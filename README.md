@@ -4,14 +4,6 @@
 
 A modern web and mobile application for ZoneMinder NVR systems, providing a clean, intuitive interface for viewing live camera feeds, reviewing events, and managing multiple server profiles. It is a ground-up rewrite of the original [zmNinja](https://zmninja.zoneminder.com/) application, using modern web technologies and a more intuitive user interface. The code was 99% Claude CLI generated.
 
-> **Recent Updates** ✨
-> - 🔐 **Password encryption** with AES-GCM for secure credential storage
-> - 📊 **Centralized logging** system with structured log levels
-> - ♻️ **Reusable components** and custom hooks for better maintainability
-> - 🛡️ **Error boundaries** for graceful error handling
-> - ⚡ **Performance optimizations** with memoization and proper cleanup
-> - ✅ **100% type-safe** - no critical `any` types in codebase
-
 ## Quick Start
 
 ```bash
