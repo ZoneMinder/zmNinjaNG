@@ -36,5 +36,8 @@ AntiGravity (AG) is the new Google IDE that was launched a few weeks ago. It see
 | Activity | Claude CLI | Anti-Gravity (AG) | Winner |
 |----------|------------|-------------------|--------|
 | Initial framing | Claude did an excellent job setting up a layout of the app. It did not work out of the box, but after maybe 30 mins of tuning/pasting error logs, I had around 50% of the app functionality baked in. Even though I asked it to deep dive into my old code and extract all the functionality, it picked up the main ones (montage/monitors/settings/events) but not the nuanced ones like timeline/etc | I passed the same instructions to AG. It also selected react, but went with some other choices for the desktop stack - forgot. Overall, I spent around an hour trying to get it to work but I kept getting error after error. Gave up | Claude |
+| Test setup | Claude setup Playwright and wrote out e2e test cases. Oddly it did not write unit test cases until I prompted it later | This is where I though AG would shine because it has an integrated browser plugin. However, this application has complex screens with transitions, toast popups et al. AG wasn't able to control the UI effectively. It kept entering duplicate characters into text boxes, did not time the transition intercepts correctly and keep waiting for results. Overall I gave up and went back to Claude | Claude |
+|  Simple feature adds | Claude was easily able to add features, ran tests and made sure everything
+worked | AG also did a good job, ran tests, all good | Same |
 
 
