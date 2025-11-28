@@ -3,7 +3,7 @@
  * Works cross-platform (web browser and mobile apps)
  */
 
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { log } from './logger';
 
@@ -16,33 +16,26 @@ export async function downloadFile(url: string, filename: string): Promise<void>
   const isNative = Capacitor.isNativePlatform();
 
   try {
-    // Fetch the file data
-    const isDev = import.meta.env.DEV;
-    let fetchUrl = url;
-
-    if (isDev && !isNative && (url.startsWith('http://') || url.startsWith('https://'))) {
-      // Use the image proxy for cross-origin URLs in dev mode (web only)
-      fetchUrl = `http://localhost:3001/image-proxy?url=${encodeURIComponent(url)}`;
-      log.info('[Download] Using proxy for CORS', { component: 'Download', url: fetchUrl });
-    }
-
-    const response = await fetch(fetchUrl);
-    if (!response.ok) {
-      throw new Error(`Failed to download: ${response.statusText}`);
-    }
-
     if (isNative) {
-      // Mobile: Save to Downloads directory using Filesystem API
-      const blob = await response.blob();
-      const base64Data = await blobToBase64(blob);
+      // Mobile: Use native HTTP to bypass CORS and network restrictions
+      log.info('[Download] Downloading via native HTTP', { component: 'Download', url });
 
-      // Remove data URL prefix to get pure base64
-      const base64 = base64Data.split(',')[1];
+      const response = await CapacitorHttp.get({
+        url: url,
+        responseType: 'blob',
+      });
+
+      if (response.status !== 200) {
+        throw new Error(`Failed to download: HTTP ${response.status}`);
+      }
+
+      // CapacitorHttp returns blob data as base64 string
+      const base64Data = response.data as string;
 
       const result = await Filesystem.writeFile({
         path: filename,
-        data: base64,
-        directory: Directory.Documents, // Use Documents for better accessibility
+        data: base64Data,
+        directory: Directory.Documents,
       });
 
       log.info('[Download] File saved to mobile storage', {
@@ -50,11 +43,22 @@ export async function downloadFile(url: string, filename: string): Promise<void>
         path: result.uri,
         filename
       });
-
-      // Note: On Android, files in Documents are accessible via file manager
-      // For images to appear in gallery, we'd need @capacitor/camera plugin
     } else {
-      // Web: Use traditional blob download
+      // Web: Use traditional fetch + blob download
+      const isDev = import.meta.env.DEV;
+      let fetchUrl = url;
+
+      if (isDev && (url.startsWith('http://') || url.startsWith('https://'))) {
+        // Use the image proxy for cross-origin URLs in dev mode
+        fetchUrl = `http://localhost:3001/image-proxy?url=${encodeURIComponent(url)}`;
+        log.info('[Download] Using proxy for CORS', { component: 'Download', url: fetchUrl });
+      }
+
+      const response = await fetch(fetchUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to download: ${response.statusText}`);
+      }
+
       const blob = await response.blob();
       const blobUrl = window.URL.createObjectURL(blob);
 
@@ -71,21 +75,9 @@ export async function downloadFile(url: string, filename: string): Promise<void>
       log.info('[Download] File downloaded via browser', { component: 'Download', filename });
     }
   } catch (error) {
-    log.error('[Download] Failed to download file', { component: 'Download' }, error);
+    log.error('[Download] Failed to download file', { component: 'Download', url }, error);
     throw error;
   }
-}
-
-/**
- * Convert blob to base64 string
- */
-function blobToBase64(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
 }
 
 /**
@@ -94,17 +86,34 @@ function blobToBase64(blob: Blob): Promise<string> {
  * @param monitorName - Name of the monitor for filename
  */
 export async function downloadSnapshot(imageUrl: string, monitorName: string): Promise<void> {
+  const isNative = Capacitor.isNativePlatform();
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
   const filename = `${monitorName}_${timestamp}.jpg`;
 
-  // If it's a data URL, we can download directly
+  // If it's a data URL
   if (imageUrl.startsWith('data:')) {
-    const link = document.createElement('a');
-    link.href = imageUrl;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    if (isNative) {
+      // Mobile: Save data URL directly
+      const base64 = imageUrl.split(',')[1];
+      const result = await Filesystem.writeFile({
+        path: filename,
+        data: base64,
+        directory: Directory.Documents,
+      });
+      log.info('[Download] Snapshot saved from data URL', {
+        component: 'Download',
+        path: result.uri,
+        filename
+      });
+    } else {
+      // Web: Traditional download
+      const link = document.createElement('a');
+      link.href = imageUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
     return;
   }
 
