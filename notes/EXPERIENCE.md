@@ -29,16 +29,12 @@ So here is what I did:
 - I also downloaded the [ZM API documents](https://zoneminder.readthedocs.io/en/latest/api.html), and the old[zmNinja code](https://github.com/ZoneMinder/zmNinja)
 - I then asked the agent to refactor and asked it to make its own tech stack choice. I was quite happy with the choices (reactive/capacitor)
 
-## Horse-Raching Anti Gravity (Gemini3) and Claude CLI (Auto models)
+## Horse-Racing Anti Gravity (Gemini3) and Claude CLI (Auto models)
 
-| Activity | Claude CLI | Anti-Gravity (AG)| Winner |
-| initial framing | Claude did an excellent job setting up a layout of the app. It did not work out of the box, but after maybe 30 mins of tuning/pasting error logs, I had around 50% of the app functionality baked in. Even though I asked it to deep dive into my old code and extract all the functionality, it picked up the main ones (montage/monitors/settings/events) but not the nuanced ones like timeline/etc | I passed the same instructions to AG. It also selected react, but went with some other choices for the desktop stack - forgot. Overall, I spent around an hour trying to get it to work but I kept getting error after error. Gave up | Claude |
-
-
-
-
-
-
-Even though I asked it to deep dive
 AntiGravity (AG) is the new Google IDE that was launched a few weeks ago. It seems to be based off WindSurf but adds some interesting integrated UI tests that are useful for UI heavy apps. Given zmNinja is very heavy on UI, I wanted to see how AG would measure up
+
+| Activity | Claude CLI | Anti-Gravity (AG) | Winner |
+|----------|------------|-------------------|--------|
+| Initial framing | Claude did an excellent job setting up a layout of the app. It did not work out of the box, but after maybe 30 mins of tuning/pasting error logs, I had around 50% of the app functionality baked in. Even though I asked it to deep dive into my old code and extract all the functionality, it picked up the main ones (montage/monitors/settings/events) but not the nuanced ones like timeline/etc | I passed the same instructions to AG. It also selected react, but went with some other choices for the desktop stack - forgot. Overall, I spent around an hour trying to get it to work but I kept getting error after error. Gave up | Claude |
+
 
