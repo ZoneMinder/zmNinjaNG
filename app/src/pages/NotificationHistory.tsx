@@ -1,0 +1,141 @@
+import { useNotificationStore } from '../stores/notifications';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import { Button } from '../components/ui/button';
+import { Badge } from '../components/ui/badge';
+import { Bell, Trash2, CheckCheck, ExternalLink } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
+import { useNavigate } from 'react-router-dom';
+
+export default function NotificationHistory() {
+  const navigate = useNavigate();
+  const { events, unreadCount, markEventRead, markAllRead, clearEvents } = useNotificationStore();
+
+  const handleViewEvent = (eventId: number) => {
+    markEventRead(eventId);
+    navigate(`/events/${eventId}`);
+  };
+
+  return (
+    <div className="p-6 md:p-8 max-w-5xl mx-auto space-y-8">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
+            Notification History
+            {unreadCount > 0 && (
+              <Badge variant="destructive" className="text-base">
+                {unreadCount} new
+              </Badge>
+            )}
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Recent alarm events from your monitors
+          </p>
+        </div>
+
+        <div className="flex gap-2">
+          {unreadCount > 0 && (
+            <Button variant="outline" onClick={markAllRead}>
+              <CheckCheck className="h-4 w-4 mr-2" />
+              Mark All Read
+            </Button>
+          )}
+          {events.length > 0 && (
+            <Button variant="destructive" onClick={clearEvents}>
+              <Trash2 className="h-4 w-4 mr-2" />
+              Clear All
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {events.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-16">
+            <Bell className="h-16 w-16 text-muted-foreground mb-4" />
+            <h3 className="text-lg font-semibold mb-2">No notifications yet</h3>
+            <p className="text-sm text-muted-foreground text-center max-w-md">
+              When you receive alarm events from your monitors, they'll appear here
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {events.map((event) => (
+            <Card
+              key={`${event.EventId}-${event.receivedAt}`}
+              className={event.read ? 'opacity-60' : 'border-primary'}
+            >
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <CardTitle className="text-lg">{event.MonitorName}</CardTitle>
+                      {!event.read && (
+                        <Badge variant="destructive" className="text-xs">
+                          New
+                        </Badge>
+                      )}
+                    </div>
+                    <CardDescription className="mt-1">
+                      {formatDistanceToNow(event.receivedAt, { addSuffix: true })}
+                    </CardDescription>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleViewEvent(event.EventId)}
+                  >
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    View Event
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="flex gap-4">
+                  {event.ImageUrl && (
+                    <div className="flex-shrink-0">
+                      <img
+                        src={event.ImageUrl}
+                        alt={`Event ${event.EventId}`}
+                        className="h-32 w-auto rounded-lg border object-cover cursor-pointer hover:opacity-80 transition-opacity"
+                        onClick={() => handleViewEvent(event.EventId)}
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    </div>
+                  )}
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Bell className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">{event.Cause}</span>
+                    </div>
+                    <div className="text-xs text-muted-foreground space-y-1">
+                      <div>Event ID: {event.EventId}</div>
+                      <div>Monitor ID: {event.MonitorId}</div>
+                    </div>
+                    {!event.read && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => markEventRead(event.EventId)}
+                      >
+                        Mark as Read
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {events.length > 0 && (
+        <div className="text-center text-sm text-muted-foreground">
+          Showing {events.length} notification{events.length !== 1 ? 's' : ''} (last 100)
+        </div>
+      )}
+    </div>
+  );
+}

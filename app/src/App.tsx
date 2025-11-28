@@ -17,6 +17,9 @@ import EventMontage from './pages/EventMontage';
 import Timeline from './pages/Timeline';
 import Profiles from './pages/Profiles';
 import Settings from './pages/Settings';
+import NotificationSettings from './pages/NotificationSettings';
+import NotificationHistory from './pages/NotificationHistory';
+import { NotificationHandler } from './components/NotificationHandler';
 import { log } from './lib/logger';
 
 const queryClient = new QueryClient({
@@ -70,6 +73,8 @@ function AppRoutes() {
         <Route path="/event-montage" element={<EventMontage />} />
         <Route path="/timeline" element={<Timeline />} />
         <Route path="/profiles" element={<Profiles />} />
+        <Route path="/notifications" element={<NotificationSettings />} />
+        <Route path="/notifications/history" element={<NotificationHistory />} />
         <Route path="/settings" element={<Settings />} />
       </Route>
     </Routes>
@@ -82,6 +87,7 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <ThemeProvider defaultTheme="dark" storageKey="zmng-ui-theme">
           <BrowserRouter>
+            <NotificationHandler />
             <AppRoutes />
           </BrowserRouter>
           <Toaster />

@@ -25,8 +25,8 @@ The test suite is configured to work with two ZoneMinder servers:
 
 ### Account 2: zm.connortechnology.com
 - **URL**: https://zm.connortechnology.com
-- **Username**: demo
-- **Password**: demo
+- **Username**: <provide>
+- **Password**: <provide>
 - **Usage**: Testing with authentication
 
 ## Running Tests

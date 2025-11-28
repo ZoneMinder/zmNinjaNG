@@ -1,6 +1,6 @@
 # zmNg - Modern ZoneMinder Client
 
-[View Comparison with zmNinja](COMPARISON.md)
+[View Comparison with zmNinja](notes/COMPARISON.md)
 
 A modern web and mobile application for ZoneMinder NVR systems, providing a clean, intuitive interface for viewing live camera feeds, reviewing events, and managing multiple server profiles. It is a ground-up rewrite of the original [zmNinja](https://zmninja.zoneminder.com/) application, using modern web technologies and a more intuitive user interface. The code was 99% Claude CLI generated.
 
@@ -48,6 +48,15 @@ npm run android
 - **Layout persistence** - Montage layouts saved per profile
 - **Automatic token management** - Silent refresh before expiration
 
+### Push Notifications
+- **Real-time alarm events** - Get notified when motion/events are detected
+- **WebSocket connection** - Direct connection to ZoneMinder event server (desktop & mobile foreground)
+- **FCM support** - Firebase Cloud Messaging for mobile background notifications
+- **Rich notifications** - Event images displayed in toasts and history
+- **Monitor filtering** - Choose which cameras trigger notifications
+- **Notification history** - View last 100 events with unread tracking
+- **Mock server included** - Test notifications without ZM server setup
+
 ### Screenshots
 
 ![Montage View](images/1.png)
@@ -57,6 +66,7 @@ npm run android
 ![Monitor Detail](images/5.png)
 ![Settings](images/6.png)
 ![Profile Switcher](images/7.png)
+![Notifications](images/8.png)
 
 ## Prerequisites
 - Node.js 18+ and npm
@@ -85,10 +95,45 @@ npm run android:devices
 ```
 
 ### Testing
+
+**Unit Tests (Vitest)**
 ```bash
-npm run test:e2e        # Run E2E tests
-npm run test:e2e:ui     # Run with UI
+npm run test:unit       # Run unit tests once (CI)
+npm test                # Run in watch mode
+npm run test:coverage   # Generate coverage report
 ```
+Current coverage: 28 passing tests (notification service & store)
+
+**E2E Tests (Playwright)**
+```bash
+npm run test:e2e        # Run all E2E tests
+npm run test:e2e:ui     # Run with Playwright UI
+npm run test:e2e:notifications  # Test notification system only
+```
+
+**Testing Notifications Without ZM Server**
+```bash
+# Start mock WebSocket server + dev server + proxy
+npm run dev:notifications
+
+# Or mock server only
+npm run mock:notifications
+```
+
+The mock server simulates the ZoneMinder event notification server:
+- Runs on `ws://localhost:9000`
+- Accepts any username/password
+- Sends fake alarms every 10 seconds
+- Includes realistic event images
+- Perfect for testing without full ZM setup
+
+To test:
+1. Start mock server (see above)
+2. Open app at http://localhost:5173
+3. Go to Notifications settings
+4. Set host: `localhost`, port: `9000`, SSL: OFF
+5. Click "Connect" with any credentials
+6. Watch notifications appear!
 
 ## Production Builds
 
@@ -319,6 +364,43 @@ All user passwords are encrypted before being stored in localStorage using:
 import { Capacitor } from '@capacitor/core';
 const isNative = Capacitor.isNativePlatform(); // true on Android/iOS
 ```
+
+### Notification Setup (Production)
+
+#### Desktop
+Desktop uses WebSocket connection to ZoneMinder event notification server.
+
+**Requirements:**
+- Install `zmeventnotification` on your ZoneMinder server
+- See: https://github.com/ZoneMinder/zmeventnotification
+
+**In the app:**
+1. Go to Notifications page
+2. Enable notifications
+3. Enter your ZM server hostname and port (default: 9000)
+4. Enable SSL if using WSS
+5. Click "Connect"
+
+#### Mobile (Android/iOS)
+Mobile uses Firebase Cloud Messaging (FCM) for background notifications.
+
+**Setup:**
+1. Create Firebase project at https://console.firebase.google.com
+2. Add Android/iOS app to Firebase project
+3. Download `google-services.json` (Android) or `GoogleService-Info.plist` (iOS)
+4. Place in `android/app/` or `ios/App/`
+5. Configure ZoneMinder event server with FCM credentials
+6. App will auto-register for push on first launch
+
+**Configure ZoneMinder event server:**
+Edit `/etc/zm/zmeventnotification.ini`:
+```ini
+[fcm]
+enable = yes
+api_key = <your-firebase-server-key>
+```
+
+See [Capacitor Push Notifications](https://capacitorjs.com/docs/apis/push-notifications) for platform-specific details.
 
 ---
 

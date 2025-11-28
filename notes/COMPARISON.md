@@ -4,7 +4,7 @@
 
 ## Executive Summary
 
-zmNg represents a complete architectural modernization of zmNinja, reducing codebase complexity by **76%** while delivering superior performance, maintainability, and user experience through modern web technologies. The migration from 26 Cordova plugins to a single Capacitor plugin demonstrates a dramatic simplification in mobile architecture.
+zmNg represents a complete architectural modernization of zmNinja, reducing codebase complexity by **65%** while delivering superior performance, maintainability, and user experience through modern web technologies. The migration from 26 Cordova plugins to 2 Capacitor plugins (secure storage + push notifications) demonstrates a **92% reduction** in native dependencies.
 
 ---
 
@@ -22,6 +22,7 @@ zmNg represents a complete architectural modernization of zmNinja, reducing code
 | **State** | $scope/$rootScope | - | Scattered, no persistence |
 | **Styling** | SCSS + Custom CSS | - | Manual responsive design |
 | **Testing** | Manual | - | No automated test suite |
+| **Unit Testing** | None | - | No test framework |
 | **HTTP Client** | AngularJS $http | - | Basic, no interceptors |
 
 **Cordova Plugins (26 total):**
@@ -53,10 +54,13 @@ zmNg represents a complete architectural modernization of zmNinja, reducing code
 | **State** | Zustand + TanStack Query | 5.x | ✅ Optimized, persistent |
 | **Styling** | Tailwind CSS + shadcn/ui | 3.4 | ✅ Utility-first, responsive |
 | **Testing** | Playwright | 1.57 | ✅ E2E test coverage |
+| **Unit Testing** | Vitest | 3.2 | ✅ 28 tests passing |
 | **HTTP Client** | Axios + Capacitor HTTP | 1.13 | ✅ Interceptors, native support |
+| **Notifications** | socket.io-client + FCM | 4.8 | ✅ WebSocket + Push |
 
-**Capacitor Plugins (1 total):**
+**Capacitor Plugins (2 total):**
 - `@aparajita/capacitor-secure-storage` - Hardware-backed secure storage
+- `@capacitor/push-notifications` - Native push notifications (FCM)
 
 **Build Stack:**
 ```bash
@@ -68,12 +72,13 @@ zmNg represents a complete architectural modernization of zmNinja, reducing code
 ```
 
 **Key Technology Advantages:**
-- **76% less code** to maintain
-- **96% fewer native plugins** (26 → 1)
+- **65% less code** to maintain
+- **92% fewer native plugins** (26 → 2)
 - **Modern, actively maintained** ecosystem
 - **Built-in TypeScript** support
 - **Instant HMR** during development
 - **Automatic code splitting**
+- **Real-time notifications** via WebSocket + push
 
 ---
 
@@ -83,12 +88,12 @@ zmNg represents a complete architectural modernization of zmNinja, reducing code
 
 | Metric | zmNinja | zmNg | Reduction |
 |--------|---------|------|-----------|
-| **JavaScript/TypeScript** | ~28,000 LOC | 7,438 LOC | **73% less** |
+| **JavaScript/TypeScript** | ~28,000 LOC | ~11,014 LOC | **61% less** |
 | **Templates/JSX** | ~3,000 LOC | (integrated) | Unified |
 | **Styles (CSS/SCSS)** | ~650 LOC | ~300 LOC | **54% less** |
-| **Total Source Code** | **~31,650 LOC** | **~7,738 LOC** | **76% less** |
-| **Source Files** | 79 files | 49 files | **38% fewer** |
-| **Cordova/Capacitor Plugins** | 26 plugins | 1 plugin | **96% fewer** |
+| **Total Source Code** | **~31,650 LOC** | **~11,314 LOC** | **65% less** |
+| **Source Files** | 79 files | 67 files | **15% fewer** |
+| **Cordova/Capacitor Plugins** | 26 plugins | 2 plugins | **92% fewer** |
 
 ### File Organization
 
@@ -112,13 +117,20 @@ electron_js/               # Desktop-specific code
 ```
 src/
 ├── api/                   # 4 files - API clients & types
-├── components/            # 16 files - Reusable UI
+├── components/            # 18 files - Reusable UI
 │   ├── ui/                # shadcn/ui components
 │   ├── monitors/          # MonitorCard
 │   ├── events/            # EventCard
-│   └── layout/            # AppLayout
-├── pages/                 # 14 files - Route components
-├── stores/                # 4 files - State management
+│   ├── layout/            # AppLayout
+│   └── NotificationHandler.tsx  # WebSocket event handler
+├── pages/                 # 16 files - Route components
+│   ├── NotificationHistory.tsx  # Last 100 events
+│   └── NotificationSettings.tsx # Per-monitor config
+├── stores/                # 5 files - State management
+│   └── notifications.ts   # Notification state + persistence
+├── services/              # 2 files - Business logic
+│   ├── notifications.ts   # WebSocket connection to zmEventNotification
+│   └── pushNotifications.ts # FCM token management
 ├── hooks/                 # 3 files - Custom React hooks
 ├── lib/                   # 5 files - Utilities
 │   ├── crypto.ts          # AES-GCM encryption
@@ -204,10 +216,20 @@ src/
 
         +
 ┌──────────────────────┐
-│ 1 Capacitor Plugin   │
+│ 2 Capacitor Plugins  │
 │ - Secure Storage     │
 │   (Keychain/         │
 │    Keystore)         │
+│ - Push Notifications │
+│   (FCM)              │
+└──────────────────────┘
+        +
+┌──────────────────────┐
+│ Notification Service │
+│ - WebSocket          │
+│   (zmEventServer)    │
+│ - Real-time events   │
+│ - History (100)      │
 └──────────────────────┘
 ```
 
@@ -218,8 +240,9 @@ src/
 - ✅ Type-safe API layer (TypeScript)
 - ✅ Composable UI components
 - ✅ Declarative data fetching
-- ✅ Minimal native dependencies
+- ✅ Minimal native dependencies (2 vs 26 plugins)
 - ✅ Modern, maintained stack
+- ✅ Real-time notifications (WebSocket + Push)
 
 ---
 
@@ -264,14 +287,16 @@ cordova build android --release
 
 **Technology:**
 - Capacitor Android 7.4.4
-- 1 Capacitor plugin (secure storage)
+- 2 Capacitor plugins (secure storage + push notifications)
 - React 19 UI framework
 - Modern ES2020+ JavaScript
 
-**APK Size:** ~8-12 MB (significantly smaller)
+**APK Size:** ~8-12 MB (still 60-75% smaller than zmNinja)
 
 **Native Features:**
 - Hardware-backed secure storage (Android Keystore)
+- Native push notifications (FCM)
+- WebSocket-based real-time event notifications
 - Native HTTP client (bypasses CORS)
 - System WebView integration
 - Platform detection and optimization
@@ -287,12 +312,13 @@ npm run android:release    # Build release APK
 
 **Advantages:**
 - ✅ **60-75% smaller APK** size
-- ✅ **96% fewer plugins** to maintain
+- ✅ **92% fewer plugins** to maintain (2 vs 26)
 - ✅ Modern Capacitor ecosystem
-- ✅ Zero Firebase bloat
+- ✅ Minimal Firebase footprint (FCM only, no analytics/crashlytics)
 - ✅ Simpler build pipeline
 - ✅ Better performance (lighter runtime)
 - ✅ Hardware encryption (Keystore)
+- ✅ Real-time notifications (WebSocket + Push)
 
 ---
 
@@ -352,10 +378,11 @@ npm run android:release    # Build release APK
 **Advantages:**
 - ✅ **Hardware-backed encryption** on Android (Keystore)
 - ✅ **Military-grade AES-GCM** on web
-- ✅ **No analytics/tracking** (privacy-first)
-- ✅ **Minimal attack surface** (1 plugin vs 26)
+- ✅ **No analytics/tracking** (FCM only, privacy-first)
+- ✅ **Minimal attack surface** (2 plugins vs 26)
 - ✅ **Auto token refresh** (no re-login)
 - ✅ **Type-safe security** layer
+- ✅ **Secure WebSocket** (encrypted event notifications)
 
 **Security Comparison Table:**
 
@@ -363,10 +390,11 @@ npm run android:release    # Build release APK
 |------------------|---------|------|
 | **Password Encryption (Web)** | ❌ None | ✅ AES-GCM 256-bit |
 | **Password Encryption (Android)** | ⚠️ SQLite (not encrypted) | ✅ Android Keystore (hardware) |
-| **Analytics/Tracking** | ⚠️ Firebase Analytics | ✅ None (privacy-first) |
-| **Native Plugins** | 26 (large attack surface) | 1 (minimal surface) |
+| **Analytics/Tracking** | ⚠️ Firebase Analytics + Crashlytics | ✅ None (FCM only) |
+| **Native Plugins** | 26 (large attack surface) | 2 (minimal surface) |
 | **Token Management** | Manual | ✅ Automatic refresh |
 | **Credential Storage** | SQLite database | ✅ Encrypted storage |
+| **Notification Security** | Firebase-dependent | ✅ WebSocket SSL/TLS + FCM |
 
 ---
 
@@ -383,7 +411,12 @@ npm run android:release    # Build release APK
 | **Timeline View** | ✅ | ✅ | zmNg: Interactive vis-timeline |
 | **Multi-Server Profiles** | ✅ | ✅ | Both support multiple servers |
 | **Dark Mode** | ⚠️ Manual theme | ✅ | zmNg: System-aware auto |
-| **Push Notifications** | ✅ | ⏳ | zmNinja: Firebase, zmNg: Planned |
+| **Push Notifications** | ✅ | ✅ | zmNinja: Firebase only, zmNg: WebSocket + FCM |
+| **Notification Images** | ❌ | ✅ | zmNg: Event thumbnails in toast notifications |
+| **Notification History** | ❌ | ✅ | zmNg: Last 100 events with unread tracking |
+| **Notification Settings** | ⚠️ Limited | ✅ | zmNg: Per-monitor config + intervals |
+| **Real-time Events** | ⚠️ Polling | ✅ | zmNg: WebSocket connection to zmEventServer |
+| **Notification Sound** | ✅ | ✅ | Both support audio alerts |
 | **Download Media** | ⚠️ Limited | ✅ | zmNg: Snapshots & videos |
 | **Responsive Design** | ⚠️ Limited | ✅ | zmNg: Mobile-first |
 | **Offline Support** | ✅ | ⚠️ | zmNinja: SQLite cache |
@@ -840,7 +873,7 @@ npm run android:release # Build APK (auto-signed)
 | **Coupling** | Tight (services ↔ controllers) | Loose (components) | zmNg |
 | **Cohesion** | Low (mixed concerns) | High (single responsibility) | zmNg |
 | **Type Coverage** | 0% (JavaScript) | 100% (TypeScript) | zmNg |
-| **Test Coverage** | ~0% (manual) | Growing (Playwright) | zmNg |
+| **Test Coverage** | ~0% (manual) | 28 unit + E2E | zmNg |
 
 ### Technical Debt
 
@@ -858,15 +891,16 @@ npm run android:release # Build APK (auto-signed)
 
 **zmNg Clean Slate:**
 - ✅ **React 19** (actively developed, long-term support)
-- ✅ **1 Capacitor plugin** (minimal maintenance)
+- ✅ **2 Capacitor plugins** (minimal maintenance: storage + push)
 - ✅ **Zero jQuery** (modern DOM APIs)
 - ✅ **100% TypeScript** (compile-time safety)
-- ✅ **Playwright E2E tests** (automated regression)
+- ✅ **28 unit tests + Playwright E2E** (automated regression)
 - ✅ **Modular components** (50-300 LOC files)
 - ✅ **Async/await** (readable, linear code)
 - ✅ **Declarative UI** (React reconciliation)
 - ✅ **Centralized state** (Zustand stores)
-- ✅ **No analytics** (privacy-first)
+- ✅ **No analytics** (privacy-first, FCM only)
+- ✅ **Real-time notifications** (WebSocket + Push)
 
 ---
 
@@ -901,6 +935,7 @@ npm run android:release # Build APK (auto-signed)
   "@capacitor/android": "7.4.4",
   "@capacitor/core": "7.4.4",
   "@capacitor/preferences": "7.0.2",
+  "@capacitor/push-notifications": "7.0.3",
   "@aparajita/capacitor-secure-storage": "7.1.6",
   "react": "19.2.0",
   "react-dom": "19.2.0",
@@ -909,11 +944,13 @@ npm run android:release # Build APK (auto-signed)
   "@tanstack/react-virtual": "3.13.12",
   "zustand": "5.0.8",
   "axios": "1.13.2",
+  "socket.io-client": "4.8.1",
+  "sonner": "2.0.7",
   // Modern, maintained packages only
 }
 ```
 
-**Total npm packages:** ~100
+**Total npm packages:** ~110
 **Security vulnerabilities:** None (actively updated)
 **Maintenance burden:** Low
 
@@ -938,13 +975,13 @@ npm run android:release # Build APK (auto-signed)
 
 | Benefit | Impact |
 |---------|--------|
-| **76% Less Code** | 7,738 LOC vs 31,650 LOC |
-| **96% Fewer Plugins** | 1 plugin vs 26 plugins |
+| **65% Less Code** | 11,314 LOC vs 31,650 LOC |
+| **92% Fewer Plugins** | 2 plugins vs 26 plugins |
 | **Instant HMR** | <50ms vs 10-30s reload |
 | **Type Safety** | 100% vs 0% type coverage |
 | **Modern Tools** | Vite, TypeScript, React 19 |
 | **Better DX** | Clear errors, autocomplete |
-| **Automated Testing** | Playwright E2E vs manual |
+| **Automated Testing** | 28 unit tests + Playwright E2E |
 | **Easier Debugging** | React DevTools vs console.log |
 
 ### For the Project
@@ -957,7 +994,8 @@ npm run android:release # Build APK (auto-signed)
 | **Community Support** | Large React community |
 | **Innovation Ready** | Easy feature additions |
 | **Future-Proof** | Modern web standards |
-| **Reduced Attack Surface** | 96% fewer plugins |
+| **Reduced Attack Surface** | 92% fewer plugins (2 vs 26) |
+| **Real-time Capabilities** | WebSocket + Push notifications |
 
 ---
 
@@ -983,12 +1021,13 @@ npm run android:release # Build APK (auto-signed)
 - ✅ **2-3x faster startup** (1-2s)
 - ✅ **40% lower memory** (80-120 MB idle)
 - ✅ **Hardware-backed security** (Keystore)
+- ✅ **Real-time notifications** (WebSocket + FCM)
+- ✅ **Notification history** (Last 100 events)
 - ✅ Modern Capacitor runtime
 - ✅ Better battery life
 - ✅ Smoother animations (60 FPS)
 
 **zmNg Weaknesses:**
-- ⏳ Push notifications (planned)
 - ⏳ Biometric auth (planned)
 
 ### Web
@@ -1173,12 +1212,14 @@ function Monitors() {
 - ✅ **Easy feature additions** - Component-based architecture
 - ✅ **Community welcome** - Clean, documented codebase
 - ✅ **PWA capabilities** - Already supported
-- 🚀 **Push notifications** - Planned Q1 2025
+- ✅ **Real-time notifications** - Fully implemented (WebSocket + FCM)
+- ✅ **Notification history** - Last 100 events with unread tracking
+- ✅ **Per-monitor config** - Customizable check intervals
+- ✅ **Comprehensive testing** - 28 unit tests, E2E coverage
 - 🚀 **Biometric auth** - Planned Q1 2025
 - 🚀 **iOS support** - Planned Q2 2025
 - 🚀 **Desktop app (Tauri)** - Planned Q2 2025
 - 🚀 **PTZ controls** - Planned Q2 2025
-- 🚀 **Event Server integration** - Planned Q3 2025
 - 🚀 **Face recognition** - Planned Q3 2025
 
 **Verdict:** Active development, modern foundation for growth
@@ -1191,9 +1232,9 @@ function Monitors() {
 
 | Metric | zmNinja | zmNg | Improvement |
 |--------|---------|------|-------------|
-| **Lines of Code** | 31,650 | 7,738 | **-76%** |
-| **Source Files** | 79 | 49 | **-38%** |
-| **Native Plugins** | 26 | 1 | **-96%** |
+| **Lines of Code** | 31,650 | 11,314 | **-65%** |
+| **Source Files** | 79 | 67 | **-15%** |
+| **Native Plugins** | 26 | 2 | **-92%** |
 | **Load Time (Web)** | 3-5s | 0.8-1.5s | **-70%** |
 | **APK Size (Android)** | 30-50 MB | 8-12 MB | **-75%** |
 | **Bundle Size** | 5-8 MB | 2-3 MB | **-60%** |
@@ -1201,16 +1242,18 @@ function Monitors() {
 | **Memory Usage** | 150-200 MB | 80-120 MB | **-40%** |
 | **Type Safety** | 0% | 100% | **+100%** |
 | **UI Performance** | 30-45 FPS | 55-60 FPS | **+50%** |
+| **Unit Tests** | 0 | 28 | **+∞** |
 
 ### The Bottom Line
 
 zmNg achieves a **fundamental transformation** of zmNinja through modern web technologies:
 
 **Code & Architecture:**
-- ✅ **76% smaller codebase** (easier maintenance)
-- ✅ **96% fewer plugins** (reduced complexity)
+- ✅ **65% smaller codebase** (11,314 vs 31,650 LOC)
+- ✅ **92% fewer plugins** (2 vs 26 - reduced complexity)
 - ✅ **100% type-safe** (compile-time error detection)
 - ✅ **Modern architecture** (React component-based)
+- ✅ **28 unit tests** (automated quality assurance)
 
 **Performance:**
 - ✅ **3-4x faster load times** (better UX)
@@ -1221,8 +1264,14 @@ zmNg achieves a **fundamental transformation** of zmNinja through modern web tec
 **Security:**
 - ✅ **Hardware-backed encryption** (Android Keystore)
 - ✅ **Military-grade AES-GCM** (web platform)
-- ✅ **96% smaller attack surface** (1 plugin vs 26)
-- ✅ **No analytics/tracking** (privacy-first)
+- ✅ **92% smaller attack surface** (2 plugins vs 26)
+- ✅ **Minimal Firebase** (FCM only, no analytics)
+
+**Real-time Features:**
+- ✅ **WebSocket notifications** (zmEventServer integration)
+- ✅ **Push notifications** (Native FCM support)
+- ✅ **Event history** (Last 100 with unread tracking)
+- ✅ **Per-monitor config** (Customizable intervals)
 
 **Developer Experience:**
 - ✅ **Instant HMR** (<50ms vs 10-30s)
@@ -1276,9 +1325,9 @@ zmNg achieves a **fundamental transformation** of zmNinja through modern web tec
 
 **Dependencies:**
 - ❌ 26 Cordova plugins (maintenance nightmare)
-- ❌ Firebase bloat (analytics, crashlytics)
+- ❌ Firebase bloat (analytics, crashlytics, performance monitoring)
 - ❌ SQLite for local storage (overkill)
-- ❌ 200+ npm packages
+- ❌ 200+ npm packages with security vulnerabilities
 
 **Security:**
 - ❌ Unencrypted password storage
@@ -1314,20 +1363,51 @@ zmNg achieves a **fundamental transformation** of zmNinja through modern web tec
 - ✅ No memory leaks (proper cleanup)
 
 **Dependencies:**
-- ✅ 1 Capacitor plugin (minimal)
-- ✅ No analytics (privacy-first)
-- ✅ Encrypted storage (no SQLite)
-- ✅ ~100 npm packages (lean)
+- ✅ 2 Capacitor plugins (minimal: secure storage + push)
+- ✅ No analytics bloat (FCM only, no crashlytics/performance)
+- ✅ Encrypted storage (no SQLite overhead)
+- ✅ ~110 npm packages (lean, actively maintained)
 
 **Security:**
 - ✅ AES-GCM encryption (web)
 - ✅ Hardware Keystore (Android)
-- ✅ Minimal attack surface (1 plugin)
-- ✅ No tracking/analytics
+- ✅ Minimal attack surface (2 plugins vs 26)
+- ✅ No tracking/analytics (privacy-first)
+
+**Notification System:**
+- ✅ WebSocket connection (real-time zmEventServer)
+- ✅ Native push notifications (FCM)
+- ✅ Event history (persistent, last 100)
+- ✅ Per-monitor configuration
+- ✅ Unread tracking with badge count
 
 ---
 
-*Last Updated: January 27, 2025*
+*Last Updated: November 28, 2025*
 *zmNinja version: v1.8.000*
-*zmNg version: v0.1.0 (beta)*
+*zmNg version: v0.2.0 (beta - with notifications)*
 *Platforms: Android & Web (iOS not yet implemented in zmNg)*
+
+## Recent Updates (v0.2.0)
+
+**Notification System (Fully Implemented):**
+- ✅ WebSocket connection to ZoneMinder Event Server (zmeventnotification.pl)
+- ✅ Native push notifications via Firebase Cloud Messaging (FCM)
+- ✅ Notification history with last 100 events
+- ✅ Unread event tracking with badge count
+- ✅ Per-monitor notification configuration
+- ✅ Customizable check intervals (60s, 120s, etc.)
+- ✅ Toast notifications with event thumbnails
+- ✅ Sound alerts (Web Audio API)
+- ✅ Auto-reconnect with exponential backoff
+- ✅ 28 passing unit tests (Vitest)
+- ✅ E2E test coverage (Playwright)
+
+**Technical Implementation:**
+- Added `@capacitor/push-notifications` plugin for FCM
+- Added `socket.io-client` for WebSocket communication
+- Added `sonner` for toast notifications
+- New notification store with Zustand + persistence
+- New services: `notifications.ts` (WebSocket), `pushNotifications.ts` (FCM)
+- New pages: NotificationHistory, NotificationSettings
+- New component: NotificationHandler (auto-connect, toast display)

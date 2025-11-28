@@ -1,6 +1,7 @@
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useProfileStore } from '../../stores/profile';
 import { useAuthStore } from '../../stores/auth';
+import { useNotificationStore } from '../../stores/notifications';
 import { Button } from '../ui/button';
 import { ModeToggle } from '../mode-toggle';
 import { ProfileSwitcher } from '../profile-switcher';
@@ -13,7 +14,8 @@ import {
   LogOut,
   Menu,
   Users,
-  Grid3x3
+  Grid3x3,
+  Bell
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useState } from 'react';
@@ -27,6 +29,7 @@ function SidebarContent({ onMobileClose }: SidebarContentProps) {
   const location = useLocation();
   const currentProfile = useProfileStore((state) => state.currentProfile());
   const logout = useAuthStore((state) => state.logout);
+  const unreadCount = useNotificationStore((state) => state.unreadCount);
 
   const handleLogout = () => {
     logout();
@@ -39,6 +42,7 @@ function SidebarContent({ onMobileClose }: SidebarContentProps) {
     { path: '/events', label: 'Events', icon: Video },
     { path: '/event-montage', label: 'Event Montage', icon: Grid3x3 },
     { path: '/timeline', label: 'Timeline', icon: Clock },
+    { path: '/notifications', label: 'Notifications', icon: Bell },
     { path: '/profiles', label: 'Profiles', icon: Users },
     { path: '/settings', label: 'Settings', icon: Settings },
   ];
@@ -71,7 +75,7 @@ function SidebarContent({ onMobileClose }: SidebarContentProps) {
                 to={item.path}
                 onClick={() => onMobileClose?.()}
                 className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group",
+                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group relative",
                   isActive
                     ? "bg-primary text-primary-foreground shadow-md"
                     : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
@@ -79,6 +83,11 @@ function SidebarContent({ onMobileClose }: SidebarContentProps) {
               >
                 <Icon className={cn("h-4 w-4 transition-transform group-hover:scale-110", isActive && "text-primary-foreground")} />
                 {item.label}
+                {item.path === '/notifications' && unreadCount > 0 && (
+                  <span className="ml-auto h-5 min-w-5 px-1.5 flex items-center justify-center text-xs font-bold rounded-full bg-destructive text-destructive-foreground">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
               </Link>
             );
           })}
