@@ -54,9 +54,7 @@ function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentProps) {
     <div className="flex flex-col h-full overflow-hidden">
       <div className={cn("p-6 transition-all duration-300", isCollapsed && "p-2")}>
         <div className="flex items-center gap-2 mb-1">
-          <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
-            <Video className="h-5 w-5 text-primary-foreground" />
-          </div>
+          <img src="/logo.png" alt="zmNg Logo" className="h-8 w-8 rounded-lg" />
           {!isCollapsed && (
             <h1 className="text-xl font-bold tracking-tight whitespace-nowrap">zmNg</h1>
           )}
@@ -205,9 +203,7 @@ export default function AppLayout() {
       {/* Mobile Header */}
       <div className="md:hidden fixed top-0 left-0 right-0 h-12 border-b bg-background/80 backdrop-blur-md z-30 flex items-center px-3 justify-between">
         <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-            <Video className="h-5 w-5 text-primary-foreground" />
-          </div>
+          <img src="/logo.png" alt="zmNg Logo" className="h-8 w-8 rounded-lg" />
           <span className="font-bold">zmNg</span>
         </div>
         <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
