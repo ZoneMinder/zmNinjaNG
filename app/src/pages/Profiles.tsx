@@ -340,7 +340,7 @@ export default function Profiles() {
                             <span className="font-sans font-medium text-foreground">API:</span> {profile.apiUrl}
                           </p>
                           <p className="text-muted-foreground">
-                            <span className="font-sans font-medium text-foreground">CGI/ZMS:</span> {profile.cgiUrl}
+                            <span className="font-sans font-medium text-foreground">Streaming:</span> {profile.cgiUrl}
                           </p>
                         </div>
                         {!(profile.username && profile.password) && (
