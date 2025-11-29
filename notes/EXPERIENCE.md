@@ -49,5 +49,5 @@ AntiGravity (AG) is the new Google IDE that was launched a few weeks ago. It see
 | Dump logs when things don't work and let agents figure things out | My workflow consists of dumping logs when stuff doesn't work and let agents figure things out. Claude does really well here | AG in general was similar to WS, which means at times it got it right, at times it kept trying to fix to no avail | Claude |
 | Paste images with visuals to fix | Claude intelligently parses images and figures out problems - like aligning edges/overflows etc | AG also does this well | Same |
 | Subsequent features (with the app in good shape) | Claude was able to add features, run tests, make sure everything worked | AG also did a good job, ran tests, all good | Same |
-| 
+| Image Generation (app icon) | Claude doesn't generate great images. It writes code to generate SVGs and then converts to PNGs or other format. BTW I also tried on Cursor/WS/Copilot - all terrible | Excellent. AG nailed a professional icon the way I described | AntiGravity |
 
