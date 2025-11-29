@@ -31,6 +31,9 @@ npm install
 # Desktop development (with CORS proxy)
 npm run dev:all
 
+# Desktop development (Tauri)
+npm run tauri:dev
+
 # Android development
 npm run android
 
@@ -93,6 +96,12 @@ npm run dev:all
 ```
 - App: `http://localhost:5173`
 - Proxy: `http://localhost:3001`
+
+### Desktop (Tauri)
+```bash
+# Start Tauri development window
+npm run tauri:dev
+```
 
 ### Android
 ```bash
@@ -167,6 +176,12 @@ npm run preview        # Preview production build
 
 Deploy `dist/` to: Netlify, Vercel, GitHub Pages, AWS S3, etc.
 
+### Desktop (Tauri)
+```bash
+npm run tauri:build    # Build for current OS (macOS/Windows/Linux)
+```
+Output will be in `src-tauri/target/release/bundle/`
+
 ### Android
 
 **See [ANDROID.md](app/ANDROID.md) for complete release build instructions including:**
@@ -204,6 +219,7 @@ Output files:
 - **Frontend**: React 19 + TypeScript 5
 - **Build Tool**: Vite 6
 - **Mobile**: Capacitor 7 (cross-platform native runtime)
+- **Desktop**: Tauri 2 (cross-platform desktop runtime)
 - **Styling**: TailwindCSS 4 + shadcn/ui components
 - **State Management**: Zustand with persistence
 - **Data Fetching**: TanStack Query (React Query)
@@ -238,6 +254,7 @@ Output files:
 - **API Client** (`api/client.ts`) - Axios instance with automatic token injection and logging
   - Uses proxy server in web development mode
   - Uses Capacitor native HTTP on mobile to bypass CORS
+  - Uses Tauri HTTP plugin on desktop to bypass CORS
   - Direct requests in web production mode
 - **Monitor API** (`api/monitors.ts`) - Camera listing and stream URL generation
 - **Event API** (`api/events.ts`) - Event queries, filtering, and image URLs
@@ -374,6 +391,7 @@ All user passwords are encrypted before being stored in localStorage using:
   - **Web Dev**: Uses proxy server on localhost:3001
   - **Web Production**: Direct requests (assumes CORS enabled on ZM server)
   - **Android/iOS**: Native HTTP via Capacitor (no CORS issues)
+  - **Desktop**: Native HTTP via Tauri (no CORS issues)
 
 #### Network Security (Android)
 - Android 9+ blocks cleartext (HTTP) traffic by default

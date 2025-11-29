@@ -2,6 +2,8 @@ import axios, { AxiosError } from 'axios';
 import type { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import { Capacitor } from '@capacitor/core';
 import { CapacitorHttp } from '@capacitor/core';
+import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
+import { isTauri } from '@tauri-apps/api/core';
 import { useAuthStore } from '../stores/auth';
 import { log } from '../lib/logger';
 
@@ -72,7 +74,8 @@ export function createApiClient(baseURL: string): AxiosInstance {
   // In production web, use full URL directly
   const isDev = import.meta.env.DEV;
   const isNative = Capacitor.isNativePlatform();
-  const clientBaseURL = (isDev && !isNative) ? 'http://localhost:3001/proxy' : baseURL;
+  const isTauriApp = isTauri();
+  const clientBaseURL = (isDev && !isNative && !isTauriApp) ? 'http://localhost:3001/proxy' : baseURL;
 
   const client = axios.create({
     baseURL: clientBaseURL,
@@ -80,14 +83,14 @@ export function createApiClient(baseURL: string): AxiosInstance {
     headers: {
       'Content-Type': 'application/json',
       // In dev mode (web only), add header to tell proxy which server to route to
-      ...((isDev && !isNative) && { 'X-Target-Host': baseURL }),
+      ...((isDev && !isNative && !isTauriApp) && { 'X-Target-Host': baseURL }),
     },
     // Let axios handle response decompression (browser forces gzip anyway)
     decompress: true,
     // On native platforms, use custom adapter that uses CapacitorHttp
-    ...(isNative && {
+    ...((isNative || isTauriApp) && {
       adapter: async (config): Promise<AdapterResponse> => {
-        log.api(`[Native HTTP] Request: ${config.method} ${config.url}`);
+        log.api(`[${isNative ? 'Native' : 'Tauri'} HTTP] Request: ${config.method} ${config.url}`);
 
         try {
           const fullUrl = config.url?.startsWith('http')
@@ -98,26 +101,75 @@ export function createApiClient(baseURL: string): AxiosInstance {
           const params = new URLSearchParams(config.params || {}).toString();
           const urlWithParams = params ? `${fullUrl}?${params}` : fullUrl;
 
-          const response = await CapacitorHttp.request({
-            method: (config.method?.toUpperCase() || 'GET') as 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH',
-            url: urlWithParams,
-            headers: (config.headers as Record<string, string>) || {},
-            data: config.data,
-          });
+          let responseData;
+          let responseStatus;
+          let responseHeaders: Record<string, string> = {};
 
-          log.api(`[Native HTTP] Response: ${response.status} ${fullUrl}`);
+          if (isNative) {
+            const response = await CapacitorHttp.request({
+              method: (config.method?.toUpperCase() || 'GET') as 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH',
+              url: urlWithParams,
+              headers: (config.headers as Record<string, string>) || {},
+              data: config.data,
+            });
+            responseData = response.data;
+            responseStatus = response.status;
+            responseHeaders = response.headers as Record<string, string>;
+          } else {
+            // Tauri implementation
+            let body = undefined;
+            if (config.data) {
+              if (typeof config.data === 'string') {
+                body = config.data;
+              } else if (config.data instanceof URLSearchParams) {
+                body = config.data.toString();
+              } else {
+                body = JSON.stringify(config.data);
+              }
+            }
+
+            const response = await tauriFetch(urlWithParams, {
+              method: config.method?.toUpperCase() || 'GET',
+              headers: (config.headers as Record<string, string>) || {},
+              body: body,
+            });
+
+            responseStatus = response.status;
+            response.headers.forEach((value, key) => {
+              responseHeaders[key] = value;
+            });
+
+            const text = await response.text();
+            try {
+              responseData = JSON.parse(text);
+            } catch {
+              responseData = text;
+            }
+
+            // Handle 401 specifically for Tauri
+            if (responseStatus === 401) {
+              throw {
+                message: 'Unauthorized',
+                status: 401,
+                data: responseData,
+                headers: responseHeaders
+              };
+            }
+          }
+
+          log.api(`[${isNative ? 'Native' : 'Tauri'} HTTP] Response: ${responseStatus} ${fullUrl}`);
 
           return {
-            data: response.data,
-            status: response.status,
+            data: responseData,
+            status: responseStatus,
             statusText: '',
-            headers: response.headers as Record<string, string>,
+            headers: responseHeaders,
             config: config,
             request: {},
           };
         } catch (error) {
           const nativeError = error as NativeHttpError;
-          log.error('[Native HTTP] Error', { component: 'API' }, error);
+          log.error(`[${isNative ? 'Native' : 'Tauri'} HTTP] Error`, { component: 'API' }, error);
 
           const axiosError = new Error(nativeError.message) as Error & {
             config: InternalAxiosRequestConfig;
