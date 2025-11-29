@@ -13,6 +13,7 @@ export interface ProfileSettings {
   montageGridRows: number; // Grid rows for Montage page
   montageGridCols: number; // Grid columns for Montage page
   eventMontageGridCols: number; // Grid columns for EventMontage page
+  montageIsFullscreen: boolean; // Fullscreen state for Montage page
 }
 
 interface SettingsState {
@@ -41,6 +42,7 @@ const DEFAULT_SETTINGS: ProfileSettings = {
   montageGridRows: 4,
   montageGridCols: 4,
   eventMontageGridCols: 5,
+  montageIsFullscreen: false,
 };
 
 export const useSettingsStore = create<SettingsState>()(

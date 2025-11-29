@@ -95,8 +95,8 @@ export default function Montage() {
   // Track container width for toast notifications
   const currentWidthRef = useRef(window.innerWidth);
 
-  // Fullscreen mode state
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  // Fullscreen mode state - load from settings
+  const [isFullscreen, setIsFullscreen] = useState(settings.montageIsFullscreen);
   const [showFullscreenOverlay, setShowFullscreenOverlay] = useState(false);
 
   // Auto-hide overlay after 5 seconds
@@ -114,7 +114,8 @@ export default function Montage() {
     setGridRows(settings.montageGridRows);
     setGridCols(settings.montageGridCols);
     setCustomCols(settings.montageGridCols.toString());
-  }, [currentProfile?.id, settings.montageGridRows, settings.montageGridCols]);
+    setIsFullscreen(settings.montageIsFullscreen);
+  }, [currentProfile?.id, settings.montageGridRows, settings.montageGridCols, settings.montageIsFullscreen]);
 
   useEffect(() => {
     // Clean up interval if it exists (removed auto-refresh)
@@ -284,6 +285,19 @@ export default function Montage() {
     setIsCustomGridDialogOpen(false);
   };
 
+  const handleToggleFullscreen = (fullscreen: boolean) => {
+    if (!currentProfile) return;
+
+    setIsFullscreen(fullscreen);
+    updateSettings(currentProfile.id, {
+      montageIsFullscreen: fullscreen,
+    });
+
+    if (!fullscreen) {
+      setShowFullscreenOverlay(false);
+    }
+  };
+
   if (isLoading && !isLayoutLoaded) {
     return (
       <div className="p-8 space-y-6">
@@ -390,7 +404,7 @@ export default function Montage() {
               <span className="hidden sm:inline">Refresh</span>
             </Button>
             <Button
-              onClick={() => setIsFullscreen(true)}
+              onClick={() => handleToggleFullscreen(true)}
               variant="default"
               size="sm"
               className="h-8 sm:h-9"
@@ -416,10 +430,7 @@ export default function Montage() {
                 <RefreshCw className="h-4 w-4" />
               </Button>
               <Button
-                onClick={() => {
-                  setIsFullscreen(false);
-                  setShowFullscreenOverlay(false);
-                }}
+                onClick={() => handleToggleFullscreen(false)}
                 variant="ghost"
                 size="sm"
                 className="text-white hover:bg-white/10"
@@ -620,7 +631,7 @@ function MontageMonitor({
     <Card className={cn(
       "h-full overflow-hidden flex flex-col",
       isFullscreen
-        ? "border-0 shadow-none bg-black rounded-none"
+        ? "border-none shadow-none bg-black rounded-none m-0 p-0"
         : "border-0 shadow-md bg-card hover:shadow-xl transition-shadow duration-200 ring-1 ring-border/50 hover:ring-primary/50"
     )}>
       {/* Header / Drag Handle - Hidden in fullscreen */}
@@ -645,7 +656,8 @@ function MontageMonitor({
       {/* Video Content */}
       <div
         className={cn(
-          "flex-1 relative bg-black/90 overflow-hidden",
+          "flex-1 relative overflow-hidden",
+          isFullscreen ? "bg-black" : "bg-black/90",
           !isFullscreen && "cursor-pointer"
         )}
         onClick={() => !isFullscreen && navigate(`/monitors/${monitor.Id}`)}
@@ -654,7 +666,10 @@ function MontageMonitor({
           ref={imgRef}
           src={displayedImageUrl || streamUrl}
           alt={monitor.Name}
-          className="w-full h-full object-contain"
+          className={cn(
+            "w-full h-full",
+            isFullscreen ? "object-cover" : "object-contain"
+          )}
           onError={(e) => {
             const img = e.target as HTMLImageElement;
             // Only retry if we haven't retried too recently (basic debounce)
