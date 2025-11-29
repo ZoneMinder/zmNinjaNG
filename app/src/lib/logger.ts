@@ -37,7 +37,7 @@ class Logger {
   }
 
   private formatMessage(level: string, context: LogContext, message: string, ...args: unknown[]): void {
-    const timestamp = new Date().toISOString();
+    const timestamp = new Date().toLocaleString();
     const contextStr = context.component ? `[${context.component}]` : '';
     const actionStr = context.action ? `{${context.action}}` : '';
 
