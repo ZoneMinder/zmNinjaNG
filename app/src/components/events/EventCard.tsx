@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
+import { SecureImage } from '../ui/secure-image';
 import { Video, Calendar, Clock } from 'lucide-react';
 import type { EventCardProps } from '../../api/types';
 
@@ -24,7 +25,7 @@ function EventCardComponent({ event, monitorName, thumbnailUrl }: EventCardProps
       <div className="flex gap-2 sm:gap-3 p-2 sm:p-3">
         {/* Thumbnail */}
         <div className="relative w-24 h-18 sm:w-32 sm:h-24 md:w-40 md:h-30 flex-shrink-0 rounded overflow-hidden bg-black">
-          <img
+          <SecureImage
             src={thumbnailUrl}
             alt={event.Name}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"

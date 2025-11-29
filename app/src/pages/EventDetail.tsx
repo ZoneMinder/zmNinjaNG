@@ -6,6 +6,7 @@ import { useAuthStore } from '../stores/auth';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
+import { SecureImage } from '../components/ui/secure-image';
 import { ArrowLeft, Calendar, Clock, HardDrive, AlertTriangle, Download, Archive, Video, ListVideo, Image } from 'lucide-react';
 import { format } from 'date-fns';
 import { downloadEventVideo, downloadEventImage } from '../lib/download';
@@ -160,7 +161,7 @@ export default function EventDetail() {
                 </video>
               ) : hasJPEGs ? (
                 <div className="relative w-full h-full flex flex-col items-center justify-center bg-black">
-                  <img
+                  <SecureImage
                     src={imageUrl}
                     alt={event.Event.Name}
                     className="max-w-full max-h-full object-contain"

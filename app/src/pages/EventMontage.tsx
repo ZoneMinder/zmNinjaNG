@@ -10,6 +10,7 @@ import { useSettingsStore } from '../stores/settings';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
+import { SecureImage } from '../components/ui/secure-image';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Checkbox } from '../components/ui/checkbox';
@@ -496,7 +497,7 @@ export default function EventMontage() {
                   onClick={() => navigate(`/events/${event.Id}`)}
                 >
                   <div className="aspect-video relative bg-black">
-                    <img
+                    <SecureImage
                       src={imageUrl}
                       alt={event.Name}
                       className="w-full h-full object-cover"
