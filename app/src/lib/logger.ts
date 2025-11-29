@@ -3,6 +3,8 @@
  * Provides structured logging with levels and context
  */
 
+import { useLogStore } from '../stores/logs';
+
 export const LogLevel = {
   DEBUG: 0,
   INFO: 1,
@@ -36,6 +38,8 @@ class Logger {
     return level >= this.level;
   }
 
+
+
   private formatMessage(level: string, context: LogContext, message: string, ...args: unknown[]): void {
     const timestamp = new Date().toLocaleString();
     const contextStr = context.component ? `[${context.component}]` : '';
@@ -48,6 +52,15 @@ class Logger {
     } else {
       console.log(prefix, message);
     }
+
+    // Add to store
+    useLogStore.getState().addLog({
+      timestamp,
+      level,
+      message,
+      context,
+      args: args.length > 0 ? args : undefined,
+    });
   }
 
   debug(message: string, context: LogContext = {}, ...args: unknown[]): void {

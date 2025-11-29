@@ -110,7 +110,7 @@ export default function Profiles() {
     setIsSaving(true);
     try {
       let portalUrl = formData.portalUrl.replace(/\/$/, '');
-      
+
       // Add URL scheme if missing (prefer https://)
       if (!portalUrl.startsWith('http://') && !portalUrl.startsWith('https://')) {
         portalUrl = `https://${portalUrl}`;
@@ -159,7 +159,7 @@ export default function Profiles() {
     setIsSaving(true);
     try {
       let portalUrl = formData.portalUrl.replace(/\/$/, '');
-      
+
       // Add URL scheme if missing (prefer https://)
       if (!portalUrl.startsWith('http://') && !portalUrl.startsWith('https://')) {
         portalUrl = `https://${portalUrl}`;
@@ -168,7 +168,7 @@ export default function Profiles() {
       // If URLs were manually edited, use them; otherwise derive from portal URL
       let apiUrl = formData.apiUrl;
       let cgiUrl = formData.cgiUrl;
-      
+
       // If URLs are empty or look like they need re-derivation, derive them
       if (!apiUrl || !cgiUrl) {
         const { apiPatterns, cgiPatterns } = deriveZoneminderUrls(portalUrl);
@@ -355,13 +355,13 @@ export default function Profiles() {
                           )}
                         </div>
                         <div className="space-y-1 text-xs font-mono">
-                          <p className="text-muted-foreground">
+                          <p className="text-muted-foreground break-all">
                             <span className="font-sans font-medium text-foreground">Portal:</span> {profile.portalUrl}
                           </p>
-                          <p className="text-muted-foreground">
+                          <p className="text-muted-foreground break-all">
                             <span className="font-sans font-medium text-foreground">API:</span> {profile.apiUrl}
                           </p>
-                          <p className="text-muted-foreground">
+                          <p className="text-muted-foreground break-all">
                             <span className="font-sans font-medium text-foreground">Streaming:</span> {profile.cgiUrl}
                           </p>
                         </div>

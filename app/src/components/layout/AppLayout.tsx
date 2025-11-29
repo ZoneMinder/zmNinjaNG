@@ -17,7 +17,8 @@ import {
   Grid3x3,
   Bell,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  FileText
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useState, useRef, useEffect } from 'react';
@@ -48,6 +49,7 @@ function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentProps) {
     { path: '/notifications', label: 'Notifications', icon: Bell },
     { path: '/profiles', label: 'Profiles', icon: Users },
     { path: '/settings', label: 'Settings', icon: Settings },
+    { path: '/logs', label: 'Logs', icon: FileText },
   ];
 
   return (
