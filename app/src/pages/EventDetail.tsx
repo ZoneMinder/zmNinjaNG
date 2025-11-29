@@ -1,21 +1,24 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { getEvent, getEventVideoUrl, getEventImageUrl } from '../api/events';
+import { getEvent, getEventVideoUrl, getEventImageUrl, getEventZmsUrl } from '../api/events';
 import { useProfileStore } from '../stores/profile';
 import { useAuthStore } from '../stores/auth';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { SecureImage } from '../components/ui/secure-image';
+import { VideoPlayer } from '../components/ui/video-player';
 import { ArrowLeft, Calendar, Clock, HardDrive, AlertTriangle, Download, Archive, Video, ListVideo, Image } from 'lucide-react';
 import { format } from 'date-fns';
 import { downloadEventVideo, downloadEventImage } from '../lib/download';
 import { toast } from 'sonner';
 import { ZM_CONSTANTS } from '../lib/constants';
+import { useState } from 'react';
 
 export default function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [useZmsFallback, setUseZmsFallback] = useState(false);
 
   const { data: event, isLoading, error } = useQuery({
     queryKey: ['event', id],
@@ -61,6 +64,10 @@ export default function EventDetail() {
 
   const videoUrl = currentProfile && hasVideo
     ? getEventVideoUrl(currentProfile.portalUrl, event.Event.Id, accessToken || undefined)
+    : '';
+
+  const zmsUrl = currentProfile && hasVideo
+    ? getEventZmsUrl(currentProfile.portalUrl, event.Event.Id, accessToken || undefined)
     : '';
 
   const imageUrl = currentProfile && hasJPEGs
@@ -156,15 +163,33 @@ export default function EventDetail() {
           <Card className="overflow-hidden shadow-2xl border-0 ring-1 ring-border/20 bg-black">
             <div className="aspect-video relative">
               {hasVideo ? (
-                <video
-                  src={videoUrl}
-                  controls
-                  autoPlay
-                  className="w-full h-full"
-                  poster={posterUrl}
-                >
-                  Your browser does not support the video tag.
-                </video>
+                useZmsFallback ? (
+                  <div className="relative w-full h-full flex flex-col items-center justify-center bg-black">
+                    <img
+                      src={zmsUrl}
+                      alt={event.Event.Name}
+                      className="w-full h-full object-contain"
+                    />
+                    <div className="absolute top-4 left-4">
+                      <Badge variant="secondary" className="gap-2 bg-yellow-500/80 text-black hover:bg-yellow-500">
+                        <AlertTriangle className="h-3 w-3" />
+                        Stream Fallback
+                      </Badge>
+                    </div>
+                  </div>
+                ) : (
+                  <VideoPlayer
+                    src={videoUrl}
+                    className="w-full h-full"
+                    poster={posterUrl}
+                    autoPlay
+                    onError={() => {
+                      console.log('Video playback failed, falling back to ZMS stream');
+                      toast.error('Video playback failed, falling back to stream');
+                      setUseZmsFallback(true);
+                    }}
+                  />
+                )
               ) : hasJPEGs ? (
                 <div className="relative w-full h-full flex flex-col items-center justify-center bg-black">
                   <SecureImage

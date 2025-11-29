@@ -220,8 +220,38 @@ export function getEventVideoUrl(
   const params = new URLSearchParams({
     view: 'view_video',
     eid: eventId,
+    mode: 'mp4',
+    format: 'h264',
     ...(token && { token }),
   });
 
   return `${baseUrl}/index.php?${params.toString()}`;
+}
+
+/**
+ * Construct event ZMS stream URL (for MJPEG playback fallback)
+ */
+export function getEventZmsUrl(
+  portalUrl: string,
+  eventId: string,
+  token?: string
+): string {
+  // Ensure portalUrl has a protocol
+  let baseUrl = portalUrl;
+  if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
+    baseUrl = `https://${baseUrl}`;
+  }
+
+  const params = new URLSearchParams({
+    mode: 'jpeg',
+    frame: '1',
+    rate: '100',
+    maxfps: '30',
+    replay: 'single',
+    source: 'event',
+    event: eventId,
+    ...(token && { token }),
+  });
+
+  return `${baseUrl}/cgi-bin/nph-zms?${params.toString()}`;
 }
