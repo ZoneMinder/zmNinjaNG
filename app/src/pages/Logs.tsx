@@ -194,11 +194,17 @@ export default function Logs() {
                                         <div className="min-w-0 flex-1 space-y-1">
                                             <div className="flex items-center gap-2 text-muted-foreground text-[10px] sm:text-xs">
                                                 <span>{log.timestamp}</span>
-                                                {log.context?.component && typeof log.context.component === 'string' && (
-                                                    <span className="font-semibold text-foreground">
-                                                        [{log.context.component}]
-                                                    </span>
-                                                )}
+                                                {(() => {
+                                                    const component = log.context?.component;
+                                                    if (component && typeof component === 'string') {
+                                                        return (
+                                                            <span className="font-semibold text-foreground">
+                                                                [{component}]
+                                                            </span>
+                                                        );
+                                                    }
+                                                    return null;
+                                                })()}
                                             </div>
                                             <p className="break-all whitespace-pre-wrap">{log.message}</p>
                                             {log.args && log.args.length > 0 && (
