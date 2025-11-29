@@ -18,16 +18,67 @@ import {
   Bell,
   ChevronLeft,
   ChevronRight,
-  FileText
+  FileText,
+  Globe
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useState, useRef, useEffect } from 'react';
 import { Sheet, SheetContent, SheetTrigger } from '../ui/sheet';
 import { useTranslation } from 'react-i18next';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../ui/dropdown-menu';
 
 interface SidebarContentProps {
   onMobileClose?: () => void;
   isCollapsed?: boolean;
+}
+
+function LanguageSwitcher({ collapsed = false }: { collapsed?: boolean }) {
+  const { i18n } = useTranslation();
+
+  const languages = [
+    { code: 'en', label: 'English' },
+    { code: 'es', label: 'Español' },
+    { code: 'fr', label: 'Français' },
+    { code: 'de', label: 'Deutsch' },
+    { code: 'zh', label: '中文' },
+  ];
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          className={cn(
+            "h-8 px-2 gap-1 ml-1",
+            collapsed && "w-8 p-0 justify-center ml-0 mt-2"
+          )}
+          title="Switch Language"
+        >
+          <Globe className="h-4 w-4" />
+          {!collapsed && (
+            <span className="text-xs uppercase font-medium">{i18n.language?.split('-')[0] || 'en'}</span>
+          )}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        {languages.map((lang) => (
+          <DropdownMenuItem
+            key={lang.code}
+            onClick={() => i18n.changeLanguage(lang.code)}
+            className="text-xs"
+          >
+            {lang.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }
 
 function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentProps) {
@@ -56,13 +107,17 @@ function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentProps) {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className={cn("p-6 transition-all duration-300", isCollapsed && "p-2")}>
-        <div className="flex items-center gap-2 mb-1">
+      <div className={cn("p-6 transition-all duration-300", isCollapsed && "p-2 flex flex-col items-center")}>
+        <div className={cn("flex items-center gap-2 mb-1", isCollapsed && "flex-col mb-2")}>
           <img src="/logo.png" alt="zmNg Logo" className="h-8 w-8 rounded-lg" />
           {!isCollapsed && (
-            <h1 className="text-xl font-bold tracking-tight whitespace-nowrap">zmNg</h1>
+            <>
+              <h1 className="text-xl font-bold tracking-tight whitespace-nowrap">zmNg</h1>
+              <LanguageSwitcher />
+            </>
           )}
         </div>
+        {isCollapsed && <LanguageSwitcher collapsed />}
         {!isCollapsed && currentProfile && (
           <p className="text-xs text-muted-foreground font-medium px-1 truncate">
             {currentProfile.name}
@@ -210,6 +265,7 @@ export default function AppLayout() {
         <div className="flex items-center gap-2">
           <img src="/logo.png" alt="zmNg Logo" className="h-8 w-8 rounded-lg" />
           <span className="font-bold">zmNg</span>
+          <LanguageSwitcher />
         </div>
         <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
           <SheetTrigger asChild>
