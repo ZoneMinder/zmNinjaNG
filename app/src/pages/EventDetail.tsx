@@ -8,17 +8,28 @@ import { Card } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { SecureImage } from '../components/ui/secure-image';
 import { VideoPlayer } from '../components/ui/video-player';
-import { ArrowLeft, Calendar, Clock, HardDrive, AlertTriangle, Download, Archive, Video, ListVideo, Image } from 'lucide-react';
+import { ArrowLeft, Calendar, Clock, HardDrive, AlertTriangle, Download, Archive, Video, ListVideo, Image, Info } from 'lucide-react';
 import { format } from 'date-fns';
 import { downloadEventVideo, downloadEventImage } from '../lib/download';
 import { toast } from 'sonner';
 import { ZM_CONSTANTS } from '../lib/constants';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export default function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [useZmsFallback, setUseZmsFallback] = useState(false);
+  const [showFallbackBadge, setShowFallbackBadge] = useState(false);
+
+  useEffect(() => {
+    if (useZmsFallback) {
+      setShowFallbackBadge(true);
+      const timer = setTimeout(() => {
+        setShowFallbackBadge(false);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [useZmsFallback]);
 
   const { data: event, isLoading, error } = useQuery({
     queryKey: ['event', id],
@@ -170,12 +181,14 @@ export default function EventDetail() {
                       alt={event.Event.Name}
                       className="w-full h-full object-contain"
                     />
-                    <div className="absolute top-4 left-4">
-                      <Badge variant="secondary" className="gap-2 bg-yellow-500/80 text-black hover:bg-yellow-500">
-                        <AlertTriangle className="h-3 w-3" />
-                        Stream Fallback
-                      </Badge>
-                    </div>
+                    {showFallbackBadge && (
+                      <div className="absolute top-4 left-4 transition-opacity duration-500">
+                        <Badge variant="secondary" className="gap-2 bg-blue-500/80 text-white hover:bg-blue-500">
+                          <Info className="h-3 w-3" />
+                          Streaming via ZMS
+                        </Badge>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <VideoPlayer
