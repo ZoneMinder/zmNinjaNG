@@ -10,17 +10,19 @@ Watch a video of the demo [HERE](https://youtu.be/ces_2ap-htc)
 
 ### Screenshots
 
-| | |
-|---|---|
-| <img src="images/1.png" width="400" alt="Montage View"> | <img src="images/2.png" width="400" alt="Events View"> |
-| <img src="images/3.png" width="400" alt="Event Detail"> | <img src="images/4.png" width="400" alt="Timeline"> |
-
-<details>
-<summary>More Screenshots</summary>
-
-<img src="images/5.png" width="250" alt="Monitor Detail"> <img src="images/6.png" width="250" alt="Settings"> <img src="images/7.png" width="250" alt="Profile Switcher"> <img src="images/8.png" width="250" alt="Notifications">
-
-</details>
+<p align="center">
+  <img src="images/1.png" width="32%" />
+  <img src="images/2.png" width="32%" />
+  <img src="images/3.png" width="32%" />
+</p>
+<p align="center">
+  <img src="images/4.png" width="32%" />
+  <img src="images/5.png" width="32%" />
+  <img src="images/6.png" width="32%" />
+</p>
+<p align="center">
+  <img src="images/7.png" width="32%" />
+</p>
 
 ## Quick Start
 
