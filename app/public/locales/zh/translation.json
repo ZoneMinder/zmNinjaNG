@@ -21,7 +21,10 @@
     "try_again": "重试",
     "events": "事件",
     "save_changes": "保存更改",
-    "success": "成功"
+    "success": "成功",
+    "all": "全部",
+    "filter": "筛选",
+    "clear": "清除"
   },
   "monitors": {
     "title": "监控",
@@ -82,7 +85,9 @@
     "frames": "帧数",
     "id": "ID",
     "select_monitor": "选择监控",
-    "no_image": "无图像"
+    "no_image": "无图像",
+    "start": "开始",
+    "end": "结束"
   },
   "event_detail": {
     "event_id": "事件 ID",

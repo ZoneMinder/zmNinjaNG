@@ -21,7 +21,10 @@
     "try_again": "Réessayer",
     "events": "Événements",
     "save_changes": "Enregistrer les modifications",
-    "success": "Succès"
+    "success": "Succès",
+    "all": "Tous",
+    "filter": "Filtrer",
+    "clear": "Effacer"
   },
   "monitors": {
     "title": "Caméras",
@@ -82,7 +85,9 @@
     "frames": "Images",
     "id": "ID",
     "select_monitor": "Sélectionner un moniteur",
-    "no_image": "Pas d'image"
+    "no_image": "Pas d'image",
+    "start": "Début",
+    "end": "Fin"
   },
   "event_detail": {
     "event_id": "ID Événement",

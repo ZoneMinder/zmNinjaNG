@@ -21,7 +21,10 @@
     "try_again": "Try Again",
     "events": "Events",
     "save_changes": "Save Changes",
-    "success": "Success"
+    "success": "Success",
+    "all": "All",
+    "filter": "Filter",
+    "clear": "Clear"
   },
   "monitors": {
     "title": "Monitors",
@@ -82,7 +85,9 @@
     "frames": "Frames",
     "id": "ID",
     "select_monitor": "Select Monitor",
-    "no_image": "No Image"
+    "no_image": "No Image",
+    "start": "Start",
+    "end": "End"
   },
   "event_detail": {
     "event_id": "Event ID",

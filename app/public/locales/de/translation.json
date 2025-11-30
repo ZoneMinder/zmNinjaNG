@@ -21,7 +21,10 @@
     "try_again": "Erneut versuchen",
     "events": "Ereignisse",
     "save_changes": "Änderungen speichern",
-    "success": "Erfolg"
+    "success": "Erfolg",
+    "all": "Alle",
+    "filter": "Filtern",
+    "clear": "Leeren"
   },
   "monitors": {
     "title": "Kameras",
@@ -82,7 +85,9 @@
     "frames": "Frames",
     "id": "ID",
     "select_monitor": "Monitor auswählen",
-    "no_image": "Kein Bild"
+    "no_image": "Kein Bild",
+    "start": "Start",
+    "end": "Ende"
   },
   "event_detail": {
     "event_id": "Ereignis ID",
