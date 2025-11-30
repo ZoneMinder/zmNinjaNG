@@ -58,7 +58,8 @@
     "snapshot_failed": "Snapshot failed",
     "stream_connection_lost": "Stream connection lost",
     "ptz_capable": "PTZ Capable",
-    "view_events": "View Events"
+    "view_events": "View Events",
+    "offline": "Offline"
   },
   "events": {
     "title": "Events",
@@ -332,7 +333,8 @@
     "api": "API",
     "credentials": "Credentials",
     "streaming": "Streaming",
-    "streaming_url": "Streaming URL"
+    "streaming_url": "Streaming URL",
+    "add": "Add"
   },
   "setup": {
     "welcome": "Welcome to ZoneMinder",

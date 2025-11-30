@@ -58,7 +58,8 @@
     "snapshot_failed": "Schnappschuss fehlgeschlagen",
     "stream_connection_lost": "Stream-Verbindung verloren",
     "ptz_capable": "PTZ-fähig",
-    "view_events": "Ereignisse ansehen"
+    "view_events": "Ereignisse ansehen",
+    "offline": "Offline"
   },
   "events": {
     "title": "Ereignisse",
@@ -332,7 +333,8 @@
     "api": "API",
     "credentials": "Anmeldeinformationen",
     "streaming": "Streaming",
-    "streaming_url": "Streaming URL"
+    "streaming_url": "Streaming URL",
+    "add": "Hinzufügen"
   },
   "setup": {
     "welcome": "Willkommen bei ZoneMinder",

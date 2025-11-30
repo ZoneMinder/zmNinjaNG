@@ -58,7 +58,8 @@
     "snapshot_failed": "快照失败",
     "stream_connection_lost": "流连接丢失",
     "ptz_capable": "支持 PTZ",
-    "view_events": "查看事件"
+    "view_events": "查看事件",
+    "offline": "离线"
   },
   "events": {
     "title": "事件",
@@ -332,7 +333,8 @@
     "api": "API",
     "credentials": "凭据",
     "streaming": "流媒体",
-    "streaming_url": "流媒体 URL"
+    "streaming_url": "流媒体 URL",
+    "add": "添加"
   },
   "setup": {
     "welcome": "欢迎使用 ZoneMinder",

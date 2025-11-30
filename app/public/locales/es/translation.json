@@ -58,7 +58,8 @@
     "snapshot_failed": "Fallo al descargar instantánea",
     "stream_connection_lost": "Conexión de transmisión perdida",
     "ptz_capable": "Capacidad PTZ",
-    "view_events": "Ver Eventos"
+    "view_events": "Ver Eventos",
+    "offline": "Fuera de línea"
   },
   "events": {
     "title": "Eventos",
@@ -332,7 +333,8 @@
     "api": "API",
     "credentials": "Credenciales",
     "streaming": "Transmisión",
-    "streaming_url": "URL de Transmisión"
+    "streaming_url": "URL de Transmisión",
+    "add": "Agregar"
   },
   "setup": {
     "welcome": "Bienvenido a ZoneMinder",
