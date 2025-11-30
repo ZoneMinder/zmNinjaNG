@@ -217,8 +217,8 @@
     "apply": "Apply",
     "exit": "Exit",
     "invalid_columns": "Invalid number of columns",
-    "screen_limit": "Screen limit reached",
-    "grid_applied": "Grid applied",
+    "screen_limit": "Screen limited to {{columns}} columns",
+    "grid_applied": "Grid set to {{columns}} columns",
     "cameras_count": "{{count}} Cameras",
     "drag_hint": "Drag and drop to reorder monitors"
   },

@@ -217,8 +217,8 @@
     "apply": "Anwenden",
     "exit": "Verlassen",
     "invalid_columns": "Ungültige Anzahl von Spalten",
-    "screen_limit": "Bildschirmlimit erreicht",
-    "grid_applied": "Raster angewendet",
+    "screen_limit": "Bildschirm auf {{columns}} Spalten begrenzt",
+    "grid_applied": "Raster auf {{columns}} Spalten eingestellt",
     "cameras_count": "{{count}} Kameras",
     "drag_hint": "Ziehen und ablegen zum Neuordnen"
   },

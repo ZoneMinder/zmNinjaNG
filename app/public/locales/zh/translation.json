@@ -217,8 +217,8 @@
     "apply": "应用",
     "exit": "退出",
     "invalid_columns": "无效的列数",
-    "screen_limit": "达到屏幕限制",
-    "grid_applied": "网格已应用",
+    "screen_limit": "屏幕限制为 {{columns}} 列",
+    "grid_applied": "网格设置为 {{columns}} 列",
     "cameras_count": "{{count}} 个摄像头",
     "drag_hint": "拖放以重新排序"
   },

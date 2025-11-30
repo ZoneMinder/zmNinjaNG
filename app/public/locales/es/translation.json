@@ -217,8 +217,8 @@
     "apply": "Aplicar",
     "exit": "Salir",
     "invalid_columns": "Número inválido de columnas",
-    "screen_limit": "Límite de pantalla alcanzado",
-    "grid_applied": "Cuadrícula aplicada",
+    "screen_limit": "Pantalla limitada a {{columns}} columnas",
+    "grid_applied": "Cuadrícula establecida en {{columns}} columnas",
     "cameras_count": "{{count}} Cámaras",
     "drag_hint": "Arrastra y suelta para reordenar monitores"
   },

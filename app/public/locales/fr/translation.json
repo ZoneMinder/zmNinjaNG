@@ -217,8 +217,8 @@
     "apply": "Appliquer",
     "exit": "Quitter",
     "invalid_columns": "Nombre de colonnes invalide",
-    "screen_limit": "Limite d'écran atteinte",
-    "grid_applied": "Grille appliquée",
+    "screen_limit": "Écran limité à {{columns}} colonnes",
+    "grid_applied": "Grille définie sur {{columns}} colonnes",
     "cameras_count": "{{count}} Caméras",
     "drag_hint": "Glisser-déposer pour réorganiser"
   },

@@ -265,11 +265,11 @@ export default function Montage() {
     // Check if actual columns match requested columns
     const effectiveCols = getEffectiveCols(currentWidthRef.current, cols);
     if (effectiveCols !== cols) {
-      toast.info(t('montage.grid_set', { rows, cols }), {
-        description: t('montage.screen_limit', { cols: effectiveCols })
+      toast.info(t('montage.grid_set', { columns: cols }), {
+        description: t('montage.screen_limit', { columns: effectiveCols })
       });
     } else {
-      toast.success(t('montage.grid_applied', { rows, cols }));
+      toast.success(t('montage.grid_applied', { columns: cols }));
     }
   };
 
