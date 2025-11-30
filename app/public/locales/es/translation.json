@@ -19,7 +19,8 @@
     "none": "Ninguno",
     "unknown": "Desconocido",
     "try_again": "Intentar de nuevo",
-    "events": "Eventos"
+    "events": "Eventos",
+    "save_changes": "Guardar Cambios"
   },
   "monitors": {
     "title": "Cámaras",

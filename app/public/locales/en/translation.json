@@ -19,7 +19,8 @@
     "none": "None",
     "unknown": "Unknown",
     "try_again": "Try Again",
-    "events": "Events"
+    "events": "Events",
+    "save_changes": "Save Changes"
   },
   "monitors": {
     "title": "Monitors",

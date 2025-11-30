@@ -19,7 +19,8 @@
     "none": "无",
     "unknown": "未知",
     "try_again": "重试",
-    "events": "事件"
+    "events": "事件",
+    "save_changes": "保存更改"
   },
   "monitors": {
     "title": "监控",
