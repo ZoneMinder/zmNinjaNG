@@ -36,7 +36,7 @@ import {
 } from '../components/ui/dialog';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { RefreshCw, Video, Clock, Settings2, Maximize2, AlertCircle, LayoutDashboard, RotateCcw, Download, Grid2x2, Grid3x3, GripVertical, Maximize, Minimize, X, LayoutGrid } from 'lucide-react';
+import { RefreshCw, Video, Clock, Settings2, Maximize2, AlertCircle, LayoutDashboard, Download, Grid2x2, Grid3x3, GripVertical, Maximize, Minimize, X, LayoutGrid } from 'lucide-react';
 import { filterEnabledMonitors } from '../lib/filters';
 import { cn } from '../lib/utils';
 import { ZM_CONSTANTS } from '../lib/constants';
@@ -245,15 +245,6 @@ export default function Montage() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(allLayouts));
   }, [isLayoutLoaded]);
 
-  const handleResetLayout = () => {
-    if (confirm(t('montage.reset_confirm'))) {
-      const defaultLayout = generateDefaultLayout(monitors);
-      setLayouts(defaultLayout);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(defaultLayout));
-      toast.success(t('montage.reset_success'));
-    }
-  };
-
   const handleApplyGridLayout = (rows: number, cols: number) => {
     if (!currentProfile) return;
 
@@ -404,10 +395,6 @@ export default function Montage() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button onClick={handleResetLayout} variant="ghost" size="sm" title={t('montage.reset_layout')} className="h-8 sm:h-9">
-              <RotateCcw className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">{t('montage.reset_layout')}</span>
-            </Button>
             <Button onClick={() => refetch()} variant="outline" size="sm" className="h-8 sm:h-9">
               <RefreshCw className="h-4 w-4 sm:mr-2" />
               <span className="hidden sm:inline">{t('common.refresh')}</span>
