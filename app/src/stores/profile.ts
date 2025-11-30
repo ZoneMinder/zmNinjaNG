@@ -8,10 +8,12 @@ import { log } from '../lib/logger';
 interface ProfileState {
   profiles: Profile[];
   currentProfileId: string | null;
+  isInitialized: boolean;
 
   // Computed
   currentProfile: () => Profile | null;
   profileExists: (name: string, excludeId?: string) => boolean;
+
 
   // Actions
   addProfile: (profile: Omit<Profile, 'id' | 'createdAt'>) => Promise<void>;
@@ -30,6 +32,7 @@ export const useProfileStore = create<ProfileState>()(
     (set, get) => ({
       profiles: [],
       currentProfileId: null,
+      isInitialized: false,
 
       currentProfile: () => {
         const { profiles, currentProfileId } = get();
@@ -334,8 +337,12 @@ export const useProfileStore = create<ProfileState>()(
       name: 'zmng-profiles',
       // On load, initialize API client with current profile and authenticate
       onRehydrateStorage: () => async (state) => {
+        log.profile('onRehydrateStorage called', { hasState: !!state, currentProfileId: state?.currentProfileId });
+
         if (!state?.currentProfileId) {
-          log.profile('No current profile found on app load');
+          log.profile('No current profile found on app load', { state });
+          useProfileStore.setState({ isInitialized: true });
+          log.profile('isInitialized set to true (no profile)');
           return;
         }
 
@@ -345,6 +352,8 @@ export const useProfileStore = create<ProfileState>()(
             component: 'Profile',
             profileId: state.currentProfileId,
           });
+          // CRITICAL: Set isInitialized even on error to prevent hanging
+          useProfileStore.setState({ isInitialized: true });
           return;
         }
 
@@ -375,33 +384,42 @@ export const useProfileStore = create<ProfileState>()(
         setApiClient(createApiClient(profile.apiUrl));
 
         // STEP 3: Authenticate if credentials exist
-        if (profile.username && profile.password) {
-          log.profile('Authenticating with stored credentials', { username: profile.username });
-          try {
-            // Decrypt password before login
-            const decryptedPassword = await useProfileStore
-              .getState()
-              .getDecryptedPassword(state.currentProfileId);
-            if (!decryptedPassword) {
-              throw new Error('Failed to decrypt password');
+        // IMPORTANT: Wrap in try-finally to ensure isInitialized is ALWAYS set,
+        // even if authentication hangs or fails. This prevents the app from
+        // hanging on the loading screen indefinitely.
+        try {
+          if (profile.username && profile.password) {
+            log.profile('Authenticating with stored credentials', { username: profile.username });
+            try {
+              // Decrypt password before login
+              const decryptedPassword = await useProfileStore
+                .getState()
+                .getDecryptedPassword(state.currentProfileId);
+              if (!decryptedPassword) {
+                throw new Error('Failed to decrypt password');
+              }
+
+              const { useAuthStore } = await import('./auth');
+              await useAuthStore.getState().login(profile.username, decryptedPassword);
+              log.profile('Authentication successful on app load');
+            } catch (error) {
+              log.warn('Authentication failed on app load - this might be OK if server does not require auth', {
+                component: 'Profile',
+                error,
+              });
+              // Don't crash the app - some servers work without auth
             }
-
-            const { useAuthStore } = await import('./auth');
-            await useAuthStore.getState().login(profile.username, decryptedPassword);
-            log.profile('Authentication successful on app load');
-          } catch (error) {
-            log.warn('Authentication failed on app load - this might be OK if server does not require auth', {
-              component: 'Profile',
-              error,
-            });
-            // Don't crash the app - some servers work without auth
+          } else {
+            log.profile('No credentials stored, skipping authentication');
+            log.info('This is normal for public servers', { component: 'Profile' });
           }
-        } else {
-          log.profile('No credentials stored, skipping authentication');
-          log.info('This is normal for public servers', { component: 'Profile' });
+        } finally {
+          // CRITICAL: Always set isInitialized to true, even if authentication fails
+          // This allows the app to proceed to the UI and show any error messages
+          log.profile('App initialization complete - setting isInitialized to true');
+          useProfileStore.setState({ isInitialized: true });
+          log.profile('isInitialized flag set successfully');
         }
-
-        log.profile('App initialization complete');
       },
     }
   )

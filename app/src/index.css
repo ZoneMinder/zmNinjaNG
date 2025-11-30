@@ -57,6 +57,13 @@
     background-color: hsl(var(--background));
     color: hsl(var(--foreground));
     font-family: system-ui, -apple-system, sans-serif;
+    overflow-x: hidden; /* Prevent horizontal scroll */
+    width: 100%;
+    -webkit-tap-highlight-color: transparent; /* Remove tap highlight on mobile */
+  }
+  
+  html {
+    overflow-x: hidden;
   }
 }
 

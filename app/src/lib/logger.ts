@@ -28,11 +28,26 @@ class Logger {
 
   constructor() {
     this.isDev = import.meta.env.DEV;
-    this.level = this.isDev ? LogLevel.DEBUG : LogLevel.WARN;
+    // Check for saved log level
+    const savedLevel = typeof localStorage !== 'undefined' ? localStorage.getItem('zm_log_level') : null;
+    
+    if (savedLevel !== null && !isNaN(parseInt(savedLevel, 10))) {
+      this.level = parseInt(savedLevel, 10) as LogLevel;
+    } else {
+      // Default to INFO in production to ensure logs are visible in simulator/device
+      this.level = this.isDev ? LogLevel.DEBUG : LogLevel.INFO;
+    }
   }
 
   setLevel(level: LogLevel): void {
     this.level = level;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('zm_log_level', level.toString());
+    }
+  }
+
+  getLevel(): LogLevel {
+    return this.level;
   }
 
   private shouldLog(level: LogLevel): boolean {

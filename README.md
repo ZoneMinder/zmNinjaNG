@@ -38,7 +38,11 @@ npm run tauri:dev
 npm run android
 
 # iOS development
+npm run ios:sync # to sync changes
+
 npm run ios
+or
+npm run ios:open # for xcode based so you can see logs
 ```
 
 📱 **For detailed Android guide, see [ANDROID.md](app/ANDROID.md)**

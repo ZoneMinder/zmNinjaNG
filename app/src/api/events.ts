@@ -166,12 +166,21 @@ export function getEventImageUrl(
     token?: string;
     width?: number;
     height?: number;
+    apiUrl?: string;
   } = {}
 ): string {
   // Ensure portalUrl has a protocol
   let baseUrl = portalUrl;
+  
+  // If apiUrl is provided and starts with http://, force baseUrl to use http://
+  // This handles cases where portalUrl was forced to https:// but the server is actually http://
+  if (options.apiUrl && options.apiUrl.startsWith('http://')) {
+    baseUrl = baseUrl.replace(/^https:\/\//, 'http://');
+  }
+
   if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
-    baseUrl = `https://${baseUrl}`;
+    // Default to http if no protocol specified - many ZM installs are on local LANs
+    baseUrl = `http://${baseUrl}`;
   }
 
   // Build query parameters for ZoneMinder's index.php image viewer
@@ -209,12 +218,19 @@ export function getEventImageUrl(
 export function getEventVideoUrl(
   portalUrl: string,
   eventId: string,
-  token?: string
+  token?: string,
+  apiUrl?: string
 ): string {
   // Ensure portalUrl has a protocol
   let baseUrl = portalUrl;
+
+  // If apiUrl is provided and starts with http://, force baseUrl to use http://
+  if (apiUrl && apiUrl.startsWith('http://')) {
+    baseUrl = baseUrl.replace(/^https:\/\//, 'http://');
+  }
+
   if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
-    baseUrl = `https://${baseUrl}`;
+    baseUrl = `http://${baseUrl}`;
   }
 
   const params = new URLSearchParams({
@@ -234,12 +250,19 @@ export function getEventVideoUrl(
 export function getEventZmsUrl(
   portalUrl: string,
   eventId: string,
-  token?: string
+  token?: string,
+  apiUrl?: string
 ): string {
   // Ensure portalUrl has a protocol
   let baseUrl = portalUrl;
+
+  // If apiUrl is provided and starts with http://, force baseUrl to use http://
+  if (apiUrl && apiUrl.startsWith('http://')) {
+    baseUrl = baseUrl.replace(/^https:\/\//, 'http://');
+  }
+
   if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
-    baseUrl = `https://${baseUrl}`;
+    baseUrl = `http://${baseUrl}`;
   }
 
   const params = new URLSearchParams({

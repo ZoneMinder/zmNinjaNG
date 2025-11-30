@@ -55,6 +55,7 @@ setQueryClient(queryClient);
 function AppRoutes() {
   const profiles = useProfileStore((state) => state.profiles);
   const currentProfile = useProfileStore((state) => state.currentProfile());
+  const isInitialized = useProfileStore((state) => state.isInitialized);
   const displayMode = useSettingsStore(
     (state) => state.getProfileSettings(currentProfile?.id || '').displayMode
   );
@@ -75,13 +76,35 @@ function AppRoutes() {
   }, [displayMode]);
 
   // Log app mount and profile state
-  log.info('React app initialized', {
-    component: 'App',
-    totalProfiles: profiles.length,
-    currentProfile: currentProfile?.name || 'None',
-    profileId: currentProfile?.id || 'None',
-    hasCredentials: !!(currentProfile?.username && currentProfile?.password),
-  });
+  useEffect(() => {
+    log.info('React app initialized', {
+      component: 'App',
+      totalProfiles: profiles.length,
+      currentProfile: currentProfile?.name || 'None',
+      profileId: currentProfile?.id || 'None',
+      hasCredentials: !!(currentProfile?.username && currentProfile?.password),
+      isInitialized,
+    });
+  }, [profiles.length, currentProfile, isInitialized]);
+
+  // SAFETY: Timeout fallback to prevent indefinite hanging
+  // If initialization doesn't complete within 5 seconds, force it to complete
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (!isInitialized) {
+        log.warn('Profile store initialization timeout - forcing initialization', {
+          component: 'App',
+        });
+        useProfileStore.setState({ isInitialized: true });
+      }
+    }, 5000);
+
+    return () => clearTimeout(timeout);
+  }, [isInitialized]);
+
+  if (!isInitialized) {
+    return <RouteLoadingFallback />;
+  }
 
   return (
     <Suspense fallback={<RouteLoadingFallback />}>

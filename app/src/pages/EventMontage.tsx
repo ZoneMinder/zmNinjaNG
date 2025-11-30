@@ -487,6 +487,7 @@ export default function EventMontage() {
                   token: accessToken || undefined,
                   width: ZM_CONSTANTS.eventMontageImageWidth,
                   height: ZM_CONSTANTS.eventMontageImageHeight,
+                  apiUrl: currentProfile.apiUrl,
                 })
                 : '';
 

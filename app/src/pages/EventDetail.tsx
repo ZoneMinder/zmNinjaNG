@@ -76,11 +76,11 @@ export default function EventDetail() {
   console.log('[EventDetail] hasVideo:', hasVideo, 'hasJPEGs:', hasJPEGs);
 
   const videoUrl = currentProfile && hasVideo
-    ? getEventVideoUrl(currentProfile.portalUrl, event.Event.Id, accessToken || undefined)
+    ? getEventVideoUrl(currentProfile.portalUrl, event.Event.Id, accessToken || undefined, currentProfile.apiUrl)
     : '';
 
   const zmsUrl = currentProfile && hasVideo
-    ? getEventZmsUrl(currentProfile.portalUrl, event.Event.Id, accessToken || undefined)
+    ? getEventZmsUrl(currentProfile.portalUrl, event.Event.Id, accessToken || undefined, currentProfile.apiUrl)
     : '';
 
   const imageUrl = currentProfile && hasJPEGs
@@ -88,12 +88,14 @@ export default function EventDetail() {
         token: accessToken || undefined,
         width: ZM_CONSTANTS.eventMontageImageWidth,
         height: ZM_CONSTANTS.eventMontageImageHeight,
+        apiUrl: currentProfile.apiUrl,
       })
     : '';
 
   const posterUrl = currentProfile
     ? getEventImageUrl(currentProfile.portalUrl, event.Event.Id, 'snapshot', {
         token: accessToken || undefined,
+        apiUrl: currentProfile.apiUrl,
       })
     : undefined;
 

@@ -1,9 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { Capacitor } from '@capacitor/core';
-import { isTauri } from '@tauri-apps/api/core';
 import { getStreamUrl } from '../api/monitors';
-import { getApiClient } from '../api/client';
 import { useMonitorStore } from '../stores/monitors';
 import { useProfileStore } from '../stores/profile';
 import { useAuthStore } from '../stores/auth';
@@ -106,66 +103,20 @@ export function useMonitorStream({
       return;
     }
 
-    const isNative = Capacitor.isNativePlatform();
-    const isTauriApp = isTauri();
+    // Note: We previously attempted to use native HTTP fetch for snapshots on native platforms
+    // to bypass CORS, but it caused NSURLErrorDomain errors on iOS.
+    // We now rely on standard Image preloading which works fine.
 
-    // If we are on a native platform or Tauri, we need to fetch the image as a blob
-    // to bypass CORS restrictions that might apply to <img> tags
-    if (isNative || isTauriApp) {
-      let isMounted = true;
-      
-      const fetchImage = async () => {
-        try {
-          const client = getApiClient();
-          // We use the API client which is configured to use the native/Tauri HTTP client
-          // This bypasses CORS
-          const response = await client.get(streamUrl, { 
-            responseType: 'blob',
-            // Ensure we don't append the token again if it's already in the URL
-            // (getStreamUrl adds it, but client interceptor might add it too)
-            // Actually client interceptor adds it if not present, but streamUrl has it.
-            // The interceptor checks if token is in params/data.
-            // Since we are passing a full URL, we should be careful.
-            // But client.get(url) treats url as path if it doesn't start with http.
-            // streamUrl starts with http.
-          });
-          
-          if (isMounted && response.data) {
-            const blob = response.data as Blob;
-            const objectUrl = URL.createObjectURL(blob);
-            setDisplayedImageUrl((prev) => {
-              // Revoke previous URL to avoid memory leaks
-              if (prev && prev.startsWith('blob:')) {
-                URL.revokeObjectURL(prev);
-              }
-              return objectUrl;
-            });
-          }
-        } catch (error) {
-          console.error('Failed to fetch snapshot image:', error);
-          // Fallback to direct URL if fetch fails
-          if (isMounted) setDisplayedImageUrl(streamUrl);
-        }
-      };
-
-      fetchImage();
-
-      return () => {
-        isMounted = false;
-      };
-    } else {
-      // Web mode - standard image preloading
-      const img = new Image();
-      img.onload = () => {
-        // Only update the displayed URL when the new image is fully loaded
-        setDisplayedImageUrl(streamUrl);
-      };
-      img.onerror = () => {
-        // On error, still update to trigger the error handler
-        setDisplayedImageUrl(streamUrl);
-      };
-      img.src = streamUrl;
-    }
+    const img = new Image();
+    img.onload = () => {
+      // Only update the displayed URL when the new image is fully loaded
+      setDisplayedImageUrl(streamUrl);
+    };
+    img.onerror = () => {
+      // On error, still update to trigger the error handler
+      setDisplayedImageUrl(streamUrl);
+    };
+    img.src = streamUrl;
   }, [streamUrl, settings.viewMode]);
 
   const regenerateConnection = () => {

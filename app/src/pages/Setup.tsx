@@ -172,8 +172,8 @@ export default function Setup() {
         console.log('[Setup] Attempting login with provided credentials...');
         console.log('[Setup]   - Username:', username);
         try {
-          const { login } = await import('../api/auth');
-          await login({ user: username, pass: password });
+          const { useAuthStore } = await import('../stores/auth');
+          await useAuthStore.getState().login(username, password);
           console.log('[Setup]   ✓ Login successful');
         } catch (loginError: unknown) {
           console.error('[Setup]   ✗ Login failed:', loginError);

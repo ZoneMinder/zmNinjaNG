@@ -1,7 +1,9 @@
 import { useLogStore } from '../stores/logs';
+import { logger, LogLevel } from '../lib/logger';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { ScrollText, Trash2, Download, Share2, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Capacitor } from '@capacitor/core';
@@ -52,6 +54,17 @@ export default function Logs() {
     const { toast } = useToast();
     const { t } = useTranslation();
     const isNative = Capacitor.isNativePlatform();
+    const [logLevel, setLogLevel] = useState<string>(logger.getLevel().toString());
+
+    const handleLevelChange = (value: string) => {
+        const level = parseInt(value, 10) as LogLevel;
+        logger.setLevel(level);
+        setLogLevel(value);
+        toast({
+            title: t('common.success'),
+            description: "Log level updated",
+        });
+    };
 
     const exportLogsAsText = () => {
         const logText = logs.map(log => {
@@ -138,6 +151,17 @@ export default function Logs() {
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
+                    <Select value={logLevel} onValueChange={handleLevelChange}>
+                        <SelectTrigger className="w-[100px] h-8">
+                            <SelectValue placeholder="Level" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value={LogLevel.DEBUG.toString()}>DEBUG</SelectItem>
+                            <SelectItem value={LogLevel.INFO.toString()}>INFO</SelectItem>
+                            <SelectItem value={LogLevel.WARN.toString()}>WARN</SelectItem>
+                            <SelectItem value={LogLevel.ERROR.toString()}>ERROR</SelectItem>
+                        </SelectContent>
+                    </Select>
                     {isNative ? (
                         <Button
                             variant="outline"

@@ -15,6 +15,8 @@ PODS:
     - Capacitor
   - CapacitorPushNotifications (7.0.3):
     - Capacitor
+  - CapacitorShare (7.0.2):
+    - Capacitor
   - IONFilesystemLib (1.0.1)
   - KeychainSwift (21.0.0)
   - SDWebImage (5.21.4):
@@ -29,6 +31,7 @@ DEPENDENCIES:
   - "CapacitorFilesystem (from `../../node_modules/@capacitor/filesystem`)"
   - "CapacitorPreferences (from `../../node_modules/@capacitor/preferences`)"
   - "CapacitorPushNotifications (from `../../node_modules/@capacitor/push-notifications`)"
+  - "CapacitorShare (from `../../node_modules/@capacitor/share`)"
 
 SPEC REPOS:
   trunk:
@@ -51,6 +54,8 @@ EXTERNAL SOURCES:
     :path: "../../node_modules/@capacitor/preferences"
   CapacitorPushNotifications:
     :path: "../../node_modules/@capacitor/push-notifications"
+  CapacitorShare:
+    :path: "../../node_modules/@capacitor/share"
 
 SPEC CHECKSUMS:
   AparajitaCapacitorSecureStorage: 502bff73187cf9d0164459458ccf47ec65d5895a
@@ -60,10 +65,11 @@ SPEC CHECKSUMS:
   CapacitorFilesystem: 609d5cceca1ed93d7f25839dbfdfd224bfe78209
   CapacitorPreferences: 65107ed7437d96ee72583df5763985e3c0ff2bc2
   CapacitorPushNotifications: bdd621fbd562be34a41f4a7b1750efa000447d5a
+  CapacitorShare: be166411fa995ead2d39b104aa0aae56d8615c66
   IONFilesystemLib: 89258b8e3e85465da93127d25d7ce37f977e8a6f
   KeychainSwift: 4a71a45c802fd9e73906457c2dcbdbdc06c9419d
   SDWebImage: d0184764be51240d49c761c37f53dd017e1ccaaf
 
-PODFILE CHECKSUM: dfac81b840420a106627b0fe2bbc40853d573ead
+PODFILE CHECKSUM: 10a43a9b6365bd451d1d4ebb6fd1b2d8e633a3c9
 
 COCOAPODS: 1.16.2

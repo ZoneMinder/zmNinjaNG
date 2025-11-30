@@ -282,7 +282,7 @@ export default function AppLayout() {
       </div>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto relative w-full pt-12 md:pt-0">
+      <main className="flex-1 overflow-y-auto overflow-x-hidden relative w-full pt-12 md:pt-0">
         {/* Background gradient blob for visual interest */}
         <div className="absolute top-0 left-0 w-full h-96 bg-gradient-to-b from-primary/5 to-transparent -z-10 pointer-events-none" />
 

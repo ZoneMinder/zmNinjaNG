@@ -24,6 +24,10 @@ function sanitizeForLogging(obj: unknown): unknown {
     return obj;
   }
 
+  if (obj instanceof Blob) {
+    return `[Blob: ${obj.type}, ${obj.size} bytes]`;
+  }
+
   if (Array.isArray(obj)) {
     return obj.map(sanitizeForLogging);
   }
@@ -118,7 +122,27 @@ export function createApiClient(baseURL: string): AxiosInstance {
                   ? 'arraybuffer' 
                   : undefined,
             });
-            responseData = response.data;
+            
+            // Handle blob response type - CapacitorHttp returns base64 string for blob
+            if (config.responseType === 'blob' && typeof response.data === 'string') {
+              try {
+                const byteCharacters = atob(response.data);
+                const byteNumbers = new Array(byteCharacters.length);
+                for (let i = 0; i < byteCharacters.length; i++) {
+                  byteNumbers[i] = byteCharacters.charCodeAt(i);
+                }
+                const byteArray = new Uint8Array(byteNumbers);
+                // Try to get content type from headers
+                const contentType = response.headers['Content-Type'] || response.headers['content-type'] || 'application/octet-stream';
+                responseData = new Blob([byteArray], { type: contentType });
+              } catch (e) {
+                log.error('Failed to convert base64 to blob', { component: 'API' }, e);
+                responseData = response.data;
+              }
+            } else {
+              responseData = response.data;
+            }
+
             responseStatus = response.status;
             responseHeaders = response.headers as Record<string, string>;
           } else {

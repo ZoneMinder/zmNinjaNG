@@ -306,6 +306,7 @@ export default function Events() {
                   token: accessToken || undefined,
                   width: 160,
                   height: 120,
+                  apiUrl: currentProfile.apiUrl,
                 })
                 : '';
 
