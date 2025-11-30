@@ -261,7 +261,7 @@ export default function AppLayout() {
       </aside>
 
       {/* Mobile Header */}
-      <div className="md:hidden fixed top-0 left-0 right-0 h-12 border-b bg-background/80 backdrop-blur-md z-30 flex items-center px-3 justify-between">
+      <div className="md:hidden fixed top-0 left-0 right-0 h-[calc(3rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] border-b bg-background/80 backdrop-blur-md z-30 flex items-center px-3 justify-between">
         <div className="flex items-center gap-2">
           <img src="/logo.png" alt="zmNg Logo" className="h-8 w-8 rounded-lg" />
           <span className="font-bold">zmNg</span>
@@ -273,7 +273,7 @@ export default function AppLayout() {
               <Menu className="h-5 w-5" />
             </Button>
           </SheetTrigger>
-          <SheetContent side="left" className="p-0 w-64 sm:w-72 flex flex-col">
+          <SheetContent side="left" className="p-0 w-64 sm:w-72 flex flex-col pt-[env(safe-area-inset-top)]">
             <div className="flex-1 overflow-y-auto">
               <SidebarContent onMobileClose={() => setIsMobileOpen(false)} />
             </div>
@@ -282,7 +282,7 @@ export default function AppLayout() {
       </div>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto overflow-x-hidden relative w-full pt-12 md:pt-0">
+      <main className="flex-1 overflow-y-auto overflow-x-hidden relative w-full pt-[calc(3rem+env(safe-area-inset-top))] md:pt-0">
         {/* Background gradient blob for visual interest */}
         <div className="absolute top-0 left-0 w-full h-96 bg-gradient-to-b from-primary/5 to-transparent -z-10 pointer-events-none" />
 
