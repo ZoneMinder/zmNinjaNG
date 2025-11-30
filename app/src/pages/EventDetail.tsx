@@ -206,7 +206,7 @@ export default function EventDetail() {
                     src={videoUrl}
                     className="w-full h-full"
                     poster={posterUrl}
-                    autoPlay
+                    autoplay
                     onError={() => {
                       console.log('Video playback failed, falling back to ZMS stream');
                       toast.error(t('event_detail.video_playback_failed'));
