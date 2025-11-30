@@ -8,7 +8,10 @@
 import { useEffect, useRef, useState } from 'react';
 import videojs from 'video.js';
 import 'video.js/dist/video-js.css';
-import Player from 'video.js/dist/types/player';
+
+// Define Player type from the videojs function return type
+// This avoids deep imports which can be problematic with some bundlers
+type Player = ReturnType<typeof videojs>;
 import { cn } from '../../lib/utils';
 
 interface VideoPlayerProps {
@@ -72,7 +75,7 @@ export function VideoPlayer({
       const videoElement = document.createElement("video-js");
 
       videoElement.classList.add('vjs-big-play-centered');
-      
+
       if (videoRef.current) {
         videoRef.current.appendChild(videoElement);
       }
