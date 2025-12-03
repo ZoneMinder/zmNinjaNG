@@ -1,5 +1,8 @@
 {
   "common": {
+    "pip": "Bild-in-Bild",
+    "pip_failed": "Bild-in-Bild konnte nicht gestartet werden",
+    "go_back": "Zurück",
     "refresh": "Aktualisieren",
     "close": "Schließen",
     "settings": "Einstellungen",

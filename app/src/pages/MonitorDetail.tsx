@@ -14,7 +14,7 @@ import { useAuthStore } from '../stores/auth';
 import { useSettingsStore } from '../stores/settings';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
-import { ArrowLeft, Settings, Maximize2, Video, AlertTriangle, Clock, Download } from 'lucide-react';
+import { ArrowLeft, Settings, Maximize2, Video, AlertTriangle, Clock, Download, PictureInPicture } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { cn } from '../lib/utils';
 import { useMonitorStore } from '../stores/monitors';
@@ -45,6 +45,58 @@ export default function MonitorDetail() {
   const [cacheBuster, setCacheBuster] = useState(Date.now());
   const [displayedImageUrl, setDisplayedImageUrl] = useState<string>('');
   const imgRef = useRef<HTMLImageElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const pipLoopRef = useRef<number | null>(null);
+
+  const togglePip = async () => {
+    try {
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+      } else {
+        if (!imgRef.current || !canvasRef.current || !videoRef.current) return;
+
+        const img = imgRef.current;
+        const canvas = canvasRef.current;
+        const video = videoRef.current;
+
+        // Set canvas dimensions to match image
+        canvas.width = img.naturalWidth || img.width;
+        canvas.height = img.naturalHeight || img.height;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        // Render loop
+        const draw = () => {
+          if (img.complete && img.naturalHeight !== 0) {
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          }
+          pipLoopRef.current = requestAnimationFrame(draw);
+        };
+        draw();
+
+        // Connect stream
+        const stream = canvas.captureStream(30); // 30 FPS
+        video.srcObject = stream;
+        await video.play();
+
+        await video.requestPictureInPicture();
+
+        // Cleanup when PiP closes
+        video.addEventListener('leavepictureinpicture', () => {
+          if (pipLoopRef.current) {
+            cancelAnimationFrame(pipLoopRef.current);
+          }
+          video.pause();
+          video.srcObject = null;
+        }, { once: true });
+      }
+    } catch (err) {
+      console.error('PiP failed:', err);
+      toast.error(t('monitor_detail.pip_failed'));
+    }
+  };
 
   // Force regenerate connKey when component mounts or monitor changes
   useEffect(() => {
@@ -196,6 +248,10 @@ export default function MonitorDetail() {
             }}
           />
 
+          {/* Hidden Canvas and Video for PiP */}
+          <canvas ref={canvasRef} className="hidden" />
+          <video ref={videoRef} className="hidden" muted playsInline />
+
           {/* Controls Overlay */}
           <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300">
             <div className="flex items-center justify-between text-white">
@@ -236,6 +292,18 @@ export default function MonitorDetail() {
                 >
                   {scale}%
                 </Button>
+                {document.pictureInPictureEnabled && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-white hover:bg-white/20"
+                    onClick={togglePip}
+                    title={t('monitor_detail.pip')}
+                    aria-label={t('monitor_detail.pip')}
+                  >
+                    <PictureInPicture className="h-5 w-5" />
+                  </Button>
+                )}
                 <Button variant="ghost" size="icon" className="text-white hover:bg-white/20" aria-label={t('monitor_detail.maximize')}>
                   <Maximize2 className="h-5 w-5" />
                 </Button>

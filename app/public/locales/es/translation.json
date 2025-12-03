@@ -1,5 +1,8 @@
 {
   "common": {
+    "pip": "Imagen en Imagen",
+    "pip_failed": "Error al entrar en Imagen en Imagen",
+    "go_back": "Volver",
     "refresh": "Actualizar",
     "close": "Cerrar",
     "settings": "Configuración",

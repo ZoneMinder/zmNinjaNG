@@ -1,5 +1,8 @@
 {
   "common": {
+    "pip": "Image dans l'image",
+    "pip_failed": "Échec de l'ouverture de l'image dans l'image",
+    "go_back": "Retour",
     "refresh": "Actualiser",
     "close": "Fermer",
     "settings": "Paramètres",
