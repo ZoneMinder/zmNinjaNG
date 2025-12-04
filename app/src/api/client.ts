@@ -6,56 +6,13 @@ import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 import { isTauri } from '@tauri-apps/api/core';
 import { useAuthStore } from '../stores/auth';
 import { log } from '../lib/logger';
+import { sanitizeObject } from '../lib/log-sanitizer';
 
 interface NativeHttpError {
   message: string;
   status?: number;
   data?: unknown;
   headers?: Record<string, string>;
-}
-
-/**
- * Sanitize sensitive data for logging
- * - Truncates tokens to first 5 chars + "...<truncated>"
- * - Masks passwords completely with "***"
- */
-function sanitizeForLogging(obj: unknown): unknown {
-  if (!obj || typeof obj !== 'object') {
-    return obj;
-  }
-
-  if (obj instanceof Blob) {
-    return `[Blob: ${obj.type}, ${obj.size} bytes]`;
-  }
-
-  if (Array.isArray(obj)) {
-    return obj.map(sanitizeForLogging);
-  }
-
-  const sanitized: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(obj)) {
-    const lowerKey = key.toLowerCase();
-
-    // Mask passwords completely
-    if (lowerKey === 'pass' || lowerKey === 'password') {
-      sanitized[key] = '***';
-    }
-    // Truncate tokens to first 5 chars
-    else if (lowerKey === 'token' || lowerKey === 'access_token' || lowerKey === 'refresh_token') {
-      const tokenValue = String(value || '');
-      sanitized[key] = tokenValue.length > 5
-        ? `${tokenValue.slice(0, 5)}...<truncated>`
-        : tokenValue;
-    }
-    // Recursively sanitize nested objects
-    else if (typeof value === 'object' && value !== null) {
-      sanitized[key] = sanitizeForLogging(value);
-    }
-    else {
-      sanitized[key] = value;
-    }
-  }
-  return sanitized;
 }
 
 interface AdapterResponse {
@@ -281,7 +238,7 @@ export function createApiClient(baseURL: string): AxiosInstance {
         };
 
         if (queryParams) {
-          logData.queryParams = sanitizeForLogging(config.params);
+          logData.queryParams = sanitizeObject(config.params);
         }
 
         if (config.data) {
@@ -290,9 +247,9 @@ export function createApiClient(baseURL: string): AxiosInstance {
             config.data.forEach((value: string, key: string) => {
               formDataObj[key] = value;
             });
-            logData.formData = sanitizeForLogging(formDataObj);
+            logData.formData = sanitizeObject(formDataObj);
           } else {
-            logData.bodyData = sanitizeForLogging(config.data);
+            logData.bodyData = sanitizeObject(config.data);
           }
         }
 
@@ -319,7 +276,7 @@ export function createApiClient(baseURL: string): AxiosInstance {
         log.api(`[Response] ${response.status} ${response.statusText} - ${fullZmUrl}`, {
           status: response.status,
           statusText: response.statusText,
-          data: sanitizeForLogging(response.data),
+          data: sanitizeObject(response.data),
         });
       }
       return response;
@@ -368,7 +325,7 @@ export function createApiClient(baseURL: string): AxiosInstance {
         };
 
         if (error.response?.data) {
-          errorData.responseData = sanitizeForLogging(error.response.data);
+          errorData.responseData = sanitizeObject(error.response.data);
         }
 
         if (error.config?.data) {
@@ -377,9 +334,9 @@ export function createApiClient(baseURL: string): AxiosInstance {
             error.config.data.forEach((value: string, key: string) => {
               formDataObj[key] = value;
             });
-            errorData.requestFormData = sanitizeForLogging(formDataObj);
+            errorData.requestFormData = sanitizeObject(formDataObj);
           } else {
-            errorData.requestBodyData = sanitizeForLogging(error.config.data);
+            errorData.requestBodyData = sanitizeObject(error.config.data);
           }
         }
 

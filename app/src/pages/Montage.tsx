@@ -7,18 +7,14 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useShallow } from 'zustand/react/shallow';
-import { getMonitors, getStreamUrl } from '../api/monitors';
+import { getMonitors } from '../api/monitors';
 import { useProfileStore } from '../stores/profile';
 import { useAuthStore } from '../stores/auth';
-import { useMonitorStore } from '../stores/monitors';
 import { useSettingsStore } from '../stores/settings';
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { NavigateFunction } from 'react-router-dom';
-import type { Monitor, MonitorStatus, Profile } from '../api/types';
-import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { Badge } from '../components/ui/badge';
+import { MontageMonitor } from '../components/monitors/MontageMonitor';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,11 +32,10 @@ import {
 } from '../components/ui/dialog';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { RefreshCw, Video, Clock, Settings2, Maximize2, AlertCircle, LayoutDashboard, Download, Grid2x2, Grid3x3, GripVertical, Maximize, Minimize, X, LayoutGrid } from 'lucide-react';
+import { RefreshCw, Video, AlertCircle, LayoutDashboard, Grid2x2, Grid3x3, GripVertical, Maximize, Minimize, X, LayoutGrid } from 'lucide-react';
 import { filterEnabledMonitors } from '../lib/filters';
 import { cn } from '../lib/utils';
 import { ZM_CONSTANTS } from '../lib/constants';
-import { downloadSnapshotFromElement } from '../lib/download';
 import { Responsive, WidthProvider } from 'react-grid-layout';
 import type { Layout, Layouts } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
@@ -535,219 +530,5 @@ export default function Montage() {
         </DialogContent>
       </Dialog>
     </div>
-  );
-}
-
-function MontageMonitor({
-  monitor,
-  status,
-  currentProfile,
-  accessToken,
-  navigate,
-  isFullscreen = false
-}: {
-  monitor: Monitor,
-  status: MonitorStatus | undefined,
-  currentProfile: Profile | null,
-  accessToken: string | null,
-  navigate: NavigateFunction,
-  isFullscreen?: boolean
-}) {
-  const { t } = useTranslation();
-  const isRunning = status?.Status === 'Connected';
-  const regenerateConnKey = useMonitorStore((state) => state.regenerateConnKey);
-  const settings = useSettingsStore(
-    useShallow((state) => state.getProfileSettings(currentProfile?.id || ''))
-  );
-  const [connKey, setConnKey] = useState(0);
-  const [cacheBuster, setCacheBuster] = useState(Date.now());
-  const [displayedImageUrl, setDisplayedImageUrl] = useState<string>('');
-  const imgRef = useRef<HTMLImageElement>(null);
-
-  // Force regenerate connKey when component mounts
-  useEffect(() => {
-    console.log(`[Montage] Regenerating connkey for monitor ${monitor.Id}`);
-    const newKey = regenerateConnKey(monitor.Id);
-    setConnKey(newKey);
-    setCacheBuster(Date.now());
-  }, [monitor.Id, regenerateConnKey]);
-
-  // Snapshot mode: periodic refresh
-  useEffect(() => {
-    if (settings.viewMode !== 'snapshot') return;
-
-    const interval = setInterval(() => {
-      setCacheBuster(Date.now());
-    }, settings.snapshotRefreshInterval * 1000);
-
-    return () => clearInterval(interval);
-  }, [settings.viewMode, settings.snapshotRefreshInterval]);
-
-  // Cleanup: abort image loading on unmount to release connection
-  useEffect(() => {
-    const currentImg = imgRef.current;
-    return () => {
-      if (currentImg) {
-        console.log(`[Montage] Cleaning up stream for monitor ${monitor.Id}`);
-        // Set to empty data URI to abort the connection
-        currentImg.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-      }
-    };
-  }, [monitor.Id]);
-
-  const streamUrl = currentProfile
-    ? getStreamUrl(currentProfile.cgiUrl, monitor.Id, {
-      mode: settings.viewMode === 'snapshot' ? 'single' : 'jpeg',
-      scale: ZM_CONSTANTS.montageStreamScale,
-      maxfps: settings.viewMode === 'streaming' ? ZM_CONSTANTS.streamMaxFPS : undefined,
-      token: accessToken || undefined,
-      connkey: connKey,
-      cacheBuster: cacheBuster,
-    })
-    : '';
-
-  // Preload images in snapshot mode to avoid flickering
-  useEffect(() => {
-    if (settings.viewMode !== 'snapshot' || !streamUrl) {
-      setDisplayedImageUrl(streamUrl);
-      return;
-    }
-
-    // Preload the new image
-    const img = new Image();
-    img.onload = () => {
-      // Only update the displayed URL when the new image is fully loaded
-      setDisplayedImageUrl(streamUrl);
-    };
-    img.onerror = () => {
-      // On error, still update to trigger the error handler
-      setDisplayedImageUrl(streamUrl);
-    };
-    img.src = streamUrl;
-  }, [streamUrl, settings.viewMode]);
-
-  return (
-    <Card className={cn(
-      "h-full overflow-hidden flex flex-col",
-      isFullscreen
-        ? "border-none shadow-none bg-black rounded-none m-0 p-0"
-        : "border-0 shadow-md bg-card hover:shadow-xl transition-shadow duration-200 ring-1 ring-border/50 hover:ring-primary/50"
-    )}>
-      {/* Header / Drag Handle - Hidden in fullscreen */}
-      {!isFullscreen && (
-        <div className="drag-handle h-8 bg-card border-b flex items-center justify-between px-2 cursor-move hover:bg-accent/50 transition-colors shrink-0 select-none">
-          <div className="flex items-center gap-2 overflow-hidden">
-            <Badge
-              variant={isRunning ? "default" : "destructive"}
-              className={cn(
-                "h-1.5 w-1.5 p-0 rounded-full shrink-0",
-                isRunning ? "bg-green-500 hover:bg-green-500" : "bg-red-500 hover:bg-red-500"
-              )}
-            />
-            <span className="text-xs font-medium truncate" title={monitor.Name}>
-              {monitor.Name}
-            </span>
-          </div>
-          <Settings2 className="h-3 w-3 text-muted-foreground opacity-50" />
-        </div>
-      )}
-
-      {/* Video Content */}
-      <div
-        className={cn(
-          "flex-1 relative overflow-hidden",
-          isFullscreen ? "bg-black" : "bg-black/90",
-          !isFullscreen && "cursor-pointer"
-        )}
-        onClick={() => !isFullscreen && navigate(`/monitors/${monitor.Id}`)}
-      >
-        <img
-          ref={imgRef}
-          src={displayedImageUrl || streamUrl}
-          alt={monitor.Name}
-          className={cn(
-            "w-full h-full",
-            isFullscreen ? "object-cover" : "object-contain"
-          )}
-          onError={(e) => {
-            const img = e.target as HTMLImageElement;
-            // Only retry if we haven't retried too recently (basic debounce)
-            if (!img.dataset.retrying) {
-              img.dataset.retrying = "true";
-              console.log(`[Montage] Stream failed for ${monitor.Name}, regenerating connkey...`);
-              regenerateConnKey(monitor.Id);
-              toast.error(t('montage.stream_lost_reconnecting', { name: monitor.Name }));
-
-              // Reset retry flag after a delay
-              setTimeout(() => {
-                delete img.dataset.retrying;
-              }, ZM_CONSTANTS.streamReconnectDelay);
-            } else {
-              img.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="320" height="240"%3E%3Crect fill="%231a1a1a" width="320" height="240"/%3E%3Ctext fill="%23444" x="50%" y="50%" text-anchor="middle" font-family="sans-serif" font-size="14"%3ENo Signal%3C/text%3E%3C/svg%3E';
-            }
-          }}
-        />
-
-        {/* Overlay Controls (visible on hover) */}
-        <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex justify-end gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 text-white hover:bg-white/20"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (imgRef.current) {
-                downloadSnapshotFromElement(imgRef.current, monitor.Name)
-                  .then(() => toast.success(t('montage.snapshot_saved', { name: monitor.Name })))
-                  .catch(() => toast.error(t('montage.snapshot_failed')));
-              }
-            }}
-            title={t('montage.save_snapshot')}
-            aria-label={t('montage.save_snapshot')}
-          >
-            <Download className="h-3 w-3" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 text-white hover:bg-white/20"
-            onClick={(e) => {
-              e.stopPropagation();
-              navigate(`/events?monitorId=${monitor.Id}`);
-            }}
-            title={t('common.events')}
-            aria-label={t('monitors.view_events')}
-          >
-            <Video className="h-3 w-3" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 text-white hover:bg-white/20"
-            onClick={(e) => {
-              e.stopPropagation();
-              navigate(`/timeline?monitorId=${monitor.Id}`);
-            }}
-            title={t('sidebar.timeline')}
-            aria-label={t('sidebar.timeline')}
-          >
-            <Clock className="h-3 w-3" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 text-white hover:bg-white/20"
-            onClick={(e) => {
-              e.stopPropagation();
-              navigate(`/monitors/${monitor.Id}`);
-            }}
-            title={t('monitor_detail.maximize')}
-            aria-label={t('monitor_detail.maximize')}
-          >
-            <Maximize2 className="h-3 w-3" />
-          </Button>
-        </div>
-      </div>
-    </Card>
   );
 }

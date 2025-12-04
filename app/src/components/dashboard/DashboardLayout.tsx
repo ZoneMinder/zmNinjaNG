@@ -21,7 +21,7 @@ import { Responsive, WidthProvider } from 'react-grid-layout';
 import type { Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
-import { useMemo, useState, useEffect, useRef } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
@@ -49,8 +49,6 @@ export function DashboardLayout() {
     const updateLayouts = useDashboardStore((state) => state.updateLayouts);
     const isEditing = useDashboardStore((state) => state.isEditing);
 
-    // Track current breakpoint for responsive behavior
-    const [currentBreakpoint, setCurrentBreakpoint] = useState<string>('lg');
     const [mounted, setMounted] = useState(false);
 
     // Force component to mount properly
@@ -102,10 +100,6 @@ export function DashboardLayout() {
         updateLayouts(profileId, newLayouts);
     };
 
-    const handleBreakpointChange = (newBreakpoint: string) => {
-        setCurrentBreakpoint(newBreakpoint);
-    };
-
     if (widgets.length === 0) {
         return (
             <div className="flex flex-col items-center justify-center h-[60vh] text-center p-8">
@@ -146,7 +140,6 @@ export function DashboardLayout() {
                 cols={COLS}
                 rowHeight={ROW_HEIGHT}
                 onLayoutChange={handleLayoutChange}
-                onBreakpointChange={handleBreakpointChange}
                 isDraggable={isEditing}
                 isResizable={isEditing}
                 draggableHandle=".drag-handle"
