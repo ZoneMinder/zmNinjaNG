@@ -9,7 +9,7 @@
  * - Form validation
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
 import { Button } from '../ui/button';
 import type { DashboardWidget } from '../../stores/dashboard';
@@ -21,6 +21,7 @@ import { Input } from '../ui/input';
 import { Checkbox } from '../ui/checkbox';
 import { ScrollArea } from '../ui/scroll-area';
 import { useTranslation } from 'react-i18next';
+import { filterEnabledMonitors } from '../../lib/filters';
 
 interface WidgetEditDialogProps {
     open: boolean;
@@ -41,6 +42,11 @@ export function WidgetEditDialog({ open, onOpenChange, widget, profileId }: Widg
         queryKey: ['monitors'],
         queryFn: getMonitors,
     });
+
+    // Filter out deleted monitors
+    const enabledMonitors = useMemo(() => {
+        return monitors?.monitors ? filterEnabledMonitors(monitors.monitors) : [];
+    }, [monitors?.monitors]);
 
     // Reset form when widget changes
     useEffect(() => {
@@ -115,7 +121,7 @@ export function WidgetEditDialog({ open, onOpenChange, widget, profileId }: Widg
                                     : t('dashboard.select_monitor')}
                             </Label>
                             <ScrollArea className="h-48 border rounded-md p-4">
-                                {monitors?.monitors.map((monitor) => (
+                                {enabledMonitors.map((monitor) => (
                                     <div key={monitor.Monitor.Id} className="flex items-center space-x-2 mb-2">
                                         <Checkbox
                                             id={`monitor-${monitor.Monitor.Id}`}

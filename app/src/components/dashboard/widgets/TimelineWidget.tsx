@@ -19,12 +19,15 @@ import { useTheme } from '../../theme-provider';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../ui/button';
 
+type TimeRange = '24h' | '48h' | '1w' | '2w' | '1m';
+
 export function TimelineWidget() {
     const { theme } = useTheme();
     const { t } = useTranslation();
     const navigate = useNavigate();
     const now = new Date();
     const [start, setStart] = useState(subHours(now, 24));
+    const [selectedRange, setSelectedRange] = useState<TimeRange>('24h');
     const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -56,73 +59,200 @@ export function TimelineWidget() {
     });
 
     // Quick range handlers
-    const setRange = (hours: number) => {
+    const setRange = (hours: number, range: TimeRange) => {
         setStart(subHours(new Date(), hours));
+        setSelectedRange(range);
     };
 
-    const setRangeDays = (days: number) => {
+    const setRangeDays = (days: number, range: TimeRange) => {
         setStart(subDays(new Date(), days));
+        setSelectedRange(range);
     };
 
-    // Intelligently aggregate events based on time range
-    const { data, tickInterval } = useMemo(() => {
+    // Intelligently aggregate events and format x-axis based on time range and widget width
+    const { data, tickFormatter, tickInterval } = useMemo(() => {
         const hoursDiff = differenceInHours(now, start);
-        const useHourly = hoursDiff <= 72; // Use hourly for <= 3 days
+        const widthInPixels = containerSize.width || 400;
 
-        if (useHourly) {
-            // Hourly aggregation for short ranges
+        // Calculate how many labels we can fit based on widget width
+        const avgLabelWidth = 60; // pixels per label
+        const maxLabels = Math.floor(widthInPixels / avgLabelWidth);
+
+        if (hoursDiff <= 24) {
+            // 24 hours: Show hours, mark with time
             const intervals = eachHourOfInterval({ start, end: now });
             const chartData = intervals.map(interval => {
                 const intervalStart = startOfHour(interval);
                 const intervalEnd = endOfHour(interval);
-
                 const count = events?.events.filter(e => {
                     const eventTime = new Date(e.Event.StartDateTime);
                     return eventTime >= intervalStart && eventTime <= intervalEnd;
                 }).length || 0;
 
+                const hour = interval.getHours();
+                let timeLabel: string;
+                // Show hour, and mark midnight/noon
+                if (hour === 0) {
+                    timeLabel = format(interval, 'MMM dd');
+                } else if (hour === 12) {
+                    timeLabel = '12pm';
+                } else {
+                    timeLabel = format(interval, 'ha');
+                }
+
                 return {
-                    time: format(interval, 'HH:mm'),
+                    time: timeLabel,
                     fullTime: format(interval, 'MMM dd HH:mm'),
                     count,
                     intervalStart,
                     intervalEnd,
+                    rawTime: interval,
                 };
             });
 
-            // Calculate tick interval: show ~8-12 labels
-            const targetLabels = 10;
-            const calculatedInterval = Math.max(1, Math.floor(intervals.length / targetLabels));
+            const tickInterval = Math.max(1, Math.floor(intervals.length / Math.min(maxLabels, 12)));
+            const tickFormatter = (value: string) => value;
 
-            return { data: chartData, tickInterval: calculatedInterval };
-        } else {
-            // Daily aggregation for longer ranges
+            return { data: chartData, tickFormatter, tickInterval };
+
+        } else if (hoursDiff <= 72) {
+            // 48-72 hours: Show hours with day names
+            const intervals = eachHourOfInterval({ start, end: now });
+            const chartData = intervals.map(interval => {
+                const intervalStart = startOfHour(interval);
+                const intervalEnd = endOfHour(interval);
+                const count = events?.events.filter(e => {
+                    const eventTime = new Date(e.Event.StartDateTime);
+                    return eventTime >= intervalStart && eventTime <= intervalEnd;
+                }).length || 0;
+
+                const hour = interval.getHours();
+                let timeLabel: string;
+                // Mark day boundaries prominently
+                if (hour === 0) {
+                    timeLabel = format(interval, 'EEE dd');
+                } else if (hour === 12) {
+                    timeLabel = '12pm';
+                } else {
+                    timeLabel = format(interval, 'ha');
+                }
+
+                return {
+                    time: timeLabel,
+                    fullTime: format(interval, 'MMM dd HH:mm'),
+                    count,
+                    intervalStart,
+                    intervalEnd,
+                    rawTime: interval,
+                };
+            });
+
+            // Show more frequent ticks for 48-72 hours to ensure day markers are visible
+            const tickInterval = Math.max(1, Math.floor(intervals.length / Math.min(maxLabels, 12)));
+            const tickFormatter = (value: string) => value;
+
+            return { data: chartData, tickFormatter, tickInterval };
+
+        } else if (hoursDiff <= 168) {
+            // 1 week: Show days
             const intervals = eachDayOfInterval({ start, end: now });
             const chartData = intervals.map(interval => {
                 const intervalStart = startOfDay(interval);
                 const intervalEnd = endOfDay(interval);
-
                 const count = events?.events.filter(e => {
                     const eventTime = new Date(e.Event.StartDateTime);
                     return eventTime >= intervalStart && eventTime <= intervalEnd;
                 }).length || 0;
 
                 return {
-                    time: format(interval, 'MMM dd'),
-                    fullTime: format(interval, 'MMM dd, yyyy'),
+                    time: format(interval, 'EEE'),
+                    fullTime: format(interval, 'EEEE, MMM dd'),
                     count,
                     intervalStart,
                     intervalEnd,
+                    rawTime: interval,
                 };
             });
 
-            // For daily, show fewer labels for longer ranges
-            const targetLabels = hoursDiff > 336 ? 6 : 8; // Less labels for month view
-            const calculatedInterval = Math.max(0, Math.floor(intervals.length / targetLabels));
+            const tickInterval = Math.max(0, Math.floor(intervals.length / Math.min(maxLabels, 7)));
+            const tickFormatter = (value: string) => value;
 
-            return { data: chartData, tickInterval: calculatedInterval };
+            return { data: chartData, tickFormatter, tickInterval };
+
+        } else if (hoursDiff <= 336) {
+            // 2 weeks: Show dates, emphasize Mondays
+            const intervals = eachDayOfInterval({ start, end: now });
+            const chartData = intervals.map(interval => {
+                const intervalStart = startOfDay(interval);
+                const intervalEnd = endOfDay(interval);
+                const count = events?.events.filter(e => {
+                    const eventTime = new Date(e.Event.StartDateTime);
+                    return eventTime >= intervalStart && eventTime <= intervalEnd;
+                }).length || 0;
+
+                const dayOfWeek = interval.getDay();
+                let timeLabel: string;
+                // Show Mondays prominently, other days with just the date
+                if (dayOfWeek === 1) {
+                    timeLabel = format(interval, 'MMM dd'); // Monday
+                } else {
+                    timeLabel = format(interval, 'dd');
+                }
+
+                return {
+                    time: timeLabel,
+                    fullTime: format(interval, 'EEEE, MMM dd'),
+                    count,
+                    intervalStart,
+                    intervalEnd,
+                    rawTime: interval,
+                };
+            });
+
+            const tickInterval = Math.max(0, Math.floor(intervals.length / Math.min(maxLabels, 10)));
+            const tickFormatter = (value: string) => value;
+
+            return { data: chartData, tickFormatter, tickInterval };
+
+        } else {
+            // 1 month: Show weeks (Mondays) and month boundaries
+            const intervals = eachDayOfInterval({ start, end: now });
+            const chartData = intervals.map(interval => {
+                const intervalStart = startOfDay(interval);
+                const intervalEnd = endOfDay(interval);
+                const count = events?.events.filter(e => {
+                    const eventTime = new Date(e.Event.StartDateTime);
+                    return eventTime >= intervalStart && eventTime <= intervalEnd;
+                }).length || 0;
+
+                const dayOfWeek = interval.getDay();
+                const dayOfMonth = interval.getDate();
+                let timeLabel: string;
+                // Show week starts (Mondays) and month boundaries
+                if (dayOfMonth === 1) {
+                    timeLabel = format(interval, 'MMM dd'); // First of month
+                } else if (dayOfWeek === 1) {
+                    timeLabel = format(interval, 'dd'); // Monday
+                } else {
+                    timeLabel = '';
+                }
+
+                return {
+                    time: timeLabel,
+                    fullTime: format(interval, 'EEEE, MMM dd'),
+                    count,
+                    intervalStart,
+                    intervalEnd,
+                    rawTime: interval,
+                };
+            });
+
+            const tickInterval = Math.max(0, Math.floor(intervals.length / Math.min(maxLabels, 8)));
+            const tickFormatter = (value: string) => value;
+
+            return { data: chartData, tickFormatter, tickInterval };
         }
-    }, [start, now, events]);
+    }, [start, now, events, containerSize.width]);
 
     // Handle bar click - navigate to events with time filter
     const handleBarClick = (data: any) => {
@@ -132,7 +262,7 @@ export function TimelineWidget() {
                 return format(date, "yyyy-MM-dd'T'HH:mm");
             };
 
-            navigate(`/events?start=${formatDateTime(data.intervalStart)}&end=${formatDateTime(data.intervalEnd)}`, {
+            navigate(`/events?startDateTime=${formatDateTime(data.intervalStart)}&endDateTime=${formatDateTime(data.intervalEnd)}`, {
                 state: { from: '/dashboard' }
             });
         }
@@ -142,42 +272,42 @@ export function TimelineWidget() {
         <div ref={containerRef} className="w-full h-full flex flex-col p-2 gap-2">
             <div className="flex flex-wrap gap-1 shrink-0">
                 <Button
-                    variant="outline"
+                    variant={selectedRange === '24h' ? 'default' : 'outline'}
                     size="sm"
                     className="text-xs h-7 px-2"
-                    onClick={() => setRange(24)}
+                    onClick={() => setRange(24, '24h')}
                 >
                     {t('events.past_24_hours')}
                 </Button>
                 <Button
-                    variant="outline"
+                    variant={selectedRange === '48h' ? 'default' : 'outline'}
                     size="sm"
                     className="text-xs h-7 px-2"
-                    onClick={() => setRange(48)}
+                    onClick={() => setRange(48, '48h')}
                 >
                     {t('events.past_48_hours')}
                 </Button>
                 <Button
-                    variant="outline"
+                    variant={selectedRange === '1w' ? 'default' : 'outline'}
                     size="sm"
                     className="text-xs h-7 px-2"
-                    onClick={() => setRangeDays(7)}
+                    onClick={() => setRangeDays(7, '1w')}
                 >
                     {t('events.past_week')}
                 </Button>
                 <Button
-                    variant="outline"
+                    variant={selectedRange === '2w' ? 'default' : 'outline'}
                     size="sm"
                     className="text-xs h-7 px-2"
-                    onClick={() => setRangeDays(14)}
+                    onClick={() => setRangeDays(14, '2w')}
                 >
                     {t('events.past_2_weeks')}
                 </Button>
                 <Button
-                    variant="outline"
+                    variant={selectedRange === '1m' ? 'default' : 'outline'}
                     size="sm"
                     className="text-xs h-7 px-2"
-                    onClick={() => setRangeDays(30)}
+                    onClick={() => setRangeDays(30, '1m')}
                 >
                     {t('events.past_month')}
                 </Button>
@@ -192,9 +322,10 @@ export function TimelineWidget() {
                         tickLine={false}
                         axisLine={false}
                         interval={tickInterval}
-                        angle={data.length > 50 ? -45 : 0}
-                        textAnchor={data.length > 50 ? 'end' : 'middle'}
-                        height={data.length > 50 ? 60 : 30}
+                        tickFormatter={tickFormatter}
+                        angle={0}
+                        textAnchor="middle"
+                        height={30}
                     />
                     <YAxis
                         stroke="#888888"

@@ -10,7 +10,7 @@
  * - Profile-aware widget creation
  */
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { Plus, LayoutGrid, List, Activity } from 'lucide-react';
@@ -20,6 +20,7 @@ import { useProfileStore } from '../../stores/profile';
 import { useShallow } from 'zustand/react/shallow';
 import { useQuery } from '@tanstack/react-query';
 import { getMonitors } from '../../api/monitors';
+import { filterEnabledMonitors } from '../../lib/filters';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Input } from '../ui/input';
@@ -46,6 +47,11 @@ export function DashboardConfig() {
         queryKey: ['monitors'],
         queryFn: getMonitors,
     });
+
+    // Filter out deleted monitors
+    const enabledMonitors = useMemo(() => {
+        return monitors?.monitors ? filterEnabledMonitors(monitors.monitors) : [];
+    }, [monitors?.monitors]);
 
     /**
      * Get default title for a widget type
@@ -184,7 +190,7 @@ export function DashboardConfig() {
                             <Label>{t('dashboard.select_monitors')}</Label>
                             <ScrollArea className="h-[200px] border rounded-md p-2">
                                 <div className="space-y-2">
-                                    {monitors?.monitors.map((m) => (
+                                    {enabledMonitors.map((m) => (
                                         <div key={m.Monitor.Id} className="flex items-center space-x-2">
                                             <Checkbox
                                                 id={`monitor-${m.Monitor.Id}`}
@@ -216,7 +222,7 @@ export function DashboardConfig() {
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="all">{t('dashboard.all_monitors')}</SelectItem>
-                                    {monitors?.monitors.map((m) => (
+                                    {enabledMonitors.map((m) => (
                                         <SelectItem key={m.Monitor.Id} value={m.Monitor.Id}>
                                             {m.Monitor.Name}
                                         </SelectItem>

@@ -65,12 +65,17 @@ export function DashboardLayout() {
         };
     }, [widgets]);
 
-    const handleLayoutChange = (currentLayout: Layout[]) => {
-        // Only update if we are editing or if it's a drag/resize event
-        // RGL fires this on mount too, so we need to be careful not to create infinite loops
+    const handleLayoutChange = (currentLayout: Layout[], allLayouts: { [key: string]: Layout[] }) => {
+        // Only save layouts when user is actively editing (dragging/resizing)
+        // Don't save when react-grid-layout auto-calculates layouts for breakpoint changes
+        if (!isEditing) return;
+
+        // Only save the lg layout as source of truth
+        // React-grid-layout will auto-calculate other breakpoints from lg
+        const lgLayout = allLayouts.lg || currentLayout;
 
         // Check if layout has actually changed to prevent infinite loops
-        const hasChanged = currentLayout.some(l => {
+        const hasChanged = lgLayout.some(l => {
             const widget = widgets.find(w => w.id === l.i);
             if (!widget) return false;
             return (
@@ -84,7 +89,7 @@ export function DashboardLayout() {
         if (!hasChanged) return;
 
         // Map RGL layout back to our WidgetLayout format
-        const newLayouts = currentLayout.map(l => ({
+        const newLayouts = lgLayout.map(l => ({
             i: l.i,
             x: l.x,
             y: l.y,
