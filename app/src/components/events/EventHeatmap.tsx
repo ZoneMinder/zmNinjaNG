@@ -23,6 +23,10 @@ interface EventHeatmapProps {
   startDate?: Date;
   endDate?: Date;
   onTimeRangeClick?: (startDateTime: string, endDateTime: string) => void;
+  /** Whether the heatmap is collapsible (default: true). Set to false for widget mode. */
+  collapsible?: boolean;
+  /** Whether to show the card wrapper (default: true). Set to false for widget mode. */
+  showCard?: boolean;
 }
 
 interface HeatmapBucket {
@@ -36,9 +40,11 @@ export function EventHeatmap({
   startDate,
   endDate,
   onTimeRangeClick,
+  collapsible = true,
+  showCard = true,
 }: EventHeatmapProps) {
   const { t } = useTranslation();
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(!collapsible);
 
   // Calculate time buckets and event density
   const { buckets } = useMemo(() => {
@@ -130,8 +136,8 @@ export function EventHeatmap({
     return null;
   }
 
-  return (
-    <Card className="p-4 mb-4">
+  const heatmapContent = (
+    <>
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-semibold">{t('events.heatmap_title', 'Event Density')}</h3>
@@ -139,31 +145,37 @@ export function EventHeatmap({
             ({t('events.heatmap_total', { count: events.length })})
           </span>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="h-8 w-8 p-0"
-        >
-          {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-        </Button>
+        {collapsible && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="h-8 w-8 p-0"
+          >
+            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </Button>
+        )}
       </div>
 
       {isExpanded && (
         <>
-          <div className="relative h-32 mb-3 overflow-x-auto">
-            <div className="flex items-end h-full gap-px" style={{ minWidth: `${Math.max(buckets.length * 12, 100)}px` }}>
+          <div className="relative h-32 mb-3">
+            <div className="flex items-end h-full gap-px">
               {buckets.map((bucket) => (
                 <div
                   key={bucket.time.toISOString()}
-                  className="relative group cursor-pointer transition-opacity hover:opacity-80"
-                  style={{ flex: '1 1 0', minWidth: '8px' }}
+                  className="relative group cursor-pointer transition-opacity hover:opacity-80 h-full"
+                  style={{
+                    flex: '1 1 0',
+                    minWidth: showCard ? '8px' : '4px',
+                    maxWidth: showCard ? 'none' : '20px'
+                  }}
                   onClick={() => handleBarClick(bucket)}
                 >
                   <div
                     className="w-full rounded-t transition-all"
                     style={{
-                      height: `${Math.max(bucket.intensity * 100, bucket.count > 0 ? 4 : 2)}%`,
+                      height: `${Math.max(bucket.intensity * 100, bucket.count > 0 ? 8 : 4)}%`,
                       backgroundColor: getColor(bucket.intensity),
                     }}
                   >
@@ -180,8 +192,8 @@ export function EventHeatmap({
           </div>
 
           {/* X-axis labels */}
-          <div className="relative h-4 text-xs text-muted-foreground overflow-x-auto">
-            <div style={{ minWidth: `${Math.max(buckets.length * 12, 100)}px`, position: 'relative' }}>
+          <div className="relative h-4 text-xs text-muted-foreground">
+            <div className="relative">
               {buckets.map((bucket, bucketIndex) => {
                 const label = formatTimeLabel(bucket.time, bucketIndex);
                 if (!label) return null;
@@ -189,7 +201,7 @@ export function EventHeatmap({
                 return (
                   <span
                     key={bucket.time.toISOString()}
-                    className="absolute whitespace-nowrap"
+                    className="absolute whitespace-nowrap text-[10px]"
                     style={{
                       left: `${leftPercent}%`,
                       transform: 'translateX(-50%)',
@@ -218,6 +230,12 @@ export function EventHeatmap({
           </div>
         </>
       )}
-    </Card>
+    </>
   );
+
+  if (showCard) {
+    return <Card className="p-4 mb-4">{heatmapContent}</Card>;
+  }
+
+  return <div className="w-full h-full overflow-hidden">{heatmapContent}</div>;
 }

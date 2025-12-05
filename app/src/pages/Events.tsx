@@ -426,18 +426,34 @@ export default function Events() {
       </div>
 
       {/* Event Heatmap */}
-      {allEvents.length > 0 && filters.startDateTime && filters.endDateTime && (
-        <EventHeatmap
-          events={allEvents}
-          startDate={new Date(filters.startDateTime)}
-          endDate={new Date(filters.endDateTime)}
-          onTimeRangeClick={(startDateTime, endDateTime) => {
-            setStartDateInput(formatLocalDateTime(new Date(startDateTime)));
-            setEndDateInput(formatLocalDateTime(new Date(endDateTime)));
-            applyFilters();
-          }}
-        />
-      )}
+      {allEvents.length > 0 && (() => {
+        // Use explicit date filters if available, otherwise infer from events
+        let startDate: Date;
+        let endDate: Date;
+
+        if (filters.startDateTime && filters.endDateTime) {
+          startDate = new Date(filters.startDateTime);
+          endDate = new Date(filters.endDateTime);
+        } else {
+          // Infer date range from events
+          const eventDates = allEvents.map(e => new Date(e.Event.StartDateTime));
+          startDate = new Date(Math.min(...eventDates.map(d => d.getTime())));
+          endDate = new Date(Math.max(...eventDates.map(d => d.getTime())));
+        }
+
+        return (
+          <EventHeatmap
+            events={allEvents}
+            startDate={startDate}
+            endDate={endDate}
+            onTimeRangeClick={(startDateTime, endDateTime) => {
+              setStartDateInput(formatLocalDateTime(new Date(startDateTime)));
+              setEndDateInput(formatLocalDateTime(new Date(endDateTime)));
+              applyFilters();
+            }}
+          />
+        );
+      })()}
 
       {/* Events List */}
       {allEvents.length === 0 ? (

@@ -88,8 +88,8 @@ export function HeatmapWidget({ title }: HeatmapWidgetProps) {
   ];
 
   return (
-    <Card className="h-full flex flex-col">
-      <CardHeader className="pb-3">
+    <Card className="h-full flex flex-col overflow-hidden">
+      <CardHeader className="pb-3 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Activity className="h-5 w-5" />
@@ -97,9 +97,9 @@ export function HeatmapWidget({ title }: HeatmapWidgetProps) {
           </div>
         </div>
       </CardHeader>
-      <CardContent className="flex-1 overflow-auto">
+      <CardContent className="flex-1 flex flex-col min-h-0">
         {/* Time range selector */}
-        <div className="flex flex-wrap gap-2 mb-4">
+        <div className="flex flex-wrap gap-2 mb-4 flex-shrink-0">
           {timeRangeButtons.map((btn) => (
             <Button
               key={btn.value}
@@ -114,27 +114,31 @@ export function HeatmapWidget({ title }: HeatmapWidgetProps) {
         </div>
 
         {/* Heatmap or loading state */}
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </div>
-        ) : error ? (
-          <div className="text-center py-12 text-destructive">
-            <p className="text-sm">{t('common.error')}</p>
-          </div>
-        ) : events.length === 0 ? (
-          <div className="text-center py-12 text-muted-foreground">
-            <Activity className="h-12 w-12 mx-auto mb-4 opacity-20" />
-            <p className="text-sm">{t('events.no_events')}</p>
-          </div>
-        ) : (
-          <EventHeatmap
-            events={events}
-            startDate={startDate}
-            endDate={endDate}
-            onTimeRangeClick={handleTimeRangeClick}
-          />
-        )}
+        <div className="flex-1 min-h-0">
+          {isLoading ? (
+            <div className="flex items-center justify-center h-full">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : error ? (
+            <div className="text-center py-12 text-destructive">
+              <p className="text-sm">{t('common.error')}</p>
+            </div>
+          ) : events.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <Activity className="h-12 w-12 mx-auto mb-4 opacity-20" />
+              <p className="text-sm">{t('events.no_events')}</p>
+            </div>
+          ) : (
+            <EventHeatmap
+              events={events}
+              startDate={startDate}
+              endDate={endDate}
+              onTimeRangeClick={handleTimeRangeClick}
+              collapsible={false}
+              showCard={false}
+            />
+          )}
+        </div>
       </CardContent>
     </Card>
   );
