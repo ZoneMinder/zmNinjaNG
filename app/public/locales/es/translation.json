@@ -117,7 +117,13 @@
     "past_48_hours": "Últimas 48 Horas",
     "past_week": "Última Semana",
     "past_2_weeks": "Últimas 2 Semanas",
-    "past_month": "Último Mes"
+    "past_month": "Último Mes",
+    "heatmap_title": "Densidad de Eventos",
+    "heatmap_total": "{{count}} eventos",
+    "heatmap_events": "eventos",
+    "heatmap_low": "Bajo",
+    "heatmap_high": "Alto",
+    "clear_filters": "Borrar Filtros"
   },
   "event_detail": {
     "event_id": "ID de Evento",

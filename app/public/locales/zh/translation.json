@@ -117,7 +117,13 @@
     "past_48_hours": "过去48小时",
     "past_week": "过去一周",
     "past_2_weeks": "过去两周",
-    "past_month": "过去一个月"
+    "past_month": "过去一个月",
+    "heatmap_title": "事件密度",
+    "heatmap_total": "{{count}} 个事件",
+    "heatmap_events": "个事件",
+    "heatmap_low": "低",
+    "heatmap_high": "高",
+    "clear_filters": "清除筛选"
   },
   "event_detail": {
     "event_id": "事件 ID",

@@ -16,6 +16,8 @@ import { useProfileStore } from '../stores/profile';
 import { useAuthStore } from '../stores/auth';
 import { useSettingsStore } from '../stores/settings';
 import { useEventFilters } from '../hooks/useEventFilters';
+import { usePullToRefresh } from '../hooks/usePullToRefresh';
+import { PullToRefreshIndicator } from '../components/ui/pull-to-refresh-indicator';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -25,6 +27,7 @@ import { getEnabledMonitorIds, filterEnabledMonitors } from '../lib/filters';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
 import { Checkbox } from '../components/ui/checkbox';
 import { EventCard } from '../components/events/EventCard';
+import { EventHeatmap } from '../components/events/EventHeatmap';
 import { useTranslation } from 'react-i18next';
 
 export default function Events() {
@@ -96,6 +99,14 @@ export default function Events() {
   const { data: eventsData, isLoading, error, refetch } = useQuery({
     queryKey: ['events', filters, eventLimit],
     queryFn: () => getEvents({ ...filters, limit: eventLimit }),
+  });
+
+  // Pull-to-refresh gesture
+  const pullToRefresh = usePullToRefresh({
+    onRefresh: async () => {
+      await refetch();
+    },
+    enabled: true,
   });
 
   // Load next batch of events
@@ -179,7 +190,20 @@ export default function Events() {
   }
 
   return (
-    <div ref={parentRef} className="h-full overflow-auto p-3 sm:p-4 md:p-6">
+    <div
+      ref={(el) => {
+        parentRef.current = el;
+        pullToRefresh.containerRef.current = el;
+      }}
+      {...pullToRefresh.bind()}
+      className="h-full overflow-auto p-3 sm:p-4 md:p-6 relative touch-none"
+    >
+      <PullToRefreshIndicator
+        isPulling={pullToRefresh.isPulling}
+        isRefreshing={pullToRefresh.isRefreshing}
+        pullDistance={pullToRefresh.pullDistance}
+        threshold={pullToRefresh.threshold}
+      />
       <div className="flex flex-col gap-3 sm:gap-4 mb-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -400,6 +424,20 @@ export default function Events() {
           </div>
         </div>
       </div>
+
+      {/* Event Heatmap */}
+      {allEvents.length > 0 && filters.startDateTime && filters.endDateTime && (
+        <EventHeatmap
+          events={allEvents}
+          startDate={new Date(filters.startDateTime)}
+          endDate={new Date(filters.endDateTime)}
+          onTimeRangeClick={(startDateTime, endDateTime) => {
+            setStartDateInput(formatLocalDateTime(new Date(startDateTime)));
+            setEndDateInput(formatLocalDateTime(new Date(endDateTime)));
+            applyFilters();
+          }}
+        />
+      )}
 
       {/* Events List */}
       {allEvents.length === 0 ? (
