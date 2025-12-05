@@ -47,9 +47,9 @@ export default function Dashboard() {
     return (
         <div className="flex flex-col h-full bg-background">
             <div className="flex items-center justify-between p-4 border-b">
-                <div className="flex items-center gap-3">
-                    <LayoutDashboard className="h-6 w-6" />
-                    <h1 className="text-2xl font-bold">{t('dashboard.title')}</h1>
+                <div className="flex items-center gap-2">
+                    <LayoutDashboard className="h-5 w-5 sm:h-6 sm:w-6" />
+                    <h1 className="text-lg sm:text-2xl font-bold">{t('dashboard.title')}</h1>
                 </div>
                 <div className="flex items-center gap-2">
                     {widgets.length > 0 && (
@@ -68,16 +68,17 @@ export default function Dashboard() {
                                 size="sm"
                                 onClick={toggleEditMode}
                                 className={isEditing ? "bg-green-600 hover:bg-green-700" : ""}
+                                title={isEditing ? t('dashboard.done') : t('dashboard.edit_layout')}
                             >
                                 {isEditing ? (
                                     <>
-                                        <Check className="mr-2 h-4 w-4" />
-                                        {t('dashboard.done')}
+                                        <Check className="sm:mr-2 h-4 w-4" />
+                                        <span className="hidden sm:inline">{t('dashboard.done')}</span>
                                     </>
                                 ) : (
                                     <>
-                                        <Pencil className="mr-2 h-4 w-4" />
-                                        {t('dashboard.edit_layout')}
+                                        <Pencil className="sm:mr-2 h-4 w-4" />
+                                        <span className="hidden sm:inline">{t('dashboard.edit_layout')}</span>
                                     </>
                                 )}
                             </Button>

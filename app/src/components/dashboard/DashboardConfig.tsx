@@ -141,9 +141,9 @@ export function DashboardConfig() {
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button>
-                    <Plus className="mr-2 h-4 w-4" />
-                    {t('dashboard.add_widget')}
+                <Button title={t('dashboard.add_widget')}>
+                    <Plus className="sm:mr-2 h-4 w-4" />
+                    <span className="hidden sm:inline">{t('dashboard.add_widget')}</span>
                 </Button>
             </DialogTrigger>
             <DialogContent>
