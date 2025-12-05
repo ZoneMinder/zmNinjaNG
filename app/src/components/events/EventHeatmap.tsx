@@ -38,7 +38,7 @@ export function EventHeatmap({
   onTimeRangeClick,
 }: EventHeatmapProps) {
   const { t } = useTranslation();
-  const [isExpanded, setIsExpanded] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   // Calculate time buckets and event density
   const { buckets } = useMemo(() => {
@@ -151,18 +151,19 @@ export function EventHeatmap({
 
       {isExpanded && (
         <>
-          <div className="relative h-32 mb-3">
-            <div className="flex items-end justify-between h-full gap-px">
+          <div className="relative h-32 mb-3 overflow-x-auto">
+            <div className="flex items-end h-full gap-px" style={{ minWidth: `${Math.max(buckets.length * 12, 100)}px` }}>
               {buckets.map((bucket) => (
                 <div
                   key={bucket.time.toISOString()}
-                  className="flex-1 min-w-0 relative group cursor-pointer transition-opacity hover:opacity-80"
+                  className="relative group cursor-pointer transition-opacity hover:opacity-80"
+                  style={{ flex: '1 1 0', minWidth: '8px' }}
                   onClick={() => handleBarClick(bucket)}
                 >
                   <div
                     className="w-full rounded-t transition-all"
                     style={{
-                      height: `${Math.max(bucket.intensity * 100, 2)}%`,
+                      height: `${Math.max(bucket.intensity * 100, bucket.count > 0 ? 4 : 2)}%`,
                       backgroundColor: getColor(bucket.intensity),
                     }}
                   >
@@ -179,15 +180,26 @@ export function EventHeatmap({
           </div>
 
           {/* X-axis labels */}
-          <div className="flex justify-between text-xs text-muted-foreground px-1">
-            {buckets.map((bucket, bucketIndex) => {
-              const label = formatTimeLabel(bucket.time, bucketIndex);
-              return label ? (
-                <span key={bucket.time.toISOString()}>{label}</span>
-              ) : (
-                <span key={bucket.time.toISOString()} className="invisible">•</span>
-              );
-            })}
+          <div className="relative h-4 text-xs text-muted-foreground overflow-x-auto">
+            <div style={{ minWidth: `${Math.max(buckets.length * 12, 100)}px`, position: 'relative' }}>
+              {buckets.map((bucket, bucketIndex) => {
+                const label = formatTimeLabel(bucket.time, bucketIndex);
+                if (!label) return null;
+                const leftPercent = (bucketIndex / Math.max(buckets.length - 1, 1)) * 100;
+                return (
+                  <span
+                    key={bucket.time.toISOString()}
+                    className="absolute whitespace-nowrap"
+                    style={{
+                      left: `${leftPercent}%`,
+                      transform: 'translateX(-50%)',
+                    }}
+                  >
+                    {label}
+                  </span>
+                );
+              })}
+            </div>
           </div>
 
           {/* Legend */}
