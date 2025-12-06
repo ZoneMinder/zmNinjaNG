@@ -10,3 +10,4 @@ Global Rules
 - When you make changes that may be breaking (such as changes in layout profile), always avoid the app crashing. Feel free to prompt the user to reset the profile if that happens instead of the app crashing
 - For all functionality, add test cases 
 - Write high quality documentation
+- When you implement clicks inside views that navigate to other views, always implement a "stacked" navigation, which means a back arrow to go back to the screen you came from

@@ -7,7 +7,7 @@
 
 import { useMemo, useRef, useState, useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { getEvents, getEventImageUrl } from '../api/events';
@@ -29,6 +29,10 @@ import { Checkbox } from '../components/ui/checkbox';
 import { EventCard } from '../components/events/EventCard';
 import { EventHeatmap } from '../components/events/EventHeatmap';
 import { useTranslation } from 'react-i18next';
+import { formatForServer, formatLocalDateTime } from '../lib/time';
+import { QuickDateRangeButtons } from '../components/ui/quick-date-range-buttons';
+import { MonitorFilterPopoverContent } from '../components/filters/MonitorFilterPopover';
+import { EmptyState } from '../components/ui/empty-state';
 
 export default function Events() {
   const navigate = useNavigate();
@@ -44,16 +48,6 @@ export default function Events() {
   // Check if user came from another page (navigation state tracking)
   const referrer = location.state?.from as string | undefined;
 
-  // Helper to format date in local timezone for datetime-local input
-  const formatLocalDateTime = (date: Date): string => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    return `${year}-${month}-${day}T${hours}:${minutes}`;
-  };
-
   const {
     filters,
     selectedMonitorIds,
@@ -68,22 +62,7 @@ export default function Events() {
     activeFilterCount,
   } = useEventFilters();
 
-  const [searchParams] = useSearchParams();
 
-  // Handle query parameters for date filtering (from timeline widget clicks)
-  useEffect(() => {
-    const startParam = searchParams.get('start');
-    const endParam = searchParams.get('end');
-
-    if (startParam && endParam) {
-      setStartDateInput(startParam);
-      setEndDateInput(endParam);
-      // Auto-apply the filters
-      setTimeout(() => applyFilters(), 100);
-    }
-    // Only run once on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Pagination state
   const [eventLimit, setEventLimit] = useState(settings.defaultEventLimit || 300);
@@ -95,10 +74,17 @@ export default function Events() {
     queryFn: getMonitors,
   });
 
+
   // Fetch events with configured limit
   const { data: eventsData, isLoading, error, refetch } = useQuery({
     queryKey: ['events', filters, eventLimit],
-    queryFn: () => getEvents({ ...filters, limit: eventLimit }),
+    queryFn: () => getEvents({
+      ...filters,
+      // Convert local time inputs to server time for the API
+      startDateTime: filters.startDateTime ? formatForServer(new Date(filters.startDateTime)) : undefined,
+      endDateTime: filters.endDateTime ? formatForServer(new Date(filters.endDateTime)) : undefined,
+      limit: eventLimit
+    }),
   });
 
   // Pull-to-refresh gesture
@@ -239,82 +225,14 @@ export default function Events() {
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-[calc(100vw-2rem)] sm:w-80 max-w-sm max-h-[80vh] overflow-y-auto no-scrollbar">
-                <div className="grid gap-4">
-                  <div className="space-y-2">
-                    <h4 className="text-sm sm:text-base font-medium leading-none">{t('events.filters')}</h4>
-                    <p className="text-xs sm:text-sm text-muted-foreground">{t('events.try_adjusting_filters')}</p>
-                  </div>
-                  <div className="grid gap-4">
-                    <div className="grid gap-2">
-                      <Label>{t('events.select_monitor')}</Label>
-                      <div className="border rounded-md max-h-48 overflow-y-auto p-2 space-y-2">
-                        {enabledMonitors.length === 0 ? (
-                          <p className="text-sm text-muted-foreground text-center py-2">
-                            {t('monitors.no_monitors')}
-                          </p>
-                        ) : (
-                          <>
-                            <div className="flex items-center space-x-2 pb-2 border-b">
-                              <Checkbox
-                                id="select-all"
-                                checked={selectedMonitorIds.length === enabledMonitors.length}
-                                onCheckedChange={(checked) => {
-                                  if (checked) {
-                                    setSelectedMonitorIds(enabledMonitors.map((m) => m.Monitor.Id));
-                                  } else {
-                                    setSelectedMonitorIds([]);
-                                  }
-                                }}
-                              />
-                              <label
-                                htmlFor="select-all"
-                                className="text-sm font-medium cursor-pointer"
-                              >
-                                {t('common.all')}
-                              </label>
-                            </div>
-                            {enabledMonitors.map(({ Monitor }) => (
-                              <div key={Monitor.Id} className="flex items-center space-x-2">
-                                <Checkbox
-                                  id={`monitor-${Monitor.Id}`}
-                                  checked={selectedMonitorIds.includes(Monitor.Id)}
-                                  onCheckedChange={() => toggleMonitorSelection(Monitor.Id)}
-                                />
-                                <label
-                                  htmlFor={`monitor-${Monitor.Id}`}
-                                  className="text-sm flex-1 cursor-pointer flex items-center justify-between"
-                                >
-                                  <span>{Monitor.Name}</span>
-                                  <Badge variant="outline" className="text-[10px] ml-2">
-                                    {t('events.id')}: {Monitor.Id}
-                                  </Badge>
-                                </label>
-                              </div>
-                            ))}
-                          </>
-                        )}
-                      </div>
-                      {selectedMonitorIds.length > 0 && (
-                        <div className="flex items-center gap-1 flex-wrap">
-                          <span className="text-xs text-muted-foreground">{t('common.selected')}:</span>
-                          {selectedMonitorIds.map((id) => {
-                            const monitor = enabledMonitors.find((m) => m.Monitor.Id === id);
-                            return monitor ? (
-                              <Badge key={id} variant="secondary" className="text-xs">
-                                {monitor.Monitor.Name}
-                                <X
-                                  className="h-3 w-3 ml-1 cursor-pointer"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    toggleMonitorSelection(id);
-                                  }}
-                                />
-                              </Badge>
-                            ) : null;
-                          })}
-                        </div>
-                      )}
-                    </div>
+                <MonitorFilterPopoverContent
+                  monitors={enabledMonitors}
+                  selectedMonitorIds={selectedMonitorIds}
+                  onSelectionChange={setSelectedMonitorIds}
+                  idPrefix="events"
+                />
+                <div className="grid gap-4 mt-4">
+                  <div className="grid gap-2">
                     <div className="grid gap-2">
                       <Label htmlFor="start-date">{t('events.date_range')} ({t('events.start')})</Label>
                       <Input
@@ -337,73 +255,12 @@ export default function Events() {
                     </div>
                     <div className="grid gap-2">
                       <Label className="text-xs text-muted-foreground">{t('events.quick_ranges')}</Label>
-                      <div className="grid grid-cols-2 gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-xs h-8"
-                          onClick={() => {
-                            const end = new Date();
-                            const start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
-                            setStartDateInput(formatLocalDateTime(start));
-                            setEndDateInput(formatLocalDateTime(end));
-                          }}
-                        >
-                          {t('events.past_24_hours')}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-xs h-8"
-                          onClick={() => {
-                            const end = new Date();
-                            const start = new Date(end.getTime() - 48 * 60 * 60 * 1000);
-                            setStartDateInput(formatLocalDateTime(start));
-                            setEndDateInput(formatLocalDateTime(end));
-                          }}
-                        >
-                          {t('events.past_48_hours')}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-xs h-8"
-                          onClick={() => {
-                            const end = new Date();
-                            const start = new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000);
-                            setStartDateInput(formatLocalDateTime(start));
-                            setEndDateInput(formatLocalDateTime(end));
-                          }}
-                        >
-                          {t('events.past_week')}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-xs h-8"
-                          onClick={() => {
-                            const end = new Date();
-                            const start = new Date(end.getTime() - 14 * 24 * 60 * 60 * 1000);
-                            setStartDateInput(formatLocalDateTime(start));
-                            setEndDateInput(formatLocalDateTime(end));
-                          }}
-                        >
-                          {t('events.past_2_weeks')}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-xs h-8 md:col-span-2"
-                          onClick={() => {
-                            const end = new Date();
-                            const start = new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
-                            setStartDateInput(formatLocalDateTime(start));
-                            setEndDateInput(formatLocalDateTime(end));
-                          }}
-                        >
-                          {t('events.past_month')}
-                        </Button>
-                      </div>
+                      <QuickDateRangeButtons
+                        onRangeSelect={({ start, end }) => {
+                          setStartDateInput(formatLocalDateTime(start));
+                          setEndDateInput(formatLocalDateTime(end));
+                        }}
+                      />
                     </div>
                     <div className="flex gap-2">
                       <Button onClick={applyFilters} size="sm" className="flex-1">
@@ -457,15 +314,19 @@ export default function Events() {
 
       {/* Events List */}
       {allEvents.length === 0 ? (
-        <div className="text-center py-20 text-muted-foreground">
-          <Video className="h-12 w-12 mx-auto mb-4 opacity-20" />
-          <p>{t('events.no_events')}</p>
-          {(filters.monitorId || filters.startDateTime || filters.endDateTime) && (
-            <Button variant="link" onClick={clearFilters}>
-              {t('events.clear_filters')}
-            </Button>
-          )}
-        </div>
+        <EmptyState
+          icon={Video}
+          title={t('events.no_events')}
+          action={
+            filters.monitorId || filters.startDateTime || filters.endDateTime
+              ? {
+                  label: t('events.clear_filters'),
+                  onClick: clearFilters,
+                  variant: 'link',
+                }
+              : undefined
+          }
+        />
       ) : (
         <div className="min-h-0">
           <div

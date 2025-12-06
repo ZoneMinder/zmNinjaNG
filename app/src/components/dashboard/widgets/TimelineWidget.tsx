@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { getEvents } from '../../../api/events';
+import { formatForServer } from '../../../lib/time';
 import {
     format,
     subHours,
@@ -52,7 +53,7 @@ export function TimelineWidget() {
     const { data: events } = useQuery({
         queryKey: ['events', 'timeline-widget', format(start, 'yyyy-MM-dd HH:mm:ss')],
         queryFn: () => getEvents({
-            startDateTime: format(start, 'yyyy-MM-dd HH:mm:ss'),
+            startDateTime: formatForServer(start),
             limit: 1000,
         }),
         refetchInterval: 60000,

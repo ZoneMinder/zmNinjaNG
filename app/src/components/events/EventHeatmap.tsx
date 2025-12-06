@@ -101,23 +101,25 @@ export function EventHeatmap({
     return 'rgb(37, 99, 235)'; // blue-600
   };
 
-  // Format time label
+  // Format time label - show ~5 labels
   const formatTimeLabel = (time: Date, index: number): string => {
-    const daysDiff = startDate && endDate ? differenceInDays(endDate, startDate) : 0;
+    const total = buckets.length;
+    if (total === 0) return '';
 
-    if (daysDiff > 7) {
-      // Daily buckets: show date
-      if (index % 7 === 0 || index === 0 || index === buckets.length - 1) {
-        return format(time, 'MMM d');
-      }
-      return '';
-    } else {
-      // Hourly buckets: show time
-      if (index % 4 === 0 || index === 0 || index === buckets.length - 1) {
-        return format(time, 'HH:mm');
-      }
-      return '';
+    // Always show first and last
+    if (index === 0 || index === total - 1) {
+      const daysDiff = startDate && endDate ? differenceInDays(endDate, startDate) : 0;
+      return daysDiff > 7 ? format(time, 'MMM d') : format(time, 'HH:mm');
     }
+
+    // Show 3 intermediate labels
+    const step = Math.floor(total / 4);
+    if (step > 0 && index % step === 0 && index !== total - 1) {
+      const daysDiff = startDate && endDate ? differenceInDays(endDate, startDate) : 0;
+      return daysDiff > 7 ? format(time, 'MMM d') : format(time, 'HH:mm');
+    }
+
+    return '';
   };
 
   const handleBarClick = (bucket: HeatmapBucket) => {
@@ -159,7 +161,7 @@ export function EventHeatmap({
 
       {isExpanded && (
         <>
-          <div className="relative h-32 mb-3">
+          <div className="relative h-12 mb-3">
             <div className="flex items-end h-full gap-px">
               {buckets.map((bucket) => (
                 <div
@@ -167,15 +169,13 @@ export function EventHeatmap({
                   className="relative group cursor-pointer transition-opacity hover:opacity-80 h-full"
                   style={{
                     flex: '1 1 0',
-                    minWidth: showCard ? '8px' : '4px',
-                    maxWidth: showCard ? 'none' : '20px'
+                    minWidth: '4px',
                   }}
                   onClick={() => handleBarClick(bucket)}
                 >
                   <div
-                    className="w-full rounded-t transition-all"
+                    className="w-full h-full rounded-sm transition-all"
                     style={{
-                      height: `${Math.max(bucket.intensity * 100, bucket.count > 0 ? 8 : 4)}%`,
                       backgroundColor: getColor(bucket.intensity),
                     }}
                   >
@@ -204,7 +204,7 @@ export function EventHeatmap({
                     className="absolute whitespace-nowrap text-[10px]"
                     style={{
                       left: `${leftPercent}%`,
-                      transform: 'translateX(-50%)',
+                      transform: bucketIndex === 0 ? 'translateX(0)' : bucketIndex === buckets.length - 1 ? 'translateX(-100%)' : 'translateX(-50%)',
                     }}
                   >
                     {label}

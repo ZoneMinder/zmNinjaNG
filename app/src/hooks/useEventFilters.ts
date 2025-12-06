@@ -59,22 +59,45 @@ export function useEventFilters(): UseEventFiltersReturn {
     [searchParams, settings.defaultEventLimit]
   );
 
+  // Helper to safely format valid ISO strings to local datetime for inputs
+  const formatInputDate = (isoString: string | null | undefined): string => {
+    if (!isoString) return '';
+    try {
+      const date = new Date(isoString);
+      if (isNaN(date.getTime())) return isoString; // Return as-is if invalid date
+
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      return `${year}-${month}-${day}T${hours}:${minutes}`;
+    } catch (e) {
+      return isoString;
+    }
+  };
+
   // Local state for filter inputs
   const [selectedMonitorIds, setSelectedMonitorIds] = useState<string[]>(() => {
     const monitorId = filters.monitorId;
     return monitorId ? monitorId.split(',') : [];
   });
   const [startDateInput, setStartDateInput] = useState(
-    filters.startDateTime || ''
+    formatInputDate(filters.startDateTime)
   );
-  const [endDateInput, setEndDateInput] = useState(filters.endDateTime || '');
+  const [endDateInput, setEndDateInput] = useState(formatInputDate(filters.endDateTime));
 
   // Update local inputs when URL params change (e.g. navigation)
   useEffect(() => {
     const monitorId = searchParams.get('monitorId');
     setSelectedMonitorIds(monitorId ? monitorId.split(',') : []);
-    setStartDateInput(searchParams.get('startDateTime') || '');
-    setEndDateInput(searchParams.get('endDateTime') || '');
+
+    // Only update inputs from URL if they differ significantly to avoid cursor jumping
+    // But for initial navigation from Heatmap, this ensures inputs are populated
+    const newStart = searchParams.get('startDateTime');
+    const newEnd = searchParams.get('endDateTime');
+    if (newStart) setStartDateInput(formatInputDate(newStart));
+    if (newEnd) setEndDateInput(formatInputDate(newEnd));
   }, [searchParams]);
 
   // Apply filters to URL

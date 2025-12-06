@@ -13,7 +13,6 @@ import { useAuthStore } from '../stores/auth';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
-import { SecureImage } from '../components/ui/secure-image';
 import { VideoPlayer } from '../components/ui/video-player';
 import { ArrowLeft, Calendar, Clock, HardDrive, AlertTriangle, Download, Archive, Video, ListVideo, Image, Info } from 'lucide-react';
 import { format } from 'date-fns';
@@ -90,24 +89,24 @@ export default function EventDetail() {
     ? getEventVideoUrl(currentProfile.portalUrl, event.Event.Id, accessToken || undefined, currentProfile.apiUrl)
     : '';
 
-  const zmsUrl = currentProfile && hasVideo
+  const zmsUrl = currentProfile && (hasVideo || hasJPEGs)
     ? getEventZmsUrl(currentProfile.portalUrl, event.Event.Id, accessToken || undefined, currentProfile.apiUrl)
     : '';
 
   const imageUrl = currentProfile && hasJPEGs
     ? getEventImageUrl(currentProfile.portalUrl, event.Event.Id, 'snapshot', {
-        token: accessToken || undefined,
-        width: ZM_CONSTANTS.eventMontageImageWidth,
-        height: ZM_CONSTANTS.eventMontageImageHeight,
-        apiUrl: currentProfile.apiUrl,
-      })
+      token: accessToken || undefined,
+      width: ZM_CONSTANTS.eventMontageImageWidth,
+      height: ZM_CONSTANTS.eventMontageImageHeight,
+      apiUrl: currentProfile.apiUrl,
+    })
     : '';
 
   const posterUrl = currentProfile
     ? getEventImageUrl(currentProfile.portalUrl, event.Event.Id, 'snapshot', {
-        token: accessToken || undefined,
-        apiUrl: currentProfile.apiUrl,
-      })
+      token: accessToken || undefined,
+      apiUrl: currentProfile.apiUrl,
+    })
     : undefined;
 
   const startTime = new Date(event.Event.StartDateTime.replace(' ', 'T'));
@@ -214,6 +213,7 @@ export default function EventDetail() {
                 ) : (
                   <VideoPlayer
                     src={videoUrl}
+                    type="video/mp4"
                     className="w-full h-full"
                     poster={posterUrl}
                     autoplay
@@ -226,19 +226,15 @@ export default function EventDetail() {
                 )
               ) : hasJPEGs ? (
                 <div className="relative w-full h-full flex flex-col items-center justify-center bg-black">
-                  <SecureImage
-                    src={imageUrl}
+                  <img
+                    src={zmsUrl}
                     alt={event.Event.Name}
-                    className="max-w-full max-h-full object-contain"
-                    onError={(e) => {
-                      const img = e.target as HTMLImageElement;
-                      img.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="800" height="600"%3E%3Crect fill="%231a1a1a" width="800" height="600"/%3E%3Ctext fill="%23444" x="50%" y="50%" text-anchor="middle" font-family="sans-serif"%3ENo Image Available%3C/text%3E%3C/svg%3E';
-                    }}
+                    className="w-full h-full object-contain"
                   />
                   <div className="absolute top-4 left-4">
-                    <Badge variant="secondary" className="gap-2">
-                      <Image className="h-3 w-3" />
-                      {t('event_detail.jpeg_event')}
+                    <Badge variant="secondary" className="gap-2 bg-blue-500/80 text-white hover:bg-blue-500">
+                      <Info className="h-3 w-3" />
+                      {t('event_detail.streaming_via_zms')}
                     </Badge>
                   </div>
                 </div>

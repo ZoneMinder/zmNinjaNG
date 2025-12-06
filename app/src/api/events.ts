@@ -9,8 +9,7 @@ import { getApiClient } from './client';
 import type { EventsResponse, EventData } from './types';
 import { EventsResponseSchema } from './types';
 import { log } from '../lib/logger';
-import { Capacitor } from '@capacitor/core';
-import { isTauri } from '@tauri-apps/api/core';
+import { Platform } from '../lib/platform';
 
 export interface EventFilters {
   monitorId?: string;
@@ -208,17 +207,21 @@ export function getEventImageUrl(
   } = {}
 ): string {
   // Ensure portalUrl has a protocol
+  // Ensure portalUrl has a protocol
   let baseUrl = portalUrl;
-  
+
+  // If no protocol specified, default to http first so we can upgrade it later if needed
+  if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
+    baseUrl = `http://${baseUrl}`;
+  }
+
   // If apiUrl is provided and starts with http://, force baseUrl to use http://
   // This handles cases where portalUrl was forced to https:// but the server is actually http://
   if (options.apiUrl && options.apiUrl.startsWith('http://')) {
     baseUrl = baseUrl.replace(/^https:\/\//, 'http://');
-  }
-
-  if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
-    // Default to http if no protocol specified - many ZM installs are on local LANs
-    baseUrl = `http://${baseUrl}`;
+  } else if (options.apiUrl && options.apiUrl.startsWith('https://')) {
+    // Conversely, if API is https://, force baseUrl to use https://
+    baseUrl = baseUrl.replace(/^http:\/\//, 'https://');
   }
 
   // Build query parameters for ZoneMinder's index.php image viewer
@@ -237,11 +240,7 @@ export function getEventImageUrl(
 
   // In dev mode, use proxy server to avoid CORS issues
   // In production (Tauri), use direct URL
-  const isDev = import.meta.env.DEV;
-  const isNative = Capacitor.isNativePlatform();
-  const isTauriApp = isTauri();
-
-  if (isDev && !isNative && !isTauriApp) {
+  if (Platform.shouldUseProxy) {
     const proxyParams = new URLSearchParams();
     proxyParams.append('url', fullUrl);
     return `http://localhost:3001/image-proxy?${proxyParams.toString()}`;
@@ -266,15 +265,20 @@ export function getEventVideoUrl(
   apiUrl?: string
 ): string {
   // Ensure portalUrl has a protocol
+  // Ensure portalUrl has a protocol
   let baseUrl = portalUrl;
+
+  // If no protocol specified, default to http first so we can upgrade it later if needed
+  if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
+    baseUrl = `http://${baseUrl}`;
+  }
 
   // If apiUrl is provided and starts with http://, force baseUrl to use http://
   if (apiUrl && apiUrl.startsWith('http://')) {
     baseUrl = baseUrl.replace(/^https:\/\//, 'http://');
-  }
-
-  if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
-    baseUrl = `http://${baseUrl}`;
+  } else if (apiUrl && apiUrl.startsWith('https://')) {
+    // Conversely, if API is https://, force baseUrl to use https://
+    baseUrl = baseUrl.replace(/^http:\/\//, 'https://');
   }
 
   const params = new URLSearchParams({
@@ -304,15 +308,20 @@ export function getEventZmsUrl(
   apiUrl?: string
 ): string {
   // Ensure portalUrl has a protocol
+  // Ensure portalUrl has a protocol
   let baseUrl = portalUrl;
+
+  // If no protocol specified, default to http first so we can upgrade it later if needed
+  if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
+    baseUrl = `http://${baseUrl}`;
+  }
 
   // If apiUrl is provided and starts with http://, force baseUrl to use http://
   if (apiUrl && apiUrl.startsWith('http://')) {
     baseUrl = baseUrl.replace(/^https:\/\//, 'http://');
-  }
-
-  if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
-    baseUrl = `http://${baseUrl}`;
+  } else if (apiUrl && apiUrl.startsWith('https://')) {
+    // Conversely, if API is https://, force baseUrl to use https://
+    baseUrl = baseUrl.replace(/^http:\/\//, 'https://');
   }
 
   const params = new URLSearchParams({

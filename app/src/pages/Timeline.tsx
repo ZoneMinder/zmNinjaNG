@@ -13,6 +13,7 @@ import { format, subDays } from 'date-fns';
 import { filterEnabledMonitors } from '../lib/filters';
 import { ZM_CONSTANTS } from '../lib/constants';
 import { escapeHtml } from '../lib/utils';
+import { formatForServer } from '../lib/time';
 import { Timeline as VisTimeline } from 'vis-timeline/standalone';
 import { DataSet } from 'vis-data';
 import 'vis-timeline/styles/vis-timeline-graph2d.css';
@@ -24,6 +25,10 @@ import {
   PopoverTrigger,
 } from "../components/ui/popover";
 import { useTranslation } from 'react-i18next';
+import { QuickDateRangeButtons } from '../components/ui/quick-date-range-buttons';
+import { MonitorFilterPopoverContent } from '../components/filters/MonitorFilterPopover';
+import { EmptyState } from '../components/ui/empty-state';
+import { formatLocalDateTime } from '../lib/time';
 
 interface TimelineGroup {
   id: string;
@@ -67,8 +72,8 @@ export default function Timeline() {
     queryKey: ['timeline-events', startDate, endDate, monitorFilter],
     queryFn: () =>
       getEvents({
-        startDateTime: `${startDate} 00:00:00`,
-        endDateTime: `${endDate} 23:59:59`,
+        startDateTime: formatForServer(new Date(`${startDate} 00:00:00`)),
+        endDateTime: formatForServer(new Date(`${endDate} 23:59:59`)),
         monitorId: monitorFilter,
         sort: 'StartDateTime',
         direction: 'desc',
@@ -292,78 +297,12 @@ export default function Timeline() {
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-[calc(100vw-2rem)] sm:w-80 max-w-sm">
-                  <div className="grid gap-4">
-                    <div className="space-y-2">
-                      <h4 className="text-sm sm:text-base font-medium leading-none">{t('timeline.select_monitors')}</h4>
-                      <p className="text-xs sm:text-sm text-muted-foreground">
-                        {t('timeline.filter_by_monitors')}
-                      </p>
-                    </div>
-                    <div className="border rounded-md max-h-64 overflow-y-auto p-2 space-y-2">
-                      {enabledMonitors.length === 0 ? (
-                        <p className="text-sm text-muted-foreground text-center py-2">
-                          {t('timeline.no_monitors')}
-                        </p>
-                      ) : (
-                        <>
-                          <div className="flex items-center space-x-2 pb-2 border-b">
-                            <Checkbox
-                              id="select-all-timeline"
-                              checked={selectedMonitorIds.length === enabledMonitors.length}
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  setSelectedMonitorIds(enabledMonitors.map(m => m.Monitor.Id));
-                                } else {
-                                  setSelectedMonitorIds([]);
-                                }
-                              }}
-                            />
-                            <label htmlFor="select-all-timeline" className="text-sm font-medium cursor-pointer">
-                              {selectedMonitorIds.length === enabledMonitors.length ? t('timeline.deselect_all') : t('timeline.select_all')}
-                            </label>
-                          </div>
-                          {enabledMonitors.map(({ Monitor }) => (
-                            <div key={Monitor.Id} className="flex items-center space-x-2">
-                              <Checkbox
-                                id={`timeline-monitor-${Monitor.Id}`}
-                                checked={selectedMonitorIds.includes(Monitor.Id)}
-                                onCheckedChange={() => toggleMonitorSelection(Monitor.Id)}
-                              />
-                              <label
-                                htmlFor={`timeline-monitor-${Monitor.Id}`}
-                                className="text-sm flex-1 cursor-pointer flex items-center justify-between"
-                              >
-                                <span>{Monitor.Name}</span>
-                                <Badge variant="outline" className="text-[10px] ml-2">
-                                  ID: {Monitor.Id}
-                                </Badge>
-                              </label>
-                            </div>
-                          ))}
-                        </>
-                      )}
-                    </div>
-                    {selectedMonitorIds.length > 0 && (
-                      <div className="flex items-center gap-1 flex-wrap pt-2 border-t">
-                        <span className="text-xs text-muted-foreground">{t('timeline.selected')}:</span>
-                        {selectedMonitorIds.map(id => {
-                          const monitor = enabledMonitors.find(m => m.Monitor.Id === id);
-                          return monitor ? (
-                            <Badge key={id} variant="secondary" className="text-xs">
-                              {monitor.Monitor.Name}
-                              <X
-                                className="h-3 w-3 ml-1 cursor-pointer"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  toggleMonitorSelection(id);
-                                }}
-                              />
-                            </Badge>
-                          ) : null;
-                        })}
-                      </div>
-                    )}
-                  </div>
+                  <MonitorFilterPopoverContent
+                    monitors={enabledMonitors}
+                    selectedMonitorIds={selectedMonitorIds}
+                    onSelectionChange={setSelectedMonitorIds}
+                    idPrefix="timeline"
+                  />
                 </PopoverContent>
               </Popover>
             </div>
@@ -372,73 +311,12 @@ export default function Timeline() {
           {/* Quick Date Ranges */}
           <div className="space-y-2 mt-4">
             <Label className="text-sm text-muted-foreground">{t('events.quick_ranges')}</Label>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-xs"
-                onClick={() => {
-                  const end = new Date();
-                  const start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
-                  setStartDate(format(start, 'yyyy-MM-dd'));
-                  setEndDate(format(end, 'yyyy-MM-dd'));
-                }}
-              >
-                {t('events.past_24_hours')}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-xs"
-                onClick={() => {
-                  const end = new Date();
-                  const start = new Date(end.getTime() - 48 * 60 * 60 * 1000);
-                  setStartDate(format(start, 'yyyy-MM-dd'));
-                  setEndDate(format(end, 'yyyy-MM-dd'));
-                }}
-              >
-                {t('events.past_48_hours')}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-xs"
-                onClick={() => {
-                  const end = new Date();
-                  const start = new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000);
-                  setStartDate(format(start, 'yyyy-MM-dd'));
-                  setEndDate(format(end, 'yyyy-MM-dd'));
-                }}
-              >
-                {t('events.past_week')}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-xs"
-                onClick={() => {
-                  const end = new Date();
-                  const start = new Date(end.getTime() - 14 * 24 * 60 * 60 * 1000);
-                  setStartDate(format(start, 'yyyy-MM-dd'));
-                  setEndDate(format(end, 'yyyy-MM-dd'));
-                }}
-              >
-                {t('events.past_2_weeks')}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-xs"
-                onClick={() => {
-                  const end = new Date();
-                  const start = new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
-                  setStartDate(format(start, 'yyyy-MM-dd'));
-                  setEndDate(format(end, 'yyyy-MM-dd'));
-                }}
-              >
-                {t('events.past_month')}
-              </Button>
-            </div>
+            <QuickDateRangeButtons
+              onRangeSelect={({ start, end }) => {
+                setStartDate(format(start, 'yyyy-MM-dd'));
+                setEndDate(format(end, 'yyyy-MM-dd'));
+              }}
+            />
           </div>
         </CardContent>
       </Card>
@@ -452,10 +330,12 @@ export default function Timeline() {
               <div className="text-muted-foreground">{t('timeline.loading')}</div>
             </div>
           ) : data?.events && data.events.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-[600px] text-muted-foreground gap-4">
-              <Video className="h-16 w-16 opacity-20" />
-              <div className="text-lg">{t('timeline.no_events_found')}</div>
-              <p className="text-sm">{t('timeline.adjust_filters')}</p>
+            <div className="h-[600px] flex items-center justify-center">
+              <EmptyState
+                icon={Video}
+                title={t('timeline.no_events_found')}
+                description={t('timeline.adjust_filters')}
+              />
             </div>
           ) : (
             <div className="p-6">

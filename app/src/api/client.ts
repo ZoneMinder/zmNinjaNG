@@ -1,12 +1,11 @@
 import axios, { AxiosError } from 'axios';
 import type { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
-import { Capacitor } from '@capacitor/core';
 import { CapacitorHttp } from '@capacitor/core';
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
-import { isTauri } from '@tauri-apps/api/core';
 import { useAuthStore } from '../stores/auth';
 import { log } from '../lib/logger';
 import { sanitizeObject } from '../lib/log-sanitizer';
+import { Platform } from '../lib/platform';
 
 interface NativeHttpError {
   message: string;
@@ -33,10 +32,7 @@ export function createApiClient(baseURL: string): AxiosInstance {
   // In dev mode (web), use standalone proxy server on port 3001 with X-Target-Host header
   // On native platforms (Android/iOS), use full URL directly (native HTTP bypasses CORS)
   // In production web, use full URL directly
-  const isDev = import.meta.env.DEV;
-  const isNative = Capacitor.isNativePlatform();
-  const isTauriApp = isTauri();
-  const clientBaseURL = (isDev && !isNative && !isTauriApp) ? 'http://localhost:3001/proxy' : baseURL;
+  const clientBaseURL = Platform.shouldUseProxy ? 'http://localhost:3001/proxy' : baseURL;
 
   const client = axios.create({
     baseURL: clientBaseURL,
@@ -44,12 +40,12 @@ export function createApiClient(baseURL: string): AxiosInstance {
     headers: {
       'Content-Type': 'application/json',
       // In dev mode (web only), add header to tell proxy which server to route to
-      ...((isDev && !isNative && !isTauriApp) && { 'X-Target-Host': baseURL }),
+      ...(Platform.shouldUseProxy && { 'X-Target-Host': baseURL }),
     },
     // Let axios handle response decompression (browser forces gzip anyway)
     decompress: true,
     // On native platforms, use custom adapter that uses CapacitorHttp
-    ...((isNative || isTauriApp) && {
+    ...((Platform.isNative || Platform.isTauri) && {
       adapter: async (config): Promise<AdapterResponse> => {
         try {
           const fullUrl = config.url?.startsWith('http')
@@ -60,13 +56,13 @@ export function createApiClient(baseURL: string): AxiosInstance {
           const params = new URLSearchParams(config.params || {}).toString();
           const urlWithParams = params ? `${fullUrl}?${params}` : fullUrl;
 
-          log.api(`[${isNative ? 'Native' : 'Tauri'} HTTP] Request: ${config.method?.toUpperCase() || 'GET'} ${urlWithParams}`, {});
+          log.api(`[${Platform.isNative ? 'Native' : 'Tauri'} HTTP] Request: ${config.method?.toUpperCase() || 'GET'} ${urlWithParams}`, {});
 
           let responseData;
           let responseStatus;
           let responseHeaders: Record<string, string> = {};
 
-          if (isNative) {
+          if (Platform.isNative) {
             const response = await CapacitorHttp.request({
               method: (config.method?.toUpperCase() || 'GET') as 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH',
               url: urlWithParams,
@@ -150,7 +146,7 @@ export function createApiClient(baseURL: string): AxiosInstance {
             }
           }
 
-          log.api(`[${isNative ? 'Native' : 'Tauri'} HTTP] Response: ${responseStatus} ${fullUrl}`, {});
+          log.api(`[${Platform.isNative ? 'Native' : 'Tauri'} HTTP] Response: ${responseStatus} ${fullUrl}`, {});
 
           return {
             data: responseData,
@@ -162,7 +158,7 @@ export function createApiClient(baseURL: string): AxiosInstance {
           };
         } catch (error) {
           const nativeError = error as NativeHttpError;
-          log.error(`[${isNative ? 'Native' : 'Tauri'} HTTP] Error`, { component: 'API' }, error);
+          log.error(`[${Platform.isNative ? 'Native' : 'Tauri'} HTTP] Error`, { component: 'API' }, error);
 
           const axiosError = new Error(nativeError.message) as Error & {
             config: InternalAxiosRequestConfig;
@@ -196,7 +192,7 @@ export function createApiClient(baseURL: string): AxiosInstance {
 
       if (accessToken && config.url) {
         // Add token as query parameter for GET requests
-        if (config.method === 'get') {
+        if (config.method?.toLowerCase() === 'get') {
           config.params = {
             ...config.params,
             token: accessToken,

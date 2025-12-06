@@ -14,8 +14,8 @@
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Media } from '@capacitor-community/media';
-import { isTauri } from '@tauri-apps/api/core';
 import { log } from './logger';
+import { Platform } from './platform';
 
 /**
  * Download a file from a URL.
@@ -27,10 +27,8 @@ import { log } from './logger';
  * @param filename - The target filename
  */
 export async function downloadFile(url: string, filename: string): Promise<void> {
-  const isNative = Capacitor.isNativePlatform();
-
   try {
-    if (isNative) {
+    if (Platform.isNative) {
       // Mobile: Use native HTTP to bypass CORS and network restrictions
       log.info('[Download] Downloading via native HTTP', { component: 'Download', url });
 
@@ -77,11 +75,9 @@ export async function downloadFile(url: string, filename: string): Promise<void>
       }
     } else {
       // Web: Use traditional fetch + blob download
-      const isDev = import.meta.env.DEV;
-      const isTauriApp = isTauri();
       let fetchUrl = url;
 
-      if (isDev && !isTauriApp && (url.startsWith('http://') || url.startsWith('https://'))) {
+      if (Platform.shouldUseProxy && (url.startsWith('http://') || url.startsWith('https://'))) {
         // Use the image proxy for cross-origin URLs in dev mode
         fetchUrl = `http://localhost:3001/image-proxy?url=${encodeURIComponent(url)}`;
         log.info('[Download] Using proxy for CORS', { component: 'Download', url: fetchUrl });
@@ -120,13 +116,12 @@ export async function downloadFile(url: string, filename: string): Promise<void>
  * @param monitorName - Name of the monitor for filename generation
  */
 export async function downloadSnapshot(imageUrl: string, monitorName: string): Promise<void> {
-  const isNative = Capacitor.isNativePlatform();
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
   const filename = `${monitorName}_${timestamp}.jpg`;
 
   // If it's a data URL
   if (imageUrl.startsWith('data:')) {
-    if (isNative) {
+    if (Platform.isNative) {
       // Mobile: Save data URL directly
       const base64 = imageUrl.split(',')[1];
       const result = await Filesystem.writeFile({
@@ -175,8 +170,6 @@ export async function downloadSnapshotFromElement(
   imgElement: HTMLImageElement,
   monitorName: string
 ): Promise<void> {
-  const isNative = Capacitor.isNativePlatform();
-
   try {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
     const filename = `${monitorName}_${timestamp}.jpg`;
@@ -184,7 +177,7 @@ export async function downloadSnapshotFromElement(
 
     // If it's a data URL
     if (imageUrl.startsWith('data:')) {
-      if (isNative) {
+      if (Platform.isNative) {
         // Mobile: Save data URL to filesystem
         const base64 = imageUrl.split(',')[1];
         const result = await Filesystem.writeFile({

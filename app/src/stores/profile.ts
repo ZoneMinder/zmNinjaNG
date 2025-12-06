@@ -15,6 +15,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Profile } from '../api/types';
 import { createApiClient, setApiClient } from '../api/client';
+import { getServerTimeZone } from '../api/time';
 import { setSecureValue, getSecureValue, removeSecureValue } from '../lib/secureStorage';
 import { log } from '../lib/logger';
 
@@ -113,6 +114,17 @@ export const useProfileStore = create<ProfileState>()(
         // If this is now the current profile, initialize API client
         if (get().currentProfileId === newProfile.id) {
           setApiClient(createApiClient(newProfile.apiUrl));
+
+          // Fetch timezone for new profile
+          try {
+            // Get token from auth store state
+            const { useAuthStore } = await import('./auth');
+            const { accessToken } = useAuthStore.getState();
+            const timezone = await getServerTimeZone(accessToken || undefined);
+            get().updateProfile(newProfile.id, { timezone });
+          } catch (e) {
+            log.warn('Failed to fetch timezone for new profile', { error: e });
+          }
         }
       },
 
@@ -305,9 +317,22 @@ export const useProfileStore = create<ProfileState>()(
               // Don't throw - allow switch to complete even if auth fails
               // Some servers (like demo.zoneminder.com) work without auth
             }
-          } else {
             log.profile('No credentials stored, skipping authentication');
             log.info('This is normal for public servers', { component: 'Profile' });
+          }
+
+          // STEP 5: Fetch Server Timezone
+          try {
+            log.profile('Step 5: Fetching server timezone');
+            // Explicitly pass token if we have one to ensure it's used
+            const { useAuthStore } = await import('./auth');
+            const { accessToken } = useAuthStore.getState();
+            const timezone = await getServerTimeZone(accessToken || undefined);
+            log.profile('Server timezone fetched', { timezone });
+            get().updateProfile(id, { timezone });
+          } catch (tzError) {
+            log.warn('Failed to fetch server timezone', { error: tzError });
+            // Don't fail the switch for this
           }
 
           log.profile('Profile switch completed successfully', { currentProfile: profile.name });
@@ -475,6 +500,20 @@ export const useProfileStore = create<ProfileState>()(
             log.profile('No credentials stored, skipping authentication');
             log.info('This is normal for public servers', { component: 'Profile' });
           }
+          // STEP 4: Fetch timezone on load
+          try {
+            log.profile('Fetching server timezone on load');
+            const { useAuthStore } = await import('./auth');
+            const { accessToken } = useAuthStore.getState();
+            const timezone = await getServerTimeZone(accessToken || undefined);
+            if (timezone !== profile.timezone) {
+              // Update profile with new timezone if changed
+              useProfileStore.getState().updateProfile(profile.id, { timezone });
+            }
+          } catch (tzError) {
+            log.warn('Failed to fetch timezone on load', { error: tzError });
+          }
+
         } finally {
           // CRITICAL: Always set isInitialized to true, even if authentication fails
           // This allows the app to proceed to the UI and show any error messages

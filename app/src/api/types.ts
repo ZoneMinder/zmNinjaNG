@@ -14,6 +14,48 @@ export const LoginResponseSchema = z.object({
 
 export type LoginResponse = z.infer<typeof LoginResponseSchema>;
 
+// Host types
+export const HostTimeZoneResponseSchema = z.object({
+  DateTime: z.object({
+    TimeZone: z.string().optional(),
+    Timezone: z.string().optional(),
+    timezone: z.string().optional(),
+  }).optional(),
+  dateTime: z.object({
+    TimeZone: z.string().optional(),
+    Timezone: z.string().optional(),
+    timezone: z.string().optional(),
+  }).optional(),
+  // Support root level keys
+  TimeZone: z.string().optional(),
+  Timezone: z.string().optional(),
+  timezone: z.string().optional(),
+  tz: z.string().optional(),
+}).transform((data) => {
+  // Check nested first
+  const dt = data.DateTime || data.dateTime;
+  let tz = dt ? (dt.TimeZone || dt.Timezone || dt.timezone) : undefined;
+
+  // If not nested, check root
+  if (!tz) {
+    tz = data.TimeZone || data.Timezone || data.timezone || data.tz;
+  }
+
+  if (!tz) {
+    // Log the actual data to help debugging if this fails
+    console.warn('HostTimeZoneResponseSchema validation failed. Received:', JSON.stringify(data));
+    throw new Error('Response missing TimeZone field (checked root and DateTime object)');
+  }
+
+  return {
+    DateTime: {
+      TimeZone: tz
+    }
+  };
+});
+
+export type HostTimeZoneResponse = z.infer<typeof HostTimeZoneResponseSchema>;
+
 // Monitor types
 export const MonitorStatusSchema = z.object({
   MonitorId: z.coerce.string().nullable(),
@@ -225,6 +267,7 @@ export interface Profile {
   isDefault: boolean;
   createdAt: number;
   lastUsed?: number;
+  timezone?: string;
 }
 
 // Error types

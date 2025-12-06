@@ -1,6 +1,6 @@
 /**
  * Monitors API
- * 
+ *
  * Handles fetching monitor lists, details, and controlling monitor state (enable/disable, alarms).
  * Also provides utility for generating stream URLs.
  */
@@ -8,6 +8,7 @@
 import { getApiClient } from './client';
 import type { MonitorsResponse, MonitorData } from './types';
 import { MonitorsResponseSchema } from './types';
+import { Platform } from '../lib/platform';
 
 /**
  * Get all monitors.
@@ -146,9 +147,10 @@ export async function getDaemonStatus(
 
 /**
  * Construct streaming URL for a monitor.
- * 
+ *
  * Generates the URL for the ZMS CGI script to stream video or images.
- * 
+ * In development mode on web, routes through proxy to avoid CORS issues.
+ *
  * @param cgiUrl - Base CGI URL (e.g. https://zm.example.com/cgi-bin)
  * @param monitorId - The ID of the monitor
  * @param options - Streaming options (mode, scale, dimensions, etc.)
@@ -183,5 +185,15 @@ export function getStreamUrl(
     ...(options.cacheBuster && { _t: options.cacheBuster.toString() }),
   });
 
-  return `${cgiUrl}/nph-zms?${params.toString()}`;
+  const fullUrl = `${cgiUrl}/nph-zms?${params.toString()}`;
+
+  // In dev mode on web, use proxy server to avoid CORS issues
+  // Native platforms and production can access directly
+  if (Platform.shouldUseProxy) {
+    const proxyParams = new URLSearchParams();
+    proxyParams.append('url', fullUrl);
+    return `http://localhost:3001/image-proxy?${proxyParams.toString()}`;
+  }
+
+  return fullUrl;
 }
