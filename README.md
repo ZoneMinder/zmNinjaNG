@@ -30,7 +30,9 @@ Watch a video of the demo [HERE](https://youtu.be/ces_2ap-htc)
 ## Quick Start
 
 ```bash
+git clone https://github.com/pliablepixels/zmNg
 cd app
+# If you don't have npm/nodejs https://nodejs.org/en/download
 npm install
 
 # Desktop development (with CORS proxy)
