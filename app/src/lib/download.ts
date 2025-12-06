@@ -16,6 +16,7 @@ import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Media } from '@capacitor-community/media';
 import { log } from './logger';
 import { Platform } from './platform';
+import { getApiClient } from '../api/client';
 
 /**
  * Download a file from a URL.
@@ -74,34 +75,55 @@ export async function downloadFile(url: string, filename: string): Promise<void>
         // Don't throw here, as the file is at least saved to Documents
       }
     } else {
-      // Web: Use traditional fetch + blob download
-      let fetchUrl = url;
+      // Web: Use axios with auth headers to avoid CORS issues
+      try {
+        const apiClient = getApiClient();
 
-      if (Platform.shouldUseProxy && (url.startsWith('http://') || url.startsWith('https://'))) {
-        // Use the image proxy for cross-origin URLs in dev mode
-        fetchUrl = `http://localhost:3001/image-proxy?url=${encodeURIComponent(url)}`;
-        log.info('[Download] Using proxy for CORS', { component: 'Download', url: fetchUrl });
+        if (Platform.shouldUseProxy && (url.startsWith('http://') || url.startsWith('https://'))) {
+          // Use the image proxy for cross-origin URLs in dev mode
+          url = `http://localhost:3001/image-proxy?url=${encodeURIComponent(url)}`;
+          log.info('Using proxy for CORS', { component: 'Download', url });
+        }
+
+        // Use axios to fetch with proper auth headers
+        log.info('Downloading file via API client', { component: 'Download', url, filename });
+        const response = await apiClient.get(url, {
+          responseType: 'blob',
+        });
+
+        const blob = response.data as Blob;
+        const blobUrl = window.URL.createObjectURL(blob);
+
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        // Clean up blob URL
+        window.URL.revokeObjectURL(blobUrl);
+
+        log.info('File downloaded via browser', { component: 'Download', filename });
+      } catch (fetchError) {
+        // If axios fails, fall back to direct download link
+        // This will open in a new tab and rely on browser's download handling
+        log.warn('API client download failed, falling back to direct link', {
+          component: 'Download',
+          url
+        }, fetchError);
+
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        log.info('Initiated direct download', { component: 'Download', filename });
       }
-
-      const response = await fetch(fetchUrl);
-      if (!response.ok) {
-        throw new Error(`Failed to download: ${response.statusText}`);
-      }
-
-      const blob = await response.blob();
-      const blobUrl = window.URL.createObjectURL(blob);
-
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      // Clean up blob URL
-      window.URL.revokeObjectURL(blobUrl);
-
-      log.info('[Download] File downloaded via browser', { component: 'Download', filename });
     }
   } catch (error) {
     log.error('[Download] Failed to download file', { component: 'Download', url }, error);
