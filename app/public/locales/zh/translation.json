@@ -389,8 +389,8 @@
     "add": "添加"
   },
   "setup": {
-    "welcome": "欢迎使用 ZoneMinder",
-    "subtitle": "初始设置",
+    "welcome": "欢迎使用 zmNg",
+    "subtitle": "初始配置",
     "server_url": "服务器 URL",
     "api_url": "API URL",
     "cgi_url": "CGI URL",

@@ -389,7 +389,7 @@
     "add": "Agregar"
   },
   "setup": {
-    "welcome": "Bienvenido a ZoneMinder",
+    "welcome": "Bienvenido a zmNg",
     "subtitle": "Configuración Inicial",
     "server_url": "URL del Servidor",
     "api_url": "URL de API",

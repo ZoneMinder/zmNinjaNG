@@ -389,7 +389,7 @@
     "add": "Hinzufügen"
   },
   "setup": {
-    "welcome": "Willkommen bei ZoneMinder",
+    "welcome": "Willkommen bei zmNg",
     "subtitle": "Erstkonfiguration",
     "server_url": "Server URL",
     "api_url": "API URL",
