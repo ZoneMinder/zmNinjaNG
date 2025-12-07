@@ -328,8 +328,11 @@
     "no_profile": "未选择配置",
     "profile_credentials_required": "需要配置凭据",
     "hide_advanced": "隐藏高级",
+    "show_advanced": "显示高级",
     "unread_count": "未读数量",
-    "view_history": "查看历史"
+    "view_history": "查看历史",
+    "function": "功能",
+    "disconnected": "已断开"
   },
   "profiles": {
     "title": "配置",

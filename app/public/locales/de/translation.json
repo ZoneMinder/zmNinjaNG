@@ -328,8 +328,11 @@
     "no_profile": "Kein Profil ausgewählt",
     "profile_credentials_required": "Profil-Anmeldeinformationen erforderlich",
     "hide_advanced": "Erweitert ausblenden",
+    "show_advanced": "Erweitert anzeigen",
     "unread_count": "Ungelesene Anzahl",
-    "view_history": "Verlauf ansehen"
+    "view_history": "Verlauf ansehen",
+    "function": "Funktion",
+    "disconnected": "Getrennt"
   },
   "profiles": {
     "title": "Profile",

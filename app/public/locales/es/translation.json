@@ -328,8 +328,11 @@
     "no_profile": "Ningún perfil seleccionado",
     "profile_credentials_required": "Credenciales de perfil requeridas",
     "hide_advanced": "Ocultar Avanzado",
+    "show_advanced": "Mostrar Avanzado",
     "unread_count": "Conteo No Leído",
-    "view_history": "Ver Historial"
+    "view_history": "Ver Historial",
+    "function": "Función",
+    "disconnected": "Desconectado"
   },
   "profiles": {
     "title": "Perfiles",
