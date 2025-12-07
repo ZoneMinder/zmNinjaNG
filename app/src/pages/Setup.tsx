@@ -269,6 +269,8 @@ export default function Setup() {
                 value={portalUrl}
                 onChange={(e) => setPortalUrl(e.target.value)}
                 disabled={testing}
+                autoCapitalize="none"
+                autoCorrect="off"
                 className="pl-9 h-10 bg-background/50 border-input/50 focus:border-primary/50 transition-colors"
               />
             </div>
@@ -284,6 +286,8 @@ export default function Setup() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 disabled={testing}
+                autoCapitalize="none"
+                autoCorrect="off"
                 className="h-10 bg-background/50 border-input/50"
               />
             </div>
@@ -297,6 +301,8 @@ export default function Setup() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={testing}
+                  autoCapitalize="none"
+                  autoCorrect="off"
                   className="h-10 bg-background/50 border-input/50 pr-10"
                 />
                 <Button
@@ -342,6 +348,8 @@ export default function Setup() {
                   value={manualApiUrl}
                   onChange={(e) => setManualApiUrl(e.target.value)}
                   disabled={testing}
+                  autoCapitalize="none"
+                  autoCorrect="off"
                   className="h-10 bg-background/50 border-input/50"
                 />
                 <p className="text-xs text-muted-foreground">
@@ -357,6 +365,8 @@ export default function Setup() {
                   value={manualCgiUrl}
                   onChange={(e) => setManualCgiUrl(e.target.value)}
                   disabled={testing}
+                  autoCapitalize="none"
+                  autoCorrect="off"
                   className="h-10 bg-background/50 border-input/50"
                 />
                 <p className="text-xs text-muted-foreground">

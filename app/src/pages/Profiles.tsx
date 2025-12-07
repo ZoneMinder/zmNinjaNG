@@ -484,6 +484,8 @@ export default function Profiles() {
                 placeholder="https://zm.example.com"
                 value={formData.portalUrl}
                 onChange={(e) => setFormData({ ...formData, portalUrl: e.target.value })}
+                autoCapitalize="none"
+                autoCorrect="off"
               />
               <p className="text-xs text-muted-foreground">
                 {t('profiles.url_hint')}
@@ -496,6 +498,8 @@ export default function Profiles() {
                 placeholder="admin"
                 value={formData.username}
                 onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                autoCapitalize="none"
+                autoCorrect="off"
               />
             </div>
             <div className="grid gap-2">
@@ -508,6 +512,8 @@ export default function Profiles() {
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   className="pr-10"
+                  autoCapitalize="none"
+                  autoCorrect="off"
                 />
                 <Button
                   type="button"
@@ -566,6 +572,8 @@ export default function Profiles() {
                 id="edit-portalUrl"
                 value={formData.portalUrl}
                 onChange={(e) => setFormData({ ...formData, portalUrl: e.target.value })}
+                autoCapitalize="none"
+                autoCorrect="off"
               />
             </div>
             <div className="grid gap-2">
@@ -574,6 +582,8 @@ export default function Profiles() {
                 id="edit-apiUrl"
                 value={formData.apiUrl}
                 onChange={(e) => setFormData({ ...formData, apiUrl: e.target.value })}
+                autoCapitalize="none"
+                autoCorrect="off"
               />
               <p className="text-xs text-muted-foreground">
                 {t('profiles.manual_override_hint')}
@@ -585,6 +595,8 @@ export default function Profiles() {
                 id="edit-cgiUrl"
                 value={formData.cgiUrl}
                 onChange={(e) => setFormData({ ...formData, cgiUrl: e.target.value })}
+                autoCapitalize="none"
+                autoCorrect="off"
               />
               <p className="text-xs text-muted-foreground">
                 {t('profiles.manual_override_hint')}
@@ -596,6 +608,8 @@ export default function Profiles() {
                 id="edit-username"
                 value={formData.username}
                 onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                autoCapitalize="none"
+                autoCorrect="off"
               />
             </div>
             <div className="grid gap-2">
@@ -608,6 +622,8 @@ export default function Profiles() {
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   className="pr-10"
+                  autoCapitalize="none"
+                  autoCorrect="off"
                 />
                 <Button
                   type="button"

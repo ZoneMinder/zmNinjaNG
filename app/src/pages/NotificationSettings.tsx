@@ -303,6 +303,8 @@ export default function NotificationSettings() {
                   value={settings.host}
                   onChange={(e) => updateSettings({ host: e.target.value })}
                   disabled={isConnected}
+                  autoCapitalize="none"
+                  autoCorrect="off"
                 />
                 <p className="text-xs text-muted-foreground">
                   {t('notification_settings.server_host_desc')}
