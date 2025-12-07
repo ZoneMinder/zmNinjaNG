@@ -46,15 +46,19 @@ export default function NotificationSettings() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
   const {
-    settings,
-    connectionState,
-    isConnected,
-    unreadCount,
-    updateSettings,
+    getProfileSettings,
+    updateProfileSettings,
     setMonitorFilter,
     connect,
     disconnect,
+    connectionState,
+    isConnected,
+    getUnreadCount,
   } = useNotificationStore();
+
+  // Get settings for current profile
+  const settings = currentProfile ? getProfileSettings(currentProfile.id) : null;
+  const unreadCount = currentProfile ? getUnreadCount(currentProfile.id) : 0;
 
   // Fetch monitors
   const { data: monitorsData } = useQuery({
@@ -70,30 +74,40 @@ export default function NotificationSettings() {
 
   // Initialize push notifications on mobile
   useEffect(() => {
-    if (Capacitor.isNativePlatform() && settings.enabled) {
+    if (Capacitor.isNativePlatform() && settings && settings.enabled) {
       const pushService = getPushService();
       pushService.initialize().catch((error) => {
         log.error('Failed to initialize push notifications', { component: 'NotificationSettings' }, error);
       });
     }
-  }, [settings.enabled]);
+  }, [settings?.enabled]);
 
   const handleEnableToggle = async (enabled: boolean) => {
-    updateSettings({ enabled });
+    if (!currentProfile) {
+      toast.error(t('notification_settings.no_profile'));
+      return;
+    }
+
+    updateProfileSettings(currentProfile.id, { enabled });
 
     if (enabled) {
       // Auto-detect host from current profile if not set
-      if (!settings.host && currentProfile) {
+      if (!settings?.host && currentProfile) {
         try {
           const url = new URL(currentProfile.portalUrl);
-          updateSettings({ host: url.hostname });
+          // Use wss:// scheme for the notification server
+          const wsHost = url.hostname;
+          updateProfileSettings(currentProfile.id, { host: wsHost });
+          log.info('Auto-populated notification host from profile', {
+            component: 'NotificationSettings',
+            host: wsHost,
+          });
         } catch (error) {
           log.error('Failed to parse portal URL', { component: 'NotificationSettings' }, error);
         }
       }
 
-      // Try to connect
-      await handleConnect();
+      toast.info(t('notification_settings.notifications_enabled'));
     } else {
       disconnect();
       toast.info(t('notification_settings.notifications_disabled'));
@@ -106,7 +120,7 @@ export default function NotificationSettings() {
       return;
     }
 
-    if (!settings.host) {
+    if (!settings?.host) {
       toast.error(t('notification_settings.enter_host'));
       return;
     }
@@ -125,7 +139,7 @@ export default function NotificationSettings() {
         throw new Error('Failed to get password');
       }
 
-      await connect(currentProfile.username, password);
+      await connect(currentProfile.id, currentProfile.username, password);
       toast.success(t('notification_settings.connected_success'));
 
       // Initialize push on mobile
@@ -154,17 +168,21 @@ export default function NotificationSettings() {
   };
 
   const handleMonitorToggle = (monitorId: number, enabled: boolean) => {
+    if (!currentProfile) return;
+
     if (enabled) {
-      setMonitorFilter(monitorId, true, 60); // Default 60 second interval
+      setMonitorFilter(currentProfile.id, monitorId, true, 60); // Default 60 second interval
     } else {
-      setMonitorFilter(monitorId, false);
+      setMonitorFilter(currentProfile.id, monitorId, false);
     }
   };
 
   const handleIntervalChange = (monitorId: number, interval: number) => {
+    if (!currentProfile || !settings) return;
+
     const filter = settings.monitorFilters.find((f) => f.monitorId === monitorId);
     if (filter) {
-      setMonitorFilter(monitorId, filter.enabled, interval);
+      setMonitorFilter(currentProfile.id, monitorId, filter.enabled, interval);
     }
   };
 
@@ -201,6 +219,21 @@ export default function NotificationSettings() {
         );
     }
   };
+
+  // Early return if no profile
+  if (!currentProfile || !settings) {
+    return (
+      <div className="p-6 md:p-8 max-w-5xl mx-auto">
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center space-y-3">
+            <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto" />
+            <h2 className="text-xl font-semibold">{t('notification_settings.no_profile')}</h2>
+            <p className="text-muted-foreground">{t('notification_settings.select_profile_first')}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 md:p-8 max-w-5xl mx-auto space-y-8">
@@ -301,7 +334,7 @@ export default function NotificationSettings() {
                   type="text"
                   placeholder="zm.example.com"
                   value={settings.host}
-                  onChange={(e) => updateSettings({ host: e.target.value })}
+                  onChange={(e) => updateProfileSettings(currentProfile.id, { host: e.target.value })}
                   disabled={isConnected}
                   autoCapitalize="none"
                   autoCorrect="off"
@@ -331,7 +364,7 @@ export default function NotificationSettings() {
                           id="port"
                           type="number"
                           value={settings.port}
-                          onChange={(e) => updateSettings({ port: Number(e.target.value) })}
+                          onChange={(e) => updateProfileSettings(currentProfile.id, { port: Number(e.target.value) })}
                           disabled={isConnected}
                         />
                         <p className="text-xs text-muted-foreground">{t('notification_settings.default_port')}</p>
@@ -347,7 +380,7 @@ export default function NotificationSettings() {
                           <Switch
                             id="ssl"
                             checked={settings.ssl}
-                            onCheckedChange={(checked) => updateSettings({ ssl: checked })}
+                            onCheckedChange={(checked) => updateProfileSettings(currentProfile.id, { ssl: checked })}
                             disabled={isConnected}
                           />
                         </div>
@@ -372,7 +405,7 @@ export default function NotificationSettings() {
                         <Switch
                           id="show-toasts"
                           checked={settings.showToasts}
-                          onCheckedChange={(checked) => updateSettings({ showToasts: checked })}
+                          onCheckedChange={(checked) => updateProfileSettings(currentProfile.id, { showToasts: checked })}
                         />
                       </div>
 
@@ -386,7 +419,7 @@ export default function NotificationSettings() {
                         <Switch
                           id="play-sound"
                           checked={settings.playSound}
-                          onCheckedChange={(checked) => updateSettings({ playSound: checked })}
+                          onCheckedChange={(checked) => updateProfileSettings(currentProfile.id, { playSound: checked })}
                         />
                       </div>
                     </div>

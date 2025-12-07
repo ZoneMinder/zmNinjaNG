@@ -108,13 +108,18 @@ function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentProps) {
     })
   );
   const logout = useAuthStore((state) => state.logout);
-  const { unreadCount, connectionState, settings } = useNotificationStore(
+  const { getUnreadCount, connectionState, getProfileSettings } = useNotificationStore(
     useShallow((state) => ({
-      unreadCount: state.unreadCount,
+      getUnreadCount: state.getUnreadCount,
       connectionState: state.connectionState,
-      settings: state.settings,
+      getProfileSettings: state.getProfileSettings,
     }))
   );
+
+  // Get notification data for current profile
+  const unreadCount = currentProfile ? getUnreadCount(currentProfile.id) : 0;
+  const settings = currentProfile ? getProfileSettings(currentProfile.id) : null;
+
   const { t } = useTranslation();
 
   const handleLogout = () => {
@@ -181,16 +186,16 @@ function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentProps) {
                     <span className="truncate">{item.label}</span>
                     
                     {item.path === '/notifications' && (
-                      <div 
+                      <div
                         className={cn(
                           "h-2 w-2 rounded-full ml-2 flex-shrink-0",
-                          !settings.enabled ? "bg-muted-foreground/50" :
+                          !settings?.enabled ? "bg-muted-foreground/50" :
                           connectionState === 'connected' ? "bg-green-500" :
                           connectionState === 'disconnected' || connectionState === 'error' ? "bg-red-500" :
                           "bg-orange-500 animate-pulse"
-                        )} 
+                        )}
                         title={
-                          !settings.enabled ? "Disabled" :
+                          !settings?.enabled ? "Disabled" :
                           connectionState === 'connected' ? "Connected" :
                           connectionState === 'disconnected' ? "Disconnected" :
                           "Connecting..."

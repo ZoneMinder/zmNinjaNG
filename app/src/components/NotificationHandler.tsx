@@ -26,31 +26,53 @@ export function NotificationHandler() {
   const { t } = useTranslation();
 
   const {
-    settings,
-    events,
+    getProfileSettings,
+    getEvents,
     isConnected,
     connectionState,
+    currentProfileId,
     connect,
+    disconnect,
   } = useNotificationStore();
 
   const lastEventId = useRef<number | null>(null);
   const hasAttemptedAutoConnect = useRef(false);
+  const lastProfileId = useRef<string | null>(null);
+
+  // Get settings and events for current profile
+  const settings = currentProfile ? getProfileSettings(currentProfile.id) : null;
+  const events = currentProfile ? getEvents(currentProfile.id) : [];
 
   // Reset auto-connect flag when profile changes or disabled
   useEffect(() => {
-    if (!settings.enabled) {
+    if (!settings?.enabled) {
       hasAttemptedAutoConnect.current = false;
     }
-  }, [settings.enabled]);
+  }, [settings?.enabled]);
 
+  // Handle profile switching
   useEffect(() => {
-    hasAttemptedAutoConnect.current = false;
-  }, [currentProfile?.id]);
+    if (currentProfile?.id !== lastProfileId.current) {
+      lastProfileId.current = currentProfile?.id || null;
+      hasAttemptedAutoConnect.current = false;
+
+      // Disconnect from previous profile if connected to a different one
+      if (isConnected && currentProfileId !== currentProfile?.id) {
+        log.info('Profile changed - disconnecting from previous profile', {
+          component: 'Notifications',
+          previousProfile: currentProfileId,
+          newProfile: currentProfile?.id,
+        });
+        disconnect();
+      }
+    }
+  }, [currentProfile?.id, isConnected, currentProfileId, disconnect]);
 
   // Auto-connect when profile loads (if enabled)
   useEffect(() => {
     if (
-      settings.enabled &&
+      settings?.enabled &&
+      settings?.host && // Don't auto-connect if host is not set
       !isConnected &&
       connectionState === 'disconnected' &&
       currentProfile &&
@@ -60,32 +82,42 @@ export function NotificationHandler() {
     ) {
       hasAttemptedAutoConnect.current = true;
 
-      log.info('Auto-connecting to notification server', { component: 'Notifications' });
+      log.info('Auto-connecting to notification server', {
+        component: 'Notifications',
+        profileId: currentProfile.id,
+      });
 
       const attemptConnect = async (retries = 3) => {
         try {
           const password = await getDecryptedPassword(currentProfile.id);
-          
+
           // Check state again right before connecting to avoid race conditions
           // This is crucial because getDecryptedPassword is async and state might have changed
           const currentState = useNotificationStore.getState().connectionState;
           if (currentState !== 'disconnected') {
-             log.info('Skipping auto-connect - already connected or connecting', { 
+             log.info('Skipping auto-connect - already connected or connecting', {
                component: 'Notifications',
-               state: currentState 
+               state: currentState,
+               profileId: currentProfile.id,
              });
              return;
           }
 
           if (password) {
-            await connect(currentProfile.username!, password);
-            log.info('Auto-connected to notification server', { component: 'Notifications' });
+            await connect(currentProfile.id, currentProfile.username!, password);
+            log.info('Auto-connected to notification server', {
+              component: 'Notifications',
+              profileId: currentProfile.id,
+            });
           } else {
             throw new Error('Failed to get password');
           }
         } catch (error) {
-          log.error(`Auto-connect failed (retries left: ${retries})`, { component: 'Notifications' }, error);
-          
+          log.error(`Auto-connect failed (retries left: ${retries})`, {
+            component: 'Notifications',
+            profileId: currentProfile.id,
+          }, error);
+
           if (retries > 0) {
             setTimeout(() => attemptConnect(retries - 1), 2000);
           }
@@ -95,11 +127,11 @@ export function NotificationHandler() {
       // Add a small delay to ensure everything is initialized
       setTimeout(() => attemptConnect(), 500);
     }
-  }, [settings.enabled, isConnected, connectionState, currentProfile, connect, getDecryptedPassword]);
+  }, [settings?.enabled, settings?.host, isConnected, connectionState, currentProfile, connect, getDecryptedPassword]);
 
   // Listen for new events and show toasts
   useEffect(() => {
-    if (!settings.showToasts || events.length === 0) {
+    if (!settings?.showToasts || events.length === 0) {
       return;
     }
 
@@ -157,17 +189,18 @@ export function NotificationHandler() {
       );
 
       // Play sound if enabled
-      if (settings.playSound) {
+      if (settings?.playSound) {
         playNotificationSound();
       }
 
       log.info('Showed notification toast', {
         component: 'Notifications',
+        profileId: currentProfile?.id,
         monitor: latestEvent.MonitorName,
         eventId: latestEvent.EventId,
       });
     }
-  }, [events, settings.showToasts, settings.playSound, t]);
+  }, [events, settings?.showToasts, settings?.playSound, currentProfile?.id, t]);
 
   // This component doesn't render anything
   return null;

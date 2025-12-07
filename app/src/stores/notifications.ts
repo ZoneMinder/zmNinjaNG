@@ -32,35 +32,38 @@ export interface NotificationEvent extends ZMAlarmEvent {
 }
 
 interface NotificationState {
-  // Settings
-  settings: NotificationSettings;
+  // Settings per profile ID
+  profileSettings: Record<string, NotificationSettings>;
 
-  // Connection state
+  // Connection state (runtime only, not persisted)
   connectionState: ConnectionState;
   isConnected: boolean;
+  currentProfileId: string | null; // Track which profile is connected
 
-  // Events
-  events: NotificationEvent[]; // Recent events (last 100)
-  unreadCount: number;
+  // Events per profile ID
+  profileEvents: Record<string, NotificationEvent[]>;
 
   // Internal runtime state (not persisted)
   _cleanupFunctions: (() => void)[];
 
   // Actions - Settings
-  updateSettings: (updates: Partial<NotificationSettings>) => void;
-  setMonitorFilter: (monitorId: number, enabled: boolean, checkInterval?: number) => void;
-  removeMonitorFilter: (monitorId: number) => void;
+  getProfileSettings: (profileId: string) => NotificationSettings;
+  updateProfileSettings: (profileId: string, updates: Partial<NotificationSettings>) => void;
+  setMonitorFilter: (profileId: string, monitorId: number, enabled: boolean, checkInterval?: number) => void;
+  removeMonitorFilter: (profileId: string, monitorId: number) => void;
 
   // Actions - Connection
-  connect: (username: string, password: string) => Promise<void>;
+  connect: (profileId: string, username: string, password: string) => Promise<void>;
   disconnect: () => void;
   reconnect: () => Promise<void>;
 
   // Actions - Events
-  addEvent: (event: ZMAlarmEvent) => void;
-  markEventRead: (eventId: number) => void;
-  markAllRead: () => void;
-  clearEvents: () => void;
+  addEvent: (profileId: string, event: ZMAlarmEvent) => void;
+  markEventRead: (profileId: string, eventId: number) => void;
+  markAllRead: (profileId: string) => void;
+  clearEvents: (profileId: string) => void;
+  getUnreadCount: (profileId: string) => number;
+  getEvents: (profileId: string) => NotificationEvent[];
 
   // Actions - Push (Mobile)
   registerPushToken: (token: string, platform: 'ios' | 'android') => Promise<void>;
@@ -75,124 +78,149 @@ interface NotificationState {
 const MAX_EVENTS = 100; // Keep last 100 events
 const DEFAULT_PORT = 9000;
 
+const DEFAULT_SETTINGS: NotificationSettings = {
+  enabled: false,
+  host: '',
+  port: DEFAULT_PORT,
+  ssl: true,
+  monitorFilters: [],
+  showToasts: true,
+  playSound: false,
+  badgeCount: 0,
+};
+
 export const useNotificationStore = create<NotificationState>()(
   persist(
     (set, get) => ({
       // Initial state
-      settings: {
-        enabled: false,
-        host: '',
-        port: DEFAULT_PORT,
-        ssl: true,
-        monitorFilters: [],
-        showToasts: true,
-        playSound: false,
-        badgeCount: 0,
-      },
+      profileSettings: {},
       connectionState: 'disconnected',
       isConnected: false,
-      events: [],
-      unreadCount: 0,
+      currentProfileId: null,
+      profileEvents: {},
       _cleanupFunctions: [],
 
       // ========== Settings Actions ==========
 
-      updateSettings: (updates) => {
-        log.info('Updating notification settings', { component: 'Notifications', updates });
+      getProfileSettings: (profileId) => {
+        const settings = get().profileSettings[profileId];
+        return { ...DEFAULT_SETTINGS, ...settings };
+      },
+
+      updateProfileSettings: (profileId, updates) => {
+        log.info('Updating notification settings', { component: 'Notifications', profileId, updates });
 
         set((state) => ({
-          settings: {
-            ...state.settings,
-            ...updates,
+          profileSettings: {
+            ...state.profileSettings,
+            [profileId]: {
+              ...(state.profileSettings[profileId] || DEFAULT_SETTINGS),
+              ...updates,
+            },
           },
         }));
 
-        // If enabled state changed, connect/disconnect
-        if ('enabled' in updates) {
-          if (updates.enabled) {
-            // Will connect when credentials are available (via connect method)
-            log.info('Notifications enabled - call connect() with credentials', {
-              component: 'Notifications',
-            });
-          } else {
-            get().disconnect();
-          }
+        // If enabled state changed to false, disconnect if this is the current profile
+        if ('enabled' in updates && !updates.enabled && get().currentProfileId === profileId) {
+          get().disconnect();
         }
 
-        // If monitor filters changed and connected, update server
-        if ('monitorFilters' in updates && get().isConnected) {
+        // If monitor filters changed and connected for this profile, update server
+        if ('monitorFilters' in updates && get().isConnected && get().currentProfileId === profileId) {
           get()._syncMonitorFilters();
         }
       },
 
-      setMonitorFilter: (monitorId, enabled, checkInterval = 60) => {
+      setMonitorFilter: (profileId, monitorId, enabled, checkInterval = 60) => {
         log.info('Setting monitor filter', {
           component: 'Notifications',
+          profileId,
           monitorId,
           enabled,
           checkInterval,
         });
 
         set((state) => {
-          const existing = state.settings.monitorFilters.find((f) => f.monitorId === monitorId);
+          const profileSettings = state.profileSettings[profileId] || DEFAULT_SETTINGS;
+          const existing = profileSettings.monitorFilters.find((f) => f.monitorId === monitorId);
           const filters = existing
-            ? state.settings.monitorFilters.map((f) =>
+            ? profileSettings.monitorFilters.map((f) =>
                 f.monitorId === monitorId ? { ...f, enabled, checkInterval } : f
               )
             : [
-                ...state.settings.monitorFilters,
+                ...profileSettings.monitorFilters,
                 { monitorId, enabled, checkInterval },
               ];
 
           return {
-            settings: {
-              ...state.settings,
-              monitorFilters: filters,
+            profileSettings: {
+              ...state.profileSettings,
+              [profileId]: {
+                ...profileSettings,
+                monitorFilters: filters,
+              },
             },
           };
         });
 
-        // Update server if connected
-        if (get().isConnected) {
+        // Update server if connected for this profile
+        if (get().isConnected && get().currentProfileId === profileId) {
           get()._syncMonitorFilters();
         }
       },
 
-      removeMonitorFilter: (monitorId) => {
-        log.info('Removing monitor filter', { component: 'Notifications', monitorId });
+      removeMonitorFilter: (profileId, monitorId) => {
+        log.info('Removing monitor filter', { component: 'Notifications', profileId, monitorId });
 
-        set((state) => ({
-          settings: {
-            ...state.settings,
-            monitorFilters: state.settings.monitorFilters.filter(
-              (f) => f.monitorId !== monitorId
-            ),
-          },
-        }));
+        set((state) => {
+          const profileSettings = state.profileSettings[profileId] || DEFAULT_SETTINGS;
+          return {
+            profileSettings: {
+              ...state.profileSettings,
+              [profileId]: {
+                ...profileSettings,
+                monitorFilters: profileSettings.monitorFilters.filter(
+                  (f) => f.monitorId !== monitorId
+                ),
+              },
+            },
+          };
+        });
 
-        // Update server if connected
-        if (get().isConnected) {
+        // Update server if connected for this profile
+        if (get().isConnected && get().currentProfileId === profileId) {
           get()._syncMonitorFilters();
         }
       },
 
       // ========== Connection Actions ==========
 
-      connect: async (username: string, password: string) => {
-        const { settings } = get();
+      connect: async (profileId: string, username: string, password: string) => {
+        const settings = get().getProfileSettings(profileId);
 
         if (!settings.enabled) {
-          log.warn('Notifications not enabled', { component: 'Notifications' });
+          log.warn('Notifications not enabled for this profile', { component: 'Notifications', profileId });
           return;
         }
 
         if (!settings.host) {
-          log.warn('No notification server host configured', { component: 'Notifications' });
+          log.warn('No notification server host configured', { component: 'Notifications', profileId });
           return;
+        }
+
+        // Disconnect if already connected to a different profile
+        if (get().isConnected && get().currentProfileId !== profileId) {
+          log.info('Disconnecting from previous profile', {
+            component: 'Notifications',
+            previousProfile: get().currentProfileId,
+            newProfile: profileId
+          });
+          get().disconnect();
         }
 
         log.info('Connecting to notification server', {
           component: 'Notifications',
+          profileId,
           host: settings.host,
           port: settings.port,
           ssl: settings.ssl,
@@ -215,20 +243,27 @@ export const useNotificationStore = create<NotificationState>()(
         try {
           await service.connect(config);
 
+          // Mark which profile is connected
+          set({ currentProfileId: profileId });
+
           // Sync monitor filters after connection
           get()._syncMonitorFilters();
 
           log.info('Successfully connected to notification server', {
             component: 'Notifications',
+            profileId,
           });
         } catch (error) {
-          log.error('Failed to connect to notification server', { component: 'Notifications' }, error);
+          log.error('Failed to connect to notification server', { component: 'Notifications', profileId }, error);
           throw error;
         }
       },
 
       disconnect: () => {
-        log.info('Disconnecting from notification server', { component: 'Notifications' });
+        log.info('Disconnecting from notification server', {
+          component: 'Notifications',
+          profileId: get().currentProfileId
+        });
 
         get()._cleanup();
         resetNotificationService();
@@ -236,6 +271,7 @@ export const useNotificationStore = create<NotificationState>()(
         set({
           connectionState: 'disconnected',
           isConnected: false,
+          currentProfileId: null,
         });
       },
 
@@ -247,9 +283,19 @@ export const useNotificationStore = create<NotificationState>()(
 
       // ========== Event Actions ==========
 
-      addEvent: (event: ZMAlarmEvent) => {
+      getEvents: (profileId) => {
+        return get().profileEvents[profileId] || [];
+      },
+
+      getUnreadCount: (profileId) => {
+        const events = get().profileEvents[profileId] || [];
+        return events.filter((e) => !e.read).length;
+      },
+
+      addEvent: (profileId: string, event: ZMAlarmEvent) => {
         log.info('Adding notification event', {
           component: 'Notifications',
+          profileId,
           monitor: event.MonitorName,
           eventId: event.EventId,
         });
@@ -261,82 +307,128 @@ export const useNotificationStore = create<NotificationState>()(
             read: false,
           };
 
-          const events = [notificationEvent, ...state.events].slice(0, MAX_EVENTS);
+          const currentEvents = state.profileEvents[profileId] || [];
+          const events = [notificationEvent, ...currentEvents].slice(0, MAX_EVENTS);
           const unreadCount = events.filter((e) => !e.read).length;
 
+          const profileSettings = state.profileSettings[profileId] || DEFAULT_SETTINGS;
+
           return {
-            events,
-            unreadCount,
-            settings: {
-              ...state.settings,
-              badgeCount: unreadCount,
+            profileEvents: {
+              ...state.profileEvents,
+              [profileId]: events,
+            },
+            profileSettings: {
+              ...state.profileSettings,
+              [profileId]: {
+                ...profileSettings,
+                badgeCount: unreadCount,
+              },
             },
           };
         });
       },
 
-      markEventRead: (eventId: number) => {
+      markEventRead: (profileId: string, eventId: number) => {
         set((state) => {
-          const events = state.events.map((e) =>
+          const currentEvents = state.profileEvents[profileId] || [];
+          const events = currentEvents.map((e) =>
             e.EventId === eventId ? { ...e, read: true } : e
           );
           const unreadCount = events.filter((e) => !e.read).length;
 
+          const profileSettings = state.profileSettings[profileId] || DEFAULT_SETTINGS;
+
           return {
-            events,
-            unreadCount,
-            settings: {
-              ...state.settings,
-              badgeCount: unreadCount,
+            profileEvents: {
+              ...state.profileEvents,
+              [profileId]: events,
+            },
+            profileSettings: {
+              ...state.profileSettings,
+              [profileId]: {
+                ...profileSettings,
+                badgeCount: unreadCount,
+              },
             },
           };
         });
 
-        // Update badge on server
-        get()._updateBadge();
+        // Update badge on server if this is the connected profile
+        if (get().currentProfileId === profileId) {
+          get()._updateBadge();
+        }
       },
 
-      markAllRead: () => {
-        set((state) => ({
-          events: state.events.map((e) => ({ ...e, read: true })),
-          unreadCount: 0,
-          settings: {
-            ...state.settings,
-            badgeCount: 0,
-          },
-        }));
+      markAllRead: (profileId: string) => {
+        set((state) => {
+          const currentEvents = state.profileEvents[profileId] || [];
+          const events = currentEvents.map((e) => ({ ...e, read: true }));
+          const profileSettings = state.profileSettings[profileId] || DEFAULT_SETTINGS;
 
-        // Update badge on server
-        get()._updateBadge();
-      },
-
-      clearEvents: () => {
-        log.info('Clearing all notification events', { component: 'Notifications' });
-        set({
-          events: [],
-          unreadCount: 0,
-          settings: {
-            ...get().settings,
-            badgeCount: 0,
-          },
+          return {
+            profileEvents: {
+              ...state.profileEvents,
+              [profileId]: events,
+            },
+            profileSettings: {
+              ...state.profileSettings,
+              [profileId]: {
+                ...profileSettings,
+                badgeCount: 0,
+              },
+            },
+          };
         });
 
-        // Update badge on server
-        get()._updateBadge();
+        // Update badge on server if this is the connected profile
+        if (get().currentProfileId === profileId) {
+          get()._updateBadge();
+        }
+      },
+
+      clearEvents: (profileId: string) => {
+        log.info('Clearing all notification events', { component: 'Notifications', profileId });
+
+        set((state) => {
+          const profileSettings = state.profileSettings[profileId] || DEFAULT_SETTINGS;
+
+          return {
+            profileEvents: {
+              ...state.profileEvents,
+              [profileId]: [],
+            },
+            profileSettings: {
+              ...state.profileSettings,
+              [profileId]: {
+                ...profileSettings,
+                badgeCount: 0,
+              },
+            },
+          };
+        });
+
+        // Update badge on server if this is the connected profile
+        if (get().currentProfileId === profileId) {
+          get()._updateBadge();
+        }
       },
 
       // ========== Push Token Actions ==========
 
       registerPushToken: async (token: string, platform: 'ios' | 'android') => {
-        if (!get().isConnected) {
+        const { isConnected, currentProfileId } = get();
+
+        if (!isConnected || !currentProfileId) {
           log.warn('Cannot register push token - not connected', { component: 'Notifications' });
           return;
         }
 
-        log.info('Registering push token', { component: 'Notifications', platform });
+        log.info('Registering push token', { component: 'Notifications', platform, profileId: currentProfileId });
 
         const service = getNotificationService();
-        const { monitorFilters } = get().settings;
+        const settings = get().getProfileSettings(currentProfileId);
+        const { monitorFilters } = settings;
 
         const enabledFilters = monitorFilters.filter((f) => f.enabled);
         const monitorIds = enabledFilters.map((f) => f.monitorId);
@@ -361,17 +453,22 @@ export const useNotificationStore = create<NotificationState>()(
 
         // Listen for alarm events
         const unsubscribeEvents = service.onEvent((event) => {
-          get().addEvent(event);
+          const { currentProfileId } = get();
+          if (currentProfileId) {
+            get().addEvent(currentProfileId, event);
 
-          // Show toast if enabled
-          if (get().settings.showToasts) {
-            // Toast will be shown by the UI component listening to the store
-          }
+            const settings = get().getProfileSettings(currentProfileId);
 
-          // Play sound if enabled
-          if (get().settings.playSound) {
-            // TODO: Play notification sound
-            log.info('Playing notification sound', { component: 'Notifications' });
+            // Show toast if enabled
+            if (settings.showToasts) {
+              // Toast will be shown by the UI component listening to the store
+            }
+
+            // Play sound if enabled
+            if (settings.playSound) {
+              // TODO: Play notification sound
+              log.info('Playing notification sound', { component: 'Notifications' });
+            }
           }
         });
 
@@ -390,12 +487,19 @@ export const useNotificationStore = create<NotificationState>()(
       },
 
       _syncMonitorFilters: async () => {
+        const { currentProfileId } = get();
+        if (!currentProfileId) {
+          log.warn('Cannot sync monitor filters - no profile connected', { component: 'Notifications' });
+          return;
+        }
+
         const service = getNotificationService();
-        const { monitorFilters } = get().settings;
+        const settings = get().getProfileSettings(currentProfileId);
+        const { monitorFilters } = settings;
 
         const enabledFilters = monitorFilters.filter((f) => f.enabled);
         if (enabledFilters.length === 0) {
-          log.info('No enabled monitor filters to sync', { component: 'Notifications' });
+          log.info('No enabled monitor filters to sync', { component: 'Notifications', profileId: currentProfileId });
           return;
         }
 
@@ -404,6 +508,7 @@ export const useNotificationStore = create<NotificationState>()(
 
         log.info('Syncing monitor filters with server', {
           component: 'Notifications',
+          profileId: currentProfileId,
           monitors: monitorIds,
           intervals,
         });
@@ -411,18 +516,25 @@ export const useNotificationStore = create<NotificationState>()(
         try {
           await service.setMonitorFilter(monitorIds, intervals);
         } catch (error) {
-          log.error('Failed to sync monitor filters', { component: 'Notifications' }, error);
+          log.error('Failed to sync monitor filters', { component: 'Notifications', profileId: currentProfileId }, error);
         }
       },
 
       _updateBadge: async () => {
+        const { currentProfileId } = get();
+        if (!currentProfileId) {
+          log.warn('Cannot update badge - no profile connected', { component: 'Notifications' });
+          return;
+        }
+
         const service = getNotificationService();
-        const { badgeCount } = get().settings;
+        const settings = get().getProfileSettings(currentProfileId);
+        const { badgeCount } = settings;
 
         try {
           await service.updateBadgeCount(badgeCount);
         } catch (error) {
-          log.error('Failed to update badge count', { component: 'Notifications' }, error);
+          log.error('Failed to update badge count', { component: 'Notifications', profileId: currentProfileId }, error);
         }
       },
     }),
@@ -430,18 +542,19 @@ export const useNotificationStore = create<NotificationState>()(
       name: 'zmng-notifications',
       // Only persist settings and events, not connection state
       partialize: (state) => ({
-        settings: state.settings,
-        events: state.events,
-        unreadCount: state.unreadCount,
+        profileSettings: state.profileSettings,
+        profileEvents: state.profileEvents,
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {
+          const profileCount = Object.keys(state.profileSettings || {}).length;
+          const eventCounts = Object.entries(state.profileEvents || {}).map(
+            ([id, events]) => `${id}: ${events.length}`
+          );
           log.info('Notification store rehydrated', {
             component: 'Notifications',
-            enabled: state.settings.enabled,
-            host: state.settings.host,
-            eventCount: state.events.length,
-            unreadCount: state.unreadCount,
+            profileCount,
+            eventCounts,
           });
         }
       },

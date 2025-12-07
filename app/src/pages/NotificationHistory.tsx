@@ -6,10 +6,11 @@
  */
 
 import { useNotificationStore } from '../stores/notifications';
+import { useProfileStore } from '../stores/profile';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
-import { Bell, Trash2, CheckCheck, ExternalLink } from 'lucide-react';
+import { Bell, Trash2, CheckCheck, ExternalLink, AlertCircle } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -17,12 +18,46 @@ import { useTranslation } from 'react-i18next';
 export default function NotificationHistory() {
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const { events, unreadCount, markEventRead, markAllRead, clearEvents } = useNotificationStore();
+  const currentProfile = useProfileStore((state) => state.currentProfile());
+  const { getEvents, getUnreadCount, markEventRead, markAllRead, clearEvents } = useNotificationStore();
+
+  // Get events and unread count for current profile
+  const events = currentProfile ? getEvents(currentProfile.id) : [];
+  const unreadCount = currentProfile ? getUnreadCount(currentProfile.id) : 0;
 
   const handleViewEvent = (eventId: number) => {
-    markEventRead(eventId);
+    if (currentProfile) {
+      markEventRead(currentProfile.id, eventId);
+    }
     navigate(`/events/${eventId}`);
   };
+
+  const handleMarkAllRead = () => {
+    if (currentProfile) {
+      markAllRead(currentProfile.id);
+    }
+  };
+
+  const handleClearEvents = () => {
+    if (currentProfile) {
+      clearEvents(currentProfile.id);
+    }
+  };
+
+  // Early return if no profile
+  if (!currentProfile) {
+    return (
+      <div className="p-6 md:p-8 max-w-5xl mx-auto">
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center space-y-3">
+            <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto" />
+            <h2 className="text-xl font-semibold">{t('notification_history.no_profile')}</h2>
+            <p className="text-muted-foreground">{t('notification_history.select_profile_first')}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-3 sm:p-4 md:p-6 max-w-5xl mx-auto space-y-4 sm:space-y-6">
@@ -44,13 +79,13 @@ export default function NotificationHistory() {
 
         <div className="flex gap-1.5 sm:gap-2">
           {unreadCount > 0 && (
-            <Button variant="outline" onClick={markAllRead} size="sm" className="h-8 sm:h-10">
+            <Button variant="outline" onClick={handleMarkAllRead} size="sm" className="h-8 sm:h-10">
               <CheckCheck className="h-4 w-4 sm:mr-2" />
               <span className="hidden sm:inline">{t('notification_history.mark_all_read')}</span>
             </Button>
           )}
           {events.length > 0 && (
-            <Button variant="destructive" onClick={clearEvents} size="sm" className="h-8 sm:h-10">
+            <Button variant="destructive" onClick={handleClearEvents} size="sm" className="h-8 sm:h-10">
               <Trash2 className="h-4 w-4 sm:mr-2" />
               <span className="hidden sm:inline">{t('notification_history.clear_all')}</span>
             </Button>
@@ -125,11 +160,11 @@ export default function NotificationHistory() {
                       <div>{t('notification_history.event_id', { id: event.EventId })}</div>
                       <div>{t('notification_history.monitor_id', { id: event.MonitorId })}</div>
                     </div>
-                    {!event.read && (
+                    {!event.read && currentProfile && (
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => markEventRead(event.EventId)}
+                        onClick={() => markEventRead(currentProfile.id, event.EventId)}
                       >
                         {t('notification_history.mark_read')}
                       </Button>

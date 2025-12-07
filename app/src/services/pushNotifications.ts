@@ -198,14 +198,17 @@ export class MobilePushService {
     // Extract event data and add to notification store
     if (data.monitorId && data.eventId) {
       const notificationStore = useNotificationStore.getState();
+      const profileId = notificationStore.currentProfileId;
 
-      notificationStore.addEvent({
-        MonitorId: parseInt(data.monitorId, 10),
-        MonitorName: data.monitorName || 'Unknown',
-        EventId: parseInt(data.eventId, 10),
-        Cause: data.cause || notification.body || 'Motion detected',
-        Name: data.monitorName || 'Unknown',
-      });
+      if (profileId) {
+        notificationStore.addEvent(profileId, {
+          MonitorId: parseInt(data.monitorId, 10),
+          MonitorName: data.monitorName || 'Unknown',
+          EventId: parseInt(data.eventId, 10),
+          Cause: data.cause || notification.body || 'Motion detected',
+          Name: data.monitorName || 'Unknown',
+        });
+      }
     }
   }
 
@@ -223,7 +226,11 @@ export class MobilePushService {
     if (data.eventId) {
       // Mark as read
       const notificationStore = useNotificationStore.getState();
-      notificationStore.markEventRead(parseInt(data.eventId, 10));
+      const profileId = notificationStore.currentProfileId;
+
+      if (profileId) {
+        notificationStore.markEventRead(profileId, parseInt(data.eventId, 10));
+      }
 
       // TODO: Navigate to event detail page
       // This will be handled by a React component that listens to deep link events
