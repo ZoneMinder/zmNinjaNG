@@ -296,7 +296,13 @@ export class ZMNotificationService {
 
       this.ws.onopen = () => this._handleOpen();
       this.ws.onmessage = (event) => this._handleMessage(event);
-      this.ws.onerror = (error) => this._handleError(error);
+      this.ws.onerror = (error) => {
+      log.error('WebSocket error', { component: 'Notifications' }, error);
+      if (this.config.ssl) {
+        log.warn('If using self-signed certificates, ensure they are trusted by the device/browser.', { component: 'Notifications' });
+      }
+      this._handleError(error);
+    };
       this.ws.onclose = (event) => this._handleClose(event);
 
       // Wait for authentication to complete
