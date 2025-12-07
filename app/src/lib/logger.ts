@@ -15,6 +15,8 @@
 
 import { useLogStore } from '../stores/logs';
 import { sanitizeLogMessage, sanitizeObject, sanitizeLogArgs } from './log-sanitizer';
+import { isTauri } from '@tauri-apps/api/core';
+import { info, warn, error, debug } from '@tauri-apps/plugin-log';
 
 export const LogLevel = {
   DEBUG: 0,
@@ -88,6 +90,14 @@ class Logger {
       console.log(prefix, sanitizedMessage, ...sanitizedArgs);
     } else {
       console.log(prefix, sanitizedMessage);
+    }
+
+    // Log to Tauri backend if available
+    if (isTauri()) {
+      const logMsg = `${contextStr}${actionStr} ${sanitizedMessage} ${sanitizedArgs.length > 0 ? JSON.stringify(sanitizedArgs) : ''}`;
+      const logFn = level === 'ERROR' ? error : level === 'WARN' ? warn : level === 'DEBUG' ? debug : info;
+      
+      logFn(logMsg).catch(err => console.error('Failed to log to Tauri backend:', err));
     }
 
     // Add to store
