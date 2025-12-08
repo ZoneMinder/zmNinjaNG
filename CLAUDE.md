@@ -1,10 +1,11 @@
 Global Rules
 -------------
 - All text needs to be internationlized. Always make sure all language files are in sync and updated with each change
-- Write reusable, high quality code
+- Always prefer DRY: Write reusable, high quality code. Don't duplicate the same code 
 - Keep code simple
+- Keep code modular
 - Remember all code needs to work on iOS, Android and Desktop
-- Specifically, all screens need to reflow on mobile devices. Sometimes this means in portrait view, implement icon only buttons if needed
+- Specifically, all screens need to reflow on mobile devices. Sometimes this means in portrait view, implement icon only buttons if needed or they need to wrap
 - Every setting you add MUST be linked to the current profile and not global
 - Never keep legacy files or code - remove them
 - When you make changes that may be breaking (such as changes in layout profile), always avoid the app crashing. Feel free to prompt the user to reset the profile if that happens instead of the app crashing
@@ -12,3 +13,4 @@ Global Rules
 - Write high quality documentation
 - When you implement clicks inside views that navigate to other views, always implement a "stacked" navigation, which means a back arrow to go back to the screen you came from
 - Always use proper log functions, not console logs
+- If you land up changing core iOS/Android code, make sure that they will not be overwritten and re-generated
