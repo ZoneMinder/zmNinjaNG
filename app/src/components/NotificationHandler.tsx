@@ -104,7 +104,7 @@ export function NotificationHandler() {
           }
 
           if (password) {
-            await connect(currentProfile.id, currentProfile.username!, password);
+            await connect(currentProfile.id, currentProfile.username!, password, currentProfile.portalUrl);
             log.info('Auto-connected to notification server', {
               component: 'Notifications',
               profileId: currentProfile.id,

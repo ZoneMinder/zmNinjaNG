@@ -139,7 +139,7 @@ export default function NotificationSettings() {
         throw new Error('Failed to get password');
       }
 
-      await connect(currentProfile.id, currentProfile.username, password);
+      await connect(currentProfile.id, currentProfile.username, password, currentProfile.portalUrl);
       toast.success(t('notification_settings.connected_success'));
 
       // Initialize push on mobile

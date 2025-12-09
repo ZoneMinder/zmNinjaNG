@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "857968839790",
+    "project_id": "zmng-b7af6",
+    "storage_bucket": "zmng-b7af6.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:857968839790:android:a0b35ad4ba27dcf854ea7f",
+        "android_client_info": {
+          "package_name": "com.zmng.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB3VvM3p4ZgEJ99FMTR5kw2NJNGxpt-KyU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

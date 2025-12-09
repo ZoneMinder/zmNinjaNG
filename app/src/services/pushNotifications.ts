@@ -198,6 +198,17 @@ export class MobilePushService {
     // Extract event data and add to notification store
     if (data.monitorId && data.eventId) {
       const notificationStore = useNotificationStore.getState();
+
+      // If we are connected to the event server, we will receive this event via WebSocket.
+      // Ignore the push notification to avoid duplicate processing/toasts.
+      if (notificationStore.isConnected) {
+        log.info('Ignoring foreground push notification - already connected to event server', {
+          component: 'Push',
+          eventId: data.eventId,
+        });
+        return;
+      }
+
       const profileId = notificationStore.currentProfileId;
 
       if (profileId) {
