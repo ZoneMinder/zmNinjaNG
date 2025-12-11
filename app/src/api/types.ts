@@ -257,6 +257,8 @@ export const EventSchema = z.object({
   Length: z.coerce.string(),
   Frames: z.coerce.string(),
   AlarmFrames: z.coerce.string(),
+  AlarmFrameId: z.coerce.string().optional(),  // First alarm frame ID
+  MaxScoreFrameId: z.coerce.string().optional(),  // Frame with highest score
   DefaultVideo: z.string().nullable(),
   SaveJPEGs: z.coerce.string().nullable(),
   TotScore: z.coerce.string(),

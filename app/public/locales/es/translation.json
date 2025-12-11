@@ -156,7 +156,22 @@
     "load_error": "Error al cargar evento",
     "all_events": "Todos los Eventos",
     "seconds": "segundos",
-    "timing": "Tiempo"
+    "timing": "Tiempo",
+    "event_playback": "Reproducción de Evento",
+    "zms_playback": "Reproducción ZMS",
+    "frame": "Fotograma",
+    "play": "Reproducir",
+    "pause": "Pausar",
+    "rewind": "Retroceder",
+    "fast_forward": "Avance Rápido",
+    "previous_frame": "Fotograma Anterior",
+    "next_frame": "Fotograma Siguiente",
+    "frame_position": "Posición del Fotograma",
+    "playback_speed": "Velocidad de Reproducción",
+    "first_alarm_frame": "Primer Fotograma de Alarma",
+    "max_score_frame": "Fotograma de Máxima Puntuación",
+    "alarm_frames": "Fotogramas de Alarma",
+    "alarm_frames_count": "{{count}} de {{total}} fotogramas con alarma"
   },
   "settings": {
     "title": "Configuración",

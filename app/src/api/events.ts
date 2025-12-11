@@ -293,21 +293,26 @@ export function getEventVideoUrl(
 }
 
 /**
- * Construct event ZMS stream URL (for MJPEG playback fallback).
- * 
+ * Construct event ZMS stream URL (for MJPEG playback with controls).
+ *
  * @param portalUrl - Base portal URL
  * @param eventId - The ID of the event
- * @param token - Auth token
- * @param apiUrl - API URL override
+ * @param options - Playback control options
  * @returns Full URL string for the stream
  */
 export function getEventZmsUrl(
   portalUrl: string,
   eventId: string,
-  token?: string,
-  apiUrl?: string
+  options: {
+    token?: string;
+    apiUrl?: string;
+    frame?: number;        // Start frame (1-based)
+    rate?: number;         // Playback speed (100 = 1x, 200 = 2x, 50 = 0.5x)
+    maxfps?: number;       // Maximum frames per second
+    replay?: 'single' | 'all' | 'gapless' | 'none';  // Replay mode
+    scale?: number;        // Scale percentage (50 = 50%, 100 = 100%)
+  } = {}
 ): string {
-  // Ensure portalUrl has a protocol
   // Ensure portalUrl has a protocol
   let baseUrl = portalUrl;
 
@@ -317,22 +322,23 @@ export function getEventZmsUrl(
   }
 
   // If apiUrl is provided and starts with http://, force baseUrl to use http://
-  if (apiUrl && apiUrl.startsWith('http://')) {
+  if (options.apiUrl && options.apiUrl.startsWith('http://')) {
     baseUrl = baseUrl.replace(/^https:\/\//, 'http://');
-  } else if (apiUrl && apiUrl.startsWith('https://')) {
+  } else if (options.apiUrl && options.apiUrl.startsWith('https://')) {
     // Conversely, if API is https://, force baseUrl to use https://
     baseUrl = baseUrl.replace(/^http:\/\//, 'https://');
   }
 
   const params = new URLSearchParams({
     mode: 'jpeg',
-    frame: '1',
-    rate: '100',
-    maxfps: '30',
-    replay: 'single',
     source: 'event',
     event: eventId,
-    ...(token && { token }),
+    frame: (options.frame || 1).toString(),
+    rate: (options.rate || 100).toString(),
+    maxfps: (options.maxfps || 30).toString(),
+    replay: options.replay || 'single',
+    ...(options.scale && { scale: options.scale.toString() }),
+    ...(options.token && { token: options.token }),
   });
 
   return `${baseUrl}/cgi-bin/nph-zms?${params.toString()}`;

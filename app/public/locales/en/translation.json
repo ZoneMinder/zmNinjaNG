@@ -156,7 +156,22 @@
     "load_error": "Error loading event",
     "all_events": "All Events",
     "seconds": "seconds",
-    "timing": "Timing"
+    "timing": "Timing",
+    "event_playback": "Event Playback",
+    "zms_playback": "ZMS Playback",
+    "frame": "Frame",
+    "play": "Play",
+    "pause": "Pause",
+    "rewind": "Rewind",
+    "fast_forward": "Fast Forward",
+    "previous_frame": "Previous Frame",
+    "next_frame": "Next Frame",
+    "frame_position": "Frame Position",
+    "playback_speed": "Playback Speed",
+    "first_alarm_frame": "First Alarm Frame",
+    "max_score_frame": "Max Score Frame",
+    "alarm_frames": "Alarm Frames",
+    "alarm_frames_count": "{{count}} of {{total}} frames alarmed"
   },
   "settings": {
     "title": "Settings",

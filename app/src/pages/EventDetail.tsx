@@ -7,13 +7,14 @@
 
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { getEvent, getEventVideoUrl, getEventImageUrl, getEventZmsUrl } from '../api/events';
+import { getEvent, getEventVideoUrl, getEventImageUrl } from '../api/events';
 import { useProfileStore } from '../stores/profile';
 import { useAuthStore } from '../stores/auth';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { VideoPlayer } from '../components/ui/video-player';
+import { ZmsEventPlayer } from '../components/events/ZmsEventPlayer';
 import { ArrowLeft, Calendar, Clock, HardDrive, AlertTriangle, Download, Archive, Video, ListVideo, Info } from 'lucide-react';
 import { format } from 'date-fns';
 import { downloadEventVideo } from '../lib/download';
@@ -93,12 +94,6 @@ export default function EventDetail() {
     ? getEventVideoUrl(currentProfile.portalUrl, event.Event.Id, accessToken || undefined, currentProfile.apiUrl)
     : '';
 
-  const zmsUrl = currentProfile && (hasVideo || hasJPEGs)
-    ? getEventZmsUrl(currentProfile.portalUrl, event.Event.Id, accessToken || undefined, currentProfile.apiUrl)
-    : '';
-
-
-
   const posterUrl = currentProfile
     ? getEventImageUrl(currentProfile.portalUrl, event.Event.Id, 'snapshot', {
       token: accessToken || undefined,
@@ -174,27 +169,28 @@ export default function EventDetail() {
       {/* Main Content */}
       <div className="flex-1 p-2 sm:p-3 md:p-4 flex flex-col items-center bg-muted/10 overflow-y-auto">
         <div className="w-full max-w-5xl space-y-3 sm:space-y-4 md:space-y-6">
-          {/* Video Player or Image Display */}
-          <Card className="overflow-hidden shadow-2xl border-0 ring-1 ring-border/20 bg-black">
-            <div className="aspect-video relative">
-              {hasVideo ? (
-                useZmsFallback ? (
-                  <div className="relative w-full h-full flex flex-col items-center justify-center bg-black">
-                    <img
-                      src={zmsUrl}
-                      alt={event.Event.Name}
-                      className="w-full h-full object-contain"
-                    />
-                    {showFallbackBadge && (
-                      <div className="absolute top-4 left-4 transition-opacity duration-500">
-                        <Badge variant="secondary" className="gap-2 bg-blue-500/80 text-white hover:bg-blue-500">
-                          <Info className="h-3 w-3" />
-                          {t('event_detail.streaming_via_zms')}
-                        </Badge>
-                      </div>
-                    )}
-                  </div>
-                ) : (
+          {/* Video Player or ZMS Playback */}
+          {hasVideo ? (
+            useZmsFallback ? (
+              // ZMS playback with controls
+              currentProfile && (
+                <ZmsEventPlayer
+                  portalUrl={currentProfile.portalUrl}
+                  eventId={event.Event.Id}
+                  token={accessToken || undefined}
+                  apiUrl={currentProfile.apiUrl}
+                  totalFrames={parseInt(event.Event.Frames)}
+                  alarmFrames={parseInt(event.Event.AlarmFrames)}
+                  alarmFrameId={event.Event.AlarmFrameId}
+                  maxScoreFrameId={event.Event.MaxScoreFrameId}
+                  eventLength={parseFloat(event.Event.Length)}
+                  className="space-y-4"
+                />
+              )
+            ) : (
+              // MP4 video playback
+              <Card className="overflow-hidden shadow-2xl border-0 ring-1 ring-border/20 bg-black">
+                <div className="aspect-video relative">
                   <VideoPlayer
                     src={videoUrl}
                     type="video/mp4"
@@ -207,31 +203,38 @@ export default function EventDetail() {
                       setUseZmsFallback(true);
                     }}
                   />
-                )
-              ) : hasJPEGs ? (
-                <div className="relative w-full h-full flex flex-col items-center justify-center bg-black">
-                  <img
-                    src={zmsUrl}
-                    alt={event.Event.Name}
-                    className="w-full h-full object-contain"
-                  />
-                  <div className="absolute top-4 left-4">
-                    <Badge variant="secondary" className="gap-2 bg-blue-500/80 text-white hover:bg-blue-500">
-                      <Info className="h-3 w-3" />
-                      {t('event_detail.streaming_via_zms')}
-                    </Badge>
-                  </div>
                 </div>
-              ) : (
+              </Card>
+            )
+          ) : hasJPEGs ? (
+            // ZMS playback for JPEG-only events
+            currentProfile && (
+              <ZmsEventPlayer
+                portalUrl={currentProfile.portalUrl}
+                eventId={event.Event.Id}
+                token={accessToken || undefined}
+                apiUrl={currentProfile.apiUrl}
+                totalFrames={parseInt(event.Event.Frames)}
+                alarmFrames={parseInt(event.Event.AlarmFrames)}
+                alarmFrameId={event.Event.AlarmFrameId}
+                maxScoreFrameId={event.Event.MaxScoreFrameId}
+                eventLength={parseFloat(event.Event.Length)}
+                className="space-y-4"
+              />
+            )
+          ) : (
+            // No media available
+            <Card className="overflow-hidden shadow-2xl border-0 ring-1 ring-border/20 bg-black">
+              <div className="aspect-video relative">
                 <div className="w-full h-full flex items-center justify-center text-muted-foreground">
                   <div className="text-center">
                     <AlertTriangle className="h-12 w-12 mx-auto mb-4 opacity-50" />
                     <p>{t('event_detail.no_media')}</p>
                   </div>
                 </div>
-              )}
-            </div>
-          </Card>
+              </div>
+            </Card>
+          )}
 
           {/* Metadata Grid */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

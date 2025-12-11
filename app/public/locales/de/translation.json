@@ -156,7 +156,22 @@
     "load_error": "Fehler beim Laden des Ereignisses",
     "all_events": "Alle Ereignisse",
     "seconds": "Sekunden",
-    "timing": "Zeitplanung"
+    "timing": "Zeitplanung",
+    "event_playback": "Ereigniswiedergabe",
+    "zms_playback": "ZMS-Wiedergabe",
+    "frame": "Frame",
+    "play": "Abspielen",
+    "pause": "Pause",
+    "rewind": "Zurückspulen",
+    "fast_forward": "Vorspulen",
+    "previous_frame": "Vorheriges Frame",
+    "next_frame": "Nächstes Frame",
+    "frame_position": "Frame-Position",
+    "playback_speed": "Wiedergabegeschwindigkeit",
+    "first_alarm_frame": "Erstes Alarm-Frame",
+    "max_score_frame": "Frame mit Höchstwertung",
+    "alarm_frames": "Alarm-Frames",
+    "alarm_frames_count": "{{count}} von {{total}} Frames mit Alarm"
   },
   "settings": {
     "title": "Einstellungen",

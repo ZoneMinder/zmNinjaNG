@@ -156,7 +156,22 @@
     "load_error": "Erreur de chargement de l'événement",
     "all_events": "Tous les événements",
     "seconds": "secondes",
-    "timing": "Minutage"
+    "timing": "Minutage",
+    "event_playback": "Lecture d'Événement",
+    "zms_playback": "Lecture ZMS",
+    "frame": "Image",
+    "play": "Lecture",
+    "pause": "Pause",
+    "rewind": "Retour Arrière",
+    "fast_forward": "Avance Rapide",
+    "previous_frame": "Image Précédente",
+    "next_frame": "Image Suivante",
+    "frame_position": "Position de l'Image",
+    "playback_speed": "Vitesse de Lecture",
+    "first_alarm_frame": "Première Image d'Alarme",
+    "max_score_frame": "Image Score Maximum",
+    "alarm_frames": "Images d'Alarme",
+    "alarm_frames_count": "{{count}} sur {{total}} images avec alarme"
   },
   "settings": {
     "title": "Paramètres",
