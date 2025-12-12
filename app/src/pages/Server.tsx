@@ -5,7 +5,6 @@
  * Includes version info, load metrics, disk usage, and run state management.
  */
 
-import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useProfileStore } from '../stores/profile';
 import { useAuthStore } from '../stores/auth';
@@ -21,10 +20,14 @@ import {
   PlayCircle,
   RefreshCw,
   Loader2,
+  Play,
+  Square,
+  RotateCw,
 } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getServers, getLoad, getDiskPercent, getRunState, changeRunState } from '../api/server';
-import { getStates } from '../api/states';
+import { getServers, getLoad, getDiskPercent } from '../api/server';
+import { getStates, changeState } from '../api/states';
 import { getAppVersion } from '../lib/version';
 import { useToast } from '../hooks/use-toast';
 import { log } from '../lib/logger';
@@ -42,14 +45,13 @@ export default function Server() {
   const queryClient = useQueryClient();
   const currentProfile = useProfileStore((state) => state.currentProfile());
   const { version, apiVersion } = useAuthStore();
-  const [selectedState, setSelectedState] = useState<string>('');
+  const [selectedAction, setSelectedAction] = useState<string>('');
 
   // Fetch server information
   const { data: servers, isLoading: serversLoading } = useQuery({
     queryKey: ['servers', currentProfile?.id],
     queryFn: getServers,
     enabled: !!currentProfile,
-    refetchInterval: 30000, // Refresh every 30 seconds
   });
 
   // Fetch load average
@@ -57,7 +59,6 @@ export default function Server() {
     queryKey: ['server-load', currentProfile?.id],
     queryFn: getLoad,
     enabled: !!currentProfile,
-    refetchInterval: 10000, // Refresh every 10 seconds
   });
 
   // Fetch disk usage
@@ -65,61 +66,67 @@ export default function Server() {
     queryKey: ['disk-usage', currentProfile?.id],
     queryFn: getDiskPercent,
     enabled: !!currentProfile,
-    refetchInterval: 60000, // Refresh every minute
   });
 
-  // Fetch run state
-  const { data: runStateData, isLoading: runStateLoading } = useQuery({
-    queryKey: ['run-state', currentProfile?.id],
-    queryFn: getRunState,
-    enabled: !!currentProfile,
-    refetchInterval: 5000, // Refresh every 5 seconds
-  });
-
-  // Fetch available states
-  const { data: states } = useQuery({
+  // Fetch states
+  const { data: states, isLoading: statesLoading } = useQuery({
     queryKey: ['states', currentProfile?.id],
     queryFn: getStates,
     enabled: !!currentProfile,
   });
 
-  // Mutation for changing run state
+  // Mutation for state change
   const changeStateMutation = useMutation({
-    mutationFn: (state: string) => changeRunState(state),
-    onSuccess: (data) => {
+    mutationFn: (stateName: string) => changeState(stateName),
+    onSuccess: () => {
       toast({
         title: t('common.success'),
-        description: t('server.state_changed', { state: data.state }),
+        description: t('server.state_applied'),
       });
-      queryClient.invalidateQueries({ queryKey: ['run-state'] });
-      log.info('Run state changed', { component: 'Server', newState: data.state });
+      queryClient.invalidateQueries({ queryKey: ['states'] });
+      log.info('State/action applied', { component: 'Server', action: selectedAction });
     },
     onError: (error) => {
       toast({
         title: t('common.error'),
-        description: t('server.state_change_failed'),
+        description: t('server.state_apply_failed'),
         variant: 'destructive',
       });
-      log.error('Failed to change run state', { component: 'Server' }, error);
+      log.error('Failed to apply state/action', { component: 'Server' }, error);
     },
   });
 
-  // Set initial selected state when runStateData loads
-  useEffect(() => {
-    if (runStateData?.state && !selectedState) {
-      setSelectedState(runStateData.state);
-    }
-  }, [runStateData, selectedState]);
+  // Find active state
+  const activeState = states?.find((s) => s.IsActive === '1');
 
-  const handleStateChange = (value: string) => {
-    setSelectedState(value);
-    changeStateMutation.mutate(value);
+  // Set default selected action to active state
+  useEffect(() => {
+    if (activeState && !selectedAction) {
+      setSelectedAction(activeState.Name);
+    }
+  }, [activeState, selectedAction]);
+
+  const handleApply = () => {
+    if (selectedAction) {
+      changeStateMutation.mutate(selectedAction);
+    }
   };
 
-  const getDiskUsageColor = (percent: number | undefined) => {
-    if (!percent) return 'text-muted-foreground';
-    if (percent >= 90) return 'text-destructive';
-    if (percent >= 75) return 'text-orange-500';
+  const handleRefreshAll = () => {
+    queryClient.invalidateQueries({ queryKey: ['servers', currentProfile?.id] });
+    queryClient.invalidateQueries({ queryKey: ['server-load', currentProfile?.id] });
+    queryClient.invalidateQueries({ queryKey: ['disk-usage', currentProfile?.id] });
+    queryClient.invalidateQueries({ queryKey: ['states', currentProfile?.id] });
+  };
+
+  const isRefreshing = serversLoading || loadLoading || diskLoading || statesLoading;
+
+  const getDiskUsageColor = (usage: number | undefined) => {
+    if (!usage) return 'text-muted-foreground';
+    // Color based on disk space used (in GB)
+    // These thresholds are arbitrary - adjust based on typical server capacity
+    if (usage >= 1000) return 'text-destructive'; // 1TB+
+    if (usage >= 500) return 'text-orange-500'; // 500GB+
     return 'text-green-500';
   };
 
@@ -138,17 +145,29 @@ export default function Server() {
   };
 
   const primaryServer = servers && servers.length > 0 ? servers[0] : null;
-  const diskPercent = diskData?.percent ?? diskData?.usage;
+  const diskUsageGB = diskData?.usage;
 
   return (
     <div className="p-3 sm:p-4 md:p-6 max-w-7xl mx-auto space-y-4 sm:space-y-6">
-      <div>
-        <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight">
-          {t('server.title')}
-        </h1>
-        <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 hidden sm:block">
-          {t('server.subtitle')}
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight">
+            {t('server.title')}
+          </h1>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 hidden sm:block">
+            {t('server.subtitle')}
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleRefreshAll}
+          disabled={isRefreshing}
+          className="flex items-center gap-2"
+        >
+          <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+          <span className="hidden sm:inline">{t('common.refresh')}</span>
+        </Button>
       </div>
 
       {/* Version Information */}
@@ -217,8 +236,8 @@ export default function Server() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className={`text-3xl font-bold ${getDiskUsageColor(diskPercent)}`}>
-              {diskPercent !== undefined ? `${diskPercent.toFixed(1)}%` : '--'}
+            <div className={`text-3xl font-bold ${getDiskUsageColor(diskUsageGB)}`}>
+              {diskUsageGB !== undefined ? `${diskUsageGB.toFixed(1)} GB` : '--'}
             </div>
             <p className="text-xs text-muted-foreground mt-1">{t('server.disk_desc')}</p>
           </CardContent>
@@ -307,14 +326,14 @@ export default function Server() {
         </Card>
       )}
 
-      {/* Run State Control */}
+      {/* ZoneMinder Control */}
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
             <PlayCircle className="h-5 w-5 text-primary" />
-            <CardTitle>{t('server.run_state')}</CardTitle>
+            <CardTitle>{t('server.zm_control')}</CardTitle>
           </div>
-          <CardDescription>{t('server.run_state_desc')}</CardDescription>
+          <CardDescription>{t('server.zm_control_desc')}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
@@ -324,64 +343,86 @@ export default function Server() {
                   {t('server.current_state')}
                 </div>
                 <div className="flex items-center gap-2">
-                  {runStateLoading ? (
+                  {statesLoading ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : activeState ? (
+                    <Badge variant="outline" className="text-base px-3 py-1">
+                      {activeState.Name}
+                    </Badge>
                   ) : (
                     <Badge variant="outline" className="text-base px-3 py-1">
-                      {runStateData?.state || t('common.unknown')}
+                      {t('common.unknown')}
                     </Badge>
                   )}
                 </div>
               </div>
             </div>
 
-            {states && states.length > 0 && (
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">{t('server.change_state')}</Label>
-                <div className="flex gap-2">
-                  <Select value={selectedState} onValueChange={handleStateChange}>
-                    <SelectTrigger className="flex-1">
-                      <SelectValue placeholder={t('server.select_state')} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {states.map((state) => (
-                        <SelectItem key={state.Id} value={state.Name}>
-                          <div className="flex items-center gap-2">
-                            <span>{state.Name}</span>
-                            {state.IsActive === '1' && (
-                              <Badge variant="secondary" className="text-xs">
-                                {t('server.active')}
-                              </Badge>
-                            )}
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => queryClient.invalidateQueries({ queryKey: ['run-state'] })}
-                    disabled={runStateLoading}
-                  >
-                    <RefreshCw className={`h-4 w-4 ${runStateLoading ? 'animate-spin' : ''}`} />
-                  </Button>
-                </div>
-                {changeStateMutation.isPending && (
-                  <p className="text-xs text-muted-foreground flex items-center gap-2">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    {t('server.changing_state')}
-                  </p>
-                )}
+            <div className="space-y-2">
+              <div className="text-sm font-medium text-muted-foreground mb-2">
+                {t('server.select_action')}
               </div>
-            )}
+              <div className="flex gap-2">
+                <Select value={selectedAction} onValueChange={setSelectedAction}>
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder={t('server.select_state_or_action')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="start">
+                      <div className="flex items-center gap-2 w-full">
+                        <Play className="h-4 w-4 flex-shrink-0" />
+                        <span className="flex-1">{t('server.start')}</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="stop">
+                      <div className="flex items-center gap-2 w-full">
+                        <Square className="h-4 w-4 flex-shrink-0" />
+                        <span className="flex-1">{t('server.stop')}</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="restart">
+                      <div className="flex items-center gap-2 w-full">
+                        <RotateCw className="h-4 w-4 flex-shrink-0" />
+                        <span className="flex-1">{t('server.restart')}</span>
+                      </div>
+                    </SelectItem>
+                    {states && states.length > 0 && states.map((state) => (
+                      <SelectItem key={state.Id} value={state.Name}>
+                        <div className="flex items-center gap-2 w-full">
+                          <span className="flex-1 truncate">{state.Name}</span>
+                          {state.IsActive === '1' && (
+                            <Badge variant="secondary" className="text-xs whitespace-nowrap">
+                              {t('server.active')}
+                            </Badge>
+                          )}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  onClick={handleApply}
+                  disabled={!selectedAction || changeStateMutation.isPending}
+                  className="flex items-center gap-2"
+                >
+                  {changeStateMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <PlayCircle className="h-4 w-4" />
+                  )}
+                  {t('server.apply')}
+                </Button>
+              </div>
+              {changeStateMutation.isPending && (
+                <p className="text-xs text-muted-foreground flex items-center gap-2">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  {t('server.executing_action')}
+                </p>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>
     </div>
   );
-}
-
-function Label({ className, children }: { className?: string; children: React.ReactNode }) {
-  return <label className={className}>{children}</label>;
 }

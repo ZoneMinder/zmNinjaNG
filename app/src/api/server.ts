@@ -28,26 +28,32 @@ const ServersResponseSchema = z.object({
 
 const LoadSchema = z.object({
   load: z.union([
+    z.array(z.number()),
     z.coerce.number(),
     z.string().transform((val) => parseFloat(val)),
   ]),
 });
 
 const DiskPercentSchema = z.object({
-  usage: z.union([
-    z.coerce.number(),
-    z.string().transform((val) => parseFloat(val)),
-  ]).optional(),
-  percent: z.union([
-    z.coerce.number(),
-    z.string().transform((val) => parseFloat(val)),
-  ]).optional(),
+  usage: z
+    .union([
+      // Complex object with monitor disk usage
+      z.record(
+        z.string(),
+        z.object({
+          space: z
+            .union([z.string(), z.number()])
+            .transform((val) => (typeof val === 'string' ? parseFloat(val) : val)),
+          color: z.string().optional(),
+        })
+      ),
+      // Simple number fallback
+      z.coerce.number(),
+    ])
+    .optional(),
+  percent: z.coerce.number().optional(),
 });
 
-const RunStateSchema = z.object({
-  state: z.string(),
-  message: z.string().optional(),
-});
 
 // ========== Types ==========
 
@@ -63,7 +69,7 @@ export interface Server {
 }
 
 export interface ServerLoad {
-  load: number;
+  load: number | number[];
 }
 
 export interface DiskUsage {
@@ -71,10 +77,6 @@ export interface DiskUsage {
   percent?: number;
 }
 
-export interface RunState {
-  state: string;
-  message?: string;
-}
 
 // ========== API Functions ==========
 
@@ -114,7 +116,10 @@ export async function getLoad(): Promise<ServerLoad> {
     method: 'GET',
   });
 
-  return { load: validated.load };
+  // If load is an array, use the 1-minute average (first element)
+  const loadValue = Array.isArray(validated.load) ? validated.load[0] : validated.load;
+
+  return { load: loadValue };
 }
 
 /**
@@ -133,64 +138,26 @@ export async function getDiskPercent(): Promise<DiskUsage> {
     method: 'GET',
   });
 
+  let usageValue: number | undefined;
+  let percentValue: number | undefined;
+
+  // Handle complex usage object (monitor-specific disk usage)
+  if (validated.usage && typeof validated.usage === 'object' && !Array.isArray(validated.usage)) {
+    // Extract total disk space from "Total" key
+    const totalEntry = (validated.usage as Record<string, { space: number; color?: string }>)['Total'];
+    if (totalEntry) {
+      usageValue = totalEntry.space;
+      // For now, we don't have total capacity to calculate percentage
+      // Return the space usage in GB
+      percentValue = undefined;
+    }
+  } else if (typeof validated.usage === 'number') {
+    usageValue = validated.usage;
+  }
+
   return {
-    usage: validated.usage,
-    percent: validated.percent ?? validated.usage,
+    usage: usageValue,
+    percent: validated.percent ?? percentValue ?? usageValue,
   };
 }
 
-/**
- * Get current run state
- *
- * Fetches the current run state of the ZoneMinder daemon.
- * Common states: running, stopped, paused
- *
- * @returns Promise resolving to RunState object
- */
-export async function getRunState(): Promise<RunState> {
-  const client = getApiClient();
-  const response = await client.get('/states/runState.json');
-
-  // RunState endpoint might return state directly or in a wrapper
-  let stateData: unknown;
-  if (typeof response.data === 'object' && response.data !== null) {
-    stateData = 'state' in response.data ? response.data : { state: response.data };
-  } else {
-    stateData = { state: response.data };
-  }
-
-  const validated = validateApiResponse(RunStateSchema, stateData, {
-    endpoint: '/states/runState.json',
-    method: 'GET',
-  });
-
-  return validated;
-}
-
-/**
- * Change run state
- *
- * Changes the ZoneMinder daemon run state.
- *
- * @param state - The new state name (e.g., "stop", "restart")
- * @returns Promise resolving to RunState object with confirmation
- */
-export async function changeRunState(state: string): Promise<RunState> {
-  const client = getApiClient();
-  const response = await client.post(`/states/change/${state}.json`);
-
-  // Response might be the new state or a confirmation message
-  let stateData: unknown;
-  if (typeof response.data === 'object' && response.data !== null) {
-    stateData = 'state' in response.data ? response.data : { state, message: 'State changed' };
-  } else {
-    stateData = { state, message: String(response.data) };
-  }
-
-  const validated = validateApiResponse(RunStateSchema, stateData, {
-    endpoint: `/states/change/${state}.json`,
-    method: 'POST',
-  });
-
-  return validated;
-}

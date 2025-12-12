@@ -9,11 +9,6 @@
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build"
   },
-  "plugins": {
-    "http": {
-      "dangerousDisableTlsValidation": true
-    }
-  },
   "app": {
     "windows": [
       {

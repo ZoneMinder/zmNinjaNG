@@ -9,11 +9,7 @@
     "core:default",
     {
       "identifier": "http:default",
-      "allow": [
-        { "url": "https://**" },
-        { "url": "http://**" }
-      ],
-      "dangerousDisableTlsValidation": true
+      "allow": [{ "url": "https://**" }, { "url": "http://**" }]
     },
     "log:default"
   ]

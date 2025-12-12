@@ -196,32 +196,11 @@ export function createApiClient(baseURL: string): AxiosInstance {
       const skipAuth = config.headers?.['Skip-Auth'] === 'true';
 
       if (accessToken && config.url && !skipAuth) {
-        // Add token as query parameter for GET requests
-        if (config.method?.toLowerCase() === 'get') {
-          config.params = {
-            ...config.params,
-            token: accessToken,
-          };
-        } else {
-          // Add token in data for POST/PUT/DELETE requests
-          if (config.data) {
-            if (config.data instanceof URLSearchParams) {
-              // If it's URLSearchParams, append the token
-              config.data.append('token', accessToken);
-            } else if (typeof config.data === 'object') {
-              // If it's a plain object, merge the token
-              config.data = {
-                ...config.data,
-                token: accessToken,
-              };
-            }
-          } else {
-            // If no data, create object with token (axios will send as JSON by default)
-            // Unless content-type header says otherwise, but usually JSON is fine for ZM API
-            // except for login which we handle specifically with URLSearchParams
-            config.data = { token: accessToken };
-          }
-        }
+        // Add token as query parameter for ALL requests (GET, POST, PUT, DELETE)
+        config.params = {
+          ...config.params,
+          token: accessToken,
+        };
       }
 
       // Enhanced logging in development
