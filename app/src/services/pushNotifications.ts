@@ -13,6 +13,7 @@ import {
   type ActionPerformed,
 } from '@capacitor/push-notifications';
 import { log } from '../lib/logger';
+import { navigationService } from '../lib/navigation';
 import { useNotificationStore } from '../stores/notifications';
 
 export interface PushNotificationData {
@@ -243,9 +244,10 @@ export class MobilePushService {
         notificationStore.markEventRead(profileId, parseInt(data.eventId, 10));
       }
 
-      // TODO: Navigate to event detail page
-      // This will be handled by a React component that listens to deep link events
-      log.info('Should navigate to event detail', { component: 'Push', eventId: data.eventId });
+      // Navigate to event detail page
+      navigationService.navigateToEvent(data.eventId);
+
+      log.info('Navigating to event detail', { component: 'Push', eventId: data.eventId });
     }
   }
 }

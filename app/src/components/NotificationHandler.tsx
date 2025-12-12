@@ -8,11 +8,13 @@
  */
 
 import { useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useNotificationStore } from '../stores/notifications';
 import { useProfileStore } from '../stores/profile';
 import { toast } from 'sonner';
 import { Bell } from 'lucide-react';
 import { log } from '../lib/logger';
+import { navigationService } from '../lib/navigation';
 import { useTranslation } from 'react-i18next';
 
 /**
@@ -21,6 +23,7 @@ import { useTranslation } from 'react-i18next';
  * side effects related to notifications (toasts, sounds, connection).
  */
 export function NotificationHandler() {
+  const navigate = useNavigate();
   const currentProfile = useProfileStore((state) => state.currentProfile());
   const getDecryptedPassword = useProfileStore((state) => state.getDecryptedPassword);
   const { t } = useTranslation();
@@ -67,6 +70,27 @@ export function NotificationHandler() {
       }
     }
   }, [currentProfile?.id, isConnected, currentProfileId, disconnect]);
+
+  // Listen to navigation events from services (e.g., push notifications)
+  useEffect(() => {
+    const unsubscribe = navigationService.addListener((event) => {
+      log.info('Navigating from service event', {
+        component: 'NotificationHandler',
+        path: event.path,
+        replace: event.replace,
+      });
+
+      if (event.replace) {
+        navigate(event.path, { replace: true });
+      } else {
+        navigate(event.path);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [navigate]);
 
   // Auto-connect when profile loads (if enabled)
   useEffect(() => {
@@ -181,7 +205,7 @@ export function NotificationHandler() {
                 label: t('common.view'),
                 onClick: () => {
                   // Navigate to event detail
-                  window.location.href = `/events/${latestEvent.EventId}`;
+                  navigate(`/events/${latestEvent.EventId}`);
                 },
               }
             : undefined,
@@ -200,7 +224,7 @@ export function NotificationHandler() {
         eventId: latestEvent.EventId,
       });
     }
-  }, [events, settings?.showToasts, settings?.playSound, currentProfile?.id, t]);
+  }, [events, settings?.showToasts, settings?.playSound, currentProfile?.id, t, navigate]);
 
   // This component doesn't render anything
   return null;
