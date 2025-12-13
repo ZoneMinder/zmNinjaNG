@@ -1,0 +1,168 @@
+/**
+ * Video.js Markers - Triangular Style
+ *
+ * Matches the EventProgressBar design with triangular indicators
+ * for alarm frames (red) and max score frames (yellow)
+ */
+
+/* Base marker styling */
+.vjs-marker {
+  position: absolute;
+  width: 2px;
+  height: 100%;
+  background: currentColor;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  z-index: 10;
+}
+
+/* Alarm frame marker - Red */
+.vjs-marker-alarm {
+  color: hsl(var(--destructive));
+}
+
+/* Max score frame marker - Yellow */
+.vjs-marker-max-score {
+  color: rgb(234 179 8);
+}
+
+/* Top triangle indicator */
+.vjs-marker::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 8px solid currentColor;
+  transition: all 0.2s ease;
+}
+
+/* Bottom triangle indicator */
+.vjs-marker::after {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 8px solid currentColor;
+  transition: all 0.2s ease;
+}
+
+/* Hover effect - Enlarge triangles */
+.vjs-marker:hover::before {
+  border-left-width: 8px;
+  border-right-width: 8px;
+  border-top-width: 10px;
+  top: -8px;
+}
+
+.vjs-marker:hover::after {
+  border-left-width: 8px;
+  border-right-width: 8px;
+  border-bottom-width: 10px;
+  bottom: -8px;
+}
+
+.vjs-marker:hover {
+  width: 3px;
+}
+
+/* Marker tooltip */
+.vjs-marker .vjs-tip {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  z-index: 20;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  border: 1px solid hsl(var(--border));
+}
+
+.vjs-marker:hover .vjs-tip {
+  opacity: 1;
+}
+
+/* Tooltip arrow */
+.vjs-marker .vjs-tip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 5px solid hsl(var(--popover));
+}
+
+/* Mobile responsive - Larger touch targets */
+@media (max-width: 768px) {
+  .vjs-marker {
+    width: 3px;
+  }
+
+  .vjs-marker::before,
+  .vjs-marker::after {
+    border-left-width: 8px;
+    border-right-width: 8px;
+  }
+
+  .vjs-marker::before {
+    border-top-width: 10px;
+    top: -8px;
+  }
+
+  .vjs-marker::after {
+    border-bottom-width: 10px;
+    bottom: -8px;
+  }
+
+  /* Increase touch target size */
+  .vjs-marker::before {
+    padding: 8px;
+  }
+}
+
+/* Dark mode compatibility */
+@media (prefers-color-scheme: dark) {
+  .vjs-marker .vjs-tip {
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+  }
+}
+
+/* Ensure markers work with video.js progress control */
+.video-js .vjs-progress-control .vjs-progress-holder {
+  position: relative;
+}
+
+/* Position markers within the progress bar */
+.video-js .vjs-marker-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.video-js .vjs-marker-overlay .vjs-marker {
+  pointer-events: all;
+}

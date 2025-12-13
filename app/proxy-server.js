@@ -8,7 +8,7 @@ const PORT = 3001;
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, X-Target-Host');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, X-Target-Host, skip-auth');
 
   // Handle preflight requests
   if (req.method === 'OPTIONS') {
@@ -50,7 +50,7 @@ app.get('/image-proxy', async (req, res) => {
       // Check if it's a Node.js stream (node-fetch)
       if (typeof response.body.pipe === 'function') {
         response.body.pipe(res);
-      } 
+      }
       // Check if it's a Web ReadableStream (native fetch)
       else if (typeof response.body.getReader === 'function') {
         const reader = response.body.getReader();

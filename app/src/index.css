@@ -1,3 +1,6 @@
+/* Video.js marker styles */
+@import './styles/video-markers.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

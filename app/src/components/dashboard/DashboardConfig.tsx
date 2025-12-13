@@ -193,8 +193,9 @@ export function DashboardConfig() {
                     </div>
 
                     <div className="space-y-2">
-                        <Label>{t('dashboard.widget_title')}</Label>
+                        <Label htmlFor="widget-title">{t('dashboard.widget_title')}</Label>
                         <Input
+                            id="widget-title"
                             placeholder={t('dashboard.widget_title_placeholder')}
                             value={title}
                             onChange={(e) => setTitle(e.target.value)}

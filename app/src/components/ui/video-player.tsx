@@ -8,12 +8,15 @@
 import { useEffect, useRef, useState } from 'react';
 import videojs from 'video.js';
 import 'video.js/dist/video-js.css';
+import 'videojs-markers';
 
 // Define Player type from the videojs function return type
 // This avoids deep imports which can be problematic with some bundlers
 type Player = ReturnType<typeof videojs>;
 import { cn } from '../../lib/utils';
 import { log } from '../../lib/logger';
+import type { VideoMarker } from '../../lib/video-markers';
+import type { MarkerConfig } from '../../types/videojs-markers';
 
 interface VideoPlayerProps {
   /** The source URL of the video stream */
@@ -32,6 +35,10 @@ interface VideoPlayerProps {
   muted?: boolean;
   /** Aspect ratio (e.g., '16:9') */
   aspectRatio?: string;
+  /** Timeline markers for alarm frames */
+  markers?: VideoMarker[];
+  /** Callback when a marker is clicked */
+  onMarkerClick?: (marker: VideoMarker) => void;
   /** Callback when player is ready */
   onReady?: (player: Player) => void;
   /** Callback on error */
@@ -50,6 +57,8 @@ interface VideoPlayerProps {
  * @param props.controls - Show controls
  * @param props.muted - Mute video
  * @param props.aspectRatio - Aspect ratio
+ * @param props.markers - Timeline markers for alarm frames
+ * @param props.onMarkerClick - Marker click callback
  * @param props.onReady - Ready callback
  * @param props.onError - Error callback
  */
@@ -62,6 +71,8 @@ export function VideoPlayer({
   controls = true,
   muted = true,
   aspectRatio = '16:9',
+  markers,
+  onMarkerClick,
   onReady,
   onError
 }: VideoPlayerProps) {
@@ -102,6 +113,46 @@ export function VideoPlayer({
         }
       }, () => {
         videojs.log('player is ready');
+
+        // Initialize markers if provided
+        if (markers && markers.length > 0) {
+          try {
+            const markerConfigs: MarkerConfig[] = markers.map(m => ({
+              time: m.time,
+              text: m.text,
+              class: m.type === 'alarm' ? 'vjs-marker-alarm' : 'vjs-marker-max-score',
+              frameId: m.frameId,
+            }));
+
+            (player as any).markers({
+              markerTip: {
+                display: true,
+                text: (marker: MarkerConfig) => marker.text || `Frame ${marker.frameId || ''}`,
+              },
+              onMarkerClick: (marker: MarkerConfig) => {
+                player.currentTime(marker.time);
+                if (onMarkerClick) {
+                  // Find the original VideoMarker by matching time and frameId
+                  const originalMarker = markers.find(
+                    m => m.time === marker.time && m.frameId === marker.frameId
+                  );
+                  if (originalMarker) {
+                    onMarkerClick(originalMarker);
+                  }
+                }
+              },
+              markers: markerConfigs,
+            });
+
+            log.info('Video markers initialized', {
+              component: 'VideoPlayer',
+              count: markers.length
+            });
+          } catch (err) {
+            log.error('Failed to initialize video markers', { component: 'VideoPlayer' }, err);
+          }
+        }
+
         onReady && onReady(player);
       });
 
@@ -122,6 +173,60 @@ export function VideoPlayer({
       if (poster) player.poster(poster);
     }
   }, [src, type, poster, autoplay, controls, muted, aspectRatio, onReady, onError]);
+
+  // Update markers when they change
+  useEffect(() => {
+    const player = playerRef.current;
+    if (!player || player.isDisposed()) return;
+
+    // Remove existing markers if the markers plugin is initialized
+    if (typeof (player as any).markers === 'function') {
+      try {
+        // Check if player has markers to remove
+        (player as any).markers?.removeAll?.();
+      } catch (err) {
+        // Ignore - markers plugin might not be fully initialized
+      }
+    }
+
+    // Add new markers if provided
+    if (markers && markers.length > 0) {
+      try {
+        const markerConfigs: MarkerConfig[] = markers.map(m => ({
+          time: m.time,
+          text: m.text,
+          class: m.type === 'alarm' ? 'vjs-marker-alarm' : 'vjs-marker-max-score',
+          frameId: m.frameId,
+        }));
+
+        (player as any).markers({
+          markerTip: {
+            display: true,
+            text: (marker: MarkerConfig) => marker.text || `Frame ${marker.frameId || ''}`,
+          },
+          onMarkerClick: (marker: MarkerConfig) => {
+            player.currentTime(marker.time);
+            if (onMarkerClick) {
+              const originalMarker = markers.find(
+                m => m.time === marker.time && m.frameId === marker.frameId
+              );
+              if (originalMarker) {
+                onMarkerClick(originalMarker);
+              }
+            }
+          },
+          markers: markerConfigs,
+        });
+
+        log.debug('Video markers updated', {
+          component: 'VideoPlayer',
+          count: markers.length
+        });
+      } catch (err) {
+        log.error('Failed to update video markers', { component: 'VideoPlayer' }, err);
+      }
+    }
+  }, [markers, onMarkerClick]);
 
   // Dispose the player on unmount
   useEffect(() => {

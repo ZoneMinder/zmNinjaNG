@@ -446,42 +446,66 @@ export const useProfileStore = create<ProfileState>()(
       name: 'zmng-profiles',
       // On load, initialize API client with current profile and authenticate
       onRehydrateStorage: () => async (state) => {
-        log.profile('onRehydrateStorage called', { hasState: !!state, currentProfileId: state?.currentProfileId });
+        try {
+          log.profile('onRehydrateStorage called', { hasState: !!state, currentProfileId: state?.currentProfileId });
+        } catch {
+          // Logger might not be initialized in test environment
+        }
 
         if (!state?.currentProfileId) {
-          log.profile('No current profile found on app load', { state });
+          try {
+            log.profile('No current profile found on app load', { state });
+          } catch {
+            // Logger might not be initialized in test environment
+          }
           setTimeout(() => useProfileStore.setState({ isInitialized: true }), 0);
-          log.profile('isInitialized set to true (no profile)');
+          try {
+            log.profile('isInitialized set to true (no profile)');
+          } catch {
+            // Logger might not be initialized in test environment
+          }
           return;
         }
 
         const profile = state.profiles.find((p) => p.id === state.currentProfileId);
         if (!profile) {
-          log.error('Current profile ID exists but profile not found', {
-            component: 'Profile',
-            profileId: state.currentProfileId,
-          });
+          try {
+            log.error('Current profile ID exists but profile not found', {
+              component: 'Profile',
+              profileId: state.currentProfileId,
+            });
+          } catch {
+            // Logger might not be initialized in test environment
+          }
           // CRITICAL: Set isInitialized even on error to prevent hanging
           setTimeout(() => useProfileStore.setState({ isInitialized: true }), 0);
           return;
         }
 
-        log.profile('App loading with profile', {
-          name: profile.name,
-          id: profile.id,
-          portalUrl: profile.portalUrl,
-          apiUrl: profile.apiUrl,
-          cgiUrl: profile.cgiUrl,
-          username: profile.username || '(not set)',
-          hasPassword: !!profile.password,
-          passwordLength: profile.password?.length,
-          isDefault: profile.isDefault,
-          createdAt: new Date(profile.createdAt).toLocaleString(),
-          lastUsed: profile.lastUsed ? new Date(profile.lastUsed).toLocaleString() : 'never',
-        });
+        try {
+          log.profile('App loading with profile', {
+            name: profile.name,
+            id: profile.id,
+            portalUrl: profile.portalUrl,
+            apiUrl: profile.apiUrl,
+            cgiUrl: profile.cgiUrl,
+            username: profile.username || '(not set)',
+            hasPassword: !!profile.password,
+            passwordLength: profile.password?.length,
+            isDefault: profile.isDefault,
+            createdAt: new Date(profile.createdAt).toLocaleString(),
+            lastUsed: profile.lastUsed ? new Date(profile.lastUsed).toLocaleString() : 'never',
+          });
+        } catch {
+          // Logger might not be initialized in test environment
+        }
 
         // STEP 1: Clear any stale auth state and cache from previous sessions
-        log.profile('Clearing stale auth and cache');
+        try {
+          log.profile('Clearing stale auth and cache');
+        } catch {
+          // Logger might not be initialized in test environment
+        }
         const { useAuthStore } = await import('./auth');
         useAuthStore.getState().logout();
 
@@ -489,7 +513,11 @@ export const useProfileStore = create<ProfileState>()(
         clearQueryCache();
 
         // STEP 2: Initialize API client for current profile
-        log.profile('Initializing API client', { apiUrl: profile.apiUrl });
+        try {
+          log.profile('Initializing API client', { apiUrl: profile.apiUrl });
+        } catch {
+          // Logger might not be initialized in test environment
+        }
         setApiClient(createApiClient(profile.apiUrl, useProfileStore.getState().reLogin));
 
         // STEP 3: Authenticate if credentials exist
@@ -498,7 +526,11 @@ export const useProfileStore = create<ProfileState>()(
         // hanging on the loading screen indefinitely.
         try {
           if (profile.username && profile.password) {
-            log.profile('Authenticating with stored credentials', { username: profile.username });
+            try {
+              log.profile('Authenticating with stored credentials', { username: profile.username });
+            } catch {
+              // Logger might not be initialized in test environment
+            }
             try {
               // Decrypt password before login
               const decryptedPassword = await useProfileStore
@@ -510,12 +542,20 @@ export const useProfileStore = create<ProfileState>()(
 
               const { useAuthStore } = await import('./auth');
               await useAuthStore.getState().login(profile.username, decryptedPassword);
-              log.profile('Authentication successful on app load');
+              try {
+                log.profile('Authentication successful on app load');
+              } catch {
+                // Logger might not be initialized in test environment
+              }
             } catch (error) {
-              log.warn('Authentication failed on app load - this might be OK if server does not require auth', {
-                component: 'Profile',
-                error,
-              });
+              try {
+                log.warn('Authentication failed on app load - this might be OK if server does not require auth', {
+                  component: 'Profile',
+                  error,
+                });
+              } catch {
+                // Logger might not be initialized in test environment
+              }
               // Don't crash the app - some servers work without auth
             }
           } else {

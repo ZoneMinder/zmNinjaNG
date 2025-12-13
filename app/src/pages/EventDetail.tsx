@@ -19,9 +19,10 @@ import { ArrowLeft, Calendar, Clock, HardDrive, AlertTriangle, Download, Archive
 import { format } from 'date-fns';
 import { downloadEventVideo } from '../lib/download';
 import { toast } from 'sonner';
-import { useState } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { log } from '../lib/logger';
+import { generateEventMarkers, type VideoMarker } from '../lib/video-markers';
 
 export default function EventDetail() {
   const { id } = useParams<{ id: string }>();
@@ -41,6 +42,32 @@ export default function EventDetail() {
 
   const currentProfile = useProfileStore((state) => state.currentProfile());
   const accessToken = useAuthStore((state) => state.accessToken);
+
+  // Generate video markers for alarm frames
+  // NOTE: This hook must be called before any conditional returns
+  const videoMarkers = useMemo(() => {
+    if (!event) return [];
+    const markers = generateEventMarkers(event.Event);
+
+    // Add internationalized text to markers
+    return markers.map(marker => ({
+      ...marker,
+      text: marker.type === 'alarm'
+        ? t('event_detail.alarm_frame_marker', { frameId: marker.frameId })
+        : t('event_detail.max_score_marker', { frameId: marker.frameId })
+    }));
+  }, [event, t]);
+
+  // Handle marker clicks
+  // NOTE: This hook must be called before any conditional returns
+  const handleMarkerClick = useCallback((marker: VideoMarker) => {
+    log.info('Video marker clicked', {
+      component: 'EventDetail',
+      frameId: marker.frameId,
+      type: marker.type
+    });
+    toast.info(t('event_detail.marker_jumped', { text: marker.text }));
+  }, [t]);
 
   if (isLoading) {
     return (
@@ -186,6 +213,8 @@ export default function EventDetail() {
                     className="w-full h-full"
                     poster={posterUrl}
                     autoplay
+                    markers={videoMarkers}
+                    onMarkerClick={handleMarkerClick}
                     onError={() => {
                       log.info('Video playback failed, falling back to ZMS stream', { component: 'EventDetail' });
                       toast.error(t('event_detail.video_playback_failed'));

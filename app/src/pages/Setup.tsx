@@ -217,7 +217,7 @@ export default function Setup() {
               : 'My ZoneMinder'
         );
 
-        addProfile({
+        await addProfile({
           name: finalProfileName,
           portalUrl: finalPortalUrl,
           apiUrl,

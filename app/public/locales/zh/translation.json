@@ -174,7 +174,10 @@
     "first_alarm_frame": "首个报警帧",
     "max_score_frame": "最高分数帧",
     "alarm_frames": "报警帧",
-    "alarm_frames_count": "{{total}}帧中有{{count}}个报警帧"
+    "alarm_frames_count": "{{total}}帧中有{{count}}个报警帧",
+    "alarm_frame_marker": "报警帧 {{frameId}}",
+    "max_score_marker": "最高分数帧 {{frameId}}",
+    "marker_jumped": "跳转到 {{text}}"
   },
   "settings": {
     "server": "Server",

@@ -174,7 +174,10 @@
     "first_alarm_frame": "Primer Fotograma de Alarma",
     "max_score_frame": "Fotograma de Máxima Puntuación",
     "alarm_frames": "Fotogramas de Alarma",
-    "alarm_frames_count": "{{count}} de {{total}} fotogramas con alarma"
+    "alarm_frames_count": "{{count}} de {{total}} fotogramas con alarma",
+    "alarm_frame_marker": "Fotograma de Alarma {{frameId}}",
+    "max_score_marker": "Fotograma de Máxima Puntuación {{frameId}}",
+    "marker_jumped": "Saltado a {{text}}"
   },
   "settings": {
     "server": "Server",

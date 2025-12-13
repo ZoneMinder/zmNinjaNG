@@ -1,6 +1,6 @@
 Global Rules
 -------------
-- All text needs to be internationlized. Always make sure all language files are in sync and updated with each change
+- All text needs to be internationalized. Always make sure all language files are in sync and updated with each change
 - Always prefer DRY: Write reusable, high quality code. Don't duplicate the same code 
 - Keep code simple
 - Keep code modular
@@ -9,8 +9,8 @@ Global Rules
 - Every setting you add MUST be linked to the current profile and not global
 - Never keep legacy files or code - remove them
 - When you make changes that may be breaking (such as changes in layout profile), always avoid the app crashing. Feel free to prompt the user to reset the profile if that happens instead of the app crashing
-- For all functionality, add test cases 
-- Write high quality documentation
+- Write high quality documentation & code comments but don't use words like comprehensive and other lofty terms. Be concise, yet clear.
 - When you implement clicks inside views that navigate to other views, always implement a "stacked" navigation, which means a back arrow to go back to the screen you came from
 - Always use proper log functions, not console logs
 - If you land up changing core iOS/Android code, make sure that they will not be overwritten and re-generated
+- Make sure test cases are comprehensive

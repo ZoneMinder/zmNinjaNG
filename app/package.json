@@ -89,6 +89,7 @@
     "socket.io-client": "^4.8.1",
     "sonner": "^2.0.7",
     "video.js": "^8.23.4",
+    "videojs-markers": "^1.0.1",
     "vis-data": "^8.0.3",
     "vis-timeline": "^8.4.0",
     "vite-plugin-static-copy": "^3.1.4",

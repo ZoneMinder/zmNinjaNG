@@ -1,104 +1,83 @@
-# Test Suite
+# E2E Test Suite
 
-This directory contains end-to-end tests for the zmNg application using Playwright.
+Complete end-to-end test suite for zmNg following the full user journey.
 
-## Setup
+## Quick Start
 
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
+```bash
+# Run the test
+npx playwright test tests/full_walkthrough.spec.ts
+```
 
-2. Copy `.env.example` to `.env` and configure test accounts:
-   ```bash
-   cp .env.example .env
-   ```
+## Configuration
 
-## Test Accounts
+Configure your ZoneMinder server in `.env`:
 
-The test suite is configured to work with two ZoneMinder servers:
+```env
+ZM_HOST_1=http://192.168.50.11
+ZM_USER_1=admin
+ZM_PASSWORD_1=admin
+```
 
-### Account 1: demo.zoneminder.com (Default)
-- **URL**: https://demo.zoneminder.com
-- **Authentication**: None required
-- **Usage**: Default test server, good for basic testing
+## Test Flow
 
-### Account 2: zm.connortechnology.com
-- **URL**: https://zm.connortechnology.com
-- **Username**: <provide>
-- **Password**: <provide>
-- **Usage**: Testing with authentication
+The test runs serially through the following steps using a single browser session:
+
+### 1. Authentication
+- Navigates to root
+- Performs login if not already authenticated
+- Verifies connection to server
+
+### 2. Dashboard & Widgets
+- Adds a Timeline widget to the dashboard
+- Verifies widget creation
+
+### 3. Sidebar Navigation
+Exhaustively navigates to and verifies all sidebar menu items:
+- Monitors
+- Montage
+- Events
+- Event Montage
+- Timeline
+- Notifications
+- Profiles
+- Settings
+- Server
+- Logs
 
 ## Running Tests
 
-To run all tests:
 ```bash
-npm test
+# Run the full walkthrough
+npx playwright test tests/full_walkthrough.spec.ts
+
+# Run in UI mode (recommended for debugging)
+npx playwright test tests/full_walkthrough.spec.ts --ui
+
+# View report after running (includes screenshots)
+npx playwright show-report
 ```
 
-To run tests in headed mode (see the browser):
+## Timeout Settings
+
+- **Overall test**: 30s per test case (but steps are fast)
+- **Page transitions**: 5s max per navigation
+- **Element visibility**: 5s max per element
+
+All timeouts configured in `helpers/config.ts`.
+
+## Test Reports & Screenshots
+
+Screenshots are enabled for **all tests**. You can view them in the HTML report:
+
 ```bash
-npx playwright test --headed
+npx playwright show-report
 ```
 
-To run a specific test file:
-```bash
-npx playwright test tests/monitors.spec.ts
-```
+## Helper Functions
 
-## Switching Test Accounts
+Available in `helpers/` directory:
 
-The tests use the environment variables in `.env` to determine which server to test against.
-
-By default, tests run against Account 1 (demo.zoneminder.com). To test against Account 2:
-
-1. Edit `.env` and swap the values:
-   ```env
-   # Use Account 2 for testing
-   ZM_HOST_1=https://zm.connortechnology.com
-   ZM_USER_1=demo
-   ZM_PASSWORD_1=demo
-   ```
-
-2. Delete the cached auth state:
-   ```bash
-   rm -rf playwright/.auth
-   ```
-
-3. Run tests:
-   ```bash
-   npm test
-   ```
-
-## Test Structure
-
-- `auth.setup.ts` - Sets up authentication and creates test profiles
-- `monitors.spec.ts` - Tests for the Monitors/Cameras page
-- `events.spec.ts` - Tests for the Events page
-- `montage.spec.ts` - Tests for the Montage view
-- `profiles.spec.ts` - Tests for profile management
-- `settings.spec.ts` - Tests for the Settings page
-
-## Troubleshooting
-
-### Tests failing after code changes
-Delete the auth cache and re-run:
-```bash
-rm -rf playwright/.auth
-npm test
-```
-
-### Tests timing out
-Increase timeout in `playwright.config.ts` or specific tests.
-
-### Need to see what's happening
-Run in headed mode with slowMo:
-```bash
-npx playwright test --headed --slowMo=1000
-```
-
-## Notes
-
-- Credentials are stored in `.env` and **never** in test files
-- Tests use persistent storage state to avoid re-authenticating for each test
-- Some tests may skip if certain features are not available (e.g., no events on demo server)
+**Config** (`helpers/config.ts`):
+- `testConfig.server` - Server credentials from .env
+- `testConfig.timeouts` - Timeout values
