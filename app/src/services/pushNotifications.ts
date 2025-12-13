@@ -110,9 +110,6 @@ export class MobilePushService {
     }
   }
 
-  private retryCount = 0;
-  private readonly MAX_RETRIES = 3;
-
   // ========== PRIVATE METHODS ==========
 
   private _setupListeners(): void {
@@ -124,7 +121,6 @@ export class MobilePushService {
       });
 
       this.currentToken = token.value;
-      this.retryCount = 0; // Reset retry count on success
 
       // Register token with ZM notification server
       this._registerWithServer(token.value);
@@ -133,20 +129,6 @@ export class MobilePushService {
     // Called when registration fails
     PushNotifications.addListener('registrationError', (error) => {
       log.error('FCM registration failed', { component: 'Push' }, error);
-
-      if (this.retryCount < this.MAX_RETRIES) {
-        this.retryCount++;
-        const delay = this.retryCount * 2000; // Exponential backoff: 2s, 4s, 6s
-        log.info(`Retrying registration in ${delay}ms (Attempt ${this.retryCount}/${this.MAX_RETRIES})`, { component: 'Push' });
-        
-        setTimeout(async () => {
-          try {
-            await PushNotifications.register();
-          } catch (e) {
-            log.error('Retry registration failed', { component: 'Push' }, e);
-          }
-        }, delay);
-      }
     });
 
     // Called when notification is received while app is in foreground

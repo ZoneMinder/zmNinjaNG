@@ -199,7 +199,9 @@ export function getEventImageUrl(
 }
 
 /**
- * Get event video URL
+ * Get event video URL (MP4/H.264 format)
+ *
+ * Format: /index.php?mode=mpeg&format=h264&eid=<eventId>&view=view_video&token=<token>
  *
  * @param portalUrl - Portal URL
  * @param eventId - Event ID
@@ -212,17 +214,17 @@ export function getEventVideoUrl(
   options: {
     token?: string;
     apiUrl?: string;
-    format?: 'mp4' | 'avi' | 'mjpeg';
+    format?: 'h264' | 'h265';
   } = {}
 ): string {
-  const { token, apiUrl, format } = options;
+  const { token, apiUrl, format = 'h264' } = options;
 
   const params: Record<string, string> = {
-    view: 'video',
+    mode: 'mpeg',
+    format,
     eid: eventId,
+    view: 'view_video',
   };
-
-  if (format) params.format = format;
 
   return buildUrl(portalUrl, '/index.php', params, token, apiUrl);
 }
