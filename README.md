@@ -65,3 +65,61 @@ Deploy web build (`dist/`) to: Netlify, Vercel, GitHub Pages, AWS S3, etc.
 📱 **For Android setup and builds, see [ANDROID_BUILD.md](ANDROID_BUILD.md)**
 
 📱 **For iOS setup and builds, see [IOS_BUILD.md](IOS_BUILD.md)**
+
+## Testing
+
+The project includes unit tests and end-to-end (E2E) tests to ensure code quality and reliability.
+
+### Unit Tests
+
+Run unit tests with Vitest:
+
+```bash
+cd zmNg/app
+
+# Run all unit tests
+npm run test:unit
+
+# Run tests in watch mode
+npm run test:unit -- --watch
+
+# Run with coverage report
+npm run test:coverage
+
+# Run specific test file
+npm run test:unit -- src/lib/__tests__/url-builder.test.ts
+```
+
+Coverage reports are generated in `coverage/` directory.
+
+### End-to-End Tests
+
+Run E2E tests with Playwright:
+
+```bash
+# Run E2E tests
+npm run test:e2e
+
+# Run with UI mode (visual debugging)
+npm run test:e2e:ui
+
+# Run specific test file
+npm run test:e2e -- tests/monitors.spec.ts
+```
+
+**Note:** E2E tests require a running ZoneMinder server. Configure test credentials in `.env` file (see `.env.example`).
+
+### Run All Tests
+
+```bash
+# Run both unit and E2E tests
+npm run test:all
+```
+
+### Linting
+
+Check code quality with ESLint:
+
+```bash
+npm run lint
+```
