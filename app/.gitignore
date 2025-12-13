@@ -24,7 +24,8 @@ dist-ssr
 *.sw?
 .env
 
-# Playwright
+# Testing
+coverage/
 test-results/
 playwright-report/
 playwright/.auth/
