@@ -16,6 +16,8 @@ import { Bell } from 'lucide-react';
 import { log } from '../lib/logger';
 import { navigationService } from '../lib/navigation';
 import { useTranslation } from 'react-i18next';
+import { Capacitor } from '@capacitor/core';
+import { getPushService } from '../services/pushNotifications';
 
 /**
  * NotificationHandler component.
@@ -50,6 +52,16 @@ export function NotificationHandler() {
   useEffect(() => {
     if (!settings?.enabled) {
       hasAttemptedAutoConnect.current = false;
+    }
+  }, [settings?.enabled]);
+
+  // Initialize push notifications on mobile
+  useEffect(() => {
+    if (Capacitor.isNativePlatform() && settings && settings.enabled) {
+      const pushService = getPushService();
+      pushService.initialize().catch((error) => {
+        log.error('Failed to initialize push notifications', { component: 'NotificationHandler' }, error);
+      });
     }
   }, [settings?.enabled]);
 

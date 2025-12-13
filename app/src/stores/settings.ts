@@ -25,6 +25,7 @@ export interface ProfileSettings {
     startDate: string;
     endDate: string;
   };
+  disableLogRedaction: boolean;
 }
 
 interface SettingsState {
@@ -74,6 +75,7 @@ const DEFAULT_SETTINGS: ProfileSettings = {
     startDate: '',
     endDate: '',
   },
+  disableLogRedaction: false,
 };
 
 export const useSettingsStore = create<SettingsState>()(

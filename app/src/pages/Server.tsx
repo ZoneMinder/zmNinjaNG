@@ -26,9 +26,9 @@ import {
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getServers, getLoad, getDiskPercent } from '../api/server';
+import { getServers, getLoad, getDiskPercent, getDaemonCheck } from '../api/server';
+import { getServerTimeZone } from '../api/time';
 import { getStates, changeState } from '../api/states';
-import { getAppVersion } from '../lib/version';
 import { useToast } from '../hooks/use-toast';
 import { log } from '../lib/logger';
 import {
@@ -54,6 +54,14 @@ export default function Server() {
     enabled: !!currentProfile,
   });
 
+  // Fetch daemon status
+  const { data: isDaemonRunning, isLoading: daemonLoading } = useQuery({
+    queryKey: ['daemon-check', currentProfile?.id],
+    queryFn: getDaemonCheck,
+    enabled: !!currentProfile,
+    refetchInterval: 30000, // Check every 30 seconds
+  });
+
   // Fetch load average
   const { data: loadData, isLoading: loadLoading } = useQuery({
     queryKey: ['server-load', currentProfile?.id],
@@ -72,6 +80,13 @@ export default function Server() {
   const { data: states, isLoading: statesLoading } = useQuery({
     queryKey: ['states', currentProfile?.id],
     queryFn: getStates,
+    enabled: !!currentProfile,
+  });
+
+  // Fetch timezone
+  const { data: timezone, isLoading: timezoneLoading } = useQuery({
+    queryKey: ['timezone', currentProfile?.id],
+    queryFn: () => getServerTimeZone(),
     enabled: !!currentProfile,
   });
 
@@ -114,29 +129,14 @@ export default function Server() {
 
   const handleRefreshAll = () => {
     queryClient.invalidateQueries({ queryKey: ['servers', currentProfile?.id] });
+    queryClient.invalidateQueries({ queryKey: ['daemon-check', currentProfile?.id] });
     queryClient.invalidateQueries({ queryKey: ['server-load', currentProfile?.id] });
     queryClient.invalidateQueries({ queryKey: ['disk-usage', currentProfile?.id] });
     queryClient.invalidateQueries({ queryKey: ['states', currentProfile?.id] });
+    queryClient.invalidateQueries({ queryKey: ['timezone', currentProfile?.id] });
   };
 
-  const isRefreshing = serversLoading || loadLoading || diskLoading || statesLoading;
-
-  const getDiskUsageColor = (usage: number | undefined) => {
-    if (!usage) return 'text-muted-foreground';
-    // Color based on disk space used (in GB)
-    // These thresholds are arbitrary - adjust based on typical server capacity
-    if (usage >= 1000) return 'text-destructive'; // 1TB+
-    if (usage >= 500) return 'text-orange-500'; // 500GB+
-    return 'text-green-500';
-  };
-
-  const getLoadColor = (load: number | undefined) => {
-    if (!load) return 'text-muted-foreground';
-    // Assuming 4 CPU cores as baseline
-    if (load >= 3) return 'text-destructive';
-    if (load >= 2) return 'text-orange-500';
-    return 'text-green-500';
-  };
+  const isRefreshing = serversLoading || daemonLoading || loadLoading || diskLoading || statesLoading || timezoneLoading;
 
   const formatMemory = (bytes: number | undefined) => {
     if (!bytes) return t('common.unknown');
@@ -195,9 +195,9 @@ export default function Server() {
             </div>
             <div className="p-4 rounded-lg bg-muted/50 border">
               <div className="text-sm font-medium text-muted-foreground">
-                {t('server.app_version')}
+                {t('server.timezone')}
               </div>
-              <div className="text-2xl font-bold mt-1">{getAppVersion()}</div>
+              <div className="text-lg font-bold mt-1 break-words">{timezone || t('common.unknown')}</div>
             </div>
           </div>
         </CardContent>
@@ -217,8 +217,13 @@ export default function Server() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className={`text-3xl font-bold ${getLoadColor(loadData?.load)}`}>
-              {loadData?.load !== undefined ? loadData.load.toFixed(2) : '--'}
+            <div className="text-3xl font-bold">
+              {loadData?.load !== undefined
+                ? (Array.isArray(loadData.load)
+                    ? loadData.load[0]
+                    : loadData.load
+                  ).toFixed(2)
+                : '--'}
             </div>
             <p className="text-xs text-muted-foreground mt-1">{t('server.load_desc')}</p>
           </CardContent>
@@ -236,7 +241,7 @@ export default function Server() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className={`text-3xl font-bold ${getDiskUsageColor(diskUsageGB)}`}>
+            <div className="text-3xl font-bold">
               {diskUsageGB !== undefined ? `${diskUsageGB.toFixed(1)} GB` : '--'}
             </div>
             <p className="text-xs text-muted-foreground mt-1">{t('server.disk_desc')}</p>
@@ -251,24 +256,22 @@ export default function Server() {
                 <Activity className="h-4 w-4 text-primary" />
                 <CardTitle className="text-base">{t('server.status')}</CardTitle>
               </div>
-              {serversLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+              {(serversLoading || daemonLoading) && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
             </div>
           </CardHeader>
           <CardContent>
-            {primaryServer ? (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline">{primaryServer.Status || t('common.unknown')}</Badge>
-                </div>
-                {primaryServer.Hostname && (
-                  <p className="text-xs text-muted-foreground">
-                    {t('server.hostname')}: {primaryServer.Hostname}
-                  </p>
-                )}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Badge variant={isDaemonRunning ? 'default' : 'destructive'}>
+                  {isDaemonRunning ? t('common.running') : t('common.stopped')}
+                </Badge>
               </div>
-            ) : (
-              <div className="text-sm text-muted-foreground">{t('server.no_server_info')}</div>
-            )}
+              {primaryServer?.Hostname && (
+                <p className="text-xs text-muted-foreground">
+                  {t('server.hostname')}: {primaryServer.Hostname}
+                </p>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>

@@ -336,6 +336,7 @@ export interface Profile {
   cgiUrl: string;
   username?: string;
   password?: string; // encrypted
+  refreshToken?: string; // stored in profile for auto-login
   isDefault: boolean;
   createdAt: number;
   lastUsed?: number;

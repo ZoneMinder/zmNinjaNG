@@ -25,7 +25,7 @@ interface AdapterResponse {
 
 let apiClient: AxiosInstance | null = null;
 
-export function createApiClient(baseURL: string): AxiosInstance {
+export function createApiClient(baseURL: string, reLogin?: () => Promise<boolean>): AxiosInstance {
   // Store the actual ZM URL for reference
   localStorage.setItem('zm_api_url', baseURL);
 
@@ -190,17 +190,36 @@ export function createApiClient(baseURL: string): AxiosInstance {
   // Request interceptor - add auth token
   client.interceptors.request.use(
     (config: InternalAxiosRequestConfig) => {
-      const { accessToken } = useAuthStore.getState();
+      const { accessToken, refreshToken, refreshTokenExpires } = useAuthStore.getState();
 
       // Skip adding auth token if this is a discovery/test request
       const skipAuth = config.headers?.['Skip-Auth'] === 'true';
 
-      if (accessToken && config.url && !skipAuth) {
+      // Check if this is a login request (POST to login.json)
+      const isLoginRequest = config.url?.includes('login.json') && config.method?.toUpperCase() === 'POST';
+
+      if (accessToken && config.url && !skipAuth && !isLoginRequest) {
         // Add token as query parameter for ALL requests (GET, POST, PUT, DELETE)
         config.params = {
           ...config.params,
           token: accessToken,
         };
+      }
+
+      // Special handling for login.json
+      if (isLoginRequest && !skipAuth) {
+        const now = Date.now() / 1000;
+        const isRefreshTokenValid = refreshToken && refreshTokenExpires && refreshTokenExpires > now;
+
+        if (isRefreshTokenValid) {
+          // a) If the refreshToken hasn't expired, add the refresh token as the query parameter
+          config.params = {
+            ...config.params,
+            token: refreshToken,
+          };
+        }
+        // b) If the refreshToken has expired, send the form encoded user/pass payload in the POST body
+        // This is handled by the caller (login function) or re-login logic which sets the body.
       }
 
       // Enhanced logging in development
@@ -267,20 +286,38 @@ export function createApiClient(baseURL: string): AxiosInstance {
 
       // Skip auth retry if this is a discovery/test request
       const skipAuth = originalRequest.headers?.['Skip-Auth'] === 'true';
+      
+      // Skip auth retry if this is already a login/refresh request
+      const isLoginRequest = originalRequest.url?.includes('login.json');
 
       // Handle 401 Unauthorized - try to refresh token
-      if (error.response?.status === 401 && !originalRequest._retry && !skipAuth) {
+      if (error.response?.status === 401 && !originalRequest._retry && !skipAuth && !isLoginRequest) {
         originalRequest._retry = true;
 
         try {
           const { refreshToken, refreshAccessToken } = useAuthStore.getState();
 
+          // b.1) first use refreshToken if valid
           if (refreshToken) {
             await refreshAccessToken();
             // Retry the original request
             return client(originalRequest);
+          } else {
+            throw new Error('No refresh token available');
           }
         } catch (refreshError) {
+          // b.2) Use user/pass form encoded login and store credentials
+          if (reLogin) {
+            try {
+              const success = await reLogin();
+              if (success) {
+                return client(originalRequest);
+              }
+            } catch (reLoginError) {
+              log.error('Re-login failed', { component: 'API' }, reLoginError);
+            }
+          }
+
           // Refresh failed - logout user
           const { logout } = useAuthStore.getState();
           logout();

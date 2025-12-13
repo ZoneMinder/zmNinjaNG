@@ -54,6 +54,10 @@ const DiskPercentSchema = z.object({
   percent: z.coerce.number().optional(),
 });
 
+const DaemonCheckSchema = z.object({
+  result: z.coerce.number(),
+});
+
 
 // ========== Types ==========
 
@@ -99,6 +103,30 @@ export async function getServers(): Promise<Server[]> {
 
   return validated.servers;
 }
+
+/**
+ * Check if ZoneMinder daemon is running
+ *
+ * Calls /host/daemonCheck.json to verify if the core service is active.
+ *
+ * @returns Promise resolving to boolean (true = running, false = stopped)
+ */
+export async function getDaemonCheck(): Promise<boolean> {
+  const client = getApiClient();
+  const response = await client.get('/host/daemonCheck.json');
+
+  const validated = validateApiResponse(DaemonCheckSchema, response.data, {
+    endpoint: '/host/daemonCheck.json',
+    method: 'GET',
+  });
+
+  return validated.result === 1;
+}
+
+/**
+ * Get server load average
+ *
+ * Fetches the current system load average (1, 5, 15 min).
 
 /**
  * Get server load average

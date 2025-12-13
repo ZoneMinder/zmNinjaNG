@@ -25,7 +25,11 @@
     "all": "All",
     "filter": "Filter",
     "clear": "Clear",
-    "go_back": "Go Back"
+    "go_back": "Go Back",
+    "apply": "Apply",
+    "saving": "Saving...",
+    "running": "Running",
+    "stopped": "Stopped"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -224,7 +228,12 @@
     "account": "Account",
     "account_desc": "Manage your account",
     "logout": "Logout",
-    "default": "Default"
+    "default": "Default",
+    "debug_settings": "Debug Settings",
+    "debug_settings_desc": "Advanced settings for troubleshooting",
+    "disable_log_redaction": "Disable Log Redaction",
+    "disable_log_redaction_desc": "Show sensitive data (passwords, tokens) in logs. Use with caution!",
+    "disable_log_redaction_warning": "WARNING: This will expose sensitive information in logs."
   },
   "logs": {
     "title": "Logs",
@@ -455,6 +464,7 @@
     "zm_version": "ZoneMinder Version",
     "api_version": "API Version",
     "app_version": "App Version",
+    "timezone": "Timezone",
     "load_average": "Load Average",
     "load_desc": "System load average",
     "disk_usage": "Disk Usage",

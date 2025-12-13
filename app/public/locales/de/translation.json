@@ -26,7 +26,9 @@
     "success": "Erfolg",
     "all": "Alle",
     "filter": "Filtern",
-    "clear": "Leeren"
+    "clear": "Leeren",
+    "apply": "Anwenden",
+    "saving": "Speichern..."
   },
   "dashboard": {
     "title": "Dashboard",
@@ -226,7 +228,12 @@
     "account": "Konto",
     "account_desc": "Verwalten Sie Ihr Konto",
     "logout": "Abmelden",
-    "default": "Standard"
+    "default": "Standard",
+    "debug_settings": "Debug-Einstellungen",
+    "debug_settings_desc": "Erweiterte Einstellungen zur Fehlerbehebung",
+    "disable_log_redaction": "Log-Redaktion deaktivieren",
+    "disable_log_redaction_desc": "Sensible Daten (Passwörter, Token) in Logs anzeigen. Mit Vorsicht verwenden!",
+    "disable_log_redaction_warning": "WARNUNG: Dies wird sensible Informationen in Logs offenlegen."
   },
   "logs": {
     "title": "Protokolle",

@@ -26,7 +26,9 @@
     "success": "Éxito",
     "all": "Todos",
     "filter": "Filtrar",
-    "clear": "Limpiar"
+    "clear": "Limpiar",
+    "apply": "Aplicar",
+    "saving": "Guardando..."
   },
   "dashboard": {
     "title": "Panel de Control",
@@ -226,7 +228,12 @@
     "account": "Cuenta",
     "account_desc": "Administrar tu cuenta",
     "logout": "Cerrar Sesión",
-    "default": "Predeterminado"
+    "default": "Predeterminado",
+    "debug_settings": "Ajustes de depuración",
+    "debug_settings_desc": "Ajustes avanzados para la solución de problemas",
+    "disable_log_redaction": "Desactivar redacción de registros",
+    "disable_log_redaction_desc": "Mostrar datos sensibles (contraseñas, tokens) en los registros. ¡Úselo con precaución!",
+    "disable_log_redaction_warning": "ADVERTENCIA: Esto expondrá información sensible en los registros."
   },
   "logs": {
     "title": "Registros",

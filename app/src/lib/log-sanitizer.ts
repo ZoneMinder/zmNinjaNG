@@ -1,3 +1,6 @@
+import { useSettingsStore } from '../stores/settings';
+import { useProfileStore } from '../stores/profile';
+
 /**
  * Utility functions for sanitizing sensitive data in logs
  */
@@ -164,9 +167,30 @@ function sanitizeUrl(url: string): string {
 }
 
 /**
+ * Helper to check if log redaction is disabled for the current profile
+ */
+function isRedactionDisabled(): boolean {
+    try {
+        const currentProfileId = useProfileStore.getState().currentProfileId;
+        if (currentProfileId) {
+            const settings = useSettingsStore.getState().getProfileSettings(currentProfileId);
+            return settings.disableLogRedaction;
+        }
+    } catch {
+        // Ignore errors accessing stores (e.g. during initialization)
+    }
+    return false;
+}
+
+/**
  * Recursively sanitizes an object by redacting sensitive fields
  */
 export function sanitizeObject(obj: unknown): unknown {
+    // Check if redaction is disabled in settings for current profile
+    if (isRedactionDisabled()) {
+        return obj;
+    }
+
     if (obj === null || obj === undefined) {
         return obj;
     }
@@ -264,6 +288,11 @@ export function sanitizeObject(obj: unknown): unknown {
  * Sanitizes a log message by redacting sensitive information
  */
 export function sanitizeLogMessage(message: string): string {
+    // Check if redaction is disabled
+    if (isRedactionDisabled()) {
+        return message;
+    }
+
     // Only sanitize complete URLs in the message
     // Don't try to sanitize standalone IPs/domains as they might be part of paths
     const urlPattern = /(https?:\/\/[^\s]+)/g;

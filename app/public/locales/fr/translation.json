@@ -26,7 +26,9 @@
     "success": "Succès",
     "all": "Tous",
     "filter": "Filtrer",
-    "clear": "Effacer"
+    "clear": "Effacer",
+    "apply": "Appliquer",
+    "saving": "Enregistrement..."
   },
   "dashboard": {
     "title": "Tableau de bord",
@@ -226,7 +228,12 @@
     "account": "Compte",
     "account_desc": "Gérer votre compte",
     "logout": "Déconnexion",
-    "default": "Défaut"
+    "default": "Défaut",
+    "debug_settings": "Paramètres de débogage",
+    "debug_settings_desc": "Paramètres avancés pour le dépannage",
+    "disable_log_redaction": "Désactiver la rédaction des journaux",
+    "disable_log_redaction_desc": "Afficher les données sensibles (mots de passe, jetons) dans les journaux. À utiliser avec prudence !",
+    "disable_log_redaction_warning": "ATTENTION : Cela exposera des informations sensibles dans les journaux."
   },
   "logs": {
     "title": "Journaux",

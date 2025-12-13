@@ -18,6 +18,7 @@ import { createApiClient, setApiClient } from '../api/client';
 import { getServerTimeZone } from '../api/time';
 import { setSecureValue, getSecureValue, removeSecureValue } from '../lib/secureStorage';
 import { log } from '../lib/logger';
+import { useAuthStore } from './auth';
 
 interface ProfileState {
   profiles: Profile[];
@@ -36,6 +37,7 @@ interface ProfileState {
   deleteAllProfiles: () => Promise<void>;
   switchProfile: (id: string) => Promise<void>;
   setDefaultProfile: (id: string) => void;
+  reLogin: () => Promise<boolean>;
 
   // Helpers
   getDecryptedPassword: (profileId: string) => Promise<string | undefined>;
@@ -163,7 +165,7 @@ export const useProfileStore = create<ProfileState>()(
         // If updating current profile's API URL, reinitialize client
         const currentProfile = get().currentProfile();
         if (currentProfile?.id === id && updates.apiUrl) {
-          setApiClient(createApiClient(updates.apiUrl));
+          setApiClient(createApiClient(updates.apiUrl, get().reLogin));
         }
 
         log.profile('updateProfile complete');
@@ -199,7 +201,7 @@ export const useProfileStore = create<ProfileState>()(
         // Reinitialize API client if current profile changed
         const newCurrentProfile = get().currentProfile();
         if (newCurrentProfile) {
-          setApiClient(createApiClient(newCurrentProfile.apiUrl));
+          setApiClient(createApiClient(newCurrentProfile.apiUrl, get().reLogin));
         }
       },
 
@@ -289,7 +291,7 @@ export const useProfileStore = create<ProfileState>()(
 
           // STEP 3: Initialize API client with new profile
           log.profile('Step 3: Initializing API client', { apiUrl: profile.apiUrl });
-          setApiClient(createApiClient(profile.apiUrl));
+          setApiClient(createApiClient(profile.apiUrl, get().reLogin));
           log.profile('API client initialized');
 
           // STEP 4: Authenticate immediately if credentials exist
@@ -363,7 +365,7 @@ export const useProfileStore = create<ProfileState>()(
 
               // Re-initialize with previous profile
               log.profile('Re-initializing API client', { apiUrl: previousProfile.apiUrl });
-              setApiClient(createApiClient(previousProfile.apiUrl));
+              setApiClient(createApiClient(previousProfile.apiUrl, get().reLogin));
 
               // Try to re-authenticate with previous profile
               if (previousProfile.username && previousProfile.password) {
@@ -398,6 +400,26 @@ export const useProfileStore = create<ProfileState>()(
             isDefault: p.id === id,
           })),
         }));
+      },
+
+      reLogin: async () => {
+        const { currentProfileId, getDecryptedPassword, profiles } = get();
+        if (!currentProfileId) return false;
+
+        const profile = profiles.find((p) => p.id === currentProfileId);
+        if (!profile || !profile.username || !profile.password) return false;
+
+        try {
+          const password = await getDecryptedPassword(currentProfileId);
+          if (!password) return false;
+
+          const { useAuthStore } = await import('./auth');
+          await useAuthStore.getState().login(profile.username, password);
+          return true;
+        } catch (e) {
+          log.error('Re-login helper failed', { error: e });
+          return false;
+        }
       },
 
       /**
@@ -468,7 +490,7 @@ export const useProfileStore = create<ProfileState>()(
 
         // STEP 2: Initialize API client for current profile
         log.profile('Initializing API client', { apiUrl: profile.apiUrl });
-        setApiClient(createApiClient(profile.apiUrl));
+        setApiClient(createApiClient(profile.apiUrl, useProfileStore.getState().reLogin));
 
         // STEP 3: Authenticate if credentials exist
         // IMPORTANT: Wrap in try-finally to ensure isInitialized is ALWAYS set,
@@ -525,3 +547,17 @@ export const useProfileStore = create<ProfileState>()(
     }
   )
 );
+
+// Subscribe to auth store to update refresh token in profile
+useAuthStore.subscribe((state) => {
+  const { refreshToken } = state;
+  const { currentProfileId, updateProfile, currentProfile } = useProfileStore.getState();
+
+  if (currentProfileId && refreshToken) {
+    const profile = currentProfile();
+    if (profile && profile.refreshToken !== refreshToken) {
+      log.profile('Updating profile with new refresh token', { profileId: currentProfileId });
+      updateProfile(currentProfileId, { refreshToken });
+    }
+  }
+});

@@ -5,7 +5,7 @@
  * monitor filters, and push notification settings.
  */
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useNotificationStore } from '../stores/notifications';
@@ -71,16 +71,6 @@ export default function NotificationSettings() {
 
   const [isConnecting, setIsConnecting] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
-
-  // Initialize push notifications on mobile
-  useEffect(() => {
-    if (Capacitor.isNativePlatform() && settings && settings.enabled) {
-      const pushService = getPushService();
-      pushService.initialize().catch((error) => {
-        log.error('Failed to initialize push notifications', { component: 'NotificationSettings' }, error);
-      });
-    }
-  }, [settings?.enabled]);
 
   const handleEnableToggle = async (enabled: boolean) => {
     if (!currentProfile) {
