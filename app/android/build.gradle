@@ -24,14 +24,25 @@ allprojects {
     }
 }
 
-// Configure Java compatibility for all subprojects
+// Configure Java and Kotlin compatibility for all subprojects
+// Using Java 17 LTS for compatibility with Android Gradle Plugin 8.x and Capacitor 7
 subprojects {
     afterEvaluate { project ->
         if (project.hasProperty('android')) {
             project.android {
                 compileOptions {
-                    sourceCompatibility JavaVersion.VERSION_21
-                    targetCompatibility JavaVersion.VERSION_21
+                    sourceCompatibility JavaVersion.VERSION_17
+                    targetCompatibility JavaVersion.VERSION_17
+                }
+            }
+        }
+
+        // Force Kotlin to use Java 17 target for consistency
+        // Required by Capacitor plugins that use Kotlin (e.g., capacitor-filesystem)
+        tasks.configureEach { task ->
+            if (task.hasProperty('kotlinOptions')) {
+                task.kotlinOptions {
+                    jvmTarget = "17"
                 }
             }
         }

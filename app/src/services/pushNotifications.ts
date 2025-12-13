@@ -110,6 +110,9 @@ export class MobilePushService {
     }
   }
 
+  // Single retry flag to prevent infinite retry loops
+  private hasRetried = false;
+
   // ========== PRIVATE METHODS ==========
 
   private _setupListeners(): void {
@@ -121,14 +124,29 @@ export class MobilePushService {
       });
 
       this.currentToken = token.value;
+      this.hasRetried = false; // Reset retry flag on success
 
       // Register token with ZM notification server
       this._registerWithServer(token.value);
     });
 
     // Called when registration fails
+    // Single retry after 5s delay to handle transient network issues on mobile
     PushNotifications.addListener('registrationError', (error) => {
       log.error('FCM registration failed', { component: 'Push' }, error);
+
+      if (!this.hasRetried) {
+        this.hasRetried = true;
+        log.info('Retrying FCM registration once after 5s...', { component: 'Push' });
+
+        setTimeout(async () => {
+          try {
+            await PushNotifications.register();
+          } catch (e) {
+            log.error('FCM registration retry failed', { component: 'Push' }, e);
+          }
+        }, 5000);
+      }
     });
 
     // Called when notification is received while app is in foreground

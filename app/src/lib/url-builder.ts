@@ -201,12 +201,22 @@ export function getEventImageUrl(
 /**
  * Get event video URL (MP4/H.264 format)
  *
+ * ZoneMinder requires mode=mpeg (not view=video) for MP4 video playback.
+ * This URL is used directly with video.js for event video playback.
+ *
  * Format: /index.php?mode=mpeg&format=h264&eid=<eventId>&view=view_video&token=<token>
  *
  * @param portalUrl - Portal URL
  * @param eventId - Event ID
  * @param options - Video options
- * @returns Event video URL
+ * @param options.token - Authentication token
+ * @param options.apiUrl - API URL for protocol coordination (optional)
+ * @param options.format - Video codec: 'h264' (default) or 'h265'
+ * @returns Event video URL for direct video.js playback
+ *
+ * @example
+ * getEventVideoUrl('https://zm.com', '123', { token: 'abc' })
+ * // Returns: 'https://zm.com/index.php?mode=mpeg&format=h264&eid=123&view=view_video&token=abc'
  */
 export function getEventVideoUrl(
   portalUrl: string,
