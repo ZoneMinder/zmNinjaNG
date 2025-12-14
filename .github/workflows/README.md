@@ -4,21 +4,8 @@ This directory contains automated build workflows for zmNg across multiple platf
 
 ## ⚠️ Quick Fix: macOS "Damaged App" Error
 
-If you downloaded a macOS build and get a "damaged" error, use one of these methods:
-
-**Method 1: Remove Quarantine (Easiest)**
-```bash
-# Navigate to where you downloaded the app
-xattr -c zmNg.app
-```
-
-**Method 2: Right-Click Method (Most Reliable)**
-1. Right-click (or Control+click) on `zmNg.app`
-2. Select "Open" from the menu
-3. Click "Open" in the security dialog that appears
-4. macOS will remember your choice
-
-See [macOS "Damaged" App Error](#macos-damaged-app-error) for more details.
+If you downloaded a macOS build and get a "damaged" error, that is not because the app is damaged. It is because MacOS blocks you.
+In more recent versions this has become painful. I couldn't get `xcattr` variants to work. Anyway, simple answer: use [sentinel](https://github.com/alienator88/Sentinel)
 
 ## Available Workflows
 
