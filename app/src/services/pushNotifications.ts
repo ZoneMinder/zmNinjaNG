@@ -253,10 +253,14 @@ export class MobilePushService {
     }
   }
 
+  /**
+   * Handle incoming push notification when app is in foreground
+   * This is called when a notification is received while the app is open
+   */
   private _handleNotification(notification: PushNotificationSchema): void {
     const data = notification.data as PushNotificationData;
 
-    log.info('Processing FCM notification', {
+    log.info('Processing FCM notification (foreground)', {
       component: 'Push',
       title: notification.title,
       body: notification.body,
@@ -269,6 +273,7 @@ export class MobilePushService {
 
       // If we are connected to the event server, we will receive this event via WebSocket.
       // Ignore the push notification to avoid duplicate processing/toasts.
+      // The WebSocket handler already adds the event to the store.
       if (notificationStore.isConnected) {
         log.info('Ignoring foreground push notification - already connected to event server', {
           component: 'Push',
@@ -311,6 +316,11 @@ export class MobilePushService {
     }
   }
 
+  /**
+   * Handle notification tap action
+   * This is called when user taps on a push notification (app in background/killed)
+   * Adds the event to notification history and navigates to event detail
+   */
   private _handleNotificationAction(action: ActionPerformed): void {
     const data = action.notification.data as PushNotificationData;
 
@@ -321,14 +331,38 @@ export class MobilePushService {
       eventId: data.eventId,
     });
 
-    // Navigate to event detail if we have event ID
-    if (data.eventId) {
-      // Mark as read
+    // Add event to notification history and navigate if we have event ID
+    if (data.eventId && data.monitorId) {
       const notificationStore = useNotificationStore.getState();
       const profileId = notificationStore.currentProfileId;
 
       if (profileId) {
-        notificationStore.markEventRead(profileId, parseInt(data.eventId, 10));
+        // Construct image URL using the app's portal URL and auth token
+        let imageUrl: string | undefined;
+
+        const profileStore = useProfileStore.getState();
+        const currentProfile = profileStore.currentProfile();
+        const authStore = useAuthStore.getState();
+
+        if (currentProfile && authStore.accessToken) {
+          imageUrl = `${currentProfile.portalUrl}/index.php?view=image&eid=${data.eventId}&fid=snapshot&width=600&token=${authStore.accessToken}`;
+        }
+
+        // Add event to notification history (duplicate prevention handled by store)
+        notificationStore.addEvent(profileId, {
+          MonitorId: parseInt(data.monitorId, 10),
+          MonitorName: data.monitorName || 'Unknown',
+          EventId: parseInt(data.eventId, 10),
+          Cause: data.cause || action.notification.body || 'Motion detected',
+          Name: data.monitorName || 'Unknown',
+          ImageUrl: imageUrl,
+        });
+
+        log.info('Added notification to history from tap action', {
+          component: 'Push',
+          eventId: data.eventId,
+          profileId,
+        });
       }
 
       // Navigate to event detail page

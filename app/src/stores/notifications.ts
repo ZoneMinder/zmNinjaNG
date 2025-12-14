@@ -301,6 +301,11 @@ export const useNotificationStore = create<NotificationState>()(
         return events.filter((e) => !e.read).length;
       },
 
+      /**
+       * Add notification event to history
+       * Events can come from WebSocket (when connected) or FCM push notifications
+       * Duplicate prevention: if an event with the same ID already exists, it will be replaced
+       */
       addEvent: (profileId: string, event: ZMAlarmEvent) => {
         log.info('Adding notification event', {
           component: 'Notifications',
@@ -317,10 +322,11 @@ export const useNotificationStore = create<NotificationState>()(
           };
 
           const currentEvents = state.profileEvents[profileId] || [];
-          
+
           // Remove any existing event with the same ID to avoid duplicates
+          // This prevents duplicate entries when receiving the same event from both WebSocket and FCM
           const otherEvents = currentEvents.filter(e => e.EventId !== event.EventId);
-          
+
           const events = [notificationEvent, ...otherEvents].slice(0, MAX_EVENTS);
           const unreadCount = events.filter((e) => !e.read).length;
 
