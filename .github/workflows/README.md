@@ -4,13 +4,21 @@ This directory contains automated build workflows for zmNg across multiple platf
 
 ## ⚠️ Quick Fix: macOS "Damaged App" Error
 
-If you downloaded a macOS build and get a "damaged" error, run this command:
+If you downloaded a macOS build and get a "damaged" error, use one of these methods:
 
+**Method 1: Remove Quarantine (Easiest)**
 ```bash
-xattr -cr /path/to/zmNg.app
+# Navigate to where you downloaded the app
+xattr -c zmNg.app
 ```
 
-Then open the app normally. See [macOS "Damaged" App Error](#macos-damaged-app-error) for more details.
+**Method 2: Right-Click Method (Most Reliable)**
+1. Right-click (or Control+click) on `zmNg.app`
+2. Select "Open" from the menu
+3. Click "Open" in the security dialog that appears
+4. macOS will remember your choice
+
+See [macOS "Damaged" App Error](#macos-damaged-app-error) for more details.
 
 ## Available Workflows
 
@@ -119,20 +127,28 @@ If you get a **"zmNg.app is damaged and can't be opened. You should move it to t
 
 ### Option 1: Use Unsigned Build (Bypass Gatekeeper)
 
-For unsigned builds, bypass macOS Gatekeeper security:
+For unsigned builds, bypass macOS Gatekeeper security using one of these methods:
 
+**Method A: Command Line (Simplest)**
 ```bash
-# Remove quarantine attribute
-xattr -cr /Applications/zmNg.app
-
-# Or if that doesn't work, use this before opening:
-sudo xattr -rd com.apple.quarantine /Applications/zmNg.app
+# Remove quarantine attribute (no sudo needed)
+xattr -c zmNg.app
 ```
 
-**Alternative method:**
-1. Right-click the app and select "Open"
-2. Click "Open" in the security dialog
-3. macOS will remember this choice
+**Method B: Right-Click (Most Reliable)**
+1. Right-click (or Control+click) on `zmNg.app`
+2. Select "Open" from the context menu
+3. Click "Open" in the security dialog that appears
+4. The app will open and macOS will remember your choice
+
+**Method C: System Settings (If above methods fail)**
+1. Try to open the app normally (it will fail)
+2. Go to System Settings → Privacy & Security
+3. Scroll down to see "zmNg was blocked"
+4. Click "Open Anyway"
+5. Confirm by clicking "Open"
+
+**Note:** Don't use `sudo` with xattr - it's not needed and causes permission issues.
 
 ### Option 2: Set Up Code Signing (Recommended for Distribution)
 
