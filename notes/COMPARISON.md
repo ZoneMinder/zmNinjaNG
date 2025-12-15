@@ -2,7 +2,7 @@
 
 **TLDR**: A complete architectural modernization of a popular ZoneMinder mobile/desktop client. zmNg achieves feature parity with zmNinja while delivering 3-4x better performance, 65% less code, 92% fewer native dependencies, and a future-proof technology stack - all accomplished in a focused development sprint with AI assistance.
 
-**Platforms Compared:** Android, Web, iOS (planned), Desktop
+**Platforms Compared:** Android, Web, iOS, Desktop
 
 **Last Updated:** December 15, 2025
 **zmNinja version:** v1.8.000 (September 9, 2025)
@@ -70,7 +70,7 @@ zmNg represents a complete ground-up rewrite of zmNinja using modern web technol
 | **Framework** | React | 19.2.0 | ✅ Latest with Concurrent features |
 | **Build Tool** | Vite | 7.2.4 | ✅ Lightning-fast HMR (<50ms) |
 | **Mobile Runtime** | Capacitor | 7.4.4 | ✅ 8 minimal plugins |
-| **Desktop** | Tauri | 2.9.4 | ✅ Planned (lighter than Electron) |
+| **Desktop** | Tauri | 2.9.4 | ✅ lighter than Electron |
 | **Language** | TypeScript | 5.9.3 | ✅ 100% type-safe |
 | **State** | Zustand + TanStack Query | 5.x | ✅ Optimized, persistent |
 | **Styling** | Tailwind CSS + shadcn/ui | 3.4.18 | ✅ Utility-first, responsive |
@@ -332,8 +332,8 @@ app/src/
 **Current:**
 - ✅ Android (Capacitor)
 - ✅ Web (Progressive Web App)
-- ⏳ iOS (Capacitor - in development)
-- ⏳ Desktop (Tauri - planned)
+- ⏳ iOS (Capacitor)
+- ⏳ Desktop (Tauri)
 
 **Advantages:**
 - PWA installable on any platform
@@ -368,7 +368,7 @@ app/src/
 ```bash
 # Complex multi-step process
 cordova platform add android
-cordova plugin add [26+ plugins one by one]
+cordova plugin add [26+ plugins]
 cordova build android --release
 # Manual signing with jarsigner
 ```
@@ -480,7 +480,18 @@ npm run android:release    # Build APK (auto-signed via Gradle)
 
 ---
 
-## 7. Performance Benchmarks
+### Web-Specific Features
+
+| Feature | zmNinja | zmNg |
+|---------|---------|------|
+| **PWA Support** | ❌ | ✅ Ready |
+| **Service Workers** | ❌ | ✅ Available |
+| **Installable** | ❌ | ✅ Yes |
+| **Offline Mode** | Limited | ✅ Configurable |
+
+---
+
+## 8. Performance Benchmarks
 
 ### Web Performance
 
@@ -515,7 +526,7 @@ npm run android:release    # Build APK (auto-signed via Gradle)
 
 ---
 
-## 8. State Management Evolution
+## 9. State Management Evolution
 
 ### zmNinja ($scope Hell)
 
@@ -640,7 +651,7 @@ export const useProfileStore = create<ProfileState>()(
 
 ---
 
-## 9. Build & Development Experience
+## 10. Build & Development Experience
 
 ### zmNinja Build Process
 
@@ -726,7 +737,7 @@ npm run test:all        # All tests
 
 ---
 
-## 10. Code Quality Metrics
+## 11. Code Quality Metrics
 
 ### Maintainability Comparison
 
@@ -770,7 +781,7 @@ npm run test:all        # All tests
 
 ---
 
-## 11. Dependency Management
+## 12. Dependency Management
 
 ### zmNinja Dependencies
 
@@ -834,7 +845,7 @@ Networking:
 
 ---
 
-## 12. Migration Benefits
+## 13. Migration Benefits
 
 ### For Users
 
@@ -877,7 +888,7 @@ Networking:
 
 ---
 
-## 13. Real-World Performance
+## 14. Real-World Performance
 
 ### Test Scenario: Loading 300 Events
 
@@ -923,7 +934,7 @@ Battery drain (1 hour): ~12%
 
 ---
 
-## 14. Code Examples Comparison
+## 15. Code Examples Comparison
 
 ### Example: Fetching Monitors
 
@@ -1008,7 +1019,7 @@ function Monitors() {
 
 ---
 
-## 15. Future Roadmap
+## 16. Future Roadmap
 
 ### zmNinja (Maintenance Mode)
 
@@ -1035,21 +1046,10 @@ function Monitors() {
 - ✅ Touch gestures (swipe, pinch, pull-refresh)
 - ✅ Server discovery
 
-**Planned:**
-- 🚀 **iOS support** (Capacitor ready)
-- 🚀 **Desktop app (Tauri)** (lighter than Electron)
-- 🚀 **Biometric auth** (fingerprint, face)
-- 🚀 **24-hour review mode**
-- 🚀 **Advanced analytics dashboard**
-- 🚀 **Face recognition integration**
-- 🚀 **Offline mode** (enhanced)
-- 🚀 **Video export/sharing**
-
-**Verdict:** Active development, solid foundation for growth
 
 ---
 
-## 16. Conclusion
+## 17. Conclusion
 
 ### Key Achievements
 
@@ -1124,7 +1124,7 @@ zmNg represents a **complete transformation** of zmNinja through modern web tech
 
 ---
 
-## 17. Technical Debt Eliminated
+## 18. Technical Debt Eliminated
 
 ### zmNinja Technical Debt (Left Behind)
 
