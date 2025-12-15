@@ -61,28 +61,3 @@ echo ""
 echo "✅ Standard release triggered! Check GitHub Actions for progress."
 echo "   https://github.com/pliablepixels/zmNg/actions"
 
-echo "Waiting 5 seconds for tag propagation..."
-sleep 5
-
-echo ""
-echo "---------------------------------------------------"
-echo "Optional: Linux ARM64 Build (QEMU)"
-echo "---------------------------------------------------"
-echo "The ARM64 build uses QEMU emulation and is very slow (1-2 hours)."
-echo "It is disabled by default to save resources."
-echo ""
-read -p "Do you want to trigger the ARM64 build as well? (y/N) " -n 1 -r
-echo ""
-
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    if command -v gh &> /dev/null; then
-        echo "Triggering build-linux-arm64-qemu.yml for tag $TAG..."
-        gh workflow run build-linux-arm64-qemu.yml -f release_tag="$TAG"
-        echo "✅ ARM64 build triggered."
-    else
-        echo "❌ Error: 'gh' CLI not found. Cannot trigger ARM64 build manually."
-        echo "   Please install GitHub CLI: https://cli.github.com/"
-    fi
-else
-    echo "Skipping ARM64 build."
-fi
