@@ -4,7 +4,7 @@
 
 ### macOS
 - **Unsigned Build**: This app is not code-signed. On first launch, you may see a "damaged" error.
-- **Solution**: Use [Sentinel](https://github.com/alienator88/Sentinel) to bypass Gatekeeper, or right-click the app and select "Open"
+- **Solution**: Use [Sentinel](https://github.com/alienator88/Sentinel) to bypass Gatekeeper
 
 ### Windows
 - **Unsigned Build**: SmartScreen may warn about an unrecognized app
@@ -31,4 +31,3 @@ This is personal software with no official support. For issues or contributions,
 
 ---
 
-**Edit this file to customize your release notes. This content will appear at the top of every GitHub release.**
