@@ -98,12 +98,11 @@ describe('formatForServer', () => {
 
   it('falls back gracefully on timezone error', () => {
     // Mock a timezone that might cause issues
-    const mockGetState = vi.fn(() => ({
-      currentProfile: vi.fn(() => ({
+    vi.mocked(useProfileStore.getState).mockReturnValue({
+      currentProfile: () => ({
         timezone: 'Invalid/Timezone',
-      })),
-    }));
-    vi.mocked(useProfileStore.getState).mockImplementation(mockGetState);
+      }),
+    } as ReturnType<typeof useProfileStore.getState>);
 
     const date = new Date('2024-01-15T10:30:45Z');
     const result = formatForServer(date);
@@ -113,10 +112,9 @@ describe('formatForServer', () => {
   });
 
   it('uses browser timezone when profile has no timezone', () => {
-    const mockGetState = vi.fn(() => ({
-      currentProfile: vi.fn(() => null),
-    }));
-    vi.mocked(useProfileStore.getState).mockImplementation(mockGetState);
+    vi.mocked(useProfileStore.getState).mockReturnValue({
+      currentProfile: () => null,
+    } as ReturnType<typeof useProfileStore.getState>);
 
     const date = new Date('2024-01-15T10:30:45Z');
     const result = formatForServer(date);
