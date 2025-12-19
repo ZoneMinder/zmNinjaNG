@@ -36,31 +36,47 @@ jobs:
         working-directory: ./app
         run: npm ci
 
+      - name: Sync version from package.json
+        run: node scripts/sync-version.js
+
       - name: Build Tauri app (Windows)
         working-directory: ./app
         run: npm run tauri:build
 
-      - name: Upload MSI installer artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: zmNg-windows-msi-${{ github.event.inputs.version || github.ref_name }}
-          path: app/src-tauri/target/release/bundle/msi/*.msi
-          retention-days: 30
+      - name: Rename Windows artifacts
+        shell: bash
+        run: |
+          VERSION="${{ github.event.inputs.version || github.ref_name }}"
+          VERSION="${VERSION#zmNg-}"
+          mkdir -p dist/windows
 
-      - name: Upload NSIS installer artifact
+          # Rename MSI files
+          for msi in app/src-tauri/target/release/bundle/msi/*.msi; do
+            if [ -f "$msi" ]; then
+              cp "$msi" "dist/windows/zmNg-${VERSION}-windows-x64.msi"
+            fi
+          done
+
+          # Rename NSIS installers
+          for exe in app/src-tauri/target/release/bundle/nsis/*.exe; do
+            if [ -f "$exe" ]; then
+              cp "$exe" "dist/windows/zmNg-${VERSION}-windows-x64-setup.exe"
+            fi
+          done
+
+      - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: zmNg-windows-nsis-${{ github.event.inputs.version || github.ref_name }}
-          path: app/src-tauri/target/release/bundle/nsis/*.exe
+          name: zmNg-windows-${{ github.event.inputs.version || github.ref_name }}
+          path: dist/windows/*
           retention-days: 30
-          if-no-files-found: ignore
 
       - name: Upload to Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/zmNg-')
         with:
           files: |
-            app/src-tauri/target/release/bundle/msi/*.msi
-            app/src-tauri/target/release/bundle/nsis/*.exe
+            dist/windows/*.msi
+            dist/windows/*.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -40,39 +40,54 @@ jobs:
         working-directory: ./app
         run: npm ci
 
+      - name: Sync version from package.json
+        run: node scripts/sync-version.js
+
       - name: Build Tauri app (Linux amd64)
         working-directory: ./app
         run: npm run tauri:build
 
-      - name: Upload AppImage artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: zmNg-linux-amd64-appimage-${{ github.event.inputs.version || github.ref_name }}
-          path: app/src-tauri/target/release/bundle/appimage/*.AppImage
-          retention-days: 30
+      - name: Rename Linux AMD64 artifacts
+        run: |
+          VERSION="${{ github.event.inputs.version || github.ref_name }}"
+          VERSION="${VERSION#zmNg-}"
+          mkdir -p dist/linux-amd64
 
-      - name: Upload DEB package artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: zmNg-linux-amd64-deb-${{ github.event.inputs.version || github.ref_name }}
-          path: app/src-tauri/target/release/bundle/deb/*.deb
-          retention-days: 30
+          # Rename AppImage
+          for appimage in app/src-tauri/target/release/bundle/appimage/*.AppImage; do
+            if [ -f "$appimage" ]; then
+              cp "$appimage" "dist/linux-amd64/zmNg-${VERSION}-linux-amd64.AppImage"
+            fi
+          done
 
-      - name: Upload RPM package artifact (if exists)
+          # Rename DEB
+          for deb in app/src-tauri/target/release/bundle/deb/*.deb; do
+            if [ -f "$deb" ]; then
+              cp "$deb" "dist/linux-amd64/zmNg-${VERSION}-linux-amd64.deb"
+            fi
+          done
+
+          # Rename RPM
+          for rpm in app/src-tauri/target/release/bundle/rpm/*.rpm; do
+            if [ -f "$rpm" ]; then
+              cp "$rpm" "dist/linux-amd64/zmNg-${VERSION}-linux-amd64.rpm"
+            fi
+          done
+
+      - name: Upload Linux AMD64 artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: zmNg-linux-amd64-rpm-${{ github.event.inputs.version || github.ref_name }}
-          path: app/src-tauri/target/release/bundle/rpm/*.rpm
+          name: zmNg-linux-amd64-${{ github.event.inputs.version || github.ref_name }}
+          path: dist/linux-amd64/*
           retention-days: 30
-          if-no-files-found: ignore
 
       - name: Upload to Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/zmNg-')
         with:
           files: |
-            app/src-tauri/target/release/bundle/appimage/*.AppImage
-            app/src-tauri/target/release/bundle/deb/*.deb
-            app/src-tauri/target/release/bundle/rpm/*.rpm
+            dist/linux-amd64/*.AppImage
+            dist/linux-amd64/*.deb
+            dist/linux-amd64/*.rpm
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -60,8 +60,8 @@ jobs:
           VERSION="${{ github.event.inputs.version || github.ref_name }}"
           VERSION="${VERSION#zmNg-}"
           mkdir -p dist/android
-          cp app/android/app/build/outputs/apk/release/*.apk dist/android/zmNg-android-unsigned-${VERSION}.apk
-          cp app/android/app/build/outputs/bundle/release/*.aab dist/android/zmNg-android-unsigned-${VERSION}.aab
+          cp app/android/app/build/outputs/apk/release/*.apk dist/android/zmNg-${VERSION}-android-unsigned.apk
+          cp app/android/app/build/outputs/bundle/release/*.aab dist/android/zmNg-${VERSION}-android-unsigned.aab
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

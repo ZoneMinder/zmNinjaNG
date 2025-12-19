@@ -36,22 +36,40 @@ jobs:
         working-directory: ./app
         run: npm ci
 
+      - name: Sync version from package.json
+        run: node scripts/sync-version.js
+
       - name: Build Tauri app (macOS)
         working-directory: ./app
         run: npm run tauri:build
+
+      - name: Rename macOS artifacts
+        run: |
+          VERSION="${{ github.event.inputs.version || github.ref_name }}"
+          VERSION="${VERSION#zmNg-}"
+          mkdir -p dist/macos
+
+          # Tauri creates files like zmNg_0.0.2_aarch64.dmg or zmNg_0.0.2_x64.dmg
+          for dmg in app/src-tauri/target/release/bundle/dmg/*.dmg; do
+            if [ -f "$dmg" ]; then
+              filename=$(basename "$dmg")
+              # Extract architecture from filename
+              if [[ "$filename" =~ aarch64 ]]; then
+                arch="aarch64"
+              elif [[ "$filename" =~ x64 ]]; then
+                arch="x64"
+              else
+                arch="universal"
+              fi
+              cp "$dmg" "dist/macos/zmNg-${VERSION}-macos-${arch}.dmg"
+            fi
+          done
 
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
         with:
           name: zmNg-macos-dmg-${{ github.event.inputs.version || github.ref_name }}
-          path: app/src-tauri/target/release/bundle/dmg/*.dmg
-          retention-days: 30
-
-      - name: Upload App Bundle artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: zmNg-macos-app-${{ github.event.inputs.version || github.ref_name }}
-          path: app/src-tauri/target/release/bundle/macos/*.app
+          path: dist/macos/*.dmg
           retention-days: 30
 
       - name: Upload to Release
@@ -59,6 +77,6 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/zmNg-')
         with:
             files: |
-              app/src-tauri/target/release/bundle/dmg/*.dmg
+              dist/macos/*.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
