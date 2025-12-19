@@ -66,9 +66,11 @@ echo "✅ Working directory is clean"
 echo "✅ All commits are pushed to origin"
 echo ""
 echo "This script will:"
-echo "1. Create a local git tag '$TAG'"
-echo "2. Push the tag to 'origin'"
-echo "3. Trigger GitHub Actions workflows to build and release"
+echo "1. Generate/update CHANGELOG.md using git-cliff"
+echo "2. Commit and push CHANGELOG.md (if changed)"
+echo "3. Create a local git tag '$TAG'"
+echo "4. Push the tag to 'origin'"
+echo "5. Trigger GitHub Actions workflows to build and release"
 echo ""
 read -p "Are you sure you want to proceed? (y/N) " -n 1 -r
 echo ""
@@ -76,6 +78,29 @@ echo ""
 if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     echo "Release cancelled."
     exit 1
+fi
+
+# Generate CHANGELOG.md using git-cliff
+echo ""
+echo "📋 Generating CHANGELOG.md..."
+if ! command -v git-cliff &> /dev/null; then
+    echo "❌ Error: git-cliff is not installed."
+    echo "   Install with: brew install git-cliff"
+    exit 1
+fi
+
+# Generate changelog with the upcoming tag
+git-cliff --tag "$TAG" -o CHANGELOG.md
+
+# Check if CHANGELOG.md was modified or is new
+if [[ -n $(git diff --name-only CHANGELOG.md 2>/dev/null) ]] || [[ -n $(git ls-files --others --exclude-standard CHANGELOG.md 2>/dev/null) ]]; then
+    echo "📝 CHANGELOG.md updated, committing..."
+    git add CHANGELOG.md
+    git commit -m "docs: update CHANGELOG.md for $TAG"
+    git push origin "$CURRENT_BRANCH"
+    echo "✅ CHANGELOG.md committed and pushed"
+else
+    echo "ℹ️  CHANGELOG.md unchanged"
 fi
 
 # Check if tag exists locally or remotely
