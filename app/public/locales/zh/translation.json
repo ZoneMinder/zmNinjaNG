@@ -133,7 +133,10 @@
     "heatmap_events": "个事件",
     "heatmap_low": "低",
     "heatmap_high": "高",
-    "clear_filters": "清除筛选"
+    "clear_filters": "清除筛选",
+    "alarm_frame": "报警帧 {{frameId}}",
+    "frame_number": "帧 {{number}}",
+    "total_frames": "{{count}} 帧"
   },
   "event_detail": {
     "event_id": "事件 ID",
@@ -372,6 +375,14 @@
     "notifications_enabled": "通知已启用",
     "select_profile_first": "请先选择配置"
   },
+  "notifications": {
+    "status": {
+      "disabled": "已禁用",
+      "connected": "已连接",
+      "disconnected": "已断开",
+      "connecting": "连接中..."
+    }
+  },
   "profiles": {
     "title": "配置",
     "subtitle": "管理服务器连接",
@@ -461,6 +472,13 @@
     "api_url_hint": "https://server.com/zm/api",
     "cgi_url_hint": "https://server.com/zm/cgi-bin"
   },
+  "languages": {
+    "en": "English",
+    "es": "Español",
+    "fr": "Français",
+    "de": "Deutsch",
+    "zh": "中文"
+  },
   "sidebar": {
     "dashboard": "仪表板",
     "events": "事件",
@@ -476,7 +494,8 @@
     "event_montage": "事件蒙太奇",
     "notifications": "通知",
     "profiles": "配置",
-    "logs": "日志"
+    "logs": "日志",
+    "switch_language": "切换语言"
   },
   "server": {
     "title": "服务器",

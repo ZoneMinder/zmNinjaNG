@@ -132,7 +132,10 @@
     "heatmap_events": "events",
     "heatmap_low": "Low",
     "heatmap_high": "High",
-    "clear_filters": "Clear Filters"
+    "clear_filters": "Clear Filters",
+    "alarm_frame": "Alarm Frame {{frameId}}",
+    "frame_number": "Frame {{number}}",
+    "total_frames": "{{count}} frames"
   },
   "event_detail": {
     "event_id": "Event ID",
@@ -369,6 +372,14 @@
     "disconnected": "Disconnected",
     "select_profile_first": "Please select a profile first"
   },
+  "notifications": {
+    "status": {
+      "disabled": "Disabled",
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "connecting": "Connecting..."
+    }
+  },
   "profiles": {
     "title": "Profiles",
     "subtitle": "Manage server connections",
@@ -458,6 +469,13 @@
     "api_url_hint": "https://server.com/zm/api",
     "cgi_url_hint": "https://server.com/zm/cgi-bin"
   },
+  "languages": {
+    "en": "English",
+    "es": "Español",
+    "fr": "Français",
+    "de": "Deutsch",
+    "zh": "中文"
+  },
   "sidebar": {
     "dashboard": "Dashboard",
     "events": "Events",
@@ -473,7 +491,8 @@
     "event_montage": "Event Montage",
     "notifications": "Notifications",
     "profiles": "Profiles",
-    "logs": "Logs"
+    "logs": "Logs",
+    "switch_language": "Switch Language"
   },
   "server": {
     "title": "Server",

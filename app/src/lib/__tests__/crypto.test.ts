@@ -2,8 +2,15 @@
  * Unit tests for crypto utilities (security-critical)
  */
 
-import { describe, it, expect, beforeAll } from 'vitest';
-import { encrypt, decrypt, isCryptoAvailable } from '../crypto';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
+import {
+  encrypt,
+  decrypt,
+  decryptLegacy,
+  isCryptoAvailable,
+  isProbablyEncryptedPayload,
+  MIN_ENCRYPTED_BYTES,
+} from '../crypto';
 
 describe('isCryptoAvailable', () => {
   it('returns true when Web Crypto API is available', () => {
@@ -313,5 +320,196 @@ describe('Security properties', () => {
 
     // Most characters should differ (avalanche effect)
     expect(differingChars).toBeGreaterThan(minLength * 0.3);
+  });
+});
+
+describe('isProbablyEncryptedPayload', () => {
+  it('returns true for valid encrypted payload', async () => {
+    const encrypted = await encrypt('test data');
+    expect(isProbablyEncryptedPayload(encrypted)).toBe(true);
+  });
+
+  it('returns true for payload with minimum encrypted bytes', () => {
+    const minPayload = btoa(String.fromCharCode(...new Array(MIN_ENCRYPTED_BYTES).fill(0)));
+    expect(isProbablyEncryptedPayload(minPayload)).toBe(true);
+  });
+
+  it('returns false for too-short base64 string', () => {
+    const shortPayload = btoa('abc');
+    expect(isProbablyEncryptedPayload(shortPayload)).toBe(false);
+  });
+
+  it('returns false for invalid base64', () => {
+    expect(isProbablyEncryptedPayload('not-base64!!!')).toBe(false);
+  });
+
+  it('returns false for empty string', () => {
+    expect(isProbablyEncryptedPayload('')).toBe(false);
+  });
+
+  it('returns false for plaintext', () => {
+    expect(isProbablyEncryptedPayload('plain text password')).toBe(false);
+  });
+
+  it('returns false for JSON string', () => {
+    expect(isProbablyEncryptedPayload('{"key": "value"}')).toBe(false);
+  });
+
+  it('returns true for long valid base64', () => {
+    const longBase64 = btoa(String.fromCharCode(...new Array(100).fill(65)));
+    expect(isProbablyEncryptedPayload(longBase64)).toBe(true);
+  });
+});
+
+describe('decryptLegacy', () => {
+  it('throws error when decrypting invalid data', async () => {
+    await expect(decryptLegacy('invalid-data')).rejects.toThrow('Failed to decrypt data');
+  });
+
+  it('throws error when decrypting tampered data', async () => {
+    const encrypted = await encrypt('test');
+    const tampered = encrypted.slice(0, -5) + 'ZZZZZ';
+    await expect(decryptLegacy(tampered)).rejects.toThrow('Failed to decrypt data');
+  });
+
+  it('throws error for empty string', async () => {
+    await expect(decryptLegacy('')).rejects.toThrow();
+  });
+
+  it('throws error for non-base64 string', async () => {
+    await expect(decryptLegacy('not valid base64!!!')).rejects.toThrow('Failed to decrypt data');
+  });
+});
+
+describe('Salt generation and persistence', () => {
+  let originalLocalStorage: Storage;
+
+  beforeEach(() => {
+    originalLocalStorage = window.localStorage;
+  });
+
+  afterEach(() => {
+    Object.defineProperty(window, 'localStorage', {
+      value: originalLocalStorage,
+      writable: true,
+    });
+  });
+
+  it('generates persistent salt and stores in localStorage', async () => {
+    const storageKey = 'zmng_crypto_salt_v1';
+    localStorage.removeItem(storageKey);
+
+    const plaintext = 'test';
+    await encrypt(plaintext);
+
+    const salt = localStorage.getItem(storageKey);
+    expect(salt).toBeTruthy();
+    expect(typeof salt).toBe('string');
+    expect(salt!.length).toBeGreaterThan(0);
+  });
+
+  it('reuses existing salt from localStorage', async () => {
+    const storageKey = 'zmng_crypto_salt_v1';
+    localStorage.removeItem(storageKey);
+
+    await encrypt('test1');
+    const salt1 = localStorage.getItem(storageKey);
+
+    await encrypt('test2');
+    const salt2 = localStorage.getItem(storageKey);
+
+    expect(salt1).toBe(salt2);
+  });
+
+  it('uses fallback salt when localStorage is unavailable', async () => {
+    Object.defineProperty(window, 'localStorage', {
+      value: undefined,
+      writable: true,
+    });
+
+    const plaintext = 'test';
+    const encrypted = await encrypt(plaintext);
+    expect(encrypted).toBeTruthy();
+  });
+
+  it('uses fallback salt when localStorage throws error', async () => {
+    const mockStorage = {
+      getItem: vi.fn(() => {
+        throw new Error('Storage error');
+      }),
+      setItem: vi.fn(() => {
+        throw new Error('Storage error');
+      }),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+      key: vi.fn(),
+      length: 0,
+    };
+
+    Object.defineProperty(window, 'localStorage', {
+      value: mockStorage,
+      writable: true,
+    });
+
+    const plaintext = 'test';
+    const encrypted = await encrypt(plaintext);
+    expect(encrypted).toBeTruthy();
+  });
+});
+
+describe('Key derivation with PBKDF2', () => {
+  it('derives consistent key from same salt', async () => {
+    const storageKey = 'zmng_crypto_salt_v1';
+    localStorage.removeItem(storageKey);
+
+    const plaintext = 'test data';
+    const encrypted1 = await encrypt(plaintext);
+    const salt = localStorage.getItem(storageKey);
+
+    const decrypted1 = await decrypt(encrypted1);
+    expect(decrypted1).toBe(plaintext);
+
+    const encrypted2 = await encrypt(plaintext);
+    const decrypted2 = await decrypt(encrypted1);
+    expect(decrypted2).toBe(plaintext);
+
+    expect(localStorage.getItem(storageKey)).toBe(salt);
+  });
+
+  it('successfully encrypts and decrypts with PBKDF2-derived key', async () => {
+    const plaintext = 'sensitive password';
+    const encrypted = await encrypt(plaintext);
+    const decrypted = await decrypt(encrypted);
+
+    expect(decrypted).toBe(plaintext);
+  });
+});
+
+describe('Error handling', () => {
+  it('throws error with helpful message on encryption failure', async () => {
+    vi.spyOn(window.crypto.subtle, 'encrypt').mockRejectedValueOnce(new Error('Crypto error'));
+
+    await expect(encrypt('test')).rejects.toThrow('Failed to encrypt data');
+
+    vi.restoreAllMocks();
+  });
+
+  it('throws error with helpful message on decryption failure', async () => {
+    await expect(decrypt('invalid!!!data')).rejects.toThrow('Failed to decrypt data');
+  });
+
+  it('handles corrupted IV data', async () => {
+    const validEncrypted = await encrypt('test');
+    const corrupted = validEncrypted.substring(0, 10);
+
+    await expect(decrypt(corrupted)).rejects.toThrow('Failed to decrypt data');
+  });
+
+  it('handles corrupted ciphertext data', async () => {
+    const validEncrypted = await encrypt('test');
+    const base64Decoded = atob(validEncrypted);
+    const corrupted = btoa(base64Decoded.slice(0, -5) + 'XXXXX');
+
+    await expect(decrypt(corrupted)).rejects.toThrow('Failed to decrypt data');
   });
 });

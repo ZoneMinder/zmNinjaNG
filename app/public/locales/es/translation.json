@@ -133,7 +133,10 @@
     "heatmap_events": "eventos",
     "heatmap_low": "Bajo",
     "heatmap_high": "Alto",
-    "clear_filters": "Borrar Filtros"
+    "clear_filters": "Borrar Filtros",
+    "alarm_frame": "Fotograma de Alarma {{frameId}}",
+    "frame_number": "Fotograma {{number}}",
+    "total_frames": "{{count}} fotogramas"
   },
   "event_detail": {
     "event_id": "ID de Evento",
@@ -372,6 +375,14 @@
     "notifications_enabled": "Notificaciones habilitadas",
     "select_profile_first": "Seleccione un perfil primero"
   },
+  "notifications": {
+    "status": {
+      "disabled": "Deshabilitado",
+      "connected": "Conectado",
+      "disconnected": "Desconectado",
+      "connecting": "Conectando..."
+    }
+  },
   "profiles": {
     "title": "Perfiles",
     "subtitle": "Administrar conexiones de servidor",
@@ -461,6 +472,13 @@
     "api_url_hint": "https://servidor.com/zm/api",
     "cgi_url_hint": "https://servidor.com/zm/cgi-bin"
   },
+  "languages": {
+    "en": "English",
+    "es": "Español",
+    "fr": "Français",
+    "de": "Deutsch",
+    "zh": "中文"
+  },
   "sidebar": {
     "dashboard": "Panel de Control",
     "events": "Eventos",
@@ -476,7 +494,8 @@
     "event_montage": "Montaje de Eventos",
     "notifications": "Notificaciones",
     "profiles": "Perfiles",
-    "logs": "Registros"
+    "logs": "Registros",
+    "switch_language": "Cambiar Idioma"
   },
   "server": {
     "title": "Servidor",

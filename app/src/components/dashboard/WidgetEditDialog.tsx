@@ -102,7 +102,7 @@ export function WidgetEditDialog({ open, onOpenChange, widget, profileId }: Widg
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-md">
+            <DialogContent className="sm:max-w-md" data-testid="widget-edit-dialog">
                 <DialogHeader>
                     <DialogTitle>{t('dashboard.edit_layout')}</DialogTitle>
                     <DialogDescription className="sr-only">
@@ -119,6 +119,7 @@ export function WidgetEditDialog({ open, onOpenChange, widget, profileId }: Widg
                             placeholder={t('dashboard.widget_title_placeholder')}
                             value={title}
                             onChange={(e) => setTitle(e.target.value)}
+                            data-testid="widget-edit-title-input"
                         />
                     </div>
 
@@ -130,13 +131,14 @@ export function WidgetEditDialog({ open, onOpenChange, widget, profileId }: Widg
                                     ? t('dashboard.select_monitors')
                                     : t('dashboard.select_monitor')}
                             </Label>
-                            <ScrollArea className="h-48 border rounded-md p-4">
+                            <ScrollArea className="h-48 border rounded-md p-4" data-testid="widget-edit-monitor-list">
                                 {enabledMonitors.map((monitor) => (
                                     <div key={monitor.Monitor.Id} className="flex items-center space-x-2 mb-2">
                                         <Checkbox
                                             id={`monitor-${monitor.Monitor.Id}`}
                                             checked={selectedMonitors.includes(monitor.Monitor.Id)}
                                             onCheckedChange={() => toggleMonitor(monitor.Monitor.Id)}
+                                            data-testid={`widget-edit-monitor-checkbox-${monitor.Monitor.Id}`}
                                         />
                                         <label
                                             htmlFor={`monitor-${monitor.Monitor.Id}`}
@@ -157,7 +159,7 @@ export function WidgetEditDialog({ open, onOpenChange, widget, profileId }: Widg
                 </div>
 
                 <DialogFooter>
-                    <Button variant="outline" onClick={() => onOpenChange(false)}>
+                    <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="widget-edit-cancel-button">
                         {t('dashboard.cancel')}
                     </Button>
                     <Button
@@ -165,6 +167,7 @@ export function WidgetEditDialog({ open, onOpenChange, widget, profileId }: Widg
                         disabled={
                             (widget.type === 'monitor' && selectedMonitors.length === 0)
                         }
+                        data-testid="widget-edit-save-button"
                     >
                         {t('common.save')}
                     </Button>

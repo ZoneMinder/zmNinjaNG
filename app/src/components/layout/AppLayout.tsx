@@ -53,14 +53,14 @@ interface SidebarContentProps {
  * Renders a dropdown to switch the application language.
  */
 function LanguageSwitcher({ collapsed = false }: { collapsed?: boolean }) {
-  const { i18n } = useTranslation();
+  const { i18n, t } = useTranslation();
 
   const languages = [
-    { code: 'en', label: 'English' },
-    { code: 'es', label: 'Español' },
-    { code: 'fr', label: 'Français' },
-    { code: 'de', label: 'Deutsch' },
-    { code: 'zh', label: '中文' },
+    { code: 'en', label: t('languages.en') },
+    { code: 'es', label: t('languages.es') },
+    { code: 'fr', label: t('languages.fr') },
+    { code: 'de', label: t('languages.de') },
+    { code: 'zh', label: t('languages.zh') },
   ];
 
   return (
@@ -73,7 +73,8 @@ function LanguageSwitcher({ collapsed = false }: { collapsed?: boolean }) {
             "h-8 px-2 gap-1 ml-1",
             collapsed && "w-8 p-0 justify-center ml-0 mt-2"
           )}
-          title="Switch Language"
+          title={t('sidebar.switch_language')}
+          data-testid="language-switcher"
         >
           <Globe className="h-4 w-4" />
           {!collapsed && (
@@ -87,6 +88,7 @@ function LanguageSwitcher({ collapsed = false }: { collapsed?: boolean }) {
             key={lang.code}
             onClick={() => i18n.changeLanguage(lang.code)}
             className="text-xs"
+            data-testid={`language-option-${lang.code}`}
           >
             {lang.label}
           </DropdownMenuItem>
@@ -181,6 +183,7 @@ function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentProps) {
                   isCollapsed && "justify-center px-2"
                 )}
                 title={isCollapsed ? item.label : undefined}
+                data-testid={`nav-item-${item.path.replace('/', '')}`}
               >
                 <Icon className={cn("h-4 w-4 transition-transform group-hover:scale-110 flex-shrink-0", isActive && "text-primary-foreground")} />
                 {!isCollapsed && (
@@ -197,11 +200,12 @@ function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentProps) {
                           "bg-orange-500 animate-pulse"
                         )}
                         title={
-                          !settings?.enabled ? "Disabled" :
-                          connectionState === 'connected' ? "Connected" :
-                          connectionState === 'disconnected' ? "Disconnected" :
-                          "Connecting..."
+                          !settings?.enabled ? t('notifications.status.disabled') :
+                          connectionState === 'connected' ? t('notifications.status.connected') :
+                          connectionState === 'disconnected' ? t('notifications.status.disconnected') :
+                          t('notifications.status.connecting')
                         }
+                        data-testid="notification-status-indicator"
                       />
                     )}
 
@@ -237,6 +241,7 @@ function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentProps) {
           size={isCollapsed ? "icon" : "default"}
           onClick={handleLogout}
           title={isCollapsed ? t('sidebar.logout') : undefined}
+          data-testid="logout-button"
         >
           <LogOut className="h-4 w-4" />
           {!isCollapsed && <span className="ml-2">{t('sidebar.logout')}</span>}
@@ -317,6 +322,7 @@ export default function AppLayout() {
           onMouseDown={handleMouseDown}
           onClick={toggleSidebar}
           title={isCollapsed ? t('sidebar.expand') : t('sidebar.collapse')}
+          data-testid="sidebar-toggle"
         >
           {isCollapsed ? (
             <ChevronRight className="h-4 w-4 text-primary-foreground" />
@@ -335,7 +341,7 @@ export default function AppLayout() {
         </div>
         <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
           <SheetTrigger asChild>
-            <Button variant="ghost" size="icon">
+            <Button variant="ghost" size="icon" data-testid="mobile-menu-button">
               <Menu className="h-5 w-5" />
             </Button>
           </SheetTrigger>

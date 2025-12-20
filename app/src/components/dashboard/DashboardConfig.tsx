@@ -157,12 +157,12 @@ export function DashboardConfig() {
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button title={t('dashboard.add_widget')}>
+                <Button title={t('dashboard.add_widget')} data-testid="add-widget-trigger">
                     <Plus className="sm:mr-2 h-4 w-4" />
                     <span className="hidden sm:inline">{t('dashboard.add_widget')}</span>
                 </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent data-testid="add-widget-dialog">
                 <DialogHeader>
                     <DialogTitle>{t('dashboard.add_widget')}</DialogTitle>
                     <DialogDescription className="sr-only">
@@ -175,6 +175,7 @@ export function DashboardConfig() {
                         <div
                             className={`p-4 border rounded-lg cursor-pointer hover:bg-muted/50 flex flex-col items-center gap-2 ${selectedType === 'monitor' ? 'border-primary bg-primary/5' : ''}`}
                             onClick={() => setSelectedType('monitor')}
+                            data-testid="widget-type-monitor"
                         >
                             <LayoutGrid className="h-8 w-8" />
                             <span className="font-medium text-xs text-center">{t('dashboard.widget_monitor')}</span>
@@ -182,6 +183,7 @@ export function DashboardConfig() {
                         <div
                             className={`p-4 border rounded-lg cursor-pointer hover:bg-muted/50 flex flex-col items-center gap-2 ${selectedType === 'events' ? 'border-primary bg-primary/5' : ''}`}
                             onClick={() => setSelectedType('events')}
+                            data-testid="widget-type-events"
                         >
                             <List className="h-8 w-8" />
                             <span className="font-medium text-xs text-center">{t('dashboard.widget_events')}</span>
@@ -189,6 +191,7 @@ export function DashboardConfig() {
                         <div
                             className={`p-4 border rounded-lg cursor-pointer hover:bg-muted/50 flex flex-col items-center gap-2 ${selectedType === 'timeline' ? 'border-primary bg-primary/5' : ''}`}
                             onClick={() => setSelectedType('timeline')}
+                            data-testid="widget-type-timeline"
                         >
                             <Activity className="h-8 w-8" />
                             <span className="font-medium text-xs text-center">{t('dashboard.widget_timeline')}</span>
@@ -196,6 +199,7 @@ export function DashboardConfig() {
                         <div
                             className={`p-4 border rounded-lg cursor-pointer hover:bg-muted/50 flex flex-col items-center gap-2 ${selectedType === 'heatmap' ? 'border-primary bg-primary/5' : ''}`}
                             onClick={() => setSelectedType('heatmap')}
+                            data-testid="widget-type-heatmap"
                         >
                             <TrendingUp className="h-8 w-8" />
                             <span className="font-medium text-xs text-center">{t('dashboard.widget_heatmap')}</span>
@@ -209,13 +213,14 @@ export function DashboardConfig() {
                             placeholder={t('dashboard.widget_title_placeholder')}
                             value={title}
                             onChange={(e) => setTitle(e.target.value)}
+                            data-testid="widget-title-input"
                         />
                     </div>
 
                     {selectedType === 'monitor' && (
                         <div className="space-y-2">
                             <Label>{t('dashboard.select_monitors')}</Label>
-                            <ScrollArea className="h-[200px] border rounded-md p-2">
+                            <ScrollArea className="h-[200px] border rounded-md p-2" data-testid="monitor-selection-list">
                                 <div className="space-y-2">
                                     {enabledMonitors.map((m) => (
                                         <div key={m.Monitor.Id} className="flex items-center space-x-2">
@@ -223,6 +228,7 @@ export function DashboardConfig() {
                                                 id={`monitor-${m.Monitor.Id}`}
                                                 checked={selectedMonitors.includes(m.Monitor.Id)}
                                                 onCheckedChange={() => toggleMonitor(m.Monitor.Id)}
+                                                data-testid={`monitor-checkbox-${m.Monitor.Id}`}
                                             />
                                             <label
                                                 htmlFor={`monitor-${m.Monitor.Id}`}
@@ -244,7 +250,7 @@ export function DashboardConfig() {
                         <div className="space-y-2">
                             <Label>{t('dashboard.select_monitor')}</Label>
                             <Select value={selectedMonitors[0] || 'all'} onValueChange={(val) => setSelectedMonitors(val === 'all' ? [] : [val])}>
-                                <SelectTrigger>
+                                <SelectTrigger data-testid="events-monitor-select">
                                     <SelectValue placeholder={t('dashboard.select_monitor')} />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -261,8 +267,8 @@ export function DashboardConfig() {
                 </div>
 
                 <div className="flex justify-end gap-2">
-                    <Button variant="outline" onClick={() => setOpen(false)}>{t('dashboard.cancel')}</Button>
-                    <Button onClick={handleAdd} disabled={selectedType === 'monitor' && selectedMonitors.length === 0}>
+                    <Button variant="outline" onClick={() => setOpen(false)} data-testid="widget-cancel-button">{t('dashboard.cancel')}</Button>
+                    <Button onClick={handleAdd} disabled={selectedType === 'monitor' && selectedMonitors.length === 0} data-testid="widget-add-button">
                         {t('dashboard.add')}
                     </Button>
                 </div>
