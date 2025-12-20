@@ -86,8 +86,8 @@ This will:
 After a successful build, artifacts are available for download:
 
 ### Android
-- `zmNg-android-unsigned-{version}.apk` - APK for sideloading
-- `zmNg-android-unsigned-{version}.aab` - App Bundle for Google Play Store
+- `zmNg-android-debug-{version}.apk` - Debug-signed APK for sideloading
+- `zmNg-android-debug-{version}.aab` - Debug-signed App Bundle for testing
 
 ### macOS
 - `zmNg.dmg` - DMG installer
@@ -128,8 +128,8 @@ Without this, you'll get 403 errors when trying to create releases.
 
 ### Android
 - No additional secrets required
-- Builds unsigned APK and AAB by default
-- For signed releases, configure signing in `app/android/app/build.gradle`
+- Builds debug-signed APK and AAB by default
+- For release signing, configure signing in `app/android/app/build.gradle`
 
 ### Desktop Platforms (macOS, Linux, Windows)
 - Uses Tauri for desktop builds

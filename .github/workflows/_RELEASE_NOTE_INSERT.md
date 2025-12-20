@@ -17,7 +17,7 @@ See [README](README.md)
 - **RPM Package**: Install with `sudo rpm -i zmNg-*.rpm`
 
 ### Android
-- **Unsigned APK**: Enable "Install from Unknown Sources" in device settings
+- **Debug APK (signed)**: Enable "Install from Unknown Sources" in device settings
 - **AAB Bundle**: For Google Play Store (requires signing)
 
 ## Important Notes
@@ -31,4 +31,3 @@ See [README](README.md)
 This is personal software with no official support. For issues or contributions, see the [GitHub repository](https://github.com/pliablepixels/zmNg).
 
 ---
-

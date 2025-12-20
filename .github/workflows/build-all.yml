@@ -46,20 +46,20 @@ jobs:
         working-directory: ./app
         run: npx cap sync android
 
-      - name: Build Android APK
+      - name: Build Android APK (debug, signed)
         working-directory: ./app/android
-        run: ./gradlew assembleRelease
+        run: ./gradlew assembleDebug
 
-      - name: Build Android App Bundle (AAB)
+      - name: Build Android App Bundle (AAB, debug, signed)
         working-directory: ./app/android
-        run: ./gradlew bundleRelease
+        run: ./gradlew bundleDebug
 
       - name: Rename Android artifacts
         run: |
           VERSION="${{ github.event.inputs.version }}"
           mkdir -p dist/android
-          cp app/android/app/build/outputs/apk/release/*.apk dist/android/zmNg-android-unsigned-${VERSION}.apk
-          cp app/android/app/build/outputs/bundle/release/*.aab dist/android/zmNg-android-unsigned-${VERSION}.aab
+          cp app/android/app/build/outputs/apk/debug/*.apk dist/android/zmNg-android-debug-${VERSION}.apk
+          cp app/android/app/build/outputs/bundle/debug/*.aab dist/android/zmNg-android-debug-${VERSION}.aab
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
