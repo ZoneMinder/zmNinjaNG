@@ -66,7 +66,7 @@ I am happy to accept PRs, but I don't want [AI slop](https://en.wikipedia.org/wi
 ## Build from Source
 
 ### Prerequisites
-- Node.js 18+ and npm ([download](https://nodejs.org/en/download))
+- Node.js ^20.19.0 || >=22.12.0 and npm ([download](https://nodejs.org/en/download))
 - For desktop builds: Rust toolchain (for Tauri builds)
 
 ### GitHub Actions Setup (For Automated Releases)

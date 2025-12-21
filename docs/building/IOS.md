@@ -10,7 +10,7 @@ Before you begin, ensure you have the following:
 - **Xcode 14+** - [Download from App Store](https://apps.apple.com/us/app/xcode/id497799835)
 - **Xcode Command Line Tools**
 - **CocoaPods** - Dependency manager for iOS
-- **Node.js 18+** and npm - [Download here](https://nodejs.org/en/download)
+- **Node.js ^20.19.0 || >=22.12.0** and npm - [Download here](https://nodejs.org/en/download)
 - **Apple Developer Account** (for device testing and App Store distribution)
 
 ## Environment Setup

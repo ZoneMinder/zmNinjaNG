@@ -6,7 +6,7 @@ This guide walks you through setting up and building the zmNg Android app from s
 
 Before you begin, ensure you have the following installed:
 
-- **Node.js 18+** and npm - [Download here](https://nodejs.org/en/download)
+- **Node.js ^20.19.0 || >=22.12.0** and npm - [Download here](https://nodejs.org/en/download)
 - **Android Studio** - [Download here](https://developer.android.com/studio)
 - **Android SDK** (installed via Android Studio)
 - **Java JDK 17+** (usually bundled with Android Studio)
