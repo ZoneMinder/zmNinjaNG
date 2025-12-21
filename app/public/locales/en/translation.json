@@ -33,7 +33,8 @@
     "hide_password": "Hide password",
     "show_password": "Show password",
     "selected": "Selected",
-    "unknown_error": "Unknown error"
+    "unknown_error": "Unknown error",
+    "auth_required": "Authentication required. Please enter a username and password."
   },
   "dashboard": {
     "title": "Dashboard",
@@ -406,7 +407,7 @@
     "select_profile": "Select Profile",
     "manage_servers": "Manage Servers",
     "no_credentials": "No credentials",
-    "add_creds_hint": "Add credentials to connect",
+    "add_creds_hint": "Credentials are optional for public servers. Add them if required.",
     "manual_override_hint": "Manual override available in edit mode",
     "switch_profile": "Switch Profile",
     "switching": "Switching...",
@@ -422,7 +423,7 @@
     "add_error": "Failed to add profile",
     "name_url_required": "Name and Portal URL are required",
     "enter_password": "Enter Password",
-    "no_creds_warning": "Warning: No credentials saved",
+    "no_creds_warning": "Credentials are optional for public servers.",
     "delete_all": "Delete All",
     "delete_all_btn": "Delete All Profiles",
     "delete_all_confirm_title": "Delete All Profiles?",
@@ -435,7 +436,8 @@
     "credentials": "Credentials",
     "streaming": "Streaming",
     "streaming_url": "Streaming URL",
-    "add": "Add"
+    "add": "Add",
+    "credentials_incomplete": "Please enter both username and password, or leave both empty."
   },
   "setup": {
     "welcome": "Welcome to zmNg",
@@ -445,10 +447,11 @@
     "api_url": "API URL",
     "cgi_url": "CGI URL",
     "username": "Username",
-    "username_placeholder": "admin",
+    "username_placeholder": "username",
     "password": "Password",
     "password_placeholder": "••••••••",
     "credentials_optional": "Optional - leave blank for public servers",
+    "credentials_incomplete": "Please enter both username and password, or leave both empty.",
     "connect_server": "Connect to Server",
     "connect": "Connect",
     "use_auto_discovery": "Use Auto Discovery",

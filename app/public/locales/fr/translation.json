@@ -33,6 +33,7 @@
     "show_password": "Afficher le mot de passe",
     "selected": "Sélectionné",
     "unknown_error": "Erreur inconnue",
+    "auth_required": "Authentification requise. Veuillez saisir un nom d'utilisateur et un mot de passe.",
     "running": "En cours d'exécution",
     "stopped": "Arrêté"
   },
@@ -409,7 +410,7 @@
     "select_profile": "Sélectionner un profil",
     "manage_servers": "Gérer les serveurs",
     "no_credentials": "Pas d'identifiants",
-    "add_creds_hint": "Ajouter des identifiants pour se connecter",
+    "add_creds_hint": "Les identifiants sont facultatifs pour les serveurs publics. Ajoutez-les si nécessaire.",
     "manual_override_hint": "Remplacement manuel disponible en mode édition",
     "switch_profile": "Changer de profil",
     "switching": "Changement...",
@@ -425,7 +426,7 @@
     "add_error": "Échec de l'ajout du profil",
     "name_url_required": "Nom et URL du portail sont requis",
     "enter_password": "Entrer le mot de passe",
-    "no_creds_warning": "Attention : Aucun identifiant enregistré",
+    "no_creds_warning": "Les identifiants sont facultatifs pour les serveurs publics.",
     "delete_all": "Tout supprimer",
     "delete_all_btn": "Supprimer tous les profils",
     "delete_all_confirm_title": "Supprimer tous les profils ?",
@@ -438,7 +439,8 @@
     "credentials": "Identifiants",
     "streaming": "Diffusion",
     "streaming_url": "URL de diffusion",
-    "add": "Ajouter"
+    "add": "Ajouter",
+    "credentials_incomplete": "Veuillez saisir le nom d'utilisateur et le mot de passe, ou laisser les deux vides."
   },
   "setup": {
     "welcome": "Bienvenue sur zmNg",
@@ -448,10 +450,11 @@
     "api_url": "URL de l'API",
     "cgi_url": "URL CGI",
     "username": "Nom d'utilisateur",
-    "username_placeholder": "admin",
+    "username_placeholder": "username",
     "password": "Mot de passe",
     "password_placeholder": "••••••••",
     "credentials_optional": "Optionnel - laisser vide pour les serveurs publics",
+    "credentials_incomplete": "Veuillez saisir le nom d'utilisateur et le mot de passe, ou laisser les deux vides.",
     "connect_server": "Se connecter au serveur",
     "connect": "Connecter",
     "use_auto_discovery": "Utiliser la découverte auto",

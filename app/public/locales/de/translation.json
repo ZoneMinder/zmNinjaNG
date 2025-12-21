@@ -33,6 +33,7 @@
     "show_password": "Passwort anzeigen",
     "selected": "Ausgewählt",
     "unknown_error": "Unbekannter Fehler",
+    "auth_required": "Authentifizierung erforderlich. Bitte Benutzername und Passwort eingeben.",
     "running": "Läuft",
     "stopped": "Gestoppt"
   },
@@ -409,7 +410,7 @@
     "select_profile": "Profil auswählen",
     "manage_servers": "Server verwalten",
     "no_credentials": "Keine Anmeldeinformationen",
-    "add_creds_hint": "Anmeldeinformationen hinzufügen, um eine Verbindung herzustellen",
+    "add_creds_hint": "Anmeldedaten sind für öffentliche Server optional. Fügen Sie sie hinzu, falls erforderlich.",
     "manual_override_hint": "Manuelle Überschreibung im Bearbeitungsmodus verfügbar",
     "switch_profile": "Profil wechseln",
     "switching": "Wechsle...",
@@ -425,7 +426,7 @@
     "add_error": "Fehler beim Hinzufügen des Profils",
     "name_url_required": "Name und Portal URL sind erforderlich",
     "enter_password": "Passwort eingeben",
-    "no_creds_warning": "Warnung: Keine Anmeldeinformationen gespeichert",
+    "no_creds_warning": "Anmeldedaten sind für öffentliche Server optional.",
     "delete_all": "Alles löschen",
     "delete_all_btn": "Alle Profile löschen",
     "delete_all_confirm_title": "Alle Profile löschen?",
@@ -438,7 +439,8 @@
     "credentials": "Anmeldeinformationen",
     "streaming": "Streaming",
     "streaming_url": "Streaming URL",
-    "add": "Hinzufügen"
+    "add": "Hinzufügen",
+    "credentials_incomplete": "Bitte geben Sie Benutzername und Passwort ein oder lassen Sie beide leer."
   },
   "setup": {
     "welcome": "Willkommen bei zmNg",
@@ -448,10 +450,11 @@
     "api_url": "API URL",
     "cgi_url": "CGI URL",
     "username": "Benutzername",
-    "username_placeholder": "admin",
+    "username_placeholder": "username",
     "password": "Passwort",
     "password_placeholder": "••••••••",
     "credentials_optional": "Optional - leer lassen für öffentliche Server",
+    "credentials_incomplete": "Bitte geben Sie Benutzername und Passwort ein oder lassen Sie beide leer.",
     "connect_server": "Mit Server verbinden",
     "connect": "Verbinden",
     "use_auto_discovery": "Automatische Erkennung verwenden",

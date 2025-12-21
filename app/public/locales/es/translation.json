@@ -33,6 +33,7 @@
     "show_password": "Mostrar contraseña",
     "selected": "Seleccionado",
     "unknown_error": "Error desconocido",
+    "auth_required": "Se requiere autenticación. Ingrese un nombre de usuario y una contraseña.",
     "running": "En ejecución",
     "stopped": "Detenido"
   },
@@ -409,7 +410,7 @@
     "select_profile": "Seleccionar Perfil",
     "manage_servers": "Administrar Servidores",
     "no_credentials": "Sin credenciales",
-    "add_creds_hint": "Agregar credenciales para conectar",
+    "add_creds_hint": "Las credenciales son opcionales para servidores públicos. Agrégalas si es necesario.",
     "manual_override_hint": "Anulación manual disponible en modo edición",
     "switch_profile": "Cambiar Perfil",
     "switching": "Cambiando...",
@@ -425,7 +426,7 @@
     "add_error": "Fallo al agregar perfil",
     "name_url_required": "Nombre y URL del Portal son requeridos",
     "enter_password": "Ingresar Contraseña",
-    "no_creds_warning": "Advertencia: No hay credenciales guardadas",
+    "no_creds_warning": "Las credenciales son opcionales para servidores públicos.",
     "delete_all": "Eliminar Todo",
     "delete_all_btn": "Eliminar Todos los Perfiles",
     "delete_all_confirm_title": "¿Eliminar Todos los Perfiles?",
@@ -438,7 +439,8 @@
     "credentials": "Credenciales",
     "streaming": "Transmisión",
     "streaming_url": "URL de Transmisión",
-    "add": "Agregar"
+    "add": "Agregar",
+    "credentials_incomplete": "Ingrese nombre de usuario y contraseña, o deje ambos en blanco."
   },
   "setup": {
     "welcome": "Bienvenido a zmNg",
@@ -448,10 +450,11 @@
     "api_url": "URL de API",
     "cgi_url": "URL de CGI",
     "username": "Nombre de usuario",
-    "username_placeholder": "admin",
+    "username_placeholder": "username",
     "password": "Contraseña",
     "password_placeholder": "••••••••",
     "credentials_optional": "Opcional - dejar en blanco para servidores públicos",
+    "credentials_incomplete": "Ingrese nombre de usuario y contraseña, o deje ambos en blanco.",
     "connect_server": "Conectar al Servidor",
     "connect": "Conectar",
     "use_auto_discovery": "Usar Auto Descubrimiento",

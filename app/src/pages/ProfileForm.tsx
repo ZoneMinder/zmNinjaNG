@@ -72,6 +72,14 @@ export default function ProfileForm() {
     setTesting(true);
 
     try {
+      const normalizedUsername = username.trim();
+      const hasUsername = normalizedUsername.length > 0;
+      const hasPassword = password.length > 0;
+
+      if ((hasUsername && !hasPassword) || (hasPassword && !hasUsername)) {
+        throw new Error(t('setup.credentials_incomplete'));
+      }
+
       log.info('Testing connection', { component: 'ProfileForm', portalUrl });
 
       let apiUrl: string;
@@ -114,8 +122,8 @@ export default function ProfileForm() {
       }
 
       // If credentials are provided, try to login
-      if (username && password) {
-        log.info('Attempting login with provided credentials', { component: 'ProfileForm', username });
+      if (normalizedUsername && hasPassword) {
+        log.info('Attempting login with provided credentials', { component: 'ProfileForm', username: normalizedUsername });
         try {
           const { useAuthStore } = await import('../stores/auth');
 
@@ -124,7 +132,7 @@ export default function ProfileForm() {
           useAuthStore.getState().logout();
           log.debug('Cleared existing auth state for fresh login', { component: 'ProfileForm' });
 
-          await useAuthStore.getState().login(username, password);
+          await useAuthStore.getState().login(normalizedUsername, password);
           log.info('Login successful', { component: 'ProfileForm' });
 
           // After successful login, try to fetch the ZMS path from server config
@@ -189,7 +197,7 @@ export default function ProfileForm() {
         portalUrl: finalPortalUrl,
         apiUrl,
         cgiUrl,
-        username: username || undefined,
+        username: normalizedUsername || undefined,
         password: password || undefined,
         isDefault: isFirstProfile,
       });

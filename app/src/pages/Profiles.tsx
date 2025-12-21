@@ -126,6 +126,18 @@ export default function Profiles() {
       return;
     }
 
+    const normalizedUsername = formData.username.trim();
+    const hasUsername = normalizedUsername.length > 0;
+    const hasPassword = formData.password.length > 0;
+    if ((hasUsername && !hasPassword) || (hasPassword && !hasUsername)) {
+      toast({
+        title: t('common.error'),
+        description: t('profiles.credentials_incomplete'),
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setIsSaving(true);
     try {
       let portalUrl = formData.portalUrl.replace(/\/$/, '');
@@ -154,7 +166,7 @@ export default function Profiles() {
         portalUrl,
         apiUrl,
         cgiUrl,
-        username: formData.username || undefined,
+        username: normalizedUsername || undefined,
         password: formData.password || undefined,
       };
 
