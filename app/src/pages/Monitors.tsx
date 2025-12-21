@@ -56,6 +56,15 @@ export default function Monitors() {
     }
   }, [canFetch, refetch]);
 
+  const resolveErrorMessage = (err: unknown) => {
+    const message = (err as Error)?.message || t('common.unknown_error');
+    const status = (err as { response?: { status?: number } })?.response?.status;
+    if (status === 401 || /unauthorized/i.test(message)) {
+      return t('common.auth_required');
+    }
+    return t('monitors.failed_to_load', { error: message });
+  };
+
   // Fetch event counts for the last 24 hours
   const { data: eventCounts } = useQuery({
     queryKey: ['consoleEvents', '24 hour'],
@@ -95,7 +104,7 @@ export default function Monitors() {
         </div>
         <div className="p-4 bg-destructive/10 text-destructive rounded-lg flex items-center gap-2">
           <AlertCircle className="h-5 w-5" />
-          {t('monitors.failed_to_load', { error: (error as Error).message })}
+          {resolveErrorMessage(error)}
         </div>
       </div>
     );

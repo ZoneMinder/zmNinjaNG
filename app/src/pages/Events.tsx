@@ -46,6 +46,15 @@ export default function Events() {
   // Check if user came from another page (navigation state tracking)
   const referrer = location.state?.from as string | undefined;
 
+  const resolveErrorMessage = (err: unknown) => {
+    const message = (err as Error)?.message || t('common.unknown_error');
+    const status = (err as { response?: { status?: number } })?.response?.status;
+    if (status === 401 || /unauthorized/i.test(message)) {
+      return t('common.auth_required');
+    }
+    return `${t('common.error')}: ${message}`;
+  };
+
   const {
     filters,
     selectedMonitorIds,
@@ -166,7 +175,7 @@ export default function Events() {
       <div className="p-8">
         <div className="p-4 bg-destructive/10 text-destructive rounded-lg flex items-center gap-2">
           <AlertCircle className="h-5 w-5" />
-          {t('common.error')}: {(error as Error).message}
+          {resolveErrorMessage(error)}
         </div>
       </div>
     );
