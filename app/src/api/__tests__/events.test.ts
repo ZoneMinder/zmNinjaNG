@@ -8,6 +8,7 @@ import {
 } from '../events';
 import { getApiClient } from '../client';
 import { validateApiResponse } from '../../lib/api-validator';
+import type { AxiosInstance } from 'axios';
 
 const mockGet = vi.fn();
 const mockPut = vi.fn();
@@ -71,7 +72,7 @@ describe('Events API', () => {
       get: mockGet,
       put: mockPut,
       delete: mockDelete,
-    });
+    } as unknown as AxiosInstance);
   });
 
   it('fetches events across pages and deduplicates', async () => {

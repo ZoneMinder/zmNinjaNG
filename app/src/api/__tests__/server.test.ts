@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDaemonCheck, getDiskPercent, getLoad, getServers } from '../server';
 import { getApiClient } from '../client';
 import { validateApiResponse } from '../../lib/api-validator';
+import type { AxiosInstance } from 'axios';
 
 const mockGet = vi.fn();
 
@@ -18,7 +19,7 @@ describe('Server API', () => {
     vi.clearAllMocks();
     vi.mocked(getApiClient).mockReturnValue({
       get: mockGet,
-    });
+    } as unknown as AxiosInstance);
   });
 
   it('returns server list', async () => {

@@ -15,6 +15,7 @@ import {
 import { getApiClient } from '../client';
 import { validateApiResponse } from '../../lib/api-validator';
 import { getMonitorStreamUrl } from '../../lib/url-builder';
+import type { AxiosInstance } from 'axios';
 
 const mockGet = vi.fn();
 const mockPut = vi.fn();
@@ -44,7 +45,7 @@ describe('Monitors API', () => {
     vi.mocked(getApiClient).mockReturnValue({
       get: mockGet,
       put: mockPut,
-    });
+    } as unknown as AxiosInstance);
   });
 
   it('fetches monitors list', async () => {
@@ -57,13 +58,13 @@ describe('Monitors API', () => {
   });
 
   it('fetches a monitor and validates response', async () => {
-    mockGet.mockResolvedValue({ data: { monitor: { Id: '1', Name: 'Front Door' } } });
+    mockGet.mockResolvedValue({ data: { monitor: { Monitor: { Id: '1', Name: 'Front Door' } } } });
 
     const monitor = await getMonitor('1');
 
     expect(mockGet).toHaveBeenCalledWith('/monitors/1.json');
     expect(validateApiResponse).toHaveBeenCalled();
-    expect(monitor.Id).toBe('1');
+    expect(monitor.Monitor.Id).toBe('1');
   });
 
   it('fetches control data for a monitor', async () => {
@@ -76,12 +77,12 @@ describe('Monitors API', () => {
   });
 
   it('updates monitor data', async () => {
-    mockPut.mockResolvedValue({ data: { monitor: { Id: '2', Name: 'Updated' } } });
+    mockPut.mockResolvedValue({ data: { monitor: { Monitor: { Id: '2', Name: 'Updated' } } } });
 
     const updated = await updateMonitor('2', { 'Monitor[Name]': 'Updated' });
 
     expect(mockPut).toHaveBeenCalledWith('/monitors/2.json', { 'Monitor[Name]': 'Updated' });
-    expect(updated.Id).toBe('2');
+    expect(updated.Monitor.Id).toBe('2');
   });
 
   it('changes monitor function', async () => {
