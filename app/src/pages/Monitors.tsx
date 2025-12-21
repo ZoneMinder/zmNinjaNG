@@ -139,7 +139,10 @@ export default function Monitors() {
 
       {/* Monitor Properties Dialog */}
       <Dialog open={showPropertiesDialog} onOpenChange={setShowPropertiesDialog}>
-        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+        <DialogContent
+          className="max-w-3xl max-h-[80vh] overflow-y-auto"
+          data-testid="monitor-properties-dialog"
+        >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Settings className="h-5 w-5" />

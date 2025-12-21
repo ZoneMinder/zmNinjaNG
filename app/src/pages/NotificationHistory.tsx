@@ -60,7 +60,10 @@ export default function NotificationHistory() {
   }
 
   return (
-    <div className="p-3 sm:p-4 md:p-6 max-w-5xl mx-auto space-y-4 sm:space-y-6">
+    <div
+      className="p-3 sm:p-4 md:p-6 max-w-5xl mx-auto space-y-4 sm:space-y-6"
+      data-testid="notification-history"
+    >
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div>
           <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
@@ -94,7 +97,7 @@ export default function NotificationHistory() {
       </div>
 
       {events.length === 0 ? (
-        <Card>
+        <Card data-testid="notification-history-empty">
           <CardContent className="flex flex-col items-center justify-center py-16">
             <Bell className="h-16 w-16 text-muted-foreground mb-4" />
             <h3 className="text-lg font-semibold mb-2">{t('notification_history.no_notifications')}</h3>
@@ -104,7 +107,7 @@ export default function NotificationHistory() {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-4" data-testid="notification-history-list">
           {events.map((event) => (
             <Card
               key={`${event.EventId}-${event.receivedAt}`}

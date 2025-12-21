@@ -214,6 +214,7 @@ export default function Events() {
                   size="icon"
                   className="relative"
                   aria-label={t('events.filters')}
+                  data-testid="events-filter-button"
                 >
                   <Filter className="h-4 w-4" />
                   {activeFilterCount > 0 && (
@@ -221,7 +222,10 @@ export default function Events() {
                   )}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-[calc(100vw-2rem)] sm:w-80 max-w-sm max-h-[80vh] overflow-y-auto no-scrollbar">
+              <PopoverContent
+                className="w-[calc(100vw-2rem)] sm:w-80 max-w-sm max-h-[80vh] overflow-y-auto no-scrollbar"
+                data-testid="events-filter-panel"
+              >
                 <MonitorFilterPopoverContent
                   monitors={enabledMonitors}
                   selectedMonitorIds={selectedMonitorIds}
@@ -238,6 +242,7 @@ export default function Events() {
                         value={startDateInput}
                         onChange={(e) => setStartDateInput(e.target.value)}
                         step="1"
+                        data-testid="events-start-date"
                       />
                     </div>
                     <div className="grid gap-2">
@@ -248,6 +253,7 @@ export default function Events() {
                         value={endDateInput}
                         onChange={(e) => setEndDateInput(e.target.value)}
                         step="1"
+                        data-testid="events-end-date"
                       />
                     </div>
                     <div className="grid gap-2">
@@ -260,10 +266,10 @@ export default function Events() {
                       />
                     </div>
                     <div className="flex gap-2">
-                      <Button onClick={applyFilters} size="sm" className="flex-1">
+                      <Button onClick={applyFilters} size="sm" className="flex-1" data-testid="events-apply-filters">
                         {t('common.filter')}
                       </Button>
-                      <Button onClick={clearFilters} size="sm" variant="outline" className="flex-1">
+                      <Button onClick={clearFilters} size="sm" variant="outline" className="flex-1" data-testid="events-clear-filters">
                         {t('common.clear')}
                       </Button>
                     </div>
@@ -272,7 +278,13 @@ export default function Events() {
               </PopoverContent>
             </Popover>
 
-            <Button onClick={() => refetch()} variant="outline" size="icon" aria-label={t('events.refresh')}>
+            <Button
+              onClick={() => refetch()}
+              variant="outline"
+              size="icon"
+              aria-label={t('events.refresh')}
+              data-testid="events-refresh-button"
+            >
               <RefreshCw className="h-4 w-4" />
             </Button>
           </div>
@@ -382,6 +394,7 @@ export default function Events() {
                 variant="outline"
                 size="sm"
                 className="w-full"
+                data-testid="events-load-more"
               >
                 {isLoadingMore ? (
                   <>

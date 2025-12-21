@@ -363,6 +363,7 @@ export default function Profiles() {
                           size="sm"
                           onClick={() => handleSwitchProfile(profile.id)}
                           disabled={switchingProfileId === profile.id}
+                          data-testid={`profile-switch-button-${profile.id}`}
                         >
                           {switchingProfileId === profile.id ? (
                             <>
@@ -380,6 +381,7 @@ export default function Profiles() {
                         onClick={() => handleOpenEditDialog(profile)}
                         disabled={!!switchingProfileId}
                         aria-label={t('common.edit')}
+                        data-testid={`profile-edit-button-${profile.id}`}
                       >
                         <Edit className="h-4 w-4" />
                       </Button>
@@ -391,6 +393,7 @@ export default function Profiles() {
                           className="text-destructive hover:text-destructive"
                           disabled={!!switchingProfileId}
                           aria-label={t('common.delete')}
+                          data-testid={`profile-delete-button-${profile.id}`}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -406,7 +409,7 @@ export default function Profiles() {
 
       {/* Edit Profile Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[500px]" data-testid="profile-edit-dialog">
           <DialogHeader>
             <DialogTitle>{t('profiles.edit_title')}</DialogTitle>
             <DialogDescription>
@@ -425,6 +428,7 @@ export default function Profiles() {
                 id="edit-name"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                data-testid="profile-edit-name"
               />
             </div>
             <div className="grid gap-2">
@@ -435,6 +439,7 @@ export default function Profiles() {
                 onChange={(e) => setFormData({ ...formData, portalUrl: e.target.value })}
                 autoCapitalize="none"
                 autoCorrect="off"
+                data-testid="profile-edit-portal-url"
               />
             </div>
             <div className="grid gap-2">
@@ -445,6 +450,7 @@ export default function Profiles() {
                 onChange={(e) => setFormData({ ...formData, apiUrl: e.target.value })}
                 autoCapitalize="none"
                 autoCorrect="off"
+                data-testid="profile-edit-api-url"
               />
               <p className="text-xs text-muted-foreground">
                 {t('profiles.manual_override_hint')}
@@ -458,6 +464,7 @@ export default function Profiles() {
                 onChange={(e) => setFormData({ ...formData, cgiUrl: e.target.value })}
                 autoCapitalize="none"
                 autoCorrect="off"
+                data-testid="profile-edit-cgi-url"
               />
               <p className="text-xs text-muted-foreground">
                 {t('profiles.manual_override_hint')}
@@ -471,6 +478,7 @@ export default function Profiles() {
                 onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                 autoCapitalize="none"
                 autoCorrect="off"
+                data-testid="profile-edit-username"
               />
             </div>
             <div className="grid gap-2">
@@ -485,6 +493,7 @@ export default function Profiles() {
                   className="pr-10"
                   autoCapitalize="none"
                   autoCorrect="off"
+                  data-testid="profile-edit-password"
                 />
                 <Button
                   type="button"
@@ -507,10 +516,10 @@ export default function Profiles() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)} data-testid="profile-edit-cancel">
               {t('common.cancel')}
             </Button>
-            <Button onClick={handleUpdateProfile} disabled={isSaving}>
+            <Button onClick={handleUpdateProfile} disabled={isSaving} data-testid="profile-edit-save">
               {isSaving ? t('common.saving') : t('common.save_changes')}
             </Button>
           </DialogFooter>
@@ -519,7 +528,7 @@ export default function Profiles() {
 
       {/* Delete Confirmation Dialog */}
       < AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen} >
-        <AlertDialogContent>
+        <AlertDialogContent data-testid="profile-delete-dialog">
           <AlertDialogHeader>
             <AlertDialogTitle>{t('profiles.delete_confirm_title')}</AlertDialogTitle>
             <AlertDialogDescription>
@@ -527,8 +536,12 @@ export default function Profiles() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteProfile} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            <AlertDialogCancel data-testid="profile-delete-cancel">{t('common.cancel')}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteProfile}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="profile-delete-confirm"
+            >
               {t('common.delete')}
             </AlertDialogAction>
           </AlertDialogFooter>

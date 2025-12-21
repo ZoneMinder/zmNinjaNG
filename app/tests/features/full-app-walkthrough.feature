@@ -15,6 +15,16 @@ Feature: Full Application Walkthrough
     And I click the Add button in the dialog
     Then the widget "Test Timeline" should appear on the dashboard
 
+  Scenario: Dashboard - Add monitor widget with selection
+    When I navigate to the "Dashboard" page
+    Then I should see the page heading "Dashboard"
+    When I open the Add Widget dialog
+    And I select the "Monitor Stream" widget type
+    And I select the first monitor in the widget dialog
+    And I enter widget title "Test Monitor"
+    And I click the Add button in the dialog
+    Then the widget "Test Monitor" should appear on the dashboard
+
   Scenario: Monitors - View and interact with monitors
     When I navigate to the "Monitors" page
     Then I should see the page heading "Monitors"
@@ -37,6 +47,16 @@ Feature: Full Application Walkthrough
     And I navigate back if I clicked into an event
     Then I should be on the "Events" page
 
+  Scenario: Events - Apply and clear filters
+    When I navigate to the "Events" page
+    Then I should see the page heading "Events"
+    When I open the events filter panel
+    And I set the events date range
+    And I apply event filters
+    Then I should see events list or empty state
+    When I clear event filters
+    Then I should see events list or empty state
+
   Scenario: Event Montage - View event grid
     When I navigate to the "Event Montage" page
     Then I should see the page heading "Event Montage"
@@ -51,12 +71,30 @@ Feature: Full Application Walkthrough
     Then I should see the page heading "Notification Settings"
     And I should see notification interface elements
 
+  Scenario: Notifications - View history list
+    When I navigate to the "Notifications" page
+    And I navigate to the notification history
+    Then I should see notification history page
+    And I should see notification history content or empty state
+
   Scenario: Profiles - View and interact with profiles
     When I navigate to the "Profiles" page
     Then I should see the page heading "Profiles"
     And I should see at least 1 profile cards
     And I should see the active profile indicator
     And I should see profile management buttons
+
+  Scenario: Profiles - Open edit and delete dialogs
+    When I navigate to the "Profiles" page
+    Then I should see the page heading "Profiles"
+    When I open the edit dialog for the first profile
+    Then I should see the profile edit dialog
+    When I cancel profile edits
+    Then I should see the profiles list
+    When I open the delete dialog for the first profile if possible
+    Then I should see the profile delete dialog
+    When I cancel profile deletion
+    Then I should see the profiles list
 
   Scenario: Settings - View and verify settings sections
     When I navigate to the "Settings" page
@@ -73,3 +111,5 @@ Feature: Full Application Walkthrough
     Then I should see the page heading "Logs"
     And I should see log entries or empty state
     And I should see log control elements
+    And I change the log level to "WARN"
+    And I clear logs if available

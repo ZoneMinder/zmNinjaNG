@@ -173,14 +173,14 @@ export default function Logs() {
                 </div>
                 <div className="flex items-center gap-2">
                     <Select value={logLevel} onValueChange={handleLevelChange}>
-                        <SelectTrigger className="w-[100px] h-8">
+                        <SelectTrigger className="w-[100px] h-8" data-testid="log-level-select">
                             <SelectValue placeholder="Level" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value={LogLevel.DEBUG.toString()}>DEBUG</SelectItem>
-                            <SelectItem value={LogLevel.INFO.toString()}>INFO</SelectItem>
-                            <SelectItem value={LogLevel.WARN.toString()}>WARN</SelectItem>
-                            <SelectItem value={LogLevel.ERROR.toString()}>ERROR</SelectItem>
+                            <SelectItem value={LogLevel.DEBUG.toString()} data-testid="log-level-option-DEBUG">DEBUG</SelectItem>
+                            <SelectItem value={LogLevel.INFO.toString()} data-testid="log-level-option-INFO">INFO</SelectItem>
+                            <SelectItem value={LogLevel.WARN.toString()} data-testid="log-level-option-WARN">WARN</SelectItem>
+                            <SelectItem value={LogLevel.ERROR.toString()} data-testid="log-level-option-ERROR">ERROR</SelectItem>
                         </SelectContent>
                     </Select>
                     {isNative ? (
@@ -189,6 +189,7 @@ export default function Logs() {
                             size="sm"
                             onClick={handleShareLogs}
                             disabled={logs.length === 0}
+                            data-testid="logs-share-button"
                         >
                             <Share2 className="h-4 w-4 mr-2" />
                             {t('logs.share')}
@@ -199,6 +200,7 @@ export default function Logs() {
                             size="sm"
                             onClick={handleSaveLogs}
                             disabled={logs.length === 0}
+                            data-testid="logs-save-button"
                         >
                             <Download className="h-4 w-4 mr-2" />
                             {t('logs.save')}
@@ -209,6 +211,7 @@ export default function Logs() {
                         size="sm"
                         onClick={clearLogs}
                         disabled={logs.length === 0}
+                        data-testid="logs-clear-button"
                     >
                         <Trash2 className="h-4 w-4 mr-2" />
                         {t('logs.clear_logs')}

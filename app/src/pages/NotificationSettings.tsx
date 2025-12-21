@@ -238,6 +238,7 @@ export default function NotificationSettings() {
           variant="outline"
           onClick={() => navigate('/notifications/history')}
           className="relative"
+          data-testid="notification-history-button"
         >
           <History className="h-4 w-4 mr-2" />
           {t('notification_settings.view_history')}

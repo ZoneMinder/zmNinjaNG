@@ -37,7 +37,7 @@ class Logger {
   private isDev: boolean;
 
   constructor() {
-    this.isDev = import.meta.env.DEV;
+    this.isDev = this.resolveIsDev();
     // Check for saved log level
     const savedLevel = typeof localStorage !== 'undefined' ? localStorage.getItem('zm_log_level') : null;
 
@@ -47,6 +47,16 @@ class Logger {
       // Default to INFO in production to ensure logs are visible in simulator/device
       this.level = this.isDev ? LogLevel.DEBUG : LogLevel.INFO;
     }
+  }
+
+  private resolveIsDev(): boolean {
+    if (typeof import.meta !== 'undefined' && import.meta.env && typeof import.meta.env.DEV === 'boolean') {
+      return import.meta.env.DEV;
+    }
+    if (typeof process !== 'undefined' && process.env && typeof process.env.NODE_ENV === 'string') {
+      return process.env.NODE_ENV !== 'production';
+    }
+    return false;
   }
 
   /**

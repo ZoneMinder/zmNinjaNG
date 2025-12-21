@@ -1,0 +1,215 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  deleteEvent,
+  getConsoleEvents,
+  getEvent,
+  getEvents,
+  setEventArchived,
+} from '../events';
+import { getApiClient } from '../client';
+import { validateApiResponse } from '../../lib/api-validator';
+
+const mockGet = vi.fn();
+const mockPut = vi.fn();
+const mockDelete = vi.fn();
+
+vi.mock('../client', () => ({
+  getApiClient: vi.fn(),
+}));
+
+vi.mock('../../lib/api-validator', () => ({
+  validateApiResponse: vi.fn((_, data) => data),
+}));
+
+vi.mock('../../lib/logger', () => ({
+  log: {
+    api: vi.fn(),
+    warn: vi.fn(),
+  },
+}));
+
+const buildEventData = (id: number) => ({
+  Event: {
+    Id: String(id),
+    MonitorId: '1',
+    StorageId: null,
+    SecondaryStorageId: null,
+    Name: `Event ${id}`,
+    Cause: 'Motion',
+    StartDateTime: '2024-01-01 00:00:00',
+    EndDateTime: null,
+    Width: '640',
+    Height: '480',
+    Length: '10',
+    Frames: '100',
+    AlarmFrames: '5',
+    AlarmFrameId: '1',
+    MaxScoreFrameId: '2',
+    DefaultVideo: null,
+    SaveJPEGs: '0',
+    TotScore: '10',
+    AvgScore: '1',
+    MaxScore: '3',
+    Archived: '0',
+    Videoed: '0',
+    Uploaded: '0',
+    Emailed: '0',
+    Messaged: '0',
+    Executed: '0',
+    Notes: null,
+    StateId: null,
+    Orientation: null,
+    DiskSpace: null,
+    Scheme: null,
+  },
+});
+
+describe('Events API', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getApiClient).mockReturnValue({
+      get: mockGet,
+      put: mockPut,
+      delete: mockDelete,
+    });
+  });
+
+  it('fetches events across pages and deduplicates', async () => {
+    mockGet
+      .mockResolvedValueOnce({
+        data: {
+          events: [buildEventData(1), buildEventData(2)],
+          pagination: {
+            pageCount: 2,
+            page: 1,
+            current: 1,
+            count: 2,
+            prevPage: false,
+            nextPage: true,
+            limit: 100,
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          events: [buildEventData(2), buildEventData(3)],
+          pagination: {
+            pageCount: 2,
+            page: 2,
+            current: 2,
+            count: 2,
+            prevPage: true,
+            nextPage: false,
+            limit: 100,
+          },
+        },
+      });
+
+    const response = await getEvents({ limit: 3 });
+
+    expect(mockGet).toHaveBeenCalledWith('/events/index.json', { params: { page: 1, limit: 100 } });
+    expect(mockGet).toHaveBeenCalledWith('/events/index.json', { params: { page: 2, limit: 100 } });
+    expect(response.events).toHaveLength(3);
+    expect(response.events.map((event) => event.Event.Id)).toEqual(['1', '2', '3']);
+  });
+
+  it('applies filters to the events endpoint', async () => {
+    mockGet.mockResolvedValue({
+      data: {
+        events: [buildEventData(10)],
+        pagination: {
+          pageCount: 1,
+          page: 1,
+          current: 1,
+          count: 1,
+          prevPage: false,
+          nextPage: false,
+          limit: 100,
+        },
+      },
+    });
+
+    await getEvents({
+      monitorId: '1,2',
+      startDateTime: '2024-01-01T00:00:00',
+      endDateTime: '2024-01-02T00:00:00',
+      minAlarmFrames: 3,
+      sort: 'StartDateTime',
+      direction: 'desc',
+    });
+
+    const call = mockGet.mock.calls[0][0] as string;
+    expect(call).toContain('/events/index');
+    expect(call).toContain('MonitorId%3A1');
+    expect(call).toContain('MonitorId%3A2');
+    expect(call).toContain('StartDateTime%20%3E%3D%3A2024-01-01%2000%3A00%3A00');
+    expect(call).toContain('EndDateTime%20%3C%3D%3A2024-01-02%2000%3A00%3A00');
+    expect(call).toContain('AlarmFrames%20%3E%3D%3A3');
+  });
+
+  it('fetches a single event', async () => {
+    mockGet.mockResolvedValue({
+      data: {
+        event: buildEventData(42),
+      },
+    });
+
+    const event = await getEvent('42');
+
+    expect(mockGet).toHaveBeenCalledWith('/events/42.json');
+    expect(event.Event.Id).toBe('42');
+  });
+
+  it('archives an event', async () => {
+    mockPut.mockResolvedValue({
+      data: {
+        event: buildEventData(5),
+      },
+    });
+
+    const event = await setEventArchived('5', true);
+
+    expect(mockPut).toHaveBeenCalledWith('/events/5.json', { 'Event[Archived]': '1' });
+    expect(event.Event.Id).toBe('5');
+  });
+
+  it('deletes an event', async () => {
+    mockDelete.mockResolvedValue({});
+
+    await deleteEvent('7');
+
+    expect(mockDelete).toHaveBeenCalledWith('/events/7.json');
+  });
+
+  it('gets console events', async () => {
+    mockGet.mockResolvedValue({
+      data: { results: { '1': 3, '2': 5 } },
+    });
+
+    const results = await getConsoleEvents('1 hour');
+
+    expect(mockGet).toHaveBeenCalledWith('/events/consoleEvents/1%20hour.json');
+    expect(results).toEqual({ '1': 3, '2': 5 });
+  });
+
+  it('validates responses through api-validator', async () => {
+    mockGet.mockResolvedValue({
+      data: {
+        events: [buildEventData(1)],
+        pagination: {
+          pageCount: 1,
+          page: 1,
+          current: 1,
+          count: 1,
+          prevPage: false,
+          nextPage: false,
+          limit: 100,
+        },
+      },
+    });
+
+    await getEvents({ limit: 1 });
+
+    expect(validateApiResponse).toHaveBeenCalled();
+  });
+});

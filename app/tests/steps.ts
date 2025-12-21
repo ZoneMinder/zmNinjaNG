@@ -1,6 +1,7 @@
 import { createBdd } from 'playwright-bdd';
 import { expect } from '@playwright/test';
 import { testConfig } from './helpers/config';
+import { log } from '../src/lib/logger';
 
 const { Given, When, Then } = createBdd();
 
@@ -19,7 +20,7 @@ Given('I am logged into zmNg', async ({ page }) => {
   const isSetupPage = await page.locator('text=/Initial Configuration/i').isVisible();
 
   if (isSetupPage) {
-    console.log('On Setup page. Logging in...');
+    log.info('E2E setup page detected; proceeding with login', { component: 'e2e', action: 'login' });
     const { host, username, password } = testConfig.server;
 
     await page.getByLabel(/server url/i).fill(host);
@@ -32,9 +33,9 @@ Given('I am logged into zmNg', async ({ page }) => {
 
     // Wait for successful navigation by checking for navigation elements
     await page.waitForSelector('[data-testid^="nav-item-"]', { timeout: testConfig.timeouts.transition });
-    console.log('Login successful.');
+    log.info('E2E login successful', { component: 'e2e', action: 'login' });
   } else {
-    console.log('Already logged in.');
+    log.info('E2E session already authenticated', { component: 'e2e', action: 'login' });
   }
 });
 
@@ -96,9 +97,31 @@ When('I open the Add Widget dialog', async ({ page }) => {
 });
 
 When('I select the {string} widget type', async ({ page }, widgetType: string) => {
-  const option = page.locator('div.border.rounded-lg').filter({ hasText: new RegExp(`^${widgetType}$`) }).first();
+  const normalized = widgetType.toLowerCase();
+  const typeSelectors: Record<string, string> = {
+    monitor: 'widget-type-monitor',
+    events: 'widget-type-events',
+    timeline: 'widget-type-timeline',
+    heatmap: 'widget-type-heatmap',
+  };
+
+  const matchingKey = Object.keys(typeSelectors).find((key) => normalized.includes(key));
+  if (matchingKey) {
+    const option = page.getByTestId(typeSelectors[matchingKey]);
+    await option.click();
+    await expect(option).toHaveClass(/border-primary/);
+    return;
+  }
+
+  const option = page.locator('div.border.rounded-lg').filter({ hasText: new RegExp(widgetType, 'i') }).first();
   await option.click();
   await expect(option).toHaveClass(/border-primary/);
+});
+
+When('I select the first monitor in the widget dialog', async ({ page }) => {
+  const list = page.getByTestId('monitor-selection-list');
+  const firstCheckbox = list.locator('[data-testid^="monitor-checkbox-"]').first();
+  await firstCheckbox.click();
 });
 
 let lastWidgetTitle: string;
@@ -127,7 +150,7 @@ Then('I should see at least {int} monitor cards', async ({ page }, count: number
   const monitorCards = page.getByTestId('monitor-card');
   const actualCount = await monitorCards.count();
   expect(actualCount).toBeGreaterThanOrEqual(count);
-  console.log(`Found ${actualCount} monitors`);
+  log.info('E2E monitors found', { component: 'e2e', action: 'monitors_count', count: actualCount });
 });
 
 When('I click into the first monitor detail page', async ({ page }) => {
@@ -152,15 +175,24 @@ Then('I should see the montage interface', async ({ page }) => {
 
 // Event Steps
 let hasEvents = false;
+let openedDeleteDialog = false;
 
 Then('I should see events list or empty state', async ({ page }) => {
-  const eventCount = await page.locator('[data-testid="event-card"]').count();
-  const hasNoEventsMessage = await page.getByText(/no events/i).isVisible();
+  const eventCards = page.getByTestId('event-card');
+  const emptyState = page.getByTestId('events-empty-state');
 
-  expect(eventCount > 0 || hasNoEventsMessage).toBeTruthy();
+  await expect.poll(async () => {
+    const count = await eventCards.count();
+    const emptyVisible = await emptyState.isVisible().catch(() => false);
+    return count > 0 || emptyVisible;
+  }, { timeout: testConfig.timeouts.transition }).toBeTruthy();
+
+  const eventCount = await eventCards.count();
+  const emptyVisible = await emptyState.isVisible().catch(() => false);
+  expect(eventCount > 0 || emptyVisible).toBeTruthy();
 
   if (eventCount > 0) {
-    console.log(`Found ${eventCount} events`);
+    log.info('E2E events found', { component: 'e2e', action: 'events_count', count: eventCount });
     hasEvents = true;
   } else {
     hasEvents = false;
@@ -189,6 +221,47 @@ Then('I should be on the {string} page', async ({ page }, pageName: string) => {
   await page.waitForURL(new RegExp(`.*${route}$`), { timeout: testConfig.timeouts.transition });
 });
 
+When('I open the events filter panel', async ({ page }) => {
+  const filterButton = page.getByTestId('events-filter-button');
+  await filterButton.click({ force: true });
+  const panel = page.getByTestId('events-filter-panel');
+  if (!(await panel.isVisible().catch(() => false))) {
+    await filterButton.click({ force: true });
+  }
+  await expect(panel).toBeVisible({ timeout: testConfig.timeouts.transition });
+});
+
+When('I set the events date range', async ({ page }) => {
+  const panel = page.getByTestId('events-filter-panel');
+  if (!(await panel.isVisible().catch(() => false))) {
+    await page.getByTestId('events-filter-button').click({ force: true });
+  }
+  await expect(panel).toBeVisible({ timeout: testConfig.timeouts.transition });
+
+  const startInput = page.getByTestId('events-start-date');
+  const endInput = page.getByTestId('events-end-date');
+
+  await startInput.scrollIntoViewIfNeeded();
+  await endInput.scrollIntoViewIfNeeded();
+
+  // datetime-local expects minutes precision without seconds.
+  await startInput.fill('2024-01-01T00:00', { timeout: testConfig.timeouts.transition });
+  await endInput.fill('2024-01-01T01:00', { timeout: testConfig.timeouts.transition });
+});
+
+When('I apply event filters', async ({ page }) => {
+  await page.getByTestId('events-apply-filters').click();
+});
+
+When('I clear event filters', async ({ page }) => {
+  const panel = page.getByTestId('events-filter-panel');
+  if (!(await panel.isVisible().catch(() => false))) {
+    await page.getByTestId('events-filter-button').click({ force: true });
+  }
+  await expect(panel).toBeVisible({ timeout: testConfig.timeouts.transition });
+  await page.getByTestId('events-clear-filters').click();
+});
+
 // Timeline Steps
 Then('I should see timeline interface elements', async ({ page }) => {
   const hasButtons = await page.locator('button').count() > 0;
@@ -206,11 +279,27 @@ Then('I should see notification interface elements', async ({ page }) => {
   expect(hasButtons || hasContent).toBeTruthy();
 });
 
+When('I navigate to the notification history', async ({ page }) => {
+  await page.getByTestId('notification-history-button').click();
+  await page.waitForURL(/.*notifications\/history/, { timeout: testConfig.timeouts.transition });
+});
+
+Then('I should see notification history content or empty state', async ({ page }) => {
+  const hasList = await page.getByTestId('notification-history-list').isVisible().catch(() => false);
+  const hasEmpty = await page.getByTestId('notification-history-empty').isVisible().catch(() => false);
+
+  expect(hasList || hasEmpty).toBeTruthy();
+});
+
+Then('I should see notification history page', async ({ page }) => {
+  await expect(page.getByTestId('notification-history')).toBeVisible();
+});
+
 // Profile Steps
 Then('I should see at least {int} profile cards', async ({ page }, count: number) => {
   const profileCount = await page.locator('[data-testid="profile-card"]').count();
   expect(profileCount).toBeGreaterThanOrEqual(count);
-  console.log(`Found ${profileCount} profile(s)`);
+  log.info('E2E profiles found', { component: 'e2e', action: 'profiles_count', count: profileCount });
 });
 
 Then('I should see the active profile indicator', async ({ page }) => {
@@ -220,6 +309,44 @@ Then('I should see the active profile indicator', async ({ page }) => {
 Then('I should see profile management buttons', async ({ page }) => {
   const addButton = page.getByRole('button', { name: /add/i }).first();
   await expect(addButton).toBeVisible();
+});
+
+When('I open the edit dialog for the first profile', async ({ page }) => {
+  const editButton = page.locator('[data-testid^="profile-edit-button-"]').first();
+  await editButton.click();
+});
+
+Then('I should see the profile edit dialog', async ({ page }) => {
+  await expect(page.getByTestId('profile-edit-dialog')).toBeVisible();
+});
+
+When('I cancel profile edits', async ({ page }) => {
+  await page.getByTestId('profile-edit-cancel').click();
+});
+
+Then('I should see the profiles list', async ({ page }) => {
+  await expect(page.getByTestId('profile-list')).toBeVisible();
+});
+
+When('I open the delete dialog for the first profile if possible', async ({ page }) => {
+  const deleteButton = page.locator('[data-testid^="profile-delete-button-"]').first();
+  openedDeleteDialog = await deleteButton.count() > 0;
+  if (openedDeleteDialog) {
+    await deleteButton.click();
+  }
+});
+
+Then('I should see the profile delete dialog', async ({ page }) => {
+  if (openedDeleteDialog) {
+    await expect(page.getByTestId('profile-delete-dialog')).toBeVisible();
+  }
+});
+
+When('I cancel profile deletion', async ({ page }) => {
+  const cancelButton = page.getByTestId('profile-delete-cancel');
+  if (await cancelButton.isVisible()) {
+    await cancelButton.click();
+  }
 });
 
 // Settings Steps
@@ -242,13 +369,21 @@ Then('I should see server information displayed', async ({ page }) => {
 
 // Logs Steps
 Then('I should see log entries or empty state', async ({ page }) => {
-  const logCount = await page.locator('[data-testid="log-entry"]').count();
-  const hasNoLogsMessage = await page.getByText(/no logs/i).isVisible();
+  const logEntries = page.getByTestId('log-entry');
+  const emptyState = page.getByTestId('logs-empty-state');
 
-  expect(logCount > 0 || hasNoLogsMessage).toBeTruthy();
+  await expect.poll(async () => {
+    const count = await logEntries.count();
+    const emptyVisible = await emptyState.isVisible().catch(() => false);
+    return count > 0 || emptyVisible;
+  }, { timeout: testConfig.timeouts.transition }).toBeTruthy();
+
+  const logCount = await logEntries.count();
+  const emptyVisible = await emptyState.isVisible().catch(() => false);
+  expect(logCount > 0 || emptyVisible).toBeTruthy();
 
   if (logCount > 0) {
-    console.log(`Found ${logCount} log entries`);
+    log.info('E2E log entries found', { component: 'e2e', action: 'logs_count', count: logCount });
   }
 });
 
@@ -258,4 +393,16 @@ Then('I should see log control elements', async ({ page }) => {
   const hasSaveButton = await page.getByRole('button', { name: /save|download|share/i }).isVisible().catch(() => false);
 
   expect(hasLevelFilter || hasClearButton || hasSaveButton).toBeTruthy();
+});
+
+Then('I change the log level to {string}', async ({ page }, level: string) => {
+  await page.getByTestId('log-level-select').click();
+  await page.getByTestId(`log-level-option-${level}`).click();
+});
+
+Then('I clear logs if available', async ({ page }) => {
+  const clearButton = page.getByTestId('logs-clear-button');
+  if (await clearButton.isEnabled()) {
+    await clearButton.click();
+  }
 });

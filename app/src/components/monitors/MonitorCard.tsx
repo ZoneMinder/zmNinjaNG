@@ -191,6 +191,7 @@ function MonitorCardComponent({
             size="sm"
             className="flex-1 text-xs h-8 relative"
             onClick={() => navigate(`/events?monitorId=${monitor.Id}`, { state: { from: '/monitors' } })}
+            data-testid="monitor-events-button"
           >
             <Video className="h-3 w-3 mr-1" />
             {t('sidebar.events')}
@@ -208,6 +209,7 @@ function MonitorCardComponent({
             size="sm"
             className="flex-1 text-xs h-8"
             onClick={handleShowSettings}
+            data-testid="monitor-settings-button"
           >
             <Settings className="h-3 w-3 mr-1" />
             {t('sidebar.settings')}

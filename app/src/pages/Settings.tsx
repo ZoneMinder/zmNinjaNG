@@ -115,7 +115,7 @@ export default function Settings() {
                 value={i18n.language}
                 onValueChange={(value) => i18n.changeLanguage(value)}
               >
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-[180px]" data-testid="settings-language-select">
                   <SelectValue placeholder={t('settings.select_language')} />
                 </SelectTrigger>
                 <SelectContent>
@@ -173,6 +173,7 @@ export default function Settings() {
                   id="view-mode"
                   checked={settings.viewMode === 'streaming'}
                   onCheckedChange={handleViewModeChange}
+                  data-testid="settings-view-mode-switch"
                 />
                 <div className="flex items-center gap-2 text-sm">
                   <VideoIcon className="h-4 w-4" />
@@ -201,6 +202,7 @@ export default function Settings() {
                     value={settings.snapshotRefreshInterval}
                     onChange={(e) => handleRefreshIntervalChange(Number(e.target.value))}
                     className="w-24"
+                    data-testid="settings-refresh-interval"
                   />
                   <span className="text-sm text-muted-foreground">{t('settings.seconds')}</span>
                   <div className="flex flex-wrap gap-2 sm:ml-auto">
@@ -375,6 +377,7 @@ export default function Settings() {
                   id="display-mode"
                   checked={settings.displayMode === 'compact'}
                   onCheckedChange={handleDisplayModeChange}
+                  data-testid="settings-display-mode-switch"
                 />
                 <div className="flex items-center gap-2 text-sm">
                   <Minimize2 className="h-4 w-4" />
@@ -416,6 +419,7 @@ export default function Settings() {
                   value={settings.defaultEventLimit || 300}
                   onChange={(e) => handleEventLimitChange(Number(e.target.value))}
                   className="w-28"
+                  data-testid="settings-event-limit"
                 />
                 <span className="text-sm text-muted-foreground">{t('settings.events_per_page_suffix')}</span>
                 <div className="flex flex-wrap gap-2 sm:ml-auto">
@@ -545,6 +549,7 @@ export default function Settings() {
                     disableLogRedaction: checked,
                   });
                 }}
+                data-testid="settings-log-redaction-switch"
               />
             </div>
           </CardContent>
