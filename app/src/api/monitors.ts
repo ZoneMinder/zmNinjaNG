@@ -156,7 +156,7 @@ export async function cancelAlarm(monitorId: string): Promise<void> {
  * @param monitorId - The ID of the monitor
  * @returns Promise resolving to object with status string
  */
-export async function getAlarmStatus(monitorId: string): Promise<{ status: string }> {
+export async function getAlarmStatus(monitorId: string): Promise<{ status: string; output?: string | number }> {
   const client = getApiClient();
   const response = await client.get(`/monitors/alarm/id:${monitorId}/command:status.json`);
   return response.data;
