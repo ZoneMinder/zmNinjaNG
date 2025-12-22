@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [zmNg-0.0.6](https://github.com/pliablepixels/zmNg/compare/zmNg-0.0.6..zmNg-0.0.6) - 2025-12-22
+
+### 🐛 Bug Fixes
+
+- Extend alarm status typing - ([8b3073b](https://github.com/pliablepixels/zmNg/commit/8b3073bbd4fb0de71772585f14ee2ffdab138195))
 ## [zmNg-0.0.6](https://github.com/pliablepixels/zmNg/compare/zmNg-0.0.5..zmNg-0.0.6) - 2025-12-22
 
 ### ✨ Features
@@ -22,6 +27,7 @@ All notable changes to this project will be documented in this file.
 
 ### 📚 Documentation
 
+- Update CHANGELOG.md for zmNg-0.0.6 - ([f565e7f](https://github.com/pliablepixels/zmNg/commit/f565e7f09bbb0118b0236fee4a7028e13eb633ef))
 - Clarify profile-scoped settings and add feed fit controls - ([3c5f989](https://github.com/pliablepixels/zmNg/commit/3c5f9892b239d80afccd782988872596f29f46de))
 - Clarified claude and codex usage - ([f0b792a](https://github.com/pliablepixels/zmNg/commit/f0b792a2829f4d93a4565d05c295002ab27993aa))
 - Added more clarity to instructions - ([2c45de2](https://github.com/pliablepixels/zmNg/commit/2c45de23a97794a4b1356048c81fffe6194707be))
