@@ -21,7 +21,7 @@ import { PullToRefreshIndicator } from '../components/ui/pull-to-refresh-indicat
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { RefreshCw, Filter, AlertCircle, Video, Loader2, ArrowLeft, LayoutGrid, List } from 'lucide-react';
+import { RefreshCw, Filter, AlertCircle, Video, Clock, Loader2, ArrowLeft, LayoutGrid, List } from 'lucide-react';
 import { getEnabledMonitorIds, filterEnabledMonitors } from '../lib/filters';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
 import { EventCard } from '../components/events/EventCard';
@@ -514,7 +514,7 @@ export default function Events() {
       {allEvents.length === 0 ? (
         <div data-testid="events-empty-state">
           <EmptyState
-            icon={Video}
+            icon={Clock}
             title={t('events.no_events')}
             action={
               filters.monitorId || filters.startDateTime || filters.endDateTime

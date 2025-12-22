@@ -21,7 +21,7 @@ import { useSettingsStore } from '../../stores/settings';
 import { Card } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import { Video, Clock, Settings2, Download, Maximize2 } from 'lucide-react';
+import { Clock, ChartGantt, Settings2, Download, Maximize2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { ZM_CONSTANTS } from '../../lib/constants';
 import { downloadSnapshotFromElement } from '../../lib/download';
@@ -222,7 +222,7 @@ function MontageMonitorComponent({
             title={t('common.events')}
             aria-label={t('monitors.view_events')}
           >
-            <Video className="h-3 w-3" />
+            <Clock className="h-3 w-3" />
           </Button>
           <Button
             variant="ghost"
@@ -235,7 +235,7 @@ function MontageMonitorComponent({
             title={t('sidebar.timeline')}
             aria-label={t('sidebar.timeline')}
           >
-            <Clock className="h-3 w-3" />
+            <ChartGantt className="h-3 w-3" />
           </Button>
           <Button
             variant="ghost"

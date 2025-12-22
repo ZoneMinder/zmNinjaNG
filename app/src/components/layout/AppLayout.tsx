@@ -15,9 +15,9 @@ import { ModeToggle } from '../mode-toggle';
 import { ProfileSwitcher } from '../profile-switcher';
 import {
   LayoutGrid,
-  Camera,
   Video,
   Clock,
+  ChartGantt,
   Settings,
   Menu,
   Users,
@@ -124,10 +124,10 @@ function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentProps) {
 
   const navItems = [
     { path: '/dashboard', label: t('sidebar.dashboard'), icon: LayoutDashboard },
-    { path: '/monitors', label: t('sidebar.monitors'), icon: Camera },
+    { path: '/monitors', label: t('sidebar.monitors'), icon: Video },
     { path: '/montage', label: t('sidebar.montage'), icon: LayoutGrid },
-    { path: '/events', label: t('sidebar.events'), icon: Video },
-    { path: '/timeline', label: t('sidebar.timeline'), icon: Clock },
+    { path: '/events', label: t('sidebar.events'), icon: Clock },
+    { path: '/timeline', label: t('sidebar.timeline'), icon: ChartGantt },
     { path: '/notifications', label: t('sidebar.notifications'), icon: Bell },
     { path: '/profiles', label: t('sidebar.profiles'), icon: Users },
     { path: '/settings', label: t('sidebar.settings'), icon: Settings },

@@ -20,7 +20,7 @@ import {
     DialogTrigger,
 } from '../ui/dialog';
 import { Button } from '../ui/button';
-import { Plus, LayoutGrid, List, Activity, TrendingUp } from 'lucide-react';
+import { Plus, Video, Clock, ChartGantt, TrendingUp } from 'lucide-react';
 import type { WidgetType } from '../../stores/dashboard';
 import type { MonitorFeedFit } from '../../stores/settings';
 import { useDashboardStore } from '../../stores/dashboard';
@@ -181,7 +181,7 @@ export function DashboardConfig() {
                             onClick={() => setSelectedType('monitor')}
                             data-testid="widget-type-monitor"
                         >
-                            <LayoutGrid className="h-8 w-8" />
+                            <Video className="h-8 w-8" />
                             <span className="font-medium text-xs text-center">{t('dashboard.widget_monitor')}</span>
                         </div>
                         <div
@@ -189,7 +189,7 @@ export function DashboardConfig() {
                             onClick={() => setSelectedType('events')}
                             data-testid="widget-type-events"
                         >
-                            <List className="h-8 w-8" />
+                            <Clock className="h-8 w-8" />
                             <span className="font-medium text-xs text-center">{t('dashboard.widget_events')}</span>
                         </div>
                         <div
@@ -197,7 +197,7 @@ export function DashboardConfig() {
                             onClick={() => setSelectedType('timeline')}
                             data-testid="widget-type-timeline"
                         >
-                            <Activity className="h-8 w-8" />
+                            <ChartGantt className="h-8 w-8" />
                             <span className="font-medium text-xs text-center">{t('dashboard.widget_timeline')}</span>
                         </div>
                         <div

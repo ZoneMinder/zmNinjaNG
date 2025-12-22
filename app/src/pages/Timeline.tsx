@@ -7,7 +7,7 @@ import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { RefreshCw, Filter, Video, Activity, AlertCircle, Clock } from 'lucide-react';
+import { RefreshCw, Filter, Activity, AlertCircle, Clock } from 'lucide-react';
 import { format, subDays } from 'date-fns';
 import { filterEnabledMonitors } from '../lib/filters';
 import { ZM_CONSTANTS } from '../lib/constants';
@@ -321,7 +321,7 @@ export default function Timeline() {
           ) : data?.events && data.events.length === 0 ? (
             <div className="h-[600px] flex items-center justify-center">
               <EmptyState
-                icon={Video}
+                icon={Clock}
                 title={t('timeline.no_events_found')}
                 description={t('timeline.adjust_filters')}
               />
@@ -362,7 +362,7 @@ export default function Timeline() {
                   <p className="text-xs text-muted-foreground mt-1 font-medium">{t('timeline.total_events')}</p>
                 </div>
                 <div className="h-12 w-12 rounded-full bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center">
-                  <Video className="h-6 w-6 text-blue-600" />
+                  <Clock className="h-6 w-6 text-blue-600" />
                 </div>
               </div>
             </CardContent>

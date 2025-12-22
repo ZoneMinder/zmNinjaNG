@@ -48,7 +48,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../components/ui/dialog';
-import { RefreshCw, Video, AlertCircle, Filter, ChevronDown, X, Calendar, LayoutGrid, Grid2x2, Grid3x3, GripVertical, Loader2 } from 'lucide-react';
+import { RefreshCw, Video, Clock, AlertCircle, Filter, ChevronDown, X, Calendar, LayoutGrid, Grid2x2, Grid3x3, GripVertical, Loader2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
 import { filterEnabledMonitors } from '../lib/filters';
@@ -522,7 +522,7 @@ export default function EventMontage() {
       {/* Events Grid */}
       {events.length === 0 && !isLoading ? (
         <EmptyState
-          icon={Video}
+          icon={Clock}
           title={t('eventMontage.no_events')}
         />
       ) : (

@@ -11,7 +11,7 @@ import { useNavigate } from 'react-router-dom';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
-import { Activity, Settings, Download, Video } from 'lucide-react';
+import { Activity, Settings, Download, Clock } from 'lucide-react';
 import { cn, formatEventCount } from '../../lib/utils';
 import { downloadSnapshotFromElement } from '../../lib/download';
 import { toast } from 'sonner';
@@ -192,7 +192,7 @@ function MonitorCardComponent({
               onClick={() => navigate(`/events?monitorId=${monitor.Id}`, { state: { from: '/monitors' } })}
               data-testid="monitor-events-button"
             >
-              <Video className="h-3 w-3 mr-1" />
+              <Clock className="h-3 w-3 mr-1" />
               {t('sidebar.events')}
               {eventCount !== undefined && eventCount > 0 && (
                 <Badge
