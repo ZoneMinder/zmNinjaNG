@@ -25,6 +25,7 @@ export interface ProfileSettings {
   eventsViewMode: EventsViewMode; // List vs montage view for Events page
   monitorsFeedFit: MonitorFeedFit; // Object-fit for monitor grid feeds
   monitorDetailFeedFit: MonitorFeedFit; // Object-fit for monitor detail feed
+  monitorDetailCycleSeconds: number; // Auto-cycle interval for single monitor view (0 = off)
   eventMontageFilters: {
     monitorIds: string[];
     cause: string;
@@ -79,6 +80,7 @@ const DEFAULT_SETTINGS: ProfileSettings = {
   eventsViewMode: 'list',
   monitorsFeedFit: 'cover',
   monitorDetailFeedFit: 'contain',
+  monitorDetailCycleSeconds: 0,
   eventMontageFilters: {
     monitorIds: [],
     cause: 'all',

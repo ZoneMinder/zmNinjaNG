@@ -181,6 +181,9 @@ Then('I should see the monitor player', async ({ page }) => {
 });
 
 Then('I should see the monitor rotation status', async ({ page }) => {
+  const settingsButton = page.getByTestId('monitor-detail-settings');
+  await expect(settingsButton).toBeVisible();
+  await settingsButton.click();
   const rotationStatus = page.getByTestId('monitor-rotation');
   await expect(rotationStatus).toBeVisible();
   await expect(rotationStatus).not.toBeEmpty();
@@ -226,7 +229,11 @@ Then('I should see events list or empty state', async ({ page }) => {
 });
 
 When('I switch events view to montage', async ({ page }) => {
-  const montageToggle = page.getByTestId('events-view-montage');
+  const montageGrid = page.getByTestId('events-montage-grid');
+  if (await montageGrid.isVisible().catch(() => false)) {
+    return;
+  }
+  const montageToggle = page.getByTestId('events-view-toggle');
   await expect(montageToggle).toBeVisible();
   await montageToggle.click();
 });

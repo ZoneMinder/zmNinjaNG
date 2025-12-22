@@ -15,6 +15,7 @@ describe('Settings Store', () => {
     expect(settings.snapshotRefreshInterval).toBe(3);
     expect(settings.montageGridRows).toBe(4);
     expect(settings.eventMontageGridCols).toBe(5);
+    expect(settings.monitorDetailCycleSeconds).toBe(0);
   });
 
   it('updates profile settings with partial values', () => {

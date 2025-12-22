@@ -19,7 +19,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Switch } from '../components/ui/switch';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { ArrowLeft, Settings, Maximize2, Video, AlertTriangle, Clock, Download, ChevronUp, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Settings, Maximize2, Video, AlertTriangle, Download, ChevronUp, ChevronDown } from 'lucide-react';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { cn } from '../lib/utils';
 import { useMonitorStore } from '../stores/monitors';
@@ -79,7 +79,7 @@ export default function MonitorDetail() {
 
   // Check if user came from another page (navigation state tracking)
   const referrer = location.state?.from as string | undefined;
-  const [mode, setMode] = useState<'jpeg' | 'stream'>('jpeg');
+  const streamMode: 'jpeg' | 'stream' = 'jpeg';
   // Default to false on Tauri/Native to avoid CORS issues unless we know we need it
   const [corsAllowed, setCorsAllowed] = useState(Platform.isWeb);
   const [showPTZ, setShowPTZ] = useState(true);
@@ -116,6 +116,8 @@ export default function MonitorDetail() {
     queryKey: ['monitor-alarm-status', monitor?.Monitor.Id],
     queryFn: () => getAlarmStatus(monitor!.Monitor.Id),
     enabled: !!monitor?.Monitor.Id,
+    refetchInterval: 5000,
+    refetchIntervalInBackground: true,
     refetchOnWindowFocus: false,
   });
 
@@ -139,13 +141,13 @@ export default function MonitorDetail() {
     onSwipeLeft: () => {
       if (hasNext) {
         const nextMonitor = enabledMonitors[currentIndex + 1];
-        navigate(`/monitor/${nextMonitor.Monitor.Id}`, { state: { from: location.pathname } });
+        navigate(`/monitors/${nextMonitor.Monitor.Id}`, { state: { from: location.pathname } });
       }
     },
     onSwipeRight: () => {
       if (hasPrev) {
         const prevMonitor = enabledMonitors[currentIndex - 1];
-        navigate(`/monitor/${prevMonitor.Monitor.Id}`, { state: { from: location.pathname } });
+        navigate(`/monitors/${prevMonitor.Monitor.Id}`, { state: { from: location.pathname } });
       }
     },
     threshold: 80,
@@ -163,6 +165,7 @@ export default function MonitorDetail() {
   const [connKey, setConnKey] = useState(0);
   const [cacheBuster, setCacheBuster] = useState(Date.now());
   const [displayedImageUrl, setDisplayedImageUrl] = useState<string>('');
+  const [isSliding, setIsSliding] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
   const rotationStatus = useMemo(() => {
     const rotation = parseMonitorRotation(monitor?.Monitor.Orientation);
@@ -189,12 +192,19 @@ export default function MonitorDetail() {
     ? Number(alarmStatusNumeric)
     : Number.NaN;
   const isAlarmArmed =
-    Number.isFinite(parsedAlarmStatus) ? parsedAlarmStatus === 1 : (
+    Number.isFinite(parsedAlarmStatus) ? parsedAlarmStatus !== 0 : (
       alarmStatusValue === 'on' ||
       alarmStatusValue === '1' ||
       alarmStatusValue === 'armed' ||
       alarmStatusValue === 'true'
     );
+  const alarmBorderClass = Number.isFinite(parsedAlarmStatus)
+    ? parsedAlarmStatus === 2
+      ? "ring-4 ring-orange-500/70"
+      : parsedAlarmStatus === 3 || parsedAlarmStatus === 4
+        ? "ring-4 ring-red-500/70"
+        : "ring-0"
+    : "ring-0";
   const displayAlarmArmed = alarmPendingValue ?? (isAlarmUpdating ? alarmToggleValue : isAlarmArmed);
   const alarmStatusLabel = hasAlarmStatus
     ? displayAlarmArmed
@@ -285,6 +295,40 @@ export default function MonitorDetail() {
       monitorDetailFeedFit: value as typeof settings.monitorDetailFeedFit,
     });
   };
+  const handleCycleSecondsChange = (value: string) => {
+    if (!currentProfile) return;
+    const parsedValue = Number(value);
+    updateSettings(currentProfile.id, {
+      monitorDetailCycleSeconds: Number.isFinite(parsedValue) ? parsedValue : 0,
+    });
+  };
+
+  useEffect(() => {
+    if (!id) return;
+    setIsSliding(true);
+    const timeout = window.setTimeout(() => setIsSliding(false), 450);
+    return () => window.clearTimeout(timeout);
+  }, [id]);
+
+  useEffect(() => {
+    const cycleSeconds = settings.monitorDetailCycleSeconds;
+    if (!cycleSeconds || cycleSeconds <= 0) return;
+    if (enabledMonitors.length < 2 || currentIndex < 0) return;
+
+    const intervalId = window.setInterval(() => {
+      const nextIndex = currentIndex + 1 < enabledMonitors.length ? currentIndex + 1 : 0;
+      const nextMonitor = enabledMonitors[nextIndex];
+      navigate(`/monitors/${nextMonitor.Monitor.Id}`, { state: { from: location.pathname } });
+    }, cycleSeconds * 1000);
+
+    return () => window.clearInterval(intervalId);
+  }, [
+    currentIndex,
+    enabledMonitors,
+    location.pathname,
+    navigate,
+    settings.monitorDetailCycleSeconds,
+  ]);
 
   // Force regenerate connKey when component mounts or monitor changes
   useEffect(() => {
@@ -344,9 +388,9 @@ export default function MonitorDetail() {
   // because we are viewing a single monitor and don't need to worry about browser connection limits
   const streamUrl = currentProfile && monitor
     ? getStreamUrl(currentProfile.cgiUrl, monitor.Monitor.Id, {
-      mode: mode,
+      mode: streamMode,
       scale,
-      maxfps: mode === 'jpeg' ? settings.streamMaxFps : undefined,
+      maxfps: streamMode === 'jpeg' ? settings.streamMaxFps : undefined,
       token: accessToken || undefined,
       connkey: connKey,
       cacheBuster: cacheBuster,
@@ -407,11 +451,7 @@ export default function MonitorDetail() {
                 "w-1.5 h-1.5 rounded-full",
                 monitor.Monitor.Function !== 'None' ? "bg-green-500" : "bg-red-500"
               )} />
-              <span className="hidden sm:inline">{monitor.Monitor.Function} • </span>{monitor.Monitor.Width}x{monitor.Monitor.Height}
-              <span className="hidden sm:inline"> • </span>
-              <span data-testid="monitor-rotation">
-                {t('monitor_detail.rotation_label')}: {rotationStatus}
-              </span>
+              <span className="hidden sm:inline">{monitor.Monitor.Function}</span>
             </div>
           </div>
         </div>
@@ -419,10 +459,6 @@ export default function MonitorDetail() {
           <Button variant="outline" size="sm" onClick={() => navigate(`/events?monitorId=${monitor.Monitor.Id}`)} className="h-8 sm:h-9" title={t('monitor_detail.events')}>
             <Video className="h-4 w-4 sm:mr-2" />
             <span className="hidden sm:inline">{t('monitor_detail.events')}</span>
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => navigate(`/timeline?monitorId=${monitor.Monitor.Id}`)} className="h-8 sm:h-9" title={t('monitor_detail.timeline')}>
-            <Clock className="h-4 w-4 sm:mr-2" />
-            <span className="hidden sm:inline">{t('monitor_detail.timeline')}</span>
           </Button>
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground hidden md:inline">{t('monitor_detail.feed_fit')}</span>
@@ -449,9 +485,6 @@ export default function MonitorDetail() {
               </SelectContent>
             </Select>
           </div>
-          <Button variant="outline" size="sm" onClick={() => setMode(mode === 'jpeg' ? 'stream' : 'jpeg')} className="h-8 sm:h-9 text-xs">
-            {mode === 'jpeg' ? 'MJPEG' : 'Stream'}
-          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -471,9 +504,8 @@ export default function MonitorDetail() {
           {...swipeNavigation.bind()}
           className={cn(
             "relative w-full max-w-5xl aspect-video bg-black overflow-hidden shadow-2xl border-0 touch-none transition-shadow",
-            isAlarmArmed
-              ? "ring-4 ring-red-500/60 animate-pulse [animation-duration:2.5s]"
-              : "ring-1 ring-border/20"
+            isSliding && "monitor-slide-in",
+            alarmBorderClass
           )}
         >
           <img
@@ -739,10 +771,58 @@ export default function MonitorDetail() {
 
             <Card className="border-muted/60 shadow-sm">
               <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold">{t('monitor_detail.cycle_title')}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <div className="space-y-2" data-testid="monitor-detail-cycle-setting">
+                  <Label htmlFor="monitor-cycle-select" className="text-sm">
+                    {t('monitor_detail.cycle_label')}
+                  </Label>
+                  <Select
+                    value={String(settings.monitorDetailCycleSeconds)}
+                    onValueChange={handleCycleSecondsChange}
+                  >
+                    <SelectTrigger
+                      id="monitor-cycle-select"
+                      className="h-8"
+                      data-testid="monitor-detail-cycle-select"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0" data-testid="monitor-detail-cycle-option-off">
+                        {t('monitor_detail.cycle_off')}
+                      </SelectItem>
+                      <SelectItem value="5" data-testid="monitor-detail-cycle-option-5">
+                        {t('monitor_detail.cycle_seconds', { seconds: 5 })}
+                      </SelectItem>
+                      <SelectItem value="10" data-testid="monitor-detail-cycle-option-10">
+                        {t('monitor_detail.cycle_seconds', { seconds: 10 })}
+                      </SelectItem>
+                      <SelectItem value="15" data-testid="monitor-detail-cycle-option-15">
+                        {t('monitor_detail.cycle_seconds', { seconds: 15 })}
+                      </SelectItem>
+                      <SelectItem value="30" data-testid="monitor-detail-cycle-option-30">
+                        {t('monitor_detail.cycle_seconds', { seconds: 30 })}
+                      </SelectItem>
+                      <SelectItem value="60" data-testid="monitor-detail-cycle-option-60">
+                        {t('monitor_detail.cycle_seconds', { seconds: 60 })}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {t('monitor_detail.cycle_help')}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-muted/60 shadow-sm">
+              <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-semibold">{t('monitor_detail.rotation_label')}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between" data-testid="monitor-rotation">
                   <span className="text-muted-foreground">{t('monitor_detail.rotation_label')}</span>
                   <span className="font-medium">{rotationStatus}</span>
                 </div>
