@@ -116,6 +116,8 @@ export default function MonitorDetail() {
     queryKey: ['monitor-alarm-status', monitor?.Monitor.Id],
     queryFn: () => getAlarmStatus(monitor!.Monitor.Id),
     enabled: !!monitor?.Monitor.Id,
+    refetchInterval: 5000,
+    refetchIntervalInBackground: true,
     refetchOnWindowFocus: false,
   });
 
@@ -189,12 +191,19 @@ export default function MonitorDetail() {
     ? Number(alarmStatusNumeric)
     : Number.NaN;
   const isAlarmArmed =
-    Number.isFinite(parsedAlarmStatus) ? parsedAlarmStatus === 1 : (
+    Number.isFinite(parsedAlarmStatus) ? parsedAlarmStatus !== 0 : (
       alarmStatusValue === 'on' ||
       alarmStatusValue === '1' ||
       alarmStatusValue === 'armed' ||
       alarmStatusValue === 'true'
     );
+  const alarmBorderClass = Number.isFinite(parsedAlarmStatus)
+    ? parsedAlarmStatus === 2
+      ? "ring-4 ring-orange-500/70"
+      : parsedAlarmStatus === 3 || parsedAlarmStatus === 4
+        ? "ring-4 ring-red-500/70"
+        : "ring-0"
+    : "ring-0";
   const displayAlarmArmed = alarmPendingValue ?? (isAlarmUpdating ? alarmToggleValue : isAlarmArmed);
   const alarmStatusLabel = hasAlarmStatus
     ? displayAlarmArmed
@@ -471,9 +480,7 @@ export default function MonitorDetail() {
           {...swipeNavigation.bind()}
           className={cn(
             "relative w-full max-w-5xl aspect-video bg-black overflow-hidden shadow-2xl border-0 touch-none transition-shadow",
-            isAlarmArmed
-              ? "ring-4 ring-red-500/60 animate-pulse [animation-duration:2.5s]"
-              : "ring-1 ring-border/20"
+            alarmBorderClass
           )}
         >
           <img
