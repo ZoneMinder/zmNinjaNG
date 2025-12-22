@@ -8,6 +8,7 @@
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getEvent, getEventVideoUrl, getEventImageUrl } from '../api/events';
+import { getMonitor } from '../api/monitors';
 import { useProfileStore } from '../stores/profile';
 import { useAuthStore } from '../stores/auth';
 import { Button } from '../components/ui/button';
@@ -18,6 +19,7 @@ import { ZmsEventPlayer } from '../components/events/ZmsEventPlayer';
 import { ArrowLeft, Calendar, Clock, HardDrive, AlertTriangle, Download, Archive, Video } from 'lucide-react';
 import { format } from 'date-fns';
 import { downloadEventVideo } from '../lib/download';
+import { parseMonitorRotation } from '../lib/monitor-rotation';
 import { toast } from 'sonner';
 import { useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -38,6 +40,11 @@ export default function EventDetail() {
     queryKey: ['event', id],
     queryFn: () => getEvent(id!),
     enabled: !!id,
+  });
+  const { data: monitorData } = useQuery({
+    queryKey: ['monitor', event?.Event.MonitorId],
+    queryFn: () => getMonitor(event!.Event.MonitorId),
+    enabled: !!event?.Event.MonitorId,
   });
 
   const currentProfile = useProfileStore((state) => state.currentProfile());
@@ -68,6 +75,32 @@ export default function EventDetail() {
     });
     toast.info(t('event_detail.marker_jumped', { text: marker.text }));
   }, [t]);
+
+  const orientedResolution = useMemo(() => {
+    const width = Number(event?.Event.Width ?? monitorData?.Monitor.Width);
+    const height = Number(event?.Event.Height ?? monitorData?.Monitor.Height);
+
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+      return `${event?.Event.Width ?? ''}${event?.Event.Width ? 'x' : ''}${event?.Event.Height ?? ''}`;
+    }
+
+    const rotation = parseMonitorRotation(event?.Event.Orientation ?? monitorData?.Monitor.Orientation);
+    if (rotation.kind === 'degrees') {
+      const normalized = ((rotation.degrees % 360) + 360) % 360;
+      if (normalized === 90 || normalized === 270) {
+        return `${height}x${width}`;
+      }
+    }
+
+    return `${width}x${height}`;
+  }, [
+    event?.Event.Height,
+    event?.Event.Orientation,
+    event?.Event.Width,
+    monitorData?.Monitor.Height,
+    monitorData?.Monitor.Orientation,
+    monitorData?.Monitor.Width,
+  ]);
 
   if (isLoading) {
     return (
@@ -302,7 +335,7 @@ export default function EventDetail() {
                 </div>
                 <div className="flex justify-between py-1 border-b border-border/50">
                   <span className="text-sm text-muted-foreground">{t('event_detail.resolution')}</span>
-                  <span className="text-sm font-medium">{event.Event.Width}x{event.Event.Height}</span>
+                  <span className="text-sm font-medium">{orientedResolution}</span>
                 </div>
               </div>
             </Card>

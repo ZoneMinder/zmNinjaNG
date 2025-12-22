@@ -15,6 +15,7 @@ import { SecureImage } from '../ui/secure-image';
 import { Video, Calendar, Clock } from 'lucide-react';
 import type { EventCardProps } from '../../api/types';
 import { useTranslation } from 'react-i18next';
+import { cn } from '../../lib/utils';
 
 /**
  * EventCard component.
@@ -25,10 +26,14 @@ import { useTranslation } from 'react-i18next';
  * @param props.monitorName - Name of the monitor that recorded the event
  * @param props.thumbnailUrl - URL for the event thumbnail image
  */
-function EventCardComponent({ event, monitorName, thumbnailUrl }: EventCardProps) {
+function EventCardComponent({ event, monitorName, thumbnailUrl, objectFit = 'contain', thumbnailWidth, thumbnailHeight }: EventCardProps) {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const startTime = new Date(event.StartDateTime.replace(' ', 'T'));
+
+  // Calculate aspect ratio from thumbnail dimensions
+  // (thumbnailWidth/Height are already swapped for rotated monitors)
+  const aspectRatio = thumbnailWidth / thumbnailHeight;
 
   /**
    * Handles image load errors by replacing the source with a fallback SVG.
@@ -46,16 +51,24 @@ function EventCardComponent({ event, monitorName, thumbnailUrl }: EventCardProps
       data-testid="event-card"
     >
       <div className="flex gap-2 sm:gap-3 p-2 sm:p-3">
-        {/* Thumbnail */}
-        <div className="relative w-24 h-18 sm:w-32 sm:h-24 md:w-40 md:h-30 flex-shrink-0 rounded overflow-hidden bg-black">
-          <SecureImage
-            src={thumbnailUrl}
-            alt={event.Name}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-            loading="lazy"
-            onError={handleImageError}
-            data-testid="event-thumbnail"
-          />
+        {/* Thumbnail - Fixed width container for consistent text alignment */}
+        <div className="relative flex-shrink-0 rounded overflow-hidden bg-black w-24 sm:w-28 md:w-32 max-w-[40%]">
+          <div
+            className="w-full max-h-28"
+            style={{ aspectRatio: aspectRatio.toString() }}
+          >
+            <SecureImage
+              src={thumbnailUrl}
+              alt={event.Name}
+              className={cn(
+                "w-full h-full group-hover:scale-105 transition-transform duration-300"
+              )}
+              style={{ objectFit }}
+              loading="lazy"
+              onError={handleImageError}
+              data-testid="event-thumbnail"
+            />
+          </div>
           <div className="absolute bottom-0.5 right-0.5 sm:bottom-1 sm:right-1 bg-black/80 text-white text-[10px] sm:text-xs px-1 sm:px-1.5 py-0.5 rounded font-medium">
             {event.Length}s
           </div>

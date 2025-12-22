@@ -38,6 +38,8 @@ import { downloadEventVideo } from '../lib/download';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ZM_CONSTANTS } from '../lib/constants';
+import { parseMonitorRotation } from '../lib/monitor-rotation';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -63,6 +65,64 @@ const getMaxColsForWidth = (width: number, minWidth: number, gap: number) => {
   return Math.max(1, maxCols);
 };
 
+/**
+ * Calculate thumbnail dimensions that preserve monitor aspect ratio.
+ *
+ * For rotated monitors (90°/270°), we swap width/height because:
+ * - The monitor's W/H are reported in its native orientation
+ * - ZoneMinder rotates the snapshot image
+ * - We need to request dimensions matching the rotated snapshot
+ *
+ * @param monitorWidth - Monitor's actual width in pixels
+ * @param monitorHeight - Monitor's actual height in pixels
+ * @param orientation - Monitor's orientation (rotation)
+ * @param targetSize - Target size for the larger dimension (e.g., 160, 300)
+ * @param scale - Scale multiplier for high-DPI displays (default: 2)
+ * @returns Thumbnail dimensions that preserve aspect ratio and account for rotation
+ */
+const calculateThumbnailDimensions = (
+  monitorWidth: number,
+  monitorHeight: number,
+  orientation: string | null | undefined,
+  targetSize: number,
+  scale: number = 2
+) => {
+  // Check if monitor is rotated 90 or 270 degrees
+  const rotation = parseMonitorRotation(orientation);
+  const isRotated = rotation.kind === 'degrees' &&
+    (((rotation.degrees % 360) + 360) % 360 === 90 ||
+     ((rotation.degrees % 360) + 360) % 360 === 270);
+
+  // If rotated, swap width and height for aspect ratio calculation
+  // This matches the rotated snapshot image from ZoneMinder
+  const effectiveWidth = isRotated ? monitorHeight : monitorWidth;
+  const effectiveHeight = isRotated ? monitorWidth : monitorHeight;
+
+  // Calculate aspect ratio
+  const aspectRatio = effectiveWidth / effectiveHeight;
+
+  // Calculate thumbnail dimensions preserving aspect ratio
+  // Fit to targetSize on the larger dimension
+  let thumbWidth: number;
+  let thumbHeight: number;
+
+  if (aspectRatio >= 1) {
+    // Landscape or square: width is larger
+    thumbWidth = targetSize;
+    thumbHeight = Math.round(targetSize / aspectRatio);
+  } else {
+    // Portrait: height is larger
+    thumbHeight = targetSize;
+    thumbWidth = Math.round(targetSize * aspectRatio);
+  }
+
+  // Apply scale for high-DPI displays (2x by default)
+  return {
+    width: Math.round(thumbWidth * scale),
+    height: Math.round(thumbHeight * scale)
+  };
+};
+
 export default function Events() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -71,6 +131,9 @@ export default function Events() {
   const settings = useSettingsStore(
     useShallow((state) => state.getProfileSettings(currentProfile?.id || ''))
   );
+  const normalizedThumbnailFit = settings.eventsThumbnailFit === 'fill'
+    ? 'contain'
+    : settings.eventsThumbnailFit;
   const updateSettings = useSettingsStore((state) => state.updateProfileSettings);
   const accessToken = useAuthStore((state) => state.accessToken);
   const parentRef = useRef<HTMLDivElement>(null);
@@ -248,6 +311,12 @@ export default function Events() {
     }
     setSearchParams(nextParams, { replace: true });
   };
+  const handleThumbnailFitChange = (value: string) => {
+    if (!currentProfile) return;
+    updateSettings(currentProfile.id, {
+      eventsThumbnailFit: (value === 'fill' ? 'contain' : value) as typeof settings.eventsThumbnailFit,
+    });
+  };
 
   const handleApplyGridLayout = (cols: number) => {
     if (!currentProfile) return;
@@ -354,6 +423,28 @@ export default function Events() {
             >
               {viewMode === 'list' ? <LayoutGrid className="h-4 w-4" /> : <List className="h-4 w-4" />}
             </Button>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground hidden md:inline">{t('events.thumbnail_fit')}</span>
+              <Select value={normalizedThumbnailFit} onValueChange={handleThumbnailFitChange}>
+                <SelectTrigger className="h-8 sm:h-9 w-[160px]" data-testid="events-thumbnail-fit-select">
+                  <SelectValue placeholder={t('events.thumbnail_fit')} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="contain" data-testid="events-thumbnail-fit-contain">
+                    {t('events.fit_contain')}
+                  </SelectItem>
+                  <SelectItem value="cover" data-testid="events-thumbnail-fit-cover">
+                    {t('events.fit_cover')}
+                  </SelectItem>
+                  <SelectItem value="none" data-testid="events-thumbnail-fit-none">
+                    {t('events.fit_none')}
+                  </SelectItem>
+                  <SelectItem value="scale-down" data-testid="events-thumbnail-fit-scale-down">
+                    {t('events.fit_scale_down')}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             {viewMode === 'montage' && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -533,23 +624,33 @@ export default function Events() {
             className="grid gap-4"
             style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}
           >
-            {allEvents.map((eventData) => {
-              const event = eventData.Event;
-              const monitorName =
-                enabledMonitors.find((m) => m.Monitor.Id === event.MonitorId)?.Monitor.Name ||
-                `Camera ${event.MonitorId}`;
-              const startTime = new Date(event.StartDateTime.replace(' ', 'T'));
+                  {allEvents.map((eventData) => {
+                    const event = eventData.Event;
+                    const monitorData = enabledMonitors.find((m) => m.Monitor.Id === event.MonitorId)?.Monitor;
+                    const monitorName = monitorData?.Name || `Camera ${event.MonitorId}`;
+                    const startTime = new Date(event.StartDateTime.replace(' ', 'T'));
 
+              // Get monitor dimensions (use event dimensions as fallback)
+              const monitorWidth = parseInt(monitorData?.Width || event.Width || '640', 10);
+              const monitorHeight = parseInt(monitorData?.Height || event.Height || '480', 10);
+
+              const { width: thumbnailWidth, height: thumbnailHeight } = calculateThumbnailDimensions(
+                monitorWidth,
+                monitorHeight,
+                monitorData?.Orientation ?? event.Orientation,
+                ZM_CONSTANTS.eventMontageImageWidth  // Target size for montage view (300)
+              );
               const imageUrl = currentProfile
                 ? getEventImageUrl(currentProfile.portalUrl, event.Id, 'snapshot', {
                   token: accessToken || undefined,
-                  width: ZM_CONSTANTS.eventMontageImageWidth,
-                  height: ZM_CONSTANTS.eventMontageImageHeight,
+                  width: thumbnailWidth,
+                  height: thumbnailHeight,
                   apiUrl: currentProfile.apiUrl,
                 })
                 : '';
 
               const hasVideo = event.Videoed === '1';
+              const aspectRatio = thumbnailWidth / thumbnailHeight;
 
               return (
                 <Card
@@ -557,11 +658,12 @@ export default function Events() {
                   className="group overflow-hidden cursor-pointer hover:ring-2 hover:ring-primary transition-all"
                   onClick={() => navigate(`/events/${event.Id}`)}
                 >
-                  <div className="aspect-video relative bg-black">
+                  <div className="relative bg-black" style={{ aspectRatio: aspectRatio.toString() }}>
                     <SecureImage
                       src={imageUrl}
                       alt={event.Name}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full"
+                      style={{ objectFit: normalizedThumbnailFit }}
                       onError={(e) => {
                         const img = e.target as HTMLImageElement;
                         img.src = 'data:image/svg+xml,%3Csvg xmlns=\"http://www.w3.org/2000/svg\" width=\"300\" height=\"200\"%3E%3Crect fill=\"%231a1a1a\" width=\"300\" height=\"200\"/%3E%3Ctext fill=\"%23444\" x=\"50%\" y=\"50%\" text-anchor=\"middle\" font-family=\"sans-serif\"%3ENo Image%3C/text%3E%3C/svg%3E';
@@ -658,17 +760,29 @@ export default function Events() {
           >
             {rowVirtualizer.getVirtualItems().map((virtualRow) => {
               const { Event } = allEvents[virtualRow.index];
+              const monitorData = enabledMonitors.find((m) => m.Monitor.Id === Event.MonitorId)?.Monitor;
+
+              // Get monitor dimensions (use event dimensions as fallback)
+              const monitorWidth = parseInt(monitorData?.Width || Event.Width || '640', 10);
+              const monitorHeight = parseInt(monitorData?.Height || Event.Height || '480', 10);
+
+              const { width: thumbnailWidth, height: thumbnailHeight } = calculateThumbnailDimensions(
+                monitorWidth,
+                monitorHeight,
+                monitorData?.Orientation ?? Event.Orientation,
+                160  // Target size for list view
+              );
               const thumbnailUrl = currentProfile
                 ? getEventImageUrl(currentProfile.portalUrl, Event.Id, 'snapshot', {
                   token: accessToken || undefined,
-                  width: 160,
-                  height: 120,
+                  width: thumbnailWidth,
+                  height: thumbnailHeight,
                   apiUrl: currentProfile.apiUrl,
                 })
                 : '';
 
               const monitorName =
-                enabledMonitors.find((m) => m.Monitor.Id === Event.MonitorId)?.Monitor.Name ||
+                monitorData?.Name ||
                 `Camera ${Event.MonitorId}`;
 
               return (
@@ -684,7 +798,14 @@ export default function Events() {
                   }}
                   className="pb-3"
                 >
-                  <EventCard event={Event} monitorName={monitorName} thumbnailUrl={thumbnailUrl} />
+                  <EventCard
+                    event={Event}
+                    monitorName={monitorName}
+                    thumbnailUrl={thumbnailUrl}
+                    objectFit={normalizedThumbnailFit}
+                    thumbnailWidth={thumbnailWidth}
+                    thumbnailHeight={thumbnailHeight}
+                  />
                 </div>
               );
             })}

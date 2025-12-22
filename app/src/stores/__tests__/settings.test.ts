@@ -16,6 +16,7 @@ describe('Settings Store', () => {
     expect(settings.montageGridRows).toBe(4);
     expect(settings.eventMontageGridCols).toBe(5);
     expect(settings.monitorDetailCycleSeconds).toBe(0);
+    expect(settings.eventsThumbnailFit).toBe('contain');
   });
 
   it('updates profile settings with partial values', () => {

@@ -60,6 +60,7 @@ import { formatLocalDateTime } from '../lib/time';
 import { QuickDateRangeButtons } from '../components/ui/quick-date-range-buttons';
 import { EmptyState } from '../components/ui/empty-state';
 import { log } from '../lib/logger';
+import { parseMonitorRotation } from '../lib/monitor-rotation';
 
 const GRID_GAP = 16;
 const MIN_CARD_WIDTH = 50;
@@ -70,6 +71,64 @@ const getMaxColsForWidth = (width: number, minWidth: number, gap: number) => {
   return Math.max(1, maxCols);
 };
 
+/**
+ * Calculate thumbnail dimensions that preserve monitor aspect ratio.
+ *
+ * For rotated monitors (90°/270°), we swap width/height because:
+ * - The monitor's W/H are reported in its native orientation
+ * - ZoneMinder rotates the snapshot image
+ * - We need to request dimensions matching the rotated snapshot
+ *
+ * @param monitorWidth - Monitor's actual width in pixels
+ * @param monitorHeight - Monitor's actual height in pixels
+ * @param orientation - Monitor's orientation (rotation)
+ * @param targetSize - Target size for the larger dimension (e.g., 160, 300)
+ * @param scale - Scale multiplier for high-DPI displays (default: 2)
+ * @returns Thumbnail dimensions that preserve aspect ratio and account for rotation
+ */
+const calculateThumbnailDimensions = (
+  monitorWidth: number,
+  monitorHeight: number,
+  orientation: string | null | undefined,
+  targetSize: number,
+  scale: number = 2
+) => {
+  // Check if monitor is rotated 90 or 270 degrees
+  const rotation = parseMonitorRotation(orientation);
+  const isRotated = rotation.kind === 'degrees' &&
+    (((rotation.degrees % 360) + 360) % 360 === 90 ||
+     ((rotation.degrees % 360) + 360) % 360 === 270);
+
+  // If rotated, swap width and height for aspect ratio calculation
+  // This matches the rotated snapshot image from ZoneMinder
+  const effectiveWidth = isRotated ? monitorHeight : monitorWidth;
+  const effectiveHeight = isRotated ? monitorWidth : monitorHeight;
+
+  // Calculate aspect ratio
+  const aspectRatio = effectiveWidth / effectiveHeight;
+
+  // Calculate thumbnail dimensions preserving aspect ratio
+  // Fit to targetSize on the larger dimension
+  let thumbWidth: number;
+  let thumbHeight: number;
+
+  if (aspectRatio >= 1) {
+    // Landscape or square: width is larger
+    thumbWidth = targetSize;
+    thumbHeight = Math.round(targetSize / aspectRatio);
+  } else {
+    // Portrait: height is larger
+    thumbHeight = targetSize;
+    thumbWidth = Math.round(targetSize * aspectRatio);
+  }
+
+  // Apply scale for high-DPI displays (2x by default)
+  return {
+    width: Math.round(thumbWidth * scale),
+    height: Math.round(thumbHeight * scale)
+  };
+};
+
 export default function EventMontage() {
   const navigate = useNavigate();
   const { t } = useTranslation();
@@ -78,6 +137,9 @@ export default function EventMontage() {
   const settings = useSettingsStore(
     useShallow((state) => state.getProfileSettings(currentProfile?.id || ''))
   );
+  const normalizedThumbnailFit = settings.eventsThumbnailFit === 'fill'
+    ? 'contain'
+    : settings.eventsThumbnailFit;
   const updateSettings = useSettingsStore ((state) => state.updateProfileSettings);
 
   // Filter state
@@ -269,6 +331,12 @@ export default function EventMontage() {
 
     toast.success(t('eventMontage.grid_layout_applied', { cols }));
   };
+  const handleThumbnailFitChange = (value: string) => {
+    if (!currentProfile) return;
+    updateSettings(currentProfile.id, {
+      eventsThumbnailFit: (value === 'fill' ? 'contain' : value) as typeof settings.eventsThumbnailFit,
+    });
+  };
 
   const handleCustomGridSubmit = () => {
     const cols = parseInt(customCols, 10);
@@ -376,6 +444,28 @@ export default function EventMontage() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground hidden md:inline">{t('events.thumbnail_fit')}</span>
+            <Select value={normalizedThumbnailFit} onValueChange={handleThumbnailFitChange}>
+              <SelectTrigger className="h-8 sm:h-9 w-[160px]" data-testid="event-montage-thumbnail-fit-select">
+                <SelectValue placeholder={t('events.thumbnail_fit')} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="contain" data-testid="event-montage-thumbnail-fit-contain">
+                  {t('events.fit_contain')}
+                </SelectItem>
+                <SelectItem value="cover" data-testid="event-montage-thumbnail-fit-cover">
+                  {t('events.fit_cover')}
+                </SelectItem>
+                <SelectItem value="none" data-testid="event-montage-thumbnail-fit-none">
+                  {t('events.fit_none')}
+                </SelectItem>
+                <SelectItem value="scale-down" data-testid="event-montage-thumbnail-fit-scale-down">
+                  {t('events.fit_scale_down')}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <Button onClick={() => refetch()} variant="outline" size="sm" className="h-8 sm:h-9">
             <RefreshCw className="h-4 w-4 sm:mr-2" />
             <span className="hidden sm:inline">{t('common.refresh')}</span>
@@ -533,20 +623,32 @@ export default function EventMontage() {
           >
             {events.map((eventData) => {
               const event = eventData.Event;
-              const monitorName = monitors.find((m) => m.Monitor.Id === event.MonitorId)?.Monitor.Name || `Monitor ${event.MonitorId}`;
+              const monitorData = monitors.find((m) => m.Monitor.Id === event.MonitorId)?.Monitor;
+              const monitorName = monitorData?.Name || `Monitor ${event.MonitorId}`;
               const startTime = new Date(event.StartDateTime.replace(' ', 'T'));
 
+              // Get monitor dimensions (use event dimensions as fallback)
+              const monitorWidth = parseInt(monitorData?.Width || event.Width || '640', 10);
+              const monitorHeight = parseInt(monitorData?.Height || event.Height || '480', 10);
+
               // Use portal URL for image
+              const { width: thumbnailWidth, height: thumbnailHeight } = calculateThumbnailDimensions(
+                monitorWidth,
+                monitorHeight,
+                monitorData?.Orientation ?? event.Orientation,
+                ZM_CONSTANTS.eventMontageImageWidth  // Target size (300)
+              );
               const imageUrl = currentProfile
                 ? getEventImageUrl(currentProfile.portalUrl, event.Id, 'snapshot', {
                   token: accessToken || undefined,
-                  width: ZM_CONSTANTS.eventMontageImageWidth,
-                  height: ZM_CONSTANTS.eventMontageImageHeight,
+                  width: thumbnailWidth,
+                  height: thumbnailHeight,
                   apiUrl: currentProfile.apiUrl,
                 })
                 : '';
 
               const hasVideo = event.Videoed === '1';
+              const aspectRatio = thumbnailWidth / thumbnailHeight;
 
               return (
                 <Card
@@ -554,11 +656,12 @@ export default function EventMontage() {
                   className="group overflow-hidden cursor-pointer hover:ring-2 hover:ring-primary transition-all"
                   onClick={() => navigate(`/events/${event.Id}`)}
                 >
-                  <div className="aspect-video relative bg-black">
+                  <div className="relative bg-black" style={{ aspectRatio: aspectRatio.toString() }}>
                     <SecureImage
                       src={imageUrl}
                       alt={event.Name}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full"
+                      style={{ objectFit: normalizedThumbnailFit }}
                       onError={(e) => {
                         const img = e.target as HTMLImageElement;
                         img.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="300" height="200"%3E%3Crect fill="%231a1a1a" width="300" height="200"/%3E%3Ctext fill="%23444" x="50%" y="50%" text-anchor="middle" font-family="sans-serif"%3ENo Image%3C/text%3E%3C/svg%3E';

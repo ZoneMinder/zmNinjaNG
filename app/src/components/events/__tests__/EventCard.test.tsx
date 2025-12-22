@@ -69,6 +69,8 @@ describe('EventCard', () => {
         }}
         monitorName="Front Door"
         thumbnailUrl="https://example.test/thumb.jpg"
+        thumbnailWidth={160}
+        thumbnailHeight={120}
       />
     );
 
@@ -115,6 +117,8 @@ describe('EventCard', () => {
         }}
         monitorName="Front Door"
         thumbnailUrl="https://example.test/thumb.jpg"
+        thumbnailWidth={160}
+        thumbnailHeight={120}
       />
     );
 

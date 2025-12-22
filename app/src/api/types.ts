@@ -391,6 +391,9 @@ export interface EventCardProps {
   event: Event;
   monitorName: string;
   thumbnailUrl: string;
+  objectFit?: React.CSSProperties['objectFit'];
+  thumbnailWidth: number;
+  thumbnailHeight: number;
 }
 
 // Montage layout types

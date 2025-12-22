@@ -184,6 +184,24 @@ export default function MonitorDetail() {
         return t('monitor_detail.rotation_none');
     }
   }, [monitor?.Monitor.Orientation, t]);
+  const orientedResolution = useMemo(() => {
+    const width = Number(monitor?.Monitor.Width);
+    const height = Number(monitor?.Monitor.Height);
+
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+      return `${monitor?.Monitor.Width ?? ''}${monitor?.Monitor.Width ? 'x' : ''}${monitor?.Monitor.Height ?? ''}`;
+    }
+
+    const rotation = parseMonitorRotation(monitor?.Monitor.Orientation);
+    if (rotation.kind === 'degrees') {
+      const normalized = ((rotation.degrees % 360) + 360) % 360;
+      if (normalized === 90 || normalized === 270) {
+        return `${height}x${width}`;
+      }
+    }
+
+    return `${width}x${height}`;
+  }, [monitor?.Monitor.Height, monitor?.Monitor.Orientation, monitor?.Monitor.Width]);
 
   const alarmStatusNumeric = alarmStatus?.status ?? alarmStatus?.output;
   const alarmStatusValue = alarmStatusNumeric?.toString().toLowerCase();
@@ -775,7 +793,7 @@ export default function MonitorDetail() {
               <CardContent className="space-y-3 text-sm">
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">{t('monitors.resolution')}</span>
-                  <span className="font-medium">{monitor.Monitor.Width}x{monitor.Monitor.Height}</span>
+                  <span className="font-medium">{orientedResolution}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">{t('monitors.colours')}</span>
