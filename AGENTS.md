@@ -146,6 +146,8 @@ log.info('Profile loaded', { component: 'Profiles', action: 'loadProfile', profi
 
 ## Commits
 
+- **CRITICAL:** Commit messages must be detailed and descriptive (no vague summaries).
+- **CRITICAL:** Split unrelated changes into separate commits (one logical change per commit).
 - **Use conventional commit format:**
     - `feat:` - New feature
     - `fix:` - Bug fix
