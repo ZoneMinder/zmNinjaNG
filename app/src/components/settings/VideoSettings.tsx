@@ -168,36 +168,41 @@ export function VideoSettings() {
                             value={settings.streamMaxFps}
                             onChange={(e) => handleStreamMaxFpsChange(Number(e.target.value))}
                             className="w-24"
+                            data-testid="stream-fps-input"
                         />
-                        <span className="text-sm text-muted-foreground">FPS</span>
+                        <span className="text-sm text-muted-foreground">{t('settings.fps_label')}</span>
                         <div className="flex flex-wrap gap-2 sm:ml-auto">
                             <Button
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handleStreamMaxFpsChange(5)}
+                                data-testid="stream-fps-5"
                             >
-                                5 FPS
+                                {t('settings.fps_option', { value: 5 })}
                             </Button>
                             <Button
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handleStreamMaxFpsChange(10)}
+                                data-testid="stream-fps-10"
                             >
-                                10 FPS ({t('settings.default')})
+                                {t('settings.fps_option_default', { value: 10 })}
                             </Button>
                             <Button
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handleStreamMaxFpsChange(15)}
+                                data-testid="stream-fps-15"
                             >
-                                15 FPS
+                                {t('settings.fps_option', { value: 15 })}
                             </Button>
                             <Button
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handleStreamMaxFpsChange(30)}
+                                data-testid="stream-fps-30"
                             >
-                                30 FPS
+                                {t('settings.fps_option', { value: 30 })}
                             </Button>
                         </div>
                     </div>

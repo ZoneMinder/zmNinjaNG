@@ -104,7 +104,7 @@ describe('Settings Page', () => {
     render(<Settings />);
 
     await user.click(screen.getByTestId('settings-language-select'));
-    await user.click(screen.getByText('Español'));
+    await user.click(screen.getByText('languages.es'));
 
     expect(changeLanguage).toHaveBeenCalledWith('es');
   });

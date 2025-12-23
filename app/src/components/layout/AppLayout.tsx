@@ -139,10 +139,10 @@ function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentProps) {
     <div className="flex flex-col h-full overflow-hidden">
       <div className={cn("p-6 transition-all duration-300", isCollapsed && "p-2 flex flex-col items-center")}>
         <div className={cn("flex items-center gap-2 mb-1", isCollapsed && "flex-col mb-2")}>
-          <img src="/logo.png" alt="zmNg Logo" className="h-8 w-8 rounded-lg" />
+          <img src="/logo.png" alt={t('app.logo_alt')} className="h-8 w-8 rounded-lg" />
           {!isCollapsed && (
             <>
-              <h1 className="text-xl font-bold tracking-tight whitespace-nowrap">zmNg</h1>
+              <h1 className="text-xl font-bold tracking-tight whitespace-nowrap">{t('app.name')}</h1>
               <LanguageSwitcher />
             </>
           )}
@@ -315,8 +315,8 @@ export default function AppLayout() {
       {/* Mobile Header */}
       <div className="md:hidden fixed top-0 left-0 right-0 h-[calc(3rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] border-b bg-background/80 backdrop-blur-md z-30 flex items-center px-3 justify-between">
         <div className="flex items-center gap-2">
-          <img src="/logo.png" alt="zmNg Logo" className="h-8 w-8 rounded-lg" />
-          <span className="font-bold">zmNg</span>
+          <img src="/logo.png" alt={t('app.logo_alt')} className="h-8 w-8 rounded-lg" />
+          <span className="font-bold">{t('app.name')}</span>
           <LanguageSwitcher />
         </div>
         <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
@@ -326,8 +326,8 @@ export default function AppLayout() {
             </Button>
           </SheetTrigger>
           <SheetContent side="left" className="p-0 w-64 sm:w-72 flex flex-col pt-[env(safe-area-inset-top)]">
-            <SheetTitle className="sr-only">Navigation menu</SheetTitle>
-            <SheetDescription className="sr-only">Primary application navigation.</SheetDescription>
+            <SheetTitle className="sr-only">{t('app.navigation_menu')}</SheetTitle>
+            <SheetDescription className="sr-only">{t('app.navigation_menu_desc')}</SheetDescription>
             <div className="flex-1 overflow-y-auto">
               <SidebarContent onMobileClose={() => setIsMobileOpen(false)} />
             </div>

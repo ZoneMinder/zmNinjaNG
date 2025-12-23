@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import './i18n'
 import App from './App.tsx'
+import { log, LogLevel } from './lib/logger'
 
 // Show native splash screen on app startup
 (async () => {
@@ -14,7 +15,7 @@ import App from './App.tsx'
     });
   } catch (error) {
     // Gracefully fails on web platform
-    console.debug('SplashScreen not available (web platform)', error);
+    log.app('SplashScreen not available (web platform)', LogLevel.DEBUG, { error });
   }
 })();
 

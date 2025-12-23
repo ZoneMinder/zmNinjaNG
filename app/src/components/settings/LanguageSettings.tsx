@@ -33,11 +33,11 @@ export function LanguageSettings() {
                             <SelectValue placeholder={t('settings.select_language')} />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="en">English</SelectItem>
-                            <SelectItem value="es">Español</SelectItem>
-                            <SelectItem value="fr">Français</SelectItem>
-                            <SelectItem value="de">Deutsch</SelectItem>
-                            <SelectItem value="zh">中文</SelectItem>
+                            <SelectItem value="en" data-testid="settings-language-option-en">{t('languages.en')}</SelectItem>
+                            <SelectItem value="es" data-testid="settings-language-option-es">{t('languages.es')}</SelectItem>
+                            <SelectItem value="fr" data-testid="settings-language-option-fr">{t('languages.fr')}</SelectItem>
+                            <SelectItem value="de" data-testid="settings-language-option-de">{t('languages.de')}</SelectItem>
+                            <SelectItem value="zh" data-testid="settings-language-option-zh">{t('languages.zh')}</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>

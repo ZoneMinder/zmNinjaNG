@@ -316,10 +316,10 @@ Then('I should see timeline interface elements', async ({ page }) => {
 
 // Notification Steps
 Then('I should see notification interface elements', async ({ page }) => {
-  const hasButtons = await page.locator('button').count() > 0;
-  const hasContent = await page.locator('div').count() > 0;
+  const hasSettings = await page.getByTestId('notification-settings').isVisible().catch(() => false);
+  const hasEmpty = await page.getByTestId('notification-settings-empty').isVisible().catch(() => false);
 
-  expect(hasButtons || hasContent).toBeTruthy();
+  expect(hasSettings || hasEmpty).toBeTruthy();
 });
 
 When('I navigate to the notification history', async ({ page }) => {

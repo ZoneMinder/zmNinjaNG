@@ -210,7 +210,7 @@ export default function NotificationSettings() {
   // Early return if no profile
   if (!currentProfile || !settings) {
     return (
-      <div className="p-6 md:p-8 max-w-5xl mx-auto">
+      <div className="p-6 md:p-8 max-w-5xl mx-auto" data-testid="notification-settings-empty">
         <div className="flex items-center justify-center min-h-[400px]">
           <div className="text-center space-y-3">
             <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto" />
@@ -223,7 +223,7 @@ export default function NotificationSettings() {
   }
 
   return (
-    <div className="p-6 md:p-8 max-w-5xl mx-auto space-y-8">
+    <div className="p-6 md:p-8 max-w-5xl mx-auto space-y-8" data-testid="notification-settings">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">{t('notification_settings.title')}</h1>
@@ -285,6 +285,7 @@ export default function NotificationSettings() {
                 id="enable-notifications"
                 checked={settings.enabled}
                 onCheckedChange={handleEnableToggle}
+                data-testid="notification-enable-toggle"
               />
             </div>
 
@@ -320,12 +321,13 @@ export default function NotificationSettings() {
                 <Input
                   id="host"
                   type="text"
-                  placeholder="zm.example.com"
+                  placeholder={t('notification_settings.host_placeholder')}
                   value={settings.host}
                   onChange={(e) => updateProfileSettings(currentProfile.id, { host: e.target.value })}
                   disabled={isConnected}
                   autoCapitalize="none"
                   autoCorrect="off"
+                  data-testid="notification-host-input"
                 />
                 <p className="text-xs text-muted-foreground">
                   {t('notification_settings.server_host_desc')}
@@ -338,6 +340,7 @@ export default function NotificationSettings() {
                   variant="outline"
                   size="sm"
                   onClick={() => setShowAdvanced(!showAdvanced)}
+                  data-testid="notification-advanced-toggle"
                 >
                   {showAdvanced ? t('notification_settings.hide_advanced') : t('notification_settings.show_advanced')}
                 </Button>
@@ -354,6 +357,7 @@ export default function NotificationSettings() {
                           value={settings.port}
                           onChange={(e) => updateProfileSettings(currentProfile.id, { port: Number(e.target.value) })}
                           disabled={isConnected}
+                          data-testid="notification-port-input"
                         />
                         <p className="text-xs text-muted-foreground">{t('notification_settings.default_port')}</p>
                       </div>
@@ -370,6 +374,7 @@ export default function NotificationSettings() {
                             checked={settings.ssl}
                             onCheckedChange={(checked) => updateProfileSettings(currentProfile.id, { ssl: checked })}
                             disabled={isConnected}
+                            data-testid="notification-ssl-toggle"
                           />
                         </div>
                         <p className="text-xs text-muted-foreground">
@@ -394,6 +399,7 @@ export default function NotificationSettings() {
                           id="show-toasts"
                           checked={settings.showToasts}
                           onCheckedChange={(checked) => updateProfileSettings(currentProfile.id, { showToasts: checked })}
+                          data-testid="notification-show-toasts-toggle"
                         />
                       </div>
 
@@ -408,6 +414,7 @@ export default function NotificationSettings() {
                           id="play-sound"
                           checked={settings.playSound}
                           onCheckedChange={(checked) => updateProfileSettings(currentProfile.id, { playSound: checked })}
+                          data-testid="notification-play-sound-toggle"
                         />
                       </div>
                     </div>
@@ -419,7 +426,12 @@ export default function NotificationSettings() {
               <div className="flex gap-2">
                 {isConnected ? (
                   <>
-                    <Button variant="outline" onClick={handleDisconnect} className="flex-1">
+                    <Button
+                      variant="outline"
+                      onClick={handleDisconnect}
+                      className="flex-1"
+                      data-testid="notification-disconnect-button"
+                    >
                       <WifiOff className="h-4 w-4 mr-2" />
                       {t('notification_settings.disconnect')}
                     </Button>
@@ -428,6 +440,7 @@ export default function NotificationSettings() {
                       onClick={handleConnect}
                       disabled={isConnecting}
                       className="flex-1"
+                      data-testid="notification-reconnect-button"
                     >
                       {isConnecting ? (
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -442,6 +455,7 @@ export default function NotificationSettings() {
                     onClick={handleConnect}
                     disabled={isConnecting || !settings.host}
                     className="flex-1"
+                    data-testid="notification-connect-button"
                   >
                     {isConnecting ? (
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -478,6 +492,7 @@ export default function NotificationSettings() {
                   <div
                     key={monitorData.Id}
                     className="flex flex-col gap-3 p-4 rounded-lg border bg-card"
+                    data-testid={`notification-monitor-card-${monitorData.Id}`}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
@@ -497,6 +512,7 @@ export default function NotificationSettings() {
                         onCheckedChange={(checked) =>
                           handleMonitorToggle(parseInt(monitorData.Id, 10), checked)
                         }
+                        data-testid={`notification-monitor-toggle-${monitorData.Id}`}
                       />
                     </div>
 
@@ -520,6 +536,7 @@ export default function NotificationSettings() {
                               )
                             }
                             className="w-24"
+                            data-testid={`notification-monitor-interval-${monitorData.Id}`}
                           />
                           <span className="text-sm text-muted-foreground">{t('notification_settings.seconds')}</span>
                           <div className="flex gap-1 ml-auto">
@@ -529,8 +546,9 @@ export default function NotificationSettings() {
                               onClick={() =>
                                 handleIntervalChange(parseInt(monitorData.Id, 10), 30)
                               }
+                              data-testid={`notification-monitor-interval-30-${monitorData.Id}`}
                             >
-                              30s
+                              {t('notification_settings.quick_interval_seconds', { value: 30 })}
                             </Button>
                             <Button
                               variant="outline"
@@ -538,8 +556,9 @@ export default function NotificationSettings() {
                               onClick={() =>
                                 handleIntervalChange(parseInt(monitorData.Id, 10), 60)
                               }
+                              data-testid={`notification-monitor-interval-60-${monitorData.Id}`}
                             >
-                              60s
+                              {t('notification_settings.quick_interval_seconds', { value: 60 })}
                             </Button>
                             <Button
                               variant="outline"
@@ -547,8 +566,9 @@ export default function NotificationSettings() {
                               onClick={() =>
                                 handleIntervalChange(parseInt(monitorData.Id, 10), 120)
                               }
+                              data-testid={`notification-monitor-interval-120-${monitorData.Id}`}
                             >
-                              2m
+                              {t('notification_settings.quick_interval_minutes', { value: 2 })}
                             </Button>
                           </div>
                         </div>
