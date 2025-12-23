@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [zmNg-0.0.8](https://github.com/pliablepixels/zmNg/compare/zmNg-0.0.7..zmNg-0.0.8) - 2025-12-23
+
+### 🐛 Bug Fixes
+
+- Correct event thumbnail aspect ratios for rotated monitors - ([a860616](https://github.com/pliablepixels/zmNg/commit/a86061620b05b99e64d2983fb4480bd8ce97b74f))
+- Avoid undici dependency for dev proxy - ([98ea63a](https://github.com/pliablepixels/zmNg/commit/98ea63affded4230c13339bb40917e57f3682e7b))
+
+### 🔧 Miscellaneous
+
+- Release bump - ([3b4310b](https://github.com/pliablepixels/zmNg/commit/3b4310bd3b2f96d32afc3ee3faf919cbfad417ed))
 ## [zmNg-0.0.7](https://github.com/pliablepixels/zmNg/compare/zmNg-0.0.6..zmNg-0.0.7) - 2025-12-22
 
 ### ✨ Features
@@ -23,6 +33,7 @@ All notable changes to this project will be documented in this file.
 
 ### 📚 Documentation
 
+- Update CHANGELOG.md for zmNg-0.0.7 - ([fd78c2b](https://github.com/pliablepixels/zmNg/commit/fd78c2b4e12ace6908d7a6378128dc2b48081127))
 - Make commit rules explicit - ([bbca0f8](https://github.com/pliablepixels/zmNg/commit/bbca0f8f407bfce98ebf2d39cc4baeb47b4c41c5))
 
 ### ✅ Tests
