@@ -88,7 +88,7 @@ const DEFAULT_SETTINGS: ProfileSettings = {
   eventMontageLayouts: {},
   montageGridRows: 4,
   montageGridCols: 4,
-  eventMontageGridCols: 5,
+  eventMontageGridCols: 2,
   montageIsFullscreen: false,
   montageFeedFit: 'contain',
   eventsViewMode: 'list',

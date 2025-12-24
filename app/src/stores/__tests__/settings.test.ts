@@ -14,7 +14,7 @@ describe('Settings Store', () => {
     expect(settings.viewMode).toBe('snapshot');
     expect(settings.snapshotRefreshInterval).toBe(3);
     expect(settings.montageGridRows).toBe(4);
-    expect(settings.eventMontageGridCols).toBe(5);
+    expect(settings.eventMontageGridCols).toBe(2);
     expect(settings.monitorDetailCycleSeconds).toBe(0);
     expect(settings.eventsThumbnailFit).toBe('contain');
   });
