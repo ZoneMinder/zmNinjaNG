@@ -23,6 +23,7 @@ interface EventListViewProps {
   isLoadingMore: boolean;
   onLoadMore: () => void;
   parentRef: React.RefObject<HTMLDivElement | null>;
+  parentElement: HTMLDivElement | null;
 }
 
 export const EventListView = ({
@@ -35,6 +36,7 @@ export const EventListView = ({
   isLoadingMore,
   onLoadMore,
   parentRef,
+  parentElement,
 }: EventListViewProps) => {
   const { t } = useTranslation();
 
@@ -47,9 +49,9 @@ export const EventListView = ({
     overscan: 5, // Render 5 items above and below viewport
   });
 
-  // Don't render content until we have a parent ref (iOS timing fix)
-  // Parent component will trigger re-render via callback ref
-  if (!parentRef.current) {
+  // Don't render content until we have a parent element (iOS timing fix)
+  // Parent component will trigger re-render via callback ref state update
+  if (!parentElement) {
     return (
       <div className="min-h-0 p-4" data-testid="event-list-loading">
         <div className="text-center text-muted-foreground">

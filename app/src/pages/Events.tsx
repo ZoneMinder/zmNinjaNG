@@ -50,7 +50,7 @@ export default function Events() {
   const updateSettings = useSettingsStore((state) => state.updateProfileSettings);
   const accessToken = useAuthStore((state) => state.accessToken);
   const parentRef = useRef<HTMLDivElement>(null);
-  const [_parentElement, setParentElement] = useState<HTMLDivElement | null>(null);
+  const [parentElement, setParentElement] = useState<HTMLDivElement | null>(null);
   const { t } = useTranslation();
 
   // Check if user came from another page (navigation state tracking)
@@ -463,6 +463,7 @@ export default function Events() {
             isLoadingMore={isLoadingMore}
             onLoadMore={loadNextPage}
             parentRef={parentRef}
+            parentElement={parentElement}
           />
         )}
       </div>
