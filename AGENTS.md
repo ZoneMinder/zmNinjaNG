@@ -14,7 +14,7 @@
 
 **Every user-facing string must be internationalized.**
 
-- **Location**: `app/public/locales/{lang}/translation.json`
+- **Location**: `app/src/locales/{lang}/translation.json`
 - **Current languages**: en, de, es, fr, zh
 - **Rule**: Update ALL existing language directories, including any added in the future
 - **Usage**:
@@ -23,6 +23,7 @@
   <Text>{t('setup.title')}</Text>
   ```
 - **When adding text**: Add the same key to every translation.json file
+- **When adding a new language**: Follow `.agent/workflows/add_language.md` - must update `i18n.ts` to import and bundle the new translations
 
 ---
 
