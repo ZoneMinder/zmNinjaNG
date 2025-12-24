@@ -75,6 +75,7 @@
 - If functionality changes → update affected tests
 - Tests must interact with UI elements, not just load views
 - Use data-testid selectors for reliability
+- Always make sure tests work for android (mobile devices use different files like capacitor HTTP that are not triggered when web/desktop are tested)
 
 ---
 
