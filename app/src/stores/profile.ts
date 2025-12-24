@@ -460,21 +460,29 @@ export const useProfileStore = create<ProfileState>()(
     {
       name: 'zmng-profiles',
       // On load, initialize API client with current profile and authenticate
-      onRehydrateStorage: () => async (state) => {
-        const bootstrapStart = Date.now();
-        const BOOTSTRAP_STEP_TIMEOUT_MS = 8000;
-        const BOOTSTRAP_TOTAL_TIMEOUT_MS = 20000;
-        const getState = () => {
-          if (!storeGet) {
-            throw new Error('Profile store not ready');
-          }
-          return storeGet();
-        };
-        const setState = (partial: Partial<ProfileState>) => {
-          if (storeSet) {
-            storeSet(partial);
-          }
-        };
+      onRehydrateStorage: () => {
+        try {
+          log.profileService('onRehydrateStorage: Zustand persist starting rehydration', LogLevel.INFO);
+        } catch {
+          // Logger might not be initialized in test environment
+        }
+
+        return async (state) => {
+          try {
+            const bootstrapStart = Date.now();
+            const BOOTSTRAP_STEP_TIMEOUT_MS = 8000;
+            const BOOTSTRAP_TOTAL_TIMEOUT_MS = 20000;
+            const getState = () => {
+              if (!storeGet) {
+                throw new Error('Profile store not ready');
+              }
+              return storeGet();
+            };
+            const setState = (partial: Partial<ProfileState>) => {
+              if (storeSet) {
+                storeSet(partial);
+              }
+            };
         const withTimeout = async <T>(
           label: string,
           promise: Promise<T>,
@@ -697,13 +705,44 @@ export const useProfileStore = create<ProfileState>()(
             }
             setState({ isBootstrapping: false, bootstrapStep: null });
           }
-        };
+          };
 
-        void runBootstrapTasks();
+          void runBootstrapTasks();
+        } catch (error) {
+          // CRITICAL: Catch any unexpected errors in onRehydrateStorage to prevent app from hanging
+          log.profileService(
+            'CRITICAL: Unexpected error in onRehydrateStorage - forcing initialization',
+            LogLevel.ERROR,
+            { error }
+          );
+          // Force initialization to prevent hanging
+          if (storeSet) {
+            storeSet({ isInitialized: true, isBootstrapping: false, bootstrapStep: null });
+          }
+        }
+      };
       },
     }
   )
 );
+
+// CRITICAL FAILSAFE: Ensure app initializes even if onRehydrateStorage fails
+// This is especially important for Android where storage rehydration can be unreliable after app kill
+setTimeout(() => {
+  const state = useProfileStore.getState();
+  if (!state.isInitialized) {
+    log.profileService(
+      'FAILSAFE: Profile store still not initialized after 3 seconds - forcing initialization',
+      LogLevel.ERROR,
+      {
+        hasProfiles: state.profiles.length > 0,
+        currentProfileId: state.currentProfileId,
+        isBootstrapping: state.isBootstrapping,
+      }
+    );
+    useProfileStore.setState({ isInitialized: true, isBootstrapping: false, bootstrapStep: null });
+  }
+}, 3000);
 
 // Subscribe to auth store to update refresh token in profile
 useAuthStore.subscribe((state) => {
