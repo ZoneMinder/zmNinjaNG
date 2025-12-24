@@ -5,6 +5,7 @@
  */
 
 import { useTranslation } from 'react-i18next';
+import { useState, useEffect } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
@@ -37,6 +38,14 @@ export const EventListView = ({
   parentRef,
 }: EventListViewProps) => {
   const { t } = useTranslation();
+  const [isParentReady, setIsParentReady] = useState(false);
+
+  // Wait for parentRef to be available (iOS timing fix)
+  useEffect(() => {
+    if (parentRef.current) {
+      setIsParentReady(true);
+    }
+  }, [parentRef]);
 
   // Virtualize the events list for better performance
   const rowVirtualizer = useVirtualizer({
@@ -45,6 +54,17 @@ export const EventListView = ({
     estimateSize: () => 140, // Approximate height of EventCard
     overscan: 5, // Render 5 items above and below viewport
   });
+
+  // Guard: Don't render virtualized list until parentRef is available
+  if (!isParentReady) {
+    return (
+      <div className="min-h-0 p-4" data-testid="event-list-loading">
+        <div className="text-center text-muted-foreground">
+          {t('common.loading')}...
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-0" data-testid="event-list">

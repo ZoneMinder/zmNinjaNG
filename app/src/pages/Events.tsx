@@ -91,10 +91,21 @@ export default function Events() {
     queryFn: getMonitors,
   });
 
-  // Use pagination hook
+  // Memoize enabled monitor IDs and monitors (before events query)
+  const enabledMonitorIds = useMemo(
+    () => (monitorsData?.monitors ? getEnabledMonitorIds(monitorsData.monitors) : []),
+    [monitorsData]
+  );
+
+  const enabledMonitors = useMemo(
+    () => (monitorsData?.monitors ? filterEnabledMonitors(monitorsData.monitors) : []),
+    [monitorsData]
+  );
+
+  // Use pagination hook (will be updated with event count later)
   const { eventLimit, isLoadingMore, loadNextPage } = useEventPagination({
     defaultLimit: settings.defaultEventLimit || 300,
-    eventCount: 0, // Will be updated below
+    eventCount: 0, // Temporary - updated via useEffect below
     containerRef: parentRef,
   });
 
@@ -118,17 +129,6 @@ export default function Events() {
     },
     enabled: true,
   });
-
-  // Memoize enabled monitor IDs and monitors
-  const enabledMonitorIds = useMemo(
-    () => (monitorsData?.monitors ? getEnabledMonitorIds(monitorsData.monitors) : []),
-    [monitorsData]
-  );
-
-  const enabledMonitors = useMemo(
-    () => (monitorsData?.monitors ? filterEnabledMonitors(monitorsData.monitors) : []),
-    [monitorsData]
-  );
 
   // Memoize filtered events
   const allEvents = useMemo(() => {
