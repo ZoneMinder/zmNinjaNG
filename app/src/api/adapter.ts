@@ -115,21 +115,27 @@ export const createNativeAdapter = (): AxiosAdapter => {
                     }
                 }
 
-                // Handle 401 specifically for Tauri
+                // Handle 401 specifically for Tauri - respect validateStatus
                 if (responseStatus === 401) {
-                    const error = new Error('Unauthorized') as Error & {
-                        response: {
-                            status: number;
-                            data: unknown;
-                            headers: Record<string, string>;
+                    // Check if validateStatus allows 401
+                    const validateStatus = config.validateStatus;
+                    const shouldThrow = validateStatus ? !validateStatus(401) : true;
+
+                    if (shouldThrow) {
+                        const error = new Error('Unauthorized') as Error & {
+                            response: {
+                                status: number;
+                                data: unknown;
+                                headers: Record<string, string>;
+                            };
                         };
-                    };
-                    error.response = {
-                        status: 401,
-                        data: responseData,
-                        headers: responseHeaders,
-                    };
-                    throw error;
+                        error.response = {
+                            status: 401,
+                            data: responseData,
+                            headers: responseHeaders,
+                        };
+                        throw error;
+                    }
                 }
             }
 
