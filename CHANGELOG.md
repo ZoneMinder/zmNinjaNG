@@ -2,6 +2,48 @@
 
 All notable changes to this project will be documented in this file.
 
+## [zmNg-0.1.2](https://github.com/pliablepixels/zmNg/compare/zmNg-0.1.1..zmNg-0.1.2) - 2025-12-25
+
+### ✨ Features
+
+- Add ZoneMinder server logs view to Logs page - ([16c7c74](https://github.com/pliablepixels/zmNg/commit/16c7c7438ac11690d46f931af8b7d6bff675e5e4))
+- Add ZoneMinder server logs API and schemas - ([8cbf455](https://github.com/pliablepixels/zmNg/commit/8cbf45516551ca27dcab85767b8d9b80c9188c95))
+- Add Zod validation to remaining monitors endpoints - ([057bc88](https://github.com/pliablepixels/zmNg/commit/057bc88ad9e7ca091baf4a9dc12d7f4d7083456b))
+- Add Zod validation to remaining events endpoints - ([3edc09f](https://github.com/pliablepixels/zmNg/commit/3edc09f50d617d0f97788131bef5538b19dab146))
+- Add Zod validation to getVersion endpoint - ([41d3eba](https://github.com/pliablepixels/zmNg/commit/41d3eba36b1b9bb5eb69a66279b4c805ce23de9a))
+- Add comprehensive Zod schemas for all API responses - ([9b95949](https://github.com/pliablepixels/zmNg/commit/9b95949382396916fe7898ee96ab35ef923e8861))
+
+### 🐛 Bug Fixes
+
+- Log raw API response when Zod validation fails - ([611ec63](https://github.com/pliablepixels/zmNg/commit/611ec634902d193e66b6d18886c770c9c7031ed5))
+- Translate remaining hardcoded strings in Logs page - ([06a9cec](https://github.com/pliablepixels/zmNg/commit/06a9cec6436a1ed5e88f4a8f951aa69409af4444))
+- Add missing translation for server logs fetch error - ([95c4a2a](https://github.com/pliablepixels/zmNg/commit/95c4a2a81280f572e807675c7077da85c9e31ca2))
+- Use z.coerce.number() for load array to handle ZM version variations - ([d9e7f58](https://github.com/pliablepixels/zmNg/commit/d9e7f58581d73559bec6c5ed0996e6c9544e5644))
+- Use z.coerce.number() for numeric fields to handle ZM version variations - ([cb985ca](https://github.com/pliablepixels/zmNg/commit/cb985cac9e884b70dfde3de2be673b5cbd25906c))
+- Remove unused imports in states.ts - ([1e5b32e](https://github.com/pliablepixels/zmNg/commit/1e5b32e59816ab3b08c1472b2a1c6cdca09d4ca9))
+- Use different filenames for zmNg vs Server logs export - ([43629b0](https://github.com/pliablepixels/zmNg/commit/43629b09e9d4824125a660d37cff4eb24859b241))
+- Separate component filters for zmNg and Server logs - ([f4455a0](https://github.com/pliablepixels/zmNg/commit/f4455a099b40c9323d74d3b6f00b775015d7c714))
+- Prevent infinite loop in ZM logs fetch - ([bbc41e8](https://github.com/pliablepixels/zmNg/commit/bbc41e88d831821e21651619ebef97684e90a33f))
+- Align alarm and daemon schemas with ZoneMinder API spec - ([1d140da](https://github.com/pliablepixels/zmNg/commit/1d140daca515cb18ea325fd3e13f9ae0a88e6ffd))
+- Make ConsoleEventsResponseSchema resilient to array responses - ([5a11100](https://github.com/pliablepixels/zmNg/commit/5a11100701e2f4fc26c7fac9d29369f6ccc43dee))
+
+### ♻️ Refactor
+
+- Replace manual interfaces with z.infer types in server.ts - ([c229634](https://github.com/pliablepixels/zmNg/commit/c2296342a0d5911e09bfeea6f99f2ea279b77565))
+- Replace manual interfaces with Zod validation in states.ts - ([e665376](https://github.com/pliablepixels/zmNg/commit/e6653768899816d48fbf39e6c4bce8fa68f7895e))
+
+### 📚 Documentation
+
+- Add logging and documentation for consoleEvents array edge case - ([73663b9](https://github.com/pliablepixels/zmNg/commit/73663b9eeccc47a498afcfdaa11c2d3285f7c386))
+- Updated agent experience - ([204df1f](https://github.com/pliablepixels/zmNg/commit/204df1faee552c18a13c840b1dafce4ebd9f4c49))
+
+### 🔧 Miscellaneous
+
+- Release bump - ([646aeeb](https://github.com/pliablepixels/zmNg/commit/646aeebfd9dc23de14c0272ed1cacb3a1dc7f563))
+
+### 📝 Other
+
+- Merge branch 'feat/comprehensive-zod-validation' - ([5087bb6](https://github.com/pliablepixels/zmNg/commit/5087bb671252e2d2dc3d717de08449822e730615))
 ## [zmNg-0.1.1](https://github.com/pliablepixels/zmNg/compare/zmNg-0.1.0..zmNg-0.1.1) - 2025-12-25
 
 ### 🐛 Bug Fixes
@@ -23,6 +65,7 @@ All notable changes to this project will be documented in this file.
 
 ### 📝 Other
 
+- Preparing release for: zmNg-0.1.1 - ([71b7a1f](https://github.com/pliablepixels/zmNg/commit/71b7a1fa898f6084085e530ff5cad237d1bae83f))
 - Merge pull request #6 from Subtalime/zod-logging
 
 Zod logging - ([6620cae](https://github.com/pliablepixels/zmNg/commit/6620cae3520820da131fcec6b4d3412f9701ee3f))
