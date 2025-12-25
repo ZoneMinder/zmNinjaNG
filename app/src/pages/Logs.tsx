@@ -70,11 +70,16 @@ export default function Logs() {
         (state) => state.getProfileSettings(currentProfile?.id || '').logLevel
     );
     const updateProfileSettings = useSettingsStore((state) => state.updateProfileSettings);
-    const [selectedComponents, setSelectedComponents] = useState<string[]>([]);
+    const [selectedComponentsZmng, setSelectedComponentsZmng] = useState<string[]>([]);
+    const [selectedComponentsServer, setSelectedComponentsServer] = useState<string[]>([]);
     const [logSource, setLogSource] = useState<LogSource>('zmng');
     const [zmLogs, setZmLogs] = useState<ZMLog[]>([]);
     const [isLoadingZmLogs, setIsLoadingZmLogs] = useState(false);
     const unassignedComponentValue = 'unassigned';
+
+    // Use the appropriate component filter based on log source
+    const selectedComponents = logSource === 'zmng' ? selectedComponentsZmng : selectedComponentsServer;
+    const setSelectedComponents = logSource === 'zmng' ? setSelectedComponentsZmng : setSelectedComponentsServer;
 
     // Fetch ZM logs when switching to server view
     useEffect(() => {
