@@ -2,31 +2,50 @@
 
 All notable changes to this project will be documented in this file.
 
+## [zmNg-0.1.1](https://github.com/pliablepixels/zmNg/compare/zmNg-0.1.0..zmNg-0.1.1) - 2025-12-25
+
+### 🐛 Bug Fixes
+
+- Add 'by Claude' to review title for clarity - ([414f80e](https://github.com/pliablepixels/zmNg/commit/414f80ed27f7f6675da05d47898e7919e7247661))
+- Update Claude Code Review workflow for external PRs and compact reviews - ([3c3d556](https://github.com/pliablepixels/zmNg/commit/3c3d5569aacc798b0d08c766331d817b584c04aa))
+- Use PAT instead of GITHUB_TOKEN for external PRs - ([452c27e](https://github.com/pliablepixels/zmNg/commit/452c27e5bfdf345f4ea8f363e5a77c80c2e6977a))
+- Use pull_request_target for external contributor PRs - ([51648d7](https://github.com/pliablepixels/zmNg/commit/51648d77efb44a89cd3579cb59cd7e0303d3bf24))
+- Add GitHub token to Claude Code Review workflow - ([050e2ae](https://github.com/pliablepixels/zmNg/commit/050e2aed13576b59b7adc654e13e6a311c6cdc3e))
+
+### ✅ Tests
+
+- Fix flaky events feature tests with improved wait logic - ([ff44440](https://github.com/pliablepixels/zmNg/commit/ff444405da24075c5b4b57f0f33b15e79537056e))
+- Fixes testing issues with https://github.com/pliablepixels/zmNg/pull/6 - ([f3a5aa3](https://github.com/pliablepixels/zmNg/commit/f3a5aa3154cbdf9f4a8ce0e98a7b2b4b66f1a6b5))
+
+### 🔧 Miscellaneous
+
+- Updated release - ([ec578f9](https://github.com/pliablepixels/zmNg/commit/ec578f9a26687d7dd15287864ccc71865f04c079))
+
+### 📝 Other
+
+- Merge pull request #6 from Subtalime/zod-logging
+
+Zod logging - ([6620cae](https://github.com/pliablepixels/zmNg/commit/6620cae3520820da131fcec6b4d3412f9701ee3f))
+- Removed ZOD reference in messaging - ([48e0c60](https://github.com/pliablepixels/zmNg/commit/48e0c605b60535952df5c5f6cd80e0ea95a98a5a))
+- Made coerce numbers nullable
+removed obsolete code - ([37483a4](https://github.com/pliablepixels/zmNg/commit/37483a47b8effb03f49a6543ce343fa6d1b8ff46))
+- Made monitor.json type to allow string/number for certain fields - ([6ad5855](https://github.com/pliablepixels/zmNg/commit/6ad585538fa5f6e80a35a55bf507c0362879a31c))
+- Added formatted output of parsing the monitor.json - ([169de48](https://github.com/pliablepixels/zmNg/commit/169de48bfa2d13c42749677e41ad8a6d45a4b03f))
 ## [zmNg-0.1.0](https://github.com/pliablepixels/zmNg/compare/zmNg-0.0.9..zmNg-0.1.0) - 2025-12-24
-
-### ✨ Features
-
-- **Route Persistence**: App now remembers your last visited page and returns to it on restart - ([dc2cb2c](https://github.com/pliablepixels/zmNg/commit/dc2cb2cfc5c805f2345095e24462b9f585dff2d2))
-  - Each profile independently tracks its last visited route
-  - First-time setup now navigates to Monitors view instead of Dashboard
-  - Route persistence saved per-profile in settings
-  - Excludes setup/profile management routes from being saved
 
 ### 🐛 Bug Fixes
 
 - Add missing comma in package.json - ([997e545](https://github.com/pliablepixels/zmNg/commit/997e545a65774e2e94203857930152c1c0239438))
-- Remove redundant module-level failsafe that caused E2E test failures - ([dc2cb2c](https://github.com/pliablepixels/zmNg/commit/dc2cb2cfc5c805f2345095e24462b9f585dff2d2))
-  - Removed 3-second failsafe from profile store that was triggering prematurely
-  - Now relies solely on React-based 5-second timeout in App.tsx
-  - Fixes flaky E2E tests by giving initialization more time
-- Fix flaky "clear event filters" E2E test - ([dc2cb2c](https://github.com/pliablepixels/zmNg/commit/dc2cb2cfc5c805f2345095e24462b9f585dff2d2))
-  - Removed `{ force: true }` from click action
-  - Added proper wait for button visibility before clicking
 - Add failsafes to prevent Android splash screen hang on app restart - ([31d97c7](https://github.com/pliablepixels/zmNg/commit/31d97c744df141e5e50e9793493f21f566c1cb91))
+
+### 📚 Documentation
+
+- Update CHANGELOG for zmNg-0.1.0 with route persistence feature - ([3e6b1d3](https://github.com/pliablepixels/zmNg/commit/3e6b1d3dcd4a2b7b4da805096c7dc70fcfeec939))
 
 ### 🔧 Miscellaneous
 
 - Updated release message - ([57f37d1](https://github.com/pliablepixels/zmNg/commit/57f37d17ad4b41c44d5a7d2f4caffb4289ceaa81))
+- 0.1.0 - ([dc2cb2c](https://github.com/pliablepixels/zmNg/commit/dc2cb2cfc5c805f2345095e24462b9f585dff2d2))
 
 ### 📝 Other
 
