@@ -70,7 +70,7 @@ export function validateApiResponse<T extends ZodSchema>(
     if (error instanceof z.ZodError) {
       const formattedErrors = formatZodIssues(error.issues);
 
-      log.api('ZOD-API response validation failed',
+      log.api('API response validation failed',
           LogLevel.ERROR,
           {
               endpoint: context.endpoint,
@@ -83,7 +83,7 @@ export function validateApiResponse<T extends ZodSchema>(
      );
 
       throw new ApiValidationError(
-        `ZOD-API response validation failed for ${context.method ?? 'UNKNOWN'} ${context.endpoint ?? 'unknown endpoint'}`,
+        `API response validation failed for ${context.method ?? 'UNKNOWN'} ${context.endpoint ?? 'unknown endpoint'}`,
             error,
             formattedErrors,
             data
