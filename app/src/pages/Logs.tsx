@@ -258,7 +258,11 @@ export default function Logs() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `zmng-logs-${new Date().toISOString().split('T')[0]}.txt`;
+        const dateStr = new Date().toISOString().split('T')[0];
+        const filename = logSource === 'zmng'
+            ? `zmng-logs-${dateStr}.txt`
+            : `zm-server-logs-${dateStr}.txt`;
+        a.download = filename;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
