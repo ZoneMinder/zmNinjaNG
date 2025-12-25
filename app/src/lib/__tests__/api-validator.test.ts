@@ -166,7 +166,7 @@ describe('validateApiResponse', () => {
 
       expect(() => {
         validateApiResponse(UserSchema, invalidData, { endpoint: '/api/users' });
-      }).toThrow('API response validation failed for /api/users');
+      }).toThrow('API response validation failed for UNKNOWN /api/users');
     });
 
     it('includes "unknown endpoint" when no context provided', () => {
@@ -174,7 +174,7 @@ describe('validateApiResponse', () => {
 
       expect(() => {
         validateApiResponse(UserSchema, invalidData);
-      }).toThrow('API response validation failed for unknown endpoint');
+      }).toThrow('API response validation failed for UNKNOWN unknown endpoint');
     });
 
     it('throws error with zodError property', () => {

@@ -535,6 +535,7 @@ export default function MonitorDetail() {
             alt={monitor.Monitor.Name}
             className="w-full h-full"
             style={{ objectFit: settings.monitorDetailFeedFit }}
+            data-testid="monitor-player"
             onError={(e) => {
               const img = e.target as HTMLImageElement;
 
