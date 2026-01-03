@@ -22,7 +22,7 @@ import GridLayout, { WidthProvider } from 'react-grid-layout';
 import type { Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
-import { useMemo, useState, useEffect, useCallback } from 'react';
+import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
 const WrappedGridLayout = WidthProvider(GridLayout);
@@ -49,6 +49,14 @@ export function DashboardLayout() {
 
     const [mounted, setMounted] = useState(false);
     const [layout, setLayout] = useState<Layout[]>([]);
+
+    // Use ref to track profileId without making it a dependency
+    const profileIdRef = useRef(profileId);
+
+    // Keep ref updated with current profileId
+    useEffect(() => {
+        profileIdRef.current = profileId;
+    }, [profileId]);
 
     // Force component to mount properly
     useEffect(() => {
@@ -82,8 +90,9 @@ export function DashboardLayout() {
         setLayout((prev) => (areLayoutsEqual(prev, nextLayout) ? prev : nextLayout));
         if (!isEditing) return;
 
-        updateLayouts(profileId, { lg: nextLayout });
-    }, [areLayoutsEqual, isEditing, profileId]);
+        // Use ref to access current profileId without adding it to dependencies
+        updateLayouts(profileIdRef.current, { lg: nextLayout });
+    }, [areLayoutsEqual, isEditing]);
 
     if (widgets.length === 0) {
         return (
