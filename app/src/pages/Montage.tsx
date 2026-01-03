@@ -52,6 +52,7 @@ import 'react-resizable/css/styles.css';
 import type { Monitor } from '../api/types';
 import { getMonitorAspectRatio } from '../lib/monitor-rotation';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { useCallback } from 'react';
 
 // Default column configuration
 const GRID_ROW_HEIGHT = 10;
@@ -113,29 +114,6 @@ export default function Montage() {
 
   // ResizeObserver to measure container width
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
-
-  // Callback ref to measure container width when element mounts
-  const containerRef = (element: HTMLDivElement | null) => {
-    // Clean up previous observer
-    if (resizeObserverRef.current) {
-      resizeObserverRef.current.disconnect();
-      resizeObserverRef.current = null;
-    }
-
-    if (!element) return;
-
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const width = entry.contentRect.width;
-        if (width > 0 && currentWidthRef.current !== width) {
-          handleWidthChange(width);
-        }
-      }
-    });
-
-    observer.observe(element);
-    resizeObserverRef.current = observer;
-  };
 
   // Auto-hide overlay after 5 seconds (only on desktop)
   useEffect(() => {
@@ -341,7 +319,7 @@ export default function Montage() {
     setLayout((prev) => (areLayoutsEqual(prev, normalized) ? prev : normalized));
   }, [monitors, gridCols, monitorMap, settings.montageLayouts, hasWidth]);
 
-  const handleWidthChange = (width: number) => {
+  const handleWidthChange = useCallback((width: number) => {
     const isFirstMeasurement = currentWidthRef.current === 0;
     currentWidthRef.current = width;
 
@@ -378,7 +356,30 @@ export default function Montage() {
       const normalizedLayout = normalizeLayout(prev, gridCols, width, isFullscreen ? 0 : GRID_MARGIN);
       return normalizedLayout;
     });
-  };
+  }, [gridCols, isFullscreen, currentProfile, t, updateSettings, setGridCols, setIsScreenTooSmall, setHasWidth, setLayout]);
+
+  // Callback ref to measure container width when element mounts
+  const containerRef = useCallback((element: HTMLDivElement | null) => {
+    // Clean up previous observer
+    if (resizeObserverRef.current) {
+      resizeObserverRef.current.disconnect();
+      resizeObserverRef.current = null;
+    }
+
+    if (!element) return;
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const width = entry.contentRect.width;
+        if (width > 0 && currentWidthRef.current !== width) {
+          handleWidthChange(width);
+        }
+      }
+    });
+
+    observer.observe(element);
+    resizeObserverRef.current = observer;
+  }, [handleWidthChange]);
 
   // Note: Window resize handling is now done via ResizeObserver on the container element
   // which measures the actual container width (not window.innerWidth)
