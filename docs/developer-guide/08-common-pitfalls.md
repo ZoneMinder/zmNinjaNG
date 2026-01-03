@@ -1,0 +1,684 @@
+# Common Pitfalls
+
+This chapter catalogs common mistakes and how to avoid them.
+
+## React Pitfalls
+
+### 1. Using Non-Primitive Dependencies in useCallback
+
+**Problem:**
+
+```tsx
+const handleClick = useCallback(() => {
+  saveData(currentProfile, formData);
+}, [currentProfile, formData]);  // ❌ Objects recreate every render
+```
+
+**Why it's wrong:**
+
+- `currentProfile` and `formData` are objects
+- Objects get new references on each render (even if values unchanged)
+- Dependencies change → callback recreates → triggers re-renders
+
+**Solution:**
+
+```tsx
+const currentProfileRef = useRef(currentProfile);
+const formDataRef = useRef(formData);
+
+useEffect(() => {
+  currentProfileRef.current = currentProfile;
+  formDataRef.current = formData;
+}, [currentProfile, formData]);
+
+const handleClick = useCallback(() => {
+  saveData(currentProfileRef.current, formDataRef.current);
+}, []);  // ✅ Empty deps - never recreates
+```
+
+### 2. Forgetting to Cleanup useEffect
+
+**Problem:**
+
+```tsx
+useEffect(() => {
+  const timer = setInterval(() => {
+    refetchData();
+  }, 5000);
+  // ❌ No cleanup - timer keeps running after unmount
+}, []);
+```
+
+**Why it's wrong:**
+
+- Component unmounts but timer keeps running
+- Attempts to update state on unmounted component
+- Memory leak
+- "Can't perform state update on unmounted component" warning
+
+**Solution:**
+
+```tsx
+useEffect(() => {
+  const timer = setInterval(() => {
+    refetchData();
+  }, 5000);
+
+  return () => {
+    clearInterval(timer);  // ✅ Cleanup on unmount
+  };
+}, []);
+```
+
+### 3. Mutating State Directly
+
+**Problem:**
+
+```tsx
+const [items, setItems] = useState([1, 2, 3]);
+
+const addItem = (item) => {
+  items.push(item);  // ❌ Mutates state directly
+  setItems(items);   // React doesn't detect change (same reference)
+};
+```
+
+**Why it's wrong:**
+
+- React compares state by reference
+- Mutating doesn't create a new reference
+- React doesn't know state changed
+- Component doesn't re-render
+
+**Solution:**
+
+```tsx
+const addItem = (item) => {
+  setItems([...items, item]);  // ✅ Create new array
+};
+
+// Or with updater function:
+const addItem = (item) => {
+  setItems(prev => [...prev, item]);  // ✅ Uses previous state
+};
+```
+
+### 4. Missing Keys in Lists
+
+**Problem:**
+
+```tsx
+{monitors.map((monitor, index) => (
+  <MonitorCard
+    key={index}  // ❌ Using index as key
+    monitor={monitor}
+  />
+))}
+```
+
+**Why it's wrong:**
+
+- Index changes when list is reordered/filtered
+- React loses track of which component is which
+- State (e.g., scroll position) gets mixed up
+- Unnecessary re-renders
+
+**Solution:**
+
+```tsx
+{monitors.map(monitor => (
+  <MonitorCard
+    key={monitor.Id}  // ✅ Use stable, unique ID
+    monitor={monitor}
+  />
+))}
+```
+
+### 5. Conditional Hooks
+
+**Problem:**
+
+```tsx
+function Component({ userId }) {
+  if (userId) {
+    const user = useQuery(['user', userId], fetchUser);  // ❌ Conditional hook
+  }
+}
+```
+
+**Why it's wrong:**
+
+- Hooks must be called in the same order every render
+- Conditional hooks break this rule
+- React loses track of hook state
+- Causes bugs and errors
+
+**Solution:**
+
+```tsx
+function Component({ userId }) {
+  const user = useQuery({
+    queryKey: ['user', userId],
+    queryFn: () => fetchUser(userId),
+    enabled: !!userId,  // ✅ Disable query instead
+  });
+}
+```
+
+## Zustand Pitfalls
+
+### 6. Using Store Values as Dependencies
+
+**Problem:**
+
+```tsx
+const currentProfile = useProfileStore((state) => state.currentProfile);
+
+useEffect(() => {
+  console.log('Profile changed');
+}, [currentProfile]);  // ❌ Runs every render (new reference)
+```
+
+**Why it's wrong:**
+
+- Zustand returns new references even if values unchanged
+- Effect runs on every render
+- Can cause infinite loops if effect updates state
+
+**Solution:**
+
+```tsx
+const currentProfile = useProfileStore((state) => state.currentProfile);
+const currentProfileRef = useRef(currentProfile);
+
+useEffect(() => {
+  currentProfileRef.current = currentProfile;
+}, [currentProfile]);
+
+useEffect(() => {
+  console.log('Profile changed', currentProfileRef.current);
+}, []);  // ✅ Runs once, ref has latest value
+```
+
+Or use a selector with shallow comparison:
+
+```tsx
+const profileId = useProfileStore((state) => state.currentProfile?.id);
+
+useEffect(() => {
+  console.log('Profile ID changed', profileId);
+}, [profileId]);  // ✅ ID is a primitive, stable when unchanged
+```
+
+### 7. Forgetting to Initialize Store State
+
+**Problem:**
+
+```tsx
+export const useMyStore = create<MyState>((set) => ({
+  // ❌ No initial state
+  items: undefined,  // Should be [] or null
+  count: undefined,  // Should be 0
+
+  addItem: (item) => set((state) => ({
+    items: [...state.items, item],  // ❌ Crashes if undefined
+  })),
+}));
+```
+
+**Why it's wrong:**
+
+- Accessing `undefined.length` or spreading `undefined` crashes
+- Components expect defined values
+
+**Solution:**
+
+```tsx
+export const useMyStore = create<MyState>((set) => ({
+  items: [],  // ✅ Initialize as empty array
+  count: 0,   // ✅ Initialize as zero
+
+  addItem: (item) => set((state) => ({
+    items: [...state.items, item],  // ✅ Safe to spread
+  })),
+}));
+```
+
+## React Query Pitfalls
+
+### 8. Missing enabled Flag
+
+**Problem:**
+
+```tsx
+const { data } = useQuery({
+  queryKey: ['user', userId],
+  queryFn: () => fetchUser(userId),  // ❌ Runs even if userId is null
+});
+```
+
+**Why it's wrong:**
+
+- Query runs immediately with `null` userId
+- API call fails or returns error
+- Unnecessary network request
+
+**Solution:**
+
+```tsx
+const { data } = useQuery({
+  queryKey: ['user', userId],
+  queryFn: () => fetchUser(userId!),
+  enabled: !!userId,  // ✅ Only run if userId exists
+});
+```
+
+### 9. Not Invalidating Queries After Mutations
+
+**Problem:**
+
+```tsx
+const mutation = useMutation({
+  mutationFn: (data) => createMonitor(data),
+  onSuccess: () => {
+    toast.success('Monitor created');
+    // ❌ Monitors list not refetched, new monitor doesn't appear
+  },
+});
+```
+
+**Why it's wrong:**
+
+- Cached data is stale
+- UI doesn't show updated data
+- User has to manually refresh
+
+**Solution:**
+
+```tsx
+const queryClient = useQueryClient();
+
+const mutation = useMutation({
+  mutationFn: (data) => createMonitor(data),
+  onSuccess: () => {
+    toast.success('Monitor created');
+    queryClient.invalidateQueries({ queryKey: ['monitors'] });  // ✅ Refetch
+  },
+});
+```
+
+### 10. Incorrect Query Keys
+
+**Problem:**
+
+```tsx
+// Component A
+const { data } = useQuery({
+  queryKey: ['monitors'],  // ❌ Missing profileId
+  queryFn: () => fetchMonitors(currentProfile.id),
+});
+
+// Component B (different profile selected)
+const { data } = useQuery({
+  queryKey: ['monitors'],  // ❌ Same key, returns cached data from profile A
+  queryFn: () => fetchMonitors(otherProfile.id),
+});
+```
+
+**Why it's wrong:**
+
+- Query key should uniquely identify the data
+- Different profiles have different monitors
+- Component B gets cached data from profile A
+
+**Solution:**
+
+```tsx
+// Component A
+const { data } = useQuery({
+  queryKey: ['monitors', profileA.id],  // ✅ Include profile ID
+  queryFn: () => fetchMonitors(profileA.id),
+});
+
+// Component B
+const { data } = useQuery({
+  queryKey: ['monitors', profileB.id],  // ✅ Different key
+  queryFn: () => fetchMonitors(profileB.id),
+});
+```
+
+## Testing Pitfalls
+
+### 11. Hardcoded Values in E2E Tests
+
+**Problem:**
+
+```gherkin
+When I select "Front Door" monitor  # ❌ Hardcoded monitor name
+Then I should see 5 events          # ❌ Hardcoded event count
+```
+
+**Why it's wrong:**
+
+- Test only works with specific server setup
+- Fails when server changes
+- Not reusable
+
+**Solution:**
+
+```gherkin
+When I select the first monitor     # ✅ Dynamic
+Then I should see at least 1 event  # ✅ Flexible count
+```
+
+### 12. Not Mocking Dependencies in Unit Tests
+
+**Problem:**
+
+```tsx
+// MonitorCard.test.tsx
+it('renders monitor', () => {
+  render(<MonitorCard monitor={mockMonitor} />);
+  // ❌ MonitorCard uses useMonitorStream which makes real API calls
+});
+```
+
+**Why it's wrong:**
+
+- Test makes real network requests
+- Test is slow
+- Test fails if server is down
+- Not a unit test (testing integration)
+
+**Solution:**
+
+```tsx
+import { useMonitorStream } from '../../hooks/useMonitorStream';
+
+vi.mock('../../hooks/useMonitorStream');
+
+it('renders monitor', () => {
+  useMonitorStream.mockReturnValue({  // ✅ Mock the hook
+    streamUrl: 'https://test.com/stream.jpg',
+    imgRef: { current: null },
+    regenerateConnection: vi.fn(),
+  });
+
+  render(<MonitorCard monitor={mockMonitor} />);
+  // Now it's a true unit test
+});
+```
+
+### 13. Forgetting to Add data-testid
+
+**Problem:**
+
+```tsx
+<Button onClick={handleDelete}>Delete</Button>
+// ❌ No data-testid, hard to select in E2E tests
+```
+
+**Why it's wrong:**
+
+- E2E tests select by text ("Delete")
+- Text changes when i18n locale changes
+- Text might not be unique
+
+**Solution:**
+
+```tsx
+<Button
+  onClick={handleDelete}
+  data-testid="delete-monitor-button"  // ✅ Stable selector
+>
+  {t('common.delete')}
+</Button>
+```
+
+## Performance Pitfalls
+
+### 14. Not Memoizing Expensive Calculations
+
+**Problem:**
+
+```tsx
+function MonitorList({ monitors }) {
+  const sortedMonitors = monitors.sort((a, b) =>
+    a.Name.localeCompare(b.Name)
+  );  // ❌ Re-sorts on every render
+
+  return (
+    <div>
+      {sortedMonitors.map(m => <MonitorCard key={m.Id} monitor={m} />)}
+    </div>
+  );
+}
+```
+
+**Why it's wrong:**
+
+- Sorting is expensive (O(n log n))
+- Runs on every render even if monitors unchanged
+- Unnecessary work slows down app
+
+**Solution:**
+
+```tsx
+function MonitorList({ monitors }) {
+  const sortedMonitors = useMemo(
+    () => monitors.sort((a, b) => a.Name.localeCompare(b.Name)),
+    [monitors]  // ✅ Only re-sort when monitors change
+  );
+
+  return (
+    <div>
+      {sortedMonitors.map(m => <MonitorCard key={m.Id} monitor={m} />)}
+    </div>
+  );
+}
+```
+
+### 15. Not Memoizing Components in Lists
+
+**Problem:**
+
+```tsx
+function MonitorList({ monitors }) {
+  return (
+    <div>
+      {monitors.map(m => (
+        <MonitorCard key={m.Id} monitor={m} />
+        // ❌ Re-renders all cards when any card changes
+      ))}
+    </div>
+  );
+}
+```
+
+**Why it's wrong:**
+
+- When one monitor updates, all MonitorCards re-render
+- Unnecessary re-renders waste CPU
+- List scrolling feels janky
+
+**Solution:**
+
+```tsx
+// MonitorCard.tsx
+export const MonitorCard = memo(function MonitorCard({ monitor }) {
+  // ...
+});  // ✅ Only re-renders if props change
+
+// Or with custom comparison:
+export const MonitorCard = memo(
+  function MonitorCard({ monitor }) {
+    // ...
+  },
+  (prevProps, nextProps) => {
+    return prevProps.monitor.Id === nextProps.monitor.Id &&
+           prevProps.monitor.Name === nextProps.monitor.Name;
+  }
+);
+```
+
+## Internationalization Pitfalls
+
+### 16. Hardcoded User-Facing Text
+
+**Problem:**
+
+```tsx
+<Button>Delete Monitor</Button>  // ❌ Hardcoded English
+<Toast message="Monitor deleted successfully" />  // ❌ Hardcoded
+```
+
+**Why it's wrong:**
+
+- App only works in English
+- Can't localize for other languages
+- Violates AGENTS.md guidelines
+
+**Solution:**
+
+```tsx
+import { useTranslation } from 'react-i18next';
+
+function Component() {
+  const { t } = useTranslation();
+
+  return (
+    <>
+      <Button>{t('monitors.delete')}</Button>  // ✅ Translatable
+      <Toast message={t('monitors.deleted_success')} />  // ✅ Translatable
+    </>
+  );
+}
+```
+
+And update ALL language files:
+
+```json
+// en/translation.json
+{
+  "monitors": {
+    "delete": "Delete Monitor",
+    "deleted_success": "Monitor deleted successfully"
+  }
+}
+
+// de/translation.json
+{
+  "monitors": {
+    "delete": "Monitor löschen",
+    "deleted_success": "Monitor erfolgreich gelöscht"
+  }
+}
+
+// ... es, fr, zh
+```
+
+### 17. Forgetting to Update All Language Files
+
+**Problem:**
+
+```json
+// en/translation.json
+{
+  "new_feature": "New Feature"  // ✅ Added
+}
+
+// de/translation.json
+{
+  // ❌ Missing "new_feature"
+}
+```
+
+**Why it's wrong:**
+
+- German users see missing translation key
+- Looks broken in other languages
+
+**Solution:**
+
+Add to **ALL** language files (en, de, es, fr, zh):
+
+```json
+// de/translation.json
+{
+  "new_feature": "Neue Funktion"  // ✅ Added
+}
+```
+
+## Security Pitfalls
+
+### 18. Storing Sensitive Data Unencrypted
+
+**Problem:**
+
+```tsx
+localStorage.setItem('password', password);  // ❌ Plain text
+```
+
+**Why it's wrong:**
+
+- Anyone with filesystem access can read it
+- Browser extensions can read localStorage
+- Security vulnerability
+
+**Solution:**
+
+```tsx
+import { SecureStorage } from '../lib/secure-storage';
+
+await SecureStorage.set('password', password);  // ✅ Encrypted
+```
+
+### 19. Logging Sensitive Data
+
+**Problem:**
+
+```tsx
+console.log('User credentials:', username, password);  // ❌ Logs password
+log.debug('Auth response', { accessToken, refreshToken });  // ❌ Logs tokens
+```
+
+**Why it's wrong:**
+
+- Logs are visible in browser console
+- Logs might be sent to error tracking services
+- Security leak
+
+**Solution:**
+
+```tsx
+log.auth('Login successful', LogLevel.INFO, { username });  // ✅ No password
+log.auth('Tokens received', LogLevel.DEBUG);  // ✅ No token values
+```
+
+## Checklist: Pre-Code Review
+
+Before submitting a PR, check for these pitfalls:
+
+- [ ] No objects/functions in `useCallback`/`useEffect` dependencies (use refs)
+- [ ] All `useEffect` hooks have cleanup if needed
+- [ ] No state mutations (use spread operators or updater functions)
+- [ ] List items have stable, unique `key` props
+- [ ] No conditional hooks
+- [ ] Zustand values not used as dependencies (use refs or primitives)
+- [ ] All stores initialized with default values
+- [ ] React Query has `enabled` flag when data might be missing
+- [ ] Mutations invalidate relevant queries
+- [ ] Query keys include all identifying parameters
+- [ ] E2E tests use dynamic selectors (`.first()`, "at least N")
+- [ ] Unit tests mock external dependencies
+- [ ] All interactive elements have `data-testid`
+- [ ] Expensive calculations wrapped in `useMemo`
+- [ ] List components wrapped in `memo`
+- [ ] No hardcoded user-facing text (use `t()`)
+- [ ] All language files updated (en, de, es, fr, zh)
+- [ ] No sensitive data in logs
+- [ ] Sensitive data stored encrypted
+
+## Next Steps
+
+Continue to [Chapter 9: Contributing](./09-contributing.md) to learn how to contribute code to the project.
