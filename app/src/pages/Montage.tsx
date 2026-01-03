@@ -322,16 +322,9 @@ export default function Montage() {
     setLayout((prev) => normalizeLayout(prev, gridCols, width, isFullscreen ? 0 : GRID_MARGIN));
   };
 
-  useEffect(() => {
-    const handleResize = () => {
-      handleWidthChange(window.innerWidth);
-    };
-
-    window.addEventListener('resize', handleResize);
-    handleResize();
-
-    return () => window.removeEventListener('resize', handleResize);
-  }, [gridCols, isFullscreen]);
+  // Note: Window resize handling is now done via WrappedGridLayout's onWidthChange callback
+  // which receives the actual measured container width (not window.innerWidth)
+  // This fixes the issue where monitors showed as empty skeletons on initial load
 
   // Detect mobile viewport for grid controls
   useEffect(() => {
@@ -693,6 +686,7 @@ export default function Montage() {
               draggableHandle=".drag-handle"
               onLayoutChange={handleLayoutChange}
               onResizeStop={handleResizeStop}
+              onWidthChange={handleWidthChange}
             >
               {monitors.map(({ Monitor, Monitor_Status }) => (
                 <div key={Monitor.Id} className="relative group">
