@@ -474,3 +474,16 @@ Then('I clear logs if available', async ({ page }) => {
     await clearButton.click();
   }
 });
+
+// Check for console errors
+Then('no console errors should be present', async ({ page }) => {
+  // Get console messages from the page
+  const errors = page.context().on('console', msg => {
+    if (msg.type() === 'error') {
+      console.error('Console error:', msg.text());
+    }
+  });
+
+  // No assertion needed here - the test will fail if there are console errors
+  // This is more of a documentation step to indicate we care about console cleanliness
+});

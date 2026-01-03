@@ -25,6 +25,36 @@ Feature: Dashboard Customization
     And I click the Add button in the dialog
     Then the widget "Test Monitor" should appear on the dashboard
 
+  Scenario: Add a Recent Events widget without infinite loop
+    When I navigate to the "Dashboard" page
+    Then I should see the page heading "Dashboard"
+    When I open the Add Widget dialog
+    And I select the "Events" widget type
+    And I enter widget title "Recent Events"
+    And I click the Add button in the dialog
+    Then the widget "Recent Events" should appear on the dashboard
+    And no console errors should be present
+
+  Scenario: Add multiple widgets in sequence
+    When I navigate to the "Dashboard" page
+    Then I should see the page heading "Dashboard"
+    When I open the Add Widget dialog
+    And I select the "Timeline" widget type
+    And I enter widget title "Timeline 1"
+    And I click the Add button in the dialog
+    Then the widget "Timeline 1" should appear on the dashboard
+    When I open the Add Widget dialog
+    And I select the "Events" widget type
+    And I enter widget title "Recent Events"
+    And I click the Add button in the dialog
+    Then the widget "Recent Events" should appear on the dashboard
+    When I open the Add Widget dialog
+    And I select the "Event Heatmap" widget type
+    And I enter widget title "Heatmap"
+    And I click the Add button in the dialog
+    Then the widget "Heatmap" should appear on the dashboard
+    And no console errors should be present
+
   Scenario: View dashboard without widgets
     When I navigate to the "Dashboard" page
     Then I should see the page heading "Dashboard"
