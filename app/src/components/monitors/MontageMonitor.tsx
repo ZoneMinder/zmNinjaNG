@@ -60,6 +60,7 @@ function MontageMonitorComponent({
   const [connKey, setConnKey] = useState(0);
   const [cacheBuster, setCacheBuster] = useState(Date.now());
   const [displayedImageUrl, setDisplayedImageUrl] = useState<string>('');
+  const [imageLoaded, setImageLoaded] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
   const resolvedFit = objectFit ?? (isFullscreen ? 'cover' : 'contain');
   const aspectRatio = getMonitorAspectRatio(monitor.Width, monitor.Height, monitor.Orientation);
@@ -67,6 +68,7 @@ function MontageMonitorComponent({
   // Force regenerate connKey when component mounts
   useEffect(() => {
     log.montageMonitor('Regenerating connkey', LogLevel.INFO, { monitorId: monitor.Id });
+    setImageLoaded(false);
     const newKey = regenerateConnKey(monitor.Id);
     setConnKey(newKey);
     setCacheBuster(Date.now());
@@ -172,14 +174,26 @@ function MontageMonitorComponent({
         style={!isFullscreen && aspectRatio ? { aspectRatio } : undefined}
         onClick={() => !isFullscreen && !isEditing && navigate(`/monitors/${monitor.Id}`)}
       >
+        {/* Skeleton loader with correct aspect ratio */}
+        {!imageLoaded && (
+          <div
+            className="absolute inset-0 bg-muted/20 animate-pulse flex items-center justify-center"
+            style={aspectRatio ? { aspectRatio } : undefined}
+          >
+            <div className="text-muted-foreground text-xs">{monitor.Width} × {monitor.Height}</div>
+          </div>
+        )}
+
         <img
           ref={imgRef}
           src={displayedImageUrl || streamUrl}
           alt={monitor.Name}
-          className="w-full h-full"
+          className={cn("w-full h-full", !imageLoaded && "opacity-0")}
           style={{ objectFit: resolvedFit }}
+          onLoad={() => setImageLoaded(true)}
           onError={(e) => {
             const img = e.target as HTMLImageElement;
+            setImageLoaded(false);
             // Only retry if we haven't retried too recently (basic debounce)
             if (!img.dataset.retrying) {
               img.dataset.retrying = "true";

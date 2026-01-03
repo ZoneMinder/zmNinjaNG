@@ -95,8 +95,9 @@ export default function Montage() {
   const [isMobile, setIsMobile] = useState(false);
   const [isGridSheetOpen, setIsGridSheetOpen] = useState(false);
 
-  // Track container width for toast notifications
-  const currentWidthRef = useRef(window.innerWidth);
+  // Track container width for toast notifications (0 = not measured yet)
+  const currentWidthRef = useRef(0);
+  const [hasWidth, setHasWidth] = useState(false);
 
   // Fullscreen mode state - load from settings
   const [isFullscreen, setIsFullscreen] = useState(settings.montageIsFullscreen);
@@ -109,6 +110,32 @@ export default function Montage() {
     initialScale: 1,
     enabled: true,
   });
+
+  // ResizeObserver to measure container width
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
+
+  // Callback ref to measure container width when element mounts
+  const containerRef = (element: HTMLDivElement | null) => {
+    // Clean up previous observer
+    if (resizeObserverRef.current) {
+      resizeObserverRef.current.disconnect();
+      resizeObserverRef.current = null;
+    }
+
+    if (!element) return;
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const width = entry.contentRect.width;
+        if (width > 0 && currentWidthRef.current !== width) {
+          handleWidthChange(width);
+        }
+      }
+    });
+
+    observer.observe(element);
+    resizeObserverRef.current = observer;
+  };
 
   // Auto-hide overlay after 5 seconds (only on desktop)
   useEffect(() => {
@@ -125,14 +152,11 @@ export default function Montage() {
     setGridCols(settings.montageGridCols);
     setCustomCols(settings.montageGridCols.toString());
     setIsFullscreen(settings.montageIsFullscreen);
-    const maxCols = getMaxColsForWidth(window.innerWidth, MIN_CARD_WIDTH, GRID_MARGIN);
-    const tooSmall = settings.montageGridCols > maxCols;
-    setIsScreenTooSmall(tooSmall);
-    screenTooSmallRef.current = tooSmall;
+    // Don't check screen size here - wait for ResizeObserver to measure actual container width
   }, [currentProfile?.id, settings.montageGridCols, settings.montageIsFullscreen]);
 
+  // Clean up effect (removed auto-refresh workaround)
   useEffect(() => {
-    // Clean up interval if it exists (removed auto-refresh)
     return () => { };
   }, []);
 
@@ -261,8 +285,9 @@ export default function Montage() {
     const itemWidth = columnWidth * widthUnits + margin * (widthUnits - 1);
     const heightPx = itemWidth * aspectRatio;
     const unit = (heightPx + margin) / (GRID_ROW_HEIGHT + margin);
+    const result = Math.max(2, Math.round(unit));
 
-    return Math.max(2, Math.round(unit));
+    return result;
   };
 
   const buildDefaultLayout = (monitorList: typeof monitors, cols: number, gridWidth: number) => {
@@ -292,6 +317,11 @@ export default function Montage() {
   useEffect(() => {
     if (monitors.length === 0) return;
 
+    // Wait for ResizeObserver to measure the actual container width
+    if (!hasWidth || currentWidthRef.current === 0) {
+      return;
+    }
+
     let nextLayout: Layout[] = [];
     const stored = settings.montageLayouts?.lg;
 
@@ -307,23 +337,51 @@ export default function Montage() {
     }
 
     const normalized = normalizeLayout(nextLayout, gridCols, currentWidthRef.current, GRID_MARGIN);
+
     setLayout((prev) => (areLayoutsEqual(prev, normalized) ? prev : normalized));
-  }, [monitors, gridCols, monitorMap, settings.montageLayouts]);
+  }, [monitors, gridCols, monitorMap, settings.montageLayouts, hasWidth]);
 
   const handleWidthChange = (width: number) => {
+    const isFirstMeasurement = currentWidthRef.current === 0;
     currentWidthRef.current = width;
+
     const maxCols = getMaxColsForWidth(width, MIN_CARD_WIDTH, isFullscreen ? 0 : GRID_MARGIN);
     const tooSmall = gridCols > maxCols;
+
+    if (isFirstMeasurement) {
+      // If configured grid is too large, auto-adjust to max possible
+      if (tooSmall) {
+        setGridCols(maxCols);
+        setIsScreenTooSmall(false);
+        screenTooSmallRef.current = false;
+        if (currentProfile) {
+          updateSettings(currentProfile.id, {
+            montageGridCols: maxCols,
+          });
+        }
+      } else {
+        setIsScreenTooSmall(false);
+        screenTooSmallRef.current = false;
+      }
+
+      setHasWidth(true);
+      return; // Let the useEffect recalculate with the correct width
+    }
+
     setIsScreenTooSmall(tooSmall);
     if (tooSmall && !screenTooSmallRef.current) {
       toast.error(t('montage.screen_too_small'));
     }
     screenTooSmallRef.current = tooSmall;
-    setLayout((prev) => normalizeLayout(prev, gridCols, width, isFullscreen ? 0 : GRID_MARGIN));
+
+    setLayout((prev) => {
+      const normalizedLayout = normalizeLayout(prev, gridCols, width, isFullscreen ? 0 : GRID_MARGIN);
+      return normalizedLayout;
+    });
   };
 
-  // Note: Window resize handling is now done via WrappedGridLayout's onWidthChange callback
-  // which receives the actual measured container width (not window.innerWidth)
+  // Note: Window resize handling is now done via ResizeObserver on the container element
+  // which measures the actual container width (not window.innerWidth)
   // This fixes the issue where monitors showed as empty skeletons on initial load
 
   // Detect mobile viewport for grid controls
@@ -654,6 +712,7 @@ export default function Montage() {
 
       {/* Grid Content */}
       <div
+        ref={containerRef}
         {...pinchZoom.bind()}
         className={cn(
           "flex-1 overflow-auto bg-muted/10 touch-pan-y",
@@ -686,7 +745,6 @@ export default function Montage() {
               draggableHandle=".drag-handle"
               onLayoutChange={handleLayoutChange}
               onResizeStop={handleResizeStop}
-              onWidthChange={handleWidthChange}
             >
               {monitors.map(({ Monitor, Monitor_Status }) => (
                 <div key={Monitor.Id} className="relative group">
