@@ -361,6 +361,41 @@ export const useProfileStore = create<ProfileState>()(
               // Don't fail the switch for this
             }
 
+            // STEP 6: Fetch MIN_STREAMING_PORT configuration
+            try {
+              log.profileService('Step 6: Fetching server configuration for multi-port streaming', LogLevel.INFO);
+              const { fetchMinStreamingPort } = await import('../api/server');
+              const minPort = await fetchMinStreamingPort();
+
+              if (minPort !== null) {
+                log.profileService('Multi-port streaming enabled', LogLevel.INFO, { minPort });
+
+                // Update profile with minStreamingPort
+                get().updateProfile(id, { minStreamingPort: minPort });
+
+                // For NEW profiles (no existing settings), default to streaming mode
+                // For existing profiles, respect user's current settings
+                try {
+                  const { useSettingsStore } = await import('./settings');
+                  const settingsStore = useSettingsStore.getState();
+                  const hasExistingSettings = settingsStore.profileSettings[id] !== undefined;
+
+                  if (!hasExistingSettings) {
+                    log.profileService('New profile with multi-port: defaulting to streaming mode', LogLevel.INFO);
+                    settingsStore.updateProfileSettings(id, { viewMode: 'streaming' });
+                  } else {
+                    log.profileService('Existing profile: preserving current viewMode setting', LogLevel.DEBUG);
+                  }
+                } catch (settingsError) {
+                  log.profileService('Failed to configure view mode', LogLevel.WARN, { error: settingsError });
+                }
+              } else {
+                log.profileService('Multi-port streaming not configured on server', LogLevel.DEBUG);
+              }
+            } catch (configError) {
+              log.profileService('Failed to fetch MIN_STREAMING_PORT - multi-port may be unavailable', LogLevel.WARN, { error: configError });
+            }
+
             log.profileService('Profile switch completed successfully', LogLevel.INFO, { currentProfile: profile.name });
 
           } catch (error) {
@@ -696,6 +731,45 @@ export const useProfileStore = create<ProfileState>()(
                   logDuration('Bootstrap step: ZMS path fetch failed', zmsStart);
                 }
                 setState({ bootstrapStep: 'finalize' });
+
+                // Fetch MIN_STREAMING_PORT configuration
+                try {
+                  log.profileService('Fetching server configuration for multi-port streaming', LogLevel.INFO);
+                  const { fetchMinStreamingPort } = await import('../api/server');
+                  const minPort = await fetchMinStreamingPort();
+
+                  if (minPort !== null) {
+                    log.profileService('Multi-port streaming enabled', LogLevel.INFO, { minPort });
+
+                    const currentMinPort = getState().currentProfile()?.minStreamingPort;
+
+                    // Update profile only if changed
+                    if (currentMinPort !== minPort) {
+                      getState().updateProfile(profile.id, { minStreamingPort: minPort });
+
+                      // For NEW profiles (no existing settings), default to streaming mode
+                      // For existing profiles, respect user's current settings
+                      try {
+                        const { useSettingsStore } = await import('./settings');
+                        const settingsStore = useSettingsStore.getState();
+                        const hasExistingSettings = settingsStore.profileSettings[profile.id] !== undefined;
+
+                        if (!hasExistingSettings) {
+                          log.profileService('New profile with multi-port: defaulting to streaming mode', LogLevel.INFO);
+                          settingsStore.updateProfileSettings(profile.id, { viewMode: 'streaming' });
+                        } else {
+                          log.profileService('Existing profile: preserving current viewMode setting', LogLevel.DEBUG);
+                        }
+                      } catch (settingsError) {
+                        log.profileService('Failed to configure view mode', LogLevel.WARN, { error: settingsError });
+                      }
+                    }
+                  } else {
+                    log.profileService('Multi-port streaming not configured on server', LogLevel.DEBUG);
+                  }
+                } catch (configError) {
+                  log.profileService('Failed to fetch MIN_STREAMING_PORT - multi-port may be unavailable', LogLevel.WARN, { error: configError });
+                }
               } finally {
                 logDuration('Profile bootstrap completed', bootstrapStart, {
                   profileId: profile.id,
@@ -705,6 +779,7 @@ export const useProfileStore = create<ProfileState>()(
                 }
                 setState({ isBootstrapping: false, bootstrapStep: null });
               }
+
             };
 
             void runBootstrapTasks();

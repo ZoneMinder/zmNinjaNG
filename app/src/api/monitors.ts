@@ -249,7 +249,9 @@ export function getStreamUrl(
     token?: string;
     connkey?: number;
     cacheBuster?: number;
+    minStreamingPort?: number;
   } = {}
+
 ): string {
   const fullUrl = buildMonitorStreamUrl(cgiUrl, monitorId, options);
 

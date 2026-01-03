@@ -414,6 +414,8 @@ export default function MonitorDetail() {
       token: accessToken || undefined,
       connkey: connKey,
       cacheBuster: cacheBuster,
+      // Always use multi-port in MonitorDetail (always streaming mode)
+      minStreamingPort: currentProfile.minStreamingPort,
     })
     : '';
 

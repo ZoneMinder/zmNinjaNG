@@ -8,6 +8,7 @@
 import { getApiClient } from './client';
 import { validateApiResponse } from '../lib/api-validator';
 import { z } from 'zod';
+import { log, LogLevel } from '../lib/logger';
 
 // ========== Schemas ==========
 
@@ -179,5 +180,72 @@ export async function getDiskPercent(): Promise<DiskUsage> {
     usage: usageValue,
     percent: validated.percent ?? percentValue ?? usageValue,
   };
+}
+
+/**
+ * Get system configurations
+ *
+ * Fetches configuration values from the server.
+ * Can optionally filter by restart requirement or category.
+ *
+ * @returns Promise resolving to array of Config objects
+ */
+export async function getConfigs(): Promise<import('./types').Config[]> {
+  const client = getApiClient();
+  const response = await client.get('/configs.json');
+  const { ConfigsResponseSchema } = await import('./types');
+
+  const validated = validateApiResponse(ConfigsResponseSchema, response.data, {
+    endpoint: '/configs.json',
+    method: 'GET',
+  });
+
+  return validated.configs.map((c) => c.Config);
+}
+
+/**
+ * Fetch the ZM_MIN_STREAMING_PORT configuration value
+ *
+ * Returns the minimum streaming port if multi-port streaming is enabled.
+ * An empty string indicates multi-port streaming is not configured.
+ * Only works after successful authentication.
+ *
+ * @returns Promise resolving to the port number or null if not configured/fetch fails
+ */
+export async function fetchMinStreamingPort(): Promise<number | null> {
+  try {
+    const client = getApiClient();
+    log.api('Fetching MIN_STREAMING_PORT from server config', LogLevel.DEBUG);
+
+    const response = await client.get<import('./types').MinStreamingPortResponse>(
+      '/configs/viewByName/ZM_MIN_STREAMING_PORT.json'
+    );
+
+    const { MinStreamingPortResponseSchema } = await import('./types');
+    const validated = MinStreamingPortResponseSchema.parse(response.data);
+    const portValue = validated.config.Value;
+
+    if (!portValue || portValue === '') {
+      log.api('MIN_STREAMING_PORT not configured (empty value)', LogLevel.DEBUG);
+      return null;
+    }
+
+    const port = parseInt(portValue, 10);
+    if (isNaN(port) || port <= 0) {
+      log.api('MIN_STREAMING_PORT has invalid value', LogLevel.WARN, { portValue });
+      return null;
+    }
+
+    log.api('MIN_STREAMING_PORT fetched successfully', LogLevel.INFO, { port });
+    return port;
+  } catch (error: unknown) {
+    const err = error as { constructor: { name: string }; message: string; response?: { status: number; data: unknown } };
+    log.api('Failed to fetch MIN_STREAMING_PORT from server', LogLevel.WARN, {
+      error: err.constructor.name,
+      message: err.message,
+      status: err.response?.status,
+    });
+    return null;
+  }
 }
 

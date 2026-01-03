@@ -357,19 +357,19 @@ export type ConsoleEventsResponse = z.infer<typeof ConsoleEventsResponseSchema>;
 
 // Config types
 export const ConfigSchema = z.object({
-  Id: z.string(),
+  Id: z.coerce.string(),
   Name: z.string(),
   Value: z.string(),
   Type: z.string(),
-  DefaultValue: z.string(),
-  Hint: z.string().nullable(),
-  Pattern: z.string().nullable(),
-  Format: z.string().nullable(),
-  Prompt: z.string().nullable(),
-  Help: z.string().nullable(),
+  DefaultValue: z.string().nullable().optional(),
+  Hint: z.string().nullable().optional(),
+  Pattern: z.string().nullable().optional(),
+  Format: z.string().nullable().optional(),
+  Prompt: z.string().nullable().optional(),
+  Help: z.string().nullable().optional(),
   Category: z.string(),
-  Readonly: z.string().nullable(),
-  Requires: z.string().nullable(),
+  Readonly: z.coerce.string().nullable().optional(),
+  Requires: z.string().nullable().optional(),
 });
 
 export const ConfigDataSchema = z.object({
@@ -392,6 +392,15 @@ export const ZmsPathResponseSchema = z.object({
 });
 
 export type ZmsPathResponse = z.infer<typeof ZmsPathResponseSchema>;
+
+// Min Streaming Port response schema for fetching ZM_MIN_STREAMING_PORT config
+export const MinStreamingPortResponseSchema = z.object({
+  config: z.object({
+    Value: z.string(),
+  }),
+});
+
+export type MinStreamingPortResponse = z.infer<typeof MinStreamingPortResponseSchema>;
 
 // ZoneMinder server log types
 export const ZMLogSchema = z.object({
@@ -473,6 +482,7 @@ export interface Profile {
   createdAt: number;
   lastUsed?: number;
   timezone?: string;
+  minStreamingPort?: number; // ZM_MIN_STREAMING_PORT from server config
 }
 
 // Error types

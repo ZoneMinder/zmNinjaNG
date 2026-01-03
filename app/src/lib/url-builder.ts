@@ -10,6 +10,8 @@
  * Eliminates duplication of URL construction logic across the codebase.
  */
 
+import { log, LogLevel } from './logger';
+
 /**
  * Normalize a portal URL to ensure it has a proper protocol.
  * Preserves the existing protocol if present, otherwise defaults to http.
@@ -108,6 +110,7 @@ export function getMonitorStreamUrl(
     token?: string;
     connkey?: number;
     cacheBuster?: number;
+    minStreamingPort?: number; // Base port for multi-port streaming
   } = {}
 ): string {
   const params: Record<string, string> = {
@@ -125,9 +128,28 @@ export function getMonitorStreamUrl(
   if (options.cacheBuster) params._t = options.cacheBuster.toString();
 
   const queryString = new URLSearchParams(params).toString();
+
   // cgiUrl already includes /nph-zms (from discovery or ZM_PATH_ZMS API)
+  // If minStreamingPort is set, we need to construct a new base URL
+  if (options.minStreamingPort) {
+    try {
+      const url = new URL(cgiUrl);
+      const basePort = options.minStreamingPort;
+      const monitorIdNum = parseInt(monitorId, 10);
+
+      if (!isNaN(basePort) && basePort > 0 && !isNaN(monitorIdNum)) {
+        url.port = (basePort + monitorIdNum).toString();
+        return `${url.toString()}?${queryString}`;
+      }
+    } catch (e) {
+      // Fallback to standard URL if parsing fails
+      log.http('Failed to construct multi-port URL', LogLevel.WARN, { error: e });
+    }
+  }
+
   return `${cgiUrl}?${queryString}`;
 }
+
 
 /**
  * Get monitor control command URL

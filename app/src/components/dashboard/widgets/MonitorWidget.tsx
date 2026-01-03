@@ -104,6 +104,11 @@ function SingleMonitor({ monitorId, objectFit }: { monitorId: string; objectFit:
             token: accessToken || undefined,
             connkey: connKey,
             cacheBuster: cacheBuster,
+            // Only use multi-port in streaming mode, not snapshot
+            minStreamingPort:
+                settings.viewMode === 'streaming'
+                    ? currentProfile.minStreamingPort
+                    : undefined,
         })
         : '';
 
