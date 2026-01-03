@@ -393,7 +393,7 @@ export default function AppLayout() {
       </aside>
 
       {/* Mobile Header */}
-      <div className="md:hidden fixed top-0 left-0 right-0 h-[calc(3rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] border-b bg-background/80 backdrop-blur-md z-30 flex items-center px-3 justify-between">
+      <div className="md:hidden fixed top-0 left-0 right-0 h-[calc(3rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] border-b bg-background z-30 flex items-center px-3 justify-between">
         <div className="flex items-center gap-2">
           <img src="/logo.png" alt={t('app.logo_alt')} className="h-8 w-8 rounded-lg" />
           <span className="font-bold">{t('app.name')}</span>
