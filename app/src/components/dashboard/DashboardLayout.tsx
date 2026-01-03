@@ -83,7 +83,7 @@ export function DashboardLayout() {
         if (!isEditing) return;
 
         updateLayouts(profileId, { lg: nextLayout });
-    }, [areLayoutsEqual, isEditing, profileId, updateLayouts]);
+    }, [areLayoutsEqual, isEditing, profileId]);
 
     if (widgets.length === 0) {
         return (
