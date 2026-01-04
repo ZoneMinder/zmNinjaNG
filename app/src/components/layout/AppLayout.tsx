@@ -39,6 +39,7 @@ import { cn } from '../../lib/utils';
 import { useState, useRef, useEffect } from 'react';
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from '../ui/sheet';
 import { useTranslation } from 'react-i18next';
+import { BackgroundTaskDrawer } from '../BackgroundTaskDrawer';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -422,6 +423,9 @@ export default function AppLayout() {
 
         <Outlet />
       </main>
+
+      {/* Global Background Task Drawer */}
+      <BackgroundTaskDrawer />
     </div>
   );
 }

@@ -751,5 +751,13 @@
     "hide_controls": "Hide Controls",
     "continuous_movement": "Continuous Movement",
     "zoom": "Zoom"
+  },
+  "backgroundTasks": {
+    "title": "Background Tasks",
+    "active": "active",
+    "completed": "Completed",
+    "task_in_progress": "task in progress",
+    "tasks_in_progress": "tasks in progress",
+    "clear_completed": "Clear Completed"
   }
 }

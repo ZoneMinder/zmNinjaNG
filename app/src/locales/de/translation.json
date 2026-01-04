@@ -752,5 +752,13 @@
     "hide_controls": "Steuerung ausblenden",
     "continuous_movement": "Kontinuierliche Bewegung",
     "zoom": "Zoom"
+  },
+  "backgroundTasks": {
+    "title": "Hintergrundaufgaben",
+    "active": "aktiv",
+    "completed": "Abgeschlossen",
+    "task_in_progress": "Aufgabe läuft",
+    "tasks_in_progress": "Aufgaben laufen",
+    "clear_completed": "Abgeschlossene löschen"
   }
 }
