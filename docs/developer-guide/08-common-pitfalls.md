@@ -684,9 +684,72 @@ Add to **ALL** language files (en, de, es, fr, zh):
 }
 ```
 
+## Cross-Platform Pitfalls
+
+### 19. Invisible Overlays Blocking Touch Events on iOS
+
+**Problem:**
+
+```tsx
+<div className="relative group">
+  <img src={imageUrl} />
+  {/* Hover overlay */}
+  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 bg-black/50">
+    {/* ❌ Blocks touch events on iOS even though invisible */}
+    <Button>Action</Button>
+  </div>
+</div>
+```
+
+**Why it's wrong:**
+
+- Invisible overlays with `opacity-0` are still touchable on iOS
+- iOS treats them as interactive elements even when not visible
+- Users must tap outside the overlay area to interact with elements beneath
+- Desktop works fine because mouse hover makes overlay visible first
+- Mobile users experience confusing touch offset issues
+
+**What happens:**
+1. User tries to tap the image or button beneath overlay
+2. Touch event is captured by the invisible overlay
+3. Nothing happens because overlay is invisible
+4. User must tap outside the overlay boundary to succeed
+
+**Solution:**
+
+```tsx
+<div className="relative group">
+  <img src={imageUrl} />
+  {/* Hover overlay with pointer-events control */}
+  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 bg-black/50 pointer-events-none group-hover:pointer-events-auto">
+    {/* ✅ Not touchable when invisible, touchable when visible */}
+    <Button>Action</Button>
+  </div>
+</div>
+```
+
+**Key principles:**
+- Always add `pointer-events-none` to invisible overlay elements
+- Use `group-hover:pointer-events-auto` to restore interactivity on hover (desktop)
+- Test touch interactions on actual iOS devices, not just desktop
+- Invisible doesn't mean non-interactive - iOS can still capture touch events
+
+**When this matters:**
+- Hover overlays on cards, images, tiles
+- Tooltip containers
+- Hidden menus that appear on hover
+- Any element with `opacity-0` that overlays interactive content
+
+**Testing:**
+- Test on actual iOS device (Safari or native app)
+- Try tapping all interactive elements in mobile portrait mode
+- Verify no "dead zones" where taps are ignored
+
+---
+
 ## Security Pitfalls
 
-### 19. Storing Sensitive Data Unencrypted
+### 20. Storing Sensitive Data Unencrypted
 
 **Problem:**
 
@@ -708,7 +771,7 @@ import { SecureStorage } from '../lib/secure-storage';
 await SecureStorage.set('password', password);  // ✅ Encrypted
 ```
 
-### 20. Logging Sensitive Data
+### 21. Logging Sensitive Data
 
 **Problem:**
 
@@ -751,6 +814,7 @@ Before submitting a PR, check for these pitfalls:
 - [ ] List components wrapped in `memo`
 - [ ] No hardcoded user-facing text (use `t()`)
 - [ ] All language files updated (en, de, es, fr, zh)
+- [ ] Invisible overlays have `pointer-events-none` (iOS touch fix)
 - [ ] No sensitive data in logs
 - [ ] Sensitive data stored encrypted
 
