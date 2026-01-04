@@ -9,8 +9,37 @@
     "core:default",
     {
       "identifier": "http:default",
-      "allow": [{ "url": "https://**" }, { "url": "http://**" }]
+      "allow": [
+        {
+          "url": "https://**"
+        },
+        {
+          "url": "http://**"
+        }
+      ]
     },
-    "log:default"
+    "log:default",
+    "fs:default",
+    {
+      "identifier": "fs:allow-write-file",
+      "allow": [
+        {
+          "path": "$DOWNLOADS/**"
+        },
+        {
+          "path": "$DOCUMENTS/**"
+        },
+        {
+          "path": "$DESKTOP/**"
+        },
+        {
+          "path": "$PICTURES/**"
+        },
+        {
+          "path": "$MOVIES/**"
+        }
+      ]
+    },
+    "dialog:default"
   ]
 }
