@@ -176,6 +176,8 @@ Encapsulates stream URL generation and connection key management:
 - Generates authenticated stream URL with connection key
 - Watches for failures and regenerates keys
 - Returns ref for the `<img>` element for snapshot downloads
+- **See [Chapter 7: Streaming Mechanics](./07-api-and-data-fetching.md#streaming-mechanics)** for details on cache busting (`_t`), multi-port streaming, and snapshot preloading.
+- Uses `src/lib/url-builder.ts` for centralized URL construction.
 
 ### MontageMonitor
 
@@ -605,6 +607,52 @@ const removeWidget = useDashboardStore((state) => state.removeWidget);
 6. **Stop propagation**: Nested clickable areas need `e.stopPropagation()`
 7. **Composition over inheritance**: Build complex UIs from simple components
 8. **Stream URL management**: useMonitorStream hook handles authentication and regeneration
+
+## Platform Integrations (`src/services/`)
+
+The `src/services/` directory allows the React application to interact with native device features provided by Capacitor. This layer acts as a bridge, ensuring the UI code remains platform-agnostic.
+
+### Storage Service (`services/storage.ts`)
+
+We use a hybrid storage approach:
+- **Web**: Standard `localStorage`.
+- **Native (iOS/Android)**: Encrypted `SecureStorage` (via `@aparajita/capacitor-secure-storage`).
+
+**Why?** Storing authentication tokens in plaintext `localStorage` on a shared device (or even a phone) is a security risk. SecureStorage uses the device's hardware-backed keystore (Keychain on iOS, Keystore on Android).
+
+### Feature Deep Dive: Notifications
+
+The notification system is the most complex non-UI feature in the app, involving native plugins, API calls, and local state.
+
+**1. The Stack**
+- **Native Layer**: Firebase Cloud Messaging (FCM) / Apple Push Notification Service (APNS)
+- **Plugin**: `@capacitor/push-notifications`
+- **Service**: `src/services/notifications.ts`
+- **Store**: `src/stores/notifications.ts`
+- **UI**: `src/pages/NotificationSettings.tsx`
+
+**2. The Registration Flow**
+1. User enables notifications in Settings UI.
+2. `useSettingsStore` calls `NotificationService.register()`.
+3. **Native Prompt**: "zmNg would like to send you notifications."
+4. **Token Generation**: OS generates a unique push token.
+5. **API Sync**: App sends this token to ZoneMinder server via `POST /api/host/registerFcmToken`.
+
+**3. Handling Incoming Notifications**
+When a push notification arrives:
+- **Foreground**: `NotificationService` listens for `pushNotificationReceived`. It shows a local `toast` to the user without disrupting their work.
+- **Background/Closed**: Tapping the notification triggers `pushNotificationActionPerformed`. The app launches and navigates deeply to the relevant Event or Monitor ID.
+
+```typescript
+// src/services/notifications.ts (Simplified)
+PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
+  const eventId = notification.data.eventId;
+  if (eventId) {
+    // Navigate straight to event playback
+    router.navigate(`/events/${eventId}`);
+  }
+});
+```
 
 ## Next Steps
 

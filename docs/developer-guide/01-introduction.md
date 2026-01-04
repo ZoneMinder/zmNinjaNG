@@ -38,9 +38,11 @@ If you're coming from backend development, Java, C++, Python, or similar languag
 - **Testing Strategy**: Our approach to unit and E2E testing
 - **Common Pitfalls**: Things to watch out for
 
-### Architecture (Chapters 8-9)
+### Architecture (Chapters 8-11)
 - **API Architecture**: How we structure API calls and data fetching
 - **Contributing Guide**: How to contribute code to the project
+- **Key Libraries**: Justifications for our tech stack choices
+- **Application Lifecycle**: The "Map" of how the app runs from start to finish
 
 ## Learning Path
 
@@ -52,9 +54,11 @@ If you're new to React:
 5. Reference other chapters as needed
 
 If you're familiar with React:
+
 - Skip to **Chapter 3** for Zustand-specific patterns
 - Read **Chapter 4** to understand our specific infinite loop issues
 - Review **Chapter 6** for our testing approach
+- Read **Chapter 11** to understand the end-to-end runtime flow
 
 ## Code Examples
 

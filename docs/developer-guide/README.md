@@ -75,6 +75,10 @@ This guide is designed for experienced programmers who may not be familiar with 
     - Data and Logic (date-fns, react-hook-form)
     - Mobile Platform (@capacitor)
 
+11. **[Application Lifecycle](./11-application-lifecycle.md)**
+    - The "Runtime Map" from entry point to main loop
+    - Authentication, Hydration, and Mobile Lifecycle
+
 
 ## Quick Start
 
@@ -145,7 +149,6 @@ Every code change must follow `AGENTS.md` guidelines:
 
 - **AGENTS.md**: Development guidelines and pre-commit checklist
 - **tests/README.md**: Testing documentation
-- **DEVELOPER_GUIDE_OLD.md**: Previous high-level guide (for reference)
 
 ## Getting Help
 

@@ -264,9 +264,63 @@ export const useProfileStore = create<ProfileState>()(
 3. Everything is automatic
 
 **Caveats**:
-- Only serializable data (no functions, dates need special handling)
 - Can slow down updates if state is large
 - Versioning is manual (detect and handle format changes yourself)
+
+### Advanced Persistence: Hydration
+
+Persistence is **asynchronous** (especially with `AsyncStorage` on mobile). When the app launches, the store starts with its initial state (empty) and then "hydrates" with data from storage a few milliseconds later.
+
+This can cause UI flashes or errors if the app tries to use state before it's loaded. To handle this, we use the `onRehydrateStorage` callback.
+
+**Implementation Pattern (`src/stores/profile.ts`)**:
+
+```tsx
+export const useProfileStore = create<ProfileState>()(
+  persist(
+    (set, get) => ({
+      // ... state and actions
+      isInitialized: false,
+    }),
+    {
+      name: 'profile-storage',
+      storage: createJSONStorage(() => AsyncStorage),
+      
+      // Callback when hydration starts
+      onRehydrateStorage: () => {
+        console.log('Hydration starting...');
+        
+        // Returns a function that runs when hydration finishes
+        return (state, error) => {
+          if (error) {
+            console.error('Hydration failed', error);
+          } else {
+            console.log('Hydration finished');
+            // Flag that we are ready to render
+            state?.setInitialized(true);
+          }
+        };
+      },
+    }
+  )
+);
+```
+
+**Usage in App Logic**:
+
+In the main `App.tsx`, we wait for `isInitialized` before rendering routes:
+
+```tsx
+function AppRoutes() {
+  const isInitialized = useProfileStore((state) => state.isInitialized);
+
+  if (!isInitialized) {
+    return <LoadingScreen />;
+  }
+
+  return <Routes>...</Routes>;
+}
+```
 
 ## Calling Stores Outside React
 

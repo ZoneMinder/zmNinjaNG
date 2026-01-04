@@ -118,6 +118,37 @@ export async function getConnKey(profileId: string): Promise<string> {
 
   return key;
 }
+
+### Streaming Mechanics
+
+Video streaming in zmNg is more complex than simple API calls due to browser limitations and ZoneMinder's architecture.
+
+#### 1. Cache Busting (`_t`)
+Browsers aggressively cache image requests based on URL. When using `mode=single` (Snapshot mode) or when a stream connection breaks and needs re-establishing, the browser might show a stale image if the URL hasn't changed.
+
+To force a refresh, we append a **cache buster parameter** (`_t=<timestamp>`) to the stream URL:
+```
+/cgi-bin/nph-zms?mode=jpeg&monitor=1&token=xyz&_t=1704358000000
+```
+This is handled centrally in `src/lib/url-builder.ts`.
+
+#### 2. Multi-Port Streaming
+Browsers limit the number of concurrent connections to the same domain (typically 6). If you have a dashboard with 10 monitors, the 7th monitor will fail to load until another closes.
+
+To bypass this, we use **domain sharding via ports**. If `minStreamingPort` is configured (e.g., 30000) in the profile:
+- Monitor 1 loads from `port 30001`
+- Monitor 2 loads from `port 30002`
+- ...and so on.
+
+This tricks the browser into treating each stream as a separate origin, bypassing the connection limit.
+
+#### 3. Streaming vs. Snapshot
+The app supports two view modes:
+- **Streaming (`mode=jpeg`)**: A long-lived HTTP connection where the server pushes new frames (MJPEG). Low latency but higher bandwidth and connection usage.
+- **Snapshot (`mode=single`)**: The app fetches a single JPEG image, waits `snapshotRefreshInterval` seconds, and fetches again. Lower resource usage but lower frame rate.
+
+Snapshot mode uses `Image()` preloading in `useMonitorStream` to download the next frame in the background before swapping the `src` of the visible image, ensuring flicker-free playback.
+
 ```
 
 ## React Query Integration
