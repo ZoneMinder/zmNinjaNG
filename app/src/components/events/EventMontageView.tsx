@@ -12,7 +12,6 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Download, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
-import { toast } from 'sonner';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -122,9 +121,8 @@ export const EventMontageView = ({
                       onClick={async (e) => {
                         e.stopPropagation();
                         await triggerHaptic();
-                        downloadEventVideo(portalUrl, event.Id, event.Name, accessToken)
-                          .then(() => toast.success(t('eventMontage.video_download_started')))
-                          .catch(() => toast.error(t('eventMontage.video_download_failed')));
+                        downloadEventVideo(portalUrl, event.Id, event.Name, accessToken);
+                        // Background task drawer will show download progress
                       }}
                       title={t('eventMontage.download_video')}
                       aria-label={t('eventMontage.download_video')}

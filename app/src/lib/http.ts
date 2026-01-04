@@ -18,7 +18,7 @@ import { Platform } from './platform';
 import { log, LogLevel } from './logger';
 
 export interface HttpOptions {
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD';
   headers?: Record<string, string>;
   params?: Record<string, string>;
   body?: unknown;

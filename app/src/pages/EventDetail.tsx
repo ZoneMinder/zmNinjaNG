@@ -199,12 +199,12 @@ export default function EventDetail() {
                     event.Event.Id,
                     event.Event.Name,
                     accessToken || undefined
-                  )
-                    .then(() => toast.success(t('event_detail.video_download_started')))
-                    .catch(() => toast.error(t('event_detail.video_download_failed')));
+                  );
+                  // Background task drawer will show download progress
                 }
               }}
               title={t('event_detail.download_video')}
+              data-testid="download-video-button"
             >
               <Download className="h-4 w-4" />
               <span className="hidden sm:inline">{t('event_detail.download_video')}</span>
