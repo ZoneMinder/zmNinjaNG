@@ -16,6 +16,9 @@ import { useEffect, useState, useRef, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { getMonitor, getMonitors, getStreamUrl } from '../../../api/monitors';
+import { getZmsControlUrl } from '../../../lib/url-builder';
+import { ZMS_COMMANDS } from '../../../lib/zm-constants';
+import { httpGet } from '../../../lib/http';
 import { useProfileStore } from '../../../stores/profile';
 import { useAuthStore } from '../../../stores/auth';
 import { useMonitorStore } from '../../../stores/monitors';
@@ -26,6 +29,7 @@ import { Skeleton } from '../../ui/skeleton';
 import { useTranslation } from 'react-i18next';
 import { calculateGridDimensions, getGridTemplateStyle } from '../../../lib/grid-utils';
 import { filterEnabledMonitors } from '../../../lib/filters';
+import { log, LogLevel } from '../../../lib/logger';
 
 interface MonitorWidgetProps {
     /** Array of monitor IDs to display */
@@ -64,15 +68,48 @@ function SingleMonitor({ monitorId, objectFit }: { monitorId: string; objectFit:
     const [displayedImageUrl, setDisplayedImageUrl] = useState<string>('');
     const imgRef = useRef<HTMLImageElement>(null);
 
-    // Force regenerate connKey when monitor changes
+    // Track previous connKey to send CMD_QUIT before regenerating
+    const prevConnKeyRef = useRef<number>(0);
+    const isInitialMountRef = useRef(true);
+
+    // Force regenerate connKey when monitor ID changes
     useEffect(() => {
-        if (monitor) {
-            const newKey = regenerateConnKey(monitor.Monitor.Id);
-            setConnKey(newKey);
-            setCacheBuster(Date.now());
+        if (!monitor) return;
+
+        const monitorId = monitor.Monitor.Id;
+
+        // Send CMD_QUIT for previous connKey before generating new one (skip on initial mount)
+        if (!isInitialMountRef.current && prevConnKeyRef.current !== 0 && settings.viewMode === 'streaming' && currentProfile) {
+            const controlUrl = getZmsControlUrl(
+                currentProfile.portalUrl,
+                ZMS_COMMANDS.cmdQuit,
+                prevConnKeyRef.current.toString(),
+                {
+                    token: accessToken || undefined,
+                }
+            );
+
+            log.dashboard('Sending CMD_QUIT before regenerating connkey for widget', LogLevel.DEBUG, {
+                monitorId,
+                monitorName: monitor.Monitor.Name,
+                oldConnkey: prevConnKeyRef.current,
+            });
+
+            httpGet(controlUrl).catch(() => {
+                // Silently ignore errors - connection may already be closed
+            });
         }
+
+        isInitialMountRef.current = false;
+
+        // Generate new connKey
+        log.dashboard('Regenerating connkey for widget', LogLevel.DEBUG, { monitorId });
+        const newKey = regenerateConnKey(monitorId);
+        setConnKey(newKey);
+        prevConnKeyRef.current = newKey;
+        setCacheBuster(Date.now());
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [monitor]);
+    }, [monitor?.Monitor.Id]); // ONLY regenerate when monitor ID changes
 
     // Snapshot mode: periodic refresh
     useEffect(() => {
@@ -85,25 +122,60 @@ function SingleMonitor({ monitorId, objectFit }: { monitorId: string; objectFit:
         return () => clearInterval(interval);
     }, [settings.viewMode, settings.snapshotRefreshInterval]);
 
-    // Cleanup: abort image loading on unmount to release connection
+    // Store cleanup parameters in ref to access latest values on unmount
+    const cleanupParamsRef = useRef({ monitorId: '', monitorName: '', connKey: 0, profile: currentProfile, token: accessToken, viewMode: settings.viewMode });
+
+    // Update cleanup params whenever they change
     useEffect(() => {
-        const currentImg = imgRef.current;
+        cleanupParamsRef.current = {
+            monitorId: monitor?.Monitor.Id || '',
+            monitorName: monitor?.Monitor.Name || '',
+            connKey,
+            profile: currentProfile,
+            token: accessToken,
+            viewMode: settings.viewMode,
+        };
+    }, [monitor?.Monitor.Id, monitor?.Monitor.Name, connKey, currentProfile, accessToken, settings.viewMode]);
+
+    // Cleanup: send CMD_QUIT and abort image loading on unmount ONLY
+    useEffect(() => {
         return () => {
-            if (currentImg) {
-                // Set to empty data URI to abort the connection
-                currentImg.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+            const params = cleanupParamsRef.current;
+
+            // Send CMD_QUIT to properly close the stream connection (only in streaming mode)
+            if (params.viewMode === 'streaming' && params.profile && params.monitorId && params.connKey !== 0) {
+                const controlUrl = getZmsControlUrl(params.profile.portalUrl, ZMS_COMMANDS.cmdQuit, params.connKey.toString(), {
+                    token: params.token || undefined,
+                });
+
+                log.dashboard('Sending CMD_QUIT on unmount', LogLevel.DEBUG, {
+                    monitorId: params.monitorId,
+                    monitorName: params.monitorName,
+                    connkey: params.connKey,
+                });
+
+                // Send CMD_QUIT asynchronously, ignore errors (connection may already be closed)
+                httpGet(controlUrl).catch(() => {
+                    // Silently ignore errors - server connection may already be closed
+                });
+            }
+
+            // Abort image loading to release browser connection
+            if (imgRef.current) {
+                imgRef.current.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
             }
         };
-    }, [monitorId]);
+    }, []); // Empty deps = only run on unmount
 
-    const streamUrl = currentProfile && monitor
+    const streamUrl = currentProfile && monitor && connKey !== 0
         ? getStreamUrl(currentProfile.cgiUrl, monitor.Monitor.Id, {
             mode: settings.viewMode === 'snapshot' ? 'single' : 'jpeg',
             scale: settings.streamScale,
             maxfps: settings.viewMode === 'streaming' ? settings.streamMaxFps : undefined,
             token: accessToken || undefined,
             connkey: connKey,
-            cacheBuster: cacheBuster,
+            // Only use cacheBuster in snapshot mode to force refresh; streaming mode uses only connkey
+            cacheBuster: settings.viewMode === 'snapshot' ? cacheBuster : undefined,
             // Only use multi-port in streaming mode, not snapshot
             minStreamingPort:
                 settings.viewMode === 'streaming'
