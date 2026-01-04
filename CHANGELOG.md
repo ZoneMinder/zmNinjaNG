@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [zmNg-0.1.4](https://github.com/pliablepixels/zmNg/compare/zmNg-0.1.3..zmNg-0.1.4) - 2026-01-04
+
+### ✨ Features
+
+- Refactor downloads to use background tasks and fix mobile OOM - ([f7db29e](https://github.com/pliablepixels/zmNg/commit/f7db29e2bd4fe8cdcae5f80291189976b3dd5a8e))
+- Add background task drawer with progress tracking - ([996486b](https://github.com/pliablepixels/zmNg/commit/996486b9ae996c2ab068199c9e460e55f1372da7))
+- Add Tauri file system and dialog plugins for desktop downloads - ([e2d8230](https://github.com/pliablepixels/zmNg/commit/e2d823045f511f0701c730b73768956aeaac70d0))
+
+### 🐛 Bug Fixes
+
+- Improve E2E download tests with conditional verification - ([29e16dc](https://github.com/pliablepixels/zmNg/commit/29e16dc250cec2ab59e216aebb73e1cb00bdc0f5))
+
+### 📚 Documentation
+
+- Add guideline to keep AGENTS.md updated on significant changes - ([1281714](https://github.com/pliablepixels/zmNg/commit/12817146cc1c332b008ed00852033ce97ce00f97))
+- Add conditional E2E testing pattern and update quick reference - ([8807813](https://github.com/pliablepixels/zmNg/commit/8807813a3162a2d32b550cb09c98ae63c76bac07))
+- Add Background Tasks & Downloads section to developer guide - ([fbaeb02](https://github.com/pliablepixels/zmNg/commit/fbaeb02080dabc911f8469a1c5514897014df16d))
+- Tweaked Agent instructions - ([3612e54](https://github.com/pliablepixels/zmNg/commit/3612e54059aaf3a7a8b2dec8359c3b4fdc95c474))
+
+### ✅ Tests
+
+- Add E2E tests for download flow with background task drawer - ([20e82d2](https://github.com/pliablepixels/zmNg/commit/20e82d2569b6fbf9f58ae728d3a5379d0c5a0101))
+
+### 🔧 Miscellaneous
+
+- Release bump - ([5eeeea1](https://github.com/pliablepixels/zmNg/commit/5eeeea186161bec5ba0339b2f92c509ee786403a))
 ## [zmNg-0.1.3](https://github.com/pliablepixels/zmNg/compare/zmNg-0.1.2..zmNg-0.1.3) - 2026-01-04
 
 ### ✨ Features
@@ -57,6 +83,7 @@ All notable changes to this project will be documented in this file.
 
 ### 📝 Other
 
+- Preparing release for: zmNg-0.1.3 - ([ca4ce94](https://github.com/pliablepixels/zmNg/commit/ca4ce94f4163718903a6718e6a9dec14f53a8487))
 - Add event view switcher translations - ([9f38744](https://github.com/pliablepixels/zmNg/commit/9f387442281f80324a6e6070ef2f8e77eed0fdbb))
 - Update issue templates - ([2e87677](https://github.com/pliablepixels/zmNg/commit/2e876778db5fc3ff726f886de5e66528dc1d6d13))
 - Update issue templates - ([8b2d396](https://github.com/pliablepixels/zmNg/commit/8b2d3967416156f3df4c45dcab42c68c9d51dcdd))
