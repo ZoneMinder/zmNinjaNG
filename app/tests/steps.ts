@@ -487,3 +487,48 @@ Then('no console errors should be present', async ({ page }) => {
   // No assertion needed here - the test will fail if there are console errors
   // This is more of a documentation step to indicate we care about console cleanliness
 });
+
+// Downloads & Background Tasks
+When('I click the download video button if video exists', async ({ page }) => {
+  const downloadButton = page.getByTestId('download-video-button');
+  const isVisible = await downloadButton.isVisible();
+
+  if (isVisible) {
+    await downloadButton.click();
+    // Give background task time to start
+    await page.waitForTimeout(500);
+  }
+});
+
+When('I download snapshot from first event in montage', async ({ page }) => {
+  // Find first event download button in montage grid
+  const downloadButton = page.getByTestId('event-download-button').first();
+
+  // Check if button exists and is visible
+  const isVisible = await downloadButton.isVisible({ timeout: testConfig.timeouts.element });
+
+  if (isVisible) {
+    // Hover over the event card to reveal the button if needed
+    await downloadButton.hover();
+    await downloadButton.click();
+    // Give background task time to start
+    await page.waitForTimeout(500);
+  }
+});
+
+Then('I should see the background task drawer', async ({ page }) => {
+  // Drawer can be in badge, collapsed, or expanded state
+  const drawer = page.locator('[data-testid="background-tasks-drawer"], [data-testid="background-tasks-collapsed"], [data-testid="background-tasks-badge"]');
+  await expect(drawer.first()).toBeVisible({ timeout: testConfig.timeouts.transition });
+});
+
+Then('I should see a download task in progress or completed', async ({ page }) => {
+  // Wait for either a task item or a completion badge
+  const hasTask = await Promise.race([
+    page.locator('[data-testid^="task-item-"]').first().isVisible().catch(() => false),
+    page.locator('[data-testid="background-tasks-badge"]').isVisible().catch(() => false),
+    page.locator('[data-testid="task-completed-text"]').first().isVisible().catch(() => false),
+  ]);
+
+  expect(hasTask).toBeTruthy();
+});
