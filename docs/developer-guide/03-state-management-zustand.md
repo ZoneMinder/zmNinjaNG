@@ -375,10 +375,13 @@ We use multiple stores for different domains:
 
 ```
 src/stores/
-├── useProfileStore.ts       # User profiles and authentication
+├── useProfileStore.ts       # User profiles management
+├── useAuthStore.ts          # Authentication tokens and state
+├── useSettingsStore.ts      # Application and profile settings
 ├── useDashboardStore.ts     # Dashboard configuration
 ├── useMonitorStore.ts       # Monitor data cache
 ├── useNotificationStore.ts  # Push notifications
+├── useLogStore.ts           # Application logs (ephemeral)
 └── useQueryCacheStore.ts    # API response cache
 ```
 
@@ -510,4 +513,4 @@ addMonitor: (monitor) =>
 
 ## Next Steps
 
-Continue to [Chapter 4: Infinite Loops Explained](./04-infinite-loops-explained.md) to see real examples of how Zustand object references caused infinite loops in our codebase and how we fixed them.
+Continue to [Chapter 4: Pages and Views](./04-pages-and-views.md) to see real examples of how Zustand object references caused infinite loops in our codebase and how we fixed them.

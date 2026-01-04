@@ -505,6 +505,60 @@ function fetchMonitors() {}
 // - Tests: Same as source (MonitorCard.test.tsx)
 ```
 
+## Mobile Development
+
+zmNg is a cross-platform app built with [Capacitor](https://capacitorjs.com/).
+
+### Prerequisites
+
+- **Node.js**: 18+
+- **Android Studio**: For Android development (installs Android SDK/JDK)
+- **Xcode**: For iOS development (macOS only)
+
+### Running on Device/Emulator
+
+The project includes helper scripts in `package.json` to streamline the mobile workflow.
+
+**Android:**
+
+```bash
+# Sync web assets to Android project and open Android Studio
+npm run android
+
+# Just sync (if you already have Android Studio open)
+npm run android:sync
+
+# View logs from connected Android device
+npm run android:logs
+```
+
+**iOS:**
+
+```bash
+# Sync web assets to iOS project and open Xcode
+npm run ios
+
+# Just sync
+npm run ios:sync
+```
+
+### Workflow
+
+1.  Make changes to the web code (`src/`).
+2.  Run `npm run build` to compile the web assets.
+3.  Run `npm run android:sync` or `npm run ios:sync` to copy the built assets to the native projects.
+4.  Run/Debug via Android Studio or Xcode.
+
+> [!TIP]
+> **Live Reload**: For faster development, you can configure Capacitor to load the dev server URL instead of the built bundle. Edit `capacitor.config.ts`:
+> ```ts
+> server: {
+>   url: 'http://YOUR_LOCAL_IP:5173',
+>   cleartext: true
+> }
+> ```
+> Remember to remove this before building for release!
+
 ## Getting Help
 
 - **Questions about the codebase**: Create a GitHub discussion

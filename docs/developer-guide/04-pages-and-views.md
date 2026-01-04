@@ -1,6 +1,53 @@
 # Pages and Views
 
-This chapter describes the main pages/views in the zmNg app and their implementations.
+This chapter provides a tour of the application screens and the routing logic that connects them.
+
+## Routing and Navigation
+
+zmNg uses **React Router** (`react-router-dom`) for client-side routing. The router integration is handled in `src/App.tsx`.
+
+### Route Structure
+
+Routes are defined in the `AppRoutes` component. There are two main types of routes:
+
+1.  **Standalone Routes**: Render outside the main layout (e.g., Setup Wizard).
+2.  **Layout Routes**: Render inside `AppLayout`, which provides the sidebar navigation and header.
+
+```tsx
+// src/App.tsx
+<Routes>
+  {/* Standalone Route */}
+  <Route path="/profiles/new" element={<ProfileForm />} />
+
+  {/* Layout Routes - wrapped in AppLayout */}
+  <Route element={<AppLayout />}>
+    <Route path="dashboard" element={<Dashboard />} />
+    <Route path="monitors" element={<Monitors />} />
+    {/* ... other pages ... */}
+  </Route>
+</Routes>
+```
+
+### Route Error Boundaries
+
+Each route is wrapped in a `RouteErrorBoundary` component. This ensures that if a specific page crashes (e.g., due to a rendering bug), it doesn't crash the entire application. The user sees an error message for that page but can still use the navigation sidebar to go elsewhere.
+
+### Programmatic Navigation
+
+To navigate imperatively from code, use the `useNavigate` hook:
+
+```tsx
+import { useNavigate } from 'react-router-dom';
+
+function MyComponent() {
+  const navigate = useNavigate();
+
+  const handleSave = () => {
+    // Navigate to monitor details
+    navigate(`/monitors/${monitorId}`);
+  };
+}
+```
 
 ## Page Structure
 
@@ -561,6 +608,56 @@ export default function ProfileForm() {
 **Connection Testing:**
 
 Before saving, users can test the connection to verify credentials and server accessibility.
+
+## Secondary Views
+
+### Logs Page
+
+**Location**: `src/pages/Logs.tsx`
+
+Provides a unified view of both application logs (ephemeral, stored in memory) and ZoneMinder server logs (fetched via API).
+
+**Key Features**:
+- Toggle between App (zmNg) and Server logs
+- Filter by log level (DEBUG, INFO, WARN, ERROR)
+- Filter by component (e.g., specific monitor or service)
+- Export logs to file or share (mobile)
+- Live server log fetching
+
+### Notification System
+
+**Pages**:
+- **History**: `src/pages/NotificationHistory.tsx` - List of past push notifications with read status.
+- **Settings**: `src/pages/NotificationSettings.tsx` - Configuration for the notification server connection, including:
+    - WebSocket connection management (`wss://`)
+    - Per-monitor subscription toggles
+    - Check intervals
+    - Push notification registration (Capacitor)
+
+### Server Status
+
+**Location**: `src/pages/Server.tsx`
+
+Dashboard for server health and control.
+
+**Features**:
+- Version information (API & Core)
+- System Load and Disk Usage metrics
+- Daemon status check
+- ZoneMinder Run State management (Start/Stop/Restart)
+
+### Timeline View
+
+**Location**: `src/pages/Timeline.tsx`
+
+A visualization of events over time using `vis-timeline`.
+
+**Implementation details**:
+- Uses `vis-timeline/standalone` for rendering
+- Groups events by Monitor
+- Color-coded by Monitor ID for visual distinction
+- Interactive zooming and panning
+- "Quick Range" buttons for common timeframes (1h, 8h, 24h)
 
 ## Common Page Patterns
 

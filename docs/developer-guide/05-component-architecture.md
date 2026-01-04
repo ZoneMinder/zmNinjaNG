@@ -1,6 +1,38 @@
-# Component Architecture
+# Project Architecture
 
-This chapter describes the reusable components used throughout zmNg and how they're organized.
+This chapter describes the overall structure of the zmNg project, including non-component logic and the component hierarchy.
+
+## Directory Structure
+
+The `src/` directory is organized by responsibility:
+
+```
+src/
+├── api/             # API client functions (Zustand independence)
+├── components/      # React components (Visuals)
+├── hooks/           # Custom React hooks (Component logic)
+├── lib/             # Pure utility functions and system wrappers
+├── pages/           # Route-level views
+├── services/        # Platform-specific services (Capacitor, etc.)
+├── stores/          # Global state (Zustand)
+└── types/           # Shared TypeScript definitions
+```
+
+### Key Directories Explained
+
+- **`api/`**: Contains raw fetch functions for ZoneMinder endpoints. These functions are stateless and should not depend on React or stores directly if possible (though some might need auth tokens).
+- **`hooks/`**: Reusable React logic.
+    - `useMonitorStream`: Manages video stream URLs and auth.
+    - `useEventPlayer`: Manages JPEGs streaming for recorded events.
+    - `useTokenRefresh`: Handles background token renewal.
+- **`lib/`**: "Library" code - helpers that could theoretically be in a separate npm package.
+    - `logger.ts`: Structured logging system.
+    - `utils.ts`: String formatting, date helpers.
+    - `http.ts`: Fetch wrapper with error handling.
+- **`services/`**: Bridges between the web app and native platform features.
+    - `notifications.ts`: Push notification handling.
+    - `storage.ts`: Wrapper around Capacitor preferences/secure storage.
+- **`stores/`**: Global state management (see Chapter 3).
 
 ## Component Structure
 

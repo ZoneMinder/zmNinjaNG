@@ -70,6 +70,12 @@ This guide is designed for experienced programmers who may not be familiar with 
    - Code review guidelines
    - Common contribution scenarios
 
+10. **[Key Libraries](./10-key-libraries.md)**
+    - UI and Visualization (react-grid-layout, vis-timeline)
+    - Data and Logic (date-fns, react-hook-form)
+    - Mobile Platform (@capacitor)
+
+
 ## Quick Start
 
 ### For React Beginners
