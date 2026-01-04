@@ -7,7 +7,9 @@
 4. **Testing**: MANDATORY - Write tests first, run AND verify pass before commit
 5. **Logging**: Use component-specific helpers (e.g., `log.secureStorage(msg, LogLevel.INFO, details)`), never `console.*`
 6. **HTTP**: ALWAYS use `lib/http.ts` abstractions (`httpGet`, `httpPost`, etc.), NEVER raw `fetch()` or `axios`
-7. **Coding**: DRY principles, keep code files small and modular
+7. **Background Tasks**: Use background task store for long-running operations (downloads, uploads, syncs)
+8. **Mobile Downloads**: NEVER convert to Blob - use CapacitorHttp base64 directly to avoid OOM
+9. **Coding**: DRY principles, keep code files small and modular
 
 ---
 
@@ -211,6 +213,67 @@ If you change ANY of the following, you MUST update and run tests:
 - Tests must interact with UI elements, not just load views
 - Use data-testid selectors for reliability
 - Always make sure tests work for android (mobile devices use different files like capacitor HTTP that are not triggered when web/desktop are tested)
+
+**Conditional Testing Pattern**:
+
+When testing features that depend on dynamic content (events, videos, etc.), use conditional verification:
+
+```typescript
+// BAD ❌ - Unconditional verification
+When('I click download button if exists', async ({ page }) => {
+  const button = page.getByTestId('download-button');
+  if (await button.isVisible()) {
+    await button.click();
+  }
+});
+
+Then('I should see download progress', async ({ page }) => {
+  // This ALWAYS expects progress, even if button didn't exist!
+  await expect(page.getByTestId('progress')).toBeVisible();
+});
+```
+
+```typescript
+// GOOD ✅ - Conditional verification
+let actionPerformed = false;
+
+When('I click download button if exists', async ({ page }) => {
+  actionPerformed = false;
+  const button = page.getByTestId('download-button');
+
+  try {
+    if (await button.isVisible({ timeout: 1000 })) {
+      await button.click();
+      actionPerformed = true;
+    }
+  } catch {
+    // Button doesn't exist - that's okay
+    actionPerformed = false;
+  }
+});
+
+Then('I should see download progress if download started', async ({ page }) => {
+  if (!actionPerformed) {
+    log.info('E2E: Skipping verification - action was not performed');
+    return; // Don't verify if action didn't happen
+  }
+
+  // Only verify if action was actually performed
+  await expect(page.getByTestId('progress')).toBeVisible();
+});
+```
+
+**Why this matters**:
+- Tests work with varying server content (empty states, missing data)
+- Tests don't fail when optional features aren't present
+- Tests adapt to real-world conditions
+- Avoids false failures from unavailable test data
+
+**Use cases**:
+- Testing downloads (events may not have videos)
+- Testing actions on lists (lists may be empty)
+- Testing optional features (may be disabled)
+- Testing server-dependent content
 
 ---
 
