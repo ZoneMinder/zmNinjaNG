@@ -6,7 +6,8 @@
 3. **Settings**: Must be profile-scoped; read/write via profile settings only
 4. **Testing**: MANDATORY - Write tests first, run AND verify pass before commit
 5. **Logging**: Use component-specific helpers (e.g., `log.secureStorage(msg, LogLevel.INFO, details)`), never `console.*`
-6. **Coding**: DRY principles, keep code files small and modular
+6. **HTTP**: ALWAYS use `lib/http.ts` abstractions (`httpGet`, `httpPost`, etc.), NEVER raw `fetch()` or `axios`
+7. **Coding**: DRY principles, keep code files small and modular
 
 ---
 
@@ -26,7 +27,7 @@
 
 2. **Run Type Check**
    ```bash
-   npm run typecheck
+   npx tsc --noEmit
    ```
 
 3. **Run Build**
@@ -66,6 +67,12 @@
   ```typescript
   const { t } = useTranslation();
   <Text>{t('setup.title')}</Text>
+  ```
+- **Toast notifications**: Must use i18n keys
+  ```typescript
+  toast.error(t('montage.screen_too_small_for_editing'));
+  toast.success(t('profile.saved'));
+  toast.info(t('common.loading'));
   ```
 - **When adding text**: Add the same key to every translation.json file
 - **When adding a new language**: Follow `.agent/workflows/add_language.md` - must update `i18n.ts` to import and bundle the new translations
@@ -269,6 +276,192 @@ console.log('Regenerating connkey');
 
 ---
 
+## HTTP Requests
+
+**ALWAYS use lib/http.ts abstractions - NEVER use fetch() or axios directly**
+
+### Why This Matters
+- **Platform differences**: Mobile uses Capacitor HTTP plugin, web uses fetch
+- **Automatic logging**: All HTTP requests logged via `log.http()`
+- **Error handling**: Consistent error handling across platforms
+- **Authentication**: Automatic token handling
+
+### Required Pattern
+```typescript
+import { httpGet, httpPost, httpPut, httpDelete } from '../lib/http';
+
+// Good ✅
+const data = await httpGet<MonitorData>('/api/monitors.json');
+await httpPost('/api/states/change.json', { monitorId: '1', newState: 'Alert' });
+
+// Bad ❌
+const response = await fetch('/api/monitors.json');
+const data = await axios.get('/api/monitors.json');
+```
+
+### Available Functions
+- `httpGet<T>(url: string, options?: RequestOptions): Promise<T>`
+- `httpPost<T>(url: string, data?: any, options?: RequestOptions): Promise<T>`
+- `httpPut<T>(url: string, data?: any, options?: RequestOptions): Promise<T>`
+- `httpDelete<T>(url: string, options?: RequestOptions): Promise<T>`
+
+### Platform Detection
+The abstraction automatically:
+- Uses Capacitor HTTP on iOS/Android (native networking)
+- Uses fetch() on web/desktop
+- Handles CORS and authentication headers
+- Logs all requests with timing
+
+### Reference
+- Full implementation: `app/src/lib/http.ts`
+
+---
+
+## Capacitor Native Features
+
+When using Capacitor plugins (Haptics, Camera, Filesystem, etc.):
+
+### 1. Use Dynamic Imports
+Avoid static imports for optional native features:
+
+```typescript
+// Good ✅ - Dynamic import with platform check
+if (Capacitor.isNativePlatform()) {
+  try {
+    const { Haptics, ImpactStyle } = await import('@capacitor/haptics');
+    await Haptics.impact({ style: ImpactStyle.Light });
+  } catch {
+    // Haptics not available, silently ignore
+  }
+}
+
+// Bad ❌ - Static import
+import { Haptics } from '@capacitor/haptics';
+await Haptics.impact(); // Breaks on web
+```
+
+### 2. Platform Checking
+- **Always check**: `Capacitor.isNativePlatform()` before using mobile-only features
+- **Wrap in try-catch**: Features may not be available on all devices
+- **Graceful degradation**: App must work without native features
+
+### 3. Test Mocks Required
+When adding new Capacitor plugins:
+
+1. Add mock to `src/tests/setup.ts`:
+   ```typescript
+   vi.mock('@capacitor/haptics', () => ({
+     Haptics: {
+       impact: vi.fn().mockResolvedValue(undefined),
+       // ... other methods
+     },
+     ImpactStyle: {
+       Heavy: 'Heavy',
+       Medium: 'Medium',
+       Light: 'Light',
+     },
+   }));
+   ```
+
+2. Mock any components that use the plugin in test files:
+   ```typescript
+   vi.mock('../../components/events/EventMontageView', () => ({
+     EventMontageView: () => <div data-testid="events-montage-grid" />,
+   }));
+   ```
+
+### 4. Version Compatibility
+**CRITICAL**: Match Capacitor plugin version with `@capacitor/core` version
+
+```bash
+# Check current @capacitor/core version
+npm list @capacitor/core
+
+# Install matching plugin version
+npm install @capacitor/haptics@7  # Match major version (7.x)
+```
+
+**Example**:
+- `@capacitor/core@7.4.4` → use `@capacitor/haptics@7.x.x`
+- `@capacitor/core@6.2.1` → use `@capacitor/haptics@6.x.x`
+
+### Common Patterns
+```typescript
+// Haptic feedback on button press
+const handleButtonClick = async () => {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const { Haptics, ImpactStyle } = await import('@capacitor/haptics');
+      await Haptics.impact({ style: ImpactStyle.Light });
+    } catch {
+      // Haptics not available
+    }
+  }
+  // Continue with action
+};
+
+// File download
+import { Filesystem, Directory } from '@capacitor/filesystem';
+if (Capacitor.isNativePlatform()) {
+  await Filesystem.writeFile({
+    path: filename,
+    data: base64Data,
+    directory: Directory.Documents,
+  });
+}
+```
+
+---
+
+## Adding Dependencies
+
+### Before Installing
+
+1. **Check version compatibility**:
+   ```bash
+   npm info <package> peerDependencies
+   ```
+
+2. **For Capacitor plugins**: Match `@capacitor/core` major version
+   ```bash
+   npm list @capacitor/core
+   npm install @capacitor/<plugin>@<matching-major>
+   ```
+
+3. **For other packages**: Check compatibility with React, TypeScript, Vite
+
+### After Installing
+
+1. **Update test setup** if needed:
+   - Capacitor plugins → add mock to `src/tests/setup.ts`
+   - Complex imports → add `vi.mock()` in test files
+   - Components using package → mock in parent test files
+
+2. **Document usage**:
+   - Add comment explaining why package is needed
+   - Note platform-specific behavior if applicable
+
+3. **Test**:
+   - Run `npm test` - all tests must pass with mocks
+   - Run `npm run build` - ensure no build errors
+
+### Example
+```bash
+# 1. Check @capacitor/core version
+npm list @capacitor/core
+# Output: @capacitor/core@7.4.4
+
+# 2. Install matching version
+npm install @capacitor/haptics@7
+
+# 3. Add mock to src/tests/setup.ts
+# 4. Test
+npm test
+npm run build
+```
+
+---
+
 ## Settings & Data Management
 
 ### Profile-Scoped Settings
@@ -291,13 +484,54 @@ console.log('Regenerating connkey');
 - Don't over-engineer
 - Three similar lines > premature abstraction
 
-## Keep It Small
+### Keep It Small
 - Keep each file small (SLOC count) and cohesive
 
+### Get User Approval Early
+- **For complex features with multiple approaches**: Present options and get approval BEFORE implementing
+- **For UX changes affecting core workflows**: Demo or describe the approach before coding
+- **Don't spend time on features user might reject**: A 5-minute discussion saves hours of work
+- **When in doubt**: Ask first, code second
+
+Examples of when to get approval:
+- Multiple valid implementation patterns (hooks vs context, Redux vs Zustand)
+- UX/UI changes that alter user workflows
+- Architectural decisions with long-term impact
+- Features requiring significant time investment
+
 ### Remove Legacy Code
-- When replacing functionality, delete old code
+- When replacing functionality, delete old code completely
 - Don't leave unused files or commented code
 - Clean as you go
+
+### Feature Removal Checklist
+
+When removing or reverting functionality:
+
+1. **Delete unused files completely**:
+   - Remove component files
+   - Remove utility/helper files
+   - Remove test files for deleted features
+
+2. **Clean up imports**:
+   - Remove unused imports from all files
+   - Run linter to catch orphaned imports
+
+3. **Remove unused code**:
+   - Delete unused props, functions, state variables
+   - Remove event handlers that are no longer called
+   - Clean up unused types/interfaces
+
+4. **Update or remove translations**:
+   - Remove translation keys if feature is permanently removed
+   - Keep keys if backward compatibility needed
+
+5. **Verify no breakage**:
+   - Run full test suite: `npm test && npm run test:e2e`
+   - Run type check: `npx tsc --noEmit`
+   - Run build: `npm run build`
+
+6. **Update documentation** if feature was documented
 
 ### Documentation
 - Write concise comments
@@ -344,7 +578,7 @@ console.log('Regenerating connkey');
 ### ALL Changes (MANDATORY - No Exceptions)
 - [ ] Tests written/updated BEFORE or DURING implementation
 - [ ] Unit tests run and PASS: `npm test`
-- [ ] Type check passes: `npm run typecheck`
+- [ ] Type check passes: `npx tsc --noEmit`
 - [ ] Build succeeds: `npm run build`
 - [ ] No console.* logging (use structured logging with LogLevel)
 - [ ] Test verification stated in commit message or response
@@ -439,22 +673,22 @@ npm run test:e2e -- dashboard.feature:10
 ### Type Checking & Build
 ```bash
 # Type check only (no emit)
-npm run typecheck
+npx tsc --noEmit
 
 # Build for production
 npm run build
 
 # Run all verification steps
-npm test && npm run typecheck && npm run build
+npm test && npx tsc --noEmit && npm run build
 ```
 
 ### Common Test Workflows
 ```bash
 # Quick verification (unit + types + build)
-npm test && npm run typecheck && npm run build
+npm test && npx tsc --noEmit && npm run build
 
 # Full verification (unit + e2e + types + build)
-npm test && npm run test:e2e && npm run typecheck && npm run build
+npm test && npm run test:e2e && npx tsc --noEmit && npm run build
 
 # Test specific feature end-to-end
 npm test && npm run test:e2e -- dashboard.feature
