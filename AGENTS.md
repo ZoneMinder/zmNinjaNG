@@ -317,6 +317,166 @@ The abstraction automatically:
 
 ---
 
+## Background Tasks & Downloads
+
+**Use the background task system for long-running async operations**
+
+### Background Task Store
+
+Centralized state management for downloads, uploads, syncs, and exports.
+
+- **Location**: `app/src/stores/backgroundTasks.ts`
+- **UI Component**: `app/src/components/BackgroundTaskDrawer.tsx`
+- **Features**:
+  - Task states: pending, in_progress, completed, failed, cancelled
+  - Progress tracking (percentage, bytes processed)
+  - Cancellation support via AbortController
+  - Auto-transitions (hidden → expanded → collapsed → badge)
+  - Works across all views in the application
+
+### Adding a Background Task
+
+```typescript
+import { useBackgroundTasks } from '../stores/backgroundTasks';
+
+const taskStore = useBackgroundTasks.getState();
+const abortController = new AbortController();
+
+// Create task
+const taskId = taskStore.addTask({
+  type: 'download', // or 'upload' | 'sync' | 'export'
+  metadata: {
+    title: 'Video.mp4',
+    description: 'Event 12345',
+  },
+  cancelFn: () => abortController.abort(),
+});
+
+// Update progress
+taskStore.updateProgress(taskId, percentage, bytesProcessed);
+
+// Complete or fail
+taskStore.completeTask(taskId);
+taskStore.failTask(taskId, error);
+```
+
+### Download Implementation
+
+**CRITICAL**: Avoid Out-Of-Memory (OOM) errors on mobile
+
+Downloads use platform-specific implementations to avoid loading large files into memory:
+
+#### Web
+```typescript
+// Uses axios with blob + anchor download
+const response = await apiClient.get(url, { responseType: 'blob' });
+const blob = response.data;
+const blobUrl = window.URL.createObjectURL(blob);
+// Trigger download via anchor element
+```
+
+#### Mobile (iOS/Android)
+```typescript
+// CRITICAL: Use CapacitorHttp directly, NOT blob conversion
+// CapacitorHttp returns base64 string, avoiding Blob in memory
+const { CapacitorHttp } = await import('@capacitor/core');
+const response = await CapacitorHttp.request({
+  method: 'GET',
+  url,
+  responseType: 'blob', // Returns base64 string, NOT Blob object
+});
+
+const base64Data = response.data as string; // Direct base64, no conversion
+
+// Write directly to filesystem
+await Filesystem.writeFile({
+  path: filename,
+  data: base64Data, // No intermediate Blob conversion
+  directory: Directory.Documents,
+});
+
+// Save to Photo/Video library
+await Media.saveVideo({ path: writeResult.uri });
+```
+
+**Why this matters:**
+- ❌ **Bad**: Network → base64 → **Blob (entire file in memory)** → base64 → Disk
+- ✅ **Good**: Network → base64 → Disk
+
+CapacitorHttp already returns base64 data. Converting to Blob doubles memory usage and causes OOM on large video files.
+
+#### Desktop (Tauri)
+```typescript
+// Uses native fetch with streaming
+const response = await tauriFetch(url);
+const reader = response.body.getReader();
+
+// Stream chunks to disk
+const chunks: Uint8Array[] = [];
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+  chunks.push(value);
+}
+
+// Write to user-selected location
+await writeFile(savePath, combined);
+```
+
+### Progress Tracking
+
+All download functions accept `options.onProgress`:
+
+```typescript
+await downloadFile(url, filename, {
+  signal: abortController.signal,
+  onProgress: (progress) => {
+    console.log(`${progress.percentage}% - ${progress.loaded}/${progress.total} bytes`);
+    taskStore.updateProgress(taskId, progress.percentage, progress.loaded);
+  },
+});
+```
+
+### Cancellation
+
+All downloads support cancellation via AbortController:
+
+```typescript
+const abortController = new AbortController();
+
+// Pass to download
+await downloadFile(url, filename, {
+  signal: abortController.signal,
+});
+
+// Cancel from anywhere
+abortController.abort();
+```
+
+### UI States
+
+The background task drawer has 4 states:
+
+1. **Hidden**: No active or completed tasks
+2. **Expanded**: Slides up when task starts, shows progress bars
+3. **Collapsed**: Minimized to thin bar at bottom, shows task count
+4. **Badge**: Floating badge with completion count, tap to review
+
+Transitions happen automatically based on task state changes.
+
+### Testing
+
+- Unit tests: `src/stores/__tests__/backgroundTasks.test.ts`
+- UI tests: `src/components/__tests__/BackgroundTaskDrawer.test.tsx`
+- Download tests: `src/lib/__tests__/download.test.ts`
+
+### Reference
+- Background task store: `app/src/stores/backgroundTasks.ts`
+- Download implementation: `app/src/lib/download.ts`
+- UI component: `app/src/components/BackgroundTaskDrawer.tsx`
+
+---
+
 ## Capacitor Native Features
 
 When using Capacitor plugins (Haptics, Camera, Filesystem, etc.):
