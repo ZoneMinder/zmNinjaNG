@@ -2,6 +2,64 @@
 
 All notable changes to this project will be documented in this file.
 
+## [zmNg-0.1.3](https://github.com/pliablepixels/zmNg/compare/zmNg-0.1.2..zmNg-0.1.3) - 2026-01-04
+
+### ✨ Features
+
+- Add haptic feedback to event download buttons - ([bd6e6de](https://github.com/pliablepixels/zmNg/commit/bd6e6decac2435200e198301469396c01dbf1fe8))
+- Implement multi-port streaming support for ZoneMinder - ([1598d16](https://github.com/pliablepixels/zmNg/commit/1598d1648dc8aced648e184e6a540227eac795ce))
+
+### 🐛 Bug Fixes
+
+- IOS touch offset caused by invisible hover overlays blocking pointer events - ([7febe8e](https://github.com/pliablepixels/zmNg/commit/7febe8e94ac961987e826245c4cff327cf8085c6))
+- Prevent zombie ZMS streams by blocking rendering until valid connKey exists - ([b9acc59](https://github.com/pliablepixels/zmNg/commit/b9acc5945f35d9b708aefc254bc11ffb02c8d364))
+- Infinite loop in Montage caused by unstable callback dependencies - ([d0c7173](https://github.com/pliablepixels/zmNg/commit/d0c7173f24585209d0543c9983f485258273f83f))
+- Infinite loop when adding Recent Events widget to dashboard - ([0819320](https://github.com/pliablepixels/zmNg/commit/0819320fa127e50585f52c3e976770b7bcbb463a))
+- Remove zustand action from useCallback dependencies - ([a17cb88](https://github.com/pliablepixels/zmNg/commit/a17cb887185a321e2204e6218ce77772d2766b70))
+- Infinite loop in dashboard layout caused by unstable callbacks - ([bad02c6](https://github.com/pliablepixels/zmNg/commit/bad02c656900ef9ad822d0a5300b4786466a2bc7))
+- Infinite loop in montage caused by unstable callback ref - ([c84c3bc](https://github.com/pliablepixels/zmNg/commit/c84c3bce3ca9621972c7b505968ece1df3bb44fa))
+- Montage grid showing empty skeleton boxes on initial load - ([e1511d5](https://github.com/pliablepixels/zmNg/commit/e1511d543bc2586c5d900bb7935cad8dbd1c2779))
+- Remove lazy loading from montage monitors to fix skeleton boxes on slow servers - ([ba4b801](https://github.com/pliablepixels/zmNg/commit/ba4b8014dafa29f4a86fa4800626ae772167bf64))
+- Montage grid showing empty skeletons on initial load - ([e794f8e](https://github.com/pliablepixels/zmNg/commit/e794f8ec52e03b4b86865c5414ec52d926d7b97e))
+- Improve montage grid defaults and thumbnail loading performance - ([67bd352](https://github.com/pliablepixels/zmNg/commit/67bd35249612b5e981a38e2975419ba9b534ec38))
+- Resolve iOS mobile header scrolling bug by removing backdrop-blur - ([1a729ed](https://github.com/pliablepixels/zmNg/commit/1a729edbb348447830cbb00fa03d51a47ad16dc7))
+
+### ♻️ Refactor
+
+- Split constants.ts into zm-constants and zmng-constants - ([0d382be](https://github.com/pliablepixels/zmNg/commit/0d382be9b5f85bcbb01e9a3792f2372a0154745e))
+
+### 📚 Documentation
+
+- Add iOS touch offset pitfall to developer guide - ([c925daa](https://github.com/pliablepixels/zmNg/commit/c925daa822dfc73c9b3ca93f53527dedea47d33d))
+- Update AGENTS.md with HTTP abstraction and Capacitor guidelines - ([368a714](https://github.com/pliablepixels/zmNg/commit/368a714254a9074d742fb7cad69e4e769fdecd42))
+- Document zombie stream fix and constants refactoring - ([c08b27c](https://github.com/pliablepixels/zmNg/commit/c08b27c675b045589dc57affc07024b473a1e8ca))
+- Enhance developer guide with lifecycle and architecture details - ([efca49f](https://github.com/pliablepixels/zmNg/commit/efca49f6b629f500170d22cc85b832e8c2d4a664))
+- Added developer docs - ([9e7519f](https://github.com/pliablepixels/zmNg/commit/9e7519f6680619d82ab8b423b9ca28a177766e00))
+- Create comprehensive developer guide with detailed explanations - ([0448f27](https://github.com/pliablepixels/zmNg/commit/0448f27c6b77f188b4a7d68ef2774caac62dba33))
+- Document e2e test server flexibility - ([fc898f0](https://github.com/pliablepixels/zmNg/commit/fc898f01369141b85bd2fa800dfd1adab30cec90))
+- Strengthen testing requirements and add mandatory verification workflow - ([fd66308](https://github.com/pliablepixels/zmNg/commit/fd6630807da1716a30458aedcbc4033be1ef5b8f))
+
+### ✅ Tests
+
+- Remove Montage unit test due to component complexity - ([d9e0a31](https://github.com/pliablepixels/zmNg/commit/d9e0a31bdef0158be5cf4fb8c62a625abd1d05c2))
+
+### 🔧 Miscellaneous
+
+- Release bump - ([9243739](https://github.com/pliablepixels/zmNg/commit/92437393100708130ef392a6ef39f847be7e9654))
+- Install @capacitor/haptics and add test mocks - ([f62174b](https://github.com/pliablepixels/zmNg/commit/f62174b74b367ea7f497de2f1dfe8643dc5467df))
+- Don't need the old dev guide - ([3c1b67d](https://github.com/pliablepixels/zmNg/commit/3c1b67d4a49e7596faadd8077028ca944c24577e))
+- Don't need the analysis file anymore - ([2eff9d5](https://github.com/pliablepixels/zmNg/commit/2eff9d5091a12ef83989eb69caef30e06021340f))
+- Bump version to 0.1.2 - ([aa0da6e](https://github.com/pliablepixels/zmNg/commit/aa0da6e577d1354ef1bd80da318bb72fadfc73aa))
+
+### ◀️ Revert
+
+- Remove responsive montage UX and add small screen toast - ([90a7e1d](https://github.com/pliablepixels/zmNg/commit/90a7e1dacc5a6b99bc2f187bc2f346a2c369b9cd))
+
+### 📝 Other
+
+- Add event view switcher translations - ([9f38744](https://github.com/pliablepixels/zmNg/commit/9f387442281f80324a6e6070ef2f8e77eed0fdbb))
+- Update issue templates - ([2e87677](https://github.com/pliablepixels/zmNg/commit/2e876778db5fc3ff726f886de5e66528dc1d6d13))
+- Update issue templates - ([8b2d396](https://github.com/pliablepixels/zmNg/commit/8b2d3967416156f3df4c45dcab42c68c9d51dcdd))
 ## [zmNg-0.1.2](https://github.com/pliablepixels/zmNg/compare/zmNg-0.1.1..zmNg-0.1.2) - 2025-12-25
 
 ### ✨ Features
@@ -43,6 +101,7 @@ All notable changes to this project will be documented in this file.
 
 ### 📝 Other
 
+- Preparing release for: zmNg-0.1.2 - ([61124e0](https://github.com/pliablepixels/zmNg/commit/61124e026b61ccd4c722028a8401e1df894d1875))
 - Merge branch 'feat/comprehensive-zod-validation' - ([5087bb6](https://github.com/pliablepixels/zmNg/commit/5087bb671252e2d2dc3d717de08449822e730615))
 ## [zmNg-0.1.1](https://github.com/pliablepixels/zmNg/compare/zmNg-0.1.0..zmNg-0.1.1) - 2025-12-25
 
