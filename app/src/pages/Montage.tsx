@@ -254,6 +254,7 @@ export default function Montage() {
   };
 
   const calculateHeightUnits = (
+    monitorMap: Map<string, Monitor>,
     monitorId: string,
     widthUnits: number,
     gridWidth: number,
@@ -278,7 +279,7 @@ export default function Montage() {
   const buildDefaultLayout = (monitorList: typeof monitors, cols: number, gridWidth: number) => {
     return monitorList.map(({ Monitor }, index) => {
       const widthUnits = 1;
-      const heightUnits = calculateHeightUnits(Monitor.Id, widthUnits, gridWidth, cols, GRID_LAYOUT.margin);
+      const heightUnits = calculateHeightUnits(monitorMap, Monitor.Id, widthUnits, gridWidth, cols, GRID_LAYOUT.margin);
       return {
         i: Monitor.Id,
         x: index % cols,
@@ -291,11 +292,17 @@ export default function Montage() {
     });
   };
 
-  const normalizeLayout = (current: Layout[], cols: number, gridWidth: number, margin: number) => {
+  const normalizeLayout = (
+    monitorMap: Map<string, Monitor>,
+    current: Layout[],
+    cols: number,
+    gridWidth: number,
+    margin: number
+  ) => {
     return current.map((item) => ({
       ...item,
       x: item.x % cols,
-      h: calculateHeightUnits(item.i, item.w, gridWidth, cols, margin),
+      h: calculateHeightUnits(monitorMap, item.i, item.w, gridWidth, cols, margin),
     }));
   };
 
@@ -321,7 +328,7 @@ export default function Montage() {
       nextLayout = buildDefaultLayout(monitors, gridCols, currentWidthRef.current);
     }
 
-    const normalized = normalizeLayout(nextLayout, gridCols, currentWidthRef.current, GRID_LAYOUT.margin);
+    const normalized = normalizeLayout(monitorMap, nextLayout, gridCols, currentWidthRef.current, GRID_LAYOUT.margin);
 
     setLayout((prev) => (areLayoutsEqual(prev, normalized) ? prev : normalized));
   }, [monitors, gridCols, monitorMap, settings.montageLayouts, hasWidth]);
@@ -361,10 +368,10 @@ export default function Montage() {
     screenTooSmallRef.current = tooSmall;
 
     setLayout((prev) => {
-      const normalizedLayout = normalizeLayout(prev, gridCols, width, isFullscreen ? 0 : GRID_LAYOUT.margin);
+      const normalizedLayout = normalizeLayout(monitorMap, prev, gridCols, width, isFullscreen ? 0 : GRID_LAYOUT.margin);
       return normalizedLayout;
     });
-  }, [gridCols, isFullscreen, t]);
+  }, [gridCols, isFullscreen, t, monitorMap]);
 
   // Callback ref to measure container width when element mounts
   const containerRef = useCallback((element: HTMLDivElement | null) => {
@@ -415,6 +422,7 @@ export default function Montage() {
 
   const handleResizeStop = (_layout: Layout[], _oldItem: Layout, newItem: Layout) => {
     const adjustedHeight = calculateHeightUnits(
+      monitorMap,
       newItem.i,
       newItem.w,
       currentWidthRef.current,
