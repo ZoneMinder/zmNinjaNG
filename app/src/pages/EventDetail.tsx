@@ -16,7 +16,7 @@ import { Card } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { VideoPlayer } from '../components/ui/video-player';
 import { ZmsEventPlayer } from '../components/events/ZmsEventPlayer';
-import { ArrowLeft, Calendar, Clock, HardDrive, AlertTriangle, Download, Archive, Video, Star } from 'lucide-react';
+import { ArrowLeft, Calendar, Clock, HardDrive, AlertTriangle, Download, Archive, Video, Star, Timer } from 'lucide-react';
 import { format } from 'date-fns';
 import { downloadEventVideo } from '../lib/download';
 import { parseMonitorRotation } from '../lib/monitor-rotation';
@@ -329,9 +329,7 @@ export default function EventDetail() {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <div className="h-5 w-5 flex items-center justify-center font-bold text-primary text-xs border rounded border-primary">
-                    {event.Event.Length}s
-                  </div>
+                  <Timer className="h-5 w-5 text-primary" />
                   <div>
                     <div className="text-sm font-medium">{t('event_detail.duration')}</div>
                     <div className="text-sm text-muted-foreground">{event.Event.Length} {t('event_detail.seconds')}</div>
