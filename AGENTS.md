@@ -10,7 +10,8 @@
 7. **HTTP**: ALWAYS use `lib/http.ts` abstractions (`httpGet`, `httpPost`, etc.), NEVER raw `fetch()` or `axios`
 8. **Background Tasks**: Use background task store for long-running operations (downloads, uploads, syncs)
 9. **Mobile Downloads**: NEVER convert to Blob - use CapacitorHttp base64 directly to avoid OOM
-10. **Coding**: DRY principles, keep code files small and modular
+10. **Text Overflow**: Always use `truncate` + `min-w-0` in flex containers; add `title` for tooltips
+11. **Coding**: DRY principles, keep code files small and modular
 
 ---
 
@@ -105,6 +106,125 @@
 ### Navigation
 - In-view clicks must use stacked navigation with back arrow
 - Maintain proper routing history
+
+### Text Overflow Handling (Required)
+
+**All text must be constrained to prevent overflow from containers.**
+
+#### CSS Utilities (Tailwind)
+Use these classes to handle text overflow:
+
+1. **Single-line truncation**:
+   ```tsx
+   <span className="truncate" title={fullText}>
+     {fullText}
+   </span>
+   ```
+   - Adds ellipsis (`...`) when text exceeds container
+   - Always add `title` attribute for tooltip
+
+2. **Multi-line truncation**:
+   ```tsx
+   <p className="line-clamp-2">
+     {longText}
+   </p>
+   ```
+   - Limits text to specified number of lines
+   - Available: `line-clamp-1` through `line-clamp-6`
+
+3. **Word breaking**:
+   ```tsx
+   <div className="break-words">
+     {urlOrLongWord}
+   </div>
+   ```
+   - Breaks long words/URLs to fit container
+   - Use for user-generated content
+
+#### Flex Container Patterns
+
+When text is inside flex containers, use `min-w-0` to allow shrinking:
+
+```tsx
+<div className="flex items-center gap-2">
+  <span className="truncate min-w-0">{text}</span>
+  <Badge>Icon</Badge>
+</div>
+```
+
+**Why**: Flex items by default have `min-width: auto`, preventing them from shrinking below content size.
+
+#### Button Text Overflow
+
+When buttons contain translated text that may vary in length, prefer **abbreviated labels**:
+
+```tsx
+// Add both full and abbreviated versions to translation files
+"action_label": "Complete Action Name"
+"action_label_short": "Short"
+
+// Use abbreviated for display, full for tooltip
+<Button title={t('action.label')}>
+  {t('action.label_short')}
+</Button>
+```
+
+**Example**: Quick date range buttons (`app/src/components/ui/quick-date-range-buttons.tsx`)
+- Display: `24h`, `48h`, `1wk`, `2wk`, `1mo`
+- Tooltip: `Past 24 Hours`, `Past 48 Hours`, etc.
+
+**Why**: Abbreviated labels prevent overflow without truncation, work across all languages, and keep buttons compact on mobile.
+
+#### Responsive Text
+
+Use responsive classes to hide/show text at different breakpoints:
+
+```tsx
+<Button>
+  <Icon className="h-4 w-4" />
+  <span className="hidden sm:inline">{label}</span>
+</Button>
+```
+
+- Mobile: Shows icon only
+- Desktop: Shows icon + label
+
+#### Testing Requirements
+
+- Test with all translation languages (de, es, fr may be longer)
+- Test on mobile portrait (320px width minimum)
+- Test with long user-generated content
+- Verify tooltips appear on hover for truncated text
+
+#### Common Mistakes to Avoid
+
+❌ **Bad** - Text can overflow:
+```tsx
+<div className="w-32">
+  <p>{longText}</p>
+</div>
+```
+
+✅ **Good** - Text is constrained:
+```tsx
+<div className="w-32">
+  <p className="truncate" title={longText}>{longText}</p>
+</div>
+```
+
+❌ **Bad** - Truncate without min-w-0 in flex:
+```tsx
+<div className="flex">
+  <span className="truncate">{text}</span>
+</div>
+```
+
+✅ **Good** - Truncate with min-w-0:
+```tsx
+<div className="flex">
+  <span className="truncate min-w-0">{text}</span>
+</div>
+```
 
 ---
 
