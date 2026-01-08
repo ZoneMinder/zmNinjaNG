@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [zmNg-0.1.5](https://github.com/pliablepixels/zmNg/compare/zmNg-0.1.4..zmNg-0.1.5) - 2026-01-08
+
+### ✨ Features
+
+- Add event favorites feature with profile-scoped storage and filtering - ([d438c49](https://github.com/pliablepixels/zmNg/commit/d438c49ed943e03713c867ca9cbe93c4bd54189a))
+
+### 🐛 Bug Fixes
+
+- Replace custom duration box with Timer icon in event detail - ([1b609a1](https://github.com/pliablepixels/zmNg/commit/1b609a1a8a9cb2fb7218252135689e383b450e39))
+- Prevent text overflow in quick range buttons with abbreviated labels - ([8ec6d8e](https://github.com/pliablepixels/zmNg/commit/8ec6d8ee2cd0b913a85eb662343324131866b541))
+- Resolve stale closure bug causing rotated monitors to lose aspect ratio on resize - ([29a1369](https://github.com/pliablepixels/zmNg/commit/29a1369434dbedd4f1a7f18f5ace0f66ebdf9f68))
+
+### 📚 Documentation
+
+- Add comprehensive text overflow handling guidelines - ([26bef5d](https://github.com/pliablepixels/zmNg/commit/26bef5d4bb45cc395778cc2b0c960ff50d516211))
+- Add mandatory feature development workflow to AGENTS.md - ([f0565f4](https://github.com/pliablepixels/zmNg/commit/f0565f44fa786e46bdc4b2299380dc03bd8fd8cd))
+
+### 🔧 Miscellaneous
+
+- Release bump - ([9bfbdda](https://github.com/pliablepixels/zmNg/commit/9bfbdda2742c00fdbdad3599e26a98025bcbbd80))
+- Version bump artifacts for 0.1.4 - ([b9cf50d](https://github.com/pliablepixels/zmNg/commit/b9cf50d4185bbe87e775e8d1e8519c84a07c5b29))
 ## [zmNg-0.1.4](https://github.com/pliablepixels/zmNg/compare/zmNg-0.1.3..zmNg-0.1.4) - 2026-01-04
 
 ### ✨ Features
@@ -28,6 +49,10 @@ All notable changes to this project will be documented in this file.
 ### 🔧 Miscellaneous
 
 - Release bump - ([5eeeea1](https://github.com/pliablepixels/zmNg/commit/5eeeea186161bec5ba0339b2f92c509ee786403a))
+
+### 📝 Other
+
+- Preparing release for: zmNg-0.1.4 - ([a40b18b](https://github.com/pliablepixels/zmNg/commit/a40b18b70405d6ba9988f64f3c91afbade04a0be))
 ## [zmNg-0.1.3](https://github.com/pliablepixels/zmNg/compare/zmNg-0.1.2..zmNg-0.1.3) - 2026-01-04
 
 ### ✨ Features
