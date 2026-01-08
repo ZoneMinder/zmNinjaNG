@@ -39,11 +39,31 @@ export function QuickDateRangeButtons({
   const { t } = useTranslation();
 
   const ranges = [
-    { hours: 24, label: t('events.past_24_hours') },
-    { hours: 48, label: t('events.past_48_hours') },
-    { hours: 168, label: t('events.past_week') },
-    { hours: 336, label: t('events.past_2_weeks') },
-    { hours: 720, label: t('events.past_month') },
+    {
+      hours: 24,
+      label: t('events.past_24_hours_short'),
+      fullLabel: t('events.past_24_hours')
+    },
+    {
+      hours: 48,
+      label: t('events.past_48_hours_short'),
+      fullLabel: t('events.past_48_hours')
+    },
+    {
+      hours: 168,
+      label: t('events.past_week_short'),
+      fullLabel: t('events.past_week')
+    },
+    {
+      hours: 336,
+      label: t('events.past_2_weeks_short'),
+      fullLabel: t('events.past_2_weeks')
+    },
+    {
+      hours: 720,
+      label: t('events.past_month_short'),
+      fullLabel: t('events.past_month')
+    },
   ];
 
   const handleRangeClick = (hours: number) => {
@@ -54,13 +74,14 @@ export function QuickDateRangeButtons({
 
   return (
     <div className={gridClassName}>
-      {ranges.map(({ hours, label }) => (
+      {ranges.map(({ hours, label, fullLabel }) => (
         <Button
           key={hours}
           variant={variant}
           size={size}
           className={className}
           onClick={() => handleRangeClick(hours)}
+          title={fullLabel}
         >
           {label}
         </Button>
