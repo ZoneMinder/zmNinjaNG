@@ -58,9 +58,14 @@ Tokens expire (usually after 1 hour). We need to verify we are still logged in.
 
 Once logged in and on the Dashboard, several background processes keep the app alive.
 
-1.  **Event Polling**: The Timeline view polls for new events (`useTimelineStore`).
-2.  **Monitor Status**: `useMonitorStore` polls for monitor status (Capture/Idle).
-3.  **Stream Keep-Alive**: Streaming connections (`useMonitorStream`) monitor their own health. If a stream dies (socket close), they automatically try to reconnect with a new "Connection Key".
+1.  **Token Refresh**: Background timer checks token expiry every 60 seconds and refreshes 5 minutes before expiry
+2.  **Event Polling**: Dashboard widgets and event views poll for new events at configurable intervals (30-60 seconds)
+3.  **Monitor Status**: Alarm status polling (5 seconds on Monitor Detail page)
+4.  **Stream Keep-Alive**: Streaming connections (`useMonitorStream`) monitor their own health. If a stream dies (socket close), they automatically try to reconnect with a new "Connection Key"
+5.  **WebSocket Keepalive**: Push notification WebSocket sends ping every 60 seconds to maintain connection
+6.  **Daemon Status**: Server page checks ZoneMinder daemon health every 30 seconds
+
+For a complete reference of all timers, polling intervals, and scheduled actions across the application, see [Chapter 7: Complete Timer and Polling Reference](./07-api-and-data-fetching.md#complete-timer-and-polling-reference).
 
 ## 5. Mobile Lifecycle (Capacitor)
 

@@ -270,6 +270,285 @@ const { data } = useQuery({
 });
 ```
 
+### Complete Timer and Polling Reference
+
+zmNg uses various timers and scheduled tasks across the application to keep data fresh and maintain connections. Understanding these timers is crucial for debugging performance issues and optimizing resource usage.
+
+#### Global / App-Level Timers
+
+| Timer | Location | Interval | Action |
+|-------|----------|----------|--------|
+| Token Refresh | `hooks/useTokenRefresh.ts` | **60 seconds** | Checks if access token is expiring soon and refreshes it 5 minutes before expiry |
+| WebSocket Keepalive | `services/notifications.ts` | **60 seconds** | Sends ping to keep WebSocket connection alive for push notifications |
+
+**Token Refresh Implementation:**
+
+```tsx
+// hooks/useTokenRefresh.ts
+export function useTokenRefresh(): void {
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const accessTokenExpires = useAuthStore((state) => state.accessTokenExpires);
+  const refreshAccessToken = useAuthStore((state) => state.refreshAccessToken);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const checkAndRefresh = async () => {
+      if (accessTokenExpires) {
+        const timeUntilExpiry = accessTokenExpires - Date.now();
+        // Refresh 5 minutes before expiry
+        if (timeUntilExpiry < ZM_INTEGRATION.accessTokenLeewayMs && timeUntilExpiry > 0) {
+          await refreshAccessToken();
+        }
+      }
+    };
+
+    checkAndRefresh();
+    const interval = setInterval(checkAndRefresh, ZM_INTEGRATION.tokenCheckInterval);
+    return () => clearInterval(interval);
+  }, [isAuthenticated, accessTokenExpires, refreshAccessToken]);
+}
+```
+
+#### Screen-Specific Timers
+
+**Monitors Page** (`pages/Monitors.tsx`):
+
+| Timer | Interval | Action |
+|-------|----------|--------|
+| Event Counts | **60 seconds** | Refreshes 24-hour event counts per monitor |
+
+```tsx
+const { data: eventCounts } = useQuery({
+  queryKey: ['consoleEvents', '24 hour'],
+  queryFn: () => getConsoleEvents('24 hour'),
+  refetchInterval: 60000,
+});
+```
+
+**Monitor Detail Page** (`pages/MonitorDetail.tsx`):
+
+| Timer | Interval | Action |
+|-------|----------|--------|
+| Alarm Status | **5 seconds** | Polls alarm status for the current monitor |
+| Monitor Cycling | **Configurable** | Auto-cycles to next monitor (if enabled in settings) |
+
+```tsx
+const { data: alarmStatus } = useQuery({
+  queryKey: ['monitor-alarm-status', monitor?.Monitor.Id],
+  queryFn: () => getAlarmStatus(monitor!.Monitor.Id),
+  refetchInterval: 5000,
+  refetchIntervalInBackground: true,
+});
+
+// Monitor cycling (if enabled)
+useEffect(() => {
+  const cycleSeconds = settings.monitorDetailCycleSeconds;
+  if (!cycleSeconds || cycleSeconds <= 0) return;
+  
+  const intervalId = window.setInterval(() => {
+    // Navigate to next monitor
+  }, cycleSeconds * 1000);
+  
+  return () => window.clearInterval(intervalId);
+}, [settings.monitorDetailCycleSeconds]);
+```
+
+**Montage Page** (`pages/Montage.tsx` + `components/monitors/MontageMonitor.tsx`):
+
+| Timer | Interval | Action |
+|-------|----------|--------|
+| Snapshot Refresh | **Configurable** | Refreshes each monitor image (only in snapshot mode, not streaming) |
+
+```tsx
+// hooks/useMonitorStream.ts - Used by montage monitors
+useEffect(() => {
+  if (settings.viewMode !== 'snapshot') return;
+
+  const interval = setInterval(() => {
+    setCacheBuster(Date.now());  // Forces image reload
+  }, settings.snapshotRefreshInterval * 1000);
+
+  return () => clearInterval(interval);
+}, [settings.viewMode, settings.snapshotRefreshInterval]);
+```
+
+**Server Page** (`pages/Server.tsx`):
+
+| Timer | Interval | Action |
+|-------|----------|--------|
+| Daemon Status | **30 seconds** | Checks if ZoneMinder daemon is running |
+
+```tsx
+const { data: isDaemonRunning } = useQuery({
+  queryKey: ['daemon-check', currentProfile?.id],
+  queryFn: getDaemonCheck,
+  refetchInterval: 30000,
+});
+```
+
+#### Dashboard Widget Timers
+
+**Events Widget** (`components/dashboard/widgets/EventsWidget.tsx`):
+
+| Timer | Interval | Action |
+|-------|----------|--------|
+| Events Refetch | **30 seconds** (default, configurable) | Refreshes recent events list |
+
+```tsx
+export function EventsWidget({ refreshInterval = 30000 }: EventsWidgetProps) {
+  const { data: events } = useQuery({
+    queryKey: ['events', monitorId, limit],
+    queryFn: () => getEvents({ /* ... */ }),
+    refetchInterval: refreshInterval,
+  });
+}
+```
+
+**Timeline Widget** (`components/dashboard/widgets/TimelineWidget.tsx`):
+
+| Timer | Interval | Action |
+|-------|----------|--------|
+| Events Refetch | **60 seconds** | Refreshes timeline events data |
+
+**Heatmap Widget** (`components/dashboard/widgets/HeatmapWidget.tsx`):
+
+| Timer | Interval | Action |
+|-------|----------|--------|
+| Events Refetch | **60 seconds** | Refreshes heatmap event data |
+
+**Monitor Widget** (`components/dashboard/widgets/MonitorWidget.tsx`):
+
+| Timer | Interval | Action |
+|-------|----------|--------|
+| Snapshot Refresh | **Configurable** | Refreshes monitor image (only in snapshot mode) |
+
+#### Configuration Constants
+
+All default intervals are defined in `lib/zmng-constants.ts`:
+
+```tsx
+export const ZM_INTEGRATION = {
+  // Polling and status intervals
+  eventCheckTime: 30000,           // 30 sec - default event checking
+  streamQueryStatusTime: 10000,    // 10 sec - stream status polling
+  alarmStatusTime: 10000,          // 10 sec - alarm status polling
+  streamReconnectDelay: 5000,      // 5 sec - delay before stream reconnect
+  
+  // Token management
+  tokenCheckInterval: 60 * 1000,   // 60 sec - check token expiry
+  accessTokenLeewayMs: 5 * 60 * 1000,  // 5 min - refresh before expiry
+  loginInterval: 1800000,          // 30 min - re-login interval
+} as const;
+```
+
+#### Timer Best Practices
+
+**1. Always Clean Up Timers:**
+
+```tsx
+// Good ✅
+useEffect(() => {
+  const interval = setInterval(() => {
+    // Do something
+  }, 1000);
+  
+  return () => clearInterval(interval);  // Cleanup
+}, []);
+
+// Bad ❌
+useEffect(() => {
+  setInterval(() => {
+    // Timer keeps running even after unmount!
+  }, 1000);
+}, []);
+```
+
+**2. Use refetchInterval for Polling Queries:**
+
+Prefer React Query's `refetchInterval` over manual `setInterval`:
+
+```tsx
+// Good ✅ - React Query handles cleanup automatically
+const { data } = useQuery({
+  queryKey: ['monitors'],
+  queryFn: getMonitors,
+  refetchInterval: 30000,
+});
+
+// Bad ❌ - Manual polling requires cleanup
+useEffect(() => {
+  const interval = setInterval(() => {
+    fetchMonitors().then(setData);
+  }, 30000);
+  return () => clearInterval(interval);
+}, []);
+```
+
+**3. Stop Background Polling:**
+
+Save battery and bandwidth by stopping polls when app is in background:
+
+```tsx
+const { data } = useQuery({
+  queryKey: ['monitors'],
+  queryFn: getMonitors,
+  refetchInterval: 30000,
+  refetchIntervalInBackground: false,  // Stop when app backgrounded
+});
+```
+
+**4. Conditional Timers:**
+
+Only start timers when needed:
+
+```tsx
+useEffect(() => {
+  // Only cycle if enabled and there are multiple monitors
+  if (!settings.monitorDetailCycleSeconds || enabledMonitors.length < 2) return;
+  
+  const interval = setInterval(() => {
+    // Cycle to next monitor
+  }, settings.monitorDetailCycleSeconds * 1000);
+  
+  return () => clearInterval(interval);
+}, [settings.monitorDetailCycleSeconds, enabledMonitors.length]);
+```
+
+#### Performance Considerations
+
+**Timer Impact on Performance:**
+
+| Frequency | Impact | Recommendation |
+|-----------|--------|----------------|
+| < 1 second | High CPU/battery usage | Only for critical real-time data (alarm status) |
+| 1-10 seconds | Moderate usage | Good for live monitoring features |
+| 30-60 seconds | Low usage | Ideal for background data refresh |
+| > 60 seconds | Minimal usage | Best for infrequent checks |
+
+**Debugging Timers:**
+
+Use browser DevTools to profile timer overhead:
+
+```tsx
+// Add logging to track timer execution
+const interval = setInterval(() => {
+  console.time('timer-execution');
+  // Timer logic
+  console.timeEnd('timer-execution');
+}, 1000);
+```
+
+**Memory Leaks:**
+
+Forgotten timers are a common source of memory leaks. Always verify cleanup:
+
+```tsx
+// Run in DevTools console to check for orphaned timers
+console.log('Active intervals:', window.setInterval.length);
+console.log('Active timeouts:', window.setTimeout.length);
+```
+
 ### Mutations
 
 For creating, updating, or deleting data:
