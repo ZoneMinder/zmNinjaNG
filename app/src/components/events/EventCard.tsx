@@ -32,10 +32,15 @@ function EventCardComponent({ event, monitorName, thumbnailUrl, objectFit = 'con
   const navigate = useNavigate();
   const { t } = useTranslation();
   const currentProfile = useProfileStore((state) => state.currentProfile());
-  const { isFavorited, toggleFavorite } = useEventFavoritesStore();
-  const startTime = new Date(event.StartDateTime.replace(' ', 'T'));
+  const toggleFavorite = useEventFavoritesStore((state) => state.toggleFavorite);
 
-  const isFav = currentProfile ? isFavorited(currentProfile.id, event.Id) : false;
+  // Subscribe to the specific favorite state for this event
+  // This ensures re-renders when favorite status changes
+  const isFav = useEventFavoritesStore((state) =>
+    currentProfile ? state.isFavorited(currentProfile.id, event.Id) : false
+  );
+
+  const startTime = new Date(event.StartDateTime.replace(' ', 'T'));
 
   // Calculate aspect ratio from thumbnail dimensions
   // (thumbnailWidth/Height are already swapped for rotated monitors)

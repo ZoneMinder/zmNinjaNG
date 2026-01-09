@@ -194,6 +194,146 @@ function MonitorList() {
 }
 ```
 
+### useShallow: Preventing Infinite Loops with Arrays and Objects
+
+When selecting arrays or objects from Zustand, you can encounter infinite re-render loops because JavaScript compares objects by **reference**, not by **value**.
+
+#### The Problem
+
+```tsx
+function EventList() {
+  // ❌ Creates new array reference every time selector runs!
+  const favoriteIds = useEventFavoritesStore((state) =>
+    state.profileFavorites[profileId] || []
+  );
+
+  useEffect(() => {
+    console.log('Favorites changed');
+  }, [favoriteIds]);  // Runs on EVERY render!
+}
+```
+
+**Why this happens:**
+
+1. Selector runs: `state.profileFavorites[profileId] || []`
+2. Returns `[1, 2, 3]` (new array reference)
+3. Component re-renders
+4. Selector runs again: returns `[1, 2, 3]` (different reference!)
+5. React sees new reference → triggers effect
+6. → Infinite loop
+
+Even though the array *values* are identical `[1, 2, 3]`, they're different *objects*:
+
+```tsx
+[1, 2, 3] !== [1, 2, 3]  // true - different references!
+```
+
+#### The Solution: useShallow
+
+`useShallow` does **shallow comparison** - it compares array/object contents, not references:
+
+```tsx
+import { useShallow } from 'zustand/react/shallow';
+
+function EventList() {
+  // ✅ Returns same reference if array contents haven't changed
+  const favoriteIds = useEventFavoritesStore(
+    useShallow((state) => state.getFavorites(profileId))
+  );
+
+  useEffect(() => {
+    console.log('Favorites actually changed');
+  }, [favoriteIds]);  // Only runs when array contents change
+}
+```
+
+**How it works:**
+
+```tsx
+// Without useShallow:
+[1, 2, 3] !== [1, 2, 3]  // true (different references)
+
+// With useShallow:
+shallowEquals([1, 2, 3], [1, 2, 3])  // true (same contents)
+```
+
+It compares each element: `arr1[0] === arr2[0] && arr1[1] === arr2[1] && ...`
+
+#### When to Use useShallow
+
+**Use for:**
+- Selecting arrays: `(state) => state.items`
+- Selecting objects: `(state) => state.config`
+- Selecting multiple values: `(state) => ({ a: state.a, b: state.b })`
+
+**Don't use for:**
+- Primitives: `(state) => state.count` (numbers/strings/booleans are fine)
+- Single object properties: `(state) => state.currentProfile` (already stable if unchanged)
+- Actions/functions: `(state) => state.addItem` (functions don't need shallow comparison)
+
+#### Examples
+
+```tsx
+// ✅ Array - use useShallow
+const monitors = useMonitorStore(
+  useShallow((state) => state.monitors)
+);
+
+// ✅ Object - use useShallow
+const settings = useSettingsStore(
+  useShallow((state) => state.getProfileSettings(profileId))
+);
+
+// ✅ Multiple values - use useShallow
+const { name, email } = useUserStore(
+  useShallow((state) => ({
+    name: state.currentUser?.name,
+    email: state.currentUser?.email,
+  }))
+);
+
+// ✅ Primitive - no useShallow needed
+const count = useCountStore((state) => state.count);
+
+// ✅ Function - no useShallow needed
+const increment = useCountStore((state) => state.increment);
+```
+
+#### Debugging Infinite Loops
+
+If you suspect an infinite loop from Zustand:
+
+1. Add console.log to see how often selector runs:
+   ```tsx
+   const data = useStore((state) => {
+     console.log('Selector running');
+     return state.data;
+   });
+   ```
+
+2. Check if you're selecting an array/object without useShallow
+3. Wrap with useShallow and test
+
+#### useShallow vs useMemo
+
+Both prevent unnecessary re-renders, but for different reasons:
+
+- **useShallow**: Compares array/object contents to return stable reference
+- **useMemo**: Caches expensive calculation results
+
+```tsx
+// useShallow - for Zustand arrays/objects
+const favorites = useEventStore(
+  useShallow((state) => state.getFavorites(profileId))
+);
+
+// useMemo - for expensive derivations
+const sortedMonitors = useMemo(
+  () => monitors.sort((a, b) => a.name.localeCompare(b.name)),
+  [monitors]
+);
+```
+
 ## Store Actions: Best Practices
 
 Actions should encapsulate business logic:

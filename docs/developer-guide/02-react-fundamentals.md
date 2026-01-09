@@ -394,6 +394,179 @@ const CONFIG = { width: 100 };  // Created once
 // Option 3: Don't use as dependency (use refs - see Chapter 4)
 ```
 
+## React.memo: Preventing Unnecessary Re-renders
+
+`React.memo` is a higher-order component that optimizes performance by preventing a component from re-rendering when its props haven't changed.
+
+### The Problem
+
+By default, a component re-renders whenever its parent re-renders, even if its props are identical:
+
+```tsx
+function Parent() {
+  const [count, setCount] = useState(0);
+
+  return (
+    <View>
+      <Pressable onPress={() => setCount(count + 1)}>
+        <Text>Count: {count}</Text>
+      </Pressable>
+      <ExpensiveChild name="Alice" />  {/* Re-renders every time! */}
+    </View>
+  );
+}
+
+function ExpensiveChild({ name }: { name: string }) {
+  console.log('ExpensiveChild rendered');
+  // Expensive rendering logic...
+  return <Text>Hello, {name}</Text>;
+}
+```
+
+Every time you click the button, `ExpensiveChild` re-renders even though its `name` prop never changes. This wastes CPU cycles.
+
+### The Solution: React.memo
+
+Wrap the component in `memo()` to skip re-renders when props are unchanged:
+
+```tsx
+import { memo } from 'react';
+
+const ExpensiveChild = memo(function ExpensiveChild({ name }: { name: string }) {
+  console.log('ExpensiveChild rendered');
+  return <Text>Hello, {name}</Text>;
+});
+```
+
+Now `ExpensiveChild` only re-renders when the `name` prop changes.
+
+### How It Works
+
+1. React compares the **new props** with the **previous props**
+2. Uses **shallow equality** - compares references, not deep values
+3. If props are identical (same references), skip re-render
+4. If any prop changed, re-render normally
+
+```tsx
+const prev = { name: 'Alice', age: 30 };
+const next = { name: 'Alice', age: 30 };
+
+prev === next  // false! Different objects
+prev.name === next.name  // true - same value
+```
+
+`memo()` does: `prev.name === next.name && prev.age === next.age`
+
+### When to Use React.memo
+
+**✅ Good use cases:**
+- Component renders expensive UI (complex calculations, SVG, animations)
+- Component is in a large list (50+ items)
+- Props rarely change
+- Parent re-renders frequently
+
+**❌ Don't use when:**
+- Component is cheap to render
+- Props change on every render anyway
+- Only one instance exists
+- You haven't profiled to confirm it's slow
+
+**Rule of thumb**: Only use `memo()` after you've identified a performance problem. Premature optimization adds complexity.
+
+### Example: List Optimization
+
+```tsx
+function MonitorList({ monitors }: { monitors: Monitor[] }) {
+  return (
+    <View>
+      {monitors.map(monitor => (
+        <MonitorCard key={monitor.id} monitor={monitor} />
+      ))}
+    </View>
+  );
+}
+
+// Without memo: updating one monitor re-renders all cards
+// With memo: only the updated monitor's card re-renders
+const MonitorCard = memo(function MonitorCard({ monitor }: { monitor: Monitor }) {
+  return (
+    <View>
+      <Text>{monitor.name}</Text>
+      <Text>{monitor.status}</Text>
+    </View>
+  );
+});
+```
+
+### Custom Comparison Function
+
+By default, `memo()` does shallow comparison. For custom logic, provide a comparison function:
+
+```tsx
+const MonitorCard = memo(
+  function MonitorCard({ monitor, showDetails }) {
+    // ...
+  },
+  (prevProps, nextProps) => {
+    // Return true if props are equal (skip re-render)
+    // Return false if props changed (do re-render)
+    return (
+      prevProps.monitor.id === nextProps.monitor.id &&
+      prevProps.monitor.status === nextProps.monitor.status &&
+      prevProps.showDetails === nextProps.showDetails
+    );
+  }
+);
+```
+
+### Important: memo() with Global State
+
+**Critical caveat**: `memo()` only compares **props**. It doesn't prevent re-renders from state changes inside the component.
+
+```tsx
+const EventCard = memo(function EventCard({ event }) {
+  // This will still cause re-renders when favorites change
+  const isFavorited = useStore((state) => state.isFavorited(event.id));
+
+  return <Star filled={isFavorited} />;
+});
+```
+
+`memo()` blocks re-renders from the parent, but the component still subscribes to the store. When the store changes, the component re-renders.
+
+This is correct behavior! The component needs to update when its data changes.
+
+### Common Mistake: Extracting Functions Without Subscribing
+
+```tsx
+// ❌ WRONG - Won't update when favorites change
+const EventCard = memo(function EventCard({ event }) {
+  const { isFavorited } = useStore();  // Extracts function, doesn't subscribe
+  const isFav = isFavorited(event.id);  // Computed once, never updates
+
+  return <Star filled={isFav} />;
+  // When favorites change:
+  // - Store doesn't notify this component (no subscription)
+  // - Parent doesn't re-render (no prop change)
+  // - memo() blocks re-render from parent
+  // - Star stays stale!
+});
+
+// ✅ CORRECT - Subscribe to state
+const EventCard = memo(function EventCard({ event }) {
+  // Subscribes to this specific state value
+  const isFav = useStore((state) => state.isFavorited(event.id));
+
+  return <Star filled={isFav} />;
+  // When favorites change:
+  // - Store notifies this component (subscribed)
+  // - Component re-renders with new value
+  // - Star updates correctly!
+});
+```
+
+**Key principle**: When using `memo()` with global state (Zustand, Redux, Context), you must subscribe to the state with a selector. Extracting functions without subscribing breaks reactivity.
+
 ## React Native Specifics
 
 zmNg uses React Native components, not HTML:

@@ -51,7 +51,15 @@ export default function Events() {
     : settings.eventsThumbnailFit;
   const updateSettings = useSettingsStore((state) => state.updateProfileSettings);
   const accessToken = useAuthStore((state) => state.accessToken);
-  const { getFavorites } = useEventFavoritesStore();
+
+  // Subscribe to the actual favorites data, not just the getter function
+  // Use shallow comparison to avoid infinite re-renders from new array references
+  const favoriteIds = useEventFavoritesStore(
+    useShallow((state) =>
+      currentProfile ? state.getFavorites(currentProfile.id) : []
+    )
+  );
+
   const parentRef = useRef<HTMLDivElement>(null);
   const [parentElement, setParentElement] = useState<HTMLDivElement | null>(null);
   const { t } = useTranslation();
@@ -143,13 +151,12 @@ export default function Events() {
     );
 
     // Apply favorites filter if enabled
-    if (favoritesOnly && currentProfile) {
-      const favoriteIds = getFavorites(currentProfile.id);
+    if (favoritesOnly) {
       filtered = filtered.filter(({ Event }: any) => favoriteIds.includes(Event.Id));
     }
 
     return filtered;
-  }, [eventsData?.events, enabledMonitorIds, favoritesOnly, currentProfile, getFavorites]);
+  }, [eventsData?.events, enabledMonitorIds, favoritesOnly, favoriteIds]);
 
   // Use grid management hook (only active when in montage mode)
   const gridControls = useEventMontageGrid({

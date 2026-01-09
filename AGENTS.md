@@ -11,7 +11,8 @@
 8. **Background Tasks**: Use background task store for long-running operations (downloads, uploads, syncs)
 9. **Mobile Downloads**: NEVER convert to Blob - use CapacitorHttp base64 directly to avoid OOM
 10. **Text Overflow**: Always use `truncate` + `min-w-0` in flex containers; add `title` for tooltips
-11. **Coding**: DRY principles, keep code files small and modular
+11. **Documentation**: When using new React/Zustand concepts, update `docs/developer-guide/` to explain from first principles
+12. **Coding**: DRY principles, keep code files small and modular
 
 ---
 
@@ -882,11 +883,11 @@ When removing or reverting functionality:
 - Comment the "why", not the "what"
 - Keep tone neutral and factual
 
-### Keeping AGENTS.md Updated (CRITICAL)
+### Keeping Documentation Updated (CRITICAL)
 
-**ALWAYS update this document when making significant changes to the codebase.**
+**ALWAYS update documentation when making significant changes to the codebase.**
 
-Update AGENTS.md when you:
+#### Update AGENTS.md when you:
 - ✅ Introduce new architectural patterns (stores, hooks, components)
 - ✅ Add new critical APIs or abstractions (HTTP, logging, storage)
 - ✅ Discover important gotchas or pitfalls (OOM issues, platform differences)
@@ -915,6 +916,35 @@ Update AGENTS.md when you:
 **Bad**: Make significant changes, don't update docs → future developers repeat mistakes
 
 **Good**: Make changes, immediately document patterns → knowledge is preserved
+
+#### Update Developer Docs (`docs/developer-guide/`) when you:
+- ✅ Use new React concepts (hooks, patterns, APIs)
+- ✅ Use new Zustand patterns (selectors, middleware, subscriptions)
+- ✅ Add new libraries or dependencies
+- ✅ Introduce new state management patterns
+- ✅ Use React optimization techniques (memo, useCallback, etc.)
+- ✅ Add any concept that a programmer unfamiliar with React would need to understand
+
+**Where to document**:
+- `02-react-fundamentals.md`: React concepts (hooks, components, memo, etc.)
+- `03-state-management-zustand.md`: Zustand patterns (selectors, useShallow, subscriptions)
+- `05-component-architecture.md`: Component patterns and structure
+- `08-common-pitfalls.md`: Bugs and gotchas discovered
+
+**Important**:
+- **Assume reader is a programmer** but doesn't know React/Zustand
+- **Explain from first principles** - why something exists, how it works
+- **Use concrete examples** from zmNg codebase
+- **Don't just document the bug** - explain the underlying concept
+
+**Example**: When fixing EventCard favorites bug, we:
+1. Added React.memo() explanation to `02-react-fundamentals.md`
+2. Added useShallow explanation to `03-state-management-zustand.md`
+3. Explained why extracting functions breaks subscriptions
+4. Used the bug as a teaching example, not just documenting the fix
+
+**Bad**: "Fixed EventCard by using selector pattern" → No learning
+**Good**: "React.memo prevents re-renders from parent. When using with Zustand, you must subscribe with selectors, not extract functions" → Teaches the concept
 
 ---
 
