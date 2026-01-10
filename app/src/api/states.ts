@@ -8,6 +8,7 @@ import { getApiClient } from './client';
 import type { State } from './types';
 import { StatesResponseSchema } from './types';
 import { validateApiResponse } from '../lib/api-validator';
+import { log, LogLevel } from '../lib/logger';
 
 /**
  * Get all states
@@ -15,6 +16,8 @@ import { validateApiResponse } from '../lib/api-validator';
  * @returns Promise resolving to array of State objects
  */
 export async function getStates(): Promise<State[]> {
+  log.api('Fetching system states', LogLevel.INFO);
+
   const client = getApiClient();
   const response = await client.get('/states.json');
 
@@ -41,6 +44,8 @@ export async function getStates(): Promise<State[]> {
  * @param stateName - The name of the state to activate
  */
 export async function changeState(stateName: string): Promise<void> {
+  log.api('Changing system state', LogLevel.INFO, { stateName });
+
   const client = getApiClient();
   await client.post(`/states/change/${stateName}.json`);
 }

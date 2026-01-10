@@ -9,6 +9,9 @@ import { Platform } from '../lib/platform';
 
 let apiClient: AxiosInstance | null = null;
 
+// Correlation ID counter - starts at 1, increments with each request, resets on app restart
+let correlationIdCounter = 0;
+
 export function createApiClient(baseURL: string, reLogin?: () => Promise<boolean>): AxiosInstance {
   // In dev mode (web), use standalone proxy server on port 3001 with X-Target-Host header
   // On native platforms (Android/iOS), use full URL directly (native HTTP bypasses CORS)
@@ -34,6 +37,10 @@ export function createApiClient(baseURL: string, reLogin?: () => Promise<boolean
   // Request interceptor - add auth token
   client.interceptors.request.use(
     (config: InternalAxiosRequestConfig) => {
+      // Assign correlation ID to this request
+      const correlationId = ++correlationIdCounter;
+      (config as any).correlationId = correlationId;
+
       const { accessToken, refreshToken, refreshTokenExpires } = useAuthStore.getState();
 
       // Skip adding auth token if this is a discovery/test request
@@ -66,39 +73,38 @@ export function createApiClient(baseURL: string, reLogin?: () => Promise<boolean
         // This is handled by the caller (login function) or re-login logic which sets the body.
       }
 
-      // Enhanced logging in development
-      if (import.meta.env.DEV) {
-        const zmApiUrl = baseURL;
-        const path = config.url || '';
-        // Don't prepend base URL if path is already absolute
-        const fullZmUrl = path.startsWith('http') ? path : zmApiUrl + path;
-        const queryParams = config.params ? new URLSearchParams(config.params).toString() : '';
-        const fullUrlWithParams = queryParams ? `${fullZmUrl}?${queryParams}` : fullZmUrl;
+      // Log API request
+      const zmApiUrl = baseURL;
+      const path = config.url || '';
+      // Don't prepend base URL if path is already absolute
+      const fullZmUrl = path.startsWith('http') ? path : zmApiUrl + path;
+      const queryParams = config.params ? new URLSearchParams(config.params).toString() : '';
+      const fullUrlWithParams = queryParams ? `${fullZmUrl}?${queryParams}` : fullZmUrl;
 
-        const logData: Record<string, unknown> = {
-          method: config.method?.toUpperCase(),
-          url: fullUrlWithParams,
-          zmUrl: fullZmUrl,
-        };
+      const logData: Record<string, unknown> = {
+        correlationId,
+        method: config.method?.toUpperCase(),
+        url: fullUrlWithParams,
+        zmUrl: fullZmUrl,
+      };
 
-        if (queryParams) {
-          logData.queryParams = sanitizeObject(config.params);
-        }
-
-        if (config.data) {
-          if (config.data instanceof URLSearchParams) {
-            const formDataObj: Record<string, string> = {};
-            config.data.forEach((value: string, key: string) => {
-              formDataObj[key] = value;
-            });
-            logData.formData = sanitizeObject(formDataObj);
-          } else {
-            logData.bodyData = sanitizeObject(config.data);
-          }
-        }
-
-        log.api(`[Request] ${config.method?.toUpperCase()} ${fullUrlWithParams}`, LogLevel.DEBUG, logData);
+      if (queryParams) {
+        logData.queryParams = sanitizeObject(config.params);
       }
+
+      if (config.data) {
+        if (config.data instanceof URLSearchParams) {
+          const formDataObj: Record<string, string> = {};
+          config.data.forEach((value: string, key: string) => {
+            formDataObj[key] = value;
+          });
+          logData.formData = sanitizeObject(formDataObj);
+        } else {
+          logData.bodyData = sanitizeObject(config.data);
+        }
+      }
+
+      log.api(`[Request #${correlationId}] ${config.method?.toUpperCase()} ${fullUrlWithParams}`, LogLevel.DEBUG, logData);
 
       return config;
     },
@@ -111,18 +117,18 @@ export function createApiClient(baseURL: string, reLogin?: () => Promise<boolean
   // Response interceptor - handle errors and token refresh
   client.interceptors.response.use(
     (response) => {
-      // Enhanced logging in development
-      if (import.meta.env.DEV) {
-        const zmApiUrl = baseURL;
-        const path = response.config.url || '';
-        const fullZmUrl = path.startsWith('http') ? path : zmApiUrl + path;
+      // Log API response
+      const correlationId = (response.config as any).correlationId;
+      const zmApiUrl = baseURL;
+      const path = response.config.url || '';
+      const fullZmUrl = path.startsWith('http') ? path : zmApiUrl + path;
 
-        log.api(`[Response] ${response.status} ${response.statusText} - ${fullZmUrl}`, LogLevel.DEBUG, {
-          status: response.status,
-          statusText: response.statusText,
-          data: sanitizeObject(response.data),
-        });
-      }
+      log.api(`[Response #${correlationId}] ${response.status} ${response.statusText} - ${fullZmUrl}`, LogLevel.DEBUG, {
+        correlationId,
+        status: response.status,
+        statusText: response.statusText,
+        data: sanitizeObject(response.data),
+      });
       return response;
     },
     async (error: AxiosError) => {
@@ -169,47 +175,47 @@ export function createApiClient(baseURL: string, reLogin?: () => Promise<boolean
         }
       }
 
-      // Enhanced logging in development
-      if (import.meta.env.DEV) {
-        const zmApiUrl = baseURL;
-        const path = error.config?.url || '';
-        const fullZmUrl = path.startsWith('http') ? path : zmApiUrl + path;
-        const queryParams = error.config?.params
-          ? new URLSearchParams(error.config.params).toString()
-          : '';
-        const fullUrlWithParams = queryParams ? `${fullZmUrl}?${queryParams}` : fullZmUrl;
+      // Log API error
+      const correlationId = (error.config as any)?.correlationId;
+      const zmApiUrl = baseURL;
+      const path = error.config?.url || '';
+      const fullZmUrl = path.startsWith('http') ? path : zmApiUrl + path;
+      const queryParams = error.config?.params
+        ? new URLSearchParams(error.config.params).toString()
+        : '';
+      const fullUrlWithParams = queryParams ? `${fullZmUrl}?${queryParams}` : fullZmUrl;
 
-        const errorData: Record<string, unknown> = {
-          method: error.config?.method?.toUpperCase(),
-          url: fullUrlWithParams,
-          zmUrl: fullZmUrl,
-          path,
-          status: error.response?.status,
-          statusText: error.response?.statusText,
-          message: error.message,
-        };
+      const errorData: Record<string, unknown> = {
+        correlationId,
+        method: error.config?.method?.toUpperCase(),
+        url: fullUrlWithParams,
+        zmUrl: fullZmUrl,
+        path,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        message: error.message,
+      };
 
-        if (error.response?.data) {
-          errorData.responseData = sanitizeObject(error.response.data);
-        }
-
-        if (error.config?.data) {
-          if (error.config.data instanceof URLSearchParams) {
-            const formDataObj: Record<string, string> = {};
-            error.config.data.forEach((value: string, key: string) => {
-              formDataObj[key] = value;
-            });
-            errorData.requestFormData = sanitizeObject(formDataObj);
-          } else {
-            errorData.requestBodyData = sanitizeObject(error.config.data);
-          }
-        }
-
-        log.api(`[API ERROR] ${error.config?.method?.toUpperCase()} ${fullUrlWithParams}`, LogLevel.ERROR, {
-          error,
-          ...errorData,
-        });
+      if (error.response?.data) {
+        errorData.responseData = sanitizeObject(error.response.data);
       }
+
+      if (error.config?.data) {
+        if (error.config.data instanceof URLSearchParams) {
+          const formDataObj: Record<string, string> = {};
+          error.config.data.forEach((value: string, key: string) => {
+            formDataObj[key] = value;
+          });
+          errorData.requestFormData = sanitizeObject(formDataObj);
+        } else {
+          errorData.requestBodyData = sanitizeObject(error.config.data);
+        }
+      }
+
+      log.api(`[Error #${correlationId}] ${error.config?.method?.toUpperCase()} ${fullUrlWithParams}`, LogLevel.ERROR, {
+        error,
+        ...errorData,
+      });
 
       return Promise.reject(error);
     }
