@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useLogStore } from '../logs';
+import { LOGGING } from '../../lib/zmng-constants';
 
 describe('Log Store', () => {
   beforeEach(() => {
@@ -20,10 +21,11 @@ describe('Log Store', () => {
     expect(logs[0].message).toBe('Test log');
   });
 
-  it('keeps only the latest 1000 logs', () => {
+  it('keeps only the latest N logs as configured', () => {
     const store = useLogStore.getState();
+    const testCount = LOGGING.maxLogEntries + 100;
 
-    for (let i = 0; i < 1100; i += 1) {
+    for (let i = 0; i < testCount; i += 1) {
       store.addLog({
         timestamp: `2024-01-01T00:00:${String(i).padStart(2, '0')}Z`,
         level: 'DEBUG',
@@ -31,8 +33,8 @@ describe('Log Store', () => {
       });
     }
 
-    expect(useLogStore.getState().logs).toHaveLength(1000);
-    expect(useLogStore.getState().logs[0].message).toBe('Log 1099');
+    expect(useLogStore.getState().logs).toHaveLength(LOGGING.maxLogEntries);
+    expect(useLogStore.getState().logs[0].message).toBe(`Log ${testCount - 1}`);
   });
 
   it('clears logs', () => {

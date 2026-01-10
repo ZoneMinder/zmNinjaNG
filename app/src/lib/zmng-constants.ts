@@ -183,6 +183,16 @@ export const MONITOR_STATUS_COLORS = {
 } as const;
 
 /**
+ * Logging and Debugging Constants
+ *
+ * Configuration for application logging and debug output.
+ */
+export const LOGGING = {
+  // Maximum log entries to retain in the logs screen
+  maxLogEntries: 1000,
+} as const;
+
+/**
  * Valid ZoneMinder Monitor Functions
  *
  * NOTE: These are duplicated from zm-constants for backward compatibility.

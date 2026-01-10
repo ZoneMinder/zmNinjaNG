@@ -308,19 +308,9 @@ export default function AppLayout() {
     const excludedRoutes = ['/profiles/new', '/setup', '/profiles'];
     const shouldSave = !excludedRoutes.includes(location.pathname);
 
-    log.app('Route tracking', LogLevel.DEBUG, {
-      pathname: location.pathname,
-      profileId: currentProfile.id,
-      shouldSave,
-      excluded: excludedRoutes.includes(location.pathname),
-    });
-
     if (shouldSave) {
       updateProfileSettings(currentProfile.id, { lastRoute: location.pathname });
-      log.app('Saved lastRoute to settings', LogLevel.DEBUG, {
-        lastRoute: location.pathname,
-        profileId: currentProfile.id,
-      });
+      log.app('Storing route', LogLevel.DEBUG, { route: location.pathname });
     }
   }, [location.pathname, currentProfile?.id, updateProfileSettings]);
 

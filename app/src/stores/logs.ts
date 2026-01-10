@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { LOGGING } from '../lib/zmng-constants';
 
 export interface LogEntry {
     id: string;
@@ -20,8 +21,8 @@ export const useLogStore = create<LogState>((set) => ({
     addLog: (entry) =>
         set((state) => {
             const newLog = { ...entry, id: crypto.randomUUID() };
-            // Keep last 1000 logs
-            const newLogs = [newLog, ...state.logs].slice(0, 1000);
+            // Keep last N logs as configured
+            const newLogs = [newLog, ...state.logs].slice(0, LOGGING.maxLogEntries);
             return { logs: newLogs };
         }),
     clearLogs: () => set({ logs: [] }),

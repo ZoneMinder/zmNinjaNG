@@ -7,7 +7,7 @@
 
 import { lazy, Suspense, useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, QueryCache } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useProfileStore } from './stores/profile';
 import { useSettingsStore } from './stores/settings';
@@ -50,7 +50,22 @@ function RouteLoadingFallback() {
   );
 }
 
+const queryCache = new QueryCache({
+  onSuccess: (_data, query) => {
+    // Log cache hit vs network fetch
+    // dataUpdateCount > 1 means data was updated at least once before (cache hit on subsequent fetches)
+    const isCached = query.state.dataUpdateCount > 1;
+
+    log.api('Query result', LogLevel.DEBUG, {
+      queryKey: query.queryKey,
+      cached: isCached,
+      status: isCached ? 'cache hit' : 'network fetch',
+    });
+  },
+});
+
 const queryClient = new QueryClient({
+  queryCache,
   defaultOptions: {
     queries: {
       retry: 1,
@@ -75,15 +90,6 @@ function AppRoutes() {
   const lastRoute = useSettingsStore(
     (state) => state.getProfileSettings(currentProfile?.id || '').lastRoute
   );
-
-  // Debug: Log last route on mount and when it changes
-  useEffect(() => {
-    log.app('Last route from settings', LogLevel.DEBUG, {
-      lastRoute,
-      currentProfileId: currentProfile?.id,
-      currentProfileName: currentProfile?.name,
-    });
-  }, [lastRoute, currentProfile?.id, currentProfile?.name]);
 
   // Enable automatic token refresh
   useTokenRefresh();
