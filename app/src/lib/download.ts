@@ -396,7 +396,7 @@ async function downloadDataUrlNative(dataUrl: string, filename: string): Promise
 /**
  * Web data URL download implementation
  */
-function downloadFromDataUrlWeb(dataUrl: string, filename: string) {
+async function downloadFromDataUrlWeb(dataUrl: string, filename: string): Promise<void> {
   const link = document.createElement('a');
   link.href = dataUrl;
   link.download = filename;
