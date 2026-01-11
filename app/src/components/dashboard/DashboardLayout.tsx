@@ -23,7 +23,7 @@ import GridLayout, { WidthProvider } from 'react-grid-layout';
 import type { Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
-import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
+import { useMemo, useState, useEffect, useCallback, useRef, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 const WrappedGridLayout = WidthProvider(GridLayout);
@@ -140,38 +140,37 @@ export function DashboardLayout() {
                 compactType="vertical"
                 preventCollision={false}
             >
-                {widgets.map((widget) => (
-                    <div key={widget.id}>
-                        <DashboardWidget id={widget.id} title={widget.title} profileId={profileId}>
-                            {widget.type === 'monitor' && widget.settings.monitorIds && (
-                                <MonitorWidget
-                                    monitorIds={widget.settings.monitorIds}
-                                    objectFit={widget.settings.feedFit || 'contain'}
-                                />
-                            )}
-                            {/* Backwards compatibility for single monitorId */}
-                            {widget.type === 'monitor' && widget.settings.monitorId && !widget.settings.monitorIds && (
-                                <MonitorWidget
-                                    monitorIds={[widget.settings.monitorId]}
-                                    objectFit={widget.settings.feedFit || 'contain'}
-                                />
-                            )}
-                            {widget.type === 'events' && (
-                                <EventsWidget
-                                    monitorId={widget.settings.monitorId}
-                                    limit={widget.settings.eventCount}
-                                    refreshInterval={widget.settings.refreshInterval}
-                                />
-                            )}
-                            {widget.type === 'timeline' && (
-                                <TimelineWidget />
-                            )}
-                            {widget.type === 'heatmap' && (
-                                <HeatmapWidget title={widget.title} />
-                            )}
-                        </DashboardWidget>
-                    </div>
-                ))}
+                {widgets.map((widget) => {
+                    // Memoize monitorIds to prevent new array references
+                    const monitorIds = widget.settings.monitorIds ?? 
+                        (widget.settings.monitorId ? [widget.settings.monitorId] : []);
+                    
+                    return (
+                        <div key={widget.id}>
+                            <DashboardWidget id={widget.id} title={widget.title} profileId={profileId}>
+                                {widget.type === 'monitor' && monitorIds.length > 0 && (
+                                    <MonitorWidget
+                                        monitorIds={monitorIds}
+                                        objectFit={widget.settings.feedFit || 'contain'}
+                                    />
+                                )}
+                                {widget.type === 'events' && (
+                                    <EventsWidget
+                                        monitorId={widget.settings.monitorId}
+                                        limit={widget.settings.eventCount}
+                                        refreshInterval={widget.settings.refreshInterval}
+                                    />
+                                )}
+                                {widget.type === 'timeline' && (
+                                    <TimelineWidget />
+                                )}
+                                {widget.type === 'heatmap' && (
+                                    <HeatmapWidget title={widget.title} />
+                                )}
+                            </DashboardWidget>
+                        </div>
+                    );
+                })}
             </WrappedGridLayout>
         </div>
     );

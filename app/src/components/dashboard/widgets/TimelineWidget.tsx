@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback, memo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { getEvents } from '../../../api/events';
@@ -22,7 +22,7 @@ import { Button } from '../../ui/button';
 
 type TimeRange = '24h' | '48h' | '1w' | '2w' | '1m';
 
-export function TimelineWidget() {
+export const TimelineWidget = memo(function TimelineWidget() {
     const { theme } = useTheme();
     const { t } = useTranslation();
     const navigate = useNavigate();
@@ -371,4 +371,4 @@ export function TimelineWidget() {
             </div>
         </div>
     );
-}
+});

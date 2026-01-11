@@ -8,7 +8,7 @@
  * - Click to navigate to Events page with time filter
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, memo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -27,7 +27,7 @@ interface HeatmapWidgetProps {
 
 type TimeRange = '24h' | '48h' | '7d' | '14d' | '30d';
 
-export function HeatmapWidget({ title }: HeatmapWidgetProps) {
+export const HeatmapWidget = memo(function HeatmapWidget({ title }: HeatmapWidgetProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
@@ -168,4 +168,4 @@ export function HeatmapWidget({ title }: HeatmapWidgetProps) {
       </CardContent>
     </Card>
   );
-}
+});
