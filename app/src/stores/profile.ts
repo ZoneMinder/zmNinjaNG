@@ -63,6 +63,16 @@ export const useProfileStore = create<ProfileState>()(
 
         /**
          * Get the currently active profile object.
+         * 
+         * @deprecated In React components, use the `useCurrentProfile()` hook instead.
+         * This getter creates a new object reference on every call, which can cause
+         * infinite re-render loops when used as a dependency in useEffect/useCallback.
+         * 
+         * For non-React code (services, utilities), access primitives directly:
+         * ```ts
+         * const { profiles, currentProfileId } = useProfileStore.getState();
+         * const profile = profiles.find(p => p.id === currentProfileId);
+         * ```
          */
         currentProfile: () => {
           const { profiles, currentProfileId } = get();

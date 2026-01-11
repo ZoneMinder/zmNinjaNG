@@ -17,6 +17,12 @@ vi.mock('../../../hooks/useCurrentProfile', () => ({
 }));
 
 vi.mock('../../../stores/settings', () => ({
+  DEFAULT_SETTINGS: {
+    viewMode: 'snapshot',
+    displayMode: 'normal',
+    theme: 'light',
+    dashboardRefreshInterval: 30,
+  },
   useSettingsStore: vi.fn((selector: any) => {
     if (typeof selector === 'function') {
       return selector({

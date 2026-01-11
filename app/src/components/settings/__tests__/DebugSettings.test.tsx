@@ -20,6 +20,12 @@ vi.mock('../../../hooks/useCurrentProfile', () => ({
 }));
 
 vi.mock('../../../stores/settings', () => ({
+  DEFAULT_SETTINGS: {
+    viewMode: 'snapshot',
+    displayMode: 'normal',
+    theme: 'light',
+    disableLogRedaction: false,
+  },
   useSettingsStore: mockUseSettingsStore,
 }));
 
