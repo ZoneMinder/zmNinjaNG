@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { getEvents } from '../../../api/events';
@@ -26,11 +26,14 @@ export function TimelineWidget() {
     const { theme } = useTheme();
     const { t } = useTranslation();
     const navigate = useNavigate();
-    const now = new Date();
-    const [start, setStart] = useState(subHours(now, 24));
+    const [start, setStart] = useState(() => subHours(new Date(), 24));
     const [selectedRange, setSelectedRange] = useState<TimeRange>('24h');
     const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
     const containerRef = useRef<HTMLDivElement>(null);
+    
+    // Use ref for "now" to avoid infinite re-renders - updated when range changes
+    const nowRef = useRef(new Date());
+    const now = nowRef.current;
 
     // Track container resize to force chart re-render
     useEffect(() => {
@@ -59,14 +62,16 @@ export function TimelineWidget() {
         refetchInterval: 60000,
     });
 
-    // Quick range handlers
+    // Quick range handlers - update nowRef when range changes
     const setRange = (hours: number, range: TimeRange) => {
-        setStart(subHours(new Date(), hours));
+        nowRef.current = new Date();
+        setStart(subHours(nowRef.current, hours));
         setSelectedRange(range);
     };
 
     const setRangeDays = (days: number, range: TimeRange) => {
-        setStart(subDays(new Date(), days));
+        nowRef.current = new Date();
+        setStart(subDays(nowRef.current, days));
         setSelectedRange(range);
     };
 
@@ -255,8 +260,23 @@ export function TimelineWidget() {
         }
     }, [start, now, events, containerSize.width]);
 
+    // Memoize tooltip styles to prevent re-renders
+    const tooltipContentStyle = useMemo(() => ({
+        backgroundColor: theme === 'dark' ? '#1f2937' : '#ffffff',
+        borderColor: theme === 'dark' ? '#374151' : '#e5e7eb',
+        borderRadius: '0.5rem',
+        fontSize: '12px'
+    }), [theme]);
+
+    const tooltipLabelFormatter = useCallback((value: string, payload: any[]) => {
+        if (payload && payload[0]) {
+            return payload[0].payload.fullTime;
+        }
+        return value;
+    }, []);
+
     // Handle bar click - navigate to events with time filter
-    const handleBarClick = (data: any) => {
+    const handleBarClick = useCallback((data: any) => {
         if (data && data.intervalStart && data.intervalEnd) {
             const formatDateTime = (date: Date) => {
                 // Format as YYYY-MM-DDTHH:mm for datetime-local input
@@ -267,7 +287,7 @@ export function TimelineWidget() {
                 state: { from: '/dashboard' }
             });
         }
-    };
+    }, [navigate]);
 
     return (
         <div ref={containerRef} className="w-full h-full flex flex-col p-2 gap-2">
@@ -336,18 +356,8 @@ export function TimelineWidget() {
                         allowDecimals={false}
                     />
                     <Tooltip
-                        contentStyle={{
-                            backgroundColor: theme === 'dark' ? '#1f2937' : '#ffffff',
-                            borderColor: theme === 'dark' ? '#374151' : '#e5e7eb',
-                            borderRadius: '0.5rem',
-                            fontSize: '12px'
-                        }}
-                        labelFormatter={(value, payload) => {
-                            if (payload && payload[0]) {
-                                return payload[0].payload.fullTime;
-                            }
-                            return value;
-                        }}
+                        contentStyle={tooltipContentStyle}
+                        labelFormatter={tooltipLabelFormatter}
                     />
                     <Bar
                         dataKey="count"
