@@ -25,6 +25,13 @@ export default defineConfig({
         '**/mockData',
         'dist/',
       ],
+      // Coverage thresholds - fail tests if coverage drops below these values
+      thresholds: {
+        lines: 60,
+        functions: 60,
+        branches: 60,
+        statements: 60,
+      },
     },
   },
   resolve: {
