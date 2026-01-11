@@ -17,6 +17,65 @@
 
 ---
 
+## Table of Contents
+- [Quick Reference](#quick-reference)
+- [Forbidden Actions](#forbidden-actions)
+- [Working Directory](#working-directory)
+- [Verification Workflow](#verification-workflow-mandatory)
+- [Internationalization](#internationalization)
+- [UI & Cross-Platform](#ui--cross-platform)
+- [Testing](#testing-mandatory---no-exceptions)
+- [Logging](#logging)
+- [HTTP Requests](#http-requests)
+- [Background Tasks & Downloads](#background-tasks--downloads)
+- [Capacitor Native Features](#capacitor-native-features)
+- [Adding Dependencies](#adding-dependencies)
+- [Settings & Data Management](#settings--data-management)
+- [Code Quality](#code-quality)
+- [Platform-Specific Code](#platform-specific-code)
+- [Feature Development Workflow](#feature-development-workflow-mandatory)
+- [Commits](#commits)
+- [Issue Handling](#issue-handling)
+- [Pre-Commit Checklist](#pre-commit-checklist)
+- [Test Commands Reference](#test-commands-reference)
+- [Quick Decision Trees](#quick-decision-trees)
+- [AI Agent Pitfalls](#ai-agent-pitfalls)
+
+---
+
+## Forbidden Actions
+
+**These are absolute prohibitions - never do these:**
+
+- ❌ **Never use `console.*`** - use `log.*` component helpers with explicit LogLevel
+- ❌ **Never use raw `fetch()` or `axios`** - use `app/src/lib/http.ts` abstractions
+- ❌ **Never convert to Blob on mobile** - use CapacitorHttp base64 directly to avoid OOM
+- ❌ **Never commit without running tests** - unit tests AND e2e tests must pass
+- ❌ **Never use static imports for Capacitor plugins** - use dynamic imports with platform checks
+- ❌ **Never claim "build passed" as proof code works** - build only checks types, not behavior
+- ❌ **Never leave features half-implemented** - complete fully or don't start
+- ❌ **Never merge to main without user approval** - always request review first
+- ❌ **Never hardcode user-facing strings** - all text must use i18n
+- ❌ **Never skip `data-testid` on interactive elements** - required for e2e tests
+
+---
+
+## Working Directory
+
+**All `npm` commands must be run from the `app/` directory.**
+
+```bash
+cd /Users/arjun/fiddle/zmNg/app
+```
+
+The workspace structure:
+- `/Users/arjun/fiddle/zmNg/` - workspace root (contains AGENTS.md, docs/, scripts/)
+- `/Users/arjun/fiddle/zmNg/app/` - main application (run npm commands here)
+- `/Users/arjun/fiddle/zmNg/app/src/` - source code
+- `/Users/arjun/fiddle/zmNg/app/tests/` - e2e test features and helpers
+
+---
+
 ## Verification Workflow (MANDATORY)
 
 **CRITICAL**: Never claim a fix works or mark a task complete without verification.
@@ -617,7 +676,7 @@ All download functions accept `options.onProgress`:
 await downloadFile(url, filename, {
   signal: abortController.signal,
   onProgress: (progress) => {
-    console.log(`${progress.percentage}% - ${progress.loaded}/${progress.total} bytes`);
+    log.download(`Progress: ${progress.percentage}%`, LogLevel.DEBUG, { loaded: progress.loaded, total: progress.total });
     taskStore.updateProgress(taskId, progress.percentage, progress.loaded);
   },
 });
@@ -652,9 +711,9 @@ Transitions happen automatically based on task state changes.
 
 ### Testing
 
-- Unit tests: `src/stores/__tests__/backgroundTasks.test.ts`
-- UI tests: `src/components/__tests__/BackgroundTaskDrawer.test.tsx`
-- Download tests: `src/lib/__tests__/download.test.ts`
+- Unit tests: `app/src/stores/__tests__/backgroundTasks.test.ts`
+- UI tests: `app/src/components/__tests__/BackgroundTaskDrawer.test.tsx`
+- Download tests: `app/src/lib/__tests__/download.test.ts`
 
 ### Reference
 - Background task store: `app/src/stores/backgroundTasks.ts`
@@ -694,7 +753,7 @@ await Haptics.impact(); // Breaks on web
 ### 3. Test Mocks Required
 When adding new Capacitor plugins:
 
-1. Add mock to `src/tests/setup.ts`:
+1. Add mock to `app/src/tests/setup.ts`:
    ```typescript
    vi.mock('@capacitor/haptics', () => ({
      Haptics: {
@@ -779,7 +838,7 @@ if (Capacitor.isNativePlatform()) {
 ### After Installing
 
 1. **Update test setup** if needed:
-   - Capacitor plugins → add mock to `src/tests/setup.ts`
+   - Capacitor plugins → add mock to `app/src/tests/setup.ts`
    - Complex imports → add `vi.mock()` in test files
    - Components using package → mock in parent test files
 
@@ -800,7 +859,7 @@ npm list @capacitor/core
 # 2. Install matching version
 npm install @capacitor/haptics@7
 
-# 3. Add mock to src/tests/setup.ts
+# 3. Add mock to app/src/tests/setup.ts
 # 4. Test
 npm test
 npm run build
@@ -1080,10 +1139,9 @@ git push origin --delete feature/dark-mode
 - ❌ Bad: `fix: comprehensive overflow handling improvements`
 - ❌ Bad: `feat: critical haptic feedback system`
 
+---
 
-
-
-## Issue handling
+## Issue Handling
 - When Github issues are created, make sure code fixes refer to that issue in commit messages
 - Use `refs #<id>` for references and `fixes #<id>` when the commit should close the issue
 - When working in github issues, make changes, validate tests and then ask me to test before pushing code to github
@@ -1213,5 +1271,85 @@ npm test && npm run test:e2e -- dashboard.feature
 # Debug failing e2e test
 npm run test:e2e -- dashboard.feature --headed --debug
 ```
+
+---
+
+## Quick Decision Trees
+
+**Use these to quickly determine what's required:**
+
+### Adding UI?
+→ Need: `data-testid` attributes, e2e test in `.feature` file, i18n keys in ALL languages, responsive check (320px min), text overflow handling
+
+### Adding a Feature?
+→ Need: GitHub issue first, feature branch, unit tests, e2e tests, user approval before merge
+
+### Fixing a Bug?
+→ Need: Write reproduction test FIRST, then fix, then verify test passes, then run full suite
+
+### Changing a Store?
+→ Need: Update store tests, check all selectors still work, verify components using `useShallow` still subscribe correctly
+
+### Adding HTTP Request?
+→ Use: `httpGet`/`httpPost`/`httpPut`/`httpDelete` from `app/src/lib/http.ts` - NEVER raw fetch/axios
+
+### Adding Logging?
+→ Use: `log.componentName(message, LogLevel.X, details)` - NEVER console.*
+
+### Adding Capacitor Plugin?
+→ Need: Match `@capacitor/core` major version, add mock to `app/src/tests/setup.ts`, use dynamic imports with platform check
+
+### Adding User-Facing Text?
+→ Need: i18n key in ALL translation files (en, de, es, fr, zh), use `t('key')` in component
+
+### Mobile Download?
+→ Use: CapacitorHttp base64 directly to Filesystem - NEVER convert to Blob (causes OOM)
+
+---
+
+## AI Agent Pitfalls
+
+**Common mistakes AI agents make - avoid these:**
+
+### 1. Claiming Success Without Verification
+- ❌ "Build passed, so the fix works" - Build only checks types
+- ❌ "I updated the code" without running tests
+- ✅ Always run `npm test` AND relevant e2e tests, state results explicitly
+
+### 2. Skipping Tests for "Simple" Changes
+- ❌ "This is a small change, tests not needed"
+- ✅ ALL changes need test verification - no exceptions
+
+### 3. Batching Unrelated Changes
+- ❌ One commit with multiple unrelated fixes
+- ✅ Split into separate commits with clear conventional commit messages
+
+### 4. Assuming Files/Paths Exist
+- ❌ Editing a file without verifying it exists
+- ✅ Use file_search or list_dir to verify paths before editing
+
+### 5. Leaving TODO Comments
+- ❌ `// TODO: implement this later`
+- ✅ Implement fully or don't implement at all
+
+### 6. Using Wrong Working Directory
+- ❌ Running `npm test` from workspace root
+- ✅ All npm commands run from `app/` directory
+
+### 7. Partial i18n Updates
+- ❌ Adding translation key to only English file
+- ✅ Add to ALL language files: en, de, es, fr, zh
+
+### 8. Static Capacitor Imports
+- ❌ `import { Haptics } from '@capacitor/haptics'` at top of file
+- ✅ Dynamic import inside `if (Capacitor.isNativePlatform())` block
+
+### 9. Forgetting data-testid
+- ❌ Adding interactive element without test selector
+- ✅ All buttons, inputs, clickable elements need `data-testid="kebab-case-name"`
+
+### 10. Not Reading Error Output
+- ❌ "Tests failed" without analyzing why
+- ✅ Read full error, identify root cause, fix systematically
 
 ---
