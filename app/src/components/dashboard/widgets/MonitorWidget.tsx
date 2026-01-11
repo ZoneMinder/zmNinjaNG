@@ -227,17 +227,19 @@ function SingleMonitor({ monitorId, objectFit }: { monitorId: string; objectFit:
             className="w-full h-full bg-black relative group overflow-hidden cursor-pointer"
             onClick={() => navigate(`/monitors/${monitor.Monitor.Id}`, { state: { from: '/dashboard' } })}
         >
-            <img
-                ref={imgRef}
-                src={displayedImageUrl}
-                alt={monitor.Monitor.Name}
-                className="w-full h-full"
-                style={{ objectFit }}
-                onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = 'none';
-                    (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
-                }}
-            />
+            {displayedImageUrl && (
+                <img
+                    ref={imgRef}
+                    src={displayedImageUrl}
+                    alt={monitor.Monitor.Name}
+                    className="w-full h-full"
+                    style={{ objectFit }}
+                    onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                        (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                    }}
+                />
+            )}
             <div className="hidden absolute inset-0 flex items-center justify-center text-white/50 bg-zinc-900">
                 <VideoOff className="h-8 w-8" />
             </div>

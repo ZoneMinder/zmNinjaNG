@@ -116,15 +116,17 @@ function MonitorCardComponent({
           style={{ aspectRatio: aspectRatio ?? '16 / 9' }}
           onClick={() => navigate(`/monitors/${monitor.Id}`, { state: { from: '/monitors' } })}
         >
-          <img
-            ref={imgRef}
-            src={displayedImageUrl || streamUrl}
-            alt={monitor.Name}
-            className="w-full h-full"
-            style={{ objectFit: resolvedFit }}
-            onError={handleImageError}
-            data-testid="monitor-player"
-          />
+          {(displayedImageUrl || streamUrl) && (
+            <img
+              ref={imgRef}
+              src={displayedImageUrl || streamUrl}
+              alt={monitor.Name}
+              className="w-full h-full"
+              style={{ objectFit: resolvedFit }}
+              onError={handleImageError}
+              data-testid="monitor-player"
+            />
+          )}
 
           {/* Status Badge */}
           <div className="absolute top-2 left-2 z-10">

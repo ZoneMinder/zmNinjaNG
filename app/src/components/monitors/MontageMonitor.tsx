@@ -258,32 +258,34 @@ function MontageMonitorComponent({
           </div>
         )}
 
-        <img
-          ref={imgRef}
-          src={displayedImageUrl || streamUrl}
-          alt={monitor.Name}
-          className={cn("w-full h-full", !imageLoaded && "opacity-0")}
-          style={{ objectFit: resolvedFit }}
-          onLoad={() => setImageLoaded(true)}
-          onError={(e) => {
-            const img = e.target as HTMLImageElement;
-            setImageLoaded(false);
-            // Only retry if we haven't retried too recently (basic debounce)
-            if (!img.dataset.retrying) {
-              img.dataset.retrying = "true";
-              log.montageMonitor('Stream failed, regenerating connkey', LogLevel.WARN, { monitorName: monitor.Name });
-              regenerateConnKey(monitor.Id);
-              toast.error(t('montage.stream_lost_reconnecting', { name: monitor.Name }));
+        {(displayedImageUrl || streamUrl) && (
+          <img
+            ref={imgRef}
+            src={displayedImageUrl || streamUrl}
+            alt={monitor.Name}
+            className={cn("w-full h-full", !imageLoaded && "opacity-0")}
+            style={{ objectFit: resolvedFit }}
+            onLoad={() => setImageLoaded(true)}
+            onError={(e) => {
+              const img = e.target as HTMLImageElement;
+              setImageLoaded(false);
+              // Only retry if we haven't retried too recently (basic debounce)
+              if (!img.dataset.retrying) {
+                img.dataset.retrying = "true";
+                log.montageMonitor('Stream failed, regenerating connkey', LogLevel.WARN, { monitorName: monitor.Name });
+                regenerateConnKey(monitor.Id);
+                toast.error(t('montage.stream_lost_reconnecting', { name: monitor.Name }));
 
-              // Reset retry flag after a delay
-              setTimeout(() => {
-                delete img.dataset.retrying;
-              }, ZM_INTEGRATION.streamReconnectDelay);
-            } else {
-              img.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="320" height="240"%3E%3Crect fill="%231a1a1a" width="320" height="240"/%3E%3Ctext fill="%23444" x="50%" y="50%" text-anchor="middle" font-family="sans-serif" font-size="14"%3ENo Signal%3C/text%3E%3C/svg%3E';
-            }
-          }}
-        />
+                // Reset retry flag after a delay
+                setTimeout(() => {
+                  delete img.dataset.retrying;
+                }, ZM_INTEGRATION.streamReconnectDelay);
+              } else {
+                img.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="320" height="240"%3E%3Crect fill="%231a1a1a" width="320" height="240"/%3E%3Ctext fill="%23444" x="50%" y="50%" text-anchor="middle" font-family="sans-serif" font-size="14"%3ENo Signal%3C/text%3E%3C/svg%3E';
+              }
+            }}
+          />
+        )}
 
         {/* Overlay Controls (visible on hover) */}
         <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex justify-end gap-1 pointer-events-none group-hover:pointer-events-auto">
