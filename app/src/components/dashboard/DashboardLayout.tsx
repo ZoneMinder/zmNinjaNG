@@ -49,6 +49,9 @@ export function DashboardLayout() {
 
     // Use ref to track profileId without making it a dependency
     const profileIdRef = useRef(profileId);
+    
+    // Track when we're syncing from store to prevent feedback loop
+    const isSyncingFromStoreRef = useRef(false);
 
     // Keep ref updated with current profileId
     useEffect(() => {
@@ -80,12 +83,24 @@ export function DashboardLayout() {
     }, []);
 
     useEffect(() => {
+        // Mark that we're syncing from store - this prevents handleLayoutChange from 
+        // writing back to store and causing an infinite loop
+        isSyncingFromStoreRef.current = true;
         setLayout((prev) => (areLayoutsEqual(prev, layouts) ? prev : layouts));
+        // Reset the flag after React has processed the state update
+        // Use queueMicrotask to ensure this runs after the render cycle
+        queueMicrotask(() => {
+            isSyncingFromStoreRef.current = false;
+        });
     }, [layouts, areLayoutsEqual]);
 
     const handleLayoutChange = useCallback((nextLayout: Layout[]) => {
         setLayout((prev) => (areLayoutsEqual(prev, nextLayout) ? prev : nextLayout));
-        if (!isEditing) return;
+        
+        // Don't update store if:
+        // 1. Not in edit mode
+        // 2. We're just syncing from store (would cause infinite loop)
+        if (!isEditing || isSyncingFromStoreRef.current) return;
 
         // Use ref to access current profileId without adding it to dependencies
         updateLayouts(profileIdRef.current, { lg: nextLayout });
