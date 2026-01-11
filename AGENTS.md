@@ -5,14 +5,15 @@
 2. **Internationalization**: Update ALL language files (en, de, es, fr, zh + any future)
 3. **Cross-platform**: iOS, Android, Desktop, mobile portrait + landscape
 4. **Settings**: Must be profile-scoped; read/write via profile settings only
-5. **Testing**: MANDATORY - Write tests first, run AND verify pass before commit
+5. **Testing**: MANDATORY - Write tests first, run AND verify pass before commit; enforce 60% coverage threshold
 6. **Logging**: Use component-specific helpers (e.g., `log.secureStorage(msg, LogLevel.INFO, details)`), never `console.*`
 7. **HTTP**: ALWAYS use `lib/http.ts` abstractions (`httpGet`, `httpPost`, etc.), NEVER raw `fetch()` or `axios`
 8. **Background Tasks**: Use background task store for long-running operations (downloads, uploads, syncs)
 9. **Mobile Downloads**: NEVER convert to Blob - use CapacitorHttp base64 directly to avoid OOM
 10. **Text Overflow**: Always use `truncate` + `min-w-0` in flex containers; add `title` for tooltips
 11. **Documentation**: When using new React/Zustand concepts, update `docs/developer-guide/` to explain from first principles
-12. **Coding**: DRY principles, keep code files small and modular
+12. **Coding**: DRY principles, keep code files small and modular; extract complex logic to separate modules (max ~400 LOC per file)
+13. **Bundle Analysis**: Run `npm run analyze` to visualize bundle size and identify optimization opportunities
 
 ---
 
@@ -831,6 +832,30 @@ npm run build
 
 ### Keep It Small
 - Keep each file small (SLOC count) and cohesive
+- Target: ~400 LOC max per file
+- If file exceeds ~500 LOC, consider extracting logic to separate modules
+
+### Refactoring Large Files
+
+When a file becomes too large (>400-500 LOC), extract complex logic into separate modules:
+
+**Example: Profile Store Refactoring**
+- **Before**: `profile.ts` at 586 LOC with complex initialization logic inline
+- **After**: Extracted `profile-initialization.ts` (277 LOC) for rehydration logic
+- **Result**: `profile.ts` reduced to 428 LOC, better separation of concerns
+
+**Extraction Strategy:**
+1. Identify cohesive blocks of logic (e.g., initialization, validation, transforms)
+2. Extract to separate file with clear single responsibility
+3. Import and use extracted module
+4. Update tests to test extracted module independently
+5. Verify all tests pass after refactor
+
+**Benefits:**
+- Easier to understand and maintain
+- Better testability (can test modules in isolation)
+- Reduced cognitive load
+- Clearer separation of concerns
 
 ### Get User Approval Early
 - **For complex features with multiple approaches**: Present options and get approval BEFORE implementing
