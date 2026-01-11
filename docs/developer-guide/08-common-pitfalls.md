@@ -596,9 +596,106 @@ export const MonitorCard = memo(
 );
 ```
 
+### 17. Creating New Object References in Component Body
+
+**Problem:**
+
+```tsx
+function TimelineWidget() {
+  const now = new Date();  // ❌ Creates new Date object every render
+  
+  return (
+    <Chart
+      tooltip={{
+        contentStyle: { backgroundColor: 'black' },  // ❌ New object every render
+        labelFormatter: (value) => formatDate(value)  // ❌ New function every render
+      }}
+      style={{ width: 100 }}  // ❌ New object every render
+    />
+  );
+}
+```
+
+**Why it's wrong:**
+
+- `new Date()` creates a new reference on every render
+- Inline objects `{{ }}` create new references on every render
+- Inline functions `() => {}` create new references on every render
+- If these are passed to memoized children or used in dependencies, they cause unnecessary re-renders
+- Can trigger infinite render loops when used in `useEffect` or `useMemo` dependencies
+
+**Solution:**
+
+```tsx
+function TimelineWidget() {
+  // For values that shouldn't trigger re-renders, use useRef
+  const nowRef = useRef(new Date());
+  
+  // For values derived from props/state, use useMemo
+  const tooltipContentStyle = useMemo(() => ({ 
+    backgroundColor: 'black' 
+  }), []);
+  
+  // For functions, use useCallback
+  const tooltipLabelFormatter = useCallback((value) => {
+    return formatDate(value);
+  }, []);
+  
+  // For static styles, define outside component or memoize
+  const chartStyle = useMemo(() => ({ width: 100 }), []);
+  
+  return (
+    <Chart
+      tooltip={{
+        contentStyle: tooltipContentStyle,  // ✅ Stable reference
+        labelFormatter: tooltipLabelFormatter  // ✅ Stable reference
+      }}
+      style={chartStyle}  // ✅ Stable reference
+    />
+  );
+}
+```
+
+**Real zmNg example (TimelineWidget):**
+
+```tsx
+// Before: Caused infinite loops
+export function TimelineWidget() {
+  const now = new Date();  // ❌ New reference every render
+  
+  return (
+    <Tooltip
+      contentStyle={{ backgroundColor: 'var(--background)' }}  // ❌
+      labelFormatter={(value) => format(value, 'PPp')}  // ❌
+    />
+  );
+}
+
+// After: Stable references
+export const TimelineWidget = memo(function TimelineWidget() {
+  const nowRef = useRef(new Date());  // ✅
+  
+  const tooltipContentStyle = useMemo(() => ({
+    backgroundColor: 'var(--background)',
+    border: '1px solid var(--border)',
+  }), []);  // ✅
+  
+  const tooltipLabelFormatter = useCallback((value: number) => {
+    return format(new Date(value), 'PPp');
+  }, []);  // ✅
+  
+  return (
+    <Tooltip
+      contentStyle={tooltipContentStyle}
+      labelFormatter={tooltipLabelFormatter}
+    />
+  );
+});  // ✅ Wrapped in memo
+```
+
 ## Internationalization Pitfalls
 
-### 17. Hardcoded User-Facing Text
+### 18. Hardcoded User-Facing Text
 
 **Problem:**
 
@@ -652,7 +749,7 @@ And update ALL language files:
 // ... es, fr, zh
 ```
 
-### 18. Forgetting to Update All Language Files
+### 19. Forgetting to Update All Language Files
 
 **Problem:**
 
@@ -686,7 +783,7 @@ Add to **ALL** language files (en, de, es, fr, zh):
 
 ## Cross-Platform Pitfalls
 
-### 19. Invisible Overlays Blocking Touch Events on iOS
+### 20. Invisible Overlays Blocking Touch Events on iOS
 
 **Problem:**
 
@@ -749,7 +846,7 @@ Add to **ALL** language files (en, de, es, fr, zh):
 
 ## Security Pitfalls
 
-### 20. Storing Sensitive Data Unencrypted
+### 21. Storing Sensitive Data Unencrypted
 
 **Problem:**
 
@@ -771,7 +868,7 @@ import { SecureStorage } from '../lib/secure-storage';
 await SecureStorage.set('password', password);  // ✅ Encrypted
 ```
 
-### 21. Logging Sensitive Data
+### 22. Logging Sensitive Data
 
 **Problem:**
 
