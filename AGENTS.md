@@ -17,32 +17,6 @@
 
 ---
 
-## Table of Contents
-- [Quick Reference](#quick-reference)
-- [Forbidden Actions](#forbidden-actions)
-- [Working Directory](#working-directory)
-- [Verification Workflow](#verification-workflow-mandatory)
-- [Internationalization](#internationalization)
-- [UI & Cross-Platform](#ui--cross-platform)
-- [Testing](#testing-mandatory---no-exceptions)
-- [Logging](#logging)
-- [HTTP Requests](#http-requests)
-- [Background Tasks & Downloads](#background-tasks--downloads)
-- [Capacitor Native Features](#capacitor-native-features)
-- [Adding Dependencies](#adding-dependencies)
-- [Settings & Data Management](#settings--data-management)
-- [Code Quality](#code-quality)
-- [Platform-Specific Code](#platform-specific-code)
-- [Feature Development Workflow](#feature-development-workflow-mandatory)
-- [Commits](#commits)
-- [Issue Handling](#issue-handling)
-- [Pre-Commit Checklist](#pre-commit-checklist)
-- [Test Commands Reference](#test-commands-reference)
-- [Quick Decision Trees](#quick-decision-trees)
-- [AI Agent Pitfalls](#ai-agent-pitfalls)
-
----
-
 ## Forbidden Actions
 
 **These are absolute prohibitions - never do these:**
@@ -170,122 +144,24 @@ The workspace structure:
 
 ### Text Overflow Handling (Required)
 
-**All text must be constrained to prevent overflow from containers.**
+**All text must be constrained to prevent overflow.**
 
-#### CSS Utilities (Tailwind)
-Use these classes to handle text overflow:
-
-1. **Single-line truncation**:
-   ```tsx
-   <span className="truncate" title={fullText}>
-     {fullText}
-   </span>
-   ```
-   - Adds ellipsis (`...`) when text exceeds container
-   - Always add `title` attribute for tooltip
-
-2. **Multi-line truncation**:
-   ```tsx
-   <p className="line-clamp-2">
-     {longText}
-   </p>
-   ```
-   - Limits text to specified number of lines
-   - Available: `line-clamp-1` through `line-clamp-6`
-
-3. **Word breaking**:
-   ```tsx
-   <div className="break-words">
-     {urlOrLongWord}
-   </div>
-   ```
-   - Breaks long words/URLs to fit container
-   - Use for user-generated content
-
-#### Flex Container Patterns
-
-When text is inside flex containers, use `min-w-0` to allow shrinking:
+- **Single-line**: `className="truncate"` + `title={text}` for tooltip
+- **Multi-line**: `className="line-clamp-2"` (1-6 available)
+- **Long words/URLs**: `className="break-words"`
+- **In flex containers**: MUST add `min-w-0` with truncate (flex items have `min-width: auto` by default)
+- **Buttons with i18n**: Use abbreviated labels with full text in `title` tooltip
+- **Responsive**: `<span className="hidden sm:inline">` for desktop-only text
 
 ```tsx
+// Correct pattern for flex + truncate
 <div className="flex items-center gap-2">
   <span className="truncate min-w-0">{text}</span>
   <Badge>Icon</Badge>
 </div>
 ```
 
-**Why**: Flex items by default have `min-width: auto`, preventing them from shrinking below content size.
-
-#### Button Text Overflow
-
-When buttons contain translated text that may vary in length, prefer **abbreviated labels**:
-
-```tsx
-// Add both full and abbreviated versions to translation files
-"action_label": "Complete Action Name"
-"action_label_short": "Short"
-
-// Use abbreviated for display, full for tooltip
-<Button title={t('action.label')}>
-  {t('action.label_short')}
-</Button>
-```
-
-**Example**: Quick date range buttons (`app/src/components/ui/quick-date-range-buttons.tsx`)
-- Display: `24h`, `48h`, `1wk`, `2wk`, `1mo`
-- Tooltip: `Past 24 Hours`, `Past 48 Hours`, etc.
-
-**Why**: Abbreviated labels prevent overflow without truncation, work across all languages, and keep buttons compact on mobile.
-
-#### Responsive Text
-
-Use responsive classes to hide/show text at different breakpoints:
-
-```tsx
-<Button>
-  <Icon className="h-4 w-4" />
-  <span className="hidden sm:inline">{label}</span>
-</Button>
-```
-
-- Mobile: Shows icon only
-- Desktop: Shows icon + label
-
-#### Testing Requirements
-
-- Test with all translation languages (de, es, fr may be longer)
-- Test on mobile portrait (320px width minimum)
-- Test with long user-generated content
-- Verify tooltips appear on hover for truncated text
-
-#### Common Mistakes to Avoid
-
-❌ **Bad** - Text can overflow:
-```tsx
-<div className="w-32">
-  <p>{longText}</p>
-</div>
-```
-
-✅ **Good** - Text is constrained:
-```tsx
-<div className="w-32">
-  <p className="truncate" title={longText}>{longText}</p>
-</div>
-```
-
-❌ **Bad** - Truncate without min-w-0 in flex:
-```tsx
-<div className="flex">
-  <span className="truncate">{text}</span>
-</div>
-```
-
-✅ **Good** - Truncate with min-w-0:
-```tsx
-<div className="flex">
-  <span className="truncate min-w-0">{text}</span>
-</div>
-```
+**Test**: All languages (de/es/fr longer), mobile 320px, long user content
 
 ---
 
@@ -398,64 +274,26 @@ If you change ANY of the following, you MUST update and run tests:
 
 **Conditional Testing Pattern**:
 
-When testing features that depend on dynamic content (events, videos, etc.), use conditional verification:
+For features depending on dynamic content, track whether action was performed:
 
 ```typescript
-// BAD ❌ - Unconditional verification
-When('I click download button if exists', async ({ page }) => {
-  const button = page.getByTestId('download-button');
-  if (await button.isVisible()) {
-    await button.click();
-  }
-});
-
-Then('I should see download progress', async ({ page }) => {
-  // This ALWAYS expects progress, even if button didn't exist!
-  await expect(page.getByTestId('progress')).toBeVisible();
-});
-```
-
-```typescript
-// GOOD ✅ - Conditional verification
 let actionPerformed = false;
 
-When('I click download button if exists', async ({ page }) => {
-  actionPerformed = false;
+When('I click download if exists', async ({ page }) => {
   const button = page.getByTestId('download-button');
-
-  try {
-    if (await button.isVisible({ timeout: 1000 })) {
-      await button.click();
-      actionPerformed = true;
-    }
-  } catch {
-    // Button doesn't exist - that's okay
-    actionPerformed = false;
+  if (await button.isVisible({ timeout: 1000 })) {
+    await button.click();
+    actionPerformed = true;
   }
 });
 
-Then('I should see download progress if download started', async ({ page }) => {
-  if (!actionPerformed) {
-    log.info('E2E: Skipping verification - action was not performed');
-    return; // Don't verify if action didn't happen
-  }
-
-  // Only verify if action was actually performed
+Then('I should see progress if started', async ({ page }) => {
+  if (!actionPerformed) return; // Skip verification if action didn't happen
   await expect(page.getByTestId('progress')).toBeVisible();
 });
 ```
 
-**Why this matters**:
-- Tests work with varying server content (empty states, missing data)
-- Tests don't fail when optional features aren't present
-- Tests adapt to real-world conditions
-- Avoids false failures from unavailable test data
-
-**Use cases**:
-- Testing downloads (events may not have videos)
-- Testing actions on lists (lists may be empty)
-- Testing optional features (may be disabled)
-- Testing server-dependent content
+Use for: optional downloads, empty lists, server-dependent content.
 
 ---
 
@@ -501,20 +339,8 @@ log.error(msg, context, ...args)
 - ✅ Use component-specific helpers for all new logging
 - ✅ Always specify explicit `LogLevel` (DEBUG, INFO, WARN, ERROR)
 - ✅ Include relevant context in the `details` object
-- ✅ Pass errors as part of `details`, not as separate arguments
 - ❌ Don't manually add `{ component: 'X' }` - use helpers instead
 - ❌ Don't use `console.log`, `console.error`, etc.
-
-### Examples
-```typescript
-// Good ✅
-log.secureStorage('Failed to encrypt value', LogLevel.ERROR, { key }, error);
-log.monitorDetail('Regenerating connkey', LogLevel.INFO, { monitorId });
-
-// Bad ❌
-log.info('Failed to encrypt', { component: 'SecureStorage', key });
-console.log('Regenerating connkey');
-```
 
 ### Reference
 - Full implementation: `app/src/lib/logger.ts`
@@ -564,161 +390,44 @@ The abstraction automatically:
 
 ## Background Tasks & Downloads
 
-**Use the background task system for long-running async operations**
+**Use background task store for long-running operations (downloads, uploads, syncs)**
 
 ### Background Task Store
-
-Centralized state management for downloads, uploads, syncs, and exports.
-
 - **Location**: `app/src/stores/backgroundTasks.ts`
-- **UI Component**: `app/src/components/BackgroundTaskDrawer.tsx`
-- **Features**:
-  - Task states: pending, in_progress, completed, failed, cancelled
-  - Progress tracking (percentage, bytes processed)
-  - Cancellation support via AbortController
-  - Auto-transitions (hidden → expanded → collapsed → badge)
-  - Works across all views in the application
-
-### Adding a Background Task
+- **UI**: `app/src/components/BackgroundTaskDrawer.tsx`
+- **States**: pending, in_progress, completed, failed, cancelled
 
 ```typescript
-import { useBackgroundTasks } from '../stores/backgroundTasks';
-
 const taskStore = useBackgroundTasks.getState();
-const abortController = new AbortController();
-
-// Create task
 const taskId = taskStore.addTask({
-  type: 'download', // or 'upload' | 'sync' | 'export'
-  metadata: {
-    title: 'Video.mp4',
-    description: 'Event 12345',
-  },
+  type: 'download',
+  metadata: { title: 'Video.mp4', description: 'Event 12345' },
   cancelFn: () => abortController.abort(),
 });
-
-// Update progress
 taskStore.updateProgress(taskId, percentage, bytesProcessed);
-
-// Complete or fail
-taskStore.completeTask(taskId);
-taskStore.failTask(taskId, error);
+taskStore.completeTask(taskId); // or failTask(taskId, error)
 ```
 
-### Download Implementation
+### Mobile Downloads - CRITICAL OOM Prevention
 
-**CRITICAL**: Avoid Out-Of-Memory (OOM) errors on mobile
-
-Downloads use platform-specific implementations to avoid loading large files into memory:
-
-#### Web
-```typescript
-// Uses axios with blob + anchor download
-const response = await apiClient.get(url, { responseType: 'blob' });
-const blob = response.data;
-const blobUrl = window.URL.createObjectURL(blob);
-// Trigger download via anchor element
-```
-
-#### Mobile (iOS/Android)
-```typescript
-// CRITICAL: Use CapacitorHttp directly, NOT blob conversion
-// CapacitorHttp returns base64 string, avoiding Blob in memory
-const { CapacitorHttp } = await import('@capacitor/core');
-const response = await CapacitorHttp.request({
-  method: 'GET',
-  url,
-  responseType: 'blob', // Returns base64 string, NOT Blob object
-});
-
-const base64Data = response.data as string; // Direct base64, no conversion
-
-// Write directly to filesystem
-await Filesystem.writeFile({
-  path: filename,
-  data: base64Data, // No intermediate Blob conversion
-  directory: Directory.Documents,
-});
-
-// Save to Photo/Video library
-await Media.saveVideo({ path: writeResult.uri });
-```
-
-**Why this matters:**
-- ❌ **Bad**: Network → base64 → **Blob (entire file in memory)** → base64 → Disk
-- ✅ **Good**: Network → base64 → Disk
-
-CapacitorHttp already returns base64 data. Converting to Blob doubles memory usage and causes OOM on large video files.
-
-#### Desktop (Tauri)
-```typescript
-// Uses native fetch with streaming
-const response = await tauriFetch(url);
-const reader = response.body.getReader();
-
-// Stream chunks to disk
-const chunks: Uint8Array[] = [];
-while (true) {
-  const { done, value } = await reader.read();
-  if (done) break;
-  chunks.push(value);
-}
-
-// Write to user-selected location
-await writeFile(savePath, combined);
-```
-
-### Progress Tracking
-
-All download functions accept `options.onProgress`:
+**NEVER convert to Blob on mobile** - causes Out-Of-Memory on large files.
 
 ```typescript
-await downloadFile(url, filename, {
-  signal: abortController.signal,
-  onProgress: (progress) => {
-    log.download(`Progress: ${progress.percentage}%`, LogLevel.DEBUG, { loaded: progress.loaded, total: progress.total });
-    taskStore.updateProgress(taskId, progress.percentage, progress.loaded);
-  },
-});
+// Mobile (iOS/Android) - CapacitorHttp returns base64 directly
+const response = await CapacitorHttp.request({ method: 'GET', url, responseType: 'blob' });
+const base64Data = response.data as string; // Already base64, NOT Blob
+await Filesystem.writeFile({ path: filename, data: base64Data, directory: Directory.Documents });
 ```
+
+- ❌ **Bad**: Network → base64 → **Blob** → base64 → Disk (doubles memory)
+- ✅ **Good**: Network → base64 → Disk (direct)
 
 ### Cancellation
-
-All downloads support cancellation via AbortController:
-
-```typescript
-const abortController = new AbortController();
-
-// Pass to download
-await downloadFile(url, filename, {
-  signal: abortController.signal,
-});
-
-// Cancel from anywhere
-abortController.abort();
-```
-
-### UI States
-
-The background task drawer has 4 states:
-
-1. **Hidden**: No active or completed tasks
-2. **Expanded**: Slides up when task starts, shows progress bars
-3. **Collapsed**: Minimized to thin bar at bottom, shows task count
-4. **Badge**: Floating badge with completion count, tap to review
-
-Transitions happen automatically based on task state changes.
-
-### Testing
-
-- Unit tests: `app/src/stores/__tests__/backgroundTasks.test.ts`
-- UI tests: `app/src/components/__tests__/BackgroundTaskDrawer.test.tsx`
-- Download tests: `app/src/lib/__tests__/download.test.ts`
+All downloads support `AbortController` via `signal` option.
 
 ### Reference
-- Background task store: `app/src/stores/backgroundTasks.ts`
-- Download implementation: `app/src/lib/download.ts`
-- UI component: `app/src/components/BackgroundTaskDrawer.tsx`
+- Store: `app/src/stores/backgroundTasks.ts`
+- Downloads: `app/src/lib/download.ts`
 
 ---
 
@@ -756,64 +465,19 @@ When adding new Capacitor plugins:
 1. Add mock to `app/src/tests/setup.ts`:
    ```typescript
    vi.mock('@capacitor/haptics', () => ({
-     Haptics: {
-       impact: vi.fn().mockResolvedValue(undefined),
-       // ... other methods
-     },
-     ImpactStyle: {
-       Heavy: 'Heavy',
-       Medium: 'Medium',
-       Light: 'Light',
-     },
+     Haptics: { impact: vi.fn().mockResolvedValue(undefined) },
+     ImpactStyle: { Heavy: 'Heavy', Medium: 'Medium', Light: 'Light' },
    }));
    ```
 
-2. Mock any components that use the plugin in test files:
-   ```typescript
-   vi.mock('../../components/events/EventMontageView', () => ({
-     EventMontageView: () => <div data-testid="events-montage-grid" />,
-   }));
-   ```
+2. Mock components using the plugin in test files if needed
 
 ### 4. Version Compatibility
 **CRITICAL**: Match Capacitor plugin version with `@capacitor/core` version
 
 ```bash
-# Check current @capacitor/core version
-npm list @capacitor/core
-
-# Install matching plugin version
-npm install @capacitor/haptics@7  # Match major version (7.x)
-```
-
-**Example**:
-- `@capacitor/core@7.4.4` → use `@capacitor/haptics@7.x.x`
-- `@capacitor/core@6.2.1` → use `@capacitor/haptics@6.x.x`
-
-### Common Patterns
-```typescript
-// Haptic feedback on button press
-const handleButtonClick = async () => {
-  if (Capacitor.isNativePlatform()) {
-    try {
-      const { Haptics, ImpactStyle } = await import('@capacitor/haptics');
-      await Haptics.impact({ style: ImpactStyle.Light });
-    } catch {
-      // Haptics not available
-    }
-  }
-  // Continue with action
-};
-
-// File download
-import { Filesystem, Directory } from '@capacitor/filesystem';
-if (Capacitor.isNativePlatform()) {
-  await Filesystem.writeFile({
-    path: filename,
-    data: base64Data,
-    directory: Directory.Documents,
-  });
-}
+npm list @capacitor/core              # Check version
+npm install @capacitor/haptics@7      # Match major version
 ```
 
 ---
@@ -840,30 +504,8 @@ if (Capacitor.isNativePlatform()) {
 1. **Update test setup** if needed:
    - Capacitor plugins → add mock to `app/src/tests/setup.ts`
    - Complex imports → add `vi.mock()` in test files
-   - Components using package → mock in parent test files
 
-2. **Document usage**:
-   - Add comment explaining why package is needed
-   - Note platform-specific behavior if applicable
-
-3. **Test**:
-   - Run `npm test` - all tests must pass with mocks
-   - Run `npm run build` - ensure no build errors
-
-### Example
-```bash
-# 1. Check @capacitor/core version
-npm list @capacitor/core
-# Output: @capacitor/core@7.4.4
-
-# 2. Install matching version
-npm install @capacitor/haptics@7
-
-# 3. Add mock to app/src/tests/setup.ts
-# 4. Test
-npm test
-npm run build
-```
+2. **Test**: `npm test && npm run build`
 
 ---
 
@@ -896,25 +538,11 @@ npm run build
 
 ### Refactoring Large Files
 
-When a file becomes too large (>400-500 LOC), extract complex logic into separate modules:
-
-**Example: Profile Store Refactoring**
-- **Before**: `profile.ts` at 586 LOC with complex initialization logic inline
-- **After**: Extracted `profile-initialization.ts` (277 LOC) for rehydration logic
-- **Result**: `profile.ts` reduced to 428 LOC, better separation of concerns
-
-**Extraction Strategy:**
-1. Identify cohesive blocks of logic (e.g., initialization, validation, transforms)
-2. Extract to separate file with clear single responsibility
-3. Import and use extracted module
-4. Update tests to test extracted module independently
-5. Verify all tests pass after refactor
-
-**Benefits:**
-- Easier to understand and maintain
-- Better testability (can test modules in isolation)
-- Reduced cognitive load
-- Clearer separation of concerns
+When a file exceeds ~400-500 LOC:
+1. Identify cohesive blocks (initialization, validation, transforms)
+2. Extract to separate file with single responsibility
+3. Update tests to cover extracted module
+4. Verify all tests pass
 
 ### Get User Approval Early
 - **For complex features with multiple approaches**: Present options and get approval BEFORE implementing
@@ -935,31 +563,12 @@ Examples of when to get approval:
 
 ### Feature Removal Checklist
 
-When removing or reverting functionality:
-
-1. **Delete unused files completely**:
-   - Remove component files
-   - Remove utility/helper files
-   - Remove test files for deleted features
-
-2. **Clean up imports**:
-   - Remove unused imports from all files
-   - Run linter to catch orphaned imports
-
-3. **Remove unused code**:
-   - Delete unused props, functions, state variables
-   - Remove event handlers that are no longer called
-   - Clean up unused types/interfaces
-
-4. **Update or remove translations**:
-   - Remove translation keys if feature is permanently removed
-
-5. **Verify no breakage**:
-   - Run full test suite: `npm test && npm run test:e2e`
-   - Run type check: `npx tsc --noEmit`
-   - Run build: `npm run build`
-
-6. **Update documentation** if feature was documented
+When removing functionality:
+1. Delete component, utility, helper, and test files completely
+2. Remove unused imports (run linter)
+3. Delete unused props, functions, state, types
+4. Remove translation keys if permanently removed
+5. Verify: `npm test && npm run test:e2e && npx tsc --noEmit && npm run build`
 
 ### Documentation
 - Write concise comments
@@ -969,66 +578,9 @@ When removing or reverting functionality:
 
 ### Keeping Documentation Updated (CRITICAL)
 
-**ALWAYS update documentation when making significant changes to the codebase.**
+**Update AGENTS.md when**: New patterns, APIs, pitfalls, testing strategies, workflows, breaking changes.
 
-#### Update AGENTS.md when you:
-- ✅ Introduce new architectural patterns (stores, hooks, components)
-- ✅ Add new critical APIs or abstractions (HTTP, logging, storage)
-- ✅ Discover important gotchas or pitfalls (OOM issues, platform differences)
-- ✅ Create new testing patterns (conditional E2E tests, mocking strategies)
-- ✅ Add new development workflows (background tasks, downloads)
-- ✅ Fix bugs that reveal important patterns to avoid
-- ✅ Make breaking changes or deprecations
-
-**Where to document**:
-- **Quick Reference** (top of file): Add brief one-liners for critical rules
-- **Existing sections**: Update relevant sections with new patterns
-- **New sections**: Create new sections for major features (e.g., "Background Tasks & Downloads")
-
-**Why this matters**:
-- This file is the single source of truth for development guidelines
-- Future developers (and AI agents) rely on this for correct patterns
-- Prevents repeating mistakes and reinventing solutions
-- Keeps the team aligned on best practices
-
-**Example**: When we added background tasks and fixed mobile OOM issues, we:
-1. Updated Quick Reference with new rules
-2. Added "Background Tasks & Downloads" section
-3. Added "Conditional Testing Pattern" section
-4. Documented the mobile OOM pitfall
-
-**Bad**: Make significant changes, don't update docs → future developers repeat mistakes
-
-**Good**: Make changes, immediately document patterns → knowledge is preserved
-
-#### Update Developer Docs (`docs/developer-guide/`) when you:
-- ✅ Use new React concepts (hooks, patterns, APIs)
-- ✅ Use new Zustand patterns (selectors, middleware, subscriptions)
-- ✅ Add new libraries or dependencies
-- ✅ Introduce new state management patterns
-- ✅ Use React optimization techniques (memo, useCallback, etc.)
-- ✅ Add any concept that a programmer unfamiliar with React would need to understand
-
-**Where to document**:
-- `02-react-fundamentals.md`: React concepts (hooks, components, memo, etc.)
-- `03-state-management-zustand.md`: Zustand patterns (selectors, useShallow, subscriptions)
-- `05-component-architecture.md`: Component patterns and structure
-- `08-common-pitfalls.md`: Bugs and gotchas discovered
-
-**Important**:
-- **Assume reader is a programmer** but doesn't know React/Zustand
-- **Explain from first principles** - why something exists, how it works
-- **Use concrete examples** from zmNg codebase
-- **Don't just document the bug** - explain the underlying concept
-
-**Example**: When fixing EventCard favorites bug, we:
-1. Added React.memo() explanation to `02-react-fundamentals.md`
-2. Added useShallow explanation to `03-state-management-zustand.md`
-3. Explained why extracting functions breaks subscriptions
-4. Used the bug as a teaching example, not just documenting the fix
-
-**Bad**: "Fixed EventCard by using selector pattern" → No learning
-**Good**: "React.memo prevents re-renders from parent. When using with Zustand, you must subscribe with selectors, not extract functions" → Teaches the concept
+**Update `docs/developer-guide/` when**: New React/Zustand concepts, libraries, optimization techniques. Explain from first principles with zmNg examples.
 
 ---
 
@@ -1044,77 +596,18 @@ When removing or reverting functionality:
 
 ## Feature Development Workflow (MANDATORY)
 
-**When the user requests a new feature, follow this workflow:**
+**For new features, follow this workflow:**
 
-### 1. Create GitHub Issue
-- Create a GitHub issue for the feature request using `gh issue create`
-- Label it as `enhancement`
-- Include clear description of what the feature should do
-- Example:
-  ```bash
-  gh issue create --title "Add event favorites feature" \
-    --body "Allow users to mark events as favorites and filter by favorites" \
-    --label "enhancement"
-  ```
+1. **Create GitHub Issue**: `gh issue create --title "Feature" --body "Description" --label "enhancement"`
+2. **Create Feature Branch**: `git checkout -b feature/<short-description>`
+3. **Implement Completely**: Full feature + unit tests + e2e tests + type check + build
+4. **Request Approval**: Ask user for feedback before merging - DO NOT merge without approval
+5. **Merge & Cleanup**: Merge to main, delete branch, use `fixes #<issue>` to auto-close
 
-### 2. Create Feature Branch
-- Create a new branch from main with descriptive name
-- Branch naming: `feature/<short-description>` or `feat/<issue-number>-<description>`
-- Example:
-  ```bash
-  git checkout -b feature/event-favorites
-  ```
-
-### 3. Implement Feature Completely
-- **CRITICAL:** Implement the ENTIRE feature - do not stop in the middle
-- Follow all testing requirements (unit tests, E2E tests, type check, build)
-- Commit work in logical chunks with descriptive messages
-- Reference the issue in commit messages: `refs #<issue-number>`
-- Make multiple commits if the feature has multiple logical components
-
-### 4. Request User Feedback
-- Once implementation is complete and all tests pass, ask user for feedback
-- DO NOT merge or push without user approval
-- Example: "Feature implementation complete. All tests passing. Ready for your review."
-
-### 5. Merge and Cleanup (After User Approval Only)
-- Merge feature branch to main
-- Delete the feature branch (local and remote)
-- Reference the issue in final commit/merge: `fixes #<issue-number>`
-- Push to main
-- Verify issue is automatically closed (due to `fixes #<number>`)
-
-**Example Complete Workflow:**
-```bash
-# 1. Create issue
-gh issue create --title "Add dark mode toggle" --body "..." --label "enhancement"
-# Note the issue number (e.g., #42)
-
-# 2. Create branch
-git checkout -b feature/dark-mode
-
-# 3. Implement + test + commit
-git add <files>
-git commit -m "feat: add dark mode toggle component refs #42"
-# ... more commits as needed
-
-# 4. Ask user for approval
-# (Wait for user confirmation)
-
-# 5. After approval, merge and cleanup
-git checkout main
-git merge feature/dark-mode
-git push origin main
-git branch -d feature/dark-mode
-git push origin --delete feature/dark-mode
-# Verify issue #42 is closed
-```
-
-**Important Notes:**
+**Rules**:
 - Never merge to main without user approval
-- Never leave a feature half-implemented
-- Always include tests before requesting approval
-- Feature branches keep main stable and allow for review
+- Never leave features half-implemented
+- Reference issues in commits: `refs #<id>` or `fixes #<id>`
 
 ---
 
@@ -1194,44 +687,18 @@ git push origin --delete feature/dark-mode
 
 ### Unit Tests
 ```bash
-# Run all unit tests
-npm test
-
-# Run specific test file
-npm test -- MontageMonitor.test.tsx
-
-# Run tests matching pattern
-npm test -- dashboard
-
-# Run with coverage report
-npm test -- --coverage
-
-# Watch mode (auto-rerun on file changes)
-npm test -- --watch
-
-# Run tests for specific directory
-npm test -- src/stores/__tests__
+npm test                              # Run all
+npm test -- <pattern>                 # Run matching pattern
+npm test -- --coverage                # With coverage
+npm test -- --watch                   # Watch mode
 ```
 
 ### E2E Tests
 ```bash
-# Run all e2e tests
-npm run test:e2e
-
-# Run specific feature file
-npm run test:e2e -- dashboard.feature
-
-# Run multiple specific features
-npm run test:e2e -- dashboard.feature events.feature
-
-# Run in headed mode (see browser)
-npm run test:e2e -- --headed
-
-# Run in debug mode
-npm run test:e2e -- --debug
-
-# Run specific scenario by line number
-npm run test:e2e -- dashboard.feature:10
+npm run test:e2e                      # Run all
+npm run test:e2e -- <feature>.feature # Run specific feature
+npm run test:e2e -- --headed          # See browser
+npm run test:e2e -- --debug           # Debug mode
 ```
 
 ### E2E Test Requirements
@@ -1245,31 +712,10 @@ npm run test:e2e -- dashboard.feature:10
 - Server must have at least 1 monitor for tests to pass
 - Tests work with any ZoneMinder server configuration
 
-### Type Checking & Build
-```bash
-# Type check only (no emit)
-npx tsc --noEmit
-
-# Build for production
-npm run build
-
-# Run all verification steps
-npm test && npx tsc --noEmit && npm run build
-```
-
 ### Common Test Workflows
 ```bash
-# Quick verification (unit + types + build)
-npm test && npx tsc --noEmit && npm run build
-
-# Full verification (unit + e2e + types + build)
-npm test && npm run test:e2e && npx tsc --noEmit && npm run build
-
-# Test specific feature end-to-end
-npm test && npm run test:e2e -- dashboard.feature
-
-# Debug failing e2e test
-npm run test:e2e -- dashboard.feature --headed --debug
+npm test && npx tsc --noEmit && npm run build              # Quick verification
+npm test && npm run test:e2e && npx tsc --noEmit && npm run build  # Full verification
 ```
 
 ---
