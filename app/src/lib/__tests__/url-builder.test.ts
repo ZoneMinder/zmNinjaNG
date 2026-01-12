@@ -16,6 +16,8 @@ import {
   getEventVideoUrl,
   getEventZmsUrl,
   getZmsControlUrl,
+  getGo2RTCWebSocketUrl,
+  getGo2RTCStreamUrl,
 } from '../url-builder';
 
 describe('normalizePortalUrl', () => {
@@ -325,5 +327,93 @@ describe('Edge Cases', () => {
     });
     // URLSearchParams automatically encodes special characters
     expect(result).toContain('token=abc');
+  });
+});
+
+describe('getGo2RTCWebSocketUrl', () => {
+  it('builds WebSocket URL for Go2RTC', () => {
+    const result = getGo2RTCWebSocketUrl('http://zm.example.com:1984', 'front_camera');
+    expect(result).toBe('ws://zm.example.com:1984/api/ws?src=front_camera');
+  });
+
+  it('converts https to wss', () => {
+    const result = getGo2RTCWebSocketUrl('https://zm.example.com:1984', 'front_camera');
+    expect(result).toBe('wss://zm.example.com:1984/api/ws?src=front_camera');
+  });
+
+  it('adds protocol if missing (defaults to ws)', () => {
+    const result = getGo2RTCWebSocketUrl('zm.example.com:1984', 'front_camera');
+    expect(result).toBe('ws://zm.example.com:1984/api/ws?src=front_camera');
+  });
+
+  it('preserves explicit port', () => {
+    const result = getGo2RTCWebSocketUrl('http://zm.example.com:8080', 'camera1');
+    expect(result).toBe('ws://zm.example.com:8080/api/ws?src=camera1');
+  });
+
+  it('includes auth token when provided', () => {
+    const result = getGo2RTCWebSocketUrl('http://zm.example.com:1984', 'camera1', {
+      token: 'mytoken123',
+    });
+    expect(result).toBe('ws://zm.example.com:1984/api/ws?src=camera1&token=mytoken123');
+  });
+
+  it('encodes stream name with special characters', () => {
+    const result = getGo2RTCWebSocketUrl('http://zm.example.com:1984', 'front camera #1');
+    expect(result).toContain('src=front+camera+%231');
+  });
+
+  it('handles URL with path', () => {
+    const result = getGo2RTCWebSocketUrl('http://zm.example.com/go2rtc', 'camera1');
+    expect(result).toBe('ws://zm.example.com/api/ws?src=camera1');
+  });
+});
+
+describe('getGo2RTCStreamUrl', () => {
+  it('builds MSE stream URL', () => {
+    const result = getGo2RTCStreamUrl('http://zm.example.com:1984', 'front_camera', 'mse');
+    expect(result).toBe('http://zm.example.com:1984/api/stream.mse?src=front_camera');
+  });
+
+  it('builds HLS stream URL', () => {
+    const result = getGo2RTCStreamUrl('http://zm.example.com:1984', 'front_camera', 'hls');
+    expect(result).toBe('http://zm.example.com:1984/api/stream.hls?src=front_camera');
+  });
+
+  it('builds MP4 stream URL', () => {
+    const result = getGo2RTCStreamUrl('http://zm.example.com:1984', 'camera1', 'mp4');
+    expect(result).toBe('http://zm.example.com:1984/api/stream.mp4?src=camera1');
+  });
+
+  it('builds MJPEG stream URL', () => {
+    const result = getGo2RTCStreamUrl('http://zm.example.com:1984', 'camera1', 'mjpeg');
+    expect(result).toBe('http://zm.example.com:1984/api/stream.mjpeg?src=camera1');
+  });
+
+  it('preserves https protocol', () => {
+    const result = getGo2RTCStreamUrl('https://zm.example.com:1984', 'camera1', 'hls');
+    expect(result).toBe('https://zm.example.com:1984/api/stream.hls?src=camera1');
+  });
+
+  it('includes auth token when provided', () => {
+    const result = getGo2RTCStreamUrl('http://zm.example.com:1984', 'camera1', 'mse', {
+      token: 'mytoken123',
+    });
+    expect(result).toBe('http://zm.example.com:1984/api/stream.mse?src=camera1&token=mytoken123');
+  });
+
+  it('encodes stream name with special characters', () => {
+    const result = getGo2RTCStreamUrl('http://zm.example.com:1984', 'front camera #1', 'hls');
+    expect(result).toContain('src=front+camera+%231');
+  });
+
+  it('preserves explicit port', () => {
+    const result = getGo2RTCStreamUrl('http://zm.example.com:8080', 'camera1', 'hls');
+    expect(result).toBe('http://zm.example.com:8080/api/stream.hls?src=camera1');
+  });
+
+  it('adds protocol if missing (defaults to http)', () => {
+    const result = getGo2RTCStreamUrl('zm.example.com:1984', 'camera1', 'mse');
+    expect(result).toBe('http://zm.example.com:1984/api/stream.mse?src=camera1');
   });
 });

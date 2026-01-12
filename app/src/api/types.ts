@@ -165,6 +165,13 @@ export const MonitorSchema = z.object({
   RTSPServer: z.coerce.string().nullable(),
   RTSPStreamName: z.string().nullable(),
   Importance: z.string().nullable(),
+  // Go2RTC fields (ZoneMinder 1.37+)
+  Go2RTCEnabled: z.coerce.boolean().optional().default(false),
+  Go2RTCType: z.enum(['WebRTC', 'MSE', 'HLS']).nullable().optional(),
+  RTSP2WebEnabled: z.coerce.boolean().optional().default(false),
+  RTSP2WebType: z.enum(['HLS', 'MSE']).nullable().optional(),
+  JanusEnabled: z.coerce.boolean().optional().default(false),
+  DefaultPlayer: z.string().nullable().optional(),
 });
 
 export const MonitorDataSchema = z.object({
@@ -483,6 +490,8 @@ export interface Profile {
   lastUsed?: number;
   timezone?: string;
   minStreamingPort?: number; // ZM_MIN_STREAMING_PORT from server config
+  go2rtcUrl?: string; // Go2RTC server URL (e.g., http://server:1984)
+  go2rtcAvailable?: boolean; // Whether Go2RTC is available on this server
 }
 
 // Error types

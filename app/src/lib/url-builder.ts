@@ -343,3 +343,108 @@ export function getZmsControlUrl(
 
   return buildUrl(portalUrl, '/index.php', params, token, apiUrl);
 }
+
+/**
+ * Build Go2RTC WebSocket URL for WebRTC signaling.
+ *
+ * Constructs a WebSocket URL for go2rtc WebRTC streaming with the format:
+ * ws://server:1984/api/ws?src=streamname&token=xxx
+ *
+ * Protocol conversion:
+ * - http:// → ws://
+ * - https:// → wss://
+ *
+ * @param go2rtcUrl - Go2RTC base URL (e.g., "http://server:1984")
+ * @param streamName - RTSP stream name from Monitor.RTSPStreamName
+ * @param options - Additional options
+ * @returns WebSocket URL for go2rtc signaling
+ *
+ * @example
+ * getGo2RTCWebSocketUrl('http://zm.example.com:1984', 'front_camera', { token: 'abc' })
+ * // Returns: 'ws://zm.example.com:1984/api/ws?src=front_camera&token=abc'
+ */
+export function getGo2RTCWebSocketUrl(
+  go2rtcUrl: string,
+  streamName: string,
+  options: {
+    token?: string;
+  } = {}
+): string {
+  const { token } = options;
+
+  // Normalize URL and parse
+  const normalized = normalizePortalUrl(go2rtcUrl);
+  const url = new URL(normalized);
+
+  // Convert http/https to ws/wss
+  url.protocol = url.protocol.replace('http', 'ws');
+
+  // Set path for WebSocket API
+  url.pathname = '/api/ws';
+
+  // Build query parameters
+  url.searchParams.set('src', streamName);
+  if (token) {
+    url.searchParams.set('token', token);
+  }
+
+  const finalUrl = url.toString();
+
+  log.http(
+    'Built Go2RTC WebSocket URL',
+    LogLevel.DEBUG,
+    { go2rtcUrl, streamName, hasToken: !!token, protocol: url.protocol }
+  );
+
+  return finalUrl;
+}
+
+/**
+ * Build Go2RTC HTTP stream URL for MSE/HLS/MP4/MJPEG fallback.
+ *
+ * Constructs an HTTP URL for go2rtc fallback streaming with the format:
+ * http://server:1984/api/stream.{type}?src=streamname&token=xxx
+ *
+ * @param go2rtcUrl - Go2RTC base URL (e.g., "http://server:1984")
+ * @param streamName - RTSP stream name from Monitor.RTSPStreamName
+ * @param streamType - Stream type (mse, hls, mp4, mjpeg)
+ * @param options - Additional options
+ * @returns HTTP stream URL for go2rtc
+ *
+ * @example
+ * getGo2RTCStreamUrl('http://zm.example.com:1984', 'front_camera', 'hls', { token: 'abc' })
+ * // Returns: 'http://zm.example.com:1984/api/stream.hls?src=front_camera&token=abc'
+ */
+export function getGo2RTCStreamUrl(
+  go2rtcUrl: string,
+  streamName: string,
+  streamType: 'mse' | 'hls' | 'mp4' | 'mjpeg',
+  options: {
+    token?: string;
+  } = {}
+): string {
+  const { token } = options;
+
+  // Normalize URL and parse
+  const normalized = normalizePortalUrl(go2rtcUrl);
+  const url = new URL(normalized);
+
+  // Set path for stream type
+  url.pathname = `/api/stream.${streamType}`;
+
+  // Build query parameters
+  url.searchParams.set('src', streamName);
+  if (token) {
+    url.searchParams.set('token', token);
+  }
+
+  const finalUrl = url.toString();
+
+  log.http(
+    'Built Go2RTC stream URL',
+    LogLevel.DEBUG,
+    { go2rtcUrl, streamName, streamType, hasToken: !!token }
+  );
+
+  return finalUrl;
+}
