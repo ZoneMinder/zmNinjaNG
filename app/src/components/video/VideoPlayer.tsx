@@ -17,6 +17,7 @@
 
 import { useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import type { Monitor, Profile } from '../../api/types';
 import { useSettingsStore } from '../../stores/settings';
 import { useGo2RTCStream } from '../../hooks/useGo2RTCStream';
@@ -61,7 +62,9 @@ export function VideoPlayer({
   const internalVideoRef = useRef<HTMLVideoElement>(null);
   // Use external ref if provided, otherwise use internal ref
   const videoRef = externalVideoRef || internalVideoRef;
-  const settings = useSettingsStore((state) => state.getProfileSettings(profile?.id || ''));
+  const settings = useSettingsStore(
+    useShallow((state) => state.getProfileSettings(profile?.id || ''))
+  );
 
   // Determine which streaming method to use
   const streamingMethod = useMemo(() => {
