@@ -592,6 +592,7 @@ export default function MonitorDetail() {
                   }}
                   title={t('monitor_detail.save_snapshot')}
                   aria-label={t('monitor_detail.save_snapshot')}
+                  data-testid="snapshot-button"
                 >
                   <Download className="h-5 w-5" />
                 </Button>
