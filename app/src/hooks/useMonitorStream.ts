@@ -26,6 +26,7 @@ import type { StreamOptions } from '../api/types';
 interface UseMonitorStreamOptions {
   monitorId: string;
   streamOptions?: Partial<StreamOptions>;
+  enabled?: boolean; // Enable/disable stream management (default: true)
 }
 
 interface UseMonitorStreamReturn {
@@ -45,6 +46,7 @@ interface UseMonitorStreamReturn {
 export function useMonitorStream({
   monitorId,
   streamOptions = {},
+  enabled = true,
 }: UseMonitorStreamOptions): UseMonitorStreamReturn {
   const { currentProfile, settings } = useCurrentProfile();
   const accessToken = useAuthStore((state) => state.accessToken);
@@ -61,6 +63,8 @@ export function useMonitorStream({
 
   // Regenerate connKey on mount and when monitor ID changes
   useEffect(() => {
+    if (!enabled) return;
+
     // Send CMD_QUIT for previous connKey before generating new one (skip on initial mount)
     if (!isInitialMountRef.current && prevConnKeyRef.current !== 0 && settings.viewMode === 'streaming' && currentProfile) {
       const controlUrl = getZmsControlUrl(
@@ -95,20 +99,21 @@ export function useMonitorStream({
 
   // Snapshot mode: periodic refresh
   useEffect(() => {
-    if (settings.viewMode !== 'snapshot') return;
+    if (!enabled || settings.viewMode !== 'snapshot') return;
 
     const interval = setInterval(() => {
       setCacheBuster(Date.now());
     }, settings.snapshotRefreshInterval * 1000);
 
     return () => clearInterval(interval);
-  }, [settings.viewMode, settings.snapshotRefreshInterval]);
+  }, [enabled, settings.viewMode, settings.snapshotRefreshInterval]);
 
   // Store cleanup parameters in ref to access latest values on unmount
   const cleanupParamsRef = useRef({ monitorId, connKey: 0, profile: currentProfile, token: accessToken, viewMode: settings.viewMode });
 
   // Update cleanup params whenever they change
   useEffect(() => {
+    if (!enabled) return;
     cleanupParamsRef.current = {
       monitorId,
       connKey,
@@ -116,7 +121,7 @@ export function useMonitorStream({
       token: accessToken,
       viewMode: settings.viewMode,
     };
-  }, [monitorId, connKey, currentProfile, accessToken, settings.viewMode]);
+  }, [enabled, monitorId, connKey, currentProfile, accessToken, settings.viewMode]);
 
   // Cleanup: send CMD_QUIT and abort image loading on unmount ONLY
   useEffect(() => {
@@ -173,6 +178,8 @@ export function useMonitorStream({
 
   // Preload images in snapshot mode to avoid flickering
   useEffect(() => {
+    if (!enabled) return;
+
     // In streaming mode or if no URL, just use the streamUrl directly
     if (settings.viewMode !== 'snapshot') {
       setDisplayedImageUrl(streamUrl);
@@ -199,7 +206,7 @@ export function useMonitorStream({
       setDisplayedImageUrl(streamUrl);
     };
     img.src = streamUrl;
-  }, [streamUrl, settings.viewMode]);
+  }, [enabled, streamUrl, settings.viewMode]);
 
   const regenerateConnection = () => {
     log.monitor(`Manually regenerating connection for monitor ${monitorId}`, LogLevel.WARN);

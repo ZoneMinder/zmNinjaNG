@@ -119,13 +119,14 @@ export function VideoPlayer({
     enabled: streamingMethod === 'webrtc',
   });
 
-  // MJPEG stream using existing hook
+  // MJPEG stream using existing hook (only enabled when using MJPEG)
   const mjpegStream = useMonitorStream({
     monitorId: monitor.Id,
     streamOptions: {
       maxfps: settings.streamMaxFps,
       scale: settings.streamScale,
     },
+    enabled: streamingMethod === 'mjpeg',
   });
 
   // Determine current status
