@@ -284,6 +284,15 @@
     "stream_scale": "Échelle de diffusion",
     "stream_scale_desc": "Pourcentage d'échelle de résolution pour les flux en direct",
     "recommended": "Recommandé",
+    "streaming_method": "Méthode de Diffusion",
+    "streaming_method_desc": "Choisir le protocole de diffusion pour les moniteurs",
+    "streaming_method_auto": "Auto (WebRTC avec repli)",
+    "streaming_method_webrtc": "WebRTC Seulement",
+    "streaming_method_mjpeg": "MJPEG Seulement",
+    "webrtc_fallback": "Activer le Repli WebRTC",
+    "webrtc_fallback_desc": "Basculer automatiquement vers MJPEG si WebRTC échoue",
+    "go2rtc_available": "Go2RTC disponible sur ce serveur",
+    "go2rtc_not_available": "Go2RTC non disponible. La diffusion WebRTC ne fonctionnera pas.",
     "system_info": "Infos système",
     "system_info_desc": "Informations sur le serveur ZoneMinder",
     "zm_version": "Version ZoneMinder",
@@ -771,5 +780,14 @@
     "task_in_progress": "tâche en cours",
     "tasks_in_progress": "tâches en cours",
     "clear_completed": "Effacer terminées"
+  },
+  "video": {
+    "streaming_webrtc": "WebRTC",
+    "streaming_mjpeg": "MJPEG",
+    "connecting": "Connexion...",
+    "connection_error": "Erreur de Connexion",
+    "connection_failed": "Échec de la connexion de diffusion",
+    "fallback_to_mjpeg": "Passage à MJPEG",
+    "retry_connection": "Réessayer la Connexion"
   }
 }

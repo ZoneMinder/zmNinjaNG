@@ -284,6 +284,15 @@
     "stream_scale": "流媒体缩放",
     "stream_scale_desc": "实时流的分辨率缩放百分比",
     "recommended": "推荐",
+    "streaming_method": "流媒体方式",
+    "streaming_method_desc": "选择监控的流媒体协议",
+    "streaming_method_auto": "自动（WebRTC 带回退）",
+    "streaming_method_webrtc": "仅 WebRTC",
+    "streaming_method_mjpeg": "仅 MJPEG",
+    "webrtc_fallback": "启用 WebRTC 回退",
+    "webrtc_fallback_desc": "如果 WebRTC 失败则自动切换至 MJPEG",
+    "go2rtc_available": "此服务器上 Go2RTC 可用",
+    "go2rtc_not_available": "Go2RTC 不可用。WebRTC 流媒体将无法工作。",
     "system_info": "系统信息",
     "system_info_desc": "ZoneMinder 服务器信息",
     "zm_version": "ZoneMinder 版本",
@@ -771,5 +780,14 @@
     "task_in_progress": "任务进行中",
     "tasks_in_progress": "任务进行中",
     "clear_completed": "清除已完成"
+  },
+  "video": {
+    "streaming_webrtc": "WebRTC",
+    "streaming_mjpeg": "MJPEG",
+    "connecting": "连接中...",
+    "connection_error": "连接错误",
+    "connection_failed": "流媒体连接失败",
+    "fallback_to_mjpeg": "切换至 MJPEG",
+    "retry_connection": "重试连接"
   }
 }
