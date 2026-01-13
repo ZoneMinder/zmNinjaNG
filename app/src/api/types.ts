@@ -167,9 +167,15 @@ export const MonitorSchema = z.object({
   Importance: z.string().nullable(),
   // Go2RTC fields (ZoneMinder 1.37+)
   Go2RTCEnabled: z.coerce.boolean().optional().default(false),
-  Go2RTCType: z.enum(['WebRTC', 'MSE', 'HLS']).nullable().optional(),
+  Go2RTCType: z.preprocess(
+    (val) => (val === '' ? null : val),
+    z.enum(['WebRTC', 'MSE', 'HLS']).nullable().optional()
+  ),
   RTSP2WebEnabled: z.coerce.boolean().optional().default(false),
-  RTSP2WebType: z.enum(['HLS', 'MSE']).nullable().optional(),
+  RTSP2WebType: z.preprocess(
+    (val) => (val === '' ? null : val),
+    z.enum(['HLS', 'MSE']).nullable().optional()
+  ),
   JanusEnabled: z.coerce.boolean().optional().default(false),
   DefaultPlayer: z.string().nullable().optional(),
 });
