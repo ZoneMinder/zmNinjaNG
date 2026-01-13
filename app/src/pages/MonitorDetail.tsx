@@ -7,7 +7,7 @@
 
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { getMonitor, getStreamUrl, getMonitors, getControl, getAlarmStatus, triggerAlarm, cancelAlarm, changeMonitorFunction } from '../api/monitors';
+import { getMonitor, getMonitors, getControl, getAlarmStatus, triggerAlarm, cancelAlarm, changeMonitorFunction } from '../api/monitors';
 import { getZmsControlUrl } from '../lib/url-builder';
 import { ZMS_COMMANDS } from '../lib/zm-constants';
 import { httpGet } from '../lib/http';
@@ -35,7 +35,6 @@ import { VideoPlayer } from '../components/video/VideoPlayer';
 import { controlMonitor } from '../api/monitors';
 import { filterEnabledMonitors } from '../lib/filters';
 import { log, LogLevel } from '../lib/logger';
-import { Platform } from '../lib/platform';
 import { parseMonitorRotation } from '../lib/monitor-rotation';
 
 export default function MonitorDetail() {
@@ -83,9 +82,6 @@ export default function MonitorDetail() {
 
   // Check if user came from another page (navigation state tracking)
   const referrer = location.state?.from as string | undefined;
-  const streamMode: 'jpeg' | 'stream' = 'jpeg';
-  // Default to false on Tauri/Native to avoid CORS issues unless we know we need it
-  const [corsAllowed, setCorsAllowed] = useState(Platform.isWeb);
   const [showPTZ, setShowPTZ] = useState(true);
   const [isAlarmUpdating, setIsAlarmUpdating] = useState(false);
   const [isModeUpdating, setIsModeUpdating] = useState(false);
@@ -167,7 +163,6 @@ export default function MonitorDetail() {
   useInsomnia({ enabled: settings.insomnia });
   const [scale, setScale] = useState(settings.streamScale);
   const [connKey, setConnKey] = useState(0);
-  const [displayedImageUrl, setDisplayedImageUrl] = useState<string>('');
   const [isSliding, setIsSliding] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -470,28 +465,6 @@ export default function MonitorDetail() {
   // Note: In MonitorDetail, we always force streaming mode (ignoring settings.viewMode)
   // because we are viewing a single monitor and don't need to worry about browser connection limits
   // Don't use cacheBuster in streaming mode - only connkey is needed for ZMS connection management
-  const streamUrl = currentProfile && monitor && connKey !== 0
-    ? getStreamUrl(currentProfile.cgiUrl, monitor.Monitor.Id, {
-      mode: streamMode,
-      scale,
-      maxfps: streamMode === 'jpeg' ? settings.streamMaxFps : undefined,
-      token: accessToken || undefined,
-      connkey: connKey,
-      // Always use multi-port in MonitorDetail (always streaming mode)
-      minStreamingPort: currentProfile.minStreamingPort,
-    })
-    : '';
-
-  // Preload images in snapshot mode to avoid flickering
-  // Note: Since we are forcing streaming, this effect is largely bypassed, but kept for safety
-  useEffect(() => {
-    if (!streamUrl) {
-      setDisplayedImageUrl('');
-      return;
-    }
-    setDisplayedImageUrl(streamUrl);
-  }, [streamUrl]);
-
   if (isLoading) {
     return (
       <div className="p-8 space-y-6">

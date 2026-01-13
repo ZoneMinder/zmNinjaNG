@@ -26,7 +26,7 @@ export interface UseGo2RTCStreamOptions {
   /** RTSP stream name from monitor */
   streamName: string;
   /** Video element ref to attach stream */
-  videoRef: React.RefObject<HTMLVideoElement>;
+  videoRef: React.RefObject<HTMLVideoElement | null>;
   /** Enable automatic fallback on WebRTC failure (default: true) */
   enableFallback?: boolean;
   /** Preferred protocols in order (default: ['webrtc', 'mse', 'hls', 'mjpeg']) */
@@ -85,7 +85,7 @@ export function useGo2RTCStream(options: UseGo2RTCStreamOptions): UseGo2RTCStrea
       try {
         videoRtcRef.current.onclose();
       } catch (err) {
-        log.videoPlayer('Error closing VideoRTC', LogLevel.WARN, { streamName }, err);
+        log.videoPlayer('Error closing VideoRTC', LogLevel.WARN, { streamName, error: err });
       }
       videoRtcRef.current = null;
     }
@@ -187,7 +187,7 @@ export function useGo2RTCStream(options: UseGo2RTCStreamOptions): UseGo2RTCStrea
           setState('connected');
         }
       } catch (err) {
-        log.videoPlayer('Connection failed', LogLevel.ERROR, { protocol, streamName }, err);
+        log.videoPlayer('Connection failed', LogLevel.ERROR, { protocol, streamName, error: err });
         setState('error');
         setError(err instanceof Error ? err.message : 'Connection failed');
 

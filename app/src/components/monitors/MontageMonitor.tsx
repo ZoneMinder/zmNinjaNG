@@ -11,11 +11,9 @@
  */
 
 import { useState, useEffect, useRef, memo } from 'react';
-import type { CSSProperties } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
 import type { Monitor, MonitorStatus, Profile } from '../../api/types';
-import { getStreamUrl } from '../../api/monitors';
 import { getZmsControlUrl } from '../../lib/url-builder';
 import { ZMS_COMMANDS } from '../../lib/zm-constants';
 import { httpGet } from '../../lib/http';
@@ -27,7 +25,6 @@ import { Badge } from '../ui/badge';
 import { VideoPlayer } from '../video/VideoPlayer';
 import { Clock, ChartGantt, Settings2, Download, Maximize2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { ZM_INTEGRATION } from '../../lib/zmng-constants';
 import { downloadSnapshotFromElement } from '../../lib/download';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
@@ -42,7 +39,7 @@ interface MontageMonitorProps {
   navigate: NavigateFunction;
   isFullscreen?: boolean;
   isEditing?: boolean;
-  objectFit?: CSSProperties['objectFit'];
+  objectFit?: 'contain' | 'cover' | 'fill' | 'none' | 'scale-down';
 }
 
 function MontageMonitorComponent({
@@ -62,8 +59,6 @@ function MontageMonitorComponent({
     useShallow((state) => state.getProfileSettings(currentProfile?.id || ''))
   );
   const [connKey, setConnKey] = useState(0);
-  const [cacheBuster, setCacheBuster] = useState(Date.now());
-  const [displayedImageUrl, setDisplayedImageUrl] = useState<string>('');
   const [imageLoaded, setImageLoaded] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const resolvedFit = objectFit ?? (isFullscreen ? 'cover' : 'contain');
@@ -107,20 +102,8 @@ function MontageMonitorComponent({
     const newKey = regenerateConnKey(monitorId);
     setConnKey(newKey);
     prevConnKeyRef.current = newKey;
-    setCacheBuster(Date.now());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [monitor.Id]); // ONLY regenerate when monitor ID changes
-
-  // Snapshot mode: periodic refresh
-  useEffect(() => {
-    if (settings.viewMode !== 'snapshot') return;
-
-    const interval = setInterval(() => {
-      setCacheBuster(Date.now());
-    }, settings.snapshotRefreshInterval * 1000);
-
-    return () => clearInterval(interval);
-  }, [settings.viewMode, settings.snapshotRefreshInterval]);
 
   // Store cleanup parameters in ref to access latest values on unmount
   const cleanupParamsRef = useRef({ monitorId: '', monitorName: '', connKey: 0, profile: currentProfile, token: accessToken, viewMode: settings.viewMode });
@@ -167,43 +150,6 @@ function MontageMonitorComponent({
       }
     };
   }, []); // Empty deps = only run on unmount
-
-  const streamUrl = currentProfile && connKey !== 0
-    ? getStreamUrl(currentProfile.cgiUrl, monitor.Id, {
-      mode: settings.viewMode === 'snapshot' ? 'single' : 'jpeg',
-      scale: settings.streamScale,
-      maxfps: settings.viewMode === 'streaming' ? settings.streamMaxFps : undefined,
-      token: accessToken || undefined,
-      connkey: connKey,
-      // Only use cacheBuster in snapshot mode to force refresh; streaming mode uses only connkey
-      cacheBuster: settings.viewMode === 'snapshot' ? cacheBuster : undefined,
-      // Only use multi-port in streaming mode, not snapshot
-      minStreamingPort:
-        settings.viewMode === 'streaming'
-          ? currentProfile.minStreamingPort
-          : undefined,
-    })
-    : '';
-
-  // Preload images in snapshot mode to avoid flickering
-  useEffect(() => {
-    if (settings.viewMode !== 'snapshot' || !streamUrl) {
-      setDisplayedImageUrl(streamUrl);
-      return;
-    }
-
-    // Preload the new image
-    const img = new Image();
-    img.onload = () => {
-      // Only update the displayed URL when the new image is fully loaded
-      setDisplayedImageUrl(streamUrl);
-    };
-    img.onerror = () => {
-      // On error, still update to trigger the error handler
-      setDisplayedImageUrl(streamUrl);
-    };
-    img.src = streamUrl;
-  }, [streamUrl, settings.viewMode]);
 
   return (
     <Card className={cn(

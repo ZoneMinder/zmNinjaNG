@@ -17,8 +17,7 @@
 
 import { useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Monitor } from '../../api/types';
-import type { Profile } from '../../types/profile';
+import type { Monitor, Profile } from '../../api/types';
 import { useSettingsStore } from '../../stores/settings';
 import { useGo2RTCStream } from '../../hooks/useGo2RTCStream';
 import { useMonitorStream } from '../../hooks/useMonitorStream';
@@ -30,7 +29,7 @@ export interface VideoPlayerProps {
   /** Monitor to display */
   monitor: Monitor;
   /** Current profile */
-  profile: Profile;
+  profile: Profile | null;
   /** CSS class for video element */
   className?: string;
   /** Object-fit style (contain, cover, fill, none, scale-down) */
@@ -44,7 +43,7 @@ export interface VideoPlayerProps {
   /** Additional controls */
   controls?: boolean;
   /** External ref to video element (optional, for snapshot capture) */
-  externalVideoRef?: React.RefObject<HTMLVideoElement>;
+  externalVideoRef?: React.RefObject<HTMLVideoElement | null>;
 }
 
 export function VideoPlayer({
@@ -62,12 +61,12 @@ export function VideoPlayer({
   const internalVideoRef = useRef<HTMLVideoElement>(null);
   // Use external ref if provided, otherwise use internal ref
   const videoRef = externalVideoRef || internalVideoRef;
-  const settings = useSettingsStore((state) => state.getProfileSettings(profile.id));
+  const settings = useSettingsStore((state) => state.getProfileSettings(profile?.id || ''));
 
   // Determine which streaming method to use
   const streamingMethod = useMemo(() => {
     const userPreference = settings.streamingMethod;
-    const go2rtcAvailable = profile.go2rtcAvailable ?? false;
+    const go2rtcAvailable = profile?.go2rtcAvailable ?? false;
     const monitorSupportsGo2RTC = monitor.Go2RTCEnabled ?? false;
 
     log.videoPlayer('Determining streaming method', LogLevel.DEBUG, {
@@ -109,11 +108,11 @@ export function VideoPlayer({
 
     // Default to MJPEG
     return 'mjpeg';
-  }, [settings.streamingMethod, profile.go2rtcAvailable, monitor.Go2RTCEnabled, monitor.Id, monitor.Name]);
+  }, [settings.streamingMethod, profile?.go2rtcAvailable, monitor.Go2RTCEnabled, monitor.Id, monitor.Name]);
 
   // WebRTC stream (only enabled if streamingMethod is 'webrtc')
   const go2rtcStream = useGo2RTCStream({
-    go2rtcUrl: profile.go2rtcUrl || '',
+    go2rtcUrl: profile?.go2rtcUrl || '',
     streamName: monitor.RTSPStreamName || monitor.Name || `monitor-${monitor.Id}`,
     videoRef,
     enableFallback: settings.webrtcFallbackEnabled,
