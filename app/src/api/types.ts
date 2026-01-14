@@ -165,6 +165,29 @@ export const MonitorSchema = z.object({
   RTSPServer: z.coerce.string().nullable(),
   RTSPStreamName: z.string().nullable(),
   Importance: z.string().nullable(),
+  // Go2RTC fields (ZoneMinder 1.37+)
+  Go2RTCEnabled: z.coerce.boolean().optional().default(false),
+  Go2RTCType: z.preprocess(
+    (val) => {
+      // Transform any falsy value (including '', 0, false, null, undefined) to null
+      // Also handle whitespace-only strings
+      if (!val || (typeof val === 'string' && !val.trim())) return null;
+      return val;
+    },
+    z.enum(['WebRTC', 'MSE', 'HLS']).nullable().optional()
+  ),
+  RTSP2WebEnabled: z.coerce.boolean().optional().default(false),
+  RTSP2WebType: z.preprocess(
+    (val) => {
+      // Transform any falsy value (including '', 0, false, null, undefined) to null
+      // Also handle whitespace-only strings
+      if (!val || (typeof val === 'string' && !val.trim())) return null;
+      return val;
+    },
+    z.enum(['HLS', 'MSE', 'WebRTC']).nullable().optional()
+  ),
+  JanusEnabled: z.coerce.boolean().optional().default(false),
+  DefaultPlayer: z.string().nullable().optional(),
 });
 
 export const MonitorDataSchema = z.object({
@@ -402,6 +425,15 @@ export const MinStreamingPortResponseSchema = z.object({
 
 export type MinStreamingPortResponse = z.infer<typeof MinStreamingPortResponseSchema>;
 
+// Go2RTC Path response schema for fetching ZM_GO2RTC_PATH config
+export const Go2RTCPathResponseSchema = z.object({
+  config: z.object({
+    Value: z.string(),
+  }),
+});
+
+export type Go2RTCPathResponse = z.infer<typeof Go2RTCPathResponseSchema>;
+
 // ZoneMinder server log types
 export const ZMLogSchema = z.object({
   Id: z.coerce.number(),
@@ -483,6 +515,7 @@ export interface Profile {
   lastUsed?: number;
   timezone?: string;
   minStreamingPort?: number; // ZM_MIN_STREAMING_PORT from server config
+  go2rtcUrl?: string; // ZM_GO2RTC_PATH from server config (full URL)
 }
 
 // Error types

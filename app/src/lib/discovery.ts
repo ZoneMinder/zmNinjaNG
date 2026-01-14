@@ -254,6 +254,6 @@ export async function discoverZoneminder(inputUrl: string): Promise<DiscoveryRes
     return {
         portalUrl: confirmedPortalUrl,
         apiUrl: confirmedApiUrl,
-        cgiUrl: confirmedCgiUrl
+        cgiUrl: confirmedCgiUrl,
     };
 }

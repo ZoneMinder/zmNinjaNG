@@ -7,7 +7,7 @@
 
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { getMonitor, getStreamUrl, getMonitors, getControl, getAlarmStatus, triggerAlarm, cancelAlarm, changeMonitorFunction } from '../api/monitors';
+import { getMonitor, getMonitors, getControl, getAlarmStatus, triggerAlarm, cancelAlarm, changeMonitorFunction } from '../api/monitors';
 import { getZmsControlUrl } from '../lib/url-builder';
 import { ZMS_COMMANDS } from '../lib/zm-constants';
 import { httpGet } from '../lib/http';
@@ -31,10 +31,10 @@ import { useTranslation } from 'react-i18next';
 import { useSwipeNavigation } from '../hooks/useSwipeNavigation';
 import { useInsomnia } from '../hooks/useInsomnia';
 import { PTZControls } from '../components/monitors/PTZControls';
+import { VideoPlayer } from '../components/video/VideoPlayer';
 import { controlMonitor } from '../api/monitors';
 import { filterEnabledMonitors } from '../lib/filters';
 import { log, LogLevel } from '../lib/logger';
-import { Platform } from '../lib/platform';
 import { parseMonitorRotation } from '../lib/monitor-rotation';
 
 export default function MonitorDetail() {
@@ -82,9 +82,6 @@ export default function MonitorDetail() {
 
   // Check if user came from another page (navigation state tracking)
   const referrer = location.state?.from as string | undefined;
-  const streamMode: 'jpeg' | 'stream' = 'jpeg';
-  // Default to false on Tauri/Native to avoid CORS issues unless we know we need it
-  const [corsAllowed, setCorsAllowed] = useState(Platform.isWeb);
   const [showPTZ, setShowPTZ] = useState(true);
   const [isAlarmUpdating, setIsAlarmUpdating] = useState(false);
   const [isModeUpdating, setIsModeUpdating] = useState(false);
@@ -166,9 +163,8 @@ export default function MonitorDetail() {
   useInsomnia({ enabled: settings.insomnia });
   const [scale, setScale] = useState(settings.streamScale);
   const [connKey, setConnKey] = useState(0);
-  const [displayedImageUrl, setDisplayedImageUrl] = useState<string>('');
   const [isSliding, setIsSliding] = useState(false);
-  const imgRef = useRef<HTMLImageElement>(null);
+  const mediaRef = useRef<HTMLImageElement | HTMLVideoElement>(null);
 
   // Track previous connKey to send CMD_QUIT before regenerating
   const prevConnKeyRef = useRef<number>(0);
@@ -458,9 +454,9 @@ export default function MonitorDetail() {
       }
 
       // Abort image loading to release browser connection
-      if (imgRef.current && params.monitorId) {
-        log.monitorDetail('Aborting image element', LogLevel.DEBUG, { monitorId: params.monitorId });
-        imgRef.current.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+      if (mediaRef.current && params.monitorId) {
+        log.monitorDetail('Aborting media element', LogLevel.DEBUG, { monitorId: params.monitorId });
+        mediaRef.current.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
       }
     };
   }, []); // Empty deps = only run on unmount
@@ -469,28 +465,6 @@ export default function MonitorDetail() {
   // Note: In MonitorDetail, we always force streaming mode (ignoring settings.viewMode)
   // because we are viewing a single monitor and don't need to worry about browser connection limits
   // Don't use cacheBuster in streaming mode - only connkey is needed for ZMS connection management
-  const streamUrl = currentProfile && monitor && connKey !== 0
-    ? getStreamUrl(currentProfile.cgiUrl, monitor.Monitor.Id, {
-      mode: streamMode,
-      scale,
-      maxfps: streamMode === 'jpeg' ? settings.streamMaxFps : undefined,
-      token: accessToken || undefined,
-      connkey: connKey,
-      // Always use multi-port in MonitorDetail (always streaming mode)
-      minStreamingPort: currentProfile.minStreamingPort,
-    })
-    : '';
-
-  // Preload images in snapshot mode to avoid flickering
-  // Note: Since we are forcing streaming, this effect is largely bypassed, but kept for safety
-  useEffect(() => {
-    if (!streamUrl) {
-      setDisplayedImageUrl('');
-      return;
-    }
-    setDisplayedImageUrl(streamUrl);
-  }, [streamUrl]);
-
   if (isLoading) {
     return (
       <div className="p-8 space-y-6">
@@ -500,7 +474,7 @@ export default function MonitorDetail() {
     );
   }
 
-  if (error || !monitor) {
+  if (error || !monitor || !currentProfile) {
     return (
       <div className="p-8">
         <div className="p-4 bg-destructive/10 text-destructive rounded-lg flex items-center gap-2">
@@ -592,88 +566,66 @@ export default function MonitorDetail() {
             alarmBorderClass
           )}
         >
-          <img
-            ref={imgRef}
-            crossOrigin={corsAllowed ? "anonymous" : undefined}
-            src={displayedImageUrl || streamUrl}
-            alt={monitor.Monitor.Name}
-            className="w-full h-full"
-            style={{ objectFit: settings.monitorDetailFeedFit }}
-            data-testid="monitor-player"
-            onError={(e) => {
-              const img = e.target as HTMLImageElement;
-
-              // Check for CORS failure first
-              if (corsAllowed) {
-                log.monitorDetail('Image load failed with CORS enabled, disabling CORS and retrying', LogLevel.WARN);
-                setCorsAllowed(false);
-                // Regenerate connkey to force new connection (don't use cacheBuster in streaming mode)
-                const newKey = regenerateConnKey(monitor.Monitor.Id);
-                setConnKey(newKey);
-                return;
-              }
-
-              // Only retry if we haven't retried too recently
-              if (!img.dataset.retrying) {
-                img.dataset.retrying = "true";
-                log.monitorDetail('Stream failed, regenerating connkey', LogLevel.WARN);
-                regenerateConnKey(monitor.Monitor.Id);
-                toast.error(t('monitor_detail.stream_lost'));
-
-                setTimeout(() => {
-                  delete img.dataset.retrying;
-                }, 5000);
-              }
-            }}
+          <VideoPlayer
+            monitor={monitor.Monitor}
+            profile={currentProfile}
+            externalMediaRef={mediaRef}
+            objectFit={settings.monitorDetailFeedFit}
+            showStatus={true}
+            className="data-[testid=monitor-player]"
           />
-
-          {/* Controls Overlay */}
-          <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300">
-            <div className="flex items-center justify-between text-white">
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-white hover:bg-white/20"
-                  onClick={() => {
-                    if (imgRef.current) {
-                      downloadSnapshotFromElement(imgRef.current, monitor.Monitor.Name)
-                        .then(() => toast.success(t('monitor_detail.snapshot_saved', { name: monitor.Monitor.Name })))
-                        .catch(() => toast.error(t('monitor_detail.snapshot_failed')));
-                    }
-                  }}
-                  title={t('monitor_detail.save_snapshot')}
-                  aria-label={t('monitor_detail.save_snapshot')}
-                >
-                  <Download className="h-5 w-5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-white hover:bg-white/20"
-                  onClick={() => navigate(`/events?monitorId=${monitor.Monitor.Id}`)}
-                  title={t('monitor_detail.view_events')}
-                  aria-label={t('monitor_detail.view_events')}
-                >
-                  <Clock className="h-5 w-5" />
-                </Button>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-white hover:bg-white/20 text-xs"
-                  onClick={() => setScale(scale === settings.streamScale ? 150 : settings.streamScale)}
-                >
-                  {scale}%
-                </Button>
-                <Button variant="ghost" size="icon" className="text-white hover:bg-white/20" aria-label={t('monitor_detail.maximize')}>
-                  <Maximize2 className="h-5 w-5" />
-                </Button>
-              </div>
-            </div>
-          </div>
         </Card>
+
+        {/* Video Controls Bar - below video to not interfere with native video controls */}
+        <div className="w-full max-w-5xl mt-2 px-2 flex items-center justify-between">
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => {
+                if (mediaRef.current) {
+                  downloadSnapshotFromElement(mediaRef.current, monitor.Monitor.Name)
+                    .then(() => toast.success(t('monitor_detail.snapshot_saved', { name: monitor.Monitor.Name })))
+                    .catch(() => toast.error(t('monitor_detail.snapshot_failed')));
+                }
+              }}
+              title={t('monitor_detail.save_snapshot')}
+              aria-label={t('monitor_detail.save_snapshot')}
+              data-testid="snapshot-button"
+            >
+              <Download className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => navigate(`/events?monitorId=${monitor.Monitor.Id}`)}
+              title={t('monitor_detail.view_events')}
+              aria-label={t('monitor_detail.view_events')}
+            >
+              <Clock className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => setScale(scale === settings.streamScale ? 150 : settings.streamScale)}
+            >
+              {scale}%
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              aria-label={t('monitor_detail.maximize')}
+            >
+              <Maximize2 className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
 
         {/* PTZ Controls */}
         {monitor.Monitor.Controllable === '1' && (

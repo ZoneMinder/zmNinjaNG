@@ -323,18 +323,33 @@ export async function downloadSnapshot(imageUrl: string, monitorName: string): P
  * Capture current frame from an img element and download.
  */
 export async function downloadSnapshotFromElement(
-  imgElement: HTMLImageElement,
+  element: HTMLImageElement | HTMLVideoElement,
   monitorName: string
 ): Promise<void> {
   try {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
     const filename = `${monitorName}_${timestamp}.jpg`;
-    const imageUrl = imgElement.src;
 
-    if (imageUrl.startsWith('data:')) {
-      await downloadSnapshot(imageUrl, monitorName);
+    // For video elements, capture current frame to canvas
+    if (element instanceof HTMLVideoElement) {
+      const canvas = document.createElement('canvas');
+      canvas.width = element.videoWidth || element.clientWidth;
+      canvas.height = element.videoHeight || element.clientHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        throw new Error('Failed to get canvas context');
+      }
+      ctx.drawImage(element, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+      await downloadSnapshot(dataUrl, monitorName);
     } else {
-      await downloadFile(imageUrl, filename);
+      // For image elements, use existing src
+      const imageUrl = element.src;
+      if (imageUrl.startsWith('data:')) {
+        await downloadSnapshot(imageUrl, monitorName);
+      } else {
+        await downloadFile(imageUrl, filename);
+      }
     }
   } catch (error) {
     log.download('[Download] Failed to capture snapshot', LogLevel.ERROR, error);

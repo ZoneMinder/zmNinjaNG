@@ -55,4 +55,72 @@ describe('Settings Store', () => {
     const settings = useSettingsStore.getState().getProfileSettings(profileId);
     expect(settings.eventMontageLayouts).toEqual(layout);
   });
+
+  describe('Streaming method settings', () => {
+    it('defaults to auto streaming method', () => {
+      const settings = useSettingsStore.getState().getProfileSettings('new-profile');
+      expect(settings.streamingMethod).toBe('auto');
+      expect(settings.webrtcFallbackEnabled).toBe(true);
+    });
+
+    it('updates streaming method to mjpeg from default', () => {
+      const profileId = 'profile-1';
+      useSettingsStore.getState().updateProfileSettings(profileId, {
+        streamingMethod: 'mjpeg',
+      });
+
+      const settings = useSettingsStore.getState().getProfileSettings(profileId);
+      expect(settings.streamingMethod).toBe('mjpeg');
+    });
+
+    it('updates streaming method back to auto', () => {
+      const profileId = 'profile-1';
+      // First set to mjpeg
+      useSettingsStore.getState().updateProfileSettings(profileId, {
+        streamingMethod: 'mjpeg',
+      });
+      // Then back to auto
+      useSettingsStore.getState().updateProfileSettings(profileId, {
+        streamingMethod: 'auto',
+      });
+
+      const settings = useSettingsStore.getState().getProfileSettings(profileId);
+      expect(settings.streamingMethod).toBe('auto');
+    });
+
+    it('disables webrtc fallback', () => {
+      const profileId = 'profile-1';
+      useSettingsStore.getState().updateProfileSettings(profileId, {
+        webrtcFallbackEnabled: false,
+      });
+
+      const settings = useSettingsStore.getState().getProfileSettings(profileId);
+      expect(settings.webrtcFallbackEnabled).toBe(false);
+    });
+
+    it('updates both streaming settings together', () => {
+      const profileId = 'profile-1';
+      useSettingsStore.getState().updateProfileSettings(profileId, {
+        streamingMethod: 'mjpeg',
+        webrtcFallbackEnabled: false,
+      });
+
+      const settings = useSettingsStore.getState().getProfileSettings(profileId);
+      expect(settings.streamingMethod).toBe('mjpeg');
+      expect(settings.webrtcFallbackEnabled).toBe(false);
+    });
+
+    it('persists streaming method across store resets', () => {
+      const profileId = 'profile-1';
+      useSettingsStore.getState().updateProfileSettings(profileId, {
+        streamingMethod: 'mjpeg',
+        webrtcFallbackEnabled: false,
+      });
+
+      // Verify settings are stored
+      const storedSettings = useSettingsStore.getState().profileSettings[profileId];
+      expect(storedSettings.streamingMethod).toBe('mjpeg');
+      expect(storedSettings.webrtcFallbackEnabled).toBe(false);
+    });
+  });
 });

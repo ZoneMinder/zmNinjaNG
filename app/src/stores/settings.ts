@@ -8,6 +8,8 @@ export type DisplayMode = 'normal' | 'compact';
 export type MonitorFeedFit = 'contain' | 'cover' | 'fill' | 'none' | 'scale-down';
 export type EventsViewMode = 'list' | 'montage';
 export type ThemePreference = 'dark' | 'light' | 'system';
+export type StreamingMethod = 'auto' | 'mjpeg';
+export type WebRTCProtocol = 'webrtc' | 'mse' | 'hls';
 
 export interface ProfileSettings {
   viewMode: ViewMode;
@@ -42,6 +44,12 @@ export interface ProfileSettings {
   };
   disableLogRedaction: boolean;
   lastRoute: string; // Last visited route for this profile
+  // Streaming method: 'auto' tries WebRTC/MSE/HLS for Go2RTC-enabled monitors, 'mjpeg' forces MJPEG for all
+  streamingMethod: StreamingMethod;
+  // Whether to enable fallback from WebRTC to MSE to HLS when protocols fail
+  webrtcFallbackEnabled: boolean;
+  // Which protocols to try for WebRTC streaming (video-rtc runs them in parallel)
+  webrtcProtocols: WebRTCProtocol[];
 }
 
 interface SettingsState {
@@ -108,6 +116,12 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   },
   disableLogRedaction: false,
   lastRoute: '/monitors',
+  // Auto mode: use WebRTC/MSE/HLS for Go2RTC-enabled monitors, MJPEG for others
+  streamingMethod: 'auto',
+  // Enable fallback through protocols when one fails
+  webrtcFallbackEnabled: true,
+  // Default: try all protocols (video-rtc runs them in parallel, first to produce video wins)
+  webrtcProtocols: ['webrtc', 'mse', 'hls'],
 };
 
 export const useSettingsStore = create<SettingsState>()(

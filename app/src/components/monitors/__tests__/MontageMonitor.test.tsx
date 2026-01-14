@@ -41,6 +41,8 @@ vi.mock('../../../lib/download', () => ({
 vi.mock('../../../lib/logger', () => ({
   log: {
     montageMonitor: vi.fn(),
+    videoPlayer: vi.fn(),
+    monitor: vi.fn(),
   },
   LogLevel: {
     DEBUG: 0,
@@ -53,6 +55,10 @@ vi.mock('../../../lib/logger', () => ({
 vi.mock('../../../lib/monitor-rotation', () => ({
   getMonitorAspectRatio: (width: number, height: number) =>
     `${width}/${height}`,
+}));
+
+vi.mock('../../video/VideoPlayer', () => ({
+  VideoPlayer: () => <div data-testid="video-player">Mock VideoPlayer</div>,
 }));
 
 describe('MontageMonitor', () => {
