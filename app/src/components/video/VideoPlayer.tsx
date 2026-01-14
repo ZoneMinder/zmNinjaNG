@@ -160,13 +160,21 @@ export function VideoPlayer({
     enabled: effectiveStreamingMethod === 'mjpeg',
   });
 
-  // Sync internal imgRef with external media ref for snapshot capture
+  // Sync internal refs with external media ref for snapshot capture
   useEffect(() => {
-    if (externalMediaRef && effectiveStreamingMethod === 'mjpeg' && imgRef.current) {
-      // Cast to mutable ref to allow assignment
+    if (!externalMediaRef) return;
+
+    if (effectiveStreamingMethod === 'mjpeg' && imgRef.current) {
+      // For MJPEG, use the img element
       (externalMediaRef as React.MutableRefObject<HTMLImageElement | HTMLVideoElement | null>).current = imgRef.current;
+    } else if (effectiveStreamingMethod === 'webrtc') {
+      // For WebRTC, get the video element from the Go2RTC stream
+      const videoElement = go2rtcStream.getVideoElement();
+      if (videoElement) {
+        (externalMediaRef as React.MutableRefObject<HTMLImageElement | HTMLVideoElement | null>).current = videoElement;
+      }
     }
-  }, [externalMediaRef, effectiveStreamingMethod, mjpegStream.streamUrl]);
+  }, [externalMediaRef, effectiveStreamingMethod, mjpegStream.streamUrl, go2rtcStream.state, go2rtcStream]);
 
   // Determine current status
   const status = useMemo(() => {

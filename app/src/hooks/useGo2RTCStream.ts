@@ -63,6 +63,8 @@ export interface UseGo2RTCStreamResult {
   toggleMute: () => boolean;
   /** Check if currently muted */
   isMuted: () => boolean;
+  /** Get the underlying video element (for snapshot capture) */
+  getVideoElement: () => HTMLVideoElement | null;
 }
 
 export function useGo2RTCStream(options: UseGo2RTCStreamOptions): UseGo2RTCStreamResult {
@@ -360,6 +362,11 @@ export function useGo2RTCStream(options: UseGo2RTCStreamOptions): UseGo2RTCStrea
     return videoRtcRef.current?.video?.muted ?? true;
   }, []);
 
+  // Get the underlying video element (for snapshot capture)
+  const getVideoElement = useCallback(() => {
+    return videoRtcRef.current?.video ?? null;
+  }, []);
+
   return {
     state,
     error,
@@ -367,5 +374,6 @@ export function useGo2RTCStream(options: UseGo2RTCStreamOptions): UseGo2RTCStrea
     stop,
     toggleMute,
     isMuted,
+    getVideoElement,
   };
 }

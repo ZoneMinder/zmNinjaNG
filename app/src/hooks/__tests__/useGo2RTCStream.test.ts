@@ -336,6 +336,63 @@ describe('useGo2RTCStream', () => {
     });
   });
 
+  describe('Video element access', () => {
+    it('returns null when no video element exists', async () => {
+      const containerRef = { current: containerElement };
+      const { result } = renderHook(() =>
+        useGo2RTCStream({
+          go2rtcUrl: 'http://localhost:1984',
+          monitorId: '1',
+          containerRef,
+          enabled: false,
+        })
+      );
+
+      expect(result.current.getVideoElement()).toBeNull();
+    });
+
+    it('returns video element when available', async () => {
+      const containerRef = { current: containerElement };
+      const mockVideoElement = document.createElement('video');
+
+      // Update mock to include video element
+      (VideoRTC as any).mockImplementation(function (this: any) {
+        this.mode = '';
+        this.media = '';
+        this.src = '';
+        this.style = {};
+        this.background = false;
+        this.video = mockVideoElement;
+        this.oninit = vi.fn();
+        this.onconnect = vi.fn();
+        this.ondisconnect = vi.fn();
+        this.onopen = vi.fn();
+        this.onclose = vi.fn();
+        this.onpcvideo = vi.fn();
+        this.play = vi.fn().mockResolvedValue(undefined);
+        this.parentNode = null;
+        mockVideoRtcInstances.push(this);
+        return this;
+      });
+
+      const { result } = renderHook(() =>
+        useGo2RTCStream({
+          go2rtcUrl: 'http://localhost:1984',
+          monitorId: '1',
+          containerRef,
+          enabled: true,
+        })
+      );
+
+      await waitFor(() => {
+        expect(VideoRTC).toHaveBeenCalled();
+      });
+
+      // Should return the video element
+      expect(result.current.getVideoElement()).toBe(mockVideoElement);
+    });
+  });
+
   describe('State transitions', () => {
     it('transitions: idle → connecting → connected', async () => {
       const containerRef = { current: containerElement };
