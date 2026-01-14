@@ -10,69 +10,38 @@ import { Checkbox } from '../ui/checkbox';
 import { useSettingsStore, type WebRTCProtocol } from '../../stores/settings';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 
+// Protocol checkbox configuration
+const PROTOCOLS: { id: WebRTCProtocol; label: string; descKey: string }[] = [
+    { id: 'webrtc', label: 'WebRTC', descKey: 'settings.protocol_webrtc_desc' },
+    { id: 'mse', label: 'MSE', descKey: 'settings.protocol_mse_desc' },
+    { id: 'hls', label: 'HLS', descKey: 'settings.protocol_hls_desc' },
+];
+
 export function VideoSettings() {
     const { t } = useTranslation();
-
     const { currentProfile, settings } = useCurrentProfile();
     const updateSettings = useSettingsStore((state) => state.updateProfileSettings);
 
-    const handleViewModeChange = (checked: boolean) => {
+    // Generic setting update helper
+    const update = <K extends keyof Parameters<typeof updateSettings>[1]>(
+        key: K,
+        value: Parameters<typeof updateSettings>[1][K]
+    ) => {
         if (!currentProfile) return;
-        updateSettings(currentProfile.id, {
-            viewMode: checked ? 'streaming' : 'snapshot',
-        });
-    };
-
-    const handleStreamMaxFpsChange = (value: number) => {
-        if (!currentProfile) return;
-        updateSettings(currentProfile.id, {
-            streamMaxFps: value,
-        });
-    };
-
-    const handleStreamScaleChange = (value: number) => {
-        if (!currentProfile) return;
-        updateSettings(currentProfile.id, {
-            streamScale: value,
-        });
-    };
-
-    const handleRefreshIntervalChange = (value: number) => {
-        if (!currentProfile) return;
-        updateSettings(currentProfile.id, {
-            snapshotRefreshInterval: value,
-        });
-    };
-
-    const handleStreamingMethodChange = (enableGo2RTC: boolean) => {
-        if (!currentProfile) return;
-        updateSettings(currentProfile.id, {
-            streamingMethod: enableGo2RTC ? 'auto' : 'mjpeg',
-        });
+        updateSettings(currentProfile.id, { [key]: value });
     };
 
     const handleProtocolChange = (protocol: WebRTCProtocol, enabled: boolean) => {
         if (!currentProfile) return;
-        const currentProtocols = settings.webrtcProtocols || ['webrtc', 'mse', 'hls'];
-        let newProtocols: WebRTCProtocol[];
+        const current = settings.webrtcProtocols || ['webrtc', 'mse', 'hls'];
+        const updated = enabled
+            ? current.includes(protocol) ? current : [...current, protocol]
+            : current.filter(p => p !== protocol);
 
-        if (enabled) {
-            // Add protocol if not already present
-            newProtocols = currentProtocols.includes(protocol)
-                ? currentProtocols
-                : [...currentProtocols, protocol];
-        } else {
-            // Remove protocol, but ensure at least one remains
-            newProtocols = currentProtocols.filter(p => p !== protocol);
-            if (newProtocols.length === 0) {
-                // Don't allow removing the last protocol
-                return;
-            }
+        // Ensure at least one protocol remains
+        if (updated.length > 0) {
+            updateSettings(currentProfile.id, { webrtcProtocols: updated });
         }
-
-        updateSettings(currentProfile.id, {
-            webrtcProtocols: newProtocols,
-        });
     };
 
     return (
@@ -117,7 +86,7 @@ export function VideoSettings() {
                         <Switch
                             id="view-mode"
                             checked={settings.viewMode === 'streaming'}
-                            onCheckedChange={handleViewModeChange}
+                            onCheckedChange={(checked) => update('viewMode', checked ? 'streaming' : 'snapshot')}
                             data-testid="settings-view-mode-switch"
                         />
                         <div className="flex items-center gap-2 text-sm">
@@ -148,12 +117,11 @@ export function VideoSettings() {
                     <Switch
                         id="go2rtc-mode"
                         checked={settings.streamingMethod === 'auto'}
-                        onCheckedChange={handleStreamingMethodChange}
+                        onCheckedChange={(enabled) => update('streamingMethod', enabled ? 'auto' : 'mjpeg')}
                         data-testid="settings-go2rtc-switch"
                     />
                 </div>
 
-                {/* WebRTC Protocol Selection - Only shown when Go2RTC is enabled */}
                 {settings.streamingMethod === 'auto' && (
                     <div className="space-y-3 p-4 rounded-lg border bg-muted/50 ml-4">
                         <div>
@@ -165,59 +133,28 @@ export function VideoSettings() {
                             </p>
                         </div>
                         <div className="space-y-3">
-                            <div className="flex items-start space-x-3">
-                                <Checkbox
-                                    id="protocol-webrtc"
-                                    checked={settings.webrtcProtocols?.includes('webrtc') ?? true}
-                                    onCheckedChange={(checked) => handleProtocolChange('webrtc', checked === true)}
-                                    data-testid="protocol-webrtc-checkbox"
-                                />
-                                <div className="grid gap-0.5 leading-none">
-                                    <Label htmlFor="protocol-webrtc" className="font-medium cursor-pointer">
-                                        WebRTC
-                                    </Label>
-                                    <p className="text-xs text-muted-foreground">
-                                        {t('settings.protocol_webrtc_desc')}
-                                    </p>
+                            {PROTOCOLS.map(({ id, label, descKey }) => (
+                                <div key={id} className="flex items-start space-x-3">
+                                    <Checkbox
+                                        id={`protocol-${id}`}
+                                        checked={settings.webrtcProtocols?.includes(id) ?? true}
+                                        onCheckedChange={(checked) => handleProtocolChange(id, checked === true)}
+                                        data-testid={`protocol-${id}-checkbox`}
+                                    />
+                                    <div className="grid gap-0.5 leading-none">
+                                        <Label htmlFor={`protocol-${id}`} className="font-medium cursor-pointer">
+                                            {label}
+                                        </Label>
+                                        <p className="text-xs text-muted-foreground">
+                                            {t(descKey)}
+                                        </p>
+                                    </div>
                                 </div>
-                            </div>
-                            <div className="flex items-start space-x-3">
-                                <Checkbox
-                                    id="protocol-mse"
-                                    checked={settings.webrtcProtocols?.includes('mse') ?? true}
-                                    onCheckedChange={(checked) => handleProtocolChange('mse', checked === true)}
-                                    data-testid="protocol-mse-checkbox"
-                                />
-                                <div className="grid gap-0.5 leading-none">
-                                    <Label htmlFor="protocol-mse" className="font-medium cursor-pointer">
-                                        MSE
-                                    </Label>
-                                    <p className="text-xs text-muted-foreground">
-                                        {t('settings.protocol_mse_desc')}
-                                    </p>
-                                </div>
-                            </div>
-                            <div className="flex items-start space-x-3">
-                                <Checkbox
-                                    id="protocol-hls"
-                                    checked={settings.webrtcProtocols?.includes('hls') ?? true}
-                                    onCheckedChange={(checked) => handleProtocolChange('hls', checked === true)}
-                                    data-testid="protocol-hls-checkbox"
-                                />
-                                <div className="grid gap-0.5 leading-none">
-                                    <Label htmlFor="protocol-hls" className="font-medium cursor-pointer">
-                                        HLS
-                                    </Label>
-                                    <p className="text-xs text-muted-foreground">
-                                        {t('settings.protocol_hls_desc')}
-                                    </p>
-                                </div>
-                            </div>
+                            ))}
                         </div>
                     </div>
                 )}
 
-                {/* Snapshot Refresh Interval */}
                 {settings.viewMode === 'snapshot' && (
                     <div className="space-y-3 p-4 rounded-lg border bg-muted/50">
                         <div>
@@ -235,39 +172,27 @@ export function VideoSettings() {
                                 min="1"
                                 max="30"
                                 value={settings.snapshotRefreshInterval}
-                                onChange={(e) => handleRefreshIntervalChange(Number(e.target.value))}
+                                onChange={(e) => update('snapshotRefreshInterval', Number(e.target.value))}
                                 className="w-24"
                                 data-testid="settings-refresh-interval"
                             />
                             <span className="text-sm text-muted-foreground">{t('settings.seconds')}</span>
                             <div className="flex flex-wrap gap-2 sm:ml-auto">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleRefreshIntervalChange(1)}
-                                >
-                                    1s
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleRefreshIntervalChange(3)}
-                                >
-                                    3s ({t('settings.default')})
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleRefreshIntervalChange(5)}
-                                >
-                                    5s
-                                </Button>
+                                {[1, 3, 5].map((val) => (
+                                    <Button
+                                        key={val}
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => update('snapshotRefreshInterval', val)}
+                                    >
+                                        {val}s{val === 3 ? ` (${t('settings.default')})` : ''}
+                                    </Button>
+                                ))}
                             </div>
                         </div>
                     </div>
                 )}
 
-                {/* Stream FPS */}
                 <div className="space-y-3 p-4 rounded-lg border bg-muted/50">
                     <div>
                         <Label htmlFor="stream-fps" className="text-base font-semibold">
@@ -284,49 +209,29 @@ export function VideoSettings() {
                             min="1"
                             max="30"
                             value={settings.streamMaxFps}
-                            onChange={(e) => handleStreamMaxFpsChange(Number(e.target.value))}
+                            onChange={(e) => update('streamMaxFps', Number(e.target.value))}
                             className="w-24"
                             data-testid="stream-fps-input"
                         />
                         <span className="text-sm text-muted-foreground">{t('settings.fps_label')}</span>
                         <div className="flex flex-wrap gap-2 sm:ml-auto">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleStreamMaxFpsChange(5)}
-                                data-testid="stream-fps-5"
-                            >
-                                {t('settings.fps_option', { value: 5 })}
-                            </Button>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleStreamMaxFpsChange(10)}
-                                data-testid="stream-fps-10"
-                            >
-                                {t('settings.fps_option_default', { value: 10 })}
-                            </Button>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleStreamMaxFpsChange(15)}
-                                data-testid="stream-fps-15"
-                            >
-                                {t('settings.fps_option', { value: 15 })}
-                            </Button>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleStreamMaxFpsChange(30)}
-                                data-testid="stream-fps-30"
-                            >
-                                {t('settings.fps_option', { value: 30 })}
-                            </Button>
+                            {[5, 10, 15, 30].map((val) => (
+                                <Button
+                                    key={val}
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => update('streamMaxFps', val)}
+                                    data-testid={`stream-fps-${val}`}
+                                >
+                                    {val === 10
+                                        ? t('settings.fps_option_default', { value: val })
+                                        : t('settings.fps_option', { value: val })}
+                                </Button>
+                            ))}
                         </div>
                     </div>
                 </div>
 
-                {/* Stream Scale */}
                 <div className="space-y-3 p-4 rounded-lg border bg-muted/50">
                     <div>
                         <Label htmlFor="stream-scale" className="text-base font-semibold">
@@ -344,39 +249,21 @@ export function VideoSettings() {
                             max="100"
                             step="10"
                             value={settings.streamScale}
-                            onChange={(e) => handleStreamScaleChange(Number(e.target.value))}
+                            onChange={(e) => update('streamScale', Number(e.target.value))}
                             className="w-24"
                         />
                         <span className="text-sm text-muted-foreground">%</span>
                         <div className="flex flex-wrap gap-2 sm:ml-auto">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleStreamScaleChange(25)}
-                            >
-                                25%
-                            </Button>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleStreamScaleChange(50)}
-                            >
-                                50% ({t('settings.default')})
-                            </Button>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleStreamScaleChange(75)}
-                            >
-                                75%
-                            </Button>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleStreamScaleChange(100)}
-                            >
-                                100%
-                            </Button>
+                            {[25, 50, 75, 100].map((val) => (
+                                <Button
+                                    key={val}
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => update('streamScale', val)}
+                                >
+                                    {val}%{val === 50 ? ` (${t('settings.default')})` : ''}
+                                </Button>
+                            ))}
                         </div>
                     </div>
                 </div>
