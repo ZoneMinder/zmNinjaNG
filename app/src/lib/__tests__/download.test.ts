@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { downloadFile } from '../download';
+import { downloadFile, normalizeZmsSnapshotUrl } from '../download';
 import { Platform } from '../platform';
 
 // Mock dependencies
@@ -23,15 +23,13 @@ vi.mock('../platform', () => ({
     },
 }));
 
-// Mock Capacitor dynamic imports
-vi.mock('@capacitor/core', () => ({
-    CapacitorHttp: {
-        request: vi.fn().mockResolvedValue({
-            status: 200,
-            data: 'base64_encoded_video_data',
-            headers: { 'content-type': 'video/mp4' },
-        }),
-    },
+vi.mock('../http', () => ({
+    httpRequest: vi.fn().mockResolvedValue({
+        status: 200,
+        data: 'base64_encoded_video_data',
+        headers: { 'content-type': 'video/mp4' },
+        statusText: 'OK',
+    }),
 }));
 
 vi.mock('@capacitor/filesystem', () => ({
@@ -60,22 +58,20 @@ describe('Mobile Download Logic', () => {
         (Platform as any).isTauri = false;
     });
 
-    it('should download file using CapacitorHttp on mobile', async () => {
+    it('should download file using unified HTTP on mobile', async () => {
         const onProgress = vi.fn();
 
         // Trigger the download
         await downloadFile('http://example.com/video.mp4', 'test_video.mp4', { onProgress });
 
-        // Get mocked modules
-        const { CapacitorHttp } = await import('@capacitor/core');
+        const { httpRequest } = await import('../http');
         const { Filesystem } = await import('@capacitor/filesystem');
         const { Media } = await import('@capacitor-community/media');
 
-        // Verify CapacitorHttp was called
-        expect(CapacitorHttp.request).toHaveBeenCalledWith({
+        // Verify httpRequest was called
+        expect(httpRequest).toHaveBeenCalledWith('http://example.com/video.mp4', {
             method: 'GET',
-            url: 'http://example.com/video.mp4',
-            responseType: 'blob',
+            responseType: 'base64',
         });
 
         // Verify file was written to documents with base64 data
@@ -89,5 +85,35 @@ describe('Mobile Download Logic', () => {
         expect(Media.saveVideo).toHaveBeenCalledWith({
             path: 'file:///documents/test.mp4'
         });
+    });
+});
+
+describe('ZMS Snapshot URL normalization', () => {
+    it('removes streaming params and forces single mode', () => {
+        const url = 'http://zm.example.com/cgi-bin/nph-zms?monitor=1&mode=jpeg&scale=100&maxfps=10&connkey=4456&_t=123&token=abc';
+        const normalized = normalizeZmsSnapshotUrl(url);
+        const parsed = new URL(normalized);
+
+        expect(parsed.searchParams.get('mode')).toBe('single');
+        expect(parsed.searchParams.get('monitor')).toBe('1');
+        expect(parsed.searchParams.get('scale')).toBe('100');
+        expect(parsed.searchParams.get('token')).toBe('abc');
+        expect(parsed.searchParams.get('maxfps')).toBeNull();
+        expect(parsed.searchParams.get('connkey')).toBeNull();
+        expect(parsed.searchParams.get('_t')).toBeNull();
+    });
+
+    it('normalizes proxied ZMS URLs', () => {
+        const targetUrl = 'http://zm.example.com/cgi-bin/nph-zms?monitor=2&mode=jpeg&connkey=999';
+        const proxyUrl = `http://localhost:3001/image-proxy?url=${encodeURIComponent(targetUrl)}`;
+        const normalized = normalizeZmsSnapshotUrl(proxyUrl);
+        const parsed = new URL(normalized);
+        const normalizedTarget = parsed.searchParams.get('url');
+
+        expect(normalizedTarget).toBeTruthy();
+        const targetParsed = new URL(normalizedTarget as string);
+        expect(targetParsed.searchParams.get('mode')).toBe('single');
+        expect(targetParsed.searchParams.get('connkey')).toBeNull();
+        expect(targetParsed.searchParams.get('monitor')).toBe('2');
     });
 });

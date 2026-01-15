@@ -10,7 +10,6 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { CapacitorHttp } from '@capacitor/core';
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 import {
   httpRequest,
@@ -227,13 +226,13 @@ describe('HTTP Client - Web Platform', () => {
     });
 
     it('handles blob response type', async () => {
-      const mockBlob = new Blob(['image data'], { type: 'image/png' });
+      const mockBuffer = new Uint8Array([1, 2, 3]).buffer;
       const mockResponse = {
         ok: true,
         status: 200,
         statusText: 'OK',
-        headers: new Headers(),
-        blob: vi.fn().mockResolvedValue(mockBlob),
+        headers: new Headers({ 'content-type': 'image/png' }),
+        arrayBuffer: vi.fn().mockResolvedValue(mockBuffer),
       };
 
       vi.mocked(global.fetch).mockResolvedValue(mockResponse as any);
@@ -242,7 +241,8 @@ describe('HTTP Client - Web Platform', () => {
         responseType: 'blob',
       });
 
-      expect(result.data).toBe(mockBlob);
+      expect(result.data).toBeInstanceOf(Blob);
+      expect((result.data as Blob).type).toBe('image/png');
     });
 
     it('handles arraybuffer response type', async () => {
@@ -336,6 +336,24 @@ describe('HTTP Client - Web Platform', () => {
         expect(httpError.statusText).toBe('Not Found');
         expect(httpError.message).toContain('404');
       }
+    });
+
+    it('respects validateStatus overrides', async () => {
+      const mockResponse = {
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+        headers: new Headers(),
+        text: vi.fn().mockResolvedValue('{"error":"Unauthorized"}'),
+      };
+
+      vi.mocked(global.fetch).mockResolvedValue(mockResponse as any);
+
+      const result = await httpRequest('https://example.com/api/protected', {
+        validateStatus: (status) => status === 401,
+      });
+
+      expect(result.status).toBe(401);
     });
 
     it('includes response data in error', async () => {
@@ -550,10 +568,14 @@ describe('HTTP Client - Web Platform', () => {
 });
 
 describe('HTTP Client - Native Platform', () => {
-  beforeEach(() => {
+  let capacitorHttp: { request: ReturnType<typeof vi.fn> };
+
+  beforeEach(async () => {
     vi.clearAllMocks();
     Object.defineProperty(Platform, 'isNative', { value: true, writable: true });
     Object.defineProperty(Platform, 'isWeb', { value: false, writable: true });
+    const module = await import('@capacitor/core');
+    capacitorHttp = module.CapacitorHttp as unknown as { request: ReturnType<typeof vi.fn> };
   });
 
   afterEach(() => {
@@ -569,11 +591,11 @@ describe('HTTP Client - Native Platform', () => {
       headers: { 'content-type': 'application/json' },
     };
 
-    vi.mocked(CapacitorHttp.request).mockResolvedValue(mockResponse);
+    vi.mocked(capacitorHttp.request).mockResolvedValue(mockResponse);
 
     const result = await httpRequest('https://example.com/api/data');
 
-    expect(CapacitorHttp.request).toHaveBeenCalledWith({
+    expect(capacitorHttp.request).toHaveBeenCalledWith({
       method: 'GET',
       url: 'https://example.com/api/data',
       headers: {},
@@ -583,7 +605,7 @@ describe('HTTP Client - Native Platform', () => {
     expect(result.data).toEqual({ result: 'success' });
   });
 
-  it('converts base64 blob response to Blob on native', async () => {
+  it('returns base64 string for blob response on native', async () => {
     const base64Data = btoa('image binary data');
     const mockResponse = {
       url: 'https://example.com/api/image',
@@ -592,17 +614,16 @@ describe('HTTP Client - Native Platform', () => {
       headers: { 'content-type': 'image/png' },
     };
 
-    vi.mocked(CapacitorHttp.request).mockResolvedValue(mockResponse);
+    vi.mocked(capacitorHttp.request).mockResolvedValue(mockResponse);
 
     const result = await httpRequest('https://example.com/api/image', {
       responseType: 'blob',
     });
 
-    expect(result.data).toBeInstanceOf(Blob);
-    expect((result.data as Blob).type).toBe('image/png');
+    expect(result.data).toBe(base64Data);
   });
 
-  it('uses default content-type when missing in blob response', async () => {
+  it('returns base64 string when content-type is missing', async () => {
     const base64Data = btoa('binary data');
     const mockResponse = {
       url: 'https://example.com/api/file',
@@ -611,32 +632,13 @@ describe('HTTP Client - Native Platform', () => {
       headers: {},
     };
 
-    vi.mocked(CapacitorHttp.request).mockResolvedValue(mockResponse);
+    vi.mocked(capacitorHttp.request).mockResolvedValue(mockResponse);
 
     const result = await httpRequest('https://example.com/api/file', {
       responseType: 'blob',
     });
 
-    expect(result.data).toBeInstanceOf(Blob);
-    expect((result.data as Blob).type).toBe('application/octet-stream');
-  });
-
-  it('handles blob conversion errors gracefully', async () => {
-    const invalidBase64 = 'not-valid-base64!!!';
-    const mockResponse = {
-      url: 'https://example.com/api/image',
-      status: 200,
-      data: invalidBase64,
-      headers: { 'content-type': 'image/png' },
-    };
-
-    vi.mocked(CapacitorHttp.request).mockResolvedValue(mockResponse);
-
-    const result = await httpRequest('https://example.com/api/image', {
-      responseType: 'blob',
-    });
-
-    expect(result.data).toBe(invalidBase64);
+    expect(result.data).toBe(base64Data);
   });
 
   it('throws HttpError for failed native request', async () => {
@@ -647,7 +649,7 @@ describe('HTTP Client - Native Platform', () => {
       headers: {},
     };
 
-    vi.mocked(CapacitorHttp.request).mockResolvedValue(mockResponse);
+    vi.mocked(capacitorHttp.request).mockResolvedValue(mockResponse);
 
     try {
       await httpRequest('https://example.com/api/missing');

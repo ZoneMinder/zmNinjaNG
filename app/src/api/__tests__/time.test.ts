@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getServerTimeZone } from '../time';
 import { getApiClient } from '../client';
-import type { AxiosInstance } from 'axios';
+import type { ApiClient } from '../client';
 
 const mockGet = vi.fn();
 
@@ -27,7 +27,7 @@ describe('Time API', () => {
     vi.clearAllMocks();
     vi.mocked(getApiClient).mockReturnValue({
       get: mockGet,
-    } as unknown as AxiosInstance);
+    } as unknown as ApiClient);
   });
 
   it('fetches server time zone without token', async () => {

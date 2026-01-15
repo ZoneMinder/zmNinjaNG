@@ -9,6 +9,7 @@ import { getApiClient } from './client';
 import { validateApiResponse } from '../lib/api-validator';
 import { z } from 'zod';
 import { log, LogLevel } from '../lib/logger';
+import type { HttpError } from '../lib/http';
 
 // ========== Schemas ==========
 
@@ -239,13 +240,12 @@ export async function fetchMinStreamingPort(): Promise<number | null> {
     log.api('MIN_STREAMING_PORT fetched successfully', LogLevel.INFO, { port });
     return port;
   } catch (error: unknown) {
-    const err = error as { constructor: { name: string }; message: string; response?: { status: number; data: unknown } };
+    const err = error as HttpError & { constructor: { name: string } };
     log.api('Failed to fetch MIN_STREAMING_PORT from server', LogLevel.WARN, {
       error: err.constructor.name,
       message: err.message,
-      status: err.response?.status,
+      status: err.status,
     });
     return null;
   }
 }
-

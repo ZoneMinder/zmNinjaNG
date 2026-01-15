@@ -1,5 +1,6 @@
 
 import { createApiClient } from '../api/client';
+import type { HttpError } from './http';
 import { log, LogLevel } from './logger';
 
 /**
@@ -130,7 +131,7 @@ export async function discoverZoneminder(inputUrl: string): Promise<DiscoveryRes
 
             // 1. Try getVersion.json
             try {
-                const res = await apiClient.get('/host/getVersion.json', {
+                const res = await apiClient.get<{ version?: string; apiversion?: string }>('/host/getVersion.json', {
                     timeout: 5000,
                     headers: { 'Skip-Auth': 'true' },
                     validateStatus: (status) => isValidApi(status)
@@ -145,9 +146,8 @@ export async function discoverZoneminder(inputUrl: string): Promise<DiscoveryRes
                         break;
                     }
                 }
-            } catch (error: any) {
-                // Handle Tauri 401 throw or generic axios error
-                const status = error.status || error.response?.status;
+            } catch (error: unknown) {
+                const status = (error as HttpError)?.status;
                 if (isValidApi(status)) {
                     confirmedApiUrl = fullApiUrl;
                     log.discovery(`API confirmed via getVersion (auth check): ${confirmedApiUrl} (Status: ${status})`, LogLevel.INFO);
@@ -155,7 +155,11 @@ export async function discoverZoneminder(inputUrl: string): Promise<DiscoveryRes
                 }
 
                 // If getVersion fails (e.g. 404), try login.json as fallback
-                log.discovery(`getVersion probe failed for ${fullApiUrl}, trying login.json`, LogLevel.DEBUG, { error: error.message });
+                log.discovery(
+                    `getVersion probe failed for ${fullApiUrl}, trying login.json`,
+                    LogLevel.DEBUG,
+                    { error: error instanceof Error ? error.message : String(error) }
+                );
 
                 try {
                     // 2. Try login.json (GET might return 405 or 401 or 200)
@@ -170,14 +174,14 @@ export async function discoverZoneminder(inputUrl: string): Promise<DiscoveryRes
                         log.discovery(`API confirmed via login.json: ${confirmedApiUrl} (Status: ${loginRes.status})`, LogLevel.INFO);
                         break;
                     }
-                } catch (loginError: any) {
-                    const loginStatus = loginError.status || loginError.response?.status;
+                } catch (loginError: unknown) {
+                    const loginStatus = (loginError as HttpError)?.status;
                     if (isValidApi(loginStatus)) {
                         confirmedApiUrl = fullApiUrl;
                         log.discovery(`API confirmed via login.json (auth check): ${confirmedApiUrl} (Status: ${loginStatus})`, LogLevel.INFO);
                         break;
                     }
-                    log.discovery(`login.json probe failed for ${fullApiUrl}`, LogLevel.DEBUG, { error: loginError.message });
+                    log.discovery(`login.json probe failed for ${fullApiUrl}`, LogLevel.DEBUG, { error: loginError instanceof Error ? loginError.message : String(loginError) });
                 }
             }
 

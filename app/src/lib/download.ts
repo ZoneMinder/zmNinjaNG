@@ -14,12 +14,11 @@
 
 import { writeFile } from '@tauri-apps/plugin-fs';
 import { save } from '@tauri-apps/plugin-dialog';
-import { fetch } from '@tauri-apps/plugin-http';
 import { log, LogLevel } from './logger';
 import { Platform } from './platform';
 import { wrapWithImageProxyIfNeeded } from './proxy-utils';
+import { httpRequest, type HttpProgress } from './http';
 
-import { getApiClient } from '../api/client';
 import { getEventVideoUrl as buildEventVideoUrl } from './url-builder';
 import { useBackgroundTasks } from '../stores/backgroundTasks';
 
@@ -38,6 +37,38 @@ export interface DownloadProgress {
 export interface DownloadOptions {
   onProgress?: (progress: DownloadProgress) => void;
   signal?: AbortSignal;
+}
+
+export function normalizeZmsSnapshotUrl(imageUrl: string): string {
+  try {
+    const parsedUrl = new URL(imageUrl);
+
+    if (parsedUrl.pathname.endsWith('/image-proxy') && parsedUrl.searchParams.has('url')) {
+      const targetUrl = parsedUrl.searchParams.get('url');
+      if (!targetUrl) return imageUrl;
+      const normalizedTarget = normalizeZmsSnapshotUrl(targetUrl);
+      parsedUrl.searchParams.set('url', normalizedTarget);
+      return parsedUrl.toString();
+    }
+
+    if (!parsedUrl.pathname.includes('nph-zms')) {
+      return imageUrl;
+    }
+
+    const params = parsedUrl.searchParams;
+    params.set('mode', 'single');
+    params.delete('maxfps');
+    params.delete('connkey');
+    params.delete('buffer');
+    params.delete('_t');
+    params.delete('rand');
+    params.delete('fps');
+
+    parsedUrl.search = params.toString();
+    return parsedUrl.toString();
+  } catch {
+    return imageUrl;
+  }
 }
 
 /**
@@ -111,96 +142,64 @@ async function downloadFileTauri(url: string, filename: string, options?: Downlo
     return;
   }
 
-  // 2. Fetch the file using native fetch (Tauri v2 fetch is native)
+  // 2. Fetch the file using unified HTTP
   log.download('[Download] Fetching file', LogLevel.INFO, { url });
 
-  // Use imported fetch from @tauri-apps/plugin-http which uses rust backend
-  const response = await fetch(url, {
+  const onDownloadProgress = options?.onProgress
+    ? (progress: HttpProgress) => {
+        options.onProgress?.(progress);
+      }
+    : undefined;
+
+  const response = await httpRequest<ArrayBuffer>(url, {
     method: 'GET',
+    responseType: 'arraybuffer',
     signal: options?.signal,
+    onDownloadProgress,
   });
 
-  if (!response.ok) {
-    throw new Error(`Failed to download: ${response.status} ${response.statusText}`);
-  }
-
-  const contentLength = response.headers.get('content-length');
-  const total = contentLength ? parseInt(contentLength, 10) : 0;
-  let loaded = 0;
-
-  // 3. Stream to file
-  if (response.body) {
-    const reader = response.body.getReader();
-    const chunks: Uint8Array[] = [];
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      if (value) {
-        chunks.push(value);
-        loaded += value.length;
-
-        if (options?.onProgress && total > 0) {
-          const percentage = Math.round((loaded * 100) / total);
-          options.onProgress({
-            loaded,
-            total,
-            percentage,
-          });
-        }
-      }
-    }
-
-    // Combine chunks
-    const combined = new Uint8Array(loaded);
-    let offset = 0;
-    for (const chunk of chunks) {
-      combined.set(chunk, offset);
-      offset += chunk.length;
-    }
-
-    // 4. Write to disk
-    await writeFile(savePath, combined);
-    log.download('[Download] File saved successfully', LogLevel.INFO, { path: savePath });
-  } else {
-    // Fallback if no body
-    const arrayBuffer = await response.arrayBuffer();
-    await writeFile(savePath, new Uint8Array(arrayBuffer));
-    log.download('[Download] File saved successfully (no stream)', LogLevel.INFO, { path: savePath });
-  }
+  // 3. Write to disk
+  const bytes = new Uint8Array(response.data);
+  await writeFile(savePath, bytes);
+  log.download('[Download] File saved successfully', LogLevel.INFO, { path: savePath });
 }
 
 /**
  * Mobile Implementation (Native)
  * Downloads file using native HTTP with streaming to avoid OOM
  */
-async function downloadFileNative(url: string, filename: string, _options?: DownloadOptions): Promise<void> {
+async function downloadFileNative(url: string, filename: string, options?: DownloadOptions): Promise<void> {
   log.download('[Download] Initiating native mobile download', LogLevel.INFO, { url, filename });
 
   // Dynamic imports for Capacitor plugins
   const { Media } = await import('@capacitor-community/media');
   const { Filesystem, Directory } = await import('@capacitor/filesystem');
-  const { CapacitorHttp } = await import('@capacitor/core');
 
   try {
-    // Use CapacitorHttp directly to get base64 data without blob conversion
+    // Use unified HTTP to get base64 data without blob conversion
     // This avoids loading the entire file as a Blob in memory (OOM prevention)
     log.download('[Download] Fetching file via native HTTP', LogLevel.INFO, { url });
 
-    const response = await CapacitorHttp.request({
+    const response = await httpRequest<string>(url, {
       method: 'GET',
-      url,
-      responseType: 'blob', // CapacitorHttp returns base64 string for blob type
+      responseType: 'base64',
     });
 
     if (response.status !== 200) {
       throw new Error(`Failed to download: HTTP ${response.status}`);
     }
 
-    // CapacitorHttp returns base64 string when responseType is 'blob'
+    // Native HTTP returns base64 string when responseType is base64/blob
     // We use it directly without converting to Blob (avoids OOM)
     const base64Data = response.data as string;
+
+    if (options?.onProgress) {
+      options.onProgress({
+        loaded: base64Data.length,
+        total: base64Data.length,
+        percentage: 100,
+      });
+    }
 
     // Write directly to Documents directory
     const writeResult = await Filesystem.writeFile({
@@ -236,34 +235,27 @@ async function downloadFileNative(url: string, filename: string, _options?: Down
  * Web Implementation
  */
 async function downloadFileWeb(url: string, filename: string, options?: DownloadOptions): Promise<void> {
-  // Web: Use axios/fetch with auth headers to avoid CORS issues
+  // Web: Use unified HTTP with auth headers to avoid CORS issues
   try {
-    const apiClient = getApiClient();
-
     // Use the image proxy for cross-origin URLs in dev mode
     const proxiedUrl = wrapWithImageProxyIfNeeded(url);
     if (proxiedUrl !== url) {
       log.download('Using proxy for CORS', LogLevel.INFO, { url: proxiedUrl });
     }
 
-    // Use axios to fetch with proper auth headers
-    log.download('Downloading file via API client', LogLevel.INFO, { url: proxiedUrl, filename });
-    const response = await apiClient.get(proxiedUrl, {
+    log.download('Downloading file via unified HTTP', LogLevel.INFO, { url: proxiedUrl, filename });
+    const response = await httpRequest<Blob>(proxiedUrl, {
+      method: 'GET',
       responseType: 'blob',
       signal: options?.signal,
-      onDownloadProgress: (progressEvent) => {
-        if (options?.onProgress && progressEvent.total) {
-          const percentage = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-          options.onProgress({
-            loaded: progressEvent.loaded,
-            total: progressEvent.total,
-            percentage,
-          });
-        }
-      },
+      onDownloadProgress: options?.onProgress
+        ? (progress: HttpProgress) => {
+            options.onProgress?.(progress);
+          }
+        : undefined,
     });
 
-    const blob = response.data as Blob;
+    const blob = response.data;
     const blobUrl = window.URL.createObjectURL(blob);
 
     const link = document.createElement('a');
@@ -281,7 +273,7 @@ async function downloadFileWeb(url: string, filename: string, options?: Download
 
     log.download('File downloaded via browser', LogLevel.INFO, { filename });
   } catch (fetchError) {
-    // If axios fails, fall back to direct download link
+    // If unified HTTP fails, fall back to direct download link
     // This will open in a new tab and rely on browser's download handling
     log.download('API client download failed, falling back to direct link', LogLevel.WARN, { url, error: fetchError });
 
@@ -316,7 +308,7 @@ export async function downloadSnapshot(imageUrl: string, monitorName: string): P
   }
 
   // Otherwise fetch and download
-  await downloadFile(imageUrl, filename);
+  await downloadFile(normalizeZmsSnapshotUrl(imageUrl), filename);
 }
 
 /**
@@ -348,7 +340,7 @@ export async function downloadSnapshotFromElement(
       if (imageUrl.startsWith('data:')) {
         await downloadSnapshot(imageUrl, monitorName);
       } else {
-        await downloadFile(imageUrl, filename);
+        await downloadFile(normalizeZmsSnapshotUrl(imageUrl), filename);
       }
     }
   } catch (error) {
@@ -506,5 +498,3 @@ export function downloadEventVideo(
 
   return taskId;
 }
-
-

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchGo2RTCPath, fetchZmsPath, getVersion, login, refreshToken, testConnection } from '../auth';
 import { getApiClient } from '../client';
-import type { AxiosInstance } from 'axios';
+import type { ApiClient } from '../client';
 
 const mockPost = vi.fn();
 const mockGet = vi.fn();
@@ -33,7 +33,7 @@ describe('Auth API', () => {
     vi.mocked(getApiClient).mockReturnValue({
       post: mockPost,
       get: mockGet,
-    } as unknown as AxiosInstance);
+    } as unknown as ApiClient);
   });
 
   it('logs in with form-encoded credentials', async () => {
