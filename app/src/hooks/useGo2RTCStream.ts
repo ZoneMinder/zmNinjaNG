@@ -169,10 +169,12 @@ export function useGo2RTCStream(options: UseGo2RTCStreamOptions): UseGo2RTCStrea
         return originalOnclose();
       };
 
-      // Apply muted when video track arrives
+      // Apply muted when video track arrives - wrap original handler to preserve MSE/WebRTC priority logic
+      const originalOnpcvideo = videoRtc.onpcvideo.bind(videoRtc);
       videoRtc.onpcvideo = (video: HTMLVideoElement) => {
         log.videoPlayer('GO2RTC: Video track received', LogLevel.INFO, { monitorId, videoWidth: video.videoWidth, videoHeight: video.videoHeight });
-        applyMuted(video);
+        originalOnpcvideo(video);  // Call original first - handles MSE vs WebRTC priority
+        applyMuted(videoRtc.video);  // Apply muted to the final video element
       };
 
       // Add to DOM and start connection
