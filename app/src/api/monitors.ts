@@ -303,8 +303,7 @@ export async function controlMonitor(
   const proxiedUrl = wrapWithImageProxy(url);
 
   const client = getApiClient();
-  // We use the client to take advantage of the native adapter if needed,
-  // but we pass the full URL which overrides the baseURL.
+  // Use the unified client for cross-platform HTTP while keeping the full URL override.
   // We skip auth interceptor because we manually added the token to the URL
   await client.get(proxiedUrl, {
     headers: {

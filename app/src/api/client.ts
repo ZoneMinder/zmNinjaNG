@@ -1,237 +1,212 @@
-import axios, { AxiosError } from 'axios';
-import type { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
-import { createNativeAdapter } from './adapter';
+import { httpRequest, type HttpError, type HttpOptions, type HttpResponse } from '../lib/http';
 import { useAuthStore } from '../stores/auth';
 import { log, LogLevel } from '../lib/logger';
 import { sanitizeObject } from '../lib/log-sanitizer';
-import { Platform } from '../lib/platform';
 
+export type ApiMethod = NonNullable<HttpOptions['method']>;
 
-let apiClient: AxiosInstance | null = null;
+export interface ApiRequestConfig {
+  baseURL?: string;
+  headers?: Record<string, string>;
+  params?: Record<string, string | number>;
+  responseType?: HttpOptions['responseType'];
+  timeout?: number;
+  timeoutMs?: number;
+  signal?: AbortSignal;
+  validateStatus?: (status: number) => boolean;
+  onDownloadProgress?: HttpOptions['onDownloadProgress'];
+}
+
+export interface ApiClient {
+  get<T = unknown>(url: string, config?: ApiRequestConfig): Promise<HttpResponse<T>>;
+  post<T = unknown>(url: string, data?: unknown, config?: ApiRequestConfig): Promise<HttpResponse<T>>;
+  put<T = unknown>(url: string, data?: unknown, config?: ApiRequestConfig): Promise<HttpResponse<T>>;
+  delete<T = unknown>(url: string, config?: ApiRequestConfig): Promise<HttpResponse<T>>;
+}
+
+let apiClient: ApiClient | null = null;
 
 // Correlation ID counter - starts at 1, increments with each request, resets on app restart
 let correlationIdCounter = 0;
 
-export function createApiClient(baseURL: string, reLogin?: () => Promise<boolean>): AxiosInstance {
-  // In dev mode (web), use standalone proxy server on port 3001 with X-Target-Host header
-  // On native platforms (Android/iOS), use full URL directly (native HTTP bypasses CORS)
-  // In production web, use full URL directly
-  const clientBaseURL = Platform.shouldUseProxy ? 'http://localhost:3001/proxy' : baseURL;
+function resolveUrl(baseURL: string, url: string): string {
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
 
-  const client = axios.create({
-    baseURL: clientBaseURL,
-    timeout: 20000, // 20 seconds timeout
-    headers: {
-      'Content-Type': 'application/json',
-      // In dev mode (web only), add header to tell proxy which server to route to
-      ...(Platform.shouldUseProxy && { 'X-Target-Host': baseURL }),
-    },
-    // Let axios handle response decompression (browser forces gzip anyway)
-    decompress: true,
-    // On native platforms, use custom adapter that uses CapacitorHttp
-    ...((Platform.isNative || Platform.isTauri) && {
-      adapter: createNativeAdapter(),
-    }),
+  const trimmedBase = baseURL.replace(/\/$/, '');
+  const normalizedPath = url.startsWith('/') ? url : `/${url}`;
+  return `${trimmedBase}${normalizedPath}`;
+}
+
+function appendQuery(url: string, params: Record<string, string | number>): string {
+  const stringParams: Record<string, string> = {};
+  Object.entries(params).forEach(([key, value]) => {
+    stringParams[key] = String(value);
   });
+  const queryParams = new URLSearchParams(stringParams).toString();
+  if (!queryParams) return url;
+  return url.includes('?') ? `${url}&${queryParams}` : `${url}?${queryParams}`;
+}
 
-  // Request interceptor - add auth token
-  client.interceptors.request.use(
-    (config: InternalAxiosRequestConfig) => {
-      // Assign correlation ID to this request
-      const correlationId = ++correlationIdCounter;
-      (config as any).correlationId = correlationId;
+export function createApiClient(baseURL: string, reLogin?: () => Promise<boolean>): ApiClient {
+  const request = async <T>(
+    method: ApiMethod,
+    url: string,
+    data?: unknown,
+    config: ApiRequestConfig = {},
+    hasRetried = false
+  ): Promise<HttpResponse<T>> => {
+    const correlationId = ++correlationIdCounter;
+    const { accessToken, refreshToken, refreshTokenExpires } = useAuthStore.getState();
+    const headers = { ...(config.headers ?? {}) };
+    const params: Record<string, string | number> = { ...(config.params ?? {}) };
 
-      const { accessToken, refreshToken, refreshTokenExpires } = useAuthStore.getState();
+    const skipAuth = headers['Skip-Auth'] === 'true';
+    const isLoginRequest = url.includes('login.json') && method.toUpperCase() === 'POST';
 
-      // Skip adding auth token if this is a discovery/test request
-      const skipAuth = config.headers?.['Skip-Auth'] === 'true';
-
-      // Check if this is a login request (POST to login.json)
-      const isLoginRequest = config.url?.includes('login.json') && config.method?.toUpperCase() === 'POST';
-
-      if (accessToken && config.url && !skipAuth && !isLoginRequest) {
-        // Add token as query parameter for ALL requests (GET, POST, PUT, DELETE)
-        config.params = {
-          ...config.params,
-          token: accessToken,
-        };
-      }
-
-      // Special handling for login.json
-      if (isLoginRequest && !skipAuth) {
-        const nowMs = Date.now();
-        const isRefreshTokenValid = refreshToken && refreshTokenExpires && refreshTokenExpires > nowMs;
-
-        if (isRefreshTokenValid) {
-          // a) If the refreshToken hasn't expired, add the refresh token as the query parameter
-          config.params = {
-            ...config.params,
-            token: refreshToken,
-          };
-        }
-        // b) If the refreshToken has expired, send the form encoded user/pass payload in the POST body
-        // This is handled by the caller (login function) or re-login logic which sets the body.
-      }
-
-      // Log API request
-      const zmApiUrl = baseURL;
-      const path = config.url || '';
-      // Don't prepend base URL if path is already absolute
-      const fullZmUrl = path.startsWith('http') ? path : zmApiUrl + path;
-      const queryParams = config.params ? new URLSearchParams(config.params).toString() : '';
-      const fullUrlWithParams = queryParams ? `${fullZmUrl}?${queryParams}` : fullZmUrl;
-
-      const logData: Record<string, unknown> = {
-        correlationId,
-        method: config.method?.toUpperCase(),
-        url: fullUrlWithParams,
-        zmUrl: fullZmUrl,
-      };
-
-      if (queryParams) {
-        logData.queryParams = sanitizeObject(config.params);
-      }
-
-      if (config.data) {
-        if (config.data instanceof URLSearchParams) {
-          const formDataObj: Record<string, string> = {};
-          config.data.forEach((value: string, key: string) => {
-            formDataObj[key] = value;
-          });
-          logData.formData = sanitizeObject(formDataObj);
-        } else {
-          logData.bodyData = sanitizeObject(config.data);
-        }
-      }
-
-      log.api(`[Request #${correlationId}] ${config.method?.toUpperCase()} ${fullUrlWithParams}`, LogLevel.DEBUG, logData);
-
-      return config;
-    },
-    (error: AxiosError) => {
-      log.api('[API] Request error', LogLevel.ERROR, error);
-      return Promise.reject(error);
+    if (accessToken && !skipAuth && !isLoginRequest) {
+      params.token = accessToken;
     }
-  );
 
-  // Response interceptor - handle errors and token refresh
-  client.interceptors.response.use(
-    (response) => {
-      // Log API response
-      const correlationId = (response.config as any).correlationId;
-      const zmApiUrl = baseURL;
-      const path = response.config.url || '';
-      const fullZmUrl = path.startsWith('http') ? path : zmApiUrl + path;
+    if (isLoginRequest && !skipAuth) {
+      const nowMs = Date.now();
+      const isRefreshTokenValid = refreshToken && refreshTokenExpires && refreshTokenExpires > nowMs;
+      if (isRefreshTokenValid) {
+        params.token = refreshToken;
+      }
+    }
 
-      log.api(`[Response #${correlationId}] ${response.status} ${response.statusText} - ${fullZmUrl}`, LogLevel.DEBUG, {
+    const resolvedBaseUrl = config.baseURL ?? baseURL;
+    const fullUrl = resolveUrl(resolvedBaseUrl, url);
+    const fullUrlWithParams = appendQuery(fullUrl, params);
+
+    const logData: Record<string, unknown> = {
+      correlationId,
+      method,
+      url: fullUrlWithParams,
+      zmUrl: fullUrl,
+    };
+
+    if (Object.keys(params).length > 0) {
+      logData.queryParams = sanitizeObject(params);
+    }
+
+    if (data) {
+      if (data instanceof URLSearchParams) {
+        const formDataObj: Record<string, string> = {};
+        data.forEach((value: string, key: string) => {
+          formDataObj[key] = value;
+        });
+        logData.formData = sanitizeObject(formDataObj);
+      } else {
+        logData.bodyData = sanitizeObject(data);
+      }
+    }
+
+    log.api(`[Request #${correlationId}] ${method} ${fullUrlWithParams}`, LogLevel.DEBUG, logData);
+
+    try {
+      const response = await httpRequest<T>(fullUrl, {
+        method,
+        headers,
+        params,
+        body: data,
+        responseType: config.responseType,
+        timeout: config.timeout,
+        timeoutMs: config.timeoutMs,
+        validateStatus: config.validateStatus,
+        signal: config.signal,
+        onDownloadProgress: config.onDownloadProgress,
+      });
+
+      log.api(`[Response #${correlationId}] ${response.status} ${response.statusText} - ${fullUrl}`, LogLevel.DEBUG, {
         correlationId,
         status: response.status,
         statusText: response.statusText,
         data: sanitizeObject(response.data),
       });
+
       return response;
-    },
-    async (error: AxiosError) => {
-      const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
-
-      // Skip auth retry if this is a discovery/test request
-      const skipAuth = originalRequest.headers?.['Skip-Auth'] === 'true';
-
-      // Skip auth retry if this is already a login/refresh request
-      const isLoginRequest = originalRequest.url?.includes('login.json');
-
-      // Handle 401 Unauthorized - try to refresh token
-      if (error.response?.status === 401 && !originalRequest._retry && !skipAuth && !isLoginRequest) {
-        originalRequest._retry = true;
-
+    } catch (error) {
+      const httpError = error as HttpError;
+      if (httpError.status === 401 && !hasRetried && !skipAuth && !isLoginRequest) {
         try {
-          const { refreshToken, refreshAccessToken } = useAuthStore.getState();
-
-          // b.1) first use refreshToken if valid
-          if (refreshToken) {
+          const { refreshToken: refreshTokenValue, refreshAccessToken } = useAuthStore.getState();
+          if (refreshTokenValue) {
             await refreshAccessToken();
-            // Retry the original request
-            return client(originalRequest);
-          } else {
-            throw new Error('No refresh token available');
+            return request(method, url, data, config, true);
           }
+          throw new Error('No refresh token available');
         } catch (refreshError) {
-          // b.2) Use user/pass form encoded login and store credentials
           if (reLogin) {
             try {
               const success = await reLogin();
               if (success) {
-                return client(originalRequest);
+                return request(method, url, data, config, true);
               }
             } catch (reLoginError) {
               log.api('Re-login failed', LogLevel.ERROR, reLoginError);
             }
           }
 
-          // Refresh failed - logout user
           const { logout } = useAuthStore.getState();
           logout();
-          return Promise.reject(refreshError);
+          throw refreshError;
         }
       }
 
-      // Log API error
-      const correlationId = (error.config as any)?.correlationId;
-      const zmApiUrl = baseURL;
-      const path = error.config?.url || '';
-      const fullZmUrl = path.startsWith('http') ? path : zmApiUrl + path;
-      const queryParams = error.config?.params
-        ? new URLSearchParams(error.config.params).toString()
-        : '';
-      const fullUrlWithParams = queryParams ? `${fullZmUrl}?${queryParams}` : fullZmUrl;
-
       const errorData: Record<string, unknown> = {
         correlationId,
-        method: error.config?.method?.toUpperCase(),
+        method,
         url: fullUrlWithParams,
-        zmUrl: fullZmUrl,
-        path,
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        message: error.message,
+        zmUrl: fullUrl,
+        status: httpError.status,
+        statusText: httpError.statusText,
+        message: httpError.message,
       };
 
-      if (error.response?.data) {
-        errorData.responseData = sanitizeObject(error.response.data);
+      if (httpError.data) {
+        errorData.responseData = sanitizeObject(httpError.data);
       }
 
-      if (error.config?.data) {
-        if (error.config.data instanceof URLSearchParams) {
+      if (data) {
+        if (data instanceof URLSearchParams) {
           const formDataObj: Record<string, string> = {};
-          error.config.data.forEach((value: string, key: string) => {
+          data.forEach((value: string, key: string) => {
             formDataObj[key] = value;
           });
           errorData.requestFormData = sanitizeObject(formDataObj);
         } else {
-          errorData.requestBodyData = sanitizeObject(error.config.data);
+          errorData.requestBodyData = sanitizeObject(data);
         }
       }
 
-      log.api(`[Error #${correlationId}] ${error.config?.method?.toUpperCase()} ${fullUrlWithParams}`, LogLevel.ERROR, {
+      log.api(`[Error #${correlationId}] ${method} ${fullUrlWithParams}`, LogLevel.ERROR, {
         error,
         ...errorData,
       });
 
-      return Promise.reject(error);
+      throw error;
     }
-  );
+  };
 
-  return client;
+  return {
+    get: <T>(url: string, config?: ApiRequestConfig) => request<T>('GET', url, undefined, config),
+    post: <T>(url: string, data?: unknown, config?: ApiRequestConfig) => request<T>('POST', url, data, config),
+    put: <T>(url: string, data?: unknown, config?: ApiRequestConfig) => request<T>('PUT', url, data, config),
+    delete: <T>(url: string, config?: ApiRequestConfig) => request<T>('DELETE', url, undefined, config),
+  };
 }
 
-export function getApiClient(): AxiosInstance {
+export function getApiClient(): ApiClient {
   if (!apiClient) {
     throw new Error('API client not initialized. Call createApiClient first.');
   }
   return apiClient;
 }
 
-export function setApiClient(client: AxiosInstance): void {
+export function setApiClient(client: ApiClient): void {
   apiClient = client;
 }
 

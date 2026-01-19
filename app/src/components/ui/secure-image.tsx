@@ -83,10 +83,13 @@ export function SecureImage({ src, fallbackSrc, className, alt, ...props }: Secu
     if (isNative && src.startsWith('http') && imageSrc === src) {
       try {
         const client = getApiClient();
-        const response = await client.get(src, { responseType: 'blob' });
+        const response = await client.get<string>(src, { responseType: 'base64' });
         if (mountedRef.current && response.data) {
-          const blobUrl = URL.createObjectURL(response.data);
-          setImageSrc(blobUrl);
+          const contentType =
+            response.headers['content-type'] ||
+            response.headers['Content-Type'] ||
+            'image/jpeg';
+          setImageSrc(`data:${contentType};base64,${response.data}`);
           return; // Success, don't trigger parent onError yet
         }
       } catch (err) {

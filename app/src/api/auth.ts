@@ -9,6 +9,7 @@ import { getApiClient } from './client';
 import type { Go2RTCPathResponse, LoginResponse, ZmsPathResponse, VersionResponse } from './types';
 import { Go2RTCPathResponseSchema, LoginResponseSchema, ZmsPathResponseSchema, VersionResponseSchema } from './types';
 import { log, LogLevel } from '../lib/logger';
+import type { HttpError } from '../lib/http';
 
 export interface LoginCredentials {
   user: string;
@@ -71,13 +72,13 @@ export async function login(credentials: LoginCredentials): Promise<LoginRespons
       throw zodError;
     }
   } catch (error: unknown) {
-    const err = error as { constructor: { name: string }; message: string; response?: { status: number; data: unknown } };
+    const err = error as HttpError & { constructor: { name: string } };
     log.auth('Login failed', LogLevel.ERROR, {
       error,
       errorType: err.constructor.name,
       message: err.message,
-      status: err.response?.status,
-      responseData: err.response?.data,
+      status: err.status,
+      responseData: err.data,
     });
 
     throw error;
@@ -168,13 +169,13 @@ export async function fetchZmsPath(): Promise<string | null> {
     log.auth('ZMS path fetched successfully', LogLevel.INFO, { zmsPath });
     return zmsPath;
   } catch (error: unknown) {
-    const err = error as { constructor: { name: string }; message: string; response?: { status: number; data: unknown } };
+    const err = error as HttpError & { constructor: { name: string } };
     log.auth('Failed to fetch ZMS path from server', LogLevel.WARN, {
       error,
       errorType: err.constructor.name,
       message: err.message,
-      status: err.response?.status,
-      responseData: err.response?.data,
+      status: err.status,
+      responseData: err.data,
     });
 
     // Return null to allow fallback to inference logic
@@ -213,12 +214,12 @@ export async function fetchGo2RTCPath(): Promise<string | null> {
     log.auth('Go2RTC path fetched successfully', LogLevel.INFO, { go2rtcPath });
     return go2rtcPath;
   } catch (error: unknown) {
-    const err = error as { constructor: { name: string }; message: string; response?: { status: number; data: unknown } };
+    const err = error as HttpError & { constructor: { name: string } };
     log.auth('Failed to fetch Go2RTC path from server', LogLevel.INFO, {
       error,
       errorType: err.constructor.name,
       message: err.message,
-      status: err.response?.status,
+      status: err.status,
     });
 
     // Return null - Go2RTC is optional

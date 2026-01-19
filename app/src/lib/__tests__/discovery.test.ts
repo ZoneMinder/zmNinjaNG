@@ -7,19 +7,18 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { discoverZoneminder, DiscoveryError } from '../discovery';
-import type { AxiosInstance } from 'axios';
+import type { ApiClient } from '../../api/client';
 
 // Mock the API client
 vi.mock('../../api/client', () => ({
-  createApiClient: vi.fn((baseURL: string) => {
-    // Return a mock axios instance
+  createApiClient: vi.fn((_baseURL: string) => {
+    // Return a mock api client
     return {
       get: vi.fn(),
       post: vi.fn(),
       put: vi.fn(),
       delete: vi.fn(),
-      defaults: { baseURL },
-    } as unknown as AxiosInstance;
+    } as unknown as ApiClient;
   }),
 }));
 

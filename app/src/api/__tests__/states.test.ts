@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { changeState, getStates } from '../states';
 import { getApiClient } from '../client';
-import type { AxiosInstance } from 'axios';
+import type { ApiClient } from '../client';
 
 const mockGet = vi.fn();
 const mockPost = vi.fn();
@@ -16,7 +16,7 @@ describe('States API', () => {
     vi.mocked(getApiClient).mockReturnValue({
       get: mockGet,
       post: mockPost,
-    } as unknown as AxiosInstance);
+    } as unknown as ApiClient);
   });
 
   it('unwraps and normalizes state data', async () => {

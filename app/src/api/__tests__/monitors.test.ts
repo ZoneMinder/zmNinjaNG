@@ -15,7 +15,7 @@ import {
 import { getApiClient } from '../client';
 import { validateApiResponse } from '../../lib/api-validator';
 import { getMonitorStreamUrl } from '../../lib/url-builder';
-import type { AxiosInstance } from 'axios';
+import type { ApiClient } from '../client';
 
 const mockGet = vi.fn();
 const mockPost = vi.fn();
@@ -45,7 +45,7 @@ describe('Monitors API', () => {
     vi.mocked(getApiClient).mockReturnValue({
       get: mockGet,
       post: mockPost,
-    } as unknown as AxiosInstance);
+    } as unknown as ApiClient);
   });
 
   it('fetches monitors list', async () => {

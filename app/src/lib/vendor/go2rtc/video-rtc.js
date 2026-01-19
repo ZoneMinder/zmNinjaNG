@@ -440,30 +440,24 @@ export class VideoRTC extends HTMLElement {
             const sb = ms.addSourceBuffer(msg.value);
             sb.mode = 'segments'; // segments or sequence
             sb.addEventListener('updateend', () => {
-                if (!sb.updating && bufLen > 0) {
-                    try {
-                        const data = buf.slice(0, bufLen);
-                        sb.appendBuffer(data);
-                        bufLen = 0;
-                    } catch (e) {
-                        // console.debug(e);
-                    }
-                }
+                if (sb.updating) return;
 
-                if (!sb.updating && sb.buffered && sb.buffered.length) {
-                    const end = sb.buffered.end(sb.buffered.length - 1);
-                    const start = end - 5;
-                    const start0 = sb.buffered.start(0);
-                    if (start > start0) {
-                        sb.remove(start0, start);
-                        ms.setLiveSeekableRange(start, end);
+                try {
+                    if (bufLen > 0) {
+                        const data = buf.slice(0, bufLen);
+                        bufLen = 0;
+                        sb.appendBuffer(data);
+                    } else if (sb.buffered && sb.buffered.length) {
+                        const end = sb.buffered.end(sb.buffered.length - 1) - 15;
+                        const start = sb.buffered.start(0);
+                        if (end > start) {
+                            sb.remove(start, end);
+                            ms.setLiveSeekableRange(end, end + 15);
+                        }
+                        // console.debug("VideoRTC.buffered", start, end);
                     }
-                    if (this.video.currentTime < start) {
-                        this.video.currentTime = start;
-                    }
-                    const gap = end - this.video.currentTime;
-                    this.video.playbackRate = gap > 0.1 ? gap : 0.1;
-                    // console.debug('VideoRTC.buffered', gap, this.video.playbackRate, this.video.readyState);
+                } catch (e) {
+                    // console.debug(e);
                 }
             });
 
@@ -475,7 +469,7 @@ export class VideoRTC extends HTMLElement {
                     const b = new Uint8Array(data);
                     buf.set(b, bufLen);
                     bufLen += b.byteLength;
-                    // console.debug('VideoRTC.buffer', b.byteLength, bufLen);
+                    // console.debug("VideoRTC.buffer", b.byteLength, bufLen);
                 } else {
                     try {
                         sb.appendBuffer(data);
