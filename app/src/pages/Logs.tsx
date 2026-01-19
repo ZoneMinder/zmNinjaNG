@@ -1,5 +1,5 @@
 import { useLogStore } from '../stores/logs';
-import { logger, LogLevel } from '../lib/logger';
+import { logger, log, LogLevel } from '../lib/logger';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useSettingsStore } from '../stores/settings';
 import { Button } from '../components/ui/button';
@@ -94,7 +94,7 @@ export default function Logs() {
                         description: t('logs.zm_fetch_failed'),
                         variant: 'destructive',
                     });
-                    console.error('Failed to fetch ZM logs:', error);
+                    log.server('Failed to fetch ZM logs', LogLevel.ERROR, { error });
                 })
                 .finally(() => {
                     setIsLoadingZmLogs(false);
