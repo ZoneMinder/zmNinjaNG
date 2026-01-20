@@ -282,7 +282,7 @@ export default function MonitorDetail() {
         <Card
           {...swipeNavigation.bind()}
           className={cn(
-            'relative w-full max-w-5xl aspect-video bg-black overflow-hidden shadow-2xl border-0 touch-none transition-shadow',
+            'relative w-full max-w-5xl aspect-video bg-black overflow-hidden shadow-2xl border-0 touch-pan-y transition-shadow',
             isSliding && 'monitor-slide-in',
             alarmBorderClass
           )}
