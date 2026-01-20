@@ -8,8 +8,14 @@ Comprehensive testing strategy with unit tests and BDD-first E2E tests.
 # Run all unit tests (fast)
 npm test
 
+# Start dev server with proxy (required for E2E in browser)
+npm run dev:all
+
 # Run all E2E tests
 npm run test:e2e
+
+# Run specific feature
+npm run test:e2e -- tests/features/dashboard.feature
 
 # Run E2E with UI mode
 npm run test:e2e:ui
@@ -31,29 +37,30 @@ zmNg uses a layered testing approach:
 
 ## Current Test Coverage
 
-**Unit Tests**: 352 tests across 12 files
+**Unit Tests**: 765+ tests across 58 files
 - ✓ API validation and error handling
 - ✓ Cryptographic functions (AES-GCM)
 - ✓ Log sanitization (security-critical)
 - ✓ URL utilities and derivation
 - ✓ Time/timezone conversions
 - ✓ Grid layout calculations
-- ✓ Monitor filtering
+- ✓ Monitor filtering and rotation
 - ✓ Video markers and timestamps
 - ✓ Dashboard store
 - ✓ Notification service
+- ✓ Download utilities
+- ✓ Profile validation
 
-**E2E Tests**: 11 scenarios covering all major features
-- ✓ Dashboard widgets
-- ✓ Monitor viewing
-- ✓ Montage grid
-- ✓ Event browsing
-- ✓ Timeline interaction
-- ✓ Notifications
-- ✓ Profiles
-- ✓ Settings
-- ✓ Server status
-- ✓ Application logs
+**E2E Tests**: 9 feature files with 74 scenarios covering all major features
+- ✓ Dashboard widgets and editing (dashboard.feature - 8 scenarios)
+- ✓ Monitor list, montage, and detail (monitors.feature - 7 scenarios)
+- ✓ Monitor detail page controls (monitor-detail.feature - 7 scenarios)
+- ✓ Event browsing, filtering, and favorites (events.feature - 14 scenarios)
+- ✓ Timeline visualization and filtering (timeline.feature - 10 scenarios)
+- ✓ Profile management (profiles.feature - 5 scenarios)
+- ✓ Settings, server info, and logs (settings.feature - 7 scenarios)
+- ✓ Go2RTC WebRTC streaming (go2rtc-streaming.feature - 3 scenarios)
+- ✓ Full app navigation walkthrough (full-app-walkthrough.feature - 8 scenarios)
 
 ---
 
@@ -170,11 +177,19 @@ All E2E tests are generated from Gherkin `.feature` files using playwright-bdd:
 ```
 tests/
 ├── features/
-│   └── full-app-walkthrough.feature  # Source of truth (Gherkin)
+│   ├── dashboard.feature           # Dashboard widget tests (8 scenarios)
+│   ├── monitors.feature            # Monitor list and montage tests (7 scenarios)
+│   ├── monitor-detail.feature      # Monitor detail page tests (7 scenarios)
+│   ├── events.feature              # Event browsing tests (14 scenarios)
+│   ├── timeline.feature            # Timeline visualization tests (10 scenarios)
+│   ├── profiles.feature            # Profile management tests (5 scenarios)
+│   ├── settings.feature            # Settings, server, logs tests (7 scenarios)
+│   ├── go2rtc-streaming.feature    # WebRTC streaming tests (3 scenarios)
+│   └── full-app-walkthrough.feature # Full navigation walkthrough (8 scenarios)
 ├── helpers/
-│   └── config.ts                     # Test configuration
-├── steps.ts                          # Step implementations
-└── README.md                         # This file
+│   └── config.ts                   # Test configuration
+├── steps.ts                        # Step implementations (150+ step definitions)
+└── README.md                       # This file
 ```
 
 ## Configuration
@@ -182,10 +197,17 @@ tests/
 Configure your ZoneMinder server in `.env`:
 
 ```env
-ZM_HOST_1=<url>
-ZM_USER_1=<username>
-ZM_PASSWORD_1=<password>
+ZM_HOST_1=http://192.168.1.100
+ZM_USER_1=admin
+ZM_PASSWORD_1=password
 ```
+
+**Important:** E2E tests require the dev server with proxy:
+```bash
+npm run dev:all  # Starts both Vite (5173) and proxy server (3001)
+```
+
+The proxy is needed because browser security (CORS) blocks direct requests to ZoneMinder servers.
 
 Timeout settings in `helpers/config.ts`:
 - Overall test: 30s per test case
