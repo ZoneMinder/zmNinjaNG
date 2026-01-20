@@ -407,7 +407,11 @@
     "mode_record": "Record",
     "mode_mocord": "Mocord",
     "mode_nodect": "Nodect",
-    "mode_none": "None"
+    "mode_none": "None",
+    "show_zones": "显示区域",
+    "hide_zones": "隐藏区域",
+    "zones_loading": "正在加载区域...",
+    "no_zones": "未定义区域"
   },
   "montage": {
     "title": "蒙太奇",

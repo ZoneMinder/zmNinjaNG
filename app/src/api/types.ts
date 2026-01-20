@@ -562,6 +562,49 @@ export interface EventCardProps {
   thumbnailHeight: number;
 }
 
+// Zone types
+export const ZoneTypeEnum = z.enum(['Active', 'Inclusive', 'Exclusive', 'Preclusive', 'Inactive', 'Privacy']);
+
+export const ZoneSchema = z.object({
+  Id: z.coerce.number(),
+  MonitorId: z.coerce.number(),
+  Name: z.string(),
+  Type: ZoneTypeEnum,
+  Units: z.string().optional(),
+  NumCoords: z.coerce.number(),
+  Coords: z.string(),
+  Area: z.coerce.number().optional(),
+  AlarmRGB: z.coerce.number().optional(),
+  CheckMethod: z.string().optional(),
+  MinPixelThreshold: z.coerce.number().nullable().optional(),
+  MaxPixelThreshold: z.coerce.number().nullable().optional(),
+  MinAlarmPixels: z.coerce.number().nullable().optional(),
+  MaxAlarmPixels: z.coerce.number().nullable().optional(),
+  FilterX: z.coerce.number().nullable().optional(),
+  FilterY: z.coerce.number().nullable().optional(),
+  MinFilterPixels: z.coerce.number().nullable().optional(),
+  MaxFilterPixels: z.coerce.number().nullable().optional(),
+  MinBlobPixels: z.coerce.number().nullable().optional(),
+  MaxBlobPixels: z.coerce.number().nullable().optional(),
+  MinBlobs: z.coerce.number().nullable().optional(),
+  MaxBlobs: z.coerce.number().nullable().optional(),
+  OverloadFrames: z.coerce.number().nullable().optional(),
+  ExtendAlarmFrames: z.coerce.number().nullable().optional(),
+});
+
+export const ZoneDataSchema = z.object({
+  Zone: ZoneSchema,
+});
+
+export const ZonesResponseSchema = z.object({
+  zones: z.array(ZoneDataSchema),
+});
+
+export type Zone = z.infer<typeof ZoneSchema>;
+export type ZoneType = z.infer<typeof ZoneTypeEnum>;
+export type ZoneData = z.infer<typeof ZoneDataSchema>;
+export type ZonesResponse = z.infer<typeof ZonesResponseSchema>;
+
 // Montage layout types
 export interface MontageLayout {
   lg?: ReactGridLayout.Layout[];

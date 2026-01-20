@@ -405,7 +405,11 @@
     "mode_record": "Record",
     "mode_mocord": "Mocord",
     "mode_nodect": "Nodect",
-    "mode_none": "None"
+    "mode_none": "None",
+    "show_zones": "Show Zones",
+    "hide_zones": "Hide Zones",
+    "zones_loading": "Loading zones...",
+    "no_zones": "No zones defined"
   },
   "montage": {
     "title": "Montage",

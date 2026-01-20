@@ -19,6 +19,14 @@ Feature: Monitor Management and Viewing
     When I navigate back
     Then I should see the monitor grid
 
+  Scenario: Toggle zone overlay on monitor detail
+    When I navigate to the "Monitors" page
+    And I click into the first monitor detail page
+    Then I should see the monitor player
+    And I should see the zone toggle button
+    When I click the zone toggle button
+    Then the zone toggle should be active
+
   Scenario: Navigate between monitors using swipe
     When I navigate to the "Monitors" page
     And I click into the first monitor detail page

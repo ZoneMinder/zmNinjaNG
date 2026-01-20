@@ -8,6 +8,7 @@
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getMonitor, getControl } from '../api/monitors';
+import { getZones } from '../api/zones';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useAuthStore } from '../stores/auth';
 import { useSettingsStore } from '../stores/settings';
@@ -16,7 +17,7 @@ import { Card } from '../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Switch } from '../components/ui/switch';
 import { Label } from '../components/ui/label';
-import { ArrowLeft, Settings, Maximize2, Clock, AlertTriangle, Download, ChevronUp, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Settings, Maximize2, Clock, AlertTriangle, Download, ChevronUp, ChevronDown, Layers } from 'lucide-react';
 import { useState, useRef, useMemo } from 'react';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
@@ -25,6 +26,7 @@ import { useTranslation } from 'react-i18next';
 import { useInsomnia } from '../hooks/useInsomnia';
 import { PTZControls } from '../components/monitors/PTZControls';
 import { VideoPlayer } from '../components/video/VideoPlayer';
+import { ZoneOverlay } from '../components/video/ZoneOverlay';
 import { log, LogLevel } from '../lib/logger';
 import { parseMonitorRotation } from '../lib/monitor-rotation';
 
@@ -43,6 +45,7 @@ export default function MonitorDetail() {
   const [isContinuous, setIsContinuous] = useState(true);
   const [showPTZ, setShowPTZ] = useState(true);
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
+  const [showZones, setShowZones] = useState(false);
   const [scale, setScale] = useState(100);
   const mediaRef = useRef<HTMLImageElement | HTMLVideoElement>(null);
 
@@ -69,6 +72,13 @@ export default function MonitorDetail() {
     queryKey: ['control', monitor?.Monitor.ControlId],
     queryFn: () => getControl(monitor!.Monitor.ControlId!),
     enabled: !!monitor?.Monitor.ControlId && monitor.Monitor.Controllable === '1',
+  });
+
+  // Fetch zones when showZones is enabled
+  const { data: zones = [], isLoading: isZonesLoading } = useQuery({
+    queryKey: ['zones', id],
+    queryFn: () => getZones(id!),
+    enabled: !!id && showZones,
   });
 
   // Custom hooks for extracted logic
@@ -285,6 +295,14 @@ export default function MonitorDetail() {
             showStatus={true}
             className="data-[testid=monitor-player]"
           />
+          <ZoneOverlay
+            zones={zones}
+            monitorWidth={Number(monitor.Monitor.Width) || 1920}
+            monitorHeight={Number(monitor.Monitor.Height) || 1080}
+            rotation={parseMonitorRotation(monitor.Monitor.Orientation)}
+            monitorId={monitor.Monitor.Id}
+            visible={showZones && !isZonesLoading}
+          />
         </Card>
 
         {/* Video Controls Bar */}
@@ -318,6 +336,17 @@ export default function MonitorDetail() {
               aria-label={t('monitor_detail.view_events')}
             >
               <Clock className="h-4 w-4" />
+            </Button>
+            <Button
+              variant={showZones ? 'secondary' : 'ghost'}
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setShowZones(!showZones)}
+              title={showZones ? t('monitor_detail.hide_zones') : t('monitor_detail.show_zones')}
+              aria-label={showZones ? t('monitor_detail.hide_zones') : t('monitor_detail.show_zones')}
+              data-testid="zone-toggle-button"
+            >
+              <Layers className={cn('h-4 w-4', isZonesLoading && 'animate-pulse')} />
             </Button>
           </div>
           <div className="flex items-center gap-1">
