@@ -17,6 +17,7 @@ import { Badge } from '../components/ui/badge';
 import { VideoPlayer } from '../components/ui/video-player';
 import { ZmsEventPlayer } from '../components/events/ZmsEventPlayer';
 import { ArrowLeft, Calendar, Clock, HardDrive, AlertTriangle, Download, Archive, Video, Star, Timer } from 'lucide-react';
+import { getEventCauseIcon } from '../lib/event-icons';
 import { format } from 'date-fns';
 import { downloadEventVideo } from '../lib/download';
 import { parseMonitorRotation } from '../lib/monitor-rotation';
@@ -180,9 +181,15 @@ export default function EventDetail() {
           <div>
             <h1 className="text-sm sm:text-base font-semibold truncate max-w-[200px] sm:max-w-none">{event.Event.Name}</h1>
             <div className="flex items-center gap-1.5 text-[10px] sm:text-xs text-muted-foreground">
-              <Badge variant="outline" className="text-[10px] h-4">
-                {event.Event.Cause}
-              </Badge>
+              {(() => {
+                const CauseIcon = getEventCauseIcon(event.Event.Cause);
+                return (
+                  <Badge variant="outline" className="text-[10px] h-4 gap-1">
+                    <CauseIcon className="h-3 w-3" />
+                    {event.Event.Cause}
+                  </Badge>
+                );
+              })()}
               <span className="hidden sm:inline">{t('event_detail.camera')} {event.Event.MonitorId}</span>
             </div>
           </div>

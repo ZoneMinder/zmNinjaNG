@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Bell, Trash2, CheckCheck, ExternalLink, AlertCircle } from 'lucide-react';
+import { getEventCauseIcon } from '../lib/event-icons';
 import { formatDistanceToNow } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -155,10 +156,15 @@ export default function NotificationHistory() {
                     </div>
                   )}
                   <div className="flex-1 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Bell className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm font-medium">{event.Cause}</span>
-                    </div>
+                    {(() => {
+                      const CauseIcon = getEventCauseIcon(event.Cause);
+                      return (
+                        <div className="flex items-center gap-2">
+                          <CauseIcon className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm font-medium">{event.Cause}</span>
+                        </div>
+                      );
+                    })()}
                     <div className="text-xs text-muted-foreground space-y-1">
                       <div>{t('notification_history.event_id', { id: event.EventId })}</div>
                       <div>{t('notification_history.monitor_id', { id: event.MonitorId })}</div>

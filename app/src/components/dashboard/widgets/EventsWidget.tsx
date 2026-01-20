@@ -16,6 +16,7 @@ import { getEvents } from '../../../api/events';
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { getEventCauseIcon } from '../../../lib/event-icons';
 
 interface EventsWidgetProps {
     /** Optional monitor ID to filter events */
@@ -75,7 +76,15 @@ export const EventsWidget = memo(function EventsWidget({ monitorId, limit = 5, r
                                 </span>
                             </div>
                             <div className="flex items-center justify-between text-xs text-muted-foreground">
-                                <span>{event.Event.Cause}</span>
+                                {(() => {
+                                    const CauseIcon = getEventCauseIcon(event.Event.Cause);
+                                    return (
+                                        <span className="flex items-center gap-1">
+                                            <CauseIcon className="h-3 w-3" />
+                                            {event.Event.Cause}
+                                        </span>
+                                    );
+                                })()}
                                 <span className="bg-primary/10 text-primary px-1.5 py-0.5 rounded text-[10px]">
                                     {event.Event.Length}s
                                 </span>

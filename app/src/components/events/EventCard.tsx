@@ -13,6 +13,7 @@ import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { SecureImage } from '../ui/secure-image';
 import { Video, Calendar, Clock, Star } from 'lucide-react';
+import { getEventCauseIcon } from '../../lib/event-icons';
 import type { EventCardProps } from '../../api/types';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/utils';
@@ -127,9 +128,15 @@ function EventCardComponent({ event, monitorName, thumbnailUrl, objectFit = 'con
                     )}
                   />
                 </button>
-                <Badge variant="outline" className="text-[10px] sm:text-xs">
-                  {event.Cause}
-                </Badge>
+                {(() => {
+                  const CauseIcon = getEventCauseIcon(event.Cause);
+                  return (
+                    <Badge variant="outline" className="text-[10px] sm:text-xs gap-1">
+                      <CauseIcon className="h-3 w-3" />
+                      {event.Cause}
+                    </Badge>
+                  );
+                })()}
               </div>
             </div>
 

@@ -14,6 +14,7 @@ import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useProfileStore } from '../stores/profile';
 import { toast } from 'sonner';
 import { Bell } from 'lucide-react';
+import { getEventCauseIcon } from '../lib/event-icons';
 import { log, LogLevel } from '../lib/logger';
 import { navigationService } from '../lib/navigation';
 import { useTranslation } from 'react-i18next';
@@ -193,7 +194,15 @@ export function NotificationHandler() {
           )}
           <div className="flex-1 min-w-0">
             <div className="font-semibold text-sm">{latestEvent.MonitorName}</div>
-            <div className="text-sm text-muted-foreground mt-0.5">{latestEvent.Cause}</div>
+            {(() => {
+              const CauseIcon = getEventCauseIcon(latestEvent.Cause);
+              return (
+                <div className="text-sm text-muted-foreground mt-0.5 flex items-center gap-1">
+                  <CauseIcon className="h-3 w-3" />
+                  {latestEvent.Cause}
+                </div>
+              );
+            })()}
             <div className="text-xs text-muted-foreground mt-1">
               {t('events.event_id')}: {latestEvent.EventId}
             </div>
