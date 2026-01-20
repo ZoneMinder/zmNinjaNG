@@ -51,7 +51,8 @@ export function normalizeZmsSnapshotUrl(imageUrl: string): string {
       return parsedUrl.toString();
     }
 
-    if (!parsedUrl.pathname.includes('nph-zms')) {
+    // Handle both /nph-zms and /zms streaming endpoints
+    if (!parsedUrl.pathname.includes('nph-zms') && !parsedUrl.pathname.endsWith('/zms')) {
       return imageUrl;
     }
 

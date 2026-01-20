@@ -103,6 +103,19 @@ describe('ZMS Snapshot URL normalization', () => {
         expect(parsed.searchParams.get('_t')).toBeNull();
     });
 
+    it('normalizes /zms URLs (without nph- prefix)', () => {
+        const url = 'https://zm.example.com:30005/zm/cgi-bin/zms?monitor=5&mode=jpeg&scale=100&maxfps=10&connkey=74238&token=abc';
+        const normalized = normalizeZmsSnapshotUrl(url);
+        const parsed = new URL(normalized);
+
+        expect(parsed.searchParams.get('mode')).toBe('single');
+        expect(parsed.searchParams.get('monitor')).toBe('5');
+        expect(parsed.searchParams.get('scale')).toBe('100');
+        expect(parsed.searchParams.get('token')).toBe('abc');
+        expect(parsed.searchParams.get('maxfps')).toBeNull();
+        expect(parsed.searchParams.get('connkey')).toBeNull();
+    });
+
     it('normalizes proxied ZMS URLs', () => {
         const targetUrl = 'http://zm.example.com/cgi-bin/nph-zms?monitor=2&mode=jpeg&connkey=999';
         const proxyUrl = `http://localhost:3001/image-proxy?url=${encodeURIComponent(targetUrl)}`;
