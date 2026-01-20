@@ -105,11 +105,11 @@ export function ProfileSwitcher() {
           className="flex items-center gap-2 min-w-[200px] justify-between"
           disabled={isLoading}
         >
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             {isLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
             ) : (
-              <Server className="h-4 w-4" />
+              <Server className="h-4 w-4 shrink-0" />
             )}
             <span className="truncate">{currentProfile?.name || t('profiles.select_profile')}</span>
           </div>
