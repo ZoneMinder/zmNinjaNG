@@ -802,9 +802,51 @@ When('I click the snapshot button in monitor detail', async ({ page }) => {
 });
 
 Then('I should see snapshot download initiated', async ({ page }) => {
-  // Look for background task or download indication
-  await page.waitForTimeout(500);
-  log.info('E2E: Snapshot download initiated', { component: 'e2e' });
+  // Snapshot can work two ways:
+  // 1. Canvas capture from video element -> data URL -> browser download (no HTTP request)
+  // 2. Fetch from URL -> HTTP request -> download
+  //
+  // For WebRTC video players (#1), there's no HTTP request to monitor.
+  // We verify success by checking for:
+  // - Success toast appearing
+  // - No error toast appearing within a reasonable time
+
+  const errorToast = page.locator('[data-sonner-toast][data-type="error"]');
+  const successToast = page.locator('[data-sonner-toast][data-type="success"]');
+
+  // Wait for either success or error indication
+  const waitTimeout = 5000;
+
+  try {
+    await Promise.race([
+      // Success: toast appears indicating snapshot saved
+      successToast.waitFor({ state: 'visible', timeout: waitTimeout }).then(async () => {
+        const text = await successToast.textContent();
+        log.info('E2E: Snapshot success toast appeared', { component: 'e2e', text });
+      }),
+
+      // Failure: error toast appears
+      errorToast.waitFor({ state: 'visible', timeout: waitTimeout }).then(async () => {
+        const errorText = await errorToast.textContent();
+        throw new Error(`Snapshot download failed: ${errorText}`);
+      }),
+    ]);
+  } catch (error) {
+    // If timeout waiting for either toast, check final state
+    if (error instanceof Error && error.message.includes('Timeout')) {
+      // Check if error toast appeared
+      if (await errorToast.isVisible({ timeout: 500 }).catch(() => false)) {
+        const errorText = await errorToast.textContent();
+        throw new Error(`Snapshot download failed: ${errorText}`);
+      }
+      // No error toast = likely succeeded (canvas capture + browser download)
+      log.info('E2E: Snapshot download initiated (no error detected)', { component: 'e2e' });
+      return;
+    }
+    throw error;
+  }
+
+  log.info('E2E: Snapshot download completed successfully', { component: 'e2e' });
 });
 
 When('I click the fullscreen button on video player', async ({ page }) => {
