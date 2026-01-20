@@ -16,7 +16,7 @@ const causeIconMap: Record<string, LucideIcon> = {
   Alarm: Bell,
   Signal: Wifi,
   Linked: Link,
-  Manual: Hand,
+  'Forced Web': Hand,
   Continuous: Video,
 };
 

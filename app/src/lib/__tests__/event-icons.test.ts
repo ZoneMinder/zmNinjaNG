@@ -27,8 +27,8 @@ describe('getEventCauseIcon', () => {
     expect(icon).toBe(Link);
   });
 
-  it('returns Hand icon for Manual cause', () => {
-    const icon = getEventCauseIcon('Manual');
+  it('returns Hand icon for Forced Web cause', () => {
+    const icon = getEventCauseIcon('Forced Web');
     expect(icon).toBe(Hand);
   });
 
@@ -66,7 +66,7 @@ describe('hasSpecificCauseIcon', () => {
     expect(hasSpecificCauseIcon('Alarm')).toBe(true);
     expect(hasSpecificCauseIcon('Signal')).toBe(true);
     expect(hasSpecificCauseIcon('Linked')).toBe(true);
-    expect(hasSpecificCauseIcon('Manual')).toBe(true);
+    expect(hasSpecificCauseIcon('Forced Web')).toBe(true);
     expect(hasSpecificCauseIcon('Continuous')).toBe(true);
   });
 
