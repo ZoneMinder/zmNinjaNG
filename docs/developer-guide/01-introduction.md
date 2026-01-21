@@ -1,20 +1,24 @@
 # Introduction to zmNg Development
 
-Welcome to the zmNg developer guide. This guide is designed for experienced programmers who may not be familiar with React, React Native, or modern frontend state management patterns.
+Welcome to the zmNg developer guide. This guide is designed for experienced programmers who may not be familiar with React or modern frontend development patterns.
 
 ## What is zmNg?
 
-zmNg is a cross-platform mobile and desktop application for ZoneMinder, a video surveillance system. It's built using:
+zmNg is a cross-platform mobile and desktop application for ZoneMinder, an open-source video surveillance system. It's built using:
 
-- **React Native**: A framework for building native mobile apps using React
-- **Ionic Framework**: Provides UI components and tooling for cross-platform development
-- **Capacitor**: A native runtime for web apps that allows access to device features
-- **TypeScript**: A typed superset of JavaScript that compiles to plain JavaScript
+- **React**: A JavaScript library for building user interfaces
+- **Ionic Framework**: Provides mobile-optimized UI components and navigation patterns
+- **Capacitor**: Wraps the web app as a native iOS/Android app with access to device features
+- **Tauri**: Wraps the web app as a native desktop app (macOS, Windows, Linux)
+- **TypeScript**: A typed superset of JavaScript that catches errors at compile time
 
-The app runs on:
-- iOS (iPhone/iPad)
-- Android phones and tablets
-- Desktop (via Electron/browser)
+**The key insight**: zmNg is a web application that runs everywhere. The same React code is packaged as:
+- A native iOS app (via Capacitor)
+- A native Android app (via Capacitor)
+- A native desktop app (via Tauri)
+- A web app (runs in browser)
+
+This "write once, run anywhere" approach means you write React code, and it runs on all platforms.
 
 ## Who This Guide Is For
 

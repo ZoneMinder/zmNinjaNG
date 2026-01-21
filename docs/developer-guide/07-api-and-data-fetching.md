@@ -425,7 +425,7 @@ export function EventsWidget({ refreshInterval = 30000 }: EventsWidgetProps) {
 
 #### Configuration Constants
 
-All default intervals are defined in `lib/zmng-constants.ts`:
+Static defaults are defined in `lib/zmng-constants.ts`:
 
 ```tsx
 export const ZM_INTEGRATION = {
@@ -434,13 +434,66 @@ export const ZM_INTEGRATION = {
   streamQueryStatusTime: 10000,    // 10 sec - stream status polling
   alarmStatusTime: 10000,          // 10 sec - alarm status polling
   streamReconnectDelay: 5000,      // 5 sec - delay before stream reconnect
-  
+
   // Token management
   tokenCheckInterval: 60 * 1000,   // 60 sec - check token expiry
   accessTokenLeewayMs: 5 * 60 * 1000,  // 5 min - refresh before expiry
   loginInterval: 1800000,          // 30 min - re-login interval
 } as const;
 ```
+
+#### Bandwidth Mode Settings
+
+Most polling intervals are controlled by the user's **bandwidth mode** setting (Normal or Low). This allows users to reduce network usage on metered connections.
+
+**Configuration** (`lib/zmng-constants.ts`):
+
+```tsx
+export const BANDWIDTH_SETTINGS: Record<BandwidthMode, BandwidthSettings> = {
+  normal: {
+    monitorStatusInterval: 10000,   // 10 sec
+    alarmStatusInterval: 5000,      // 5 sec
+    snapshotRefreshInterval: 3,     // 3 sec
+    eventsWidgetInterval: 30000,    // 30 sec
+    timelineHeatmapInterval: 60000, // 60 sec
+    consoleEventsInterval: 60000,   // 60 sec
+    daemonCheckInterval: 30000,     // 30 sec
+    imageScale: 100,                // 100%
+    imageQuality: 100,              // 100%
+    streamMaxFps: 10,               // 10 FPS
+  },
+  low: {
+    monitorStatusInterval: 20000,   // 20 sec
+    alarmStatusInterval: 10000,     // 10 sec
+    snapshotRefreshInterval: 10,    // 10 sec
+    eventsWidgetInterval: 60000,    // 60 sec
+    timelineHeatmapInterval: 120000,// 120 sec
+    consoleEventsInterval: 60000,   // 60 sec
+    daemonCheckInterval: 60000,     // 60 sec
+    imageScale: 50,                 // 50%
+    imageQuality: 50,               // 50%
+    streamMaxFps: 5,                // 5 FPS
+  },
+};
+```
+
+**Accessing bandwidth settings** (`hooks/useBandwidthSettings.ts`):
+
+```tsx
+import { useBandwidthSettings } from '../hooks/useBandwidthSettings';
+
+function MyComponent() {
+  const bandwidth = useBandwidthSettings();
+
+  const { data } = useQuery({
+    queryKey: ['monitors'],
+    queryFn: getMonitors,
+    refetchInterval: bandwidth.monitorStatusInterval,
+  });
+}
+```
+
+Components should use `useBandwidthSettings()` instead of hardcoded intervals for any polling that affects network usage.
 
 #### Timer Best Practices
 

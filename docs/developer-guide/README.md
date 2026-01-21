@@ -1,10 +1,16 @@
 # zmNg Developer Guide
 
-Comprehensive guide for developing the zmNg ZoneMinder mobile and desktop application.
+This guide teaches you how to work on the zmNg codebase. It's written for developers who may not have React experience, explaining concepts from first principles with real examples from the code.
 
-## Overview
+## How to Use This Guide
 
-This guide is designed for experienced programmers who may not be familiar with React, React Native, or modern frontend development. It explains concepts from first principles and describes the actual codebase architecture.
+**New to React?** Start with Chapter 2 (React Fundamentals), then Chapter 3 (Zustand). These explain the core concepts you'll encounter throughout the codebase.
+
+**Adding a feature?** Read Chapter 9 (Contributing) for the workflow, then Chapter 6 (Testing) to understand the test requirements.
+
+**Debugging an issue?** Check Chapter 8 (Common Pitfalls) - it catalogs the bugs we've hit before and how to avoid them.
+
+**Understanding the architecture?** Chapter 5 (Component Architecture) explains how files are organized, and Chapter 11 (Application Lifecycle) explains how the app runs from start to finish.
 
 ## Table of Contents
 
@@ -87,38 +93,87 @@ This guide is designed for experienced programmers who may not be familiar with 
     - Domain Components and Usage Patterns
 
 
+---
+
+## Key Concepts (Quick Reference)
+
+### The Three Rules
+
+1. **Never use `console.*`** - Use `log.componentName(message, LogLevel.X)` from `lib/logger.ts`
+2. **Never use raw `fetch()`** - Use `httpGet`, `httpPost` from `lib/http.ts`
+3. **Never skip tests** - Write tests before/during implementation, verify they pass
+
+### State Types
+
+| Type | Where | Example | When to Use |
+|------|-------|---------|-------------|
+| **Local** | `useState` | Form inputs, UI toggles | Component-specific, temporary |
+| **Global** | Zustand stores | Current profile, settings | Shared across components |
+| **Server** | React Query | Monitor list, events | Data from ZoneMinder API |
+
+### File Organization
+
+```
+src/
+├── api/          # API functions (thin wrappers around http client)
+├── components/   # React components (visual)
+├── hooks/        # Custom React hooks (component logic)
+├── lib/          # Pure utilities (no React dependencies)
+├── pages/        # Route-level views
+├── services/     # Platform-specific code (Capacitor plugins)
+├── stores/       # Global state (Zustand)
+└── locales/      # i18n translations (en, de, es, fr, zh)
+```
+
+### Common Patterns
+
+```tsx
+// Logging (never use console.*)
+import { log, LogLevel } from '../lib/logger';
+log.monitor('Stream started', LogLevel.INFO, { monitorId });
+
+// HTTP requests (never use raw fetch)
+import { httpGet, httpPost } from '../lib/http';
+const data = await httpGet<MonitorsResponse>(url, { token });
+
+// Translations (never hardcode strings)
+const { t } = useTranslation();
+<Button>{t('common.delete')}</Button>
+
+// Test selectors (always add data-testid)
+<Button data-testid="delete-button">{t('common.delete')}</Button>
+```
+
+---
+
 ## Quick Start
 
-### For React Beginners
+```bash
+cd app
+npm install
+npm run dev      # Start development server
+npm test         # Run unit tests
+npm run build    # Build for production
+```
 
-If you're new to React:
+### Reading Order
 
-1. Read **Chapter 2: React Fundamentals** - understand the mental model
-2. Read **Chapter 3: State Management** - learn Zustand patterns
-3. Study **Chapter 4: Pages and Views** - see infinite loop examples
-4. Review **Chapter 6: Testing Strategy** - learn testing approach
-5. Reference other chapters as needed
+**New to React:**
+1. Chapter 2: React Fundamentals
+2. Chapter 3: State Management (Zustand)
+3. Chapter 4: Pages and Views
+4. Chapter 6: Testing Strategy
 
-### For React Developers
+**Experienced React developers:**
+1. Chapter 3: Zustand patterns
+2. Chapter 4: Infinite loop issues (important!)
+3. Chapter 8: Common Pitfalls
 
-If you're familiar with React:
-
-1. Skim **Chapter 2** to confirm understanding
-2. Read **Chapter 3** for Zustand-specific patterns
-3. Read **Chapter 4** for infinite loop issues (important!)
-4. Review **Chapter 6** for testing approach
-5. Reference **Chapter 8** for common pitfalls
-
-### For Contributors
-
-Before contributing:
-
-1. Read **Chapter 4-5** to understand the codebase
-2. Read **Chapter 12** to understand shared services and components
-3. Read **Chapter 6** for testing requirements
-4. Read **Chapter 8** to avoid common mistakes
-5. Follow **Chapter 9** for contribution workflow
-6. Always check `AGENTS.md` for requirements
+**Before contributing:**
+1. Chapters 4-5: Understand the codebase
+2. Chapter 6: Testing requirements
+3. Chapter 9: Contribution workflow
+4. Check `AGENTS.md` for all requirements
 
 
 ## Additional Resources
