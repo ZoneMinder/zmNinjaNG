@@ -157,15 +157,67 @@ We use React Query (`@tanstack/react-query`) for server state management.
 
 ### Why React Query?
 
-- **Automatic caching**: Responses are cached by query key
-- **Background refetching**: Keeps data fresh automatically
+- **State storage**: Responses stored by query key, available to all components
+- **Background refetching**: Keeps data fresh via polling
 - **Loading/error states**: Built-in state management
 - **Deduplication**: Multiple components requesting same data = one request
 - **Pagination**: Built-in infinite scroll support
 
+### Understanding React Query's "Cache"
+
+**The word "cache" is misleading.** React Query doesn't cache HTTP requests to avoid network calls. Instead, it provides **state storage** that holds the last response.
+
+#### What the "Cache" Actually Does
+
+```
+Timer fires (refetchInterval)
+    ↓
+Network request to /monitors.json  ← ALWAYS hits the server
+    ↓
+Response stored in React Query's state
+    ↓
+Components re-render with new data
+```
+
+The stored state prevents:
+1. **Loading spinners between polls** - UI shows previous data while fetching
+2. **Duplicate simultaneous requests** - If 3 components use `useMonitors()`, only 1 network request is made
+3. **Data loss on unmount** - Navigate away and back within 5 minutes, old data is still there
+
+#### Key Settings Explained
+
+| Setting | zmNg Value | What It Does |
+|---------|------------|--------------|
+| `staleTime` | `0` (default) | How long data is "fresh". At 0, data is immediately stale, so any new subscriber triggers a background refetch. |
+| `gcTime` | `5 min` (default) | How long unused data stays in memory. After 5 min with no subscribers, data is garbage collected. |
+| `refetchInterval` | varies | **Always makes a network request** at this interval. Not cached. |
+
+#### When Network Requests Happen
+
+| Scenario | Network Request? |
+|----------|-----------------|
+| `refetchInterval` timer fires | **Yes** - always hits the server |
+| Component mounts, data exists from recent poll | **No** - uses stored data (but may trigger background refetch since `staleTime: 0`) |
+| Component mounts, no data exists | **Yes** - fetches from server |
+| Multiple components use same query key simultaneously | **One request** - deduplicated |
+| Window regains focus | **No** - `refetchOnWindowFocus: false` in zmNg |
+
+#### Example: Monitor Polling
+
+```tsx
+// useMonitors.ts
+const { data } = useQuery({
+  queryKey: ['monitors', currentProfile?.id],
+  queryFn: getMonitors,
+  refetchInterval: bandwidth.monitorStatusInterval,  // 20-40 sec
+});
+```
+
+Every 20-40 seconds, this makes a real network request to `/monitors.json`. Between polls, any component using `useMonitors()` gets the stored response instantly without a new request.
+
 ### Query Client Setup
 
-**Location**: `src/main.tsx`
+**Location**: `src/App.tsx`
 
 ```tsx
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -173,22 +225,16 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 30000,  // Data fresh for 30 seconds
-      cacheTime: 5 * 60 * 1000,  // Keep in cache for 5 minutes
-      retry: 2,  // Retry failed requests twice
-      refetchOnWindowFocus: true,  // Refetch when window focused
+      retry: 1,                      // Single retry on failure
+      refetchOnWindowFocus: false,   // Don't refetch when window focused
+      // staleTime: 0 (default)      // Data immediately stale
+      // gcTime: 5 min (default)     // Unused data kept 5 min
     },
   },
 });
-
-function App() {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <YourApp />
-    </QueryClientProvider>
-  );
-}
 ```
+
+**Note:** With `staleTime: 0`, every query access triggers a network fetch. The HTTP layer (`lib/http.ts`) logs all network calls with correlation IDs - there's no separate "cache hit" logging since true cache hits (skipped network calls) don't occur with this configuration.
 
 ### Basic Queries
 
@@ -196,13 +242,14 @@ function App() {
 
 ```tsx
 function MonitorList() {
-  const currentProfile = useProfileStore((state) => state.currentProfile);
+  const { currentProfile } = useCurrentProfile();
+  const bandwidth = useBandwidthSettings();
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['monitors', currentProfile?.id],
-    queryFn: () => fetchMonitors(currentProfile!.id),
-    enabled: !!currentProfile,  // Only run if profile exists
-    staleTime: 30000,  // Fresh for 30s
+    queryFn: getMonitors,
+    enabled: !!currentProfile,
+    refetchInterval: bandwidth.monitorStatusInterval,  // 20-40 sec polling
   });
 
   if (isLoading) return <Skeleton />;
@@ -211,7 +258,7 @@ function MonitorList() {
 
   return (
     <div>
-      {data.monitors.map(m => <MonitorCard key={m.Id} monitor={m} />)}
+      {data.monitors.map(m => <MonitorCard key={m.Monitor.Id} monitor={m} />)}
     </div>
   );
 }
