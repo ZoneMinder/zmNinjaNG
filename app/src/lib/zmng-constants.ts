@@ -241,7 +241,7 @@ export interface BandwidthSettings {
  */
 export const BANDWIDTH_SETTINGS: Record<BandwidthMode, BandwidthSettings> = {
   normal: {
-    monitorStatusInterval: 10000, // 10 sec
+    monitorStatusInterval: 20000, // 20 sec
     alarmStatusInterval: 5000, // 5 sec
     snapshotRefreshInterval: 3, // 3 sec (stored in seconds for settings compatibility)
     eventsWidgetInterval: 30000, // 30 sec
@@ -253,7 +253,7 @@ export const BANDWIDTH_SETTINGS: Record<BandwidthMode, BandwidthSettings> = {
     streamMaxFps: 10, // 10 FPS
   },
   low: {
-    monitorStatusInterval: 20000, // 20 sec
+    monitorStatusInterval: 40000, // 40 sec
     alarmStatusInterval: 10000, // 10 sec
     snapshotRefreshInterval: 10, // 10 sec
     eventsWidgetInterval: 60000, // 60 sec
