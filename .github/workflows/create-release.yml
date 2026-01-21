@@ -18,21 +18,38 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Generate changelog with git-cliff
-        uses: orhun/git-cliff-action@v4
-        id: changelog
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
         with:
-          config: cliff.toml
-          args: --latest --strip header
+          ruby-version: '3.3'
+
+      - name: Install github_changelog_generator
+        run: gem install github_changelog_generator
+
+      - name: Get previous tag
+        id: prev_tag
+        run: |
+          CURRENT_TAG="${{ github.ref_name }}"
+          PREV_TAG=$(git tag --sort=-version:refname | grep -A1 "^${CURRENT_TAG}$" | tail -1)
+          echo "previous_tag=${PREV_TAG}" >> $GITHUB_OUTPUT
+          echo "Previous tag: ${PREV_TAG}"
+
+      - name: Generate changelog
         env:
-          OUTPUT: /tmp/git-cliff-changelog.md
-          GITHUB_REPO: ${{ github.repository }}
+          CHANGELOG_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          github_changelog_generator \
+            --since-tag "${{ steps.prev_tag.outputs.previous_tag }}" \
+            --output /tmp/changelog-raw.md
+
+          # Extract just the latest version section (skip header and footer)
+          sed -n '/^## \[/,/^\* \*This Changelog/p' /tmp/changelog-raw.md | head -n -2 > /tmp/changelog-section.md
 
       - name: Prepare release notes
         run: |
-          # Add header and separator, then append install notes
+          # Add header, changelog content, then append install notes
           echo -e "## 📋 Changelog\n" > /tmp/changelog.md
-          cat /tmp/git-cliff-changelog.md >> /tmp/changelog.md
+          cat /tmp/changelog-section.md >> /tmp/changelog.md
           echo -e "\n---\n" >> /tmp/changelog.md
           cat .github/workflows/_RELEASE_NOTE_INSERT.md >> /tmp/changelog.md
 

@@ -1,0 +1,29 @@
+# github-changelog-generator configuration
+# https://github.com/github-changelog-generator/github-changelog-generator
+
+# Repository
+user=pliablepixels
+project=zmNg
+
+# Output
+output=CHANGELOG.md
+
+# Date format
+date-format=%Y-%m-%d
+
+# Include
+issues=true
+pulls=false
+unreleased=true
+
+# Labels for categorization
+enhancement-labels=enhancement,feature
+bug-labels=bug,fix
+
+# Exclude labels
+exclude-labels=duplicate,question,invalid,wontfix,ignore-for-release
+
+# Formatting
+simple-list=false
+author=false
+compare-link=true
