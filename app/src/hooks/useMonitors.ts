@@ -17,11 +17,14 @@ import { useQuery } from '@tanstack/react-query';
 import { getMonitors } from '../api/monitors';
 import { filterEnabledMonitors } from '../lib/filters';
 import { useCurrentProfile } from './useCurrentProfile';
+import { useBandwidthSettings } from './useBandwidthSettings';
 import type { MonitorData } from '../api/types';
 
 export interface UseMonitorsOptions {
   /** Whether the query is enabled (default: true) */
   enabled?: boolean;
+  /** Override polling interval in ms (default: uses bandwidth settings) */
+  refetchInterval?: number;
 }
 
 export interface UseMonitorsReturn {
@@ -52,11 +55,13 @@ export interface UseMonitorsReturn {
  */
 export function useMonitors(options?: UseMonitorsOptions): UseMonitorsReturn {
   const { currentProfile } = useCurrentProfile();
+  const bandwidth = useBandwidthSettings();
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['monitors', currentProfile?.id],
     queryFn: getMonitors,
     enabled: options?.enabled ?? true,
+    refetchInterval: options?.refetchInterval ?? bandwidth.monitorStatusInterval,
   });
 
   const monitors = data?.monitors || [];

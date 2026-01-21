@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Layouts } from 'react-grid-layout';
 import { LogLevel } from '../lib/log-level';
+import type { BandwidthMode } from '../lib/zmng-constants';
 
 export type ViewMode = 'snapshot' | 'streaming';
 export type DisplayMode = 'normal' | 'compact';
@@ -50,6 +51,8 @@ export interface ProfileSettings {
   webrtcFallbackEnabled: boolean;
   // Which protocols to try for WebRTC streaming (video-rtc runs them in parallel)
   webrtcProtocols: WebRTCProtocol[];
+  // Bandwidth mode: 'normal' for default intervals, 'low' for reduced bandwidth usage
+  bandwidthMode: BandwidthMode;
 }
 
 interface SettingsState {
@@ -122,6 +125,8 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   webrtcFallbackEnabled: true,
   // Default: try all protocols (video-rtc runs them in parallel, first to produce video wins)
   webrtcProtocols: ['webrtc', 'mse', 'hls'],
+  // Normal bandwidth mode by default
+  bandwidthMode: 'normal',
 };
 
 export const useSettingsStore = create<SettingsState>()(

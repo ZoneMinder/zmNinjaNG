@@ -1,4 +1,4 @@
-import { Image, Settings as SettingsIcon, Video as VideoIcon, Zap } from 'lucide-react';
+import { Image, Settings as SettingsIcon, Video as VideoIcon, Zap, Gauge, Leaf } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Label } from '../ui/label';
@@ -9,6 +9,7 @@ import { Badge } from '../ui/badge';
 import { Checkbox } from '../ui/checkbox';
 import { useSettingsStore, type WebRTCProtocol } from '../../stores/settings';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
+import { getBandwidthSettings, type BandwidthMode } from '../../lib/zmng-constants';
 
 // Protocol checkbox configuration
 const PROTOCOLS: { id: WebRTCProtocol; label: string; descKey: string }[] = [
@@ -44,6 +45,20 @@ export function VideoSettings() {
         }
     };
 
+    const handleBandwidthModeChange = (isLow: boolean) => {
+        if (!currentProfile) return;
+        const mode: BandwidthMode = isLow ? 'low' : 'normal';
+        const bandwidthDefaults = getBandwidthSettings(mode);
+
+        // Update bandwidth mode and all related settings to the new defaults
+        updateSettings(currentProfile.id, {
+            bandwidthMode: mode,
+            streamScale: bandwidthDefaults.imageScale,
+            streamMaxFps: bandwidthDefaults.streamMaxFps,
+            snapshotRefreshInterval: bandwidthDefaults.snapshotRefreshInterval,
+        });
+    };
+
     return (
         <Card>
             <CardHeader>
@@ -56,6 +71,43 @@ export function VideoSettings() {
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
+                {/* Bandwidth Mode Toggle */}
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 rounded-lg border bg-card">
+                    <div className="flex-1 space-y-1">
+                        <div className="flex items-center gap-2">
+                            <Label htmlFor="bandwidth-mode" className="text-base font-semibold">
+                                {t('settings.bandwidth_mode')}
+                            </Label>
+                            {settings.bandwidthMode === 'low' && (
+                                <Badge variant="secondary" className="text-xs bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
+                                    {t('settings.bandwidth_saving')}
+                                </Badge>
+                            )}
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                            {settings.bandwidthMode === 'low'
+                                ? t('settings.bandwidth_low_desc')
+                                : t('settings.bandwidth_normal_desc')}
+                        </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3">
+                        <div className="flex items-center gap-2 text-sm">
+                            <Gauge className="h-4 w-4" />
+                            <span className="font-medium">{t('settings.bandwidth_normal')}</span>
+                        </div>
+                        <Switch
+                            id="bandwidth-mode"
+                            checked={settings.bandwidthMode === 'low'}
+                            onCheckedChange={handleBandwidthModeChange}
+                            data-testid="settings-bandwidth-mode-switch"
+                        />
+                        <div className="flex items-center gap-2 text-sm">
+                            <Leaf className="h-4 w-4 text-green-600" />
+                            <span className="font-medium">{t('settings.bandwidth_low')}</span>
+                        </div>
+                    </div>
+                </div>
+
                 {/* View Mode Toggle */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 rounded-lg border bg-card">
                     <div className="flex-1 space-y-1">

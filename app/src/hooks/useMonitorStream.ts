@@ -19,6 +19,7 @@ import { ZMS_COMMANDS } from '../lib/zm-constants';
 import { httpGet } from '../lib/http';
 import { useMonitorStore } from '../stores/monitors';
 import { useCurrentProfile } from './useCurrentProfile';
+import { useBandwidthSettings } from './useBandwidthSettings';
 import { useAuthStore } from '../stores/auth';
 import { log, LogLevel } from '../lib/logger';
 import type { StreamOptions } from '../api/types';
@@ -49,6 +50,7 @@ export function useMonitorStream({
   enabled = true,
 }: UseMonitorStreamOptions): UseMonitorStreamReturn {
   const { currentProfile, settings } = useCurrentProfile();
+  const bandwidth = useBandwidthSettings();
   const accessToken = useAuthStore((state) => state.accessToken);
   const regenerateConnKey = useMonitorStore((state) => state.regenerateConnKey);
 
@@ -107,10 +109,10 @@ export function useMonitorStream({
 
     const interval = setInterval(() => {
       setCacheBuster(Date.now());
-    }, settings.snapshotRefreshInterval * 1000);
+    }, bandwidth.snapshotRefreshInterval * 1000);
 
     return () => clearInterval(interval);
-  }, [enabled, settings.viewMode, settings.snapshotRefreshInterval]);
+  }, [enabled, settings.viewMode, bandwidth.snapshotRefreshInterval]);
 
   // Store cleanup parameters in ref to access latest values on unmount
   const cleanupParamsRef = useRef({ monitorId, connKey: 0, profile: currentProfile, token: accessToken, viewMode: settings.viewMode });
@@ -162,7 +164,7 @@ export function useMonitorStream({
   const streamUrl = currentProfile && connKey !== 0
     ? getStreamUrl(currentProfile.cgiUrl, monitorId, {
       mode: settings.viewMode === 'snapshot' ? 'single' : 'jpeg',
-      scale: settings.streamScale,
+      scale: bandwidth.imageScale,
       maxfps:
         settings.viewMode === 'streaming'
           ? settings.streamMaxFps

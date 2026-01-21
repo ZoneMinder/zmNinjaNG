@@ -17,19 +17,21 @@ import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { getEventCauseIcon } from '../../../lib/event-icons';
+import { useBandwidthSettings } from '../../../hooks/useBandwidthSettings';
 
 interface EventsWidgetProps {
     /** Optional monitor ID to filter events */
     monitorId?: string;
     /** Maximum number of events to display (default: 5) */
     limit?: number;
-    /** Auto-refresh interval in milliseconds (default: 30000) */
+    /** Override auto-refresh interval in milliseconds (default: uses bandwidth settings) */
     refreshInterval?: number;
 }
 
-export const EventsWidget = memo(function EventsWidget({ monitorId, limit = 5, refreshInterval = 30000 }: EventsWidgetProps) {
+export const EventsWidget = memo(function EventsWidget({ monitorId, limit = 5, refreshInterval }: EventsWidgetProps) {
     const { t } = useTranslation();
     const navigate = useNavigate();
+    const bandwidth = useBandwidthSettings();
     const { data: events, isLoading } = useQuery({
         queryKey: ['events', monitorId, limit],
         queryFn: () => getEvents({
@@ -38,7 +40,7 @@ export const EventsWidget = memo(function EventsWidget({ monitorId, limit = 5, r
             sort: 'StartTime',
             direction: 'desc'
         }),
-        refetchInterval: refreshInterval,
+        refetchInterval: refreshInterval ?? bandwidth.eventsWidgetInterval,
     });
 
     if (isLoading) {

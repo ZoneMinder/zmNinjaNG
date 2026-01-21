@@ -23,6 +23,7 @@ import { useProfileStore } from '../../../stores/profile';
 import { useAuthStore } from '../../../stores/auth';
 import { useMonitorStore } from '../../../stores/monitors';
 import { useSettingsStore, type MonitorFeedFit } from '../../../stores/settings';
+import { useBandwidthSettings } from '../../../hooks/useBandwidthSettings';
 import { useShallow } from 'zustand/react/shallow';
 import { AlertTriangle, VideoOff } from 'lucide-react';
 import { Skeleton } from '../../ui/skeleton';
@@ -45,6 +46,7 @@ interface MonitorWidgetProps {
 function SingleMonitor({ monitorId, objectFit }: { monitorId: string; objectFit: MonitorFeedFit }) {
     const { t } = useTranslation();
     const navigate = useNavigate();
+    const bandwidth = useBandwidthSettings();
     const { data: monitor, isLoading, error } = useQuery({
         queryKey: ['monitor', monitorId],
         queryFn: () => getMonitor(monitorId),
@@ -66,8 +68,6 @@ function SingleMonitor({ monitorId, objectFit }: { monitorId: string; objectFit:
     // Merge with defaults in render - only include settings actually used by this component
     const settings = {
         viewMode: rawSettings?.viewMode ?? 'snapshot',
-        snapshotRefreshInterval: rawSettings?.snapshotRefreshInterval ?? 3,
-        streamScale: rawSettings?.streamScale ?? 50,
         streamMaxFps: rawSettings?.streamMaxFps ?? 10,
     };
 
@@ -125,10 +125,10 @@ function SingleMonitor({ monitorId, objectFit }: { monitorId: string; objectFit:
 
         const interval = setInterval(() => {
             setCacheBuster(Date.now());
-        }, settings.snapshotRefreshInterval * 1000);
+        }, bandwidth.snapshotRefreshInterval * 1000);
 
         return () => clearInterval(interval);
-    }, [settings.viewMode, settings.snapshotRefreshInterval]);
+    }, [settings.viewMode, bandwidth.snapshotRefreshInterval]);
 
     // Store cleanup parameters in ref to access latest values on unmount
     const cleanupParamsRef = useRef({ monitorId: '', monitorName: '', connKey: 0, profile: currentProfile, token: accessToken, viewMode: settings.viewMode });
@@ -178,7 +178,7 @@ function SingleMonitor({ monitorId, objectFit }: { monitorId: string; objectFit:
     const streamUrl = currentProfile && monitor && connKey !== 0
         ? getStreamUrl(currentProfile.cgiUrl, monitor.Monitor.Id, {
             mode: settings.viewMode === 'snapshot' ? 'single' : 'jpeg',
-            scale: settings.streamScale,
+            scale: bandwidth.imageScale,
             maxfps: settings.viewMode === 'streaming' ? settings.streamMaxFps : undefined,
             token: accessToken || undefined,
             connkey: connKey,

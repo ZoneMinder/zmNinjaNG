@@ -14,6 +14,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { getEvents } from '../../../api/events';
 import { useCurrentProfile } from '../../../hooks/useCurrentProfile';
+import { useBandwidthSettings } from '../../../hooks/useBandwidthSettings';
 import { Card, CardHeader, CardTitle, CardContent } from '../../ui/card';
 import { Button } from '../../ui/button';
 import { Loader2, Activity } from 'lucide-react';
@@ -31,6 +32,7 @@ export const HeatmapWidget = memo(function HeatmapWidget({ title }: HeatmapWidge
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
+  const bandwidth = useBandwidthSettings();
   const [timeRange, setTimeRange] = useState<TimeRange>('7d');
   const { currentProfile } = useCurrentProfile();
 
@@ -74,7 +76,7 @@ export const HeatmapWidget = memo(function HeatmapWidget({ title }: HeatmapWidge
         limit: 1000,
       }),
     enabled: !!currentProfile,
-    refetchInterval: 60000, // Refresh every minute
+    refetchInterval: bandwidth.timelineHeatmapInterval,
   });
 
   const events = eventsData?.events || [];

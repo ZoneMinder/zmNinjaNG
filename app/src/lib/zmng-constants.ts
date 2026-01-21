@@ -201,3 +201,74 @@ export const LOGGING = {
  * @deprecated Use ZM_MONITOR_FUNCTIONS from zm-constants.ts
  */
 export const MONITOR_FUNCTIONS = ['None', 'Monitor', 'Modect', 'Record', 'Mocord', 'Nodect'] as const;
+
+/**
+ * Bandwidth Mode Types
+ */
+export type BandwidthMode = 'normal' | 'low';
+
+/**
+ * Bandwidth Settings Interface
+ */
+export interface BandwidthSettings {
+  /** Monitor status polling interval (ms) */
+  monitorStatusInterval: number;
+  /** Alarm status polling interval (ms) */
+  alarmStatusInterval: number;
+  /** Snapshot refresh interval (seconds) */
+  snapshotRefreshInterval: number;
+  /** Events widget polling interval (ms) */
+  eventsWidgetInterval: number;
+  /** Timeline/Heatmap widget polling interval (ms) */
+  timelineHeatmapInterval: number;
+  /** Console events polling interval (ms) */
+  consoleEventsInterval: number;
+  /** Daemon check polling interval (ms) */
+  daemonCheckInterval: number;
+  /** Image scale percentage (1-100) */
+  imageScale: number;
+  /** Image quality percentage (1-100) */
+  imageQuality: number;
+  /** Stream max FPS */
+  streamMaxFps: number;
+}
+
+/**
+ * Bandwidth Settings by Mode
+ *
+ * Configurable polling intervals and image quality settings
+ * to balance between responsiveness and bandwidth usage.
+ */
+export const BANDWIDTH_SETTINGS: Record<BandwidthMode, BandwidthSettings> = {
+  normal: {
+    monitorStatusInterval: 10000, // 10 sec
+    alarmStatusInterval: 5000, // 5 sec
+    snapshotRefreshInterval: 3, // 3 sec (stored in seconds for settings compatibility)
+    eventsWidgetInterval: 30000, // 30 sec
+    timelineHeatmapInterval: 60000, // 60 sec
+    consoleEventsInterval: 60000, // 60 sec
+    daemonCheckInterval: 30000, // 30 sec
+    imageScale: 100, // 100%
+    imageQuality: 100, // 100%
+    streamMaxFps: 10, // 10 FPS
+  },
+  low: {
+    monitorStatusInterval: 20000, // 20 sec
+    alarmStatusInterval: 10000, // 10 sec
+    snapshotRefreshInterval: 10, // 10 sec
+    eventsWidgetInterval: 60000, // 60 sec
+    timelineHeatmapInterval: 120000, // 120 sec
+    consoleEventsInterval: 60000, // 60 sec
+    daemonCheckInterval: 60000, // 60 sec
+    imageScale: 50, // 50%
+    imageQuality: 50, // 50%
+    streamMaxFps: 5, // 5 FPS
+  },
+} as const;
+
+/**
+ * Get bandwidth settings for a given mode
+ */
+export function getBandwidthSettings(mode: BandwidthMode): BandwidthSettings {
+  return BANDWIDTH_SETTINGS[mode];
+}

@@ -163,9 +163,10 @@ describe('useMonitorStream', () => {
     });
 
     // Check streaming mode parameters
+    // Note: Normal bandwidth mode uses 100% image scale
     expect(result.current.streamUrl).toContain('mode=jpeg');
     expect(result.current.streamUrl).toContain('connkey=12345');
-    expect(result.current.streamUrl).toContain('scale=50');
+    expect(result.current.streamUrl).toContain('scale=100');
     expect(result.current.streamUrl).toContain('maxfps=5');
     expect(result.current.streamUrl).not.toContain('rand='); // No cacheBuster in streaming
   });
@@ -176,7 +177,6 @@ describe('useMonitorStream', () => {
         'profile-1': {
           ...DEFAULT_SETTINGS,
           viewMode: 'snapshot',
-          streamScale: 50,
         },
       },
     });
@@ -191,9 +191,10 @@ describe('useMonitorStream', () => {
     });
 
     // Check snapshot mode parameters
+    // Note: Normal bandwidth mode uses 100% image scale
     expect(result.current.streamUrl).toContain('mode=single');
     expect(result.current.streamUrl).toContain('connkey=12345');
-    expect(result.current.streamUrl).toContain('scale=50');
+    expect(result.current.streamUrl).toContain('scale=100');
     expect(result.current.streamUrl).not.toContain('maxfps'); // No maxfps in snapshot
     expect(result.current.streamUrl).toContain('rand='); // cacheBuster in snapshot
   });

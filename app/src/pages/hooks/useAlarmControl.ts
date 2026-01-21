@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { getAlarmStatus, triggerAlarm, cancelAlarm } from '../../api/monitors';
 import { log, LogLevel } from '../../lib/logger';
+import { useBandwidthSettings } from '../../hooks/useBandwidthSettings';
 
 interface UseAlarmControlOptions {
   monitorId: string | undefined;
@@ -28,6 +29,7 @@ interface UseAlarmControlReturn {
 
 export function useAlarmControl({ monitorId }: UseAlarmControlOptions): UseAlarmControlReturn {
   const { t } = useTranslation();
+  const bandwidth = useBandwidthSettings();
   const [isAlarmUpdating, setIsAlarmUpdating] = useState(false);
   const [alarmToggleValue, setAlarmToggleValue] = useState(false);
   const [alarmPendingValue, setAlarmPendingValue] = useState<boolean | null>(null);
@@ -40,7 +42,7 @@ export function useAlarmControl({ monitorId }: UseAlarmControlOptions): UseAlarm
     queryKey: ['monitor-alarm-status', monitorId],
     queryFn: () => getAlarmStatus(monitorId!),
     enabled: !!monitorId,
-    refetchInterval: 5000,
+    refetchInterval: bandwidth.alarmStatusInterval,
     refetchIntervalInBackground: true,
     refetchOnWindowFocus: false,
   });

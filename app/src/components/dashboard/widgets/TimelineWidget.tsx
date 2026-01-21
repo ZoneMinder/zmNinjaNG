@@ -19,6 +19,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recha
 import { useTheme } from '../../theme-provider';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../ui/button';
+import { useBandwidthSettings } from '../../../hooks/useBandwidthSettings';
 
 type TimeRange = '24h' | '48h' | '1w' | '2w' | '1m';
 
@@ -26,6 +27,7 @@ export const TimelineWidget = memo(function TimelineWidget() {
     const { theme } = useTheme();
     const { t } = useTranslation();
     const navigate = useNavigate();
+    const bandwidth = useBandwidthSettings();
     const [start, setStart] = useState(() => subHours(new Date(), 24));
     const [selectedRange, setSelectedRange] = useState<TimeRange>('24h');
     const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
@@ -70,7 +72,7 @@ export const TimelineWidget = memo(function TimelineWidget() {
             startDateTime: formatForServer(start),
             limit: 1000,
         }),
-        refetchInterval: 60000,
+        refetchInterval: bandwidth.timelineHeatmapInterval,
     });
 
     // Quick range handlers - update nowRef when range changes

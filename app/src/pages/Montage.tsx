@@ -9,6 +9,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getMonitors } from '../api/monitors';
 import { GRID_LAYOUT } from '../lib/zmng-constants';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
+import { useBandwidthSettings } from '../hooks/useBandwidthSettings';
 import { useAuthStore } from '../stores/auth';
 import { useSettingsStore } from '../stores/settings';
 import { useState, useEffect, useMemo } from 'react';
@@ -41,9 +42,11 @@ const WrappedGridLayout = WidthProvider(GridLayout);
 export default function Montage() {
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const bandwidth = useBandwidthSettings();
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['monitors'],
     queryFn: getMonitors,
+    refetchInterval: bandwidth.monitorStatusInterval,
   });
 
   const { currentProfile, settings } = useCurrentProfile();

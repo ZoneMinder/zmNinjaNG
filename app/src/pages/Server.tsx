@@ -7,6 +7,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
+import { useBandwidthSettings } from '../hooks/useBandwidthSettings';
 import { useAuthStore } from '../stores/auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -44,6 +45,7 @@ export default function Server() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { currentProfile } = useCurrentProfile();
+  const bandwidth = useBandwidthSettings();
   const { version, apiVersion } = useAuthStore();
   const [selectedAction, setSelectedAction] = useState<string>('');
 
@@ -59,7 +61,7 @@ export default function Server() {
     queryKey: ['daemon-check', currentProfile?.id],
     queryFn: getDaemonCheck,
     enabled: !!currentProfile,
-    refetchInterval: 30000, // Check every 30 seconds
+    refetchInterval: bandwidth.daemonCheckInterval,
   });
 
   // Fetch load average

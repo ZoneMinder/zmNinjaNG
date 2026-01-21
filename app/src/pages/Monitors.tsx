@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next';
 import { getMonitors } from '../api/monitors';
 import { getConsoleEvents } from '../api/events';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
+import { useBandwidthSettings } from '../hooks/useBandwidthSettings';
 import { useAuthStore } from '../stores/auth';
 import { useSettingsStore } from '../stores/settings';
 import { Button } from '../components/ui/button';
@@ -34,6 +35,7 @@ export default function Monitors() {
   const [showPropertiesDialog, setShowPropertiesDialog] = useState(false);
 
   const { currentProfile, settings } = useCurrentProfile();
+  const bandwidth = useBandwidthSettings();
   const updateSettings = useSettingsStore((state) => state.updateProfileSettings);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
@@ -44,6 +46,7 @@ export default function Monitors() {
     queryKey: ['monitors', currentProfile?.id],
     queryFn: getMonitors,
     enabled: canFetch,
+    refetchInterval: bandwidth.monitorStatusInterval,
   });
 
   // Force refetch when profile changes or auth state changes
@@ -72,7 +75,7 @@ export default function Monitors() {
     queryKey: ['consoleEvents', '24 hour'],
     queryFn: () => getConsoleEvents('24 hour'),
     enabled: !!currentProfile && isAuthenticated,
-    refetchInterval: 60000, // Refresh every minute
+    refetchInterval: bandwidth.consoleEventsInterval,
   });
 
   // Memoize filtered monitors (all monitors, regardless of status)
