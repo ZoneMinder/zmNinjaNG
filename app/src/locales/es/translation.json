@@ -438,7 +438,7 @@
     "grid_set": "Cuadrícula establecida en {{columns}} columnas",
     "custom_grid_title": "Cuadrícula Personalizada",
     "custom_grid_desc": "Ingresa número de columnas (1-10)",
-    "columns_label": "Columnas",
+    "columns_label": "col.",
     "apply": "Aplicar",
     "exit": "Salir",
     "invalid_columns": "Número inválido de columnas",
@@ -453,8 +453,8 @@
     "fit_fill": "Rellenar (estirar)",
     "fit_none": "Ninguno (sin escalar)",
     "fit_scale_down": "Reducir (solo encoger)",
-    "edit_layout": "Editar diseño",
-    "done_editing": "Finalizar edición",
+    "edit_layout": "Editar",
+    "done_editing": "Hecho",
     "insomnia_enabled": "La pantalla permanecerá activa",
     "insomnia_disabled": "Suspensión de pantalla activada",
     "screen_too_small_for_editing": "La pantalla es demasiado pequeña para editar el diseño. Use una pantalla más grande o gire su dispositivo."
@@ -811,7 +811,7 @@
     "retry_connection": "Reintentar Conexión"
   },
   "groups": {
-    "all_monitors": "Todos los Monitores",
+    "all_monitors": "Todos",
     "filter_by_group": "Filtrar por Grupo",
     "no_groups": "No hay grupos disponibles"
   }

@@ -194,10 +194,6 @@ export default function Montage() {
                   <LayoutDashboard className="h-4 w-4 sm:h-5 sm:w-5" />
                   {t('montage.title')}
                 </h1>
-                <p className="text-[10px] sm:text-xs text-muted-foreground hidden sm:block">
-                  {t('montage.cameras_count', { count: monitors.length })}
-                  <span className="hidden md:inline"> • {t('montage.drag_hint')}</span>
-                </p>
               </div>
             </div>
             <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">

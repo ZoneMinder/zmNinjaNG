@@ -436,7 +436,7 @@
     "grid_set": "Grid set to {{columns}} columns",
     "custom_grid_title": "Custom Grid",
     "custom_grid_desc": "Enter number of columns (1-10)",
-    "columns_label": "Columns",
+    "columns_label": "cols",
     "apply": "Apply",
     "exit": "Exit",
     "invalid_columns": "Invalid number of columns",
@@ -452,8 +452,8 @@
     "fit_fill": "Fill (stretch)",
     "fit_none": "None (no scaling)",
     "fit_scale_down": "Scale down (shrink only)",
-    "edit_layout": "Edit Layout",
-    "done_editing": "Done Editing",
+    "edit_layout": "Edit",
+    "done_editing": "Done",
     "insomnia_enabled": "Screen will stay awake",
     "insomnia_disabled": "Screen sleep enabled"
   },
@@ -809,7 +809,7 @@
     "retry_connection": "Retry Connection"
   },
   "groups": {
-    "all_monitors": "All Monitors",
+    "all_monitors": "All",
     "filter_by_group": "Filter by Group",
     "no_groups": "No groups available"
   }

@@ -438,7 +438,7 @@
     "grid_set": "Raster auf {{columns}} Spalten eingestellt",
     "custom_grid_title": "Benutzerdefiniertes Raster",
     "custom_grid_desc": "Geben Sie die Anzahl der Spalten ein (1-10)",
-    "columns_label": "Spalten",
+    "columns_label": "Sp.",
     "apply": "Anwenden",
     "exit": "Verlassen",
     "invalid_columns": "Ungültige Anzahl von Spalten",
@@ -453,8 +453,8 @@
     "fit_fill": "Füllen (strecken)",
     "fit_none": "Keine (nicht skalieren)",
     "fit_scale_down": "Verkleinern (nur schrumpfen)",
-    "edit_layout": "Layout bearbeiten",
-    "done_editing": "Bearbeiten beenden",
+    "edit_layout": "Bearb.",
+    "done_editing": "Fertig",
     "insomnia_enabled": "Bildschirm bleibt wach",
     "insomnia_disabled": "Bildschirmschlaf aktiviert",
     "screen_too_small_for_editing": "Bildschirm ist zu klein für Layout-Bearbeitung. Bitte verwenden Sie einen größeren Bildschirm oder drehen Sie Ihr Gerät."
@@ -811,7 +811,7 @@
     "retry_connection": "Verbindung wiederholen"
   },
   "groups": {
-    "all_monitors": "Alle Monitore",
+    "all_monitors": "Alle",
     "filter_by_group": "Nach Gruppe filtern",
     "no_groups": "Keine Gruppen verfügbar"
   }

@@ -438,7 +438,7 @@
     "grid_set": "Grille définie sur {{columns}} colonnes",
     "custom_grid_title": "Grille personnalisée",
     "custom_grid_desc": "Entrez le nombre de colonnes (1-10)",
-    "columns_label": "Colonnes",
+    "columns_label": "col.",
     "apply": "Appliquer",
     "exit": "Quitter",
     "invalid_columns": "Nombre de colonnes invalide",
@@ -453,8 +453,8 @@
     "fit_fill": "Remplir (étirer)",
     "fit_none": "Aucun (pas de mise à l'échelle)",
     "fit_scale_down": "Réduire (rétrécir seulement)",
-    "edit_layout": "Modifier la disposition",
-    "done_editing": "Terminer la modification",
+    "edit_layout": "Éditer",
+    "done_editing": "Fini",
     "insomnia_enabled": "L'écran restera actif",
     "insomnia_disabled": "Veille d'écran activée",
     "screen_too_small_for_editing": "L'écran est trop petit pour éditer la mise en page. Veuillez utiliser un écran plus grand ou faire pivoter votre appareil."
@@ -811,7 +811,7 @@
     "retry_connection": "Réessayer la Connexion"
   },
   "groups": {
-    "all_monitors": "Tous les Moniteurs",
+    "all_monitors": "Tous",
     "filter_by_group": "Filtrer par Groupe",
     "no_groups": "Aucun groupe disponible"
   }
