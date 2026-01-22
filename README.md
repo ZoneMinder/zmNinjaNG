@@ -47,7 +47,7 @@ Instead, treat this as "personal software" - i.e. download the code and fix it y
 I am happy to accept PRs, but I don't want [AI slop](https://en.wikipedia.org/wiki/AI_slop). Funny I am saying this, given this repo is largely AI agent(s) generated. The difference is I understand the code and know how to prompt it with directions that make the tools generate better quality code. Remember these tools are amazing but love to write a lot of code doing custom things when simpler/better means are available. They also make mistakes. So here are the rules:
 
 - If you have not read and understood the code you generated, please don't PR it to my repo. Please continue to extend it yourself
-- See my agent rules for [CLAUDE](CLAUDE.md) here - please make sure to use it in your agent
+- See my agent rules for [CLAUDE](AGENTS.md) here - please make sure to use it in your agent
 - Before you PR, please do a code review
 
 ### Limitations & Notes
