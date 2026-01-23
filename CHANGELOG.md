@@ -1,5 +1,14 @@
 # Changelog
 
+## [zmNg-0.2.2](https://github.com/pliablepixels/zmNg/tree/zmNg-0.2.2) (2026-01-23)
+
+[Full Changelog](https://github.com/pliablepixels/zmNg/compare/zmNg-0.2.1...zmNg-0.2.2)
+
+**Implemented enhancements:**
+
+- feat: Add QR code import for profiles [\#19](https://github.com/pliablepixels/zmNg/issues/19)
+- Support ZoneMinder monitor groups for filtering [\#18](https://github.com/pliablepixels/zmNg/issues/18)
+
 ## [zmNg-0.2.1](https://github.com/pliablepixels/zmNg/tree/zmNg-0.2.1) (2026-01-22)
 
 [Full Changelog](https://github.com/pliablepixels/zmNg/compare/zmNg-0.2.0...zmNg-0.2.1)
