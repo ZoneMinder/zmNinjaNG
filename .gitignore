@@ -47,3 +47,4 @@ android/keystore.properties
 # Ruby/Bundler
 .bundle/
 vendor/bundle/
+.grepai/
