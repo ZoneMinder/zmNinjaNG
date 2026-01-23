@@ -87,7 +87,7 @@ export function QRScanner({ open, onOpenChange, onScan }: QRScannerProps) {
         if (state === SCANNER_STATE.SCANNING || state === SCANNER_STATE.PAUSED) {
           await scannerRef.current.stop();
         }
-        await scannerRef.current.clear();
+        scannerRef.current.clear();
       } catch (e) {
         log.profile('Error cleaning up QR scanner', LogLevel.WARN, e);
       }
@@ -241,7 +241,7 @@ export function QRScanner({ open, onOpenChange, onScan }: QRScannerProps) {
         if (scannerRef.current) {
           try {
             scannerRef.current.stop().catch(() => {});
-            scannerRef.current.clear().catch(() => {});
+            scannerRef.current.clear();
           } catch {
             // Ignore
           }
