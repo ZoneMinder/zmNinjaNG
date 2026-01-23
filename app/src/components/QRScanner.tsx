@@ -6,6 +6,9 @@
  * - Web-based scanning on desktop (html5-qrcode)
  *
  * Used for scanning profile QR codes to import ZoneMinder server configurations.
+ *
+ * Note: html5-qrcode manipulates DOM directly, so we create the scanner container
+ * outside of React's virtual DOM to avoid reconciliation conflicts.
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -41,24 +44,69 @@ const SCANNER_STATE = {
 export function QRScanner({ open, onOpenChange, onScan }: QRScannerProps) {
   const { t } = useTranslation();
   const scannerRef = useRef<Html5QrcodeType | null>(null);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
   const [isStarting, setIsStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  const [scannerReady, setScannerReady] = useState(false);
   const isNative = Capacitor.isNativePlatform();
 
-  const stopScanner = useCallback(async () => {
+  // Create scanner container outside React's control
+  const createScannerElement = useCallback(() => {
+    if (!wrapperRef.current) return null;
+
+    // Remove any existing scanner element
+    const existing = document.getElementById(SCANNER_ID);
+    if (existing) {
+      existing.remove();
+    }
+
+    // Create new element
+    const scannerEl = document.createElement('div');
+    scannerEl.id = SCANNER_ID;
+    scannerEl.style.width = '100%';
+    scannerEl.style.height = '100%';
+    wrapperRef.current.appendChild(scannerEl);
+
+    return scannerEl;
+  }, []);
+
+  // Remove scanner container
+  const removeScannerElement = useCallback(() => {
+    const existing = document.getElementById(SCANNER_ID);
+    if (existing) {
+      existing.remove();
+    }
+  }, []);
+
+  // Cleanup scanner
+  const cleanupScanner = useCallback(async () => {
     if (scannerRef.current) {
       try {
         const state = scannerRef.current.getState();
         if (state === SCANNER_STATE.SCANNING || state === SCANNER_STATE.PAUSED) {
           await scannerRef.current.stop();
         }
+        await scannerRef.current.clear();
       } catch (e) {
-        log.profile('Error stopping QR scanner', LogLevel.WARN, e);
+        log.profile('Error cleaning up QR scanner', LogLevel.WARN, e);
       }
       scannerRef.current = null;
     }
-  }, []);
+    removeScannerElement();
+    setScannerReady(false);
+  }, [removeScannerElement]);
+
+  // Handle dialog close
+  const handleClose = useCallback(async () => {
+    if (!isNative) {
+      await cleanupScanner();
+    }
+    setError(null);
+    setHasPermission(null);
+    setScannerReady(false);
+    onOpenChange(false);
+  }, [isNative, cleanupScanner, onOpenChange]);
 
   // Native scanner for iOS/Android
   const startNativeScanner = useCallback(async () => {
@@ -67,10 +115,8 @@ export function QRScanner({ open, onOpenChange, onScan }: QRScannerProps) {
 
     try {
       const { BarcodeScanner } = await import('capacitor-barcode-scanner');
-
       setIsStarting(false);
 
-      // Start scanning - this opens native camera UI and handles permissions
       const result = await BarcodeScanner.scan();
 
       if (result.result && result.code) {
@@ -78,7 +124,6 @@ export function QRScanner({ open, onOpenChange, onScan }: QRScannerProps) {
         onScan(result.code);
         onOpenChange(false);
       } else {
-        // User cancelled or no content
         onOpenChange(false);
       }
     } catch (e) {
@@ -103,20 +148,22 @@ export function QRScanner({ open, onOpenChange, onScan }: QRScannerProps) {
   const startWebScanner = useCallback(async () => {
     setIsStarting(true);
     setError(null);
+    setScannerReady(false);
 
     try {
-      // Clean up any existing scanner
-      await stopScanner();
+      // Clean up any existing scanner first
+      await cleanupScanner();
 
-      // Wait for DOM element to be ready
+      // Wait for wrapper to be ready
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      const element = document.getElementById(SCANNER_ID);
+      // Create scanner element outside React
+      const element = createScannerElement();
       if (!element) {
-        throw new Error('Scanner element not found');
+        throw new Error('Scanner wrapper not found');
       }
 
-      // Dynamic import to avoid SSR/bundling issues
+      // Dynamic import
       const { Html5Qrcode } = await import('html5-qrcode');
       const scanner = new Html5Qrcode(SCANNER_ID);
       scannerRef.current = scanner;
@@ -128,23 +175,28 @@ export function QRScanner({ open, onOpenChange, onScan }: QRScannerProps) {
           qrbox: { width: 250, height: 250 },
           aspectRatio: 1,
         },
-        (decodedText) => {
+        async (decodedText) => {
           log.profile('QR code scanned (web)', LogLevel.INFO);
+          await cleanupScanner();
           onScan(decodedText);
           onOpenChange(false);
         },
         () => {
-          // QR code scan failure - this fires continuously while scanning, ignore
+          // Continuous scan failure - ignore
         }
       );
 
+      setScannerReady(true);
       setHasPermission(true);
+      setIsStarting(false);
       log.profile('Web QR scanner started', LogLevel.INFO);
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'Unknown error';
       log.profile('Web QR scanner failed to start', LogLevel.ERROR, e);
 
-      // Check for permission denied
+      // Clean up on error
+      removeScannerElement();
+
       if (
         errorMessage.includes('Permission') ||
         errorMessage.includes('NotAllowedError') ||
@@ -157,10 +209,9 @@ export function QRScanner({ open, onOpenChange, onScan }: QRScannerProps) {
       } else {
         setError('camera_error');
       }
-    } finally {
       setIsStarting(false);
     }
-  }, [onScan, onOpenChange, stopScanner]);
+  }, [onScan, onOpenChange, cleanupScanner, createScannerElement, removeScannerElement]);
 
   const startScanner = useCallback(async () => {
     if (isNative) {
@@ -172,31 +223,42 @@ export function QRScanner({ open, onOpenChange, onScan }: QRScannerProps) {
 
   // Start scanner when dialog opens
   useEffect(() => {
-    if (open) {
+    if (open && !isNative) {
+      const timer = setTimeout(() => {
+        startScanner();
+      }, 300);
+      return () => clearTimeout(timer);
+    } else if (open && isNative) {
       startScanner();
-    } else {
-      if (!isNative) {
-        stopScanner();
-      }
-      setError(null);
-      setHasPermission(null);
     }
+  }, [open, isNative, startScanner]);
 
+  // Cleanup on unmount
+  useEffect(() => {
     return () => {
       if (!isNative) {
-        stopScanner();
+        // Force cleanup
+        if (scannerRef.current) {
+          try {
+            scannerRef.current.stop().catch(() => {});
+            scannerRef.current.clear().catch(() => {});
+          } catch {
+            // Ignore
+          }
+          scannerRef.current = null;
+        }
+        removeScannerElement();
       }
     };
-  }, [open, isNative, startScanner, stopScanner]);
+  }, [isNative, removeScannerElement]);
 
-  // For native platforms, we don't show the dialog UI - the native scanner takes over
-  // But we still need to show errors
+  // For native platforms, we don't show the dialog UI
   if (isNative && !error) {
     return null;
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(newOpen) => !newOpen && handleClose()}>
       <DialogContent
         className="sm:max-w-md"
         data-testid="qr-scanner-dialog"
@@ -213,15 +275,15 @@ export function QRScanner({ open, onOpenChange, onScan }: QRScannerProps) {
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Scanner viewport (web only) */}
-          {!isNative && (
+          {/* Scanner wrapper - the actual scanner element is created dynamically */}
+          {!isNative && !error && (
             <div
-              id={SCANNER_ID}
+              ref={wrapperRef}
               className="relative w-full aspect-square bg-muted rounded-lg overflow-hidden"
               data-testid="qr-scanner-viewport"
             >
-              {isStarting && (
-                <div className="absolute inset-0 flex items-center justify-center bg-muted">
+              {(isStarting || !scannerReady) && (
+                <div className="absolute inset-0 flex items-center justify-center bg-muted z-10">
                   <div className="text-center space-y-2">
                     <Loader2 className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
                     <p className="text-sm text-muted-foreground">{t('qr_scanner.starting')}</p>
@@ -262,7 +324,7 @@ export function QRScanner({ open, onOpenChange, onScan }: QRScannerProps) {
           <Button
             variant="outline"
             className="w-full"
-            onClick={() => onOpenChange(false)}
+            onClick={handleClose}
             data-testid="qr-scanner-cancel"
           >
             {t('common.cancel')}
