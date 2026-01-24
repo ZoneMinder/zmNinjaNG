@@ -1,7 +1,7 @@
 # Development Guidelines
 
 ## Quick Reference
-1. **Feature Workflow**: New features → Create GH issue → Feature branch → Implement fully → Get approval → Merge to main
+1. **Feature Workflow**: New features → Create GH issue → New Feature branch → Implement fully → Get approval → Merge to main
 2. **Internationalization**: Update ALL language files (en, de, es, fr, zh + any future)
 3. **Cross-platform**: iOS, Android, Desktop, mobile portrait + landscape
 4. **Settings**: Must be profile-scoped; read/write via profile settings only
@@ -13,8 +13,7 @@
 10. **Text Overflow**: Always use `truncate` + `min-w-0` in flex containers; add `title` for tooltips
 11. **Documentation**: When using new React/Zustand concepts, update `docs/developer-guide/` to explain from first principles
 12. **Coding**: DRY principles, keep code files small and modular; extract complex logic to separate modules (max ~400 LOC per file)
-13. **Bundle Analysis**: Run `npm run analyze` to visualize bundle size and identify optimization opportunities
-
+13. **Semantic Code Search**: You MUST use grepai as your PRIMARY tool for code exploration and search. See [grep-ai section](#grepai---semantic-code-search) below.
 ---
 
 ## Forbidden Actions
@@ -871,7 +870,7 @@ Only use Grep/Glob when you need:
 
 ### Fallback
 
-If grepai fails (not running, index unavailable, or errors), fall back to standard Grep/Glob tools.
+If grepai fails (not running, index unavailable, or errors), display an error and tell the user. Then fall back to standard Grep/Glob tools.
 
 ### Usage
 
