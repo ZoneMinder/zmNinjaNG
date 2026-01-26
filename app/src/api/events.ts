@@ -71,10 +71,11 @@ export async function getEvents(filters: EventFilters = {}): Promise<EventsRespo
   // Use /events/index.json for both filtered and unfiltered requests
   const url = filterPath ? `/events/index${filterPath}.json` : '/events/index.json';
 
-  const desiredLimit = filters.limit || 300;
+  const desiredLimit = filters.limit || 100;
   const allEvents: EventData[] = [];
   let currentPage = 1;
   let hasMore = true;
+  let totalCount = 0; // Total events matching filters (from server)
   const maxPages = 10; // Limit to 10 pages (1000 events max) to prevent excessive API calls
 
   // Keep fetching pages until we have enough events, no more pages, or hit max pages
@@ -96,6 +97,11 @@ export async function getEvents(filters: EventFilters = {}): Promise<EventsRespo
       endpoint: url,
       method: 'GET',
     });
+
+    // Capture total count from first page (ZM returns total matching events in count)
+    if (currentPage === 1) {
+      totalCount = validated.pagination?.count ?? 0;
+    }
 
     // Add events from this page
     allEvents.push(...validated.events);
@@ -137,12 +143,13 @@ export async function getEvents(filters: EventFilters = {}): Promise<EventsRespo
     events: finalEvents,
     pagination: {
       page: 1,
-      pageCount: Math.ceil(allEvents.length / desiredLimit),
+      pageCount: Math.ceil(totalCount / desiredLimit),
       current: 1,
       count: finalEvents.length,
       prevPage: false,
-      nextPage: allEvents.length > desiredLimit,
+      nextPage: finalEvents.length < totalCount,
       limit: desiredLimit,
+      totalCount, // Total events matching filters (from server)
     },
   };
 }

@@ -48,7 +48,7 @@ export function EventSettings() {
                             min="10"
                             max="1000"
                             step="10"
-                            value={settings.defaultEventLimit || 300}
+                            value={settings.defaultEventLimit || 100}
                             onChange={(e) => handleEventLimitChange(Number(e.target.value))}
                             className="w-28"
                             data-testid="settings-event-limit"
@@ -60,14 +60,14 @@ export function EventSettings() {
                                 size="sm"
                                 onClick={() => handleEventLimitChange(100)}
                             >
-                                100
+                                100 ({t('settings.default')})
                             </Button>
                             <Button
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handleEventLimitChange(300)}
                             >
-                                300 ({t('settings.default')})
+                                300
                             </Button>
                             <Button
                                 variant="outline"

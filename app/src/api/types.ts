@@ -353,6 +353,7 @@ export const EventsResponseSchema = z.object({
     prevPage: z.boolean(),
     nextPage: z.boolean(),
     limit: z.coerce.number(),
+    totalCount: z.coerce.number().optional(), // Total events matching filters (from server)
   }),
 });
 

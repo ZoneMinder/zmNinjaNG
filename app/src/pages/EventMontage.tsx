@@ -70,7 +70,7 @@ export default function EventMontage() {
       params.endDateTime = new Date(endDate).toISOString();
     }
 
-    params.limit = settings.defaultEventLimit || 300;
+    params.limit = settings.defaultEventLimit || 100;
     params.sort = 'StartDateTime';
     params.direction = 'desc';
 
@@ -87,11 +87,9 @@ export default function EventMontage() {
 
   const events = eventsData?.events || [];
 
-  // Use pagination hook
-  const { eventLimit, isLoadingMore, loadNextPage } = useEventPagination({
-    defaultLimit: settings.defaultEventLimit || 300,
-    eventCount: events.length,
-    containerRef,
+  // Use pagination hook for manual "Load More" button
+  const { batchSize, isLoadingMore, loadNextPage } = useEventPagination({
+    defaultLimit: settings.defaultEventLimit || 100,
   });
 
   // Use grid management hook
@@ -297,7 +295,8 @@ export default function EventMontage() {
           thumbnailFit={normalizedThumbnailFit}
           portalUrl={currentProfile?.portalUrl || ''}
           accessToken={accessToken || undefined}
-          eventLimit={eventLimit}
+          batchSize={batchSize}
+          totalCount={eventsData?.pagination?.totalCount}
           isLoadingMore={isLoadingMore}
           onLoadMore={loadNextPage}
         />

@@ -156,6 +156,18 @@ export const API_PAGINATION = {
 } as const;
 
 /**
+ * Event List View Constants
+ *
+ * Configuration for the events list display.
+ */
+export const EVENT_LIST = {
+  // Only virtualize lists larger than this threshold.
+  // Smaller lists render directly to avoid scroll margin calculation complexity
+  // when there's content above the list (header, heatmap, etc.)
+  virtualizationThreshold: 100,
+} as const;
+
+/**
  * Development Proxy Server Configuration
  *
  * DEVELOPMENT ONLY: Used by the local proxy server for CORS bypass during development.

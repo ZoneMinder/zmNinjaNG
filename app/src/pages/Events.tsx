@@ -6,7 +6,7 @@
  */
 
 import { useMemo, useRef, useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
 import { getEvents } from '../api/events';
@@ -22,7 +22,7 @@ import { useEventTags, useEventTagMapping } from '../hooks/useEventTags';
 import { PullToRefreshIndicator } from '../components/ui/pull-to-refresh-indicator';
 import { Button } from '../components/ui/button';
 import { RefreshCw, Filter, AlertCircle, ArrowLeft, LayoutGrid, List, Clock } from 'lucide-react';
-import { filterEnabledMonitors, filterMonitorsByGroup } from '../lib/filters';
+import { filterMonitorsByGroup } from '../lib/filters';
 import { useGroupFilter } from '../hooks/useGroupFilter';
 import { GroupFilterSelect } from '../components/filters/GroupFilterSelect';
 import { Popover, PopoverTrigger } from '../components/ui/popover';
@@ -105,48 +105,68 @@ export default function Events() {
     return settings.eventsViewMode;
   });
 
-  // Fetch monitors to filter by enabled ones
+  // Fetch monitors for display in filter UI
   const { data: monitorsData } = useQuery({
     queryKey: ['monitors'],
     queryFn: getMonitors,
   });
 
-  // Memoize enabled monitor IDs and monitors (before events query)
-  const allEnabledMonitors = useMemo(
-    () => (monitorsData?.monitors ? filterEnabledMonitors(monitorsData.monitors) : []),
-    [monitorsData]
-  );
+  // All monitors (for filter popover display)
+  const allMonitors = monitorsData?.monitors || [];
 
-  // Apply group filter to monitors if active
-  const enabledMonitors = useMemo(() => {
-    if (!isGroupFilterActive) return allEnabledMonitors;
-    return filterMonitorsByGroup(allEnabledMonitors, groupMonitorIds);
-  }, [allEnabledMonitors, isGroupFilterActive, groupMonitorIds]);
+  // Monitors filtered by group (for filter popover when group is active)
+  const displayMonitors = useMemo(() => {
+    if (!isGroupFilterActive) return allMonitors;
+    return filterMonitorsByGroup(allMonitors, groupMonitorIds);
+  }, [allMonitors, isGroupFilterActive, groupMonitorIds]);
 
-  const enabledMonitorIds = useMemo(
-    () => enabledMonitors.map((m) => m.Monitor.Id),
-    [enabledMonitors]
-  );
-
-  // Use pagination hook (will be updated with event count later)
-  const { eventLimit, isLoadingMore, loadNextPage } = useEventPagination({
-    defaultLimit: settings.defaultEventLimit || 300,
-    eventCount: 0, // Temporary - updated via useEffect below
-    containerRef: parentRef,
-  });
+  // Compute effective monitor IDs for API call:
+  // 1. If user selected specific monitors in filter → use those
+  // 2. Else if group filter is active → use group monitor IDs
+  // 3. Else → undefined (fetch all)
+  const effectiveMonitorId = useMemo(() => {
+    // User's explicit filter takes priority
+    if (filters.monitorId) {
+      return filters.monitorId;
+    }
+    // Group filter - pass group monitor IDs to API
+    if (isGroupFilterActive && groupMonitorIds.length > 0) {
+      return groupMonitorIds.join(',');
+    }
+    // No filter - fetch all
+    return undefined;
+  }, [filters.monitorId, isGroupFilterActive, groupMonitorIds]);
 
   // Fetch events with configured limit
-  const { data: eventsData, isLoading, error, refetch } = useQuery({
-    queryKey: ['events', filters, eventLimit],
+  // Include effectiveMonitorId and group filter state in query key for proper cache invalidation
+  const [currentEventLimit, setCurrentEventLimit] = useState(settings.defaultEventLimit || 100);
+  const { data: eventsData, isLoading, isFetching, error, refetch } = useQuery({
+    queryKey: ['events', filters, currentEventLimit, effectiveMonitorId, isGroupFilterActive],
     queryFn: () =>
       getEvents({
         ...filters,
+        // Use effective monitor ID (user filter or group filter)
+        monitorId: effectiveMonitorId,
         // Convert local time inputs to server time for the API
         startDateTime: filters.startDateTime ? formatForServer(new Date(filters.startDateTime)) : undefined,
         endDateTime: filters.endDateTime ? formatForServer(new Date(filters.endDateTime)) : undefined,
-        limit: eventLimit,
+        limit: currentEventLimit,
       }),
+    // Keep showing previous data while fetching more (prevents UI flash during pagination)
+    placeholderData: keepPreviousData,
   });
+
+  // Use pagination hook for manual "Load More" button
+  const { eventLimit, batchSize, isLoadingMore, loadNextPage } = useEventPagination({
+    defaultLimit: settings.defaultEventLimit || 100,
+  });
+
+  // Sync pagination limit with query when it changes
+  useEffect(() => {
+    if (eventLimit !== currentEventLimit) {
+      setCurrentEventLimit(eventLimit);
+    }
+  }, [eventLimit, currentEventLimit]);
 
   // Pull-to-refresh gesture
   const pullToRefresh = usePullToRefresh({
@@ -156,12 +176,10 @@ export default function Events() {
     enabled: true,
   });
 
-  // Get event IDs for tag fetching (before filtering by tags)
+  // Get event IDs for tag fetching
   const eventIdsForTagFetch = useMemo(() =>
-    (eventsData?.events || [])
-      .filter(({ Event }: any) => enabledMonitorIds.includes(Event.MonitorId))
-      .map(({ Event }: any) => Event.Id),
-    [eventsData?.events, enabledMonitorIds]
+    (eventsData?.events || []).map(({ Event }: any) => Event.Id),
+    [eventsData?.events]
   );
 
   // Fetch tags for displayed events
@@ -170,18 +188,16 @@ export default function Events() {
     enabled: tagsSupported && eventIdsForTagFetch.length > 0,
   });
 
-  // Memoize filtered events
+  // Memoize filtered events (server already filtered by monitor/group, apply client-side filters here)
   const allEvents = useMemo(() => {
-    let filtered = (eventsData?.events || []).filter(({ Event }: any) =>
-      enabledMonitorIds.includes(Event.MonitorId)
-    );
+    let filtered = eventsData?.events || [];
 
-    // Apply favorites filter if enabled
+    // Apply favorites filter if enabled (client-side only - favorites stored locally)
     if (favoritesOnly) {
       filtered = filtered.filter(({ Event }: any) => favoriteIds.includes(Event.Id));
     }
 
-    // Apply tag filter if tags are selected
+    // Apply tag filter if tags are selected (client-side - ZM API doesn't support tag filtering)
     if (selectedTagIds.length > 0 && eventTagMap.size > 0) {
       filtered = filtered.filter(({ Event }: any) => {
         const eventTags = eventTagMap.get(Event.Id) || [];
@@ -191,7 +207,7 @@ export default function Events() {
     }
 
     return filtered;
-  }, [eventsData?.events, enabledMonitorIds, favoritesOnly, favoriteIds, selectedTagIds, eventTagMap]);
+  }, [eventsData?.events, favoritesOnly, favoriteIds, selectedTagIds, eventTagMap]);
 
   // Use grid management hook (only active when in montage mode)
   const gridControls = useEventMontageGrid({
@@ -366,7 +382,7 @@ export default function Events() {
                   </Button>
                 </PopoverTrigger>
                 <EventsFilterPopover
-                  monitors={enabledMonitors}
+                  monitors={displayMonitors}
                   selectedMonitorIds={selectedMonitorIds}
                   onMonitorSelectionChange={setSelectedMonitorIds}
                   favoritesOnly={favoritesOnly}
@@ -456,25 +472,29 @@ export default function Events() {
         ) : viewMode === 'montage' ? (
           <EventMontageView
             events={allEvents}
-            monitors={enabledMonitors}
+            monitors={displayMonitors}
             gridCols={gridControls.gridCols}
             thumbnailFit={normalizedThumbnailFit}
             portalUrl={currentProfile?.portalUrl || ''}
             accessToken={accessToken || undefined}
-            eventLimit={eventLimit}
+            batchSize={batchSize}
+            totalCount={eventsData?.pagination?.totalCount}
             isLoadingMore={isLoadingMore}
+            isFetching={isFetching}
             onLoadMore={loadNextPage}
             eventTagMap={eventTagMap}
           />
         ) : (
           <EventListView
             events={allEvents}
-            monitors={enabledMonitors}
+            monitors={displayMonitors}
             thumbnailFit={normalizedThumbnailFit}
             portalUrl={currentProfile?.portalUrl || ''}
             accessToken={accessToken || undefined}
-            eventLimit={eventLimit}
+            batchSize={batchSize}
+            totalCount={eventsData?.pagination?.totalCount}
             isLoadingMore={isLoadingMore}
+            isFetching={isFetching}
             onLoadMore={loadNextPage}
             parentRef={parentRef}
             parentElement={parentElement}

@@ -8,6 +8,7 @@ const useQueryMock = vi.fn();
 
 vi.mock('@tanstack/react-query', () => ({
   useQuery: (options: { queryKey: (string | object)[] }) => useQueryMock(options),
+  keepPreviousData: (previousData: unknown) => previousData,
 }));
 
 vi.mock('@tanstack/react-virtual', () => ({
@@ -49,11 +50,15 @@ vi.mock('../../hooks/useEventFilters', () => ({
   useEventFilters: () => ({
     filters: {},
     selectedMonitorIds: [],
+    selectedTagIds: [],
     startDateInput: '',
     endDateInput: '',
+    favoritesOnly: false,
     setSelectedMonitorIds: vi.fn(),
+    setSelectedTagIds: vi.fn(),
     setStartDateInput: vi.fn(),
     setEndDateInput: vi.fn(),
+    setFavoritesOnly: vi.fn(),
     applyFilters,
     clearFilters,
     activeFilterCount: 0,
@@ -139,7 +144,13 @@ describe('Events Page', () => {
       if (queryKey[0] === 'events') {
         return { data: { events: [] }, isLoading: false, error: null, refetch: vi.fn() };
       }
-      return { data: {}, isLoading: false, error: null, refetch: vi.fn() };
+      if (queryKey[0] === 'tags') {
+        return { data: { tags: [] }, isLoading: false, error: null, refetch: vi.fn() };
+      }
+      if (queryKey[0] === 'eventTags') {
+        return { data: new Map(), isLoading: false, error: null, refetch: vi.fn() };
+      }
+      return { data: null, isLoading: false, error: null, refetch: vi.fn() };
     });
 
     render(<Events />);
@@ -178,7 +189,13 @@ describe('Events Page', () => {
           refetch: vi.fn(),
         };
       }
-      return { data: {}, isLoading: false, error: null, refetch: vi.fn() };
+      if (queryKey[0] === 'tags') {
+        return { data: { tags: [] }, isLoading: false, error: null, refetch: vi.fn() };
+      }
+      if (queryKey[0] === 'eventTags') {
+        return { data: new Map(), isLoading: false, error: null, refetch: vi.fn() };
+      }
+      return { data: null, isLoading: false, error: null, refetch: vi.fn() };
     });
 
     render(<Events />);
@@ -195,7 +212,13 @@ describe('Events Page', () => {
       if (queryKey[0] === 'events') {
         return { data: { events: [] }, isLoading: false, error: null, refetch: vi.fn() };
       }
-      return { data: {}, isLoading: false, error: null, refetch: vi.fn() };
+      if (queryKey[0] === 'tags') {
+        return { data: { tags: [] }, isLoading: false, error: null, refetch: vi.fn() };
+      }
+      if (queryKey[0] === 'eventTags') {
+        return { data: new Map(), isLoading: false, error: null, refetch: vi.fn() };
+      }
+      return { data: null, isLoading: false, error: null, refetch: vi.fn() };
     });
 
     render(<Events />);

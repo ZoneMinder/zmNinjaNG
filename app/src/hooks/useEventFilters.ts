@@ -49,7 +49,7 @@ export function useEventFilters(): UseEventFiltersReturn {
   // Derive filters from URL
   const filters: EventFilters = useMemo(
     () => ({
-      limit: settings.defaultEventLimit || 300,
+      limit: settings.defaultEventLimit || 100,
       sort: searchParams.get('sort') || 'StartDateTime',
       direction: (searchParams.get('direction') as 'asc' | 'desc') || 'desc',
       monitorId: searchParams.get('monitorId') || undefined,

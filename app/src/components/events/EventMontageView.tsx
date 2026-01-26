@@ -32,8 +32,10 @@ interface EventMontageViewProps {
   thumbnailFit: 'contain' | 'cover' | 'none' | 'scale-down';
   portalUrl: string;
   accessToken?: string;
-  eventLimit: number;
+  batchSize: number;
+  totalCount?: number;
   isLoadingMore: boolean;
+  isFetching?: boolean;
   onLoadMore: () => void;
   eventTagMap?: Map<string, Tag[]>;
 }
@@ -45,8 +47,10 @@ export const EventMontageView = ({
   thumbnailFit,
   portalUrl,
   accessToken,
-  eventLimit,
+  batchSize,
+  totalCount,
   isLoadingMore,
+  isFetching = false,
   onLoadMore,
   eventTagMap,
 }: EventMontageViewProps) => {
@@ -65,8 +69,20 @@ export const EventMontageView = ({
     }
   };
 
+  const isLoadingData = isLoadingMore || isFetching;
+  const hasMore = totalCount !== undefined ? events.length < totalCount : false;
+  const remaining = totalCount !== undefined ? Math.min(batchSize, totalCount - events.length) : batchSize;
+
   return (
     <div className="min-h-0" data-testid="events-montage-grid">
+      {/* Status header */}
+      <div className="text-xs text-muted-foreground pb-3 flex items-center gap-2">
+        {isFetching && <Loader2 className="h-3 w-3 animate-spin" />}
+        {totalCount !== undefined
+          ? t('events.showing_of_total', { showing: events.length, total: totalCount })
+          : t('events.showing_events', { count: events.length })}
+      </div>
+
       <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}>
         {events.map((eventData) => {
           const event = eventData.Event;
@@ -167,31 +183,28 @@ export const EventMontageView = ({
         })}
       </div>
 
-      <div className="text-center py-4 space-y-3">
-        <div className="text-xs text-muted-foreground">
-          {t('events.showing_events', { count: events.length })}
-          {events.length >= eventLimit && ` (${t('events.more_available')})`}
-        </div>
-        {events.length >= eventLimit && (
+      {/* Load More button */}
+      {hasMore && (
+        <div className="text-center py-4">
           <Button
             onClick={onLoadMore}
-            disabled={isLoadingMore}
+            disabled={isLoadingData}
             variant="outline"
             size="sm"
             className="w-full"
             data-testid="events-load-more"
           >
-            {isLoadingMore ? (
+            {isLoadingData ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                {t('common.loading')}
+                {t('events.loading_more', { count: remaining })}
               </>
             ) : (
               t('events.load_more')
             )}
           </Button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };

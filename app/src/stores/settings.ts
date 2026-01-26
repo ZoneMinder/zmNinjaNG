@@ -96,7 +96,7 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   snapshotRefreshInterval: 3,
   streamMaxFps: 10,
   streamScale: 50,
-  defaultEventLimit: 300,
+  defaultEventLimit: 100,
   dashboardRefreshInterval: 30,
   montageLayouts: {},
   eventMontageLayouts: {},

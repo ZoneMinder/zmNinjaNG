@@ -21,7 +21,7 @@ vi.mock('../../../stores/settings', () => ({
     viewMode: 'snapshot',
     displayMode: 'normal',
     theme: 'light',
-    defaultEventLimit: 300,
+    defaultEventLimit: 100,
   },
   useSettingsStore: vi.fn((selector: any) => {
     if (typeof selector === 'function') {
@@ -38,7 +38,7 @@ describe('EventSettings', () => {
     vi.clearAllMocks();
     mockUseCurrentProfile.mockReturnValue({
       currentProfile: { id: 'profile-1', name: 'Test Profile' },
-      settings: { defaultEventLimit: 300 },
+      settings: { defaultEventLimit: 100 },
       hasProfile: true,
     });
   });
@@ -55,7 +55,7 @@ describe('EventSettings', () => {
 
     const input = screen.getByTestId('settings-event-limit');
     expect(input).toBeInTheDocument();
-    expect(input).toHaveValue(300);
+    expect(input).toHaveValue(100);
   });
 
   it('should update settings when quick select button clicked', async () => {
@@ -73,8 +73,8 @@ describe('EventSettings', () => {
   it('should have quick select buttons', () => {
     render(<EventSettings />);
 
-    expect(screen.getByRole('button', { name: /100/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /300.*settings.default/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /100.*settings.default/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^300$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /500/i })).toBeInTheDocument();
   });
 });
