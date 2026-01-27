@@ -500,7 +500,7 @@ Most polling intervals are controlled by the user's **bandwidth mode** setting (
 ```tsx
 export const BANDWIDTH_SETTINGS: Record<BandwidthMode, BandwidthSettings> = {
   normal: {
-    monitorStatusInterval: 10000,   // 10 sec
+    monitorStatusInterval: 20000,   // 20 sec
     alarmStatusInterval: 5000,      // 5 sec
     snapshotRefreshInterval: 3,     // 3 sec
     eventsWidgetInterval: 30000,    // 30 sec
@@ -512,7 +512,7 @@ export const BANDWIDTH_SETTINGS: Record<BandwidthMode, BandwidthSettings> = {
     streamMaxFps: 10,               // 10 FPS
   },
   low: {
-    monitorStatusInterval: 20000,   // 20 sec
+    monitorStatusInterval: 40000,   // 40 sec
     alarmStatusInterval: 10000,     // 10 sec
     snapshotRefreshInterval: 10,    // 10 sec
     eventsWidgetInterval: 60000,    // 60 sec
@@ -543,6 +543,45 @@ function MyComponent() {
 ```
 
 Components should use `useBandwidthSettings()` instead of hardcoded intervals for any polling that affects network usage.
+
+**What uses bandwidth settings:**
+
+| Feature | Property | Normal | Low | Where Used |
+|---------|----------|--------|-----|------------|
+| Monitor status polling | `monitorStatusInterval` | 20s | 40s | Monitors, Montage pages |
+| Alarm state checking | `alarmStatusInterval` | 5s | 10s | useAlarmControl hook |
+| Event count refresh | `consoleEventsInterval` | 60s | 60s | Monitors page event badges |
+| Dashboard events widget | `eventsWidgetInterval` | 30s | 60s | EventsWidget |
+| Timeline/heatmap data | `timelineHeatmapInterval` | 60s | 120s | TimelineWidget, HeatmapWidget |
+| Daemon health checks | `daemonCheckInterval` | 30s | 60s | Server page |
+| Snapshot image refresh | `snapshotRefreshInterval` | 3s | 10s | useMonitorStream (snapshot mode) |
+| Stream FPS limit | `streamMaxFps` | 10 | 5 | Video streaming |
+| Image scaling | `imageScale` | 100% | 50% | Image requests |
+| Image quality | `imageQuality` | 100% | 50% | Image requests |
+
+**What does NOT use bandwidth settings:**
+
+| Feature | Interval | Reason |
+|---------|----------|--------|
+| Groups data (`useGroups`) | `staleTime: 5min` | Groups rarely change, uses React Query cache |
+| Event tags (`useEventTags`) | `staleTime: 5min` | Tags rarely change, uses React Query cache |
+| Token expiry check | 60s (hardcoded) | Security requirement, must check regularly |
+| Monitor cycle navigation | User-configured | User-controlled timer, not data fetching |
+| WebSocket keepalive | 60s (hardcoded) | Protocol requirement for connection stability |
+| One-time queries | N/A | Queries without `refetchInterval` (event lists, states, timezone) |
+
+**When to add bandwidth settings:**
+
+Use bandwidth settings for:
+- Background polling that fetches server data repeatedly
+- Auto-refresh features that run on timers
+- Any operation that could consume significant bandwidth over time
+
+Do NOT use bandwidth settings for:
+- User-triggered actions (button clicks, navigation)
+- One-time data fetches
+- Protocol requirements (authentication, keepalives)
+- Data that rarely changes (use `staleTime` instead)
 
 #### Timer Best Practices
 
