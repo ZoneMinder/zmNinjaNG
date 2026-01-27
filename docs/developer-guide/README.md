@@ -41,10 +41,12 @@ This guide teaches you how to work on the zmNg codebase. It's written for develo
    - ResizeObserver pattern and the ref solution
 
 5. **[Component Architecture](./05-component-architecture.md)**
-   - Component organization (monitors/, dashboard/, events/, ui/)
+   - Component organization (monitors/, dashboard/, events/, ui/, filters/)
    - MonitorCard and MontageMonitor components
    - Dashboard widgets and grid layout
-   - Event components and video player
+   - Event components, video player, and tags
+   - QR Scanner for profile import
+   - Filter components (groups, monitors)
    - Testing data attributes and patterns
 
 6. **[Testing Strategy](./06-testing-strategy.md)**
@@ -58,6 +60,7 @@ This guide teaches you how to work on the zmNg codebase. It's written for develo
    - ZoneMinder API overview
    - Authentication and connection keys
    - React Query integration
+   - Monitor groups and event tags APIs
    - Queries, mutations, and infinite queries
    - Complete data flow example
 

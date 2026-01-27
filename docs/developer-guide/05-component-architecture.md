@@ -59,9 +59,12 @@ src/components/
 │   ├── EventListView.tsx
 │   ├── EventMontageView.tsx
 │   ├── ZmsEventPlayer.tsx
-│   └── EventHeatmap.tsx
+│   ├── EventHeatmap.tsx
+│   └── TagChip.tsx         # Event tag display
 ├── filters/          # Filter components
-│   └── MonitorFilterPopover.tsx
+│   ├── MonitorFilterPopover.tsx
+│   └── GroupFilterSelect.tsx  # Monitor group filtering
+├── QRScanner.tsx     # QR code scanning for profile import
 └── ui/              # Reusable UI primitives
     ├── button.tsx
     ├── card.tsx
@@ -376,6 +379,84 @@ Calendar heatmap showing event frequency by day and hour.
 - `react-calendar-heatmap` for visualization
 - Queries event counts aggregated by time
 - Color intensity based on event frequency
+
+### TagChip
+
+**Location**: `src/components/events/TagChip.tsx`
+
+Displays event tags as small badge/chip elements.
+
+**Features:**
+- Compact visual representation of tags
+- Used in EventCard to show assigned tags
+- Styled to match the app's design system
+
+**Usage:**
+```tsx
+<div className="flex gap-1">
+  {tags.map(tag => (
+    <TagChip key={tag.Id} tag={tag} />
+  ))}
+</div>
+```
+
+## Filter Components
+
+### GroupFilterSelect
+
+**Location**: `src/components/filters/GroupFilterSelect.tsx`
+
+Dropdown component for filtering monitors by group.
+
+**Features:**
+- Fetches groups from the groups API
+- Supports "All Groups" option
+- Updates filter state when selection changes
+
+**Usage:**
+```tsx
+<GroupFilterSelect
+  value={selectedGroupId}
+  onChange={(groupId) => setSelectedGroupId(groupId)}
+/>
+```
+
+## QR Scanner
+
+### QRScanner
+
+**Location**: `src/components/QRScanner.tsx`
+
+A dialog-based QR code scanner for importing server profiles.
+
+**Platform Implementations:**
+- **Native (iOS/Android)**: Uses `capacitor-barcode-scanner` for native camera access
+- **Web (Desktop)**: Uses `html5-qrcode` library with browser camera API
+
+**Features:**
+- Scan QR codes with device camera
+- Load QR codes from photo files ("Load from Photo" option)
+- Graceful error handling for permission denied, camera not found
+- Auto-cleanup of scanner resources on unmount
+
+**Usage:**
+```tsx
+<QRScanner
+  open={scannerOpen}
+  onOpenChange={setScannerOpen}
+  onScan={(data) => {
+    // data contains the decoded QR code content
+    // Parse as JSON for profile data
+    const profile = JSON.parse(data);
+    importProfile(profile);
+  }}
+/>
+```
+
+**Implementation Notes:**
+- The `html5-qrcode` library manipulates DOM directly, so the scanner container is created outside React's virtual DOM to avoid reconciliation conflicts
+- Native scanner launches a full-screen camera view; the dialog is hidden while scanning
+- File scanning creates a temporary DOM element, scans the image, then cleans up
 
 ## UI Components
 

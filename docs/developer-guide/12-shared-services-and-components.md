@@ -212,6 +212,41 @@ const videoUrl = getEventVideoUrl(portalUrl, eventId, {
 
 ---
 
+### Event Icons (`lib/event-icons.ts`)
+
+Maps event causes from ZoneMinder to Lucide icons for visual display.
+
+**Features:**
+- Exact match for known causes (Motion, Alarm, Signal, Linked, etc.)
+- Prefix matching for cause variants (e.g., "Motion:All", "Motion:Person" → Motion icon)
+- Fallback to Circle icon for unknown causes
+
+**Implementation:**
+```typescript
+import { getEventCauseIcon, hasSpecificCauseIcon } from '../lib/event-icons';
+
+// Get icon component for a cause
+const Icon = getEventCauseIcon('Motion');  // Returns Move icon
+const Icon2 = getEventCauseIcon('Motion:Person');  // Also returns Move icon (prefix match)
+const Icon3 = getEventCauseIcon('Unknown');  // Returns Circle icon (fallback)
+
+// Check if cause has a specific (non-fallback) icon
+const hasIcon = hasSpecificCauseIcon('Motion');  // true
+const hasIcon2 = hasSpecificCauseIcon('Custom');  // false
+```
+
+**Mapped Causes:**
+- `Motion` → Move icon
+- `Alarm` → Bell icon
+- `Signal` → Wifi icon
+- `Linked` → Link icon
+- `Forced Web` → Hand icon
+- `Continuous` → Video icon
+
+**Used By:** EventCard, event list components
+
+---
+
 ### Time Utilities (`lib/time.ts`)
 
 Date/time formatting and timezone conversion for ZoneMinder API.

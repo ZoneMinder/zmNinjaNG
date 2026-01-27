@@ -1079,10 +1079,82 @@ src/api/
 ├── auth.ts          # login(), logout(), refreshAccessToken()
 ├── monitors.ts      # fetchMonitors(), updateMonitor(), getAlarmStatus()
 ├── events.ts        # fetchEvents(), fetchEvent(), deleteEvent()
-├── groups.ts        # getGroups()
+├── groups.ts        # getGroups() - monitor groups for filtering
+├── tags.ts          # getTags(), getEventTags() - event tagging (ZM 1.37+)
 ├── states.ts        # fetchStates(), changeState()
 ├── server.ts        # getVersion(), getDaemonStatus(), fetchMinStreamingPort()
 └── streaming.ts     # generateConnKey(), getStreamUrl()
+```
+
+## Monitor Groups API
+
+The groups API (`src/api/groups.ts`) fetches monitor groups for filtering monitors.
+
+**Usage:**
+
+```tsx
+import { getGroups } from '../api/groups';
+
+const response = await getGroups();
+// response.groups: Array of group objects with Id, Name, ParentId, MonitorIds
+```
+
+**Response structure:**
+
+```tsx
+interface Group {
+  Id: string;
+  Name: string;
+  ParentId: string | null;  // For hierarchical groups
+  MonitorIds: string;       // Comma-separated list of monitor IDs
+}
+```
+
+Groups are used with the `GroupFilterSelect` component for filtering monitors in views.
+
+## Event Tags API
+
+The tags API (`src/api/tags.ts`) handles event tagging functionality. Tags are labels assigned to events (e.g., "person", "car", "cat"). Not all ZoneMinder servers support tags - the API handles graceful degradation.
+
+**Key functions:**
+
+```tsx
+import { getTags, getEventTags, checkTagsSupported } from '../api/tags';
+
+// Check if tags are supported on this server
+const supported = await checkTagsSupported();
+
+// Get all available tags
+const tagsResponse = await getTags();
+// Returns null if tags not supported (404) or permission denied (401/403)
+
+// Get tags for specific events (batched automatically)
+const eventTagMap = await getEventTags(['123', '456', '789']);
+// Returns Map<eventId, Tag[]> or null if not supported
+```
+
+**Features:**
+- Graceful degradation for servers without tag support
+- Automatic batching for large event ID lists (avoids URL length limits)
+- Returns `null` instead of throwing on 404/401/403 responses
+
+**Response structure:**
+
+```tsx
+interface Tag {
+  Id: string;
+  Name: string;
+  CreateDate: string;
+  CreatedBy: string;
+  LastAssignedDate: string;
+}
+```
+
+**Query key pattern:**
+
+```tsx
+['tags', profileId]           // All available tags
+['eventTags', profileId, eventIds]  // Tags for specific events
 ```
 
 ## Data Flow Example
