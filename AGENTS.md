@@ -1,23 +1,25 @@
 # Development Guidelines
 
 ## Quick Reference
-1. **Issues First**: Create GitHub issue before implementing features or fixing bugs
-2. **Testing**: Write tests first, run and verify pass before commit
-3. **Documentation**: Update `docs/developer-guide/` when adding new APIs, components, or utilities
-4. **Internationalization**: Update ALL language files (en, de, es, fr, zh)
-5. **Cross-platform**: iOS, Android, Desktop, mobile portrait + landscape
-6. **Settings**: Profile-scoped only; read/write via `getProfileSettings`/`updateProfileSettings`
-7. **Bandwidth**: Polling/refresh features need bandwidth settings support (normal vs. low)
-8. **Logging**: Use `log.*` component helpers with explicit LogLevel, never `console.*`
-9. **HTTP**: Use `lib/http.ts` abstractions (`httpGet`, `httpPost`, etc.), never raw `fetch()` or `axios`
-10. **Text Overflow**: Use `truncate` + `min-w-0` in flex containers; add `title` for tooltips
-11. **Coding**: DRY, small files (~400 LOC max), extract complex logic to separate modules
-12. **Semantic Search**: Use grepai as primary tool for code exploration. See [grepai section](#grepai---semantic-code-search).
+1. **NO SUPERLATIVES**: Never use "comprehensive", "critical", "major", "robust", "powerful", etc. Plain, factual language only.
+2. **Issues First**: Create GitHub issue before implementing features or fixing bugs
+3. **Testing**: Write tests first, run and verify pass before commit
+4. **Documentation**: Update `docs/developer-guide/` when adding new APIs, components, or utilities
+5. **Internationalization**: Update ALL language files (en, de, es, fr, zh)
+6. **Cross-platform**: iOS, Android, Desktop, mobile portrait + landscape
+7. **Settings**: Profile-scoped only; read/write via `getProfileSettings`/`updateProfileSettings`
+8. **Bandwidth**: Polling/refresh features need bandwidth settings support (normal vs. low)
+9. **Logging**: Use `log.*` component helpers with explicit LogLevel, never `console.*`
+10. **HTTP**: Use `lib/http.ts` abstractions (`httpGet`, `httpPost`, etc.), never raw `fetch()` or `axios`
+11. **Text Overflow**: Use `truncate` + `min-w-0` in flex containers; add `title` for tooltips
+12. **Coding**: DRY, small files (~400 LOC max), extract complex logic to separate modules
+13. **Semantic Search**: Use grepai as primary tool for code exploration. See [grepai section](#grepai---semantic-code-search).
 
 ---
 
 ## Forbidden Actions
 
+- **NEVER USE SUPERLATIVE LANGUAGE** - No "comprehensive", "critical", "major", "robust", "powerful", "extensively", "thoroughly", "excellent", "amazing", "significant", etc. in ANY communication (responses, commits, docs, comments). Use plain, factual descriptions.
 - **Never use `console.*`** - use `log.*` component helpers with explicit LogLevel
 - **Never use raw `fetch()` or `axios`** - use `app/src/lib/http.ts` abstractions
 - **Never convert to Blob on mobile** - use CapacitorHttp base64 directly
@@ -493,7 +495,7 @@ For complex features with multiple approaches, UX changes, or architectural deci
 ### Commit Guidelines
 - Detailed, descriptive messages (no vague summaries)
 - One logical change per commit
-- **DO NOT USE** superlative language ("comprehensive", "critical", "major")
+- No superlative language (see Forbidden Actions)
 - Use conventional format: `feat:`, `fix:`, `docs:`, `test:`, `chore:`, `refactor:`
 
 **Examples**:
@@ -548,17 +550,18 @@ For complex features with multiple approaches, UX changes, or architectural deci
 
 ## AI Agent Pitfalls
 
-1. **Claiming success without verification** - Always run `npm test` AND relevant e2e tests
-2. **Skipping tests for "simple" changes** - All changes need test verification
-3. **Batching unrelated changes** - Split into separate commits
-4. **Using wrong working directory** - All npm commands from `app/`
-5. **Partial i18n updates** - Add to ALL language files
-6. **Static Capacitor imports** - Use dynamic imports with platform check
-7. **Forgetting data-testid** - All interactive elements need test selectors
-8. **Not reading error output** - Analyze why tests failed, fix systematically
-9. **Implementing without GitHub issue** - Create issue first for features and bugs
-10. **Forgetting documentation updates** - Update developer-guide when adding APIs/components
-11. **Hardcoding polling intervals** - Use `useBandwidthSettings()` for all polling/auto-refresh features
+1. **Using superlative language** - NEVER use "comprehensive", "critical", "major", "robust", "powerful", etc. in responses, commits, docs, or code comments. Use plain, factual descriptions.
+2. **Claiming success without verification** - Always run `npm test` AND relevant e2e tests
+3. **Skipping tests for "simple" changes** - All changes need test verification
+4. **Batching unrelated changes** - Split into separate commits
+5. **Using wrong working directory** - All npm commands from `app/`
+6. **Partial i18n updates** - Add to ALL language files
+7. **Static Capacitor imports** - Use dynamic imports with platform check
+8. **Forgetting data-testid** - All interactive elements need test selectors
+9. **Not reading error output** - Analyze why tests failed, fix systematically
+10. **Implementing without GitHub issue** - Create issue first for features and bugs
+11. **Forgetting documentation updates** - Update developer-guide when adding APIs/components
+12. **Hardcoding polling intervals** - Use `useBandwidthSettings()` for all polling/auto-refresh features
 
 ---
 
