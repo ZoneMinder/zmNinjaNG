@@ -73,10 +73,10 @@ export default function Monitors() {
     return t('monitors.failed_to_load', { error: message });
   };
 
-  // Fetch event counts for the last 24 hours
+  // Fetch event counts for the last week
   const { data: eventCounts } = useQuery({
-    queryKey: ['consoleEvents', '24 hour'],
-    queryFn: () => getConsoleEvents('24 hour'),
+    queryKey: ['consoleEvents', '1 week'],
+    queryFn: () => getConsoleEvents('1 week'),
     enabled: !!currentProfile && isAuthenticated,
     refetchInterval: bandwidth.consoleEventsInterval,
   });

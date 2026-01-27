@@ -7,11 +7,12 @@
 4. **Internationalization**: Update ALL language files (en, de, es, fr, zh)
 5. **Cross-platform**: iOS, Android, Desktop, mobile portrait + landscape
 6. **Settings**: Profile-scoped only; read/write via `getProfileSettings`/`updateProfileSettings`
-7. **Logging**: Use `log.*` component helpers with explicit LogLevel, never `console.*`
-8. **HTTP**: Use `lib/http.ts` abstractions (`httpGet`, `httpPost`, etc.), never raw `fetch()` or `axios`
-9. **Text Overflow**: Use `truncate` + `min-w-0` in flex containers; add `title` for tooltips
-10. **Coding**: DRY, small files (~400 LOC max), extract complex logic to separate modules
-11. **Semantic Search**: Use grepai as primary tool for code exploration. See [grepai section](#grepai---semantic-code-search).
+7. **Bandwidth**: Polling/refresh features need bandwidth settings support (normal vs. low)
+8. **Logging**: Use `log.*` component helpers with explicit LogLevel, never `console.*`
+9. **HTTP**: Use `lib/http.ts` abstractions (`httpGet`, `httpPost`, etc.), never raw `fetch()` or `axios`
+10. **Text Overflow**: Use `truncate` + `min-w-0` in flex containers; add `title` for tooltips
+11. **Coding**: DRY, small files (~400 LOC max), extract complex logic to separate modules
+12. **Semantic Search**: Use grepai as primary tool for code exploration. See [grepai section](#grepai---semantic-code-search).
 
 ---
 
@@ -328,6 +329,102 @@ Detect version/structure changes in stored data. If incompatible, prompt user to
 
 ---
 
+## Bandwidth Settings
+
+Features that poll or refresh data from the server must respect bandwidth settings to support users on low-bandwidth connections or mobile data.
+
+### When to Use Bandwidth Settings
+
+**Always use bandwidth settings for:**
+- API polling intervals (useQuery `refetchInterval`)
+- Auto-refresh timers for data fetching
+- Background data sync operations
+- Periodic status checks
+
+**Examples requiring bandwidth settings:**
+- Monitor status polling
+- Event count refreshing
+- Dashboard widget updates
+- Timeline/heatmap data
+- Daemon health checks
+- Alarm status checking
+
+### Implementation Pattern
+
+```typescript
+import { useBandwidthSettings } from '../hooks/useBandwidthSettings';
+
+const bandwidth = useBandwidthSettings();
+
+// Use in React Query
+const { data } = useQuery({
+  queryKey: ['monitors'],
+  queryFn: getMonitors,
+  refetchInterval: bandwidth.monitorStatusInterval, // Respects normal vs. low mode
+});
+
+// Use in timers
+useEffect(() => {
+  const interval = setInterval(() => {
+    fetchData();
+  }, bandwidth.eventsWidgetInterval);
+  return () => clearInterval(interval);
+}, [bandwidth.eventsWidgetInterval]);
+```
+
+### Available Bandwidth Properties
+
+From `useBandwidthSettings()`:
+- `monitorStatusInterval` - Monitor status updates
+- `alarmStatusInterval` - Alarm state checking
+- `consoleEventsInterval` - Event count refreshing
+- `eventsWidgetInterval` - Dashboard events widget
+- `timelineHeatmapInterval` - Timeline/heatmap data
+- `daemonCheckInterval` - Server daemon health
+- `snapshotRefreshInterval` - Snapshot image refresh
+- `imageScale` - Image scaling percentage
+- `imageQuality` - Image quality percentage
+- `streamMaxFps` - Maximum stream FPS
+
+### Adding New Bandwidth Properties
+
+If adding a new polling/refresh feature:
+
+1. **Add to BandwidthSettings type** in `lib/zmng-constants.ts`:
+   ```typescript
+   export interface BandwidthSettings {
+     // ... existing properties
+     myNewFeatureInterval: number; // Description
+   }
+   ```
+
+2. **Add values for both modes**:
+   ```typescript
+   export const BANDWIDTH_SETTINGS: Record<BandwidthMode, BandwidthSettings> = {
+     normal: {
+       // ... existing settings
+       myNewFeatureInterval: 30000, // 30 sec
+     },
+     low: {
+       // ... existing settings
+       myNewFeatureInterval: 60000, // 60 sec (2x slower for low bandwidth)
+     },
+   };
+   ```
+
+3. **Use in your component** via `useBandwidthSettings()`
+
+### Quick Check
+
+**Before implementing any feature that polls or auto-refreshes:**
+- Does it fetch data from the server repeatedly?
+- Does it run on a timer or interval?
+- Could it consume significant bandwidth over time?
+
+If yes to any → Use bandwidth settings!
+
+---
+
 ## Documentation
 
 ### When to Update Developer Docs
@@ -444,6 +541,9 @@ For complex features with multiple approaches, UX changes, or architectural deci
 **Mobile Download?**
 → Use CapacitorHttp base64 directly, never convert to Blob
 
+**Adding Polling/Auto-Refresh Feature?**
+→ Use `useBandwidthSettings()` and appropriate interval property (e.g., `monitorStatusInterval`, `consoleEventsInterval`). If no matching property exists, add to `lib/zmng-constants.ts` with values for both normal and low modes.
+
 ---
 
 ## AI Agent Pitfalls
@@ -458,6 +558,7 @@ For complex features with multiple approaches, UX changes, or architectural deci
 8. **Not reading error output** - Analyze why tests failed, fix systematically
 9. **Implementing without GitHub issue** - Create issue first for features and bugs
 10. **Forgetting documentation updates** - Update developer-guide when adding APIs/components
+11. **Hardcoding polling intervals** - Use `useBandwidthSettings()` for all polling/auto-refresh features
 
 ---
 
