@@ -1,16 +1,17 @@
 # Development Guidelines
 
 ## Quick Reference
-1. **Testing**: Write tests first, run and verify pass before commit
-2. **Internationalization**: Update ALL language files (en, de, es, fr, zh)
-3. **Cross-platform**: iOS, Android, Desktop, mobile portrait + landscape
-4. **Settings**: Profile-scoped only; read/write via `getProfileSettings`/`updateProfileSettings`
-5. **Logging**: Use `log.*` component helpers with explicit LogLevel, never `console.*`
-6. **HTTP**: Use `lib/http.ts` abstractions (`httpGet`, `httpPost`, etc.), never raw `fetch()` or `axios`
-7. **Mobile Downloads**: Use CapacitorHttp base64 directly, never convert to Blob (causes OOM)
-8. **Text Overflow**: Use `truncate` + `min-w-0` in flex containers; add `title` for tooltips
-9. **Coding**: DRY, small files (~400 LOC max), extract complex logic to separate modules
-10. **Semantic Search**: Use grepai as primary tool for code exploration. See [grepai section](#grepai---semantic-code-search).
+1. **Issues First**: Create GitHub issue before implementing features or fixing bugs
+2. **Testing**: Write tests first, run and verify pass before commit
+3. **Documentation**: Update `docs/developer-guide/` when adding new APIs, components, or utilities
+4. **Internationalization**: Update ALL language files (en, de, es, fr, zh)
+5. **Cross-platform**: iOS, Android, Desktop, mobile portrait + landscape
+6. **Settings**: Profile-scoped only; read/write via `getProfileSettings`/`updateProfileSettings`
+7. **Logging**: Use `log.*` component helpers with explicit LogLevel, never `console.*`
+8. **HTTP**: Use `lib/http.ts` abstractions (`httpGet`, `httpPost`, etc.), never raw `fetch()` or `axios`
+9. **Text Overflow**: Use `truncate` + `min-w-0` in flex containers; add `title` for tooltips
+10. **Coding**: DRY, small files (~400 LOC max), extract complex logic to separate modules
+11. **Semantic Search**: Use grepai as primary tool for code exploration. See [grepai section](#grepai---semantic-code-search).
 
 ---
 
@@ -26,6 +27,8 @@
 - **Never merge to main without user approval** - always request review first
 - **Never hardcode user-facing strings** - all text must use i18n
 - **Never skip `data-testid` on interactive elements** - required for e2e tests
+- **Never implement features/fixes without a GitHub issue** - create issue first, reference in commits
+- **Never add new APIs/components without updating docs** - update developer-guide in same session
 
 ---
 
@@ -325,6 +328,26 @@ Detect version/structure changes in stored data. If incompatible, prompt user to
 
 ---
 
+## Documentation
+
+### When to Update Developer Docs
+Update `docs/developer-guide/` when adding:
+- New API modules (`api/*.ts`) → Update `07-api-and-data-fetching.md`
+- New components (`components/*.tsx`) → Update `05-component-architecture.md`
+- New utilities (`lib/*.ts`) → Update `12-shared-services-and-components.md`
+- New hooks (`hooks/*.ts`) → Update `05-component-architecture.md` or relevant chapter
+
+### What to Document
+- Purpose and usage examples
+- Key functions/props with brief descriptions
+- Integration patterns (how it connects to existing code)
+- Any gotchas or platform-specific behavior
+
+### Documentation Timing
+Update docs in the same session as the code change, not as a separate task.
+
+---
+
 ## Code Quality
 
 ### Keep It Simple
@@ -347,25 +370,33 @@ For complex features with multiple approaches, UX changes, or architectural deci
 
 ## Feature Development & Commits
 
-### When to Create Feature Branches
-Create GitHub issues and feature branches for:
-- Features that need tracking or user approval
-- Changes that might be reverted or discarded
+### When to Create GitHub Issues
+**Always create a GitHub issue for:**
+- New user-facing functionality (screens, buttons, workflows)
+- New API integrations (endpoints, data types)
+- Bug fixes (describe the bug, reproduction steps, expected behavior)
+- Architectural changes (new stores, new patterns)
 
-For small, self-contained fixes: commit directly to main after tests pass.
+**Commit directly to main (no issue needed) for:**
+- Documentation-only updates
+- Refactoring without behavior change (same functionality, cleaner code)
+- Test additions for existing, working code
+- Dependency updates
 
-### Workflow (when using branches)
-1. Create GitHub Issue: `gh issue create --title "Feature" --body "Description" --label "enhancement"`
-2. Create branch: `git checkout -b feature/<short-description>`
+### Workflow
+1. **Create GitHub Issue first:**
+   - Features: `gh issue create --title "feat: Description" --body "..." --label "enhancement"`
+   - Bugs: `gh issue create --title "fix: Description" --body "Bug: ...\nSteps to reproduce: ...\nExpected: ..." --label "bug"`
+2. Create branch: `git checkout -b feature/<short-description>`. Don't create a branch for bug fixes.
 3. Implement with tests
-4. Request approval before merging
-5. Alwas tag commits to the issue `refs #<id>`
-5. Use `fixes #<id>` to auto-close issues
+4. Request user approval before merging
+5. Tag all commits to the issue: `refs #<id>`
+6. Use `fixes #<id>` in final commit to auto-close the issue after user confirms that the fix is working. DO NOT close issues automatically
 
 ### Commit Guidelines
 - Detailed, descriptive messages (no vague summaries)
 - One logical change per commit
-- Avoid superlative language ("comprehensive", "critical", "major")
+- **DO NOT USE** superlative language ("comprehensive", "critical", "major")
 - Use conventional format: `feat:`, `fix:`, `docs:`, `test:`, `chore:`, `refactor:`
 
 **Examples**:
@@ -380,11 +411,23 @@ For small, self-contained fixes: commit directly to main after tests pass.
 
 ## Quick Decision Trees
 
+**Adding a Feature?**
+→ Create GitHub issue first, then: create feature branch, implement, test, update docs, reference issue in commits, update developer docs if needed
+
+**Fixing a Bug?**
+→ Create GitHub issue (describe bug + repro steps), write reproduction test, fix, verify test passes
+
 **Adding UI?**
 → Need: `data-testid`, e2e test in .feature file, i18n keys in ALL languages, responsive check, text overflow handling
 
-**Fixing a Bug?**
-→ Write reproduction test first, then fix, then verify test passes
+**Adding New API Module?**
+→ Create in `api/`, update `docs/developer-guide/07-api-and-data-fetching.md`
+
+**Adding New Component?**
+→ Create in `components/`, update `docs/developer-guide/05-component-architecture.md`
+
+**Adding New Utility?**
+→ Create in `lib/`, update `docs/developer-guide/12-shared-services-and-components.md`
 
 **Adding HTTP Request?**
 → Use `httpGet`/`httpPost`/`httpPut`/`httpDelete` from `lib/http.ts`
@@ -413,6 +456,8 @@ For small, self-contained fixes: commit directly to main after tests pass.
 6. **Static Capacitor imports** - Use dynamic imports with platform check
 7. **Forgetting data-testid** - All interactive elements need test selectors
 8. **Not reading error output** - Analyze why tests failed, fix systematically
+9. **Implementing without GitHub issue** - Create issue first for features and bugs
+10. **Forgetting documentation updates** - Update developer-guide when adding APIs/components
 
 ---
 
