@@ -1,5 +1,20 @@
 # Changelog
 
+## [zmNg-0.2.3](https://github.com/pliablepixels/zmNg/tree/zmNg-0.2.3) (2026-01-28)
+
+[Full Changelog](https://github.com/pliablepixels/zmNg/compare/zmNg-0.2.2...zmNg-0.2.3)
+
+**Implemented enhancements:**
+
+- Add event tags support [\#20](https://github.com/pliablepixels/zmNg/issues/20)
+
+**Fixed bugs:**
+
+- fix: event thumbnails and playback broken on Android [\#24](https://github.com/pliablepixels/zmNg/issues/24)
+- fix: move filter popup buttons to top for better mobile accessibility [\#23](https://github.com/pliablepixels/zmNg/issues/23)
+- fix: QR scanner button unresponsive after closing scanner on mobile [\#22](https://github.com/pliablepixels/zmNg/issues/22)
+- fix: API queries firing before authentication completes [\#21](https://github.com/pliablepixels/zmNg/issues/21)
+
 ## [zmNg-0.2.2](https://github.com/pliablepixels/zmNg/tree/zmNg-0.2.2) (2026-01-23)
 
 [Full Changelog](https://github.com/pliablepixels/zmNg/compare/zmNg-0.2.1...zmNg-0.2.2)
