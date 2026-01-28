@@ -83,6 +83,22 @@ export function EventsFilterPopover({
       className="w-[calc(100vw-2rem)] sm:w-80 max-w-sm max-h-[80vh] overflow-y-auto no-scrollbar"
       data-testid="events-filter-panel"
     >
+      {/* Action buttons at top for mobile accessibility */}
+      <div className="flex gap-2 mb-4 pb-4 border-b sticky top-0 bg-popover z-10">
+        <Button onClick={onApplyFilters} size="sm" className="flex-1" data-testid="events-apply-filters">
+          {t('common.filter')}
+        </Button>
+        <Button
+          onClick={onClearFilters}
+          size="sm"
+          variant="outline"
+          className="flex-1"
+          data-testid="events-clear-filters"
+        >
+          {t('common.clear')}
+        </Button>
+      </div>
+
       <MonitorFilterPopoverContent
         monitors={monitors}
         selectedMonitorIds={selectedMonitorIds}
@@ -205,20 +221,6 @@ export function EventsFilterPopover({
           <div className="grid gap-2">
             <Label className="text-xs text-muted-foreground">{t('events.quick_ranges')}</Label>
             <QuickDateRangeButtons onRangeSelect={onQuickRangeSelect} />
-          </div>
-          <div className="flex gap-2">
-            <Button onClick={onApplyFilters} size="sm" className="flex-1" data-testid="events-apply-filters">
-              {t('common.filter')}
-            </Button>
-            <Button
-              onClick={onClearFilters}
-              size="sm"
-              variant="outline"
-              className="flex-1"
-              data-testid="events-clear-filters"
-            >
-              {t('common.clear')}
-            </Button>
           </div>
         </div>
       </div>
