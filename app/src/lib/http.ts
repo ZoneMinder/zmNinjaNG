@@ -281,11 +281,24 @@ export async function httpRequest<T = unknown>(
   const platform = Platform.isNative ? 'Native' : Platform.isTauri ? 'Tauri' : 'Web';
   const startTime = performance.now();
 
+  // Prepare request body for logging
+  let requestBodyForLog: unknown = body;
+  if (body instanceof URLSearchParams) {
+    const formData: Record<string, string> = {};
+    body.forEach((value, key) => {
+      formData[key] = value;
+    });
+    requestBodyForLog = formData;
+  }
+
   log.http(`[HTTP] Request #${requestId} ${method} ${fullUrl}`, LogLevel.DEBUG, {
     requestId,
     platform,
     method,
     url: fullUrl,
+    params: Object.keys(finalParams).length > 0 ? finalParams : undefined,
+    headers: Object.keys(requestHeaders).length > 0 ? requestHeaders : undefined,
+    body: requestBodyForLog,
   });
 
   try {
@@ -327,25 +340,48 @@ export async function httpRequest<T = unknown>(
     }
 
     const duration = Math.round(performance.now() - startTime);
+
+    // Prepare response data for logging (truncate large responses)
+    let responseDataForLog: unknown = response.data;
+    if (responseType === 'blob' || responseType === 'arraybuffer' || responseType === 'base64') {
+      responseDataForLog = `<Binary data: ${responseType}>`;
+    } else if (typeof response.data === 'string' && response.data.length > 1000) {
+      responseDataForLog = `${response.data.substring(0, 1000)}... (truncated, total: ${response.data.length} chars)`;
+    } else if (typeof response.data === 'object' && response.data !== null) {
+      const jsonString = JSON.stringify(response.data);
+      if (jsonString.length > 2000) {
+        responseDataForLog = `${jsonString.substring(0, 2000)}... (truncated, total: ${jsonString.length} chars)`;
+      }
+    }
+
     log.http(`[HTTP] Response #${requestId} ${method} ${fullUrl}`, LogLevel.DEBUG, {
       requestId,
       platform,
       method,
       url: fullUrl,
       status: response.status,
+      statusText: response.statusText || undefined,
       duration: `${duration}ms`,
+      headers: Object.keys(response.headers).length > 0 ? response.headers : undefined,
+      data: responseDataForLog,
     });
 
     return response;
   } catch (error) {
     const duration = Math.round(performance.now() - startTime);
+    const httpError = error as HttpError;
+
     log.http(`[HTTP] Failed #${requestId} ${method} ${fullUrl}`, LogLevel.ERROR, {
       requestId,
       platform,
       method,
       url: fullUrl,
       duration: `${duration}ms`,
-      error,
+      status: httpError.status || undefined,
+      statusText: httpError.statusText || undefined,
+      headers: httpError.headers && Object.keys(httpError.headers).length > 0 ? httpError.headers : undefined,
+      errorData: httpError.data || undefined,
+      error: httpError.message || error,
     });
     throw error;
   }
