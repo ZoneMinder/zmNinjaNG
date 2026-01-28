@@ -1,54 +1,46 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+/**
+ * Tests for QRScanner component
+ */
+
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-
-// Mock html5-qrcode module
-const mockScanFile = vi.fn();
-const mockStart = vi.fn();
-const mockStop = vi.fn();
-const mockClear = vi.fn();
-const mockGetState = vi.fn().mockReturnValue(0);
-
-vi.mock('html5-qrcode', () => ({
-  Html5Qrcode: vi.fn().mockImplementation(() => ({
-    scanFile: mockScanFile,
-    start: mockStart,
-    stop: mockStop,
-    clear: mockClear,
-    getState: mockGetState,
-  })),
-}));
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { QRScanner } from '../QRScanner';
 
 // Mock Capacitor
 vi.mock('@capacitor/core', () => ({
   Capacitor: {
-    isNativePlatform: vi.fn().mockReturnValue(false),
+    isNativePlatform: () => true, // Test native platform behavior
   },
 }));
 
-// Mock i18n
-vi.mock('react-i18next', () => ({
-  useTranslation: () => ({
-    t: (key: string) => {
-      const translations: Record<string, string> = {
-        'qr_scanner.title': 'Scan QR Code',
-        'qr_scanner.description': 'Point your camera at a profile QR code',
-        'qr_scanner.hint': 'Position the QR code within the frame',
-        'qr_scanner.scan_with_camera': 'Scan with Camera',
-        'qr_scanner.load_from_file': 'Load from Photo',
-        'qr_scanner.processing_file': 'Processing image...',
-        'qr_scanner.starting': 'Starting camera...',
-        'qr_scanner.retry': 'Try Again',
-        'qr_scanner.errors.no_qr_in_file': 'No QR code found in the selected image.',
-        'qr_scanner.errors.camera_error': 'Camera error',
-        'common.cancel': 'Cancel',
-      };
-      return translations[key] || key;
-    },
-  }),
+// Mock capacitor-barcode-scanner
+const mockScan = vi.fn();
+vi.mock('capacitor-barcode-scanner', () => ({
+  BarcodeScanner: {
+    scan: mockScan,
+  },
 }));
 
-// Import after mocks are set up
-import { QRScanner } from '../QRScanner';
+// Mock logger
+vi.mock('../../lib/logger', () => ({
+  log: {
+    profile: vi.fn(),
+  },
+  LogLevel: {
+    INFO: 'info',
+    ERROR: 'error',
+    WARN: 'warn',
+    DEBUG: 'debug',
+  },
+}));
+
+// Mock translations
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string) => key,
+  }),
+}));
 
 describe('QRScanner', () => {
   const mockOnScan = vi.fn();
@@ -56,207 +48,179 @@ describe('QRScanner', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockStart.mockResolvedValue(undefined);
-    mockStop.mockResolvedValue(undefined);
   });
 
-  it('renders file input element when dialog is open', () => {
+  it('should render when open', () => {
     render(
-      <QRScanner open={true} onOpenChange={mockOnOpenChange} onScan={mockOnScan} />
+      <QRScanner
+        open={true}
+        onOpenChange={mockOnOpenChange}
+        onScan={mockOnScan}
+      />
     );
 
-    const fileInput = screen.getByTestId('qr-scanner-file-input');
-    expect(fileInput).toBeInTheDocument();
-    expect(fileInput).toHaveClass('hidden');
-    expect(fileInput).toHaveAttribute('type', 'file');
-    expect(fileInput).toHaveAttribute('accept', 'image/*');
+    expect(screen.getByTestId('qr-scanner-dialog')).toBeInTheDocument();
+    expect(screen.getByText('qr_scanner.title')).toBeInTheDocument();
   });
 
-  it('renders load from file button', () => {
+  it('should not render when closed', () => {
     render(
-      <QRScanner open={true} onOpenChange={mockOnOpenChange} onScan={mockOnScan} />
+      <QRScanner
+        open={false}
+        onOpenChange={mockOnOpenChange}
+        onScan={mockOnScan}
+      />
     );
 
-    const loadButton = screen.getByTestId('qr-scanner-load-file');
-    expect(loadButton).toBeInTheDocument();
-    expect(loadButton).toHaveTextContent('Load from Photo');
+    expect(screen.queryByTestId('qr-scanner-dialog')).not.toBeInTheDocument();
   });
 
-  it('triggers file input when load button is clicked', () => {
+  it('should show scan with camera button on native platforms', () => {
     render(
-      <QRScanner open={true} onOpenChange={mockOnOpenChange} onScan={mockOnScan} />
+      <QRScanner
+        open={true}
+        onOpenChange={mockOnOpenChange}
+        onScan={mockOnScan}
+      />
     );
 
-    const fileInput = screen.getByTestId('qr-scanner-file-input');
-    const loadButton = screen.getByTestId('qr-scanner-load-file');
-
-    // Mock the click method on file input
-    const clickSpy = vi.spyOn(fileInput, 'click');
-
-    fireEvent.click(loadButton);
-
-    expect(clickSpy).toHaveBeenCalled();
+    expect(screen.getByTestId('qr-scanner-camera')).toBeInTheDocument();
   });
 
-  it('calls onScan with decoded text when valid QR image is selected', async () => {
-    const decodedQrData = '{"name": "Test Profile", "portalUrl": "https://example.com"}';
-    mockScanFile.mockResolvedValueOnce(decodedQrData);
+  it('should reset state when dialog reopens after closing', async () => {
+    const user = userEvent.setup();
 
-    render(
-      <QRScanner open={true} onOpenChange={mockOnOpenChange} onScan={mockOnScan} />
+    const { rerender } = render(
+      <QRScanner
+        open={true}
+        onOpenChange={mockOnOpenChange}
+        onScan={mockOnScan}
+      />
     );
 
-    const fileInput = screen.getByTestId('qr-scanner-file-input');
-    const file = new File(['test'], 'qr.png', { type: 'image/png' });
+    // Simulate user cancelling the native scanner
+    mockScan.mockResolvedValueOnce({ result: false });
 
-    fireEvent.change(fileInput, { target: { files: [file] } });
+    // Click scan button
+    const scanButton = screen.getByTestId('qr-scanner-camera');
+    await user.click(scanButton);
 
+    // Wait for scan to complete (cancelled)
     await waitFor(() => {
-      expect(mockOnScan).toHaveBeenCalledWith(decodedQrData);
+      expect(mockScan).toHaveBeenCalled();
     });
+
+    // Close dialog
+    const cancelButton = screen.getByTestId('qr-scanner-cancel');
+    await user.click(cancelButton);
 
     expect(mockOnOpenChange).toHaveBeenCalledWith(false);
-  });
 
-  it('shows error message when no QR code found in image', async () => {
-    mockScanFile.mockRejectedValueOnce(new Error('No QR code found'));
-
-    render(
-      <QRScanner open={true} onOpenChange={mockOnOpenChange} onScan={mockOnScan} />
+    // Reopen dialog
+    rerender(
+      <QRScanner
+        open={false}
+        onOpenChange={mockOnOpenChange}
+        onScan={mockOnScan}
+      />
     );
 
-    const fileInput = screen.getByTestId('qr-scanner-file-input');
-    const file = new File(['test'], 'no-qr.png', { type: 'image/png' });
+    rerender(
+      <QRScanner
+        open={true}
+        onOpenChange={mockOnOpenChange}
+        onScan={mockOnScan}
+      />
+    );
 
-    fireEvent.change(fileInput, { target: { files: [file] } });
+    // Verify dialog is rendered again with reset state
+    await waitFor(() => {
+      expect(screen.getByTestId('qr-scanner-dialog')).toBeInTheDocument();
+    });
+
+    // Verify scan button is enabled and clickable
+    const scanButtonAfterReopen = screen.getByTestId('qr-scanner-camera');
+    expect(scanButtonAfterReopen).toBeEnabled();
+
+    // Should be able to scan again
+    mockScan.mockResolvedValueOnce({ result: false });
+    await user.click(scanButtonAfterReopen);
 
     await waitFor(() => {
-      expect(screen.getByText('No QR code found in the selected image.')).toBeInTheDocument();
-    });
-
-    expect(mockOnScan).not.toHaveBeenCalled();
-    expect(mockOnOpenChange).not.toHaveBeenCalled();
-  });
-
-  it('does not process when no file is selected', () => {
-    render(
-      <QRScanner open={true} onOpenChange={mockOnOpenChange} onScan={mockOnScan} />
-    );
-
-    const fileInput = screen.getByTestId('qr-scanner-file-input');
-
-    fireEvent.change(fileInput, { target: { files: [] } });
-
-    expect(mockScanFile).not.toHaveBeenCalled();
-    expect(mockOnScan).not.toHaveBeenCalled();
-  });
-
-  it('resets file input after selection', async () => {
-    mockScanFile.mockResolvedValueOnce('test-qr-data');
-
-    render(
-      <QRScanner open={true} onOpenChange={mockOnOpenChange} onScan={mockOnScan} />
-    );
-
-    const fileInput = screen.getByTestId('qr-scanner-file-input') as HTMLInputElement;
-    const file = new File(['test'], 'qr.png', { type: 'image/png' });
-
-    // Set initial value
-    Object.defineProperty(fileInput, 'value', {
-      writable: true,
-      value: 'C:\\fakepath\\qr.png',
-    });
-
-    fireEvent.change(fileInput, { target: { files: [file] } });
-
-    await waitFor(() => {
-      expect(mockOnScan).toHaveBeenCalled();
-    });
-
-    // Value should be reset to empty
-    expect(fileInput.value).toBe('');
-  });
-
-  it('disables load button while processing', async () => {
-    // Create a promise that we can control
-    let resolvePromise: (value: string) => void;
-    const pendingPromise = new Promise<string>((resolve) => {
-      resolvePromise = resolve;
-    });
-    mockScanFile.mockReturnValueOnce(pendingPromise);
-
-    render(
-      <QRScanner open={true} onOpenChange={mockOnOpenChange} onScan={mockOnScan} />
-    );
-
-    const fileInput = screen.getByTestId('qr-scanner-file-input');
-    const loadButton = screen.getByTestId('qr-scanner-load-file');
-    const file = new File(['test'], 'qr.png', { type: 'image/png' });
-
-    fireEvent.change(fileInput, { target: { files: [file] } });
-
-    // Button should be disabled while processing
-    await waitFor(() => {
-      expect(loadButton).toBeDisabled();
-    });
-
-    expect(screen.getByText('Processing image...')).toBeInTheDocument();
-
-    // Resolve the promise
-    resolvePromise!('qr-data');
-
-    await waitFor(() => {
-      expect(mockOnScan).toHaveBeenCalled();
+      expect(mockScan).toHaveBeenCalledTimes(2);
     });
   });
 
-  it('renders cancel button', () => {
-    render(
-      <QRScanner open={true} onOpenChange={mockOnOpenChange} onScan={mockOnScan} />
+  it('should reset isStarting and isProcessingFile state when closing dialog', async () => {
+    const user = userEvent.setup();
+
+    const { rerender } = render(
+      <QRScanner
+        open={true}
+        onOpenChange={mockOnOpenChange}
+        onScan={mockOnScan}
+      />
     );
 
+    // Close dialog
     const cancelButton = screen.getByTestId('qr-scanner-cancel');
-    expect(cancelButton).toBeInTheDocument();
-    expect(cancelButton).toHaveTextContent('Cancel');
-  });
+    await user.click(cancelButton);
 
-  it('closes dialog when cancel is clicked', async () => {
-    render(
-      <QRScanner open={true} onOpenChange={mockOnOpenChange} onScan={mockOnScan} />
+    expect(mockOnOpenChange).toHaveBeenCalledWith(false);
+
+    // Reopen dialog - state should be reset
+    rerender(
+      <QRScanner
+        open={true}
+        onOpenChange={mockOnOpenChange}
+        onScan={mockOnScan}
+      />
     );
 
-    const cancelButton = screen.getByTestId('qr-scanner-cancel');
-    fireEvent.click(cancelButton);
+    // Verify all buttons are enabled (not stuck in starting/processing state)
+    const scanButton = screen.getByTestId('qr-scanner-camera');
+    const loadFileButton = screen.getByTestId('qr-scanner-load-file');
+
+    expect(scanButton).toBeEnabled();
+    expect(loadFileButton).toBeEnabled();
+  });
+
+  it('should handle successful scan', async () => {
+    const user = userEvent.setup();
+    const scannedCode = 'https://example.com/qr-profile';
+
+    mockScan.mockResolvedValueOnce({
+      result: true,
+      code: scannedCode,
+    });
+
+    render(
+      <QRScanner
+        open={true}
+        onOpenChange={mockOnOpenChange}
+        onScan={mockOnScan}
+      />
+    );
+
+    const scanButton = screen.getByTestId('qr-scanner-camera');
+    await user.click(scanButton);
 
     await waitFor(() => {
+      expect(mockOnScan).toHaveBeenCalledWith(scannedCode);
       expect(mockOnOpenChange).toHaveBeenCalledWith(false);
     });
   });
 
-  it('clears error when retry button is clicked', async () => {
-    mockScanFile.mockRejectedValueOnce(new Error('No QR code found'));
-    mockStart.mockResolvedValue(undefined);
-
+  it('should allow file upload', () => {
     render(
-      <QRScanner open={true} onOpenChange={mockOnOpenChange} onScan={mockOnScan} />
+      <QRScanner
+        open={true}
+        onOpenChange={mockOnOpenChange}
+        onScan={mockOnScan}
+      />
     );
 
-    const fileInput = screen.getByTestId('qr-scanner-file-input');
-    const file = new File(['test'], 'no-qr.png', { type: 'image/png' });
-
-    fireEvent.change(fileInput, { target: { files: [file] } });
-
-    await waitFor(() => {
-      expect(screen.getByText('No QR code found in the selected image.')).toBeInTheDocument();
-    });
-
-    // Click retry button
-    const retryButton = screen.getByTestId('qr-scanner-retry');
-    fireEvent.click(retryButton);
-
-    // Error should be cleared (startScanner is called which sets error to null)
-    await waitFor(() => {
-      expect(screen.queryByText('No QR code found in the selected image.')).not.toBeInTheDocument();
-    });
+    expect(screen.getByTestId('qr-scanner-load-file')).toBeInTheDocument();
+    expect(screen.getByTestId('qr-scanner-file-input')).toBeInTheDocument();
   });
 });

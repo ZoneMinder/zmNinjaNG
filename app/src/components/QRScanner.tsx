@@ -108,6 +108,8 @@ export function QRScanner({ open, onOpenChange, onScan }: QRScannerProps) {
     setHasPermission(null);
     setScannerReady(false);
     setNativeScannerLaunched(false);
+    setIsStarting(false);
+    setIsProcessingFile(false);
     onOpenChange(false);
   }, [isNative, cleanupScanner, onOpenChange]);
 
@@ -275,6 +277,17 @@ export function QRScanner({ open, onOpenChange, onScan }: QRScannerProps) {
   const handleLoadFromFile = useCallback(() => {
     fileInputRef.current?.click();
   }, []);
+
+  // Reset state when dialog opens to ensure clean slate
+  useEffect(() => {
+    if (open) {
+      log.profile('QR scanner dialog opened', LogLevel.DEBUG, { isNative });
+      setError(null);
+      setIsStarting(false);
+      setIsProcessingFile(false);
+      setNativeScannerLaunched(false);
+    }
+  }, [open, isNative]);
 
   // Start scanner when dialog opens (only for web - native shows selection UI first)
   useEffect(() => {
