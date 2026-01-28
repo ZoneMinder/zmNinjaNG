@@ -21,7 +21,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 
 ## 2. Bootstrapping Phase (`App.tsx`)
 
-When `<App />` renders, the app is not yet ready to use. It must "hydrate" its state from storage.
+When `<App />` renders, the app is not yet ready to use. It must "hydrate" its state from storage and bootstrap the active profile.
 
 ### Data Hydration
 The `useProfileStore` attempts to read saved profiles and the last active user from `AsyncStorage` (mobile) or `localStorage` (web).
@@ -30,9 +30,32 @@ The `useProfileStore` attempts to read saved profiles and the last active user f
 -   **Visual**: User sees `<RouteLoadingFallback />` (a spinner).
 -   **Mechanism**: `zustand/persist` triggers `onRehydrateStorage`.
 
+### Profile Bootstrap
+Once storage is hydrated and a profile exists, the app bootstraps the profile:
+
+1.  **State**: `isBootstrapping` becomes `true`.
+2.  **Visual**: User sees a bootstrap overlay with progress steps and a **Cancel** button.
+3.  **Steps**:
+    - Clear stale auth/cache from previous session
+    - Initialize API client with profile's `apiUrl`
+    - Authenticate with stored credentials
+    - Fetch server timezone
+    - Fetch ZMS path from server config
+    - Fetch Go2RTC path (if configured)
+    - Check multi-port streaming configuration
+
+### Bootstrap Cancellation
+If the server is unreachable or bootstrap takes too long, users can cancel:
+
+-   **Action**: Click "Cancel" button on bootstrap overlay
+-   **Effect**: Calls `cancelBootstrap()` which clears `currentProfileId`
+-   **Navigation**:
+    - If other profiles exist → redirects to `/profiles` (profile selection)
+    - If no profiles exist → redirects to `/profiles/new` (add profile)
+
 ### Initialization Complete
-Once storage is read:
-1.  `isInitialized` becomes `true`.
+Once bootstrap completes (or is cancelled):
+1.  `isInitialized` becomes `true`, `isBootstrapping` becomes `false`.
 2.  `AppRoutes` decides where to send the user:
     -   **No Profile**: Redirects to `/profiles/new`.
     -   **Has Profile**: Redirects to `/monitors` (or last visited route).

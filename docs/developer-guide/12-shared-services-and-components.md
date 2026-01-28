@@ -97,6 +97,58 @@ const blob = await httpGet<Blob>('/video.mp4', {
 
 ---
 
+### Discovery (`lib/discovery.ts`)
+
+ZoneMinder server discovery utility that probes for API endpoints and derives connection URLs.
+
+**Features:**
+- Automatic HTTPS/HTTP fallback for scheme-less URLs
+- Probes `/zm/api` and `/api` paths to find API endpoint
+- Derives `portalUrl` and `cgiUrl` from confirmed API location
+- Optional authentication to fetch accurate `ZM_PATH_ZMS` from server config
+- Cancellable via AbortSignal
+- Skips redundant probes on connection errors (faster failure)
+
+**Implementation:**
+```typescript
+import { discoverZoneminder, DiscoveryError } from '../lib/discovery';
+
+// Basic discovery (no auth)
+const result = await discoverZoneminder('192.168.1.100');
+// Returns: { portalUrl, apiUrl, cgiUrl }
+
+// With credentials (fetches accurate ZMS path from server)
+const result = await discoverZoneminder('myserver.com', {
+  username: 'admin',
+  password: 'secret'
+});
+
+// With cancellation support
+const abortController = new AbortController();
+try {
+  const result = await discoverZoneminder('192.168.1.100', {
+    signal: abortController.signal
+  });
+} catch (error) {
+  if (error instanceof DiscoveryError && error.code === 'CANCELLED') {
+    console.log('Discovery was cancelled');
+  }
+}
+
+// Cancel from elsewhere
+abortController.abort();
+```
+
+**Error Codes:**
+- `API_NOT_FOUND` - No ZoneMinder API found at any probed path
+- `PORTAL_UNREACHABLE` - Server completely unreachable
+- `CANCELLED` - Discovery was cancelled via AbortSignal
+- `UNKNOWN` - Unexpected error
+
+**Used By:** `ProfileForm.tsx`, `Profiles.tsx` (profile creation/editing)
+
+---
+
 ### Download Utilities (`lib/download.ts`)
 
 Cross-platform file download with progress tracking and cancellation support.
