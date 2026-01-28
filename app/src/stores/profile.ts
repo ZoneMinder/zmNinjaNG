@@ -41,6 +41,7 @@ interface ProfileState {
   switchProfile: (id: string) => Promise<void>;
   setDefaultProfile: (id: string) => void;
   reLogin: () => Promise<boolean>;
+  cancelBootstrap: () => void;
 
   // Helpers
   getDecryptedPassword: (profileId: string) => Promise<string | undefined>;
@@ -358,6 +359,19 @@ export const useProfileStore = create<ProfileState>()(
             log.profileService('Re-login helper failed', LogLevel.ERROR, { error: e });
             return false;
           }
+        },
+
+        /**
+         * Cancel ongoing bootstrap and clear current profile.
+         * Used when user wants to abort loading a profile that's taking too long.
+         */
+        cancelBootstrap: () => {
+          log.profileService('Bootstrap cancelled by user', LogLevel.INFO);
+          set({
+            isBootstrapping: false,
+            bootstrapStep: null,
+            currentProfileId: null,
+          });
         },
 
         /**

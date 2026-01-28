@@ -54,7 +54,9 @@
     "step_auth": "Authentification auprès de votre serveur.",
     "step_timezone": "Récupération du fuseau horaire du serveur.",
     "step_zms": "Détection du chemin ZMS.",
-    "step_finalize": "Finalisation du démarrage."
+    "step_finalize": "Finalisation du démarrage.",
+    "cancel_hint_single": "Annuler pour choisir un autre profil",
+    "cancel_hint_multiple": "Annuler pour choisir un autre profil"
   },
   "dashboard": {
     "title": "Tableau de bord",

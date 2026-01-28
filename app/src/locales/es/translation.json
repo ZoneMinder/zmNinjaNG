@@ -54,7 +54,9 @@
     "step_auth": "Autenticando con tu servidor.",
     "step_timezone": "Obteniendo la zona horaria del servidor.",
     "step_zms": "Descubriendo la ruta ZMS.",
-    "step_finalize": "Finalizando el inicio."
+    "step_finalize": "Finalizando el inicio.",
+    "cancel_hint_single": "Cancelar para elegir otro perfil",
+    "cancel_hint_multiple": "Cancelar para elegir otro perfil"
   },
   "dashboard": {
     "title": "Panel de Control",

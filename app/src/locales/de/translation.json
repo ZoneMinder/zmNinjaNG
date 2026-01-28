@@ -54,7 +54,9 @@
     "step_auth": "Anmeldung am Server wird ausgeführt.",
     "step_timezone": "Serverzeitzone wird abgerufen.",
     "step_zms": "ZMS-Pfad wird ermittelt.",
-    "step_finalize": "Start wird abgeschlossen."
+    "step_finalize": "Start wird abgeschlossen.",
+    "cancel_hint_single": "Abbrechen, um ein anderes Profil zu wählen",
+    "cancel_hint_multiple": "Abbrechen, um ein anderes Profil zu wählen"
   },
   "dashboard": {
     "title": "Dashboard",

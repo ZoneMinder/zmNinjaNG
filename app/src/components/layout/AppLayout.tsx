@@ -354,8 +354,16 @@ export default function AppLayout() {
   }, [isDragging]);
 
   // Check for profile after all hooks are called to avoid hooks violation
+  // Allow /profiles route without a current profile (for profile selection after cancel)
+  // Otherwise redirect to profile selection or new profile setup
   if (!currentProfile) {
-    return <Navigate to="/setup" replace />;
+    // Don't redirect if already on profiles page
+    if (location.pathname === '/profiles') {
+      // Allow access to profiles page without a current profile
+    } else {
+      const profiles = useProfileStore.getState().profiles;
+      return <Navigate to={profiles.length > 0 ? "/profiles" : "/profiles/new"} replace />;
+    }
   }
 
   const toggleSidebar = () => {

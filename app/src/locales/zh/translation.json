@@ -54,7 +54,9 @@
     "step_auth": "正在与你的服务器进行认证。",
     "step_timezone": "正在获取服务器时区。",
     "step_zms": "正在发现 ZMS 路径。",
-    "step_finalize": "正在完成启动。"
+    "step_finalize": "正在完成启动。",
+    "cancel_hint_single": "取消以选择其他配置文件",
+    "cancel_hint_multiple": "取消以选择其他配置文件"
   },
   "dashboard": {
     "title": "仪表板",

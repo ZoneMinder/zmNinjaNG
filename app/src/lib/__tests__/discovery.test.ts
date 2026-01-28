@@ -1,8 +1,9 @@
 /**
  * Discovery System Tests
  *
- * Tests for ZoneMinder and Go2RTC endpoint discovery.
- * Includes portal detection, API probing, CGI URL inference, and Go2RTC detection.
+ * Tests for ZoneMinder endpoint discovery.
+ * The discovery logic probes for the API and derives portal/CGI URLs from it.
+ * If credentials are provided, it authenticates and fetches ZM_PATH_ZMS for accurate cgiUrl.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -12,7 +13,6 @@ import type { ApiClient } from '../../api/client';
 // Mock the API client
 vi.mock('../../api/client', () => ({
   createApiClient: vi.fn((_baseURL: string) => {
-    // Return a mock api client
     return {
       get: vi.fn(),
       post: vi.fn(),
@@ -20,6 +20,12 @@ vi.mock('../../api/client', () => ({
       delete: vi.fn(),
     } as unknown as ApiClient;
   }),
+  setApiClient: vi.fn(),
+}));
+
+// Mock auth functions (fetchZmsPath is no longer used directly in discovery)
+vi.mock('../../api/auth', () => ({
+  fetchZmsPath: vi.fn(),
 }));
 
 // Mock logger
@@ -44,14 +50,28 @@ describe('discoverZoneminder', () => {
   });
 
   describe('Success cases', () => {
-    it('discovers ZoneMinder with /zm/api path', async () => {
+    it('discovers ZoneMinder with /zm/api path and derives correct URLs', async () => {
       const mockGet = vi.fn()
-        // Portal check
-        .mockResolvedValueOnce({ status: 200 })
-        // API check for /zm/api
-        .mockResolvedValueOnce({ status: 200, data: { version: '1.36.0' } })
-        // Go2RTC check (not available)
-        .mockRejectedValueOnce(new Error('Not found'));
+        .mockResolvedValueOnce({ status: 200, data: { version: '1.36.0' } });
+
+      (createApiClient as any).mockReturnValue({ get: mockGet });
+
+      const result = await discoverZoneminder('http://zm.example.com');
+
+      // portalUrl = apiUrl minus "/api", cgiUrl = portalUrl + /cgi-bin/nph-zms (default)
+      expect(result).toEqual({
+        portalUrl: 'http://zm.example.com/zm',
+        apiUrl: 'http://zm.example.com/zm/api',
+        cgiUrl: 'http://zm.example.com/zm/cgi-bin/nph-zms',
+      });
+    });
+
+    it('discovers ZoneMinder with /api path (no /zm prefix)', async () => {
+      const mockGet = vi.fn()
+        // API check for /zm/api - fails (connection error, login.json fallback skipped)
+        .mockRejectedValueOnce(new Error('Not found'))
+        // API check for /api - success
+        .mockResolvedValueOnce({ status: 200, data: { version: '1.36.0' } });
 
       (createApiClient as any).mockReturnValue({ get: mockGet });
 
@@ -59,64 +79,125 @@ describe('discoverZoneminder', () => {
 
       expect(result).toEqual({
         portalUrl: 'http://zm.example.com',
-        apiUrl: 'http://zm.example.com/zm/api',
-        cgiUrl: 'http://zm.example.com/zm/cgi-bin/nph-zms',
+        apiUrl: 'http://zm.example.com/api',
+        cgiUrl: 'http://zm.example.com/cgi-bin/nph-zms',
       });
     });
 
-    it('discovers ZoneMinder successfully', async () => {
+    it('fetches ZM_PATH_ZMS when credentials provided', async () => {
       const mockGet = vi.fn()
-        // Portal check
-        .mockResolvedValueOnce({ status: 200 })
-        // API check
+        // API probe
+        .mockResolvedValueOnce({ status: 200, data: { version: '1.36.0' } })
+        // ZMS config fetch
+        .mockResolvedValueOnce({ status: 200, data: { config: { Value: '/zm/cgi-bin/nph-zms' } } });
+      const mockPost = vi.fn()
+        // Login
+        .mockResolvedValueOnce({ status: 200, data: { access_token: 'token' } });
+
+      (createApiClient as any).mockReturnValue({ get: mockGet, post: mockPost });
+
+      const result = await discoverZoneminder('http://zm.example.com', {
+        username: 'admin',
+        password: 'secret',
+      });
+
+      expect(mockPost).toHaveBeenCalled();
+      expect(result.cgiUrl).toBe('http://zm.example.com/zm/cgi-bin/nph-zms');
+    });
+
+    it('uses server ZMS path even if different from default', async () => {
+      const mockGet = vi.fn()
+        // API probe
+        .mockResolvedValueOnce({ status: 200, data: { version: '1.36.0' } })
+        // ZMS config fetch with non-standard path
+        .mockResolvedValueOnce({ status: 200, data: { config: { Value: '/custom/path/nph-zms' } } });
+      const mockPost = vi.fn()
+        .mockResolvedValueOnce({ status: 200, data: { access_token: 'token' } });
+
+      (createApiClient as any).mockReturnValue({ get: mockGet, post: mockPost });
+
+      const result = await discoverZoneminder('http://zm.example.com', {
+        username: 'admin',
+        password: 'secret',
+      });
+
+      expect(result.cgiUrl).toBe('http://zm.example.com/custom/path/nph-zms');
+    });
+
+    it('falls back to default cgiUrl if auth fails', async () => {
+      const mockGet = vi.fn()
         .mockResolvedValueOnce({ status: 200, data: { version: '1.36.0' } });
+      const mockPost = vi.fn()
+        .mockRejectedValueOnce(new Error('Invalid credentials'));
 
-      (createApiClient as any).mockReturnValue({ get: mockGet });
+      (createApiClient as any).mockReturnValue({ get: mockGet, post: mockPost });
 
-      const result = await discoverZoneminder('http://zm.example.com');
+      const result = await discoverZoneminder('http://zm.example.com', {
+        username: 'admin',
+        password: 'wrong',
+      });
 
-      // Verify discovery succeeded
-      expect(result.portalUrl).toBe('http://zm.example.com');
-      expect(result.apiUrl).toBeTruthy();
-      expect(result.cgiUrl).toBeTruthy();
+      // Should still succeed with default cgiUrl
+      expect(result.cgiUrl).toBe('http://zm.example.com/zm/cgi-bin/nph-zms');
     });
 
     it('handles HTTPS URLs correctly', async () => {
       const mockGet = vi.fn()
-        // Portal check
-        .mockResolvedValueOnce({ status: 200 })
-        // API check
         .mockResolvedValueOnce({ status: 200, data: { version: '1.36.0' } });
 
       (createApiClient as any).mockReturnValue({ get: mockGet });
 
       const result = await discoverZoneminder('https://zm.example.com');
 
-      expect(result.portalUrl).toBe('https://zm.example.com');
+      expect(result.portalUrl).toBe('https://zm.example.com/zm');
       expect(result.apiUrl).toContain('https://');
       expect(result.cgiUrl).toContain('https://');
     });
 
-    it('adds http:// prefix to scheme-less URLs', async () => {
+    it('adds https:// prefix to scheme-less URLs and tries HTTPS first', async () => {
       const mockGet = vi.fn()
-        // Portal check
-        .mockResolvedValueOnce({ status: 200 })
-        // API check
         .mockResolvedValueOnce({ status: 200, data: { version: '1.36.0' } });
 
       (createApiClient as any).mockReturnValue({ get: mockGet });
 
       const result = await discoverZoneminder('zm.example.com');
 
-      expect(result.portalUrl).toMatch(/^https?:\/\//);
+      // Should try HTTPS first
+      expect(result.portalUrl).toMatch(/^https:\/\//);
+    });
+
+    it('falls back to HTTP if HTTPS fails', async () => {
+      const mockGet = vi.fn()
+        // HTTPS /zm/api - fails (connection error, login.json fallback skipped)
+        .mockRejectedValueOnce(new Error('Connection refused'))
+        // HTTPS /api - fails (connection error, login.json fallback skipped)
+        .mockRejectedValueOnce(new Error('Connection refused'))
+        // HTTP /zm/api - success
+        .mockResolvedValueOnce({ status: 200, data: { version: '1.36.0' } });
+
+      (createApiClient as any).mockReturnValue({ get: mockGet });
+
+      const result = await discoverZoneminder('zm.example.com');
+
+      expect(result.portalUrl).toMatch(/^http:\/\//);
+    });
+
+    it('accepts 401 as valid API response (auth required)', async () => {
+      const mockGet = vi.fn()
+        .mockRejectedValueOnce({ status: 401, message: 'Unauthorized' });
+
+      (createApiClient as any).mockReturnValue({ get: mockGet });
+
+      const result = await discoverZoneminder('http://zm.example.com');
+
+      expect(result.apiUrl).toBe('http://zm.example.com/zm/api');
     });
   });
 
   describe('Error cases', () => {
-    it('throws DiscoveryError when portal is unreachable', async () => {
+    it('throws DiscoveryError when API is not found at any path', async () => {
       const mockGet = vi.fn()
-        // Portal check fails
-        .mockRejectedValue(new Error('Connection refused'));
+        .mockRejectedValue(new Error('Not found'));
 
       (createApiClient as any).mockReturnValue({ get: mockGet });
 
@@ -125,50 +206,26 @@ describe('discoverZoneminder', () => {
       );
     });
 
-    it('throws DiscoveryError when API is not found', async () => {
+    it('throws with API_NOT_FOUND code when no API is discovered', async () => {
       const mockGet = vi.fn()
-        // Portal check succeeds
-        .mockResolvedValueOnce({ status: 200 })
-        // All API checks fail
-        .mockRejectedValue(new Error('Not found'));
+        .mockRejectedValue(new Error('Connection refused'));
 
       (createApiClient as any).mockReturnValue({ get: mockGet });
 
-      await expect(discoverZoneminder('http://zm.example.com')).rejects.toThrow(
-        DiscoveryError
-      );
-    });
-
-    it('throws DiscoveryError on protocol mismatch', async () => {
-      const mockGet = vi.fn()
-        // Portal check (HTTP)
-        .mockResolvedValueOnce({ status: 200 })
-        // API check returns HTTPS URL (simulated by throwing and having fallback)
-        // This is a bit contrived for the test, but checks the validation logic
-        .mockRejectedValueOnce(new Error('Not found'))
-        .mockResolvedValueOnce({ status: 200, data: { version: '1.36.0' } });
-
-      (createApiClient as any).mockReturnValue({ get: mockGet });
-
-      // Manually create a scenario where portal is http but we somehow end up with https API
-      // In real code, this is caught by the protocol validation
-      // For this test, we're verifying the validation exists
-
-      // This test is complex to set up realistically; the actual validation
-      // happens inside the function. We'll trust the implementation and
-      // focus on happy paths + Go2RTC tests.
-
-      // Skip this test for now as it's hard to mock the internal protocol mismatch
-      // The validation code is in place and will catch it in production
+      try {
+        await discoverZoneminder('http://zm.example.com');
+        expect.fail('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(DiscoveryError);
+        expect((error as DiscoveryError).code).toBe('API_NOT_FOUND');
+      }
     });
   });
 
   describe('Edge cases', () => {
     it('handles URLs with trailing slashes', async () => {
       const mockGet = vi.fn()
-        .mockResolvedValueOnce({ status: 200 })
-        .mockResolvedValueOnce({ status: 200, data: { version: '1.36.0' } })
-        .mockRejectedValueOnce(new Error('Not found'));
+        .mockResolvedValueOnce({ status: 200, data: { version: '1.36.0' } });
 
       (createApiClient as any).mockReturnValue({ get: mockGet });
 
@@ -181,29 +238,92 @@ describe('discoverZoneminder', () => {
 
     it('handles URLs with ports', async () => {
       const mockGet = vi.fn()
-        .mockResolvedValueOnce({ status: 200 })
-        .mockResolvedValueOnce({ status: 200, data: { version: '1.36.0' } })
-        .mockRejectedValueOnce(new Error('Not found'));
+        .mockResolvedValueOnce({ status: 200, data: { version: '1.36.0' } });
 
       (createApiClient as any).mockReturnValue({ get: mockGet });
 
       const result = await discoverZoneminder('http://zm.example.com:8080');
 
-      expect(result.portalUrl).toBe('http://zm.example.com:8080');
+      expect(result.portalUrl).toBe('http://zm.example.com:8080/zm');
       expect(result.apiUrl).toContain(':8080');
+      expect(result.cgiUrl).toContain(':8080');
     });
 
     it('handles hostnames without domain', async () => {
       const mockGet = vi.fn()
-        .mockResolvedValueOnce({ status: 200 })
-        .mockResolvedValueOnce({ status: 200, data: { version: '1.36.0' } })
-        .mockRejectedValueOnce(new Error('Not found'));
+        .mockResolvedValueOnce({ status: 200, data: { version: '1.36.0' } });
 
       (createApiClient as any).mockReturnValue({ get: mockGet });
 
       const result = await discoverZoneminder('http://zm-server');
 
-      expect(result.portalUrl).toBe('http://zm-server');
+      expect(result.portalUrl).toBe('http://zm-server/zm');
+    });
+
+    it('uses login.json fallback when getVersion.json fails', async () => {
+      const mockGet = vi.fn()
+        // getVersion.json fails with 404
+        .mockRejectedValueOnce({ status: 404, message: 'Not found' })
+        // login.json succeeds
+        .mockResolvedValueOnce({ status: 200 });
+
+      (createApiClient as any).mockReturnValue({ get: mockGet });
+
+      const result = await discoverZoneminder('http://zm.example.com');
+
+      expect(result.apiUrl).toBe('http://zm.example.com/zm/api');
+    });
+
+    it('skips ZMS fetch if no credentials provided', async () => {
+      const mockGet = vi.fn()
+        .mockResolvedValueOnce({ status: 200, data: { version: '1.36.0' } });
+      const mockPost = vi.fn();
+
+      (createApiClient as any).mockReturnValue({ get: mockGet, post: mockPost });
+
+      await discoverZoneminder('http://zm.example.com');
+
+      // No login attempt without credentials
+      expect(mockPost).not.toHaveBeenCalled();
+    });
+
+    it('throws CANCELLED error when signal is already aborted', async () => {
+      const abortController = new AbortController();
+      abortController.abort();
+
+      await expect(
+        discoverZoneminder('http://zm.example.com', { signal: abortController.signal })
+      ).rejects.toThrow(DiscoveryError);
+
+      try {
+        await discoverZoneminder('http://zm.example.com', { signal: abortController.signal });
+      } catch (error) {
+        expect((error as DiscoveryError).code).toBe('CANCELLED');
+      }
+    });
+
+    it('throws CANCELLED error when signal is aborted during probe', async () => {
+      const abortController = new AbortController();
+
+      const mockGet = vi.fn().mockImplementation(() => {
+        // Simulate abort during request
+        abortController.abort();
+        const error = new Error('aborted');
+        error.name = 'AbortError';
+        return Promise.reject(error);
+      });
+
+      (createApiClient as any).mockReturnValue({ get: mockGet });
+
+      await expect(
+        discoverZoneminder('http://zm.example.com', { signal: abortController.signal })
+      ).rejects.toThrow(DiscoveryError);
+
+      try {
+        await discoverZoneminder('http://zm.example.com', { signal: abortController.signal });
+      } catch (error) {
+        expect((error as DiscoveryError).code).toBe('CANCELLED');
+      }
     });
   });
 });

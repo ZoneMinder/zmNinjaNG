@@ -71,9 +71,10 @@ export default function Profiles() {
   const [showPassword, setShowPassword] = useState(false);
 
   // Check server connection and discover URLs
-  const discoverUrls = async (portal: string) => {
+  // If credentials are provided, also authenticates to fetch ZM_PATH_ZMS for accurate cgiUrl
+  const discoverUrls = async (portal: string, credentials?: { username: string; password: string }) => {
     try {
-      const result = await discoverZoneminder(portal);
+      const result = await discoverZoneminder(portal, credentials);
 
       // Initialize client with found API
       const client = createApiClient(result.apiUrl);
@@ -149,7 +150,10 @@ export default function Profiles() {
 
       // If URLs are empty, discover working URLs
       if (!apiUrl || !cgiUrl) {
-        const discovered = await discoverUrls(portalUrl);
+        const credentials = formData.username && formData.password
+          ? { username: formData.username, password: formData.password }
+          : undefined;
+        const discovered = await discoverUrls(portalUrl, credentials);
         apiUrl = discovered.apiUrl;
         cgiUrl = discovered.cgiUrl;
         // Update portalUrl to match the discovered confirmed one

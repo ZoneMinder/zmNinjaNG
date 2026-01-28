@@ -53,7 +53,9 @@
     "step_auth": "Authenticating with your server.",
     "step_timezone": "Fetching server timezone.",
     "step_zms": "Discovering ZMS path.",
-    "step_finalize": "Finalizing startup."
+    "step_finalize": "Finalizing startup.",
+    "cancel_hint_single": "Cancel to choose a different profile",
+    "cancel_hint_multiple": "Cancel to choose a different profile"
   },
   "dashboard": {
     "title": "Dashboard",

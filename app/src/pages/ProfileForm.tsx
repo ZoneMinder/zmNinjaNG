@@ -6,7 +6,7 @@
  * Shows welcome messaging when this is the user's first profile.
  */
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -15,10 +15,10 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { useProfileStore } from '../stores/profile';
 import { createApiClient, setApiClient } from '../api/client';
 import { discoverZoneminder, DiscoveryError } from '../lib/discovery';
-import { Video, Server, ShieldCheck, ArrowRight, Loader2, Eye, EyeOff, ArrowLeft, QrCode } from 'lucide-react';
+import { Video, Server, ShieldCheck, ArrowRight, Loader2, Eye, EyeOff, ArrowLeft, QrCode, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { log, LogLevel } from '../lib/logger';
-import { fetchGo2RTCPath, fetchZmsPath } from '../api/auth';
+import { fetchGo2RTCPath } from '../api/auth';
 import { QRScanner } from '../components/QRScanner';
 import { parseQRProfile } from '../lib/qr-profile';
 import { toast } from 'sonner';
@@ -52,6 +52,9 @@ export default function ProfileForm() {
   // QR Scanner state
   const [showQRScanner, setShowQRScanner] = useState(false);
 
+  // Abort controller for cancelling discovery
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   // Handle QR code scan result
   const handleQRScan = (data: string) => {
     const result = parseQRProfile(data);
@@ -81,9 +84,10 @@ export default function ProfileForm() {
   };
 
   // Discover API and CGI URLs from portal URL
-  const discoverUrls = async (portal: string) => {
+  // If credentials are provided, also authenticates to fetch ZM_PATH_ZMS for accurate cgiUrl
+  const discoverUrls = async (portal: string, credentials?: { username: string; password: string }, signal?: AbortSignal) => {
     try {
-      const result = await discoverZoneminder(portal);
+      const result = await discoverZoneminder(portal, { ...credentials, signal });
 
       // Initialize client
       const client = createApiClient(result.apiUrl);
@@ -100,10 +104,25 @@ export default function ProfileForm() {
     }
   };
 
+  // Cancel ongoing discovery
+  const handleCancelDiscovery = () => {
+    if (abortControllerRef.current) {
+      log.profileForm('Cancelling discovery', LogLevel.INFO);
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setTesting(false);
+    setError('');
+  };
+
   const handleTestConnection = async () => {
     setError('');
     setSuccess(false);
     setTesting(true);
+
+    // Create abort controller for this connection attempt
+    abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
 
     try {
       const normalizedUsername = username.trim();
@@ -156,8 +175,10 @@ export default function ProfileForm() {
         setApiClient(client);
       } else {
         // Discover URLs from portal URL
+        // Pass credentials if provided to fetch accurate ZM_PATH_ZMS from server
         log.profileForm('Discovering URLs', LogLevel.INFO);
-        const discovered = await discoverUrls(portalUrl);
+        const credentials = hasUsername && hasPassword ? { username: normalizedUsername, password } : undefined;
+        const discovered = await discoverUrls(portalUrl, credentials, signal);
         confirmedPortalUrl = discovered.portalUrl;
         apiUrl = discovered.apiUrl;
         cgiUrl = discovered.cgiUrl;
@@ -178,33 +199,10 @@ export default function ProfileForm() {
           await useAuthStore.getState().login(normalizedUsername, password);
           log.profileForm('Login successful', LogLevel.INFO);
 
-          // After successful login, try to fetch the ZMS path from server config
-          const zmsPath = await fetchZmsPath();
-          if (zmsPath) {
-            // Successfully fetched ZMS path - construct the full CGI URL using confirmed portal URL
-            try {
-              const url = new URL(confirmedPortalUrl);
-              const newCgiUrl = `${url.origin}${zmsPath}`;
-              log.profileForm('ZMS path fetched, updating CGI URL', LogLevel.INFO, {
-                oldCgiUrl: cgiUrl,
-                zmsPath,
-                newCgiUrl
-              });
-              cgiUrl = newCgiUrl;
-            } catch (urlError) {
-              log.profileForm('Failed to construct CGI URL from ZMS path, using inferred URL', LogLevel.WARN, {
-                confirmedPortalUrl,
-                zmsPath,
-                error: urlError
-              });
-            }
-          } else {
-            log.profileForm('ZMS path not available, using inferred CGI URL', LogLevel.INFO, {
-              cgiUrl
-            });
-          }
+          // Note: ZMS path is already fetched during discovery when credentials are provided,
+          // so cgiUrl is already set correctly. We just need to fetch Go2RTC path here.
 
-          // Also fetch Go2RTC path if configured (optional, not all servers have it)
+          // Fetch Go2RTC path if configured (optional, not all servers have it)
           go2rtcPath = await fetchGo2RTCPath();
           if (go2rtcPath) {
             log.profileForm('Go2RTC path fetched from server config', LogLevel.INFO, {
@@ -256,9 +254,15 @@ export default function ProfileForm() {
         navigate(returnTo);
       }, 1000);
     } catch (err: unknown) {
+      // Don't show error if cancelled by user
+      if (err instanceof DiscoveryError && err.code === 'CANCELLED') {
+        log.profileForm('Discovery cancelled by user', LogLevel.INFO);
+        return;
+      }
       setError((err as Error).message || t('setup.connection_failed'));
       setSuccess(false);
     } finally {
+      abortControllerRef.current = null;
       setTesting(false);
     }
   };
@@ -444,28 +448,39 @@ export default function ProfileForm() {
               {t('setup.success')}
             </div>
           )}
+
+          {testing && (
+            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {t('setup.testing')}
+            </div>
+          )}
         </CardContent>
 
         <CardFooter className="flex flex-col gap-3">
-          <Button
-            onClick={handleTestConnection}
-            disabled={testing || !portalUrl}
-            className="w-full h-11 text-base font-medium shadow-lg shadow-primary/20"
-          >
-            {testing ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                {t('setup.testing')}
-              </>
-            ) : (
-              <>
-                {isFirstProfile ? t('setup.connect') : t('profiles.add')}
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </>
-            )}
-          </Button>
+          {testing ? (
+            <Button
+              variant="destructive"
+              onClick={handleCancelDiscovery}
+              className="w-full h-11 text-base font-medium"
+              data-testid="cancel-discovery-button"
+            >
+              <X className="mr-2 h-4 w-4" />
+              {t('common.cancel')}
+            </Button>
+          ) : (
+            <Button
+              onClick={handleTestConnection}
+              disabled={!portalUrl}
+              className="w-full h-11 text-base font-medium shadow-lg shadow-primary/20"
+              data-testid="connect-button"
+            >
+              {isFirstProfile ? t('setup.connect') : t('profiles.add')}
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+          )}
 
-          {!isFirstProfile && (
+          {!isFirstProfile && !testing && (
             <Button
               variant="outline"
               onClick={() => navigate('/profiles')}
