@@ -8,6 +8,7 @@
  */
 
 import { log, LogLevel } from '../lib/logger';
+import { useAuthStore } from '../stores/auth';
 
 import type {
   ZMEventServerConfig,
@@ -399,10 +400,12 @@ export class ZMNotificationService {
           });
 
           // Construct image URL for the event snapshot
+          // Read token fresh from auth store to avoid stale token from connect-time config
           if (this.config && event.EventId) {
+            const currentToken = useAuthStore.getState().accessToken;
             let imageUrl = `${this.config.portalUrl}/index.php?view=image&eid=${event.EventId}&fid=snapshot&width=600`;
-            if (this.config.token) {
-              imageUrl += `&token=${this.config.token}`;
+            if (currentToken) {
+              imageUrl += `&token=${currentToken}`;
             }
             event.ImageUrl = imageUrl;
             log.notifications('Constructed image URL for event', LogLevel.INFO, {

@@ -9,7 +9,6 @@ export interface ZMEventServerConfig {
     ssl: boolean; // true for wss://, false for ws://
     username: string;
     password: string;
-    token?: string;
     appVersion: string;
     portalUrl: string; // ZoneMinder portal URL for constructing image URLs
 }

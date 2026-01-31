@@ -10,7 +10,6 @@ import {
   type ConnectionState,
 } from '../types/notifications';
 import { log, LogLevel } from '../lib/logger';
-import { useAuthStore } from './auth';
 import { getAppVersion } from '../lib/version';
 
 export interface NotificationSettings {
@@ -229,7 +228,6 @@ export const useNotificationStore = create<NotificationState>()(
           ssl: settings.ssl,
           username,
           password,
-          token: useAuthStore.getState().accessToken || undefined,
           appVersion: getAppVersion(),
           portalUrl,
         };
