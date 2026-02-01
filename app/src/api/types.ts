@@ -649,7 +649,7 @@ import type * as ReactGridLayout from 'react-grid-layout';
 export const TagSchema = z.object({
   Id: z.coerce.string(),
   Name: z.string(),
-  CreateDate: z.string().optional(),
+  CreateDate: z.string().nullable().optional(),
   CreatedBy: z.coerce.string().nullable().optional(),
   LastAssignedDate: z.string().nullable().optional(),
 });
