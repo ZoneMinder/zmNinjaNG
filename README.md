@@ -162,7 +162,7 @@ npm run test:all
 ```
 
 ### Making releases
-- See `scripts/release.sh` [here](scripts/release.sh). This automatically tags the current state and triggers release builds
+- See `scripts/make_release.sh` [here](scripts/make_release.sh). This automatically tags the current state and triggers release builds
 
 ### New vs Old
 [View Comparison with zmNinja](notes/COMPARISON.md)

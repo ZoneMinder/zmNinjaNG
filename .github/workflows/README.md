@@ -30,7 +30,7 @@ The easiest way to create a release is using the automated release script:
 
 ```bash
 # From the project root
-./scripts/release.sh
+./scripts/make_release.sh
 ```
 
 This script will:
