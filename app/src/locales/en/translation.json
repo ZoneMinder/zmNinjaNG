@@ -334,7 +334,12 @@
     "debug_settings_desc": "Advanced settings for troubleshooting",
     "disable_log_redaction": "Disable Log Redaction",
     "disable_log_redaction_desc": "Show sensitive data (passwords, tokens) in logs. Use with caution!",
-    "disable_log_redaction_warning": "WARNING: This will expose sensitive information in logs."
+    "disable_log_redaction_warning": "WARNING: This will expose sensitive information in logs.",
+    "connection_settings": "Connection",
+    "connection_settings_desc": "Server connection options for this profile",
+    "allow_self_signed_certs": "Allow Self-Signed Certificates",
+    "allow_self_signed_certs_desc": "Accept invalid or self-signed SSL certificates when connecting to this server. Enable only if your server uses a self-signed certificate.",
+    "allow_self_signed_certs_warning": "WARNING: SSL certificate validation is disabled. Connections may be vulnerable to interception."
   },
   "logs": {
     "title": "Logs",

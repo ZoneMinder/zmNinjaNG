@@ -335,7 +335,12 @@
     "debug_settings_desc": "Paramètres avancés pour le dépannage",
     "disable_log_redaction": "Désactiver la rédaction des journaux",
     "disable_log_redaction_desc": "Afficher les données sensibles (mots de passe, jetons) dans les journaux. À utiliser avec prudence !",
-    "disable_log_redaction_warning": "ATTENTION : Cela exposera des informations sensibles dans les journaux."
+    "disable_log_redaction_warning": "ATTENTION : Cela exposera des informations sensibles dans les journaux.",
+    "connection_settings": "Connexion",
+    "connection_settings_desc": "Options de connexion au serveur pour ce profil",
+    "allow_self_signed_certs": "Autoriser les certificats auto-signés",
+    "allow_self_signed_certs_desc": "Accepter les certificats SSL non valides ou auto-signés lors de la connexion à ce serveur. Activer uniquement si votre serveur utilise un certificat auto-signé.",
+    "allow_self_signed_certs_warning": "ATTENTION : La validation des certificats SSL est désactivée. Les connexions peuvent être interceptées."
   },
   "logs": {
     "title": "Journaux",

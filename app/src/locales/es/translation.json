@@ -335,7 +335,12 @@
     "debug_settings_desc": "Ajustes avanzados para la solución de problemas",
     "disable_log_redaction": "Desactivar redacción de registros",
     "disable_log_redaction_desc": "Mostrar datos sensibles (contraseñas, tokens) en los registros. ¡Úselo con precaución!",
-    "disable_log_redaction_warning": "ADVERTENCIA: Esto expondrá información sensible en los registros."
+    "disable_log_redaction_warning": "ADVERTENCIA: Esto expondrá información sensible en los registros.",
+    "connection_settings": "Conexión",
+    "connection_settings_desc": "Opciones de conexión del servidor para este perfil",
+    "allow_self_signed_certs": "Permitir certificados autofirmados",
+    "allow_self_signed_certs_desc": "Aceptar certificados SSL no válidos o autofirmados al conectar con este servidor. Activar solo si su servidor usa un certificado autofirmado.",
+    "allow_self_signed_certs_warning": "ADVERTENCIA: La validación de certificados SSL está desactivada. Las conexiones pueden ser interceptadas."
   },
   "logs": {
     "title": "Registros",

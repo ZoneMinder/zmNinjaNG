@@ -62,6 +62,8 @@ export interface ProfileSettings {
   bandwidthMode: BandwidthMode;
   // Selected group ID for filtering monitors (null = show all monitors)
   selectedGroupId: string | null;
+  // Allow self-signed/invalid SSL certificates for this profile's server (off by default)
+  allowSelfSignedCerts: boolean;
 }
 
 interface SettingsState {
@@ -145,6 +147,8 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   bandwidthMode: 'normal',
   // No group filter by default (show all monitors)
   selectedGroupId: null,
+  // Self-signed certs disabled by default
+  allowSelfSignedCerts: false,
 };
 
 export const useSettingsStore = create<SettingsState>()(

@@ -50,12 +50,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 }
 
 class ViewController: CAPBridgeViewController {
-    
+
     var sslDelegate: SSLProxyDelegate?
-    
+
     override func viewDidLoad() {
         super.viewDidLoad()
-        
+
         // Wrap the existing navigation delegate to intercept SSL challenges
         if let webView = self.webView, let original = webView.navigationDelegate {
             self.sslDelegate = SSLProxyDelegate(originalDelegate: original)
@@ -66,31 +66,39 @@ class ViewController: CAPBridgeViewController {
 
 class SSLProxyDelegate: NSObject, WKNavigationDelegate {
     let originalDelegate: WKNavigationDelegate
-    
+
     init(originalDelegate: WKNavigationDelegate) {
         self.originalDelegate = originalDelegate
         super.init()
     }
-    
+
     override func forwardingTarget(for aSelector: Selector!) -> Any? {
         return originalDelegate
     }
-    
+
     override func responds(to aSelector: Selector!) -> Bool {
         if super.responds(to: aSelector) { return true }
         return originalDelegate.responds(to: aSelector)
     }
-    
+
+    /// Check whether the user has opted in to accepting self-signed certificates.
+    /// The JS layer writes this value via Capacitor Preferences which stores it in
+    /// UserDefaults under the key "CapacitorStorage.<key>".
+    private var isSelfSignedCertsAllowed: Bool {
+        let value = UserDefaults.standard.string(forKey: "CapacitorStorage.zmng_allow_self_signed_certs")
+        return value == "true"
+    }
+
     func webView(_ webView: WKWebView, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
-        
-        // Handle SSL Trust for self-signed certificates
+
+        // Handle SSL Trust for self-signed certificates only when user opted in
         if challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust {
-            if let serverTrust = challenge.protectionSpace.serverTrust {
+            if isSelfSignedCertsAllowed, let serverTrust = challenge.protectionSpace.serverTrust {
                 completionHandler(.useCredential, URLCredential(trust: serverTrust))
                 return
             }
         }
-        
+
         // Forward to original delegate if it implements this method
         if originalDelegate.responds(to: #selector(webView(_:didReceive:completionHandler:))) {
             originalDelegate.webView?(webView, didReceive: challenge, completionHandler: completionHandler)

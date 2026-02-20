@@ -335,7 +335,12 @@
     "debug_settings_desc": "Erweiterte Einstellungen zur Fehlerbehebung",
     "disable_log_redaction": "Log-Redaktion deaktivieren",
     "disable_log_redaction_desc": "Sensible Daten (Passwörter, Token) in Logs anzeigen. Mit Vorsicht verwenden!",
-    "disable_log_redaction_warning": "WARNUNG: Dies wird sensible Informationen in Logs offenlegen."
+    "disable_log_redaction_warning": "WARNUNG: Dies wird sensible Informationen in Logs offenlegen.",
+    "connection_settings": "Verbindung",
+    "connection_settings_desc": "Server-Verbindungsoptionen für dieses Profil",
+    "allow_self_signed_certs": "Selbstsignierte Zertifikate zulassen",
+    "allow_self_signed_certs_desc": "Ungültige oder selbstsignierte SSL-Zertifikate beim Verbinden mit diesem Server akzeptieren. Nur aktivieren, wenn Ihr Server ein selbstsigniertes Zertifikat verwendet.",
+    "allow_self_signed_certs_warning": "WARNUNG: SSL-Zertifikatvalidierung ist deaktiviert. Verbindungen können abgefangen werden."
   },
   "logs": {
     "title": "Protokolle",

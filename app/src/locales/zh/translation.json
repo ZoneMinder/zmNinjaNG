@@ -335,7 +335,12 @@
     "debug_settings_desc": "用于故障排除的高级设置",
     "disable_log_redaction": "禁用日志编辑",
     "disable_log_redaction_desc": "在日志中显示敏感数据（密码、令牌）。请谨慎使用！",
-    "disable_log_redaction_warning": "警告：这将会在日志中暴露敏感信息。"
+    "disable_log_redaction_warning": "警告：这将会在日志中暴露敏感信息。",
+    "connection_settings": "连接",
+    "connection_settings_desc": "此配置文件的服务器连接选项",
+    "allow_self_signed_certs": "允许自签名证书",
+    "allow_self_signed_certs_desc": "连接此服务器时接受无效或自签名的SSL证书。仅在您的服务器使用自签名证书时启用。",
+    "allow_self_signed_certs_warning": "警告：SSL证书验证已禁用。连接可能被拦截。"
   },
   "logs": {
     "title": "日志",
