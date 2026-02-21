@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, useCallback, memo } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback, memo, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { getEvents } from '../../../api/events';
@@ -282,7 +282,7 @@ export const TimelineWidget = memo(function TimelineWidget() {
         fontSize: '12px'
     }), [theme]);
 
-    const tooltipLabelFormatter = useCallback((value: string, payload: readonly any[]) => {
+    const tooltipLabelFormatter = useCallback((value: ReactNode, payload: readonly any[]) => {
         if (payload && payload[0]) {
             return payload[0].payload.fullTime;
         }
