@@ -24,7 +24,8 @@ end
 
 target 'App' do
   capacitor_pods
-  # Add your Pods here
+  # Pin SDWebImage to 5.19.x for iOS 16 compatibility
+  pod 'SDWebImage', '~> 5.19.0'
 end
 
 post_install do |installer|
