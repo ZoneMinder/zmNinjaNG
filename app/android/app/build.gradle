@@ -1,10 +1,10 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace "com.pliablepixels.zmng"
+    namespace "com.zoneminder.zmNinjaNG"
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.pliablepixels.zmng"
+        applicationId "com.zoneminder.zmNinjaNG"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

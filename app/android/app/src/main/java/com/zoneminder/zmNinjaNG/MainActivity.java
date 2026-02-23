@@ -1,4 +1,4 @@
-package com.pliablepixels.zmng;
+package com.zoneminder.zmNinjaNG;
 
 import android.os.Bundle;
 import android.net.http.SslError;
