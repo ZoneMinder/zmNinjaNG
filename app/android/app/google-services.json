@@ -1,13 +1,32 @@
 {
   "project_info": {
-    "project_number": "857968839790",
-    "project_id": "zmng-b7af6",
-    "storage_bucket": "zmng-b7af6.firebasestorage.app"
+    "project_number": "625362857243",
+    "project_id": "zoneminder-ninja",
+    "storage_bucket": "zoneminder-ninja.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:857968839790:android:d1acf2187c66dd2354ea7f",
+        "mobilesdk_app_id": "1:625362857243:android:c81c1e1d6e31d22bd9f7be",
+        "android_client_info": {
+          "package_name": "com.zoneminder.zmNinja"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAtBQdDm4yzDZzjhKB0ojpYLKcbTXmZMyg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:625362857243:android:b01ea8a84b5b6487d9f7be",
         "android_client_info": {
           "package_name": "com.zoneminder.zmNinjaNG"
         }
@@ -15,7 +34,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyB3VvM3p4ZgEJ99FMTR5kw2NJNGxpt-KyU"
+          "current_key": "AIzaSyAtBQdDm4yzDZzjhKB0ojpYLKcbTXmZMyg"
         }
       ],
       "services": {
