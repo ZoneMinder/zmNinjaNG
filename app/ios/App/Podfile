@@ -30,16 +30,6 @@ end
 
 post_install do |installer|
   assertDeploymentTarget(installer)
-
-  # Patch Capacitor Swift sources for Xcode < 15 compatibility.
-  # MSEC_PER_SEC is a Darwin C macro not bridged to Swift in Xcode 14.x.
-  # Remove this block once building with Xcode 15+.
-  capacitor_ios = File.expand_path("../../node_modules/@capacitor/ios", __dir__)
-  Dir.glob("#{capacitor_ios}/**/*.swift").each do |file|
-    content = File.read(file)
-    if content.include?("MSEC_PER_SEC") && !content.include?("private let MSEC_PER_SEC")
-      patched = "private let MSEC_PER_SEC: Double = 1000\n" + content
-      File.write(file, patched)
-    end
-  end
+  # Xcode 14.x Swift 5.8 compatibility patches are applied via patch-package
+  # (see app/patches/). Remove patches once building with Xcode 15+.
 end

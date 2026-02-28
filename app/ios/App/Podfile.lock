@@ -2,32 +2,32 @@ PODS:
   - AparajitaCapacitorSecureStorage (7.1.6):
     - Capacitor
     - KeychainSwift (~> 21.0)
-  - Capacitor (7.4.4):
+  - Capacitor (7.5.0):
     - CapacitorCordova
   - CapacitorBarcodeScanner (2.5.0):
     - Capacitor
   - CapacitorCommunityMedia (8.0.1):
     - Capacitor
     - SDWebImage
-  - CapacitorCordova (7.4.4)
-  - CapacitorFilesystem (7.1.5):
+  - CapacitorCordova (7.5.0)
+  - CapacitorFilesystem (7.1.8):
     - Capacitor
-    - IONFilesystemLib (~> 1.0.1)
+    - IONFilesystemLib (~> 1.1.1)
   - CapacitorHaptics (7.0.3):
     - Capacitor
-  - CapacitorPreferences (7.0.3):
+  - CapacitorPreferences (7.0.4):
     - Capacitor
-  - CapacitorPushNotifications (7.0.4):
+  - CapacitorPushNotifications (7.0.5):
     - Capacitor
-  - CapacitorShare (7.0.3):
+  - CapacitorShare (7.0.4):
     - Capacitor
-  - CapacitorSplashScreen (7.0.4):
+  - CapacitorSplashScreen (7.0.5):
     - Capacitor
-  - IONFilesystemLib (1.0.1)
+  - IONFilesystemLib (1.1.1)
   - KeychainSwift (21.0.0)
-  - SDWebImage (5.21.4):
-    - SDWebImage/Core (= 5.21.4)
-  - SDWebImage/Core (5.21.4)
+  - SDWebImage (5.19.7):
+    - SDWebImage/Core (= 5.19.7)
+  - SDWebImage/Core (5.19.7)
 
 DEPENDENCIES:
   - "AparajitaCapacitorSecureStorage (from `../../node_modules/@aparajita/capacitor-secure-storage`)"
@@ -41,6 +41,7 @@ DEPENDENCIES:
   - "CapacitorPushNotifications (from `../../node_modules/@capacitor/push-notifications`)"
   - "CapacitorShare (from `../../node_modules/@capacitor/share`)"
   - "CapacitorSplashScreen (from `../../node_modules/@capacitor/splash-screen`)"
+  - SDWebImage (~> 5.19.0)
 
 SPEC REPOS:
   trunk:
@@ -73,21 +74,21 @@ EXTERNAL SOURCES:
     :path: "../../node_modules/@capacitor/splash-screen"
 
 SPEC CHECKSUMS:
-  AparajitaCapacitorSecureStorage: 502bff73187cf9d0164459458ccf47ec65d5895a
-  Capacitor: 358dd1c3fdd71d969547b17e159fd8a7736cb45f
-  CapacitorBarcodeScanner: 16eacd05fb1bbc8dee20dde07439d5f7b002b574
-  CapacitorCommunityMedia: d1538b56a3303298e7cf45a18b11e624fbcbdc8e
-  CapacitorCordova: bf648a636f3c153f652d312ae145fb508b6ffced
-  CapacitorFilesystem: 609d5cceca1ed93d7f25839dbfdfd224bfe78209
-  CapacitorHaptics: ce15be8f287fa2c61c7d2d9e958885b90cf0bebc
-  CapacitorPreferences: 913eef88272c13eb6445b21e51fe8ef6635412cc
-  CapacitorPushNotifications: 7604512af53bbfdf1dd8fb2256b9ef1e8a69cdc2
-  CapacitorShare: a4f4f86eabd4b3ff52ba6a11b754713c6926a8d1
-  CapacitorSplashScreen: 000f7591d546907dda5cbb514bd6b6d9e6048cf8
-  IONFilesystemLib: 89258b8e3e85465da93127d25d7ce37f977e8a6f
+  AparajitaCapacitorSecureStorage: 78f10ed02c0f1f409dc0e8e845c62587ac3a88f3
+  Capacitor: 5f723a6113395cfef3bbabf0d2b8e9ca1201c681
+  CapacitorBarcodeScanner: 2ba83ec6b451e4988f0e73c2432c8d4123f0eacc
+  CapacitorCommunityMedia: fe394f8113ce60904fa41211a7c9f455a2dde5fc
+  CapacitorCordova: ae35646a9b46cfd00d637f195509c86594026aad
+  CapacitorFilesystem: dfb76ed83f886ee66cd6f555d347e103242edf29
+  CapacitorHaptics: 09cecfd6aa3eab17b7f9f9eefcb60ac74c1686f2
+  CapacitorPreferences: 3186b3589ba1f7a71916e1d86f7c843c5a481bbd
+  CapacitorPushNotifications: 3e4170a07f9e649a4ddfbbfa4bee46974cd7e342
+  CapacitorShare: 0075e3bf486f01b521ae9e1812ddd833df96cd11
+  CapacitorSplashScreen: fe9384f9a8cb8c48180497d05c2354c890badaa2
+  IONFilesystemLib: dfa8706539ac9ab77ccfd6e5b3830ce9b5e57f6c
   KeychainSwift: 4a71a45c802fd9e73906457c2dcbdbdc06c9419d
-  SDWebImage: d0184764be51240d49c761c37f53dd017e1ccaaf
+  SDWebImage: 8a6b7b160b4d710e2a22b6900e25301075c34cb3
 
-PODFILE CHECKSUM: cdca1bb44af1489c4765c1d83e4a8db6810012ce
+PODFILE CHECKSUM: 3de37755e42652b802895e98dfe70ecbda546ed6
 
 COCOAPODS: 1.16.2

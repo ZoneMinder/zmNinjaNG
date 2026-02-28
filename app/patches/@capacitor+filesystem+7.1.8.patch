@@ -1,0 +1,222 @@
+diff --git a/node_modules/@capacitor/filesystem/ios/Sources/FilesystemPlugin/CAPPluginCall+Accelerators.swift b/node_modules/@capacitor/filesystem/ios/Sources/FilesystemPlugin/CAPPluginCall+Accelerators.swift
+index a942c95..f074137 100644
+--- a/node_modules/@capacitor/filesystem/ios/Sources/FilesystemPlugin/CAPPluginCall+Accelerators.swift
++++ b/node_modules/@capacitor/filesystem/ios/Sources/FilesystemPlugin/CAPPluginCall+Accelerators.swift
+@@ -4,9 +4,9 @@ import IONFilesystemLib
+ extension CAPPluginCall {
+     func getEncoding(_ key: String) -> IONFILEEncoding {
+         if let encodingParameter = getString(key) {
+-            .string(encoding: .create(from: encodingParameter))
++            return .string(encoding: .create(from: encodingParameter))
+         } else {
+-            .byteBuffer
++            return .byteBuffer
+         }
+     }
+ 
+@@ -22,16 +22,16 @@ extension CAPPluginCall {
+         guard let data: String = getString(Constants.MethodParameter.data) else {
+             return nil
+         }
+-        return switch getEncoding(Constants.MethodParameter.encoding) {
++        switch getEncoding(Constants.MethodParameter.encoding) {
+         case .byteBuffer:
+             if let base64Data = Data.capacitor.data(base64EncodedOrDataUrl: data) {
+-                .byteBuffer(value: base64Data)
++                return .byteBuffer(value: base64Data)
+             } else {
+-                nil
++                return nil
+             }
+         case .string(encoding: let stringEncoding):
+-            .string(encoding: stringEncoding, value: data)
+-        @unknown default: nil
++            return .string(encoding: stringEncoding, value: data)
++        @unknown default: return nil
+         }
+     }
+ 
+@@ -64,10 +64,10 @@ extension CAPPluginCall {
+             return defaultSearchPath
+         }
+ 
+-        return if let type = IONFILEDirectoryType.create(from: directoryParameter) ?? defaultDirectoryType {
+-            .directory(type: type)
++        if let type = IONFILEDirectoryType.create(from: directoryParameter) ?? defaultDirectoryType {
++            return .directory(type: type)
+         } else {
+-            defaultSearchPath
++            return defaultSearchPath
+         }
+     }
+ }
+diff --git a/node_modules/@capacitor/filesystem/ios/Sources/FilesystemPlugin/FilesystemError.swift b/node_modules/@capacitor/filesystem/ios/Sources/FilesystemPlugin/FilesystemError.swift
+index 030e336..78cdb26 100644
+--- a/node_modules/@capacitor/filesystem/ios/Sources/FilesystemPlugin/FilesystemError.swift
++++ b/node_modules/@capacitor/filesystem/ios/Sources/FilesystemPlugin/FilesystemError.swift
+@@ -24,34 +24,34 @@ enum FilesystemError: Error {
+     case operationFailed(method: IONFileMethod, _ error: Error)
+ 
+     func toCodeMessagePair() -> (code: String, message: String) {
+-        ("OS-PLUG-FILE-\(String(format: "%04d", code))", description)
++        return ("OS-PLUG-FILE-\(String(format: "%04d", code))", description)
+     }
+ }
+ 
+ private extension FilesystemError {
+     var code: Int {
+         switch self {
+-        case .bridgeNotInitialised: 4
+-        case .invalidInput: 5
+-        case .invalidPath: 6
+-        case .fileNotFound: 8
+-        case .directoryAlreadyExists: 10
+-        case .parentDirectoryMissing: 11
+-        case .cannotDeleteChildren: 12
+-        case .operationFailed: 13
++        case .bridgeNotInitialised: return 4
++        case .invalidInput: return 5
++        case .invalidPath: return 6
++        case .fileNotFound: return 8
++        case .directoryAlreadyExists: return 10
++        case .parentDirectoryMissing: return 11
++        case .cannotDeleteChildren: return 12
++        case .operationFailed: return 13
+         }
+     }
+ 
+     var description: String {
+         switch self {
+-        case .bridgeNotInitialised: "Capacitor bridge isn't initialized."
+-        case .invalidInput(let method): "The '\(method.rawValue)' input parameters aren't valid."
+-        case .invalidPath(let path): "Invalid \(!path.isEmpty ? "'" + path + "' " : "")path."
+-        case .fileNotFound(let method, let path): "'\(method.rawValue)' failed because file\(!path.isEmpty ? " at '" + path + "' " : "") does not exist."
+-        case .directoryAlreadyExists(let path): "Directory\(!path.isEmpty ? " at '" + path + "' " : "") already exists, cannot be overwritten."
+-        case .parentDirectoryMissing: "Missing parent directory - possibly recursive=false was passed or parent directory creation failed."
+-        case .cannotDeleteChildren: "Cannot delete directory with children; received recursive=false but directory has contents."
+-        case .operationFailed(let method, let error): "'\(method.rawValue)' failed with: \(error.localizedDescription)"
++        case .bridgeNotInitialised: return "Capacitor bridge isn't initialized."
++        case .invalidInput(let method): return "The '\(method.rawValue)' input parameters aren't valid."
++        case .invalidPath(let path): return "Invalid \(!path.isEmpty ? "'" + path + "' " : "")path."
++        case .fileNotFound(let method, let path): return "'\(method.rawValue)' failed because file\(!path.isEmpty ? " at '" + path + "' " : "") does not exist."
++        case .directoryAlreadyExists(let path): return "Directory\(!path.isEmpty ? " at '" + path + "' " : "") already exists, cannot be overwritten."
++        case .parentDirectoryMissing: return "Missing parent directory - possibly recursive=false was passed or parent directory creation failed."
++        case .cannotDeleteChildren: return "Cannot delete directory with children; received recursive=false but directory has contents."
++        case .operationFailed(let method, let error): return "'\(method.rawValue)' failed with: \(error.localizedDescription)"
+         }
+     }
+ }
+diff --git a/node_modules/@capacitor/filesystem/ios/Sources/FilesystemPlugin/FilesystemLocationResolver.swift b/node_modules/@capacitor/filesystem/ios/Sources/FilesystemPlugin/FilesystemLocationResolver.swift
+index c96f69e..c199b25 100644
+--- a/node_modules/@capacitor/filesystem/ios/Sources/FilesystemPlugin/FilesystemLocationResolver.swift
++++ b/node_modules/@capacitor/filesystem/ios/Sources/FilesystemPlugin/FilesystemLocationResolver.swift
+@@ -30,10 +30,10 @@ struct FilesystemLocationResolver {
+     }
+ 
+     private func resolveURL(path: String, directory: IONFILESearchPath) -> Result<URL, FilesystemError> {
+-        return if let url = try? service.getFileURL(atPath: path, withSearchPath: directory) {
+-            .success(url)
++        if let url = try? service.getFileURL(atPath: path, withSearchPath: directory) {
++            return .success(url)
+         } else {
+-            .failure(.invalidPath(path))
++            return .failure(.invalidPath(path))
+         }
+     }
+ }
+diff --git a/node_modules/@capacitor/filesystem/ios/Sources/FilesystemPlugin/FilesystemOperationExecutor.swift b/node_modules/@capacitor/filesystem/ios/Sources/FilesystemPlugin/FilesystemOperationExecutor.swift
+index afcf637..0b36db6 100644
+--- a/node_modules/@capacitor/filesystem/ios/Sources/FilesystemPlugin/FilesystemOperationExecutor.swift
++++ b/node_modules/@capacitor/filesystem/ios/Sources/FilesystemPlugin/FilesystemOperationExecutor.swift
+@@ -100,12 +100,12 @@ private extension FilesystemOperationExecutor {
+     }
+ 
+     private func mapError(_ error: Error, withPath path: String, andMethod method: IONFileMethod) -> FilesystemError {
+-        return switch error {
+-        case IONFILEDirectoryManagerError.notEmpty: .cannotDeleteChildren
+-        case IONFILEDirectoryManagerError.alreadyExists: .directoryAlreadyExists(path)
+-        case IONFILEFileManagerError.missingParentFolder: .parentDirectoryMissing
+-        case IONFILEFileManagerError.fileNotFound: .fileNotFound(method: method, path)
+-        default: .operationFailed(method: method, error)
++        switch error {
++        case IONFILEDirectoryManagerError.notEmpty: return .cannotDeleteChildren
++        case IONFILEDirectoryManagerError.alreadyExists: return .directoryAlreadyExists(path)
++        case IONFILEFileManagerError.missingParentFolder: return .parentDirectoryMissing
++        case IONFILEFileManagerError.fileNotFound: return .fileNotFound(method: method, path)
++        default: return .operationFailed(method: method, error)
+         }
+     }
+ 
+diff --git a/node_modules/@capacitor/filesystem/ios/Sources/FilesystemPlugin/IONFileStructures+Converters.swift b/node_modules/@capacitor/filesystem/ios/Sources/FilesystemPlugin/IONFileStructures+Converters.swift
+index ce2ed24..b3f5f4e 100644
+--- a/node_modules/@capacitor/filesystem/ios/Sources/FilesystemPlugin/IONFileStructures+Converters.swift
++++ b/node_modules/@capacitor/filesystem/ios/Sources/FilesystemPlugin/IONFileStructures+Converters.swift
+@@ -4,10 +4,10 @@ import IONFilesystemLib
+ extension IONFILEStringEncoding {
+     static func create(from text: String) -> Self {
+         switch text {
+-        case Constants.StringEncodingValue.ascii: .ascii
+-        case Constants.StringEncodingValue.utf16: .utf16
+-        case Constants.StringEncodingValue.utf8: .utf8
+-        default: .utf8
++        case Constants.StringEncodingValue.ascii: return .ascii
++        case Constants.StringEncodingValue.utf16: return .utf16
++        case Constants.StringEncodingValue.utf8: return .utf8
++        default: return .utf8
+         }
+     }
+ }
+@@ -15,12 +15,12 @@ extension IONFILEStringEncoding {
+ extension IONFILEDirectoryType {
+     static func create(from text: String) -> Self? {
+         switch text {
+-        case Constants.DirectoryTypeValue.cache: .cache
+-        case Constants.DirectoryTypeValue.data, Constants.DirectoryTypeValue.documents, Constants.DirectoryTypeValue.external, Constants.DirectoryTypeValue.externalCache, Constants.DirectoryTypeValue.externalStorage: .document
+-        case Constants.DirectoryTypeValue.library: .library
+-        case Constants.DirectoryTypeValue.libraryNoCloud: .notSyncedLibrary
+-        case Constants.DirectoryTypeValue.temporary: .temporary
+-        default: nil
++        case Constants.DirectoryTypeValue.cache: return .cache
++        case Constants.DirectoryTypeValue.data, Constants.DirectoryTypeValue.documents, Constants.DirectoryTypeValue.external, Constants.DirectoryTypeValue.externalCache, Constants.DirectoryTypeValue.externalStorage: return .document
++        case Constants.DirectoryTypeValue.library: return .library
++        case Constants.DirectoryTypeValue.libraryNoCloud: return .notSyncedLibrary
++        case Constants.DirectoryTypeValue.temporary: return .temporary
++        default: return nil
+         }
+     }
+ }
+@@ -28,9 +28,9 @@ extension IONFILEDirectoryType {
+ extension IONFILEEncodingValueMapper {
+     var textValue: String {
+         switch self {
+-        case .byteBuffer(let data): data.base64EncodedString()
+-        case .string(_, let text): text
+-        @unknown default: ""
++        case .byteBuffer(let data): return data.base64EncodedString()
++        case .string(_, let text): return text
++        @unknown default: return ""
+         }
+     }
+ }
+@@ -38,7 +38,7 @@ extension IONFILEEncodingValueMapper {
+ extension IONFILEItemAttributeModel {
+     typealias JSResult = [String: Any]
+     func toJSResult(with url: URL) -> JSResult {
+-        [
++        return [
+             Constants.ItemAttributeJSONKey.name: url.lastPathComponent,
+             Constants.ItemAttributeJSONKey.type: type.description,
+             Constants.ItemAttributeJSONKey.size: size,
+@@ -52,9 +52,9 @@ extension IONFILEItemAttributeModel {
+ extension IONFILEItemType {
+     var description: String {
+         switch self {
+-        case .directory: Constants.FileItemTypeValue.directory
+-        case .file: Constants.FileItemTypeValue.file
+-        @unknown default: Constants.FileItemTypeValue.fallback
++        case .directory: return Constants.FileItemTypeValue.directory
++        case .file: return Constants.FileItemTypeValue.file
++        @unknown default: return Constants.FileItemTypeValue.fallback
+         }
+     }
+ }

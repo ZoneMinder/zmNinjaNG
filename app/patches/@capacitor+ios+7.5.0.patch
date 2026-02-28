@@ -1,0 +1,43 @@
+diff --git a/node_modules/@capacitor/ios/Capacitor/Capacitor/Codable/JSValueDecoder.swift b/node_modules/@capacitor/ios/Capacitor/Capacitor/Codable/JSValueDecoder.swift
+index 43042e4..6ebf4f8 100644
+--- a/node_modules/@capacitor/ios/Capacitor/Capacitor/Codable/JSValueDecoder.swift
++++ b/node_modules/@capacitor/ios/Capacitor/Capacitor/Codable/JSValueDecoder.swift
+@@ -9,6 +9,9 @@
+ import Foundation
+ import Combine
+ 
++// Xcode 14.x does not bridge the Darwin C macro MSEC_PER_SEC to Swift.
++private let MSEC_PER_SEC: Double = 1000
++
+ /// A decoder that can decode ``JSValue`` objects into `Decodable` types.
+ public final class JSValueDecoder: TopLevelDecoder {
+     /// The strategies available for formatting dates when decoding from a ``JSValue``
+diff --git a/node_modules/@capacitor/ios/Capacitor/Capacitor/Codable/JSValueEncoder.swift b/node_modules/@capacitor/ios/Capacitor/Capacitor/Codable/JSValueEncoder.swift
+index 926aa11..a75f208 100644
+--- a/node_modules/@capacitor/ios/Capacitor/Capacitor/Codable/JSValueEncoder.swift
++++ b/node_modules/@capacitor/ios/Capacitor/Capacitor/Codable/JSValueEncoder.swift
+@@ -9,6 +9,9 @@
+ import Foundation
+ import Combine
+ 
++// Xcode 14.x does not bridge the Darwin C macro MSEC_PER_SEC to Swift.
++private let MSEC_PER_SEC: Double = 1000
++
+ /// An encoder than can encode ``JSValue`` objects from `Encodable` types
+ public final class JSValueEncoder: TopLevelEncoder {
+     /// The strategy to use when encoding `nil` values
+@@ -153,11 +156,11 @@ private enum EncodingContainer: JSValueEncodingContainer {
+     var type: String {
+         switch self {
+         case .singleValue:
+-            "SingleValueContainer"
++            return "SingleValueContainer"
+         case .unkeyed:
+-            "UnkeyedContainer"
++            return "UnkeyedContainer"
+         case .keyed:
+-            "KeyedContainer"
++            return "KeyedContainer"
+         }
+     }
+ }

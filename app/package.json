@@ -4,6 +4,7 @@
   "version": "0.2.4",
   "type": "module",
   "scripts": {
+    "postinstall": "npx patch-package",
     "dev": "vite",
     "proxy": "node proxy-server.js",
     "dev:all": "npm run proxy & npm run dev",
