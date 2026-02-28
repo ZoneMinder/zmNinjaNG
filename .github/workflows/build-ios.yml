@@ -7,12 +7,21 @@ on:
         description: 'Release version (e.g., 1.0.0)'
         required: true
         type: string
+      upload_to_testflight:
+        description: 'Upload IPA to TestFlight'
+        required: false
+        type: boolean
+        default: true
   push:
     tags:
       - 'zmNg-*'
 
 permissions:
   contents: write
+
+env:
+  KEYCHAIN_NAME: build.keychain
+  KEYCHAIN_PASSWORD: ${{ github.run_id }}
 
 jobs:
   build-ios:
@@ -45,7 +54,38 @@ jobs:
         working-directory: ./app/ios/App
         run: pod install
 
-      - name: Build iOS archive (no codesign)
+      - name: Install signing certificate
+        run: |
+          # Decode P12 certificate
+          echo "${{ secrets.IOS_P12_BASE64 }}" | base64 --decode > ${{ runner.temp }}/certificate.p12
+
+          # Create temporary keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" ${{ runner.temp }}/$KEYCHAIN_NAME
+          security set-keychain-settings -lut 21600 ${{ runner.temp }}/$KEYCHAIN_NAME
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" ${{ runner.temp }}/$KEYCHAIN_NAME
+
+          # Import certificate into keychain
+          security import ${{ runner.temp }}/certificate.p12 \
+            -P "${{ secrets.IOS_P12_PASSWORD }}" \
+            -A \
+            -t cert \
+            -f pkcs12 \
+            -k ${{ runner.temp }}/$KEYCHAIN_NAME
+
+          # Allow codesign to access the keychain without prompt
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" ${{ runner.temp }}/$KEYCHAIN_NAME
+
+          # Add temporary keychain to search list
+          security list-keychains -d user -s ${{ runner.temp }}/$KEYCHAIN_NAME login.keychain-db
+
+      - name: Install provisioning profile
+        run: |
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "${{ secrets.IOS_PROVISION_PROFILE_BASE64 }}" | base64 --decode \
+            > ~/Library/MobileDevice/Provisioning\ Profiles/build.mobileprovision
+
+      - name: Build iOS archive
         working-directory: ./app/ios/App
         run: |
           xcodebuild archive \
@@ -53,22 +93,50 @@ jobs:
             -scheme App \
             -configuration Release \
             -archivePath ${{ runner.temp }}/App.xcarchive \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
             -destination "generic/platform=iOS" \
+            -allowProvisioningUpdates \
             -quiet
 
-      - name: Rename artifact
+      - name: Export IPA
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath ${{ runner.temp }}/App.xcarchive \
+            -exportPath ${{ runner.temp }}/export \
+            -exportOptionsPlist app/ios/ExportOptions.plist \
+            -allowProvisioningUpdates
+
+      - name: Prepare artifact
         run: |
           VERSION="${{ github.event.inputs.version || github.ref_name }}"
           VERSION="${VERSION#zmNg-}"
           mkdir -p dist/ios
-          cp -R "${{ runner.temp }}/App.xcarchive" "dist/ios/zmNg-${VERSION}-ios.xcarchive"
+          cp ${{ runner.temp }}/export/*.ipa "dist/ios/zmNg-${VERSION}-ios.ipa"
 
-      - name: Upload xcarchive artifact
+      - name: Upload to TestFlight
+        if: ${{ github.event.inputs.upload_to_testflight != 'false' }}
+        run: |
+          # Decode App Store Connect API key
+          mkdir -p ~/.private_keys
+          echo "${{ secrets.ASC_API_KEY_BASE64 }}" | base64 --decode \
+            > ~/.private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8
+
+          xcrun altool --upload-app \
+            --type ios \
+            --file dist/ios/*.ipa \
+            --apiKey "${{ secrets.ASC_KEY_ID }}" \
+            --apiIssuer "${{ secrets.ASC_ISSUER_ID }}"
+
+      - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: zmNg-ios-xcarchive-${{ github.event.inputs.version || github.ref_name }}
-          path: dist/ios/*.xcarchive
+          name: zmNg-ios-ipa-${{ github.event.inputs.version || github.ref_name }}
+          path: dist/ios/*.ipa
           retention-days: 30
+
+      - name: Cleanup signing
+        if: always()
+        run: |
+          security delete-keychain ${{ runner.temp }}/$KEYCHAIN_NAME || true
+          rm -f ${{ runner.temp }}/certificate.p12
+          rm -f ~/Library/MobileDevice/Provisioning\ Profiles/build.mobileprovision
+          rm -rf ~/.private_keys
