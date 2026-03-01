@@ -85,6 +85,12 @@ jobs:
           echo "${{ secrets.IOS_PROVISION_PROFILE_BASE64 }}" | base64 --decode \
             > ~/Library/MobileDevice/Provisioning\ Profiles/build.mobileprovision
 
+      - name: Install App Store Connect API key
+        run: |
+          mkdir -p ~/.private_keys
+          echo "${{ secrets.ASC_API_KEY_BASE64 }}" | base64 --decode \
+            > ~/.private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8
+
       - name: Build iOS archive
         working-directory: ./app/ios/App
         run: |
@@ -95,6 +101,9 @@ jobs:
             -archivePath ${{ runner.temp }}/App.xcarchive \
             -destination "generic/platform=iOS" \
             -allowProvisioningUpdates \
+            -authenticationKeyPath ~/.private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8 \
+            -authenticationKeyID ${{ secrets.ASC_KEY_ID }} \
+            -authenticationKeyIssuerID ${{ secrets.ASC_ISSUER_ID }} \
             -quiet
 
       - name: Export IPA
@@ -103,7 +112,10 @@ jobs:
             -archivePath ${{ runner.temp }}/App.xcarchive \
             -exportPath ${{ runner.temp }}/export \
             -exportOptionsPlist app/ios/ExportOptions.plist \
-            -allowProvisioningUpdates
+            -allowProvisioningUpdates \
+            -authenticationKeyPath ~/.private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8 \
+            -authenticationKeyID ${{ secrets.ASC_KEY_ID }} \
+            -authenticationKeyIssuerID ${{ secrets.ASC_ISSUER_ID }}
 
       - name: Prepare artifact
         run: |
@@ -115,11 +127,6 @@ jobs:
       - name: Upload to TestFlight
         if: ${{ github.event.inputs.upload_to_testflight != 'false' }}
         run: |
-          # Decode App Store Connect API key
-          mkdir -p ~/.private_keys
-          echo "${{ secrets.ASC_API_KEY_BASE64 }}" | base64 --decode \
-            > ~/.private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8
-
           xcrun altool --upload-app \
             --type ios \
             --file dist/ios/*.ipa \
