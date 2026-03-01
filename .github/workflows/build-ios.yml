@@ -104,6 +104,21 @@ jobs:
           echo "${{ secrets.ASC_API_KEY_BASE64 }}" | base64 --decode \
             > ~/.private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8
 
+      - name: Configure App target signing
+        run: |
+          ruby -e "
+            require 'xcodeproj'
+            project = Xcodeproj::Project.open('app/ios/App/App.xcodeproj')
+            target = project.targets.find { |t| t.name == 'App' }
+            target.build_configurations.each do |config|
+              config.build_settings['CODE_SIGN_STYLE'] = 'Manual'
+              config.build_settings['CODE_SIGN_IDENTITY'] = 'Apple Distribution'
+              config.build_settings['PROVISIONING_PROFILE_SPECIFIER'] = ENV['PROFILE_NAME']
+              config.build_settings['DEVELOPMENT_TEAM'] = 'P97TSUFFDX'
+            end
+            project.save
+          "
+
       - name: Build iOS archive
         working-directory: ./app/ios/App
         run: |
@@ -113,9 +128,6 @@ jobs:
             -configuration Release \
             -archivePath ${{ runner.temp }}/App.xcarchive \
             -destination "generic/platform=iOS" \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
-            PROVISIONING_PROFILE="$PROFILE_UUID" \
             -quiet
 
       - name: Export IPA
