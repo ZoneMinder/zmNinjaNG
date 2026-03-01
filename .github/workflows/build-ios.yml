@@ -83,7 +83,20 @@ jobs:
         run: |
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           echo "${{ secrets.IOS_PROVISION_PROFILE_BASE64 }}" | base64 --decode \
-            > ~/Library/MobileDevice/Provisioning\ Profiles/build.mobileprovision
+            > ${{ runner.temp }}/build.mobileprovision
+
+          # Extract UUID and Name for manual signing
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin \
+            <<< "$(security cms -D -i ${{ runner.temp }}/build.mobileprovision)")
+          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c "Print Name" /dev/stdin \
+            <<< "$(security cms -D -i ${{ runner.temp }}/build.mobileprovision)")
+
+          # Install to standard location using UUID as filename
+          cp ${{ runner.temp }}/build.mobileprovision \
+            ~/Library/MobileDevice/Provisioning\ Profiles/${PROFILE_UUID}.mobileprovision
+
+          echo "PROFILE_UUID=$PROFILE_UUID" >> "$GITHUB_ENV"
+          echo "PROFILE_NAME=$PROFILE_NAME" >> "$GITHUB_ENV"
 
       - name: Install App Store Connect API key
         run: |
@@ -100,22 +113,42 @@ jobs:
             -configuration Release \
             -archivePath ${{ runner.temp }}/App.xcarchive \
             -destination "generic/platform=iOS" \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath ~/.private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8 \
-            -authenticationKeyID ${{ secrets.ASC_KEY_ID }} \
-            -authenticationKeyIssuerID ${{ secrets.ASC_ISSUER_ID }} \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE="$PROFILE_UUID" \
             -quiet
 
       - name: Export IPA
         run: |
+          # Generate ExportOptions.plist for manual signing
+          cat > ${{ runner.temp }}/ExportOptions.plist <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store-connect</string>
+            <key>teamID</key>
+            <string>P97TSUFFDX</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>signingCertificate</key>
+            <string>Apple Distribution</string>
+            <key>uploadSymbols</key>
+            <true/>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>com.zoneminder.zmNinjaNG</key>
+              <string>${PROFILE_NAME}</string>
+            </dict>
+          </dict>
+          </plist>
+          PLIST
+
           xcodebuild -exportArchive \
             -archivePath ${{ runner.temp }}/App.xcarchive \
             -exportPath ${{ runner.temp }}/export \
-            -exportOptionsPlist app/ios/ExportOptions.plist \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath ~/.private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8 \
-            -authenticationKeyID ${{ secrets.ASC_KEY_ID }} \
-            -authenticationKeyIssuerID ${{ secrets.ASC_ISSUER_ID }}
+            -exportOptionsPlist ${{ runner.temp }}/ExportOptions.plist
 
       - name: Prepare artifact
         run: |
@@ -145,5 +178,6 @@ jobs:
         run: |
           security delete-keychain ${{ runner.temp }}/$KEYCHAIN_NAME || true
           rm -f ${{ runner.temp }}/certificate.p12
-          rm -f ~/Library/MobileDevice/Provisioning\ Profiles/build.mobileprovision
+          rm -f ${{ runner.temp }}/build.mobileprovision
+          rm -f ~/Library/MobileDevice/Provisioning\ Profiles/${PROFILE_UUID}.mobileprovision
           rm -rf ~/.private_keys
