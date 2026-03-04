@@ -22,7 +22,10 @@ const config: CapacitorConfig = {
       backgroundColor: '#000000',
       showSpinner: false,
       fadeOutDuration: 200,
-    }
+    },
+    FirebaseMessaging: {
+      presentationOptions: ['alert', 'badge', 'sound'],
+    },
   }
 };
 
