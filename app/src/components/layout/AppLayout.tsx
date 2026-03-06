@@ -216,7 +216,7 @@ function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentProps) {
                         t('notifications.status.connecting');
                       const dotColor =
                         !settings?.enabled ? "bg-muted-foreground/50" :
-                        settings?.notificationMode === 'direct' ? "bg-green-500" :
+                        settings?.notificationMode === 'direct' ? "bg-blue-400" :
                         connectionState === 'connected' ? "bg-green-500" :
                         connectionState === 'disconnected' || connectionState === 'error' ? "bg-red-500" :
                         "bg-orange-500 animate-pulse";
