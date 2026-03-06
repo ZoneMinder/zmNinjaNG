@@ -1,7 +1,7 @@
 @preconcurrency import UserNotifications
 import os.log
 
-private let logger = OSLog(subsystem: "com.pliablepixels.zmng.ImageNotification", category: "NotificationService")
+private let logger = OSLog(subsystem: "com.zoneminder.zmNinjaNG.ImageNotification", category: "NotificationService")
 
 class NotificationService: UNNotificationServiceExtension {
 
