@@ -567,7 +567,8 @@
       "disabled": "Deaktiviert",
       "connected": "Verbunden",
       "disconnected": "Getrennt",
-      "connecting": "Verbinde..."
+      "connecting": "Verbinde...",
+      "direct_active": "Direktmodus aktiv"
     }
   },
   "profiles": {
