@@ -551,7 +551,16 @@
     "function": "功能",
     "disconnected": "已断开",
     "notifications_enabled": "通知已启用",
-    "select_profile_first": "请先选择配置"
+    "select_profile_first": "请先选择配置",
+    "mode_title": "通知模式",
+    "mode_desc": "选择通知的传递方式",
+    "mode_es": "事件服务器",
+    "mode_direct": "直连 ZM",
+    "mode_es_desc": "通过事件服务器 WebSocket 接收实时事件和推送通知",
+    "mode_direct_desc": "通过 ZoneMinder API 接收推送通知（无需事件服务器）",
+    "mode_direct_unavailable": "需要 ZoneMinder 支持通知 API",
+    "mode_switched_direct": "已切换到直连 ZM 模式",
+    "mode_switched_es": "已切换到事件服务器模式"
   },
   "notifications": {
     "status": {

@@ -551,7 +551,16 @@
     "function": "Funktion",
     "disconnected": "Getrennt",
     "notifications_enabled": "Benachrichtigungen aktiviert",
-    "select_profile_first": "Wählen Sie zuerst ein Profil"
+    "select_profile_first": "Wählen Sie zuerst ein Profil",
+    "mode_title": "Benachrichtigungsmodus",
+    "mode_desc": "Wählen Sie, wie Benachrichtigungen zugestellt werden",
+    "mode_es": "Event Server",
+    "mode_direct": "Direkt ZM",
+    "mode_es_desc": "Echtzeit-Ereignisse über Event Server WebSocket und Push-Benachrichtigungen",
+    "mode_direct_desc": "Push-Benachrichtigungen über ZoneMinder API (kein Event Server nötig)",
+    "mode_direct_unavailable": "Erfordert ZoneMinder mit Notifications API Unterstützung",
+    "mode_switched_direct": "Auf Direkt-ZM-Modus umgeschaltet",
+    "mode_switched_es": "Auf Event-Server-Modus umgeschaltet"
   },
   "notifications": {
     "status": {

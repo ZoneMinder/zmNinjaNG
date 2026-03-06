@@ -549,7 +549,16 @@
     "view_history": "View History",
     "function": "Function",
     "disconnected": "Disconnected",
-    "select_profile_first": "Please select a profile first"
+    "select_profile_first": "Please select a profile first",
+    "mode_title": "Notification Mode",
+    "mode_desc": "Choose how notifications are delivered",
+    "mode_es": "Event Server",
+    "mode_direct": "Direct ZM",
+    "mode_es_desc": "Real-time events via Event Server websocket and push notifications",
+    "mode_direct_desc": "Push notifications via ZoneMinder API (no Event Server needed)",
+    "mode_direct_unavailable": "Requires ZoneMinder with Notifications API support",
+    "mode_switched_direct": "Switched to Direct ZM mode",
+    "mode_switched_es": "Switched to Event Server mode"
   },
   "notifications": {
     "status": {

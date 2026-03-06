@@ -14,6 +14,8 @@ import { navigationService } from '../lib/navigation';
 import { useNotificationStore } from '../stores/notifications';
 import { useProfileStore } from '../stores/profile';
 import { useAuthStore } from '../stores/auth';
+import { registerToken, deleteNotification } from '../api/notifications';
+import { getAppVersion } from '../lib/version';
 
 /**
  * Data payload sent by zmeventnotification server via FCM.
@@ -148,12 +150,26 @@ export class MobilePushService {
     log.push('Deregistering from push notifications', LogLevel.INFO);
 
     try {
-      // Send disabled state to server if connected
       const notificationStore = useNotificationStore.getState();
-      if (notificationStore.isConnected) {
-        const platform = Capacitor.getPlatform() as 'ios' | 'android';
-        log.push('Sending disabled state to notification server', LogLevel.INFO, { platform });
-        await notificationStore.deregisterPushToken(this.currentToken, platform);
+      const profileId = notificationStore.currentProfileId;
+
+      if (profileId) {
+        const settings = notificationStore.getProfileSettings(profileId);
+
+        if (settings.notificationMode === 'direct') {
+          // Direct mode: delete via ZM REST API
+          const notifId = settings.notificationId;
+          if (notifId) {
+            log.push('Deleting notification via ZM API (direct mode)', LogLevel.INFO, { notificationId: notifId });
+            await deleteNotification(notifId);
+            notificationStore.clearNotificationId(profileId);
+          }
+        } else if (notificationStore.isConnected) {
+          // ES mode: deregister via websocket
+          const platform = Capacitor.getPlatform() as 'ios' | 'android';
+          log.push('Sending disabled state to notification server', LogLevel.INFO, { platform });
+          await notificationStore.deregisterPushToken(this.currentToken, platform);
+        }
       }
 
       // Unregister locally
@@ -241,24 +257,58 @@ export class MobilePushService {
 
   private async _registerWithServer(token: string): Promise<void> {
     const notificationStore = useNotificationStore.getState();
-
-    if (!notificationStore.isConnected) {
-      log.push('Storing FCM token - will register when connected to notification server', LogLevel.INFO);
+    const profileId = notificationStore.currentProfileId;
+    if (!profileId) {
+      log.push('No profile connected - cannot register token', LogLevel.WARN);
       return;
     }
 
-    try {
-      const platform = Capacitor.getPlatform() as 'ios' | 'android';
+    const settings = notificationStore.getProfileSettings(profileId);
 
-      log.push('Registering FCM token with notification server', LogLevel.INFO, {
-        platform,
-      });
+    if (settings.notificationMode === 'direct') {
+      // Direct mode: register via ZM REST API (no websocket needed)
+      try {
+        const platform = Capacitor.getPlatform() as 'android' | 'ios';
+        const enabledFilters = settings.monitorFilters.filter(f => f.enabled);
+        const monitorList = settings.allMonitors ? undefined : enabledFilters.map(f => f.monitorId).join(',');
+        const interval = settings.allMonitors ? 0 : Math.max(0, ...enabledFilters.map(f => f.checkInterval));
 
-      await notificationStore.registerPushToken(token, platform);
+        log.push('Registering FCM token via ZM REST API (direct mode)', LogLevel.INFO, { platform });
 
-      log.push('Successfully registered FCM token with server', LogLevel.INFO);
-    } catch (error) {
-      log.push('Failed to register FCM token with server', LogLevel.ERROR, error);
+        const result = await registerToken({
+          token,
+          platform,
+          monitorList,
+          interval,
+          pushState: 'enabled',
+          appVersion: getAppVersion(),
+        });
+
+        notificationStore.setNotificationId(profileId, result.Id);
+        log.push('Successfully registered FCM token via ZM API', LogLevel.INFO, { notificationId: result.Id });
+      } catch (error) {
+        log.push('Failed to register FCM token via ZM API', LogLevel.ERROR, error);
+      }
+    } else {
+      // ES mode: register via websocket
+      if (!notificationStore.isConnected) {
+        log.push('Storing FCM token - will register when connected to notification server', LogLevel.INFO);
+        return;
+      }
+
+      try {
+        const platform = Capacitor.getPlatform() as 'ios' | 'android';
+
+        log.push('Registering FCM token with notification server', LogLevel.INFO, {
+          platform,
+        });
+
+        await notificationStore.registerPushToken(token, platform);
+
+        log.push('Successfully registered FCM token with server', LogLevel.INFO);
+      } catch (error) {
+        log.push('Failed to register FCM token with server', LogLevel.ERROR, error);
+      }
     }
   }
 

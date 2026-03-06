@@ -41,5 +41,7 @@ export type ConnectionState =
     | 'connected'
     | 'error';
 
+export type NotificationMode = 'es' | 'direct';
+
 export type NotificationEventCallback = (event: ZMAlarmEvent) => void;
 export type ConnectionStateCallback = (state: ConnectionState) => void;

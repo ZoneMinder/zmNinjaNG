@@ -20,6 +20,8 @@ import { navigationService } from '../lib/navigation';
 import { useTranslation } from 'react-i18next';
 import { Capacitor } from '@capacitor/core';
 import { getPushService } from '../services/pushNotifications';
+import { Platform } from '../lib/platform';
+import { getEventPoller } from '../services/eventPoller';
 
 /**
  * NotificationHandler component.
@@ -132,56 +134,92 @@ export function NotificationHandler() {
   }, [navigate]);
 
   // Auto-connect when profile loads (if enabled)
+  // In ES mode: connects websocket. In Direct mode on desktop: starts event poller.
   useEffect(() => {
     if (
-      settings?.enabled &&
-      settings?.host && // Don't auto-connect if host is not set
-      !isConnected &&
-      connectionState === 'disconnected' &&
-      currentProfile &&
-      currentProfile.username &&
-      currentProfile.password &&
-      !hasAttemptedAutoConnect.current
+      !settings?.enabled ||
+      !currentProfile ||
+      !currentProfile.username ||
+      !currentProfile.password ||
+      hasAttemptedAutoConnect.current
     ) {
-      hasAttemptedAutoConnect.current = true;
-
-      log.notifications('Auto-connecting to notification server', LogLevel.INFO, { profileId: currentProfile.id, });
-
-      const attemptConnect = async (retries = 3) => {
-        try {
-          const password = await getDecryptedPassword(currentProfile.id);
-
-          // Check state again right before connecting to avoid race conditions
-          // This is crucial because getDecryptedPassword is async and state might have changed
-          const currentState = useNotificationStore.getState().connectionState;
-          if (currentState !== 'disconnected') {
-             log.notifications('Skipping auto-connect - already connected or connecting', LogLevel.INFO, { state: currentState,
-               profileId: currentProfile.id, });
-             return;
-          }
-
-          if (password) {
-            await connect(currentProfile.id, currentProfile.username!, password, currentProfile.portalUrl);
-            log.notifications('Auto-connected to notification server', LogLevel.INFO, { profileId: currentProfile.id, });
-          } else {
-            throw new Error('Failed to get password');
-          }
-        } catch (error) {
-          log.notifications(`Auto-connect failed (retries left: ${retries})`, LogLevel.ERROR, {
-            profileId: currentProfile.id,
-            error,
-          });
-
-          if (retries > 0) {
-            setTimeout(() => attemptConnect(retries - 1), 2000);
-          }
-        }
-      };
-
-      // Add a small delay to ensure everything is initialized
-      setTimeout(() => attemptConnect(), 500);
+      return;
     }
-  }, [settings?.enabled, settings?.host, isConnected, connectionState, currentProfile, connect, getDecryptedPassword]);
+
+    const mode = settings.notificationMode || 'es';
+
+    if (mode === 'direct') {
+      // Direct mode on desktop (Tauri): start event poller
+      if (Platform.isTauri) {
+        hasAttemptedAutoConnect.current = true;
+        log.notifications('Starting event poller for direct mode (desktop)', LogLevel.INFO, {
+          profileId: currentProfile.id,
+        });
+        const poller = getEventPoller();
+        poller.start(currentProfile.id);
+      }
+      // Direct mode on mobile: push notifications handle everything via FCM
+      // (initialized separately in the push notifications effect above)
+      return;
+    }
+
+    // ES mode: auto-connect websocket (existing behavior)
+    if (
+      !settings.host ||
+      isConnected ||
+      connectionState !== 'disconnected'
+    ) {
+      return;
+    }
+
+    hasAttemptedAutoConnect.current = true;
+
+    log.notifications('Auto-connecting to notification server', LogLevel.INFO, { profileId: currentProfile.id, });
+
+    const attemptConnect = async (retries = 3) => {
+      try {
+        const password = await getDecryptedPassword(currentProfile.id);
+
+        // Check state again right before connecting to avoid race conditions
+        // This is crucial because getDecryptedPassword is async and state might have changed
+        const currentState = useNotificationStore.getState().connectionState;
+        if (currentState !== 'disconnected') {
+           log.notifications('Skipping auto-connect - already connected or connecting', LogLevel.INFO, { state: currentState,
+             profileId: currentProfile.id, });
+           return;
+        }
+
+        if (password) {
+          await connect(currentProfile.id, currentProfile.username!, password, currentProfile.portalUrl);
+          log.notifications('Auto-connected to notification server', LogLevel.INFO, { profileId: currentProfile.id, });
+        } else {
+          throw new Error('Failed to get password');
+        }
+      } catch (error) {
+        log.notifications(`Auto-connect failed (retries left: ${retries})`, LogLevel.ERROR, {
+          profileId: currentProfile.id,
+          error,
+        });
+
+        if (retries > 0) {
+          setTimeout(() => attemptConnect(retries - 1), 2000);
+        }
+      }
+    };
+
+    // Add a small delay to ensure everything is initialized
+    setTimeout(() => attemptConnect(), 500);
+  }, [settings?.enabled, settings?.notificationMode, settings?.host, isConnected, connectionState, currentProfile, connect, getDecryptedPassword]);
+
+  // Stop event poller on cleanup or when mode/profile changes
+  useEffect(() => {
+    return () => {
+      const poller = getEventPoller();
+      if (poller.isRunning()) {
+        poller.stop();
+      }
+    };
+  }, [currentProfile?.id, settings?.notificationMode, settings?.enabled]);
 
   // Listen for new events and show toasts
   useEffect(() => {

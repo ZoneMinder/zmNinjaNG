@@ -8,12 +8,16 @@ import {
   type ZMEventServerConfig,
   type ZMAlarmEvent,
   type ConnectionState,
+  type NotificationMode,
 } from '../types/notifications';
 import { log, LogLevel } from '../lib/logger';
 import { getAppVersion } from '../lib/version';
+import { updateNotification } from '../api/notifications';
 
 export interface NotificationSettings {
   enabled: boolean;
+  notificationMode: NotificationMode; // 'es' = Event Server websocket, 'direct' = ZM REST API
+  notificationId: number | null; // Server-side Notifications.Id (direct mode)
   host: string; // Event server host (e.g., "zm.example.com")
   port: number; // Event server port (default 9000)
   ssl: boolean; // Use wss:// instead of ws://
@@ -30,7 +34,7 @@ export interface MonitorNotificationConfig {
   checkInterval: number; // Seconds between checks (60, 120, etc.)
 }
 
-export type NotificationSource = 'websocket' | 'push';
+export type NotificationSource = 'websocket' | 'push' | 'poll';
 
 export interface NotificationEvent extends ZMAlarmEvent {
   receivedAt: number; // Timestamp when received
@@ -72,6 +76,11 @@ interface NotificationState {
   getUnreadCount: (profileId: string) => number;
   getEvents: (profileId: string) => NotificationEvent[];
 
+  // Actions - Notification Mode
+  setNotificationMode: (profileId: string, mode: NotificationMode) => void;
+  setNotificationId: (profileId: string, id: number) => void;
+  clearNotificationId: (profileId: string) => void;
+
   // Actions - Push (Mobile)
   registerPushToken: (token: string, platform: 'ios' | 'android') => Promise<void>;
   deregisterPushToken: (token: string, platform: 'ios' | 'android') => Promise<void>;
@@ -89,6 +98,8 @@ const DEFAULT_PORT = 9000;
 
 const DEFAULT_SETTINGS: NotificationSettings = {
   enabled: false,
+  notificationMode: 'es',
+  notificationId: null,
   host: '',
   port: DEFAULT_PORT,
   ssl: true,
@@ -440,6 +451,47 @@ export const useNotificationStore = create<NotificationState>()(
         }
       },
 
+      // ========== Notification Mode Actions ==========
+
+      setNotificationMode: (profileId, mode) => {
+        log.notifications('Setting notification mode', LogLevel.INFO, { profileId, mode });
+        set((state) => ({
+          profileSettings: {
+            ...state.profileSettings,
+            [profileId]: {
+              ...(state.profileSettings[profileId] || DEFAULT_SETTINGS),
+              notificationMode: mode,
+            },
+          },
+        }));
+      },
+
+      setNotificationId: (profileId, id) => {
+        log.notifications('Setting notification ID', LogLevel.INFO, { profileId, id });
+        set((state) => ({
+          profileSettings: {
+            ...state.profileSettings,
+            [profileId]: {
+              ...(state.profileSettings[profileId] || DEFAULT_SETTINGS),
+              notificationId: id,
+            },
+          },
+        }));
+      },
+
+      clearNotificationId: (profileId) => {
+        log.notifications('Clearing notification ID', LogLevel.INFO, { profileId });
+        set((state) => ({
+          profileSettings: {
+            ...state.profileSettings,
+            [profileId]: {
+              ...(state.profileSettings[profileId] || DEFAULT_SETTINGS),
+              notificationId: null,
+            },
+          },
+        }));
+      },
+
       // ========== Push Token Actions ==========
 
       registerPushToken: async (token: string, platform: 'ios' | 'android') => {
@@ -532,33 +584,62 @@ export const useNotificationStore = create<NotificationState>()(
           return;
         }
 
-        const service = getNotificationService();
         const settings = get().getProfileSettings(currentProfileId);
-
-        // When allMonitors is on, don't send a filter — ES treats empty monlist as "all monitors"
-        if (settings.allMonitors) {
-          log.notifications('All monitors enabled, skipping filter sync', LogLevel.INFO, { profileId: currentProfileId });
-          return;
-        }
-
         const { monitorFilters } = settings;
         const enabledFilters = monitorFilters.filter((f) => f.enabled);
-        if (enabledFilters.length === 0) {
-          log.notifications('No enabled monitor filters to sync', LogLevel.INFO, { profileId: currentProfileId });
-          return;
-        }
 
-        const monitorIds = enabledFilters.map((f) => f.monitorId);
-        const intervals = enabledFilters.map((f) => f.checkInterval);
+        if (settings.notificationMode === 'direct') {
+          // Direct mode: sync via ZM REST API
+          const notifId = settings.notificationId;
+          if (!notifId) {
+            log.notifications('Cannot sync filters in direct mode - no notification ID', LogLevel.WARN);
+            return;
+          }
 
-        log.notifications('Syncing monitor filters with server', LogLevel.INFO, { profileId: currentProfileId,
-          monitors: monitorIds,
-          intervals, });
+          const monitorList = settings.allMonitors ? '' : enabledFilters.map(f => f.monitorId).join(',');
+          const interval = settings.allMonitors ? 0 : Math.max(0, ...enabledFilters.map(f => f.checkInterval));
 
-        try {
-          await service.setMonitorFilter(monitorIds, intervals);
-        } catch (error) {
-          log.notifications('Failed to sync monitor filters', LogLevel.ERROR, { profileId: currentProfileId, error });
+          log.notifications('Syncing monitor filters via ZM API', LogLevel.INFO, {
+            profileId: currentProfileId,
+            notificationId: notifId,
+            monitorList: monitorList || '(all)',
+            interval,
+          });
+
+          try {
+            await updateNotification(notifId, {
+              monitorList: monitorList || undefined,
+              interval,
+            });
+          } catch (error) {
+            log.notifications('Failed to sync monitor filters via ZM API', LogLevel.ERROR, { profileId: currentProfileId, error });
+          }
+        } else {
+          // ES mode: sync via websocket
+          // When allMonitors is on, don't send a filter — ES treats empty monlist as "all monitors"
+          if (settings.allMonitors) {
+            log.notifications('All monitors enabled, skipping filter sync', LogLevel.INFO, { profileId: currentProfileId });
+            return;
+          }
+
+          if (enabledFilters.length === 0) {
+            log.notifications('No enabled monitor filters to sync', LogLevel.INFO, { profileId: currentProfileId });
+            return;
+          }
+
+          const monitorIds = enabledFilters.map((f) => f.monitorId);
+          const intervals = enabledFilters.map((f) => f.checkInterval);
+
+          log.notifications('Syncing monitor filters with server', LogLevel.INFO, { profileId: currentProfileId,
+            monitors: monitorIds,
+            intervals, });
+
+          try {
+            const service = getNotificationService();
+            await service.setMonitorFilter(monitorIds, intervals);
+          } catch (error) {
+            log.notifications('Failed to sync monitor filters', LogLevel.ERROR, { profileId: currentProfileId, error });
+          }
         }
       },
 

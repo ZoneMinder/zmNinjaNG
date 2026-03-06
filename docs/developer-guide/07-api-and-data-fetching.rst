@@ -1473,6 +1473,63 @@ Returns ``null`` instead of throwing on 404/401/403 responses
 Data Flow Example
 -----------------
 
+Notifications API
+-----------------
+
+The notifications API (``src/api/notifications.ts``) manages FCM push token
+registration via ZoneMinder’s Notifications REST API. Used in Direct ZM
+notification mode where tokens are registered via REST instead of the Event
+Server WebSocket.
+
+**Key functions:**
+
+.. code:: tsx
+
+   import {
+     registerToken,
+     updateNotification,
+     deleteNotification,
+     listNotifications,
+     checkNotificationsApiSupport,
+   } from ‘../api/notifications’;
+
+   // Check if server supports the Notifications API
+   const supported = await checkNotificationsApiSupport();
+   // Returns false on 404 (older ZM versions)
+
+   // Register or upsert an FCM token
+   const notif = await registerToken({
+     token: fcmToken,
+     platform: ‘android’,
+     monitorList: ‘1,2,3’,
+     interval: 60,
+     pushState: ‘enabled’,
+     appVersion: ‘2.0.0’,
+   });
+
+   // Update monitor filter or push state
+   await updateNotification(notif.Id, { monitorList: ‘1,2’, interval: 30 });
+
+   // Delete a registration
+   await deleteNotification(notif.Id);
+
+**Features:** - Upsert semantics (POST with existing token updates the row)
+- User-scoped (server returns only the current user’s tokens) - Feature
+detection via 404 response for older ZM versions
+
+Event Poller Service
+--------------------
+
+The event poller (``src/services/eventPoller.ts``) polls the ZM events API
+for new events in Direct notification mode on desktop (Tauri). New events
+are fed into the notification store, which triggers toast display via
+``NotificationHandler``.
+
+**Usage:** The poller is started automatically by ``NotificationHandler``
+when ``notificationMode === ‘direct’`` on Tauri desktop. It uses
+``getBandwidthSettings().eventPollerInterval`` for the polling interval
+(30s normal, 60s low bandwidth).
+
 Let’s trace a complete data flow: viewing monitors
 
 1. User navigates to Monitors page
