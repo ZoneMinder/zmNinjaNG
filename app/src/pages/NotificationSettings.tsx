@@ -202,6 +202,19 @@ export default function NotificationSettings() {
       }
 
       setNotificationMode(currentProfile.id, 'es');
+
+      // Auto-connect websocket if host is configured
+      if (settings?.host && currentProfile.username && currentProfile.password) {
+        try {
+          const password = await getDecryptedPassword(currentProfile.id);
+          if (password) {
+            await connect(currentProfile.id, currentProfile.username, password, currentProfile.portalUrl);
+          }
+        } catch (error) {
+          log.notificationSettings('Failed to connect after switching to ES mode', LogLevel.ERROR, error);
+        }
+      }
+
       toast.info(t('notification_settings.mode_switched_es'));
     }
   };
