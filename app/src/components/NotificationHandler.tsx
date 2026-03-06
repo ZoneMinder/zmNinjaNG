@@ -66,17 +66,34 @@ export function NotificationHandler() {
   }, [settings?.notificationMode]);
 
   // Initialize push notifications on mobile
-  // This runs whenever notifications are enabled to ensure we get the FCM token
+  // Runs when notifications are enabled or mode changes to ensure FCM token
+  // is registered with the correct backend (ES websocket vs ZM REST API)
   useEffect(() => {
-    if (Capacitor.isNativePlatform() && settings && settings.enabled) {
-      const pushService = getPushService();
+    if (!Capacitor.isNativePlatform() || !settings?.enabled || !currentProfile) return;
 
-      // Initialize push service - this will call register() to get the current FCM token
+    const mode = settings.notificationMode || 'es';
+
+    // In direct mode, set currentProfileId so the push service knows which
+    // profile to register against (there's no WebSocket connect to set it)
+    if (mode === 'direct') {
+      useNotificationStore.setState({ currentProfileId: currentProfile.id });
+    }
+
+    const pushService = getPushService();
+
+    if (pushService.isReady()) {
+      // Token already obtained — re-register with server for current mode
+      log.notificationHandler('Re-registering FCM token for mode change', LogLevel.INFO, { mode });
+      pushService.registerTokenWithServer().catch((error) => {
+        log.notificationHandler('Failed to re-register FCM token', LogLevel.ERROR, error);
+      });
+    } else {
+      // First time — initialize to get FCM token and register
       pushService.initialize().catch((error) => {
         log.notificationHandler('Failed to initialize push notifications', LogLevel.ERROR, error);
       });
     }
-  }, [settings?.enabled]);
+  }, [settings?.enabled, settings?.notificationMode, currentProfile]);
 
   // Handle profile switching
   useEffect(() => {
