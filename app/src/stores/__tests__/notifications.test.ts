@@ -20,6 +20,7 @@ vi.mock('../../services/notifications', () => ({
 vi.mock('../auth', () => ({
   useAuthStore: {
     getState: vi.fn(() => ({ accessToken: 'access-token' })),
+    subscribe: vi.fn(() => vi.fn()),
   },
 }));
 
