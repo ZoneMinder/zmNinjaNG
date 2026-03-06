@@ -811,26 +811,6 @@ export default function NotificationSettings() {
             </CardContent>
           </Card>
         )}
-
-        {/* Platform Info */}
-        {Capacitor.isNativePlatform() && settings.enabled && (
-          <Card>
-            <CardHeader>
-              <CardTitle>{t('notification_settings.mobile_platform')}</CardTitle>
-              <CardDescription>
-                {t('notification_settings.push_enabled')}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-2 p-3 rounded-lg bg-primary/10 border border-primary/20">
-                <CheckCircle className="h-4 w-4 text-primary" />
-                <span className="text-sm">
-                  {t('notification_settings.running_on', { platform: Capacitor.getPlatform() })}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-        )}
       </div>
     </div>
   );
