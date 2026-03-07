@@ -19,7 +19,6 @@
 		DC3ECBBB2F0A1BDC00F7400D /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = DC3ECBBA2F0A1BDC00F7400C /* PrivacyInfo.xcprivacy */; };
 		DC10E70100000000000F0001 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC10E70100000000000F0003 /* NotificationService.swift */; };
 		DC10E70100000000000F0002 /* ImageNotification.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = DC10E70100000000000F0005 /* ImageNotification.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		DC3ECBBB2F0A1BDC00F7400D /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = DC3ECBBA2F0A1BDC00F7400C /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */

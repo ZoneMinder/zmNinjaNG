@@ -25,12 +25,9 @@ end
 
 target 'App' do
   capacitor_pods
-  # Pin SDWebImage to 5.19.x for iOS 16 compatibility
-  pod 'SDWebImage', '~> 5.19.0'
+  # Add your Pods here
 end
 
 post_install do |installer|
   assertDeploymentTarget(installer)
-  # Xcode 14.x Swift 5.8 compatibility patches are applied via patch-package
-  # (see app/patches/). Remove patches once building with Xcode 15+.
 end
