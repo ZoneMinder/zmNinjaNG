@@ -125,6 +125,10 @@ export function NotificationHandler() {
           if (isActive) {
             await FirebaseMessaging.removeAllDeliveredNotifications();
             log.notificationHandler('Cleared native badge on app resume', LogLevel.DEBUG);
+
+            // Sync badge count with server so future pushes use the correct number
+            const store = useNotificationStore.getState();
+            store._updateBadge();
           }
         });
 

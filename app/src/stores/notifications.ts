@@ -345,6 +345,11 @@ export const useNotificationStore = create<NotificationState>()(
             },
           };
         });
+
+        // Sync badge count with server so future push notifications use the correct number
+        if (get().currentProfileId === profileId) {
+          get()._updateBadge();
+        }
       },
 
       markEventRead: (profileId: string, eventId: number) => {
@@ -608,12 +613,21 @@ export const useNotificationStore = create<NotificationState>()(
           return;
         }
 
-        const service = getNotificationService();
         const settings = get().getProfileSettings(currentProfileId);
         const { badgeCount } = settings;
 
         try {
-          await service.updateBadgeCount(badgeCount);
+          if (settings.notificationMode === 'direct') {
+            // Direct mode: update badge count via ZM REST API
+            const notifId = settings.notificationId;
+            if (notifId) {
+              await updateNotification(notifId, { badgeCount });
+            }
+          } else {
+            // ES mode: update badge count via WebSocket
+            const service = getNotificationService();
+            await service.updateBadgeCount(badgeCount);
+          }
         } catch (error) {
           log.notifications('Failed to update badge count', LogLevel.ERROR, { profileId: currentProfileId, error });
         }

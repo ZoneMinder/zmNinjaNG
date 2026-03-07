@@ -73,6 +73,7 @@ export async function updateNotification(
     monitorList: string;
     interval: number;
     pushState: 'enabled' | 'disabled';
+    badgeCount: number;
   }>
 ): Promise<ZMNotification> {
   log.api('Updating notification via ZM API', LogLevel.INFO, { id });
@@ -82,6 +83,7 @@ export async function updateNotification(
   if (params.monitorList !== undefined) formData.append('Notification[MonitorList]', params.monitorList);
   if (params.interval !== undefined) formData.append('Notification[Interval]', String(params.interval));
   if (params.pushState !== undefined) formData.append('Notification[PushState]', params.pushState);
+  if (params.badgeCount !== undefined) formData.append('Notification[BadgeCount]', String(params.badgeCount));
 
   const resp = await client.put<NotificationResponse>(`/notifications/${id}.json`, formData.toString(), {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
