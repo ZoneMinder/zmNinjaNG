@@ -173,7 +173,7 @@ export function useMontageGrid({
     if (monitors.length === 0) return;
     if (!hasWidth || currentWidthRef.current === 0) return;
 
-    const margin = isFullscreen ? 0 : GRID_LAYOUT.margin;
+    const margin = isFullscreen ? 0 : GRID_LAYOUT.montageMargin;
     let nextLayout: Layout[] = [];
     const stored = settings.montageLayouts?.lg;
 
@@ -202,7 +202,7 @@ export function useMontageGrid({
     (cols: number) => {
       if (!currentProfile) return;
 
-      const margin = isFullscreen ? 0 : GRID_LAYOUT.margin;
+      const margin = isFullscreen ? 0 : GRID_LAYOUT.montageMargin;
       const maxCols = getMaxColsForWidth(currentWidthRef.current, GRID_LAYOUT.minCardWidth, margin);
       if (cols > maxCols) {
         toast.error(t('montage.screen_too_small'));
@@ -246,7 +246,7 @@ export function useMontageGrid({
       const maxCols = getMaxColsForWidth(
         width,
         GRID_LAYOUT.minCardWidth,
-        isFullscreen ? 0 : GRID_LAYOUT.margin
+        isFullscreen ? 0 : GRID_LAYOUT.montageMargin
       );
       const tooSmall = gridCols > maxCols;
 
@@ -276,7 +276,7 @@ export function useMontageGrid({
       screenTooSmallRef.current = tooSmall;
 
       setLayout((prev) => {
-        return normalizeLayout(prev, gridCols, width, isFullscreen ? 0 : GRID_LAYOUT.margin);
+        return normalizeLayout(prev, gridCols, width, isFullscreen ? 0 : GRID_LAYOUT.montageMargin);
       });
     },
     [gridCols, isFullscreen, t, normalizeLayout]
@@ -300,7 +300,7 @@ export function useMontageGrid({
         newItem.w,
         currentWidthRef.current,
         gridCols,
-        isFullscreen ? 0 : GRID_LAYOUT.margin
+        isFullscreen ? 0 : GRID_LAYOUT.montageMargin
       );
 
       setLayout((prev) => {

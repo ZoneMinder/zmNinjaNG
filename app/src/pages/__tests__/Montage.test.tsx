@@ -75,18 +75,18 @@ describe('Montage Layout Calculations', () => {
       const monitorMap = new Map([['1', monitor]]);
       const gridWidth = 1200;
       const cols = 2;
-      const margin = GRID_LAYOUT.margin;
+      const margin = GRID_LAYOUT.montageMargin;
 
       const height = calculateHeightUnits(monitorMap, '1', 1, gridWidth, cols, margin);
 
       // Aspect ratio should be 1080/1920 = 0.5625
-      // With gridWidth=1200, cols=2, margin=16:
-      // columnWidth = (1200 - 16 * (2-1)) / 2 = (1200 - 16) / 2 = 592
-      // itemWidth = 592 * 1 + 16 * 0 = 592
-      // heightPx = 592 * 0.5625 = 333
-      // unit = (333 + 16) / (10 + 16) = 349 / 26 = 13.42
-      // rounded = 13
-      expect(height).toBe(13);
+      // With gridWidth=1200, cols=2, margin=4:
+      // columnWidth = (1200 - 4 * (2-1)) / 2 = (1200 - 4) / 2 = 598
+      // itemWidth = 598 * 1 + 4 * 0 = 598
+      // heightPx = 598 * 0.5625 = 336.375
+      // unit = (336.375 + 4) / (10 + 4) = 340.375 / 14 = 24.31
+      // rounded = 24
+      expect(height).toBe(24);
     });
 
     it('calculates correct height for 90° rotated 1920x1080 monitor (should become 1080x1920)', () => {
@@ -101,19 +101,19 @@ describe('Montage Layout Calculations', () => {
       const monitorMap = new Map([['2', monitor]]);
       const gridWidth = 1200;
       const cols = 2;
-      const margin = GRID_LAYOUT.margin;
+      const margin = GRID_LAYOUT.montageMargin;
 
       const height = calculateHeightUnits(monitorMap, '2', 1, gridWidth, cols, margin);
 
       // For 90° rotation, dimensions should swap: 1080x1920
       // Aspect ratio should be 1920/1080 = 1.777... (tall)
-      // With gridWidth=1200, cols=2, margin=16:
-      // columnWidth = (1200 - 16) / 2 = 592
-      // itemWidth = 592 * 1 + 16 * 0 = 592
-      // heightPx = 592 * 1.777... = 1052.14
-      // unit = (1052.14 + 16) / (10 + 16) = 1068.14 / 26 = 41.08
-      // rounded = 41
-      expect(height).toBe(41);
+      // With gridWidth=1200, cols=2, margin=4:
+      // columnWidth = (1200 - 4) / 2 = 598
+      // itemWidth = 598 * 1 + 4 * 0 = 598
+      // heightPx = 598 * 1.777... = 1063.11
+      // unit = (1063.11 + 4) / (10 + 4) = 1067.11 / 14 = 76.22
+      // rounded = 76
+      expect(height).toBe(76);
     });
 
     it('calculates correct height for 270° rotated monitor (should also swap dimensions)', () => {
@@ -128,19 +128,19 @@ describe('Montage Layout Calculations', () => {
       const monitorMap = new Map([['3', monitor]]);
       const gridWidth = 1200;
       const cols = 2;
-      const margin = GRID_LAYOUT.margin;
+      const margin = GRID_LAYOUT.montageMargin;
 
       const height = calculateHeightUnits(monitorMap, '3', 1, gridWidth, cols, margin);
 
       // 270° rotation should also swap dimensions like 90°
-      expect(height).toBe(41);
+      expect(height).toBe(76);
     });
 
     it('returns default height when monitor not found in map', () => {
       const monitorMap = new Map<string, Monitor>();
       const gridWidth = 1200;
       const cols = 2;
-      const margin = GRID_LAYOUT.margin;
+      const margin = GRID_LAYOUT.montageMargin;
 
       const height = calculateHeightUnits(monitorMap, 'non-existent', 1, gridWidth, cols, margin);
 
@@ -159,7 +159,7 @@ describe('Montage Layout Calculations', () => {
 
       const monitorMap = new Map([['4', monitor]]);
       const cols = 2;
-      const margin = GRID_LAYOUT.margin;
+      const margin = GRID_LAYOUT.montageMargin;
 
       // Calculate at different widths (simulating window resize)
       const height1 = calculateHeightUnits(monitorMap, '4', 1, 1200, cols, margin);
@@ -203,7 +203,7 @@ describe('Montage Layout Calculations', () => {
 
       const gridWidth = 1200;
       const cols = 2;
-      const margin = GRID_LAYOUT.margin;
+      const margin = GRID_LAYOUT.montageMargin;
 
       const normalHeight = calculateHeightUnits(monitorMap, '5', 1, gridWidth, cols, margin);
       const rotatedHeight = calculateHeightUnits(monitorMap, '6', 1, gridWidth, cols, margin);

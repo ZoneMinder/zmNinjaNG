@@ -68,8 +68,11 @@ export const GRID_LAYOUT = {
   // Row height in pixels (dashboard cards)
   rowHeight: 100,
 
-  // Margin between grid items in pixels
+  // Margin between grid items in pixels (dashboard)
   margin: 16,
+
+  // Margin between montage grid items in pixels (tighter for monitor feeds)
+  montageMargin: 4,
 
   // Minimum card width in grid units
   minCardWidth: 50,

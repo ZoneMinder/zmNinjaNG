@@ -315,7 +315,7 @@ export default function Montage() {
               layout={layout}
               cols={gridCols}
               rowHeight={GRID_LAYOUT.montageRowHeight}
-              margin={[isFullscreen ? 0 : GRID_LAYOUT.margin, isFullscreen ? 0 : GRID_LAYOUT.margin]}
+              margin={[isFullscreen ? 0 : GRID_LAYOUT.montageMargin, isFullscreen ? 0 : GRID_LAYOUT.montageMargin]}
               containerPadding={[0, 0]}
               compactType="vertical"
               preventCollision={false}
