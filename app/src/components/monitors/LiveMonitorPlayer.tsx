@@ -386,13 +386,18 @@ export function LiveMonitorPlayer({
     viewModeOverride: forceViewMode,
   });
 
-  // Track MJPEG image error state
+  // Track MJPEG image error state. Clear it whenever a new connection is minted
+  // (imageSrc carries the connkey). When the window is occluded the <img>
+  // connection drops and onError latches this true, which unmounts the <img>.
+  // The visibility/focus resume then regenerates the connkey; without imageSrc
+  // in the deps the error stayed latched and the tile never recovered until a
+  // full remount (route change). refs #150
   const [mjpegError, setMjpegError] = useState(false);
   useEffect(() => {
     if (effectiveStreamingMethod === 'mjpeg' || showMjpegPlaceholder) {
       setMjpegError(false);
     }
-  }, [effectiveStreamingMethod, showMjpegPlaceholder, monitor.Id]);
+  }, [effectiveStreamingMethod, showMjpegPlaceholder, monitor.Id, mjpegStream.imageSrc]);
 
   const handleMjpegLoad = useCallback(() => {
     setMjpegError(false);
@@ -400,8 +405,11 @@ export function LiveMonitorPlayer({
   }, [onLoad]);
 
   const handleMjpegError = useCallback(() => {
+    // Log so an occlusion-induced drop is visible. The <img> onError is
+    // otherwise silent, which made this look like "0 logs". refs #150
+    log.videoPlayer('MJPEG stream error', LogLevel.WARN, { monitorId: monitor.Id });
     setMjpegError(true);
-  }, []);
+  }, [monitor.Id]);
 
   // Sync media ref for snapshot capture
   useEffect(() => {
@@ -504,6 +512,10 @@ export function LiveMonitorPlayer({
 
       {showMjpeg && hasMjpegFrame && (
         <img
+          // Key on the connkey URL so a regenerated connection mounts a fresh
+          // <img> rather than swapping src on an element whose prior multipart
+          // load was interrupted by occlusion. refs #150
+          key={mjpegStream.imageSrc}
           ref={imgRef}
           className={`w-full h-full ${className}`}
           style={
