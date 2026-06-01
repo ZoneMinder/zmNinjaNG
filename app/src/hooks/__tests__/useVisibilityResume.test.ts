@@ -103,6 +103,20 @@ describe('useVisibilityResume', () => {
     expect(cb).not.toHaveBeenCalled();
   });
 
+  it('does not fire on the first reveal when mounted while already hidden (startup)', () => {
+    // Electron creates the window with show:false, so the page mounts while
+    // hidden and is revealed later. That first reveal must not be treated as a
+    // return-from-away. refs #150
+    visibilityState = 'hidden';
+    const cb = vi.fn();
+    renderHook(() => useVisibilityResume(cb, { minHiddenMs: 1000 }));
+
+    vi.advanceTimersByTime(5000);
+    setVisibility('visible');
+
+    expect(cb).not.toHaveBeenCalled();
+  });
+
   it('fires on window focus after a blur on Electron (occlusion behind another app)', () => {
     mockIsElectron = true;
     const cb = vi.fn();

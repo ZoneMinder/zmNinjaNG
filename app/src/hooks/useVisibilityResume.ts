@@ -25,9 +25,12 @@ export function useVisibilityResume(
   onResume: () => void,
   { enabled = true, minHiddenMs = 1500 }: UseVisibilityResumeOptions = {},
 ): void {
-  const hiddenAtRef = useRef<number | null>(
-    typeof document !== 'undefined' && document.visibilityState === 'hidden' ? Date.now() : null,
-  );
+  // Only an away-transition observed after mount counts. Do not seed from the
+  // initial visibility state: on Electron the window starts hidden/unfocused
+  // (created with show:false, revealed later), and seeding would make the first
+  // reveal look like a return-from-away and fire a needless reconnect that
+  // flashes the montage tiles black on startup. refs #150
+  const hiddenAtRef = useRef<number | null>(null);
   const onResumeRef = useRef(onResume);
   onResumeRef.current = onResume;
 

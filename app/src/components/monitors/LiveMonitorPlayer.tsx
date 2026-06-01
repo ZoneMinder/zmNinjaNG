@@ -512,10 +512,6 @@ export function LiveMonitorPlayer({
 
       {showMjpeg && hasMjpegFrame && (
         <img
-          // Key on the connkey URL so a regenerated connection mounts a fresh
-          // <img> rather than swapping src on an element whose prior multipart
-          // load was interrupted by occlusion. refs #150
-          key={mjpegStream.imageSrc}
           ref={imgRef}
           className={`w-full h-full ${className}`}
           style={
