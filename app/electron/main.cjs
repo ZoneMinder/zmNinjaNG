@@ -15,19 +15,6 @@ const path = require('node:path');
 // the pool and starves the rest of the app. Must be set before app.whenReady().
 app.commandLine.appendSwitch('max-connections-per-host', '32');
 
-// Keep live streams running when the window is occluded by another app.
-// Chromium throttles and eventually freezes the renderer of a backgrounded or
-// occluded window (timers drop to ~1/min, JS execution suspends), which tears
-// down the open MJPEG <img> connections. The tiles then go blank with no logs,
-// because the freeze stops JS from running, and they do not recover on focus
-// return until the tree is remounted. The display never sleeps here (the screen
-// stays lit), so Insomnia's screen wake lock does nothing for this case. These
-// switches disable the occlusion/background throttling so montage streams stay
-// alive behind other windows. Must be set before app.whenReady(). refs #150
-app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
-app.commandLine.appendSwitch('disable-renderer-backgrounding');
-app.commandLine.appendSwitch('disable-background-timer-throttling');
-
 // Whether to trust self-signed/invalid TLS certificates. Secure default: reject
 // until the renderer enables it during bootstrap, gated on the per-profile
 // allowSelfSignedCerts setting (see src/lib/ssl-trust.ts applySSLTrustSetting).
@@ -102,10 +89,6 @@ function createWindow() {
       nodeIntegration: false,
       // Allow cross-origin requests to the ZoneMinder server and mixed content.
       webSecurity: false,
-      // Do not throttle/suspend the renderer when the window is in the
-      // background or occluded, so live montage streams keep running behind
-      // other apps instead of going blank. refs #150
-      backgroundThrottling: false,
     },
   });
 
