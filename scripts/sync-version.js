@@ -72,6 +72,13 @@ function main() {
     console.log(`✓ Updated ${xcodeProjectPath} (MARKETING_VERSION=${version}, CURRENT_PROJECT_VERSION=${build})`);
   }
 
+  // In GitHub Actions, expose the build number to later steps so the
+  // electron-builder ${env.BUILD_NUMBER} macro and rename steps can use it.
+  if (process.env.GITHUB_ENV) {
+    fs.appendFileSync(process.env.GITHUB_ENV, `BUILD_NUMBER=${build}\n`);
+    console.log(`✓ Exported BUILD_NUMBER=${build} to GITHUB_ENV`);
+  }
+
   console.log(`✅ Synced version ${version}, build ${build}`);
 }
 

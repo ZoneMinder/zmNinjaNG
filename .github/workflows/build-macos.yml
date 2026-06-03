@@ -21,6 +21,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history so git rev-list --count HEAD is the real build number
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -70,7 +72,7 @@ jobs:
           VERSION="${VERSION#zmNinjaNg-}"
           mkdir -p dist/macos
           for f in desktop_release_builds/electron/*.dmg; do
-            [ -f "$f" ] && cp "$f" "dist/macos/zmNinjaNg-${VERSION}-macos-aarch64.dmg"
+            [ -f "$f" ] && cp "$f" "dist/macos/zmNinjaNg-${VERSION}-b${BUILD_NUMBER}-macos-aarch64.dmg"
           done
 
       - name: Upload Electron DMG artifact
