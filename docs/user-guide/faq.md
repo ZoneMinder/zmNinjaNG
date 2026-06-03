@@ -10,6 +10,19 @@ ZoneMinder 1.36 or newer with API access enabled (`OPT_USE_API = 1`).
 
 Yes. Enable **Allow self-signed certificates** in Settings > Advanced (the toggle is shown only when the Portal URL uses HTTPS), or toggle it when adding a new profile. On native platforms (iOS/Android/desktop) the certificate fingerprint is pinned on first connection. Using [Let's Encrypt](https://letsencrypt.org/) (free) or another trusted CA is still recommended. You can also use plain HTTP if your server is on a local network.
 
+### Linux desktop: login works but live streams and images stay black
+
+On Linux (AppImage and `.deb`), the **Allow self-signed certificates** toggle covers API calls, but the underlying Chromium engine still rejects the self-signed certificate when loading MJPEG streams and snapshot images. The symptom is a successful login with a black preview and a crossed-out camera icon. Right-click > Inspect > Console shows `Unacceptable TLS certificate` errors.
+
+Fix this by adding the certificate to the system trust store:
+
+```bash
+sudo cp your-server.crt /usr/local/share/ca-certificates/
+sudo update-ca-certificates
+```
+
+Then restart zmNinjaNg. This applies to both the AppImage and `.deb` builds.
+
 ### Is zmNinjaNg free?
 
 Yes. zmNinjaNg is open source and free to use. The source code is available on [GitHub](https://github.com/ZoneMinder/zmNinjaNg).
