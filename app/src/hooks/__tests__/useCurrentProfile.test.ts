@@ -18,8 +18,8 @@ vi.mock('../../stores/settings', () => ({
     snapshotRefreshInterval: 3,
     streamMaxFps: 10,
     streamScale: 50,
-    montageGridRows: 2,
-    eventMontageGridCols: 2,
+    montageByGroup: {},
+    eventMontageByGroup: {},
     monitorDetailCycleSeconds: 0,
     defaultEventLimit: 300,
     eventsThumbnailFit: 'contain',
@@ -132,7 +132,7 @@ describe('useCurrentProfile', () => {
     expect(result.current.settings.streamMaxFps).toBe(15);
     // Defaults should be preserved for non-overridden values
     expect(result.current.settings.snapshotRefreshInterval).toBe(3);
-    expect(result.current.settings.montageGridRows).toBe(2);
+    expect(result.current.settings.montageByGroup).toEqual({});
   });
 
   it('returns correct profile when switching profiles', () => {
