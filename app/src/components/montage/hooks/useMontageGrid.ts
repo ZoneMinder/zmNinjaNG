@@ -127,7 +127,7 @@ export function useMontageGrid({
 
   // displayCols = user's chosen number of visible columns (1–5)
   const bucketGridCols =
-    settings.montageByGroup[groupKey]?.gridCols ?? DEFAULT_MONTAGE_GROUP_LAYOUT.gridCols;
+    settings.montageByGroup?.[groupKey]?.gridCols ?? DEFAULT_MONTAGE_GROUP_LAYOUT.gridCols;
   const [displayCols, setDisplayCols] = useState<number>(bucketGridCols);
   const [layout, setLayout] = useState<Layout[]>([]);
   const [hasWidth, setHasWidth] = useState(false);

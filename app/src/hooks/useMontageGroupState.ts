@@ -34,7 +34,7 @@ export function useMontageGroupState(): UseMontageGroupStateReturn {
   );
 
   const groupKey = selectedGroupId ?? ALL_GROUPS_KEY;
-  const bucket = settings.montageByGroup[groupKey] ?? DEFAULT_MONTAGE_GROUP_LAYOUT;
+  const bucket = settings.montageByGroup?.[groupKey] ?? DEFAULT_MONTAGE_GROUP_LAYOUT;
 
   const update = useCallback(
     (patch: Partial<MontageGroupLayout>) => {
