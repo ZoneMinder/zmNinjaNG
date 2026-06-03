@@ -11,9 +11,10 @@ body:
   - type: input
     id: app-version
     attributes:
-      label: zmNinjaNg version
-      description: Found under the Logs menu option.
-      placeholder: e.g. 1.4.2
+      label: zmNinjaNg version and build number
+      description: |
+        Shown at the bottom of the sidebar (open the menu on mobile) as `v<version> (<build>)`. Include the build number in parentheses.
+      placeholder: e.g. 1.4.2 (1512)
     validations:
       required: true
 
