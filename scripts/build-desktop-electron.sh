@@ -13,6 +13,10 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_DIR="$(cd "$SCRIPT_DIR/../app" && pwd)"
 cd "$APP_DIR"
 
+# Build number for the artifact filename (electron-builder ${env.BUILD_NUMBER}).
+# Same git commit count as the in-app sidebar and the store build numbers.
+export BUILD_NUMBER="$(git rev-list --count HEAD)"
+
 # Shared default signing identity (overridable via APPLE_SIGNING_IDENTITY).
 DEFAULT_IDENTITY="Developer ID Application: ZoneMinder Inc (P97TSUFFDX)"
 

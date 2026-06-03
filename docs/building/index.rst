@@ -93,6 +93,24 @@ The generated ``versionCode`` / ``CURRENT_PROJECT_VERSION`` values in
 committed at release time by ``make_release.sh``; they are not committed on
 every change.
 
+The build number also goes into the desktop artifact filenames, so a
+downloaded binary identifies its exact build:
+
+.. code:: text
+
+   zmNinjaNg-1.1.14-b1512-macos-aarch64.dmg
+   zmNinjaNg-1.1.14-b1512-windows-x64-setup.exe
+   zmNinjaNg-1.1.14-b1512-linux-amd64.AppImage
+
+The release workflows set this in their rename steps; local builds and
+``build-all.yml`` use the electron-builder ``${env.BUILD_NUMBER}`` macro, which
+``sync-version.js`` exports via ``$GITHUB_ENV`` in CI and
+``build-desktop-electron.sh`` exports locally.
+
+Because the build number is the git commit count, the build workflows check
+out with ``fetch-depth: 0``. The default shallow clone makes
+``git rev-list --count HEAD`` return ``1``.
+
 Automated Releases
 ------------------
 

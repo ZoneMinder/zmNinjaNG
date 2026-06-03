@@ -20,6 +20,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history so git rev-list --count HEAD is the real build number
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -79,6 +81,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history so git rev-list --count HEAD is the real build number
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -90,6 +94,9 @@ jobs:
       - name: Install dependencies
         working-directory: ./app
         run: npm ci
+
+      - name: Sync version (exports BUILD_NUMBER)
+        run: node scripts/sync-version.js
 
       - name: Import code signing certificate
         env:
@@ -131,6 +138,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history so git rev-list --count HEAD is the real build number
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -147,6 +156,9 @@ jobs:
       - name: Install dependencies
         working-directory: ./app
         run: npm ci
+
+      - name: Sync version (exports BUILD_NUMBER)
+        run: node scripts/sync-version.js
 
       - name: Build Electron app (Linux amd64, unsigned)
         working-directory: ./app
@@ -171,6 +183,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history so git rev-list --count HEAD is the real build number
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -187,6 +201,9 @@ jobs:
       - name: Install dependencies
         working-directory: ./app
         run: npm ci
+
+      - name: Sync version (exports BUILD_NUMBER)
+        run: node scripts/sync-version.js
 
       - name: Build Electron app (Linux arm64, unsigned)
         working-directory: ./app
@@ -211,6 +228,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history so git rev-list --count HEAD is the real build number
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -222,6 +241,9 @@ jobs:
       - name: Install dependencies
         working-directory: ./app
         run: npm ci
+
+      - name: Sync version (exports BUILD_NUMBER)
+        run: node scripts/sync-version.js
 
       - name: Build Electron app (Windows, unsigned)
         working-directory: ./app

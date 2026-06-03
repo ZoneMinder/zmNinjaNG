@@ -21,6 +21,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history so git rev-list --count HEAD is the real build number
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -51,7 +53,7 @@ jobs:
           VERSION="${VERSION#zmNinjaNg-}"
           mkdir -p dist/windows
           for f in desktop_release_builds/electron/*.exe; do
-            [ -f "$f" ] && cp "$f" "dist/windows/zmNinjaNg-${VERSION}-windows-x64-setup.exe"
+            [ -f "$f" ] && cp "$f" "dist/windows/zmNinjaNg-${VERSION}-b${BUILD_NUMBER}-windows-x64-setup.exe"
           done
 
       - name: Upload Windows Electron artifact

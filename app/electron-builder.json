@@ -23,18 +23,18 @@
     "hardenedRuntime": true,
     "notarize": false,
     "icon": "electron/icons/icon.icns",
-    "artifactName": "${productName}_${version}_aarch64.${ext}"
+    "artifactName": "${productName}_${version}-b${env.BUILD_NUMBER}_aarch64.${ext}"
   },
   "linux": {
     "target": ["AppImage", "deb", "rpm"],
     "maintainer": "ZoneMinder <noreply@zoneminder.com>",
     "category": "Utility",
     "icon": "electron/icons/icon.png",
-    "artifactName": "${productName}_${version}_${arch}.${ext}"
+    "artifactName": "${productName}_${version}-b${env.BUILD_NUMBER}_${arch}.${ext}"
   },
   "win": {
     "target": ["nsis"],
     "icon": "electron/icons/icon.ico",
-    "artifactName": "${productName}_${version}_${arch}.${ext}"
+    "artifactName": "${productName}_${version}-b${env.BUILD_NUMBER}_${arch}.${ext}"
   }
 }

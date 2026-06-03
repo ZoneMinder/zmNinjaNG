@@ -20,6 +20,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history so git rev-list --count HEAD is the real build number
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -53,9 +55,9 @@ jobs:
           VERSION="${{ github.event.inputs.version || github.ref_name }}"
           VERSION="${VERSION#zmNinjaNg-}"
           mkdir -p dist/linux-arm64
-          for f in desktop_release_builds/electron/*.AppImage; do [ -f "$f" ] && cp "$f" "dist/linux-arm64/zmNinjaNg-${VERSION}-linux-arm64.AppImage"; done
-          for f in desktop_release_builds/electron/*.deb; do [ -f "$f" ] && cp "$f" "dist/linux-arm64/zmNinjaNg-${VERSION}-linux-arm64.deb"; done
-          for f in desktop_release_builds/electron/*.rpm; do [ -f "$f" ] && cp "$f" "dist/linux-arm64/zmNinjaNg-${VERSION}-linux-arm64.rpm"; done
+          for f in desktop_release_builds/electron/*.AppImage; do [ -f "$f" ] && cp "$f" "dist/linux-arm64/zmNinjaNg-${VERSION}-b${BUILD_NUMBER}-linux-arm64.AppImage"; done
+          for f in desktop_release_builds/electron/*.deb; do [ -f "$f" ] && cp "$f" "dist/linux-arm64/zmNinjaNg-${VERSION}-b${BUILD_NUMBER}-linux-arm64.deb"; done
+          for f in desktop_release_builds/electron/*.rpm; do [ -f "$f" ] && cp "$f" "dist/linux-arm64/zmNinjaNg-${VERSION}-b${BUILD_NUMBER}-linux-arm64.rpm"; done
 
       - name: Upload Linux ARM64 Electron artifacts
         uses: actions/upload-artifact@v4
