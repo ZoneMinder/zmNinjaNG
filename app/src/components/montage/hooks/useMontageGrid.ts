@@ -10,7 +10,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { GRID_LAYOUT, MONTAGE_GRID } from '../../../lib/zmninja-ng-constants';
-import { useSettingsStore } from '../../../stores/settings';
+import { useSettingsStore, DEFAULT_MONTAGE_GROUP_LAYOUT } from '../../../stores/settings';
 import { getMonitorAspectRatio } from '../../../lib/monitor-rotation';
 import type { Layout } from 'react-grid-layout';
 import type { Monitor, MonitorData } from '../../../api/types';
@@ -95,6 +95,7 @@ interface UseMontageGridOptions {
   currentProfile: Profile | null;
   settings: ProfileSettings;
   isEditMode: boolean;
+  groupKey: string;
 }
 
 interface UseMontageGridReturn {
@@ -117,13 +118,17 @@ export function useMontageGrid({
   currentProfile,
   settings,
   isEditMode,
+  groupKey,
 }: UseMontageGridOptions): UseMontageGridReturn {
   const { t } = useTranslation();
-  const updateSettings = useSettingsStore((state) => state.updateProfileSettings);
-  const saveMontageLayout = useSettingsStore((state) => state.saveMontageLayout);
+  const updateMontageGroupLayout = useSettingsStore(
+    (state) => state.updateMontageGroupLayout
+  );
 
   // displayCols = user's chosen number of visible columns (1–5)
-  const [displayCols, setDisplayCols] = useState<number>(settings.montageGridCols);
+  const bucketGridCols =
+    settings.montageByGroup?.[groupKey]?.gridCols ?? DEFAULT_MONTAGE_GROUP_LAYOUT.gridCols;
+  const [displayCols, setDisplayCols] = useState<number>(bucketGridCols);
   const [layout, setLayout] = useState<Layout[]>([]);
   const [hasWidth, setHasWidth] = useState(false);
   // Track whether initial layout has been built (prevent re-running on monitor refetch)
@@ -144,6 +149,9 @@ export function useMontageGrid({
   useEffect(() => { isEditModeRef.current = isEditMode; }, [isEditMode]);
   useEffect(() => { currentProfileRef.current = currentProfile; }, [currentProfile]);
   useEffect(() => { settingsRef.current = settings; }, [settings]);
+
+  const groupKeyRef = useRef(groupKey);
+  useEffect(() => { groupKeyRef.current = groupKey; }, [groupKey]);
 
   const monitorMap = useMemo(() => {
     return new Map(monitors.map((item) => [item.Monitor.Id, item.Monitor]));
@@ -190,8 +198,8 @@ export function useMontageGrid({
 
   // Update displayCols when profile changes (external change only)
   useEffect(() => {
-    setDisplayCols(settings.montageGridCols);
-  }, [currentProfile?.id, settings.montageGridCols]);
+    setDisplayCols(bucketGridCols);
+  }, [currentProfile?.id, groupKey, bucketGridCols]);
 
   // Build initial layout once when we have monitors + width.
   // Also re-runs when displayCols changes (user picked a new column count).
@@ -206,7 +214,7 @@ export function useMontageGrid({
       return;
     }
 
-    const stored = settingsRef.current.montageLayouts?.lg;
+    const stored = settingsRef.current.montageByGroup?.[groupKeyRef.current]?.workingLayout;
     let nextLayout: Layout[];
 
     if (stored && stored.length > 0) {
@@ -225,7 +233,7 @@ export function useMontageGrid({
     setLayout((prev) => (areLayoutsEqual(prev, normalized) ? prev : normalized));
     initializedRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [displayCols, hasWidth]);
+  }, [displayCols, hasWidth, groupKey]);
 
   // When the monitor list changes (new/removed monitors), add missing ones
   // but don't reset existing positions.
@@ -258,15 +266,14 @@ export function useMontageGrid({
       setLayout(nextLayout);
 
       const profileId = currentProfileRef.current.id;
-      updateSettings(profileId, {
-        montageGridRows: cols,
-        montageGridCols: cols,
+      updateMontageGroupLayout(profileId, groupKeyRef.current, {
+        gridCols: cols,
+        workingLayout: nextLayout,
       });
-      saveMontageLayout(profileId, { ...settingsRef.current.montageLayouts, lg: nextLayout });
 
       toast.success(t('montage.grid_applied', { columns: cols }));
     },
-    [monitors, updateSettings, saveMontageLayout, buildDefaultLayout, t]
+    [monitors, updateMontageGroupLayout, buildDefaultLayout, t]
   );
 
   const handleLoadSavedLayout = useCallback(
@@ -279,10 +286,12 @@ export function useMontageGrid({
       setLayout(normalized);
 
       const profileId = currentProfileRef.current.id;
-      updateSettings(profileId, { montageGridCols: cols, montageGridRows: cols });
-      saveMontageLayout(profileId, { ...settingsRef.current.montageLayouts, lg: normalized });
+      updateMontageGroupLayout(profileId, groupKeyRef.current, {
+        gridCols: cols,
+        workingLayout: normalized,
+      });
     },
-    [updateSettings, saveMontageLayout, recalcHeights]
+    [updateMontageGroupLayout, recalcHeights]
   );
 
   const handleWidthChange = useCallback(
@@ -318,12 +327,11 @@ export function useMontageGrid({
     (nextLayout: Layout[]) => {
       if (!isEditModeRef.current || !currentProfileRef.current) return;
       setLayout(nextLayout);
-      saveMontageLayout(currentProfileRef.current.id, {
-        ...settingsRef.current.montageLayouts,
-        lg: nextLayout,
+      updateMontageGroupLayout(currentProfileRef.current.id, groupKeyRef.current, {
+        workingLayout: nextLayout,
       });
     },
-    [saveMontageLayout]
+    [updateMontageGroupLayout]
   );
 
   const handleResizeStop = useCallback(
@@ -342,15 +350,14 @@ export function useMontageGrid({
           item.i === newItem.i ? { ...item, h: adjustedHeight, w: newItem.w } : item
         );
         if (isEditModeRef.current && currentProfileRef.current) {
-          saveMontageLayout(currentProfileRef.current.id, {
-            ...settingsRef.current.montageLayouts,
-            lg: nextLayout,
+          updateMontageGroupLayout(currentProfileRef.current.id, groupKeyRef.current, {
+            workingLayout: nextLayout,
           });
         }
         return areLayoutsEqual(prev, nextLayout) ? prev : nextLayout;
       });
     },
-    [saveMontageLayout]
+    [updateMontageGroupLayout]
   );
 
   // Proportionally scale the entire layout so it fills the full grid width
@@ -374,14 +381,13 @@ export function useMontageGrid({
       // Recalculate heights for new widths
       const recalculated = recalcHeights(nextLayout, currentWidthRef.current);
 
-      saveMontageLayout(profileId, {
-        ...settingsRef.current.montageLayouts,
-        lg: recalculated,
+      updateMontageGroupLayout(profileId, groupKeyRef.current, {
+        workingLayout: recalculated,
       });
 
       return recalculated;
     });
-  }, [recalcHeights, saveMontageLayout]);
+  }, [recalcHeights, updateMontageGroupLayout]);
 
   // Pinned monitors: prevents accidental drag/resize of the pinned item.
   // Uses per-item isDraggable/isResizable on the layout — does NOT use `static`.

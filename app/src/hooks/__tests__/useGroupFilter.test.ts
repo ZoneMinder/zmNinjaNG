@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, waitFor } from '@testing-library/react';
 import { useGroupFilter } from '../useGroupFilter';
 import { useCurrentProfile } from '../useCurrentProfile';
 import { useGroups } from '../useGroups';
@@ -140,6 +140,64 @@ describe('useGroupFilter', () => {
       result.current.setSelectedGroup('1');
     });
 
+    expect(mockUpdateProfileSettings).not.toHaveBeenCalled();
+  });
+
+  it('resets a dangling selectedGroupId after a successful groups load', async () => {
+    vi.mocked(useCurrentProfile).mockReturnValue({
+      currentProfile: { id: 'profile-1', name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
+      settings: { selectedGroupId: '999' } as never,
+      hasProfile: true,
+    });
+    vi.mocked(useGroups).mockReturnValue({
+      groups: [{ Group: { Id: '1', Name: 'Front', ParentId: null }, Monitor: [] }],
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+      getGroupMonitorIds: () => [],
+      hasGroups: true,
+    });
+    renderHook(() => useGroupFilter());
+    await waitFor(() => {
+      expect(mockUpdateProfileSettings).toHaveBeenCalledWith('profile-1', {
+        selectedGroupId: null,
+      });
+    });
+  });
+
+  it('does not reset while groups are still loading', () => {
+    vi.mocked(useCurrentProfile).mockReturnValue({
+      currentProfile: { id: 'profile-1', name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
+      settings: { selectedGroupId: '999' } as never,
+      hasProfile: true,
+    });
+    vi.mocked(useGroups).mockReturnValue({
+      groups: [],
+      isLoading: true,
+      error: null,
+      refetch: vi.fn(),
+      getGroupMonitorIds: () => [],
+      hasGroups: false,
+    });
+    renderHook(() => useGroupFilter());
+    expect(mockUpdateProfileSettings).not.toHaveBeenCalled();
+  });
+
+  it('does not reset when the groups query errored', () => {
+    vi.mocked(useCurrentProfile).mockReturnValue({
+      currentProfile: { id: 'profile-1', name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
+      settings: { selectedGroupId: '999' } as never,
+      hasProfile: true,
+    });
+    vi.mocked(useGroups).mockReturnValue({
+      groups: [],
+      isLoading: false,
+      error: new Error('offline'),
+      refetch: vi.fn(),
+      getGroupMonitorIds: () => [],
+      hasGroups: false,
+    });
+    renderHook(() => useGroupFilter());
     expect(mockUpdateProfileSettings).not.toHaveBeenCalled();
   });
 });

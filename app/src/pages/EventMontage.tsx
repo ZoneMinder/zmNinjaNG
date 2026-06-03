@@ -25,6 +25,9 @@ import { EventMontageFilterPanel } from '../components/events/EventMontageFilter
 import { useTranslation } from 'react-i18next';
 import { EmptyState } from '../components/ui/empty-state';
 import { log, LogLevel } from '../lib/logger';
+import { useGroupFilter } from '../hooks/useGroupFilter';
+import { GroupFilterSelect } from '../components/filters/GroupFilterSelect';
+import { ALL_GROUPS_KEY, DEFAULT_EVENT_MONTAGE_GROUP_LAYOUT } from '../stores/settings';
 
 export default function EventMontage() {
   const { t } = useTranslation();
@@ -33,6 +36,14 @@ export default function EventMontage() {
   const normalizedThumbnailFit =
     settings.eventsThumbnailFit === 'fill' ? 'contain' : settings.eventsThumbnailFit;
   const updateSettings = useSettingsStore((state) => state.updateProfileSettings);
+  const { selectedGroupId } = useGroupFilter();
+  const updateEventMontageGroupLayout = useSettingsStore(
+    (state) => state.updateEventMontageGroupLayout
+  );
+  const groupKey = selectedGroupId ?? ALL_GROUPS_KEY;
+  const eventCols =
+    settings.eventMontageByGroup[groupKey]?.gridCols ??
+    DEFAULT_EVENT_MONTAGE_GROUP_LAYOUT.gridCols;
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Filter state - load from settings
@@ -95,11 +106,11 @@ export default function EventMontage() {
 
   // Use grid management hook
   const gridControls = useEventMontageGrid({
-    initialCols: settings.eventMontageGridCols,
+    initialCols: eventCols,
     containerRef,
     onGridChange: (cols) => {
       if (currentProfile) {
-        updateSettings(currentProfile.id, { eventMontageGridCols: cols });
+        updateEventMontageGroupLayout(currentProfile.id, groupKey, { gridCols: cols });
       }
     },
   });
@@ -144,13 +155,13 @@ export default function EventMontage() {
 
   // Update grid state and filters when profile changes
   useEffect(() => {
-    gridControls.setGridCols(settings.eventMontageGridCols);
-    gridControls.setCustomCols(settings.eventMontageGridCols.toString());
+    gridControls.setGridCols(eventCols);
+    gridControls.setCustomCols(eventCols.toString());
     setSelectedMonitorIds(settings.eventMontageFilters.monitorIds);
     setSelectedCause(settings.eventMontageFilters.cause);
     setStartDate(settings.eventMontageFilters.startDate);
     setEndDate(settings.eventMontageFilters.endDate);
-  }, [currentProfile?.id, settings.eventMontageGridCols, settings.eventMontageFilters]);
+  }, [currentProfile?.id, groupKey, eventCols, settings.eventMontageFilters]);
 
   // Persist filters to settings when they change
   useEffect(() => {
@@ -223,6 +234,7 @@ export default function EventMontage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <GroupFilterSelect />
           {/* Thumbnail Fit Selector */}
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground hidden md:inline">

@@ -116,6 +116,8 @@ export function GridLayoutControls({
           size="sm"
           title={t('montage.layout')}
           className="h-8 sm:h-9"
+          data-testid="montage-layout-trigger"
+          data-grid-cols={gridCols}
           onClick={() => setIsGridSheetOpen(true)}
         >
           <LayoutDashboard className="h-4 w-4 sm:mr-2" />
@@ -133,6 +135,7 @@ export function GridLayoutControls({
                 <Button
                   key={cols}
                   variant={gridCols === cols ? 'default' : 'outline'}
+                  data-testid={`montage-grid-preset-${cols}`}
                   onClick={() => handleGridSelection(cols)}
                   className="justify-start"
                 >
@@ -219,7 +222,14 @@ export function GridLayoutControls({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" title={t('montage.layout')} className="h-8 sm:h-9">
+          <Button
+            variant="ghost"
+            size="sm"
+            title={t('montage.layout')}
+            className="h-8 sm:h-9"
+            data-testid="montage-layout-trigger"
+            data-grid-cols={gridCols}
+          >
             <LayoutDashboard className="h-4 w-4 sm:mr-2" />
             <span className="hidden sm:inline">
               {activeLayoutName || `${gridCols} ${t('montage.columns_label')}`}
@@ -228,7 +238,11 @@ export function GridLayoutControls({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           {presetItems.map(({ cols, icon: Icon, label }) => (
-            <DropdownMenuItem key={cols} onClick={() => onApplyGridLayout(cols)}>
+            <DropdownMenuItem
+              key={cols}
+              data-testid={`montage-grid-preset-${cols}`}
+              onClick={() => onApplyGridLayout(cols)}
+            >
               <Icon className="h-4 w-4 mr-2" />
               {label}
             </DropdownMenuItem>

@@ -57,6 +57,42 @@ export const DEFAULT_THUMBNAIL_FALLBACK_CHAIN: ThumbnailFallbackEntry[] = [
   { type: 'custom', enabled: false, customFid: '' },
 ];
 
+/** Sentinel group key for the "no group / All monitors" montage bucket. */
+export const ALL_GROUPS_KEY = '__all__';
+
+export interface MontageSavedLayout {
+  name: string;
+  layout: Layout[];
+  displayCols: number;
+}
+
+/** Per-group live montage state. Keyed by group ID or ALL_GROUPS_KEY. */
+export interface MontageGroupLayout {
+  workingLayout: Layout[];
+  savedLayouts: MontageSavedLayout[];
+  activeLayoutName: string | null;
+  gridCols: number;
+  hiddenMonitorIds: string[];
+}
+
+/** Per-group event montage state. Event montage is a uniform grid, so only the
+ * column count needs scoping. */
+export interface EventMontageGroupLayout {
+  gridCols: number;
+}
+
+export const DEFAULT_MONTAGE_GROUP_LAYOUT: MontageGroupLayout = {
+  workingLayout: [],
+  savedLayouts: [],
+  activeLayoutName: null,
+  gridCols: 2,
+  hiddenMonitorIds: [],
+};
+
+export const DEFAULT_EVENT_MONTAGE_GROUP_LAYOUT: EventMontageGroupLayout = {
+  gridCols: 2,
+};
+
 export interface ProfileSettings {
   viewMode: ViewMode;
   displayMode: DisplayMode;
@@ -67,11 +103,10 @@ export interface ProfileSettings {
   streamScale: number; // Scale percentage for live streams (1-100)
   defaultEventLimit: number; // Default number of events to fetch when no filters applied
   dashboardRefreshInterval: number; // in seconds, for dashboard widgets (events/timeline)
-  montageLayouts: Layouts; // Store montage layouts per profile
-  eventMontageLayouts: Layouts; // Store event montage layouts per profile
-  montageGridRows: number; // Grid rows for Montage page
-  montageGridCols: number; // Grid columns for Montage page
-  eventMontageGridCols: number; // Grid columns for EventMontage page
+  // Per-group live montage layout state. Key = group ID or ALL_GROUPS_KEY.
+  montageByGroup: Record<string, MontageGroupLayout>;
+  // Per-group event montage state (column count). Key = group ID or ALL_GROUPS_KEY.
+  eventMontageByGroup: Record<string, EventMontageGroupLayout>;
   montageIsFullscreen: boolean; // Fullscreen state for Montage page
   montageFeedFit: MonitorFeedFit; // Object-fit for montage feeds
   montageShowToolbar: boolean; // Show/hide montage toolbar row
@@ -115,20 +150,12 @@ export interface ProfileSettings {
   // Monitor IDs excluded from this profile. Excluded monitors and their events
   // are dropped at the API boundary so they behave as if they don't exist.
   excludedMonitorIds: string[];
-  // Monitor IDs hidden from the Montage view only. Profile-scoped. AND-combined
-  // with the group filter on the Montage page. Does not affect dashboard,
-  // monitor list, or monitor detail.
-  montageHiddenMonitorIds: string[];
   // Allow self-signed HTTPS certificates for this profile's server
   allowSelfSignedCerts: boolean;
   // SHA-256 fingerprint of the trusted TLS certificate (TOFU pinning)
   trustedCertFingerprint: string | null;
   // Custom sidebar nav order (array of route paths). Empty = default order.
   sidebarNavOrder: string[];
-  // Named saved montage layouts
-  montageSavedLayouts: Array<{ name: string; layout: Layout[]; displayCols: number }>;
-  // Name of the currently active saved layout (null = using a preset column count)
-  montageActiveLayoutName: string | null;
   // Timeline page persisted filters
   timelinePageFilters: {
     monitorIds: string[];
@@ -177,11 +204,19 @@ interface SettingsState {
   // Update settings for a specific profile
   updateProfileSettings: (profileId: string, updates: Partial<ProfileSettings>) => void;
 
-  // Save montage layout for current profile
-  saveMontageLayout: (profileId: string, layout: Layouts) => void;
+  // Merge a patch into a group's montage bucket
+  updateMontageGroupLayout: (
+    profileId: string,
+    groupKey: string,
+    patch: Partial<MontageGroupLayout>
+  ) => void;
 
-  // Save event montage layout for current profile
-  saveEventMontageLayout: (profileId: string, layout: Layouts) => void;
+  // Merge a patch into a group's event montage bucket
+  updateEventMontageGroupLayout: (
+    profileId: string,
+    groupKey: string,
+    patch: Partial<EventMontageGroupLayout>
+  ) => void;
 }
 
 // Compact is the default for all devices
@@ -205,11 +240,8 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   streamScale: 50,
   defaultEventLimit: 100,
   dashboardRefreshInterval: 30,
-  montageLayouts: {},
-  eventMontageLayouts: {},
-  montageGridRows: 2,
-  montageGridCols: 2,
-  eventMontageGridCols: 2,
+  montageByGroup: {},
+  eventMontageByGroup: {},
   montageIsFullscreen: false,
   montageFeedFit: 'cover',
   montageShowToolbar: true,
@@ -252,7 +284,6 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   selectedGroupId: null,
   // No monitors excluded by default
   excludedMonitorIds: [],
-  montageHiddenMonitorIds: [],
   // Self-signed certs disabled by default (secure default)
   allowSelfSignedCerts: false,
   // No pinned certificate by default
@@ -272,8 +303,6 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   customDateFormat: 'EEE, MMM d yyyy',
   customTimeFormat: 'h:mm:ss a',
   eventVideoAutoplay: true,
-  montageSavedLayouts: [],
-  montageActiveLayoutName: null,
   sidebarWidth: 256,
   tvMode: false,
   showProtocolLabel: true,
@@ -283,6 +312,53 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   hoverPreview: DEFAULT_HOVER_PREVIEW,
   hoverPreviewPlaybackRate: DEFAULT_HOVER_PREVIEW_PLAYBACK_RATE,
 };
+
+/** Migrate persisted settings from v0 (flat montage fields) to v1 (group-keyed maps). */
+export function migrateSettings(persistedState: unknown, version: number): unknown {
+  if (version >= 1) return persistedState;
+  const state = (persistedState ?? {}) as { profileSettings?: Record<string, unknown> };
+  const profileSettings = state.profileSettings ?? {};
+  const migrated: Record<string, unknown> = {};
+
+  for (const [profileId, raw] of Object.entries(profileSettings)) {
+    const s = (raw ?? {}) as Record<string, unknown>;
+    const {
+      montageLayouts,
+      montageSavedLayouts,
+      montageActiveLayoutName,
+      montageGridCols,
+      montageGridRows: _montageGridRows,
+      montageHiddenMonitorIds,
+      eventMontageGridCols,
+      eventMontageLayouts: _eventMontageLayouts,
+      ...rest
+    } = s;
+
+    const lgLayout = (montageLayouts as Layouts | undefined)?.lg ?? [];
+
+    migrated[profileId] = {
+      ...rest,
+      montageByGroup: {
+        [ALL_GROUPS_KEY]: {
+          workingLayout: lgLayout,
+          savedLayouts: (montageSavedLayouts as MontageSavedLayout[] | undefined) ?? [],
+          activeLayoutName: (montageActiveLayoutName as string | null | undefined) ?? null,
+          gridCols: (montageGridCols as number | undefined) ?? DEFAULT_MONTAGE_GROUP_LAYOUT.gridCols,
+          hiddenMonitorIds: (montageHiddenMonitorIds as string[] | undefined) ?? [],
+        },
+      },
+      eventMontageByGroup: {
+        [ALL_GROUPS_KEY]: {
+          gridCols:
+            (eventMontageGridCols as number | undefined) ??
+            DEFAULT_EVENT_MONTAGE_GROUP_LAYOUT.gridCols,
+        },
+      },
+    };
+  }
+
+  return { ...state, profileSettings: migrated };
+}
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
@@ -306,16 +382,49 @@ export const useSettingsStore = create<SettingsState>()(
         }));
       },
 
-      saveMontageLayout: (profileId, layout) => {
-        get().updateProfileSettings(profileId, { montageLayouts: layout });
+      updateMontageGroupLayout: (profileId, groupKey, patch) => {
+        set((state) => {
+          const profile = state.profileSettings[profileId] || DEFAULT_SETTINGS;
+          const bucket = profile.montageByGroup?.[groupKey] || DEFAULT_MONTAGE_GROUP_LAYOUT;
+          return {
+            profileSettings: {
+              ...state.profileSettings,
+              [profileId]: {
+                ...profile,
+                montageByGroup: {
+                  ...profile.montageByGroup,
+                  [groupKey]: { ...bucket, ...patch },
+                },
+              },
+            },
+          };
+        });
       },
 
-      saveEventMontageLayout: (profileId, layout) => {
-        get().updateProfileSettings(profileId, { eventMontageLayouts: layout });
+      updateEventMontageGroupLayout: (profileId, groupKey, patch) => {
+        set((state) => {
+          const profile = state.profileSettings[profileId] || DEFAULT_SETTINGS;
+          const bucket =
+            profile.eventMontageByGroup?.[groupKey] || DEFAULT_EVENT_MONTAGE_GROUP_LAYOUT;
+          return {
+            profileSettings: {
+              ...state.profileSettings,
+              [profileId]: {
+                ...profile,
+                eventMontageByGroup: {
+                  ...profile.eventMontageByGroup,
+                  [groupKey]: { ...bucket, ...patch },
+                },
+              },
+            },
+          };
+        });
       },
     }),
     {
       name: 'zmng-settings',
+      version: 1,
+      migrate: migrateSettings,
     }
   )
 );

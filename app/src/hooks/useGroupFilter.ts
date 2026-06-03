@@ -10,7 +10,7 @@
  * - Provides helper functions to manage filter state
  */
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useCurrentProfile } from './useCurrentProfile';
 import { useGroups } from './useGroups';
 import { useSettingsStore } from '../stores/settings';
@@ -47,7 +47,7 @@ export interface UseGroupFilterReturn {
  */
 export function useGroupFilter(): UseGroupFilterReturn {
   const { currentProfile, settings } = useCurrentProfile();
-  const { groups, getGroupMonitorIds } = useGroups();
+  const { groups, getGroupMonitorIds, isLoading, error } = useGroups();
   const updateProfileSettings = useSettingsStore((state) => state.updateProfileSettings);
 
   const selectedGroupId = settings.selectedGroupId;
@@ -64,6 +64,16 @@ export function useGroupFilter(): UseGroupFilterReturn {
   const clearGroupFilter = useCallback(() => {
     setSelectedGroup(null);
   }, [setSelectedGroup]);
+
+  // Self-heal a dangling selection: if the selected group was deleted on the
+  // server, reset to the All-monitors bucket. Only act on a confirmed load to
+  // avoid wiping the selection during a transient empty or errored fetch.
+  useEffect(() => {
+    if (isLoading || error) return;
+    if (!selectedGroupId) return;
+    const exists = groups.some((g) => g.Group.Id === selectedGroupId);
+    if (!exists) setSelectedGroup(null);
+  }, [isLoading, error, selectedGroupId, groups, setSelectedGroup]);
 
   const isFilterActive = selectedGroupId !== null;
 
