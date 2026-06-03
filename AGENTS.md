@@ -34,6 +34,7 @@ These are non-negotiable. Every rule applies to all communication: responses, co
 23. **Date/time formatting**: all user-facing date/time display must use `useDateTimeFormat()` hook (or `formatAppDate`/`formatAppTime`/`formatAppDateTime` from `lib/format-date-time.ts` outside React). Never hardcode date-fns `format()` with literal patterns for user-visible output. This includes canvas rendering, tooltips, labels, and scrubber overlays.
 24. **Self-updating rules**: when the user gives guidance that establishes a general pattern (e.g., "all X should use Y"), check whether it belongs as a persistent rule in this file. If so, add it here so future sessions follow it automatically.
 25. **Centralized constants**: every named constant (timeouts, thresholds, storage keys, animation durations, magic numbers with semantic meaning) lives in `lib/zmninja-ng-constants.ts` (app-level) or `lib/zm-constants.ts` (ZoneMinder protocol-level). Import from there; do not redeclare per file. CSS pixel values inline in JSX/styles are fine; ad-hoc numbers used once with no semantic name are fine.
+26. **Identify yourself on GitHub**: whenever you post a comment on a GitHub issue or PR, identify yourself as Claude assisting @pliablepixels. End the comment with a line such as `Posted by Claude, assisting @pliablepixels.` This line is only for GitHub comments. Never put it in git commit messages: commits use the usual `Co-Authored-By: Claude ...` signature and nothing else.
 
 ---
 
