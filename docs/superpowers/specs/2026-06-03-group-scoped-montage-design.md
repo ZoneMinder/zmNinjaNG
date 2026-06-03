@@ -100,6 +100,25 @@ Nothing is lost. Users re-save layouts under specific groups as needed.
 All writes (drag stop, resize stop, fill width, apply columns, load saved layout) target the
 current group's bucket.
 
+## Deleted group
+
+If the selected group is deleted on the server, `selectedGroupId` keeps pointing at a dead ID.
+Today this already misbehaves: `isFilterActive` stays true while the group resolves to no
+monitors, `filterMonitorsByGroup` treats an empty ID list as "show everything", and
+`GroupFilterSelect` renders blank because the dead ID is not in its options. Group-scoped
+arrangements make the consequence larger, so this work fixes it.
+
+Self-heal the selection: once `useGroups` has loaded successfully and `selectedGroupId` is not
+present in the list, reset it to `null` (the All-monitors bucket). Guard so the reset fires
+only on a confirmed successful load, never while groups are still fetching or when the query
+errored. A transient offline fetch must not wipe the selection. With the reset, a deleted group
+falls back to the All-monitors arrangement, and the blank-dropdown state is resolved.
+
+Leave the orphaned `montageByGroup[deletedId]` bucket in place. It is small and harmless, and
+auto-pruning would have to run against the live groups list where a transient empty or errored
+fetch could delete good buckets. If the group is recreated with the same ID, its arrangement
+returns. Cleanup, if ever wanted, is a manual reset action, not automatic deletion.
+
 ## Accessor
 
 A `useMontageGroupState()` hook resolves the current key and returns
@@ -122,6 +141,8 @@ one. Switching groups recalls that group's column count.
 - `src/pages/EventMontage.tsx`, `src/pages/Events.tsx`: column count via the bucket; add the
   group selector to `EventMontage.tsx`.
 - new `src/hooks/useMontageGroupState.ts`.
+- `src/hooks/useGroupFilter.ts` or `src/hooks/useGroups.ts`: self-heal a dangling
+  `selectedGroupId` after a successful groups load.
 
 ## Testing
 
@@ -129,7 +150,8 @@ one. Switching groups recalls that group's column count.
   keys; default settings expose empty `montageByGroup`/`eventMontageByGroup`.
 - `src/components/montage/hooks/__tests__/useMontageGrid.test.ts`: switching `groupKey`
   re-initializes the layout; writes land in the right bucket.
-- `src/hooks/__tests__/useGroupFilter.test.ts`: unaffected, but verify interplay if touched.
+- `src/hooks/__tests__/useGroupFilter.test.ts`: a dangling `selectedGroupId` resets to `null`
+  after a successful groups load, but is left untouched while loading or on a query error.
 - e2e: a montage scenario that selects a group, changes the arrangement, switches to another
   group and back, and confirms the first group's arrangement persists across a refresh.
 - i18n: add labels only if the `EventMontage.tsx` group selector needs new strings; reuse
