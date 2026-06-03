@@ -64,6 +64,35 @@ Mobile Builds
    ANDROID
    IOS
 
+Versioning
+----------
+
+Two numbers identify a build, set by
+`sync-version.js <https://github.com/ZoneMinder/zmNinjaNg/blob/main/scripts/sync-version.js>`_
+(run by ``npm run android:sync`` / ``npm run ios:sync`` and by the release
+script):
+
+- **Marketing version**, from ``package.json`` ``version`` (e.g. ``1.1.14``).
+  Written to Android ``versionName`` and iOS ``MARKETING_VERSION``
+  (``CFBundleShortVersionString``). This is the version shown in the store
+  listing and the app sidebar. Bump it on a prod release.
+- **Build number**, the git commit count (``git rev-list --count HEAD``).
+  Written to Android ``versionCode`` and iOS ``CURRENT_PROJECT_VERSION``
+  (``CFBundleVersion``). The stores require this to strictly increase per
+  upload. It is the same value the app sidebar shows in parentheses, so
+  ``v1.1.14 (1512)`` in the app matches ``versionCode 1512`` in the Play
+  Console and ``CFBundleVersion 1512`` in App Store Connect.
+
+The git commit count increases on every commit and stays monotonic as long as
+release builds come from ``main`` without rewriting published history. The
+Android ``versionCode`` is a signed 32-bit integer capped at 2,100,000,000 by
+Google Play, which the commit count stays far below.
+
+The generated ``versionCode`` / ``CURRENT_PROJECT_VERSION`` values in
+``app/android/app/build.gradle`` and the Xcode project are regenerated and
+committed at release time by ``make_release.sh``; they are not committed on
+every change.
+
 Automated Releases
 ------------------
 
