@@ -12,7 +12,7 @@
 
 **[Documentation](https://zmninjang.readthedocs.io/en/latest/)**
 
-A web and mobile application for ZoneMinder for viewing live camera feeds, reviewing events, and managing multiple server profiles. It is a rewrite of the original [zmNinja](https://zmninja.zoneminder.com/) application, built on React, TypeScript, Capacitor, and Electron. 
+A web and mobile application for ZoneMinder for viewing live camera feeds, reviewing events, and managing multiple profiles. It is a rewrite of the original [zmNinja](https://zmninja.zoneminder.com/) application, built on React, TypeScript, Capacitor, and Electron. 
 
 ### Demo
 
