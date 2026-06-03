@@ -23,6 +23,7 @@ import { Video, AlertCircle, Maximize, Pencil, ArrowLeftRight } from 'lucide-rea
 import { RefreshButton } from '../components/common/RefreshButton';
 import { filterEnabledMonitors, filterMonitorsByGroup } from '../lib/filters';
 import { useGroupFilter } from '../hooks/useGroupFilter';
+import { useMontageGroupState } from '../hooks/useMontageGroupState';
 import { GroupFilterSelect } from '../components/filters/GroupFilterSelect';
 import { cn } from '../lib/utils';
 import { useTranslation } from 'react-i18next';
@@ -62,7 +63,9 @@ export default function Montage() {
     refetchInterval: bandwidth.monitorStatusInterval,
   });
   const updateSettings = useSettingsStore((state) => state.updateProfileSettings);
+  const updateMontageGroupLayout = useSettingsStore((state) => state.updateMontageGroupLayout);
   const { isFilterActive, filteredMonitorIds } = useGroupFilter();
+  const { groupKey, bucket } = useMontageGroupState();
 
   // Keep screen awake when Insomnia is enabled
   useInsomnia({ enabled: settings.insomnia });
@@ -83,8 +86,8 @@ export default function Montage() {
   );
 
   const hiddenSet = useMemo(
-    () => new Set(settings.montageHiddenMonitorIds ?? []),
-    [settings.montageHiddenMonitorIds]
+    () => new Set(bucket.hiddenMonitorIds),
+    [bucket.hiddenMonitorIds]
   );
 
   const monitors = useMemo(() => {
@@ -98,7 +101,7 @@ export default function Montage() {
   const [isEditMode, setIsEditMode] = useState(false);
 
   // Active saved layout name (persisted in settings)
-  const activeLayoutName = settings.montageActiveLayoutName;
+  const activeLayoutName = bucket.activeLayoutName;
 
   // Monitor label overlay toggle for fullscreen mode
   const [showMonitorLabels, setShowMonitorLabels] = useState(false);
@@ -133,6 +136,7 @@ export default function Montage() {
     currentProfile,
     settings,
     isEditMode,
+    groupKey,
   });
 
   // Container resize observation
@@ -209,7 +213,7 @@ export default function Montage() {
   const handleApplyGridLayoutWithClear = (cols: number) => {
     handleApplyGridLayout(cols);
     if (currentProfile) {
-      updateSettings(currentProfile.id, { montageActiveLayoutName: null });
+      updateMontageGroupLayout(currentProfile.id, groupKey, { activeLayoutName: null });
     }
   };
 
@@ -223,38 +227,37 @@ export default function Montage() {
   // Saved layout handlers
   const handleSaveLayout = (name: string) => {
     if (!currentProfile) return;
-    const saved = settings.montageSavedLayouts || [];
     const entry = { name, layout: [...layout], displayCols: gridCols };
-    updateSettings(currentProfile.id, {
-      montageSavedLayouts: [...saved, entry],
-      montageActiveLayoutName: name,
+    updateMontageGroupLayout(currentProfile.id, groupKey, {
+      savedLayouts: [...bucket.savedLayouts, entry],
+      activeLayoutName: name,
     });
   };
 
   const handleLoadLayout = (saved: { name: string; layout: Layout[]; displayCols: number }) => {
     handleLoadSavedLayout(saved.layout, saved.displayCols);
     if (currentProfile) {
-      updateSettings(currentProfile.id, { montageActiveLayoutName: saved.name });
+      updateMontageGroupLayout(currentProfile.id, groupKey, { activeLayoutName: saved.name });
     }
   };
 
   const handleDeleteLayout = (index: number) => {
     if (!currentProfile) return;
-    const saved = [...(settings.montageSavedLayouts || [])];
+    const saved = [...bucket.savedLayouts];
     saved.splice(index, 1);
-    updateSettings(currentProfile.id, { montageSavedLayouts: saved });
+    updateMontageGroupLayout(currentProfile.id, groupKey, { savedLayouts: saved });
   };
 
   const handleToggleMonitorVisibility = useCallback(
     (id: string) => {
       if (!currentProfile) return;
-      const current = settings.montageHiddenMonitorIds ?? [];
+      const current = bucket.hiddenMonitorIds;
       const next = current.includes(id)
         ? current.filter((x) => x !== id)
         : [...current, id];
-      updateSettings(currentProfile.id, { montageHiddenMonitorIds: next });
+      updateMontageGroupLayout(currentProfile.id, groupKey, { hiddenMonitorIds: next });
     },
-    [currentProfile, settings.montageHiddenMonitorIds, updateSettings]
+    [currentProfile, bucket.hiddenMonitorIds, groupKey, updateMontageGroupLayout]
   );
 
   const handleEditModeToggle = () => {
@@ -331,7 +334,7 @@ export default function Montage() {
                 gridCols={gridCols}
                 activeLayoutName={activeLayoutName}
                 onApplyGridLayout={handleApplyGridLayoutWithClear}
-                savedLayouts={settings.montageSavedLayouts || []}
+                savedLayouts={bucket.savedLayouts}
                 onSaveLayout={handleSaveLayout}
                 onLoadLayout={handleLoadLayout}
                 onDeleteLayout={handleDeleteLayout}
@@ -388,7 +391,7 @@ export default function Montage() {
               </Button>
               <MontageKebabMenu
                 monitors={enabledMonitors.map((m) => m.Monitor)}
-                hiddenMonitorIds={settings.montageHiddenMonitorIds ?? []}
+                hiddenMonitorIds={bucket.hiddenMonitorIds}
                 isRefreshing={isFetching}
                 onRefresh={() => refetch()}
                 onToggleVisibility={handleToggleMonitorVisibility}
