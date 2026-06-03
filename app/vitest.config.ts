@@ -4,6 +4,11 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
+  define: {
+    // Fixed value for tests; the real build number is the git commit count
+    // injected by vite.config.ts at build time.
+    __BUILD_NUMBER__: JSON.stringify('test'),
+  },
   test: {
     environment: 'jsdom',
     globals: true,

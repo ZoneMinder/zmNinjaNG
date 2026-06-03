@@ -47,7 +47,7 @@ async function openHelpDocs(): Promise<void> {
 import { cn } from '../../lib/utils';
 import { useState, useRef, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getAppVersion } from '../../lib/version';
+import { getAppVersion, getFullVersion } from '../../lib/version';
 import { useKioskStore } from '../../stores/kioskStore';
 import { PinPad } from '../kiosk/PinPad';
 import { useKioskLock } from '../../hooks/useKioskLock';
@@ -451,8 +451,13 @@ export function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentPro
             {isCollapsed ? 'TV' : t('sidebar.tv_mode')}
           </span>
         )}
-        <span className={cn("block text-[10px] pt-1 opacity-40", isCollapsed ? "text-center" : "px-1")} style={{ fontSize: '10px' }}>
-          v{getAppVersion()}
+        <span
+          className={cn("block text-[10px] pt-1 opacity-40 truncate min-w-0", isCollapsed ? "text-center" : "px-1")}
+          style={{ fontSize: '10px' }}
+          title={getFullVersion()}
+          data-testid="sidebar-app-version"
+        >
+          v{isCollapsed ? getAppVersion() : getFullVersion()}
         </span>
       </div>
       </div>

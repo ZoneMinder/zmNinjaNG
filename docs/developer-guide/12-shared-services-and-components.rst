@@ -649,6 +649,34 @@ platform-specific features
 
 --------------
 
+App Version (``lib/version.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Exposes the app's marketing version and build number.
+
+The marketing version comes from ``package.json`` and is bumped only on a
+prod release. The build number is the git commit count
+(``git rev-list --count HEAD``), injected at build time as the
+``__BUILD_NUMBER__`` compile-time constant by ``vite.config.ts``. It
+increases on every commit, so two builds that share a marketing version
+are still distinguishable. Outside a git checkout the build number is
+``dev``. ``vitest.config.ts`` defines ``__BUILD_NUMBER__`` as ``test``.
+
+**Public API:**
+
+.. code:: typescript
+
+   import { getAppVersion, getBuildNumber, getFullVersion } from '../lib/version';
+
+   getAppVersion();   // "1.1.14"
+   getBuildNumber();  // "1509"
+   getFullVersion();  // "1.1.14 (1509)"
+
+**Used By:** ``SidebarContent`` renders ``getFullVersion()`` (expanded) or
+``getAppVersion()`` (collapsed) in the sidebar footer.
+
+--------------
+
 Safe-Area Bootstrap (``lib/safe-area-bootstrap.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
