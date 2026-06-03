@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { useSettingsStore } from '../settings';
+import { useSettingsStore, ALL_GROUPS_KEY, migrateSettings } from '../settings';
+import type { ProfileSettings } from '../settings';
 
 describe('Settings Store', () => {
   beforeEach(() => {
@@ -13,8 +14,6 @@ describe('Settings Store', () => {
     const settings = useSettingsStore.getState().getProfileSettings('missing-profile');
     expect(settings.viewMode).toBe('snapshot');
     expect(settings.snapshotRefreshInterval).toBe(3);
-    expect(settings.montageGridRows).toBe(2);
-    expect(settings.eventMontageGridCols).toBe(2);
     expect(settings.monitorDetailCycleSeconds).toBe(0);
     expect(settings.eventsThumbnailFit).toBe('contain');
   });
@@ -30,30 +29,6 @@ describe('Settings Store', () => {
     expect(settings.viewMode).toBe('streaming');
     expect(settings.streamMaxFps).toBe(15);
     expect(settings.snapshotRefreshInterval).toBe(3);
-  });
-
-  it('saves montage layout per profile', () => {
-    const profileId = 'profile-1';
-    const layout = {
-      lg: [{ i: '1', x: 0, y: 0, w: 2, h: 2 }],
-    };
-
-    useSettingsStore.getState().saveMontageLayout(profileId, layout);
-
-    const settings = useSettingsStore.getState().getProfileSettings(profileId);
-    expect(settings.montageLayouts).toEqual(layout);
-  });
-
-  it('saves event montage layout per profile', () => {
-    const profileId = 'profile-1';
-    const layout = {
-      lg: [{ i: 'e1', x: 1, y: 1, w: 3, h: 2 }],
-    };
-
-    useSettingsStore.getState().saveEventMontageLayout(profileId, layout);
-
-    const settings = useSettingsStore.getState().getProfileSettings(profileId);
-    expect(settings.eventMontageLayouts).toEqual(layout);
   });
 
   describe('Streaming method settings', () => {
@@ -125,32 +100,91 @@ describe('Settings Store', () => {
   });
 });
 
-describe('montageHiddenMonitorIds setting', () => {
+describe('group-scoped montage settings', () => {
   beforeEach(() => {
     useSettingsStore.setState({ profileSettings: {} });
   });
 
-  it('defaults to an empty array', () => {
-    const settings = useSettingsStore.getState().getProfileSettings('profile-a');
-    expect(settings.montageHiddenMonitorIds).toEqual([]);
+  it('defaults to empty group maps', () => {
+    const settings = useSettingsStore.getState().getProfileSettings('profile-x');
+    expect(settings.montageByGroup).toEqual({});
+    expect(settings.eventMontageByGroup).toEqual({});
   });
 
-  it('persists updates via updateProfileSettings', () => {
+  it('updateMontageGroupLayout merges a patch into the group bucket', () => {
     const store = useSettingsStore.getState();
-    store.updateProfileSettings('profile-a', { montageHiddenMonitorIds: ['3', '7'] });
-    const settings = useSettingsStore.getState().getProfileSettings('profile-a');
-    expect(settings.montageHiddenMonitorIds).toEqual(['3', '7']);
+    store.updateMontageGroupLayout('profile-a', ALL_GROUPS_KEY, { gridCols: 4 });
+    store.updateMontageGroupLayout('profile-a', ALL_GROUPS_KEY, {
+      hiddenMonitorIds: ['3'],
+    });
+    const bucket = useSettingsStore
+      .getState()
+      .getProfileSettings('profile-a').montageByGroup[ALL_GROUPS_KEY];
+    expect(bucket.gridCols).toBe(4);
+    expect(bucket.hiddenMonitorIds).toEqual(['3']);
+    expect(bucket.savedLayouts).toEqual([]);
+    expect(bucket.activeLayoutName).toBeNull();
   });
 
-  it('is profile-scoped (does not leak across profiles)', () => {
+  it('keeps montage buckets separate per group key', () => {
     const store = useSettingsStore.getState();
-    store.updateProfileSettings('profile-a', { montageHiddenMonitorIds: ['1'] });
-    store.updateProfileSettings('profile-b', { montageHiddenMonitorIds: ['2'] });
-    expect(
-      useSettingsStore.getState().getProfileSettings('profile-a').montageHiddenMonitorIds
-    ).toEqual(['1']);
-    expect(
-      useSettingsStore.getState().getProfileSettings('profile-b').montageHiddenMonitorIds
-    ).toEqual(['2']);
+    store.updateMontageGroupLayout('profile-a', ALL_GROUPS_KEY, { gridCols: 2 });
+    store.updateMontageGroupLayout('profile-a', '7', { gridCols: 5 });
+    const settings = useSettingsStore.getState().getProfileSettings('profile-a');
+    expect(settings.montageByGroup[ALL_GROUPS_KEY].gridCols).toBe(2);
+    expect(settings.montageByGroup['7'].gridCols).toBe(5);
+  });
+
+  it('updateEventMontageGroupLayout stores cols per group key', () => {
+    const store = useSettingsStore.getState();
+    store.updateEventMontageGroupLayout('profile-a', '7', { gridCols: 6 });
+    const settings = useSettingsStore.getState().getProfileSettings('profile-a');
+    expect(settings.eventMontageByGroup['7'].gridCols).toBe(6);
+  });
+});
+
+describe('settings migration v0 -> v1', () => {
+  it('moves flat montage fields into the All-monitors bucket', () => {
+    const legacy = {
+      profileSettings: {
+        'profile-a': {
+          montageLayouts: { lg: [{ i: '1', x: 0, y: 0, w: 6, h: 4 }] },
+          montageSavedLayouts: [{ name: 'Wall', layout: [], displayCols: 3 }],
+          montageActiveLayoutName: 'Wall',
+          montageGridCols: 3,
+          montageGridRows: 3,
+          montageHiddenMonitorIds: ['9'],
+          eventMontageGridCols: 4,
+          eventMontageLayouts: { lg: [] },
+          theme: 'slate',
+        },
+      },
+    };
+    const migrated = migrateSettings(legacy, 0) as {
+      profileSettings: Record<string, ProfileSettings>;
+    };
+    const p = migrated.profileSettings['profile-a'];
+    expect(p.montageByGroup[ALL_GROUPS_KEY]).toEqual({
+      workingLayout: [{ i: '1', x: 0, y: 0, w: 6, h: 4 }],
+      savedLayouts: [{ name: 'Wall', layout: [], displayCols: 3 }],
+      activeLayoutName: 'Wall',
+      gridCols: 3,
+      hiddenMonitorIds: ['9'],
+    });
+    expect(p.eventMontageByGroup[ALL_GROUPS_KEY]).toEqual({ gridCols: 4 });
+    expect('montageLayouts' in p).toBe(false);
+    expect('eventMontageLayouts' in p).toBe(false);
+    expect(p.theme).toBe('slate');
+  });
+
+  it('fills defaults when legacy fields are absent', () => {
+    const legacy = { profileSettings: { 'profile-b': { theme: 'dark' } } };
+    const migrated = migrateSettings(legacy, 0) as {
+      profileSettings: Record<string, ProfileSettings>;
+    };
+    const p = migrated.profileSettings['profile-b'];
+    expect(p.montageByGroup[ALL_GROUPS_KEY].gridCols).toBe(2);
+    expect(p.montageByGroup[ALL_GROUPS_KEY].workingLayout).toEqual([]);
+    expect(p.eventMontageByGroup[ALL_GROUPS_KEY].gridCols).toBe(2);
   });
 });
