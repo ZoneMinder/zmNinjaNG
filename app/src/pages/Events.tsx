@@ -16,7 +16,7 @@ import { getMonitors } from '../api/monitors';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useAuthStore } from '../stores/auth';
 import { useFreshAccessToken } from '../hooks/useFreshAccessToken';
-import { useSettingsStore } from '../stores/settings';
+import { useSettingsStore, ALL_GROUPS_KEY, DEFAULT_EVENT_MONTAGE_GROUP_LAYOUT } from '../stores/settings';
 import { useEventFilters, ALL_TAGS_FILTER_ID } from '../hooks/useEventFilters';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import { useEventPagination } from '../hooks/useEventPagination';
@@ -52,9 +52,16 @@ export default function Events() {
     ? 'contain'
     : settings.eventsThumbnailFit;
   const updateSettings = useSettingsStore((state) => state.updateProfileSettings);
+  const updateEventMontageGroupLayout = useSettingsStore(
+    (state) => state.updateEventMontageGroupLayout
+  );
   const { token: accessToken, isFresh: isAccessTokenFresh } = useFreshAccessToken();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const { isFilterActive: isGroupFilterActive, filteredMonitorIds: groupMonitorIds } = useGroupFilter();
+  const { selectedGroupId, isFilterActive: isGroupFilterActive, filteredMonitorIds: groupMonitorIds } = useGroupFilter();
+  const groupKey = selectedGroupId ?? ALL_GROUPS_KEY;
+  const eventCols =
+    settings.eventMontageByGroup[groupKey]?.gridCols ??
+    DEFAULT_EVENT_MONTAGE_GROUP_LAYOUT.gridCols;
 
   // Subscribe to the actual favorites data, not just the getter function
   // Use shallow comparison to avoid infinite re-renders from new array references
@@ -236,11 +243,11 @@ export default function Events() {
 
   // Use grid management hook (only active when in montage mode)
   const gridControls = useEventMontageGrid({
-    initialCols: settings.eventMontageGridCols,
+    initialCols: eventCols,
     containerRef: parentRef,
     onGridChange: (cols) => {
       if (currentProfile) {
-        updateSettings(currentProfile.id, { eventMontageGridCols: cols });
+        updateEventMontageGroupLayout(currentProfile.id, groupKey, { gridCols: cols });
       }
     },
   });
@@ -257,9 +264,9 @@ export default function Events() {
   useEffect(() => {
     if (!currentProfile) return;
     setViewMode(settings.eventsViewMode);
-    gridControls.setGridCols(settings.eventMontageGridCols);
-    gridControls.setCustomCols(settings.eventMontageGridCols.toString());
-  }, [currentProfile?.id, settings.eventsViewMode, settings.eventMontageGridCols]);
+    gridControls.setGridCols(eventCols);
+    gridControls.setCustomCols(eventCols.toString());
+  }, [currentProfile?.id, settings.eventsViewMode, groupKey, eventCols]);
 
   const handleViewModeChange = (mode: 'list' | 'montage') => {
     setViewMode(mode);

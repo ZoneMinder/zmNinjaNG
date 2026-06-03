@@ -43,16 +43,22 @@ vi.mock('../../stores/auth', () => ({
 }));
 
 vi.mock('../../stores/settings', () => ({
+  ALL_GROUPS_KEY: '__all__',
+  DEFAULT_EVENT_MONTAGE_GROUP_LAYOUT: { gridCols: 3 },
   DEFAULT_SETTINGS: {
     viewMode: 'snapshot',
     displayMode: 'normal',
     theme: 'light',
     defaultEventLimit: 50,
     eventsViewMode: 'list',
-    eventMontageGridCols: 3,
+    eventMontageByGroup: { '__all__': { gridCols: 3 } },
   },
-  useSettingsStore: (selector: (state: { getProfileSettings: (id: string) => { defaultEventLimit: number; eventsViewMode: 'list'; eventMontageGridCols: number } }) => unknown) =>
-    selector({ getProfileSettings: () => ({ defaultEventLimit: 50, eventsViewMode: 'list', eventMontageGridCols: 3 }) }),
+  useSettingsStore: (selector: (state: { getProfileSettings: (id: string) => { defaultEventLimit: number; eventsViewMode: 'list'; eventMontageByGroup: Record<string, { gridCols: number }> }; updateProfileSettings: () => void; updateEventMontageGroupLayout: () => void }) => unknown) =>
+    selector({
+      getProfileSettings: () => ({ defaultEventLimit: 50, eventsViewMode: 'list', eventMontageByGroup: { '__all__': { gridCols: 3 } } }),
+      updateProfileSettings: vi.fn(),
+      updateEventMontageGroupLayout: vi.fn(),
+    }),
 }));
 
 const applyFilters = vi.fn();
