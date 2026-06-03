@@ -245,13 +245,15 @@ Saved Layouts
 Each saved layout stores the ``Layout[]`` array and the
 ``displayCols`` at save time.
 
-- **Save**: ``handleSaveLayout(name)`` → persists via
-  ``saveMontageLayout()`` in the settings store.
+- **Save**: ``handleSaveLayout(name)`` → persists via the
+  ``update()`` patch from ``useMontageGroupState()``, which writes the
+  active group's ``savedLayouts`` in the settings store.
 - **Load**: ``handleLoadSavedLayout(layout, displayCols)``.
 - **Delete**: ``handleDeleteLayout(index)``.
-- **Active name**: ``settings.montageActiveLayoutName`` tracks the
-  currently loaded saved layout (cleared when the user switches to a
-  preset column count).
+- **Active name**: ``bucket.activeLayoutName`` (from
+  ``useMontageGroupState()``) tracks the currently loaded saved layout,
+  cleared when the user switches to a preset column count. Saved layouts
+  are scoped per monitor group; see :doc:`12-shared-services-and-components`.
 
 Layout Migration
 ~~~~~~~~~~~~~~~~

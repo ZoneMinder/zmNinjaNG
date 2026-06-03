@@ -901,6 +901,106 @@ per-profile exclusion at the API boundary.
 
 --------------
 
+Group-Keyed Montage Settings (``stores/settings.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Montage layout state is scoped per monitor group inside a profile. A
+profile can show all monitors or one selected group, and each group keeps
+its own grid columns, hidden monitors, and saved layouts. Two
+``ProfileSettings`` fields hold this state:
+
+.. code:: typescript
+
+   montageByGroup: Record<string, MontageGroupLayout>;
+   eventMontageByGroup: Record<string, EventMontageGroupLayout>;
+
+The map key is the group ID, or the ``ALL_GROUPS_KEY`` sentinel when no
+group is selected:
+
+.. code:: typescript
+
+   export const ALL_GROUPS_KEY = '__all__';
+
+The active key is ``selectedGroupId ?? ALL_GROUPS_KEY``, where
+``selectedGroupId`` is the profile's current group filter (``null`` for
+all monitors).
+
+The bucket shapes are:
+
+.. code:: typescript
+
+   interface MontageGroupLayout {
+     workingLayout: Layout[];
+     savedLayouts: MontageSavedLayout[];
+     activeLayoutName: string | null;
+     gridCols: number;
+     hiddenMonitorIds: string[];
+   }
+
+   // Event montage is a uniform grid, so only the column count is scoped.
+   interface EventMontageGroupLayout {
+     gridCols: number;
+   }
+
+``DEFAULT_MONTAGE_GROUP_LAYOUT`` and ``DEFAULT_EVENT_MONTAGE_GROUP_LAYOUT``
+supply the values used when a group has no stored bucket. Both default
+``gridCols`` to ``2``; the montage default also has an empty
+``workingLayout``, empty ``savedLayouts``, ``activeLayoutName: null``, and
+empty ``hiddenMonitorIds``. ``DEFAULT_SETTINGS`` starts both maps empty
+(``{}``), so a group's bucket is created lazily on first write.
+
+**Reading and writing.** Live montage components use the
+``useMontageGroupState()`` hook rather than touching ``montageByGroup``
+directly:
+
+.. code:: typescript
+
+   import { useMontageGroupState } from '../hooks/useMontageGroupState';
+
+   const { groupKey, bucket, update } = useMontageGroupState();
+
+   // bucket is the active group's MontageGroupLayout (defaults when absent)
+   update({ gridCols: 3, hiddenMonitorIds: ['12'] });
+
+The hook resolves ``groupKey`` from ``useGroupFilter``, reads the matching
+bucket (falling back to ``DEFAULT_MONTAGE_GROUP_LAYOUT``), and exposes
+``update`` as a partial patch. Internally it calls the store action
+``updateMontageGroupLayout(profileId, groupKey, patch)``, which merges the
+patch into that group's bucket.
+
+Event montage columns are written through the matching store action:
+
+.. code:: typescript
+
+   const updateEventMontageGroupLayout = useSettingsStore(
+     (state) => state.updateEventMontageGroupLayout
+   );
+   updateEventMontageGroupLayout(profileId, groupKey, { gridCols: 4 });
+
+**Persist migration.** The store is at ``version: 1`` and registers
+``migrateSettings`` as its ``migrate`` callback. Persisted state from v0
+held flat montage fields (``montageLayouts``, ``montageSavedLayouts``,
+``montageActiveLayoutName``, ``montageGridCols``, ``montageGridRows``,
+``montageHiddenMonitorIds``, ``eventMontageGridCols``,
+``eventMontageLayouts``). The migration removes those fields from each
+profile and seeds the ``ALL_GROUPS_KEY`` bucket from them. The old
+``montageLayouts.lg`` array becomes the new ``workingLayout``; absent
+values fall back to the defaults above. Profiles created after v1 skip
+the migration and start with empty maps.
+
+**Dangling group filter self-heal.** A persisted ``selectedGroupId`` can
+point at a group that no longer exists on the server. ``useGroupFilter``
+resets ``selectedGroupId`` to ``null`` after a successful groups load when
+the stored ID is not in the returned list. The reset is guarded so it does
+not fire while the groups query is loading or has errored, which avoids
+clearing a valid selection during a transient fetch failure.
+
+**Used By:** ``useMontageGroupState`` (live montage pages and the grid
+hook), the event montage column control, and the persist layer of
+``useSettingsStore``.
+
+--------------
+
 Stream Lifecycle (``hooks/useStreamLifecycle.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
