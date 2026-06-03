@@ -51,3 +51,15 @@ Feature: Montage Live Grid
     And I open the montage show-monitors submenu
     And I check the visibility for the captured monitor
     Then the captured monitor tile should be present in the montage grid
+
+  @web
+  Scenario: Montage arrangements follow the selected group
+    Then I should see at least 1 monitor in montage grid
+    When I record whether two montage groups are selectable
+    And I select montage group A and apply 2 columns
+    And I select montage group B and apply 3 columns
+    And I re-select montage group A
+    Then the montage layout should show 2 columns for group A
+    When I reload the current page
+    And I re-select montage group A
+    Then the montage layout should show 2 columns for group A
