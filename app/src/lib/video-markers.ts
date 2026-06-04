@@ -7,7 +7,7 @@
 
 import { log, LogLevel } from './logger';
 import type { Event } from '../api/types';
-import type { MarkerConfig, MarkersPlugin, MarkerTipConfig } from '../types/videojs-markers';
+import type { MarkerConfig, MarkersPlugin, MarkersPluginApi, MarkerTipConfig } from '../types/videojs-markers';
 
 /**
  * Video marker for timeline visualization
@@ -157,39 +157,48 @@ export function generateEventMarkers(event: Event | null | undefined): VideoMark
 }
 
 /**
- * Apply marker configs to a videojs-markers plugin instance.
+ * A Video.js player as far as the markers plugin is concerned. ``player.markers``
+ * is the plugin initializer function before init, and the plugin replaces it
+ * with an API object (add/removeAll/...) after the first init.
+ */
+export interface VideoJsMarkersHost {
+  markers: MarkersPlugin | MarkersPluginApi;
+}
+
+/**
+ * Apply marker configs to the videojs-markers plugin on a player.
  *
- * videojs-markers is a Video.js basic plugin: calling the plugin function
- * initializes it. It must be called exactly once per player. Re-invoking it
- * re-runs initialization (duplicate timeupdate handlers and DOM) and throws,
- * which surfaced as repeated "Failed to update video markers" errors whenever
- * a react-query refetch produced a new markers array. After the first init,
- * updates must go through removeAll()/add().
+ * videojs-markers (v1.x) registers via videojs.plugin(): inside the plugin
+ * function the first statement is ``S = this; S.on('loadedmetadata', ...)``.
+ * It must therefore be invoked as a method (``player.markers(opts)``) so ``this``
+ * binds to the player. Calling it detached (``const f = player.markers; f(opts)``)
+ * leaves ``this`` undefined and throws "Cannot read properties of undefined
+ * (reading 'on')", which is what produced the recurring "Failed to update video
+ * markers" errors for events that have markers.
  *
- * Initialization is deferred until there is at least one marker so the
- * markerTip and onMarkerClick options are wired up alongside real markers.
+ * The plugin must be initialized exactly once per player; on init it replaces
+ * ``player.markers`` with an API object, so a function value means "not yet
+ * initialized". Initialization is deferred until there is at least one marker so
+ * markerTip/onMarkerClick are wired up alongside real markers; later updates go
+ * through removeAll()/add().
  *
- * @param markersFn - the plugin attached to the player (player.markers)
- * @param markerConfigs - markers to display
- * @param alreadyInitialized - whether the plugin was initialized for this player
- * @param initOptions - options passed only on the first (initializing) call
- * @returns whether the plugin is initialized after this call (true once it has been)
+ * @returns whether the plugin is initialized after this call
  */
 export function applyVideoJsMarkers(
-  markersFn: MarkersPlugin,
+  player: VideoJsMarkersHost,
   markerConfigs: MarkerConfig[],
-  alreadyInitialized: boolean,
   initOptions: { markerTip: MarkerTipConfig; onMarkerClick: (marker: MarkerConfig) => void }
 ): boolean {
-  if (!alreadyInitialized) {
+  if (typeof player.markers === 'function') {
     if (markerConfigs.length === 0) return false;
-    markersFn({ ...initOptions, markers: markerConfigs });
+    // Method call: `this` binds to the player. Do not extract to a variable first.
+    player.markers({ ...initOptions, markers: markerConfigs });
     return true;
   }
 
-  markersFn.removeAll?.();
+  player.markers.removeAll?.();
   if (markerConfigs.length > 0) {
-    markersFn.add?.(markerConfigs);
+    player.markers.add?.(markerConfigs);
   }
   return true;
 }

@@ -607,19 +607,25 @@ Video.js wrapper for recorded event playback. Consumed only by
 
 Markers are rendered via ``videojs-markers``; the ``markers`` array
 maps to alarm / max-score frames on the event timeline and
-``onMarkerClick`` seeks to a frame. ``videojs-markers`` is a Video.js
-basic plugin that must be initialized exactly once per player: calling
-the plugin function again re-runs initialization and throws. The
-``applyVideoJsMarkers`` helper in ``lib/video-markers.ts`` enforces
-this. It initializes on the first call that has markers and uses
-``removeAll()`` / ``add()`` for later updates, so a react-query refetch
-producing a fresh ``markers`` array no longer logs "Failed to update
-video markers". ``onMarkerClick`` is read through a ref inside a stable
-click handler so a changing callback identity does not force a
-re-init. Source, poster, and autoplay changes propagate through a
-separate update effect that diffs against ``player.currentSrc()``
-before reassigning, so token refresh does not restart playback on iOS
-WKWebView.
+``onMarkerClick`` seeks to a frame. ``videojs-markers`` (v1.x) is a
+Video.js basic plugin registered with ``videojs.plugin()``; its plugin
+function reads ``this`` as the player (``S = this; S.on('loadedmetadata',
+...)``), so it must be invoked as a method (``player.markers(opts)``).
+Calling it detached (``const f = player.markers; f(opts)``) leaves
+``this`` undefined and throws, which is what produced the recurring
+"Failed to update video markers" errors on events that have markers. On
+init the plugin replaces ``player.markers`` with an API object, so a
+function value means "not initialized". The ``applyVideoJsMarkers``
+helper in ``lib/video-markers.ts`` initializes once via a method call
+and uses ``removeAll()`` / ``add()`` for later updates. Marker updates
+are gated on the player's ready callback (the plugin reads the player
+DOM), ``onMarkerClick`` is read through a ref inside a stable click
+handler so a changing callback identity does not force a re-init, and a
+value signature skips redundant re-applies when a react-query refetch
+hands back a fresh ``markers`` array with unchanged values. Source,
+poster, and autoplay changes propagate through a separate update effect
+that diffs against ``player.currentSrc()`` before reassigning, so token
+refresh does not restart playback on iOS WKWebView.
 
 When ``eventId`` is set, the player participates in Picture-in-Picture
 via ``usePip()`` from ``contexts/PipContext.tsx``: it adopts its

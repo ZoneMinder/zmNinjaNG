@@ -14,8 +14,8 @@ type Player = ReturnType<typeof videojs>;
 import { cn } from '../../lib/utils';
 import { log, LogLevel } from '../../lib/logger';
 import { Platform } from '../../lib/platform';
-import { applyVideoJsMarkers, type VideoMarker } from '../../lib/video-markers';
-import type { MarkerConfig, MarkersPlugin } from '../../types/videojs-markers';
+import { applyVideoJsMarkers, type VideoMarker, type VideoJsMarkersHost } from '../../lib/video-markers';
+import type { MarkerConfig } from '../../types/videojs-markers';
 import { usePip } from '../../contexts/PipContext';
 import { Pip } from '../../plugins/pip';
 
@@ -82,15 +82,12 @@ export function Mp4EventPlayer({
   useEffect(() => { markersRef.current = markers; }, [markers]);
   useEffect(() => { onMarkerClickRef.current = onMarkerClick; }, [onMarkerClick]);
 
-  // The videojs-markers plugin must be initialized exactly once per player.
-  // Track which player it was initialized for, and the last applied marker set,
-  // so updates go through add()/removeAll() instead of re-initializing.
-  const markersPlayerRef = useRef<Player | null>(null);
+  // True once the player has fired its ready callback. The markers plugin reads
+  // the player DOM, so marker updates are gated on this. lastMarkerSig skips
+  // redundant re-applies when the markers array identity changes but the values
+  // do not (e.g. a react-query refetch).
+  const playerReadyRef = useRef(false);
   const lastMarkerSigRef = useRef<string | null>(null);
-
-  // videojs-markers plugin attaches `markers` to the Player at runtime; types not shipped.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const getMarkersPlugin = (player: Player): MarkersPlugin | undefined => (player as any).markers;
 
   // Stable click handler wired in at plugin init time. Reads the latest
   // callback and markers from refs so it never goes stale and never forces a
@@ -109,8 +106,9 @@ export function Mp4EventPlayer({
   const updateMarkers = (player: Player, markers: VideoMarker[]) => {
     if (!player || player.isDisposed()) return;
 
-    const markersFn = getMarkersPlugin(player);
-    if (typeof markersFn !== 'function') return;
+    const host = player as unknown as VideoJsMarkersHost;
+    // Plugin not registered (e.g. import side effect missing). Nothing to do.
+    if (typeof host.markers !== 'function' && typeof host.markers !== 'object') return;
 
     const markerConfigs: MarkerConfig[] = (markers || []).map(m => ({
       time: m.time,
@@ -119,20 +117,20 @@ export function Mp4EventPlayer({
       frameId: m.frameId,
     }));
 
-    const initializedForPlayer = markersPlayerRef.current === player;
+    // A function value means the plugin has not been initialized yet; after init
+    // it is an API object.
+    const alreadyInitialized = typeof host.markers !== 'function';
     const sig = JSON.stringify(markerConfigs);
-    // Nothing changed since the last apply for this player — skip the churn.
-    if (initializedForPlayer && sig === lastMarkerSigRef.current) return;
+    if (alreadyInitialized && sig === lastMarkerSigRef.current) return;
 
     try {
-      const initialized = applyVideoJsMarkers(markersFn, markerConfigs, initializedForPlayer, {
+      applyVideoJsMarkers(host, markerConfigs, {
         markerTip: {
           display: true,
           text: (marker: MarkerConfig) => marker.text || `Frame ${marker.frameId || ''}`,
         },
         onMarkerClick: handleMarkerClick,
       });
-      if (initialized) markersPlayerRef.current = player;
       lastMarkerSigRef.current = sig;
       log.videoPlayer('Video markers updated', LogLevel.DEBUG, { count: markerConfigs.length });
     } catch (err) {
@@ -153,6 +151,9 @@ export function Mp4EventPlayer({
           videoRef.current.appendChild(wrapper);
         }
         playerRef.current = reclaimed.player;
+        // A reclaimed player is already initialized and ready; the init effect's
+        // ready callback will not fire for it, so mark it ready here.
+        playerReadyRef.current = true;
         adoptedForPip.current = false;
       }
     } else if (activePipEventId) {
@@ -226,6 +227,7 @@ export function Mp4EventPlayer({
       }
     }, () => {
       videojs.log('player is ready');
+      playerReadyRef.current = true;
 
       const initialMarkers = markersRef.current;
       if (initialMarkers && initialMarkers.length > 0) {
@@ -270,11 +272,13 @@ export function Mp4EventPlayer({
     }
   }, [src, type, poster, autoplay]);
 
-  // Update markers when they change. onMarkerClick is read via a ref inside the
-  // stable click handler, so it is intentionally not a dependency here.
+  // Update markers when they change, but only once the player is ready (the
+  // markers plugin reads the player DOM). The ready callback applies the initial
+  // markers; this effect handles later changes. onMarkerClick is read via a ref
+  // inside the stable click handler, so it is intentionally not a dependency.
   useEffect(() => {
     const player = playerRef.current;
-    if (player && markers) {
+    if (player && playerReadyRef.current && markers) {
       updateMarkers(player, markers);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
