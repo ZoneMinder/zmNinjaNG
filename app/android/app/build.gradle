@@ -23,7 +23,7 @@ android {
         applicationId "com.zoneminder.zmNinjaNG"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 10114
+        versionCode 1517
         versionName "1.1.14"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
