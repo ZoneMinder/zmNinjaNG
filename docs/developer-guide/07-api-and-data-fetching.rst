@@ -1328,6 +1328,18 @@ The HTTP client throws ``HttpError`` for non-2xx responses:
      throw error;
    }
 
+The client logs every non-2xx response at ERROR before the caller sees
+it. For endpoints where a status is expected and handled, pass
+``expectedStatuses`` so the client logs that status at DEBUG instead.
+The request still rejects, so the caller branches on it as before. Used
+by the event-tags probe, where a 404 means the server build predates
+tags rather than a real error:
+
+.. code:: tsx
+
+   // api/tags.ts
+   const response = await client.get<EventTagsResponse>(url, { expectedStatuses: [404] });
+
 API Functions
 ~~~~~~~~~~~~~
 

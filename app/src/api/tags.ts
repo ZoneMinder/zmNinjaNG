@@ -133,7 +133,10 @@ export async function getEventTags(
       // ZM API format: /tags/index/Events.Id:1,2,3.json
       const url = `/tags/index/Events.Id:${eventIdsParam}.json`;
 
-      const response = await client.get<EventTagsResponse>(url);
+      // A 404 here means the server build predates event tags; the catch below
+      // treats it as "tags not supported". Mark it expected so the client logs
+      // the probe at DEBUG rather than ERROR.
+      const response = await client.get<EventTagsResponse>(url, { expectedStatuses: [404] });
 
       // Validate response
       const validated = validateApiResponse(EventTagsResponseSchema, response.data, {

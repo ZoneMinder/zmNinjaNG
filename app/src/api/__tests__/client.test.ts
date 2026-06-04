@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApiClient } from '../client';
 import { httpRequest } from '../../lib/http';
+import { log, LogLevel } from '../../lib/logger';
 import { useAuthStore } from '../../stores/auth';
 
 vi.mock('../../lib/http', () => ({
@@ -122,5 +123,40 @@ describe('API Client', () => {
     expect(getFreshAccessToken).toHaveBeenCalled();
     const callArgs = httpRequestSpy.mock.calls[0]?.[1];
     expect(callArgs?.params?.token).toBeUndefined();
+  });
+
+  it('logs an expected status (e.g. 404 probe) at DEBUG, not ERROR, and still rejects', async () => {
+    const httpRequestSpy = vi.mocked(httpRequest);
+    httpRequestSpy.mockRejectedValueOnce({
+      status: 404,
+      statusText: 'Not Found',
+      message: 'Not Found',
+    } as never);
+
+    const client = createApiClient('https://zm.example.com/api');
+
+    await expect(
+      client.get('/tags/index/Events.Id:55.json', { expectedStatuses: [404] }),
+    ).rejects.toMatchObject({ status: 404 });
+
+    const errorCall = vi.mocked(log.api).mock.calls.find(c => String(c[0]).includes('[Error #'));
+    expect(errorCall).toBeDefined();
+    expect(errorCall?.[1]).toBe(LogLevel.DEBUG);
+  });
+
+  it('logs an unexpected error status at ERROR', async () => {
+    const httpRequestSpy = vi.mocked(httpRequest);
+    httpRequestSpy.mockRejectedValueOnce({
+      status: 500,
+      statusText: 'Server Error',
+      message: 'Server Error',
+    } as never);
+
+    const client = createApiClient('https://zm.example.com/api');
+
+    await expect(client.get('/monitors.json')).rejects.toMatchObject({ status: 500 });
+
+    const errorCall = vi.mocked(log.api).mock.calls.find(c => String(c[0]).includes('[Error #'));
+    expect(errorCall?.[1]).toBe(LogLevel.ERROR);
   });
 });

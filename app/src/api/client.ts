@@ -22,6 +22,13 @@ export interface ApiRequestConfig {
    * line at the call site.
    */
   intent?: string;
+  /**
+   * HTTP statuses the caller handles itself and does not consider errors, e.g.
+   * a 404 from a feature-probe endpoint. The request still rejects so the
+   * caller can branch on it, but the client logs at DEBUG instead of ERROR so
+   * expected non-2xx responses do not show up as errors.
+   */
+  expectedStatuses?: number[];
 }
 
 export interface ApiClient {
@@ -210,10 +217,18 @@ export function createApiClient(baseURL: string, reLogin?: () => Promise<boolean
         }
       }
 
-      log.api(`[Error #${correlationId}] ${method} ${fullUrlWithParams}`, LogLevel.ERROR, {
-        error,
-        ...errorData,
-      });
+      // Statuses the caller declared as expected (e.g. a 404 feature probe) are
+      // logged at DEBUG so they don't surface as errors. The request still
+      // rejects so the caller can branch on the status.
+      const isExpectedStatus =
+        httpError.status !== undefined &&
+        (config.expectedStatuses?.includes(httpError.status) ?? false);
+
+      log.api(
+        `[Error #${correlationId}] ${method} ${fullUrlWithParams}`,
+        isExpectedStatus ? LogLevel.DEBUG : LogLevel.ERROR,
+        { error, ...errorData },
+      );
 
       throw error;
     }
