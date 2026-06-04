@@ -318,6 +318,19 @@ in ``stores/auth.ts`` holds a module-level ``pendingFreshToken``
 promise, so a montage view with twelve tiles plus an open hover preview
 issues one ``/host/login.json`` refresh, not thirteen.
 
+``getFreshAccessToken`` returns ``null`` early when the API client is not
+yet initialized, checked via ``isApiClientInitialized()`` from
+``api/client-ready.ts``. The access token is never persisted (only the
+refresh token is, see ``partialize`` in ``stores/auth.ts``), so on cold
+start a token-bearing component mounts with ``requiresAuth`` true and no
+token and calls this immediately, before profile bootstrap has created the
+client. Without the gate that refresh throws ``API client not
+initialized``, logs an error, and forces a logout, all pointless because
+``clearStaleState`` re-authenticates from stored credentials regardless.
+``client-ready.ts`` holds the flag in a module with no imports so
+``stores/auth.ts`` can read it without an ``auth`` <-> ``api/client`` load
+cycle; ``setApiClient``/``resetApiClient`` keep it in sync.
+
 Callsites render a ``VideoOff`` placeholder while ``isFresh`` is
 ``false`` rather than building a URL with a stale or empty token:
 

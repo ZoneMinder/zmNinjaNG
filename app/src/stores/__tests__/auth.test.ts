@@ -1,10 +1,19 @@
 import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
 import { useAuthStore } from '../auth';
 import { login as apiLogin, refreshToken as apiRefreshToken } from '../../api/auth';
+import { log } from '../../lib/logger';
 
 vi.mock('../../api/auth', () => ({
   login: vi.fn(),
   refreshToken: vi.fn(),
+}));
+
+// getFreshAccessToken skips refreshing until the API client exists. Default to
+// initialized for the existing tests; the cold-start test flips it to false.
+const clientState = vi.hoisted(() => ({ initialized: true }));
+vi.mock('../../api/client-ready', () => ({
+  isApiClientInitialized: () => clientState.initialized,
+  setApiClientInitialized: vi.fn(),
 }));
 
 vi.mock('../../lib/logger', () => ({
@@ -36,6 +45,7 @@ describe('Auth Store', () => {
       isAuthenticated: false,
       requiresAuth: true,
     });
+    clientState.initialized = true;
     vi.clearAllMocks();
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2024-01-01T00:00:00Z'));
@@ -227,6 +237,35 @@ describe('Auth Store', () => {
       useAuthStore.getState().setReLoginCallback(async () => false);
       const result = await useAuthStore.getState().getFreshAccessToken();
       expect(result).toBeNull();
+    });
+
+    it('returns null without refreshing or logging out when the API client is not yet initialized', async () => {
+      // Cold start: refresh token rehydrated, no access token, but profile
+      // bootstrap has not created the API client yet.
+      clientState.initialized = false;
+      useAuthStore.setState({
+        accessToken: null,
+        refreshToken: 'rt',
+        accessTokenExpires: null,
+        refreshTokenExpires: Date.now() + 24 * 60 * 60 * 1000,
+        isAuthenticated: true,
+        requiresAuth: true,
+      });
+      const reLogin = vi.fn(async () => true);
+      useAuthStore.getState().setReLoginCallback(reLogin);
+
+      const result = await useAuthStore.getState().getFreshAccessToken();
+
+      expect(result).toBeNull();
+      expect(apiRefreshToken).not.toHaveBeenCalled();
+      expect(reLogin).not.toHaveBeenCalled();
+      // No doomed-refresh error and no spurious logout.
+      expect(vi.mocked(log.auth)).not.toHaveBeenCalledWith(
+        'Token refresh failed',
+        expect.anything(),
+        expect.anything(),
+      );
+      expect(useAuthStore.getState().isAuthenticated).toBe(true);
     });
 
     it('dedupes concurrent callers into one refresh', async () => {

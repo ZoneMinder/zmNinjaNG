@@ -15,6 +15,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { PersistStorage, StorageValue } from 'zustand/middleware';
 import { login as apiLogin, refreshToken as apiRefreshToken } from '../api/auth';
+import { isApiClientInitialized } from '../api/client-ready';
 import type { LoginResponse } from '../api/types';
 import { log, LogLevel } from '../lib/logger';
 import { encrypt, decrypt, isCryptoAvailable } from '../lib/crypto';
@@ -279,6 +280,17 @@ export const useAuthStore = create<AuthState>()(
         // No-auth server: there is no token to fetch and nothing to refresh.
         // Returning null here stops the refresh/reLogin loop. Refs #153.
         if (!get().requiresAuth) {
+          return null;
+        }
+        // Cold start: the access token is never persisted, so a component that
+        // builds a token-bearing URL (stream tile, event/notification image)
+        // mounts with requiresAuth=true and no token and calls this immediately,
+        // before profile bootstrap has created the API client. There is nothing
+        // to refresh against yet, and bootstrap will re-authenticate from stored
+        // credentials regardless. Returning null avoids a doomed refresh that
+        // would throw, log an error, and force a spurious logout. Subscribers
+        // re-render once bootstrap lands a fresh token.
+        if (!isApiClientInitialized()) {
           return null;
         }
         if (pendingFreshToken) {

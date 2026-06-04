@@ -2,6 +2,7 @@ import { httpRequest, type HttpError, type HttpOptions, type HttpResponse } from
 import { useAuthStore } from '../stores/auth';
 import { log, LogLevel } from '../lib/logger';
 import { sanitizeObject } from '../lib/log-sanitizer';
+import { setApiClientInitialized } from './client-ready';
 
 export type ApiMethod = NonNullable<HttpOptions['method']>;
 
@@ -235,8 +236,10 @@ export function getApiClient(): ApiClient {
 
 export function setApiClient(client: ApiClient): void {
   apiClient = client;
+  setApiClientInitialized(true);
 }
 
 export function resetApiClient(): void {
   apiClient = null;
+  setApiClientInitialized(false);
 }
