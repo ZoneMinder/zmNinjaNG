@@ -22,12 +22,12 @@ export async function applySSLTrustSetting(enabled: boolean, fingerprint?: strin
       if (enabled) {
         await SSLTrust.enable();
         await SSLTrust.setTrustedFingerprint({ fingerprint: fingerprint ?? null });
-        log.sslTrust('SSL trust override enabled for self-signed certificates', LogLevel.INFO, {
+        log.sslTrust('Native: set trust-self-signed-certs to true', LogLevel.INFO, {
           hasFingerprint: !!fingerprint,
         });
       } else {
         await SSLTrust.disable();
-        log.sslTrust('SSL trust override disabled', LogLevel.DEBUG);
+        log.sslTrust('Native: set trust-self-signed-certs to false', LogLevel.DEBUG);
       }
     } catch (error) {
       log.sslTrust('Failed to apply SSL trust setting', LogLevel.ERROR, { error });
@@ -37,7 +37,7 @@ export async function applySSLTrustSetting(enabled: boolean, fingerprint?: strin
       if (typeof window !== 'undefined' && window.electronSsl) {
         await window.electronSsl.setTrustSelfSigned(enabled);
         log.sslTrust(
-          enabled ? 'Electron SSL trust override enabled' : 'Electron SSL trust override disabled',
+          `Electron: set trust-self-signed-certs to ${enabled}`,
           enabled ? LogLevel.INFO : LogLevel.DEBUG
         );
       }

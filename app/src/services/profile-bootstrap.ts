@@ -258,6 +258,11 @@ export async function bootstrapSSLTrust(
     const settings = useSettingsStore.getState().getProfileSettings(profile.id);
     const { applySSLTrustSetting, getServerCertFingerprint } = await import('../lib/ssl-trust');
 
+    log.sslTrust(
+      `Profile "${profile.name}" allowSelfSignedCerts=${settings.allowSelfSignedCerts}; setting SSL trust override to ${settings.allowSelfSignedCerts}`,
+      settings.allowSelfSignedCerts ? LogLevel.INFO : LogLevel.DEBUG,
+    );
+
     if (!settings.allowSelfSignedCerts) {
       await applySSLTrustSetting(false);
       return;
