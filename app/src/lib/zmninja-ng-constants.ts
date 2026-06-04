@@ -265,11 +265,13 @@ export const DEVELOPER_NOTICES = {
   // Public raw URL of the notice feed (GitHub serves with ~5min CDN TTL)
   feedUrl: 'https://raw.githubusercontent.com/ZoneMinder/zmNinjaNg/main/docs/notices.json',
 
-  // Foreground refetch interval. React Query handles the actual polling.
-  pollIntervalMs: 30 * 60 * 1000,
+  // Background refetch interval. React Query handles the actual polling.
+  // Notices change rarely, so poll once per day.
+  pollIntervalMs: 24 * 60 * 60 * 1000,
 
-  // How long fetched data stays "fresh" before a refetch is allowed
-  staleTimeMs: 10 * 60 * 1000,
+  // How long fetched data stays "fresh" before a refetch is allowed. Matches the
+  // poll interval so a window-focus refetch does not check more often than daily.
+  staleTimeMs: 24 * 60 * 60 * 1000,
 } as const;
 
 /**
