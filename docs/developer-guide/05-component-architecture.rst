@@ -607,10 +607,19 @@ Video.js wrapper for recorded event playback. Consumed only by
 
 Markers are rendered via ``videojs-markers``; the ``markers`` array
 maps to alarm / max-score frames on the event timeline and
-``onMarkerClick`` seeks to a frame. Source, poster, and autoplay
-changes propagate through a separate update effect that diffs against
-``player.currentSrc()`` before reassigning, so token refresh does not
-restart playback on iOS WKWebView.
+``onMarkerClick`` seeks to a frame. ``videojs-markers`` is a Video.js
+basic plugin that must be initialized exactly once per player: calling
+the plugin function again re-runs initialization and throws. The
+``applyVideoJsMarkers`` helper in ``lib/video-markers.ts`` enforces
+this. It initializes on the first call that has markers and uses
+``removeAll()`` / ``add()`` for later updates, so a react-query refetch
+producing a fresh ``markers`` array no longer logs "Failed to update
+video markers". ``onMarkerClick`` is read through a ref inside a stable
+click handler so a changing callback identity does not force a
+re-init. Source, poster, and autoplay changes propagate through a
+separate update effect that diffs against ``player.currentSrc()``
+before reassigning, so token refresh does not restart playback on iOS
+WKWebView.
 
 When ``eventId`` is set, the player participates in Picture-in-Picture
 via ``usePip()`` from ``contexts/PipContext.tsx``: it adopts its

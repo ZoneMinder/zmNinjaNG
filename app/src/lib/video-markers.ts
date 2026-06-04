@@ -7,6 +7,7 @@
 
 import { log, LogLevel } from './logger';
 import type { Event } from '../api/types';
+import type { MarkerConfig, MarkersPlugin, MarkerTipConfig } from '../types/videojs-markers';
 
 /**
  * Video marker for timeline visualization
@@ -153,4 +154,42 @@ export function generateEventMarkers(event: Event | null | undefined): VideoMark
   }
 
   return markers;
+}
+
+/**
+ * Apply marker configs to a videojs-markers plugin instance.
+ *
+ * videojs-markers is a Video.js basic plugin: calling the plugin function
+ * initializes it. It must be called exactly once per player. Re-invoking it
+ * re-runs initialization (duplicate timeupdate handlers and DOM) and throws,
+ * which surfaced as repeated "Failed to update video markers" errors whenever
+ * a react-query refetch produced a new markers array. After the first init,
+ * updates must go through removeAll()/add().
+ *
+ * Initialization is deferred until there is at least one marker so the
+ * markerTip and onMarkerClick options are wired up alongside real markers.
+ *
+ * @param markersFn - the plugin attached to the player (player.markers)
+ * @param markerConfigs - markers to display
+ * @param alreadyInitialized - whether the plugin was initialized for this player
+ * @param initOptions - options passed only on the first (initializing) call
+ * @returns whether the plugin is initialized after this call (true once it has been)
+ */
+export function applyVideoJsMarkers(
+  markersFn: MarkersPlugin,
+  markerConfigs: MarkerConfig[],
+  alreadyInitialized: boolean,
+  initOptions: { markerTip: MarkerTipConfig; onMarkerClick: (marker: MarkerConfig) => void }
+): boolean {
+  if (!alreadyInitialized) {
+    if (markerConfigs.length === 0) return false;
+    markersFn({ ...initOptions, markers: markerConfigs });
+    return true;
+  }
+
+  markersFn.removeAll?.();
+  if (markerConfigs.length > 0) {
+    markersFn.add?.(markerConfigs);
+  }
+  return true;
 }

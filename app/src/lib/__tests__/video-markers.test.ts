@@ -2,9 +2,10 @@
  * Unit tests for video-markers utility
  */
 
-import { describe, it, expect } from 'vitest';
-import { frameToTimestamp, generateEventMarkers } from '../video-markers';
+import { describe, it, expect, vi } from 'vitest';
+import { frameToTimestamp, generateEventMarkers, applyVideoJsMarkers } from '../video-markers';
 import type { Event } from '../../api/types';
+import type { MarkerConfig, MarkersPlugin } from '../../types/videojs-markers';
 
 describe('frameToTimestamp', () => {
   it('calculates timestamp for middle frame', () => {
@@ -273,5 +274,64 @@ describe('generateEventMarkers', () => {
     expect(markers).toHaveLength(2);
     expect(markers[0].time).toBe(1800);
     expect(markers[1].time).toBe(2700);
+  });
+});
+
+describe('applyVideoJsMarkers', () => {
+  function makeMarkersFn() {
+    const fn = vi.fn() as unknown as MarkersPlugin;
+    fn.removeAll = vi.fn();
+    fn.add = vi.fn();
+    return fn;
+  }
+
+  const configs: MarkerConfig[] = [{ time: 1.5, text: 'Frame 12', frameId: 12 }];
+  const initOptions = {
+    markerTip: { display: true, text: () => 'tip' },
+    onMarkerClick: () => {},
+  };
+
+  it('initializes the plugin once on the first call with markers', () => {
+    const fn = makeMarkersFn();
+
+    const result = applyVideoJsMarkers(fn, configs, false, initOptions);
+
+    expect(result).toBe(true);
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(fn).toHaveBeenCalledWith(expect.objectContaining({ markers: configs }));
+    expect(fn.removeAll).not.toHaveBeenCalled();
+    expect(fn.add).not.toHaveBeenCalled();
+  });
+
+  it('defers initialization when there are no markers yet', () => {
+    const fn = makeMarkersFn();
+
+    const result = applyVideoJsMarkers(fn, [], false, initOptions);
+
+    expect(result).toBe(false);
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it('updates via removeAll + add without re-initializing once initialized', () => {
+    const fn = makeMarkersFn();
+
+    const result = applyVideoJsMarkers(fn, configs, true, initOptions);
+
+    expect(result).toBe(true);
+    // The plugin initializer must NOT be called again - that is the bug this fixes.
+    expect(fn).not.toHaveBeenCalled();
+    expect(fn.removeAll).toHaveBeenCalledTimes(1);
+    expect(fn.add).toHaveBeenCalledWith(configs);
+  });
+
+  it('clears markers via removeAll and skips add when updating to an empty set', () => {
+    const fn = makeMarkersFn();
+
+    const result = applyVideoJsMarkers(fn, [], true, initOptions);
+
+    expect(result).toBe(true);
+    expect(fn).not.toHaveBeenCalled();
+    expect(fn.removeAll).toHaveBeenCalledTimes(1);
+    expect(fn.add).not.toHaveBeenCalled();
   });
 });

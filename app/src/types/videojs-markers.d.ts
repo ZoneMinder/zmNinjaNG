@@ -15,10 +15,12 @@ import type videojs from 'video.js';
 export interface MarkersPlugin {
   (options?: MarkersOptions): MarkersPluginApi;
   removeAll?: () => void;
+  add?: (markers: MarkerConfig[]) => void;
 }
 
 export interface MarkersPluginApi {
   removeAll?: () => void;
+  add?: (markers: MarkerConfig[]) => void;
 }
 
 /**

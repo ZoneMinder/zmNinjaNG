@@ -14,7 +14,7 @@ type Player = ReturnType<typeof videojs>;
 import { cn } from '../../lib/utils';
 import { log, LogLevel } from '../../lib/logger';
 import { Platform } from '../../lib/platform';
-import type { VideoMarker } from '../../lib/video-markers';
+import { applyVideoJsMarkers, type VideoMarker } from '../../lib/video-markers';
 import type { MarkerConfig, MarkersPlugin } from '../../types/videojs-markers';
 import { usePip } from '../../contexts/PipContext';
 import { Pip } from '../../plugins/pip';
@@ -76,59 +76,65 @@ export function Mp4EventPlayer({
   const onReadyRef = useRef(onReady);
   const onErrorRef = useRef(onError);
   const markersRef = useRef(markers);
+  const onMarkerClickRef = useRef(onMarkerClick);
   useEffect(() => { onReadyRef.current = onReady; }, [onReady]);
   useEffect(() => { onErrorRef.current = onError; }, [onError]);
   useEffect(() => { markersRef.current = markers; }, [markers]);
+  useEffect(() => { onMarkerClickRef.current = onMarkerClick; }, [onMarkerClick]);
+
+  // The videojs-markers plugin must be initialized exactly once per player.
+  // Track which player it was initialized for, and the last applied marker set,
+  // so updates go through add()/removeAll() instead of re-initializing.
+  const markersPlayerRef = useRef<Player | null>(null);
+  const lastMarkerSigRef = useRef<string | null>(null);
 
   // videojs-markers plugin attaches `markers` to the Player at runtime; types not shipped.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const getMarkersPlugin = (player: Player): MarkersPlugin | undefined => (player as any).markers;
 
+  // Stable click handler wired in at plugin init time. Reads the latest
+  // callback and markers from refs so it never goes stale and never forces a
+  // plugin re-initialization.
+  const handleMarkerClick = (marker: MarkerConfig) => {
+    const player = playerRef.current;
+    if (player && !player.isDisposed()) player.currentTime(marker.time);
+    const cb = onMarkerClickRef.current;
+    if (!cb) return;
+    const original = (markersRef.current || []).find(
+      m => m.time === marker.time && m.frameId === marker.frameId
+    );
+    if (original) cb(original);
+  };
+
   const updateMarkers = (player: Player, markers: VideoMarker[]) => {
     if (!player || player.isDisposed()) return;
 
     const markersFn = getMarkersPlugin(player);
-
-    // Remove existing markers if the markers plugin is initialized
-    if (typeof markersFn === 'function') {
-      try {
-        markersFn.removeAll?.();
-      } catch {
-        // Ignore - markers plugin might not be fully initialized
-      }
-    }
-
-    if (!markers || markers.length === 0) return;
     if (typeof markersFn !== 'function') return;
 
-    try {
-      const markerConfigs: MarkerConfig[] = markers.map(m => ({
-        time: m.time,
-        text: m.text,
-        class: m.type === 'alarm' ? 'vjs-marker-alarm' : 'vjs-marker-max-score',
-        frameId: m.frameId,
-      }));
+    const markerConfigs: MarkerConfig[] = (markers || []).map(m => ({
+      time: m.time,
+      text: m.text,
+      class: m.type === 'alarm' ? 'vjs-marker-alarm' : 'vjs-marker-max-score',
+      frameId: m.frameId,
+    }));
 
-      markersFn({
+    const initializedForPlayer = markersPlayerRef.current === player;
+    const sig = JSON.stringify(markerConfigs);
+    // Nothing changed since the last apply for this player — skip the churn.
+    if (initializedForPlayer && sig === lastMarkerSigRef.current) return;
+
+    try {
+      const initialized = applyVideoJsMarkers(markersFn, markerConfigs, initializedForPlayer, {
         markerTip: {
           display: true,
           text: (marker: MarkerConfig) => marker.text || `Frame ${marker.frameId || ''}`,
         },
-        onMarkerClick: (marker: MarkerConfig) => {
-          player.currentTime(marker.time);
-          if (onMarkerClick) {
-            const originalMarker = markers.find(
-              m => m.time === marker.time && m.frameId === marker.frameId
-            );
-            if (originalMarker) {
-              onMarkerClick(originalMarker);
-            }
-          }
-        },
-        markers: markerConfigs,
+        onMarkerClick: handleMarkerClick,
       });
-
-      log.videoPlayer('Video markers updated', LogLevel.DEBUG, { count: markers.length });
+      if (initialized) markersPlayerRef.current = player;
+      lastMarkerSigRef.current = sig;
+      log.videoPlayer('Video markers updated', LogLevel.DEBUG, { count: markerConfigs.length });
     } catch (err) {
       log.videoPlayer('Failed to update video markers', LogLevel.ERROR, err);
     }
@@ -264,13 +270,15 @@ export function Mp4EventPlayer({
     }
   }, [src, type, poster, autoplay]);
 
-  // Update markers when they change
+  // Update markers when they change. onMarkerClick is read via a ref inside the
+  // stable click handler, so it is intentionally not a dependency here.
   useEffect(() => {
     const player = playerRef.current;
     if (player && markers) {
       updateMarkers(player, markers);
     }
-  }, [markers, onMarkerClick]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [markers]);
 
   // Re-poke Video.js after rotation / safe-area changes.
   // Without this, .vjs-user-inactive can latch hidden after rotation (no mousemove
