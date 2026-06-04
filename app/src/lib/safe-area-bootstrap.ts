@@ -18,13 +18,23 @@ import { Capacitor } from '@capacitor/core';
 import { log, LogLevel } from './logger';
 import type { SafeAreaInsets } from '../plugins/safe-area';
 
+let lastAppliedKey: string | null = null;
+
 function applyInsets(insets: SafeAreaInsets, source: string): void {
   const root = document.documentElement;
   root.style.setProperty('--sai-top', `${insets.top}px`);
   root.style.setProperty('--sai-right', `${insets.right}px`);
   root.style.setProperty('--sai-bottom', `${insets.bottom}px`);
   root.style.setProperty('--sai-left', `${insets.left}px`);
-  log.app(`[SafeArea] applied (${source})`, LogLevel.INFO, insets);
+
+  // The native plugin re-emits on every foreground (applicationDidBecomeActive),
+  // so the values are usually unchanged. Only log when they actually differ to
+  // avoid flooding the log on each app resume.
+  const key = `${insets.top},${insets.right},${insets.bottom},${insets.left}`;
+  if (key !== lastAppliedKey) {
+    lastAppliedKey = key;
+    log.app(`[SafeArea] applied (${source})`, LogLevel.INFO, insets);
+  }
 }
 
 export async function installSafeAreaBootstrap(): Promise<void> {

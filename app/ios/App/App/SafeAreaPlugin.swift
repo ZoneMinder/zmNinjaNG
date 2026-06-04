@@ -49,13 +49,18 @@ public class SafeAreaPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func getInsets(_ call: CAPPluginCall) {
-        let insets = currentInsets()
-        call.resolve([
-            "top": insets.top,
-            "right": insets.right,
-            "bottom": insets.bottom,
-            "left": insets.left,
-        ])
+        // Capacitor invokes plugin methods on a background bridge queue. currentInsets()
+        // reads UIWindow/UIApplication, which are main-thread-only UIKit APIs. Hop to the
+        // main thread before touching them to avoid Main Thread Checker violations.
+        DispatchQueue.main.async { [weak self] in
+            let insets = self?.currentInsets() ?? .zero
+            call.resolve([
+                "top": insets.top,
+                "right": insets.right,
+                "bottom": insets.bottom,
+                "left": insets.left,
+            ])
+        }
     }
 
     /// Called by the host ViewController after viewWillTransition completes.
