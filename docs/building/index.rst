@@ -77,16 +77,21 @@ script):
   (``CFBundleShortVersionString``). This is the version shown in the store
   listing and the app sidebar. Bump it on a prod release.
 - **Build number**, the git commit count (``git rev-list --count HEAD``).
-  Written to Android ``versionCode`` and iOS ``CURRENT_PROJECT_VERSION``
-  (``CFBundleVersion``). The stores require this to strictly increase per
-  upload. It is the same value the app sidebar shows in parentheses, so
-  ``v1.1.14 (1512)`` in the app matches ``versionCode 1512`` in the Play
-  Console and ``CFBundleVersion 1512`` in App Store Connect.
+  The stores require this to strictly increase per upload. iOS
+  ``CURRENT_PROJECT_VERSION`` (``CFBundleVersion``) uses the commit count
+  directly, so ``v1.1.14 (1533)`` in the app sidebar matches ``CFBundleVersion
+  1533`` in App Store Connect. Android ``versionCode`` adds a base offset of
+  100000 (``100000 + commit count``): builds before mid-2026 used
+  ``major*10000 + minor*100 + patch`` (``v1.1.14`` -> ``10114``), and the raw
+  commit count is below those legacy codes, so Google Play would reject it as a
+  downgrade. The offset clears any legacy code (at most 99999 for versions below
+  10.0.0), so commit ``1533`` becomes ``versionCode 101533``. The app sidebar
+  shows the un-offset commit count.
 
 The git commit count increases on every commit and stays monotonic as long as
 release builds come from ``main`` without rewriting published history. The
 Android ``versionCode`` is a signed 32-bit integer capped at 2,100,000,000 by
-Google Play, which the commit count stays far below.
+Google Play, which ``100000 + commit count`` stays far below.
 
 The generated ``versionCode`` / ``CURRENT_PROJECT_VERSION`` values in
 ``app/android/app/build.gradle`` and the Xcode project are regenerated and

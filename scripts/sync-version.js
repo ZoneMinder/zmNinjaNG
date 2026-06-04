@@ -35,6 +35,25 @@ function getBuildNumber() {
   return count;
 }
 
+/**
+ * Base offset for the Android versionCode.
+ *
+ * Builds before mid-2026 used versionCode = major*10000 + minor*100 + patch
+ * (v1.1.14 -> 10114). The Play Store requires versionCode to strictly increase
+ * across uploads, but the raw git commit count (~1500) is *below* those legacy
+ * codes, so a commit-count build would be rejected as a downgrade. Any legacy
+ * code for a version below 10.0.0 is at most 99999, so offsetting by 100000
+ * guarantees every commit-count build supersedes the old scheme. iOS does not
+ * need this: its CFBundleVersion was previously 1, so the commit count already
+ * exceeds it.
+ */
+const ANDROID_VERSION_CODE_BASE = 100000;
+
+/** Android versionCode: commit-count build offset above the legacy scheme. */
+function androidVersionCode(build) {
+  return ANDROID_VERSION_CODE_BASE + build;
+}
+
 /** Set Android versionName (marketing) and versionCode (build number). */
 function applyGradleVersion(text, version, build) {
   return text
@@ -60,9 +79,10 @@ function main() {
 
   const buildGradlePath = path.join(__dirname, '../app/android/app/build.gradle');
   if (fs.existsSync(buildGradlePath)) {
-    const updated = applyGradleVersion(fs.readFileSync(buildGradlePath, 'utf8'), version, build);
+    const versionCode = androidVersionCode(build);
+    const updated = applyGradleVersion(fs.readFileSync(buildGradlePath, 'utf8'), version, versionCode);
     fs.writeFileSync(buildGradlePath, updated);
-    console.log(`✓ Updated ${buildGradlePath} (versionName=${version}, versionCode=${build})`);
+    console.log(`✓ Updated ${buildGradlePath} (versionName=${version}, versionCode=${versionCode})`);
   }
 
   const xcodeProjectPath = path.join(__dirname, '../app/ios/App/App.xcodeproj/project.pbxproj');
@@ -86,4 +106,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { getBuildNumber, applyGradleVersion, applyXcodeVersion };
+module.exports = { getBuildNumber, androidVersionCode, applyGradleVersion, applyXcodeVersion };

@@ -4,9 +4,19 @@ import { describe, it, expect } from 'vitest';
 // runs when the script is invoked directly (require.main === module).
 import syncVersion from '../../../../scripts/sync-version.js';
 
-const { applyGradleVersion, applyXcodeVersion } = syncVersion;
+const { androidVersionCode, applyGradleVersion, applyXcodeVersion } = syncVersion;
 
 describe('sync-version build number injection', () => {
+  it('offsets the Android versionCode above the legacy major*10000+minor*100+patch scheme', () => {
+    // The live Play release used the legacy scheme (v1.1.14 -> 10114). A raw
+    // commit-count code (~1533) would be a downgrade and Play rejects it. The
+    // offset must clear any legacy code (<= 99999 for versions below 10.0.0).
+    expect(androidVersionCode(1533)).toBe(101533);
+    expect(androidVersionCode(1533)).toBeGreaterThan(10114);
+    // Monotonic: a later commit yields a higher code.
+    expect(androidVersionCode(1534)).toBeGreaterThan(androidVersionCode(1533));
+  });
+
   it('sets Android versionName to the marketing version and versionCode to the build number', () => {
     const gradle = `    defaultConfig {
         applicationId "com.zoneminder.zmNinjaNG"
