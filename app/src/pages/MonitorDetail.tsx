@@ -375,6 +375,7 @@ export default function MonitorDetail() {
               showControls={true}
               onProtocolChange={setProtocol}
               forceViewMode="streaming"
+              bypassGo2rtcFailureCache
             />
             <ZoneOverlay
               zones={zones}

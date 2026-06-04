@@ -286,7 +286,17 @@ so single-monitor view is unaffected.
 
 **Failure cache:** Monitors that fail Go2RTC are cached and skipped for
 5 minutes. This prevents repeated connection attempts in montage views
-with many monitors.
+with many monitors. The cache is module-level and shared by every
+``LiveMonitorPlayer``, and it survives in-app navigation (only a full reload
+clears it).
+
+The single-monitor detail view passes ``bypassGo2rtcFailureCache`` so it
+neither reads nor writes this cache. Montage opens many connections at once and
+some fail under that load, marking those monitors failed. Without the bypass the
+detail view inherited that and skipped Go2RTC, showing the loading placeholder
+until a reload. With the bypass the detail view always attempts Go2RTC (a single
+connection succeeds), and a failure there falls back to MJPEG locally without
+poisoning the montage cache.
 
 **Stream teardown:** leaving a live view (montage or single monitor) must stop
 the stream. ``connect()`` sets ``videoRtc.background = true`` so a tile keeps
