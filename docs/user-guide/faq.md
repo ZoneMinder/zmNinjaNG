@@ -125,7 +125,9 @@ For logs that survive across app restarts (and are easier to attach to a bug rep
 
 ### Does zmNinjaNg send data to third parties?
 
-No. zmNinjaNg does not include any analytics, tracking, or third-party data collection. All communication is between the app and your ZoneMinder server.
+zmNinjaNg includes no analytics, tracking, or telemetry, and the Firebase Analytics SDK is not bundled. Almost all communication is between the app and your own ZoneMinder server.
+
+The app does contact a few fixed external endpoints, none of which receive personal data or usage tracking: the maintainer notices feed on GitHub (checked once a day), Google Firebase Cloud Messaging for push notifications on mobile (only when notifications are enabled), and public WebRTC STUN servers during go2rtc WebRTC live view. Each endpoint, with the platforms it applies to and how to disable it, is listed in {doc}`../developer-guide/13-network-endpoints`.
 
 ### Where are my credentials stored?
 
