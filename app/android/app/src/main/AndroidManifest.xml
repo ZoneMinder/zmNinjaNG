@@ -42,6 +42,14 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- Firebase Analytics is not used. The Analytics/Measurement SDK is not a
+             dependency (only firebase-messaging, which pulls the dormant
+             measurement-connector interface). These flags declare analytics off so
+             nothing is collected even if the Analytics SDK is ever added. -->
+        <meta-data android:name="firebase_analytics_collection_enabled" android:value="false" />
+        <meta-data android:name="google_analytics_adid_collection_enabled" android:value="false" />
+        <meta-data android:name="google_analytics_ssaid_collection_enabled" android:value="false" />
     </application>
 
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />

@@ -62,5 +62,12 @@
 	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<!-- Firebase Analytics is not used; the Analytics SDK is not a CocoaPods
+	     dependency (only FirebaseMessaging/Core/Installations). These flags
+	     declare analytics and IDFA collection off as a guarantee. -->
+	<key>FIREBASE_ANALYTICS_COLLECTION_ENABLED</key>
+	<false/>
+	<key>GOOGLE_ANALYTICS_ADID_COLLECTION_ENABLED</key>
+	<false/>
 </dict>
 </plist>
