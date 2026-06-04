@@ -18,6 +18,54 @@ if (typeof window !== 'undefined' && !customElements.get('video-rtc')) {
   log.videoPlayer('Registered VideoRTC custom element', LogLevel.DEBUG);
 }
 
+/**
+ * Fully tear down a VideoRTC element so it cannot keep streaming after it
+ * leaves the view. `ondisconnect()` closes the WebSocket and peer connection,
+ * but on its own it is not enough:
+ *  - WebRTC media flows over the RTCPeerConnection, not the ws, so the pc (and
+ *    its tracks) must be closed/stopped, which `ondisconnect()` does but we also
+ *    stop the video's MediaStream tracks defensively.
+ *  - The element keeps internal reconnect/disconnect timers that can re-open a
+ *    socket after we let go of it, so cancel them.
+ *  - `background = true` (set in connect) disables the element's own teardown on
+ *    DOM removal, so flip it off so removal can't leave it running.
+ */
+function destroyVideoRtc(el: VideoRTC): void {
+  el.background = false;
+
+  const timers = el as unknown as { reconnectTID?: number; disconnectTID?: number };
+  if (timers.reconnectTID) {
+    clearTimeout(timers.reconnectTID);
+    timers.reconnectTID = 0;
+  }
+  if (timers.disconnectTID) {
+    clearTimeout(timers.disconnectTID);
+    timers.disconnectTID = 0;
+  }
+
+  // Capture the live stream before ondisconnect nulls srcObject. Feature-detect
+  // via getTracks rather than `instanceof MediaStream` (not a global in jsdom).
+  const video = el.video;
+  const srcObject = video?.srcObject as MediaStream | null | undefined;
+  const stream = srcObject && typeof srcObject.getTracks === 'function' ? srcObject : null;
+
+  try {
+    el.ondisconnect();
+  } catch {
+    // Element may be only partially initialized; the steps below still run.
+  }
+
+  if (stream) {
+    stream.getTracks().forEach((track) => track.stop());
+  }
+  if (video) {
+    video.srcObject = null;
+    video.removeAttribute('src');
+  }
+
+  el.parentNode?.removeChild(el);
+}
+
 export type StreamingProtocol = 'webrtc' | 'mse' | 'hls';
 export type ConnectionState = 'idle' | 'connecting' | 'connected' | 'error' | 'disconnected';
 
@@ -96,20 +144,31 @@ export function useGo2RTCStream(options: UseGo2RTCStreamOptions): UseGo2RTCStrea
     setActiveProtocol(null);
 
     if (videoRtcRef.current) {
-      try {
-        videoRtcRef.current.ondisconnect();
-      } catch (err) {
-        log.videoPlayer('GO2RTC: Error disconnecting', LogLevel.WARN, { monitorId, error: err });
-      }
-
-      if (videoRtcRef.current.parentNode) {
-        videoRtcRef.current.parentNode.removeChild(videoRtcRef.current);
-      }
+      destroyVideoRtc(videoRtcRef.current);
       videoRtcRef.current = null;
+    }
+
+    // Sweep any stray VideoRTC the container still holds (for example one left
+    // behind by a prior retry) so nothing keeps a WebSocket or peer connection
+    // alive after the view is gone.
+    const container = containerRef.current;
+    if (container) {
+      Array.from(container.children).forEach((child) => {
+        if (child instanceof VideoRTC) destroyVideoRtc(child);
+      });
     }
   }, [monitorId]);
 
   const connect = useCallback(() => {
+    // Guard against a late connect after unmount. retry() (visibility resume,
+    // freeze watchdog) can fire while the component is tearing down; without
+    // this a tile that's already gone would open a fresh WebSocket that nothing
+    // owns or closes, leaking a stream.
+    if (!mountedRef.current) {
+      log.videoPlayer('GO2RTC: Skipping connect, not mounted', LogLevel.DEBUG, { monitorId });
+      return;
+    }
+
     cleanup();
 
     if (!containerRef.current) {

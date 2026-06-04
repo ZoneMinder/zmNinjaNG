@@ -288,6 +288,27 @@ so single-monitor view is unaffected.
 5 minutes. This prevents repeated connection attempts in montage views
 with many monitors.
 
+**Stream teardown:** leaving a live view (montage or single monitor) must stop
+the stream. ``connect()`` sets ``videoRtc.background = true`` so a tile keeps
+streaming when scrolled out of view, but that flag also disables the VideoRTC
+element's own ``disconnectedCallback``, so teardown is the hook's job. WebRTC
+needs extra care: once it wins negotiation, media flows over the
+``RTCPeerConnection`` and the WebSocket is closed, so closing the ws alone does
+nothing. ``cleanup()`` calls ``destroyVideoRtc()``, which:
+
+- flips ``background`` back to false so DOM removal also triggers native teardown;
+- cancels the element's ``reconnectTID``/``disconnectTID`` timers so no scheduled
+  reconnect can re-open a socket after the view is gone;
+- calls ``ondisconnect()`` (closes the WebSocket and peer connection) and stops
+  the video's ``MediaStream`` tracks defensively;
+- removes the element from the DOM.
+
+``cleanup()`` also sweeps any stray VideoRTC left in the container, and
+``connect()`` bails when the hook is no longer mounted, so a late ``retry()``
+from the visibility resume or freeze watchdog cannot open a socket that nothing
+owns. Without this, tiles unmounted in bulk (navigating away from montage) leak
+their connections and keep pulling video in the background.
+
 **Per-monitor override:** The ``monitorStreamingOverrides`` map in the
 settings store allows forcing a specific streaming method per monitor,
 independent of the global setting.
