@@ -57,18 +57,21 @@ export function useMonitorNavigation({
     };
   }, [monitorsData?.monitors, currentMonitorId]);
 
-  // Navigation callbacks
+  // Navigation callbacks. Stepping between monitors replaces the current history
+  // entry (so prev/next don't build a back-stack) and carries the original
+  // `from` referrer forward, so the back button returns to the view the user
+  // came from (e.g. montage), not the previously viewed monitor. refs #180
   const onSwipeLeft = () => {
     if (hasNext) {
       const nextMonitor = enabledMonitors[currentIndex + 1];
-      navigate(`/monitors/${nextMonitor.Monitor.Id}`, { state: { from: location.pathname } });
+      navigate(`/monitors/${nextMonitor.Monitor.Id}`, { replace: true, state: location.state });
     }
   };
 
   const onSwipeRight = () => {
     if (hasPrev) {
       const prevMonitor = enabledMonitors[currentIndex - 1];
-      navigate(`/monitors/${prevMonitor.Monitor.Id}`, { state: { from: location.pathname } });
+      navigate(`/monitors/${prevMonitor.Monitor.Id}`, { replace: true, state: location.state });
     }
   };
 
@@ -96,11 +99,11 @@ export function useMonitorNavigation({
     const intervalId = window.setInterval(() => {
       const nextIndex = currentIndex + 1 < enabledMonitors.length ? currentIndex + 1 : 0;
       const nextMonitor = enabledMonitors[nextIndex];
-      navigate(`/monitors/${nextMonitor.Monitor.Id}`, { state: { from: location.pathname } });
+      navigate(`/monitors/${nextMonitor.Monitor.Id}`, { replace: true, state: location.state });
     }, cycleSeconds * 1000);
 
     return () => window.clearInterval(intervalId);
-  }, [currentIndex, enabledMonitors, location.pathname, navigate, cycleSeconds]);
+  }, [currentIndex, enabledMonitors, location.state, navigate, cycleSeconds]);
 
   return {
     enabledMonitors,
