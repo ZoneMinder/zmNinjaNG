@@ -287,6 +287,30 @@ describe('Profile Bootstrap', () => {
       // Should not throw
       await bootstrapMultiPortStreaming(mockProfile, mockContext);
     });
+
+    it('logs the force-disabled override when the profile setting is on', async () => {
+      const { fetchMinStreamingPort } = await import('../../api/server');
+      vi.mocked(fetchMinStreamingPort).mockResolvedValue(31000);
+      const { useSettingsStore } = await import('../settings');
+      vi.mocked(useSettingsStore.getState).mockReturnValue({
+        profileSettings: { 'test-profile': { forceDisableMultiPort: true } },
+        updateProfileSettings: vi.fn(),
+      } as any);
+      const { log } = await import('../../lib/logger');
+
+      await bootstrapMultiPortStreaming(mockProfile, mockContext);
+
+      expect(log.profileService).toHaveBeenCalledWith(
+        'Multi-port streaming available on server, force-disabled by profile setting',
+        expect.anything(),
+        { minPort: 31000 },
+      );
+      expect(log.profileService).not.toHaveBeenCalledWith(
+        'Multi-port streaming enabled',
+        expect.anything(),
+        expect.anything(),
+      );
+    });
   });
 
   describe('performBootstrap', () => {

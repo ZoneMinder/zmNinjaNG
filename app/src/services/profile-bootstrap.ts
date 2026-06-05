@@ -180,7 +180,22 @@ export async function bootstrapMultiPortStreaming(
       return;
     }
 
-    log.profileService('Multi-port streaming enabled', LogLevel.INFO, { minPort });
+    // Multi-port is published by the server; the per-profile
+    // forceDisableMultiPort setting is a client-side override applied later
+    // when building stream URLs (resolveMinStreamingPort). Reflect that override
+    // here so the log matches what streams actually use.
+    const { useSettingsStore } = await import('../stores/settings');
+    const settingsStore = useSettingsStore.getState();
+    const forceDisabled = settingsStore.profileSettings[profile.id]?.forceDisableMultiPort === true;
+    if (forceDisabled) {
+      log.profileService(
+        'Multi-port streaming available on server, force-disabled by profile setting',
+        LogLevel.INFO,
+        { minPort },
+      );
+    } else {
+      log.profileService('Multi-port streaming enabled', LogLevel.INFO, { minPort });
+    }
 
     // Update profile with minStreamingPort if changed
     if (profile.minStreamingPort !== minPort) {
@@ -190,8 +205,6 @@ export async function bootstrapMultiPortStreaming(
     // For NEW profiles (no existing settings), default to streaming mode
     // For existing profiles, respect user's current settings
     try {
-      const { useSettingsStore } = await import('../stores/settings');
-      const settingsStore = useSettingsStore.getState();
       const hasExistingSettings = settingsStore.profileSettings[profile.id] !== undefined;
 
       if (!hasExistingSettings) {
