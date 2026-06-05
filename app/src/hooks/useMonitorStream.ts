@@ -99,6 +99,7 @@ export function useMonitorStream({
     logFn: log.monitor,
     enabled,
     minStreamingPort: effectiveMinStreamingPort,
+    apiTimeoutSeconds: settings.apiTimeoutSeconds,
   });
 
   // Reset cacheBuster when connKey changes (new connection)

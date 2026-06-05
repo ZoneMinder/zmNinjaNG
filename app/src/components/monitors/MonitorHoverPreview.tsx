@@ -75,6 +75,7 @@ function MonitorLivePreview({ monitor }: { monitor: Monitor }) {
     logFn: log.monitor,
     enabled: true,
     minStreamingPort: effectiveMinStreamingPort,
+    apiTimeoutSeconds: settings.apiTimeoutSeconds,
   });
 
   if (!currentProfile || connKey === 0 || !isAccessTokenFresh) {

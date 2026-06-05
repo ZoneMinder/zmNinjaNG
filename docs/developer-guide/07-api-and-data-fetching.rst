@@ -783,9 +783,10 @@ default; ``0`` disables it) as the default ``timeoutMs`` when the caller
 doesn't pass one. Downloads (``onDownloadProgress`` or a binary
 ``responseType``) are exempt so large transfers are not cut off. The setting
 lives in Advanced settings and is read at request time, so changes apply
-without recreating the client. The ``CMD_QUIT`` stream-teardown request carries
-a fixed ``API_REQUEST.cmdQuitTimeoutMs`` (5s) so a slow quit can't hold a
-connection slot.
+without recreating the client. The ``CMD_QUIT`` stream-teardown request goes
+through ``httpGet`` (not the API client), so ``useStreamLifecycle`` is passed
+``apiTimeoutSeconds`` and applies the same timeout, keeping a slow quit from
+holding a connection slot during bulk teardown.
 
 The timeout is enforced on every transport. Web (``fetch``) and Electron use an
 ``AbortSignal`` from ``withTimeoutSignal``; Electron also passes ``timeoutMs`` to

@@ -43,6 +43,12 @@ export interface UseStreamLifecycleOptions {
   enabled?: boolean;
   /** Base port for multi-port streaming (port = minStreamingPort + monitorId). */
   minStreamingPort?: number;
+  /**
+   * Profile's API request timeout (seconds), applied to CMD_QUIT so teardown
+   * requests follow the same timeout as the rest of the app's HTTP. 0 disables
+   * it. Defaults to the built-in default when not supplied.
+   */
+  apiTimeoutSeconds?: number;
 }
 
 export interface UseStreamLifecycleReturn {
@@ -76,8 +82,12 @@ export function useStreamLifecycle({
   logFn,
   enabled = true,
   minStreamingPort,
+  apiTimeoutSeconds = API_REQUEST.defaultTimeoutSeconds,
 }: UseStreamLifecycleOptions): UseStreamLifecycleReturn {
   const regenerateConnKey = useMonitorStore((state) => state.regenerateConnKey);
+
+  // CMD_QUIT follows the same timeout as the rest of the app's HTTP. 0 disables.
+  const cmdQuitTimeoutMs = apiTimeoutSeconds > 0 ? apiTimeoutSeconds * 1000 : undefined;
 
   const [connKey, setConnKey] = useState(0);
 
@@ -118,7 +128,7 @@ export function useStreamLifecycle({
         }),
       );
 
-      httpGet(controlUrl, { timeoutMs: API_REQUEST.cmdQuitTimeoutMs }).catch(() => {
+      httpGet(controlUrl, { timeoutMs: cmdQuitTimeoutMs }).catch(() => {
         // Silently ignore errors - connection may already be closed
       });
     }
@@ -144,6 +154,7 @@ export function useStreamLifecycle({
     token: accessToken,
     viewMode,
     minStreamingPort,
+    cmdQuitTimeoutMs,
   });
 
   // Update cleanup params whenever they change
@@ -157,8 +168,9 @@ export function useStreamLifecycle({
       token: accessToken,
       viewMode,
       minStreamingPort,
+      cmdQuitTimeoutMs,
     };
-  }, [enabled, monitorId, monitorName, connKey, portalUrl, accessToken, viewMode, minStreamingPort]);
+  }, [enabled, monitorId, monitorName, connKey, portalUrl, accessToken, viewMode, minStreamingPort, cmdQuitTimeoutMs]);
 
   // Cleanup: send CMD_QUIT and abort image loading on unmount ONLY
   useEffect(() => {
@@ -188,7 +200,7 @@ export function useStreamLifecycle({
         );
 
         // Send CMD_QUIT asynchronously, ignore errors (connection may already be closed)
-        httpGet(controlUrl, { timeoutMs: API_REQUEST.cmdQuitTimeoutMs }).catch(() => {
+        httpGet(controlUrl, { timeoutMs: params.cmdQuitTimeoutMs }).catch(() => {
           // Silently ignore errors - server connection may already be closed
         });
       }
@@ -226,7 +238,7 @@ export function useStreamLifecycle({
         prevConnKeyRef.current.toString(),
         { token: accessToken || undefined, minStreamingPort, monitorId },
       );
-      httpGet(controlUrl, { timeoutMs: API_REQUEST.cmdQuitTimeoutMs }).catch(() => {
+      httpGet(controlUrl, { timeoutMs: cmdQuitTimeoutMs }).catch(() => {
         // Silently ignore - server connection may already be closed
       });
     }

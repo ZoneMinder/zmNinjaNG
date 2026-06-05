@@ -25,10 +25,6 @@ export const API_REQUEST = {
   // Bounds for the user-facing setting (seconds).
   minTimeoutSeconds: 0,
   maxTimeoutSeconds: 120,
-  // Timeout (ms) for the fire-and-forget CMD_QUIT teardown request. Keeps a slow
-  // stream-quit from holding an HTTP connection slot and starving other requests
-  // when many tiles tear down at once (leaving the montage view).
-  cmdQuitTimeoutMs: 5000,
 } as const;
 
 export const ZM_INTEGRATION = {
