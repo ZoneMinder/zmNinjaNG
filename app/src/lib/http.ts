@@ -382,7 +382,15 @@ export async function httpRequest<T = unknown>(
   try {
     let response: HttpResponse<T>;
     if (Platform.isNative) {
-      response = await nativeHttpRequest<T>(requestUrl, method, requestHeaders, body, responseType);
+      response = await nativeHttpRequest<T>(
+        requestUrl,
+        method,
+        requestHeaders,
+        body,
+        responseType,
+        timeoutMs ?? timeout,
+        signal,
+      );
     } else if (Platform.isElectron && typeof window !== 'undefined' && window.electronHttp) {
       const { signal: timeoutSignal, cleanup } = withTimeoutSignal(timeoutMs ?? timeout, signal);
       response = await electronHttpRequest<T>(
@@ -485,6 +493,49 @@ export async function httpRequest<T = unknown>(
 }
 
 /**
+ * Settle a native request promise within `timeoutMs` (and on `signal` abort),
+ * since CapacitorHttp can't be aborted directly. The underlying native request
+ * keeps running until its own connect/read timeout fires, but the caller's
+ * promise rejects on time so the UI can error and retry.
+ */
+function raceNativeTimeout<R>(
+  requestPromise: Promise<R>,
+  timeoutMs?: number,
+  signal?: AbortSignal
+): Promise<R> {
+  if (!timeoutMs && !signal) return requestPromise;
+  return new Promise<R>((resolve, reject) => {
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const cleanup = () => {
+      if (timer) clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+    };
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      fn();
+    };
+    const onAbort = () => finish(() => reject(new DOMException('The operation was aborted.', 'AbortError')));
+    if (signal) {
+      if (signal.aborted) return onAbort();
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+    if (timeoutMs) {
+      timer = setTimeout(
+        () => finish(() => reject(new Error(`Native request timed out after ${timeoutMs}ms`))),
+        timeoutMs,
+      );
+    }
+    requestPromise.then(
+      (r) => finish(() => resolve(r)),
+      (e) => finish(() => reject(e)),
+    );
+  });
+}
+
+/**
  * Native (Capacitor) HTTP request implementation
  */
 async function nativeHttpRequest<T>(
@@ -492,18 +543,26 @@ async function nativeHttpRequest<T>(
   method: string,
   headers: Record<string, string>,
   body: unknown,
-  responseType: string
+  responseType: string,
+  timeoutMs?: number,
+  signal?: AbortSignal
 ): Promise<HttpResponse<T>> {
   const { CapacitorHttp } = await import('@capacitor/core');
   const nativeResponseType =
     responseType === 'arraybuffer' ? 'arraybuffer' : responseType === 'blob' || responseType === 'base64' ? 'blob' : undefined;
-  const response = await CapacitorHttp.request({
+  // CapacitorHttp has no AbortSignal support, so the timeout is enforced two
+  // ways: native connect/read timeouts (so the underlying socket gives up) and
+  // a JS race (so the promise settles deterministically even if the native
+  // timer drifts, since readTimeout resets on each received chunk).
+  const requestPromise = CapacitorHttp.request({
     method: method as 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD',
     url,
     headers,
     data: body,
     responseType: nativeResponseType,
+    ...(timeoutMs ? { connectTimeout: timeoutMs, readTimeout: timeoutMs } : {}),
   });
+  const response = await raceNativeTimeout(requestPromise, timeoutMs, signal);
 
   const data = response.data as T;
   const responseHeaders = response.headers as Record<string, string>;

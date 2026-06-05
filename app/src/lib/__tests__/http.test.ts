@@ -656,6 +656,46 @@ describe('HTTP Client - Native Platform', () => {
       expect(httpError.status).toBe(404);
     }
   });
+
+  it('passes native connect/read timeouts when a timeout is set', async () => {
+    vi.mocked(capacitorHttp.request).mockResolvedValue({
+      url: 'https://example.com/api/data',
+      status: 200,
+      data: {},
+      headers: {},
+    });
+
+    await httpRequest('https://example.com/api/data', { timeoutMs: 5000 });
+
+    expect(capacitorHttp.request).toHaveBeenCalledWith(
+      expect.objectContaining({ connectTimeout: 5000, readTimeout: 5000 }),
+    );
+  });
+
+  it('rejects a native request that exceeds the timeout', async () => {
+    // CapacitorHttp can't be aborted, so a stalled native request must still
+    // reject via the JS race so the UI can recover instead of hanging.
+    vi.mocked(capacitorHttp.request).mockReturnValue(new Promise(() => { /* never resolves */ }));
+
+    await expect(
+      httpRequest('https://example.com/api/slow', { timeoutMs: 20 }),
+    ).rejects.toThrow(/timed out/i);
+  });
+
+  it('does not set native timeouts when none is configured', async () => {
+    vi.mocked(capacitorHttp.request).mockResolvedValue({
+      url: 'https://example.com/api/data',
+      status: 200,
+      data: {},
+      headers: {},
+    });
+
+    await httpRequest('https://example.com/api/data');
+
+    const callArg = vi.mocked(capacitorHttp.request).mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(callArg.connectTimeout).toBeUndefined();
+    expect(callArg.readTimeout).toBeUndefined();
+  });
 });
 
 describe('HTTP Client - Proxy Mode', () => {

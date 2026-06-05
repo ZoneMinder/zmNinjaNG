@@ -787,6 +787,13 @@ without recreating the client. The ``CMD_QUIT`` stream-teardown request carries
 a fixed ``API_REQUEST.cmdQuitTimeoutMs`` (5s) so a slow quit can't hold a
 connection slot.
 
+The timeout is enforced on every transport. Web (``fetch``) and Electron use an
+``AbortSignal`` from ``withTimeoutSignal``; Electron also passes ``timeoutMs`` to
+the main process. The Capacitor native path has no ``AbortSignal``, so it sets
+CapacitorHttp ``connectTimeout``/``readTimeout`` (so the native socket gives up)
+and races the request against a JS timer (so the promise settles on time even
+though the underlying native request can't be cancelled).
+
 Bandwidth Mode Settings
 ^^^^^^^^^^^^^^^^^^^^^^^
 
