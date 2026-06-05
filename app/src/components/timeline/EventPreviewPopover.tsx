@@ -16,6 +16,7 @@ import { Badge } from '../ui/badge';
 import { getEventImageUrl } from '../../api/events';
 import { getPortalUrlForEvent } from '../../lib/server-resolver';
 import { resolveFallbackFids } from '../../lib/thumbnail-chain';
+import { resolveMinStreamingPort } from '../../lib/multiport';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useDateTimeFormat } from '../../hooks/useDateTimeFormat';
 import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
@@ -75,7 +76,7 @@ export const EventPreviewPopover = memo(function EventPreviewPopover({
   const portalUrl = getPortalUrlForEvent(event.monitorId, monitors, profilePortalUrl);
   const tokenOpts = {
     token: accessToken ?? undefined,
-    minStreamingPort: currentProfile?.minStreamingPort,
+    minStreamingPort: resolveMinStreamingPort(currentProfile?.minStreamingPort, settings.forceDisableMultiPort),
     monitorId: event.monitorId,
   };
   const fids = resolveFallbackFids(settings.thumbnailFallbackChain);

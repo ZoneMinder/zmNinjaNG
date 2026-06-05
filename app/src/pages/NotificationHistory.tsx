@@ -7,6 +7,7 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import { useNotificationStore } from '../stores/notifications';
+import { resolveMinStreamingPort } from '../lib/multiport';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { buildThumbnailChain } from '../lib/thumbnail-chain';
 import { EventThumbnail } from '../components/events/EventThumbnail';
@@ -77,7 +78,7 @@ export default function NotificationHistory() {
         settings.thumbnailFallbackChain,
         {
           token: isAccessTokenFresh ? accessToken ?? undefined : undefined,
-          minStreamingPort: currentProfile.minStreamingPort,
+          minStreamingPort: resolveMinStreamingPort(currentProfile.minStreamingPort, settings.forceDisableMultiPort),
         }
       );
     },

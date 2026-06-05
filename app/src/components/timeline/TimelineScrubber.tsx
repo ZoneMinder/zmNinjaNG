@@ -13,6 +13,7 @@ import { buildThumbnailChain } from '../../lib/thumbnail-chain';
 import { EventThumbnail } from '../events/EventThumbnail';
 import { HoverPreview } from '../ui/hover-preview';
 import { EventZmsHoverPlayer } from '../events/EventThumbnailHoverPreview';
+import { resolveMinStreamingPort } from '../../lib/multiport';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
 import type { MonitorsResponse } from '../../api/types';
@@ -96,7 +97,7 @@ function ScrubberThumbnail({
   const portalUrl = getPortalUrlForEvent(event.monitorId, monitors, profilePortalUrl);
   const thumbnailUrls = buildThumbnailChain(portalUrl, event.id, settings.thumbnailFallbackChain, {
     token: isAccessTokenFresh ? accessToken ?? undefined : undefined,
-    minStreamingPort: currentProfile?.minStreamingPort,
+    minStreamingPort: resolveMinStreamingPort(currentProfile?.minStreamingPort, settings.forceDisableMultiPort),
     monitorId: event.monitorId,
   });
 

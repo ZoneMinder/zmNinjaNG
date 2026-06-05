@@ -181,6 +181,10 @@ export interface ProfileSettings {
   // Per-monitor streaming method overrides (monitorId → 'auto' | 'mjpeg')
   // When absent, the monitor uses the profile-level streamingMethod.
   monitorStreamingOverrides: Record<string, StreamingMethod>;
+  // Force-disable multi-port streaming. When true, the app ignores the server's
+  // ZM_MIN_STREAMING_PORT and uses the portal's default port for all streams.
+  // Default false = auto (use the server config when present).
+  forceDisableMultiPort: boolean;
   // Per-component log level overrides (component name → LogLevel)
   // When absent, the component uses the global logLevel.
   componentLogLevels: Record<string, number>;
@@ -307,6 +311,8 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   tvMode: false,
   showProtocolLabel: true,
   monitorStreamingOverrides: {},
+  // Auto by default: honor the server's ZM_MIN_STREAMING_PORT when present
+  forceDisableMultiPort: false,
   componentLogLevels: {},
   thumbnailFallbackChain: DEFAULT_THUMBNAIL_FALLBACK_CHAIN,
   hoverPreview: DEFAULT_HOVER_PREVIEW,

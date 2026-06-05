@@ -13,6 +13,7 @@ import { getEvents } from '../api/events';
 import type { EventFilters } from '../api/events';
 import type { EventData } from '../api/types';
 import { getMonitors } from '../api/monitors';
+import { resolveMinStreamingPort } from '../lib/multiport';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useAuthStore } from '../stores/auth';
 import { useFreshAccessToken } from '../hooks/useFreshAccessToken';
@@ -538,7 +539,7 @@ export default function Events() {
             onLoadMore={loadNextPage}
             eventTagMap={eventTagMap}
             eventFilters={serverFilters}
-            minStreamingPort={currentProfile?.minStreamingPort}
+            minStreamingPort={resolveMinStreamingPort(currentProfile?.minStreamingPort, settings.forceDisableMultiPort)}
           />
         ) : (
           <EventListView
@@ -554,7 +555,7 @@ export default function Events() {
             onLoadMore={loadNextPage}
             eventTagMap={eventTagMap}
             eventFilters={serverFilters}
-            minStreamingPort={currentProfile?.minStreamingPort}
+            minStreamingPort={resolveMinStreamingPort(currentProfile?.minStreamingPort, settings.forceDisableMultiPort)}
           />
         )}
       </div>

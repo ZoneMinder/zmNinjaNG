@@ -391,6 +391,8 @@
     "restart_now": "立即重启",
     "minutes": "分钟",
     "disable_log_redaction_desc": "在日志中显示密码/令牌",
+    "force_disable_multiport": "强制禁用多端口流",
+    "force_disable_multiport_desc": "忽略服务器的每监视器流端口，使用默认端口",
     "global_log_level": "全局级别",
     "global_log_level_desc": "设置所有组件。在下方自定义。",
     "component_log_levels": "组件日志",

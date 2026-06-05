@@ -52,6 +52,16 @@ Feature: Application Settings
     Then the bandwidth mode label should update
 
   @all
+  Scenario: Force-disable multiport toggle persists across navigation
+    When I navigate to the "Settings" page
+    And I expand the Advanced settings section
+    And I enable the force-disable multiport toggle
+    And I navigate to the "Dashboard" page
+    And I navigate to the "Settings" page
+    And I expand the Advanced settings section
+    Then the force-disable multiport toggle should be enabled
+
+  @all
   Scenario: Thumbnail fallback chain reorder persists across reload
     When I navigate to the "Settings" page
     And I expand the thumbnail fallback chain editor

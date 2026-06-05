@@ -391,6 +391,8 @@
     "restart_now": "Reiniciar ahora",
     "minutes": "minutos",
     "disable_log_redaction_desc": "Mostrar contraseñas/tokens en registros",
+    "force_disable_multiport": "Desactivar streaming multipuerto",
+    "force_disable_multiport_desc": "Ignorar los puertos de stream por monitor del servidor y usar el puerto predeterminado",
     "global_log_level": "Nivel global",
     "global_log_level_desc": "Configura todos los componentes. Personaliza abajo.",
     "component_log_levels": "Registros de componentes",

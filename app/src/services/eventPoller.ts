@@ -10,6 +10,7 @@ import { getEvents, getEventImageUrl } from '../api/events';
 import type { EventFilters } from '../api/events';
 import { getMonitors } from '../api/monitors';
 import { getPortalUrlForEvent } from '../lib/server-resolver';
+import { getEffectiveMinStreamingPort } from '../lib/multiport';
 import { useNotificationStore } from '../stores/notifications';
 import { useProfileStore } from '../stores/profile';
 import { useAuthStore } from '../stores/auth';
@@ -167,7 +168,7 @@ class EventPollerService {
           ? getEventImageUrl(eventPortalUrl, String(eventId), 'snapshot', {
               token: accessToken,
               width: 600,
-              minStreamingPort: currentProfile?.minStreamingPort,
+              minStreamingPort: getEffectiveMinStreamingPort(currentProfileId),
               monitorId: String(event.Event.MonitorId),
             })
           : undefined;

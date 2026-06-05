@@ -13,6 +13,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNotificationStore } from '../stores/notifications';
+import { resolveMinStreamingPort } from '../lib/multiport';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useProfileStore } from '../stores/profile';
 import { useFreshAccessToken } from '../hooks/useFreshAccessToken';
@@ -164,7 +165,7 @@ export function NotificationHandler() {
             profileSettings.thumbnailFallbackChain,
             {
               token: isAccessTokenFresh ? accessToken ?? undefined : undefined,
-              minStreamingPort: currentProfile.minStreamingPort,
+              minStreamingPort: resolveMinStreamingPort(currentProfile.minStreamingPort, profileSettings.forceDisableMultiPort),
             }
           )
         : [];

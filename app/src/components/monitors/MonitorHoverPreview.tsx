@@ -9,6 +9,7 @@
 
 import { useRef, type ReactNode } from 'react';
 import { getStreamUrl } from '../../api/monitors';
+import { resolveMinStreamingPort } from '../../lib/multiport';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useStreamLifecycle } from '../../hooks/useStreamLifecycle';
 import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
@@ -56,9 +57,13 @@ export function MonitorHoverPreview({ monitor, children }: MonitorHoverPreviewPr
  * Mount → new connkey. Unmount → CMD_QUIT via useStreamLifecycle.
  */
 function MonitorLivePreview({ monitor }: { monitor: Monitor }) {
-  const { currentProfile } = useCurrentProfile();
+  const { currentProfile, settings } = useCurrentProfile();
   const { token: accessToken, isFresh: isAccessTokenFresh } = useFreshAccessToken();
   const imgRef = useRef<HTMLImageElement>(null);
+  const effectiveMinStreamingPort = resolveMinStreamingPort(
+    currentProfile?.minStreamingPort,
+    settings.forceDisableMultiPort,
+  );
 
   const { connKey } = useStreamLifecycle({
     monitorId: monitor.Id,
@@ -69,7 +74,7 @@ function MonitorLivePreview({ monitor }: { monitor: Monitor }) {
     mediaRef: imgRef,
     logFn: log.monitor,
     enabled: true,
-    minStreamingPort: currentProfile?.minStreamingPort,
+    minStreamingPort: effectiveMinStreamingPort,
   });
 
   if (!currentProfile || connKey === 0 || !isAccessTokenFresh) {
@@ -84,7 +89,7 @@ function MonitorLivePreview({ monitor }: { monitor: Monitor }) {
     mode: 'jpeg',
     token: accessToken || undefined,
     connkey: connKey,
-    minStreamingPort: currentProfile.minStreamingPort,
+    minStreamingPort: effectiveMinStreamingPort,
   });
 
   return (

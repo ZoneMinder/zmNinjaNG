@@ -232,6 +232,73 @@ describe('useGo2RTCStream', () => {
         expect(ondisconnect).toHaveBeenCalled();
       });
     });
+
+    it('re-enables native teardown and removes the element on unmount so the stream cannot leak', async () => {
+      const containerRef = { current: containerElement };
+      const { unmount } = renderHook(() =>
+        useGo2RTCStream({
+          go2rtcUrl: 'http://localhost:1984',
+          monitorId: '1',
+          containerRef,
+          enabled: true,
+        })
+      );
+
+      await waitFor(() => {
+        expect(VideoRTC).toHaveBeenCalled();
+      });
+
+      const instance = mockVideoRtcInstances[0];
+      // While streaming, background is true (keeps playing when scrolled away),
+      // which disables VideoRTC's own disconnect-on-removal.
+      expect(instance.background).toBe(true);
+      const removeChild = vi.spyOn(containerElement, 'removeChild');
+
+      unmount();
+
+      await waitFor(() => {
+        // Cleanup flips background off so DOM removal triggers native teardown,
+        // then removes the element. Together these guarantee the WebSocket is
+        // closed even if the explicit ondisconnect is missed.
+        expect(instance.background).toBe(false);
+        expect(removeChild).toHaveBeenCalledWith(instance);
+      });
+    });
+
+    it('stops WebRTC media tracks and cancels reconnect timers on exit', async () => {
+      const containerRef = { current: containerElement };
+      const { unmount } = renderHook(() =>
+        useGo2RTCStream({
+          go2rtcUrl: 'http://localhost:1984',
+          monitorId: '1',
+          containerRef,
+          enabled: true,
+        })
+      );
+
+      await waitFor(() => {
+        expect(VideoRTC).toHaveBeenCalled();
+      });
+
+      const instance = mockVideoRtcInstances[0];
+      // Simulate an active WebRTC stream (media flows over the peer connection,
+      // surfaced as the video's srcObject) plus a scheduled reconnect.
+      const track = { stop: vi.fn() };
+      instance.video = {
+        srcObject: { getTracks: () => [track] },
+        removeAttribute: vi.fn(),
+      };
+      instance.reconnectTID = 12345;
+      const ondisconnect = vi.spyOn(instance, 'ondisconnect');
+
+      unmount();
+
+      await waitFor(() => {
+        expect(ondisconnect).toHaveBeenCalled();
+        expect(track.stop).toHaveBeenCalled();
+        expect(instance.reconnectTID).toBe(0);
+      });
+    });
   });
 
   describe('Staggered connection', () => {

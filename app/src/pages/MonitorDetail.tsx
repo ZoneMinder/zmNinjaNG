@@ -10,6 +10,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getMonitor, getControl, updateMonitor } from '../api/monitors';
 import { getZones } from '../api/zones';
+import { resolveMinStreamingPort } from '../lib/multiport';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useAuthStore } from '../stores/auth';
 import { useSettingsStore } from '../stores/settings';
@@ -110,7 +111,7 @@ export default function MonitorDetail() {
     portalUrl: resolvedPortalUrl,
     monitorId: monitor?.Monitor.Id || '',
     accessToken,
-    minStreamingPort: currentProfile?.minStreamingPort,
+    minStreamingPort: resolveMinStreamingPort(currentProfile?.minStreamingPort, settings.forceDisableMultiPort),
   });
 
   const {
@@ -375,6 +376,7 @@ export default function MonitorDetail() {
               showControls={true}
               onProtocolChange={setProtocol}
               forceViewMode="streaming"
+              bypassGo2rtcFailureCache
             />
             <ZoneOverlay
               zones={zones}

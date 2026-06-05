@@ -14,6 +14,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { getStreamUrl } from '../api/monitors';
+import { resolveMinStreamingPort } from '../lib/multiport';
 import { useCurrentProfile } from './useCurrentProfile';
 import { useBandwidthSettings } from './useBandwidthSettings';
 import { useStreamLifecycle } from './useStreamLifecycle';
@@ -71,6 +72,11 @@ export function useMonitorStream({
   const resolvedPortalUrl = portalPath ? portalPath.replace(/\/index\.php$/, '') : currentProfile?.portalUrl;
 
   const effectiveViewMode = viewModeOverride ?? settings.viewMode;
+  // Multi-port only applies in streaming mode, and only when not force-disabled.
+  const effectiveMinStreamingPort =
+    effectiveViewMode === 'streaming'
+      ? resolveMinStreamingPort(currentProfile?.minStreamingPort, settings.forceDisableMultiPort)
+      : undefined;
 
   const [cacheBuster, setCacheBuster] = useState(Date.now());
   const imgRef = useRef<HTMLImageElement>(null);
@@ -92,7 +98,7 @@ export function useMonitorStream({
     mediaRef: imgRef,
     logFn: log.monitor,
     enabled,
-    minStreamingPort: effectiveViewMode === 'streaming' ? currentProfile?.minStreamingPort : undefined,
+    minStreamingPort: effectiveMinStreamingPort,
   });
 
   // Reset cacheBuster when connKey changes (new connection)
@@ -126,11 +132,8 @@ export function useMonitorStream({
       connkey: connKey,
       // Only use cacheBuster in snapshot mode to force refresh; streaming mode uses only connkey
       cacheBuster: effectiveViewMode === 'snapshot' ? cacheBuster : undefined,
-      // Only use multi-port in streaming mode, not snapshot
-      minStreamingPort:
-        effectiveViewMode === 'streaming'
-          ? currentProfile.minStreamingPort
-          : undefined,
+      // Only use multi-port in streaming mode, not snapshot (and not force-disabled)
+      minStreamingPort: effectiveMinStreamingPort,
       ...streamOptions,
     })
     : '';

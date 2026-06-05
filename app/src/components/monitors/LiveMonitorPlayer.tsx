@@ -70,6 +70,15 @@ export interface LiveMonitorPlayerProps {
    * Defaults to 0 (no stagger) for single-monitor callers.
    */
   staggerIndex?: number;
+  /**
+   * Opt out of the shared, module-level Go2RTC failure cache. When true this
+   * player neither reads nor writes the cache: it always attempts Go2RTC, and a
+   * failure here is not recorded for other instances. The single-monitor detail
+   * view sets this so a failure recorded under montage's many-connections-at-once
+   * load is not inherited by the detail view, where a single connection succeeds.
+   * Defaults to false (montage tiles share the cache).
+   */
+  bypassGo2rtcFailureCache?: boolean;
 }
 
 export function LiveMonitorPlayer({
@@ -84,6 +93,7 @@ export function LiveMonitorPlayer({
   onProtocolChange,
   forceViewMode,
   staggerIndex = 0,
+  bypassGo2rtcFailureCache = false,
 }: LiveMonitorPlayerProps) {
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -121,8 +131,17 @@ export function LiveMonitorPlayer({
     return method;
   }, [userStreamingPreference, monitor.Go2RTCEnabled, monitor.Id, monitor.Name, profile?.go2rtcUrl]);
 
-  const [go2rtcFailed, setGo2rtcFailed] = useState(() => isGo2rtcCachedFailure(monitor.Id));
+  const [go2rtcFailed, setGo2rtcFailed] = useState(() =>
+    bypassGo2rtcFailureCache ? false : isGo2rtcCachedFailure(monitor.Id)
+  );
   const [hasVideoFrames, setHasVideoFrames] = useState(false);
+
+  // Record a Go2RTC failure in the shared cache, unless this player opts out.
+  // The local go2rtcFailed state still flips so this instance falls back to
+  // MJPEG; only the cross-instance cache write is suppressed.
+  const recordGo2rtcFailure = useCallback((id: string) => {
+    if (!bypassGo2rtcFailureCache) markGo2rtcFailed(id);
+  }, [bypassGo2rtcFailureCache]);
 
   // When user explicitly enables Go2RTC (streamingMethod changes to webrtc),
   // clear the failure cache so it retries immediately
@@ -164,10 +183,10 @@ export function LiveMonitorPlayer({
         monitorId: monitor.Id,
         error: go2rtcStream.error,
       });
-      markGo2rtcFailed(monitor.Id);
+      recordGo2rtcFailure(monitor.Id);
       setGo2rtcFailed(true);
     }
-  }, [streamingMethod, go2rtcStream.state, go2rtcStream.error, go2rtcFailed, monitor.Id]);
+  }, [streamingMethod, go2rtcStream.state, go2rtcStream.error, go2rtcFailed, monitor.Id, recordGo2rtcFailure]);
 
   // Fall back to MJPEG when Go2RTC connects but no video frames arrive
   const videoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -207,7 +226,7 @@ export function LiveMonitorPlayer({
             videoWidth: video?.videoWidth,
             videoHeight: video?.videoHeight,
           });
-          markGo2rtcFailed(monitor.Id);
+          recordGo2rtcFailure(monitor.Id);
           setGo2rtcFailed(true);
         } else {
           setHasVideoFrames(true);
@@ -220,7 +239,7 @@ export function LiveMonitorPlayer({
     }
 
     return clearVideoTimeout;
-  }, [streamingMethod, go2rtcFailed, go2rtcStream.state, hasVideoFrames, go2rtcStream, monitor.Id, clearVideoTimeout]);
+  }, [streamingMethod, go2rtcFailed, go2rtcStream.state, hasVideoFrames, go2rtcStream, monitor.Id, clearVideoTimeout, recordGo2rtcFailure]);
 
   // Swap from the MJPEG-first placeholder to the MSE <video> as soon as decoded
   // frames are available, rather than waiting for the timeout deadline. Polls
@@ -281,7 +300,7 @@ export function LiveMonitorPlayer({
           retries,
           ...detail,
         });
-        markGo2rtcFailed(monitorId);
+        recordGo2rtcFailure(monitorId);
         setGo2rtcFailed(true);
         return;
       }
@@ -339,15 +358,15 @@ export function LiveMonitorPlayer({
     }, GO2RTC_LIVENESS_CHECK_MS);
 
     return () => clearInterval(interval);
-  }, [effectiveStreamingMethod, hasVideoFrames, go2rtcFailed, monitorId]);
+  }, [effectiveStreamingMethod, hasVideoFrames, go2rtcFailed, monitorId, recordGo2rtcFailure]);
 
   // Reset failure state when monitor changes (check cache for new monitor)
   useEffect(() => {
-    setGo2rtcFailed(isGo2rtcCachedFailure(monitor.Id));
+    setGo2rtcFailed(bypassGo2rtcFailureCache ? false : isGo2rtcCachedFailure(monitor.Id));
     setHasVideoFrames(false);
     freezeRetryCountRef.current = 0;
     lastFreezeAtRef.current = 0;
-  }, [monitor.Id]);
+  }, [monitor.Id, bypassGo2rtcFailureCache]);
 
   // When the page returns from background, the freeze watchdog may have
   // exhausted its retry budget while the browser was suspending the player.

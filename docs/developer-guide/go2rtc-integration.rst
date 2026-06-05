@@ -286,7 +286,38 @@ so single-monitor view is unaffected.
 
 **Failure cache:** Monitors that fail Go2RTC are cached and skipped for
 5 minutes. This prevents repeated connection attempts in montage views
-with many monitors.
+with many monitors. The cache is module-level and shared by every
+``LiveMonitorPlayer``, and it survives in-app navigation (only a full reload
+clears it).
+
+The single-monitor detail view passes ``bypassGo2rtcFailureCache`` so it
+neither reads nor writes this cache. Montage opens many connections at once and
+some fail under that load, marking those monitors failed. Without the bypass the
+detail view inherited that and skipped Go2RTC, showing the loading placeholder
+until a reload. With the bypass the detail view always attempts Go2RTC (a single
+connection succeeds), and a failure there falls back to MJPEG locally without
+poisoning the montage cache.
+
+**Stream teardown:** leaving a live view (montage or single monitor) must stop
+the stream. ``connect()`` sets ``videoRtc.background = true`` so a tile keeps
+streaming when scrolled out of view, but that flag also disables the VideoRTC
+element's own ``disconnectedCallback``, so teardown is the hook's job. WebRTC
+needs extra care: once it wins negotiation, media flows over the
+``RTCPeerConnection`` and the WebSocket is closed, so closing the ws alone does
+nothing. ``cleanup()`` calls ``destroyVideoRtc()``, which:
+
+- flips ``background`` back to false so DOM removal also triggers native teardown;
+- cancels the element's ``reconnectTID``/``disconnectTID`` timers so no scheduled
+  reconnect can re-open a socket after the view is gone;
+- calls ``ondisconnect()`` (closes the WebSocket and peer connection) and stops
+  the video's ``MediaStream`` tracks defensively;
+- removes the element from the DOM.
+
+``cleanup()`` also sweeps any stray VideoRTC left in the container, and
+``connect()`` bails when the hook is no longer mounted, so a late ``retry()``
+from the visibility resume or freeze watchdog cannot open a socket that nothing
+owns. Without this, tiles unmounted in bulk (navigating away from montage) leak
+their connections and keep pulling video in the background.
 
 **Per-monitor override:** The ``monitorStreamingOverrides`` map in the
 settings store allows forcing a specific streaming method per monitor,

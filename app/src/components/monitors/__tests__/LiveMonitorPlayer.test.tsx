@@ -25,15 +25,23 @@ vi.mock('../../../hooks/useMonitorStream', () => ({
   useMonitorStream: () => mockMjpegReturn,
 }));
 
+const go2rtc = vi.hoisted(() => ({
+  state: 'connecting' as string,
+  optionsLog: [] as Array<{ monitorId: string; enabled?: boolean }>,
+}));
+
 vi.mock('../../../hooks/useGo2RTCStream', () => ({
-  useGo2RTCStream: () => ({
-    state: 'connecting',
-    error: null,
-    activeProtocol: null,
-    getVideoElement: () => null,
-    retry: vi.fn(),
-    stop: vi.fn(),
-  }),
+  useGo2RTCStream: (opts: { monitorId: string; enabled?: boolean }) => {
+    go2rtc.optionsLog.push(opts);
+    return {
+      state: go2rtc.state,
+      error: go2rtc.state === 'error' ? 'Go2RTC WebSocket connection failed' : null,
+      activeProtocol: null,
+      getVideoElement: () => null,
+      retry: vi.fn(),
+      stop: vi.fn(),
+    };
+  },
 }));
 
 vi.mock('../../../hooks/useVisibilityResume', () => ({
@@ -101,5 +109,62 @@ describe('LiveMonitorPlayer MJPEG recovery', () => {
       'src',
       'https://t/stream?connkey=2',
     );
+  });
+});
+
+describe('LiveMonitorPlayer Go2RTC failure cache scoping', () => {
+  const go2rtcProfile = { ...profile, go2rtcUrl: 'https://t/go2rtc' } as Profile;
+
+  beforeEach(() => {
+    mockMjpegReturn = {
+      streamUrl: 'https://t/stream?connkey=1',
+      imageSrc: 'https://t/stream?connkey=1',
+      imgRef: { current: null },
+      regenerateConnection: vi.fn(),
+    };
+    go2rtc.state = 'connecting';
+    go2rtc.optionsLog = [];
+  });
+
+  // Whether the latest mount asked the Go2RTC hook to connect for this monitor.
+  const latestEnabled = (monitorId: string): boolean | undefined =>
+    [...go2rtc.optionsLog].reverse().find((o) => o.monitorId === monitorId)?.enabled;
+
+  it('single-monitor view does not inherit a montage-recorded Go2RTC failure', () => {
+    const rtcMonitor = { Id: 'cache-a', Name: 'Cam', Go2RTCEnabled: true } as unknown as Monitor;
+
+    // A montage tile fails Go2RTC and records the failure in the shared cache.
+    go2rtc.state = 'error';
+    const montage = render(<LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} />);
+    montage.unmount();
+
+    // The single-monitor view opts out of the shared cache: it must still try
+    // Go2RTC even though the montage run just marked this monitor failed.
+    go2rtc.state = 'connecting';
+    render(
+      <LiveMonitorPlayer
+        monitor={rtcMonitor}
+        profile={go2rtcProfile}
+        bypassGo2rtcFailureCache
+        forceViewMode="streaming"
+      />,
+    );
+
+    expect(latestEnabled('cache-a')).toBe(true);
+  });
+
+  it('montage tiles still inherit the shared Go2RTC failure cache', () => {
+    const rtcMonitor = { Id: 'cache-b', Name: 'Cam', Go2RTCEnabled: true } as unknown as Monitor;
+
+    // First montage tile fails and records the failure.
+    go2rtc.state = 'error';
+    const first = render(<LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} />);
+    first.unmount();
+
+    // A subsequent montage tile for the same monitor skips Go2RTC (MJPEG fallback).
+    go2rtc.state = 'connecting';
+    render(<LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} />);
+
+    expect(latestEnabled('cache-b')).toBe(false);
   });
 });
