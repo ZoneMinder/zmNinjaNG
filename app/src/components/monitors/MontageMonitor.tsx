@@ -268,7 +268,7 @@ function MontageMonitorComponent({
           isFullscreen ? "bg-black" : "bg-black/90",
           !isFullscreen && "cursor-pointer"
         )}
-        onClick={() => !isEditing && navigate(`/monitors/${monitor.Id}`)}
+        onClick={() => !isEditing && navigate(`/monitors/${monitor.Id}`, { state: { from: '/montage' } })}
         onKeyDown={handleKeyClick}
         tabIndex={isEditing ? -1 : 0}
         role="button"

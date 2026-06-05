@@ -181,7 +181,7 @@ export default function Montage() {
   const handleDpadEnter = useCallback(() => {
     const mon = monitors[focusedMonitorIndex];
     if (mon) {
-      navigate(`/monitors/${mon.Monitor.Id}`);
+      navigate(`/monitors/${mon.Monitor.Id}`, { state: { from: '/montage' } });
     }
   }, [monitors, focusedMonitorIndex, navigate]);
 
