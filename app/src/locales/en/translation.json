@@ -391,6 +391,8 @@
     "restart_now": "Restart now",
     "minutes": "minutes",
     "disable_log_redaction_desc": "Show passwords/tokens in logs",
+    "force_disable_multiport": "Force disable multi-port streaming",
+    "force_disable_multiport_desc": "Ignore the server's per-monitor stream ports and use the default port",
     "global_log_level": "Global Level",
     "global_log_level_desc": "Sets all components. Override individual ones below.",
     "component_log_levels": "Component Logs",

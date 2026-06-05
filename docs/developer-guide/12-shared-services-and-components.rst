@@ -474,6 +474,39 @@ hooks (``useStreamLifecycle``), and stream/playback components.
 
 --------------
 
+Multi-port Resolution (``lib/multiport.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The server's ``ZM_MIN_STREAMING_PORT`` is fetched once during profile
+bootstrap and stored on the profile as ``minStreamingPort``. The
+per-profile setting ``forceDisableMultiPort`` lets a user opt out for
+servers whose per-monitor ports are not reachable. These helpers are the
+only sanctioned way to read the effective base port; when the override is
+on they return ``undefined``, so ``applyMultiPort`` becomes a no-op and
+URLs use the portal's default port.
+
+.. code:: typescript
+
+   import {
+     resolveMinStreamingPort,
+     getEffectiveMinStreamingPort,
+   } from '../lib/multiport';
+
+   // In React components (settings already in scope via useCurrentProfile)
+   const port = resolveMinStreamingPort(
+     currentProfile?.minStreamingPort,
+     settings.forceDisableMultiPort,
+   );
+
+   // In services / non-React code (reads both stores by profile id)
+   const port = getEffectiveMinStreamingPort(currentProfileId);
+
+Pass the result as ``minStreamingPort`` to the URL builders. Never read
+``currentProfile.minStreamingPort`` directly at a call site, or the
+toggle is bypassed.
+
+--------------
+
 Event Icons (``lib/event-icons.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

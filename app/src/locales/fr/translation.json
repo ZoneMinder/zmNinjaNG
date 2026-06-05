@@ -391,6 +391,8 @@
     "restart_now": "Redémarrer",
     "minutes": "minutes",
     "disable_log_redaction_desc": "Afficher les mots de passe/jetons dans les journaux",
+    "force_disable_multiport": "Désactiver le streaming multiport",
+    "force_disable_multiport_desc": "Ignorer les ports de flux par moniteur du serveur et utiliser le port par défaut",
     "global_log_level": "Niveau global",
     "global_log_level_desc": "Définit tous les composants. Personnaliser ci-dessous.",
     "component_log_levels": "Journaux composants",

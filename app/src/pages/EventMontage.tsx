@@ -9,6 +9,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getEvents } from '../api/events';
 import { getMonitors } from '../api/monitors';
+import { resolveMinStreamingPort } from '../lib/multiport';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useFreshAccessToken } from '../hooks/useFreshAccessToken';
 import { useSettingsStore } from '../stores/settings';
@@ -308,7 +309,7 @@ export default function EventMontage() {
           totalCount={eventsData?.pagination?.totalCount}
           isLoadingMore={isLoadingMore}
           onLoadMore={loadNextPage}
-          minStreamingPort={currentProfile?.minStreamingPort}
+          minStreamingPort={resolveMinStreamingPort(currentProfile?.minStreamingPort, settings.forceDisableMultiPort)}
         />
       )}
     </PageContainer>

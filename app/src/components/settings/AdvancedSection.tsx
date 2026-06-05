@@ -314,6 +314,23 @@ export function AdvancedSection({
           )}
           </>)}
 
+          {/* Force-disable multi-port streaming */}
+          <SettingsRow>
+            <RowLabel
+              label={t('settings.force_disable_multiport')}
+              desc={t('settings.force_disable_multiport_desc')}
+            />
+            <Switch
+              id="force-disable-multiport"
+              checked={settings.forceDisableMultiPort}
+              onCheckedChange={(checked) =>
+                currentProfile &&
+                updateSettings(currentProfile.id, { forceDisableMultiPort: checked })
+              }
+              data-testid="settings-force-disable-multiport-switch"
+            />
+          </SettingsRow>
+
           {/* Log Redaction */}
           <SettingsRow>
             <RowLabel

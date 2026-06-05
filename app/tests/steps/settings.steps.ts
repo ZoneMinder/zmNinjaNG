@@ -280,6 +280,27 @@ Then('I clear logs if available', async ({ page }) => {
 });
 
 // Thumbnail fallback chain steps
+When('I expand the Advanced settings section', async ({ page }) => {
+  const trigger = page.getByTestId('settings-advanced-toggle');
+  await expect(trigger).toBeVisible({ timeout: testConfig.timeouts.pageLoad });
+  if ((await trigger.getAttribute('aria-expanded')) !== 'true') {
+    await trigger.click();
+  }
+  await expect(page.getByTestId('settings-force-disable-multiport-switch')).toBeVisible();
+});
+
+When('I enable the force-disable multiport toggle', async ({ page }) => {
+  const toggle = page.getByTestId('settings-force-disable-multiport-switch');
+  if (!(await toggle.isChecked().catch(() => false))) {
+    await toggle.click();
+  }
+  await expect(toggle).toBeChecked();
+});
+
+Then('the force-disable multiport toggle should be enabled', async ({ page }) => {
+  await expect(page.getByTestId('settings-force-disable-multiport-switch')).toBeChecked();
+});
+
 When('I expand the thumbnail fallback chain editor', async ({ page }) => {
   const trigger = page.getByTestId('settings-thumbnail-chain-trigger');
   await trigger.waitFor({ state: 'visible' });

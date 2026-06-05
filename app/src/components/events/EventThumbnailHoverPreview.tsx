@@ -8,6 +8,7 @@
 
 import { useEffect, useMemo, type ReactNode } from 'react';
 import { HoverPreview } from '../ui/hover-preview';
+import { resolveMinStreamingPort } from '../../lib/multiport';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
 import { getEventZmsUrl, getZmsControlUrl } from '../../lib/url-builder';
@@ -78,7 +79,7 @@ export function EventZmsHoverPlayer({ descriptor }: { descriptor: EventZmsHoverD
   const tokenOpts = {
     token: accessToken ?? undefined,
     apiUrl: currentProfile?.apiUrl,
-    minStreamingPort: currentProfile?.minStreamingPort,
+    minStreamingPort: resolveMinStreamingPort(currentProfile?.minStreamingPort, settings.forceDisableMultiPort),
     monitorId: descriptor.monitorId,
   };
 

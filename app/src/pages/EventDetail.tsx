@@ -10,6 +10,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getEvent, getEventVideoUrl, getEventImageUrl, setEventArchived } from '../api/events';
 import { resolveFallbackFids } from '../lib/thumbnail-chain';
 import { getMonitor } from '../api/monitors';
+import { resolveMinStreamingPort } from '../lib/multiport';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useFreshAccessToken } from '../hooks/useFreshAccessToken';
 import { useEventTagMapping } from '../hooks/useEventTags';
@@ -72,6 +73,10 @@ export default function EventDetail() {
 
   const { currentProfile, settings } = useCurrentProfile();
   const { token: accessToken, isFresh: isAccessTokenFresh } = useFreshAccessToken();
+  const effectiveMinStreamingPort = resolveMinStreamingPort(
+    currentProfile?.minStreamingPort,
+    settings.forceDisableMultiPort,
+  );
 
   // Resolve portal URL for the monitor's server (multi-server support)
   const { portalPath } = useServerUrls(monitorData?.Monitor?.ServerId);
@@ -195,9 +200,9 @@ export default function EventDetail() {
   // every time the parent re-renders for unrelated reasons (toast state, query refetch).
   const videoUrl = useMemo(
     () => (currentProfile && hasVideo && isAccessTokenFresh && eventIdForUrls
-      ? getEventVideoUrl(resolvedPortalUrl, eventIdForUrls, accessToken || undefined, currentProfile.apiUrl, isHlsEvent, currentProfile.minStreamingPort, monitorIdForUrls)
+      ? getEventVideoUrl(resolvedPortalUrl, eventIdForUrls, accessToken || undefined, currentProfile.apiUrl, isHlsEvent, effectiveMinStreamingPort, monitorIdForUrls)
       : ''),
-    [currentProfile, hasVideo, isAccessTokenFresh, resolvedPortalUrl, eventIdForUrls, accessToken, isHlsEvent, monitorIdForUrls]
+    [currentProfile, hasVideo, isAccessTokenFresh, resolvedPortalUrl, eventIdForUrls, accessToken, isHlsEvent, effectiveMinStreamingPort, monitorIdForUrls]
   );
 
   const posterUrl = useMemo(
@@ -205,11 +210,11 @@ export default function EventDetail() {
       ? getEventImageUrl(resolvedPortalUrl, eventIdForUrls, posterFid, {
         token: accessToken || undefined,
         apiUrl: currentProfile.apiUrl,
-        minStreamingPort: currentProfile.minStreamingPort,
+        minStreamingPort: effectiveMinStreamingPort,
         monitorId: monitorIdForUrls,
       })
       : undefined),
-    [currentProfile, isAccessTokenFresh, resolvedPortalUrl, eventIdForUrls, posterFid, accessToken, monitorIdForUrls]
+    [currentProfile, isAccessTokenFresh, resolvedPortalUrl, eventIdForUrls, posterFid, accessToken, effectiveMinStreamingPort, monitorIdForUrls]
   );
 
   // Stable callback so Mp4EventPlayer's effect doesn't re-run on every parent render.
@@ -363,7 +368,7 @@ export default function EventDetail() {
                     event.Event.Id,
                     event.Event.Name,
                     accessToken || undefined,
-                    currentProfile?.minStreamingPort,
+                    effectiveMinStreamingPort,
                     event.Event.MonitorId,
                   );
                   // Background task drawer will show download progress
@@ -404,7 +409,7 @@ export default function EventDetail() {
                   alarmFrameId={event.Event.AlarmFrameId}
                   maxScoreFrameId={event.Event.MaxScoreFrameId}
                   eventLength={parseFloat(event.Event.Length)}
-                  minStreamingPort={currentProfile.minStreamingPort}
+                  minStreamingPort={effectiveMinStreamingPort}
                   monitorId={event.Event.MonitorId}
                   className="space-y-4"
                 />
@@ -463,7 +468,7 @@ export default function EventDetail() {
                 alarmFrameId={event.Event.AlarmFrameId}
                 maxScoreFrameId={event.Event.MaxScoreFrameId}
                 eventLength={parseFloat(event.Event.Length)}
-                minStreamingPort={currentProfile.minStreamingPort}
+                minStreamingPort={effectiveMinStreamingPort}
                 monitorId={event.Event.MonitorId}
                 className="space-y-4"
               />
