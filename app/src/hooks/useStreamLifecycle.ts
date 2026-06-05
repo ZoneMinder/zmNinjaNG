@@ -14,6 +14,7 @@ import { useState, useEffect, useRef } from 'react';
 import { getZmsControlUrl } from '../lib/url-builder';
 import { ZMS_COMMANDS } from '../lib/zm-constants';
 import { httpGet } from '../lib/http';
+import { API_REQUEST } from '../lib/zmninja-ng-constants';
 import { useMonitorStore } from '../stores/monitors';
 import { log, LogLevel } from '../lib/logger';
 
@@ -117,7 +118,7 @@ export function useStreamLifecycle({
         }),
       );
 
-      httpGet(controlUrl).catch(() => {
+      httpGet(controlUrl, { timeoutMs: API_REQUEST.cmdQuitTimeoutMs }).catch(() => {
         // Silently ignore errors - connection may already be closed
       });
     }
@@ -187,7 +188,7 @@ export function useStreamLifecycle({
         );
 
         // Send CMD_QUIT asynchronously, ignore errors (connection may already be closed)
-        httpGet(controlUrl).catch(() => {
+        httpGet(controlUrl, { timeoutMs: API_REQUEST.cmdQuitTimeoutMs }).catch(() => {
           // Silently ignore errors - server connection may already be closed
         });
       }
@@ -225,7 +226,7 @@ export function useStreamLifecycle({
         prevConnKeyRef.current.toString(),
         { token: accessToken || undefined, minStreamingPort, monitorId },
       );
-      httpGet(controlUrl).catch(() => {
+      httpGet(controlUrl, { timeoutMs: API_REQUEST.cmdQuitTimeoutMs }).catch(() => {
         // Silently ignore - server connection may already be closed
       });
     }

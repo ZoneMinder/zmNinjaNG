@@ -3,10 +3,22 @@ import { createApiClient } from '../client';
 import { httpRequest } from '../../lib/http';
 import { log, LogLevel } from '../../lib/logger';
 import { useAuthStore } from '../../stores/auth';
+import { API_REQUEST } from '../../lib/zmninja-ng-constants';
 
 vi.mock('../../lib/http', () => ({
   httpRequest: vi.fn(),
 }));
+
+const mockGetProfileSettings = vi.fn((): { apiTimeoutSeconds: number } => ({
+  apiTimeoutSeconds: API_REQUEST.defaultTimeoutSeconds,
+}));
+vi.mock('../../stores/settings', () => ({
+  useSettingsStore: { getState: () => ({ getProfileSettings: mockGetProfileSettings }) },
+}));
+
+function okOnce() {
+  vi.mocked(httpRequest).mockResolvedValueOnce({ data: {}, status: 200, statusText: 'OK', headers: {} } as never);
+}
 
 vi.mock('../../lib/logger', () => ({
   log: {
@@ -158,5 +170,45 @@ describe('API Client', () => {
 
     const errorCall = vi.mocked(log.api).mock.calls.find(c => String(c[0]).includes('[Error #'));
     expect(errorCall?.[1]).toBe(LogLevel.ERROR);
+  });
+
+  describe('default request timeout', () => {
+    it('applies the built-in default timeout when no profile and no explicit timeout', async () => {
+      okOnce();
+      const client = createApiClient('https://zm.example.com/api');
+      await client.get('/monitors.json');
+      expect(vi.mocked(httpRequest).mock.calls[0]?.[1]?.timeoutMs)
+        .toBe(API_REQUEST.defaultTimeoutSeconds * 1000);
+    });
+
+    it('uses the profile-configured timeout when a profileId is provided', async () => {
+      mockGetProfileSettings.mockReturnValueOnce({ apiTimeoutSeconds: 7 });
+      okOnce();
+      const client = createApiClient('https://zm.example.com/api', undefined, 'p1');
+      await client.get('/monitors.json');
+      expect(vi.mocked(httpRequest).mock.calls[0]?.[1]?.timeoutMs).toBe(7000);
+    });
+
+    it('disables the timeout when apiTimeoutSeconds is 0', async () => {
+      mockGetProfileSettings.mockReturnValueOnce({ apiTimeoutSeconds: 0 });
+      okOnce();
+      const client = createApiClient('https://zm.example.com/api', undefined, 'p1');
+      await client.get('/monitors.json');
+      expect(vi.mocked(httpRequest).mock.calls[0]?.[1]?.timeoutMs).toBeUndefined();
+    });
+
+    it('does not apply the default to downloads (onDownloadProgress)', async () => {
+      okOnce();
+      const client = createApiClient('https://zm.example.com/api');
+      await client.get('/events/12/video.mp4', { onDownloadProgress: () => {} });
+      expect(vi.mocked(httpRequest).mock.calls[0]?.[1]?.timeoutMs).toBeUndefined();
+    });
+
+    it('respects an explicit timeoutMs from the caller', async () => {
+      okOnce();
+      const client = createApiClient('https://zm.example.com/api');
+      await client.get('/monitors.json', { timeoutMs: 1234 });
+      expect(vi.mocked(httpRequest).mock.calls[0]?.[1]?.timeoutMs).toBe(1234);
+    });
   });
 });

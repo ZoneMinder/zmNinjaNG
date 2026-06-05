@@ -7,6 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useStreamLifecycle } from '../useStreamLifecycle';
+import { API_REQUEST } from '../../lib/zmninja-ng-constants';
 
 // Mock logger
 vi.mock('../../lib/logger', () => ({
@@ -226,6 +227,7 @@ describe('useStreamLifecycle', () => {
       await waitFor(() => {
         expect(mockHttpGet).toHaveBeenCalledWith(
           expect.stringContaining('connkey=7777'),
+          expect.objectContaining({ timeoutMs: API_REQUEST.cmdQuitTimeoutMs }),
         );
       });
     });
@@ -316,6 +318,7 @@ describe('useStreamLifecycle', () => {
       await waitFor(() => {
         expect(mockHttpGet).toHaveBeenCalledWith(
           expect.stringContaining('http://my-zm-server'),
+          expect.objectContaining({ timeoutMs: API_REQUEST.cmdQuitTimeoutMs }),
         );
       });
     });

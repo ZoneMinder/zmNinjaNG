@@ -1,5 +1,7 @@
 import { httpRequest, type HttpError, type HttpOptions, type HttpResponse } from '../lib/http';
 import { useAuthStore } from '../stores/auth';
+import { useSettingsStore } from '../stores/settings';
+import { API_REQUEST } from '../lib/zmninja-ng-constants';
 import { log, LogLevel } from '../lib/logger';
 import { sanitizeObject } from '../lib/log-sanitizer';
 import { setApiClientInitialized } from './client-ready';
@@ -67,7 +69,27 @@ function appendQuery(url: string, params: Record<string, string | number>): stri
 let loginInProgress = false;
 let loginPromise: Promise<boolean> | null = null;
 
-export function createApiClient(baseURL: string, reLogin?: () => Promise<boolean>): ApiClient {
+export function createApiClient(
+  baseURL: string,
+  reLogin?: () => Promise<boolean>,
+  profileId?: string,
+): ApiClient {
+  // Resolve the default per-request timeout (ms) from the profile setting, used
+  // when the caller didn't set one. 0 (or unset) disables it. Read at call time
+  // so changes take effect without recreating the client.
+  const resolveDefaultTimeoutMs = (config: ApiRequestConfig): number | undefined => {
+    if (config.timeoutMs !== undefined || config.timeout !== undefined) return undefined;
+    const isDownload =
+      !!config.onDownloadProgress ||
+      config.responseType === 'blob' ||
+      config.responseType === 'arraybuffer' ||
+      config.responseType === 'base64';
+    if (isDownload) return undefined;
+    const secs = profileId
+      ? useSettingsStore.getState().getProfileSettings(profileId).apiTimeoutSeconds
+      : API_REQUEST.defaultTimeoutSeconds;
+    return secs && secs > 0 ? secs * 1000 : undefined;
+  };
   const request = async <T>(
     method: ApiMethod,
     url: string,
@@ -154,7 +176,7 @@ export function createApiClient(baseURL: string, reLogin?: () => Promise<boolean
         body: data,
         responseType: config.responseType,
         timeout: config.timeout,
-        timeoutMs: config.timeoutMs,
+        timeoutMs: config.timeoutMs ?? resolveDefaultTimeoutMs(config),
         validateStatus: config.validateStatus,
         signal: config.signal,
         onDownloadProgress: config.onDownloadProgress,

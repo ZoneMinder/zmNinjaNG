@@ -15,6 +15,22 @@
  * Configuration values for interacting with ZoneMinder servers.
  * These are zmNinjaNg-specific settings, not ZM protocol values.
  */
+export const API_REQUEST = {
+  // Default per-request timeout (seconds) applied to REST API calls when the
+  // caller doesn't set an explicit one. Overridable per profile via the
+  // apiTimeoutSeconds setting; 0 disables the timeout. Caps how long a request
+  // can hang (e.g. when the HTTP connection pool is saturated) so the UI can
+  // error and retry instead of stalling forever.
+  defaultTimeoutSeconds: 15,
+  // Bounds for the user-facing setting (seconds).
+  minTimeoutSeconds: 0,
+  maxTimeoutSeconds: 120,
+  // Timeout (ms) for the fire-and-forget CMD_QUIT teardown request. Keeps a slow
+  // stream-quit from holding an HTTP connection slot and starving other requests
+  // when many tiles tear down at once (leaving the montage view).
+  cmdQuitTimeoutMs: 5000,
+} as const;
+
 export const ZM_INTEGRATION = {
   // HTTP timeouts for ZM API calls
   httpTimeout: 10000, // 10 seconds - standard API calls

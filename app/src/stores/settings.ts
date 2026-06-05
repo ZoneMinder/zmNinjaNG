@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import type { Layout, Layouts } from 'react-grid-layout';
 import { LogLevel } from '../lib/log-level';
 import type { BandwidthMode } from '../lib/zmninja-ng-constants';
+import { API_REQUEST } from '../lib/zmninja-ng-constants';
 
 export type ViewMode = 'snapshot' | 'streaming';
 export type DisplayMode = 'normal' | 'compact';
@@ -185,6 +186,10 @@ export interface ProfileSettings {
   // ZM_MIN_STREAMING_PORT and uses the portal's default port for all streams.
   // Default false = auto (use the server config when present).
   forceDisableMultiPort: boolean;
+  // Default timeout (seconds) for REST API requests. Caps how long a request
+  // can hang before it is aborted so the UI can error/retry instead of stalling
+  // forever (e.g. when the connection pool is saturated). 0 disables the timeout.
+  apiTimeoutSeconds: number;
   // Per-component log level overrides (component name → LogLevel)
   // When absent, the component uses the global logLevel.
   componentLogLevels: Record<string, number>;
@@ -313,6 +318,7 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   monitorStreamingOverrides: {},
   // Auto by default: honor the server's ZM_MIN_STREAMING_PORT when present
   forceDisableMultiPort: false,
+  apiTimeoutSeconds: API_REQUEST.defaultTimeoutSeconds,
   componentLogLevels: {},
   thumbnailFallbackChain: DEFAULT_THUMBNAIL_FALLBACK_CHAIN,
   hoverPreview: DEFAULT_HOVER_PREVIEW,

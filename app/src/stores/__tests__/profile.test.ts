@@ -82,7 +82,7 @@ describe('Profile Store', () => {
 
     expect(id).toBe('profile-1');
     expect(setSecureValue).toHaveBeenCalledWith('password_profile-1', 'secret');
-    expect(createApiClient).toHaveBeenCalledWith('https://example.test');
+    expect(createApiClient).toHaveBeenCalledWith('https://example.test', undefined, 'profile-1');
     expect(setApiClient).toHaveBeenCalled();
 
     const { profiles, currentProfileId } = useProfileStore.getState();

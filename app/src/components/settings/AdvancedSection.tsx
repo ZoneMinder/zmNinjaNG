@@ -13,7 +13,9 @@ import { PinPad, type PinPadMode } from '../kiosk/PinPad';
 import { useToast } from '../../hooks/use-toast';
 import { Switch } from '../ui/switch';
 import { Button } from '../ui/button';
+import { Input } from '../ui/input';
 import { Label } from '../ui/label';
+import { API_REQUEST } from '../../lib/zmninja-ng-constants';
 import { CertTrustDialog } from '../CertTrustDialog';
 import { SectionHeader, SettingsCard, SettingsRow, RowLabel } from './SettingsLayout';
 import { Platform } from '../../lib/platform';
@@ -330,6 +332,34 @@ export function AdvancedSection({
               data-testid="settings-force-disable-multiport-switch"
             />
           </SettingsRow>
+
+          {/* API request timeout */}
+          <div className="px-4 py-3 space-y-2">
+            <RowLabel
+              label={t('settings.api_timeout')}
+              desc={t('settings.api_timeout_desc')}
+            />
+            <div className="flex flex-wrap items-center gap-3">
+              <Input
+                id="api-timeout"
+                type="number"
+                min={API_REQUEST.minTimeoutSeconds}
+                max={API_REQUEST.maxTimeoutSeconds}
+                value={settings.apiTimeoutSeconds}
+                onChange={(e) => {
+                  if (!currentProfile) return;
+                  const v = Number(e.target.value);
+                  const clamped = Number.isFinite(v)
+                    ? Math.min(API_REQUEST.maxTimeoutSeconds, Math.max(API_REQUEST.minTimeoutSeconds, Math.round(v)))
+                    : API_REQUEST.defaultTimeoutSeconds;
+                  updateSettings(currentProfile.id, { apiTimeoutSeconds: clamped });
+                }}
+                className="w-20"
+                data-testid="settings-api-timeout-input"
+              />
+              <span className="text-xs text-muted-foreground">{t('settings.api_timeout_unit')}</span>
+            </div>
+          </div>
 
           {/* Log Redaction */}
           <SettingsRow>

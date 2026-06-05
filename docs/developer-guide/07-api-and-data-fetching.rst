@@ -771,6 +771,22 @@ Static defaults are defined in ``lib/zmninja-ng-constants.ts``:
      loginInterval: 1800000,               // 30 min - re-login interval
    } as const;
 
+Default request timeout
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+REST calls have no built-in timeout, so a stalled request (for example when
+the HTTP connection pool is saturated by a burst of stream-teardown requests
+on leaving the montage) would hang forever and leave the page stuck loading.
+``createApiClient`` takes a ``profileId`` and applies the profile's
+``apiTimeoutSeconds`` setting (``API_REQUEST.defaultTimeoutSeconds`` = 15 by
+default; ``0`` disables it) as the default ``timeoutMs`` when the caller
+doesn't pass one. Downloads (``onDownloadProgress`` or a binary
+``responseType``) are exempt so large transfers are not cut off. The setting
+lives in Advanced settings and is read at request time, so changes apply
+without recreating the client. The ``CMD_QUIT`` stream-teardown request carries
+a fixed ``API_REQUEST.cmdQuitTimeoutMs`` (5s) so a slow quit can't hold a
+connection slot.
+
 Bandwidth Mode Settings
 ^^^^^^^^^^^^^^^^^^^^^^^
 
