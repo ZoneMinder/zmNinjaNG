@@ -278,11 +278,9 @@ the MJPEG stream immediately as the visible image with a blinking "…" badge
 (``videoWidth > 0``) it swaps to the ``<video>`` and removes the badge. If
 MSE times out, MJPEG stays as the real stream and the badge is removed.
 
-**Staggered connects:** in montage every tile mounts at once. Each tile
-passes its grid index as ``staggerIndex`` down to ``useGo2RTCStream``, which
-offsets the connect by ``staggerIndex * GO2RTC_MONTAGE_STAGGER_MS`` (100 ms)
-on top of the base ``GO2RTC_CONNECT_DELAY_MS``. Index 0 gets no extra delay,
-so single-monitor view is unaffected.
+**Connect timing:** in montage every tile mounts and connects at once. There
+is a single base delay (``GO2RTC_CONNECT_DELAY_MS``) before connecting, to
+survive React Strict Mode's double-invoke; tiles are not staggered.
 
 **Failure cache:** Monitors that fail Go2RTC are cached and skipped for
 5 minutes. This prevents repeated connection attempts in montage views

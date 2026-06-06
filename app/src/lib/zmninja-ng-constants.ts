@@ -378,15 +378,9 @@ export const MONTAGE_GRID = {
 /**
  * Seconds to wait for decoded video frames after go2rtc reports "connected"
  * before giving up and falling back to MJPEG. In montage every tile connects
- * around the same time, so this is generous enough for the last staggered streams.
+ * at once, so this is generous enough to cover the resulting burst.
  */
 export const GO2RTC_VIDEO_TIMEOUT_S = 15;
-
-/**
- * Per-tile stagger added to the connect delay in montage, multiplied by the
- * tile's grid index (index 0 gets no extra delay, so single view is unaffected).
- */
-export const GO2RTC_MONTAGE_STAGGER_MS = 100;
 
 /** Base delay before connecting, to survive React Strict Mode double-invoke (ms) */
 export const GO2RTC_CONNECT_DELAY_MS = 100;

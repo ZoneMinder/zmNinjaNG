@@ -172,6 +172,14 @@ export function useStreamLifecycle({
     };
   }, [enabled, monitorId, monitorName, connKey, portalUrl, accessToken, viewMode, minStreamingPort, cmdQuitTimeoutMs]);
 
+  // Capture the live media element on every render. The unmount cleanup runs as
+  // a passive effect, by which point React has already nulled mediaRef, so we
+  // keep our own handle to the element to tear it down.
+  const mediaElRef = useRef<HTMLImageElement | HTMLVideoElement | null>(null);
+  useEffect(() => {
+    mediaElRef.current = mediaRef.current;
+  });
+
   // Cleanup: send CMD_QUIT and abort image loading on unmount ONLY
   useEffect(() => {
     return () => {
@@ -205,13 +213,15 @@ export function useStreamLifecycle({
         });
       }
 
-      // Abort image/video loading to release browser connection
-      if (mediaRef.current) {
+      // After CMD_QUIT, tear down the client side: removing the src aborts the
+      // in-flight nph-zms connection and frees the browser connection slot.
+      // Use removeAttribute, not src='' (an empty src resolves to the page URL
+      // on some engines and triggers a spurious request).
+      if (mediaElRef.current) {
         logFn('Aborting media element on unmount', LogLevel.DEBUG, {
           monitorId: params.monitorId,
         });
-        mediaRef.current.src =
-          'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+        mediaElRef.current.removeAttribute('src');
       }
     };
   }, []); // Empty deps = only run on unmount

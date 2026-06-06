@@ -264,8 +264,9 @@ describe('useStreamLifecycle', () => {
       expect(mockHttpGet).not.toHaveBeenCalled();
     });
 
-    it('clears media element src on unmount', async () => {
+    it('removes the media element src on unmount to abort the stream', async () => {
       const imgElement = document.createElement('img');
+      imgElement.src = 'http://zm.local/cgi-bin/nph-zms?mode=jpeg&connkey=9999';
       const mediaRef = { current: imgElement };
       mockRegenerateConnKey.mockReturnValue(9999);
 
@@ -279,8 +280,9 @@ describe('useStreamLifecycle', () => {
 
       unmount();
 
-      // src should be set to the blank GIF to abort loading
-      expect(mediaRef.current.src).toContain('data:image/gif');
+      // src attribute is removed (not set to ''), which aborts the in-flight
+      // nph-zms connection and frees the browser connection slot.
+      expect(imgElement.hasAttribute('src')).toBe(false);
     });
 
     it('skips media cleanup when mediaRef.current is null', async () => {

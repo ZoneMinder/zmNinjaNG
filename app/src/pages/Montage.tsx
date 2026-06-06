@@ -476,7 +476,6 @@ export default function Montage() {
                     onPinToggle={() => togglePinMonitor(Monitor.Id)}
                     objectFit={settings.montageFeedFit}
                     showOverlay={showMonitorLabels}
-                    staggerIndex={idx}
                   />
                 </div>
               ))}

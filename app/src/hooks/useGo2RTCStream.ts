@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { VideoRTC } from '../lib/vendor/go2rtc/video-rtc';
 import { getGo2RTCWebSocketUrl } from '../lib/url-builder';
-import { GO2RTC_CONNECT_DELAY_MS, GO2RTC_MONTAGE_STAGGER_MS } from '../lib/zmninja-ng-constants';
+import { GO2RTC_CONNECT_DELAY_MS } from '../lib/zmninja-ng-constants';
 import { log, LogLevel } from '../lib/logger';
 
 // Register VideoRTC custom element once
@@ -80,13 +80,6 @@ export interface UseGo2RTCStreamOptions {
   muted?: boolean;
   /** Show native video controls (play/pause, volume, fullscreen) */
   controls?: boolean;
-  /**
-   * Grid position used to stagger connection starts in montage so all tiles
-   * don't open their WebSockets at once. The connect delay is offset by
-   * `staggerIndex * GO2RTC_MONTAGE_STAGGER_MS`. Defaults to 0 (no extra delay),
-   * so single-monitor callers are unaffected.
-   */
-  staggerIndex?: number;
 }
 
 export interface UseGo2RTCStreamResult {
@@ -111,7 +104,6 @@ export function useGo2RTCStream(options: UseGo2RTCStreamOptions): UseGo2RTCStrea
     enabled = true,
     muted = false,
     controls = false,
-    staggerIndex = 0,
   } = options;
 
   const [state, setState] = useState<ConnectionState>('idle');
@@ -311,22 +303,21 @@ export function useGo2RTCStream(options: UseGo2RTCStreamOptions): UseGo2RTCStrea
       return;
     }
 
-    // Delay connection to survive React Strict Mode double-invoke, plus a
-    // per-tile stagger in montage so all streams don't open at once.
-    const connectDelay = GO2RTC_CONNECT_DELAY_MS + Math.max(0, staggerIndex) * GO2RTC_MONTAGE_STAGGER_MS;
+    // Delay connection to survive React Strict Mode double-invoke. Montage tiles
+    // all connect together (no stagger).
     connectTimeoutRef.current = setTimeout(() => {
       connectTimeoutRef.current = null;
       if (mountedRef.current) {
         connect();
       }
-    }, connectDelay);
+    }, GO2RTC_CONNECT_DELAY_MS);
 
     return () => {
       mountedRef.current = false;
       cleanup();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, go2rtcUrl, monitorId, token, protocolsKey, staggerIndex]);
+  }, [enabled, go2rtcUrl, monitorId, token, protocolsKey]);
 
   // Apply muted when prop changes
   useEffect(() => {

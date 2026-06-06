@@ -66,11 +66,6 @@ export interface LiveMonitorPlayerProps {
    */
   forceViewMode?: 'streaming' | 'snapshot';
   /**
-   * Grid position in montage, used to stagger Go2RTC connection starts.
-   * Defaults to 0 (no stagger) for single-monitor callers.
-   */
-  staggerIndex?: number;
-  /**
    * Opt out of the shared, module-level Go2RTC failure cache. When true this
    * player neither reads nor writes the cache: it always attempts Go2RTC, and a
    * failure here is not recorded for other instances. The single-monitor detail
@@ -92,12 +87,10 @@ export function LiveMonitorPlayer({
   onLoad,
   onProtocolChange,
   forceViewMode,
-  staggerIndex = 0,
   bypassGo2rtcFailureCache = false,
 }: LiveMonitorPlayerProps) {
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
-  const imgRef = useRef<HTMLImageElement>(null);
   const rawSettings = useSettingsStore(
     useShallow((state) => state.profileSettings[profile?.id || ''])
   );
@@ -173,7 +166,6 @@ export function LiveMonitorPlayer({
     enabled: streamingMethod === 'webrtc' && !!profile?.go2rtcUrl && !go2rtcFailed,
     muted,
     controls: showControls,
-    staggerIndex,
   });
 
   // Fall back to MJPEG when Go2RTC reports error state
@@ -435,8 +427,8 @@ export function LiveMonitorPlayer({
     if (!externalMediaRef) return;
     const ref = externalMediaRef as React.MutableRefObject<HTMLImageElement | HTMLVideoElement | null>;
 
-    if (effectiveStreamingMethod === 'mjpeg' && imgRef.current) {
-      ref.current = imgRef.current;
+    if (effectiveStreamingMethod === 'mjpeg' && mjpegStream.imgRef.current) {
+      ref.current = mjpegStream.imgRef.current;
     } else if (effectiveStreamingMethod === 'webrtc') {
       ref.current = go2rtcStream.getVideoElement();
     }
@@ -531,7 +523,7 @@ export function LiveMonitorPlayer({
 
       {showMjpeg && hasMjpegFrame && (
         <img
-          ref={imgRef}
+          ref={mjpegStream.imgRef}
           className={`w-full h-full ${className}`}
           style={
             showMjpegPlaceholder
