@@ -55,6 +55,7 @@ describe('GroupFilterSelect', () => {
     vi.mocked(useGroups).mockReturnValue({
       groups: [],
       isLoading: false,
+      isSuccess: true,
       error: null,
       refetch: vi.fn(),
       getGroupMonitorIds: vi.fn(),
@@ -69,6 +70,7 @@ describe('GroupFilterSelect', () => {
     vi.mocked(useGroups).mockReturnValue({
       groups: [],
       isLoading: true,
+      isSuccess: false,
       error: null,
       refetch: vi.fn(),
       getGroupMonitorIds: vi.fn(),
@@ -84,6 +86,7 @@ describe('GroupFilterSelect', () => {
     vi.mocked(useGroups).mockReturnValue({
       groups: mockGroups,
       isLoading: false,
+      isSuccess: true,
       error: null,
       refetch: vi.fn(),
       getGroupMonitorIds: vi.fn(),
@@ -98,6 +101,7 @@ describe('GroupFilterSelect', () => {
     vi.mocked(useGroups).mockReturnValue({
       groups: mockGroups,
       isLoading: false,
+      isSuccess: true,
       error: null,
       refetch: vi.fn(),
       getGroupMonitorIds: vi.fn(),
@@ -112,6 +116,7 @@ describe('GroupFilterSelect', () => {
     vi.mocked(useGroups).mockReturnValue({
       groups: mockGroups,
       isLoading: false,
+      isSuccess: true,
       error: null,
       refetch: vi.fn(),
       getGroupMonitorIds: vi.fn(),

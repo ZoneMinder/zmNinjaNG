@@ -47,7 +47,7 @@ export interface UseGroupFilterReturn {
  */
 export function useGroupFilter(): UseGroupFilterReturn {
   const { currentProfile, settings } = useCurrentProfile();
-  const { groups, getGroupMonitorIds, isLoading, error } = useGroups();
+  const { groups, getGroupMonitorIds, isSuccess } = useGroups();
   const updateProfileSettings = useSettingsStore((state) => state.updateProfileSettings);
 
   const selectedGroupId = settings.selectedGroupId;
@@ -66,14 +66,17 @@ export function useGroupFilter(): UseGroupFilterReturn {
   }, [setSelectedGroup]);
 
   // Self-heal a dangling selection: if the selected group was deleted on the
-  // server, reset to the All-monitors bucket. Only act on a confirmed load to
-  // avoid wiping the selection during a transient empty or errored fetch.
+  // server, reset to the All-monitors bucket. Gate on a confirmed successful
+  // fetch (isSuccess), not isLoading. The groups query is disabled until the
+  // profile is loaded and authenticated, and React Query v5 reports
+  // isLoading=false for a disabled query. Guarding on isLoading let the empty
+  // disabled-state list wipe a valid persisted selection during cold start.
   useEffect(() => {
-    if (isLoading || error) return;
+    if (!isSuccess) return;
     if (!selectedGroupId) return;
     const exists = groups.some((g) => g.Group.Id === selectedGroupId);
     if (!exists) setSelectedGroup(null);
-  }, [isLoading, error, selectedGroupId, groups, setSelectedGroup]);
+  }, [isSuccess, selectedGroupId, groups, setSelectedGroup]);
 
   const isFilterActive = selectedGroupId !== null;
 

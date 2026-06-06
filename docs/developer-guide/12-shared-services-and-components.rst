@@ -1052,9 +1052,14 @@ the migration and start with empty maps.
 **Dangling group filter self-heal.** A persisted ``selectedGroupId`` can
 point at a group that no longer exists on the server. ``useGroupFilter``
 resets ``selectedGroupId`` to ``null`` after a successful groups load when
-the stored ID is not in the returned list. The reset is guarded so it does
-not fire while the groups query is loading or has errored, which avoids
-clearing a valid selection during a transient fetch failure.
+the stored ID is not in the returned list. The reset is gated on the groups
+query ``isSuccess`` flag, not ``isLoading``. The groups query is disabled
+until the profile is loaded and authenticated, and React Query v5 reports
+``isLoading: false`` for a disabled query. Gating on ``isLoading`` let the
+empty disabled-state list wipe a valid selection during cold start, which
+dropped the montage back to the All-monitors bucket and streamed every
+monitor. ``isSuccess`` is false while the query is disabled, loading, or
+errored, so the reset only fires once a real fetch has returned.
 
 **Used By:** ``useMontageGroupState`` (live montage pages and the grid
 hook), the event montage column control, and the persist layer of

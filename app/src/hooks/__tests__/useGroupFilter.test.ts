@@ -42,6 +42,7 @@ describe('useGroupFilter', () => {
         },
       ],
       isLoading: false,
+      isSuccess: true,
       error: null,
       refetch: vi.fn(),
       getGroupMonitorIds: vi.fn((groupId: string) => {
@@ -152,6 +153,7 @@ describe('useGroupFilter', () => {
     vi.mocked(useGroups).mockReturnValue({
       groups: [{ Group: { Id: '1', Name: 'Front', ParentId: null }, Monitor: [] }],
       isLoading: false,
+      isSuccess: true,
       error: null,
       refetch: vi.fn(),
       getGroupMonitorIds: () => [],
@@ -174,6 +176,7 @@ describe('useGroupFilter', () => {
     vi.mocked(useGroups).mockReturnValue({
       groups: [],
       isLoading: true,
+      isSuccess: false,
       error: null,
       refetch: vi.fn(),
       getGroupMonitorIds: () => [],
@@ -192,7 +195,31 @@ describe('useGroupFilter', () => {
     vi.mocked(useGroups).mockReturnValue({
       groups: [],
       isLoading: false,
+      isSuccess: false,
       error: new Error('offline'),
+      refetch: vi.fn(),
+      getGroupMonitorIds: () => [],
+      hasGroups: false,
+    });
+    renderHook(() => useGroupFilter());
+    expect(mockUpdateProfileSettings).not.toHaveBeenCalled();
+  });
+
+  // Regression: on cold start the groups query is disabled (auth/profile not
+  // ready yet) until login completes. React Query v5 reports isLoading=false
+  // for a disabled query, so guarding only on isLoading let the self-heal wipe
+  // a valid persisted selection and Montage fell back to streaming all monitors.
+  it('does not reset while the groups query is disabled and not yet fetched', () => {
+    vi.mocked(useCurrentProfile).mockReturnValue({
+      currentProfile: { id: 'profile-1', name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
+      settings: { selectedGroupId: '1' } as never,
+      hasProfile: true,
+    });
+    vi.mocked(useGroups).mockReturnValue({
+      groups: [],
+      isLoading: false,
+      isSuccess: false,
+      error: null,
       refetch: vi.fn(),
       getGroupMonitorIds: () => [],
       hasGroups: false,

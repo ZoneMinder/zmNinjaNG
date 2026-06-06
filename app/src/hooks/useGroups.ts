@@ -23,6 +23,8 @@ export interface UseGroupsReturn {
   groups: GroupData[];
   /** Loading state */
   isLoading: boolean;
+  /** True once the groups query has completed a successful fetch */
+  isSuccess: boolean;
   /** Error state */
   error: Error | null;
   /** Refetch function */
@@ -66,7 +68,7 @@ export function useGroups(): UseGroupsReturn {
   const { currentProfile } = useCurrentProfile();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
-  const { data, isLoading, error, refetch } = useQuery({
+  const { data, isLoading, isSuccess, error, refetch } = useQuery({
     queryKey: ['groups', currentProfile?.id],
     queryFn: getGroups,
     enabled: !!currentProfile?.id && isAuthenticated,
@@ -112,6 +114,7 @@ export function useGroups(): UseGroupsReturn {
   return {
     groups,
     isLoading,
+    isSuccess,
     error: error as Error | null,
     refetch,
     getGroupMonitorIds,

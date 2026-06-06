@@ -92,7 +92,14 @@ export default function Montage() {
 
   const monitors = useMemo(() => {
     let list = enabledMonitors;
-    if (isFilterActive) list = filterMonitorsByGroup(list, filteredMonitorIds);
+    // When a group filter is active, show only its monitors. An empty id list
+    // means the group resolved to nothing (or groups have not loaded yet), so
+    // render none rather than falling back to streaming every monitor.
+    if (isFilterActive) {
+      list = filteredMonitorIds.length > 0
+        ? filterMonitorsByGroup(list, filteredMonitorIds)
+        : [];
+    }
     if (hiddenSet.size > 0) list = list.filter((m) => !hiddenSet.has(m.Monitor.Id));
     return list;
   }, [enabledMonitors, isFilterActive, filteredMonitorIds, hiddenSet]);
