@@ -82,18 +82,18 @@ Then('the date filters should update', async ({ page }) => {
   expect(endValue).not.toBe('');
 });
 
-// Refresh / Reset
+// Clear
 Then('I should see the refresh button', async ({ page }) => {
-  // The timeline has a reset button (data-testid="timeline-reset-button") with RefreshCw icon
-  const refreshBtn = page.getByTestId('timeline-reset-button')
-    .or(page.getByRole('button', { name: /reset|refresh/i }));
-  await expect(refreshBtn.first()).toBeVisible({ timeout: testConfig.timeouts.element });
+  // The timeline has a clear button (data-testid="timeline-clear-button") with a FilterX icon
+  const clearBtn = page.getByTestId('timeline-clear-button')
+    .or(page.getByRole('button', { name: /clear/i }));
+  await expect(clearBtn.first()).toBeVisible({ timeout: testConfig.timeouts.element });
 });
 
 When('I click the refresh button', async ({ page }) => {
-  const refreshBtn = page.getByTestId('timeline-reset-button')
-    .or(page.getByRole('button', { name: /reset|refresh/i })).first();
-  await refreshBtn.click();
+  const clearBtn = page.getByTestId('timeline-clear-button')
+    .or(page.getByRole('button', { name: /clear/i })).first();
+  await clearBtn.click();
 });
 
 Then('the timeline should reload', async ({ page }) => {
@@ -243,8 +243,8 @@ Then('the timeline cause filter should show {string}', async ({ page }, label: s
 
 // Mobile Responsive
 Then('the timeline controls should be accessible', async ({ page }) => {
-  // Check for the timeline page controls (filter, reset, date inputs)
-  const resetBtn = page.getByTestId('timeline-reset-button');
+  // Check for the timeline page controls (filter, clear, date inputs)
+  const resetBtn = page.getByTestId('timeline-clear-button');
   const filterBtn = page.getByTestId('timeline-monitor-filter');
   const dateInput = page.getByTestId('timeline-start-date');
 
