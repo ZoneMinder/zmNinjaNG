@@ -1061,9 +1061,22 @@ dropped the montage back to the All-monitors bucket and streamed every
 monitor. ``isSuccess`` is false while the query is disabled, loading, or
 errored, so the reset only fires once a real fetch has returned.
 
+**Render gate (``isFilterReady``).** Monitor data and group data load from
+two separate queries. The monitors query usually returns first, so a page
+that renders as soon as monitors arrive would mount tiles before the group
+membership is known. Mounting a tile starts its stream, so that one frame
+opens streams for every monitor before the group narrows the list.
+``useGroupFilter`` exposes ``isFilterReady``: true when no filter is active,
+or when a filter is active and the groups query has settled (``isSuccess``
+or ``error``). The Montage and Monitors pages hold their loading skeleton
+until ``isLoading`` is false and ``isFilterReady`` is true, so tiles first
+mount against the final filtered set. The pages also render an empty list
+(not all monitors) when a filter is active but ``filteredMonitorIds`` is
+empty.
+
 **Used By:** ``useMontageGroupState`` (live montage pages and the grid
-hook), the event montage column control, and the persist layer of
-``useSettingsStore``.
+hook), the Montage and Monitors page render gates, the event montage column
+control, and the persist layer of ``useSettingsStore``.
 
 --------------
 

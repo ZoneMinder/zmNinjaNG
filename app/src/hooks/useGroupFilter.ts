@@ -28,6 +28,13 @@ export interface UseGroupFilterReturn {
   filteredMonitorIds: string[];
   /** Name of the selected group (for display) */
   selectedGroupName: string | null;
+  /**
+   * Whether the filter is resolved enough to drive rendering. False only while
+   * a filter is active and the groups query has not settled yet, so callers can
+   * gate tile rendering until filteredMonitorIds is final. Pages must not render
+   * monitor tiles before this is true: a mounted tile starts its stream.
+   */
+  isFilterReady: boolean;
 }
 
 /**
@@ -47,7 +54,7 @@ export interface UseGroupFilterReturn {
  */
 export function useGroupFilter(): UseGroupFilterReturn {
   const { currentProfile, settings } = useCurrentProfile();
-  const { groups, getGroupMonitorIds, isSuccess } = useGroups();
+  const { groups, getGroupMonitorIds, isSuccess, error } = useGroups();
   const updateProfileSettings = useSettingsStore((state) => state.updateProfileSettings);
 
   const selectedGroupId = settings.selectedGroupId;
@@ -80,6 +87,11 @@ export function useGroupFilter(): UseGroupFilterReturn {
 
   const isFilterActive = selectedGroupId !== null;
 
+  // With no active filter there is nothing to wait for. With an active filter,
+  // gate on the groups query settling (success or error) so callers never
+  // render tiles against a half-resolved membership list.
+  const isFilterReady = !isFilterActive || isSuccess || error != null;
+
   const filteredMonitorIds = useMemo(() => {
     if (!selectedGroupId) return [];
     return getGroupMonitorIds(selectedGroupId);
@@ -98,5 +110,6 @@ export function useGroupFilter(): UseGroupFilterReturn {
     isFilterActive,
     filteredMonitorIds,
     selectedGroupName,
+    isFilterReady,
   };
 }

@@ -48,6 +48,7 @@ describe('GroupFilterSelect', () => {
       isFilterActive: false,
       filteredMonitorIds: [],
       selectedGroupName: null,
+      isFilterReady: true,
     });
   });
 
@@ -130,6 +131,7 @@ describe('GroupFilterSelect', () => {
       isFilterActive: true,
       filteredMonitorIds: ['1', '2', '4'],
       selectedGroupName: 'Inside',
+      isFilterReady: true,
     });
 
     render(<GroupFilterSelect />);

@@ -116,6 +116,66 @@ describe('useGroupFilter', () => {
     expect(result.current.selectedGroupName).toBeNull();
   });
 
+  it('isFilterReady is true when no filter is active', () => {
+    const { result } = renderHook(() => useGroupFilter());
+
+    expect(result.current.isFilterReady).toBe(true);
+  });
+
+  it('isFilterReady is true when a filter is active and groups have loaded', () => {
+    vi.mocked(useCurrentProfile).mockReturnValue({
+      currentProfile: { id: 'profile-1', name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
+      settings: { selectedGroupId: '1' } as never,
+      hasProfile: true,
+    });
+
+    const { result } = renderHook(() => useGroupFilter());
+
+    expect(result.current.isFilterReady).toBe(true);
+  });
+
+  it('isFilterReady is false when a filter is active but groups have not loaded yet', () => {
+    vi.mocked(useCurrentProfile).mockReturnValue({
+      currentProfile: { id: 'profile-1', name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
+      settings: { selectedGroupId: '1' } as never,
+      hasProfile: true,
+    });
+    vi.mocked(useGroups).mockReturnValue({
+      groups: [],
+      isLoading: false,
+      isSuccess: false,
+      error: null,
+      refetch: vi.fn(),
+      getGroupMonitorIds: () => [],
+      hasGroups: false,
+    });
+
+    const { result } = renderHook(() => useGroupFilter());
+
+    expect(result.current.isFilterReady).toBe(false);
+  });
+
+  it('isFilterReady is true when a filter is active but the groups query errored', () => {
+    vi.mocked(useCurrentProfile).mockReturnValue({
+      currentProfile: { id: 'profile-1', name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
+      settings: { selectedGroupId: '1' } as never,
+      hasProfile: true,
+    });
+    vi.mocked(useGroups).mockReturnValue({
+      groups: [],
+      isLoading: false,
+      isSuccess: false,
+      error: new Error('offline'),
+      refetch: vi.fn(),
+      getGroupMonitorIds: () => [],
+      hasGroups: false,
+    });
+
+    const { result } = renderHook(() => useGroupFilter());
+
+    expect(result.current.isFilterReady).toBe(true);
+  });
+
   it('returns null selectedGroupName when selected group does not exist', () => {
     vi.mocked(useCurrentProfile).mockReturnValue({
       currentProfile: { id: 'profile-1', name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },

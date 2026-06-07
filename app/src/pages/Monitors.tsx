@@ -40,7 +40,7 @@ export default function Monitors() {
   const updateSettings = useSettingsStore((state) => state.updateProfileSettings);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const zmVersion = useAuthStore((s) => s.version);
-  const { isFilterActive, filteredMonitorIds } = useGroupFilter();
+  const { isFilterActive, filteredMonitorIds, isFilterReady } = useGroupFilter();
   const gridContainerRef = useRef<HTMLDivElement>(null);
 
   const handleMonitorGridChange = useCallback((cols: number) => {
@@ -92,9 +92,12 @@ export default function Monitors() {
     return data?.monitors ? filterEnabledMonitors(data.monitors) : [];
   }, [data?.monitors]);
 
-  // Apply group filter if active
+  // Apply group filter if active. An empty id list means the group resolved to
+  // nothing (or groups have not loaded yet), so show none rather than falling
+  // back to every monitor.
   const allMonitors = useMemo(() => {
     if (!isFilterActive) return enabledMonitors;
+    if (filteredMonitorIds.length === 0) return [];
     return filterMonitorsByGroup(enabledMonitors, filteredMonitorIds);
   }, [enabledMonitors, isFilterActive, filteredMonitorIds]);
 
@@ -134,7 +137,10 @@ export default function Monitors() {
     });
   };
 
-  if (isLoading) {
+  // Wait for monitors to load and for the group filter to resolve before
+  // rendering tiles. A mounted tile starts its stream, so rendering all
+  // monitors for a frame before the group narrows would open every stream.
+  if (isLoading || !isFilterReady) {
     return (
       <div className="p-8 space-y-6">
         <div className="h-8 w-48 bg-muted rounded animate-pulse" />

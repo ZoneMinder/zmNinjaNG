@@ -64,7 +64,7 @@ export default function Montage() {
   });
   const updateSettings = useSettingsStore((state) => state.updateProfileSettings);
   const updateMontageGroupLayout = useSettingsStore((state) => state.updateMontageGroupLayout);
-  const { isFilterActive, filteredMonitorIds } = useGroupFilter();
+  const { isFilterActive, filteredMonitorIds, isFilterReady } = useGroupFilter();
   const { groupKey, bucket } = useMontageGroupState();
 
   // Keep screen awake when Insomnia is enabled
@@ -271,8 +271,11 @@ export default function Montage() {
     setIsEditMode((prev) => !prev);
   };
 
-  // Loading state
-  if (isLoading) {
+  // Loading state. Also wait until the group filter has resolved (isFilterReady)
+  // so we never mount monitor tiles against an unresolved group membership.
+  // Mounting a tile starts its stream, so rendering all monitors for even one
+  // frame before the group narrows would open every stream.
+  if (isLoading || !isFilterReady) {
     return (
       <div className="p-8 space-y-6">
         <div className="h-8 w-48 bg-muted rounded animate-pulse" />
