@@ -12,16 +12,15 @@ import { RefreshCw, Minimize, Menu, Lock } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useKioskLock } from '../../hooks/useKioskLock';
 import { PinPad } from '../kiosk/PinPad';
+import { reloadApp } from '../../lib/reload';
 
 interface FullscreenControlsProps {
-  onRefetch: () => void;
   onExitFullscreen: () => void;
   showLabels: boolean;
   onToggleLabels: () => void;
 }
 
 export function FullscreenControls({
-  onRefetch,
   onExitFullscreen,
   showLabels,
   onToggleLabels,
@@ -58,10 +57,12 @@ export function FullscreenControls({
             <Menu className="h-3.5 w-3.5" />
           </Button>
           <Button
-            onClick={onRefetch}
+            onClick={reloadApp}
             variant="ghost"
             size="icon"
             className="text-white/70 hover:text-white hover:bg-white/10 h-7 w-7"
+            title={t('common.refresh')}
+            aria-label={t('common.refresh')}
             data-testid="montage-fullscreen-refresh"
           >
             <RefreshCw className="h-3.5 w-3.5" />

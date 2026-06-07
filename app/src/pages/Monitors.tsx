@@ -62,7 +62,7 @@ export default function Monitors() {
     onGridChange: handleMonitorGridChange,
   });
 
-  const { data, isLoading, isFetching, error, refetch } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['monitors', currentProfile?.id],
     queryFn: () => getMonitors(),
     enabled: !!currentProfile && isAuthenticated,
@@ -220,8 +220,6 @@ export default function Monitors() {
             </SelectContent>
           </Select>
           <RefreshButton
-            onRefresh={() => refetch()}
-            isLoading={isFetching}
             className="h-8 w-8 sm:h-9 sm:w-9"
             data-testid="monitors-refresh-button"
           />

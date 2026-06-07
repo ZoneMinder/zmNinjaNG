@@ -9,25 +9,21 @@
  * - Edit mode for widget management
  */
 
-import { LayoutDashboard, Pencil, Check, RefreshCw } from 'lucide-react';
+import { LayoutDashboard, Pencil, Check } from 'lucide-react';
 import { Button } from '../components/ui/button';
+import { RefreshButton } from '../components/common/RefreshButton';
 import { DashboardLayout } from '../components/dashboard/DashboardLayout';
 import { DashboardConfig } from '../components/dashboard/DashboardConfig';
 import { useDashboardStore } from '../stores/dashboard';
 import { useProfileStore } from '../stores/profile';
 import { useShallow } from 'zustand/react/shallow';
 import { useTranslation } from 'react-i18next';
-import { useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
 import { NotificationBadge } from '../components/NotificationBadge';
 
 export default function Dashboard() {
     const { t } = useTranslation();
-    const queryClient = useQueryClient();
-    const [isRefreshing, setIsRefreshing] = useState(false);
     const isEditing = useDashboardStore((state) => state.isEditing);
     const toggleEditMode = useDashboardStore((state) => state.toggleEditMode);
-    const resetWidgetWidths = useDashboardStore((state) => state.resetWidgetWidths);
     const currentProfile = useProfileStore(
         useShallow((state) => {
             const { profiles, currentProfileId } = state;
@@ -38,15 +34,6 @@ export default function Dashboard() {
     const widgets = useDashboardStore(
         useShallow((state) => state.widgets[profileId] ?? [])
     );
-
-    const handleRefresh = async () => {
-        setIsRefreshing(true);
-        // Invalidate all queries to refresh dashboard widgets
-        await queryClient.invalidateQueries();
-        // Reset all widget widths to full width
-        resetWidgetWidths(profileId);
-        setTimeout(() => setIsRefreshing(false), 500);
-    };
 
     return (
         <div className="flex flex-col h-full bg-background">
@@ -59,16 +46,7 @@ export default function Dashboard() {
                 <div className="flex items-center gap-2">
                     {widgets.length > 0 && (
                         <>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={handleRefresh}
-                                disabled={isRefreshing}
-                                title={t('common.refresh')}
-                                data-testid="dashboard-refresh-button"
-                            >
-                                <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-                            </Button>
+                            <RefreshButton size="sm" data-testid="dashboard-refresh-button" />
                             <Button
                                 variant={isEditing ? "default" : "outline"}
                                 size="sm"

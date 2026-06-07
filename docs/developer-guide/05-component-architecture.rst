@@ -783,7 +783,7 @@ re-implemented for every data page.
    export type RefreshButtonShowLabel = 'always' | 'never' | 'sm-and-up';
 
    export interface RefreshButtonProps {
-     onRefresh: () => void;
+     onRefresh?: () => void;
      isLoading?: boolean;
      disabled?: boolean;
      label?: string;
@@ -794,15 +794,20 @@ re-implemented for every data page.
      'aria-label'?: string;
    }
 
+Every refresh control in the app reloads the window. ``onRefresh`` is
+optional and defaults to ``reloadApp`` (``src/lib/reload.ts``), which
+calls ``window.location.reload()``. A reload re-runs the bootstrap,
+re-authenticates, re-fetches all data, and restarts streams, rather than
+doing a partial react-query refetch. Pages render it icon-only by leaving
+``showLabel`` at its ``'never'`` default. The ``label`` and ``showLabel``
+props are retained for flexibility but no page passes a visible label.
+
 The icon gets ``animate-spin`` whenever ``isLoading`` is true, and the
 button is disabled while loading or when ``disabled`` is set. The label
 defaults to the ``common.refresh`` translation key (present in all five
 locales: ``en``, ``de``, ``es``, ``fr``, ``zh``) and doubles as the
 button ``title`` and ``aria-label`` when no explicit ``aria-label`` is
-passed. The ``showLabel`` variants control label visibility:
-``'never'`` (default) wraps the text in ``sr-only``, ``'always'``
-renders it inline with an ``mr-2`` icon gap, and ``'sm-and-up'`` hides
-it below the ``sm`` breakpoint via ``hidden sm:inline``.
+passed.
 
 The default ``data-testid`` is ``'refresh-button'``; pages override it
 when multiple refresh buttons can be on screen at once (for example
@@ -812,8 +817,6 @@ when multiple refresh buttons can be on screen at once (for example
 
    // src/pages/Monitors.tsx
    <RefreshButton
-     onRefresh={() => refetch()}
-     isLoading={isFetching}
      className="h-8 w-8 sm:h-9 sm:w-9"
      data-testid="monitors-refresh-button"
    />

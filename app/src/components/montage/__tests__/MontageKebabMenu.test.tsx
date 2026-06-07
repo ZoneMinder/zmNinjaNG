@@ -15,11 +15,9 @@ const monitors: Monitor[] = [
 ];
 
 describe('MontageKebabMenu', () => {
-  const onRefresh = vi.fn();
   const onToggleVisibility = vi.fn();
 
   beforeEach(() => {
-    onRefresh.mockClear();
     onToggleVisibility.mockClear();
   });
 
@@ -28,60 +26,23 @@ describe('MontageKebabMenu', () => {
       <MontageKebabMenu
         monitors={monitors}
         hiddenMonitorIds={[]}
-        isRefreshing={false}
-        onRefresh={onRefresh}
         onToggleVisibility={onToggleVisibility}
       />
     );
     expect(screen.getByTestId('montage-kebab-menu')).toBeInTheDocument();
   });
 
-  it('opens menu and shows refresh + visibility entries', async () => {
+  it('opens menu and shows the visibility entry', async () => {
     const user = userEvent.setup();
     render(
       <MontageKebabMenu
         monitors={monitors}
         hiddenMonitorIds={[]}
-        isRefreshing={false}
-        onRefresh={onRefresh}
         onToggleVisibility={onToggleVisibility}
       />
     );
     await user.click(screen.getByTestId('montage-kebab-menu'));
-    expect(screen.getByTestId('montage-kebab-refresh')).toBeInTheDocument();
     expect(screen.getByTestId('montage-kebab-visibility')).toBeInTheDocument();
-  });
-
-  it('calls onRefresh when refresh entry is clicked', async () => {
-    const user = userEvent.setup();
-    render(
-      <MontageKebabMenu
-        monitors={monitors}
-        hiddenMonitorIds={[]}
-        isRefreshing={false}
-        onRefresh={onRefresh}
-        onToggleVisibility={onToggleVisibility}
-      />
-    );
-    await user.click(screen.getByTestId('montage-kebab-menu'));
-    await user.click(screen.getByTestId('montage-kebab-refresh'));
-    expect(onRefresh).toHaveBeenCalledTimes(1);
-  });
-
-  it('refresh entry is disabled while refreshing', async () => {
-    const user = userEvent.setup();
-    render(
-      <MontageKebabMenu
-        monitors={monitors}
-        hiddenMonitorIds={[]}
-        isRefreshing={true}
-        onRefresh={onRefresh}
-        onToggleVisibility={onToggleVisibility}
-      />
-    );
-    await user.click(screen.getByTestId('montage-kebab-menu'));
-    const refreshItem = screen.getByTestId('montage-kebab-refresh');
-    expect(refreshItem).toHaveAttribute('data-disabled');
   });
 
   it('shows a checkbox per monitor, checked when visible, unchecked when hidden', async () => {
@@ -90,8 +51,6 @@ describe('MontageKebabMenu', () => {
       <MontageKebabMenu
         monitors={monitors}
         hiddenMonitorIds={['2']}
-        isRefreshing={false}
-        onRefresh={onRefresh}
         onToggleVisibility={onToggleVisibility}
       />
     );
@@ -113,8 +72,6 @@ describe('MontageKebabMenu', () => {
       <MontageKebabMenu
         monitors={monitors}
         hiddenMonitorIds={[]}
-        isRefreshing={false}
-        onRefresh={onRefresh}
         onToggleVisibility={onToggleVisibility}
       />
     );
@@ -133,8 +90,6 @@ describe('MontageKebabMenu', () => {
       <MontageKebabMenu
         monitors={[]}
         hiddenMonitorIds={[]}
-        isRefreshing={false}
-        onRefresh={onRefresh}
         onToggleVisibility={onToggleVisibility}
       />
     );
@@ -153,8 +108,6 @@ describe('MontageKebabMenu', () => {
       <MontageKebabMenu
         monitors={unordered}
         hiddenMonitorIds={[]}
-        isRefreshing={false}
-        onRefresh={onRefresh}
         onToggleVisibility={onToggleVisibility}
       />
     );

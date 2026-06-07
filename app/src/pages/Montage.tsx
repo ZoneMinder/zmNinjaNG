@@ -56,7 +56,7 @@ export default function Montage() {
   const accessToken = useAuthStore((state) => state.accessToken);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
-  const { data, isLoading, isFetching, error, refetch } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['monitors'],
     queryFn: () => getMonitors(),
     enabled: !!currentProfile && isAuthenticated,
@@ -309,12 +309,7 @@ export default function Montage() {
       <div className="p-8">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-lg font-bold tracking-tight">{t('montage.title')}</h1>
-          <RefreshButton
-            size="sm"
-            onRefresh={() => refetch()}
-            isLoading={isFetching}
-            showLabel="always"
-          />
+          <RefreshButton size="sm" />
         </div>
         <div className="text-center py-20 text-muted-foreground">
           <Video className="h-12 w-12 mx-auto mb-4 opacity-20" />
@@ -399,11 +394,10 @@ export default function Montage() {
                 <Maximize className="h-4 w-4 sm:mr-2" />
                 <span className="hidden sm:inline">{t('montage.fullscreen')}</span>
               </Button>
+              <RefreshButton size="sm" className="h-8 sm:h-9" data-testid="montage-refresh-button" />
               <MontageKebabMenu
                 monitors={enabledMonitors.map((m) => m.Monitor)}
                 hiddenMonitorIds={bucket.hiddenMonitorIds}
-                isRefreshing={isFetching}
-                onRefresh={() => refetch()}
                 onToggleVisibility={handleToggleMonitorVisibility}
               />
               <NotificationBadge />
@@ -415,7 +409,6 @@ export default function Montage() {
       {/* Fullscreen toolbar — always visible, thin, translucent */}
       {isFullscreen && (
         <FullscreenControls
-          onRefetch={() => refetch()}
           onExitFullscreen={() => handleToggleFullscreen(false)}
           showLabels={showMonitorLabels}
           onToggleLabels={() => setShowMonitorLabels((prev) => !prev)}

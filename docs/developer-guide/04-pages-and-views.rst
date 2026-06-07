@@ -323,7 +323,7 @@ List/grid view of all monitors for the current profile.
      const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
      const updateSettings = useSettingsStore((state) => state.updateProfileSettings);
 
-     const { data, isLoading, error, refetch } = useQuery({
+     const { data, isLoading, error } = useQuery({
        queryKey: ['monitors', currentProfile?.id],
        queryFn: getMonitors,
        enabled: !!currentProfile && isAuthenticated,
@@ -340,9 +340,7 @@ List/grid view of all monitors for the current profile.
            <h1 className="text-base sm:text-lg font-bold tracking-tight">
              {t('monitors.title')}
            </h1>
-           <Button variant="outline" size="icon" onClick={() => refetch()}>
-             <RefreshCw className="h-4 w-4" />
-           </Button>
+           <RefreshButton data-testid="monitors-refresh-button" />
          </div>
          {settings.monitorsViewMode === 'grid' ? (
            <MonitorGrid monitors={data!.monitors} />

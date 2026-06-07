@@ -90,7 +90,7 @@ export default function Server() {
   });
 
   // Fetch timezone
-  const { data: timezone, isLoading: timezoneLoading } = useQuery({
+  const { data: timezone } = useQuery({
     queryKey: ['timezone', currentProfile?.id],
     queryFn: () => getServerTimeZone(),
     enabled: !!currentProfile && isAuthenticated,
@@ -140,18 +140,6 @@ export default function Server() {
     }
   };
 
-  const handleRefreshAll = () => {
-    queryClient.invalidateQueries({ queryKey: ['servers', currentProfile?.id] });
-    queryClient.invalidateQueries({ queryKey: ['daemon-check', currentProfile?.id] });
-    queryClient.invalidateQueries({ queryKey: ['server-load', currentProfile?.id] });
-    queryClient.invalidateQueries({ queryKey: ['disk-usage', currentProfile?.id] });
-    queryClient.invalidateQueries({ queryKey: ['states', currentProfile?.id] });
-    queryClient.invalidateQueries({ queryKey: ['timezone', currentProfile?.id] });
-    queryClient.invalidateQueries({ queryKey: ['storages', currentProfile?.id] });
-  };
-
-  const isRefreshing = serversLoading || daemonLoading || loadLoading || diskLoading || statesLoading || timezoneLoading;
-
   const formatMemory = (bytes: number | undefined) => {
     if (!bytes) return t('common.unknown');
     const gb = bytes / (1024 * 1024 * 1024);
@@ -177,10 +165,6 @@ export default function Server() {
         </div>
         <RefreshButton
           size="sm"
-          onRefresh={handleRefreshAll}
-          isLoading={isRefreshing}
-          showLabel="sm-and-up"
-          className="flex items-center gap-2"
           data-testid="server-refresh-button"
         />
       </div>

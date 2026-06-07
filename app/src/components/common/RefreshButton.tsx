@@ -7,11 +7,13 @@ import { useTranslation } from 'react-i18next';
 import { RefreshCw } from 'lucide-react';
 import { Button } from '../ui/button';
 import { cn } from '../../lib/utils';
+import { reloadApp } from '../../lib/reload';
 
 export type RefreshButtonShowLabel = 'always' | 'never' | 'sm-and-up';
 
 export interface RefreshButtonProps {
-  onRefresh: () => void;
+  /** Click handler. Defaults to a full app reload (window reload). */
+  onRefresh?: () => void;
   isLoading?: boolean;
   disabled?: boolean;
   label?: string;
@@ -23,7 +25,7 @@ export interface RefreshButtonProps {
 }
 
 export function RefreshButton({
-  onRefresh,
+  onRefresh = reloadApp,
   isLoading = false,
   disabled = false,
   label,

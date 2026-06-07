@@ -93,7 +93,7 @@ export default function EventMontage() {
   }, [selectedMonitorIds, selectedCause, startDate, endDate, settings.defaultEventLimit]);
 
   // Fetch events
-  const { data: eventsData, isLoading, isFetching, error, refetch } = useQuery({
+  const { data: eventsData, isLoading, error } = useQuery({
     queryKey: ['event-montage', filterParams],
     queryFn: () => getEvents(filterParams),
   });
@@ -265,8 +265,6 @@ export default function EventMontage() {
 
           {/* Refresh Button */}
           <RefreshButton
-            onRefresh={() => refetch()}
-            isLoading={isFetching}
             aria-label={t('eventMontage.refresh')}
           />
         </div>

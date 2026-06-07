@@ -436,8 +436,6 @@ export default function Events() {
               </Popover>
 
               <RefreshButton
-                onRefresh={() => refetch()}
-                isLoading={isFetching}
                 aria-label={t('events.refresh')}
                 data-testid="events-refresh-button"
               />
