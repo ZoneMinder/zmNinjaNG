@@ -10,7 +10,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Switch } from '../components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { RefreshCw, Filter, Clock, ScanSearch, X, Crosshair, ZoomIn, ZoomOut, ChevronDown, SkipForward, RectangleHorizontal, Info, Move, HandMetal, Radio } from 'lucide-react';
+import { RotateCcw, Filter, Clock, ScanSearch, X, Crosshair, ZoomIn, ZoomOut, ChevronDown, SkipForward, RectangleHorizontal, Info, Move, HandMetal, Radio } from 'lucide-react';
 import { PageContainer } from '../components/common/PageContainer';
 import { subDays } from 'date-fns';
 import { filterEnabledMonitors } from '../lib/filters';
@@ -508,7 +508,7 @@ export default function Timeline() {
         </div>
         <div className="flex items-center gap-2">
           <Button onClick={() => { clearFilters(); setActiveQuickRange(null); defaultDates.current = { start: formatLocalDateTime(subDays(new Date(), 1)), end: formatLocalDateTime(new Date()) }; }} variant="outline" size="sm" className="h-8 sm:h-9" data-testid="timeline-reset-button">
-            <RefreshCw className="h-4 w-4 sm:mr-2" />
+            <RotateCcw className="h-4 w-4 sm:mr-2" />
             <span className="hidden sm:inline">{t('common.reset')}</span>
           </Button>
         </div>
