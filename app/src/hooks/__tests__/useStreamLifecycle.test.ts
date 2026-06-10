@@ -6,6 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
+import { StrictMode } from 'react';
 import { useStreamLifecycle } from '../useStreamLifecycle';
 
 // Mock logger
@@ -42,7 +43,9 @@ vi.mock('../../lib/zm-constants', () => ({
 
 // Mock monitor store
 const mockRegenerateConnKey = vi.fn();
+const mockClearConnKey = vi.fn();
 let nextConnKey = 1001;
+let mockConnKeys: Record<string, number> = {};
 
 vi.mock('../../stores/monitors', () => ({
   useMonitorStore: vi.fn(),
@@ -51,17 +54,27 @@ vi.mock('../../stores/monitors', () => ({
 import { useMonitorStore } from '../../stores/monitors';
 
 function setupMonitorStore() {
+  const state = {
+    regenerateConnKey: mockRegenerateConnKey,
+    clearConnKey: mockClearConnKey,
+    connKeys: mockConnKeys,
+    getConnKey: vi.fn(),
+  };
+
   vi.mocked(useMonitorStore).mockImplementation((selector) => {
-    const state = {
-      regenerateConnKey: mockRegenerateConnKey,
-      connKeys: {} as Record<string, number>,
-      getConnKey: vi.fn(),
-    };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (selector as (s: any) => unknown)(state);
   });
+  (useMonitorStore as unknown as { getState: () => typeof state }).getState = () => state;
 
-  mockRegenerateConnKey.mockImplementation(() => nextConnKey++);
+  mockRegenerateConnKey.mockImplementation((monitorId: string) => {
+    const key = nextConnKey++;
+    mockConnKeys[monitorId] = key;
+    return key;
+  });
+  mockClearConnKey.mockImplementation((monitorId: string) => {
+    delete mockConnKeys[monitorId];
+  });
 }
 
 const mockLogFn = vi.fn();
@@ -84,6 +97,7 @@ describe('useStreamLifecycle', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     nextConnKey = 1001;
+    mockConnKeys = {};
     setupMonitorStore();
   });
 
@@ -283,6 +297,115 @@ describe('useStreamLifecycle', () => {
       // src attribute is removed (not set to ''), which aborts the in-flight
       // nph-zms connection and frees the browser connection slot.
       expect(imgElement.hasAttribute('src')).toBe(false);
+    });
+
+    it('clears the stored connkey on unmount in streaming mode', async () => {
+      const mediaRef = makeMediaRef();
+
+      const { result, unmount } = renderHook(() =>
+        useStreamLifecycle({ ...baseOptions, mediaRef }),
+      );
+
+      await waitFor(() => {
+        expect(result.current.connKey).not.toBe(0);
+      });
+      expect(mockConnKeys['1']).toBe(result.current.connKey);
+
+      unmount();
+
+      expect(mockClearConnKey).toHaveBeenCalledWith('1');
+      expect(mockConnKeys['1']).toBeUndefined();
+    });
+
+    it('does not clear the stored connkey when the store holds a newer key', async () => {
+      const mediaRef = makeMediaRef();
+
+      const { result, unmount } = renderHook(() =>
+        useStreamLifecycle({ ...baseOptions, mediaRef }),
+      );
+
+      await waitFor(() => {
+        expect(result.current.connKey).not.toBe(0);
+      });
+
+      // Another mount of the same monitor regenerated the key after this
+      // instance's last render. The cleanup must not remove the newer key.
+      mockConnKeys['1'] = result.current.connKey + 1;
+
+      unmount();
+
+      expect(mockClearConnKey).not.toHaveBeenCalled();
+      expect(mockConnKeys['1']).toBe(result.current.connKey + 1);
+    });
+
+    it('does not clear the stored connkey in snapshot mode', async () => {
+      const mediaRef = makeMediaRef();
+
+      const { result, unmount } = renderHook(() =>
+        useStreamLifecycle({ ...baseOptions, viewMode: 'snapshot', mediaRef }),
+      );
+
+      await waitFor(() => {
+        expect(result.current.connKey).not.toBe(0);
+      });
+
+      unmount();
+
+      expect(mockClearConnKey).not.toHaveBeenCalled();
+    });
+
+    it('generates a fresh connkey on remount after the previous key was cleared', async () => {
+      const mediaRef = makeMediaRef();
+
+      const first = renderHook(() => useStreamLifecycle({ ...baseOptions, mediaRef }));
+      await waitFor(() => {
+        expect(first.result.current.connKey).not.toBe(0);
+      });
+      const oldKey = first.result.current.connKey;
+
+      first.unmount();
+      expect(mockConnKeys['1']).toBeUndefined();
+
+      const second = renderHook(() => useStreamLifecycle({ ...baseOptions, mediaRef }));
+      await waitFor(() => {
+        expect(second.result.current.connKey).not.toBe(0);
+      });
+
+      expect(second.result.current.connKey).not.toBe(oldKey);
+      expect(mockConnKeys['1']).toBe(second.result.current.connKey);
+      second.unmount();
+    });
+
+    it('StrictMode double-mount does not clear the active connkey', async () => {
+      const mediaRef = makeMediaRef();
+
+      const { result, unmount } = renderHook(
+        () => useStreamLifecycle({ ...baseOptions, mediaRef }),
+        { wrapper: StrictMode },
+      );
+
+      await waitFor(() => {
+        expect(result.current.connKey).not.toBe(0);
+      });
+
+      // The throwaway-mount cleanup ran with connKey 0 and must not have
+      // cleared the key the surviving mount is using.
+      expect(mockClearConnKey).not.toHaveBeenCalled();
+      expect(mockConnKeys['1']).toBe(result.current.connKey);
+
+      const activeKey = result.current.connKey;
+      unmount();
+
+      expect(mockClearConnKey).toHaveBeenCalledWith('1');
+      expect(mockConnKeys['1']).toBeUndefined();
+
+      // The cleared key is the one that was quit on unmount.
+      await waitFor(() => {
+        expect(mockHttpGet).toHaveBeenCalledWith(
+          expect.stringContaining(`connkey=${activeKey}`),
+          expect.objectContaining({ timeoutMs: 12000 }),
+        );
+      });
     });
 
     it('skips media cleanup when mediaRef.current is null', async () => {

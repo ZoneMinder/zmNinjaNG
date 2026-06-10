@@ -5,6 +5,7 @@ interface MonitorStore {
     connKeys: Record<string, number>;
     getConnKey: (monitorId: string) => number;
     regenerateConnKey: (monitorId: string) => number;
+    clearConnKey: (monitorId: string) => void;
 }
 
 /**
@@ -38,6 +39,16 @@ export const useMonitorStore = create<MonitorStore>()(
             },
             regenerateConnKey: (monitorId: string) => {
                 return generateAndSetConnKey(monitorId, set);
+            },
+            // Remove the stored key so the next mount generates a fresh one.
+            // Called by useStreamLifecycle after CMD_QUIT on unmount; reusing
+            // a quit key can collide with the server-side stream state.
+            clearConnKey: (monitorId: string) => {
+                set((state) => {
+                    const next = { ...state.connKeys };
+                    delete next[monitorId];
+                    return { connKeys: next };
+                });
             },
         }),
         {

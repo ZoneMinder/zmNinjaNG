@@ -400,7 +400,12 @@ calls this when a stream needs a new key.
 Connection keys are stored in the Zustand monitors store (persisted via
 ``localStorage``). ``getConnKey(monitorId)`` returns the existing key if
 one is already stored, or generates a new one. ``regenerateConnKey``
-always creates a fresh key (used on stream failure).
+always creates a fresh key (used on stream failure). ``clearConnKey``
+removes the stored key; ``useStreamLifecycle`` calls it on unmount after
+sending ``CMD_QUIT`` so the next mount generates a fresh key instead of
+reusing one tied to a quit stream. The cleanup only clears the key it
+quit: if the store already holds a newer key (another mount regenerated
+it), the newer key is left intact.
 
 Streaming Mechanics
 ~~~~~~~~~~~~~~~~~~~

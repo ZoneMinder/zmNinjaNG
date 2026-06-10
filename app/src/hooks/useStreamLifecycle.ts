@@ -211,6 +211,17 @@ export function useStreamLifecycle({
         httpGet(controlUrl, { timeoutMs: params.cmdQuitTimeoutMs }).catch(() => {
           // Silently ignore errors - server connection may already be closed
         });
+
+        // Drop the stored connkey so the next mount of this monitor gets a
+        // fresh key instead of reusing the one we just quit (a quit key can
+        // collide with the server-side stream state). The params.connKey !== 0
+        // guard above keeps the StrictMode throwaway-mount cleanup out of this
+        // path; the store comparison keeps a concurrent mount's newer key
+        // intact: only the key this cleanup quit is cleared, never a newer one.
+        const store = useMonitorStore.getState();
+        if (store.connKeys[params.monitorId] === params.connKey) {
+          store.clearConnKey(params.monitorId);
+        }
       }
 
       // After CMD_QUIT, tear down the client side: removing the src aborts the
