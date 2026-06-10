@@ -112,6 +112,8 @@ export async function httpRequest<T = unknown>(
   }
 
   try {
+    // Deliberate: cleanup() is not called when an adapter throws. The timeout
+    // timer fires later and aborts an already-dead controller, which is harmless.
     let response: HttpResponse<T>;
     if (Platform.isNative) {
       response = await nativeHttpRequest<T>({

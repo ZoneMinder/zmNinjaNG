@@ -1964,7 +1964,8 @@ Server (ES mode). Handles real-time alarm events via ``zmeventnotification.pl``.
 - ``checkAlive(timeoutMs)`` liveness probe used on app resume and tab
   visibility change
 - ``reconnectNow()`` for immediate reconnect on network restore
-- 60-second keepalive ping
+- Keepalive ping at the profile's bandwidth ``wsKeepaliveInterval``
+  (60s normal, 120s low)
 - ``reconnectAttempts`` resets only after successful authentication
 - No store imports: ``stores/notifications.ts`` injects store-derived values
   (fresh access token, event image URL builder via ``lib/url-builder``,
@@ -1990,7 +1991,8 @@ Direct notification mode on desktop/web.
   ``EventPollerDeps`` (event sink, token provider, poll interval, portal URL,
   multi-port lookup); the poller has no store imports
 - Uses recursive ``setTimeout`` so interval changes take effect on next tick
-- Configurable polling interval per-profile (default 30s)
+- Poll interval comes from the profile's bandwidth ``eventPollerInterval``
+  (30s normal, 60s low)
 - Optional ``Notes REGEXP:detected:`` filter for object-detection-only events
 - Maintains a seen-event set (capped at 500) to avoid duplicate notifications
 

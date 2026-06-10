@@ -41,8 +41,10 @@ Key Directories Explained
   - ``useMonitorStream({ monitorId, serverId })``: MJPEG stream with server-resolved URLs.
   - ``useGo2RTCStream({ go2rtcUrl, monitorId, channel, controls })``: Go2RTC streaming. ``channel`` accepts a string (the ``StreamChannel`` field, e.g. ``"CameraDirectPrimary"``).
 
-  Note: ``usePTZControl`` lives in ``pages/hooks/usePTZControl.ts``, not
-  in ``src/hooks/``.
+  Note: not every hook lives in ``src/hooks/``. Domain-scoped hooks live
+  next to the code that uses them: ``pages/hooks/`` (``usePTZControl``,
+  ``useAlarmControl``) and ``components/<domain>/hooks/``
+  (``components/montage/hooks/useMontageGrid``).
 
 - ``lib/``: “Library” code - helpers that could theoretically be in
   a separate npm package.
@@ -62,6 +64,11 @@ Key Directories Explained
   - ``pushNotifications.ts``: FCM push notification handling on iOS/Android.
   - ``eventPoller.ts``: Direct-mode event polling on desktop/web.
   - ``profile.ts``: Profile-related service helpers.
+  - ``profile-bootstrap.ts`` / ``profile-initialization.ts``: profile store
+    rehydration and bootstrap on app start and profile switch.
+  - ``discovery.ts``: portal URL discovery when adding a profile.
+  - ``download.ts``: cross-platform snapshot and video downloads.
+  - ``qr-profile.ts``: QR code profile import/export.
 
 - ``stores/``: Global state management (see Chapter 3).
 
