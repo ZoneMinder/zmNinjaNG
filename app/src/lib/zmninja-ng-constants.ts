@@ -377,7 +377,10 @@ export const Z_INDEX = {
   // Overlay content above a backdrop (hover preview card, kiosk lock overlay)
   overlay: 9999,
 
-  // TV mode cursor: above every overlay
+  // Kiosk PIN pad: must sit above the kiosk lock overlay
+  kioskPinPad: 10000,
+
+  // TV mode cursor: above every other layer in this group
   tvCursor: 99999,
 } as const;
 

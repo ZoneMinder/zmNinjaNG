@@ -9,6 +9,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../ui/button';
 import { Delete } from 'lucide-react';
+import { Z_INDEX } from '../../lib/zmninja-ng-constants';
 
 export type PinPadMode = 'set' | 'confirm' | 'unlock';
 
@@ -90,7 +91,8 @@ export function PinPad({ mode, onSubmit, onCancel, error, cooldownSeconds }: Pin
 
   return (
     <div
-      className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 backdrop-blur-sm"
+      className="fixed inset-0 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+      style={{ zIndex: Z_INDEX.kioskPinPad }}
       data-testid="kiosk-pin-pad"
     >
       <div className="bg-card rounded-2xl p-6 w-[280px] shadow-2xl">
