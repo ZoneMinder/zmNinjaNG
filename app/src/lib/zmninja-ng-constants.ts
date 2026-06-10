@@ -44,6 +44,11 @@ export const ZM_INTEGRATION = {
   mjpegReconnectMaxDelayMs: 15000, // 15 seconds
   mjpegReconnectMaxAttempts: 6,
 
+  // Grace delay before a scheduled CMD_QUIT fires. Lets React StrictMode's
+  // dev double-mount (or a rapid hover out/in) cancel the quit instead of
+  // killing a stream the surviving mount is still using. See lib/zms-quit.ts.
+  cmdQuitGraceMs: 150,
+
   // Image quality settings
   safeImageQuality: 10, // Safe quality setting for bandwidth-constrained scenarios
   defaultMontageQuality: 50, // Default JPEG quality for montage view

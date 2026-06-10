@@ -1,6 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { StrictMode } from 'react';
 import { ZmsEventPlayer } from '../ZmsEventPlayer';
+import { ZM_INTEGRATION } from '../../../lib/zmninja-ng-constants';
 
 const httpGetMock = vi.fn().mockResolvedValue({ data: {} });
 
@@ -34,6 +36,13 @@ vi.mock('../../../hooks/useBandwidthSettings', () => ({
 
 vi.mock('../../../hooks/useFreshAccessToken', () => ({
   useFreshAccessToken: () => ({ isFresh: true }),
+}));
+
+vi.mock('../../../hooks/useCurrentProfile', () => ({
+  useCurrentProfile: () => ({
+    currentProfile: null,
+    settings: { apiTimeoutSeconds: 15 },
+  }),
 }));
 
 vi.mock('../../../hooks/useZoomPan', () => ({
@@ -77,10 +86,23 @@ function connkeyOf(url: string): string | null {
   return new URL(url).searchParams.get('connkey');
 }
 
+function quitCalls() {
+  return httpGetMock.mock.calls.filter(
+    (call) => new URL(call[0] as string).searchParams.get('command') === '17'
+  );
+}
+
 describe('ZmsEventPlayer', () => {
   beforeEach(() => {
     cleanup();
     httpGetMock.mockClear();
+  });
+
+  afterEach(() => {
+    if (vi.isFakeTimers()) {
+      vi.runAllTimers();
+      vi.useRealTimers();
+    }
   });
 
   it('keeps the img src and connkey unchanged when playback speed changes', () => {
@@ -126,16 +148,63 @@ describe('ZmsEventPlayer', () => {
     expect(screen.getByTestId('zms-play-pause').getAttribute('title')).toBe('event_detail.pause');
   });
 
-  it('sends CMD_QUIT for the stream connkey on unmount', () => {
+  it('sends one CMD_QUIT with a timeout for the stream connkey on unmount', () => {
+    vi.useFakeTimers();
     const { unmount } = renderPlayer();
-    const streamConnkey = connkeyOf(getStreamImg().src);
+    const img = getStreamImg();
+    const streamConnkey = connkeyOf(img.src);
+    fireEvent.load(img);
 
     unmount();
+    // The quit is delayed by a grace period so a remount can cancel it
+    expect(quitCalls()).toHaveLength(0);
+    vi.advanceTimersByTime(ZM_INTEGRATION.cmdQuitGraceMs + 1);
 
-    const quitCalls = httpGetMock.mock.calls.filter(
-      (call) => new URL(call[0] as string).searchParams.get('command') === '17'
+    const quits = quitCalls();
+    expect(quits).toHaveLength(1);
+    expect(connkeyOf(quits[0][0] as string)).toBe(streamConnkey);
+    // apiTimeoutSeconds (15) from profile settings, converted to ms
+    expect(quits[0][1]).toEqual({ timeoutMs: 15000 });
+  });
+
+  it('does not send CMD_QUIT on unmount when the stream never loaded', () => {
+    vi.useFakeTimers();
+    const { unmount } = renderPlayer();
+
+    unmount();
+    vi.advanceTimersByTime(ZM_INTEGRATION.cmdQuitGraceMs * 2);
+
+    expect(quitCalls()).toHaveLength(0);
+  });
+
+  it('does not kill the live stream under StrictMode double-mount', () => {
+    vi.useFakeTimers();
+    const { unmount } = render(
+      <StrictMode>
+        <ZmsEventPlayer
+          portalUrl="https://zm.test"
+          eventId="42"
+          token="tok"
+          totalFrames={100}
+          alarmFrames={0}
+          eventLength={10}
+        />
+      </StrictMode>
     );
-    expect(quitCalls).toHaveLength(1);
-    expect(connkeyOf(quitCalls[0][0] as string)).toBe(streamConnkey);
+    const img = getStreamImg();
+    const streamConnkey = connkeyOf(img.src);
+    fireEvent.load(img);
+
+    // No CMD_QUIT while the component remains mounted, even after the
+    // StrictMode mount -> cleanup -> mount cycle and the grace delay
+    vi.advanceTimersByTime(ZM_INTEGRATION.cmdQuitGraceMs * 2);
+    expect(quitCalls()).toHaveLength(0);
+
+    unmount();
+    vi.advanceTimersByTime(ZM_INTEGRATION.cmdQuitGraceMs * 2);
+
+    const quits = quitCalls();
+    expect(quits).toHaveLength(1);
+    expect(connkeyOf(quits[0][0] as string)).toBe(streamConnkey);
   });
 });

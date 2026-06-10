@@ -12,9 +12,9 @@ import { resolveMinStreamingPort } from '../../lib/multiport';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
 import { getEventZmsUrl, getZmsControlUrl } from '../../lib/url-builder';
-import { httpGet } from '../../lib/http';
 import { log, LogLevel } from '../../lib/logger';
 import { ZMS_COMMANDS } from '../../lib/zm-constants';
+import { sendDelayedCmdQuit, cancelPendingQuit } from '../../lib/zms-quit';
 import { DEFAULT_HOVER_PREVIEW_PLAYBACK_RATE } from '../../stores/settings';
 import type { Event } from '../../api/types';
 
@@ -23,14 +23,6 @@ export interface EventZmsHoverDescriptor {
   monitorId: string;
   name?: string;
 }
-
-/**
- * Module-level map of pending CMD_QUIT dispatches keyed by connkey.
- * Lets StrictMode's double-mount in dev cancel the intermediate quit
- * rather than churning the zms process.
- */
-const pendingQuits = new Map<string, number>();
-const QUIT_DELAY_MS = 150;
 
 interface EventThumbnailHoverPreviewProps {
   event: Event;
@@ -63,8 +55,8 @@ export function EventThumbnailHoverPreview({
 }
 
 /**
- * Inner player — only mounted while the preview is open.
- * Mount → new connkey + event ZMS stream. Unmount → CMD_QUIT.
+ * Inner player, only mounted while the preview is open.
+ * Mount: new connkey + event ZMS stream. Unmount: CMD_QUIT.
  */
 export function EventZmsHoverPlayer({ descriptor }: { descriptor: EventZmsHoverDescriptor }) {
   const { currentProfile, settings } = useCurrentProfile();
@@ -101,11 +93,8 @@ export function EventZmsHoverPlayer({ descriptor }: { descriptor: EventZmsHoverD
   useEffect(() => {
     // If a quit was pending for this connkey (dev remount or rapid
     // hover out/in), cancel it. Otherwise, log the new start.
-    const pending = pendingQuits.get(connkey);
-    if (pending !== undefined) {
-      window.clearTimeout(pending);
-      pendingQuits.delete(connkey);
-    } else if (streamUrl) {
+    const hadPendingQuit = cancelPendingQuit(connkey);
+    if (!hadPendingQuit && streamUrl) {
       log.zmsEventPlayer('Hover preview stream started', LogLevel.INFO, {
         eventId: descriptor.eventId,
         monitorId: descriptor.monitorId,
@@ -117,23 +106,10 @@ export function EventZmsHoverPlayer({ descriptor }: { descriptor: EventZmsHoverD
     return () => {
       if (!portalUrl) return;
       const controlUrl = getZmsControlUrl(portalUrl, ZMS_COMMANDS.cmdQuit, connkey, tokenOpts);
-      const timerId = window.setTimeout(() => {
-        pendingQuits.delete(connkey);
-        log.zmsEventPlayer('Hover preview stream stopping — sending CMD_QUIT', LogLevel.INFO, {
-          eventId: descriptor.eventId,
-          monitorId: descriptor.monitorId,
-          connkey,
-          url: controlUrl,
-        });
-        // Fire-and-forget — connection may already be closed
-        httpGet(controlUrl).catch((err) => {
-          log.zmsEventPlayer('Failed to send CMD_QUIT for hover preview', LogLevel.DEBUG, {
-            eventId: descriptor.eventId,
-            error: String(err),
-          });
-        });
-      }, QUIT_DELAY_MS);
-      pendingQuits.set(connkey, timerId);
+      sendDelayedCmdQuit(controlUrl, connkey, {
+        timeoutMs: settings.apiTimeoutSeconds > 0 ? settings.apiTimeoutSeconds * 1000 : undefined,
+        logContext: { eventId: descriptor.eventId, monitorId: descriptor.monitorId },
+      });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

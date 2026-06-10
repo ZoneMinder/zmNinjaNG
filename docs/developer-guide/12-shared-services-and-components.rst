@@ -474,6 +474,33 @@ hooks (``useStreamLifecycle``), and stream/playback components.
 
 --------------
 
+Delayed CMD_QUIT (``lib/zms-quit.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Schedules a fire-and-forget CMD_QUIT for a zms connkey after a grace
+delay (``ZM_INTEGRATION.cmdQuitGraceMs``, 150 ms). Pending quits are
+tracked per connkey so a remount that reuses the connkey (React
+StrictMode's dev double-mount, or a rapid hover out/in) cancels the
+quit instead of killing a stream the surviving mount is still using.
+
+.. code:: typescript
+
+   import { sendDelayedCmdQuit, cancelPendingQuit } from '../lib/zms-quit';
+
+   // On mount: cancel a quit left over from a dev remount
+   cancelPendingQuit(connkey);
+
+   // On unmount: schedule the quit; pass a timeout so teardown against
+   // an unreachable server cannot hang
+   sendDelayedCmdQuit(controlUrl, connkey, {
+     timeoutMs: apiTimeoutSeconds > 0 ? apiTimeoutSeconds * 1000 : undefined,
+     logContext: { eventId },
+   });
+
+**Used By:** ``ZmsEventPlayer``, ``EventThumbnailHoverPreview``.
+
+--------------
+
 Multi-port Resolution (``lib/multiport.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

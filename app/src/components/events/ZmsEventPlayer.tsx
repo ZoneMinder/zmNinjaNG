@@ -26,6 +26,8 @@ import { httpGet } from '../../lib/http';
 import { log, LogLevel } from '../../lib/logger';
 import { getEventZmsUrl, getZmsControlUrl } from '../../lib/url-builder';
 import { ZMS_COMMANDS } from '../../lib/zm-constants';
+import { sendDelayedCmdQuit, cancelPendingQuit } from '../../lib/zms-quit';
+import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useZoomPan } from '../../hooks/useZoomPan';
 import { ZoomControls } from '../ui/ZoomControls';
 import { useBandwidthSettings } from '../../hooks/useBandwidthSettings';
@@ -63,6 +65,7 @@ export function ZmsEventPlayer({
   const { t } = useTranslation();
   const bandwidth = useBandwidthSettings();
   const { isFresh: isAccessTokenFresh } = useFreshAccessToken();
+  const { settings } = useCurrentProfile();
   const [currentFrame, setCurrentFrame] = useState(1);
   const [isPlaying, setIsPlaying] = useState(true);
   const [playbackSpeed, setPlaybackSpeed] = useState(100); // 100 = 1x speed
@@ -141,13 +144,25 @@ export function ZmsEventPlayer({
 
   // Send CMD_QUIT on unmount so the nph-zms process exits instead of idling.
   // Params are kept in a ref so the cleanup closure is never stale.
-  const quitParamsRef = useRef({ portalUrl, token, apiUrl, connKey, minStreamingPort, monitorId });
+  // CMD_QUIT follows the same timeout as the rest of the app's HTTP. 0 disables.
+  const cmdQuitTimeoutMs = settings.apiTimeoutSeconds > 0 ? settings.apiTimeoutSeconds * 1000 : undefined;
+  const quitParamsRef = useRef({ portalUrl, token, apiUrl, connKey, minStreamingPort, monitorId, eventId, cmdQuitTimeoutMs });
   useEffect(() => {
-    quitParamsRef.current = { portalUrl, token, apiUrl, connKey, minStreamingPort, monitorId };
-  }, [portalUrl, token, apiUrl, connKey, minStreamingPort, monitorId]);
+    quitParamsRef.current = { portalUrl, token, apiUrl, connKey, minStreamingPort, monitorId, eventId, cmdQuitTimeoutMs };
+  }, [portalUrl, token, apiUrl, connKey, minStreamingPort, monitorId, eventId, cmdQuitTimeoutMs]);
+
+  // Only quit a stream that actually started: the img onLoad flips this flag.
+  // Guards against killing nothing (token never fresh, stream failed) and
+  // against StrictMode's dev double-mount quitting the surviving mount's stream.
+  const streamStartedRef = useRef(false);
 
   useEffect(() => {
+    // A remount that reuses the connkey (StrictMode dev double-mount) cancels
+    // the quit scheduled by the previous cleanup.
+    cancelPendingQuit(quitParamsRef.current.connKey);
+
     return () => {
+      if (!streamStartedRef.current) return;
       const p = quitParamsRef.current;
       const url = getZmsControlUrl(p.portalUrl, ZMS_COMMANDS.cmdQuit, p.connKey, {
         token: p.token,
@@ -155,12 +170,11 @@ export function ZmsEventPlayer({
         minStreamingPort: p.minStreamingPort,
         monitorId: p.monitorId,
       });
-      // Fire-and-forget: the component is gone, just release the server process
-      httpGet(url).catch((err) => {
-        log.zmsEventPlayer('CMD_QUIT on unmount failed', LogLevel.DEBUG, {
-          connkey: p.connKey,
-          error: err,
-        });
+      // Delayed fire-and-forget: release the server process unless a remount
+      // cancels the quit within the grace window
+      sendDelayedCmdQuit(url, p.connKey, {
+        timeoutMs: p.cmdQuitTimeoutMs,
+        logContext: { eventId: p.eventId },
       });
     };
   }, []); // Empty deps = only run on unmount
@@ -302,7 +316,7 @@ export function ZmsEventPlayer({
         className="overflow-hidden shadow-2xl border-0 ring-1 ring-border/20 bg-black touch-none relative"
       >
         <div className="aspect-video relative bg-black">
-          {/* No-video placeholder — behind the stream, only visible when image fails */}
+          {/* No-video placeholder: behind the stream, only visible when image fails */}
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
             <VideoOff className="h-10 w-10 text-muted-foreground/30" />
           </div>
@@ -312,7 +326,10 @@ export function ZmsEventPlayer({
               alt={t('event_detail.event_playback')}
               className="w-full h-full object-contain"
               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-              onLoad={(e) => { (e.target as HTMLImageElement).style.display = ''; }}
+              onLoad={(e) => {
+                streamStartedRef.current = true;
+                (e.target as HTMLImageElement).style.display = '';
+              }}
             />
           </div>
 
