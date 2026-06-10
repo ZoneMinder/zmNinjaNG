@@ -100,12 +100,17 @@ function AppRoutes() {
     window.addEventListener('beforeunload', flush);
     document.addEventListener('visibilitychange', onVisibility);
 
+    let cancelled = false;
     let pauseListener: { remove: () => void } | null = null;
     if (Platform.isNative) {
       void (async () => {
         try {
           const { App: CapApp } = await import('@capacitor/app');
           const handle = await CapApp.addListener('pause', flush);
+          if (cancelled) {
+            handle.remove();
+            return;
+          }
           pauseListener = handle;
         } catch {
           // @capacitor/app may not be present in some test envs
@@ -114,6 +119,7 @@ function AppRoutes() {
     }
 
     return () => {
+      cancelled = true;
       window.removeEventListener('beforeunload', flush);
       document.removeEventListener('visibilitychange', onVisibility);
       pauseListener?.remove();

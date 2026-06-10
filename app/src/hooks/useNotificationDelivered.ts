@@ -96,6 +96,7 @@ export function useNotificationDelivered({
   useEffect(() => {
     if (!Platform.isNative) return;
 
+    let cancelled = false;
     let listenerCleanup: (() => void) | undefined;
 
     const setup = async () => {
@@ -136,6 +137,10 @@ export function useNotificationDelivered({
           }
         });
 
+        if (cancelled) {
+          listener.remove();
+          return;
+        }
         listenerCleanup = () => { listener.remove(); };
       } catch (e) {
         log.notificationHandler('Failed to setup badge clearing on resume', LogLevel.ERROR, e);
@@ -143,6 +148,9 @@ export function useNotificationDelivered({
     };
 
     setup();
-    return () => { listenerCleanup?.(); };
+    return () => {
+      cancelled = true;
+      listenerCleanup?.();
+    };
   }, []);
 }
