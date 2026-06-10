@@ -83,6 +83,15 @@ HTTP Client (``lib/http.ts``)
 Platform-agnostic HTTP request abstraction that works on Web, iOS,
 Android, and Desktop.
 
+``lib/http.ts`` is the public facade and the only import path consumers
+use. It builds the final URL, dispatches to a platform adapter, validates
+the status, and logs the request. The internals live in ``lib/http/``:
+``types.ts`` (request/response/error shapes), ``encoding.ts`` (body
+serialization, base64/byte conversion), ``timeout.ts`` (abort-signal
+composition, native timeout race), ``logging.ts`` (request IDs,
+correlation tags), and one adapter per platform (``adapter-native.ts``,
+``adapter-electron.ts``, ``adapter-web.ts``).
+
 **Features:**
 
 - Automatic platform detection (Capacitor, Electron, or Web)
@@ -121,7 +130,9 @@ Android, and Desktop.
 
 - **Web**: Uses ``fetch()`` with standard CORS handling
 - **Mobile (Capacitor)**: Uses ``CapacitorHttp`` for native networking
-- **Desktop (Electron)**: Uses Chromium ``fetch()`` via Electron's renderer
+- **Desktop (Electron)**: Bridges the request over IPC
+  (``electron/preload.cjs``) to the main process, which performs it with
+  Electron's ``net`` module, avoiding renderer CORS
 
 **SSL Trust:** On mobile, the native Capacitor plugin handles SSL trust
 (see SSL Trust section below). On Electron desktop, the user must add
