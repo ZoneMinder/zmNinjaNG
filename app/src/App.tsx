@@ -25,7 +25,7 @@ import { log, LogLevel, logger } from './lib/logger';
 import { initializeLogFile, hydrateLogStoreFromFile, getLogFile } from './lib/log-file';
 import { Platform } from './lib/platform';
 import { PipProvider } from './contexts/PipContext';
-import { BOOTSTRAP_TIMEOUTS } from './lib/zmninja-ng-constants';
+import { BOOTSTRAP_TIMEOUTS, Z_INDEX } from './lib/zmninja-ng-constants';
 
 // Lazy load route components for code splitting
 const ProfileForm = lazy(() => import('./pages/ProfileForm'));
@@ -372,7 +372,8 @@ function App() {
             <Toaster />
             {isBootstrapping && (
               <div
-                className="fixed inset-0 z-[9998] flex items-center justify-center bg-background/60 backdrop-blur-sm pointer-events-auto touch-none"
+                className="fixed inset-0 flex items-center justify-center bg-background/60 backdrop-blur-sm pointer-events-auto touch-none"
+                style={{ zIndex: Z_INDEX.overlayBackdrop }}
                 data-testid="app-init-blocker"
               >
                 <div className="w-[min(90vw,24rem)] rounded-lg border border-border bg-background/95 px-4 py-4 text-center shadow-lg">

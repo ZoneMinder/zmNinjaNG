@@ -363,6 +363,25 @@ export const UI_INTERACTIONS = {
 } as const;
 
 /**
+ * Overlay Z-Index Layers
+ *
+ * Stacking contract for fullscreen overlays rendered above the app.
+ * In-page elements use small Tailwind utilities (z-10, z-50); these
+ * values are for portal or fixed overlays that must sit above all of
+ * them. Backdrops sit one step below the content they belong to.
+ */
+export const Z_INDEX = {
+  // Fullscreen blocking backdrops (hover preview backdrop, app init blocker)
+  overlayBackdrop: 9998,
+
+  // Overlay content above a backdrop (hover preview card, kiosk lock overlay)
+  overlay: 9999,
+
+  // TV mode cursor: above every overlay
+  tvCursor: 99999,
+} as const;
+
+/**
  * Notification Badge UI
  *
  * Visual feedback timing for the notification bell.

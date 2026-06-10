@@ -7,6 +7,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Platform } from '../../lib/platform';
+import { Z_INDEX } from '../../lib/zmninja-ng-constants';
 
 const CURSOR_SIZE = 24;
 const SPEED_START = 4;     // px per frame initially
@@ -187,7 +188,7 @@ export function TvCursor() {
         border: '3px solid #00a8ff',
         backgroundColor: 'rgba(0, 168, 255, 0.3)',
         pointerEvents: 'none',
-        zIndex: 99999,
+        zIndex: Z_INDEX.tvCursor,
         boxShadow: '0 0 8px rgba(0, 168, 255, 0.5)',
       }}
     />

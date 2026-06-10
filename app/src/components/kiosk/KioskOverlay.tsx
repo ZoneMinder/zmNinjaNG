@@ -16,6 +16,7 @@ import { PinPad } from './PinPad';
 import { useToast } from '../../hooks/use-toast';
 import { log, LogLevel } from '../../lib/logger';
 import { Platform } from '../../lib/platform';
+import { Z_INDEX } from '../../lib/zmninja-ng-constants';
 
 interface KioskOverlayProps {
   onUnlock: () => void;
@@ -167,8 +168,8 @@ export function KioskOverlay({ onUnlock }: KioskOverlayProps) {
     <>
       {/* Transparent overlay blocking all interaction */}
       <div
-        className="fixed inset-0 z-[9999]"
-        style={{ pointerEvents: 'auto' }}
+        className="fixed inset-0"
+        style={{ zIndex: Z_INDEX.overlay, pointerEvents: 'auto' }}
         data-testid="kiosk-overlay"
       >
         {/* Unlock button — bottom-right, theme-aware */}
