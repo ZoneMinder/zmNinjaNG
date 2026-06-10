@@ -53,6 +53,7 @@ import { useEffect, useRef, useState, type ReactNode, type PointerEvent as RPoin
 import { createPortal } from 'react-dom';
 import { Platform } from '../../lib/platform';
 import { UI_INTERACTIONS, Z_INDEX } from '../../lib/zmninja-ng-constants';
+import { useCapacitorListener } from '../../hooks/useCapacitorListener';
 
 /**
  * Module-level reference count of open hover previews. Multiple
@@ -283,32 +284,23 @@ export function HoverPreview({
       if (document.visibilityState === 'hidden') dismiss();
     };
     document.addEventListener('visibilitychange', onVisibility);
-    let cancelled = false;
-    let removeAppStateListener: (() => void) | null = null;
-    if (Platform.isNative) {
-      (async () => {
-        try {
-          const { App } = await import('@capacitor/app');
-          const handle = await App.addListener('appStateChange', (state) => {
-            if (!state.isActive) dismiss();
-          });
-          if (cancelled) {
-            handle.remove();
-            return;
-          }
-          removeAppStateListener = () => handle.remove();
-        } catch { /* plugin unavailable */ }
-      })();
-    }
     return () => {
-      cancelled = true;
       window.removeEventListener('scroll', dismiss, true);
       window.removeEventListener('wheel', dismiss);
       document.removeEventListener('visibilitychange', onVisibility);
-      if (removeAppStateListener) removeAppStateListener();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  // Dismiss when the app is backgrounded (native only, while open).
+  useCapacitorListener(
+    () => import('@capacitor/app').then((m) => m.App),
+    'appStateChange',
+    (state: { isActive: boolean }) => {
+      if (!state.isActive) closePreview();
+    },
+    { enabled: open && Platform.isNative },
+  );
 
   // Safety net: if the wrapper unmounts while the preview is open
   // (e.g. parent list re-renders mid-hover), release the inert lock

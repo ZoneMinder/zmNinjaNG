@@ -23,7 +23,7 @@ import { Button } from './components/ui/button';
 import { X } from 'lucide-react';
 import { log, LogLevel, logger } from './lib/logger';
 import { initializeLogFile, hydrateLogStoreFromFile, getLogFile } from './lib/log-file';
-import { Platform } from './lib/platform';
+import { useCapacitorListener } from './hooks/useCapacitorListener';
 import { PipProvider } from './contexts/PipContext';
 import { BOOTSTRAP_TIMEOUTS, Z_INDEX } from './lib/zmninja-ng-constants';
 
@@ -100,31 +100,19 @@ function AppRoutes() {
     window.addEventListener('beforeunload', flush);
     document.addEventListener('visibilitychange', onVisibility);
 
-    let cancelled = false;
-    let pauseListener: { remove: () => void } | null = null;
-    if (Platform.isNative) {
-      void (async () => {
-        try {
-          const { App: CapApp } = await import('@capacitor/app');
-          const handle = await CapApp.addListener('pause', flush);
-          if (cancelled) {
-            handle.remove();
-            return;
-          }
-          pauseListener = handle;
-        } catch {
-          // @capacitor/app may not be present in some test envs
-        }
-      })();
-    }
-
     return () => {
-      cancelled = true;
       window.removeEventListener('beforeunload', flush);
       document.removeEventListener('visibilitychange', onVisibility);
-      pauseListener?.remove();
     };
   }, []);
+
+  // Native: also flush when the app is backgrounded. Errors are swallowed;
+  // @capacitor/app may not be present in some test envs.
+  useCapacitorListener(
+    () => import('@capacitor/app').then((m) => m.App),
+    'pause',
+    () => { void getLogFile().flush(); },
+  );
 
   // Always apply compact mode
   useEffect(() => {

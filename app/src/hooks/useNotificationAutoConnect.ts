@@ -17,6 +17,7 @@ import { log, LogLevel } from '../lib/logger';
 import { useNotificationStore, startEventPoller } from '../stores/notifications';
 import { getEventPoller } from '../services/eventPoller';
 import { getNotificationService } from '../services/notifications';
+import { useCapacitorListener } from './useCapacitorListener';
 import type { Profile } from '../api/types';
 
 interface AutoConnectParams {
@@ -160,10 +161,13 @@ export function useNotificationAutoConnect({
     };
   }, [currentProfile?.id, settings?.notificationMode, settings?.enabled]);
 
+  // Gate for the ES-mode listeners below. Recomputed each render; the
+  // listener hooks re-register only when the resulting boolean changes.
+  const esModeEnabled = !!settings?.enabled && (settings?.notificationMode || 'es') === 'es';
+
   // Network change listener: reconnect when connectivity is restored
   useEffect(() => {
-    const mode = settings?.notificationMode || 'es';
-    if (!settings?.enabled || mode !== 'es') return;
+    if (!esModeEnabled) return;
 
     const handleOnline = () => {
       log.notificationHandler('Network restored, triggering reconnect', LogLevel.INFO);
@@ -171,34 +175,23 @@ export function useNotificationAutoConnect({
     };
 
     window.addEventListener('online', handleOnline);
-
-    // On native platforms, also use Capacitor's Network plugin for faster detection
-    let cancelled = false;
-    let networkCleanup: (() => void) | undefined;
-
-    if (Platform.isNative) {
-      import('@capacitor/network').then(({ Network }) => {
-        Network.addListener('networkStatusChange', (status) => {
-          if (status.connected) {
-            log.notificationHandler('Native network restored, triggering reconnect', LogLevel.INFO);
-            reconnect();
-          }
-        }).then((handle) => {
-          if (cancelled) {
-            handle.remove();
-            return;
-          }
-          networkCleanup = () => handle.remove();
-        });
-      }).catch(() => {});
-    }
-
     return () => {
-      cancelled = true;
       window.removeEventListener('online', handleOnline);
-      networkCleanup?.();
     };
-  }, [settings?.enabled, settings?.notificationMode, reconnect]);
+  }, [esModeEnabled, reconnect]);
+
+  // On native platforms, also use Capacitor's Network plugin for faster detection
+  useCapacitorListener(
+    () => import('@capacitor/network').then((m) => m.Network),
+    'networkStatusChange',
+    (status: { connected: boolean }) => {
+      if (status.connected) {
+        log.notificationHandler('Native network restored, triggering reconnect', LogLevel.INFO);
+        reconnect();
+      }
+    },
+    { enabled: Platform.isNative && esModeEnabled },
+  );
 
   // Visibility change listener (desktop/web): check liveness when tab becomes visible
   useEffect(() => {
@@ -224,46 +217,24 @@ export function useNotificationAutoConnect({
   }, [settings?.enabled, settings?.notificationMode, isConnected, reconnect]);
 
   // App resume liveness check (mobile): verify WebSocket is alive when app returns to foreground
-  useEffect(() => {
-    if (!Platform.isNative) return;
+  useCapacitorListener(
+    () => import('@capacitor/app').then((m) => m.App),
+    'appStateChange',
+    async ({ isActive }: { isActive: boolean }) => {
+      if (!isActive || !isConnected) return;
 
-    const mode = settings?.notificationMode || 'es';
-    if (!settings?.enabled || mode !== 'es') return;
+      log.notificationHandler('App resumed, checking WebSocket liveness', LogLevel.DEBUG);
+      const service = getNotificationService();
+      const alive = await service.checkAlive(5000);
 
-    let cancelled = false;
-    let listenerCleanup: (() => void) | undefined;
-
-    const setup = async () => {
-      try {
-        const { App: CapApp } = await import('@capacitor/app');
-
-        const listener = await CapApp.addListener('appStateChange', async ({ isActive }) => {
-          if (!isActive || !isConnected) return;
-
-          log.notificationHandler('App resumed, checking WebSocket liveness', LogLevel.DEBUG);
-          const service = getNotificationService();
-          const alive = await service.checkAlive(5000);
-
-          if (!alive) {
-            log.notificationHandler('WebSocket not responding after app resume, reconnecting', LogLevel.WARN);
-            reconnect();
-          }
-        });
-
-        if (cancelled) {
-          listener.remove();
-          return;
-        }
-        listenerCleanup = () => { listener.remove(); };
-      } catch (e) {
-        log.notificationHandler('Failed to setup app resume liveness check', LogLevel.ERROR, e);
+      if (!alive) {
+        log.notificationHandler('WebSocket not responding after app resume, reconnecting', LogLevel.WARN);
+        reconnect();
       }
-    };
-
-    setup();
-    return () => {
-      cancelled = true;
-      listenerCleanup?.();
-    };
-  }, [settings?.enabled, settings?.notificationMode, isConnected, reconnect]);
+    },
+    {
+      enabled: Platform.isNative && esModeEnabled,
+      onError: (e) => log.notificationHandler('Failed to setup app resume liveness check', LogLevel.ERROR, e),
+    },
+  );
 }

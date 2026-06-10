@@ -17,6 +17,7 @@ import { useToast } from '../../hooks/use-toast';
 import { log, LogLevel } from '../../lib/logger';
 import { Platform } from '../../lib/platform';
 import { Z_INDEX } from '../../lib/zmninja-ng-constants';
+import { useCapacitorListener } from '../../hooks/useCapacitorListener';
 
 interface KioskOverlayProps {
   onUnlock: () => void;
@@ -65,34 +66,14 @@ export function KioskOverlay({ onUnlock }: KioskOverlayProps) {
   }, [isLocked]);
 
   // Block Android hardware back button while locked
-  useEffect(() => {
-    if (!isLocked) return;
-
-    let cancelled = false;
-    let removeListener: (() => void) | undefined;
-
-    (async () => {
-      if (!Platform.isNative) return;
-      try {
-        const { App } = await import('@capacitor/app');
-        const handle = await App.addListener('backButton', () => {
-          // No-op: swallow back button while locked
-        });
-        if (cancelled) {
-          handle.remove();
-          return;
-        }
-        removeListener = () => handle.remove();
-      } catch {
-        // Plugin unavailable
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      removeListener?.();
-    };
-  }, [isLocked]);
+  useCapacitorListener(
+    () => import('@capacitor/app').then((m) => m.App),
+    'backButton',
+    () => {
+      // No-op: swallow back button while locked
+    },
+    { enabled: isLocked && Platform.isNative },
+  );
 
   // Block keyboard shortcuts while locked (but not when PIN pad is open)
   useEffect(() => {

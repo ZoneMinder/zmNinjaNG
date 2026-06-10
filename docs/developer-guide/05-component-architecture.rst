@@ -1391,6 +1391,8 @@ Complex logic is extracted into hooks:
 - ``useMonitorStream()`` - Stream URL and connection management
 - ``usePTZControl()`` - PTZ command handling (in ``pages/hooks/``)
 - ``useEventNavigation()`` - Adjacent event navigation (see below)
+- ``useCapacitorListener()`` - Capacitor plugin event listeners with async
+  registration and teardown (see below)
 
 useEventNavigation
 ^^^^^^^^^^^^^^^^^^
@@ -1412,6 +1414,46 @@ maintain filter context when navigating between events.
 - Triggers directional slide animations (``event-slide-left``,
   ``event-slide-right`` CSS classes, 300 ms).
 - Used in the EventDetail header with ChevronLeft/ChevronRight buttons.
+
+useCapacitorListener
+^^^^^^^^^^^^^^^^^^^^
+
+**Location**: ``src/hooks/useCapacitorListener.ts``
+
+Registers an event listener on an async-loaded Capacitor plugin and removes
+it on unmount or when ``enabled`` turns false. Replaces the per-site pattern
+of dynamic import, ``await addListener``, and cancelled-flag teardown.
+
+.. code:: tsx
+
+   useCapacitorListener(
+     () => import('@capacitor/app').then((m) => m.App),
+     'appStateChange',
+     (state: { isActive: boolean }) => {
+       if (!state.isActive) closePreview();
+     },
+     { enabled: open && Platform.isNative },
+   );
+
+**Options:**
+
+- ``enabled``: register only while true. Defaults to ``Platform.isNative``.
+- ``onError``: called when loading the plugin or registering the listener
+  fails. Without it, failures are swallowed (plugin unavailable on this
+  platform is the common case).
+
+**Behaviour:**
+
+- The handler is kept in a ref, so callers do not need stable callback
+  identities and the listener never re-registers on handler changes.
+- A handle that resolves after teardown (unmount during the awaits) is
+  removed as soon as it arrives.
+- The plugin getter must use a static import specifier so Vite can analyze
+  and code-split it. Never build the specifier from a template literal.
+
+Used by ``App.tsx`` (flush logs on pause), ``HoverPreview``,
+``KioskOverlay``, ``Mp4EventPlayer``, ``useNotificationAutoConnect``, and
+``useNotificationDelivered``.
 
 3. Refs for DOM Access
 ~~~~~~~~~~~~~~~~~~~~~~
