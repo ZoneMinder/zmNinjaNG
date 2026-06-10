@@ -278,6 +278,12 @@ export function installDpadNavigator(): void {
   window.addEventListener('keydown', handleDpadKey, { capture: true });
 }
 
+export function uninstallDpadNavigator(): void {
+  if (!installed) return;
+  installed = false;
+  window.removeEventListener('keydown', handleDpadKey, { capture: true });
+}
+
 export function initTvNavigation(): void {
   if (Platform.isTVDevice) {
     installDpadNavigator();
