@@ -39,7 +39,7 @@ import { usePTZControl, useAlarmControl, useModeControl, useMonitorNavigation } 
 
 import { MonitorSettingsDialog } from '../components/monitor-detail/MonitorSettingsDialog';
 import { MonitorControlsCard } from '../components/monitor-detail/MonitorControlsCard';
-import { ZoomControls } from '../components/ui/ZoomControls';
+import { ZoomControls } from '../components/ui/zoom-controls';
 
 export default function MonitorDetail() {
   const { id } = useParams<{ id: string }>();

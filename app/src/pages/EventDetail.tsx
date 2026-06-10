@@ -35,7 +35,7 @@ import { log, LogLevel } from '../lib/logger';
 import { generateEventMarkers, type VideoMarker } from '../lib/video-markers';
 import { useEventFavoritesStore } from '../stores/eventFavorites';
 import { useZoomPan } from '../hooks/useZoomPan';
-import { ZoomControls } from '../components/ui/ZoomControls';
+import { ZoomControls } from '../components/ui/zoom-controls';
 import { useEventNavigation } from '../hooks/useEventNavigation';
 import { useServerUrls } from '../hooks/useServerUrls';
 import { cn } from '../lib/utils';

@@ -29,7 +29,7 @@ import { ZMS_COMMANDS } from '../../lib/zm-constants';
 import { sendDelayedCmdQuit, cancelPendingQuit } from '../../lib/zms-quit';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useZoomPan } from '../../hooks/useZoomPan';
-import { ZoomControls } from '../ui/ZoomControls';
+import { ZoomControls } from '../ui/zoom-controls';
 import { useBandwidthSettings } from '../../hooks/useBandwidthSettings';
 import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
 
