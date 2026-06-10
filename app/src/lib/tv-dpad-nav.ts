@@ -96,7 +96,7 @@ function moveWithinRegion(region: Element, direction: 'next' | 'prev'): boolean 
   if (focusable.length === 0) return false;
 
   const active = document.activeElement as HTMLElement;
-  // Find current index — check both exact match and containment
+  // Find current index: check both exact match and containment
   let currentIndex = focusable.indexOf(active);
   if (currentIndex === -1) {
     currentIndex = focusable.findIndex((el) => el.contains(active) || active.contains(el));
@@ -201,7 +201,7 @@ function handleDpadKey(e: KeyboardEvent): void {
           e.preventDefault();
         }
       } else {
-        // No region — focus the first element in any visible region
+        // No region: focus the first element in any visible region
         const regions = getAllRegions();
         for (const r of regions) {
           if (focusInRegion(r, 'first')) {

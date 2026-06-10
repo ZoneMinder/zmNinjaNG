@@ -61,7 +61,7 @@ export function clearServerMap(): void {
 // ========== Functions ==========
 
 // ZoneMinder installs often have a default/placeholder row in the Servers
-// table that was never populated — typically Hostname=server.localdomain
+// table that was never populated: typically Hostname=server.localdomain
 // or localhost and Port=0. Treating those rows as valid routes breaks
 // monitors whose ServerId points at them, because the resolver then
 // overrides the user's working profile URL with the placeholder.

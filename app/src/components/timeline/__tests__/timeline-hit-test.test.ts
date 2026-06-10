@@ -71,7 +71,7 @@ describe('hitTest', () => {
   });
 
   it('enforces eventMinWidth for narrow events', () => {
-    // Event is only 1ms wide, which at 1:1 scale is 1px — less than eventMinWidth (4)
+    // Event is only 1ms wide, which at 1:1 scale is 1px, less than eventMinWidth (4)
     const event = makeEvent('e1', 'mon-1', 500, 501);
     const events = [event];
 

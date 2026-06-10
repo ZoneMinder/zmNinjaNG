@@ -137,7 +137,7 @@ export const EventPreviewPopover = memo(function EventPreviewPopover({
 
   return (
     <>
-      {/* Invisible backdrop — tap anywhere outside to dismiss */}
+      {/* Invisible backdrop: tap anywhere outside to dismiss */}
       <div
         className="fixed inset-0 z-40"
         onClick={onClose}

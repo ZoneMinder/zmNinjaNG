@@ -76,7 +76,7 @@ export function EventsFilterPopover({
   const handleTagToggle = (tagId: string) => {
     if (!onTagSelectionChange) return;
     if (tagId === ALL_TAGS_FILTER_ID) {
-      // Toggle "All" — mutually exclusive with individual tags
+      // Toggle "All": mutually exclusive with individual tags
       onTagSelectionChange(isAllTagsSelected ? [] : [ALL_TAGS_FILTER_ID]);
       return;
     }
@@ -203,7 +203,7 @@ export function EventsFilterPopover({
             {/* Available tags list */}
             {!isLoadingTags && availableTags.length > 0 && (
               <div className="max-h-32 overflow-y-auto space-y-1 border rounded-md p-2">
-                {/* "All" option — show events with any tag */}
+                {/* "All" option: show events with any tag */}
                 <button
                   type="button"
                   onClick={() => handleTagToggle(ALL_TAGS_FILTER_ID)}

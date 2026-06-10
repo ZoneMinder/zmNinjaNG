@@ -225,7 +225,7 @@ export function useTimelineGestures(callbacks: GestureCallbacks): RefObject<HTML
     function onTouchEnd(e: TouchEvent) {
       if (brushing && e.touches.length === 0) {
         brushing = false;
-        // Use last known position — changedTouches has the lifted finger
+        // Use last known position: changedTouches has the lifted finger
         const endNorm = normX(e.changedTouches[0].clientX);
         const lo = Math.min(brushStartNorm, endNorm);
         const hi = Math.max(brushStartNorm, endNorm);

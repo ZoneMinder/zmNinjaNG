@@ -193,11 +193,11 @@ export class MobilePushService {
           const platform = Capacitor.getPlatform() as 'ios' | 'android';
 
           if (notificationStore.isConnected) {
-            // Already connected — send directly
+            // Already connected: send directly
             log.push('Sending disabled state to notification server', LogLevel.INFO, { platform });
             await notificationStore.deregisterPushToken(this.currentToken, platform);
           } else {
-            // Not connected — temporarily connect to send the deregister
+            // Not connected: temporarily connect to send the deregister
             log.push('Not connected to ES, using temporary connection to deregister', LogLevel.INFO, { platform });
             await this._deregisterViaTemporaryConnection(profileId, this.currentToken, platform);
           }
@@ -306,7 +306,7 @@ export class MobilePushService {
 
   /**
    * Create the Android notification channel used by FCM push messages.
-   * This is idempotent — calling it when the channel already exists is a no-op.
+   * This is idempotent: calling it when the channel already exists is a no-op.
    */
   private async _createNotificationChannel(): Promise<void> {
     try {
@@ -315,7 +315,7 @@ export class MobilePushService {
         id: 'zmninja-ng',
         name: 'zmNinja Notifications',
         description: 'ZoneMinder event alerts',
-        importance: 4, // IMPORTANCE_HIGH — heads-up notifications
+        importance: 4, // IMPORTANCE_HIGH, heads-up notifications
         vibration: true,
       });
       log.push('Android notification channel created', LogLevel.INFO, { channelId: 'zmninja-ng' });
@@ -558,7 +558,7 @@ export class MobilePushService {
     if (!eid) return;
 
     if (isCrossProfile && targetProfileId) {
-      // Different profile — request user confirmation before switching
+      // Different profile: request user confirmation before switching
       const { profiles } = useProfileStore.getState();
       const targetProfile = profiles.find(p => p.id === targetProfileId);
 
@@ -573,7 +573,7 @@ export class MobilePushService {
         eventId: String(eid),
       });
     } else {
-      // Same profile — navigate directly (with fallback route for back button)
+      // Same profile: navigate directly (with fallback route for back button)
       navigationService.navigateToEvent(String(eid), { from: '/monitors', fromNotification: true });
       log.push('Navigating to event detail', LogLevel.INFO, { eventId: eid });
     }

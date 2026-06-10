@@ -18,7 +18,7 @@ interface HoldButtonProps {
   stopCommand?: string;
   // If set, the command is re-fired every `repeatIntervalMs` while held.
   // Used for Rel/Abs drivers where one button-press would otherwise produce
-  // only a single discrete step — repeating gives press-and-hold UX parity
+  // only a single discrete step: repeating gives press-and-hold UX parity
   // with continuous-mode drivers, at the cost of slightly stepped motion.
   repeatIntervalMs?: number;
   onCommand: (command: string) => void;
@@ -33,7 +33,7 @@ interface HoldButtonProps {
 
 // Press-to-start / release-to-stop. For continuous drivers we fire one start
 // command on pointerdown and rely on the camera to keep moving until moveStop.
-// For Rel/Abs drivers we re-fire the step command on a timer while held —
+// For Rel/Abs drivers we re-fire the step command on a timer while held.
 // ZM's protocol has no "continuous" verb on those drivers, so a stream of
 // step commands is the only way to get hold-to-move UX.
 function HoldButton({

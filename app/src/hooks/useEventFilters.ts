@@ -80,7 +80,7 @@ export function useEventFilters(): UseEventFiltersReturn {
   const [activeQuickRange, _setActiveQuickRange] = useState<number | null>(null);
 
   // Wrapped setters that also save to settings store immediately.
-  // No effects needed — saves happen synchronously on user action.
+  // No effects needed: saves happen synchronously on user action.
   const profileIdRef = useRef<string | null>(null);
   profileIdRef.current = currentProfile?.id ?? null;
 

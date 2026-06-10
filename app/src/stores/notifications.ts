@@ -555,7 +555,7 @@ export const useNotificationStore = create<NotificationState>()(
           }
         } else {
           // ES mode: sync via websocket
-          // When allMonitors is on, don't send a filter — ES treats empty monlist as "all monitors"
+          // When allMonitors is on, don't send a filter: ES treats empty monlist as "all monitors"
           if (settings.allMonitors) {
             log.notifications('All monitors enabled, skipping filter sync', LogLevel.INFO, { profileId: currentProfileId });
             return;
@@ -600,7 +600,7 @@ export const useNotificationStore = create<NotificationState>()(
             await Badge.set({ count: badgeCount });
             log.notifications('Set native app badge', LogLevel.DEBUG, { badgeCount });
           } catch {
-            // Badge plugin not available — non-fatal
+            // Badge plugin not available: non-fatal
           }
         }
 

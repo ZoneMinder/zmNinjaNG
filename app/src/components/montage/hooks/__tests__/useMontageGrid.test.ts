@@ -10,7 +10,7 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-// Minimal but valid MonitorData fixture — just enough for calculateHeightUnits
+// Minimal but valid MonitorData fixture: just enough for calculateHeightUnits
 const makeMonitor = (id: string): MonitorData => ({
   Monitor: {
     Id: id,
@@ -198,7 +198,7 @@ describe('group-switch re-init', () => {
   const monitors = [makeMonitor('10'), makeMonitor('20')];
   const profile = makeProfile(profileId);
 
-  // Working layouts for each group — use new-format (w > 1) so migrateLayout is a no-op
+  // Working layouts for each group: use new-format (w > 1) so migrateLayout is a no-op
   const workingLayoutA: Layout[] = [
     { i: '10', x: 0, y: 0, w: 6, h: 2 },
     { i: '20', x: 6, y: 0, w: 6, h: 2 },
@@ -238,7 +238,7 @@ describe('group-switch re-init', () => {
       { initialProps }
     );
 
-    // Trigger layout build — first call sets hasWidth=true, which fires the restore effect
+    // Trigger layout build: first call sets hasWidth=true, which fires the restore effect
     act(() => { result.current.handleWidthChange(800); });
 
     // After the width is set, a second call recalculates heights (not required for this test)

@@ -126,7 +126,7 @@ export default function AppLayout() {
     }
   };
 
-  // TOFU certificate trust migration dialog — hooks must be above any early return
+  // TOFU certificate trust migration dialog: hooks must be above any early return
   const [pendingCert, setPendingCert] = useState<PendingCertTrust | null>(null);
 
   useEffect(() => {

@@ -75,7 +75,7 @@ export const ZM_INTEGRATION = {
   // Token management
   accessTokenLeewayMin: 5, // Minutes before token expiry to refresh
   refreshTokenLeewayMin: 10, // Minutes before refresh token expiry
-  accessTokenLeewayMs: 30 * 60 * 1000, // 30 minutes in milliseconds — gates URL construction; refresh fires when below this threshold
+  accessTokenLeewayMs: 30 * 60 * 1000, // 30 minutes in milliseconds. Gates URL construction; refresh fires when below this threshold
   tokenCheckInterval: 60 * 1000, // Check token status every minute
   loginInterval: 1800000, // 30 minutes - re-login interval
 } as const;
@@ -107,7 +107,7 @@ export const GRID_LAYOUT = {
   // Minimum card width in grid units
   minCardWidth: 50,
 
-  // Montage row height in pixels — 1px for pixel-level precision (no black bars with contain)
+  // Montage row height in pixels: 1px for pixel-level precision (no black bars with contain)
   montageRowHeight: 1,
 
   // Grid calculation frequencies
@@ -280,7 +280,7 @@ export const STORAGE_KEYS = {
   hoverPreviewOpen: 'zmng-hover-preview-open',
   thumbnailChainOpen: 'zmng-thumbnail-chain-open',
 
-  // Web crypto fallback salt (versioned — bump suffix to invalidate)
+  // Web crypto fallback salt (versioned: bump suffix to invalidate)
   cryptoSalt: 'zmng_crypto_salt_v1',
 
   // Developer Notice: per-device list of read notice IDs (versioned)

@@ -48,7 +48,7 @@ function makeEvent(id: number, monitorId = '1', cause = 'Motion') {
   };
 }
 
-/** Plain mock deps — the poller must work without any zustand store. */
+/** Plain mock deps: the poller must work without any zustand store. */
 function makeDeps() {
   return {
     onEvent: vi.fn(),

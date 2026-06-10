@@ -186,7 +186,7 @@ export default function EventDetail() {
     ]
   );
 
-  // Hooks below must run on every render — keep them ABOVE the early returns.
+  // Hooks below must run on every render: keep them ABOVE the early returns.
   // Reading event?.Event optionally so they're safe pre-data; consumers below
   // already gate on `hasVideo` / `event` which are derived after the returns.
   const hasVideo = !!(event?.Event.DefaultVideo || event?.Event.Videoed === '1');

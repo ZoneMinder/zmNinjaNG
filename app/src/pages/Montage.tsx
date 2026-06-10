@@ -407,7 +407,7 @@ export default function Montage() {
         </>
       )}
 
-      {/* Fullscreen toolbar — always visible, thin, translucent */}
+      {/* Fullscreen toolbar: always visible, thin, translucent */}
       {isFullscreen && (
         <FullscreenControls
           onExitFullscreen={() => handleToggleFullscreen(false)}

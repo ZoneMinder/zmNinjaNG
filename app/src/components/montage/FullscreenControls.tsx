@@ -2,7 +2,7 @@
  * Fullscreen Controls
  *
  * Persistent thin top bar for fullscreen montage mode.
- * Always visible — no hide/show toggle, no gesture conflicts.
+ * Always visible: no hide/show toggle, no gesture conflicts.
  * Sits in the safe-area-inset-top space (free space on notch devices).
  */
 

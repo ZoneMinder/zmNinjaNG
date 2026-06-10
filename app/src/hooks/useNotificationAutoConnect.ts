@@ -62,7 +62,7 @@ export function useNotificationAutoConnect({
     hasAttemptedAutoConnect.current = false;
   }, [settings?.notificationMode]);
 
-  // Handle profile switching — disconnect from previous profile
+  // Handle profile switching: disconnect from previous profile
   useEffect(() => {
     if (currentProfile?.id !== lastProfileId.current) {
       lastProfileId.current = currentProfile?.id || null;

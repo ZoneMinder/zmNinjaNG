@@ -82,7 +82,7 @@ const encryptedAuthStorage: PersistStorage<PersistedAuthState> = {
         try {
           parsed.state.refreshToken = await decrypt(parsed.state.refreshToken);
         } catch {
-          try { log.auth('Failed to decrypt refresh token — clearing stored token', LogLevel.ERROR); } catch { /* */ }
+          try { log.auth('Failed to decrypt refresh token: clearing stored token', LogLevel.ERROR); } catch { /* */ }
           parsed.state.refreshToken = null;
         }
       }
@@ -104,7 +104,7 @@ const encryptedAuthStorage: PersistStorage<PersistedAuthState> = {
       }
       storage.setItem(name, JSON.stringify(toStore));
     } catch {
-      try { log.auth('Failed to encrypt refresh token — storing plaintext fallback', LogLevel.ERROR); } catch { /* */ }
+      try { log.auth('Failed to encrypt refresh token: storing plaintext fallback', LogLevel.ERROR); } catch { /* */ }
       try { storage.setItem(name, JSON.stringify(value)); } catch { /* */ }
     }
   },

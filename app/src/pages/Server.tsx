@@ -202,7 +202,7 @@ export default function Server() {
         </CardContent>
       </Card>
 
-      {/* Server Metrics — single-server mode */}
+      {/* Server Metrics: single-server mode */}
       {!isMultiServer && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Load Average */}
@@ -277,7 +277,7 @@ export default function Server() {
         </div>
       )}
 
-      {/* Server Details — all servers */}
+      {/* Server Details: all servers */}
       {servers && servers.length > 0 && (
         <Card>
           <CardHeader>

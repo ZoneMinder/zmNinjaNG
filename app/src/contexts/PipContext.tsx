@@ -183,7 +183,7 @@ export function PipProvider({ children }: { children: ReactNode }) {
   return (
     <PipContext.Provider value={{ adoptForPip, reclaimFromPip, closePip, activePipEventId, enterAndroidPip, getAndroidPipPosition, isAndroid }}>
       {children}
-      {/* Hidden portal for adopted PiP elements — sibling of children, outside router */}
+      {/* Hidden portal for adopted PiP elements: sibling of children, outside router */}
       <div ref={portalRef} style={{ display: 'none' }} data-testid="pip-portal" />
     </PipContext.Provider>
   );

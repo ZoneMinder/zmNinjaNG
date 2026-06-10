@@ -207,7 +207,7 @@ export function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentPro
       </div>
 
       <div className={cn("flex-1 overflow-y-auto overflow-x-hidden", isMobileDrawer ? "px-2 py-1" : "px-3 py-2")}>
-        {/* Reorder toggle — only when expanded */}
+        {/* Reorder toggle: only when expanded */}
         {!isCollapsed && (
           <div className="flex justify-end gap-1 mb-1 px-1">
             {isReordering && (

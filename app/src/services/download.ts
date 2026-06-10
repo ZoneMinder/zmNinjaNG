@@ -5,7 +5,7 @@
  * Handles platform-specific logic for Web, iOS, Android, and Electron desktop.
  *
  * Features:
- * - Web / Electron: Uses standard browser download (Blob/Anchor) — Electron's
+ * - Web / Electron: Uses standard browser download (Blob/Anchor). Electron's
  *   renderer behaves like a regular browser here
  * - Mobile: Uses Capacitor Filesystem and Media plugins with chunked streaming to avoid OOM
  * - Handles CORS issues via native HTTP or proxy

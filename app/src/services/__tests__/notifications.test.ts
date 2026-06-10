@@ -78,7 +78,7 @@ const testConfig = {
   appVersion: '1.0.0',
 };
 
-/** Plain mock providers — the service must work without any zustand store. */
+/** Plain mock providers: the service must work without any zustand store. */
 function createMockProviders() {
   return {
     getFreshAccessToken: vi.fn(async () => 'fresh-token'),
@@ -162,7 +162,7 @@ describe('ZMNotificationService', () => {
       expect(service.getState()).toBe('disconnected');
       expect(service.isConnected()).toBe(false);
 
-      // Advance timers — no reconnect should be scheduled
+      // Advance timers: no reconnect should be scheduled
       await vi.advanceTimersByTimeAsync(300_000);
       expect(wsCtor).toHaveBeenCalledTimes(1); // Only the initial connect
     });
@@ -196,18 +196,18 @@ describe('ZMNotificationService', () => {
       // First failure
       ws._triggerClose(false, 1006);
 
-      // Attempt 1: ~2s delay — advance 3s to trigger it
+      // Attempt 1: ~2s delay, advance 3s to trigger it
       await vi.advanceTimersByTimeAsync(3000);
       expect(wsCtor).toHaveBeenCalledTimes(2);
       // This new socket also fails
       wsCtor.instances[1]._triggerClose(false, 1006);
 
-      // Attempt 2: ~4s delay — advance 5s to trigger it
+      // Attempt 2: ~4s delay, advance 5s to trigger it
       await vi.advanceTimersByTimeAsync(5000);
       expect(wsCtor).toHaveBeenCalledTimes(3);
       wsCtor.instances[2]._triggerClose(false, 1006);
 
-      // Attempt 3: ~8s delay — at 5s it should NOT have fired yet
+      // Attempt 3: ~8s delay, at 5s it should NOT have fired yet
       await vi.advanceTimersByTimeAsync(5000);
       // Might or might not have fired due to jitter, but advance more to be sure
       await vi.advanceTimersByTimeAsync(5000);
@@ -241,7 +241,7 @@ describe('ZMNotificationService', () => {
       const ws = wsCtor.instances[0];
       ws._triggerOpen();
 
-      // Auth fails — _handleMessage calls disconnect() which sets intentionalDisconnect
+      // Auth fails: _handleMessage calls disconnect() which sets intentionalDisconnect
       ws._triggerMessage({ event: 'auth', status: 'Fail', reason: 'Bad credentials' });
       await connectPromise;
 
@@ -257,7 +257,7 @@ describe('ZMNotificationService', () => {
       const ws = wsCtor.instances[0];
       ws._triggerOpen();
 
-      // Don't send auth response — let it time out
+      // Don't send auth response: let it time out
       await vi.advanceTimersByTimeAsync(20_000);
       await connectPromise;
 
@@ -289,7 +289,7 @@ describe('ZMNotificationService', () => {
 
       const alivePromise = service.checkAlive(3000);
 
-      // Don't respond — let it time out
+      // Don't respond: let it time out
       await vi.advanceTimersByTimeAsync(3000);
 
       const alive = await alivePromise;

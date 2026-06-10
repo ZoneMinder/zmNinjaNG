@@ -21,8 +21,8 @@
  *   2. A fullscreen transparent backdrop is rendered in the portal at
  *      `Z_INDEX.overlayBackdrop` with `pointer-events: auto`. It lives in
  *      `document.body` outside `#root`, so it stays interactive. Every
- *      tap on the screen — except those landing inside the preview
- *      itself — hit-tests to the backdrop.
+ *      tap on the screen, except those landing inside the preview
+ *      itself, hit-tests to the backdrop.
  *
  *   3. Dismissal closes on `click`, not on `pointerdown`. Closing on
  *      pointerdown would unmount the backdrop and restore `#root`'s
@@ -33,7 +33,7 @@
  *
  * - The release of the long-press itself fires a click on the preview
  *   IMG (because the preview is now over the original tap location).
- *   That click must NOT close the preview — `expectingReleaseClickRef`
+ *   That click must NOT close the preview: `expectingReleaseClickRef`
  *   tracks the first click after open and treats it as the release-click:
  *   blocked, but doesn't close. Subsequent clicks close.
  *
@@ -43,7 +43,7 @@
  *
  * The portal starts at the trigger's bounding rect and animates out to
  * the target size, with the zoom origin anchored to whichever corner of
- * the trigger is closest to the screen center — so the enlarged frame
+ * the trigger is closest to the screen center, so the enlarged frame
  * stays on-screen. `renderPreview` is only invoked while the preview is
  * open, so inner components (live stream players) are created on open
  * and torn down on close.

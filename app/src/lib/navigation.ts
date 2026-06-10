@@ -105,7 +105,7 @@ export function viewNameForPath(pathname: string): string | null {
   };
   if (path in exact) return exact[path];
 
-  // Setup-flow paths suppress the banner — they're transient and not "views".
+  // Setup-flow paths suppress the banner: they're transient and not "views".
   if (path === '/setup' || path === '/profiles/new') return null;
 
   if (/^\/monitors\/[^/]+$/.test(path)) return 'Monitor Detail';

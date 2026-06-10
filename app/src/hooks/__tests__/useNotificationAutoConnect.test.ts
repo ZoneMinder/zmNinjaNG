@@ -299,7 +299,7 @@ describe('useNotificationAutoConnect', () => {
         await vi.runAllTimersAsync();
       });
 
-      // Still only once — hasAttemptedAutoConnect flag prevents repeated calls
+      // Still only once: hasAttemptedAutoConnect flag prevents repeated calls
       expect(params.connect).toHaveBeenCalledTimes(1);
     });
   });
@@ -368,7 +368,7 @@ describe('useNotificationAutoConnect', () => {
 
       expect(result.current).toBeUndefined(); // hook returns void
 
-      // Change notification mode — this resets hasAttemptedAutoConnect
+      // Change notification mode: this resets hasAttemptedAutoConnect
       const newParams = makeParams({
         settings: { ...defaultSettings, notificationMode: 'direct' },
       });

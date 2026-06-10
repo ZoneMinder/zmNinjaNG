@@ -30,7 +30,7 @@ export interface UseStreamLifecycleOptions {
   portalUrl: string | undefined;
   /** Auth token appended to CMD_QUIT requests. */
   accessToken: string | null;
-  /** Current view mode — CMD_QUIT is only sent in streaming mode. */
+  /** Current view mode: CMD_QUIT is only sent in streaming mode. */
   viewMode: 'streaming' | 'snapshot';
   /** Ref to the <img> or <video> element whose src is cleared on unmount. */
   mediaRef: React.RefObject<HTMLImageElement | HTMLVideoElement | null>;
@@ -238,7 +238,7 @@ export function useStreamLifecycle({
   }, []); // Empty deps = only run on unmount
 
   // Force-regenerate. Optionally sends CMD_QUIT for the previous connkey
-  // first when `killPrevious` is true — used by the visibility-resume path
+  // first when `killPrevious` is true: used by the visibility-resume path
   // where the old stream may still be alive on the server. Without it, each
   // resume would orphan a connkey on ZM and the nph-zms process would only
   // exit after its own idle timeout, leaking sockets in CLOSE_WAIT.

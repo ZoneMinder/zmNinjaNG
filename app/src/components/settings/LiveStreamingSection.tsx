@@ -138,7 +138,7 @@ export function LiveStreamingSection({
           </div>
         </SettingsRow>
 
-        {/* Snapshot Refresh Interval (only in snapshot mode — child of Streaming Mode) */}
+        {/* Snapshot Refresh Interval (only in snapshot mode: child of Streaming Mode) */}
         {settings.viewMode === 'snapshot' && (
           <div className="px-4 py-3 space-y-2">
             <RowLabel

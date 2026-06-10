@@ -2,7 +2,7 @@
  * Monitor Detail Page
  *
  * Displays a continuous live stream for a single monitor (always streaming
- * mode — the global Snapshot setting does not apply here). Includes PTZ
+ * mode: the global Snapshot setting does not apply here). Includes PTZ
  * controls (if applicable) and quick actions.
  */
 
@@ -137,7 +137,7 @@ export default function MonitorDetail() {
   const zmVersion = useAuthStore((s) => s.version);
   const is138Plus = isZmVersionAtLeast(zmVersion, '1.38.0');
 
-  // Settings dialog save handler — batches all changes into one or more API calls
+  // Settings dialog save handler: batches all changes into one or more API calls
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   const handleSaveSettings = useCallback(async (changes: Record<string, string | undefined>) => {

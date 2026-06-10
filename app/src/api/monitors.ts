@@ -116,7 +116,7 @@ export async function updateMonitor(
       'Content-Type': 'application/x-www-form-urlencoded',
     },
   });
-  // ZM returns {"message":"Saved"} — callers refetch monitor data separately
+  // ZM returns {"message":"Saved"}. Callers refetch monitor data separately
 }
 
 /**

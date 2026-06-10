@@ -137,7 +137,7 @@ export function useMontageGrid({
   const skipRestoreRef = useRef(false);
 
   const currentWidthRef = useRef(0);
-  // Width at which heights were last calculated — used to skip trivial changes
+  // Width at which heights were last calculated: used to skip trivial changes
   const lastCalcWidthRef = useRef(0);
 
   // Refs for stable access in callbacks without causing re-renders
@@ -180,7 +180,7 @@ export function useMontageGrid({
         };
       });
     },
-    [] // Uses ref — stable identity
+    [] // Uses ref, stable identity
   );
 
   const recalcHeights = useCallback(
@@ -193,7 +193,7 @@ export function useMontageGrid({
         h: calculateHeightUnits(map, item.i, item.w, gridWidth, 0),
       }));
     },
-    [] // Uses ref — stable identity
+    [] // Uses ref, stable identity
   );
 
   // Update displayCols when profile changes (external change only)
@@ -308,7 +308,7 @@ export function useMontageGrid({
       // Recalculate heights to match new column pixel widths so aspect
       // ratios stay correct (especially for "Fit"/contain mode).
       // Jiggle is prevented by handleLayoutChange being a no-op in
-      // non-edit mode — RGL compaction won't trigger re-render loops.
+      // non-edit mode: RGL compaction won't trigger re-render loops.
       lastCalcWidthRef.current = width;
       setLayout((prev) => recalcHeights(prev, width));
     },
@@ -316,7 +316,7 @@ export function useMontageGrid({
   );
 
   // onLayoutChange fires on EVERY re-render due to RGL compaction.
-  // Do NOT persist here — it overwrites our layout with compacted positions.
+  // Do NOT persist here: it overwrites our layout with compacted positions.
   const handleLayoutChange = useCallback(
     (_nextLayout: Layout[]) => { /* no-op */ },
     []
@@ -390,7 +390,7 @@ export function useMontageGrid({
   }, [recalcHeights, updateMontageGroupLayout]);
 
   // Pinned monitors: prevents accidental drag/resize of the pinned item.
-  // Uses per-item isDraggable/isResizable on the layout — does NOT use `static`.
+  // Uses per-item isDraggable/isResizable on the layout: does NOT use `static`.
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
 
   const togglePinMonitor = useCallback((monitorId: string) => {

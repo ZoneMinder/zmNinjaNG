@@ -1,5 +1,5 @@
 /**
- * TimelineCanvas — main canvas component that wires together
+ * TimelineCanvas: main canvas component that wires together
  * the viewport, gestures, rendering, and hit-testing.
  */
 
@@ -149,7 +149,7 @@ const TimelineCanvasInner = ({
     return () => ro.disconnect();
   }, []);
 
-  // Current time refresh — interval comes from bandwidth settings
+  // Current time refresh: interval comes from bandwidth settings
   const bandwidth = useBandwidthSettings();
   useEffect(() => {
     const id = setInterval(() => setNowTick((t) => t + 1), bandwidth.timelineNowRefreshInterval);
@@ -318,7 +318,7 @@ const TimelineCanvasInner = ({
       ref={containerRef}
       className="relative w-full overflow-hidden rounded-lg border border-border bg-background"
     >
-      {/* Scrubber bar — above time labels */}
+      {/* Scrubber bar: above time labels */}
       <div ref={scrubberWrapRef} className="px-2 pt-2">
         <TimelineScrubber
           events={events}

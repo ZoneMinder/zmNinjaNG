@@ -13,7 +13,7 @@ installGlobalErrorHandlers();
 
 // Tag the root on native so CSS can disable long-press text selection
 // and touch callouts app-wide. Inputs and contenteditable fields opt
-// back in — see index.css.
+// back in. See index.css.
 if (Platform.isNative) {
   document.documentElement.classList.add('is-native');
 }

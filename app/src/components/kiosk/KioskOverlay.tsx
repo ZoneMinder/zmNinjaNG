@@ -113,7 +113,7 @@ export function KioskOverlay({ onUnlock }: KioskOverlayProps) {
         toast({ title: t('kiosk.unlocked_toast') });
         return;
       }
-      // Biometrics failed/cancelled — fall through to PIN
+      // Biometrics failed/cancelled: fall through to PIN
     }
 
     // Show PIN pad
@@ -153,7 +153,7 @@ export function KioskOverlay({ onUnlock }: KioskOverlayProps) {
         style={{ zIndex: Z_INDEX.overlay, pointerEvents: 'auto' }}
         data-testid="kiosk-overlay"
       >
-        {/* Unlock button — bottom-right, theme-aware */}
+        {/* Unlock button: bottom-right, theme-aware */}
         <button
           onClick={handleUnlockTap}
           className="absolute bottom-6 right-6 w-14 h-14 rounded-full flex items-center justify-center transition-all hover:scale-110 active:scale-95 bg-primary/80 hover:bg-primary border-2 border-primary-foreground/30 shadow-lg shadow-primary/30"

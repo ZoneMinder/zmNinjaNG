@@ -379,7 +379,7 @@ export class ZMNotificationService {
     } catch (error) {
       log.notifications('Failed to connect to notification server', LogLevel.ERROR, error);
       this._setState('error');
-      // Don't throw — let _handleClose schedule reconnect for transport failures.
+      // Don't throw: let _handleClose schedule reconnect for transport failures.
       // For auth failures, disconnect() was already called in _handleMessage.
     }
   }
@@ -637,7 +637,7 @@ export class ZMNotificationService {
         this.pendingAuth = null;
         this._setState('error');
 
-        // Close the socket — this triggers _handleClose which will schedule reconnect
+        // Close the socket: this triggers _handleClose which will schedule reconnect
         if (this.ws) {
           this.ws.close();
           this.ws = null;

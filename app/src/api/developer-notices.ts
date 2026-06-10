@@ -4,7 +4,7 @@
  * One-way broadcast channel from the maintainer to all users. Fetches a
  * static JSON feed (DEVELOPER_NOTICES.feedUrl) with no auth headers. The
  * feed lives in the repo at docs/notices.json and is served via GitHub's
- * raw URL — there is no backend and no telemetry.
+ * raw URL: there is no backend and no telemetry.
  */
 
 import { z } from 'zod';

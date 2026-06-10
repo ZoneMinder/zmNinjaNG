@@ -93,7 +93,7 @@ export function QuickDateRangeButtons({
     const end = new Date();
     let start: Date;
     if (hours === 0) {
-      // "Today" — midnight local time to now
+      // "Today": midnight local time to now
       start = new Date(end);
       start.setHours(0, 0, 0, 0);
     } else {

@@ -53,7 +53,7 @@ export function MonitorHoverPreview({ monitor, children }: MonitorHoverPreviewPr
 }
 
 /**
- * Live stream body — only mounted while the preview is open.
+ * Live stream body: only mounted while the preview is open.
  * Mount → new connkey. Unmount → CMD_QUIT via useStreamLifecycle.
  */
 function MonitorLivePreview({ monitor }: { monitor: Monitor }) {

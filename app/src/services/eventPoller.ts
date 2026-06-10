@@ -58,7 +58,7 @@ class EventPollerService {
     // rather than a stop/restart. A different profile *does* tear down and
     // re-init.
     if (this.timerId && this.profileId === profileId) {
-      log.notifications('Event poller already running — skipping duplicate start', LogLevel.DEBUG, { profileId });
+      log.notifications('Event poller already running: skipping duplicate start', LogLevel.DEBUG, { profileId });
       return;
     }
     if (this.timerId) {
