@@ -61,7 +61,7 @@ vi.mock('../../api/client', () => ({
   setApiClient: vi.fn(),
 }));
 
-vi.mock('../../lib/discovery', () => ({
+vi.mock('../../services/discovery', () => ({
   discoverZoneminder: vi.fn(),
   DiscoveryError: class DiscoveryError extends Error {},
 }));

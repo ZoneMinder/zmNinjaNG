@@ -21,7 +21,7 @@ import { ArrowLeft, Settings, Maximize2, Minimize2, Clock, AlertTriangle, Downlo
 import { useState, useRef, useMemo, useCallback } from 'react';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
-import { downloadSnapshotFromElement } from '../lib/download';
+import { downloadSnapshotFromElement } from '../services/download';
 import { useTranslation } from 'react-i18next';
 import { useInsomnia } from '../hooks/useInsomnia';
 import { PTZControls } from '../components/monitors/PTZControls';

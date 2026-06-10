@@ -1,8 +1,8 @@
 
 import { createApiClient, setApiClient } from '../api/client';
-import type { HttpError } from './http';
-import { log, LogLevel } from './logger';
-import { DISCOVERY_TIMEOUTS } from './zmninja-ng-constants';
+import type { HttpError } from '../lib/http';
+import { log, LogLevel } from '../lib/logger';
+import { DISCOVERY_TIMEOUTS } from '../lib/zmninja-ng-constants';
 
 /**
  * Options for the discoverUrls helper used by UI pages.

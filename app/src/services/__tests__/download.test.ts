@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { downloadFile, convertToSnapshotUrl } from '../download';
-import { Platform } from '../platform';
+import { Platform } from '../../lib/platform';
 
 // Mock dependencies
-vi.mock('../logger', () => ({
+vi.mock('../../lib/logger', () => ({
     log: {
         download: vi.fn(),
     },
@@ -15,14 +15,14 @@ vi.mock('../logger', () => ({
     },
 }));
 
-vi.mock('../platform', () => ({
+vi.mock('../../lib/platform', () => ({
     Platform: {
         isNative: true,
         isWeb: false,
     },
 }));
 
-vi.mock('../http', () => ({
+vi.mock('../../lib/http', () => ({
     httpRequest: vi.fn().mockResolvedValue({
         status: 200,
         data: 'base64_encoded_video_data',
@@ -62,7 +62,7 @@ describe('Mobile Download Logic', () => {
         // Trigger the download
         await downloadFile('http://example.com/video.mp4', 'test_video.mp4', { onProgress });
 
-        const { httpRequest } = await import('../http');
+        const { httpRequest } = await import('../../lib/http');
         const { Filesystem } = await import('@capacitor/filesystem');
         const { Media } = await import('@capacitor-community/media');
 

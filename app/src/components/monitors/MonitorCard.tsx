@@ -14,7 +14,7 @@ import { Button } from '../ui/button';
 import { Activity, Settings, Download, Clock, Video, Eye, Disc, Volume2, VolumeX } from 'lucide-react';
 import { cn, formatEventCount } from '../../lib/utils';
 import { handleKeyClick } from '../../lib/tv-a11y';
-import { downloadSnapshotFromElement } from '../../lib/download';
+import { downloadSnapshotFromElement } from '../../services/download';
 import { toast } from 'sonner';
 import { LiveMonitorPlayer } from './LiveMonitorPlayer';
 import { MonitorHoverPreview } from './MonitorHoverPreview';

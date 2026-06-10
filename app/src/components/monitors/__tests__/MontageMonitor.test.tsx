@@ -34,7 +34,7 @@ vi.mock('../../../lib/http', () => ({
   httpGet: vi.fn().mockResolvedValue({}),
 }));
 
-vi.mock('../../../lib/download', () => ({
+vi.mock('../../../services/download', () => ({
   downloadSnapshotFromElement: vi.fn().mockResolvedValue(undefined),
 }));
 

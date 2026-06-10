@@ -26,7 +26,7 @@ import { Badge } from '../ui/badge';
 import { LiveMonitorPlayer } from './LiveMonitorPlayer';
 import { Clock, ChartGantt, Download, Volume2, VolumeX, Pin, MoreVertical } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { downloadSnapshotFromElement } from '../../lib/download';
+import { downloadSnapshotFromElement } from '../../services/download';
 import {
   DropdownMenu,
   DropdownMenuContent,

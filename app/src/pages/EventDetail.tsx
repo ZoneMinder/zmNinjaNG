@@ -26,7 +26,7 @@ import { getObjectClassIconFromList } from '../lib/object-class-icons';
 import { useDateTimeFormat } from '../hooks/useDateTimeFormat';
 import { useTvMode } from '../hooks/useTvMode';
 import { Platform } from '../lib/platform';
-import { downloadEventVideo } from '../lib/download';
+import { downloadEventVideo } from '../services/download';
 import { getOrientedResolution } from '../lib/monitor-rotation';
 import { toast } from 'sonner';
 import { useState, useMemo, useCallback, useEffect } from 'react';

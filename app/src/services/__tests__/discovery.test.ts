@@ -29,7 +29,7 @@ vi.mock('../../api/auth', () => ({
 }));
 
 // Mock logger
-vi.mock('../logger', () => ({
+vi.mock('../../lib/logger', () => ({
   log: {
     discovery: vi.fn(),
   },

@@ -12,12 +12,12 @@
  * - Automatically saves media to device Photo/Video library on mobile
  */
 
-import { log, LogLevel } from './logger';
-import { Platform } from './platform';
-import { wrapWithImageProxyIfNeeded } from './proxy-utils';
-import { httpRequest, type HttpProgress } from './http';
+import { log, LogLevel } from '../lib/logger';
+import { Platform } from '../lib/platform';
+import { wrapWithImageProxyIfNeeded } from '../lib/proxy-utils';
+import { httpRequest, type HttpProgress } from '../lib/http';
 
-import { getEventVideoUrl as buildEventVideoUrl } from './url-builder';
+import { getEventVideoUrl as buildEventVideoUrl } from '../lib/url-builder';
 import { useBackgroundTasks } from '../stores/backgroundTasks';
 
 /**

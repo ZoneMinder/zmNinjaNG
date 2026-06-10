@@ -211,8 +211,8 @@ in ``AppLayout``.
 
 --------------
 
-Discovery (``lib/discovery.ts``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Discovery (``services/discovery.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ZoneMinder server discovery utility that probes for API endpoints and
 derives connection URLs.
@@ -231,7 +231,7 @@ derives connection URLs.
 
 .. code:: typescript
 
-   import { discoverZoneminder, DiscoveryError } from '../lib/discovery';
+   import { discoverZoneminder, DiscoveryError } from '../services/discovery';
 
    // Basic discovery (no auth)
    const result = await discoverZoneminder('192.168.1.100');
@@ -271,7 +271,7 @@ with iOS retry logic and an abort signal, so neither ``ProfileForm`` nor
 
 .. code:: typescript
 
-   import { discoverUrls } from '../lib/discovery';
+   import { discoverUrls } from '../services/discovery';
 
    // Shared wrapper with iOS retry logic and abort signal
    const result = await discoverUrls(portalUrl, {
@@ -286,8 +286,8 @@ with iOS retry logic and an abort signal, so neither ``ProfileForm`` nor
 
 --------------
 
-Download Utilities (``lib/download.ts``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Download Utilities (``services/download.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Cross-platform file download with progress tracking and cancellation
 support.
@@ -306,7 +306,7 @@ support.
 
 .. code:: typescript
 
-   import { downloadFile, downloadSnapshot } from '../lib/download';
+   import { downloadFile, downloadSnapshot } from '../services/download';
 
    // Download a file with progress
    const abortController = new AbortController();
