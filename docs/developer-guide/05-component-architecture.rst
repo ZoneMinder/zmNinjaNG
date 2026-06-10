@@ -240,8 +240,11 @@ GridLayoutControls
 
 **Location**: ``src/components/montage/GridLayoutControls.tsx``
 
-Provides column presets (1–5) and saved layout management. Renders as a
-``Sheet`` on mobile, ``DropdownMenu`` on desktop.
+Provides column presets (1–5) and saved layout management. A thin
+wrapper around the shared ``GridColumnsMenu`` base (see
+:ref:`grid-columns-menu`) that adds saved-layout menu sections, the
+custom-columns validation (1–10, ``montage.invalid_columns`` toast),
+and a ``SaveLayoutDialog`` for naming layouts before saving.
 
 **Props:**
 
@@ -252,8 +255,6 @@ Provides column presets (1–5) and saved layout management. Renders as a
 - ``savedLayouts`` – array of ``{ name, layout, displayCols }``
 - ``onSaveLayout(name)`` / ``onLoadLayout(saved)`` /
   ``onDeleteLayout(index)`` – saved layout CRUD
-
-Includes a ``SaveLayoutDialog`` for naming layouts before saving.
 
 MontageTileErrorBoundary
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -895,6 +896,42 @@ with a custom ``className``:
    <PageContainer className="space-y-4 sm:space-y-6" spacing="none">
      {/* ... */}
    </PageContainer>
+
+.. _grid-columns-menu:
+
+GridColumnsMenu
+~~~~~~~~~~~~~~~
+
+**Location**: ``src/components/common/GridColumnsMenu.tsx``
+
+Shared base for the grid column controls. ``GridLayoutControls``
+(montage) and ``EventMontageGridControls`` (event montage, events, and
+monitors views) both wrap it. It owns the responsive rendering: a
+bottom ``Sheet`` with preset buttons when ``isMobile`` is true, a
+``DropdownMenu`` otherwise.
+
+**Props:**
+
+- ``isMobile`` / ``gridCols`` – rendering mode and current column count
+- ``title`` – trigger tooltip and sheet title
+- ``triggerIcon`` / ``triggerLabel`` – trigger button content
+- ``triggerTestId`` – optional ``data-testid`` on the trigger
+- ``showGridColsAttr`` – render ``data-grid-cols`` on the trigger
+  (read by e2e tests)
+- ``presets`` – array of ``{ cols, icon, label, testId? }``
+- ``customIcon`` / ``customLabel`` – the custom-columns menu entry
+- ``onApplyGridLayout(cols)`` – preset selected
+- ``onCustomSelect()`` – custom entry selected (the caller opens its
+  ``CustomColumnsDialog``)
+- ``renderSheetExtras(closeSheet)`` / ``renderMenuExtras()`` – optional
+  slots appended after the custom entry; the montage wrapper uses them
+  for the saved-layouts section and the save action
+
+The file also exports ``CustomColumnsDialog``, a controlled number-input
+dialog (id ``custom-cols``, min 1, max 10, Enter submits). Validation
+stays with the caller: ``GridLayoutControls`` validates inline,
+``EventMontageGridControls`` delegates to
+``useEventMontageGrid.handleCustomGridSubmit``.
 
 UI Components
 -------------
