@@ -49,7 +49,6 @@ export function NotificationHandler() {
 
   const {
     getProfileSettings,
-    getEvents,
     isConnected,
     connectionState,
     currentProfileId,
@@ -59,7 +58,6 @@ export function NotificationHandler() {
   } = useNotificationStore(
     useShallow((state) => ({
       getProfileSettings: state.getProfileSettings,
-      getEvents: state.getEvents,
       isConnected: state.isConnected,
       connectionState: state.connectionState,
       currentProfileId: state.currentProfileId,
@@ -67,6 +65,14 @@ export function NotificationHandler() {
       disconnect: state.disconnect,
       reconnect: state.reconnect,
     }))
+  );
+
+  // Events for the current profile, subscribed via selector so addEvent
+  // re-renders this component. The store's websocket listener only calls
+  // addEvent (see stores/notifications.ts); the toast effect below relies
+  // on this subscription to fire for live events.
+  const events = useNotificationStore(
+    useShallow((state) => (currentProfile ? state.getEvents(currentProfile.id) : []))
   );
 
   const lastEventId = useRef<number | null>(null);
@@ -113,9 +119,8 @@ export function NotificationHandler() {
     return unsubscribe;
   }, []);
 
-  // Get settings and events for current profile
+  // Get settings for current profile
   const settings = currentProfile ? getProfileSettings(currentProfile.id) : null;
-  const events = currentProfile ? getEvents(currentProfile.id) : [];
 
   // --- Delegated hooks ---
 
