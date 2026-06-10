@@ -1966,6 +1966,9 @@ Server (ES mode). Handles real-time alarm events via ``zmeventnotification.pl``.
 - ``reconnectNow()`` for immediate reconnect on network restore
 - 60-second keepalive ping
 - ``reconnectAttempts`` resets only after successful authentication
+- No store imports: ``stores/notifications.ts`` injects store-derived values
+  (fresh access token, event image URL builder via ``lib/url-builder``,
+  keepalive interval) as ``ZMNotificationProviders`` at connect time
 
 ``services/pushNotifications.ts``: FCM push notification handling for
 iOS and Android.
@@ -1981,8 +1984,11 @@ iOS and Android.
 Direct notification mode on desktop/web.
 
 - Singleton via ``getEventPoller()``
-- Started by ``NotificationHandler`` when ``notificationMode === 'direct'``
-  and ``Platform.isDesktopOrWeb`` (not used on mobile, FCM handles delivery)
+- Started through ``startEventPoller(profileId)`` in ``stores/notifications.ts``
+  when ``notificationMode === 'direct'`` and ``Platform.isDesktopOrWeb``
+  (not used on mobile, FCM handles delivery). The wiring function injects
+  ``EventPollerDeps`` (event sink, token provider, poll interval, portal URL,
+  multi-port lookup); the poller has no store imports
 - Uses recursive ``setTimeout`` so interval changes take effect on next tick
 - Configurable polling interval per-profile (default 30s)
 - Optional ``Notes REGEXP:detected:`` filter for object-detection-only events

@@ -7,7 +7,7 @@
 
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useNotificationStore } from '../stores/notifications';
+import { useNotificationStore, startEventPoller } from '../stores/notifications';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useProfileStore } from '../stores/profile';
 import { getMonitors } from '../api/monitors';
@@ -187,8 +187,7 @@ export default function NotificationSettings() {
       if (Platform.isDesktopOrWeb) {
         // Desktop (Electron) or web browser: start event poller
         log.notificationSettings('Starting event poller from mode switch', LogLevel.INFO);
-        const poller = getEventPoller();
-        poller.start(currentProfile.id);
+        startEventPoller(currentProfile.id);
       }
 
       toast.info(t('notification_settings.mode_switched_direct'));
@@ -245,7 +244,7 @@ export default function NotificationSettings() {
     if (!currentProfile) return;
     const poller = getEventPoller();
     if (poller.isRunning()) {
-      poller.start(currentProfile.id);
+      startEventPoller(currentProfile.id);
     }
   };
 

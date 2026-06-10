@@ -69,30 +69,6 @@ vi.mock('../../lib/logger', () => ({
   },
 }));
 
-vi.mock('../../stores/auth', () => ({
-  useAuthStore: {
-    getState: () => ({
-      accessToken: 'test-token',
-      getFreshAccessToken: async () => 'test-token',
-    }),
-    subscribe: vi.fn(() => vi.fn()),
-  },
-}));
-
-vi.mock('../../stores/profile', () => ({
-  useProfileStore: {
-    getState: () => ({ currentProfileId: 'test-profile' }),
-  },
-}));
-
-vi.mock('../../stores/settings', () => ({
-  useSettingsStore: {
-    getState: () => ({
-      getProfileSettings: () => ({ bandwidthMode: 'normal' }),
-    }),
-  },
-}));
-
 const testConfig = {
   host: 'zm.example.com',
   port: 9000,
@@ -100,8 +76,19 @@ const testConfig = {
   username: 'admin',
   password: 'secret',
   appVersion: '1.0.0',
-  portalUrl: 'http://zm.example.com/zm',
 };
+
+/** Plain mock providers — the service must work without any zustand store. */
+function createMockProviders() {
+  return {
+    getFreshAccessToken: vi.fn(async () => 'fresh-token'),
+    buildEventImageUrl: vi.fn(
+      (eventId: number, token: string | null) =>
+        `http://built.example/image?eid=${eventId}&token=${token}`,
+    ),
+    getKeepaliveIntervalMs: vi.fn(() => 60_000),
+  };
+}
 
 function createMockWebSocketConstructor() {
   const instances: MockWebSocket[] = [];
@@ -124,12 +111,14 @@ function createMockWebSocketConstructor() {
 describe('ZMNotificationService', () => {
   let service: ZMNotificationService;
   let wsCtor: ReturnType<typeof createMockWebSocketConstructor>;
+  let providers: ReturnType<typeof createMockProviders>;
 
   beforeEach(() => {
     vi.useFakeTimers();
     service = new ZMNotificationService();
     vi.clearAllMocks();
 
+    providers = createMockProviders();
     wsCtor = createMockWebSocketConstructor();
     vi.stubGlobal('WebSocket', wsCtor);
   });
@@ -141,8 +130,8 @@ describe('ZMNotificationService', () => {
   });
 
   /** Helper: connect and authenticate */
-  async function connectAndAuth() {
-    const connectPromise = service.connect(testConfig);
+  async function connectAndAuth(connectProviders = providers) {
+    const connectPromise = service.connect(testConfig, connectProviders);
     const ws = wsCtor.instances[wsCtor.instances.length - 1];
     ws._triggerOpen();
     ws._triggerMessage({ event: 'auth', status: 'Success', version: '1.0' });
@@ -338,6 +327,86 @@ describe('ZMNotificationService', () => {
       );
     });
 
+    it('builds the image URL via injected providers when the server sends no Picture', async () => {
+      const listener = vi.fn();
+      service.onEvent(listener);
+
+      const ws = await connectAndAuth();
+
+      ws._triggerMessage({
+        event: 'alarm',
+        status: 'Success',
+        events: [
+          { MonitorId: 1, MonitorName: 'Front Door', EventId: 42, Cause: 'Motion', Name: 'Front Door' },
+        ],
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(providers.getFreshAccessToken).toHaveBeenCalledTimes(1);
+      expect(providers.buildEventImageUrl).toHaveBeenCalledWith(42, 'fresh-token');
+      expect(listener).toHaveBeenCalledWith(
+        expect.objectContaining({
+          EventId: 42,
+          ImageUrl: 'http://built.example/image?eid=42&token=fresh-token',
+        }),
+      );
+    });
+
+    it('prefers the server-provided Picture over the injected builder', async () => {
+      const listener = vi.fn();
+      service.onEvent(listener);
+
+      const ws = await connectAndAuth();
+
+      ws._triggerMessage({
+        event: 'alarm',
+        status: 'Success',
+        events: [
+          {
+            MonitorId: 1,
+            MonitorName: 'Front Door',
+            EventId: 43,
+            Cause: 'Motion',
+            Name: 'Front Door',
+            Picture: 'http://server.example/picture.jpg',
+          },
+        ],
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(providers.buildEventImageUrl).not.toHaveBeenCalled();
+      expect(listener).toHaveBeenCalledWith(
+        expect.objectContaining({ EventId: 43, ImageUrl: 'http://server.example/picture.jpg' }),
+      );
+    });
+
+    it('leaves ImageUrl unset when no providers were injected', async () => {
+      const listener = vi.fn();
+      service.onEvent(listener);
+
+      // Connect without providers (default providers build no URL)
+      const connectPromise = service.connect(testConfig);
+      const ws = wsCtor.instances[0];
+      ws._triggerOpen();
+      ws._triggerMessage({ event: 'auth', status: 'Success', version: '1.0' });
+      await connectPromise;
+
+      ws._triggerMessage({
+        event: 'alarm',
+        status: 'Success',
+        events: [{ MonitorId: 1, MonitorName: 'Test', EventId: 7, Cause: 'Motion', Name: 'Test' }],
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(listener).toHaveBeenCalledTimes(1);
+      const received = listener.mock.calls[0][0];
+      expect(received.EventId).toBe(7);
+      expect(received.ImageUrl).toBeUndefined();
+    });
+
     it('unsubscribe removes event listener', async () => {
       const listener = vi.fn();
       const unsubscribe = service.onEvent(listener);
@@ -362,6 +431,7 @@ describe('ZMNotificationService', () => {
     it('sends version request every 60 seconds', async () => {
       const ws = await connectAndAuth();
 
+      expect(providers.getKeepaliveIntervalMs).toHaveBeenCalled();
       ws.send.mockClear();
 
       await vi.advanceTimersByTimeAsync(60_000);
@@ -370,6 +440,19 @@ describe('ZMNotificationService', () => {
       const sentMessage = JSON.parse(ws.send.mock.calls[0][0]);
       expect(sentMessage.event).toBe('control');
       expect(sentMessage.data.type).toBe('version');
+    });
+
+    it('uses the injected keepalive interval', async () => {
+      providers.getKeepaliveIntervalMs.mockReturnValue(5_000);
+      const ws = await connectAndAuth();
+
+      ws.send.mockClear();
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(ws.send).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(ws.send).toHaveBeenCalledTimes(2);
     });
   });
 

@@ -14,7 +14,7 @@
 import { useEffect, useRef } from 'react';
 import { Platform } from '../lib/platform';
 import { log, LogLevel } from '../lib/logger';
-import { useNotificationStore } from '../stores/notifications';
+import { useNotificationStore, startEventPoller } from '../stores/notifications';
 import { getEventPoller } from '../services/eventPoller';
 import { getNotificationService } from '../services/notifications';
 import type { Profile } from '../api/types';
@@ -97,8 +97,7 @@ export function useNotificationAutoConnect({
         // The poller's start() emits its own "Starting event poller" log,
         // so we don't duplicate it here.
         hasAttemptedAutoConnect.current = true;
-        const poller = getEventPoller();
-        poller.start(currentProfile.id);
+        startEventPoller(currentProfile.id);
       }
       // Native mobile (iOS/Android): push notifications handle everything via FCM
       return;

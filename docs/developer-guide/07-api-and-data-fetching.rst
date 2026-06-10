@@ -1730,11 +1730,14 @@ for new events in Direct notification mode on desktop (Electron) and web.
 New events are fed into the notification store, which triggers toast
 display via ``NotificationHandler``.
 
-**Usage:** The poller is started automatically by ``NotificationHandler``
-when ``notificationMode === ‘direct’`` on desktop/web (``Platform.isDesktopOrWeb``).
-On mobile (iOS/Android), FCM push notifications handle event delivery instead.
-The polling interval is configurable per-profile via ``pollingInterval`` in
-notification settings (default 30 seconds). The poller uses recursive
+**Usage:** The poller is started through ``startEventPoller(profileId)`` in
+``stores/notifications.ts`` when ``notificationMode === ‘direct’`` on
+desktop/web (``Platform.isDesktopOrWeb``). The wiring function injects the
+poller's store-derived dependencies (``EventPollerDeps``: event sink, token
+provider, poll interval, portal URL, multi-port lookup); the poller itself has
+no store imports. On mobile (iOS/Android), FCM push notifications handle event
+delivery instead. The polling interval follows the profile's bandwidth mode
+(``eventPollerInterval``: 30 s normal, 60 s low). The poller uses recursive
 ``setTimeout`` so interval changes take effect on the next tick.
 
 **Filters:** When ``onlyDetectedEvents`` is enabled in notification settings,

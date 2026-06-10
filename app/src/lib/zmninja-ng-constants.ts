@@ -178,6 +178,9 @@ export const NOTIFICATIONS_SERVICE = {
 
   // Delay before attempting reconnection (ms)
   reconnectDelay: 5000,
+
+  // Width (px) requested for event snapshot images in notifications
+  snapshotImageWidth: 600,
 } as const;
 
 /**

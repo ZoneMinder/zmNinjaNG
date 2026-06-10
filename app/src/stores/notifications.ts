@@ -4,8 +4,10 @@ import {
   getNotificationService,
   resetNotificationService,
 } from '../services/notifications';
+import { getEventPoller, type EventPollerDeps } from '../services/eventPoller';
 import {
   type ZMEventServerConfig,
+  type ZMNotificationProviders,
   type ZMAlarmEvent,
   type ConnectionState,
   type NotificationMode,
@@ -13,9 +15,13 @@ import {
 import { log, LogLevel } from '../lib/logger';
 import { Platform } from '../lib/platform';
 import { getAppVersion } from '../lib/version';
+import { getEventImageUrl } from '../lib/url-builder';
+import { getEffectiveMinStreamingPort } from '../lib/multiport';
 import { updateNotification } from '../api/notifications';
 import { useProfileStore } from './profile';
-import { NOTIFICATIONS_SERVICE } from '../lib/zmninja-ng-constants';
+import { useAuthStore } from './auth';
+import { useSettingsStore } from './settings';
+import { getBandwidthSettings, NOTIFICATIONS_SERVICE } from '../lib/zmninja-ng-constants';
 
 export interface NotificationSettings {
   enabled: boolean;
@@ -276,7 +282,6 @@ export const useNotificationStore = create<NotificationState>()(
           username,
           password,
           appVersion: getAppVersion(),
-          portalUrl,
         };
 
         const service = getNotificationService();
@@ -285,7 +290,7 @@ export const useNotificationStore = create<NotificationState>()(
         get()._initialize();
 
         try {
-          await service.connect(config);
+          await service.connect(config, _buildServiceProviders(profileId, portalUrl));
 
           // Mark which profile is connected
           set({ currentProfileId: profileId });
@@ -659,3 +664,51 @@ export const useNotificationStore = create<NotificationState>()(
     }
   )
 );
+
+// ========== Service Wiring ==========
+//
+// The notification services (websocket, event poller) have no zustand
+// imports. The store assembles their store-derived dependencies here and
+// injects them at connect/start time.
+
+/**
+ * Build the providers injected into ZMNotificationService.connect.
+ */
+function _buildServiceProviders(profileId: string, portalUrl: string): ZMNotificationProviders {
+  return {
+    getFreshAccessToken: () => useAuthStore.getState().getFreshAccessToken(),
+    buildEventImageUrl: (eventId, token) =>
+      getEventImageUrl(portalUrl, String(eventId), 'snapshot', {
+        token: token ?? undefined,
+        width: NOTIFICATIONS_SERVICE.snapshotImageWidth,
+      }),
+    getKeepaliveIntervalMs: () => {
+      const profileSettings = useSettingsStore.getState().getProfileSettings(profileId);
+      return getBandwidthSettings(profileSettings.bandwidthMode).wsKeepaliveInterval;
+    },
+  };
+}
+
+/**
+ * Start the direct-mode event poller for a profile, wiring its
+ * store-derived dependencies. Stop/isRunning stay on getEventPoller().
+ */
+export function startEventPoller(profileId: string): Promise<void> {
+  const deps: EventPollerDeps = {
+    onEvent: (event) => useNotificationStore.getState().addEvent(profileId, event, 'poll'),
+    getOnlyDetectedEvents: () =>
+      useNotificationStore.getState().getProfileSettings(profileId).onlyDetectedEvents,
+    getFreshAccessToken: () => useAuthStore.getState().getFreshAccessToken(),
+    getPollIntervalMs: () => {
+      const profileSettings = useSettingsStore.getState().getProfileSettings(profileId);
+      return getBandwidthSettings(profileSettings.bandwidthMode).eventPollerInterval;
+    },
+    getPortalUrl: () => {
+      const { profiles, currentProfileId } = useProfileStore.getState();
+      return profiles.find((p) => p.id === currentProfileId)?.portalUrl;
+    },
+    getMinStreamingPort: () =>
+      getEffectiveMinStreamingPort(useProfileStore.getState().currentProfileId),
+  };
+  return getEventPoller().start(profileId, deps);
+}

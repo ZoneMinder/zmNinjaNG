@@ -250,7 +250,6 @@ export class MobilePushService {
       username: profile.username,
       password,
       appVersion: getAppVersion(),
-      portalUrl: profile.portalUrl,
     };
 
     const tempService = new ZMNotificationService();

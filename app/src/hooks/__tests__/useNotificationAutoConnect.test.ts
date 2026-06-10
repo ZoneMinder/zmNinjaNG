@@ -36,23 +36,23 @@ vi.mock('@capacitor/app', () => ({
   App: { addListener: mockAppAddListener },
 }));
 
-// Mock notification store (getState usage inside hook)
+// Mock notification store (getState + poller wiring usage inside hook)
 const mockNotificationStoreState = { connectionState: 'disconnected' };
+const mockStartEventPoller = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('../../stores/notifications', () => ({
   useNotificationStore: {
     getState: vi.fn(() => mockNotificationStoreState),
   },
+  startEventPoller: (profileId: string) => mockStartEventPoller(profileId),
 }));
 
 // Mock event poller
-const mockPollerStart = vi.fn().mockResolvedValue(undefined);
 const mockPollerStop = vi.fn();
 const mockPollerIsRunning = vi.fn().mockReturnValue(false);
 
 vi.mock('../../services/eventPoller', () => ({
   getEventPoller: vi.fn(() => ({
-    start: mockPollerStart,
     stop: mockPollerStop,
     isRunning: mockPollerIsRunning,
   })),
@@ -150,7 +150,7 @@ describe('useNotificationAutoConnect', () => {
       });
       renderHook(() => useNotificationAutoConnect(params));
 
-      expect(mockPollerStart).not.toHaveBeenCalled();
+      expect(mockStartEventPoller).not.toHaveBeenCalled();
     });
 
     it('does not attempt connect when settings is null', () => {
@@ -311,7 +311,7 @@ describe('useNotificationAutoConnect', () => {
       });
       renderHook(() => useNotificationAutoConnect(params));
 
-      expect(mockPollerStart).toHaveBeenCalledWith('profile-1');
+      expect(mockStartEventPoller).toHaveBeenCalledWith('profile-1');
     });
 
     it('does not call connect() in direct mode', async () => {
@@ -376,7 +376,7 @@ describe('useNotificationAutoConnect', () => {
       rerender(newParams);
 
       // Poller should now be started (new mode = direct)
-      expect(mockPollerStart).toHaveBeenCalled();
+      expect(mockStartEventPoller).toHaveBeenCalled();
     });
   });
 

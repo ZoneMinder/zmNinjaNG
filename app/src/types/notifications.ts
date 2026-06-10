@@ -10,7 +10,19 @@ export interface ZMEventServerConfig {
     username: string;
     password: string;
     appVersion: string;
-    portalUrl: string; // ZoneMinder portal URL for constructing image URLs
+}
+
+/**
+ * Store-derived values injected into ZMNotificationService at connect time.
+ * The service has no zustand imports; the notification store assembles these.
+ */
+export interface ZMNotificationProviders {
+    /** Returns a fresh ZM access token for image URLs, or null when unavailable. */
+    getFreshAccessToken: () => Promise<string | null>;
+    /** Builds the snapshot image URL for an event when the server sends no Picture. */
+    buildEventImageUrl: (eventId: number, token: string | null) => string | undefined;
+    /** WebSocket keepalive ping interval in milliseconds. */
+    getKeepaliveIntervalMs: () => number;
 }
 
 export interface ZMAlarmEvent {
