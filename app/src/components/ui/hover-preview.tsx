@@ -283,6 +283,7 @@ export function HoverPreview({
       if (document.visibilityState === 'hidden') dismiss();
     };
     document.addEventListener('visibilitychange', onVisibility);
+    let cancelled = false;
     let removeAppStateListener: (() => void) | null = null;
     if (Platform.isNative) {
       (async () => {
@@ -291,11 +292,16 @@ export function HoverPreview({
           const handle = await App.addListener('appStateChange', (state) => {
             if (!state.isActive) dismiss();
           });
+          if (cancelled) {
+            handle.remove();
+            return;
+          }
           removeAppStateListener = () => handle.remove();
         } catch { /* plugin unavailable */ }
       })();
     }
     return () => {
+      cancelled = true;
       window.removeEventListener('scroll', dismiss, true);
       window.removeEventListener('wheel', dismiss);
       document.removeEventListener('visibilitychange', onVisibility);

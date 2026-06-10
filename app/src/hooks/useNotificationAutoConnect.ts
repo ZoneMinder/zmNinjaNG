@@ -174,6 +174,7 @@ export function useNotificationAutoConnect({
     window.addEventListener('online', handleOnline);
 
     // On native platforms, also use Capacitor's Network plugin for faster detection
+    let cancelled = false;
     let networkCleanup: (() => void) | undefined;
 
     if (Platform.isNative) {
@@ -184,12 +185,17 @@ export function useNotificationAutoConnect({
             reconnect();
           }
         }).then((handle) => {
+          if (cancelled) {
+            handle.remove();
+            return;
+          }
           networkCleanup = () => handle.remove();
         });
       }).catch(() => {});
     }
 
     return () => {
+      cancelled = true;
       window.removeEventListener('online', handleOnline);
       networkCleanup?.();
     };
@@ -225,6 +231,7 @@ export function useNotificationAutoConnect({
     const mode = settings?.notificationMode || 'es';
     if (!settings?.enabled || mode !== 'es') return;
 
+    let cancelled = false;
     let listenerCleanup: (() => void) | undefined;
 
     const setup = async () => {
@@ -244,6 +251,10 @@ export function useNotificationAutoConnect({
           }
         });
 
+        if (cancelled) {
+          listener.remove();
+          return;
+        }
         listenerCleanup = () => { listener.remove(); };
       } catch (e) {
         log.notificationHandler('Failed to setup app resume liveness check', LogLevel.ERROR, e);
@@ -251,6 +262,9 @@ export function useNotificationAutoConnect({
     };
 
     setup();
-    return () => { listenerCleanup?.(); };
+    return () => {
+      cancelled = true;
+      listenerCleanup?.();
+    };
   }, [settings?.enabled, settings?.notificationMode, isConnected, reconnect]);
 }

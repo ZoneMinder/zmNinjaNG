@@ -67,6 +67,7 @@ export function KioskOverlay({ onUnlock }: KioskOverlayProps) {
   useEffect(() => {
     if (!isLocked) return;
 
+    let cancelled = false;
     let removeListener: (() => void) | undefined;
 
     (async () => {
@@ -74,8 +75,12 @@ export function KioskOverlay({ onUnlock }: KioskOverlayProps) {
       try {
         const { App } = await import('@capacitor/app');
         const handle = await App.addListener('backButton', () => {
-          // No-op — swallow back button while locked
+          // No-op: swallow back button while locked
         });
+        if (cancelled) {
+          handle.remove();
+          return;
+        }
         removeListener = () => handle.remove();
       } catch {
         // Plugin unavailable
@@ -83,6 +88,7 @@ export function KioskOverlay({ onUnlock }: KioskOverlayProps) {
     })();
 
     return () => {
+      cancelled = true;
       removeListener?.();
     };
   }, [isLocked]);

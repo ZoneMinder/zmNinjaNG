@@ -7,6 +7,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
+import type { PluginListenerHandle } from '@capacitor/core';
 import { useNotificationAutoConnect } from '../useNotificationAutoConnect';
 
 // Mock logger
@@ -23,11 +24,16 @@ vi.mock('../../lib/logger', () => ({
   },
 }));
 
-// Mock Platform
+// Mock Platform (mutable so individual tests can flip isNative)
+const mockPlatform = vi.hoisted(() => ({ isDesktopOrWeb: true, isNative: false }));
 vi.mock('../../lib/platform', () => ({
-  Platform: {
-    isDesktopOrWeb: true,
-  },
+  Platform: mockPlatform,
+}));
+
+// Mock @capacitor/app (dynamically imported by the hook on native)
+const mockAppAddListener = vi.hoisted(() => vi.fn());
+vi.mock('@capacitor/app', () => ({
+  App: { addListener: mockAppAddListener },
 }));
 
 // Mock notification store (getState usage inside hook)
@@ -118,6 +124,9 @@ describe('useNotificationAutoConnect', () => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     mockNotificationStoreState.connectionState = 'disconnected';
+    mockPlatform.isDesktopOrWeb = true;
+    mockPlatform.isNative = false;
+    mockAppAddListener.mockResolvedValue({ remove: vi.fn() });
   });
 
   afterEach(() => {
@@ -434,6 +443,65 @@ describe('useNotificationAutoConnect', () => {
       expect(removed).toBe(true);
 
       removeEventSpy.mockRestore();
+    });
+  });
+
+  describe('native listener registration races', () => {
+    it('removes the network listener when registration resolves after unmount', async () => {
+      mockPlatform.isNative = true;
+      const remove = vi.fn().mockResolvedValue(undefined);
+      let resolveListener: (handle: PluginListenerHandle) => void = () => {};
+      const { Network } = await import('@capacitor/network');
+      vi.mocked(Network.addListener).mockReturnValueOnce(
+        new Promise<PluginListenerHandle>((resolve) => { resolveListener = resolve; }),
+      );
+
+      const params = makeParams();
+      const { unmount } = renderHook(() => useNotificationAutoConnect(params));
+
+      // Let the dynamic import resolve so addListener is invoked
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(Network.addListener).toHaveBeenCalled();
+
+      // Unmount while addListener is still pending, then resolve it
+      unmount();
+      resolveListener({ remove });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(remove).toHaveBeenCalledTimes(1);
+    });
+
+    it('removes the app resume listener when registration resolves after unmount', async () => {
+      mockPlatform.isNative = true;
+      const remove = vi.fn();
+      let resolveListener: (handle: { remove: () => void }) => void = () => {};
+      mockAppAddListener.mockReturnValueOnce(
+        new Promise((resolve) => { resolveListener = resolve; }),
+      );
+
+      const params = makeParams();
+      const { unmount } = renderHook(() => useNotificationAutoConnect(params));
+
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(mockAppAddListener).toHaveBeenCalledWith('appStateChange', expect.any(Function));
+
+      unmount();
+      resolveListener({ remove });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(remove).toHaveBeenCalledTimes(1);
     });
   });
 
