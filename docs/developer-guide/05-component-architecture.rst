@@ -1135,7 +1135,7 @@ update (streams, event counts, etc.), only interaction is blocked.
 
 **Behaviour:**
 
-- Covers the viewport with ``z-index: 9999`` and ``pointer-events: auto``
+- Covers the viewport with ``Z_INDEX.overlay`` (9999) and ``pointer-events: auto``
 - Intercepts browser back navigation (pushState trick) so the user cannot
   leave the locked view
 - On Android, swallows the hardware back button via ``@capacitor/app``
