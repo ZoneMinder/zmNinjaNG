@@ -205,7 +205,8 @@ class EventPollerService {
         this.seenEventIds = new Set(events.map(e => parseEventId(e.Event.Id)));
       }
     } catch (error) {
-      log.notifications('Event poller failed', LogLevel.ERROR, error);
+      // Non-blocking: the next scheduled poll retries
+      log.notifications('Event poller failed', LogLevel.WARN, error);
     }
   }
 }

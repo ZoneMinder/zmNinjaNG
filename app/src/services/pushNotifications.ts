@@ -16,6 +16,8 @@ import { useProfileStore } from '../stores/profile';
 import { useAuthStore } from '../stores/auth';
 import { registerToken, deleteNotification } from '../api/notifications';
 import { getAppVersion } from '../lib/version';
+import { getEventImageUrl } from '../lib/url-builder';
+import { NOTIFICATIONS_SERVICE } from '../lib/zmninja-ng-constants';
 import { ZMNotificationService } from './notifications';
 import type { ZMEventServerConfig } from '../types/notifications';
 import { resolveProfileForNotification, requestProfileSwitch } from '../lib/notification-profile';
@@ -470,7 +472,10 @@ export class MobilePushService {
     // (we have a valid auth token for the current profile only)
     let imageUrl: string | undefined;
     if (eid && targetProfileId === currentProfileId && targetProfile && authStore.accessToken) {
-      imageUrl = `${targetProfile.portalUrl}/index.php?view=image&eid=${eid}&fid=snapshot&width=600&token=${authStore.accessToken}`;
+      imageUrl = getEventImageUrl(targetProfile.portalUrl, String(eid), 'snapshot', {
+        token: authStore.accessToken,
+        width: NOTIFICATIONS_SERVICE.snapshotImageWidth,
+      });
     }
 
     const monitorName = data?.monitorName || data?.MonitorName || notification.title?.replace(/\s*Alarm.*$/, '') || 'Unknown';
@@ -521,7 +526,10 @@ export class MobilePushService {
       // Only construct image URL if the notification is for the current profile
       let imageUrl: string | undefined;
       if (eid && profileIdForEvent === currentProfileId && targetProfile && authStore.accessToken) {
-        imageUrl = `${targetProfile.portalUrl}/index.php?view=image&eid=${eid}&fid=snapshot&width=600&token=${authStore.accessToken}`;
+        imageUrl = getEventImageUrl(targetProfile.portalUrl, String(eid), 'snapshot', {
+          token: authStore.accessToken,
+          width: NOTIFICATIONS_SERVICE.snapshotImageWidth,
+        });
       }
 
       const monitorName = data?.monitorName || data?.MonitorName || notification.title?.replace(/\s*Alarm.*$/, '') || 'Unknown';

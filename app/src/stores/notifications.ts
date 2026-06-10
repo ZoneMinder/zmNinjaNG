@@ -392,7 +392,10 @@ export const useNotificationStore = create<NotificationState>()(
         if (!Platform.isNative) return;
         import('@capacitor-firebase/messaging').then(({ FirebaseMessaging }) => {
           FirebaseMessaging.removeAllDeliveredNotifications();
-        }).catch(() => {});
+        }).catch((error) => {
+          // Non-blocking: stale delivered notifications stay in the tray
+          log.notifications('Failed to clear delivered notifications', LogLevel.WARN, error);
+        });
       },
 
       markAllRead: (profileId: string) => {
@@ -547,7 +550,8 @@ export const useNotificationStore = create<NotificationState>()(
               interval,
             });
           } catch (error) {
-            log.notifications('Failed to sync monitor filters via ZM API', LogLevel.ERROR, { profileId: currentProfileId, error });
+            // Non-blocking: the next settings change retries the sync
+            log.notifications('Failed to sync monitor filters via ZM API', LogLevel.WARN, { profileId: currentProfileId, error });
           }
         } else {
           // ES mode: sync via websocket
@@ -573,7 +577,8 @@ export const useNotificationStore = create<NotificationState>()(
             const service = getNotificationService();
             await service.setMonitorFilter(monitorIds, intervals);
           } catch (error) {
-            log.notifications('Failed to sync monitor filters', LogLevel.ERROR, { profileId: currentProfileId, error });
+            // Non-blocking: the next settings change retries the sync
+            log.notifications('Failed to sync monitor filters', LogLevel.WARN, { profileId: currentProfileId, error });
           }
         }
       },
@@ -615,7 +620,8 @@ export const useNotificationStore = create<NotificationState>()(
             await service.updateBadgeCount(badgeCount);
           }
         } catch (error) {
-          log.notifications('Failed to update badge count', LogLevel.ERROR, { profileId: currentProfileId, error });
+          // Non-blocking: the badge resyncs on the next event or read action
+          log.notifications('Failed to update badge count', LogLevel.WARN, { profileId: currentProfileId, error });
         }
       },
 
