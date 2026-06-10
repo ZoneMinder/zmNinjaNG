@@ -497,8 +497,10 @@ Delayed CMD_QUIT (``lib/zms-quit.ts``)
 Schedules a fire-and-forget CMD_QUIT for a zms connkey after a grace
 delay (``ZM_INTEGRATION.cmdQuitGraceMs``, 150 ms). Pending quits are
 tracked per connkey so a remount that reuses the connkey (React
-StrictMode's dev double-mount, or a rapid hover out/in) cancels the
-quit instead of killing a stream the surviving mount is still using.
+StrictMode's dev double-mount) cancels the quit instead of killing a
+stream the surviving mount is still using. A fresh mount generates a
+new connkey, so its cancel never matches and the abandoned stream's
+quit still fires.
 
 .. code:: typescript
 

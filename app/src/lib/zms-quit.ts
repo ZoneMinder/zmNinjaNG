@@ -3,9 +3,10 @@
  *
  * Quits are scheduled after a short grace delay and tracked in a
  * module-level map keyed by connkey. A remount that reuses the connkey
- * (React StrictMode's dev double-mount, or a rapid hover out/in) cancels
- * the pending quit instead of killing a stream the surviving mount is
- * still using.
+ * (React StrictMode's dev double-mount) cancels the pending quit instead
+ * of killing a stream the surviving mount is still using. A fresh mount
+ * (such as a new hover) generates a new connkey, so its cancel never
+ * matches and the abandoned stream's quit still fires.
  */
 
 import { httpGet } from './http';

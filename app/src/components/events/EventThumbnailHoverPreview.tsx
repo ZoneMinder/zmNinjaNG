@@ -88,11 +88,12 @@ export function EventZmsHoverPlayer({ descriptor }: { descriptor: EventZmsHoverD
     : '';
 
   // Log when hover playback starts. Tear down the zms process on unmount,
-  // but delay it so StrictMode's dev-mode remount (or rapid hover out/in)
-  // can cancel the CMD_QUIT and keep reusing the same connkey.
+  // but delay it so StrictMode's dev-mode remount can cancel the CMD_QUIT
+  // and keep reusing the same connkey. A re-hover mounts a fresh instance
+  // with a new connkey, so the old stream's quit still fires.
   useEffect(() => {
-    // If a quit was pending for this connkey (dev remount or rapid
-    // hover out/in), cancel it. Otherwise, log the new start.
+    // If a quit was pending for this connkey (dev remount), cancel it.
+    // Otherwise, log the new start.
     const hadPendingQuit = cancelPendingQuit(connkey);
     if (!hadPendingQuit && streamUrl) {
       log.zmsEventPlayer('Hover preview stream started', LogLevel.INFO, {
