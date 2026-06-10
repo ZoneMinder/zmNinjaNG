@@ -156,6 +156,12 @@ export const TIMELINE = {
 
   // Max monitors queried in parallel during cause-filter fan-out
   fanoutConcurrency: 6,
+
+  // Delay (ms) between a live notification arriving and the events refetch, so ZM can index the event
+  liveRefetchDebounceMs: 2000,
+
+  // Live-event arrival timestamps older than this (ms) are pruned
+  liveArrivalTtlMs: 5000,
 } as const;
 
 /**
