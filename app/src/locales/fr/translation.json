@@ -671,7 +671,8 @@
     "fit_flex": "Flex",
     "menu_more": "Plus",
     "menu_refresh": "Actualiser",
-    "menu_show_monitors": "Moniteurs"
+    "menu_show_monitors": "Moniteurs",
+    "tile_error": "Erreur de tuile"
   },
   "notification_history": {
     "title": "Notifications",

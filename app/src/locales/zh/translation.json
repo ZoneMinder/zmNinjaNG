@@ -671,7 +671,8 @@
     "fit_flex": "弹性",
     "menu_more": "更多",
     "menu_refresh": "刷新",
-    "menu_show_monitors": "显示监视器"
+    "menu_show_monitors": "显示监视器",
+    "tile_error": "图块错误"
   },
   "notification_history": {
     "title": "通知",

@@ -671,7 +671,8 @@
     "fit_flex": "Flex",
     "menu_more": "Más",
     "menu_refresh": "Actualizar",
-    "menu_show_monitors": "Monitores"
+    "menu_show_monitors": "Monitores",
+    "tile_error": "Error de mosaico"
   },
   "notification_history": {
     "title": "Notificaciones",

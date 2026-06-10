@@ -8,3 +8,4 @@ export { GridLayoutControls } from './GridLayoutControls';
 export { FullscreenControls } from './FullscreenControls';
 export { useMontageGrid, useContainerResize, useFullscreenMode } from './hooks';
 export { MontageKebabMenu } from './MontageKebabMenu';
+export { MontageTileErrorBoundary } from './MontageTileErrorBoundary';

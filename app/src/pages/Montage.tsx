@@ -40,6 +40,7 @@ import {
   GridLayoutControls,
   FullscreenControls,
   MontageKebabMenu,
+  MontageTileErrorBoundary,
   useMontageGrid,
   useContainerResize,
   useFullscreenMode,
@@ -467,19 +468,21 @@ export default function Montage() {
                   data-testid={`montage-monitor-${Monitor.Id}`}
                   tabIndex={isTvMode ? 0 : undefined}
                 >
-                  <MontageMonitor
-                    monitor={Monitor}
-                    status={Monitor_Status}
-                    currentProfile={currentProfile}
-                    accessToken={accessToken}
-                    navigate={navigate}
-                    isFullscreen={isFullscreen}
-                    isEditing={isEditMode}
-                    isPinned={isMonitorPinned(Monitor.Id)}
-                    onPinToggle={() => togglePinMonitor(Monitor.Id)}
-                    objectFit={settings.montageFeedFit}
-                    showOverlay={showMonitorLabels}
-                  />
+                  <MontageTileErrorBoundary monitorId={Monitor.Id} monitorName={Monitor.Name}>
+                    <MontageMonitor
+                      monitor={Monitor}
+                      status={Monitor_Status}
+                      currentProfile={currentProfile}
+                      accessToken={accessToken}
+                      navigate={navigate}
+                      isFullscreen={isFullscreen}
+                      isEditing={isEditMode}
+                      isPinned={isMonitorPinned(Monitor.Id)}
+                      onPinToggle={() => togglePinMonitor(Monitor.Id)}
+                      objectFit={settings.montageFeedFit}
+                      showOverlay={showMonitorLabels}
+                    />
+                  </MontageTileErrorBoundary>
                 </div>
               ))}
             </WrappedGridLayout>

@@ -255,6 +255,24 @@ Provides column presets (1–5) and saved layout management. Renders as a
 
 Includes a ``SaveLayoutDialog`` for naming layouts before saving.
 
+MontageTileErrorBoundary
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+**Location**: ``src/components/montage/MontageTileErrorBoundary.tsx``
+
+Per-tile error boundary. ``Montage.tsx`` wraps each ``MontageMonitor``
+in one so a render error in a single tile shows a compact fallback
+(alert icon, monitor name, ``montage.tile_error``) in that grid cell
+while the other tiles keep streaming. Without it the error would reach
+the route boundary and unmount the whole page. Errors are logged via
+``log.montageMonitor`` at ``LogLevel.ERROR`` with the monitor id and
+name. The fallback carries ``data-testid="montage-tile-error"``.
+
+**Props:**
+
+- ``monitorId`` / ``monitorName`` – identify the tile in the log entry
+  and fallback label
+
 Montage Hooks
 ~~~~~~~~~~~~~
 

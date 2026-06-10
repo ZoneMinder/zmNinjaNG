@@ -671,7 +671,8 @@
     "fit_flex": "Flex",
     "menu_more": "More",
     "menu_refresh": "Refresh",
-    "menu_show_monitors": "Show monitors"
+    "menu_show_monitors": "Show monitors",
+    "tile_error": "Tile failed"
   },
   "notification_history": {
     "title": "Notifications",
