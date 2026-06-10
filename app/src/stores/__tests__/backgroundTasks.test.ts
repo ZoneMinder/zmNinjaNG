@@ -13,6 +13,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useBackgroundTasks } from '../backgroundTasks';
+import { BACKGROUND_TASKS } from '../../lib/zmninja-ng-constants';
 
 describe('Background Tasks Store', () => {
   beforeEach(() => {
@@ -305,6 +306,131 @@ describe('Background Tasks Store', () => {
       const state = useBackgroundTasks.getState();
       expect(state.tasks).toHaveLength(1);
       expect(state.tasks[0].id).toBe(taskId3);
+    });
+  });
+
+  describe('Terminal Task Retention', () => {
+    const cap = BACKGROUND_TASKS.maxRetainedTerminalTasks;
+
+    it('should keep only the newest terminal tasks up to the cap', () => {
+      const { addTask, completeTask } = useBackgroundTasks.getState();
+
+      const ids: string[] = [];
+      for (let i = 0; i < cap + 10; i++) {
+        const id = addTask({ type: 'download', metadata: { title: `file${i}.mp4` } });
+        ids.push(id);
+        completeTask(id);
+      }
+
+      const state = useBackgroundTasks.getState();
+      expect(state.tasks).toHaveLength(cap);
+      // Oldest 10 evicted, newest cap retained in original order
+      expect(state.tasks.map((t) => t.id)).toEqual(ids.slice(10));
+    });
+
+    it('should never evict pending or in-progress tasks', () => {
+      const { addTask, updateProgress, completeTask } = useBackgroundTasks.getState();
+
+      const pendingId = addTask({ type: 'download', metadata: { title: 'pending.mp4' } });
+      const inProgressId = addTask({ type: 'download', metadata: { title: 'active.mp4' } });
+      updateProgress(inProgressId, 50);
+
+      for (let i = 0; i < cap + 5; i++) {
+        const id = addTask({ type: 'download', metadata: { title: `file${i}.mp4` } });
+        completeTask(id);
+      }
+
+      const state = useBackgroundTasks.getState();
+      const idSet = state.tasks.map((t) => t.id);
+      expect(idSet).toContain(pendingId);
+      expect(idSet).toContain(inProgressId);
+      expect(state.tasks).toHaveLength(cap + 2);
+      expect(state.activeTasks()).toHaveLength(2);
+      expect(state.completedTasks()).toHaveLength(cap);
+    });
+
+    it('should evict oldest terminal tasks first', () => {
+      const { addTask, completeTask, failTask, cancelTask } = useBackgroundTasks.getState();
+
+      const firstId = addTask({ type: 'download', metadata: { title: 'first.mp4' } });
+      failTask(firstId, new Error('boom'));
+
+      const secondId = addTask({ type: 'download', metadata: { title: 'second.mp4' } });
+      cancelTask(secondId);
+
+      const keptIds: string[] = [];
+      for (let i = 0; i < cap; i++) {
+        const id = addTask({ type: 'download', metadata: { title: `file${i}.mp4` } });
+        completeTask(id);
+        keptIds.push(id);
+      }
+
+      const state = useBackgroundTasks.getState();
+      expect(state.tasks.map((t) => t.id)).toEqual(keptIds);
+      expect(state.tasks.map((t) => t.id)).not.toContain(firstId);
+      expect(state.tasks.map((t) => t.id)).not.toContain(secondId);
+    });
+
+    it('should trim on failTask and cancelTask', () => {
+      const { addTask, completeTask, failTask, cancelTask } = useBackgroundTasks.getState();
+
+      for (let i = 0; i < cap; i++) {
+        const id = addTask({ type: 'download', metadata: { title: `file${i}.mp4` } });
+        completeTask(id);
+      }
+
+      const failedId = addTask({ type: 'download', metadata: { title: 'fail.mp4' } });
+      failTask(failedId, new Error('boom'));
+      expect(useBackgroundTasks.getState().tasks).toHaveLength(cap);
+
+      const cancelledId = addTask({ type: 'download', metadata: { title: 'cancel.mp4' } });
+      cancelTask(cancelledId);
+      expect(useBackgroundTasks.getState().tasks).toHaveLength(cap);
+
+      const ids = useBackgroundTasks.getState().tasks.map((t) => t.id);
+      expect(ids).toContain(failedId);
+      expect(ids).toContain(cancelledId);
+    });
+
+    it('should trim on addTask as a safety net', () => {
+      const now = Date.now();
+      useBackgroundTasks.setState({
+        tasks: Array.from({ length: cap + 20 }, (_, i) => ({
+          id: `seed-${i}`,
+          type: 'download' as const,
+          status: 'completed' as const,
+          progress: 100,
+          metadata: { title: `seed${i}.mp4` },
+          createdAt: now + i,
+          completedAt: now + i,
+        })),
+      });
+
+      const { addTask } = useBackgroundTasks.getState();
+      const newId = addTask({ type: 'download', metadata: { title: 'new.mp4' } });
+
+      const state = useBackgroundTasks.getState();
+      expect(state.completedTasks()).toHaveLength(cap);
+      expect(state.tasks).toHaveLength(cap + 1);
+      expect(state.tasks[state.tasks.length - 1].id).toBe(newId);
+      // Oldest seeds evicted
+      expect(state.tasks.map((t) => t.id)).not.toContain('seed-0');
+      expect(state.tasks.map((t) => t.id)).toContain(`seed-${cap + 19}`);
+    });
+
+    it('should still clear all terminal tasks via clearCompleted after trimming', () => {
+      const { addTask, completeTask, clearCompleted } = useBackgroundTasks.getState();
+
+      for (let i = 0; i < cap + 5; i++) {
+        const id = addTask({ type: 'download', metadata: { title: `file${i}.mp4` } });
+        completeTask(id);
+      }
+
+      clearCompleted();
+
+      const state = useBackgroundTasks.getState();
+      expect(state.tasks).toHaveLength(0);
+      expect(state.drawerState).toBe('hidden');
     });
   });
 

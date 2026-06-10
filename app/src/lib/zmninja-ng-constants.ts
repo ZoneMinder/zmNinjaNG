@@ -292,6 +292,19 @@ export const DEVELOPER_NOTICES = {
 } as const;
 
 /**
+ * Background Tasks
+ *
+ * Limits for the in-memory background task store (downloads, exports).
+ */
+export const BACKGROUND_TASKS = {
+  // Maximum completed/failed/cancelled tasks kept in the store. Oldest
+  // terminal tasks beyond this are evicted so long-lived sessions (kiosk
+  // mode, repeated downloads) do not grow memory without bound. Active
+  // tasks are never evicted.
+  maxRetainedTerminalTasks: 50,
+} as const;
+
+/**
  * UI Interaction Timings
  *
  * Pointer/touch timing knobs shared across hover previews, hold-to-repeat
