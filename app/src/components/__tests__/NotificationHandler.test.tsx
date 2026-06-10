@@ -114,6 +114,19 @@ describe('NotificationHandler live-event toasts', () => {
     expect(toast).toHaveBeenCalledTimes(2);
   });
 
+  it('does not toast again when the same event is re-added', () => {
+    renderHandler();
+
+    act(() => {
+      useNotificationStore.getState().addEvent(PROFILE_ID, makeEvent(1234));
+    });
+    act(() => {
+      useNotificationStore.getState().addEvent(PROFILE_ID, makeEvent(1234));
+    });
+
+    expect(toast).toHaveBeenCalledTimes(1);
+  });
+
   it('does not toast when showToasts is disabled for the profile', () => {
     useNotificationStore.getState().updateProfileSettings(PROFILE_ID, { showToasts: false });
     renderHandler();

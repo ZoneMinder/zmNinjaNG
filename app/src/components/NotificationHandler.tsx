@@ -72,7 +72,7 @@ export function NotificationHandler() {
   // addEvent (see stores/notifications.ts); the toast effect below relies
   // on this subscription to fire for live events.
   const events = useNotificationStore(
-    useShallow((state) => (currentProfile ? state.getEvents(currentProfile.id) : []))
+    useShallow((state) => (currentProfile ? state.profileEvents[currentProfile.id] ?? [] : []))
   );
 
   const lastEventId = useRef<number | null>(null);
