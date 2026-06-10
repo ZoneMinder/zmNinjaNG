@@ -69,6 +69,55 @@ function appendQuery(url: string, params: Record<string, string | number>): stri
 let loginInProgress = false;
 let loginPromise: Promise<boolean> | null = null;
 
+/**
+ * Single-flight 401 recovery shared by all in-flight requests. When a token
+ * expires under a busy view (e.g. montage), every pending request fails with
+ * 401 at once. Only the first caller runs refresh-then-reLogin; the rest await
+ * the same outcome and then retry their own request once. Resolves true when
+ * recovery produced a valid session, false otherwise. Never rejects. Refs #182.
+ */
+let pendingAuthRecovery: Promise<boolean> | null = null;
+
+function recoverFromAuthFailure(reLogin?: () => Promise<boolean>): Promise<boolean> {
+  if (pendingAuthRecovery) {
+    return pendingAuthRecovery;
+  }
+
+  const recovery = (async (): Promise<boolean> => {
+    try {
+      const { refreshToken: refreshTokenValue, refreshAccessToken } = useAuthStore.getState();
+      if (!refreshTokenValue) {
+        throw new Error('No refresh token available');
+      }
+      await refreshAccessToken();
+      return true;
+    } catch (refreshError) {
+      if (reLogin) {
+        try {
+          if (await reLogin()) {
+            return true;
+          }
+        } catch (reLoginError) {
+          log.api('Re-login failed', LogLevel.ERROR, reLoginError);
+        }
+      }
+      log.api('401 recovery failed; logging out', LogLevel.WARN, { error: refreshError });
+      useAuthStore.getState().logout();
+      return false;
+    }
+  })();
+
+  const gate: Promise<boolean> = recovery.finally(() => {
+    // Clear the gate only if it is still ours: resetApiClient (profile switch)
+    // may have cleared it and a newer recovery may already be in flight.
+    if (pendingAuthRecovery === gate) {
+      pendingAuthRecovery = null;
+    }
+  });
+  pendingAuthRecovery = gate;
+  return gate;
+}
+
 export function createApiClient(
   baseURL: string,
   reLogin?: () => Promise<boolean>,
@@ -188,29 +237,12 @@ export function createApiClient(
     } catch (error) {
       const httpError = error as HttpError;
       if (httpError.status === 401 && !hasRetried && !skipAuth && !isLoginRequest) {
-        try {
-          const { refreshToken: refreshTokenValue, refreshAccessToken } = useAuthStore.getState();
-          if (refreshTokenValue) {
-            await refreshAccessToken();
-            return request(method, url, data, config, true);
-          }
-          throw new Error('No refresh token available');
-        } catch (refreshError) {
-          if (reLogin) {
-            try {
-              const success = await reLogin();
-              if (success) {
-                return request(method, url, data, config, true);
-              }
-            } catch (reLoginError) {
-              log.api('Re-login failed', LogLevel.ERROR, reLoginError);
-            }
-          }
-
-          const { logout } = useAuthStore.getState();
-          logout();
-          throw refreshError;
+        const recovered = await recoverFromAuthFailure(reLogin);
+        if (recovered) {
+          return request(method, url, data, config, true);
         }
+        // Recovery failed (logout already ran inside the shared recovery).
+        // Fall through to log and propagate the original 401.
       }
 
       const errorData: Record<string, unknown> = {
@@ -278,5 +310,7 @@ export function setApiClient(client: ApiClient): void {
 
 export function resetApiClient(): void {
   apiClient = null;
+  // A profile switch must not await a recovery started for the old profile.
+  pendingAuthRecovery = null;
   setApiClientInitialized(false);
 }
