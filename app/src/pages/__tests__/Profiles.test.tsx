@@ -57,7 +57,6 @@ vi.mock('../../hooks/use-toast', () => ({
 }));
 
 vi.mock('../../api/client', () => ({
-  createApiClient: vi.fn(),
   setApiClient: vi.fn(),
 }));
 

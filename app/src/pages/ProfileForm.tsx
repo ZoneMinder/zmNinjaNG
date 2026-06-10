@@ -13,7 +13,8 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../components/ui/card';
 import { useProfileStore } from '../stores/profile';
-import { createApiClient, setApiClient } from '../api/client';
+import { setApiClient } from '../api/client';
+import { createStoreApiClient } from '../api/store-gates';
 import { discoverUrls, DiscoveryError } from '../services/discovery';
 import { Switch } from '../components/ui/switch';
 import { Video, Server, ShieldCheck, ArrowRight, Loader2, Eye, EyeOff, ArrowLeft, QrCode, X } from 'lucide-react';
@@ -193,7 +194,7 @@ export default function ProfileForm() {
         log.profileForm('Manual URLs set', LogLevel.INFO, { portalUrl: confirmedPortalUrl, apiUrl, cgiUrl });
 
         // Initialize API client with manual URL
-        const client = createApiClient(apiUrl);
+        const client = createStoreApiClient(apiUrl);
         setApiClient(client);
       } else {
         // Discover URLs from portal URL

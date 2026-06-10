@@ -27,9 +27,12 @@ vi.mock('../../api/auth', () => ({
 }));
 
 vi.mock('../../api/client', () => ({
-  createApiClient: vi.fn(() => ({})),
   setApiClient: vi.fn(),
   resetApiClient: vi.fn(),
+}));
+
+vi.mock('../../api/store-gates', () => ({
+  createStoreApiClient: vi.fn(() => ({})),
 }));
 
 vi.mock('../../lib/secureStorage', () => ({

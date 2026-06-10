@@ -1,5 +1,6 @@
 
-import { createApiClient, setApiClient } from '../api/client';
+import { setApiClient, type ApiClient } from '../api/client';
+import { createStoreApiClient } from '../api/store-gates';
 import type { HttpError } from '../lib/http';
 import { log, LogLevel } from '../lib/logger';
 import { DISCOVERY_TIMEOUTS } from '../lib/zmninja-ng-constants';
@@ -11,7 +12,7 @@ export interface DiscoverUrlsOptions {
   credentials?: { username: string; password: string };
   signal?: AbortSignal;
   /** Called once an API client has been created for the discovered URL. */
-  onClientCreated?: (client: ReturnType<typeof createApiClient>) => void;
+  onClientCreated?: (client: ApiClient) => void;
 }
 
 /**
@@ -82,7 +83,7 @@ async function probeApi(apiUrl: string, signal?: AbortSignal): Promise<boolean> 
         throw new DiscoveryError('Discovery cancelled', 'CANCELLED');
     }
 
-    const apiClient = createApiClient(apiUrl);
+    const apiClient = createStoreApiClient(apiUrl);
 
     // Try getVersion.json first
     let hadHttpError = false; // True if we got an HTTP response (even error), false if connection failed
@@ -180,7 +181,7 @@ async function fetchCgiUrl(apiUrl: string, portalUrl: string, options: Discovery
 
     try {
         // Create and set API client for this API URL
-        const client = createApiClient(apiUrl);
+        const client = createStoreApiClient(apiUrl);
         setApiClient(client);
 
         // Authenticate using direct POST to avoid circular dependency with auth store
@@ -331,7 +332,7 @@ export async function discoverUrls(
 ): Promise<DiscoveryResult> {
     const attempt = async () => {
         const result = await discoverZoneminder(portal, { ...credentials, signal });
-        const client = createApiClient(result.apiUrl);
+        const client = createStoreApiClient(result.apiUrl);
         onClientCreated?.(client);
         return result;
     };

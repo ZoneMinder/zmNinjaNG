@@ -1,6 +1,4 @@
 import { httpRequest, type HttpError, type HttpOptions, type HttpResponse } from '../lib/http';
-import { useAuthStore } from '../stores/auth';
-import { useSettingsStore } from '../stores/settings';
 import { API_REQUEST } from '../lib/zmninja-ng-constants';
 import { log, LogLevel } from '../lib/logger';
 import { sanitizeObject } from '../lib/log-sanitizer';
@@ -40,6 +38,37 @@ export interface ApiClient {
   delete<T = unknown>(url: string, config?: ApiRequestConfig): Promise<HttpResponse<T>>;
 }
 
+/**
+ * Auth operations the client needs, injected instead of importing the auth
+ * store. All single-flight deduplication (proactive login, token refresh,
+ * 401 recovery) lives behind this gate in stores/auth.ts. Refs #184.
+ */
+export interface AuthGate {
+  getAccessToken(): string | null;
+  getAccessTokenExpires(): number | null;
+  isAuthenticated(): boolean;
+  /** Deduped refresh-or-relogin; resolves to a usable token or null. */
+  getFreshAccessToken(): Promise<string | null>;
+  /** Deduped login used by the proactive auth path. */
+  proactiveLogin(reLogin: () => Promise<boolean>): Promise<boolean>;
+  /**
+   * Single-flight 401 recovery: refresh, fall back to reLogin, logout once on
+   * total failure. Resolves true when the session is valid again. Never rejects.
+   */
+  recoverFromAuthFailure(reLogin?: () => Promise<boolean>): Promise<boolean>;
+}
+
+/** Settings the client needs, injected instead of importing the settings store. */
+export interface SettingsGate {
+  /** Per-request timeout for the profile, in seconds. 0 disables it. */
+  getApiTimeoutSeconds(profileId: string): number;
+}
+
+export interface ApiClientGates {
+  auth: AuthGate;
+  settings: SettingsGate;
+}
+
 let apiClient: ApiClient | null = null;
 
 // Correlation ID counter - starts at 1, increments with each request, resets on app restart
@@ -65,61 +94,9 @@ function appendQuery(url: string, params: Record<string, string | number>): stri
   return url.includes('?') ? `${url}&${queryParams}` : `${url}?${queryParams}`;
 }
 
-// Track if login is currently in progress to prevent duplicate login attempts
-let loginInProgress = false;
-let loginPromise: Promise<boolean> | null = null;
-
-/**
- * Single-flight 401 recovery shared by all in-flight requests. When a token
- * expires under a busy view (e.g. montage), every pending request fails with
- * 401 at once. Only the first caller runs refresh-then-reLogin; the rest await
- * the same outcome and then retry their own request once. Resolves true when
- * recovery produced a valid session, false otherwise. Never rejects. Refs #182.
- */
-let pendingAuthRecovery: Promise<boolean> | null = null;
-
-function recoverFromAuthFailure(reLogin?: () => Promise<boolean>): Promise<boolean> {
-  if (pendingAuthRecovery) {
-    return pendingAuthRecovery;
-  }
-
-  const recovery = (async (): Promise<boolean> => {
-    try {
-      const { refreshToken: refreshTokenValue, refreshAccessToken } = useAuthStore.getState();
-      if (!refreshTokenValue) {
-        throw new Error('No refresh token available');
-      }
-      await refreshAccessToken();
-      return true;
-    } catch (refreshError) {
-      if (reLogin) {
-        try {
-          if (await reLogin()) {
-            return true;
-          }
-        } catch (reLoginError) {
-          log.api('Re-login failed', LogLevel.ERROR, reLoginError);
-        }
-      }
-      log.api('401 recovery failed; logging out', LogLevel.WARN, { error: refreshError });
-      useAuthStore.getState().logout();
-      return false;
-    }
-  })();
-
-  const gate: Promise<boolean> = recovery.finally(() => {
-    // Clear the gate only if it is still ours: resetApiClient (profile switch)
-    // may have cleared it and a newer recovery may already be in flight.
-    if (pendingAuthRecovery === gate) {
-      pendingAuthRecovery = null;
-    }
-  });
-  pendingAuthRecovery = gate;
-  return gate;
-}
-
 export function createApiClient(
   baseURL: string,
+  gates: ApiClientGates,
   reLogin?: () => Promise<boolean>,
   profileId?: string,
 ): ApiClient {
@@ -135,7 +112,7 @@ export function createApiClient(
       config.responseType === 'base64';
     if (isDownload) return undefined;
     const secs = profileId
-      ? useSettingsStore.getState().getProfileSettings(profileId).apiTimeoutSeconds
+      ? gates.settings.getApiTimeoutSeconds(profileId)
       : API_REQUEST.defaultTimeoutSeconds;
     return secs && secs > 0 ? secs * 1000 : undefined;
   };
@@ -147,7 +124,7 @@ export function createApiClient(
     hasRetried = false
   ): Promise<HttpResponse<T>> => {
     const correlationId = ++correlationIdCounter;
-    const { accessToken, accessTokenExpires, isAuthenticated } = useAuthStore.getState();
+    const accessToken = gates.auth.getAccessToken();
     const headers = { ...(config.headers ?? {}) };
     const params: Record<string, string | number> = { ...(config.params ?? {}) };
 
@@ -155,7 +132,7 @@ export function createApiClient(
     const isLoginRequest = url.includes('login.json') && method.toUpperCase() === 'POST';
 
     // PROACTIVE: If not authenticated and not a login request, trigger login first
-    if (!isAuthenticated && !skipAuth && !isLoginRequest && reLogin && !hasRetried) {
+    if (!gates.auth.isAuthenticated() && !skipAuth && !isLoginRequest && reLogin && !hasRetried) {
       log.api(`Request requires authentication, triggering login first`, LogLevel.DEBUG, {
         correlationId,
         method,
@@ -163,28 +140,12 @@ export function createApiClient(
       });
 
       let loginSuccess = false;
-
-      // If login already in progress, wait for it
-      if (loginInProgress && loginPromise) {
-        try {
-          loginSuccess = await loginPromise;
-        } catch (error) {
-          log.api('Waiting for in-progress login failed', LogLevel.ERROR, error);
-          throw new Error('Authentication required but concurrent login attempt failed');
-        }
-      } else {
-        // Start new login
-        loginInProgress = true;
-        loginPromise = reLogin();
-        try {
-          loginSuccess = await loginPromise;
-        } catch (error) {
-          log.api('Proactive login failed', LogLevel.ERROR, error);
-          throw error;
-        } finally {
-          loginInProgress = false;
-          loginPromise = null;
-        }
+      try {
+        // Single-flight in the auth store: concurrent requests share one reLogin.
+        loginSuccess = await gates.auth.proactiveLogin(reLogin);
+      } catch (error) {
+        log.api('Proactive login failed', LogLevel.ERROR, error);
+        throw error;
       }
 
       // Check if login actually succeeded before retrying
@@ -197,6 +158,7 @@ export function createApiClient(
     }
 
     if (accessToken && !skipAuth && !isLoginRequest) {
+      const accessTokenExpires = gates.auth.getAccessTokenExpires();
       const isAccessTokenExpired = accessTokenExpires !== null && accessTokenExpires <= Date.now();
       if (isAccessTokenExpired) {
         log.api(
@@ -204,7 +166,7 @@ export function createApiClient(
           LogLevel.DEBUG,
           { correlationId, method, url },
         );
-        const fresh = await useAuthStore.getState().getFreshAccessToken();
+        const fresh = await gates.auth.getFreshAccessToken();
         if (fresh) {
           params.token = fresh;
         }
@@ -237,7 +199,7 @@ export function createApiClient(
     } catch (error) {
       const httpError = error as HttpError;
       if (httpError.status === 401 && !hasRetried && !skipAuth && !isLoginRequest) {
-        const recovered = await recoverFromAuthFailure(reLogin);
+        const recovered = await gates.auth.recoverFromAuthFailure(reLogin);
         if (recovered) {
           return request(method, url, data, config, true);
         }
@@ -308,9 +270,21 @@ export function setApiClient(client: ApiClient): void {
   setApiClientInitialized(true);
 }
 
+/**
+ * Hooks run by resetApiClient. api/store-gates.ts registers the auth store's
+ * resetAuthGates here so a profile switch clears the pending single-flight
+ * gates without the client importing the store.
+ */
+const resetHooks = new Set<() => void>();
+
+export function registerApiClientResetHook(hook: () => void): void {
+  resetHooks.add(hook);
+}
+
 export function resetApiClient(): void {
   apiClient = null;
-  // A profile switch must not await a recovery started for the old profile.
-  pendingAuthRecovery = null;
+  // A profile switch must not await a login/refresh/recovery started for the
+  // old profile.
+  resetHooks.forEach((hook) => hook());
   setApiClientInitialized(false);
 }

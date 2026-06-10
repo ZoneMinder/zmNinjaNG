@@ -1,12 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useProfileStore } from '../profile';
-import { createApiClient, setApiClient } from '../../api/client';
+import { setApiClient } from '../../api/client';
+import { createStoreApiClient } from '../../api/store-gates';
 import { getServerTimeZone } from '../../api/time';
 import { setSecureValue, removeSecureValue } from '../../lib/secureStorage';
 
 vi.mock('../../api/client', () => ({
-  createApiClient: vi.fn(() => ({ mock: true })),
   setApiClient: vi.fn(),
+}));
+
+vi.mock('../../api/store-gates', () => ({
+  createStoreApiClient: vi.fn(() => ({ mock: true })),
 }));
 
 vi.mock('../../api/time', () => ({
@@ -82,7 +86,7 @@ describe('Profile Store', () => {
 
     expect(id).toBe('profile-1');
     expect(setSecureValue).toHaveBeenCalledWith('password_profile-1', 'secret');
-    expect(createApiClient).toHaveBeenCalledWith('https://example.test', undefined, 'profile-1');
+    expect(createStoreApiClient).toHaveBeenCalledWith('https://example.test', undefined, 'profile-1');
     expect(setApiClient).toHaveBeenCalled();
 
     const { profiles, currentProfileId } = useProfileStore.getState();

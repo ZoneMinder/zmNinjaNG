@@ -13,7 +13,8 @@
  */
 
 import type { Profile } from '../api/types';
-import { createApiClient, setApiClient } from '../api/client';
+import { setApiClient } from '../api/client';
+import { createStoreApiClient } from '../api/store-gates';
 import { log, LogLevel } from '../lib/logger';
 import { BOOTSTRAP_TIMEOUTS } from '../lib/zmninja-ng-constants';
 import { performBootstrap, type BootstrapContext } from './profile-bootstrap';
@@ -113,7 +114,7 @@ async function initializeApiClient(
     apiUrl: profile.apiUrl,
   });
 
-  setApiClient(createApiClient(profile.apiUrl, reLogin));
+  setApiClient(createStoreApiClient(profile.apiUrl, reLogin));
 
   // Wire the same credentials reLogin into the auth store so
   // getFreshAccessToken can fall through to it when refresh fails.

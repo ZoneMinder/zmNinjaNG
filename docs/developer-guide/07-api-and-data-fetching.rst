@@ -197,20 +197,37 @@ Tokens are stored encrypted in ``SecureStorage``:
 
    await SecureStorage.set(`auth_tokens_${profileId}`, JSON.stringify(tokens));
 
+Auth Gates
+^^^^^^^^^^
+
+``createApiClient`` (``src/api/client.ts``) does not import the zustand
+stores. It receives ``ApiClientGates``, two narrow interfaces:
+``AuthGate`` (token reads, ``getFreshAccessToken``, ``proactiveLogin``,
+``recoverFromAuthFailure``) and ``SettingsGate``
+(``getApiTimeoutSeconds``). ``api/store-gates.ts`` builds the gates from
+the real stores and exports ``createStoreApiClient(baseURL, reLogin?,
+profileId?)``, which every production call site uses. Tests inject plain
+mock gates instead of mocking zustand. All single-flight deduplication
+(login, token refresh, 401 recovery) lives behind the gates in
+``stores/auth.ts`` as module-level pending promises; ``resetAuthGates()``
+clears them all and runs from ``resetApiClient()`` on profile switch so a
+new profile never attaches to a login, refresh, or recovery started for
+the old one.
+
 Proactive Authentication
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
 Profiles rehydrate from localStorage at startup, but login takes a
-few seconds. To avoid 401s, ``createApiClient`` (``src/api/client.ts``)
-checks for an access token before any non-login request, triggers login
-first, then retries the original request:
+few seconds. To avoid 401s, ``createApiClient`` checks authentication
+before any non-login request, triggers login first, then retries the
+original request:
 
 .. code:: typescript
 
    // Before making HTTP request
-   if (!accessToken && !skipAuth && !isLoginRequest && reLogin && !hasRetried) {
-     // Trigger login first
-     const loginSuccess = await reLogin();
+   if (!gates.auth.isAuthenticated() && !skipAuth && !isLoginRequest && reLogin && !hasRetried) {
+     // Single-flight in the auth store: concurrent requests share one reLogin.
+     const loginSuccess = await gates.auth.proactiveLogin(reLogin);
 
      if (!loginSuccess) {
        throw new Error('Authentication required but login failed');
@@ -220,39 +237,35 @@ first, then retries the original request:
      return request(method, url, data, config, true);
    }
 
-**Concurrent requests** share the same login promise so login only
-runs once:
-
-.. code:: typescript
-
-   let loginInProgress = false;
-   let loginPromise: Promise<boolean> | null = null;
-
-   if (loginInProgress && loginPromise) {
-     // Wait for ongoing login
-     loginSuccess = await loginPromise;
-   } else {
-     // Start new login
-     loginInProgress = true;
-     loginPromise = reLogin();
-     // ...
-   }
+**Concurrent requests** share the same login attempt:
+``proactiveLogin`` in ``stores/auth.ts`` holds a module-level
+``pendingProactiveLogin`` promise, so the first request invokes
+``reLogin`` and the rest attach to the same outcome.
 
 **Reactive 401 handling.** If a request still returns 401 (e.g.
-token expired mid-flight), the client refreshes the token and retries
-once:
+token expired mid-flight), the client runs the shared recovery and
+retries once:
 
 .. code:: typescript
 
    catch (error) {
      if (httpError.status === 401 && !hasRetried && !skipAuth && !isLoginRequest) {
-       // Try refresh token
-       await refreshAccessToken();
-       return request(method, url, data, config, true); // hasRetried=true prevents loops
+       const recovered = await gates.auth.recoverFromAuthFailure(reLogin);
+       if (recovered) {
+         return request(method, url, data, config, true); // hasRetried=true prevents loops
+       }
      }
    }
 
-``hasRetried`` ensures each request attempts auth only once.
+``recoverFromAuthFailure`` in ``stores/auth.ts`` is single-flight: when a
+token expires under a busy view (e.g. montage), every pending request
+fails with 401 at once, the first caller runs refresh-then-reLogin, the
+rest await the same outcome and retry once. The refresh goes through the
+deduplicated ``refreshAccessToken``, so a recovery that starts while a
+proactive refresh is pending attaches to the same POST instead of issuing
+a second one. When refresh and reLogin both fail it logs out once and
+resolves false; it never rejects. ``hasRetried`` ensures each request
+attempts auth only once.
 
 Access Token Freshness Gate
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
