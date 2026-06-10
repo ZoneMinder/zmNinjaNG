@@ -537,17 +537,24 @@ Query Client Setup
 .. code:: tsx
 
    import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+   import { setQueryClient, shouldRetryQuery } from './stores/query-cache';
 
    const queryClient = new QueryClient({
      defaultOptions: {
        queries: {
-         retry: 1,                      // Single retry on failure
+         retry: shouldRetryQuery,       // Single retry, but never on 401/403
          refetchOnWindowFocus: false,   // Don't refetch when window focused
          // staleTime: 0 (default)      // Data immediately stale
          // gcTime: 5 min (default)     // Unused data kept 5 min
        },
      },
    });
+
+``shouldRetryQuery`` (``stores/query-cache.ts``) retries a failed query
+once (``MAX_QUERY_RETRIES`` in ``lib/zmninja-ng-constants.ts``), except
+for HTTP 401/403 errors, which are never retried. The API client already
+performs token recovery inside the request, so an auth error that
+reaches React Query is final.
 
 With ``staleTime: 0``, every query subscriber triggers a fetch. The
 HTTP layer (``lib/http.ts``) logs every call with a correlation ID;

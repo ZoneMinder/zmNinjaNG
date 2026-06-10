@@ -27,6 +27,13 @@ export const API_REQUEST = {
   maxTimeoutSeconds: 120,
 } as const;
 
+/**
+ * Maximum number of retries for a failed React Query query (the app-wide
+ * default, equivalent to `retry: 1`). Auth errors (401/403) are never
+ * retried; see shouldRetryQuery in stores/query-cache.ts.
+ */
+export const MAX_QUERY_RETRIES = 1;
+
 export const ZM_INTEGRATION = {
   // HTTP timeouts for ZM API calls
   httpTimeout: 10000, // 10 seconds - standard API calls

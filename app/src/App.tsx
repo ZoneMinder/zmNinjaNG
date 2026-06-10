@@ -11,7 +11,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useProfileStore } from './stores/profile';
 import { useCurrentProfile } from './hooks/useCurrentProfile';
-import { setQueryClient } from './stores/query-cache';
+import { setQueryClient, shouldRetryQuery } from './stores/query-cache';
 import { Toaster } from './components/ui/toast';
 import { ThemeProvider } from './components/theme-provider';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -60,7 +60,7 @@ function RouteLoadingFallback() {
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 1,
+      retry: shouldRetryQuery,
       refetchOnWindowFocus: false,
     },
   },
