@@ -253,6 +253,8 @@ export const MONITOR_STATUS_COLORS = {
 export const LOGGING = {
   // Maximum log entries to retain in the logs screen
   maxLogEntries: 1000,
+  // Maximum stack trace characters logged by the global error handlers
+  maxStackLength: 4000,
 } as const;
 
 /**

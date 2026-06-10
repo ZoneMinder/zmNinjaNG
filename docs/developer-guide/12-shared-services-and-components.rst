@@ -60,6 +60,23 @@ that array and to the matching ``Logger`` class field.
 
 --------------
 
+Global Error Sinks (``lib/global-error-handlers.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Window-level listeners for ``unhandledrejection`` and ``error`` that route
+async failures outside React Query and try/catch into the logger, so they
+appear on the Logs page and in exported log files. ``main.tsx`` calls
+``installGlobalErrorHandlers()`` once before React renders. The listeners
+log via ``log.app()`` at ``LogLevel.ERROR`` with the rejection reason or
+error message, source location, and stack, truncated to
+``LOGGING.maxStackLength`` characters (4000). They never call
+``preventDefault``, so browser console reporting is unchanged.
+``uninstallGlobalErrorHandlers()`` removes the listeners; tests use it.
+
+**Used By:** ``main.tsx`` (startup)
+
+--------------
+
 HTTP Client (``lib/http.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
