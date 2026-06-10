@@ -84,7 +84,8 @@ export function MonitorSettingsDialog({
   const editable = !!onSave;
   const is138Plus = isZmVersionAtLeast(zmVersion, '1.38.0');
   const { currentProfile } = useCurrentProfile();
-  const { getProfileSettings, updateProfileSettings } = useSettingsStore();
+  const getProfileSettings = useSettingsStore((state) => state.getProfileSettings);
+  const updateProfileSettings = useSettingsStore((state) => state.updateProfileSettings);
   const profileSettings = currentProfile ? getProfileSettings(currentProfile.id) : null;
 
   // Per-monitor Go2RTC override

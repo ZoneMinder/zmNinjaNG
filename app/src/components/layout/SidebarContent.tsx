@@ -70,18 +70,10 @@ export function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentPro
       return profiles.find((p) => p.id === currentProfileId) || null;
     })
   );
-  const { connectionState, getProfileSettings } = useNotificationStore(
-    useShallow((state) => ({
-      connectionState: state.connectionState,
-      getProfileSettings: state.getProfileSettings,
-    }))
-  );
-  const { getProfileSettings: getSettings, updateProfileSettings } = useSettingsStore(
-    useShallow((state) => ({
-      getProfileSettings: state.getProfileSettings,
-      updateProfileSettings: state.updateProfileSettings,
-    }))
-  );
+  const connectionState = useNotificationStore((state) => state.connectionState);
+  const getProfileSettings = useNotificationStore((state) => state.getProfileSettings);
+  const getSettings = useSettingsStore((state) => state.getProfileSettings);
+  const updateProfileSettings = useSettingsStore((state) => state.updateProfileSettings);
 
   // Get notification data for current profile
   const settings = currentProfile ? getProfileSettings(currentProfile.id) : null;

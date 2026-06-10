@@ -13,6 +13,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNotificationStore } from '../stores/notifications';
+import { useShallow } from 'zustand/react/shallow';
 import { resolveMinStreamingPort } from '../lib/multiport';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useProfileStore } from '../stores/profile';
@@ -55,7 +56,18 @@ export function NotificationHandler() {
     connect,
     disconnect,
     reconnect,
-  } = useNotificationStore();
+  } = useNotificationStore(
+    useShallow((state) => ({
+      getProfileSettings: state.getProfileSettings,
+      getEvents: state.getEvents,
+      isConnected: state.isConnected,
+      connectionState: state.connectionState,
+      currentProfileId: state.currentProfileId,
+      connect: state.connect,
+      disconnect: state.disconnect,
+      reconnect: state.reconnect,
+    }))
+  );
 
   const lastEventId = useRef<number | null>(null);
   const { token: accessToken, isFresh: isAccessTokenFresh } = useFreshAccessToken();
