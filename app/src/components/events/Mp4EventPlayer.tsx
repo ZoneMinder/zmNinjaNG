@@ -78,10 +78,12 @@ export function Mp4EventPlayer({
   const onErrorRef = useRef(onError);
   const markersRef = useRef(markers);
   const onMarkerClickRef = useRef(onMarkerClick);
-  useEffect(() => { onReadyRef.current = onReady; }, [onReady]);
-  useEffect(() => { onErrorRef.current = onError; }, [onError]);
-  useEffect(() => { markersRef.current = markers; }, [markers]);
-  useEffect(() => { onMarkerClickRef.current = onMarkerClick; }, [onMarkerClick]);
+  useEffect(() => {
+    onReadyRef.current = onReady;
+    onErrorRef.current = onError;
+    markersRef.current = markers;
+    onMarkerClickRef.current = onMarkerClick;
+  }, [onReady, onError, markers, onMarkerClick]);
 
   // True once the player has fired its ready callback. The markers plugin reads
   // the player DOM, so marker updates are gated on this. lastMarkerSig skips

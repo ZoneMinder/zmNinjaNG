@@ -14,6 +14,7 @@ import { log, LogLevel } from '../lib/logger';
 import { useNotificationStore } from '../stores/notifications';
 import { useProfileStore } from '../stores/profile';
 import { resolveProfileForNotification } from '../lib/notification-profile';
+import { getEventImageUrl } from '../lib/url-builder';
 import { useCapacitorListener } from './useCapacitorListener';
 import type { Profile } from '../api/types';
 
@@ -42,7 +43,7 @@ function ingestDeliveredNotification(
   // Only construct image URL for current profile's notifications
   let imageUrl: string | undefined;
   if (eid && eventProfileId === profileId && profile) {
-    imageUrl = `${profile.portalUrl}/index.php?view=image&eid=${eid}&fid=snapshot&width=600`;
+    imageUrl = getEventImageUrl(profile.portalUrl, String(eid), 'snapshot', { width: 600 });
   }
 
   const monitorName = data?.monitorName || data?.MonitorName || notif.title?.replace(/\s*Alarm.*$/, '') || 'Unknown';
