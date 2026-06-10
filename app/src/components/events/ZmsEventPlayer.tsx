@@ -25,25 +25,11 @@ import { useTranslation } from 'react-i18next';
 import { httpGet } from '../../lib/http';
 import { log, LogLevel } from '../../lib/logger';
 import { getEventZmsUrl, getZmsControlUrl } from '../../lib/url-builder';
+import { ZMS_COMMANDS } from '../../lib/zm-constants';
 import { useZoomPan } from '../../hooks/useZoomPan';
 import { ZoomControls } from '../ui/ZoomControls';
 import { useBandwidthSettings } from '../../hooks/useBandwidthSettings';
 import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
-
-// ZoneMinder stream command constants
-const ZM_CMD = {
-  PAUSE: 1,
-  PLAY: 2,
-  STOP: 3,
-  FASTFWD: 4,
-  SLOWFWD: 5,
-  SLOWREV: 6,
-  FASTREV: 7,
-  PREV: 12,
-  NEXT: 13,
-  SEEK: 14,
-  QUERY: 99,
-} as const;
 
 interface ZmsEventPlayerProps {
   portalUrl: string;
@@ -81,10 +67,12 @@ export function ZmsEventPlayer({
   const [isPlaying, setIsPlaying] = useState(true);
   const [playbackSpeed, setPlaybackSpeed] = useState(100); // 100 = 1x speed
 
-  // Generate unique connection key for this stream (regenerate on speed change)
+  // Unique connection key for this stream, stable for the component's lifetime.
+  // Speed changes are sent as CMD_VARPLAY over this same connkey instead of
+  // restarting the stream with a new one.
   const connKey = useMemo(
     () => Math.floor(Math.random() * 1000000).toString(),
-    [playbackSpeed]
+    []
   );
 
   // Calculate alarm frame positions for progress bar
@@ -112,25 +100,33 @@ export function ZmsEventPlayer({
     return positions;
   }, [alarmFrameId, maxScoreFrameId, totalFrames]);
 
-  // Build ZMS stream URL
+  // Build ZMS stream URL. Starts at 1x (rate 100); speed changes go through
+  // CMD_VARPLAY so the img src never changes after mount.
   const zmsUrl = useMemo(() => {
     if (!isAccessTokenFresh) return '';
     return getEventZmsUrl(portalUrl, eventId, {
       token,
       apiUrl,
       frame: 1,
-      rate: playbackSpeed,
+      rate: 100,
       maxfps: 30,
       replay: 'single',
       connkey: connKey,
       minStreamingPort,
       monitorId,
     });
-  }, [portalUrl, apiUrl, eventId, playbackSpeed, connKey, token, minStreamingPort, monitorId, isAccessTokenFresh]);
+  }, [portalUrl, apiUrl, eventId, connKey, token, minStreamingPort, monitorId, isAccessTokenFresh]);
 
   // Send control command to the stream
-  const sendCommand = useCallback(async (cmd: number, offset?: number) => {
-    const url = getZmsControlUrl(portalUrl, cmd, connKey, { token, apiUrl, offset, minStreamingPort, monitorId });
+  const sendCommand = useCallback(async (cmd: number, opts?: { offset?: number; rate?: number }) => {
+    const url = getZmsControlUrl(portalUrl, cmd, connKey, {
+      token,
+      apiUrl,
+      offset: opts?.offset,
+      rate: opts?.rate,
+      minStreamingPort,
+      monitorId,
+    });
 
     try {
       await httpGet(url);
@@ -142,6 +138,32 @@ export function ZmsEventPlayer({
       });
     }
   }, [portalUrl, apiUrl, connKey, token, minStreamingPort, monitorId]);
+
+  // Send CMD_QUIT on unmount so the nph-zms process exits instead of idling.
+  // Params are kept in a ref so the cleanup closure is never stale.
+  const quitParamsRef = useRef({ portalUrl, token, apiUrl, connKey, minStreamingPort, monitorId });
+  useEffect(() => {
+    quitParamsRef.current = { portalUrl, token, apiUrl, connKey, minStreamingPort, monitorId };
+  }, [portalUrl, token, apiUrl, connKey, minStreamingPort, monitorId]);
+
+  useEffect(() => {
+    return () => {
+      const p = quitParamsRef.current;
+      const url = getZmsControlUrl(p.portalUrl, ZMS_COMMANDS.cmdQuit, p.connKey, {
+        token: p.token,
+        apiUrl: p.apiUrl,
+        minStreamingPort: p.minStreamingPort,
+        monitorId: p.monitorId,
+      });
+      // Fire-and-forget: the component is gone, just release the server process
+      httpGet(url).catch((err) => {
+        log.zmsEventPlayer('CMD_QUIT on unmount failed', LogLevel.DEBUG, {
+          connkey: p.connKey,
+          error: err,
+        });
+      });
+    };
+  }, []); // Empty deps = only run on unmount
 
   // Poll stream status to track playback position.
   // Uses an AbortController shared with all in-flight httpGet calls so unmount
@@ -157,7 +179,7 @@ export function ZmsEventPlayer({
 
     const tick = async () => {
       if (signal.aborted) return;
-      const url = getZmsControlUrl(portalUrl, ZM_CMD.QUERY, connKey, { token, apiUrl, minStreamingPort, monitorId });
+      const url = getZmsControlUrl(portalUrl, ZMS_COMMANDS.cmdQuery, connKey, { token, apiUrl, minStreamingPort, monitorId });
       try {
         const resp = await httpGet<{ status?: { progress?: number; duration?: number } }>(url, { signal });
         if (signal.aborted) return;
@@ -168,7 +190,7 @@ export function ZmsEventPlayer({
           setCurrentFrame(frame);
 
           if (fraction >= 0.99) {
-            sendCommand(ZM_CMD.PAUSE);
+            sendCommand(ZMS_COMMANDS.cmdPause);
             setIsPlaying(false);
             setCurrentFrame(totalFrames);
           }
@@ -198,13 +220,21 @@ export function ZmsEventPlayer({
   // Handle play/pause
   const togglePlayPause = useCallback(() => {
     if (isPlaying) {
-      sendCommand(ZM_CMD.PAUSE);
+      sendCommand(ZMS_COMMANDS.cmdPause);
       setIsPlaying(false);
     } else {
-      sendCommand(ZM_CMD.PLAY);
+      sendCommand(ZMS_COMMANDS.cmdPlay);
       setIsPlaying(true);
     }
   }, [isPlaying, sendCommand]);
+
+  // Change playback speed with CMD_VARPLAY on the existing connkey, matching
+  // ZoneMinder's own event UI. zms resumes playing after a VARPLAY.
+  const changeSpeed = useCallback((rate: number) => {
+    setPlaybackSpeed(rate);
+    sendCommand(ZMS_COMMANDS.cmdVarPlay, { rate });
+    setIsPlaying(true);
+  }, [sendCommand]);
 
   // Handle frame navigation
   const goToFrame = useCallback((frame: number) => {
@@ -213,7 +243,7 @@ export function ZmsEventPlayer({
 
     // Seek to offset in seconds
     const offset = frameToOffset(newFrame);
-    sendCommand(ZM_CMD.SEEK, offset);
+    sendCommand(ZMS_COMMANDS.cmdSeek, { offset });
   }, [totalFrames, frameToOffset, sendCommand]);
 
   const seekBack = useCallback(() => {
@@ -392,7 +422,8 @@ export function ZmsEventPlayer({
                 key={preset.value}
                 variant={playbackSpeed === preset.value ? 'default' : 'outline'}
                 size="sm"
-                onClick={() => setPlaybackSpeed(preset.value)}
+                onClick={() => changeSpeed(preset.value)}
+                data-testid={`zms-speed-${preset.value}`}
               >
                 {preset.label}
               </Button>

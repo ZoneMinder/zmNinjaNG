@@ -5,6 +5,7 @@
  * They represent the official ZoneMinder protocol values and should not be modified.
  *
  * References:
+ * - ZoneMinder source: src/zm_stream.h (MsgCommand enum)
  * - ZoneMinder source: src/zms.cpp (streaming daemon)
  * - ZoneMinder source: web/includes/actions/control.php (control actions)
  * - ZoneMinder documentation: https://zoneminder.readthedocs.io/
@@ -22,11 +23,11 @@ export const ZMS_COMMANDS = {
   /** No command / idle */
   cmdNone: 0,
 
-  /** Start/resume playback */
-  cmdPlay: 1,
-
   /** Pause playback */
-  cmdPause: 2,
+  cmdPause: 1,
+
+  /** Start/resume playback */
+  cmdPlay: 2,
 
   /** Stop playback */
   cmdStop: 3,
@@ -73,11 +74,11 @@ export const ZMS_COMMANDS = {
   /** Quit/close stream connection - IMPORTANT for cleanup */
   cmdQuit: 17,
 
-  /** Query stream status */
-  cmdQuery: 18,
-
   /** Set maximum FPS */
-  cmdMaxFps: 19,
+  cmdMaxFps: 18,
+
+  /** Query stream status */
+  cmdQuery: 99,
 } as const;
 
 /**

@@ -1965,11 +1965,12 @@ The ZMS daemon accepts various control commands via HTTP requests:
 
    // src/lib/zm-constants.ts
    export const ZMS_COMMANDS = {
-     cmdPlay: 1,      // Start/resume playback
-     cmdPause: 2,     // Pause playback
+     cmdPause: 1,     // Pause playback
+     cmdPlay: 2,      // Start/resume playback
      cmdStop: 3,      // Stop playback
+     cmdVarPlay: 15,  // Change playback rate (with rate param)
      cmdQuit: 17,     // Close stream connection
-     cmdQuery: 18,    // Query stream status
+     cmdQuery: 99,    // Query stream status
      // ... more commands
    } as const;
 

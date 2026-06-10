@@ -317,7 +317,7 @@ describe('getEventZmsUrl', () => {
 
 describe('getZmsControlUrl', () => {
   const portalUrl = 'https://zm.com';
-  const command = 1; // ZMS_COMMANDS.cmdPlay
+  const command = 1; // ZMS_COMMANDS.cmdPause
   const connkey = 'conn123';
 
   it('generates ZMS control URL', () => {
@@ -341,6 +341,19 @@ describe('getZmsControlUrl', () => {
       token: 'mytoken',
     });
     expect(result).toContain('token=mytoken');
+  });
+
+  it('includes rate when provided', () => {
+    const result = getZmsControlUrl(portalUrl, 15, connkey, {
+      rate: 200,
+    });
+    expect(result).toContain('command=15');
+    expect(result).toContain('rate=200');
+  });
+
+  it('omits rate when not provided', () => {
+    const result = getZmsControlUrl(portalUrl, command, connkey);
+    expect(result).not.toContain('rate=');
   });
 });
 

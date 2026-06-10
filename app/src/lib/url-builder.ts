@@ -385,11 +385,12 @@ export function getZmsControlUrl(
     token?: string;
     apiUrl?: string;
     offset?: number;
+    rate?: number;
     minStreamingPort?: number;
     monitorId?: string;
   } = {}
 ): string {
-  const { token, apiUrl, offset, minStreamingPort, monitorId } = options;
+  const { token, apiUrl, offset, rate, minStreamingPort, monitorId } = options;
 
   const params: Record<string, string | number> = {
     command: command.toString(),
@@ -399,6 +400,7 @@ export function getZmsControlUrl(
   };
 
   if (offset !== undefined) params.offset = offset;
+  if (rate !== undefined) params.rate = rate;
 
   const url = buildUrl(portalUrl, '/index.php', params, token, apiUrl);
   return applyMultiPort(url, monitorId || '', minStreamingPort);
