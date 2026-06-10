@@ -216,15 +216,18 @@ export const API_PAGINATION = {
 } as const;
 
 /**
- * Event List View Constants
+ * List Virtualization Constants
  *
- * Configuration for the events list display.
+ * Row windowing for the events list and logs views (@tanstack/react-virtual).
+ * Estimates are starting heights; rows are re-measured after render.
  */
-export const EVENT_LIST = {
-  // Only virtualize lists larger than this threshold.
-  // Smaller lists render directly to avoid scroll margin calculation complexity
-  // when there's content above the list (header, heatmap, etc.)
-  virtualizationThreshold: 100,
+export const LIST_VIRTUALIZATION = {
+  // Estimated event row height before measurement (px): thumbnail (max 112px) plus card padding and row gap
+  eventRowEstimate: 140,
+  // Estimated log entry height before measurement (px)
+  logRowEstimate: 96,
+  // Rows rendered beyond the visible window on each side
+  overscan: 6,
 } as const;
 
 /**

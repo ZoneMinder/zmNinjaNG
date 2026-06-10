@@ -27,6 +27,18 @@ const logs = [
   },
 ];
 
+// jsdom has no layout, so the real virtualizer would render zero rows.
+// Render every row so list assertions exercise the virtualized path.
+vi.mock('@tanstack/react-virtual', () => ({
+  useVirtualizer: ({ count }: { count: number }) => ({
+    getTotalSize: () => count * 96,
+    getVirtualItems: () =>
+      Array.from({ length: count }, (_, index) => ({ index, key: index, size: 96, start: index * 96 })),
+    measureElement: () => {},
+    options: { scrollMargin: 0 },
+  }),
+}));
+
 vi.mock('../../stores/logs', () => ({
   useLogStore: (selector: (state: { logs: any[]; clearLogs: typeof clearLogs }) => unknown) =>
     selector({

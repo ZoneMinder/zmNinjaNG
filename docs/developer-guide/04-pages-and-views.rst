@@ -412,37 +412,13 @@ Events
 
 **Location**: ``src/pages/Events.tsx``
 
-Timeline/list of recorded events with infinite scroll via
-``useInfiniteQuery``.
-
-.. code:: tsx
-
-   export default function Events() {
-     const { t } = useTranslation();
-     const { currentProfile } = useCurrentProfile();
-     const [filters, setFilters] = useState({ monitorId: null, date: null });
-
-     const { data, isLoading, fetchNextPage, hasNextPage } = useInfiniteQuery({
-       queryKey: ['events', currentProfile?.id, filters],
-       queryFn: ({ pageParam = 0 }) => getEvents({ ...filters, page: pageParam }),
-       getNextPageParam: (lastPage) => lastPage.nextPage,
-       enabled: !!currentProfile,
-     });
-
-     return (
-       <div className="p-3 sm:p-4 md:p-6 space-y-4">
-         <h1 className="text-base sm:text-lg font-bold tracking-tight">
-           {t('events.title')}
-         </h1>
-         <EventFilters filters={filters} onChange={setFilters} />
-         <EventTimeline
-           events={data?.pages.flatMap((p) => p.events)}
-           onLoadMore={fetchNextPage}
-           hasMore={hasNextPage}
-         />
-       </div>
-     );
-   }
+List of recorded events with filtering, manual "Load More" pagination
+(``useEventPagination``), pull-to-refresh, and a montage grid mode.
+Events are fetched with ``useQuery`` keyed on the active filters and
+the current page limit. The list view (``EventListView``) virtualizes
+rows with ``useVirtualizer`` from ``@tanstack/react-virtual`` against
+the page scroll container, so only rows near the viewport mount. The
+montage grid renders all tiles.
 
 ProfileForm
 -----------
@@ -518,7 +494,9 @@ Logs (``src/pages/Logs.tsx``)
 Unified view of zmNinjaNg app logs (in-memory, ephemeral) and
 ZoneMinder server logs (fetched via API). Toggle between App and
 Server, filter by level (DEBUG / INFO / WARN / ERROR) and component,
-and export or share to file.
+and export or share to file. Log rows are virtualized with
+``useVirtualizer`` from ``@tanstack/react-virtual``, so only rows near
+the viewport mount even when filters leave thousands of entries.
 
 Notifications
 ~~~~~~~~~~~~~
