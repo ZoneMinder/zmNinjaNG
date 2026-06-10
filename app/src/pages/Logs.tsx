@@ -13,10 +13,8 @@ import { Platform } from '../lib/platform';
 import { getLogFile } from '../lib/log-file';
 import { LOG_FILE_MAX_ENTRIES } from '../lib/log-file/types';
 import { useToast } from '../hooks/use-toast';
-import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useVirtualizer } from '@tanstack/react-virtual';
-import { LIST_VIRTUALIZATION } from '../lib/zmninja-ng-constants';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
 import {
     AlertDialog,
@@ -76,27 +74,6 @@ function LogCodeBlock({ content }: { content: string }) {
 
 type LogSource = 'zmng' | 'server';
 
-const unassignedComponentValue = 'unassigned';
-
-// Map log level strings to numeric values for filtering
-const logLevelValue = (level: string): number => {
-    switch (level) {
-        case 'DEBUG': return LogLevel.DEBUG;
-        case 'INFO': return LogLevel.INFO;
-        case 'WARN': return LogLevel.WARN;
-        case 'ERROR': return LogLevel.ERROR;
-        default: return LogLevel.DEBUG;
-    }
-};
-
-const getLogComponentValue = (log: LogEntry) => {
-    const component = log.context?.component;
-    if (typeof component === 'string' && component.trim().length > 0) {
-        return component;
-    }
-    return unassignedComponentValue;
-};
-
 export default function Logs() {
     const logs = useLogStore((state) => state.logs);
     const clearLogs = useLogStore((state) => state.clearLogs);
@@ -113,6 +90,7 @@ export default function Logs() {
     const [logSource, setLogSource] = useState<LogSource>('zmng');
     const [zmLogs, setZmLogs] = useState<ZMLog[]>([]);
     const [isLoadingZmLogs, setIsLoadingZmLogs] = useState(false);
+    const unassignedComponentValue = 'unassigned';
 
     // Use the appropriate component filter based on log source
     const selectedComponents = logSource === 'zmng' ? selectedComponentsZmng : selectedComponentsServer;
@@ -153,6 +131,25 @@ export default function Logs() {
             title: t('common.success'),
             description: t('logs.level_updated'),
         });
+    };
+
+    // Map log level strings to numeric values for filtering
+    const logLevelValue = (level: string): number => {
+        switch (level) {
+            case 'DEBUG': return LogLevel.DEBUG;
+            case 'INFO': return LogLevel.INFO;
+            case 'WARN': return LogLevel.WARN;
+            case 'ERROR': return LogLevel.ERROR;
+            default: return LogLevel.DEBUG;
+        }
+    };
+
+    const getLogComponentValue = (log: LogEntry) => {
+        const component = log.context?.component;
+        if (typeof component === 'string' && component.trim().length > 0) {
+            return component;
+        }
+        return unassignedComponentValue;
     };
 
     const componentOptions = useMemo(() => {
@@ -234,38 +231,20 @@ export default function Logs() {
     // Filter logs based on selected level and components.
     // Per-component overrides beat the global level, matching Logger.createComponentLogger:
     // a component pinned to DEBUG must remain visible even when global is NONE.
-    // Memoized so the virtualizer's getItemKey keeps a stable identity between renders.
     const currentLevel = logLevel;
-    const filteredLogs = useMemo(() =>
-        (logSource === 'zmng' ? logs : zmLogsAsDisplay).filter((log) => {
-            const componentName = log.context?.component;
-            const effectiveLevel =
-                typeof componentName === 'string' && componentLogLevels?.[componentName] !== undefined
-                    ? componentLogLevels[componentName]
-                    : currentLevel;
-            const passesLevel = logLevelValue(log.level) >= effectiveLevel;
-            if (!passesLevel) return false;
-            if (selectedComponents.length === 0) return true;
-            const componentValue = logSource === 'zmng'
-                ? getLogComponentValue(log as LogEntry)
-                : (log.context?.component as string || '');
-            return selectedComponents.includes(componentValue);
-        }),
-        [logSource, logs, zmLogsAsDisplay, componentLogLevels, currentLevel, selectedComponents]
-    );
-
-    // Virtualize log rows: filters can leave thousands of entries.
-    // getItemKey must keep a stable identity between renders: the virtualizer
-    // treats a new function as a measurement-options change and schedules a
-    // re-render during render, which loops forever.
-    const logScrollRef = useRef<HTMLDivElement>(null);
-    const getItemKey = useCallback((index: number) => filteredLogs[index].id, [filteredLogs]);
-    const logVirtualizer = useVirtualizer({
-        count: filteredLogs.length,
-        getScrollElement: () => logScrollRef.current,
-        estimateSize: () => LIST_VIRTUALIZATION.logRowEstimate,
-        overscan: LIST_VIRTUALIZATION.overscan,
-        getItemKey,
+    const filteredLogs = (logSource === 'zmng' ? logs : zmLogsAsDisplay).filter((log) => {
+        const componentName = log.context?.component;
+        const effectiveLevel =
+            typeof componentName === 'string' && componentLogLevels?.[componentName] !== undefined
+                ? componentLogLevels[componentName]
+                : currentLevel;
+        const passesLevel = logLevelValue(log.level) >= effectiveLevel;
+        if (!passesLevel) return false;
+        if (selectedComponents.length === 0) return true;
+        const componentValue = logSource === 'zmng'
+            ? getLogComponentValue(log as LogEntry)
+            : (log.context?.component as string || '');
+        return selectedComponents.includes(componentValue);
     });
 
     const exportLogsAsText = (entries: LogEntry[]) => {
@@ -567,7 +546,7 @@ export default function Logs() {
                         <CardTitle className="text-base">{t('logs.log_entries', { count: filteredLogs.length })}</CardTitle>
                     </div>
                 </CardHeader>
-                <CardContent ref={logScrollRef} className="p-0 flex-1 overflow-y-auto font-mono text-xs sm:text-sm">
+                <CardContent className="p-0 flex-1 overflow-y-auto font-mono text-xs sm:text-sm">
                     {isLoadingZmLogs ? (
                         <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-8">
                             <ScrollText className="h-12 w-12 mb-4 opacity-20 animate-pulse" />
@@ -579,22 +558,9 @@ export default function Logs() {
                             <p>{logSource === 'zmng' ? t('logs.no_logs_available') : t('logs.no_server_logs')}</p>
                         </div>
                     ) : (
-                        <div
-                            className="relative w-full"
-                            style={{ height: `${logVirtualizer.getTotalSize()}px` }}
-                            data-testid="logs-list"
-                        >
-                            {logVirtualizer.getVirtualItems().map((virtualRow) => {
-                                const log = filteredLogs[virtualRow.index];
-                                return (
-                                <div
-                                    key={virtualRow.key}
-                                    ref={logVirtualizer.measureElement}
-                                    data-index={virtualRow.index}
-                                    className="absolute left-0 top-0 w-full border-b p-2 sm:p-3 hover:bg-muted/50 transition-colors"
-                                    style={{ transform: `translateY(${virtualRow.start}px)` }}
-                                    data-testid="log-entry"
-                                >
+                        <div className="divide-y" data-testid="logs-list">
+                            {filteredLogs.map((log) => (
+                                <div key={log.id} className="p-2 sm:p-3 hover:bg-muted/50 transition-colors" data-testid="log-entry">
                                     <div className="flex items-start gap-2 sm:gap-3">
                                         <div className="shrink-0 pt-0.5">
                                             <Badge className={cn("text-[10px] px-1 py-0 h-5", getLevelColor(log.level))}>
@@ -639,8 +605,7 @@ export default function Logs() {
                                         </div>
                                     </div>
                                 </div>
-                                );
-                            })}
+                            ))}
                         </div>
                     )}
                 </CardContent>

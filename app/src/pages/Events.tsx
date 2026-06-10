@@ -2,8 +2,7 @@
  * Events Page
  *
  * Displays a list of events with filtering and infinite scrolling.
- * List view rows are virtualized via @tanstack/react-virtual in
- * EventListView; the montage grid renders all tiles.
+ * Uses virtualization for performance with large lists.
  */
 
 import { useMemo, useRef, useState, useEffect } from 'react';
@@ -555,7 +554,6 @@ export default function Events() {
             eventTagMap={eventTagMap}
             eventFilters={serverFilters}
             minStreamingPort={resolveMinStreamingPort(currentProfile?.minStreamingPort, settings.forceDisableMultiPort)}
-            scrollRef={parentRef}
           />
         )}
       </div>
