@@ -13,15 +13,16 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../components/ui/card';
 import { useProfileStore } from '../stores/profile';
-import { createApiClient, setApiClient } from '../api/client';
-import { discoverUrls, DiscoveryError } from '../lib/discovery';
+import { setApiClient } from '../api/client';
+import { createStoreApiClient } from '../api/store-gates';
+import { discoverUrls, DiscoveryError } from '../services/discovery';
 import { Switch } from '../components/ui/switch';
 import { Video, Server, ShieldCheck, ArrowRight, Loader2, Eye, EyeOff, ArrowLeft, QrCode, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { log, LogLevel } from '../lib/logger';
 import { fetchGo2RTCPath } from '../api/auth';
 import { QRScanner } from '../components/QRScanner';
-import { parseQRProfile } from '../lib/qr-profile';
+import { parseQRProfile } from '../services/qr-profile';
 import { toast } from 'sonner';
 import { CertTrustDialog } from '../components/CertTrustDialog';
 import { Platform } from '../lib/platform';
@@ -193,7 +194,7 @@ export default function ProfileForm() {
         log.profileForm('Manual URLs set', LogLevel.INFO, { portalUrl: confirmedPortalUrl, apiUrl, cgiUrl });
 
         // Initialize API client with manual URL
-        const client = createApiClient(apiUrl);
+        const client = createStoreApiClient(apiUrl);
         setApiClient(client);
       } else {
         // Discover URLs from portal URL

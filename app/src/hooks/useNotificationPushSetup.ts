@@ -42,13 +42,13 @@ export function useNotificationPushSetup({
     const pushService = getPushService();
 
     if (pushService.isReady()) {
-      // Token already obtained — re-register with server for current mode
+      // Token already obtained: re-register with server for current mode
       log.notificationHandler('Re-registering FCM token for mode change', LogLevel.INFO, { mode });
       pushService.registerTokenWithServer().catch((error) => {
         log.notificationHandler('Failed to re-register FCM token', LogLevel.ERROR, error);
       });
     } else {
-      // First time — initialize to get FCM token and register
+      // First time: initialize to get FCM token and register
       pushService.initialize().catch((error) => {
         log.notificationHandler('Failed to initialize push notifications', LogLevel.ERROR, error);
       });

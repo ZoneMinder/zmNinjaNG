@@ -47,7 +47,7 @@ Modified Files
 
 - ``/app/src/lib/url-builder.ts`` - Added ``getGo2RTCWebSocketUrl()``
   and ``getGo2RTCStreamUrl()``
-- ``/app/src/lib/discovery.ts`` - Added Go2RTC endpoint detection (port
+- ``/app/src/services/discovery.ts`` - Added Go2RTC endpoint detection (port
   1984)
 - ``/app/src/api/types.ts`` - Added Go2RTC fields to Monitor and Profile
   types
@@ -226,7 +226,7 @@ Two new URL builder functions in ``lib/url-builder.ts``:
 Discovery
 ~~~~~~~~~
 
-Extended ``lib/discovery.ts`` to probe for Go2RTC at port 1984:
+Extended ``services/discovery.ts`` to probe for Go2RTC at port 1984:
 
 .. code:: typescript
 
@@ -377,7 +377,7 @@ Located in:
 - ``/app/src/hooks/__tests__/useGo2RTCStream.test.ts`` - Hook lifecycle
   tests (15 tests)
 - ``/app/src/lib/__tests__/url-builder.test.ts`` - URL builder tests
-- ``/app/src/lib/__tests__/discovery.test.ts`` - Discovery tests
+- ``/app/src/services/__tests__/discovery.test.ts`` - Discovery tests
 
 **Key test areas:**
 

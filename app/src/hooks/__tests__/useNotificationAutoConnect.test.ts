@@ -7,6 +7,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
+import type { PluginListenerHandle } from '@capacitor/core';
 import { useNotificationAutoConnect } from '../useNotificationAutoConnect';
 
 // Mock logger
@@ -23,30 +24,35 @@ vi.mock('../../lib/logger', () => ({
   },
 }));
 
-// Mock Platform
+// Mock Platform (mutable so individual tests can flip isNative)
+const mockPlatform = vi.hoisted(() => ({ isDesktopOrWeb: true, isNative: false }));
 vi.mock('../../lib/platform', () => ({
-  Platform: {
-    isDesktopOrWeb: true,
-  },
+  Platform: mockPlatform,
 }));
 
-// Mock notification store (getState usage inside hook)
+// Mock @capacitor/app (dynamically imported by the hook on native)
+const mockAppAddListener = vi.hoisted(() => vi.fn());
+vi.mock('@capacitor/app', () => ({
+  App: { addListener: mockAppAddListener },
+}));
+
+// Mock notification store (getState + poller wiring usage inside hook)
 const mockNotificationStoreState = { connectionState: 'disconnected' };
+const mockStartEventPoller = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('../../stores/notifications', () => ({
   useNotificationStore: {
     getState: vi.fn(() => mockNotificationStoreState),
   },
+  startEventPoller: (profileId: string) => mockStartEventPoller(profileId),
 }));
 
 // Mock event poller
-const mockPollerStart = vi.fn().mockResolvedValue(undefined);
 const mockPollerStop = vi.fn();
 const mockPollerIsRunning = vi.fn().mockReturnValue(false);
 
 vi.mock('../../services/eventPoller', () => ({
   getEventPoller: vi.fn(() => ({
-    start: mockPollerStart,
     stop: mockPollerStop,
     isRunning: mockPollerIsRunning,
   })),
@@ -118,6 +124,9 @@ describe('useNotificationAutoConnect', () => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     mockNotificationStoreState.connectionState = 'disconnected';
+    mockPlatform.isDesktopOrWeb = true;
+    mockPlatform.isNative = false;
+    mockAppAddListener.mockResolvedValue({ remove: vi.fn() });
   });
 
   afterEach(() => {
@@ -141,7 +150,7 @@ describe('useNotificationAutoConnect', () => {
       });
       renderHook(() => useNotificationAutoConnect(params));
 
-      expect(mockPollerStart).not.toHaveBeenCalled();
+      expect(mockStartEventPoller).not.toHaveBeenCalled();
     });
 
     it('does not attempt connect when settings is null', () => {
@@ -290,7 +299,7 @@ describe('useNotificationAutoConnect', () => {
         await vi.runAllTimersAsync();
       });
 
-      // Still only once — hasAttemptedAutoConnect flag prevents repeated calls
+      // Still only once: hasAttemptedAutoConnect flag prevents repeated calls
       expect(params.connect).toHaveBeenCalledTimes(1);
     });
   });
@@ -302,7 +311,7 @@ describe('useNotificationAutoConnect', () => {
       });
       renderHook(() => useNotificationAutoConnect(params));
 
-      expect(mockPollerStart).toHaveBeenCalledWith('profile-1');
+      expect(mockStartEventPoller).toHaveBeenCalledWith('profile-1');
     });
 
     it('does not call connect() in direct mode', async () => {
@@ -359,7 +368,7 @@ describe('useNotificationAutoConnect', () => {
 
       expect(result.current).toBeUndefined(); // hook returns void
 
-      // Change notification mode — this resets hasAttemptedAutoConnect
+      // Change notification mode: this resets hasAttemptedAutoConnect
       const newParams = makeParams({
         settings: { ...defaultSettings, notificationMode: 'direct' },
       });
@@ -367,7 +376,7 @@ describe('useNotificationAutoConnect', () => {
       rerender(newParams);
 
       // Poller should now be started (new mode = direct)
-      expect(mockPollerStart).toHaveBeenCalled();
+      expect(mockStartEventPoller).toHaveBeenCalled();
     });
   });
 
@@ -434,6 +443,65 @@ describe('useNotificationAutoConnect', () => {
       expect(removed).toBe(true);
 
       removeEventSpy.mockRestore();
+    });
+  });
+
+  describe('native listener registration races', () => {
+    it('removes the network listener when registration resolves after unmount', async () => {
+      mockPlatform.isNative = true;
+      const remove = vi.fn().mockResolvedValue(undefined);
+      let resolveListener: (handle: PluginListenerHandle) => void = () => {};
+      const { Network } = await import('@capacitor/network');
+      vi.mocked(Network.addListener).mockReturnValueOnce(
+        new Promise<PluginListenerHandle>((resolve) => { resolveListener = resolve; }),
+      );
+
+      const params = makeParams();
+      const { unmount } = renderHook(() => useNotificationAutoConnect(params));
+
+      // Let the dynamic import resolve so addListener is invoked
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(Network.addListener).toHaveBeenCalled();
+
+      // Unmount while addListener is still pending, then resolve it
+      unmount();
+      resolveListener({ remove });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(remove).toHaveBeenCalledTimes(1);
+    });
+
+    it('removes the app resume listener when registration resolves after unmount', async () => {
+      mockPlatform.isNative = true;
+      const remove = vi.fn();
+      let resolveListener: (handle: { remove: () => void }) => void = () => {};
+      mockAppAddListener.mockReturnValueOnce(
+        new Promise((resolve) => { resolveListener = resolve; }),
+      );
+
+      const params = makeParams();
+      const { unmount } = renderHook(() => useNotificationAutoConnect(params));
+
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(mockAppAddListener).toHaveBeenCalledWith('appStateChange', expect.any(Function));
+
+      unmount();
+      resolveListener({ remove });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(remove).toHaveBeenCalledTimes(1);
     });
   });
 

@@ -14,7 +14,7 @@ import { Button } from '../ui/button';
 import { Activity, Settings, Download, Clock, Video, Eye, Disc, Volume2, VolumeX } from 'lucide-react';
 import { cn, formatEventCount } from '../../lib/utils';
 import { handleKeyClick } from '../../lib/tv-a11y';
-import { downloadSnapshotFromElement } from '../../lib/download';
+import { downloadSnapshotFromElement } from '../../services/download';
 import { toast } from 'sonner';
 import { LiveMonitorPlayer } from './LiveMonitorPlayer';
 import { MonitorHoverPreview } from './MonitorHoverPreview';
@@ -197,7 +197,7 @@ function MonitorCardComponent({
               <Clock className="h-2.5 w-2.5 mr-0.5 shrink-0" />
               <span className="truncate">{t('sidebar.events')}</span>
               {eventCount !== undefined && eventCount > 0 && (
-                <Badge variant="secondary" className="ml-0.5 px-0.5 py-0 text-[8px] h-3 min-w-3 shrink-0 bg-blue-500/15 text-blue-400 border-blue-500/20">
+                <Badge variant="info" className="ml-0.5 px-0.5 py-0 text-[8px] h-3 min-w-3 shrink-0">
                   {formatEventCount(eventCount)}
                 </Badge>
               )}
@@ -343,8 +343,8 @@ function MonitorCardComponent({
               <span className="truncate">{t('sidebar.events')}</span>
               {eventCount !== undefined && eventCount > 0 && (
                 <Badge
-                  variant="secondary"
-                  className="ml-1 px-1 py-0 text-[10px] h-4 min-w-4 shrink-0 bg-blue-500/15 text-blue-400 border-blue-500/20"
+                  variant="info"
+                  className="ml-1 px-1 py-0 text-[10px] h-4 min-w-4 shrink-0"
                 >
                   {formatEventCount(eventCount)}
                 </Badge>

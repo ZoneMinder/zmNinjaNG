@@ -3,7 +3,7 @@ import type { CertInfo, SSLTrustPlugin } from './definitions';
 
 export class SSLTrustWeb extends WebPlugin implements SSLTrustPlugin {
   async enable(): Promise<void> {
-    // No-op on web — browsers handle their own certificate validation
+    // No-op on web: browsers handle their own certificate validation
   }
 
   async disable(): Promise<void> {

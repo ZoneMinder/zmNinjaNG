@@ -26,7 +26,7 @@ import { Badge } from '../ui/badge';
 import { LiveMonitorPlayer } from './LiveMonitorPlayer';
 import { Clock, ChartGantt, Download, Volume2, VolumeX, Pin, MoreVertical } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { downloadSnapshotFromElement } from '../../lib/download';
+import { downloadSnapshotFromElement } from '../../services/download';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -77,7 +77,7 @@ function MontageMonitorComponent({
   const resolvedFit = objectFit ?? 'cover';
   const isRTC = monitor.Go2RTCEnabled === true && !!currentProfile?.go2rtcUrl;
 
-  // Alarm pulse — subscribe to notification store for new events on this monitor
+  // Alarm pulse: subscribe to notification store for new events on this monitor
   const [isAlarming, setIsAlarming] = useState(false);
   const [monitorEventCount, setMonitorEventCount] = useState(0);
   const alarmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -140,7 +140,7 @@ function MontageMonitorComponent({
           : "border-0 shadow-none bg-card",
       )}
     >
-      {/* Edit mode border — rendered as overlay to avoid compact CSS !important overrides */}
+      {/* Edit mode border: rendered as overlay to avoid compact CSS !important overrides */}
       {isEditing && !isFullscreen && (
         <div
           className="absolute inset-0 z-10 pointer-events-none"
@@ -286,7 +286,7 @@ function MontageMonitorComponent({
         )}
       </div>
 
-      {/* Pin button — bottom-left corner, outside drag handle, edit mode only */}
+      {/* Pin button: bottom-left corner, outside drag handle, edit mode only */}
       {isEditing && !isFullscreen && onPinToggle && (
         <button
           type="button"

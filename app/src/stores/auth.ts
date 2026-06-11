@@ -43,6 +43,8 @@ interface AuthState {
   refreshAccessToken: () => Promise<void>;
   setTokens: (response: LoginResponse) => void;
   getFreshAccessToken: () => Promise<string | null>;
+  proactiveLogin: (reLogin: () => Promise<boolean>) => Promise<boolean>;
+  recoverFromAuthFailure: (reLogin?: () => Promise<boolean>) => Promise<boolean>;
   setReLoginCallback: (callback: (() => Promise<boolean>) | null) => void;
 }
 
@@ -80,7 +82,7 @@ const encryptedAuthStorage: PersistStorage<PersistedAuthState> = {
         try {
           parsed.state.refreshToken = await decrypt(parsed.state.refreshToken);
         } catch {
-          try { log.auth('Failed to decrypt refresh token — clearing stored token', LogLevel.ERROR); } catch { /* */ }
+          try { log.auth('Failed to decrypt refresh token: clearing stored token', LogLevel.ERROR); } catch { /* */ }
           parsed.state.refreshToken = null;
         }
       }
@@ -102,7 +104,7 @@ const encryptedAuthStorage: PersistStorage<PersistedAuthState> = {
       }
       storage.setItem(name, JSON.stringify(toStore));
     } catch {
-      try { log.auth('Failed to encrypt refresh token — storing plaintext fallback', LogLevel.ERROR); } catch { /* */ }
+      try { log.auth('Failed to encrypt refresh token: storing plaintext fallback', LogLevel.ERROR); } catch { /* */ }
       try { storage.setItem(name, JSON.stringify(value)); } catch { /* */ }
     }
   },
@@ -127,6 +129,44 @@ let pendingLogin: Promise<void> | null = null;
  * so we only hit /host/login.json once per stale window.
  */
 let pendingFreshToken: Promise<string | null> | null = null;
+
+/**
+ * Module-level dedup for the refresh POST itself. A proactive refresh
+ * (getFreshAccessToken) and a 401 recovery (recoverFromAuthFailure) would
+ * otherwise issue two concurrent refresh requests. Refs #184.
+ */
+let pendingRefresh: Promise<void> | null = null;
+
+/**
+ * Module-level dedup for the API client's proactive login: when several
+ * requests start while unauthenticated, the first invokes reLogin and the
+ * rest attach to the same attempt. Refs #184.
+ */
+let pendingProactiveLogin: Promise<boolean> | null = null;
+
+/**
+ * Single-flight 401 recovery shared by all in-flight requests. When a token
+ * expires under a busy view (e.g. montage), every pending request fails with
+ * 401 at once. Only the first caller runs refresh-then-reLogin; the rest await
+ * the same outcome. Refs #182.
+ */
+let pendingAuthRecovery: Promise<boolean> | null = null;
+
+/**
+ * Clear all pending single-flight gates. resetApiClient calls this on profile
+ * switch (via the reset hook registered in api/store-gates.ts) so the new
+ * profile never attaches to a login, refresh, or recovery started for the old
+ * one. In-flight promises still settle for their original callers, but each
+ * gate clears itself only when it is still the current one, so a stale finally
+ * cannot release a newer gate.
+ */
+export function resetAuthGates(): void {
+  pendingLogin = null;
+  pendingFreshToken = null;
+  pendingRefresh = null;
+  pendingProactiveLogin = null;
+  pendingAuthRecovery = null;
+}
 
 /**
  * Credentials-based re-login callback registered by the profile store at app
@@ -156,11 +196,11 @@ export const useAuthStore = create<AuthState>()(
       login: async (username: string, password: string) => {
         // If a login is already in flight, attach to it instead of starting a new one.
         if (pendingLogin) {
-          log.auth('Login already in flight — attaching to pending request', LogLevel.DEBUG);
+          log.auth('Login already in flight; attaching to pending request', LogLevel.DEBUG);
           return pendingLogin;
         }
         log.auth(`Login attempt for user: ${username}`);
-        pendingLogin = (async () => {
+        const attempt = (async () => {
           try {
             const response = await apiLogin({ user: username, pass: password });
             get().setTokens(response);
@@ -176,11 +216,15 @@ export const useAuthStore = create<AuthState>()(
             throw error;
           }
         })();
-        try {
-          return await pendingLogin;
-        } finally {
-          pendingLogin = null;
-        }
+        const gate: Promise<void> = attempt.finally(() => {
+          // Clear only if still ours: resetAuthGates may have cleared it and a
+          // newer login may already own the gate.
+          if (pendingLogin === gate) {
+            pendingLogin = null;
+          }
+        });
+        pendingLogin = gate;
+        return gate;
       },
 
       /**
@@ -204,26 +248,41 @@ export const useAuthStore = create<AuthState>()(
       /**
        * Refresh the access token using the stored refresh token.
        * If refresh fails, logs the user out.
+       *
+       * Single-flight: concurrent callers (proactive refresh, 401 recovery,
+       * the useTokenRefresh timer) attach to the same in-flight POST.
        */
       refreshAccessToken: async () => {
-        const { refreshToken, refreshTokenExpires } = get();
-        if (!refreshToken) {
-          throw new Error('No refresh token available');
+        if (pendingRefresh) {
+          return pendingRefresh;
         }
-        if (!refreshTokenExpires || refreshTokenExpires <= Date.now()) {
-          log.auth('Refresh token expired or missing expiry; skipping network call', LogLevel.WARN);
-          get().logout();
-          throw new Error('Refresh token expired');
-        }
+        const refresh = (async () => {
+          const { refreshToken, refreshTokenExpires } = get();
+          if (!refreshToken) {
+            throw new Error('No refresh token available');
+          }
+          if (!refreshTokenExpires || refreshTokenExpires <= Date.now()) {
+            log.auth('Refresh token expired or missing expiry; skipping network call', LogLevel.WARN);
+            get().logout();
+            throw new Error('Refresh token expired');
+          }
 
-        try {
-          const response = await apiRefreshToken(refreshToken);
-          get().setTokens(response);
-        } catch (error) {
-          log.auth('Token refresh failed', LogLevel.ERROR, error);
-          get().logout();
-          throw error;
-        }
+          try {
+            const response = await apiRefreshToken(refreshToken);
+            get().setTokens(response);
+          } catch (error) {
+            log.auth('Token refresh failed', LogLevel.ERROR, error);
+            get().logout();
+            throw error;
+          }
+        })();
+        const gate: Promise<void> = refresh.finally(() => {
+          if (pendingRefresh === gate) {
+            pendingRefresh = null;
+          }
+        });
+        pendingRefresh = gate;
+        return gate;
       },
 
       /**
@@ -307,7 +366,7 @@ export const useAuthStore = create<AuthState>()(
           return state.accessToken;
         }
 
-        pendingFreshToken = (async (): Promise<string | null> => {
+        const fetchFresh = (async (): Promise<string | null> => {
           try {
             await get().refreshAccessToken();
             return get().accessToken;
@@ -335,11 +394,76 @@ export const useAuthStore = create<AuthState>()(
           }
         })();
 
-        try {
-          return await pendingFreshToken;
-        } finally {
-          pendingFreshToken = null;
+        const gate: Promise<string | null> = fetchFresh.finally(() => {
+          if (pendingFreshToken === gate) {
+            pendingFreshToken = null;
+          }
+        });
+        pendingFreshToken = gate;
+        return gate;
+      },
+
+      /**
+       * Run the API client's proactive login through a single-flight gate.
+       * Several requests can start while unauthenticated (cold start, busy
+       * montage); only the first invokes reLogin, the rest share its outcome.
+       * Resolves to reLogin's result; rejects if reLogin rejects.
+       */
+      proactiveLogin: (reLogin: () => Promise<boolean>) => {
+        if (pendingProactiveLogin) {
+          return pendingProactiveLogin;
         }
+        const attempt = (async () => reLogin())();
+        const gate: Promise<boolean> = attempt.finally(() => {
+          if (pendingProactiveLogin === gate) {
+            pendingProactiveLogin = null;
+          }
+        });
+        pendingProactiveLogin = gate;
+        return gate;
+      },
+
+      /**
+       * Single-flight recovery after a request failed with 401: refresh the
+       * access token, fall back to reLogin, log out once when both fail.
+       * The refresh goes through refreshAccessToken, so a recovery that starts
+       * while a proactive refresh is pending attaches to the same POST instead
+       * of issuing a second one. Resolves true when recovery produced a valid
+       * session, false otherwise. Never rejects. Refs #182, #184.
+       */
+      recoverFromAuthFailure: (reLogin?: () => Promise<boolean>) => {
+        if (pendingAuthRecovery) {
+          return pendingAuthRecovery;
+        }
+        const recovery = (async (): Promise<boolean> => {
+          try {
+            if (!get().refreshToken) {
+              throw new Error('No refresh token available');
+            }
+            await get().refreshAccessToken();
+            return true;
+          } catch (refreshError) {
+            if (reLogin) {
+              try {
+                if (await reLogin()) {
+                  return true;
+                }
+              } catch (reLoginError) {
+                log.auth('Re-login failed during 401 recovery', LogLevel.ERROR, reLoginError);
+              }
+            }
+            log.auth('401 recovery failed; logging out', LogLevel.WARN, { error: refreshError });
+            get().logout();
+            return false;
+          }
+        })();
+        const gate: Promise<boolean> = recovery.finally(() => {
+          if (pendingAuthRecovery === gate) {
+            pendingAuthRecovery = null;
+          }
+        });
+        pendingAuthRecovery = gate;
+        return gate;
       },
     }),
     {

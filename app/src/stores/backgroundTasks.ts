@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { BACKGROUND_TASKS } from '../lib/zmninja-ng-constants';
 
 export type TaskType = 'download' | 'upload' | 'sync' | 'export';
 
@@ -46,6 +47,27 @@ interface BackgroundTasksState {
 
 let taskIdCounter = 0;
 
+const TERMINAL_STATUSES: ReadonlySet<TaskStatus> = new Set(['completed', 'failed', 'cancelled']);
+
+const isTerminal = (task: BackgroundTask) => TERMINAL_STATUSES.has(task.status);
+
+// Evict the oldest terminal tasks beyond the retention cap. Tasks are stored
+// in creation order, so the first terminal entries are the oldest. Active
+// (pending/in_progress) tasks are never evicted.
+function trimTerminalTasks(tasks: BackgroundTask[]): BackgroundTask[] {
+  let excess = tasks.filter(isTerminal).length - BACKGROUND_TASKS.maxRetainedTerminalTasks;
+  if (excess <= 0) {
+    return tasks;
+  }
+  return tasks.filter((task) => {
+    if (excess > 0 && isTerminal(task)) {
+      excess--;
+      return false;
+    }
+    return true;
+  });
+}
+
 export const useBackgroundTasks = create<BackgroundTasksState>((set, get) => ({
   tasks: [],
   drawerState: 'hidden',
@@ -61,7 +83,7 @@ export const useBackgroundTasks = create<BackgroundTasksState>((set, get) => ({
     };
 
     set((state) => ({
-      tasks: [...state.tasks, newTask],
+      tasks: trimTerminalTasks([...state.tasks, newTask]),
       drawerState: 'expanded', // Auto-expand when task is added
     }));
 
@@ -87,15 +109,17 @@ export const useBackgroundTasks = create<BackgroundTasksState>((set, get) => ({
 
   completeTask: (taskId) => {
     set((state) => ({
-      tasks: state.tasks.map((task) =>
-        task.id === taskId
-          ? {
-              ...task,
-              status: 'completed',
-              progress: 100,
-              completedAt: Date.now(),
-            }
-          : task
+      tasks: trimTerminalTasks(
+        state.tasks.map((task) =>
+          task.id === taskId
+            ? {
+                ...task,
+                status: 'completed' as const,
+                progress: 100,
+                completedAt: Date.now(),
+              }
+            : task
+        )
       ),
     }));
 
@@ -108,15 +132,17 @@ export const useBackgroundTasks = create<BackgroundTasksState>((set, get) => ({
 
   failTask: (taskId, error) => {
     set((state) => ({
-      tasks: state.tasks.map((task) =>
-        task.id === taskId
-          ? {
-              ...task,
-              status: 'failed',
-              error,
-              completedAt: Date.now(),
-            }
-          : task
+      tasks: trimTerminalTasks(
+        state.tasks.map((task) =>
+          task.id === taskId
+            ? {
+                ...task,
+                status: 'failed' as const,
+                error,
+                completedAt: Date.now(),
+              }
+            : task
+        )
       ),
     }));
   },
@@ -128,14 +154,16 @@ export const useBackgroundTasks = create<BackgroundTasksState>((set, get) => ({
     }
 
     set((state) => ({
-      tasks: state.tasks.map((t) =>
-        t.id === taskId
-          ? {
-              ...t,
-              status: 'cancelled',
-              completedAt: Date.now(),
-            }
-          : t
+      tasks: trimTerminalTasks(
+        state.tasks.map((t) =>
+          t.id === taskId
+            ? {
+                ...t,
+                status: 'cancelled' as const,
+                completedAt: Date.now(),
+              }
+            : t
+        )
       ),
     }));
   },

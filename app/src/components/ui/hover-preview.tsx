@@ -19,10 +19,10 @@
  *      no list item underneath can receive any tap.
  *
  *   2. A fullscreen transparent backdrop is rendered in the portal at
- *      `z-index: 9998` with `pointer-events: auto`. It lives in
+ *      `Z_INDEX.overlayBackdrop` with `pointer-events: auto`. It lives in
  *      `document.body` outside `#root`, so it stays interactive. Every
- *      tap on the screen — except those landing inside the preview
- *      itself — hit-tests to the backdrop.
+ *      tap on the screen, except those landing inside the preview
+ *      itself, hit-tests to the backdrop.
  *
  *   3. Dismissal closes on `click`, not on `pointerdown`. Closing on
  *      pointerdown would unmount the backdrop and restore `#root`'s
@@ -33,7 +33,7 @@
  *
  * - The release of the long-press itself fires a click on the preview
  *   IMG (because the preview is now over the original tap location).
- *   That click must NOT close the preview — `expectingReleaseClickRef`
+ *   That click must NOT close the preview: `expectingReleaseClickRef`
  *   tracks the first click after open and treats it as the release-click:
  *   blocked, but doesn't close. Subsequent clicks close.
  *
@@ -43,7 +43,7 @@
  *
  * The portal starts at the trigger's bounding rect and animates out to
  * the target size, with the zoom origin anchored to whichever corner of
- * the trigger is closest to the screen center — so the enlarged frame
+ * the trigger is closest to the screen center, so the enlarged frame
  * stays on-screen. `renderPreview` is only invoked while the preview is
  * open, so inner components (live stream players) are created on open
  * and torn down on close.
@@ -52,7 +52,8 @@
 import { useEffect, useRef, useState, type ReactNode, type PointerEvent as RPointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { Platform } from '../../lib/platform';
-import { UI_INTERACTIONS } from '../../lib/zmninja-ng-constants';
+import { UI_INTERACTIONS, Z_INDEX } from '../../lib/zmninja-ng-constants';
+import { useCapacitorListener } from '../../hooks/useCapacitorListener';
 
 /**
  * Module-level reference count of open hover previews. Multiple
@@ -283,26 +284,23 @@ export function HoverPreview({
       if (document.visibilityState === 'hidden') dismiss();
     };
     document.addEventListener('visibilitychange', onVisibility);
-    let removeAppStateListener: (() => void) | null = null;
-    if (Platform.isNative) {
-      (async () => {
-        try {
-          const { App } = await import('@capacitor/app');
-          const handle = await App.addListener('appStateChange', (state) => {
-            if (!state.isActive) dismiss();
-          });
-          removeAppStateListener = () => handle.remove();
-        } catch { /* plugin unavailable */ }
-      })();
-    }
     return () => {
       window.removeEventListener('scroll', dismiss, true);
       window.removeEventListener('wheel', dismiss);
       document.removeEventListener('visibilitychange', onVisibility);
-      if (removeAppStateListener) removeAppStateListener();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  // Dismiss when the app is backgrounded (native only, while open).
+  useCapacitorListener(
+    () => import('@capacitor/app').then((m) => m.App),
+    'appStateChange',
+    (state: { isActive: boolean }) => {
+      if (!state.isActive) closePreview();
+    },
+    { enabled: open && Platform.isNative },
+  );
 
   // Safety net: if the wrapper unmounts while the preview is open
   // (e.g. parent list re-renders mid-hover), release the inert lock
@@ -359,7 +357,7 @@ export function HoverPreview({
               style={{
                 position: 'fixed',
                 inset: 0,
-                zIndex: 9998,
+                zIndex: Z_INDEX.overlayBackdrop,
                 pointerEvents: 'auto',
                 background: 'transparent',
               }}
@@ -374,7 +372,7 @@ export function HoverPreview({
               width: rect.width,
               height: rect.height,
               pointerEvents: isNative ? 'auto' : 'none',
-              zIndex: 9999,
+              zIndex: Z_INDEX.overlay,
               transition: `left ${UI_INTERACTIONS.previewAnimationMs}ms ease-out, top ${UI_INTERACTIONS.previewAnimationMs}ms ease-out, width ${UI_INTERACTIONS.previewAnimationMs}ms ease-out, height ${UI_INTERACTIONS.previewAnimationMs}ms ease-out`,
             }}
             className="rounded-md overflow-hidden shadow-2xl ring-1 ring-border bg-card"

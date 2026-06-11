@@ -41,8 +41,10 @@ Key Directories Explained
   - ``useMonitorStream({ monitorId, serverId })``: MJPEG stream with server-resolved URLs.
   - ``useGo2RTCStream({ go2rtcUrl, monitorId, channel, controls })``: Go2RTC streaming. ``channel`` accepts a string (the ``StreamChannel`` field, e.g. ``"CameraDirectPrimary"``).
 
-  Note: ``usePTZControl`` lives in ``pages/hooks/usePTZControl.ts``, not
-  in ``src/hooks/``.
+  Note: not every hook lives in ``src/hooks/``. Domain-scoped hooks live
+  next to the code that uses them: ``pages/hooks/`` (``usePTZControl``,
+  ``useAlarmControl``) and ``components/<domain>/hooks/``
+  (``components/montage/hooks/useMontageGrid``).
 
 - ``lib/``: “Library” code - helpers that could theoretically be in
   a separate npm package.
@@ -62,6 +64,11 @@ Key Directories Explained
   - ``pushNotifications.ts``: FCM push notification handling on iOS/Android.
   - ``eventPoller.ts``: Direct-mode event polling on desktop/web.
   - ``profile.ts``: Profile-related service helpers.
+  - ``profile-bootstrap.ts`` / ``profile-initialization.ts``: profile store
+    rehydration and bootstrap on app start and profile switch.
+  - ``discovery.ts``: portal URL discovery when adding a profile.
+  - ``download.ts``: cross-platform snapshot and video downloads.
+  - ``qr-profile.ts``: QR code profile import/export.
 
 - ``stores/``: Global state management (see Chapter 3).
 
@@ -240,8 +247,11 @@ GridLayoutControls
 
 **Location**: ``src/components/montage/GridLayoutControls.tsx``
 
-Provides column presets (1–5) and saved layout management. Renders as a
-``Sheet`` on mobile, ``DropdownMenu`` on desktop.
+Provides column presets (1–5) and saved layout management. A thin
+wrapper around the shared ``GridColumnsMenu`` base (see
+:ref:`grid-columns-menu`) that adds saved-layout menu sections, the
+custom-columns validation (1–10, ``montage.invalid_columns`` toast),
+and a ``SaveLayoutDialog`` for naming layouts before saving.
 
 **Props:**
 
@@ -253,7 +263,23 @@ Provides column presets (1–5) and saved layout management. Renders as a
 - ``onSaveLayout(name)`` / ``onLoadLayout(saved)`` /
   ``onDeleteLayout(index)`` – saved layout CRUD
 
-Includes a ``SaveLayoutDialog`` for naming layouts before saving.
+MontageTileErrorBoundary
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+**Location**: ``src/components/montage/MontageTileErrorBoundary.tsx``
+
+Per-tile error boundary. ``Montage.tsx`` wraps each ``MontageMonitor``
+in one so a render error in a single tile shows a compact fallback
+(alert icon, monitor name, ``montage.tile_error``) in that grid cell
+while the other tiles keep streaming. Without it the error would reach
+the route boundary and unmount the whole page. Errors are logged via
+``log.montageMonitor`` at ``LogLevel.ERROR`` with the monitor id and
+name. The fallback carries ``data-testid="montage-tile-error"``.
+
+**Props:**
+
+- ``monitorId`` / ``monitorName`` – identify the tile in the log entry
+  and fallback label
 
 Montage Hooks
 ~~~~~~~~~~~~~
@@ -878,6 +904,42 @@ with a custom ``className``:
      {/* ... */}
    </PageContainer>
 
+.. _grid-columns-menu:
+
+GridColumnsMenu
+~~~~~~~~~~~~~~~
+
+**Location**: ``src/components/common/GridColumnsMenu.tsx``
+
+Shared base for the grid column controls. ``GridLayoutControls``
+(montage) and ``EventMontageGridControls`` (event montage, events, and
+monitors views) both wrap it. It owns the responsive rendering: a
+bottom ``Sheet`` with preset buttons when ``isMobile`` is true, a
+``DropdownMenu`` otherwise.
+
+**Props:**
+
+- ``isMobile`` / ``gridCols`` – rendering mode and current column count
+- ``title`` – trigger tooltip and sheet title
+- ``triggerIcon`` / ``triggerLabel`` – trigger button content
+- ``triggerTestId`` – optional ``data-testid`` on the trigger
+- ``showGridColsAttr`` – render ``data-grid-cols`` on the trigger
+  (read by e2e tests)
+- ``presets`` – array of ``{ cols, icon, label, testId? }``
+- ``customIcon`` / ``customLabel`` – the custom-columns menu entry
+- ``onApplyGridLayout(cols)`` – preset selected
+- ``onCustomSelect()`` – custom entry selected (the caller opens its
+  ``CustomColumnsDialog``)
+- ``renderSheetExtras(closeSheet)`` / ``renderMenuExtras()`` – optional
+  slots appended after the custom entry; the montage wrapper uses them
+  for the saved-layouts section and the save action
+
+The file also exports ``CustomColumnsDialog``, a controlled number-input
+dialog (id ``custom-cols``, min 1, max 10, Enter submits). Validation
+stays with the caller: ``GridLayoutControls`` validates inline,
+``EventMontageGridControls`` delegates to
+``useEventMontageGrid.handleCustomGridSubmit``.
+
 UI Components
 -------------
 
@@ -1080,7 +1142,7 @@ update (streams, event counts, etc.), only interaction is blocked.
 
 **Behaviour:**
 
-- Covers the viewport with ``z-index: 9999`` and ``pointer-events: auto``
+- Covers the viewport with ``Z_INDEX.overlay`` (9999) and ``pointer-events: auto``
 - Intercepts browser back navigation (pushState trick) so the user cannot
   leave the locked view
 - On Android, swallows the hardware back button via ``@capacitor/app``
@@ -1336,6 +1398,8 @@ Complex logic is extracted into hooks:
 - ``useMonitorStream()`` - Stream URL and connection management
 - ``usePTZControl()`` - PTZ command handling (in ``pages/hooks/``)
 - ``useEventNavigation()`` - Adjacent event navigation (see below)
+- ``useCapacitorListener()`` - Capacitor plugin event listeners with async
+  registration and teardown (see below)
 
 useEventNavigation
 ^^^^^^^^^^^^^^^^^^
@@ -1357,6 +1421,46 @@ maintain filter context when navigating between events.
 - Triggers directional slide animations (``event-slide-left``,
   ``event-slide-right`` CSS classes, 300 ms).
 - Used in the EventDetail header with ChevronLeft/ChevronRight buttons.
+
+useCapacitorListener
+^^^^^^^^^^^^^^^^^^^^
+
+**Location**: ``src/hooks/useCapacitorListener.ts``
+
+Registers an event listener on an async-loaded Capacitor plugin and removes
+it on unmount or when ``enabled`` turns false. Replaces the per-site pattern
+of dynamic import, ``await addListener``, and cancelled-flag teardown.
+
+.. code:: tsx
+
+   useCapacitorListener(
+     () => import('@capacitor/app').then((m) => m.App),
+     'appStateChange',
+     (state: { isActive: boolean }) => {
+       if (!state.isActive) closePreview();
+     },
+     { enabled: open && Platform.isNative },
+   );
+
+**Options:**
+
+- ``enabled``: register only while true. Defaults to ``Platform.isNative``.
+- ``onError``: called when loading the plugin or registering the listener
+  fails. Without it, failures are swallowed (plugin unavailable on this
+  platform is the common case).
+
+**Behaviour:**
+
+- The handler is kept in a ref, so callers do not need stable callback
+  identities and the listener never re-registers on handler changes.
+- A handle that resolves after teardown (unmount during the awaits) is
+  removed as soon as it arrives.
+- The plugin getter must use a static import specifier so Vite can analyze
+  and code-split it. Never build the specifier from a template literal.
+
+Used by ``App.tsx`` (flush logs on pause), ``HoverPreview``,
+``KioskOverlay``, ``Mp4EventPlayer``, ``useNotificationAutoConnect``, and
+``useNotificationDelivered``.
 
 3. Refs for DOM Access
 ~~~~~~~~~~~~~~~~~~~~~~

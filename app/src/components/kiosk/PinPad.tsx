@@ -5,10 +5,11 @@
  * Three modes: 'set' (first-time), 'confirm' (verify set PIN), 'unlock' (enter to unlock).
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../ui/button';
 import { Delete } from 'lucide-react';
+import { Z_INDEX } from '../../lib/zmninja-ng-constants';
 
 export type PinPadMode = 'set' | 'confirm' | 'unlock';
 
@@ -25,11 +26,19 @@ const PIN_LENGTH = 4;
 export function PinPad({ mode, onSubmit, onCancel, error, cooldownSeconds }: PinPadProps) {
   const { t } = useTranslation();
   const [pin, setPin] = useState('');
+  const submitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Reset pin when mode or error changes
   useEffect(() => {
     setPin('');
   }, [mode, error]);
+
+  // Clear any pending auto-submit timer on unmount
+  useEffect(() => {
+    return () => {
+      if (submitTimerRef.current !== null) clearTimeout(submitTimerRef.current);
+    };
+  }, []);
 
   const title =
     mode === 'set'
@@ -44,7 +53,8 @@ export function PinPad({ mode, onSubmit, onCancel, error, cooldownSeconds }: Pin
       const next = prev + digit;
       if (next.length === PIN_LENGTH) {
         // Auto-submit when 4 digits entered
-        setTimeout(() => onSubmit(next), 100);
+        if (submitTimerRef.current !== null) clearTimeout(submitTimerRef.current);
+        submitTimerRef.current = setTimeout(() => onSubmit(next), 100);
       }
       return next;
     });
@@ -81,7 +91,8 @@ export function PinPad({ mode, onSubmit, onCancel, error, cooldownSeconds }: Pin
 
   return (
     <div
-      className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 backdrop-blur-sm"
+      className="fixed inset-0 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+      style={{ zIndex: Z_INDEX.kioskPinPad }}
       data-testid="kiosk-pin-pad"
     >
       <div className="bg-card rounded-2xl p-6 w-[280px] shadow-2xl">

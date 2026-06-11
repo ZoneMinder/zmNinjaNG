@@ -3,7 +3,7 @@
  *
  * Tracks which notice ids the current device has read and which critical
  * banners have been dismissed. Persisted to localStorage (not profile-
- * scoped — the broadcast message is the same regardless of which ZM server
+ * scoped: the broadcast message is the same regardless of which ZM server
  * the user is connected to).
  */
 

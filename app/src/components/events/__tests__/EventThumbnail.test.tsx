@@ -81,7 +81,7 @@ describe('EventThumbnail', () => {
     let img = screen.getByAltText('thumb') as HTMLImageElement;
     fireEvent.error(img); // skip a.jpg
     img = screen.getByAltText('thumb') as HTMLImageElement;
-    fireEvent.load(img); // b.jpg loads — cache index 1
+    fireEvent.load(img); // b.jpg loads, cache index 1
     unmount();
 
     render(<EventThumbnail urls={urls} cacheKey="evt-1" alt="thumb" />);

@@ -18,7 +18,7 @@ export function getLogFile(): LogFileStore {
   return instance;
 }
 
-/** Test helper — resets the singleton. Do not call from production code. */
+/** Test helper: resets the singleton. Do not call from production code. */
 export function __resetLogFileForTests(replacement?: LogFileStore): void {
   instance = replacement ?? null;
 }

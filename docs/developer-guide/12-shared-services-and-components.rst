@@ -60,11 +60,37 @@ that array and to the matching ``Logger`` class field.
 
 --------------
 
+Global Error Sinks (``lib/global-error-handlers.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Window-level listeners for ``unhandledrejection`` and ``error`` that route
+async failures outside React Query and try/catch into the logger, so they
+appear on the Logs page and in exported log files. ``main.tsx`` calls
+``installGlobalErrorHandlers()`` once before React renders. The listeners
+log via ``log.app()`` at ``LogLevel.ERROR`` with the rejection reason or
+error message, source location, and stack, truncated to
+``LOGGING.maxStackLength`` characters (4000). They never call
+``preventDefault``, so browser console reporting is unchanged.
+``uninstallGlobalErrorHandlers()`` removes the listeners; tests use it.
+
+**Used By:** ``main.tsx`` (startup)
+
+--------------
+
 HTTP Client (``lib/http.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Platform-agnostic HTTP request abstraction that works on Web, iOS,
 Android, and Desktop.
+
+``lib/http.ts`` is the public facade and the only import path consumers
+use. It builds the final URL, dispatches to a platform adapter, validates
+the status, and logs the request. The internals live in ``lib/http/``:
+``types.ts`` (request/response/error shapes), ``encoding.ts`` (body
+serialization, base64/byte conversion), ``timeout.ts`` (abort-signal
+composition, native timeout race), ``logging.ts`` (request IDs,
+correlation tags), and one adapter per platform (``adapter-native.ts``,
+``adapter-electron.ts``, ``adapter-web.ts``).
 
 **Features:**
 
@@ -104,7 +130,9 @@ Android, and Desktop.
 
 - **Web**: Uses ``fetch()`` with standard CORS handling
 - **Mobile (Capacitor)**: Uses ``CapacitorHttp`` for native networking
-- **Desktop (Electron)**: Uses Chromium ``fetch()`` via Electron's renderer
+- **Desktop (Electron)**: Bridges the request over IPC
+  (``electron/preload.cjs``) to the main process, which performs it with
+  Electron's ``net`` module, avoiding renderer CORS
 
 **SSL Trust:** On mobile, the native Capacitor plugin handles SSL trust
 (see SSL Trust section below). On Electron desktop, the user must add
@@ -194,8 +222,8 @@ in ``AppLayout``.
 
 --------------
 
-Discovery (``lib/discovery.ts``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Discovery (``services/discovery.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ZoneMinder server discovery utility that probes for API endpoints and
 derives connection URLs.
@@ -214,7 +242,7 @@ derives connection URLs.
 
 .. code:: typescript
 
-   import { discoverZoneminder, DiscoveryError } from '../lib/discovery';
+   import { discoverZoneminder, DiscoveryError } from '../services/discovery';
 
    // Basic discovery (no auth)
    const result = await discoverZoneminder('192.168.1.100');
@@ -254,7 +282,7 @@ with iOS retry logic and an abort signal, so neither ``ProfileForm`` nor
 
 .. code:: typescript
 
-   import { discoverUrls } from '../lib/discovery';
+   import { discoverUrls } from '../services/discovery';
 
    // Shared wrapper with iOS retry logic and abort signal
    const result = await discoverUrls(portalUrl, {
@@ -269,8 +297,8 @@ with iOS retry logic and an abort signal, so neither ``ProfileForm`` nor
 
 --------------
 
-Download Utilities (``lib/download.ts``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Download Utilities (``services/download.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Cross-platform file download with progress tracking and cancellation
 support.
@@ -289,7 +317,7 @@ support.
 
 .. code:: typescript
 
-   import { downloadFile, downloadSnapshot } from '../lib/download';
+   import { downloadFile, downloadSnapshot } from '../services/download';
 
    // Download a file with progress
    const abortController = new AbortController();
@@ -471,6 +499,35 @@ formula.
 
 **Used By:** API functions (``api/events.ts``, ``api/monitors.ts``),
 hooks (``useStreamLifecycle``), and stream/playback components.
+
+--------------
+
+Delayed CMD_QUIT (``lib/zms-quit.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Schedules a fire-and-forget CMD_QUIT for a zms connkey after a grace
+delay (``ZM_INTEGRATION.cmdQuitGraceMs``, 150 ms). Pending quits are
+tracked per connkey so a remount that reuses the connkey (React
+StrictMode's dev double-mount) cancels the quit instead of killing a
+stream the surviving mount is still using. A fresh mount generates a
+new connkey, so its cancel never matches and the abandoned stream's
+quit still fires.
+
+.. code:: typescript
+
+   import { sendDelayedCmdQuit, cancelPendingQuit } from '../lib/zms-quit';
+
+   // On mount: cancel a quit left over from a dev remount
+   cancelPendingQuit(connkey);
+
+   // On unmount: schedule the quit; pass a timeout so teardown against
+   // an unreachable server cannot hang
+   sendDelayedCmdQuit(controlUrl, connkey, {
+     timeoutMs: apiTimeoutSeconds > 0 ? apiTimeoutSeconds * 1000 : undefined,
+     logContext: { eventId },
+   });
+
+**Used By:** ``ZmsEventPlayer``, ``EventThumbnailHoverPreview``.
 
 --------------
 
@@ -1907,8 +1964,12 @@ Server (ES mode). Handles real-time alarm events via ``zmeventnotification.pl``.
 - ``checkAlive(timeoutMs)`` liveness probe used on app resume and tab
   visibility change
 - ``reconnectNow()`` for immediate reconnect on network restore
-- 60-second keepalive ping
+- Keepalive ping at the profile's bandwidth ``wsKeepaliveInterval``
+  (60s normal, 120s low)
 - ``reconnectAttempts`` resets only after successful authentication
+- No store imports: ``stores/notifications.ts`` injects store-derived values
+  (fresh access token, event image URL builder via ``lib/url-builder``,
+  keepalive interval) as ``ZMNotificationProviders`` at connect time
 
 ``services/pushNotifications.ts``: FCM push notification handling for
 iOS and Android.
@@ -1924,10 +1985,14 @@ iOS and Android.
 Direct notification mode on desktop/web.
 
 - Singleton via ``getEventPoller()``
-- Started by ``NotificationHandler`` when ``notificationMode === 'direct'``
-  and ``Platform.isDesktopOrWeb`` (not used on mobile, FCM handles delivery)
+- Started through ``startEventPoller(profileId)`` in ``stores/notifications.ts``
+  when ``notificationMode === 'direct'`` and ``Platform.isDesktopOrWeb``
+  (not used on mobile, FCM handles delivery). The wiring function injects
+  ``EventPollerDeps`` (event sink, token provider, poll interval, portal URL,
+  multi-port lookup); the poller has no store imports
 - Uses recursive ``setTimeout`` so interval changes take effect on next tick
-- Configurable polling interval per-profile (default 30s)
+- Poll interval comes from the profile's bandwidth ``eventPollerInterval``
+  (30s normal, 60s low)
 - Optional ``Notes REGEXP:detected:`` filter for object-detection-only events
 - Maintains a seen-event set (capped at 500) to avoid duplicate notifications
 

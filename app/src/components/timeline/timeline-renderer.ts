@@ -35,7 +35,7 @@ export interface RenderViewport {
   endMs: number;
   width: number; // CSS pixels
   height: number;
-  dpr: number; // devicePixelRatio — all drawing multiplied by dpr
+  dpr: number; // devicePixelRatio, all drawing multiplied by dpr
 }
 
 export interface MonitorRow {
@@ -489,7 +489,7 @@ export function drawEvents(
     ctx.shadowColor = 'transparent';
     ctx.shadowBlur = 0;
 
-    // Bar label: two rows — top: detected objects or cause, bottom: Event ID
+    // Bar label has two rows. Top: detected objects or cause. Bottom: Event ID
     const labelPad = 3 * dpr;
     const fontSize = (LAYOUT.fontSize - 3) * dpr;
 

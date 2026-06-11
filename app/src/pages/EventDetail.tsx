@@ -26,7 +26,7 @@ import { getObjectClassIconFromList } from '../lib/object-class-icons';
 import { useDateTimeFormat } from '../hooks/useDateTimeFormat';
 import { useTvMode } from '../hooks/useTvMode';
 import { Platform } from '../lib/platform';
-import { downloadEventVideo } from '../lib/download';
+import { downloadEventVideo } from '../services/download';
 import { getOrientedResolution } from '../lib/monitor-rotation';
 import { toast } from 'sonner';
 import { useState, useMemo, useCallback, useEffect } from 'react';
@@ -35,7 +35,7 @@ import { log, LogLevel } from '../lib/logger';
 import { generateEventMarkers, type VideoMarker } from '../lib/video-markers';
 import { useEventFavoritesStore } from '../stores/eventFavorites';
 import { useZoomPan } from '../hooks/useZoomPan';
-import { ZoomControls } from '../components/ui/ZoomControls';
+import { ZoomControls } from '../components/ui/zoom-controls';
 import { useEventNavigation } from '../hooks/useEventNavigation';
 import { useServerUrls } from '../hooks/useServerUrls';
 import { cn } from '../lib/utils';
@@ -186,7 +186,7 @@ export default function EventDetail() {
     ]
   );
 
-  // Hooks below must run on every render — keep them ABOVE the early returns.
+  // Hooks below must run on every render: keep them ABOVE the early returns.
   // Reading event?.Event optionally so they're safe pre-data; consumers below
   // already gate on `hasVideo` / `event` which are derived after the returns.
   const hasVideo = !!(event?.Event.DefaultVideo || event?.Event.Videoed === '1');

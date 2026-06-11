@@ -4,6 +4,11 @@
  * Provides a platform-agnostic HTTP interface that works across Web, iOS, Android, and Desktop.
  * Handles CORS, proxying, and platform-specific implementations automatically.
  *
+ * This file is the public facade: it builds the final URL (params, token,
+ * dev proxy), dispatches to the platform adapter (lib/http/adapter-native.ts,
+ * lib/http/adapter-electron.ts, lib/http/adapter-web.ts), validates the
+ * status, and logs the request/response pair.
+ *
  * Features:
  * - Automatic platform detection (Native/Electron/Web/Proxy)
  * - CORS handling via native HTTP or proxy
@@ -14,289 +19,16 @@
 
 import { Platform } from './platform';
 import { log, LogLevel } from './logger';
+import { createHttpError } from './http/types';
+import type { HttpOptions, HttpResponse, HttpError } from './http/types';
+import { stringifyParams } from './http/encoding';
+import { withTimeoutSignal } from './http/timeout';
+import { nextRequestId, shortPath, loggableResponseBody, correlationPrefix } from './http/logging';
+import { nativeHttpRequest } from './http/adapter-native';
+import { electronHttpRequest } from './http/adapter-electron';
+import { webHttpRequest } from './http/adapter-web';
 
-// Result shape returned by the Electron main-process HTTP bridge (preload.cjs).
-interface ElectronHttpResult {
-  status: number;
-  statusText: string;
-  headers: Record<string, string>;
-  bodyText?: string;
-  bodyBase64?: string;
-}
-
-declare global {
-  interface Window {
-    electronHttp?: {
-      request(req: {
-        url: string;
-        method: string;
-        headers: Record<string, string>;
-        body?: string;
-        responseType: string;
-        timeoutMs?: number;
-      }): Promise<ElectronHttpResult>;
-    };
-  }
-}
-
-// Monotonically increasing request ID counter for correlation
-let requestIdCounter = 0;
-
-export interface HttpOptions {
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD';
-  headers?: Record<string, string>;
-  params?: Record<string, string | number>;
-  body?: unknown;
-  responseType?: 'json' | 'blob' | 'arraybuffer' | 'text' | 'base64';
-  token?: string; // Optional auth token to inject
-  timeoutMs?: number;
-  timeout?: number;
-  signal?: AbortSignal;
-  validateStatus?: (status: number) => boolean;
-  onDownloadProgress?: (progress: HttpProgress) => void;
-  /**
-   * Caller-supplied correlation ID (e.g., from api/client.ts) so the wire-level
-   * HTTP log can be tied back to the originating API request without inspecting
-   * stack traces. Rendered as `{api:N, http:M}` in the completion line.
-   */
-  correlationId?: number;
-  /**
-   * Caller-supplied business-level label for the request, e.g.
-   * "Fetch monitors list". Rendered in the HTTP completion headline so a
-   * single line carries both the wire fact and the domain intent.
-   * No leading verb requirement. Keep it short.
-   */
-  intent?: string;
-  /**
-   * Suppress the per-request HTTP log line. Use for high-frequency internal
-   * fetches (e.g. snapshot frames) that would otherwise flood the log on every
-   * refresh. The caller is responsible for logging genuine failures.
-   */
-  suppressLog?: boolean;
-}
-
-export interface HttpResponse<T = unknown> {
-  data: T;
-  status: number;
-  statusText: string;
-  headers: Record<string, string>;
-}
-
-export interface HttpProgress {
-  loaded: number;
-  total: number;
-  percentage: number;
-}
-
-export interface HttpError extends Error {
-  status: number;
-  statusText: string;
-  data: unknown;
-  headers: Record<string, string>;
-}
-
-function createHttpError(
-  status: number,
-  statusText: string,
-  data: unknown,
-  headers: Record<string, string>
-): HttpError {
-  const error = new Error(`HTTP ${status}: ${statusText}`) as HttpError;
-  error.status = status;
-  error.statusText = statusText;
-  error.data = data;
-  error.headers = headers;
-  return error;
-}
-
-/**
- * Serialize request body to string for fetch-based requests
- */
-function serializeRequestBody(body: unknown): string | undefined {
-  if (!body) return undefined;
-  if (typeof body === 'string') return body;
-  if (body instanceof URLSearchParams) return body.toString();
-  return JSON.stringify(body);
-}
-
-function normalizeHeaders(headers: Headers): Record<string, string> {
-  const responseHeaders: Record<string, string> = {};
-  headers.forEach((value: string, key: string) => {
-    responseHeaders[key] = value;
-  });
-  return responseHeaders;
-}
-
-function stringifyParams(params: Record<string, string | number>): Record<string, string> {
-  const stringParams: Record<string, string> = {};
-  Object.entries(params).forEach(([key, value]) => {
-    stringParams[key] = String(value);
-  });
-  return stringParams;
-}
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += 1) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
-}
-
-function base64ToBytes(base64: string): Uint8Array {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
-
-async function readResponseBytes(
-  response: Response,
-  onDownloadProgress?: (progress: HttpProgress) => void
-): Promise<Uint8Array> {
-  if (!response.body) {
-    const arrayBuffer = await response.arrayBuffer();
-    const bytes = new Uint8Array(arrayBuffer);
-    if (onDownloadProgress) {
-      onDownloadProgress({
-        loaded: bytes.length,
-        total: bytes.length,
-        percentage: 100,
-      });
-    }
-    return bytes;
-  }
-
-  const reader = response.body.getReader();
-  const contentLengthHeader = response.headers.get('content-length');
-  const total = contentLengthHeader ? parseInt(contentLengthHeader, 10) : 0;
-  let loaded = 0;
-  const chunks: Uint8Array[] = [];
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (value) {
-      chunks.push(value);
-      loaded += value.length;
-      if (onDownloadProgress) {
-        const percentage = total > 0 ? Math.round((loaded * 100) / total) : 0;
-        onDownloadProgress({ loaded, total, percentage });
-      }
-    }
-  }
-
-  const combined = new Uint8Array(loaded);
-  let offset = 0;
-  for (const chunk of chunks) {
-    combined.set(chunk, offset);
-    offset += chunk.length;
-  }
-
-  if (onDownloadProgress) {
-    onDownloadProgress({
-      loaded,
-      total: total || loaded,
-      percentage: 100,
-    });
-  }
-
-  return combined;
-}
-
-async function parseFetchResponse<T>(
-  response: Response,
-  responseType: string,
-  onDownloadProgress?: (progress: HttpProgress) => void
-): Promise<{ data: T; headers: Record<string, string> }> {
-  const responseHeaders = normalizeHeaders(response.headers);
-
-  let data: T;
-  if (responseType === 'blob' || responseType === 'arraybuffer' || responseType === 'base64') {
-    const bytes = await readResponseBytes(response, onDownloadProgress);
-    if (responseType === 'blob') {
-      const contentType =
-        responseHeaders['content-type'] ||
-        responseHeaders['Content-Type'] ||
-        'application/octet-stream';
-      const blobBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-      data = new Blob([blobBuffer], { type: contentType }) as T;
-    } else if (responseType === 'arraybuffer') {
-      data = bytes.buffer as T;
-    } else {
-      data = bytesToBase64(bytes) as T;
-    }
-  } else if (responseType === 'text') {
-    const text = await response.text();
-    data = text as T;
-  } else {
-    const text = await response.text();
-    try {
-      data = JSON.parse(text) as T;
-    } catch {
-      data = text as T;
-    }
-  }
-
-  return { data, headers: responseHeaders };
-}
-
-function withTimeoutSignal(timeoutMs?: number, signal?: AbortSignal): { signal?: AbortSignal; cleanup: () => void } {
-  if (!timeoutMs) {
-    return { signal, cleanup: () => {} };
-  }
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-  const onAbort = () => controller.abort();
-
-  if (signal) {
-    if (signal.aborted) {
-      controller.abort();
-    } else {
-      signal.addEventListener('abort', onAbort, { once: true });
-    }
-  }
-
-  return {
-    signal: controller.signal,
-    cleanup: () => {
-      clearTimeout(timeoutId);
-      if (signal) {
-        signal.removeEventListener('abort', onAbort);
-      }
-    },
-  };
-}
-
-/**
- * Extract the path + query for log lines so the host/proxy doesn't dominate.
- */
-function shortPath(url: string): string {
-  try {
-    const u = new URL(url);
-    return `${u.pathname}${u.search ? '?…' : ''}`;
-  } catch {
-    return url;
-  }
-}
-
-/**
- * Replace a binary response body with a short placeholder so the log
- * payload doesn't include megabytes of base64.
- */
-function loggableResponseBody(data: unknown, responseType: string): unknown {
-  if (responseType === 'blob' || responseType === 'arraybuffer' || responseType === 'base64') {
-    return `<binary: ${responseType}>`;
-  }
-  return data;
-}
-
-function correlationPrefix(requestId: number, correlationId?: number): string {
-  return correlationId !== undefined ? `{api:${correlationId}, http:${requestId}}` : `#${requestId}`;
-}
+export type { HttpOptions, HttpResponse, HttpProgress, HttpError } from './http/types';
 
 /**
  * Make an HTTP request using the appropriate platform-specific method.
@@ -358,7 +90,7 @@ export async function httpRequest<T = unknown>(
   }
 
   // Generate monotonically increasing request ID for correlation
-  const requestId = ++requestIdCounter;
+  const requestId = nextRequestId();
   const platform = Platform.isNative
     ? 'Native'
     : Platform.isElectron && typeof window !== 'undefined' && window.electronHttp
@@ -380,40 +112,42 @@ export async function httpRequest<T = unknown>(
   }
 
   try {
+    // Deliberate: cleanup() is not called when an adapter throws. The timeout
+    // timer fires later and aborts an already-dead controller, which is harmless.
     let response: HttpResponse<T>;
     if (Platform.isNative) {
-      response = await nativeHttpRequest<T>(
-        requestUrl,
+      response = await nativeHttpRequest<T>({
+        url: requestUrl,
         method,
-        requestHeaders,
+        headers: requestHeaders,
         body,
         responseType,
-        timeoutMs ?? timeout,
+        timeoutMs: timeoutMs ?? timeout,
         signal,
-      );
+      });
     } else if (Platform.isElectron && typeof window !== 'undefined' && window.electronHttp) {
       const { signal: timeoutSignal, cleanup } = withTimeoutSignal(timeoutMs ?? timeout, signal);
-      response = await electronHttpRequest<T>(
-        requestUrl,
+      response = await electronHttpRequest<T>({
+        url: requestUrl,
         method,
-        requestHeaders,
+        headers: requestHeaders,
         body,
         responseType,
-        timeoutSignal,
-        timeoutMs ?? timeout
-      );
+        signal: timeoutSignal,
+        timeoutMs: timeoutMs ?? timeout,
+      });
       cleanup();
     } else {
       const { signal: timeoutSignal, cleanup } = withTimeoutSignal(timeoutMs ?? timeout, signal);
-      response = await webHttpRequest<T>(
-        requestUrl,
+      response = await webHttpRequest<T>({
+        url: requestUrl,
         method,
-        requestHeaders,
+        headers: requestHeaders,
         body,
         responseType,
-        timeoutSignal,
-        onDownloadProgress
-      );
+        signal: timeoutSignal,
+        onDownloadProgress,
+      });
       cleanup();
     }
 
@@ -490,195 +224,6 @@ export async function httpRequest<T = unknown>(
     );
     throw error;
   }
-}
-
-/**
- * Settle a native request promise within `timeoutMs` (and on `signal` abort),
- * since CapacitorHttp can't be aborted directly. The underlying native request
- * keeps running until its own connect/read timeout fires, but the caller's
- * promise rejects on time so the UI can error and retry.
- */
-function raceNativeTimeout<R>(
-  requestPromise: Promise<R>,
-  timeoutMs?: number,
-  signal?: AbortSignal
-): Promise<R> {
-  if (!timeoutMs && !signal) return requestPromise;
-  return new Promise<R>((resolve, reject) => {
-    let settled = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const cleanup = () => {
-      if (timer) clearTimeout(timer);
-      signal?.removeEventListener('abort', onAbort);
-    };
-    const finish = (fn: () => void) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      fn();
-    };
-    const onAbort = () => finish(() => reject(new DOMException('The operation was aborted.', 'AbortError')));
-    if (signal) {
-      if (signal.aborted) return onAbort();
-      signal.addEventListener('abort', onAbort, { once: true });
-    }
-    if (timeoutMs) {
-      timer = setTimeout(
-        () => finish(() => reject(new Error(`Native request timed out after ${timeoutMs}ms`))),
-        timeoutMs,
-      );
-    }
-    requestPromise.then(
-      (r) => finish(() => resolve(r)),
-      (e) => finish(() => reject(e)),
-    );
-  });
-}
-
-/**
- * Native (Capacitor) HTTP request implementation
- */
-async function nativeHttpRequest<T>(
-  url: string,
-  method: string,
-  headers: Record<string, string>,
-  body: unknown,
-  responseType: string,
-  timeoutMs?: number,
-  signal?: AbortSignal
-): Promise<HttpResponse<T>> {
-  const { CapacitorHttp } = await import('@capacitor/core');
-  const nativeResponseType =
-    responseType === 'arraybuffer' ? 'arraybuffer' : responseType === 'blob' || responseType === 'base64' ? 'blob' : undefined;
-  // CapacitorHttp has no AbortSignal support, so the timeout is enforced two
-  // ways: native connect/read timeouts (so the underlying socket gives up) and
-  // a JS race (so the promise settles deterministically even if the native
-  // timer drifts, since readTimeout resets on each received chunk).
-  const requestPromise = CapacitorHttp.request({
-    method: method as 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD',
-    url,
-    headers,
-    data: body,
-    responseType: nativeResponseType,
-    ...(timeoutMs ? { connectTimeout: timeoutMs, readTimeout: timeoutMs } : {}),
-  });
-  const response = await raceNativeTimeout(requestPromise, timeoutMs, signal);
-
-  const data = response.data as T;
-  const responseHeaders = response.headers as Record<string, string>;
-
-  return {
-    data,
-    status: response.status,
-    statusText: '',
-    headers: responseHeaders,
-  };
-}
-
-/**
- * Electron HTTP request implementation.
- *
- * The request runs in the privileged process (Electron's main process, via the
- * net module) rather than the sandboxed renderer, bridged over IPC by
- * electron/preload.cjs. This avoids renderer CORS, and self-signed certs are
- * handled in main.cjs. Binary responses come back as base64 over IPC (no
- * streaming progress, like the Capacitor path).
- */
-async function electronHttpRequest<T>(
-  url: string,
-  method: string,
-  headers: Record<string, string>,
-  body: unknown,
-  responseType: string,
-  signal?: AbortSignal,
-  timeoutMs?: number
-): Promise<HttpResponse<T>> {
-  const requestBody = serializeRequestBody(body);
-  const invocation = window.electronHttp!.request({
-    url,
-    method,
-    headers,
-    body: requestBody,
-    responseType,
-    timeoutMs,
-  });
-
-  let result: ElectronHttpResult;
-  if (signal) {
-    result = await Promise.race([
-      invocation,
-      new Promise<never>((_resolve, reject) => {
-        const abort = () => reject(new DOMException('The operation was aborted.', 'AbortError'));
-        if (signal.aborted) abort();
-        else signal.addEventListener('abort', abort, { once: true });
-      }),
-    ]);
-  } else {
-    result = await invocation;
-  }
-
-  let data: T;
-  if (responseType === 'blob' || responseType === 'arraybuffer' || responseType === 'base64') {
-    const base64 = result.bodyBase64 ?? '';
-    if (responseType === 'base64') {
-      data = base64 as T;
-    } else if (responseType === 'arraybuffer') {
-      data = base64ToBytes(base64).buffer as T;
-    } else {
-      const contentType =
-        result.headers['content-type'] || result.headers['Content-Type'] || 'application/octet-stream';
-      const bytes = base64ToBytes(base64);
-      const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-      data = new Blob([buffer], { type: contentType }) as T;
-    }
-  } else if (responseType === 'text') {
-    data = (result.bodyText ?? '') as T;
-  } else {
-    const text = result.bodyText ?? '';
-    try {
-      data = JSON.parse(text) as T;
-    } catch {
-      data = text as T;
-    }
-  }
-
-  return {
-    data,
-    status: result.status,
-    statusText: result.statusText,
-    headers: result.headers,
-  };
-}
-
-/**
- * Web (fetch) HTTP request implementation
- */
-async function webHttpRequest<T>(
-  url: string,
-  method: string,
-  headers: Record<string, string>,
-  body: unknown,
-  responseType: string,
-  signal?: AbortSignal,
-  onDownloadProgress?: (progress: HttpProgress) => void
-): Promise<HttpResponse<T>> {
-  const requestBody = serializeRequestBody(body);
-
-  const response = await fetch(url, {
-    method,
-    headers,
-    body: requestBody,
-    signal,
-  });
-
-  const { data, headers: responseHeaders } = await parseFetchResponse<T>(response, responseType, onDownloadProgress);
-
-  return {
-    data,
-    status: response.status,
-    statusText: response.statusText,
-    headers: responseHeaders,
-  };
 }
 
 /**

@@ -6,14 +6,10 @@ const {
   mockGetEvents,
   mockGetEventImageUrl,
   mockGetMonitors,
-  mockAddEvent,
-  mockGetProfileSettings,
 } = vi.hoisted(() => ({
   mockGetEvents: vi.fn(),
   mockGetEventImageUrl: vi.fn(() => 'http://example.com/snap.jpg'),
   mockGetMonitors: vi.fn(),
-  mockAddEvent: vi.fn(),
-  mockGetProfileSettings: vi.fn(),
 }));
 
 vi.mock('../../api/events', () => ({
@@ -23,33 +19,6 @@ vi.mock('../../api/events', () => ({
 
 vi.mock('../../api/monitors', () => ({
   getMonitors: mockGetMonitors,
-}));
-
-vi.mock('../../stores/notifications', () => ({
-  useNotificationStore: {
-    getState: () => ({
-      getProfileSettings: mockGetProfileSettings,
-      addEvent: mockAddEvent,
-    }),
-  },
-}));
-
-vi.mock('../../stores/profile', () => ({
-  useProfileStore: {
-    getState: () => ({
-      profiles: [{ id: 'profile-1', portalUrl: 'http://zm.local' }],
-      currentProfileId: 'profile-1',
-    }),
-  },
-}));
-
-vi.mock('../../stores/auth', () => ({
-  useAuthStore: {
-    getState: () => ({
-      accessToken: 'test-token',
-      getFreshAccessToken: async () => 'test-token',
-    }),
-  },
 }));
 
 vi.mock('../../lib/logger', () => ({
@@ -79,19 +48,28 @@ function makeEvent(id: number, monitorId = '1', cause = 'Motion') {
   };
 }
 
-const defaultSettings = {
-  pollingInterval: 30,
-  onlyDetectedEvents: false,
-};
+/** Plain mock deps: the poller must work without any zustand store. */
+function makeDeps() {
+  return {
+    onEvent: vi.fn(),
+    getOnlyDetectedEvents: vi.fn((): boolean => false),
+    getFreshAccessToken: vi.fn(async (): Promise<string | null> => 'test-token'),
+    getPollIntervalMs: vi.fn((): number => 30_000),
+    getPortalUrl: vi.fn((): string | undefined => 'http://zm.local'),
+    getMinStreamingPort: vi.fn((): number | undefined => undefined),
+  };
+}
 
 // --- Tests ---
 
 describe('EventPollerService', () => {
+  let deps: ReturnType<typeof makeDeps>;
+
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
 
-    mockGetProfileSettings.mockReturnValue({ ...defaultSettings });
+    deps = makeDeps();
     mockGetMonitors.mockResolvedValue({
       monitors: [
         { Monitor: { Id: '1', Name: 'Front Door' } },
@@ -115,7 +93,7 @@ describe('EventPollerService', () => {
 
   it('start() loads monitor names and begins polling', async () => {
     const poller = getEventPoller();
-    await poller.start('profile-1');
+    await poller.start('profile-1', deps);
     // _pollAndSchedule sets the timer inside .finally(), flush microtasks
     await vi.advanceTimersByTimeAsync(0);
 
@@ -124,26 +102,26 @@ describe('EventPollerService', () => {
     expect(poller.isRunning()).toBe(true);
   });
 
-  it('first poll seeds seen events without calling addEvent', async () => {
+  it('first poll seeds seen events without emitting them', async () => {
     mockGetEvents.mockResolvedValue({
       events: [makeEvent(100), makeEvent(101)],
     });
 
     const poller = getEventPoller();
-    await poller.start('profile-1');
+    await poller.start('profile-1', deps);
 
-    expect(mockAddEvent).not.toHaveBeenCalled();
+    expect(deps.onEvent).not.toHaveBeenCalled();
   });
 
-  it('subsequent polls detect new events and call addEvent with poll source', async () => {
+  it('subsequent polls detect new events and emit them via onEvent', async () => {
     // First poll seeds events 100, 101
     mockGetEvents.mockResolvedValueOnce({
       events: [makeEvent(100), makeEvent(101)],
     });
 
     const poller = getEventPoller();
-    await poller.start('profile-1');
-    expect(mockAddEvent).not.toHaveBeenCalled();
+    await poller.start('profile-1', deps);
+    expect(deps.onEvent).not.toHaveBeenCalled();
 
     // Second poll returns events 100, 101, 102 (102 is new)
     mockGetEvents.mockResolvedValueOnce({
@@ -153,15 +131,48 @@ describe('EventPollerService', () => {
     // Advance past the polling interval and let the async poll settle
     await vi.advanceTimersByTimeAsync(30_000);
 
-    expect(mockAddEvent).toHaveBeenCalledTimes(1);
-    expect(mockAddEvent).toHaveBeenCalledWith(
-      'profile-1',
+    expect(deps.onEvent).toHaveBeenCalledTimes(1);
+    expect(deps.onEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         EventId: 102,
         MonitorName: 'Front Door',
         Cause: 'Person',
+        ImageUrl: 'http://example.com/snap.jpg',
       }),
-      'poll',
+    );
+  });
+
+  it('builds image URLs with the injected token', async () => {
+    mockGetEvents.mockResolvedValueOnce({ events: [] });
+
+    const poller = getEventPoller();
+    await poller.start('profile-1', deps);
+
+    mockGetEvents.mockResolvedValueOnce({ events: [makeEvent(300)] });
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    expect(deps.getFreshAccessToken).toHaveBeenCalled();
+    expect(mockGetEventImageUrl).toHaveBeenCalledWith(
+      'http://zm.local',
+      '300',
+      'snapshot',
+      expect.objectContaining({ token: 'test-token' }),
+    );
+  });
+
+  it('omits the image URL when no token is available', async () => {
+    deps.getFreshAccessToken.mockResolvedValue(null);
+    mockGetEvents.mockResolvedValueOnce({ events: [] });
+
+    const poller = getEventPoller();
+    await poller.start('profile-1', deps);
+
+    mockGetEvents.mockResolvedValueOnce({ events: [makeEvent(301)] });
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    expect(mockGetEventImageUrl).not.toHaveBeenCalled();
+    expect(deps.onEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ EventId: 301, ImageUrl: undefined }),
     );
   });
 
@@ -171,7 +182,7 @@ describe('EventPollerService', () => {
     });
 
     const poller = getEventPoller();
-    await poller.start('profile-1');
+    await poller.start('profile-1', deps);
 
     // Second poll returns the same event
     mockGetEvents.mockResolvedValueOnce({
@@ -180,12 +191,24 @@ describe('EventPollerService', () => {
 
     await vi.advanceTimersByTimeAsync(30_000);
 
-    expect(mockAddEvent).not.toHaveBeenCalled();
+    expect(deps.onEvent).not.toHaveBeenCalled();
+  });
+
+  it('uses the injected poll interval', async () => {
+    deps.getPollIntervalMs.mockReturnValue(10_000);
+
+    const poller = getEventPoller();
+    await poller.start('profile-1', deps);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mockGetEvents).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(mockGetEvents).toHaveBeenCalledTimes(2);
   });
 
   it('stop() clears the timer and resets state', async () => {
     const poller = getEventPoller();
-    await poller.start('profile-1');
+    await poller.start('profile-1', deps);
     await vi.advanceTimersByTimeAsync(0);
     expect(poller.isRunning()).toBe(true);
 
@@ -199,13 +222,10 @@ describe('EventPollerService', () => {
   });
 
   it('applies notesRegexp filter when onlyDetectedEvents is enabled', async () => {
-    mockGetProfileSettings.mockReturnValue({
-      ...defaultSettings,
-      onlyDetectedEvents: true,
-    });
+    deps.getOnlyDetectedEvents.mockReturnValue(true);
 
     const poller = getEventPoller();
-    await poller.start('profile-1');
+    await poller.start('profile-1', deps);
 
     expect(mockGetEvents).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -220,7 +240,7 @@ describe('EventPollerService', () => {
     mockGetEvents.mockResolvedValueOnce({ events: seedEvents });
 
     const poller = getEventPoller();
-    await poller.start('profile-1');
+    await poller.start('profile-1', deps);
 
     // Build up past 500 seen IDs across multiple polls
     for (let batch = 0; batch < 100; batch++) {
@@ -234,14 +254,12 @@ describe('EventPollerService', () => {
     // After pruning, only the last poll's IDs remain in the set.
     // Event 0 was in the seed but should now be treated as new.
     mockGetEvents.mockResolvedValueOnce({ events: [makeEvent(0)] });
-    mockAddEvent.mockClear();
+    deps.onEvent.mockClear();
 
     await vi.advanceTimersByTimeAsync(30_000);
 
-    expect(mockAddEvent).toHaveBeenCalledWith(
-      'profile-1',
+    expect(deps.onEvent).toHaveBeenCalledWith(
       expect.objectContaining({ EventId: 0 }),
-      'poll',
     );
   });
 });

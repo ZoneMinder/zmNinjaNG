@@ -205,10 +205,10 @@ export function getMonitorControlUrl(
   }
 
   // ZM classic UI attaches xge/yge only when the HTML button carries
-  // data-xtell/data-ytell — i.e. only for axis commands. Preset, home, reset,
+  // data-xtell/data-ytell, i.e. only for axis commands. Preset, home, reset,
   // wake/sleep buttons have no xtell/ytell and are sent without xge/yge
   // (web/skins/classic/views/js/watch.js:402-439). The server uses presence
-  // of xge/yge as a routing key in web/includes/control_functions.php:9 — if
+  // of xge/yge as a routing key in web/includes/control_functions.php:9. If
   // they're set it parses `control` as a movement-axis camelCase command and
   // logs "Invalid control parameter" for anything that doesn't match the
   // axis regex. Match ZM's emit pattern: only attach xge/yge for axis +
@@ -385,11 +385,12 @@ export function getZmsControlUrl(
     token?: string;
     apiUrl?: string;
     offset?: number;
+    rate?: number;
     minStreamingPort?: number;
     monitorId?: string;
   } = {}
 ): string {
-  const { token, apiUrl, offset, minStreamingPort, monitorId } = options;
+  const { token, apiUrl, offset, rate, minStreamingPort, monitorId } = options;
 
   const params: Record<string, string | number> = {
     command: command.toString(),
@@ -399,6 +400,7 @@ export function getZmsControlUrl(
   };
 
   if (offset !== undefined) params.offset = offset;
+  if (rate !== undefined) params.rate = rate;
 
   const url = buildUrl(portalUrl, '/index.php', params, token, apiUrl);
   return applyMultiPort(url, monitorId || '', minStreamingPort);

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useNotificationStore } from '../notifications';
+import { useNotificationStore, startEventPoller } from '../notifications';
 import type { ZMAlarmEvent } from '../../types/notifications';
 
 const mockService = {
@@ -17,10 +17,31 @@ vi.mock('../../services/notifications', () => ({
   resetNotificationService: vi.fn(),
 }));
 
+const mockPollerStart = vi.fn().mockResolvedValue(undefined);
+
+vi.mock('../../services/eventPoller', () => ({
+  getEventPoller: vi.fn(() => ({
+    start: mockPollerStart,
+    stop: vi.fn(),
+    isRunning: vi.fn(() => false),
+  })),
+}));
+
 vi.mock('../auth', () => ({
   useAuthStore: {
-    getState: vi.fn(() => ({ accessToken: 'access-token' })),
+    getState: vi.fn(() => ({
+      accessToken: 'access-token',
+      getFreshAccessToken: vi.fn().mockResolvedValue('fresh-token'),
+    })),
     subscribe: vi.fn(() => vi.fn()),
+  },
+}));
+
+vi.mock('../settings', () => ({
+  useSettingsStore: {
+    getState: vi.fn(() => ({
+      getProfileSettings: vi.fn(() => ({ bandwidthMode: 'normal' })),
+    })),
   },
 }));
 
@@ -244,5 +265,58 @@ describe('Notification Store', () => {
     const settings = store.getProfileSettings(profileId);
     expect(settings.onlyDetectedEvents).toBe(true);
     expect(settings.pollingInterval).toBe(60);
+  });
+
+  it('connect injects store-derived providers into the service', async () => {
+    const store = useNotificationStore.getState();
+    store.updateProfileSettings(profileId, { enabled: true, host: 'es.example.com' });
+
+    await useNotificationStore
+      .getState()
+      .connect(profileId, 'admin', 'secret', 'http://zm.local');
+
+    expect(mockService.connect).toHaveBeenCalledTimes(1);
+    const [config, providers] = mockService.connect.mock.calls[0];
+
+    expect(config).toMatchObject({
+      host: 'es.example.com',
+      username: 'admin',
+      password: 'secret',
+    });
+
+    expect(await providers.getFreshAccessToken()).toBe('fresh-token');
+
+    const imageUrl = providers.buildEventImageUrl(42, 'tok');
+    expect(imageUrl).toContain('http://zm.local');
+    expect(imageUrl).toContain('eid=42');
+    expect(imageUrl).toContain('fid=snapshot');
+    expect(imageUrl).toContain('width=600');
+    expect(imageUrl).toContain('token=tok');
+
+    // No token: builder must omit the token parameter
+    expect(providers.buildEventImageUrl(42, null)).not.toContain('token=');
+
+    expect(providers.getKeepaliveIntervalMs()).toBe(60000);
+  });
+
+  it('startEventPoller wires store-derived deps into the poller', async () => {
+    useNotificationStore
+      .getState()
+      .updateProfileSettings(profileId, { onlyDetectedEvents: true });
+
+    await startEventPoller(profileId);
+
+    expect(mockPollerStart).toHaveBeenCalledTimes(1);
+    const [id, deps] = mockPollerStart.mock.calls[0];
+    expect(id).toBe(profileId);
+
+    expect(deps.getOnlyDetectedEvents()).toBe(true);
+    expect(await deps.getFreshAccessToken()).toBe('fresh-token');
+    expect(deps.getPollIntervalMs()).toBe(30000);
+
+    deps.onEvent(baseEvent);
+    const events = useNotificationStore.getState().getEvents(profileId);
+    expect(events).toHaveLength(1);
+    expect(events[0].source).toBe('poll');
   });
 });

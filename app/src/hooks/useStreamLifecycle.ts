@@ -30,7 +30,7 @@ export interface UseStreamLifecycleOptions {
   portalUrl: string | undefined;
   /** Auth token appended to CMD_QUIT requests. */
   accessToken: string | null;
-  /** Current view mode — CMD_QUIT is only sent in streaming mode. */
+  /** Current view mode: CMD_QUIT is only sent in streaming mode. */
   viewMode: 'streaming' | 'snapshot';
   /** Ref to the <img> or <video> element whose src is cleared on unmount. */
   mediaRef: React.RefObject<HTMLImageElement | HTMLVideoElement | null>;
@@ -211,6 +211,17 @@ export function useStreamLifecycle({
         httpGet(controlUrl, { timeoutMs: params.cmdQuitTimeoutMs }).catch(() => {
           // Silently ignore errors - server connection may already be closed
         });
+
+        // Drop the stored connkey so the next mount of this monitor gets a
+        // fresh key instead of reusing the one we just quit (a quit key can
+        // collide with the server-side stream state). The params.connKey !== 0
+        // guard above keeps the StrictMode throwaway-mount cleanup out of this
+        // path; the store comparison keeps a concurrent mount's newer key
+        // intact: only the key this cleanup quit is cleared, never a newer one.
+        const store = useMonitorStore.getState();
+        if (store.connKeys[params.monitorId] === params.connKey) {
+          store.clearConnKey(params.monitorId);
+        }
       }
 
       // After CMD_QUIT, tear down the client side: removing the src aborts the
@@ -227,7 +238,7 @@ export function useStreamLifecycle({
   }, []); // Empty deps = only run on unmount
 
   // Force-regenerate. Optionally sends CMD_QUIT for the previous connkey
-  // first when `killPrevious` is true — used by the visibility-resume path
+  // first when `killPrevious` is true: used by the visibility-resume path
   // where the old stream may still be alive on the server. Without it, each
   // resume would orphan a connkey on ZM and the nph-zms process would only
   // exit after its own idle timeout, leaking sockets in CLOSE_WAIT.

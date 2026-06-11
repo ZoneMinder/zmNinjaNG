@@ -69,30 +69,6 @@ vi.mock('../../lib/logger', () => ({
   },
 }));
 
-vi.mock('../../stores/auth', () => ({
-  useAuthStore: {
-    getState: () => ({
-      accessToken: 'test-token',
-      getFreshAccessToken: async () => 'test-token',
-    }),
-    subscribe: vi.fn(() => vi.fn()),
-  },
-}));
-
-vi.mock('../../stores/profile', () => ({
-  useProfileStore: {
-    getState: () => ({ currentProfileId: 'test-profile' }),
-  },
-}));
-
-vi.mock('../../stores/settings', () => ({
-  useSettingsStore: {
-    getState: () => ({
-      getProfileSettings: () => ({ bandwidthMode: 'normal' }),
-    }),
-  },
-}));
-
 const testConfig = {
   host: 'zm.example.com',
   port: 9000,
@@ -100,8 +76,19 @@ const testConfig = {
   username: 'admin',
   password: 'secret',
   appVersion: '1.0.0',
-  portalUrl: 'http://zm.example.com/zm',
 };
+
+/** Plain mock providers: the service must work without any zustand store. */
+function createMockProviders() {
+  return {
+    getFreshAccessToken: vi.fn(async () => 'fresh-token'),
+    buildEventImageUrl: vi.fn(
+      (eventId: number, token: string | null) =>
+        `http://built.example/image?eid=${eventId}&token=${token}`,
+    ),
+    getKeepaliveIntervalMs: vi.fn(() => 60_000),
+  };
+}
 
 function createMockWebSocketConstructor() {
   const instances: MockWebSocket[] = [];
@@ -124,12 +111,14 @@ function createMockWebSocketConstructor() {
 describe('ZMNotificationService', () => {
   let service: ZMNotificationService;
   let wsCtor: ReturnType<typeof createMockWebSocketConstructor>;
+  let providers: ReturnType<typeof createMockProviders>;
 
   beforeEach(() => {
     vi.useFakeTimers();
     service = new ZMNotificationService();
     vi.clearAllMocks();
 
+    providers = createMockProviders();
     wsCtor = createMockWebSocketConstructor();
     vi.stubGlobal('WebSocket', wsCtor);
   });
@@ -141,8 +130,8 @@ describe('ZMNotificationService', () => {
   });
 
   /** Helper: connect and authenticate */
-  async function connectAndAuth() {
-    const connectPromise = service.connect(testConfig);
+  async function connectAndAuth(connectProviders = providers) {
+    const connectPromise = service.connect(testConfig, connectProviders);
     const ws = wsCtor.instances[wsCtor.instances.length - 1];
     ws._triggerOpen();
     ws._triggerMessage({ event: 'auth', status: 'Success', version: '1.0' });
@@ -173,7 +162,7 @@ describe('ZMNotificationService', () => {
       expect(service.getState()).toBe('disconnected');
       expect(service.isConnected()).toBe(false);
 
-      // Advance timers — no reconnect should be scheduled
+      // Advance timers: no reconnect should be scheduled
       await vi.advanceTimersByTimeAsync(300_000);
       expect(wsCtor).toHaveBeenCalledTimes(1); // Only the initial connect
     });
@@ -207,18 +196,18 @@ describe('ZMNotificationService', () => {
       // First failure
       ws._triggerClose(false, 1006);
 
-      // Attempt 1: ~2s delay — advance 3s to trigger it
+      // Attempt 1: ~2s delay, advance 3s to trigger it
       await vi.advanceTimersByTimeAsync(3000);
       expect(wsCtor).toHaveBeenCalledTimes(2);
       // This new socket also fails
       wsCtor.instances[1]._triggerClose(false, 1006);
 
-      // Attempt 2: ~4s delay — advance 5s to trigger it
+      // Attempt 2: ~4s delay, advance 5s to trigger it
       await vi.advanceTimersByTimeAsync(5000);
       expect(wsCtor).toHaveBeenCalledTimes(3);
       wsCtor.instances[2]._triggerClose(false, 1006);
 
-      // Attempt 3: ~8s delay — at 5s it should NOT have fired yet
+      // Attempt 3: ~8s delay, at 5s it should NOT have fired yet
       await vi.advanceTimersByTimeAsync(5000);
       // Might or might not have fired due to jitter, but advance more to be sure
       await vi.advanceTimersByTimeAsync(5000);
@@ -252,7 +241,7 @@ describe('ZMNotificationService', () => {
       const ws = wsCtor.instances[0];
       ws._triggerOpen();
 
-      // Auth fails — _handleMessage calls disconnect() which sets intentionalDisconnect
+      // Auth fails: _handleMessage calls disconnect() which sets intentionalDisconnect
       ws._triggerMessage({ event: 'auth', status: 'Fail', reason: 'Bad credentials' });
       await connectPromise;
 
@@ -268,7 +257,7 @@ describe('ZMNotificationService', () => {
       const ws = wsCtor.instances[0];
       ws._triggerOpen();
 
-      // Don't send auth response — let it time out
+      // Don't send auth response: let it time out
       await vi.advanceTimersByTimeAsync(20_000);
       await connectPromise;
 
@@ -300,7 +289,7 @@ describe('ZMNotificationService', () => {
 
       const alivePromise = service.checkAlive(3000);
 
-      // Don't respond — let it time out
+      // Don't respond: let it time out
       await vi.advanceTimersByTimeAsync(3000);
 
       const alive = await alivePromise;
@@ -338,6 +327,86 @@ describe('ZMNotificationService', () => {
       );
     });
 
+    it('builds the image URL via injected providers when the server sends no Picture', async () => {
+      const listener = vi.fn();
+      service.onEvent(listener);
+
+      const ws = await connectAndAuth();
+
+      ws._triggerMessage({
+        event: 'alarm',
+        status: 'Success',
+        events: [
+          { MonitorId: 1, MonitorName: 'Front Door', EventId: 42, Cause: 'Motion', Name: 'Front Door' },
+        ],
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(providers.getFreshAccessToken).toHaveBeenCalledTimes(1);
+      expect(providers.buildEventImageUrl).toHaveBeenCalledWith(42, 'fresh-token');
+      expect(listener).toHaveBeenCalledWith(
+        expect.objectContaining({
+          EventId: 42,
+          ImageUrl: 'http://built.example/image?eid=42&token=fresh-token',
+        }),
+      );
+    });
+
+    it('prefers the server-provided Picture over the injected builder', async () => {
+      const listener = vi.fn();
+      service.onEvent(listener);
+
+      const ws = await connectAndAuth();
+
+      ws._triggerMessage({
+        event: 'alarm',
+        status: 'Success',
+        events: [
+          {
+            MonitorId: 1,
+            MonitorName: 'Front Door',
+            EventId: 43,
+            Cause: 'Motion',
+            Name: 'Front Door',
+            Picture: 'http://server.example/picture.jpg',
+          },
+        ],
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(providers.buildEventImageUrl).not.toHaveBeenCalled();
+      expect(listener).toHaveBeenCalledWith(
+        expect.objectContaining({ EventId: 43, ImageUrl: 'http://server.example/picture.jpg' }),
+      );
+    });
+
+    it('leaves ImageUrl unset when no providers were injected', async () => {
+      const listener = vi.fn();
+      service.onEvent(listener);
+
+      // Connect without providers (default providers build no URL)
+      const connectPromise = service.connect(testConfig);
+      const ws = wsCtor.instances[0];
+      ws._triggerOpen();
+      ws._triggerMessage({ event: 'auth', status: 'Success', version: '1.0' });
+      await connectPromise;
+
+      ws._triggerMessage({
+        event: 'alarm',
+        status: 'Success',
+        events: [{ MonitorId: 1, MonitorName: 'Test', EventId: 7, Cause: 'Motion', Name: 'Test' }],
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(listener).toHaveBeenCalledTimes(1);
+      const received = listener.mock.calls[0][0];
+      expect(received.EventId).toBe(7);
+      expect(received.ImageUrl).toBeUndefined();
+    });
+
     it('unsubscribe removes event listener', async () => {
       const listener = vi.fn();
       const unsubscribe = service.onEvent(listener);
@@ -362,6 +431,7 @@ describe('ZMNotificationService', () => {
     it('sends version request every 60 seconds', async () => {
       const ws = await connectAndAuth();
 
+      expect(providers.getKeepaliveIntervalMs).toHaveBeenCalled();
       ws.send.mockClear();
 
       await vi.advanceTimersByTimeAsync(60_000);
@@ -370,6 +440,19 @@ describe('ZMNotificationService', () => {
       const sentMessage = JSON.parse(ws.send.mock.calls[0][0]);
       expect(sentMessage.event).toBe('control');
       expect(sentMessage.data.type).toBe('version');
+    });
+
+    it('uses the injected keepalive interval', async () => {
+      providers.getKeepaliveIntervalMs.mockReturnValue(5_000);
+      const ws = await connectAndAuth();
+
+      ws.send.mockClear();
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(ws.send).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(ws.send).toHaveBeenCalledTimes(2);
     });
   });
 

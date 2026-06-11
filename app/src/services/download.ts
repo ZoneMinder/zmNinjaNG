@@ -5,19 +5,19 @@
  * Handles platform-specific logic for Web, iOS, Android, and Electron desktop.
  *
  * Features:
- * - Web / Electron: Uses standard browser download (Blob/Anchor) — Electron's
+ * - Web / Electron: Uses standard browser download (Blob/Anchor). Electron's
  *   renderer behaves like a regular browser here
  * - Mobile: Uses Capacitor Filesystem and Media plugins with chunked streaming to avoid OOM
  * - Handles CORS issues via native HTTP or proxy
  * - Automatically saves media to device Photo/Video library on mobile
  */
 
-import { log, LogLevel } from './logger';
-import { Platform } from './platform';
-import { wrapWithImageProxyIfNeeded } from './proxy-utils';
-import { httpRequest, type HttpProgress } from './http';
+import { log, LogLevel } from '../lib/logger';
+import { Platform } from '../lib/platform';
+import { wrapWithImageProxyIfNeeded } from '../lib/proxy-utils';
+import { httpRequest, type HttpProgress } from '../lib/http';
 
-import { getEventVideoUrl as buildEventVideoUrl } from './url-builder';
+import { getEventVideoUrl as buildEventVideoUrl } from '../lib/url-builder';
 import { useBackgroundTasks } from '../stores/backgroundTasks';
 
 /**

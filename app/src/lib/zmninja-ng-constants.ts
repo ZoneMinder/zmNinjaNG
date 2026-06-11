@@ -27,6 +27,13 @@ export const API_REQUEST = {
   maxTimeoutSeconds: 120,
 } as const;
 
+/**
+ * Maximum number of retries for a failed React Query query (the app-wide
+ * default, equivalent to `retry: 1`). Auth errors (401/403) are never
+ * retried; see shouldRetryQuery in stores/query-cache.ts.
+ */
+export const MAX_QUERY_RETRIES = 1;
+
 export const ZM_INTEGRATION = {
   // HTTP timeouts for ZM API calls
   httpTimeout: 10000, // 10 seconds - standard API calls
@@ -43,6 +50,11 @@ export const ZM_INTEGRATION = {
   mjpegReconnectBaseDelayMs: 1000, // 1 second
   mjpegReconnectMaxDelayMs: 15000, // 15 seconds
   mjpegReconnectMaxAttempts: 6,
+
+  // Grace delay before a scheduled CMD_QUIT fires. Lets React StrictMode's
+  // dev double-mount cancel the quit instead of killing a stream the
+  // surviving mount is still using. See lib/zms-quit.ts.
+  cmdQuitGraceMs: 150,
 
   // Image quality settings
   safeImageQuality: 10, // Safe quality setting for bandwidth-constrained scenarios
@@ -63,7 +75,7 @@ export const ZM_INTEGRATION = {
   // Token management
   accessTokenLeewayMin: 5, // Minutes before token expiry to refresh
   refreshTokenLeewayMin: 10, // Minutes before refresh token expiry
-  accessTokenLeewayMs: 30 * 60 * 1000, // 30 minutes in milliseconds — gates URL construction; refresh fires when below this threshold
+  accessTokenLeewayMs: 30 * 60 * 1000, // 30 minutes in milliseconds. Gates URL construction; refresh fires when below this threshold
   tokenCheckInterval: 60 * 1000, // Check token status every minute
   loginInterval: 1800000, // 30 minutes - re-login interval
 } as const;
@@ -95,7 +107,7 @@ export const GRID_LAYOUT = {
   // Minimum card width in grid units
   minCardWidth: 50,
 
-  // Montage row height in pixels — 1px for pixel-level precision (no black bars with contain)
+  // Montage row height in pixels: 1px for pixel-level precision (no black bars with contain)
   montageRowHeight: 1,
 
   // Grid calculation frequencies
@@ -144,6 +156,12 @@ export const TIMELINE = {
 
   // Max monitors queried in parallel during cause-filter fan-out
   fanoutConcurrency: 6,
+
+  // Delay (ms) between a live notification arriving and the events refetch, so ZM can index the event
+  liveRefetchDebounceMs: 2000,
+
+  // Live-event arrival timestamps older than this (ms) are pruned
+  liveArrivalTtlMs: 5000,
 } as const;
 
 /**
@@ -160,6 +178,9 @@ export const NOTIFICATIONS_SERVICE = {
 
   // Delay before attempting reconnection (ms)
   reconnectDelay: 5000,
+
+  // Width (px) requested for event snapshot images in notifications
+  snapshotImageWidth: 600,
 } as const;
 
 /**
@@ -241,6 +262,8 @@ export const MONITOR_STATUS_COLORS = {
 export const LOGGING = {
   // Maximum log entries to retain in the logs screen
   maxLogEntries: 1000,
+  // Maximum stack trace characters logged by the global error handlers
+  maxStackLength: 4000,
 } as const;
 
 /**
@@ -254,7 +277,7 @@ export const STORAGE_KEYS = {
   hoverPreviewOpen: 'zmng-hover-preview-open',
   thumbnailChainOpen: 'zmng-thumbnail-chain-open',
 
-  // Web crypto fallback salt (versioned — bump suffix to invalidate)
+  // Web crypto fallback salt (versioned: bump suffix to invalidate)
   cryptoSalt: 'zmng_crypto_salt_v1',
 
   // Developer Notice: per-device list of read notice IDs (versioned)
@@ -284,6 +307,19 @@ export const DEVELOPER_NOTICES = {
   // How long fetched data stays "fresh" before a refetch is allowed. Matches the
   // poll interval so a window-focus refetch does not check more often than daily.
   staleTimeMs: 24 * 60 * 60 * 1000,
+} as const;
+
+/**
+ * Background Tasks
+ *
+ * Limits for the in-memory background task store (downloads, exports).
+ */
+export const BACKGROUND_TASKS = {
+  // Maximum completed/failed/cancelled tasks kept in the store. Oldest
+  // terminal tasks beyond this are evicted so long-lived sessions (kiosk
+  // mode, repeated downloads) do not grow memory without bound. Active
+  // tasks are never evicted.
+  maxRetainedTerminalTasks: 50,
 } as const;
 
 /**
@@ -321,6 +357,28 @@ export const UI_INTERACTIONS = {
 
   // Pointer movement threshold to cancel a long-press (px)
   moveCancelPx: 8,
+} as const;
+
+/**
+ * Overlay Z-Index Layers
+ *
+ * Stacking contract for fullscreen overlays rendered above the app.
+ * In-page elements use small Tailwind utilities (z-10, z-50); these
+ * values are for portal or fixed overlays that must sit above all of
+ * them. Backdrops sit one step below the content they belong to.
+ */
+export const Z_INDEX = {
+  // Fullscreen blocking backdrops (hover preview backdrop, app init blocker)
+  overlayBackdrop: 9998,
+
+  // Overlay content above a backdrop (hover preview card, kiosk lock overlay)
+  overlay: 9999,
+
+  // Kiosk PIN pad: must sit above the kiosk lock overlay
+  kioskPinPad: 10000,
+
+  // TV mode cursor: above every other layer in this group
+  tvCursor: 99999,
 } as const;
 
 /**

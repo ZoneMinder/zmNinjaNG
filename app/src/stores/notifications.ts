@@ -4,8 +4,10 @@ import {
   getNotificationService,
   resetNotificationService,
 } from '../services/notifications';
+import { getEventPoller, type EventPollerDeps } from '../services/eventPoller';
 import {
   type ZMEventServerConfig,
+  type ZMNotificationProviders,
   type ZMAlarmEvent,
   type ConnectionState,
   type NotificationMode,
@@ -13,9 +15,13 @@ import {
 import { log, LogLevel } from '../lib/logger';
 import { Platform } from '../lib/platform';
 import { getAppVersion } from '../lib/version';
+import { getEventImageUrl } from '../lib/url-builder';
+import { getEffectiveMinStreamingPort } from '../lib/multiport';
 import { updateNotification } from '../api/notifications';
 import { useProfileStore } from './profile';
-import { NOTIFICATIONS_SERVICE } from '../lib/zmninja-ng-constants';
+import { useAuthStore } from './auth';
+import { useSettingsStore } from './settings';
+import { getBandwidthSettings, NOTIFICATIONS_SERVICE } from '../lib/zmninja-ng-constants';
 
 export interface NotificationSettings {
   enabled: boolean;
@@ -276,7 +282,6 @@ export const useNotificationStore = create<NotificationState>()(
           username,
           password,
           appVersion: getAppVersion(),
-          portalUrl,
         };
 
         const service = getNotificationService();
@@ -285,7 +290,7 @@ export const useNotificationStore = create<NotificationState>()(
         get()._initialize();
 
         try {
-          await service.connect(config);
+          await service.connect(config, _buildServiceProviders(profileId, portalUrl));
 
           // Mark which profile is connected
           set({ currentProfileId: profileId });
@@ -387,7 +392,10 @@ export const useNotificationStore = create<NotificationState>()(
         if (!Platform.isNative) return;
         import('@capacitor-firebase/messaging').then(({ FirebaseMessaging }) => {
           FirebaseMessaging.removeAllDeliveredNotifications();
-        }).catch(() => {});
+        }).catch((error) => {
+          // Non-blocking: stale delivered notifications stay in the tray
+          log.notifications('Failed to clear delivered notifications', LogLevel.WARN, error);
+        });
       },
 
       markAllRead: (profileId: string) => {
@@ -542,11 +550,12 @@ export const useNotificationStore = create<NotificationState>()(
               interval,
             });
           } catch (error) {
-            log.notifications('Failed to sync monitor filters via ZM API', LogLevel.ERROR, { profileId: currentProfileId, error });
+            // Non-blocking: the next settings change retries the sync
+            log.notifications('Failed to sync monitor filters via ZM API', LogLevel.WARN, { profileId: currentProfileId, error });
           }
         } else {
           // ES mode: sync via websocket
-          // When allMonitors is on, don't send a filter — ES treats empty monlist as "all monitors"
+          // When allMonitors is on, don't send a filter: ES treats empty monlist as "all monitors"
           if (settings.allMonitors) {
             log.notifications('All monitors enabled, skipping filter sync', LogLevel.INFO, { profileId: currentProfileId });
             return;
@@ -568,7 +577,8 @@ export const useNotificationStore = create<NotificationState>()(
             const service = getNotificationService();
             await service.setMonitorFilter(monitorIds, intervals);
           } catch (error) {
-            log.notifications('Failed to sync monitor filters', LogLevel.ERROR, { profileId: currentProfileId, error });
+            // Non-blocking: the next settings change retries the sync
+            log.notifications('Failed to sync monitor filters', LogLevel.WARN, { profileId: currentProfileId, error });
           }
         }
       },
@@ -590,7 +600,7 @@ export const useNotificationStore = create<NotificationState>()(
             await Badge.set({ count: badgeCount });
             log.notifications('Set native app badge', LogLevel.DEBUG, { badgeCount });
           } catch {
-            // Badge plugin not available — non-fatal
+            // Badge plugin not available: non-fatal
           }
         }
 
@@ -610,7 +620,8 @@ export const useNotificationStore = create<NotificationState>()(
             await service.updateBadgeCount(badgeCount);
           }
         } catch (error) {
-          log.notifications('Failed to update badge count', LogLevel.ERROR, { profileId: currentProfileId, error });
+          // Non-blocking: the badge resyncs on the next event or read action
+          log.notifications('Failed to update badge count', LogLevel.WARN, { profileId: currentProfileId, error });
         }
       },
 
@@ -659,3 +670,51 @@ export const useNotificationStore = create<NotificationState>()(
     }
   )
 );
+
+// ========== Service Wiring ==========
+//
+// The notification services (websocket, event poller) have no zustand
+// imports. The store assembles their store-derived dependencies here and
+// injects them at connect/start time.
+
+/**
+ * Build the providers injected into ZMNotificationService.connect.
+ */
+function _buildServiceProviders(profileId: string, portalUrl: string): ZMNotificationProviders {
+  return {
+    getFreshAccessToken: () => useAuthStore.getState().getFreshAccessToken(),
+    buildEventImageUrl: (eventId, token) =>
+      getEventImageUrl(portalUrl, String(eventId), 'snapshot', {
+        token: token ?? undefined,
+        width: NOTIFICATIONS_SERVICE.snapshotImageWidth,
+      }),
+    getKeepaliveIntervalMs: () => {
+      const profileSettings = useSettingsStore.getState().getProfileSettings(profileId);
+      return getBandwidthSettings(profileSettings.bandwidthMode).wsKeepaliveInterval;
+    },
+  };
+}
+
+/**
+ * Start the direct-mode event poller for a profile, wiring its
+ * store-derived dependencies. Stop/isRunning stay on getEventPoller().
+ */
+export function startEventPoller(profileId: string): Promise<void> {
+  const deps: EventPollerDeps = {
+    onEvent: (event) => useNotificationStore.getState().addEvent(profileId, event, 'poll'),
+    getOnlyDetectedEvents: () =>
+      useNotificationStore.getState().getProfileSettings(profileId).onlyDetectedEvents,
+    getFreshAccessToken: () => useAuthStore.getState().getFreshAccessToken(),
+    getPollIntervalMs: () => {
+      const profileSettings = useSettingsStore.getState().getProfileSettings(profileId);
+      return getBandwidthSettings(profileSettings.bandwidthMode).eventPollerInterval;
+    },
+    getPortalUrl: () => {
+      const { profiles, currentProfileId } = useProfileStore.getState();
+      return profiles.find((p) => p.id === currentProfileId)?.portalUrl;
+    },
+    getMinStreamingPort: () =>
+      getEffectiveMinStreamingPort(useProfileStore.getState().currentProfileId),
+  };
+  return getEventPoller().start(profileId, deps);
+}

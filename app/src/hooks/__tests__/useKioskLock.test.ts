@@ -229,7 +229,7 @@ describe('useKioskLock', () => {
     });
   });
 
-  describe('handleSetPinSubmit — first-time PIN set', () => {
+  describe('handleSetPinSubmit: first-time PIN set', () => {
     it('moves to confirm mode on first PIN entry', async () => {
       mockHasPinStored.mockResolvedValue(false);
 
@@ -320,7 +320,7 @@ describe('useKioskLock', () => {
     });
   });
 
-  describe('handleSetPinSubmit — PIN change flow', () => {
+  describe('handleSetPinSubmit: PIN change flow', () => {
     it('shows pin_changed toast instead of locking when changing PIN', async () => {
       mockStorePin.mockResolvedValue(undefined);
 

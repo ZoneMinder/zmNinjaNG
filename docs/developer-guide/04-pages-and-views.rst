@@ -558,6 +558,20 @@ monitor, color-coded by monitor ID, with zoom/pan, quick-range buttons
 and hit-testing (``timeline-hit-test.ts``) are split into focused
 modules so each can be tested in isolation.
 
+The page itself is composition. ``src/hooks/useTimelineData.ts`` owns
+the events query (with per-monitor fan-out when a cause filter is
+active), the live-mode notification subscription that injects
+synthetic events, and the debounced refetch
+(``TIMELINE.liveRefetchDebounceMs``, 2000 ms). Detection category
+state, counts, and filtering live in
+``src/components/timeline/useDetectionCategories.ts``. The filter
+card (``TimelineFiltersPanel.tsx``), control row
+(``TimelineToolbar.tsx``), and statistics row (``TimelineStats.tsx``)
+are separate components. Toolbar and TV d-pad commands reach the
+canvas through a single ``ViewportAction`` prop (``{ type, seq }``);
+a seq change runs the named action (reset, zoomIn, zoomOut, goToNow,
+panLeft, panRight, followNow) once.
+
 Common Page Patterns
 --------------------
 

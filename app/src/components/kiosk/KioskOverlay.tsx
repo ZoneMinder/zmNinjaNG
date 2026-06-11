@@ -16,6 +16,8 @@ import { PinPad } from './PinPad';
 import { useToast } from '../../hooks/use-toast';
 import { log, LogLevel } from '../../lib/logger';
 import { Platform } from '../../lib/platform';
+import { Z_INDEX } from '../../lib/zmninja-ng-constants';
+import { useCapacitorListener } from '../../hooks/useCapacitorListener';
 
 interface KioskOverlayProps {
   onUnlock: () => void;
@@ -64,28 +66,14 @@ export function KioskOverlay({ onUnlock }: KioskOverlayProps) {
   }, [isLocked]);
 
   // Block Android hardware back button while locked
-  useEffect(() => {
-    if (!isLocked) return;
-
-    let removeListener: (() => void) | undefined;
-
-    (async () => {
-      if (!Platform.isNative) return;
-      try {
-        const { App } = await import('@capacitor/app');
-        const handle = await App.addListener('backButton', () => {
-          // No-op — swallow back button while locked
-        });
-        removeListener = () => handle.remove();
-      } catch {
-        // Plugin unavailable
-      }
-    })();
-
-    return () => {
-      removeListener?.();
-    };
-  }, [isLocked]);
+  useCapacitorListener(
+    () => import('@capacitor/app').then((m) => m.App),
+    'backButton',
+    () => {
+      // No-op: swallow back button while locked
+    },
+    { enabled: isLocked && Platform.isNative },
+  );
 
   // Block keyboard shortcuts while locked (but not when PIN pad is open)
   useEffect(() => {
@@ -125,7 +113,7 @@ export function KioskOverlay({ onUnlock }: KioskOverlayProps) {
         toast({ title: t('kiosk.unlocked_toast') });
         return;
       }
-      // Biometrics failed/cancelled — fall through to PIN
+      // Biometrics failed/cancelled: fall through to PIN
     }
 
     // Show PIN pad
@@ -161,11 +149,11 @@ export function KioskOverlay({ onUnlock }: KioskOverlayProps) {
     <>
       {/* Transparent overlay blocking all interaction */}
       <div
-        className="fixed inset-0 z-[9999]"
-        style={{ pointerEvents: 'auto' }}
+        className="fixed inset-0"
+        style={{ zIndex: Z_INDEX.overlay, pointerEvents: 'auto' }}
         data-testid="kiosk-overlay"
       >
-        {/* Unlock button — bottom-right, theme-aware */}
+        {/* Unlock button: bottom-right, theme-aware */}
         <button
           onClick={handleUnlockTap}
           className="absolute bottom-6 right-6 w-14 h-14 rounded-full flex items-center justify-center transition-all hover:scale-110 active:scale-95 bg-primary/80 hover:bg-primary border-2 border-primary-foreground/30 shadow-lg shadow-primary/30"

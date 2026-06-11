@@ -132,8 +132,8 @@ the ZoneMinder streaming daemon.
 
    // Stream control commands
    ZMS_COMMANDS.cmdQuit   // 17 - Close stream connection
-   ZMS_COMMANDS.cmdPlay   // 1 - Start/resume playback
-   ZMS_COMMANDS.cmdPause  // 2 - Pause playback
+   ZMS_COMMANDS.cmdPause  // 1 - Pause playback
+   ZMS_COMMANDS.cmdPlay   // 2 - Start/resume playback
 
    // Stream modes
    ZMS_MODES.jpeg    // MJPEG streaming

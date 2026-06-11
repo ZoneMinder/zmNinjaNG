@@ -1,5 +1,5 @@
 /**
- * useMonitorStream — token freshness gate
+ * useMonitorStream: token freshness gate
  *
  * Asserts that:
  * - When the access token has less than the 30-min leeway remaining,
@@ -66,7 +66,7 @@ vi.mock('../../lib/zm-constants', () => ({
   },
 }));
 
-describe('useMonitorStream — token freshness gate', () => {
+describe('useMonitorStream: token freshness gate', () => {
   const mockProfile: Profile = {
     id: 'profile-1',
     name: 'Test Profile',
@@ -116,7 +116,7 @@ describe('useMonitorStream — token freshness gate', () => {
   });
 
   it('emits empty streamUrl when the access token has less than the leeway remaining', async () => {
-    // Token expires in 5 minutes — under the 30-min leeway, so isFresh = false.
+    // Token expires in 5 minutes, under the 30-min leeway, so isFresh = false.
     useAuthStore.setState({
       accessToken: 'STALE-MARKER',
       accessTokenExpires: Date.now() + 5 * 60 * 1000,

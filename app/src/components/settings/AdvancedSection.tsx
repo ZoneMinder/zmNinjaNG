@@ -86,7 +86,7 @@ export function AdvancedSection({
     if (biometricsAvailable) {
       const result = await authenticateWithBiometrics(t('kiosk.biometric_prompt'));
       if (result.success) return true;
-      // Biometrics failed/cancelled — fall through to PIN pad
+      // Biometrics failed/cancelled: fall through to PIN pad
     }
     setPendingAction(action);
     setPinPadMode('unlock');
@@ -261,7 +261,7 @@ export function AdvancedSection({
         {advancedExpanded && (
         <>
         <SettingsCard>
-          {/* Self-signed certs — only relevant for HTTPS */}
+          {/* Self-signed certs: only relevant for HTTPS */}
           {currentProfile?.portalUrl?.startsWith('https') && (<><SettingsRow>
             <div className="min-w-0 flex-1">
               <div className="text-sm font-medium">{t('settings.allow_self_signed_certs')}</div>
@@ -410,7 +410,7 @@ export function AdvancedSection({
           </SettingsRow>
         </SettingsCard>
 
-        {/* Component Log Levels — nested inside the Advanced collapsible */}
+        {/* Component Log Levels: nested inside the Advanced collapsible */}
         <ComponentLogLevels
           settings={settings}
           currentProfile={currentProfile}
@@ -440,7 +440,7 @@ export function AdvancedSection({
   );
 }
 
-/** Collapsible section for log level control — global + per-component. */
+/** Collapsible section for log level control: global + per-component. */
 function ComponentLogLevels({
   settings,
   currentProfile,
@@ -462,7 +462,7 @@ function ComponentLogLevels({
     [overrides, globalLevel],
   );
 
-  // Change global level — sets all components to this level (clears overrides)
+  // Change global level: sets all components to this level (clears overrides)
   const handleGlobalChange = useCallback(
     (value: number) => {
       if (!currentProfile) return;
@@ -480,7 +480,7 @@ function ComponentLogLevels({
       if (!currentProfile) return;
       const next = { ...overrides };
       if (value === globalLevel) {
-        // Same as global — remove override
+        // Same as global: remove override
         delete next[component];
       } else {
         next[component] = value;
@@ -517,7 +517,7 @@ function ComponentLogLevels({
       {expanded && (
         <SettingsCard>
           <div className="px-4 py-3">
-            {/* Global level — changes all components */}
+            {/* Global level: changes all components */}
             <div className="flex items-center justify-between mb-3 pb-3 border-b">
               <div>
                 <div className="text-sm font-medium">{t('settings.global_log_level')}</div>

@@ -30,7 +30,7 @@ import { VideoOff } from 'lucide-react';
 /** Minutes before retrying Go2RTC on a monitor that previously failed */
 const GO2RTC_RETRY_INTERVAL_MIN = 5;
 
-/** Cache of monitors where Go2RTC failed — skip straight to MJPEG until TTL expires */
+/** Cache of monitors where Go2RTC failed: skip straight to MJPEG until TTL expires */
 const go2rtcFailureCache = new Map<string, number>();
 
 function isGo2rtcCachedFailure(monitorId: string): boolean {
@@ -197,7 +197,7 @@ export function LiveMonitorPlayer({
     }
 
     if (go2rtcStream.state === 'connected' && !hasVideoFrames) {
-      // Start timeout — if no frames arrive, fall back
+      // Start timeout: if no frames arrive, fall back
       clearVideoTimeout();
       videoTimeoutRef.current = setTimeout(() => {
         // Check for video frames by inspecting the video element
@@ -205,10 +205,10 @@ export function LiveMonitorPlayer({
         const hasFrames = video && video.videoWidth > 0 && video.videoHeight > 0;
 
         if (hasFrames && video.paused) {
-          // Autoplay was blocked — try to play programmatically
+          // Autoplay was blocked: try to play programmatically
           log.videoPlayer('Go2RTC has frames but paused, attempting play', LogLevel.INFO, { monitorId: monitor.Id });
           video.play().catch(() => {
-            // Play failed — still has frames so mark as success
+            // Play failed: still has frames so mark as success
           });
           setHasVideoFrames(true);
         } else if (!hasFrames) {
@@ -505,7 +505,7 @@ export function LiveMonitorPlayer({
 
   return (
     <div className="relative w-full h-full" data-testid="video-player">
-      {/* Background placeholder — shown until video/image loads */}
+      {/* Background placeholder: shown until video/image loads */}
       {showNoVideo && (
         <div className="absolute inset-0 flex items-center justify-center bg-muted/30" data-testid="video-player-loading">
           <VideoOff className="h-8 w-8 text-muted-foreground/40" />
@@ -538,7 +538,7 @@ export function LiveMonitorPlayer({
         />
       )}
 
-      {/* MSE-connecting badge — blinking dots while MJPEG placeholder is shown */}
+      {/* MSE-connecting badge: blinking dots while MJPEG placeholder is shown */}
       {showConnectingBadge && (
         <div
           className="absolute top-1.5 right-1.5 z-20 px-1.5 py-0.5 rounded bg-black/50 text-white/90 text-xs font-bold leading-none animate-pulse pointer-events-none"

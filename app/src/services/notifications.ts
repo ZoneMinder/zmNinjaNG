@@ -8,20 +8,16 @@
  */
 
 import { log, LogLevel } from '../lib/logger';
-import { useAuthStore } from '../stores/auth';
-import { useProfileStore } from '../stores/profile';
-import { useSettingsStore } from '../stores/settings';
 import { getBandwidthSettings } from '../lib/zmninja-ng-constants';
 
 import type {
   ZMEventServerConfig,
+  ZMNotificationProviders,
   ZMNotificationMessage,
   ConnectionState,
   NotificationEventCallback,
   ConnectionStateCallback,
 } from '../types/notifications';
-
-
 
 interface PendingAuth {
   resolve: () => void;
@@ -29,9 +25,21 @@ interface PendingAuth {
   timeout: ReturnType<typeof setTimeout>;
 }
 
+/**
+ * Defaults used when no providers are injected (e.g. the temporary
+ * deregistration connection in pushNotifications.ts). No token, no
+ * client-constructed image URLs, normal-bandwidth keepalive.
+ */
+const DEFAULT_PROVIDERS: ZMNotificationProviders = {
+  getFreshAccessToken: async () => null,
+  buildEventImageUrl: () => undefined,
+  getKeepaliveIntervalMs: () => getBandwidthSettings('normal').wsKeepaliveInterval,
+};
+
 export class ZMNotificationService {
   private ws: WebSocket | null = null;
   private config: ZMEventServerConfig | null = null;
+  private providers: ZMNotificationProviders = DEFAULT_PROVIDERS;
   private state: ConnectionState = 'disconnected';
   private reconnectAttempts = 0;
   private baseReconnectDelay = 2000; // 2 seconds initial
@@ -50,15 +58,24 @@ export class ZMNotificationService {
   }
 
   /**
-   * Connect to ZM event notification server
+   * Connect to ZM event notification server.
+   *
+   * @param config - WebSocket endpoint and credentials
+   * @param providers - Store-derived callbacks (token, image URL builder,
+   *   keepalive interval). Assembled by stores/notifications.ts; omitted
+   *   providers fall back to DEFAULT_PROVIDERS.
    */
-  public async connect(config: ZMEventServerConfig): Promise<void> {
+  public async connect(
+    config: ZMEventServerConfig,
+    providers?: Partial<ZMNotificationProviders>
+  ): Promise<void> {
     if (this.state === 'connected' || this.state === 'authenticating' || this.state === 'connecting') {
       log.notifications('Already connected or connecting to notification server', LogLevel.INFO, { state: this.state });
       return;
     }
 
     this.config = config;
+    this.providers = { ...DEFAULT_PROVIDERS, ...providers };
     this.reconnectAttempts = 0;
     this.intentionalDisconnect = false;
 
@@ -362,7 +379,7 @@ export class ZMNotificationService {
     } catch (error) {
       log.notifications('Failed to connect to notification server', LogLevel.ERROR, error);
       this._setState('error');
-      // Don't throw — let _handleClose schedule reconnect for transport failures.
+      // Don't throw: let _handleClose schedule reconnect for transport failures.
       // For auth failures, disconnect() was already called in _handleMessage.
     }
   }
@@ -441,17 +458,16 @@ export class ZMNotificationService {
               eventId: event.EventId,
               imageUrl: event.Picture,
             });
-          } else if (this.config && event.EventId) {
-            const currentToken = await useAuthStore.getState().getFreshAccessToken();
-            let imageUrl = `${this.config.portalUrl}/index.php?view=image&eid=${event.EventId}&fid=snapshot&width=600`;
-            if (currentToken) {
-              imageUrl += `&token=${currentToken}`;
+          } else if (event.EventId) {
+            const currentToken = await this.providers.getFreshAccessToken();
+            const imageUrl = this.providers.buildEventImageUrl(event.EventId, currentToken);
+            if (imageUrl) {
+              event.ImageUrl = imageUrl;
+              log.notifications('Using client-constructed image URL (no Picture from server)', LogLevel.INFO, {
+                eventId: event.EventId,
+                imageUrl,
+              });
             }
-            event.ImageUrl = imageUrl;
-            log.notifications('Using client-constructed image URL (no Picture from server)', LogLevel.INFO, {
-              eventId: event.EventId,
-              imageUrl,
-            });
           }
 
           // Notify all listeners
@@ -569,17 +585,12 @@ export class ZMNotificationService {
     if (this.pingInterval) {
       clearInterval(this.pingInterval);
     }
-    const profileId = useProfileStore.getState().currentProfileId;
-    const profileSettings = profileId
-      ? useSettingsStore.getState().getProfileSettings(profileId)
-      : null;
-    const bandwidth = getBandwidthSettings(profileSettings?.bandwidthMode ?? 'normal');
     this.pingInterval = setInterval(() => {
       if (this._isConnected()) {
         log.notifications('Sending keepalive ping', LogLevel.DEBUG);
         this._send({ event: 'control', data: { type: 'version' } });
       }
-    }, bandwidth.wsKeepaliveInterval);
+    }, this.providers.getKeepaliveIntervalMs());
   }
 
   private _send(message: unknown): void {
@@ -626,7 +637,7 @@ export class ZMNotificationService {
         this.pendingAuth = null;
         this._setState('error');
 
-        // Close the socket — this triggers _handleClose which will schedule reconnect
+        // Close the socket: this triggers _handleClose which will schedule reconnect
         if (this.ws) {
           this.ws.close();
           this.ws = null;

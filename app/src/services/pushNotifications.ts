@@ -16,6 +16,8 @@ import { useProfileStore } from '../stores/profile';
 import { useAuthStore } from '../stores/auth';
 import { registerToken, deleteNotification } from '../api/notifications';
 import { getAppVersion } from '../lib/version';
+import { getEventImageUrl } from '../lib/url-builder';
+import { NOTIFICATIONS_SERVICE } from '../lib/zmninja-ng-constants';
 import { ZMNotificationService } from './notifications';
 import type { ZMEventServerConfig } from '../types/notifications';
 import { resolveProfileForNotification, requestProfileSwitch } from '../lib/notification-profile';
@@ -191,11 +193,11 @@ export class MobilePushService {
           const platform = Capacitor.getPlatform() as 'ios' | 'android';
 
           if (notificationStore.isConnected) {
-            // Already connected — send directly
+            // Already connected: send directly
             log.push('Sending disabled state to notification server', LogLevel.INFO, { platform });
             await notificationStore.deregisterPushToken(this.currentToken, platform);
           } else {
-            // Not connected — temporarily connect to send the deregister
+            // Not connected: temporarily connect to send the deregister
             log.push('Not connected to ES, using temporary connection to deregister', LogLevel.INFO, { platform });
             await this._deregisterViaTemporaryConnection(profileId, this.currentToken, platform);
           }
@@ -250,7 +252,6 @@ export class MobilePushService {
       username: profile.username,
       password,
       appVersion: getAppVersion(),
-      portalUrl: profile.portalUrl,
     };
 
     const tempService = new ZMNotificationService();
@@ -305,7 +306,7 @@ export class MobilePushService {
 
   /**
    * Create the Android notification channel used by FCM push messages.
-   * This is idempotent — calling it when the channel already exists is a no-op.
+   * This is idempotent: calling it when the channel already exists is a no-op.
    */
   private async _createNotificationChannel(): Promise<void> {
     try {
@@ -314,7 +315,7 @@ export class MobilePushService {
         id: 'zmninja-ng',
         name: 'zmNinja Notifications',
         description: 'ZoneMinder event alerts',
-        importance: 4, // IMPORTANCE_HIGH — heads-up notifications
+        importance: 4, // IMPORTANCE_HIGH, heads-up notifications
         vibration: true,
       });
       log.push('Android notification channel created', LogLevel.INFO, { channelId: 'zmninja-ng' });
@@ -471,7 +472,10 @@ export class MobilePushService {
     // (we have a valid auth token for the current profile only)
     let imageUrl: string | undefined;
     if (eid && targetProfileId === currentProfileId && targetProfile && authStore.accessToken) {
-      imageUrl = `${targetProfile.portalUrl}/index.php?view=image&eid=${eid}&fid=snapshot&width=600&token=${authStore.accessToken}`;
+      imageUrl = getEventImageUrl(targetProfile.portalUrl, String(eid), 'snapshot', {
+        token: authStore.accessToken,
+        width: NOTIFICATIONS_SERVICE.snapshotImageWidth,
+      });
     }
 
     const monitorName = data?.monitorName || data?.MonitorName || notification.title?.replace(/\s*Alarm.*$/, '') || 'Unknown';
@@ -522,7 +526,10 @@ export class MobilePushService {
       // Only construct image URL if the notification is for the current profile
       let imageUrl: string | undefined;
       if (eid && profileIdForEvent === currentProfileId && targetProfile && authStore.accessToken) {
-        imageUrl = `${targetProfile.portalUrl}/index.php?view=image&eid=${eid}&fid=snapshot&width=600&token=${authStore.accessToken}`;
+        imageUrl = getEventImageUrl(targetProfile.portalUrl, String(eid), 'snapshot', {
+          token: authStore.accessToken,
+          width: NOTIFICATIONS_SERVICE.snapshotImageWidth,
+        });
       }
 
       const monitorName = data?.monitorName || data?.MonitorName || notification.title?.replace(/\s*Alarm.*$/, '') || 'Unknown';
@@ -551,7 +558,7 @@ export class MobilePushService {
     if (!eid) return;
 
     if (isCrossProfile && targetProfileId) {
-      // Different profile — request user confirmation before switching
+      // Different profile: request user confirmation before switching
       const { profiles } = useProfileStore.getState();
       const targetProfile = profiles.find(p => p.id === targetProfileId);
 
@@ -566,7 +573,7 @@ export class MobilePushService {
         eventId: String(eid),
       });
     } else {
-      // Same profile — navigate directly (with fallback route for back button)
+      // Same profile: navigate directly (with fallback route for back button)
       navigationService.navigateToEvent(String(eid), { from: '/monitors', fromNotification: true });
       log.push('Navigating to event detail', LogLevel.INFO, { eventId: eid });
     }

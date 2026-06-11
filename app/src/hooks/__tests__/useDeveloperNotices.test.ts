@@ -49,7 +49,7 @@ describe('compareSemver', () => {
   });
 });
 
-describe('useDeveloperNotices — feed deletions', () => {
+describe('useDeveloperNotices: feed deletions', () => {
   beforeEach(() => {
     fetchMock.mockReset();
     useDeveloperNoticeStore.setState({ readIds: [], dismissedBannerIds: [] });
@@ -81,7 +81,7 @@ describe('useDeveloperNotices — feed deletions', () => {
     expect(result.current.unreadCount).toBe(0);
     expect(result.current.isError).toBe(false);
 
-    // Orphan ids are still in localStorage — harmless, but accumulate over time
+    // Orphan ids are still in localStorage: harmless, but accumulate over time
     const state = useDeveloperNoticeStore.getState();
     expect(state.readIds).toContain('notice-b-deleted');
     expect(state.dismissedBannerIds).toContain('notice-c-deleted');

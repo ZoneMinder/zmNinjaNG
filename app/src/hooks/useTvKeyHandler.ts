@@ -12,7 +12,7 @@ type DpadKey = 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown' | 'Enter';
 
 export type TvKeyMap = Partial<Record<DpadKey, () => void>>;
 
-/** Elements that natively handle Enter — don't synthesize a click on these. */
+/** Elements that natively handle Enter: don't synthesize a click on these. */
 const NATIVE_ENTER_TAGS = new Set(['BUTTON', 'A', 'INPUT', 'SELECT', 'TEXTAREA']);
 
 export function useTvKeyHandler(keyMap: TvKeyMap) {

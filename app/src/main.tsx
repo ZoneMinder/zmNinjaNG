@@ -5,10 +5,15 @@ import './i18n'
 import App from './App.tsx'
 import { Platform } from './lib/platform'
 import { installSafeAreaBootstrap } from './lib/safe-area-bootstrap'
+import { installGlobalErrorHandlers } from './lib/global-error-handlers'
+
+// Route unhandled promise rejections and uncaught window errors into the
+// in-app log system before anything else runs. refs #182.
+installGlobalErrorHandlers();
 
 // Tag the root on native so CSS can disable long-press text selection
 // and touch callouts app-wide. Inputs and contenteditable fields opt
-// back in — see index.css.
+// back in. See index.css.
 if (Platform.isNative) {
   document.documentElement.classList.add('is-native');
 }

@@ -12,7 +12,11 @@ import type { ApiClient } from '../../api/client';
 
 // Mock the API client
 vi.mock('../../api/client', () => ({
-  createApiClient: vi.fn((_baseURL: string) => {
+  setApiClient: vi.fn(),
+}));
+
+vi.mock('../../api/store-gates', () => ({
+  createStoreApiClient: vi.fn((_baseURL: string) => {
     return {
       get: vi.fn(),
       post: vi.fn(),
@@ -20,7 +24,6 @@ vi.mock('../../api/client', () => ({
       delete: vi.fn(),
     } as unknown as ApiClient;
   }),
-  setApiClient: vi.fn(),
 }));
 
 // Mock auth functions (fetchZmsPath is no longer used directly in discovery)
@@ -29,7 +32,7 @@ vi.mock('../../api/auth', () => ({
 }));
 
 // Mock logger
-vi.mock('../logger', () => ({
+vi.mock('../../lib/logger', () => ({
   log: {
     discovery: vi.fn(),
   },
@@ -42,7 +45,7 @@ vi.mock('../logger', () => ({
 }));
 
 // Import after mocks
-import { createApiClient } from '../../api/client';
+import { createStoreApiClient } from '../../api/store-gates';
 
 describe('discoverZoneminder', () => {
   beforeEach(() => {
@@ -54,7 +57,7 @@ describe('discoverZoneminder', () => {
       const mockGet = vi.fn()
         .mockResolvedValueOnce({ status: 200, data: { version: '1.36.0' } });
 
-      (createApiClient as any).mockReturnValue({ get: mockGet });
+      (createStoreApiClient as any).mockReturnValue({ get: mockGet });
 
       const result = await discoverZoneminder('http://zm.example.com');
 
@@ -73,7 +76,7 @@ describe('discoverZoneminder', () => {
         // API check for /api - success
         .mockResolvedValueOnce({ status: 200, data: { version: '1.36.0' } });
 
-      (createApiClient as any).mockReturnValue({ get: mockGet });
+      (createStoreApiClient as any).mockReturnValue({ get: mockGet });
 
       const result = await discoverZoneminder('http://zm.example.com');
 
@@ -94,7 +97,7 @@ describe('discoverZoneminder', () => {
         // Login
         .mockResolvedValueOnce({ status: 200, data: { access_token: 'token' } });
 
-      (createApiClient as any).mockReturnValue({ get: mockGet, post: mockPost });
+      (createStoreApiClient as any).mockReturnValue({ get: mockGet, post: mockPost });
 
       const result = await discoverZoneminder('http://zm.example.com', {
         username: 'admin',
@@ -114,7 +117,7 @@ describe('discoverZoneminder', () => {
       const mockPost = vi.fn()
         .mockResolvedValueOnce({ status: 200, data: { access_token: 'token' } });
 
-      (createApiClient as any).mockReturnValue({ get: mockGet, post: mockPost });
+      (createStoreApiClient as any).mockReturnValue({ get: mockGet, post: mockPost });
 
       const result = await discoverZoneminder('http://zm.example.com', {
         username: 'admin',
@@ -130,7 +133,7 @@ describe('discoverZoneminder', () => {
       const mockPost = vi.fn()
         .mockRejectedValueOnce(new Error('Invalid credentials'));
 
-      (createApiClient as any).mockReturnValue({ get: mockGet, post: mockPost });
+      (createStoreApiClient as any).mockReturnValue({ get: mockGet, post: mockPost });
 
       const result = await discoverZoneminder('http://zm.example.com', {
         username: 'admin',
@@ -145,7 +148,7 @@ describe('discoverZoneminder', () => {
       const mockGet = vi.fn()
         .mockResolvedValueOnce({ status: 200, data: { version: '1.36.0' } });
 
-      (createApiClient as any).mockReturnValue({ get: mockGet });
+      (createStoreApiClient as any).mockReturnValue({ get: mockGet });
 
       const result = await discoverZoneminder('https://zm.example.com');
 
@@ -158,7 +161,7 @@ describe('discoverZoneminder', () => {
       const mockGet = vi.fn()
         .mockResolvedValueOnce({ status: 200, data: { version: '1.36.0' } });
 
-      (createApiClient as any).mockReturnValue({ get: mockGet });
+      (createStoreApiClient as any).mockReturnValue({ get: mockGet });
 
       const result = await discoverZoneminder('zm.example.com');
 
@@ -175,7 +178,7 @@ describe('discoverZoneminder', () => {
         // HTTP /zm/api - success
         .mockResolvedValueOnce({ status: 200, data: { version: '1.36.0' } });
 
-      (createApiClient as any).mockReturnValue({ get: mockGet });
+      (createStoreApiClient as any).mockReturnValue({ get: mockGet });
 
       const result = await discoverZoneminder('zm.example.com');
 
@@ -186,7 +189,7 @@ describe('discoverZoneminder', () => {
       const mockGet = vi.fn()
         .mockRejectedValueOnce({ status: 401, message: 'Unauthorized' });
 
-      (createApiClient as any).mockReturnValue({ get: mockGet });
+      (createStoreApiClient as any).mockReturnValue({ get: mockGet });
 
       const result = await discoverZoneminder('http://zm.example.com');
 
@@ -199,7 +202,7 @@ describe('discoverZoneminder', () => {
       const mockGet = vi.fn()
         .mockRejectedValue(new Error('Not found'));
 
-      (createApiClient as any).mockReturnValue({ get: mockGet });
+      (createStoreApiClient as any).mockReturnValue({ get: mockGet });
 
       await expect(discoverZoneminder('http://nonexistent.com')).rejects.toThrow(
         DiscoveryError
@@ -210,7 +213,7 @@ describe('discoverZoneminder', () => {
       const mockGet = vi.fn()
         .mockRejectedValue(new Error('Connection refused'));
 
-      (createApiClient as any).mockReturnValue({ get: mockGet });
+      (createStoreApiClient as any).mockReturnValue({ get: mockGet });
 
       try {
         await discoverZoneminder('http://zm.example.com');
@@ -227,7 +230,7 @@ describe('discoverZoneminder', () => {
       const mockGet = vi.fn()
         .mockResolvedValueOnce({ status: 200, data: { version: '1.36.0' } });
 
-      (createApiClient as any).mockReturnValue({ get: mockGet });
+      (createStoreApiClient as any).mockReturnValue({ get: mockGet });
 
       const result = await discoverZoneminder('http://zm.example.com/');
 
@@ -240,7 +243,7 @@ describe('discoverZoneminder', () => {
       const mockGet = vi.fn()
         .mockResolvedValueOnce({ status: 200, data: { version: '1.36.0' } });
 
-      (createApiClient as any).mockReturnValue({ get: mockGet });
+      (createStoreApiClient as any).mockReturnValue({ get: mockGet });
 
       const result = await discoverZoneminder('http://zm.example.com:8080');
 
@@ -253,7 +256,7 @@ describe('discoverZoneminder', () => {
       const mockGet = vi.fn()
         .mockResolvedValueOnce({ status: 200, data: { version: '1.36.0' } });
 
-      (createApiClient as any).mockReturnValue({ get: mockGet });
+      (createStoreApiClient as any).mockReturnValue({ get: mockGet });
 
       const result = await discoverZoneminder('http://zm-server');
 
@@ -267,7 +270,7 @@ describe('discoverZoneminder', () => {
         // login.json succeeds
         .mockResolvedValueOnce({ status: 200 });
 
-      (createApiClient as any).mockReturnValue({ get: mockGet });
+      (createStoreApiClient as any).mockReturnValue({ get: mockGet });
 
       const result = await discoverZoneminder('http://zm.example.com');
 
@@ -279,7 +282,7 @@ describe('discoverZoneminder', () => {
         .mockResolvedValueOnce({ status: 200, data: { version: '1.36.0' } });
       const mockPost = vi.fn();
 
-      (createApiClient as any).mockReturnValue({ get: mockGet, post: mockPost });
+      (createStoreApiClient as any).mockReturnValue({ get: mockGet, post: mockPost });
 
       await discoverZoneminder('http://zm.example.com');
 
@@ -313,7 +316,7 @@ describe('discoverZoneminder', () => {
         return Promise.reject(error);
       });
 
-      (createApiClient as any).mockReturnValue({ get: mockGet });
+      (createStoreApiClient as any).mockReturnValue({ get: mockGet });
 
       await expect(
         discoverZoneminder('http://zm.example.com', { signal: abortController.signal })

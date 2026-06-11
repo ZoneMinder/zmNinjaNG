@@ -51,6 +51,14 @@ export function useTimelineGestures(callbacks: GestureCallbacks): RefObject<HTML
     let pinchDist = 0;
     let pinchMidNormX = 0;
 
+    // Pending timer that clears the brush overlay after release
+    let brushClearTimer: ReturnType<typeof setTimeout> | undefined;
+
+    function scheduleBrushClear() {
+      if (brushClearTimer !== undefined) clearTimeout(brushClearTimer);
+      brushClearTimer = setTimeout(() => cbRef.current.onBrushUpdate?.(0, 0), 50);
+    }
+
     function canvasRelative(clientX: number, clientY: number): { x: number; y: number } {
       const rect = canvas!.getBoundingClientRect();
       return { x: clientX - rect.left, y: clientY - rect.top };
@@ -124,7 +132,7 @@ export function useTimelineGestures(callbacks: GestureCallbacks): RefObject<HTML
           cbRef.current.onBrushZoom?.(lo, hi);
         }
         // Clear overlay after a short delay to let the zoom animation start
-        setTimeout(() => cbRef.current.onBrushUpdate?.(0, 0), 50);
+        scheduleBrushClear();
         return;
       }
       if (!dragging) return;
@@ -217,14 +225,14 @@ export function useTimelineGestures(callbacks: GestureCallbacks): RefObject<HTML
     function onTouchEnd(e: TouchEvent) {
       if (brushing && e.touches.length === 0) {
         brushing = false;
-        // Use last known position — changedTouches has the lifted finger
+        // Use last known position: changedTouches has the lifted finger
         const endNorm = normX(e.changedTouches[0].clientX);
         const lo = Math.min(brushStartNorm, endNorm);
         const hi = Math.max(brushStartNorm, endNorm);
         if (hi - lo > 0.01) {
           cbRef.current.onBrushZoom?.(lo, hi);
         }
-        setTimeout(() => cbRef.current.onBrushUpdate?.(0, 0), 50);
+        scheduleBrushClear();
         return;
       }
       if (e.touches.length === 0) {
@@ -254,6 +262,7 @@ export function useTimelineGestures(callbacks: GestureCallbacks): RefObject<HTML
     canvas.addEventListener('touchend', onTouchEnd);
 
     return () => {
+      if (brushClearTimer !== undefined) clearTimeout(brushClearTimer);
       canvas.removeEventListener('mousedown', onMouseDown);
       canvas.removeEventListener('mousemove', onMouseMove);
       canvas.removeEventListener('mouseup', onMouseUp);

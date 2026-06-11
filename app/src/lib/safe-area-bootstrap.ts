@@ -3,7 +3,7 @@
  *
  * iOS WKWebView + Capacitor 7 with contentInset='never' + viewport-fit=cover
  * reports stale or wrong env(safe-area-inset-*) values across rotations
- * (see #147 diagnostic — env(top) stays 0 in portrait on Dynamic Island
+ * (see #147 diagnostic: env(top) stays 0 in portrait on Dynamic Island
  * devices, env(left/right) stay at landscape 62 values regardless of
  * orientation). The native SafeAreaPlugin reads UIView.safeAreaInsets
  * (UIKit's source of truth) and emits an event on every change. Here we

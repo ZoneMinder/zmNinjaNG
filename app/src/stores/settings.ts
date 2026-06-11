@@ -175,7 +175,7 @@ export interface ProfileSettings {
   eventVideoAutoplay: boolean;
   // Desktop sidebar width in pixels (60–320, persisted across sessions)
   sidebarWidth: number;
-  // TV mode — enables D-pad navigation and larger UI
+  // TV mode: enables D-pad navigation and larger UI
   tvMode: boolean;
   // Show protocol label (MJPEG/MSE/WebRTC) on video streams
   showProtocolLabel: boolean;

@@ -197,20 +197,37 @@ Tokens are stored encrypted in ``SecureStorage``:
 
    await SecureStorage.set(`auth_tokens_${profileId}`, JSON.stringify(tokens));
 
+Auth Gates
+^^^^^^^^^^
+
+``createApiClient`` (``src/api/client.ts``) does not import the zustand
+stores. It receives ``ApiClientGates``, two narrow interfaces:
+``AuthGate`` (token reads, ``getFreshAccessToken``, ``proactiveLogin``,
+``recoverFromAuthFailure``) and ``SettingsGate``
+(``getApiTimeoutSeconds``). ``api/store-gates.ts`` builds the gates from
+the real stores and exports ``createStoreApiClient(baseURL, reLogin?,
+profileId?)``, which every production call site uses. Tests inject plain
+mock gates instead of mocking zustand. All single-flight deduplication
+(login, token refresh, 401 recovery) lives behind the gates in
+``stores/auth.ts`` as module-level pending promises; ``resetAuthGates()``
+clears them all and runs from ``resetApiClient()`` on profile switch so a
+new profile never attaches to a login, refresh, or recovery started for
+the old one.
+
 Proactive Authentication
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
 Profiles rehydrate from localStorage at startup, but login takes a
-few seconds. To avoid 401s, ``createApiClient`` (``src/api/client.ts``)
-checks for an access token before any non-login request, triggers login
-first, then retries the original request:
+few seconds. To avoid 401s, ``createApiClient`` checks authentication
+before any non-login request, triggers login first, then retries the
+original request:
 
 .. code:: typescript
 
    // Before making HTTP request
-   if (!accessToken && !skipAuth && !isLoginRequest && reLogin && !hasRetried) {
-     // Trigger login first
-     const loginSuccess = await reLogin();
+   if (!gates.auth.isAuthenticated() && !skipAuth && !isLoginRequest && reLogin && !hasRetried) {
+     // Single-flight in the auth store: concurrent requests share one reLogin.
+     const loginSuccess = await gates.auth.proactiveLogin(reLogin);
 
      if (!loginSuccess) {
        throw new Error('Authentication required but login failed');
@@ -220,39 +237,35 @@ first, then retries the original request:
      return request(method, url, data, config, true);
    }
 
-**Concurrent requests** share the same login promise so login only
-runs once:
-
-.. code:: typescript
-
-   let loginInProgress = false;
-   let loginPromise: Promise<boolean> | null = null;
-
-   if (loginInProgress && loginPromise) {
-     // Wait for ongoing login
-     loginSuccess = await loginPromise;
-   } else {
-     // Start new login
-     loginInProgress = true;
-     loginPromise = reLogin();
-     // ...
-   }
+**Concurrent requests** share the same login attempt:
+``proactiveLogin`` in ``stores/auth.ts`` holds a module-level
+``pendingProactiveLogin`` promise, so the first request invokes
+``reLogin`` and the rest attach to the same outcome.
 
 **Reactive 401 handling.** If a request still returns 401 (e.g.
-token expired mid-flight), the client refreshes the token and retries
-once:
+token expired mid-flight), the client runs the shared recovery and
+retries once:
 
 .. code:: typescript
 
    catch (error) {
      if (httpError.status === 401 && !hasRetried && !skipAuth && !isLoginRequest) {
-       // Try refresh token
-       await refreshAccessToken();
-       return request(method, url, data, config, true); // hasRetried=true prevents loops
+       const recovered = await gates.auth.recoverFromAuthFailure(reLogin);
+       if (recovered) {
+         return request(method, url, data, config, true); // hasRetried=true prevents loops
+       }
      }
    }
 
-``hasRetried`` ensures each request attempts auth only once.
+``recoverFromAuthFailure`` in ``stores/auth.ts`` is single-flight: when a
+token expires under a busy view (e.g. montage), every pending request
+fails with 401 at once, the first caller runs refresh-then-reLogin, the
+rest await the same outcome and retry once. The refresh goes through the
+deduplicated ``refreshAccessToken``, so a recovery that starts while a
+proactive refresh is pending attaches to the same POST instead of issuing
+a second one. When refresh and reLogin both fail it logs out once and
+resolves false; it never rejects. ``hasRetried`` ensures each request
+attempts auth only once.
 
 Access Token Freshness Gate
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -400,7 +413,12 @@ calls this when a stream needs a new key.
 Connection keys are stored in the Zustand monitors store (persisted via
 ``localStorage``). ``getConnKey(monitorId)`` returns the existing key if
 one is already stored, or generates a new one. ``regenerateConnKey``
-always creates a fresh key (used on stream failure).
+always creates a fresh key (used on stream failure). ``clearConnKey``
+removes the stored key; ``useStreamLifecycle`` calls it on unmount after
+sending ``CMD_QUIT`` so the next mount generates a fresh key instead of
+reusing one tied to a quit stream. The cleanup only clears the key it
+quit: if the store already holds a newer key (another mount regenerated
+it), the newer key is left intact.
 
 Streaming Mechanics
 ~~~~~~~~~~~~~~~~~~~
@@ -537,17 +555,24 @@ Query Client Setup
 .. code:: tsx
 
    import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+   import { setQueryClient, shouldRetryQuery } from './stores/query-cache';
 
    const queryClient = new QueryClient({
      defaultOptions: {
        queries: {
-         retry: 1,                      // Single retry on failure
+         retry: shouldRetryQuery,       // Single retry, but never on 401/403
          refetchOnWindowFocus: false,   // Don't refetch when window focused
          // staleTime: 0 (default)      // Data immediately stale
          // gcTime: 5 min (default)     // Unused data kept 5 min
        },
      },
    });
+
+``shouldRetryQuery`` (``stores/query-cache.ts``) retries a failed query
+once (``MAX_QUERY_RETRIES`` in ``lib/zmninja-ng-constants.ts``), except
+for HTTP 401/403 errors, which are never retried. The API client already
+performs token recovery inside the request, so an auth error that
+reaches React Query is final.
 
 With ``staleTime: 0``, every query subscriber triggers a fetch. The
 HTTP layer (``lib/http.ts``) logs every call with a correlation ID;
@@ -1718,11 +1743,14 @@ for new events in Direct notification mode on desktop (Electron) and web.
 New events are fed into the notification store, which triggers toast
 display via ``NotificationHandler``.
 
-**Usage:** The poller is started automatically by ``NotificationHandler``
-when ``notificationMode === ‘direct’`` on desktop/web (``Platform.isDesktopOrWeb``).
-On mobile (iOS/Android), FCM push notifications handle event delivery instead.
-The polling interval is configurable per-profile via ``pollingInterval`` in
-notification settings (default 30 seconds). The poller uses recursive
+**Usage:** The poller is started through ``startEventPoller(profileId)`` in
+``stores/notifications.ts`` when ``notificationMode === ‘direct’`` on
+desktop/web (``Platform.isDesktopOrWeb``). The wiring function injects the
+poller's store-derived dependencies (``EventPollerDeps``: event sink, token
+provider, poll interval, portal URL, multi-port lookup); the poller itself has
+no store imports. On mobile (iOS/Android), FCM push notifications handle event
+delivery instead. The polling interval follows the profile's bandwidth mode
+(``eventPollerInterval``: 30 s normal, 60 s low). The poller uses recursive
 ``setTimeout`` so interval changes take effect on the next tick.
 
 **Filters:** When ``onlyDetectedEvents`` is enabled in notification settings,
@@ -1965,11 +1993,12 @@ The ZMS daemon accepts various control commands via HTTP requests:
 
    // src/lib/zm-constants.ts
    export const ZMS_COMMANDS = {
-     cmdPlay: 1,      // Start/resume playback
-     cmdPause: 2,     // Pause playback
+     cmdPause: 1,     // Pause playback
+     cmdPlay: 2,      // Start/resume playback
      cmdStop: 3,      // Stop playback
+     cmdVarPlay: 15,  // Change playback rate (with rate param)
      cmdQuit: 17,     // Close stream connection
-     cmdQuery: 18,    // Query stream status
+     cmdQuery: 99,    // Query stream status
      // ... more commands
    } as const;
 

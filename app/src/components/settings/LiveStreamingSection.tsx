@@ -84,7 +84,7 @@ export function LiveStreamingSection({
           />
           <div className="flex items-center gap-2 flex-shrink-0">
             {settings.bandwidthMode === 'low' && (
-              <Badge variant="secondary" className="text-xs bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
+              <Badge variant="success" className="text-xs">
                 {t('settings.bandwidth_saving')}
               </Badge>
             )}
@@ -138,7 +138,7 @@ export function LiveStreamingSection({
           </div>
         </SettingsRow>
 
-        {/* Snapshot Refresh Interval (only in snapshot mode — child of Streaming Mode) */}
+        {/* Snapshot Refresh Interval (only in snapshot mode: child of Streaming Mode) */}
         {settings.viewMode === 'snapshot' && (
           <div className="px-4 py-3 space-y-2">
             <RowLabel

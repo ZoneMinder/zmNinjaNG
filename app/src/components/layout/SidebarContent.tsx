@@ -70,18 +70,10 @@ export function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentPro
       return profiles.find((p) => p.id === currentProfileId) || null;
     })
   );
-  const { connectionState, getProfileSettings } = useNotificationStore(
-    useShallow((state) => ({
-      connectionState: state.connectionState,
-      getProfileSettings: state.getProfileSettings,
-    }))
-  );
-  const { getProfileSettings: getSettings, updateProfileSettings } = useSettingsStore(
-    useShallow((state) => ({
-      getProfileSettings: state.getProfileSettings,
-      updateProfileSettings: state.updateProfileSettings,
-    }))
-  );
+  const connectionState = useNotificationStore((state) => state.connectionState);
+  const getProfileSettings = useNotificationStore((state) => state.getProfileSettings);
+  const getSettings = useSettingsStore((state) => state.getProfileSettings);
+  const updateProfileSettings = useSettingsStore((state) => state.updateProfileSettings);
 
   // Get notification data for current profile
   const settings = currentProfile ? getProfileSettings(currentProfile.id) : null;
@@ -215,7 +207,7 @@ export function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentPro
       </div>
 
       <div className={cn("flex-1 overflow-y-auto overflow-x-hidden", isMobileDrawer ? "px-2 py-1" : "px-3 py-2")}>
-        {/* Reorder toggle — only when expanded */}
+        {/* Reorder toggle: only when expanded */}
         {!isCollapsed && (
           <div className="flex justify-end gap-1 mb-1 px-1">
             {isReordering && (

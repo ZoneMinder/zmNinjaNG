@@ -3,7 +3,7 @@
  *
  * Tabbed settings panel for monitor configuration.
  * Shows Capturing/Analysing/Recording on ZM 1.38+, legacy Function on older servers.
- * Editable fields use local state — changes are only sent when Save is pressed.
+ * Editable fields use local state: changes are only sent when Save is pressed.
  */
 
 import { useState, useEffect } from 'react';
@@ -33,7 +33,7 @@ interface MonitorSettingsDialogProps {
   /** Called with only the fields that changed when Save is pressed. */
   onSave?: (changes: Record<string, string | undefined>) => Promise<void>;
   isSaving?: boolean;
-  // Cycle settings (MonitorDetail only — local setting, not a ZM API field)
+  // Cycle settings (MonitorDetail only: local setting, not a ZM API field)
   cycleSeconds?: number;
   onCycleSecondsChange?: (value: string) => void;
   // Read-only display (MonitorDetail only)
@@ -84,7 +84,8 @@ export function MonitorSettingsDialog({
   const editable = !!onSave;
   const is138Plus = isZmVersionAtLeast(zmVersion, '1.38.0');
   const { currentProfile } = useCurrentProfile();
-  const { getProfileSettings, updateProfileSettings } = useSettingsStore();
+  const getProfileSettings = useSettingsStore((state) => state.getProfileSettings);
+  const updateProfileSettings = useSettingsStore((state) => state.updateProfileSettings);
   const profileSettings = currentProfile ? getProfileSettings(currentProfile.id) : null;
 
   // Per-monitor Go2RTC override
@@ -104,7 +105,7 @@ export function MonitorSettingsDialog({
 
     const overrides = { ...(profileSettings.monitorStreamingOverrides ?? {}) };
     if (enabled) {
-      // Remove override — inherit global
+      // Remove override: inherit global
       delete overrides[monitor.Id];
     } else {
       overrides[monitor.Id] = 'mjpeg';
@@ -155,10 +156,10 @@ export function MonitorSettingsDialog({
   }, [monitor]);
 
   // Check if anything changed from server state
-  // On ZM 1.38+, Enabled is vestigial — Capturing controls whether the monitor is active
+  // On ZM 1.38+, Enabled is vestigial: Capturing controls whether the monitor is active
   const serverEnabled = monitor.Enabled === '1' || monitor.Enabled === 'true';
 
-  // Video-tab change flags — User/Pass only exist as separate fields on ZM 1.38+
+  // Video-tab change flags: User/Pass only exist as separate fields on ZM 1.38+
   const videoHasChanges =
     localPath !== (monitor.Path ?? '') ||
     (is138Plus && localUser !== (monitor.User ?? '')) ||
@@ -311,7 +312,7 @@ export function MonitorSettingsDialog({
               </SettingsRow>
             )}
 
-            {/* Enabled toggle only for ZM < 1.38 — on 1.38+ Capturing controls this */}
+            {/* Enabled toggle only for ZM < 1.38: on 1.38+ Capturing controls this */}
             {!is138Plus && (
               <SettingsRow label={t('monitor_detail.enabled_label')} testId="settings-enabled-row" editable>
                 <Switch
@@ -392,7 +393,7 @@ export function MonitorSettingsDialog({
 
           {/* Tab: Video */}
           <TabsContent value="video" className="mt-4 space-y-0 overflow-y-auto">
-            {/* Per-monitor Go2RTC toggle — only shown when monitor supports it */}
+            {/* Per-monitor Go2RTC toggle: only shown when monitor supports it */}
             {monitorSupportsGo2rtc && (
               <SettingsRow label={t('monitor_detail.go2rtc_label')} testId="settings-go2rtc-row">
                 <div className="flex items-center gap-1.5">
@@ -411,7 +412,7 @@ export function MonitorSettingsDialog({
               </SettingsRow>
             )}
 
-            {/* Source Path — stacked layout for long value */}
+            {/* Source Path: stacked layout for long value */}
             <div className="py-2.5 border-b border-border/40 " data-testid="settings-source-row">
               <span className="text-sm text-muted-foreground flex items-center gap-1">{t('monitor_detail.source_path')}<Pencil className="h-2 w-2 shrink-0 opacity-50" /></span>
               <Input
@@ -423,7 +424,7 @@ export function MonitorSettingsDialog({
               />
             </div>
 
-            {/* Username & Password — ZM 1.38+ only (older versions embed creds in the source URL) */}
+            {/* Username & Password: ZM 1.38+ only (older versions embed creds in the source URL) */}
             {is138Plus && (
               <>
                 <SettingsRow label={t('monitor_detail.username')} testId="settings-username-row" editable>
@@ -467,17 +468,17 @@ export function MonitorSettingsDialog({
               </Select>
             </SettingsRow>
 
-            {/* Resolution — read-only */}
+            {/* Resolution: read-only */}
             <SettingsRow label={t('monitors.resolution')}>
               {orientedResolution ?? `${monitor.Width}x${monitor.Height}`}
             </SettingsRow>
 
-            {/* Colours — read-only */}
+            {/* Colours: read-only */}
             <SettingsRow label={t('monitors.colours')}>
               {monitor.Colours}
             </SettingsRow>
 
-            {/* Max FPS — editable */}
+            {/* Max FPS: editable */}
             <SettingsRow label={t('monitors.max_fps')} testId="settings-maxfps-row" editable>
               <Input
                 type="number"
@@ -491,7 +492,7 @@ export function MonitorSettingsDialog({
               />
             </SettingsRow>
 
-            {/* Alarm Max FPS — editable */}
+            {/* Alarm Max FPS: editable */}
             <SettingsRow label={t('monitors.alarm_max_fps')} testId="settings-alarmmaxfps-row" editable>
               <Input
                 type="number"
@@ -526,21 +527,21 @@ export function MonitorSettingsDialog({
               </Select>
             </SettingsRow>
 
-            {/* Controllable — read-only badge */}
+            {/* Controllable: read-only badge */}
             <SettingsRow label={t('monitors.controllable')}>
               <Badge variant={monitor.Controllable === '1' || monitor.Controllable === 'true' ? 'secondary' : 'outline'}>
                 {monitor.Controllable === '1' || monitor.Controllable === 'true' ? t('common.yes') : t('common.no')}
               </Badge>
             </SettingsRow>
 
-            {/* Control Address — shown when controllable */}
+            {/* Control Address: shown when controllable */}
             {(monitor.Controllable === '1' || monitor.Controllable === 'true') && monitor.ControlAddress && (
               <SettingsRow label={t('monitor_detail.control_address')} testId="settings-control-address">
                 <span className="font-mono text-xs">{monitor.ControlAddress}</span>
               </SettingsRow>
             )}
 
-            {/* Linked Monitors — read-only, shown only when defined */}
+            {/* Linked Monitors: read-only, shown only when defined */}
             {monitor.LinkedMonitors && (
               <SettingsRow label={t('monitor_detail.linked_monitors')} testId="settings-linked-monitors">
                 <span className="text-xs">
@@ -551,7 +552,7 @@ export function MonitorSettingsDialog({
               </SettingsRow>
             )}
 
-            {/* Event Start Cmd — stacked layout */}
+            {/* Event Start Cmd: stacked layout */}
             <div className="py-2.5 border-b border-border/40 " data-testid="settings-event-start-cmd-row">
               <span className="text-sm text-muted-foreground flex items-center gap-1">{t('monitor_detail.event_start_cmd')}<Pencil className="h-2 w-2 shrink-0 opacity-50" /></span>
               <Input
@@ -563,7 +564,7 @@ export function MonitorSettingsDialog({
               />
             </div>
 
-            {/* Event End Cmd — stacked layout */}
+            {/* Event End Cmd: stacked layout */}
             <div className="py-2.5 border-b border-border/40 " data-testid="settings-event-end-cmd-row">
               <span className="text-sm text-muted-foreground flex items-center gap-1">{t('monitor_detail.event_end_cmd')}<Pencil className="h-2 w-2 shrink-0 opacity-50" /></span>
               <Input

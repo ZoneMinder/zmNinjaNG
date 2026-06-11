@@ -16,7 +16,8 @@ export default defineConfig({
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
-      '**/tests/**', // Exclude Playwright E2E tests
+      'tests/**', // Exclude Playwright E2E tests (root tests/, not src/tests/)
+      '.features-gen/**', // Exclude generated playwright-bdd specs
       '**/*.spec.ts', // Exclude Playwright test files
     ],
     coverage: {

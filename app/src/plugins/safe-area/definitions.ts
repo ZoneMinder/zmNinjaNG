@@ -14,7 +14,7 @@ export interface SafeAreaPlugin {
   getInsets(): Promise<SafeAreaInsets>;
 
   /**
-   * Fires when iOS reports a change to UIView.safeAreaInsets — typically on
+   * Fires when iOS reports a change to UIView.safeAreaInsets: typically on
    * orientation change, status-bar visibility change, or split-view resize.
    * Native iOS only; the web/Android stub never invokes this listener.
    */

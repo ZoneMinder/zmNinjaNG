@@ -671,7 +671,8 @@
     "fit_flex": "Flex",
     "menu_more": "Mehr",
     "menu_refresh": "Aktualisieren",
-    "menu_show_monitors": "Monitore"
+    "menu_show_monitors": "Monitore",
+    "tile_error": "Kachelfehler"
   },
   "notification_history": {
     "title": "Benachrichtigungen",

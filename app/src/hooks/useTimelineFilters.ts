@@ -10,7 +10,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useCurrentProfile } from './useCurrentProfile';
 import { useSettingsStore } from '../stores/settings';
 
-interface UseTimelineFiltersReturn {
+export interface UseTimelineFiltersReturn {
   selectedMonitorIds: string[];
   startDateInput: string;
   endDateInput: string;

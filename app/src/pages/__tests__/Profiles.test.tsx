@@ -57,11 +57,10 @@ vi.mock('../../hooks/use-toast', () => ({
 }));
 
 vi.mock('../../api/client', () => ({
-  createApiClient: vi.fn(),
   setApiClient: vi.fn(),
 }));
 
-vi.mock('../../lib/discovery', () => ({
+vi.mock('../../services/discovery', () => ({
   discoverZoneminder: vi.fn(),
   DiscoveryError: class DiscoveryError extends Error {},
 }));

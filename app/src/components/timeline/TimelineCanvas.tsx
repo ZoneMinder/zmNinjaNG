@@ -1,5 +1,5 @@
 /**
- * TimelineCanvas — main canvas component that wires together
+ * TimelineCanvas: main canvas component that wires together
  * the viewport, gestures, rendering, and hit-testing.
  */
 
@@ -15,23 +15,36 @@ import { useDateTimeFormat } from '../../hooks/useDateTimeFormat';
 import { useBandwidthSettings } from '../../hooks/useBandwidthSettings';
 import { TIMELINE } from '../../lib/zmninja-ng-constants';
 
+/**
+ * One-shot viewport actions:
+ * - reset: fit viewport to startMs/endMs
+ * - zoomIn / zoomOut: zoom by 2x keeping the current center
+ * - goToNow: scroll viewport so NOW is centered, keeping zoom level
+ * - panLeft / panRight: pan by 20% of the current viewport duration
+ * - followNow: shift viewport so NOW is near the right edge, keeping zoom level
+ */
+export type ViewportActionType =
+  | 'reset'
+  | 'zoomIn'
+  | 'zoomOut'
+  | 'goToNow'
+  | 'panLeft'
+  | 'panRight'
+  | 'followNow';
+
+export interface ViewportAction {
+  type: ViewportActionType;
+  /** Monotonic sequence number; a change triggers the action once. */
+  seq: number;
+}
+
 interface TimelineCanvasProps {
   monitors: MonitorRow[];
   events: TimelineEvent[];
   startMs: number;
   endMs: number;
-  /** Increment to force viewport reset to startMs/endMs */
-  resetKey?: number;
-  /** Increment to zoom in by 2x centered */
-  zoomInKey?: number;
-  /** Increment to zoom out by 2x centered */
-  zoomOutKey?: number;
-  /** Increment to scroll viewport so NOW is visible */
-  goToNowKey?: number;
-  /** Increment to pan left */
-  panLeftKey?: number;
-  /** Increment to pan right */
-  panRightKey?: number;
+  /** Set with a new seq to run a one-shot viewport action. */
+  viewportAction?: ViewportAction | null;
   onEventClick: (event: TimelineEvent) => void;
   onEventHover: (event: TimelineEvent | null, x: number, y: number) => void;
   /** Called when a scrubber thumbnail is tapped. */
@@ -42,8 +55,6 @@ interface TimelineCanvasProps {
   initialScrubberState?: ScrubberState | null;
   /** When true, drag selects a region to zoom into instead of panning. */
   brushMode?: boolean;
-  /** Increment to shift viewport so NOW is at the right edge (keeps zoom level). */
-  followNowKey?: number;
   /** When true, prop changes to startMs/endMs won't reset the viewport. */
   liveMode?: boolean;
 }
@@ -53,19 +64,13 @@ const TimelineCanvasInner = ({
   events,
   startMs,
   endMs,
-  resetKey,
-  zoomInKey,
-  zoomOutKey,
-  goToNowKey,
-  panLeftKey,
-  panRightKey,
+  viewportAction,
   onEventClick,
   onEventHover,
   onScrubberEventTap,
   onScrubberStateChange,
   initialScrubberState,
   brushMode,
-  followNowKey,
   liveMode,
 }: TimelineCanvasProps) => {
   const { formatSettings } = useDateTimeFormat();
@@ -91,77 +96,39 @@ const TimelineCanvasInner = ({
     }
   }, [startMs, endMs, viewport, liveMode]);
 
-  // Reset viewport when resetKey changes (center/fit button)
-  const prevResetKeyRef = useRef(resetKey);
+  // Run one-shot viewport actions when the action seq changes
+  const prevActionSeqRef = useRef(viewportAction?.seq ?? 0);
   useEffect(() => {
-    if (resetKey !== undefined && resetKey !== prevResetKeyRef.current) {
-      prevResetKeyRef.current = resetKey;
-      viewport.animateToRange(startMs, endMs);
+    if (!viewportAction || viewportAction.seq === prevActionSeqRef.current) return;
+    prevActionSeqRef.current = viewportAction.seq;
+    const now = Date.now();
+    const dur = viewport.durationMs;
+    const mid = (viewport.startMs + viewport.endMs) / 2;
+    switch (viewportAction.type) {
+      case 'reset':
+        viewport.animateToRange(startMs, endMs);
+        break;
+      case 'zoomIn':
+        viewport.animateToRange(mid - dur * 0.25, mid + dur * 0.25);
+        break;
+      case 'zoomOut':
+        viewport.animateToRange(mid - dur, mid + dur);
+        break;
+      case 'goToNow':
+        viewport.animateToRange(now - dur / 2, now + dur / 2);
+        break;
+      case 'followNow':
+        // Place NOW at ~90% from left so there's a small buffer on the right
+        viewport.animateToRange(now - dur * 0.9, now + dur * 0.1);
+        break;
+      case 'panLeft':
+        viewport.animateToRange(viewport.startMs - dur * 0.2, viewport.endMs - dur * 0.2);
+        break;
+      case 'panRight':
+        viewport.animateToRange(viewport.startMs + dur * 0.2, viewport.endMs + dur * 0.2);
+        break;
     }
-  }, [resetKey, startMs, endMs, viewport]);
-
-  // Zoom in/out keeping current center
-  const prevZoomInRef = useRef(zoomInKey);
-  useEffect(() => {
-    if (zoomInKey !== undefined && zoomInKey !== prevZoomInRef.current) {
-      prevZoomInRef.current = zoomInKey;
-      const mid = (viewport.startMs + viewport.endMs) / 2;
-      const dur = viewport.durationMs * 0.5;
-      viewport.animateToRange(mid - dur / 2, mid + dur / 2);
-    }
-  }, [zoomInKey, viewport]);
-
-  const prevZoomOutRef = useRef(zoomOutKey);
-  useEffect(() => {
-    if (zoomOutKey !== undefined && zoomOutKey !== prevZoomOutRef.current) {
-      prevZoomOutRef.current = zoomOutKey;
-      const mid = (viewport.startMs + viewport.endMs) / 2;
-      const dur = viewport.durationMs * 2;
-      viewport.animateToRange(mid - dur / 2, mid + dur / 2);
-    }
-  }, [zoomOutKey, viewport]);
-
-  // Scroll viewport so NOW is centered, keeping current zoom level
-  const prevGoToNowRef = useRef(goToNowKey);
-  useEffect(() => {
-    if (goToNowKey !== undefined && goToNowKey !== prevGoToNowRef.current) {
-      prevGoToNowRef.current = goToNowKey;
-      const now = Date.now();
-      const dur = viewport.durationMs;
-      viewport.animateToRange(now - dur / 2, now + dur / 2);
-    }
-  }, [goToNowKey, viewport]);
-
-  // Follow NOW — shift viewport so NOW is near the right edge (keeps zoom level)
-  const prevFollowNowRef = useRef(followNowKey);
-  useEffect(() => {
-    if (followNowKey !== undefined && followNowKey !== prevFollowNowRef.current) {
-      prevFollowNowRef.current = followNowKey;
-      const now = Date.now();
-      const dur = viewport.durationMs;
-      // Place NOW at ~90% from left so there's a small buffer on the right
-      viewport.animateToRange(now - dur * 0.9, now + dur * 0.1);
-    }
-  }, [followNowKey, viewport]);
-
-  // Pan left/right by 20% of current viewport duration
-  const prevPanLeftRef = useRef(panLeftKey);
-  useEffect(() => {
-    if (panLeftKey !== undefined && panLeftKey !== prevPanLeftRef.current) {
-      prevPanLeftRef.current = panLeftKey;
-      const dur = viewport.durationMs;
-      viewport.animateToRange(viewport.startMs - dur * 0.2, viewport.endMs - dur * 0.2);
-    }
-  }, [panLeftKey, viewport]);
-
-  const prevPanRightRef = useRef(panRightKey);
-  useEffect(() => {
-    if (panRightKey !== undefined && panRightKey !== prevPanRightRef.current) {
-      prevPanRightRef.current = panRightKey;
-      const dur = viewport.durationMs;
-      viewport.animateToRange(viewport.startMs + dur * 0.2, viewport.endMs + dur * 0.2);
-    }
-  }, [panRightKey, viewport]);
+  }, [viewportAction, startMs, endMs, viewport]);
 
   // Observe container width + scrubber height
   useEffect(() => {
@@ -182,7 +149,7 @@ const TimelineCanvasInner = ({
     return () => ro.disconnect();
   }, []);
 
-  // Current time refresh — interval comes from bandwidth settings
+  // Current time refresh: interval comes from bandwidth settings
   const bandwidth = useBandwidthSettings();
   useEffect(() => {
     const id = setInterval(() => setNowTick((t) => t + 1), bandwidth.timelineNowRefreshInterval);
@@ -351,7 +318,7 @@ const TimelineCanvasInner = ({
       ref={containerRef}
       className="relative w-full overflow-hidden rounded-lg border border-border bg-background"
     >
-      {/* Scrubber bar — above time labels */}
+      {/* Scrubber bar: above time labels */}
       <div ref={scrubberWrapRef} className="px-2 pt-2">
         <TimelineScrubber
           events={events}

@@ -1,7 +1,7 @@
 /**
  * Kiosk Store
  *
- * Manages kiosk (lock) mode state. Ephemeral — resets to unlocked on app restart.
+ * Manages kiosk (lock) mode state. Ephemeral: resets to unlocked on app restart.
  * PIN storage is handled separately by lib/kioskPin.ts via secure storage.
  */
 

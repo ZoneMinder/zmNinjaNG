@@ -18,6 +18,7 @@ import { applyVideoJsMarkers, type VideoMarker, type VideoJsMarkersHost } from '
 import type { MarkerConfig } from '../../types/videojs-markers';
 import { usePip } from '../../contexts/PipContext';
 import { Pip } from '../../plugins/pip';
+import { useCapacitorListener } from '../../hooks/useCapacitorListener';
 
 interface Mp4EventPlayerProps {
   /** The source URL of the video stream */
@@ -44,7 +45,7 @@ interface Mp4EventPlayerProps {
   onReady?: (player: Player) => void;
   /** Callback on error */
   onError?: (error: unknown) => void;
-  /** Event ID for PiP persistence — when provided, enables PiP survival across navigation */
+  /** Event ID for PiP persistence: when provided, enables PiP survival across navigation */
   eventId?: string;
 }
 
@@ -77,10 +78,12 @@ export function Mp4EventPlayer({
   const onErrorRef = useRef(onError);
   const markersRef = useRef(markers);
   const onMarkerClickRef = useRef(onMarkerClick);
-  useEffect(() => { onReadyRef.current = onReady; }, [onReady]);
-  useEffect(() => { onErrorRef.current = onError; }, [onError]);
-  useEffect(() => { markersRef.current = markers; }, [markers]);
-  useEffect(() => { onMarkerClickRef.current = onMarkerClick; }, [onMarkerClick]);
+  useEffect(() => {
+    onReadyRef.current = onReady;
+    onErrorRef.current = onError;
+    markersRef.current = markers;
+    onMarkerClickRef.current = onMarkerClick;
+  }, [onReady, onError, markers, onMarkerClick]);
 
   // True once the player has fired its ready callback. The markers plugin reads
   // the player DOM, so marker updates are gated on this. lastMarkerSig skips
@@ -143,7 +146,7 @@ export function Mp4EventPlayer({
     if (!eventId) return;
 
     if (activePipEventId === eventId) {
-      // Same event — reclaim the player from PiP portal
+      // Same event: reclaim the player from PiP portal
       const reclaimed = reclaimFromPip();
       if (reclaimed && videoRef.current) {
         const wrapper = reclaimed.videoEl.closest('video-js') || reclaimed.videoEl.parentElement;
@@ -157,7 +160,7 @@ export function Mp4EventPlayer({
         adoptedForPip.current = false;
       }
     } else if (activePipEventId) {
-      // Different event — close existing PiP
+      // Different event: close existing PiP
       closePip();
     }
     // Only run on mount
@@ -175,7 +178,7 @@ export function Mp4EventPlayer({
   }, [activePipEventId]);
 
   // Init effect: create the player exactly once per mount.
-  // Deliberately mount-only — prop updates are handled by the dedicated effect below.
+  // Deliberately mount-only: prop updates are handled by the dedicated effect below.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     // Reclaimed-from-PiP path populates playerRef.current before this runs;
@@ -291,35 +294,28 @@ export function Mp4EventPlayer({
   // Listens to the native SafeArea plugin first (fires after iOS rotation completes
   // with correct insets), with screen.orientation.change and window resize as
   // fallbacks for Android / web / Electron.
+  const wake = () => {
+    const player = playerRef.current;
+    if (!player || player.isDisposed()) return;
+    try {
+      player.trigger('resize');
+      player.userActive(true);
+    } catch (err) {
+      log.videoPlayer('Player wake on rotation failed', LogLevel.DEBUG, { error: err });
+    }
+  };
+
+  // Native iOS path: lands at the right moment in the rotation timeline.
+  // Registered on every platform; the web/Android stub never fires and an
+  // unavailable plugin is swallowed (the fallbacks below cover those).
+  useCapacitorListener(
+    () => import('../../plugins/safe-area').then((m) => m.SafeArea),
+    'safeAreaInsetsChanged',
+    wake,
+    { enabled: true },
+  );
+
   useEffect(() => {
-    const wake = () => {
-      const player = playerRef.current;
-      if (!player || player.isDisposed()) return;
-      try {
-        player.trigger('resize');
-        player.userActive(true);
-      } catch (err) {
-        log.videoPlayer('Player wake on rotation failed', LogLevel.DEBUG, { error: err });
-      }
-    };
-
-    let safeAreaHandle: { remove: () => void } | undefined;
-    let cancelled = false;
-
-    // Native iOS path — landed at the right moment in the rotation timeline.
-    import('../../plugins/safe-area')
-      .then(({ SafeArea }) => SafeArea.addListener('safeAreaInsetsChanged', wake))
-      .then((handle) => {
-        if (cancelled) {
-          handle.remove();
-        } else {
-          safeAreaHandle = handle;
-        }
-      })
-      .catch(() => {
-        // Plugin unavailable on this platform — fallbacks below cover it.
-      });
-
     // Cross-platform fallbacks. On iOS these may fire mid-rotation with stale
     // dimensions; the SafeArea listener above lands at completion. Calling wake()
     // a second time on those is harmless and self-correcting.
@@ -328,14 +324,13 @@ export function Mp4EventPlayer({
     window.addEventListener('resize', wake);
 
     return () => {
-      cancelled = true;
-      safeAreaHandle?.remove();
       orientation?.removeEventListener?.('change', wake);
       window.removeEventListener('resize', wake);
     };
+    // wake only touches refs; identity is irrelevant.
   }, []);
 
-  // Listen for PiP activation — browser API on desktop/iOS only.
+  // Listen for PiP activation: browser API on desktop/iOS only.
   // Attaches inside player 'ready' so we know the underlying <video> tech exists.
   useEffect(() => {
     if (!eventId || isAndroid) return;

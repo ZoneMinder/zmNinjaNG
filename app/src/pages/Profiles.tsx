@@ -40,7 +40,7 @@ import type { Profile } from '../api/types';
 import { useToast } from '../hooks/use-toast';
 import { toast as sonnerToast } from 'sonner';
 import { setApiClient } from '../api/client';
-import { discoverUrls } from '../lib/discovery';
+import { discoverUrls } from '../services/discovery';
 import { useTranslation } from 'react-i18next';
 import { NotificationBadge } from '../components/NotificationBadge';
 

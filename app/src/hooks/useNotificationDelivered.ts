@@ -14,6 +14,8 @@ import { log, LogLevel } from '../lib/logger';
 import { useNotificationStore } from '../stores/notifications';
 import { useProfileStore } from '../stores/profile';
 import { resolveProfileForNotification } from '../lib/notification-profile';
+import { getEventImageUrl } from '../lib/url-builder';
+import { useCapacitorListener } from './useCapacitorListener';
 import type { Profile } from '../api/types';
 
 interface DeliveredParams {
@@ -41,7 +43,7 @@ function ingestDeliveredNotification(
   // Only construct image URL for current profile's notifications
   let imageUrl: string | undefined;
   if (eid && eventProfileId === profileId && profile) {
-    imageUrl = `${profile.portalUrl}/index.php?view=image&eid=${eid}&fid=snapshot&width=600`;
+    imageUrl = getEventImageUrl(profile.portalUrl, String(eid), 'snapshot', { width: 600 });
   }
 
   const monitorName = data?.monitorName || data?.MonitorName || notif.title?.replace(/\s*Alarm.*$/, '') || 'Unknown';
@@ -93,56 +95,51 @@ export function useNotificationDelivered({
   }, [currentProfile]);
 
   // Clear native badge and sync badge count when app comes to foreground (iOS/Android)
-  useEffect(() => {
-    if (!Platform.isNative) return;
+  useCapacitorListener(
+    async () => {
+      const { App: CapApp } = await import('@capacitor/app');
+      // The handler needs the messaging plugin; import it up front so the
+      // listener is only registered when both plugins are available.
+      await import('@capacitor-firebase/messaging');
+      return CapApp;
+    },
+    'appStateChange',
+    async ({ isActive }: { isActive: boolean }) => {
+      if (!isActive) return;
 
-    let listenerCleanup: (() => void) | undefined;
+      const { FirebaseMessaging } = await import('@capacitor-firebase/messaging');
+      const store = useNotificationStore.getState();
+      const profileId = store.currentProfileId;
 
-    const setup = async () => {
+      // Only process and clear delivered notifications if we have an active profile.
+      // On cold start, currentProfileId may still be null. The processDelivered
+      // effect (which depends on currentProfile) will handle those instead.
+      if (!profileId) return;
+
+      // Read delivered notifications that arrived while backgrounded
       try {
-        const { App: CapApp } = await import('@capacitor/app');
-        const { FirebaseMessaging } = await import('@capacitor-firebase/messaging');
+        const { notifications } = await FirebaseMessaging.getDeliveredNotifications();
+        if (notifications.length > 0) {
+          const { profiles } = useProfileStore.getState();
 
-        const listener = await CapApp.addListener('appStateChange', async ({ isActive }) => {
-          if (isActive) {
-            const store = useNotificationStore.getState();
-            const profileId = store.currentProfileId;
-
-            // Only process and clear delivered notifications if we have an active profile.
-            // On cold start, currentProfileId may still be null — the processDelivered
-            // effect (which depends on currentProfile) will handle those instead.
-            if (!profileId) return;
-
-            // Read delivered notifications that arrived while backgrounded
-            try {
-              const { notifications } = await FirebaseMessaging.getDeliveredNotifications();
-              if (notifications.length > 0) {
-                const { profiles } = useProfileStore.getState();
-
-                for (const notif of notifications) {
-                  ingestDeliveredNotification(notif, profileId, store, profiles);
-                }
-                log.notificationHandler('Added delivered notifications to history on resume', LogLevel.INFO, { count: notifications.length });
-              }
-            } catch (err) {
-              log.notificationHandler('Failed to read delivered notifications on resume', LogLevel.ERROR, err);
-            }
-
-            await FirebaseMessaging.removeAllDeliveredNotifications();
-            log.notificationHandler('Cleared delivered notifications on app resume', LogLevel.DEBUG);
-
-            // Sync badge count with server
-            store._updateBadge();
+          for (const notif of notifications) {
+            ingestDeliveredNotification(notif, profileId, store, profiles);
           }
-        });
-
-        listenerCleanup = () => { listener.remove(); };
-      } catch (e) {
-        log.notificationHandler('Failed to setup badge clearing on resume', LogLevel.ERROR, e);
+          log.notificationHandler('Added delivered notifications to history on resume', LogLevel.INFO, { count: notifications.length });
+        }
+      } catch (err) {
+        log.notificationHandler('Failed to read delivered notifications on resume', LogLevel.ERROR, err);
       }
-    };
 
-    setup();
-    return () => { listenerCleanup?.(); };
-  }, []);
+      await FirebaseMessaging.removeAllDeliveredNotifications();
+      log.notificationHandler('Cleared delivered notifications on app resume', LogLevel.DEBUG);
+
+      // Sync badge count with server
+      store._updateBadge();
+    },
+    {
+      enabled: Platform.isNative,
+      onError: (e) => log.notificationHandler('Failed to setup badge clearing on resume', LogLevel.ERROR, e),
+    },
+  );
 }

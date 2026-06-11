@@ -36,7 +36,7 @@ interface TimelineScrubberProps {
   onPlayheadChange: (timeMs: number | null) => void;
   /** Called when a scrubber thumbnail is tapped. */
   onEventTap: (eventId: string) => void;
-  /** Called whenever scrubber state changes — parent can save for restore. */
+  /** Called whenever scrubber state changes: parent can save for restore. */
   onStateChange?: (state: ScrubberState | null) => void;
   /** Restore scrubber to this state on mount. */
   initialState?: ScrubberState | null;
@@ -353,7 +353,7 @@ function TimelineScrubberComponent({
       {thumbnailStrip}
       {timeLabel}
 
-      {/* Scrubber track — z-30 so it's always above the dismiss backdrop (z-10) and thumbnails (z-20) */}
+      {/* Scrubber track: z-30 so it's always above the dismiss backdrop (z-10) and thumbnails (z-20) */}
       <div
         ref={trackRef}
         className="relative z-30 h-8 cursor-pointer select-none touch-none"

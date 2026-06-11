@@ -14,7 +14,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Profile } from '../api/types';
-import { createApiClient, setApiClient } from '../api/client';
+import { setApiClient } from '../api/client';
+import { createStoreApiClient } from '../api/store-gates';
 import { getServerTimeZone } from '../api/time';
 import { ProfileService } from '../services/profile';
 import { log, LogLevel } from '../lib/logger';
@@ -113,7 +114,7 @@ export const useProfileStore = create<ProfileState>()(
 
           // If this is now the current profile, initialize API client
           if (get().currentProfileId === newProfile.id) {
-            setApiClient(createApiClient(newProfile.apiUrl, undefined, newProfile.id));
+            setApiClient(createStoreApiClient(newProfile.apiUrl, undefined, newProfile.id));
 
             // Fetch timezone for new profile
             try {
@@ -160,7 +161,7 @@ export const useProfileStore = create<ProfileState>()(
           const { profiles, currentProfileId } = get();
           const currentProfile = profiles.find(p => p.id === currentProfileId);
           if (currentProfile?.id === id && updates.apiUrl) {
-            setApiClient(createApiClient(updates.apiUrl, get().reLogin, id));
+            setApiClient(createStoreApiClient(updates.apiUrl, get().reLogin, id));
           }
 
           log.profileService('updateProfile complete', LogLevel.INFO);
@@ -192,7 +193,7 @@ export const useProfileStore = create<ProfileState>()(
           const { profiles: updatedProfiles, currentProfileId: newCurrentId } = get();
           const newCurrentProfile = updatedProfiles.find(p => p.id === newCurrentId);
           if (newCurrentProfile) {
-            setApiClient(createApiClient(newCurrentProfile.apiUrl, get().reLogin, newCurrentProfile.id));
+            setApiClient(createStoreApiClient(newCurrentProfile.apiUrl, get().reLogin, newCurrentProfile.id));
           }
         },
 
@@ -277,7 +278,7 @@ export const useProfileStore = create<ProfileState>()(
 
             // STEP 3: Initialize API client with new profile
             log.profileService('Step 3: Initializing API client', LogLevel.INFO, { apiUrl: profile.apiUrl });
-            setApiClient(createApiClient(profile.apiUrl, get().reLogin, profile.id));
+            setApiClient(createStoreApiClient(profile.apiUrl, get().reLogin, profile.id));
             log.profileService('API client initialized', LogLevel.INFO);
 
             // STEP 4-6: Run bootstrap tasks (auth, timezone, zms path, multi-port)
@@ -315,7 +316,7 @@ export const useProfileStore = create<ProfileState>()(
 
                 // Re-initialize with previous profile
                 log.profileService('Re-initializing API client', LogLevel.INFO, { apiUrl: previousProfile.apiUrl });
-                setApiClient(createApiClient(previousProfile.apiUrl, get().reLogin, previousProfile.id));
+                setApiClient(createStoreApiClient(previousProfile.apiUrl, get().reLogin, previousProfile.id));
 
                 // Run bootstrap for previous profile
                 log.profileService('Running bootstrap for rollback profile', LogLevel.INFO);

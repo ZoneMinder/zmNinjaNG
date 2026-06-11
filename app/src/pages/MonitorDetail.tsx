@@ -2,7 +2,7 @@
  * Monitor Detail Page
  *
  * Displays a continuous live stream for a single monitor (always streaming
- * mode — the global Snapshot setting does not apply here). Includes PTZ
+ * mode: the global Snapshot setting does not apply here). Includes PTZ
  * controls (if applicable) and quick actions.
  */
 
@@ -21,7 +21,7 @@ import { ArrowLeft, Settings, Maximize2, Minimize2, Clock, AlertTriangle, Downlo
 import { useState, useRef, useMemo, useCallback } from 'react';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
-import { downloadSnapshotFromElement } from '../lib/download';
+import { downloadSnapshotFromElement } from '../services/download';
 import { useTranslation } from 'react-i18next';
 import { useInsomnia } from '../hooks/useInsomnia';
 import { PTZControls } from '../components/monitors/PTZControls';
@@ -39,7 +39,7 @@ import { usePTZControl, useAlarmControl, useModeControl, useMonitorNavigation } 
 
 import { MonitorSettingsDialog } from '../components/monitor-detail/MonitorSettingsDialog';
 import { MonitorControlsCard } from '../components/monitor-detail/MonitorControlsCard';
-import { ZoomControls } from '../components/ui/ZoomControls';
+import { ZoomControls } from '../components/ui/zoom-controls';
 
 export default function MonitorDetail() {
   const { id } = useParams<{ id: string }>();
@@ -137,7 +137,7 @@ export default function MonitorDetail() {
   const zmVersion = useAuthStore((s) => s.version);
   const is138Plus = isZmVersionAtLeast(zmVersion, '1.38.0');
 
-  // Settings dialog save handler — batches all changes into one or more API calls
+  // Settings dialog save handler: batches all changes into one or more API calls
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   const handleSaveSettings = useCallback(async (changes: Record<string, string | undefined>) => {

@@ -18,7 +18,7 @@ import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { EventThumbnail } from './EventThumbnail';
-import { downloadEventVideo } from '../../lib/download';
+import { downloadEventVideo } from '../../services/download';
 import { type EventFilters } from '../../api/events';
 import { getPortalUrlForEvent } from '../../lib/server-resolver';
 import { buildThumbnailChain } from '../../lib/thumbnail-chain';

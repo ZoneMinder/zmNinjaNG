@@ -143,7 +143,7 @@ class Logger {
       console.info;
 
     // %c styling renders bold + color in DevTools that support it.
-    // Plain consoles ignore the directive and print the raw banner —
+    // Plain consoles ignore the directive and print the raw banner,
     // still readable thanks to the unicode box-drawing bars.
     emit(
       `%c${banner}`,

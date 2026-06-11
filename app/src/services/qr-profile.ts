@@ -15,7 +15,7 @@
  * }
  */
 
-import { log, LogLevel } from './logger';
+import { log, LogLevel } from '../lib/logger';
 
 /** Compact QR data format (minimized keys for smaller QR codes) */
 export interface QRProfileData {

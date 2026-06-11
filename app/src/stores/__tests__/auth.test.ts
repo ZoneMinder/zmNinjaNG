@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
-import { useAuthStore } from '../auth';
+import { resetAuthGates, useAuthStore } from '../auth';
 import { login as apiLogin, refreshToken as apiRefreshToken } from '../../api/auth';
+import type { LoginResponse } from '../../api/types';
 import { log } from '../../lib/logger';
 
 vi.mock('../../api/auth', () => ({
@@ -46,6 +47,7 @@ describe('Auth Store', () => {
       requiresAuth: true,
     });
     clientState.initialized = true;
+    resetAuthGates();
     vi.clearAllMocks();
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2024-01-01T00:00:00Z'));
@@ -291,6 +293,154 @@ describe('Auth Store', () => {
       expect(b).toBe('new');
       expect(c).toBe('new');
       expect(apiRefreshToken).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('refreshAccessToken single-flight', () => {
+    it('dedupes concurrent callers into one refresh POST', async () => {
+      useAuthStore.setState({
+        refreshToken: 'rt',
+        refreshTokenExpires: Date.now() + 24 * 60 * 60 * 1000,
+      });
+      vi.mocked(apiRefreshToken).mockResolvedValue({
+        access_token: 'new',
+        access_token_expires: 7200,
+      });
+
+      await Promise.all([
+        useAuthStore.getState().refreshAccessToken(),
+        useAuthStore.getState().refreshAccessToken(),
+        useAuthStore.getState().refreshAccessToken(),
+      ]);
+
+      expect(apiRefreshToken).toHaveBeenCalledTimes(1);
+      // The gate clears once settled: a later call refreshes again.
+      await useAuthStore.getState().refreshAccessToken();
+      expect(apiRefreshToken).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('proactiveLogin', () => {
+    it('shares one reLogin across concurrent callers and clears the gate after settling', async () => {
+      let resolveLogin!: (ok: boolean) => void;
+      const reLogin = vi.fn(
+        () => new Promise<boolean>((resolve) => { resolveLogin = resolve; }),
+      );
+
+      const first = useAuthStore.getState().proactiveLogin(reLogin);
+      const second = useAuthStore.getState().proactiveLogin(reLogin);
+      resolveLogin(true);
+
+      expect(await first).toBe(true);
+      expect(await second).toBe(true);
+      expect(reLogin).toHaveBeenCalledTimes(1);
+
+      const reLoginAgain = vi.fn(async () => false);
+      expect(await useAuthStore.getState().proactiveLogin(reLoginAgain)).toBe(false);
+      expect(reLoginAgain).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('recoverFromAuthFailure', () => {
+    function recoverableState() {
+      useAuthStore.setState({
+        accessToken: 'stale',
+        refreshToken: 'rt',
+        accessTokenExpires: Date.now() + 60_000,
+        refreshTokenExpires: Date.now() + 24 * 60 * 60 * 1000,
+        isAuthenticated: true,
+      });
+    }
+
+    it('shares one execution across concurrent callers', async () => {
+      recoverableState();
+      let resolveRefresh!: (value: LoginResponse) => void;
+      vi.mocked(apiRefreshToken).mockImplementation(
+        () => new Promise((resolve) => { resolveRefresh = resolve; }),
+      );
+
+      const calls = [
+        useAuthStore.getState().recoverFromAuthFailure(),
+        useAuthStore.getState().recoverFromAuthFailure(),
+        useAuthStore.getState().recoverFromAuthFailure(),
+      ];
+      expect(apiRefreshToken).toHaveBeenCalledTimes(1);
+      resolveRefresh({ access_token: 'new', access_token_expires: 7200 });
+
+      expect(await Promise.all(calls)).toEqual([true, true, true]);
+      expect(apiRefreshToken).toHaveBeenCalledTimes(1);
+    });
+
+    it('attaches to a pending proactive refresh instead of issuing a second refresh POST', async () => {
+      recoverableState();
+      let resolveRefresh!: (value: LoginResponse) => void;
+      vi.mocked(apiRefreshToken).mockImplementation(
+        () => new Promise((resolve) => { resolveRefresh = resolve; }),
+      );
+
+      // Proactive refresh (e.g. a stream tile rebuilding its URL) in flight.
+      const proactive = useAuthStore.getState().getFreshAccessToken();
+      expect(apiRefreshToken).toHaveBeenCalledTimes(1);
+
+      // A 401 recovery starts while that refresh is pending.
+      const recovery = useAuthStore.getState().recoverFromAuthFailure();
+      resolveRefresh({ access_token: 'new-token', access_token_expires: 7200 });
+
+      expect(await recovery).toBe(true);
+      expect(await proactive).toBe('new-token');
+      expect(apiRefreshToken).toHaveBeenCalledTimes(1);
+    });
+
+    it('falls back to reLogin when the refresh fails', async () => {
+      recoverableState();
+      vi.mocked(apiRefreshToken).mockRejectedValue(new Error('refresh failed'));
+      const reLogin = vi.fn(async () => true);
+
+      const recovered = await useAuthStore.getState().recoverFromAuthFailure(reLogin);
+
+      expect(recovered).toBe(true);
+      expect(reLogin).toHaveBeenCalledTimes(1);
+    });
+
+    it('logs out once and resolves false when refresh and reLogin both fail', async () => {
+      useAuthStore.setState({
+        accessToken: 'at',
+        refreshToken: null,
+        refreshTokenExpires: null,
+        isAuthenticated: true,
+      });
+      const reLogin = vi.fn(async () => false);
+
+      const recovered = await useAuthStore.getState().recoverFromAuthFailure(reLogin);
+
+      expect(recovered).toBe(false);
+      expect(reLogin).toHaveBeenCalledTimes(1);
+      expect(useAuthStore.getState().isAuthenticated).toBe(false);
+    });
+  });
+
+  describe('resetAuthGates', () => {
+    it('clears an in-flight recovery and refresh so the next caller starts fresh', async () => {
+      useAuthStore.setState({
+        refreshToken: 'rt',
+        refreshTokenExpires: Date.now() + 24 * 60 * 60 * 1000,
+      });
+      const resolvers: Array<(value: LoginResponse) => void> = [];
+      vi.mocked(apiRefreshToken).mockImplementation(
+        () => new Promise((resolve) => { resolvers.push(resolve); }),
+      );
+
+      const first = useAuthStore.getState().recoverFromAuthFailure();
+      expect(apiRefreshToken).toHaveBeenCalledTimes(1);
+
+      resetAuthGates();
+
+      const second = useAuthStore.getState().recoverFromAuthFailure();
+      expect(apiRefreshToken).toHaveBeenCalledTimes(2);
+
+      resolvers.forEach((resolve) => resolve({ access_token: 'n', access_token_expires: 7200 }));
+      expect(await first).toBe(true);
+      expect(await second).toBe(true);
     });
   });
 

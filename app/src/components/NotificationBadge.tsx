@@ -1,5 +1,5 @@
 /**
- * Inline notification badge — small bell icon with unread count.
+ * Inline notification badge: small bell icon with unread count.
  * Only renders when there are unread notifications.
  * Rings when new notifications arrive.
  */
