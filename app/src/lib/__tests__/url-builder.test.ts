@@ -420,11 +420,11 @@ describe('getGo2RTCWebSocketUrl', () => {
     expect(result).toBe('ws://zm.example.com:1984/ws?src=2_0');
   });
 
-  it('strips embedded credentials from the server-configured go2rtc URL', () => {
+  it('preserves embedded credentials (ZoneMinder authenticates go2rtc via them)', () => {
     const result = getGo2RTCWebSocketUrl('https://admin:pass@zm.example.com:1985/api', '4', 0);
-    expect(result).toBe('wss://zm.example.com:1985/api/ws?src=4_0');
-    expect(result).not.toContain('admin');
-    expect(result).not.toContain('pass');
+    expect(result).toBe('wss://admin:pass@zm.example.com:1985/api/ws?src=4_0');
+    expect(result).toContain('admin');
+    expect(result).toContain('pass');
   });
 
   it('warns when the token is attached to a host other than the configured portal', async () => {

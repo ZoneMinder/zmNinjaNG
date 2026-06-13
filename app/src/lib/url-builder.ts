@@ -430,21 +430,13 @@ export function getZmsControlUrl(
  * // Returns: 'ws://zm.example.com:1984/go2rtc/ws?src=5_1'
  */
 /**
- * Harden a go2rtc URL built from the server-controlled ZM_GO2RTC_PATH config.
- * Strips any embedded user:pass@ credentials (the config value is not entered by
- * the user, so it must not silently carry credentials), and warns when the
- * session token is being sent to a host other than the configured portal.
+ * Warn when the session token is being sent to a go2rtc host other than the
+ * configured portal. Embedded user:pass@ credentials in the URL are kept
+ * intact: ZoneMinder authenticates the go2rtc WebSocket via those credentials
+ * (the client does not attach a separate token here), so stripping them breaks
+ * WebRTC streaming on setups that rely on them.
  */
 function hardenGo2RTCUrl(url: URL, hasToken: boolean, expectedHost?: string): void {
-  if (url.username || url.password) {
-    log.http(
-      'Stripped embedded credentials from server-configured go2rtc URL',
-      LogLevel.WARN,
-      { host: url.hostname }
-    );
-    url.username = '';
-    url.password = '';
-  }
   if (hasToken && expectedHost && url.hostname !== expectedHost) {
     log.http(
       'Attaching session token to a go2rtc host that differs from the configured portal',
