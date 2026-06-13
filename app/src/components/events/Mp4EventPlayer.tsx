@@ -306,13 +306,16 @@ export function Mp4EventPlayer({
   };
 
   // Native iOS path: lands at the right moment in the rotation timeline.
-  // Registered on every platform; the web/Android stub never fires and an
-  // unavailable plugin is swallowed (the fallbacks below cover those).
+  // Native only: on web, resolving the getter assimilates the Capacitor plugin
+  // proxy as a thenable (Promise resolution reads `.then` on it), which throws
+  // "SafeArea.then() is not implemented on web" as an unhandled rejection. The
+  // web/Android stub never fires this event anyway; the fallbacks below cover
+  // those platforms.
   useCapacitorListener(
     () => import('../../plugins/safe-area').then((m) => m.SafeArea),
     'safeAreaInsetsChanged',
     wake,
-    { enabled: true },
+    { enabled: Platform.isNative },
   );
 
   useEffect(() => {
