@@ -2,12 +2,13 @@
  * Unit tests for log sanitizer (security-critical)
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   sanitizeObject,
   sanitizeLogMessage,
   sanitizeLogArgs,
 } from '../log-sanitizer';
+import { useSettingsStore } from '../../stores/settings';
 
 // Mock the stores
 vi.mock('../../stores/settings', () => ({
@@ -236,6 +237,54 @@ describe('sanitizeObject', () => {
       const result = sanitizeObject(obj);
 
       expect(result).toEqual(obj);
+    });
+  });
+
+  describe('Nested secrets under whitelisted keys (security regression)', () => {
+    it('redacts a password nested inside a whitelisted message object', () => {
+      // Reproduces the WebSocket auth-frame leak: the payload is logged as
+      // { message: <object> }, and `message` is whitelisted. Nested secrets
+      // must still be redacted when redaction is enabled.
+      const obj = {
+        message: {
+          event: 'auth',
+          data: { user: 'admin', password: 'hunter2', token: 'fcmtoken123456' },
+        },
+      };
+      const result = sanitizeObject(obj) as Record<string, any>;
+
+      expect(result.message.data.password).toBe('[REDACTED]');
+      expect(result.message.data.token).toBe('fcmto...');
+      expect(result.message.data.user).toBe('admin');
+      expect(result.message.event).toBe('auth');
+    });
+
+    it('redacts a password nested inside a whitelisted event object', () => {
+      const obj = { event: { credentials: { password: 'secret' } } };
+      const result = sanitizeObject(obj) as Record<string, any>;
+
+      expect(result.event.credentials.password).toBe('[REDACTED]');
+    });
+  });
+
+  describe('Nested secrets under whitelisted keys when redaction is disabled', () => {
+    afterEach(() => {
+      vi.mocked(useSettingsStore.getState).mockReturnValue({
+        getProfileSettings: () => ({ disableLogRedaction: false }),
+      } as any);
+    });
+
+    it('shows the nested password verbatim when redaction is disabled', () => {
+      vi.mocked(useSettingsStore.getState).mockReturnValue({
+        getProfileSettings: () => ({ disableLogRedaction: true }),
+      } as any);
+
+      const obj = {
+        message: { event: 'auth', data: { user: 'admin', password: 'hunter2' } },
+      };
+      const result = sanitizeObject(obj) as Record<string, any>;
+
+      expect(result.message.data.password).toBe('hunter2');
     });
   });
 

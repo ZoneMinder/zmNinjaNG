@@ -231,9 +231,12 @@ export function sanitizeObject(obj: unknown): unknown {
     const sanitized: Record<string, unknown> = {};
 
     for (const [key, value] of Object.entries(obj)) {
-        // Skip sanitization for whitelisted keys, but still sanitize string values
+        // Whitelisted keys are not themselves treated as sensitive, but we still
+        // recurse so nested sensitive fields (e.g. a password inside a `message`
+        // object) are redacted. The recursive call respects the redaction setting,
+        // so when redaction is disabled the value is returned unchanged.
         if (WHITELIST_KEYS.includes(key)) {
-            sanitized[key] = typeof value === 'string' ? sanitizeObject(value) : value;
+            sanitized[key] = sanitizeObject(value);
             continue;
         }
 
