@@ -455,7 +455,10 @@
     "reject_button": "不连接",
     "reverify_button": "重新验证",
     "trusted_fingerprint": "已信任的证书",
-    "no_fingerprint": "未保存证书"
+    "no_fingerprint": "未保存证书",
+    "untrusted_banner_title": "证书不受信任",
+    "untrusted_banner_desc": "在信任此服务器的证书之前，实时画面和缩略图将无法加载。",
+    "verify_button": "验证"
   },
   "logs": {
     "title": "日志",

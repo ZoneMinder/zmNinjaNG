@@ -455,7 +455,10 @@
     "reject_button": "Don't Connect",
     "reverify_button": "Re-verify",
     "trusted_fingerprint": "Trusted Certificate",
-    "no_fingerprint": "No certificate pinned"
+    "no_fingerprint": "No certificate pinned",
+    "untrusted_banner_title": "Certificate not trusted",
+    "untrusted_banner_desc": "Live views and thumbnails won't load until you trust this server's certificate.",
+    "verify_button": "Verify"
   },
   "logs": {
     "title": "Logs",
