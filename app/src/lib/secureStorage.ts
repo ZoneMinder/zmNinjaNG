@@ -10,10 +10,13 @@
  * - Web/Desktop: Uses AES-GCM encryption (via Web Crypto API) and stores
  *   the encrypted blob in localStorage.
  * 
- * Security Features:
- * - iOS: Data stored in Keychain (hardware-encrypted, accessible only by app)
- * - Android: Data encrypted with AES-256-GCM using Android Keystore
- * - Web: PBKDF2 key derivation (100k iterations) + AES-GCM encryption
+ * Confidentiality:
+ * - iOS: Keychain (hardware-encrypted, accessible only by the app).
+ * - Android: Android Keystore.
+ * - Web/Desktop: AES-GCM, but the key material lives in localStorage next to
+ *   the ciphertext (see lib/crypto.ts), so this is obfuscation, not real at-rest
+ *   confidentiality against a local reader. Only the native paths protect data
+ *   from a reader of the store.
  */
 
 import { Capacitor } from '@capacitor/core';
@@ -249,10 +252,10 @@ export function getStorageInfo(): {
     return {
       platform: 'web',
       method: isCryptoAvailable()
-        ? 'AES-GCM encryption (Web Crypto API)'
+        ? 'AES-GCM obfuscation (Web Crypto API)'
         : 'Unencrypted localStorage (fallback)',
       details: isCryptoAvailable()
-        ? 'PBKDF2 key derivation with 100k iterations'
+        ? 'Key material is stored alongside the ciphertext; obfuscation, not confidentiality against a local reader'
         : 'WARNING: No encryption available',
     };
   }

@@ -1,13 +1,16 @@
 /**
  * Encryption Utility
  *
- * Provides AES-GCM encryption for secure storage of sensitive data (like passwords)
- * in environments where native secure storage is not available (e.g., web browser).
+ * AES-GCM encoding for stored secrets in environments without native secure
+ * storage (web browser, Electron renderer).
  *
- * Uses the Web Crypto API for standard, secure cryptographic operations.
- *
- * Note: On native mobile apps (iOS/Android), we prefer using the Capacitor Secure Storage
- * plugin which uses the device's Keychain/Keystore. This utility is a fallback for web.
+ * This is obfuscation, not confidentiality. The PBKDF2 key material is a random
+ * value kept in localStorage next to the ciphertext (getPersistentSalt), so a
+ * reader of localStorage has everything needed to decrypt. It defeats casual
+ * inspection (a plaintext grep), not an attacker with read access to the store.
+ * There is no browser key store to bind to. On native (iOS/Android) the
+ * Capacitor Secure Storage plugin (Keychain/Keystore) is used instead and is
+ * the only path with real at-rest confidentiality.
  */
 
 import { log, LogLevel } from './logger';
@@ -65,9 +68,10 @@ async function deriveKey(keyMaterialString: string, salt: string): Promise<Crypt
 }
 
 /**
- * Generate a crypto key from a password.
- * Uses device-specific entropy combined with a salt to derive a key.
- * 
+ * Derive the AES-GCM key. The key material is the per-install random value from
+ * getPersistentSalt(), which lives in localStorage alongside the ciphertext, so
+ * this is not a secret an attacker with store access lacks. See the file header.
+ *
  * @returns Promise resolving to a CryptoKey
  */
 async function getEncryptionKey(): Promise<CryptoKey> {

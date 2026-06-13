@@ -290,8 +290,8 @@ describe('SecureStorage - Web Platform', () => {
       const info = getStorageInfo();
 
       expect(info.platform).toBe('web');
-      expect(info.method).toBe('AES-GCM encryption (Web Crypto API)');
-      expect(info.details).toBe('PBKDF2 key derivation with 100k iterations');
+      expect(info.method).toBe('AES-GCM obfuscation (Web Crypto API)');
+      expect(info.details).toBe('Key material is stored alongside the ciphertext; obfuscation, not confidentiality against a local reader');
 
       vi.restoreAllMocks();
     });
