@@ -12,3 +12,9 @@ contextBridge.exposeInMainWorld('electronHttp', {
 contextBridge.exposeInMainWorld('electronSsl', {
   setTrustSelfSigned: (enabled) => ipcRenderer.invoke('ssl:set-trust', enabled),
 });
+
+contextBridge.exposeInMainWorld('electronSecure', {
+  isAvailable: () => ipcRenderer.invoke('secure:available'),
+  encrypt: (plaintext) => ipcRenderer.invoke('secure:encrypt', plaintext),
+  decrypt: (base64) => ipcRenderer.invoke('secure:decrypt', base64),
+});
