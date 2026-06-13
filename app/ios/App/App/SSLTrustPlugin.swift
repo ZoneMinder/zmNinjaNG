@@ -213,6 +213,14 @@ func isCertTrustedForWebView(_ certificate: SecCertificate) -> Bool {
     return actual == trusted
 }
 
+/// True when the server trust passes normal system validation (a valid CA chain
+/// for the requested host). The pinned challenge handlers accept a cert if it is
+/// system-valid OR matches the pinned fingerprint, so a pinned self-signed
+/// fingerprint does not reject valid-CA servers (other profiles, external hosts).
+func isServerTrustValid(_ serverTrust: SecTrust) -> Bool {
+    return SecTrustEvaluateWithError(serverTrust, nil)
+}
+
 // MARK: - URLProtocol for intercepting URLSession.shared HTTPS requests
 
 /// Custom URLProtocol that intercepts HTTPS requests and validates certificates
@@ -273,7 +281,11 @@ class SSLTrustURLProtocol: URLProtocol, URLSessionDelegate, URLSessionDataDelega
                 cert = SecTrustGetCertificateAtIndex(serverTrust, 0)
             }
 
-            if let leafCert = cert, isCertTrustedForHTTP(leafCert) {
+            // Accept if the cert passes normal system validation (valid CA, the
+            // requested host) OR matches the pinned fingerprint, so a pinned
+            // self-signed fingerprint does not reject valid-CA servers.
+            let fingerprintTrusted = cert.map { isCertTrustedForHTTP($0) } ?? false
+            if isServerTrustValid(serverTrust) || fingerprintTrusted {
                 completionHandler(.useCredential, URLCredential(trust: serverTrust))
                 return
             }
@@ -359,7 +371,11 @@ class SSLTrustNavigationDelegate: NSObject, WKNavigationDelegate {
                 cert = SecTrustGetCertificateAtIndex(serverTrust, 0)
             }
 
-            if let leafCert = cert, isCertTrustedForWebView(leafCert) {
+            // Accept if the cert passes normal system validation OR matches the
+            // pinned fingerprint, so a pinned self-signed fingerprint does not
+            // reject valid-CA servers (e.g. image loads from another profile's host).
+            let fingerprintTrusted = cert.map { isCertTrustedForWebView($0) } ?? false
+            if isServerTrustValid(serverTrust) || fingerprintTrusted {
                 completionHandler(.useCredential, URLCredential(trust: serverTrust))
                 return
             }
