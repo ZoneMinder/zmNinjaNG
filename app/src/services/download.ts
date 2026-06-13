@@ -21,6 +21,15 @@ import { getEventVideoUrl as buildEventVideoUrl } from '../lib/url-builder';
 import { useBackgroundTasks } from '../stores/backgroundTasks';
 
 /**
+ * Strip characters that could escape the target directory or break the
+ * filesystem path, keeping only safe characters. Server-controlled names
+ * (e.g. monitor.Name) must pass through this before being used as a filename.
+ */
+export function sanitizeFilename(name: string): string {
+  return name.replace(/[^a-zA-Z0-9-_]/g, '_');
+}
+
+/**
  * Progress callback for download operations
  */
 export interface DownloadProgress {
@@ -251,7 +260,7 @@ async function downloadFileWeb(url: string, filename: string, options?: Download
  */
 export async function downloadSnapshot(imageUrl: string, monitorName: string): Promise<void> {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-  const filename = `${monitorName}_${timestamp}.jpg`;
+  const filename = `${sanitizeFilename(monitorName)}_${timestamp}.jpg`;
 
   // If it's a data URL, use platform-specific data URL handler
   if (imageUrl.startsWith('data:')) {
@@ -273,7 +282,7 @@ export async function downloadSnapshotFromElement(
 ): Promise<void> {
   try {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-    const filename = `${monitorName}_${timestamp}.jpg`;
+    const filename = `${sanitizeFilename(monitorName)}_${timestamp}.jpg`;
 
     // For video elements, capture current frame to canvas
     if (element instanceof HTMLVideoElement) {
@@ -371,7 +380,7 @@ export function downloadEventVideo(
   const videoUrl = getEventVideoDownloadUrl(portalUrl, eventId, token, minStreamingPort, monitorId);
 
   // Sanitize event name for filename
-  const sanitizedName = eventName.replace(/[^a-zA-Z0-9-_]/g, '_');
+  const sanitizedName = sanitizeFilename(eventName);
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
 
   // Try to download with appropriate extension
