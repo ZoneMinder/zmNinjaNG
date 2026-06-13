@@ -51,6 +51,15 @@ interface ProfileState {
 let storeSet: ((partial: Partial<ProfileState>) => void) | null = null;
 let storeGet: (() => ProfileState) | null = null;
 
+// True while switchProfile is running. The logout in step 1 clears the auth
+// state, which makes the useFreshAccessToken self-heal effect fire
+// getFreshAccessToken -> reLogin. At that point currentProfileId is still the
+// outgoing profile, so reLogin would log in with the previous profile's
+// credentials against the incoming server (a 401 that then poisons the
+// single-flight login). The switch runs its own bootstrap login, so suppress
+// reLogin for the duration.
+let switchInProgress = false;
+
 export const useProfileStore = create<ProfileState>()(
   persist(
     (set, get) => {
@@ -253,6 +262,7 @@ export const useProfileStore = create<ProfileState>()(
             targetAPI: profile.apiUrl,
           });
 
+          switchInProgress = true;
           try {
             // STEP 1: Clear ALL existing state FIRST (critical for avoiding data mixing)
             log.profileService('Step 1: Clearing all existing state', LogLevel.INFO);
@@ -332,6 +342,8 @@ export const useProfileStore = create<ProfileState>()(
 
             // Re-throw the original error
             throw error;
+          } finally {
+            switchInProgress = false;
           }
         }, setDefaultProfile: (id) => {
           set((state) => ({
@@ -343,6 +355,13 @@ export const useProfileStore = create<ProfileState>()(
         },
 
         reLogin: async () => {
+          // During a profile switch the bootstrap performs its own login. A
+          // self-heal reLogin here would race it with stale (outgoing-profile)
+          // credentials, so skip it until the switch completes.
+          if (switchInProgress) {
+            log.profileService('Skipping reLogin during profile switch', LogLevel.DEBUG);
+            return false;
+          }
           const { currentProfileId, getDecryptedPassword, profiles } = get();
           if (!currentProfileId) return false;
 
