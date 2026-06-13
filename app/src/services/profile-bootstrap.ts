@@ -291,11 +291,6 @@ export async function bootstrapSSLTrust(
       log.profileService('Self-signed certs enabled without fingerprint, triggering TOFU migration', LogLevel.INFO);
       const certInfo = await getServerCertFingerprint(profile.portalUrl);
       if (certInfo) {
-        // TOFU: pin the fetched fingerprint to the trust manager for this session
-        // so the subsequent login validates against it instead of an accept-any
-        // trust manager. Persisting the fingerprint still waits for the user to
-        // accept the dialog below.
-        await applySSLTrustSetting(true, certInfo.fingerprint);
         const { requestCertTrust } = await import('../lib/cert-trust-event');
         requestCertTrust(profile.id, certInfo);
       }
