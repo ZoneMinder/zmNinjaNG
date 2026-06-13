@@ -11,6 +11,7 @@
  */
 
 import type { ReactNode } from 'react';
+import { isSafeLinkHref } from './safe-url';
 
 /** Split body into blocks separated by one or more blank lines. */
 function splitBlocks(body: string): string[] {
@@ -43,11 +44,16 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
       const closeBracket = token.indexOf(']');
       const label = token.slice(1, closeBracket);
       const href = token.slice(closeBracket + 2, -1);
-      out.push(
-        <a key={key} href={href} target="_blank" rel="noreferrer" className="text-primary underline hover:opacity-80">
-          {label}
-        </a>,
-      );
+      if (isSafeLinkHref(href)) {
+        out.push(
+          <a key={key} href={href} target="_blank" rel="noreferrer" className="text-primary underline hover:opacity-80">
+            {label}
+          </a>,
+        );
+      } else {
+        // Disallowed scheme (e.g. javascript:): render the label as plain text.
+        out.push(<span key={key}>{label}</span>);
+      }
     } else if (token.startsWith('`')) {
       out.push(
         <code key={key} className="px-1 py-0.5 rounded bg-muted text-[0.9em] font-mono">

@@ -18,6 +18,7 @@ import { useDeveloperNotices, type DeveloperNoticeView } from '../hooks/useDevel
 import { useDeveloperNoticeStore } from '../stores/developerNotices';
 import { useDateTimeFormat } from '../hooks/useDateTimeFormat';
 import { Markdown } from '../lib/markdown';
+import { isSafeLinkHref } from '../lib/safe-url';
 import { DEVELOPER_NOTICES } from '../lib/zmninja-ng-constants';
 import { cn } from '../lib/utils';
 
@@ -114,7 +115,7 @@ function NoticeRow({ notice }: { notice: DeveloperNoticeView }) {
       {expanded && (
         <div className="px-3 pb-3 pl-10 pt-2 border-t border-border/40 mt-1">
           <Markdown source={notice.body} />
-          {notice.link && (
+          {notice.link && isSafeLinkHref(notice.link) && (
             <a
               href={notice.link}
               target="_blank"
