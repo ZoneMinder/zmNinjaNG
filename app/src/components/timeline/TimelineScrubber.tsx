@@ -375,6 +375,7 @@ function TimelineScrubberComponent({
           return (
             <div
               key={ev.id}
+              data-testid={`scrubber-density-${ev.id}`}
               className="absolute top-1/2 -translate-y-1/2 h-2 rounded-full bg-primary/30"
               style={{ left: `${Math.max(0, left)}%`, width: `${Math.min(width, 100 - left)}%` }}
             />
