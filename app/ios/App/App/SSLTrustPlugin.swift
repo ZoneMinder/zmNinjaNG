@@ -193,11 +193,12 @@ func sha256Fingerprint(_ certificate: SecCertificate) -> String {
 }
 
 /// Check if a certificate's fingerprint matches the trusted one.
-/// Used by URLProtocol (HTTP requests) — allows when no fingerprint is set (TOFU cert-fetch).
+/// Used by URLProtocol (HTTP requests). Fails closed when no fingerprint is set:
+/// the one-time cert fetch uses its own ephemeral URLSession, and bootstrap pins
+/// the fetched fingerprint (TOFU) before login, so there is no accept-any window.
 func isCertTrustedForHTTP(_ certificate: SecCertificate) -> Bool {
     guard let trusted = SSLTrustPlugin.trustedFingerprint, !trusted.isEmpty else {
-        // No fingerprint stored yet — allow for TOFU cert-fetch flow
-        return true
+        return false
     }
     let actual = sha256Fingerprint(certificate)
     return actual == trusted

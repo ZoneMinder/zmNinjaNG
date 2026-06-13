@@ -144,7 +144,9 @@ public class SSLTrustPlugin extends Plugin {
 
     /**
      * Install a TrustManager that validates certificates against the trusted fingerprint.
-     * If no fingerprint is set, accepts all certs (first-use scenario before TOFU dialog).
+     * If no fingerprint is set yet, connections are rejected (fail closed): the one-time
+     * cert fetch uses its own trust-all connection, and bootstrap pins the fetched
+     * fingerprint (TOFU) before any login, so there is no accept-any window.
      * This covers CapacitorHttp requests which use HttpsURLConnection/OkHttp.
      */
     private void installFingerprintTrustManager() {
@@ -158,9 +160,11 @@ public class SSLTrustPlugin extends Plugin {
                     @Override
                     public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
                         if (fp == null || fp.isEmpty()) {
-                            // No fingerprint stored yet — allow connection so the app can
-                            // fetch the cert and show the TOFU dialog
-                            return;
+                            // Fail closed: no fingerprint pinned yet. The one-time cert
+                            // fetch uses its own trust-all connection, so it is unaffected.
+                            // Bootstrap pins the fetched fingerprint before login, so real
+                            // traffic always has a fingerprint to validate against.
+                            throw new CertificateException("No trusted fingerprint pinned yet");
                         }
                         if (chain == null || chain.length == 0) {
                             throw new CertificateException("No server certificate");
