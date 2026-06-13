@@ -5,12 +5,20 @@ const config: CapacitorConfig = {
   appName: 'zmNinjaNg',
   webDir: 'dist',
   server: {
+    // Cleartext and the http scheme are required because ZoneMinder servers are
+    // user-configured at runtime and many run plain HTTP on a LAN. The host set
+    // is not known at build time, so this cannot be scoped to specific domains
+    // via static config (Android per-domain config / iOS NSExceptionDomains).
+    // Accepted risk for a self-hosted-NVR client. ZM resources load via
+    // img/fetch/websocket, not top-level navigation.
     cleartext: true,
-    // Use http scheme to avoid CORS issues when making requests to external servers
     androidScheme: 'http',
     iosScheme: 'http',
-    // Allow navigation to any URL
-    allowNavigation: ['*']
+    // No allowNavigation wildcard: the app is a client-side-routed SPA and never
+    // needs the webview to navigate to an external host. External links open in
+    // the system browser (Browser plugin / setWindowOpenHandler). Omitting this
+    // keeps the webview pinned to the app origin so a crafted link cannot
+    // navigate it to an attacker page.
   },
   ios: {
     contentInset: 'never',
