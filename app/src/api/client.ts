@@ -176,6 +176,24 @@ export function createApiClient(
     }
 
     const resolvedBaseUrl = config.baseURL ?? baseURL;
+    // The session token is meant for the configured server. Warn if a per-request
+    // baseURL override (e.g. a server-controlled Servers map host) points the
+    // token at a different host.
+    if (params.token && config.baseURL && config.baseURL !== baseURL) {
+      try {
+        const targetHost = new URL(resolvedBaseUrl).hostname;
+        const configuredHost = new URL(baseURL).hostname;
+        if (targetHost !== configuredHost) {
+          log.api(
+            'Attaching session token to a server host that differs from the configured portal',
+            LogLevel.WARN,
+            { targetHost, configuredHost, correlationId, method },
+          );
+        }
+      } catch {
+        // baseURL not parseable; skip the cross-host check.
+      }
+    }
     const fullUrl = resolveUrl(resolvedBaseUrl, url);
     const fullUrlWithParams = appendQuery(fullUrl, params);
 

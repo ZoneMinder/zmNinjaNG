@@ -5,7 +5,7 @@
  * Tests cover event images, videos, monitor streams, and various edge cases.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   normalizePortalUrl,
   buildQueryString,
@@ -420,12 +420,40 @@ describe('getGo2RTCWebSocketUrl', () => {
     expect(result).toBe('ws://zm.example.com:1984/ws?src=2_0');
   });
 
-  it('preserves username and password in URL (ZoneMinder behavior)', () => {
+  it('strips embedded credentials from the server-configured go2rtc URL', () => {
     const result = getGo2RTCWebSocketUrl('https://admin:pass@zm.example.com:1985/api', '4', 0);
-    // ZoneMinder keeps credentials in WebSocket URL - the server/proxy handles auth
-    expect(result).toBe('wss://admin:pass@zm.example.com:1985/api/ws?src=4_0');
-    expect(result).toContain('admin');
-    expect(result).toContain('pass');
+    expect(result).toBe('wss://zm.example.com:1985/api/ws?src=4_0');
+    expect(result).not.toContain('admin');
+    expect(result).not.toContain('pass');
+  });
+
+  it('warns when the token is attached to a host other than the configured portal', async () => {
+    const { log } = await import('../logger');
+    const warnSpy = vi.spyOn(log, 'http');
+    getGo2RTCWebSocketUrl('http://attacker.example:1984', '1', 0, {
+      token: 'mytoken123',
+      expectedHost: 'zm.example.com',
+    });
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Attaching session token to a go2rtc host that differs from the configured portal',
+      expect.anything(),
+      expect.objectContaining({ go2rtcHost: 'attacker.example', expectedHost: 'zm.example.com' }),
+    );
+    warnSpy.mockRestore();
+  });
+
+  it('does not warn when the go2rtc host matches the configured portal', async () => {
+    const { log } = await import('../logger');
+    const warnSpy = vi.spyOn(log, 'http');
+    getGo2RTCWebSocketUrl('http://zm.example.com:1984', '1', 0, {
+      token: 'mytoken123',
+      expectedHost: 'zm.example.com',
+    });
+    const mismatchCalls = warnSpy.mock.calls.filter(
+      (c) => c[0] === 'Attaching session token to a go2rtc host that differs from the configured portal',
+    );
+    expect(mismatchCalls).toHaveLength(0);
+    warnSpy.mockRestore();
   });
 });
 
