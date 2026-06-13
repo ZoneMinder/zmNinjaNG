@@ -6,7 +6,7 @@
 // as a plain web page (no Tauri/Capacitor runtime), so it uses the browser
 // <img src> streaming path. no Rust reader, no cache purge, no auto-restart.
 
-const { app, BrowserWindow, Menu, nativeImage, net, ipcMain, session, shell } = require('electron');
+const { app, BrowserWindow, Menu, nativeImage, net, ipcMain, session, shell, safeStorage } = require('electron');
 const path = require('node:path');
 
 // Lift Chromium's default 6-connection-per-origin cap so Montage views with
@@ -62,6 +62,35 @@ ipcMain.handle('http:request', async (_event, req) => {
 ipcMain.handle('ssl:set-trust', (_event, enabled) => {
   trustSelfSigned = !!enabled;
   return true;
+});
+
+// OS-backed secret encryption (Keychain on macOS, libsecret on Linux, DPAPI on
+// Windows). The renderer stores the returned base64 blob; the encryption key is
+// held by the OS, so unlike the web-crypto path the key is not co-located with
+// the ciphertext. Used by lib/secureStorage.ts on Electron for the ZM password
+// and refresh token.
+ipcMain.handle('secure:available', () => {
+  try {
+    return safeStorage.isEncryptionAvailable();
+  } catch {
+    return false;
+  }
+});
+ipcMain.handle('secure:encrypt', (_event, plaintext) => {
+  if (typeof plaintext !== 'string' || !safeStorage.isEncryptionAvailable()) return null;
+  try {
+    return safeStorage.encryptString(plaintext).toString('base64');
+  } catch {
+    return null;
+  }
+});
+ipcMain.handle('secure:decrypt', (_event, base64) => {
+  if (typeof base64 !== 'string' || !safeStorage.isEncryptionAvailable()) return null;
+  try {
+    return safeStorage.decryptString(Buffer.from(base64, 'base64'));
+  } catch {
+    return null;
+  }
 });
 
 // App icon so the desktop shell shows the zmNinjaNg logo instead of the
@@ -141,6 +170,11 @@ function createWindow() {
 }
 
 // Accept self-signed certificates only when the active profile allows it.
+// Known gap vs the native builds: when enabled this trusts any cert for any
+// host (no TOFU fingerprint pinning), because the Electron shell has no
+// cert-fetch/pin path (getServerCertFingerprint is native-only). Tracked as a
+// hardening item for this experimental shell; do not promote to a production
+// desktop build without fingerprint pinning here.
 app.on('certificate-error', (event, _webContents, _url, _error, _cert, callback) => {
   if (trustSelfSigned) {
     event.preventDefault();

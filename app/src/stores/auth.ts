@@ -18,7 +18,8 @@ import { login as apiLogin, refreshToken as apiRefreshToken } from '../api/auth'
 import { isApiClientInitialized } from '../api/client-ready';
 import type { LoginResponse } from '../api/types';
 import { log, LogLevel } from '../lib/logger';
-import { encrypt, decrypt, isCryptoAvailable } from '../lib/crypto';
+import { decrypt, isCryptoAvailable } from '../lib/crypto';
+import { setSecureValue, getSecureValue, removeSecureValue } from '../lib/secureStorage';
 import { ZM_INTEGRATION } from '../lib/zmninja-ng-constants';
 
 interface AuthState {
@@ -56,12 +57,6 @@ interface PersistedAuthState {
   requiresAuth: boolean;
 }
 
-/**
- * Custom storage adapter that encrypts the refresh token before writing to localStorage
- * and decrypts it on read. Falls back to plaintext if Web Crypto is unavailable.
- * If decryption fails (e.g. key changed, corrupted data), clears the refresh token
- * so the user will be prompted to re-login.
- */
 function getStorage(): Storage | null {
   try {
     return typeof window !== 'undefined' ? window.localStorage : null;
@@ -70,47 +65,102 @@ function getStorage(): Storage | null {
   }
 }
 
-const encryptedAuthStorage: PersistStorage<PersistedAuthState> = {
+/**
+ * Secure-storage key for the refresh token. On native this resolves to the
+ * Keychain/Keystore; on web/desktop it is AES-GCM in localStorage (which is
+ * obfuscation, not confidentiality, against a local reader).
+ */
+const AUTH_REFRESH_TOKEN_KEY = 'auth_refresh_token';
+
+/**
+ * Persistence adapter for the auth store. The refresh token is the only
+ * sensitive field, so it is kept out of the persisted blob and stored through
+ * secureStorage (native Keychain/Keystore, web AES-GCM). Everything else
+ * (expiry, version, flags) is plain localStorage.
+ *
+ * If secure storage is unavailable, the token is dropped rather than written in
+ * plaintext, so the user re-authenticates. Older builds stored the token
+ * encrypted inside the blob; getItem recovers that once and the next write
+ * moves it into secure storage.
+ */
+export const encryptedAuthStorage: PersistStorage<PersistedAuthState> = {
   getItem: async (name: string): Promise<StorageValue<PersistedAuthState> | null> => {
     const storage = getStorage();
     if (!storage) return null;
     const raw = storage.getItem(name);
     if (!raw) return null;
+
+    let parsed: StorageValue<PersistedAuthState>;
     try {
-      const parsed = JSON.parse(raw) as StorageValue<PersistedAuthState>;
-      if (parsed?.state?.refreshToken && isCryptoAvailable()) {
-        try {
-          parsed.state.refreshToken = await decrypt(parsed.state.refreshToken);
-        } catch {
-          try { log.auth('Failed to decrypt refresh token: clearing stored token', LogLevel.ERROR); } catch { /* */ }
-          parsed.state.refreshToken = null;
-        }
-      }
-      return parsed;
+      parsed = JSON.parse(raw) as StorageValue<PersistedAuthState>;
     } catch {
       return null;
     }
+
+    // Preferred location: secure storage.
+    let token: string | null = null;
+    try {
+      token = await getSecureValue(AUTH_REFRESH_TOKEN_KEY);
+    } catch {
+      token = null;
+    }
+    if (token) {
+      parsed.state.refreshToken = token;
+      return parsed;
+    }
+
+    // Migration: older builds stored the refresh token encrypted in the blob.
+    const legacy = parsed.state.refreshToken;
+    if (legacy) {
+      if (isCryptoAvailable()) {
+        try {
+          const recovered = await decrypt(legacy);
+          parsed.state.refreshToken = recovered;
+          // Best effort: move it into secure storage now so the blob copy can be
+          // dropped on the next write.
+          try { await setSecureValue(AUTH_REFRESH_TOKEN_KEY, recovered); } catch { /* migrates on next write */ }
+          return parsed;
+        } catch {
+          try { log.auth('Failed to recover legacy refresh token: clearing', LogLevel.ERROR); } catch { /* */ }
+        }
+      }
+      parsed.state.refreshToken = null;
+    }
+    return parsed;
   },
   setItem: async (name: string, value: StorageValue<PersistedAuthState>): Promise<void> => {
     const storage = getStorage();
     if (!storage) return;
-    try {
-      const toStore: StorageValue<PersistedAuthState> = {
-        ...value,
-        state: { ...value.state },
-      };
-      if (toStore.state.refreshToken && isCryptoAvailable()) {
-        toStore.state.refreshToken = await encrypt(toStore.state.refreshToken);
+
+    // Never persist the refresh token inside the blob.
+    const toStore: StorageValue<PersistedAuthState> = {
+      ...value,
+      state: { ...value.state, refreshToken: null },
+    };
+
+    const token = value.state.refreshToken;
+    if (token) {
+      try {
+        await setSecureValue(AUTH_REFRESH_TOKEN_KEY, token);
+      } catch {
+        // Secure storage unavailable (e.g. no Web Crypto). Do not fall back to
+        // plaintext: drop the token so the user re-authenticates.
+        try { await removeSecureValue(AUTH_REFRESH_TOKEN_KEY); } catch { /* */ }
+        try { log.auth('Secure storage unavailable: refresh token not persisted', LogLevel.ERROR); } catch { /* */ }
       }
-      storage.setItem(name, JSON.stringify(toStore));
-    } catch {
-      try { log.auth('Failed to encrypt refresh token: storing plaintext fallback', LogLevel.ERROR); } catch { /* */ }
-      try { storage.setItem(name, JSON.stringify(value)); } catch { /* */ }
+    } else {
+      // No token in state (e.g. logout): make sure none lingers.
+      try { await removeSecureValue(AUTH_REFRESH_TOKEN_KEY); } catch { /* */ }
     }
+
+    try {
+      storage.setItem(name, JSON.stringify(toStore));
+    } catch { /* */ }
   },
-  removeItem: (name: string): void => {
+  removeItem: async (name: string): Promise<void> => {
     const storage = getStorage();
     if (storage) storage.removeItem(name);
+    try { await removeSecureValue(AUTH_REFRESH_TOKEN_KEY); } catch { /* */ }
   },
 };
 

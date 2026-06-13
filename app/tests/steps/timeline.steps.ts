@@ -168,8 +168,36 @@ Given('there are events on the timeline', async ({ page }) => {
 When('I click on an event in the timeline', async ({ page }) => {
   if (!hasTimelineEvents) return;
 
-  // Events on the canvas have no DOM node, but the scrubber renders a clickable
-  // thumbnail per event that navigates straight to the event detail page.
+  // Events render on a canvas (no DOM node). The scrubber renders one density
+  // marker per event on its track, and shows a clickable thumbnail only for the
+  // events overlapping the handle (after a drag; activeEvents starts empty).
+  // Drive the handle to the center of a real event marker, then click the
+  // thumbnail that surfaces.
+  const track = page.getByTestId('scrubber-track');
+  await expect(track).toBeVisible({ timeout: testConfig.timeouts.pageLoad });
+
+  const markers = page.locator('[data-testid^="scrubber-density-"]');
+  if ((await markers.count()) === 0) {
+    // No events fall within the current timeline window; treat like the
+    // no-events case so the navigation assertion is skipped.
+    log.info('E2E: no events in the timeline window; skipping click', { component: 'e2e' });
+    hasTimelineEvents = false;
+    return;
+  }
+
+  const trackBox = await track.boundingBox();
+  const markerBox = await markers.first().boundingBox();
+  if (!trackBox || !markerBox) throw new Error('scrubber track/marker has no bounding box');
+
+  const x = markerBox.x + markerBox.width / 2;
+  const y = trackBox.y + trackBox.height / 2;
+
+  // mousedown moves the handle to the event and queues the (debounced) lookup.
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x, y);
+  await page.mouse.up();
+
   const thumb = page.locator('[data-testid^="scrubber-thumb-"]').first();
   await expect(thumb).toBeVisible({ timeout: testConfig.timeouts.pageLoad });
   await thumb.click();

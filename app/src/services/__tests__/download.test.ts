@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { downloadFile, convertToSnapshotUrl } from '../download';
+import { downloadFile, convertToSnapshotUrl, sanitizeFilename } from '../download';
 import { Platform } from '../../lib/platform';
 
 // Mock dependencies
@@ -83,6 +83,31 @@ describe('Mobile Download Logic', () => {
         expect(Media.saveVideo).toHaveBeenCalledWith({
             path: 'file:///documents/test.mp4'
         });
+    });
+});
+
+describe('sanitizeFilename', () => {
+    it('keeps alphanumerics, hyphen and underscore', () => {
+        expect(sanitizeFilename('Front_Door-2')).toBe('Front_Door-2');
+    });
+
+    it('strips path traversal sequences from server-controlled names', () => {
+        expect(sanitizeFilename('../../etc/passwd')).toBe('______etc_passwd');
+        expect(sanitizeFilename('..\\..\\windows')).toBe('______windows');
+    });
+
+    it('leaves no path separators or dot segments', () => {
+        const result = sanitizeFilename('../../foo');
+        expect(result).not.toContain('/');
+        expect(result).not.toContain('..');
+    });
+
+    it('replaces spaces and unicode with underscores', () => {
+        expect(sanitizeFilename('Back Yard café')).toBe('Back_Yard_caf_');
+    });
+
+    it('handles empty string', () => {
+        expect(sanitizeFilename('')).toBe('');
     });
 });
 

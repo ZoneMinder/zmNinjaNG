@@ -14,6 +14,7 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 
 import java.io.ByteArrayInputStream;
 import java.net.URL;
+import java.security.KeyStore;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.security.cert.CertificateException;
@@ -26,6 +27,7 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
+import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
 
 import android.net.http.SslCertificate;
@@ -143,13 +145,37 @@ public class SSLTrustPlugin extends Plugin {
     }
 
     /**
-     * Install a TrustManager that validates certificates against the trusted fingerprint.
-     * If no fingerprint is set, accepts all certs (first-use scenario before TOFU dialog).
+     * Resolve the platform default X509TrustManager (system CA store), or null if
+     * unavailable. Used so the pinned trust manager can still accept normally-valid
+     * certificates from other hosts.
+     */
+    private X509TrustManager getSystemTrustManager() {
+        try {
+            TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+            tmf.init((KeyStore) null);
+            for (TrustManager tm : tmf.getTrustManagers()) {
+                if (tm instanceof X509TrustManager) {
+                    return (X509TrustManager) tm;
+                }
+            }
+        } catch (Exception e) {
+            // Fall back to fingerprint-only behavior.
+        }
+        return null;
+    }
+
+    /**
+     * Install a TrustManager used while self-signed trust is enabled. A certificate
+     * is accepted if it passes normal system validation (valid CA certs, other
+     * servers) OR matches the pinned fingerprint (the user's self-signed cert), so a
+     * pinned fingerprint does not reject every other HTTPS host. With no fingerprint
+     * pinned yet, self-signed certs are accepted for the TOFU cert-fetch flow.
      * This covers CapacitorHttp requests which use HttpsURLConnection/OkHttp.
      */
     private void installFingerprintTrustManager() {
         try {
             final String fp = this.trustedFingerprint;
+            final X509TrustManager systemTrustManager = getSystemTrustManager();
             TrustManager[] trustManagers = new TrustManager[]{
                 new X509TrustManager() {
                     @Override
@@ -157,6 +183,17 @@ public class SSLTrustPlugin extends Plugin {
 
                     @Override
                     public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
+                        // Accept certs that pass normal system validation first, so a
+                        // pinned self-signed fingerprint does not reject valid-CA servers.
+                        if (systemTrustManager != null) {
+                            try {
+                                systemTrustManager.checkServerTrusted(chain, authType);
+                                return;
+                            } catch (CertificateException notSystemValid) {
+                                // Not CA-valid (likely self-signed). Fall through to the
+                                // fingerprint check below.
+                            }
+                        }
                         if (fp == null || fp.isEmpty()) {
                             // No fingerprint stored yet — allow connection so the app can
                             // fetch the cert and show the TOFU dialog

@@ -157,12 +157,20 @@ export function LiveMonitorPlayer({
   // 'mjpeg' and MJPEG becomes the real stream.
   const showMjpegPlaceholder = effectiveStreamingMethod === 'webrtc' && !hasVideoFrames;
 
+  let portalHost: string | undefined;
+  try {
+    portalHost = profile?.portalUrl ? new URL(profile.portalUrl).hostname : undefined;
+  } catch {
+    portalHost = undefined;
+  }
+
   const go2rtcStream = useGo2RTCStream({
     go2rtcUrl: profile?.go2rtcUrl || '',
     monitorId: monitor.Id,
     channel: monitor.StreamChannel || 0,
     containerRef,
     protocols: rawSettings?.webrtcProtocols,
+    expectedHost: portalHost,
     enabled: streamingMethod === 'webrtc' && !!profile?.go2rtcUrl && !go2rtcFailed,
     muted,
     controls: showControls,

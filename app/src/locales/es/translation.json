@@ -455,7 +455,10 @@
     "reject_button": "No conectar",
     "reverify_button": "Re-verificar",
     "trusted_fingerprint": "Certificado de confianza",
-    "no_fingerprint": "Ningún certificado guardado"
+    "no_fingerprint": "Ningún certificado guardado",
+    "untrusted_banner_title": "Certificado no confiable",
+    "untrusted_banner_desc": "Las vistas en vivo y las miniaturas no se cargarán hasta que confíes en el certificado de este servidor.",
+    "verify_button": "Verificar"
   },
   "logs": {
     "title": "Registros",

@@ -20,6 +20,7 @@ import {
   getStorageInfo,
 } from '../secureStorage';
 import * as crypto from '../crypto';
+import { Platform } from '../platform';
 
 vi.mock('@capacitor/core', () => ({
   Capacitor: {
@@ -290,8 +291,8 @@ describe('SecureStorage - Web Platform', () => {
       const info = getStorageInfo();
 
       expect(info.platform).toBe('web');
-      expect(info.method).toBe('AES-GCM encryption (Web Crypto API)');
-      expect(info.details).toBe('PBKDF2 key derivation with 100k iterations');
+      expect(info.method).toBe('AES-GCM obfuscation (Web Crypto API)');
+      expect(info.details).toBe('Key material is stored alongside the ciphertext; obfuscation, not confidentiality against a local reader');
 
       vi.restoreAllMocks();
     });
@@ -523,5 +524,48 @@ describe('SecureStorage - Edge Cases', () => {
     await setSecureValue('overwrite', 'updated');
     const second = await getSecureValue('overwrite');
     expect(second).toBe('updated');
+  });
+});
+
+describe('SecureStorage - Electron safeStorage', () => {
+  const mockSecure = {
+    isAvailable: vi.fn(async () => true),
+    encrypt: vi.fn(async (s: string) => btoa(s)),
+    decrypt: vi.fn(async (b: string) => atob(b)),
+  };
+
+  beforeEach(() => {
+    vi.mocked(Capacitor.isNativePlatform).mockReturnValue(false);
+    vi.spyOn(Platform, 'isElectron', 'get').mockReturnValue(true);
+    (window as unknown as { electronSecure: unknown }).electronSecure = mockSecure;
+    localStorage.clear();
+    mockSecure.isAvailable.mockClear();
+    mockSecure.encrypt.mockClear();
+    mockSecure.decrypt.mockClear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete (window as unknown as { electronSecure?: unknown }).electronSecure;
+  });
+
+  it('encrypts via the OS bridge and stores a prefixed blob, not plaintext', async () => {
+    await setSecureValue('cred', 'p@ss');
+    const raw = localStorage.getItem('zmng_secure_cred')!;
+    expect(raw.startsWith('esafe:')).toBe(true);
+    expect(raw).not.toContain('p@ss');
+    expect(mockSecure.encrypt).toHaveBeenCalledWith('p@ss');
+  });
+
+  it('round-trips a value through the OS bridge', async () => {
+    await setSecureValue('cred', 'p@ss');
+    expect(await getSecureValue('cred')).toBe('p@ss');
+  });
+
+  it('returns null for an esafe blob when the bridge is unavailable', async () => {
+    await setSecureValue('cred', 'p@ss');
+    vi.spyOn(Platform, 'isElectron', 'get').mockReturnValue(false);
+    delete (window as unknown as { electronSecure?: unknown }).electronSecure;
+    expect(await getSecureValue('cred')).toBeNull();
   });
 });

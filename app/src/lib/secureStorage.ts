@@ -10,10 +10,13 @@
  * - Web/Desktop: Uses AES-GCM encryption (via Web Crypto API) and stores
  *   the encrypted blob in localStorage.
  * 
- * Security Features:
- * - iOS: Data stored in Keychain (hardware-encrypted, accessible only by app)
- * - Android: Data encrypted with AES-256-GCM using Android Keystore
- * - Web: PBKDF2 key derivation (100k iterations) + AES-GCM encryption
+ * Confidentiality:
+ * - iOS: Keychain (hardware-encrypted, accessible only by the app).
+ * - Android: Android Keystore.
+ * - Web/Desktop: AES-GCM, but the key material lives in localStorage next to
+ *   the ciphertext (see lib/crypto.ts), so this is obfuscation, not real at-rest
+ *   confidentiality against a local reader. Only the native paths protect data
+ *   from a reader of the store.
  */
 
 import { Capacitor } from '@capacitor/core';
@@ -30,11 +33,42 @@ import { log, LogLevel } from './logger';
 
 const STORAGE_PREFIX = 'zmng_secure_';
 
+// Marks a localStorage blob encrypted by the Electron main-process safeStorage
+// (OS keychain), distinguishing it from a web-crypto blob so getSecureValue
+// can pick the right path and migrate older web-crypto values.
+const ELECTRON_SAFE_PREFIX = 'esafe:';
+
+declare global {
+  interface Window {
+    electronSecure?: {
+      isAvailable(): Promise<boolean>;
+      encrypt(plaintext: string): Promise<string | null>;
+      decrypt(base64: string): Promise<string | null>;
+    };
+  }
+}
+
 /**
  * Check if we're running on a native platform (iOS/Android).
  */
 function isNativePlatform(): boolean {
   return Platform.isNative;
+}
+
+/**
+ * True when the Electron OS-backed secret encryption bridge is present and the
+ * OS reports encryption available. Unlike the web-crypto path, the key is held
+ * by the OS keychain, not stored next to the ciphertext.
+ */
+async function isElectronSecureAvailable(): Promise<boolean> {
+  if (!Platform.isElectron || typeof window === 'undefined' || !window.electronSecure) {
+    return false;
+  }
+  try {
+    return await window.electronSecure.isAvailable();
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -54,6 +88,17 @@ export async function setSecureValue(key: string, value: string): Promise<void> 
     });
     await SecureStorage.set(fullKey, value);
   } else {
+    // Electron: prefer OS-backed safeStorage (key held by the OS keychain).
+    if (await isElectronSecureAvailable()) {
+      const b64 = await window.electronSecure!.encrypt(value);
+      if (b64) {
+        localStorage.setItem(fullKey, `${ELECTRON_SAFE_PREFIX}${b64}`);
+        log.secureStorage('Value encrypted via Electron safeStorage', LogLevel.DEBUG, { key });
+        return;
+      }
+      log.secureStorage('Electron safeStorage encrypt failed; falling back to web crypto', LogLevel.WARN, { key });
+    }
+
     // Use AES-GCM encryption for web/desktop
     if (!isCryptoAvailable()) {
       log.secureStorage('Web Crypto API not available - cannot store credentials securely', LogLevel.ERROR, { key }
@@ -102,6 +147,16 @@ export async function getSecureValue(key: string): Promise<string | null> {
     // Retrieve and decrypt from localStorage
     const encrypted = localStorage.getItem(fullKey);
     if (!encrypted) {
+      return null;
+    }
+
+    // Electron safeStorage blob: decrypt via the OS-backed bridge.
+    if (encrypted.startsWith(ELECTRON_SAFE_PREFIX)) {
+      if (await isElectronSecureAvailable()) {
+        const decrypted = await window.electronSecure!.decrypt(encrypted.slice(ELECTRON_SAFE_PREFIX.length));
+        return decrypted;
+      }
+      log.secureStorage('Electron safeStorage blob found but bridge unavailable; cannot decrypt', LogLevel.WARN, { key });
       return null;
     }
 
@@ -249,10 +304,10 @@ export function getStorageInfo(): {
     return {
       platform: 'web',
       method: isCryptoAvailable()
-        ? 'AES-GCM encryption (Web Crypto API)'
+        ? 'AES-GCM obfuscation (Web Crypto API)'
         : 'Unencrypted localStorage (fallback)',
       details: isCryptoAvailable()
-        ? 'PBKDF2 key derivation with 100k iterations'
+        ? 'Key material is stored alongside the ciphertext; obfuscation, not confidentiality against a local reader'
         : 'WARNING: No encryption available',
     };
   }

@@ -76,6 +76,8 @@ export interface UseGo2RTCStreamOptions {
   containerRef: React.RefObject<HTMLElement | null>;
   protocols?: StreamingProtocol[];
   token?: string;
+  /** Configured portal hostname; warns if the token is sent to a different go2rtc host. */
+  expectedHost?: string;
   enabled?: boolean;
   muted?: boolean;
   /** Show native video controls (play/pause, volume, fullscreen) */
@@ -101,6 +103,7 @@ export function useGo2RTCStream(options: UseGo2RTCStreamOptions): UseGo2RTCStrea
     containerRef,
     protocols = ['webrtc', 'mse', 'hls'],
     token,
+    expectedHost,
     enabled = true,
     muted = false,
     controls = false,
@@ -177,7 +180,7 @@ export function useGo2RTCStream(options: UseGo2RTCStreamOptions): UseGo2RTCStrea
     setError(null);
 
     try {
-      const wsUrl = getGo2RTCWebSocketUrl(go2rtcUrl, monitorId, channel, { token });
+      const wsUrl = getGo2RTCWebSocketUrl(go2rtcUrl, monitorId, channel, { token, expectedHost });
       const videoRtc = new VideoRTC();
 
       // Style element to fill container
@@ -260,7 +263,7 @@ export function useGo2RTCStream(options: UseGo2RTCStreamOptions): UseGo2RTCStrea
       setState('error');
       setError(err instanceof Error ? err.message : 'Connection failed');
     }
-  }, [cleanup, containerRef, monitorId, go2rtcUrl, token, protocols, channel, applyMuted]);
+  }, [cleanup, containerRef, monitorId, go2rtcUrl, token, expectedHost, protocols, channel, applyMuted]);
 
   const retry = useCallback(() => {
     log.videoPlayer('GO2RTC: Retry requested', LogLevel.INFO, { monitorId });

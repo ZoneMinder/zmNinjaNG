@@ -455,7 +455,10 @@
     "reject_button": "Ne pas connecter",
     "reverify_button": "Re-vérifier",
     "trusted_fingerprint": "Certificat de confiance",
-    "no_fingerprint": "Aucun certificat enregistré"
+    "no_fingerprint": "Aucun certificat enregistré",
+    "untrusted_banner_title": "Certificat non approuvé",
+    "untrusted_banner_desc": "Les vues en direct et les miniatures ne se chargeront pas tant que vous n'aurez pas approuvé le certificat de ce serveur.",
+    "verify_button": "Vérifier"
   },
   "logs": {
     "title": "Journaux",

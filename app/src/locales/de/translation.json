@@ -455,7 +455,10 @@
     "reject_button": "Nicht verbinden",
     "reverify_button": "Erneut prüfen",
     "trusted_fingerprint": "Vertrauenswürdiges Zertifikat",
-    "no_fingerprint": "Kein Zertifikat gespeichert"
+    "no_fingerprint": "Kein Zertifikat gespeichert",
+    "untrusted_banner_title": "Zertifikat nicht vertraut",
+    "untrusted_banner_desc": "Live-Ansichten und Vorschaubilder werden erst geladen, wenn Sie dem Zertifikat dieses Servers vertrauen.",
+    "verify_button": "Prüfen"
   },
   "logs": {
     "title": "Protokolle",

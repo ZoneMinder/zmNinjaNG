@@ -429,22 +429,37 @@ export function getZmsControlUrl(
  * getGo2RTCWebSocketUrl('http://zm.example.com:1984/go2rtc', '5', 1)
  * // Returns: 'ws://zm.example.com:1984/go2rtc/ws?src=5_1'
  */
+/**
+ * Warn when the session token is being sent to a go2rtc host other than the
+ * configured portal. Embedded user:pass@ credentials in the URL are kept
+ * intact: ZoneMinder authenticates the go2rtc WebSocket via those credentials
+ * (the client does not attach a separate token here), so stripping them breaks
+ * WebRTC streaming on setups that rely on them.
+ */
+function hardenGo2RTCUrl(url: URL, hasToken: boolean, expectedHost?: string): void {
+  if (hasToken && expectedHost && url.hostname !== expectedHost) {
+    log.http(
+      'Attaching session token to a go2rtc host that differs from the configured portal',
+      LogLevel.WARN,
+      { go2rtcHost: url.hostname, expectedHost }
+    );
+  }
+}
+
 export function getGo2RTCWebSocketUrl(
   go2rtcPath: string,
   monitorId: string,
   channel: string | number = 0,
   options: {
     token?: string;
+    expectedHost?: string;
   } = {}
 ): string {
-  const { token } = options;
+  const { token, expectedHost } = options;
 
   // Parse the configured Go2RTC path
   const url = new URL(go2rtcPath);
-
-  // NOTE: Keep credentials in URL if present - ZoneMinder does NOT strip them
-  // The server/proxy may handle authentication via URL credentials
-  // (ZoneMinder's MonitorStream.js keeps credentials when building WebSocket URL)
+  hardenGo2RTCUrl(url, !!token, expectedHost);
 
   // Convert http/https to ws/wss (matches ZoneMinder implementation)
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -495,12 +510,14 @@ export function getGo2RTCStreamUrl(
   streamType: 'mse' | 'hls' | 'mp4' | 'mjpeg',
   options: {
     token?: string;
+    expectedHost?: string;
   } = {}
 ): string {
-  const { token } = options;
+  const { token, expectedHost } = options;
 
   // Parse the configured Go2RTC path
   const url = new URL(go2rtcPath);
+  hardenGo2RTCUrl(url, !!token, expectedHost);
 
   // Append /stream.{type} to existing pathname (matches Go2RTC API structure)
   // If ZM_GO2RTC_PATH is "http://server:1984/api", pathname is "/api"
