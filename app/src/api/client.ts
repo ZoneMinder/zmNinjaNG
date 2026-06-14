@@ -36,6 +36,15 @@ export interface ApiClient {
   post<T = unknown>(url: string, data?: unknown, config?: ApiRequestConfig): Promise<HttpResponse<T>>;
   put<T = unknown>(url: string, data?: unknown, config?: ApiRequestConfig): Promise<HttpResponse<T>>;
   delete<T = unknown>(url: string, config?: ApiRequestConfig): Promise<HttpResponse<T>>;
+  /**
+   * POST a form-encoded body (application/x-www-form-urlencoded). ZM's CakePHP
+   * API expects this for login and most mutations. Accepts a URLSearchParams or
+   * a plain record; serializes to a string so every platform adapter sends an
+   * identical body.
+   */
+  postForm<T = unknown>(url: string, fields: URLSearchParams | Record<string, string>, config?: ApiRequestConfig): Promise<HttpResponse<T>>;
+  /** PUT a form-encoded body. See postForm. */
+  putForm<T = unknown>(url: string, fields: URLSearchParams | Record<string, string>, config?: ApiRequestConfig): Promise<HttpResponse<T>>;
 }
 
 /**
@@ -268,11 +277,22 @@ export function createApiClient(
     }
   };
 
+  const formConfig = (config?: ApiRequestConfig): ApiRequestConfig => ({
+    ...config,
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...config?.headers },
+  });
+  const toFormBody = (fields: URLSearchParams | Record<string, string>): string =>
+    (fields instanceof URLSearchParams ? fields : new URLSearchParams(fields)).toString();
+
   return {
     get: <T>(url: string, config?: ApiRequestConfig) => request<T>('GET', url, undefined, config),
     post: <T>(url: string, data?: unknown, config?: ApiRequestConfig) => request<T>('POST', url, data, config),
     put: <T>(url: string, data?: unknown, config?: ApiRequestConfig) => request<T>('PUT', url, data, config),
     delete: <T>(url: string, config?: ApiRequestConfig) => request<T>('DELETE', url, undefined, config),
+    postForm: <T>(url: string, fields: URLSearchParams | Record<string, string>, config?: ApiRequestConfig) =>
+      request<T>('POST', url, toFormBody(fields), formConfig(config)),
+    putForm: <T>(url: string, fields: URLSearchParams | Record<string, string>, config?: ApiRequestConfig) =>
+      request<T>('PUT', url, toFormBody(fields), formConfig(config)),
   };
 }
 

@@ -31,7 +31,7 @@ describe('Auth API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getApiClient).mockReturnValue({
-      post: mockPost,
+      postForm: mockPost,
       get: mockGet,
     } as unknown as ApiClient);
   });
@@ -52,13 +52,11 @@ describe('Auth API', () => {
 
     const response = await login({ user: 'admin', pass: 'secret' });
 
-    expect(mockPost).toHaveBeenCalledWith(
-      '/host/login.json',
-      expect.stringContaining('user=admin'),
-      expect.objectContaining({
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      })
-    );
+    expect(mockPost).toHaveBeenCalledTimes(1);
+    const [loginUrl, loginBody] = mockPost.mock.calls[0];
+    expect(loginUrl).toBe('/host/login.json');
+    expect((loginBody as URLSearchParams).get('user')).toBe('admin');
+    expect((loginBody as URLSearchParams).get('pass')).toBe('secret');
     expect(response.access_token).toBe('access');
     expect(response.refresh_token).toBe('refresh');
   });
@@ -75,13 +73,9 @@ describe('Auth API', () => {
 
     const response = await refreshToken('refresh-2');
 
-    expect(mockPost).toHaveBeenCalledWith(
-      '/host/login.json',
-      'token=refresh-2',
-      expect.objectContaining({
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      })
-    );
+    const [refreshUrl, refreshBody] = mockPost.mock.calls[0];
+    expect(refreshUrl).toBe('/host/login.json');
+    expect((refreshBody as URLSearchParams).get('token')).toBe('refresh-2');
     expect(response.access_token).toBe('access-2');
   });
 

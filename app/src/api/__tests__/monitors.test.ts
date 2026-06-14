@@ -50,7 +50,7 @@ describe('Monitors API', () => {
     vi.mocked(getExcludedMonitorIds).mockReturnValue([]);
     vi.mocked(getApiClient).mockReturnValue({
       get: mockGet,
-      post: mockPost,
+      postForm: mockPost,
     } as unknown as ApiClient);
   });
 
@@ -137,7 +137,7 @@ describe('Monitors API', () => {
 
     await updateMonitor('2', { 'Monitor[Name]': 'Updated' });
 
-    expect(mockPost).toHaveBeenCalledWith('/monitors/2.json', expect.any(URLSearchParams), expect.any(Object));
+    expect(mockPost).toHaveBeenCalledWith('/monitors/2.json', expect.any(URLSearchParams));
     const body = mockPost.mock.calls[0][1] as URLSearchParams;
     expect(body.get('Monitor[Name]')).toBe('Updated');
   });
@@ -147,7 +147,7 @@ describe('Monitors API', () => {
 
     await changeMonitorFunction('3', 'Monitor');
 
-    expect(mockPost).toHaveBeenCalledWith('/monitors/3.json', expect.any(URLSearchParams), expect.any(Object));
+    expect(mockPost).toHaveBeenCalledWith('/monitors/3.json', expect.any(URLSearchParams));
     const body = mockPost.mock.calls[0][1] as URLSearchParams;
     expect(body.get('Monitor[Function]')).toBe('Monitor');
   });
@@ -157,7 +157,7 @@ describe('Monitors API', () => {
 
     await setMonitorEnabled('4', false);
 
-    expect(mockPost).toHaveBeenCalledWith('/monitors/4.json', expect.any(URLSearchParams), expect.any(Object));
+    expect(mockPost).toHaveBeenCalledWith('/monitors/4.json', expect.any(URLSearchParams));
     const body = mockPost.mock.calls[0][1] as URLSearchParams;
     expect(body.get('Monitor[Enabled]')).toBe('0');
   });

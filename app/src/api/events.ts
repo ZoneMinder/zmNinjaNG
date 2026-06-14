@@ -16,7 +16,7 @@ import {
   getEventZmsUrl as buildEventZmsUrl,
 } from '../lib/url-builder';
 import { wrapWithImageProxy } from '../lib/proxy-utils';
-import { getExcludedMonitorIds } from '../lib/profile-settings';
+import { getExcludedMonitorIdSet } from '../lib/profile-settings';
 
 export interface EventFilters {
   monitorId?: string;
@@ -127,7 +127,7 @@ export async function getEvents(filters: EventFilters = {}): Promise<EventsRespo
   );
 
   // Drop events belonging to per-profile excluded monitors at the API boundary
-  const excludedIds = new Set(getExcludedMonitorIds());
+  const excludedIds = getExcludedMonitorIdSet();
   const visibleEvents = excludedIds.size === 0
     ? uniqueEvents
     : uniqueEvents.filter(event => !excludedIds.has(event.Event.MonitorId));
@@ -214,7 +214,7 @@ export async function getAdjacentEvent(
 
   // Fetch a small batch (not just 1) so we can skip over excluded monitors
   // and still land on the nearest visible adjacent event.
-  const excludedIds = new Set(getExcludedMonitorIds());
+  const excludedIds = getExcludedMonitorIdSet();
   const params: Record<string, string | number> = {
     page: 1,
     limit: excludedIds.size === 0 ? 1 : 25,
@@ -278,9 +278,7 @@ export async function setEventArchived(eventId: string, archived: boolean): Prom
   const client = getApiClient();
   const body = new URLSearchParams();
   body.set('Event[Archived]', archived ? '1' : '0');
-  await client.put(`/events/${eventId}.json`, body, {
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-  });
+  await client.putForm(`/events/${eventId}.json`, body);
 }
 
 /**
@@ -317,7 +315,7 @@ export async function getConsoleEvents(interval: string = '1 hour'): Promise<Rec
   const results = validated.results || {};
 
   // Drop counts for per-profile excluded monitors
-  const excludedIds = new Set(getExcludedMonitorIds());
+  const excludedIds = getExcludedMonitorIdSet();
   if (excludedIds.size === 0) {
     return results;
   }
