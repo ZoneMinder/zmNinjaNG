@@ -57,7 +57,7 @@ export function WidgetEditDialog({ open, onOpenChange, widget, profileId }: Widg
     const updateWidget = useDashboardStore((state) => state.updateWidget);
 
     const { data: monitors } = useQuery({
-        queryKey: ['monitors'],
+        queryKey: ['monitors', profileId],
         queryFn: () => getMonitors(),
     });
 

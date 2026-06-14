@@ -58,7 +58,7 @@ export default function Montage() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['monitors'],
+    queryKey: ['monitors', currentProfile?.id],
     queryFn: () => getMonitors(),
     enabled: !!currentProfile && isAuthenticated,
     refetchInterval: bandwidth.monitorStatusInterval,

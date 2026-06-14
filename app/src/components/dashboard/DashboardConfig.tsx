@@ -54,7 +54,7 @@ export function DashboardConfig() {
     const profileId = currentProfile?.id || 'default';
 
     const { data: monitors } = useQuery({
-        queryKey: ['monitors'],
+        queryKey: ['monitors', profileId],
         queryFn: () => getMonitors(),
     });
 

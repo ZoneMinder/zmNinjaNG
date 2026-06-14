@@ -9,6 +9,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getMonitors } from '../../api/monitors';
 import { filterEnabledMonitors } from '../../lib/filters';
+import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useSwipeNavigation } from '../../hooks/useSwipeNavigation';
 import type { MonitorData } from '../../api/types';
 
@@ -35,10 +36,11 @@ export function useMonitorNavigation({
   const navigate = useNavigate();
   const location = useLocation();
   const [isSliding, setIsSliding] = useState(false);
+  const { currentProfile } = useCurrentProfile();
 
   // Fetch all monitors for navigation
   const { data: monitorsData } = useQuery({
-    queryKey: ['monitors'],
+    queryKey: ['monitors', currentProfile?.id],
     queryFn: () => getMonitors(),
   });
 
