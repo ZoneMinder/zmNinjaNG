@@ -297,7 +297,7 @@ export async function getConsoleEvents(interval: string = '1 hour'): Promise<Rec
 
   // Validate response with Zod
   const validated = validateApiResponse(ConsoleEventsResponseSchema, response.data, {
-    endpoint: `/events/consoleEvents/${interval}.json`,
+    endpoint: `/events/consoleEvents/${encodeURIComponent(interval)}.json`,
     method: 'GET',
   });
 
