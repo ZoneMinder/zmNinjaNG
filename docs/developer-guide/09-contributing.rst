@@ -553,9 +553,11 @@ zmNinjaNg is a cross-platform app built with
 Prerequisites
 ~~~~~~~~~~~~~
 
-- **Node.js**: 18+
-- **Android Studio**: For Android development (installs Android SDK/JDK)
-- **Xcode**: For iOS development (macOS only)
+- **Node.js**: 22+ (required by Capacitor 8)
+- **Android Studio**: Otter (2025.2.1)+ with Android SDK 36, for Android
+  development (installs the SDK/JDK)
+- **Xcode**: 26+ for iOS development (macOS only). The iOS project uses Swift
+  Package Manager, not CocoaPods: packages resolve on open, no ``pod install``.
 
 Running on Device/Emulator
 ~~~~~~~~~~~~~~~~~~~~~~~~~~

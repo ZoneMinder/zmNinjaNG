@@ -775,7 +775,7 @@ Safe-Area Bootstrap (``lib/safe-area-bootstrap.ts``)
 Mirrors iOS ``UIView.safeAreaInsets`` into ``--sai-top``/``--sai-right``/
 ``--sai-bottom``/``--sai-left`` CSS custom properties on
 ``document.documentElement``. Works around a bug in iOS WKWebView
-(Capacitor 7, ``contentInset='never'``, ``viewport-fit=cover``) where
+(Capacitor 8, ``contentInset='never'``, ``viewport-fit=cover``) where
 ``env(safe-area-inset-*)`` reports stale values after rotation. On
 Dynamic Island devices ``env(top)`` stays ``0`` in portrait, and
 ``env(left)``/``env(right)`` keep landscape-derived values regardless of
@@ -1166,6 +1166,17 @@ left until unmount. Both are no-ops outside streaming mode.
 ``<img onError>``) schedules an exponential-backoff reconnect (base 1s, max
 15s, cap 6 attempts unless insomnia is on), and ``reportStreamLoad`` (wired to
 ``<img onLoad>``) resets the backoff after a good frame.
+
+Each lifecycle instance also registers a teardown thunk in the module-level
+registry ``lib/active-streams.ts`` (``registerActiveStream`` /
+``unregisterActiveStream``). ``switchProfile`` (``stores/profile.ts``) awaits
+``quitAllActiveStreams()`` as its first step, before logout and the SSL-trust
+flip, so each tile's CMD_QUIT (which captures that tile's own per-server URL
+and token) is sent while the previous profile's trust and token are still in
+effect. Relying on React unmount alone races the switch: the new profile's
+SSL-trust setting can flip before the old self-signed server's CMD_QUIT goes
+out, orphaning an nph-zms process. A central quit keyed only by monitor id
+cannot do this, since it has no record of which server each stream used.
 
 **Implementation:**
 
