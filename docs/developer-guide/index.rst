@@ -16,10 +16,15 @@ bugs and their fixes.
 **Understanding the architecture?** Chapter 5 (Component Architecture) explains
 file organization, and Chapter 11 (Application Lifecycle) explains the runtime flow.
 
+**Returning to the codebase, or out of touch?** Start with **Call Flows** below.
+It traces a few real user actions scene by scene through the actual code and
+links into the reference chapters.
+
 .. toctree::
    :maxdepth: 2
 
    01-introduction
+   call-flows
    02-react-fundamentals
    03-state-management-zustand
    04-pages-and-views
