@@ -50,6 +50,13 @@
         <meta-data android:name="firebase_analytics_collection_enabled" android:value="false" />
         <meta-data android:name="google_analytics_adid_collection_enabled" android:value="false" />
         <meta-data android:name="google_analytics_ssaid_collection_enabled" android:value="false" />
+
+        <!-- Route FCM notification messages that omit a channel_id (the ZM event
+             server does not set one) to our high-importance "zmninja-ng" channel
+             instead of FCM's default "Miscellaneous" fallback channel, so alerts
+             show a heads-up banner. Must match the id in
+             services/pushNotifications.ts createChannel(). -->
+        <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="zmninja-ng" />
     </application>
 
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
