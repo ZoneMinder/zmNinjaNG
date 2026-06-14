@@ -167,6 +167,30 @@ describe('API Client', () => {
     expect(errorCall?.[1]).toBe(LogLevel.ERROR);
   });
 
+  describe('form helpers', () => {
+    it('postForm serializes a URLSearchParams body and sets the form content-type', async () => {
+      okOnce();
+      const client = createApiClient('https://zm.example.com/api', mockGates());
+      await client.postForm('/host/login.json', new URLSearchParams({ user: 'admin', pass: 'secret' }));
+
+      const callArgs = vi.mocked(httpRequest).mock.calls[0]?.[1];
+      expect(callArgs?.method).toBe('POST');
+      expect(callArgs?.body).toBe('user=admin&pass=secret');
+      expect((callArgs?.headers as Record<string, string>)?.['Content-Type'])
+        .toBe('application/x-www-form-urlencoded');
+    });
+
+    it('putForm accepts a plain record and serializes it to a string body', async () => {
+      okOnce();
+      const client = createApiClient('https://zm.example.com/api', mockGates());
+      await client.putForm('/notifications/1.json', { 'Notification[PushState]': 'enabled' });
+
+      const callArgs = vi.mocked(httpRequest).mock.calls[0]?.[1];
+      expect(callArgs?.method).toBe('PUT');
+      expect(callArgs?.body).toBe('Notification%5BPushState%5D=enabled');
+    });
+  });
+
   describe('default request timeout', () => {
     it('applies the built-in default timeout when no profile and no explicit timeout', async () => {
       okOnce();

@@ -56,9 +56,7 @@ export async function registerToken(params: {
   if (params.appVersion) formData.append('Notification[AppVersion]', params.appVersion);
   if (params.profile) formData.append('Notification[Profile]', params.profile.slice(0, 128));
 
-  const resp = await client.post<NotificationResponse>('/notifications.json', formData.toString(), {
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-  });
+  const resp = await client.postForm<NotificationResponse>('/notifications.json', formData);
   return resp.data.notification.Notification;
 }
 
@@ -84,9 +82,7 @@ export async function updateNotification(
   if (params.pushState !== undefined) formData.append('Notification[PushState]', params.pushState);
   if (params.badgeCount !== undefined) formData.append('Notification[BadgeCount]', String(params.badgeCount));
 
-  const resp = await client.put<NotificationResponse>(`/notifications/${id}.json`, formData.toString(), {
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-  });
+  const resp = await client.putForm<NotificationResponse>(`/notifications/${id}.json`, formData);
   return resp.data.notification.Notification;
 }
 

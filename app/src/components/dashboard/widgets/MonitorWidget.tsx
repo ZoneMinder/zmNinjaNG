@@ -103,10 +103,11 @@ function SingleMonitor({ monitorId, objectFit }: { monitorId: string; objectFit:
 
 export const MonitorWidget = memo(function MonitorWidget({ monitorIds, objectFit = 'contain' }: MonitorWidgetProps) {
     const { t } = useTranslation();
+    const { currentProfile } = useCurrentProfile();
 
     // Fetch all monitors to check which ones are deleted
     const { data: monitorsData } = useQuery({
-        queryKey: ['monitors'],
+        queryKey: ['monitors', currentProfile?.id],
         queryFn: () => getMonitors(),
     });
 

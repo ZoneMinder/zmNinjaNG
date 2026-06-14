@@ -18,6 +18,7 @@
  */
 
 import { Platform } from './platform';
+import { DEV_PROXY } from './zmninja-ng-constants';
 import { log, LogLevel } from './logger';
 import { createHttpError } from './http/types';
 import type { HttpOptions, HttpResponse, HttpError } from './http/types';
@@ -85,7 +86,7 @@ export async function httpRequest<T = unknown>(
     const baseUrl = `${urlObj.protocol}//${urlObj.host}`;
 
     // Replace base URL with proxy
-    requestUrl = fullUrl.replace(baseUrl, 'http://localhost:3001/proxy');
+    requestUrl = fullUrl.replace(baseUrl, `http://localhost:${DEV_PROXY.port}/proxy`);
     requestHeaders['X-Target-Host'] = baseUrl;
   }
 

@@ -19,6 +19,7 @@ import { createStoreApiClient } from '../api/store-gates';
 import { getServerTimeZone } from '../api/time';
 import { ProfileService } from '../services/profile';
 import { log, LogLevel } from '../lib/logger';
+import { STORAGE_KEYS } from '../lib/zmninja-ng-constants';
 import { useAuthStore } from './auth';
 import { performBootstrap } from '../services/profile-bootstrap';
 import { handleProfileRehydration } from '../services/profile-initialization';
@@ -413,7 +414,7 @@ export const useProfileStore = create<ProfileState>()(
       };
     },
     {
-      name: 'zmng-profiles',
+      name: STORAGE_KEYS.profilesStore,
       // On load, initialize API client with current profile and authenticate
       // Complex initialization logic is extracted to services/profile-initialization.ts for maintainability
       onRehydrateStorage: () => {

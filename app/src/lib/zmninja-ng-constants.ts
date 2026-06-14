@@ -285,6 +285,20 @@ export const STORAGE_KEYS = {
 
   // Developer Notice: per-device dismissed-critical-banner ids
   developerNoticeBannerDismissed: 'zmng_developer_notice_banner_dismissed_v1',
+
+  // Persisted Zustand store keys. These strings are existing on-disk keys:
+  // changing a value orphans every current user's persisted state, so the
+  // historical (inconsistently namespaced) names are kept verbatim.
+  authStore: 'zmng-auth',
+  profilesStore: 'zmng-profiles',
+  settingsStore: 'zmng-settings',
+  notificationsStore: 'zmng-notifications',
+  eventFavoritesStore: 'zmng-event-favorites',
+  dashboardStore: 'dashboard-storage',
+  monitorStore: 'zm-monitor-store',
+
+  // Secure-storage key for the auth refresh token (Capacitor SecureStorage / web fallback)
+  authRefreshToken: 'auth_refresh_token',
 } as const;
 
 /**
@@ -473,16 +487,6 @@ export const DISCOVERY_TIMEOUTS = {
   // is showing, but succeeds after the user grants access.
   iosPermissionRetryMs: 3000,
 } as const;
-
-/**
- * Valid ZoneMinder Monitor Functions
- *
- * NOTE: These are duplicated from zm-constants for backward compatibility.
- * New code should import from zm-constants.ts instead.
- *
- * @deprecated Use ZM_MONITOR_FUNCTIONS from zm-constants.ts
- */
-export const MONITOR_FUNCTIONS = ['None', 'Monitor', 'Modect', 'Record', 'Mocord', 'Nodect'] as const;
 
 /**
  * Bandwidth Mode Types

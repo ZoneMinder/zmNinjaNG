@@ -23,9 +23,13 @@ vi.mock('../../lib/api-validator', () => ({
   validateApiResponse: vi.fn((_, data) => data),
 }));
 
-vi.mock('../../lib/profile-settings', () => ({
-  getExcludedMonitorIds: vi.fn(() => []),
-}));
+vi.mock('../../lib/profile-settings', () => {
+  const getExcludedMonitorIds = vi.fn(() => [] as string[]);
+  return {
+    getExcludedMonitorIds,
+    getExcludedMonitorIdSet: vi.fn(() => new Set(getExcludedMonitorIds())),
+  };
+});
 
 vi.mock('../../lib/logger', () => ({
   log: {
@@ -83,7 +87,7 @@ describe('Events API', () => {
     vi.mocked(getExcludedMonitorIds).mockReturnValue([]);
     vi.mocked(getApiClient).mockReturnValue({
       get: mockGet,
-      put: mockPut,
+      putForm: mockPut,
       delete: mockDelete,
     } as unknown as ApiClient);
   });
@@ -214,11 +218,10 @@ describe('Events API', () => {
     await setEventArchived('5', true);
 
     expect(mockPut).toHaveBeenCalledTimes(1);
-    const [url, body, config] = mockPut.mock.calls[0];
+    const [url, body] = mockPut.mock.calls[0];
     expect(url).toBe('/events/5.json');
     expect(body).toBeInstanceOf(URLSearchParams);
     expect((body as URLSearchParams).get('Event[Archived]')).toBe('1');
-    expect(config?.headers?.['Content-Type']).toBe('application/x-www-form-urlencoded');
   });
 
   it('unarchives an event using form-encoded body', async () => {

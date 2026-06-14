@@ -633,8 +633,10 @@ Date/time formatting and timezone conversion for ZoneMinder API.
 For user-facing date/time display, use ``useDateTimeFormat()`` (React) or
 ``formatAppDate``/``formatAppTime``/``formatAppDateTime`` from
 ``lib/format-date-time.ts`` outside React. These honor the per-profile
-``dateFormat`` / ``timeFormat`` settings. Never call ``date-fns`` ``format()``
-with hard-coded patterns for user-visible output.
+``dateFormat`` / ``timeFormat`` settings. For a short weekday label use
+``fmtWeekday`` (hook) or ``formatAppWeekday`` (standalone); weekday has no
+user preset, so it routes through the same layer for consistency. Never call
+``date-fns`` ``format()`` with hard-coded patterns for user-visible output.
 
 **Used By:** API functions, Events page, filters, dashboard widgets
 

@@ -174,15 +174,17 @@ requests, refresh when it expires.
      formData.append('user', credentials.user);
      formData.append('pass', credentials.pass);
 
-     const response = await client.post<LoginResponse>(
-       '/host/login.json',
-       formData.toString(),
-       { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
-     );
+     const response = await client.postForm<LoginResponse>('/host/login.json', formData);
 
      // Validate response shape with Zod
      return LoginResponseSchema.parse(response.data);
    }
+
+``client.postForm`` / ``client.putForm`` take a ``URLSearchParams`` or a plain
+record, serialize it to a string body, and set the
+``application/x-www-form-urlencoded`` content-type. ZM's CakePHP API expects
+this for login and most mutations. Use them instead of ``post``/``put`` with a
+hand-built form body.
 
 The returned ``LoginResponse`` carries ``access_token``,
 ``access_token_expires`` (seconds), ``refresh_token``, and
@@ -1049,6 +1051,13 @@ For better UX, update the UI immediately before the server responds:
        queryClient.invalidateQueries({ queryKey: ['monitors'] });
      },
    });
+
+The monitors list is cached under a profile-scoped key,
+``['monitors', currentProfile?.id]``, so different servers never share a cache
+entry. ``cancelQueries``/``getQueryData``/``setQueryData`` need the full key
+including the profile id to hit the right entry; ``invalidateQueries`` with the
+``['monitors']`` prefix matches every profile's entry, which is what you want on
+settle.
 
 Infinite Queries (Pagination)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

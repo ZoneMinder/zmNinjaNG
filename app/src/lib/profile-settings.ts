@@ -26,3 +26,11 @@ export function getExcludedMonitorIds(): string[] {
   }
   return [];
 }
+
+/**
+ * Get the excluded monitor IDs for the current profile as a Set, for O(1)
+ * membership tests when filtering events/counts at the API boundary.
+ */
+export function getExcludedMonitorIdSet(): Set<string> {
+  return new Set(getExcludedMonitorIds());
+}

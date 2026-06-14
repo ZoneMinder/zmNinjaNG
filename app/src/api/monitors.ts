@@ -111,11 +111,7 @@ export async function updateMonitor(
     if (value === undefined || value === null) return;
     body.set(key, String(value));
   });
-  await client.post(`/monitors/${monitorId}.json`, body, {
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-  });
+  await client.postForm(`/monitors/${monitorId}.json`, body);
   // ZM returns {"message":"Saved"}. Callers refetch monitor data separately
 }
 

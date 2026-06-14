@@ -125,7 +125,7 @@ export default function Events() {
 
   // Fetch monitors for display in filter UI
   const { data: monitorsData } = useQuery({
-    queryKey: ['monitors'],
+    queryKey: ['monitors', currentProfile?.id],
     queryFn: () => getMonitors(),
     enabled: !!currentProfile && isAuthenticated,
   });

@@ -6,7 +6,7 @@
  * Editable fields use local state: changes are only sent when Save is pressed.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
@@ -133,83 +133,68 @@ export function MonitorSettingsDialog({
   const [localEventStartCmd, setLocalEventStartCmd] = useState(monitor.EventStartCommand ?? '');
   const [localEventEndCmd, setLocalEventEndCmd] = useState(monitor.EventEndCommand ?? '');
 
-  // Reset local state when monitor data changes (e.g. after refetch)
+  // Server-side value for each editable field, with the same defaults the
+  // controls fall back to. Single source of truth for reset, change-detection,
+  // and the save diff below. On ZM 1.38+, Enabled is vestigial (Capturing
+  // controls activity), so it is normalized to '1'/'0' like the toggle.
+  const serverValues = useMemo<Record<string, string>>(() => ({
+    Capturing: monitor.Capturing ?? 'Always',
+    Analysing: monitor.Analysing ?? 'None',
+    Recording: monitor.Recording ?? 'None',
+    Function: monitor.Function,
+    Enabled: (monitor.Enabled === '1' || monitor.Enabled === 'true') ? '1' : '0',
+    SaveJPEGs: monitor.SaveJPEGs ?? '0',
+    VideoWriter: monitor.VideoWriter ?? '0',
+    Path: monitor.Path ?? '',
+    User: monitor.User ?? '',
+    Pass: monitor.Pass ?? '',
+    Method: monitor.Method ?? 'rtpRtsp',
+    MaxFPS: monitor.MaxFPS ?? '',
+    AlarmMaxFPS: monitor.AlarmMaxFPS ?? '',
+    Orientation: monitor.Orientation ?? 'ROTATE_0',
+    EventStartCommand: monitor.EventStartCommand ?? '',
+    EventEndCommand: monitor.EventEndCommand ?? '',
+  }), [monitor]);
+
+  // One descriptor per editable field. `key` is the ZM API field name sent in
+  // the save payload, `applies` gates version-specific fields, `value` is the
+  // current (normalized) local value, and `set` applies a value back to local
+  // state. Capturing/Analysing/Recording and User/Pass are 1.38+ only;
+  // Function/Enabled are legacy-only.
+  const fields: Array<{ key: string; applies: boolean; value: string; set: (v: string) => void }> = [
+    { key: 'Capturing', applies: is138Plus, value: localCapturing, set: setLocalCapturing },
+    { key: 'Analysing', applies: is138Plus, value: localAnalysing, set: setLocalAnalysing },
+    { key: 'Recording', applies: is138Plus, value: localRecording, set: setLocalRecording },
+    { key: 'Function', applies: !is138Plus, value: localFunction, set: (v) => setLocalFunction(v) },
+    { key: 'Enabled', applies: !is138Plus, value: localEnabled ? '1' : '0', set: (v) => setLocalEnabled(v === '1') },
+    { key: 'SaveJPEGs', applies: true, value: localSaveJPEGs, set: setLocalSaveJPEGs },
+    { key: 'VideoWriter', applies: true, value: localVideoWriter, set: setLocalVideoWriter },
+    { key: 'Path', applies: true, value: localPath, set: setLocalPath },
+    { key: 'User', applies: is138Plus, value: localUser, set: setLocalUser },
+    { key: 'Pass', applies: is138Plus, value: localPass, set: setLocalPass },
+    { key: 'Method', applies: true, value: localMethod, set: setLocalMethod },
+    { key: 'MaxFPS', applies: true, value: localMaxFPS, set: setLocalMaxFPS },
+    { key: 'AlarmMaxFPS', applies: true, value: localAlarmMaxFPS, set: setLocalAlarmMaxFPS },
+    { key: 'Orientation', applies: true, value: localOrientation, set: setLocalOrientation },
+    { key: 'EventStartCommand', applies: true, value: localEventStartCmd, set: setLocalEventStartCmd },
+    { key: 'EventEndCommand', applies: true, value: localEventEndCmd, set: setLocalEventEndCmd },
+  ];
+
+  // Reset every field to its server value when monitor data changes (e.g. after
+  // refetch). Field setters are stable, so iterating `fields` here is safe.
   useEffect(() => {
-    // Capture tab
-    setLocalCapturing(monitor.Capturing ?? 'Always');
-    setLocalAnalysing(monitor.Analysing ?? 'None');
-    setLocalRecording(monitor.Recording ?? 'None');
-    setLocalFunction(monitor.Function);
-    setLocalEnabled(monitor.Enabled === '1' || monitor.Enabled === 'true');
-    setLocalSaveJPEGs(monitor.SaveJPEGs ?? '0');
-    setLocalVideoWriter(monitor.VideoWriter ?? '0');
-    // Video tab
-    setLocalPath(monitor.Path ?? '');
-    setLocalUser(monitor.User ?? '');
-    setLocalPass(monitor.Pass ?? '');
-    setLocalMethod(monitor.Method ?? 'rtpRtsp');
-    setLocalMaxFPS(monitor.MaxFPS ?? '');
-    setLocalAlarmMaxFPS(monitor.AlarmMaxFPS ?? '');
-    setLocalOrientation(monitor.Orientation ?? 'ROTATE_0');
-    setLocalEventStartCmd(monitor.EventStartCommand ?? '');
-    setLocalEventEndCmd(monitor.EventEndCommand ?? '');
-  }, [monitor]);
+    fields.forEach((f) => f.set(serverValues[f.key]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverValues]);
 
-  // Check if anything changed from server state
-  // On ZM 1.38+, Enabled is vestigial: Capturing controls whether the monitor is active
-  const serverEnabled = monitor.Enabled === '1' || monitor.Enabled === 'true';
-
-  // Video-tab change flags: User/Pass only exist as separate fields on ZM 1.38+
-  const videoHasChanges =
-    localPath !== (monitor.Path ?? '') ||
-    (is138Plus && localUser !== (monitor.User ?? '')) ||
-    (is138Plus && localPass !== (monitor.Pass ?? '')) ||
-    localMethod !== (monitor.Method ?? 'rtpRtsp') ||
-    localMaxFPS !== (monitor.MaxFPS ?? '') ||
-    localAlarmMaxFPS !== (monitor.AlarmMaxFPS ?? '') ||
-    localOrientation !== (monitor.Orientation ?? 'ROTATE_0') ||
-    localEventStartCmd !== (monitor.EventStartCommand ?? '') ||
-    localEventEndCmd !== (monitor.EventEndCommand ?? '');
-
-  const hasChanges = is138Plus
-    ? (localCapturing !== (monitor.Capturing ?? 'Always') ||
-       localAnalysing !== (monitor.Analysing ?? 'None') ||
-       localRecording !== (monitor.Recording ?? 'None') ||
-       localSaveJPEGs !== (monitor.SaveJPEGs ?? '0') ||
-       localVideoWriter !== (monitor.VideoWriter ?? '0') ||
-       videoHasChanges)
-    : (localFunction !== monitor.Function ||
-       localEnabled !== serverEnabled ||
-       localSaveJPEGs !== (monitor.SaveJPEGs ?? '0') ||
-       localVideoWriter !== (monitor.VideoWriter ?? '0') ||
-       videoHasChanges);
+  const hasChanges = fields.some((f) => f.applies && f.value !== serverValues[f.key]);
 
   const handleSave = async () => {
     if (!onSave) return;
     const changes: Record<string, string | undefined> = {};
-
-    if (is138Plus) {
-      if (localCapturing !== (monitor.Capturing ?? 'Always')) changes.Capturing = localCapturing;
-      if (localAnalysing !== (monitor.Analysing ?? 'None')) changes.Analysing = localAnalysing;
-      if (localRecording !== (monitor.Recording ?? 'None')) changes.Recording = localRecording;
-    } else {
-      if (localFunction !== monitor.Function) changes.Function = localFunction;
-      if (localEnabled !== serverEnabled) changes.Enabled = localEnabled ? '1' : '0';
-    }
-    if (localSaveJPEGs !== (monitor.SaveJPEGs ?? '0')) changes.SaveJPEGs = localSaveJPEGs;
-    if (localVideoWriter !== (monitor.VideoWriter ?? '0')) changes.VideoWriter = localVideoWriter;
-
-    // Video tab fields
-    if (localPath !== (monitor.Path ?? '')) changes.Path = localPath;
-    if (is138Plus && localUser !== (monitor.User ?? '')) changes.User = localUser;
-    if (is138Plus && localPass !== (monitor.Pass ?? '')) changes.Pass = localPass;
-    if (localMethod !== (monitor.Method ?? 'rtpRtsp')) changes.Method = localMethod;
-    if (localMaxFPS !== (monitor.MaxFPS ?? '')) changes.MaxFPS = localMaxFPS;
-    if (localAlarmMaxFPS !== (monitor.AlarmMaxFPS ?? '')) changes.AlarmMaxFPS = localAlarmMaxFPS;
-    if (localOrientation !== (monitor.Orientation ?? 'ROTATE_0')) changes.Orientation = localOrientation;
-    if (localEventStartCmd !== (monitor.EventStartCommand ?? '')) changes.EventStartCommand = localEventStartCmd;
-    if (localEventEndCmd !== (monitor.EventEndCommand ?? '')) changes.EventEndCommand = localEventEndCmd;
-
+    fields.forEach((f) => {
+      if (f.applies && f.value !== serverValues[f.key]) changes[f.key] = f.value;
+    });
     await onSave(changes);
   };
 

@@ -38,7 +38,7 @@ const getTooltipColors = (theme: string) =>
 export const TimelineWidget = memo(function TimelineWidget() {
     const { theme } = useTheme();
     const { t } = useTranslation();
-    const { fmtDate, fmtTimeShort, fmtDateTimeShort } = useDateTimeFormat();
+    const { fmtDate, fmtWeekday, fmtTimeShort, fmtDateTimeShort } = useDateTimeFormat();
     const navigate = useNavigate();
     const bandwidth = useBandwidthSettings();
     const [start, setStart] = useState(() => subHours(new Date(), 24));
@@ -197,7 +197,7 @@ export const TimelineWidget = memo(function TimelineWidget() {
                 }).length || 0;
 
                 return {
-                    time: new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(interval),
+                    time: fmtWeekday(interval),
                     fullTime: fmtDate(interval),
                     count,
                     intervalStart,
@@ -285,7 +285,7 @@ export const TimelineWidget = memo(function TimelineWidget() {
             return { data: chartData, tickFormatter, tickInterval };
         }
     // Use events?.events (the array) for more stable dependency - only recalc when events actually change
-    }, [start, now, events?.events, containerSize.width, fmtDate, fmtTimeShort, fmtDateTimeShort]);
+    }, [start, now, events?.events, containerSize.width, fmtDate, fmtWeekday, fmtTimeShort, fmtDateTimeShort]);
 
     // Memoize tooltip styles to prevent re-renders
     const tooltipContentStyle = useMemo(() => {

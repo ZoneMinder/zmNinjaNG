@@ -42,8 +42,8 @@ describe('Notifications API', () => {
     vi.clearAllMocks();
     vi.mocked(getApiClient).mockReturnValue({
       get: mockGet,
-      post: mockPost,
-      put: mockPut,
+      postForm: mockPost,
+      putForm: mockPut,
       delete: mockDelete,
     } as unknown as ApiClient);
   });
@@ -65,12 +65,10 @@ describe('Notifications API', () => {
 
       expect(mockPost).toHaveBeenCalledWith(
         '/notifications.json',
-        expect.any(String),
-        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+        expect.any(URLSearchParams)
       );
 
-      const body = mockPost.mock.calls[0][1] as string;
-      const params = new URLSearchParams(body);
+      const params = mockPost.mock.calls[0][1] as URLSearchParams;
       expect(params.get('Notification[Token]')).toBe('fcm-token-abc');
       expect(params.get('Notification[Platform]')).toBe('ios');
       expect(params.get('Notification[MonitorList]')).toBe('1,2,3');
@@ -88,8 +86,7 @@ describe('Notifications API', () => {
 
       await registerToken({ token: 'tok', platform: 'android' });
 
-      const body = mockPost.mock.calls[0][1] as string;
-      const params = new URLSearchParams(body);
+      const params = mockPost.mock.calls[0][1] as URLSearchParams;
       expect(params.get('Notification[Token]')).toBe('tok');
       expect(params.get('Notification[Platform]')).toBe('android');
       expect(params.has('Notification[MonitorList]')).toBe(false);
@@ -113,12 +110,10 @@ describe('Notifications API', () => {
 
       expect(mockPut).toHaveBeenCalledWith(
         '/notifications/42.json',
-        expect.any(String),
-        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+        expect.any(URLSearchParams)
       );
 
-      const body = mockPut.mock.calls[0][1] as string;
-      const params = new URLSearchParams(body);
+      const params = mockPut.mock.calls[0][1] as URLSearchParams;
       expect(params.get('Notification[MonitorList]')).toBe('4,5');
       expect(params.get('Notification[Interval]')).toBe('60');
       expect(params.get('Notification[PushState]')).toBe('disabled');
@@ -133,8 +128,7 @@ describe('Notifications API', () => {
 
       await updateNotification(42, { pushState: 'enabled' });
 
-      const body = mockPut.mock.calls[0][1] as string;
-      const params = new URLSearchParams(body);
+      const params = mockPut.mock.calls[0][1] as URLSearchParams;
       expect(params.has('Notification[MonitorList]')).toBe(false);
       expect(params.has('Notification[Interval]')).toBe(false);
       expect(params.get('Notification[PushState]')).toBe('enabled');

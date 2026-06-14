@@ -6,6 +6,7 @@ import { useCallback } from 'react';
 import { useCurrentProfile } from './useCurrentProfile';
 import {
   formatAppDate,
+  formatAppWeekday,
   formatAppTime,
   formatAppTimeShort,
   formatAppDateTime,
@@ -19,6 +20,8 @@ export function useDateTimeFormat() {
     (date: Date) => formatAppDate(date, settings),
     [settings.dateFormat, settings.customDateFormat]
   );
+
+  const fmtWeekday = useCallback((date: Date) => formatAppWeekday(date), []);
 
   const fmtTime = useCallback(
     (date: Date) => formatAppTime(date, settings),
@@ -47,5 +50,5 @@ export function useDateTimeFormat() {
     customTimeFormat: settings.customTimeFormat,
   };
 
-  return { fmtDate, fmtTime, fmtTimeShort, fmtDateTime, fmtDateTimeShort, formatSettings };
+  return { fmtDate, fmtWeekday, fmtTime, fmtTimeShort, fmtDateTime, fmtDateTimeShort, formatSettings };
 }

@@ -57,7 +57,7 @@ export default function EventMontage() {
 
   // Fetch monitors for filter
   const { data: monitorsData } = useQuery({
-    queryKey: ['monitors'],
+    queryKey: ['monitors', currentProfile?.id],
     queryFn: () => getMonitors(),
   });
 

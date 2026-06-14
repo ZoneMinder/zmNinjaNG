@@ -6,6 +6,7 @@
  */
 
 import { Platform } from './platform';
+import { DEV_PROXY } from './zmninja-ng-constants';
 
 /**
  * Wrap a URL with the image proxy if proxy mode is enabled.
@@ -25,7 +26,7 @@ export function wrapWithImageProxy(url: string): string {
     return url;
   }
 
-  return `http://localhost:3001/image-proxy?url=${encodeURIComponent(url)}`;
+  return `http://localhost:${DEV_PROXY.port}/image-proxy?url=${encodeURIComponent(url)}`;
 }
 
 // Check if a URL should be proxied (starts with http:// or https://)

@@ -39,16 +39,10 @@ export async function login(credentials: LoginCredentials): Promise<LoginRespons
   const formData = new URLSearchParams();
   formData.append('user', credentials.user);
   formData.append('pass', credentials.pass);
-
-  const formDataString = formData.toString();
   log.auth('Login form data prepared', LogLevel.DEBUG);
 
   try {
-    const response = await client.post<LoginResponse>('/host/login.json', formDataString, {
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-    });
+    const response = await client.postForm<LoginResponse>('/host/login.json', formData);
 
     log.auth('Login response received', LogLevel.DEBUG, {
       status: response.status,
@@ -100,11 +94,7 @@ export async function refreshToken(refreshToken: string): Promise<LoginResponse>
   const formData = new URLSearchParams();
   formData.append('token', refreshToken);
 
-  const response = await client.post<LoginResponse>('/host/login.json', formData.toString(), {
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-  });
+  const response = await client.postForm<LoginResponse>('/host/login.json', formData);
 
   // Validate response with Zod
   const validated = LoginResponseSchema.parse(response.data);
