@@ -405,6 +405,684 @@ a token on startup, and reacting when a push arrives.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useNotificationDelivered.ts#L62>`__
    · → :doc:`11-application-lifecycle`
 
-These three flows touch most of the moving parts. When you need to change
-something, find the nearest scene, open its ``source`` link, and follow the ``→``
-link for the full picture.
+Flow 4: Adding a server profile
+-------------------------------
+
+Adding a profile is one long orchestrated method, ``handleTestConnection``: it
+discovers the server's real API and CGI URLs, trusts its certificate the first
+time, logs in to confirm the details, then saves the profile and switches to it.
+
+.. mermaid::
+
+   sequenceDiagram
+       autonumber
+       participant Form as ProfileForm
+       participant Disc as Discovery
+       participant SSL as SSL trust
+       participant ZM as ZoneMinder
+       participant Store as Profile store
+
+       Form->>SSL: enable trust-all (if self-signed)
+       Form->>Disc: discover URLs from the portal you typed
+       Disc->>ZM: probe /api and /zm/api for getVersion
+       Disc->>ZM: read ZM_PATH_ZMS for the real CGI URL
+       Form->>SSL: fetch the cert fingerprint
+       SSL-->>Form: show trust-on-first-use dialog
+       Form->>ZM: log in to confirm
+       Form->>Store: addProfile, then switchProfile
+
+#. **The form.** ``ProfileForm`` holds state for the portal URL, credentials, the
+   self-signed switch, manual-URL mode, and the trust-dialog. The same screen
+   serves first-time setup and adding another profile.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/ProfileForm.tsx#L31>`__
+   · → :doc:`04-pages-and-views`
+
+#. **One method runs the whole thing.** ``handleTestConnection`` (the Connect
+   button) sets up an ``AbortController``, validates the inputs, then drives
+   discovery → trust → login → save → switch in order.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/ProfileForm.tsx#L132>`__
+   · → :doc:`04-pages-and-views`
+
+#. **Trust the cert before probing.** When self-signed is on, ``applySSLTrustSetting``
+   enables trust-all first, so the upcoming discovery calls can reach a
+   self-signed host instead of failing the handshake.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/ssl-trust.ts#L18>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **Find the real URLs.** ``discoverUrls`` wraps ``discoverZoneminder`` with one
+   retry (to absorb the iOS local-network permission prompt) and installs the API
+   client once a candidate answers.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/discovery.ts#L329>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **Probe candidates.** ``discoverZoneminder`` crosses ``https``/``http`` with
+   ``/api`` and ``/zm/api``, probing ``host/getVersion.json``, then derives the
+   portal URL and CGI URL from whichever responds.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/discovery.ts#L249>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **Read the server's ZMS path.** With credentials, ``fetchCgiUrl`` logs in and
+   reads ``ZM_PATH_ZMS`` from config, so the streaming URL matches the server's
+   real setup rather than a guess.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/discovery.ts#L169>`__
+   · → :doc:`13-network-endpoints`
+
+#. **Trust on first use.** On native with self-signed enabled,
+   ``getServerCertFingerprint`` fetches the cert; ``CertTrustDialog`` shows it and
+   waits. Accepting pins the fingerprint (``applySSLTrustSetting(true,
+   fingerprint)``); rejecting aborts.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/CertTrustDialog.tsx#L13>`__
+   · → :doc:`05-component-architecture`
+
+#. **Confirm with a login.** After a fresh ``logout()``, the auth store's
+   ``login()`` authenticates against the confirmed server; failure is surfaced as
+   a localized error.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/auth.ts#L246>`__
+   · → :doc:`11-application-lifecycle`
+
+#. **Save it.** ``addProfile`` validates the name, generates a UUID, writes the
+   password to secure storage (never to Zustand), appends the profile, and makes
+   it current if it is the first.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/profile.ts#L93>`__
+   · → :doc:`11-application-lifecycle`
+
+#. **Switch to it.** For a non-first profile, ``switchProfile`` quits the old
+   profile's streams, resets the client, and runs ``performBootstrap`` (the same
+   bootstrap as Flow 1) before navigating away.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/profile.ts#L247>`__
+   · → :doc:`11-application-lifecycle`
+
+Flow 5: Browse events and play a video
+--------------------------------------
+
+From the Events list to a playing video. The player choice is data-driven: an
+event whose ``DefaultVideo`` is an ``.m3u8`` plays HLS, a normal recording plays
+MP4, and anything else (or any MP4 error, or a TV device) falls back to the ZMS
+MJPEG player.
+
+.. mermaid::
+
+   sequenceDiagram
+       autonumber
+       participant Page as Events page
+       participant API as getEvents
+       participant ZM as ZoneMinder
+       participant Detail as EventDetail
+       participant Player as Video player
+
+       Page->>API: query with the active filters
+       API->>ZM: GET /events/index...json (paged)
+       ZM-->>Page: event list, rendered as thumbnail cards
+       Page->>Detail: tap a card, navigate to /events/:id
+       Detail->>ZM: GET /events/:id.json
+       Detail->>Detail: pick MP4 vs HLS vs ZMS
+       Detail->>Player: build the video URL and play
+       Player->>ZM: stream from /index.php or /cgi-bin/nph-zms
+
+#. **Assemble the filters.** ``Events`` reads monitor, date, tag, and favorite
+   filters from ``useEventFilters`` and computes the effective monitor set that
+   drives the query.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Events.tsx#L90>`__
+   · → :doc:`04-pages-and-views`
+
+#. **Run the events query.** A React Query keyed by filters calls ``getEvents``,
+   keeping the previous page visible during pagination, gated on auth.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Events.tsx#L170>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **Build the ZM filter path and paginate.** ``getEvents`` turns filters into
+   CakePHP-style URL segments, fetches up to ten pages of 100, dedupes by id,
+   drops excluded monitors, and returns a synthesized pagination block.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/events.ts#L43>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **Render thumbnail cards.** ``EventListView`` maps each event to an
+   ``EventCard``, each showing a representative still built from a fallback chain
+   of frame ids (snapshot/objdetect/alarm).
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/events/EventListView.tsx#L90>`__
+   · → :doc:`05-component-architecture`
+
+#. **Open one.** Tapping a card navigates to ``/events/:id``, carrying the
+   referrer and active filters in router state so the detail page can do
+   next/prev within the same filtered set.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/events/EventCard.tsx#L93>`__
+   · → :doc:`04-pages-and-views`
+
+#. **Load the event.** ``EventDetail`` fetches the full event (``getEvent``) and
+   its monitor, and resolves the monitor's portal URL and streaming port for
+   multi-server support.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/EventDetail.tsx#L43>`__
+   · → :doc:`04-pages-and-views`
+
+#. **Pick the player.** ``isHlsEvent`` (an ``.m3u8`` ``DefaultVideo``) chooses HLS;
+   otherwise MP4. JPEG-only events, TV devices, and any MP4 error flip
+   ``useZmsFallback`` to the ZMS player.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/EventDetail.tsx#L192>`__
+   · → :doc:`04-pages-and-views`
+
+#. **Build the video URL (stably).** ``videoUrl`` is memoized so its identity does
+   not change mid-playback (re-issuing the source resets iOS WKWebView); it calls
+   ``getEventVideoUrl`` with the token, port, and HLS flag.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/EventDetail.tsx#L201>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **The URL shape.** ``url-builder.ts`` ``getEventVideoUrl`` emits the HLS
+   (``view_event_hls``) or MP4 (``view_video``) ``/index.php`` URL, appends the
+   token, and rewrites the port when multi-port streaming is on.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/url-builder.ts#L285>`__
+   · → :doc:`10-key-libraries`
+
+#. **MP4/HLS playback.** ``Mp4EventPlayer`` creates a Video.js player, wires alarm
+   markers and PiP, and bubbles a playback ``error`` up to ``EventDetail``, which
+   switches to ZMS.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/events/Mp4EventPlayer.tsx#L52>`__
+   · → :doc:`05-component-architecture`
+
+#. **The ZMS fallback.** ``ZmsEventPlayer`` streams MJPEG from ``/cgi-bin/nph-zms``
+   into an ``<img>`` and sends play/pause/seek/speed as ZMS commands over the same
+   connkey, quitting on unmount, just like a live stream.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/events/ZmsEventPlayer.tsx#L51>`__
+   · → :doc:`05-component-architecture`
+
+Flow 6: The access-token lifecycle
+----------------------------------
+
+The app keeps the access token fresh two ways and recovers from a stale one a
+third way, and all three collapse to a single network request when they overlap.
+A timer refreshes proactively, each request refreshes just-in-time if needed, and
+a 401 triggers recovery, all behind module-level single-flight gates.
+
+.. mermaid::
+
+   sequenceDiagram
+       autonumber
+       participant Timer as useTokenRefresh
+       participant Auth as Auth store (gates)
+       participant ZM as ZoneMinder
+       participant Client as API client
+
+       Timer->>Auth: token expiring soon? getFreshAccessToken
+       Auth->>ZM: POST refresh (single-flight)
+       ZM-->>Auth: new tokens
+       Client->>Auth: getAccessToken before each request
+       Client->>Auth: expired? getFreshAccessToken (shares the same gate)
+       Client->>ZM: request with token
+       ZM-->>Client: 401
+       Client->>Auth: recoverFromAuthFailure (refresh, then re-login)
+       Client->>ZM: retry once
+
+#. **A minute timer watches expiry.** ``useTokenRefresh`` mounts once, arms a
+   one-minute interval and a ``visibilitychange`` listener so it re-checks the
+   moment the app returns from background.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useTokenRefresh.ts#L26>`__
+   · → :doc:`11-application-lifecycle`
+
+#. **Refresh before it lapses.** ``checkAndRefresh`` refreshes when the time to
+   expiry drops below the leeway window, covering both "expiring soon" and
+   "already expired while backgrounded".
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useTokenRefresh.ts#L35>`__
+   · → :doc:`11-application-lifecycle`
+
+#. **One shared entry point.** ``getFreshAccessToken`` returns the current token if
+   still fresh, else attaches to (or installs) the module-level ``pendingFreshToken``
+   gate, so concurrent callers share one outcome.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/auth.ts#L388>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **The deduped refresh POST.** ``refreshAccessToken`` runs the network refresh
+   behind its own ``pendingRefresh`` gate and logs out if the refresh token is
+   already expired, so a proactive refresh and a 401 recovery collapse to one POST.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/auth.ts#L305>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **New tokens land.** ``setTokens`` converts the relative expiry seconds to
+   absolute timestamps and stores them (access in memory, refresh in secure
+   storage); updating the expiry is what re-arms the timer.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/auth.ts#L342>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **Every request reads the token through a gate.** The API client's ``request``
+   pulls the token via the injected ``AuthGate`` rather than importing the store;
+   login and ``skipAuth`` requests bypass it.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/client.ts#L128>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **Just-in-time refresh.** If the token is already expired when a request is
+   about to fire, the client calls ``getFreshAccessToken`` (the same gate) and
+   attaches the new token, catching tokens that died between timer ticks.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/client.ts#L169>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **401 recovery, single-flight.** A 401 triggers ``recoverFromAuthFailure``,
+   which refreshes, falls back to re-login, logs out once if both fail, never
+   rejects, and on success retries the original request exactly once.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/client.ts#L228>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **The gate that breaks the import cycle.** ``storeGates`` injects the auth
+   accessors into the client so it never imports the store directly, keeping all
+   the single-flight dedup in the store and the client mockable.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/store-gates.ts#L20>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **A switch clears the gates.** ``resetAuthGates`` (a reset hook run by
+   ``resetApiClient``) nulls all five pending gates so a new profile never attaches
+   to an old profile's in-flight login or refresh.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/auth.ts#L213>`__
+   · → :doc:`12-shared-services-and-components`
+
+Flow 7: Live notifications over the Event Server websocket
+----------------------------------------------------------
+
+The other notification path (separate from FCM push in Flow 3): in "ES mode" the
+app opens a websocket to the ZoneMinder event server, authenticates, keeps it
+alive, and turns each live alarm into an event in the store and a toast on screen.
+
+.. mermaid::
+
+   sequenceDiagram
+       autonumber
+       participant Hook as Auto-connect hook
+       participant Store as Notification store
+       participant Svc as WS service
+       participant ES as Event server
+
+       Hook->>Store: connect(profile, user, pass)
+       Store->>Svc: connect + inject providers
+       Svc->>ES: open websocket, send auth
+       ES-->>Svc: auth Success
+       Svc->>ES: keepalive ping (bandwidth interval)
+       ES-->>Svc: alarm event
+       Svc->>Store: onEvent, addEvent
+       Store-->>Hook: toast + badge update
+
+#. **The handler wires the hook.** ``NotificationHandler`` hands the store's
+   ``connect``/``disconnect``/``reconnect`` and the current profile to
+   ``useNotificationAutoConnect``.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/NotificationHandler.tsx#L43>`__
+   · → :doc:`05-component-architecture`
+
+#. **Choose the ES path.** The auto-connect effect reads ``notificationMode``; for
+   ``es`` it proceeds only when a host is set and nothing is connected, guarded
+   against re-entry.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useNotificationAutoConnect.ts#L82>`__
+   · → :doc:`11-application-lifecycle`
+
+#. **Decrypt and connect (race-checked).** ``attemptConnect`` decrypts the
+   password, re-reads the connection state right before connecting (the await
+   could have changed it), then calls the store's ``connect``.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useNotificationAutoConnect.ts#L120>`__
+   · → :doc:`11-application-lifecycle`
+
+#. **Store builds the config and listeners.** ``connect`` disconnects any other
+   profile, builds the server config, registers state/event listeners, and awaits
+   the service connect.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts#L253>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **Inject store-derived providers.** ``_buildServiceProviders`` hands the
+   import-free service its token getter, image-URL builder, and bandwidth-derived
+   keepalive interval.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts#L683>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **Open the socket.** The service ``connect`` builds the ``ws(s)://host:port``
+   URL, opens the websocket with stale-socket guards on every handler, and waits
+   for auth.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/notifications.ts#L68>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **Send credentials on open.** ``_handleOpen`` sends the ``auth`` message and a
+   20-second timer rejects (and reconnects) if no response comes back.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/notifications.ts#L387>`__
+   · → :doc:`13-network-endpoints`
+
+#. **Handle the auth reply.** ``_handleMessage`` resolves the pending auth on
+   ``Success`` (starts keepalive, state ``connected``) or disconnects without
+   reconnect on bad credentials.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/notifications.ts#L407>`__
+   · → :doc:`13-network-endpoints`
+
+#. **Keep it alive.** ``_startPingInterval`` sends a periodic version request at the
+   bandwidth-derived interval; the same request backs the liveness check on resume.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/notifications.ts#L583>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **Reconnect with backoff.** On an unintended close, ``_scheduleReconnect`` waits
+   an exponential, jittered delay (capped at two minutes); ``reconnectNow`` jumps
+   the queue on network-restored.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/notifications.ts#L518>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **Bridge events into the store.** ``_initialize`` subscribes to the service's
+   state and event streams, mirroring connection state and calling ``addEvent`` per
+   alarm.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts#L472>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **Record the alarm.** ``addEvent`` wraps it as a notification, dedupes and caps
+   the history, recomputes the unread badge, and pushes the count back to the
+   server. A toast then shows for the latest event.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts#L349>`__
+   · → :doc:`03-state-management-zustand`
+
+Flow 8: A go2rtc WebRTC live stream
+-----------------------------------
+
+The alternative to the MJPEG tile in Flow 2. When a monitor has go2rtc enabled,
+the tile drives a low-latency WebRTC/MSE ``<video>`` via the vendored ``video-rtc``
+element, with a ladder of watchdogs that fall back to MJPEG if anything stalls.
+
+.. mermaid::
+
+   sequenceDiagram
+       autonumber
+       participant Tile as LiveMonitorPlayer
+       participant Hook as useGo2RTCStream
+       participant El as video-rtc element
+       participant GR as go2rtc server
+
+       Tile->>Tile: webrtc selected? (not failed recently)
+       Tile->>Hook: useGo2RTCStream
+       Hook->>El: new VideoRTC, src = ws URL
+       El->>GR: open websocket, negotiate webrtc/mse/hls
+       GR-->>El: video frames
+       Note over Tile,GR: no frames in 15s, or freeze, or error
+       Tile->>Tile: record failure, fall back to MJPEG
+
+#. **Choose WebRTC.** ``streamingMethod`` resolves ``webrtc`` only when the user
+   setting allows it, the monitor has go2rtc enabled, and the profile has a go2rtc
+   URL.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/LiveMonitorPlayer.tsx#L104>`__
+   · → :doc:`05-component-architecture`
+
+#. **Skip known-broken monitors.** A module-level failure cache (5-minute TTL)
+   makes a monitor that recently failed go2rtc go straight to MJPEG, so montage
+   tiles do not each re-attempt a broken stream.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/LiveMonitorPlayer.tsx#L36>`__
+   · → :doc:`05-component-architecture`
+
+#. **MJPEG-first placeholder.** ``effectiveStreamingMethod`` shows the MJPEG stream
+   as a placeholder while WebRTC establishes, swapping to ``<video>`` once decoded
+   frames appear, so the tile is never blank.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/LiveMonitorPlayer.tsx#L151>`__
+   · → :doc:`05-component-architecture`
+
+#. **Call the hook.** ``useGo2RTCStream`` is invoked with the go2rtc URL, channel,
+   protocols, and a host guard against leaking the token to the wrong origin.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/LiveMonitorPlayer.tsx#L167>`__
+   · → :doc:`05-component-architecture`
+
+#. **Connect lifecycle.** The hook waits a short delay (to survive Strict-Mode
+   double-invoke) then connects, and tears down on unmount or disable.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useGo2RTCStream.ts#L297>`__
+   · → :doc:`11-application-lifecycle`
+
+#. **Build the websocket URL.** ``getGo2RTCWebSocketUrl`` converts http(s) to
+   ws(s), appends ``/ws``, and sets ``src={monitorId}_{channel}`` plus the token.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/url-builder.ts#L449>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **Create the element.** ``connect`` instantiates ``VideoRTC``, wraps its
+   ``oninit``/``onopen``/``ondisconnect`` handlers into React state, and assigns
+   ``src`` to kick off the socket.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useGo2RTCStream.ts#L157>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **Negotiate protocols.** On open, the vendored element starts MSE (or HLS) and
+   WebRTC in parallel; whichever delivers video first wins and becomes the active
+   protocol.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/vendor/go2rtc/video-rtc.js#L334>`__
+   · → :doc:`go2rtc-integration`
+
+#. **Watchdog: connected but no frames.** A 15-second timer checks for actual video
+   dimensions; if none, it records the failure and falls back to MJPEG (a faster
+   poll swaps to ``<video>`` the instant frames appear).
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/LiveMonitorPlayer.tsx#L201>`__
+   · → :doc:`05-component-architecture`
+
+#. **Watchdog: freeze after playing.** A 3-second liveness check watches
+   ``currentTime`` advance; a stall past the threshold retries up to twice, then
+   demotes to MJPEG. Healthy playback for a minute clears the retry count.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/LiveMonitorPlayer.tsx#L281>`__
+   · → :doc:`05-component-architecture`
+
+#. **Resume after background.** ``useVisibilityResume`` resets freeze counters,
+   clears any latched MJPEG fallback, and nudges a retry, recovering tiles the
+   browser suspended.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/LiveMonitorPlayer.tsx#L377>`__
+   · → :doc:`11-application-lifecycle`
+
+Flow 9: The Timeline view
+-------------------------
+
+The Timeline fetches events for a time range, transforms them into bars, and
+paints them on a ``<canvas>`` you can pan, zoom, and scrub, with live events
+injected the instant they arrive.
+
+.. mermaid::
+
+   sequenceDiagram
+       autonumber
+       participant Page as Timeline page
+       participant Data as useTimelineData
+       participant ZM as ZoneMinder
+       participant Canvas as TimelineCanvas
+       participant Render as renderer
+
+       Page->>Data: fetch monitors + events for the range
+       Data->>ZM: GET events (fan out per monitor if filtered)
+       ZM-->>Data: events, transformed to bars
+       Data->>Page: live events injected from the store
+       Page->>Canvas: viewport + gestures
+       Canvas->>Render: paint axis, swimlanes, bars, playhead
+
+#. **The page and its range.** ``Timeline`` reads filters, defaults to the last 24
+   hours, and restores the scrubber from session storage so the playhead survives
+   a round-trip to an event page.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Timeline.tsx#L27>`__
+   · → :doc:`04-pages-and-views`
+
+#. **Fetch monitors and events.** ``useTimelineData`` runs a monitors query and a
+   range-bounded events query, using "now" as the end in live mode.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useTimelineData.ts#L41>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **Fan out per monitor when filtered.** With a cause filter active, it issues one
+   capped ``getEvents`` per monitor at limited concurrency and merges them, so one
+   busy camera cannot eat the whole page budget.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useTimelineData.ts#L92>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **Inject live events.** In live mode it subscribes to the notification store and
+   adds a synthetic bar immediately on a new alarm, then debounces a refetch and
+   prunes the synthetic once the real event lands.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useTimelineData.ts#L154>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **Transform to bars.** ``allTimelineEvents`` maps each event to a
+   ``TimelineEvent`` (start/end ms, alarm ratio, pulse timestamp), merging live
+   synthetics with the API winning on id collisions.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useTimelineData.ts#L217>`__
+   · → :doc:`05-component-architecture`
+
+#. **The canvas orchestrator.** ``TimelineCanvas`` wires the viewport, gestures,
+   render loop, and hit-testing, translating one-shot actions (reset, zoom, go-to-now)
+   into animated viewport changes.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/timeline/TimelineCanvas.tsx#L62>`__
+   · → :doc:`05-component-architecture`
+
+#. **Viewport math.** ``useTimelineViewport`` holds the visible range and does pan,
+   zoom (clamped between one minute and 90 days), and eased animations.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/timeline/useTimelineViewport.ts#L32>`__
+   · → :doc:`05-component-architecture`
+
+#. **Input gestures.** ``useTimelineGestures`` normalizes mouse, touch, wheel, and
+   pinch into pan/zoom/hover/click/brush callbacks.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/timeline/useTimelineGestures.ts#L27>`__
+   · → :doc:`05-component-architecture`
+
+#. **Hit-testing.** ``hitTest`` maps a canvas point to a monitor row and event,
+   expanding thin bars to a minimum width so they stay clickable.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/timeline/timeline-hit-test.ts#L13>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **Paint the canvas.** ``renderTimeline`` layers swimlanes, a collision-pruned
+   time axis, rounded per-monitor event bars (with a pulse halo for live arrivals),
+   the dashed "NOW" pill, and the scrubber playhead.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/timeline/timeline-renderer.ts#L640>`__
+   · → :doc:`10-key-libraries`
+
+#. **Scrub and preview.** ``TimelineScrubber`` drags the playhead and shows
+   thumbnail buttons for the events under it; a canvas click opens
+   ``EventPreviewPopover``, whose Play button navigates to the event.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/timeline/TimelineScrubber.tsx#L144>`__
+   · → :doc:`05-component-architecture`
+
+Flow 10: Downloading an event
+-----------------------------
+
+A download registers a background task and then splits by platform: on mobile it
+fetches base64 and writes via Capacitor (never a Blob, to avoid OOM); on web it
+streams a Blob with real progress. The drawer shows progress and a cancel button.
+
+.. mermaid::
+
+   sequenceDiagram
+       autonumber
+       participant UI as Download button
+       participant Svc as download service
+       participant Task as Background-task store
+       participant HTTP as http adapter
+       participant Save as Filesystem / Media
+       participant Drawer as Task drawer
+
+       UI->>Svc: downloadEventVideo
+       Svc->>Task: addTask (drawer pops open)
+       Svc->>HTTP: fetch (base64 on mobile, Blob on web)
+       HTTP->>Save: write file + add to media library
+       Svc->>Task: updateProgress, then completeTask
+       Task-->>Drawer: progress bar + cancel
+
+#. **The trigger.** The "Download video" button calls ``downloadEventVideo`` with
+   the URL inputs and returns immediately; the drawer surfaces progress.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/EventDetail.tsx#L366>`__
+   · → :doc:`05-component-architecture`
+
+#. **Orchestrate and register a task.** ``downloadEventVideo`` builds the URL,
+   sanitizes the filename, creates an ``AbortController``, registers a background
+   task with a cancel function, and kicks off the work asynchronously.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L372>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **The task store.** ``addTask`` creates the task, trims old finished ones, and
+   auto-expands the drawer. Using ``.getState()`` is what lets a non-React service
+   drive the store.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/backgroundTasks.ts#L75>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **Platform dispatch.** ``downloadFile`` picks the native or web handler from the
+   platform; this is the split point.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L119>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **Mobile: base64, never a Blob.** ``downloadFileNative`` fetches with
+   ``responseType: 'base64'`` and uses the string directly, explicitly avoiding a
+   Blob to prevent out-of-memory on large videos.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L133>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **The native HTTP adapter.** ``nativeHttpRequest`` uses CapacitorHttp and returns
+   base64; it has no abort support, so a timeout race stands in.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/http/adapter-native.ts#L14>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **Mobile save.** The base64 is written to Documents, then added to the Photo or
+   Video library by extension; a media-library failure is non-fatal because the
+   file is already saved.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L167>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **Web: streaming Blob.** ``downloadFileWeb`` fetches a Blob with streaming
+   progress and triggers a browser download via a temporary anchor, falling back to
+   a direct link if the fetch fails.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L199>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **Progress feeds the store.** Each tick calls ``updateProgress`` (web has real
+   streaming progress; native emits a single 100% tick), then ``completeTask`` /
+   ``failTask`` on finish.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/backgroundTasks.ts#L93>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **The drawer.** ``BackgroundTaskDrawer`` (mounted globally) renders progress bars
+   and a cancel button that calls the task's cancel function, which aborts the
+   request.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/BackgroundTaskDrawer.tsx#L143>`__
+   · → :doc:`05-component-architecture`
+
+Flow 11: A bandwidth setting becomes polling cadence
+----------------------------------------------------
+
+This is a data-propagation flow, not a time sequence: one per-profile setting
+(``bandwidthMode``) selects a preset, and every poll in the app reads its interval
+from that one place, so flipping low mode re-cadences the whole app at once.
+
+.. mermaid::
+
+   graph LR
+       Presets["BANDWIDTH_SETTINGS<br/>(normal / low)"] --> Getter["getBandwidthSettings()"]
+       Mode["bandwidthMode<br/>(per-profile setting)"] --> Hook["useBandwidthSettings()"]
+       Getter --> Hook
+       Hook --> C1["useMonitors<br/>refetchInterval"]
+       Hook --> C2["Monitors page<br/>queries"]
+       Getter --> C3["notifications<br/>keepalive / poller"]
+
+#. **The contract.** ``BandwidthSettings`` declares the shape: every interval and
+   quality knob the app polls on (monitor status, alarm status, snapshot refresh,
+   keepalive, and more).
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/zmninja-ng-constants.ts#L499>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **The two presets.** ``BANDWIDTH_SETTINGS`` holds the ``normal`` and ``low``
+   objects; ``low`` roughly doubles every interval and halves image scale and fps.
+   This is the source of every cadence number.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/zmninja-ng-constants.ts#L536>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **The non-React getter.** ``getBandwidthSettings(mode)`` is the one sanctioned
+   way for services and stores (outside React) to read a preset.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/zmninja-ng-constants.ts#L574>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **The user's knob.** ``bandwidthMode`` is a profile-scoped setting in the
+   settings store, so switching profiles can switch cadence.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/settings.ts#L148>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **The React hook.** ``useBandwidthSettings`` reads ``bandwidthMode`` from the
+   current profile and memoizes the matching preset, so components get a live,
+   profile-correct settings object.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useBandwidthSettings.ts#L28>`__
+   · → :doc:`05-component-architecture`
+
+#. **A typical consumer.** ``useMonitors`` feeds ``bandwidth.monitorStatusInterval``
+   straight into the React Query ``refetchInterval`` (overridable by the caller).
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useMonitors.ts#L57>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **The seeded path.** Toggling low mode in ``LiveStreamingSection`` copies the
+   preset's stream knobs (scale, fps, snapshot refresh) into the profile settings,
+   which is why ``useMonitorStream`` reads them as ``settings.*``.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/settings/LiveStreamingSection.tsx#L47>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **The non-React consumers.** Outside React, the notification keepalive and the
+   direct-mode poller call ``getBandwidthSettings`` directly for their intervals,
+   the same presets without a hardcoded number anywhere.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts#L691>`__
+   · → :doc:`03-state-management-zustand`
+
+These flows touch most of the moving parts of the app. When you need to change
+something, find the nearest scene, open its ``source`` link to land on the exact
+code, and follow the ``→`` link for the chapter that explains that layer.
