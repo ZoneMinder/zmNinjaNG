@@ -47,7 +47,21 @@ interface UseMonitorStreamReturn {
    */
   imageSrc: string;
   imgRef: React.RefObject<HTMLImageElement | null>;
+  /** Manual retry: reset the backoff counter and mint a fresh connkey. */
   regenerateConnection: () => void;
+  /**
+   * Call from the `<img onError>` handler. Schedules a backoff reconnect that
+   * releases the errored connkey (CMD_QUIT) before minting a new one. Caps at
+   * mjpegReconnectMaxAttempts unless insomnia is on; releases the connkey when
+   * it gives up.
+   */
+  reportStreamError: () => void;
+  /**
+   * Call from the `<img onLoad>` handler. Resets the backoff counter so a later
+   * independent drop starts fresh. A stream that never loads never resets, so
+   * the give-up cap still applies to a permanently dead feed.
+   */
+  reportStreamLoad: () => void;
 }
 
 /**
@@ -90,7 +104,7 @@ export function useMonitorStream({
   const [imageSrc, setImageSrc] = useState<string>('');
 
   // Stream lifecycle: connKey generation, CMD_QUIT on regen/unmount, media abort
-  const { connKey, forceRegenerate } = useStreamLifecycle({
+  const { connKey, forceRegenerate, releaseConnection } = useStreamLifecycle({
     monitorId,
     portalUrl: resolvedPortalUrl,
     accessToken,
@@ -146,10 +160,13 @@ export function useMonitorStream({
     setImageSrc(streamUrl);
   }, [streamUrl]);
 
-  // MJPEG reconnect: scheduleReconnect is exposed via regenerateConnection
-  // (manual) and the visibility-resume callback; the <img onError> handler in
-  // LiveMonitorPlayer also calls regenerateConnection. The retry counter caps
-  // at mjpegReconnectMaxAttempts unless insomnia is on.
+  // MJPEG reconnect on stream error. Wired to the consumer's <img onError> via
+  // reportStreamError below. Backoff doubles from mjpegReconnectBaseDelayMs up
+  // to mjpegReconnectMaxDelayMs and caps at mjpegReconnectMaxAttempts unless
+  // insomnia is on. The reconnect uses killPrevious so the errored connkey is
+  // CMD_QUIT'd before a new one is minted (an <img> error can't tell a dead
+  // server process from a dropped-but-alive one); on give-up the final connkey
+  // is released too, instead of being orphaned until unmount.
   const scheduleReconnect = () => {
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
@@ -163,6 +180,7 @@ export function useMonitorStream({
         LogLevel.ERROR,
         { monitorId },
       );
+      releaseConnection();
       return;
     }
     reconnectAttemptRef.current = attempt + 1;
@@ -171,8 +189,18 @@ export function useMonitorStream({
       ZM_INTEGRATION.mjpegReconnectMaxDelayMs,
     );
     reconnectTimerRef.current = setTimeout(() => {
-      forceRegenerate();
+      forceRegenerate({ killPrevious: true });
     }, delay);
+  };
+
+  // Reset the backoff counter (and cancel any pending reconnect) once a frame
+  // loads, so a later independent drop starts a fresh backoff.
+  const reportStreamLoad = () => {
+    reconnectAttemptRef.current = 0;
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
   };
 
   const regenerateConnection = () => {
@@ -196,11 +224,6 @@ export function useMonitorStream({
       reconnectTimerRef.current = null;
     }
   }, []);
-
-  // Suppress unused-warning while we keep the reconnect helper available for
-  // future <img onError> wiring; LiveMonitorPlayer currently calls
-  // regenerateConnection directly which exercises the same path.
-  void scheduleReconnect;
 
   // When the page returns from background, MJPEG streams may have stalled
   // while the browser was throttling timers. The token may also have lapsed
@@ -234,5 +257,7 @@ export function useMonitorStream({
     imageSrc,
     imgRef,
     regenerateConnection,
+    reportStreamError: scheduleReconnect,
+    reportStreamLoad,
   };
 }

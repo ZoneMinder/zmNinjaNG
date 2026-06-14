@@ -220,6 +220,108 @@ describe('useStreamLifecycle', () => {
       // forceRegenerate should not fire a CMD_QUIT request
       expect(mockHttpGet).not.toHaveBeenCalled();
     });
+
+    it('sends CMD_QUIT for the previous connkey when killPrevious is set', async () => {
+      const mediaRef = makeMediaRef();
+      mockRegenerateConnKey.mockReturnValueOnce(1001).mockReturnValueOnce(2002);
+
+      const { result } = renderHook(() =>
+        useStreamLifecycle({ ...baseOptions, mediaRef }),
+      );
+
+      await waitFor(() => {
+        expect(result.current.connKey).toBe(1001);
+      });
+
+      mockHttpGet.mockClear();
+
+      act(() => {
+        result.current.forceRegenerate({ killPrevious: true });
+      });
+
+      // The old connkey (1001) is quit before minting the new one.
+      expect(mockHttpGet).toHaveBeenCalledWith(
+        expect.stringContaining('connkey=1001'),
+        expect.objectContaining({ timeoutMs: 12000 }),
+      );
+    });
+  });
+
+  describe('releaseConnection', () => {
+    it('sends CMD_QUIT for the current connkey and clears the stored key', async () => {
+      const mediaRef = makeMediaRef();
+
+      const { result } = renderHook(() =>
+        useStreamLifecycle({ ...baseOptions, mediaRef }),
+      );
+
+      await waitFor(() => {
+        expect(result.current.connKey).not.toBe(0);
+      });
+      const activeKey = result.current.connKey;
+      expect(mockConnKeys['1']).toBe(activeKey);
+
+      mockHttpGet.mockClear();
+
+      act(() => {
+        result.current.releaseConnection();
+      });
+
+      expect(mockHttpGet).toHaveBeenCalledWith(
+        expect.stringContaining(`connkey=${activeKey}`),
+        expect.objectContaining({ timeoutMs: 12000 }),
+      );
+      expect(mockClearConnKey).toHaveBeenCalledWith('1');
+      expect(mockConnKeys['1']).toBeUndefined();
+    });
+
+    it('is a no-op in snapshot mode', async () => {
+      const mediaRef = makeMediaRef();
+      mockRegenerateConnKey.mockReturnValue(4004);
+
+      const { result } = renderHook(() =>
+        useStreamLifecycle({ ...baseOptions, viewMode: 'snapshot', mediaRef }),
+      );
+
+      await waitFor(() => {
+        expect(result.current.connKey).toBe(4004);
+      });
+
+      mockHttpGet.mockClear();
+
+      act(() => {
+        result.current.releaseConnection();
+      });
+
+      expect(mockHttpGet).not.toHaveBeenCalled();
+      expect(mockClearConnKey).not.toHaveBeenCalled();
+    });
+
+    it('does not re-quit the released key on a later forceRegenerate', async () => {
+      const mediaRef = makeMediaRef();
+      mockRegenerateConnKey.mockReturnValueOnce(5005).mockReturnValueOnce(6006);
+
+      const { result } = renderHook(() =>
+        useStreamLifecycle({ ...baseOptions, mediaRef }),
+      );
+
+      await waitFor(() => {
+        expect(result.current.connKey).toBe(5005);
+      });
+
+      act(() => {
+        result.current.releaseConnection();
+      });
+
+      mockHttpGet.mockClear();
+
+      // The released key (5005) must not be quit again; prevConnKeyRef was reset.
+      act(() => {
+        result.current.forceRegenerate({ killPrevious: true });
+      });
+
+      expect(mockHttpGet).not.toHaveBeenCalled();
+    });
   });
 
   describe('cleanup on unmount', () => {

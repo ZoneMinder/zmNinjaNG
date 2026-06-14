@@ -55,13 +55,21 @@ export interface UseStreamLifecycleReturn {
   /** The current connection key. 0 means no key has been generated yet. */
   connKey: number;
   /**
-   * Force-regenerate the connKey. By default skips CMD_QUIT (used for error
-   * recovery where the stream is already dead). Pass `killPrevious: true`
-   * when the previous stream may still be alive on the server (e.g. on
-   * visibility resume) so its nph-zms process is closed before a new one
-   * is started.
+   * Force-regenerate the connKey. By default skips CMD_QUIT. Pass
+   * `killPrevious: true` when the previous stream may still be alive on the
+   * server (visibility resume, manual retry, error-driven reconnect) so its
+   * nph-zms process is closed before a new one is started. An `<img>` error
+   * cannot tell a dead server process from a dropped-but-alive one, so the
+   * reconnect path passes `killPrevious: true` to avoid orphaning a connkey.
    */
   forceRegenerate: (options?: { killPrevious?: boolean }) => number;
+  /**
+   * Release the current connkey without minting a new one: sends CMD_QUIT for
+   * it and clears the stored key so the next mount/retry starts fresh. Used
+   * when the reconnect loop gives up, so the final connkey is not orphaned
+   * until unmount.
+   */
+  releaseConnection: () => void;
 }
 
 /**
@@ -237,31 +245,34 @@ export function useStreamLifecycle({
     };
   }, []); // Empty deps = only run on unmount
 
-  // Force-regenerate. Optionally sends CMD_QUIT for the previous connkey
-  // first when `killPrevious` is true: used by the visibility-resume path
-  // where the old stream may still be alive on the server. Without it, each
-  // resume would orphan a connkey on ZM and the nph-zms process would only
-  // exit after its own idle timeout, leaking sockets in CLOSE_WAIT.
-  // Dedupes the log line across all monitors in the same 3s window so a
-  // visibility-resume burst surfaces as one line, not one per tile. refs #150
+  // Send CMD_QUIT for a connkey to close its nph-zms process on the server.
+  // No-op unless we have a real key, are streaming, and know the portal URL.
+  // Errors are ignored: the connection may already be closed.
+  const sendCmdQuit = (key: number): void => {
+    if (key === 0 || viewMode !== 'streaming' || !portalUrl || !monitorId) return;
+    const controlUrl = getZmsControlUrl(
+      portalUrl,
+      ZMS_COMMANDS.cmdQuit,
+      key.toString(),
+      { token: accessToken || undefined, minStreamingPort, monitorId },
+    );
+    httpGet(controlUrl, { timeoutMs: cmdQuitTimeoutMs }).catch(() => {
+      // Silently ignore - server connection may already be closed
+    });
+  };
+
+  // Force-regenerate. Optionally sends CMD_QUIT for the previous connkey first
+  // when `killPrevious` is true: used by the visibility-resume, manual-retry,
+  // and error-reconnect paths where the old stream may still be alive on the
+  // server. Without it, each regeneration would orphan a connkey on ZM and the
+  // nph-zms process would only exit after its own idle timeout, leaking sockets
+  // in CLOSE_WAIT. Dedupes the log line across all monitors in the same 3s
+  // window so a visibility-resume burst surfaces as one line. refs #150
   const forceRegenerate = ({ killPrevious = false }: { killPrevious?: boolean } = {}): number => {
     if (!monitorId) return 0;
 
-    if (
-      killPrevious &&
-      prevConnKeyRef.current !== 0 &&
-      viewMode === 'streaming' &&
-      portalUrl
-    ) {
-      const controlUrl = getZmsControlUrl(
-        portalUrl,
-        ZMS_COMMANDS.cmdQuit,
-        prevConnKeyRef.current.toString(),
-        { token: accessToken || undefined, minStreamingPort, monitorId },
-      );
-      httpGet(controlUrl, { timeoutMs: cmdQuitTimeoutMs }).catch(() => {
-        // Silently ignore - server connection may already be closed
-      });
+    if (killPrevious) {
+      sendCmdQuit(prevConnKeyRef.current);
     }
 
     const newKey = regenerateConnKey(monitorId);
@@ -273,5 +284,25 @@ export function useStreamLifecycle({
     return newKey;
   };
 
-  return { connKey, forceRegenerate };
+  // Release the current connkey without minting a new one. Used when the
+  // reconnect loop gives up so the last errored connkey is closed on the
+  // server now, not left until unmount. Clearing the stored key keeps a quit
+  // key from being reused on the next mount (it can collide with server state).
+  const releaseConnection = (): void => {
+    const key = prevConnKeyRef.current;
+    if (key === 0 || viewMode !== 'streaming') return;
+    sendCmdQuit(key);
+    log.dedupe('connkey-release', 3000, (suffix) =>
+      logFn(`Releasing connkey after giving up${suffix}`, LogLevel.INFO, { monitorId, connkey: key }),
+    );
+    if (monitorId) {
+      const store = useMonitorStore.getState();
+      if (store.connKeys[monitorId] === key) {
+        store.clearConnKey(monitorId);
+      }
+    }
+    prevConnKeyRef.current = 0;
+  };
+
+  return { connKey, forceRegenerate, releaseConnection };
 }

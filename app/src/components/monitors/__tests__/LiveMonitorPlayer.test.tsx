@@ -19,6 +19,8 @@ let mockMjpegReturn: {
   imageSrc: string;
   imgRef: { current: HTMLImageElement | null };
   regenerateConnection: () => void;
+  reportStreamError: () => void;
+  reportStreamLoad: () => void;
 };
 
 vi.mock('../../../hooks/useMonitorStream', () => ({
@@ -79,6 +81,8 @@ describe('LiveMonitorPlayer MJPEG recovery', () => {
       imageSrc: 'https://t/stream?connkey=1',
       imgRef: { current: null },
       regenerateConnection: vi.fn(),
+      reportStreamError: vi.fn(),
+      reportStreamLoad: vi.fn(),
     };
   });
 
@@ -110,6 +114,12 @@ describe('LiveMonitorPlayer MJPEG recovery', () => {
       'https://t/stream?connkey=2',
     );
   });
+
+  it('asks the stream hook to auto-reconnect when the MJPEG <img> errors', () => {
+    render(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+    fireEvent.error(screen.getByTestId('video-player-mjpeg'));
+    expect(mockMjpegReturn.reportStreamError).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('LiveMonitorPlayer Go2RTC failure cache scoping', () => {
@@ -121,6 +131,8 @@ describe('LiveMonitorPlayer Go2RTC failure cache scoping', () => {
       imageSrc: 'https://t/stream?connkey=1',
       imgRef: { current: null },
       regenerateConnection: vi.fn(),
+      reportStreamError: vi.fn(),
+      reportStreamLoad: vi.fn(),
     };
     go2rtc.state = 'connecting';
     go2rtc.optionsLog = [];

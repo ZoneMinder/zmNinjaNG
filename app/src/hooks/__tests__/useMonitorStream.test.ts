@@ -277,6 +277,78 @@ describe('useMonitorStream', () => {
     }
   });
 
+  it('reconnects with backoff on stream error, releasing the errored connkey first', async () => {
+    let key = 100;
+    const regenerateConnKey = vi.fn((monitorId: string) => {
+      const k = ++key;
+      useMonitorStore.setState((s) => ({ connKeys: { ...s.connKeys, [monitorId]: k } }));
+      return k;
+    });
+    useMonitorStore.setState({ connKeys: {}, regenerateConnKey });
+
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() => useMonitorStream({ monitorId: '1' }));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(result.current.streamUrl).toContain('connkey=101');
+
+      mockHttpGet.mockClear();
+
+      // Stream errors: a reconnect is scheduled but must not fire before the
+      // backoff delay (1s base).
+      act(() => {
+        result.current.reportStreamError();
+      });
+      expect(mockHttpGet).not.toHaveBeenCalled();
+
+      // After the base delay, the reconnect CMD_QUITs the old connkey (101)
+      // before minting a fresh one (102).
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+      expect(mockHttpGet).toHaveBeenCalledWith(
+        expect.stringContaining('connkey=101'),
+        expect.anything(),
+      );
+      expect(result.current.streamUrl).toContain('connkey=102');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('releases the connkey after giving up at the reconnect cap', async () => {
+    let key = 100;
+    const regenerateConnKey = vi.fn((monitorId: string) => {
+      const k = ++key;
+      useMonitorStore.setState((s) => ({ connKeys: { ...s.connKeys, [monitorId]: k } }));
+      return k;
+    });
+    useMonitorStore.setState({ connKeys: {}, regenerateConnKey });
+
+    const { result } = renderHook(() => useMonitorStream({ monitorId: '1' }));
+    await waitFor(() => {
+      expect(result.current.streamUrl).toContain('connkey=101');
+    });
+
+    mockHttpGet.mockClear();
+
+    // mjpegReconnectMaxAttempts is 6: the first six errors schedule retries,
+    // the seventh hits the cap and gives up.
+    act(() => {
+      for (let i = 0; i < 7; i++) result.current.reportStreamError();
+    });
+
+    // On give-up the current connkey (101) is released via CMD_QUIT and cleared
+    // from the store, not orphaned until unmount.
+    expect(mockHttpGet).toHaveBeenCalledWith(
+      expect.stringContaining('connkey=101'),
+      expect.anything(),
+    );
+    expect(useMonitorStore.getState().connKeys['1']).toBeUndefined();
+  });
+
   it('viewModeOverride forces streaming when settings say snapshot', async () => {
     useSettingsStore.setState({
       profileSettings: {

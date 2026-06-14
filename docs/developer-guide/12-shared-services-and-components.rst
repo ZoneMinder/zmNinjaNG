@@ -1152,6 +1152,21 @@ Shared hook for ZMS stream connection key management and cleanup.
 - Aborts in-flight image loads on unmount
 - Accepts a logger function for component-specific logging
 
+Returns ``forceRegenerate({ killPrevious })`` and ``releaseConnection()``.
+``forceRegenerate`` mints a new connkey; pass ``killPrevious: true`` to
+CMD_QUIT the previous one first (visibility resume, manual retry, and the
+error-driven reconnect all do this, because an ``<img>`` error cannot tell a
+dead server process from a dropped-but-alive one, and skipping CMD_QUIT would
+orphan an nph-zms process). ``releaseConnection`` CMD_QUITs the current connkey
+and clears it from the store without minting a new one; ``useMonitorStream``
+calls it when its MJPEG reconnect loop gives up so the final connkey is not
+left until unmount. Both are no-ops outside streaming mode.
+
+``useMonitorStream`` builds on this: ``reportStreamError`` (wired to
+``<img onError>``) schedules an exponential-backoff reconnect (base 1s, max
+15s, cap 6 attempts unless insomnia is on), and ``reportStreamLoad`` (wired to
+``<img onLoad>``) resets the backoff after a good frame.
+
 **Implementation:**
 
 .. code:: typescript
