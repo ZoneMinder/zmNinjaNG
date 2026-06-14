@@ -1083,6 +1083,251 @@ from that one place, so flipping low mode re-cadences the whole app at once.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts#L691>`__
    · → :doc:`03-state-management-zustand`
 
+Flow 12: A Dashboard widget
+---------------------------
+
+The Dashboard is a per-profile grid of widgets you add, arrange, and resize. The
+layout lives in its own persisted store (not profile settings), keyed by profile
+id, and each widget fetches its own live data.
+
+.. mermaid::
+
+   sequenceDiagram
+       autonumber
+       participant Page as Dashboard page
+       participant Store as Dashboard store
+       participant Grid as DashboardLayout
+       participant Widget as A widget
+       participant ZM as ZoneMinder
+
+       Page->>Store: read widgets[profileId]
+       Store-->>Grid: saved widgets + layouts
+       Grid->>Widget: render each by type
+       Widget->>ZM: query its own data on an interval
+       Page->>Store: add / move / resize / remove
+       Store-->>Page: persisted, survives reload
+
+#. **The page reads the saved list.** ``Dashboard`` resolves the current profile
+   and pulls that profile's widgets from the dashboard store, falling back to an
+   empty array.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Dashboard.tsx#L23>`__
+   · → :doc:`04-pages-and-views`
+
+#. **A dedicated persisted store.** ``useDashboardStore`` keeps
+   ``widgets: Record<profileId, DashboardWidget[]>`` plus an editing flag, persisted
+   under its own key with versioned migrations. It is profile-scoped by keying on
+   profile id, not by ``getProfileSettings``.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/dashboard.ts#L49>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **The grid.** ``DashboardLayout`` maps each widget's stored geometry into a
+   react-grid-layout and packs widgets upward, showing an empty state when there
+   are none.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/dashboard/DashboardLayout.tsx#L31>`__
+   · → :doc:`05-component-architecture`
+
+#. **Card chrome per cell.** ``DashboardWidget`` wraps each cell in a card with the
+   drag handle and, in edit mode, the per-widget edit and delete buttons; the live
+   content is passed in by type.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/dashboard/DashboardWidget.tsx#L52>`__
+   · → :doc:`05-component-architecture`
+
+#. **Add a widget.** ``DashboardConfig`` opens the Add Widget dialog with four type
+   tiles (monitor, events, timeline, heatmap) and the per-type options (monitor
+   multi-select, feed fit, and so on).
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/dashboard/DashboardConfig.tsx#L40>`__
+   · → :doc:`05-component-architecture`
+
+#. **The store appends and auto-places it.** ``addWidget`` generates a UUID,
+   computes a ``y`` below the existing widgets so it stacks, and persists
+   immediately so it survives a reload.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/dashboard.ts#L55>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **A widget fetches its own data.** ``EventsWidget`` runs a React Query against
+   ``getEvents`` with its ``refetchInterval`` drawn from the widget override or
+   ``bandwidth.eventsWidgetInterval`` (never a hardcoded interval), then renders a
+   clickable list.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/dashboard/widgets/EventsWidget.tsx#L41>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **Drag and resize persist.** ``handleLayoutChange`` fires on every move, and only
+   while editing (guarded against a store→state→store feedback loop) writes the new
+   geometry back.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/dashboard/DashboardLayout.tsx#L97>`__
+   · → :doc:`05-component-architecture`
+
+#. **Per-breakpoint layout write.** ``updateLayouts`` merges the new geometry per
+   breakpoint and recomputes the primary layout, so a resized widget keeps its size
+   across reloads.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/dashboard.ts#L111>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **Remove a widget.** The edit-mode X button calls ``removeWidget``, which filters
+   it out of that profile's array and re-renders the grid.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/dashboard.ts#L93>`__
+   · → :doc:`03-state-management-zustand`
+
+Flow 13: Kiosk lock and biometric unlock
+----------------------------------------
+
+A wall-display lock: a full-screen overlay, protected by a global PIN, with
+biometric unlock on mobile. There is one feature here, not two; the lock is
+triggered only by a manual tap and resets to unlocked on app restart. There is no
+idle timeout and no auto-lock on backgrounding.
+
+.. mermaid::
+
+   sequenceDiagram
+       autonumber
+       participant Btn as Lock button
+       participant Store as Kiosk store
+       participant Overlay as KioskOverlay
+       participant Bio as Biometrics
+       participant Pin as PinPad
+
+       Btn->>Store: lock() (manual)
+       Store-->>Overlay: isLocked, mount full-screen gate
+       Overlay->>Bio: try biometrics on unlock tap
+       Bio-->>Overlay: success unlocks
+       Overlay->>Pin: on unavailable / cancel, show PIN
+       Pin->>Store: verifyPin, count failed attempts
+       Store-->>Overlay: unlock (or 30s cooldown after 5 misses)
+
+#. **Set the PIN.** ``AdvancedSection`` hosts setting, changing, and clearing the
+   global kiosk PIN, each gated behind biometric-then-PIN re-verification.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/settings/AdvancedSection.tsx#L52>`__
+   · → :doc:`04-pages-and-views`
+
+#. **The PIN secret.** ``kioskPin.ts`` stores a salted SHA-256 of the PIN in secure
+   storage and verifies against it; this is the single source of truth for whether a
+   PIN is configured.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/kioskPin.ts#L27>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **The lock-state store.** ``useKioskStore`` holds ``isLocked``, the failed-attempt
+   count, and a cooldown timestamp. It is not persisted, so locking does not survive
+   a restart.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/kioskStore.ts#L26>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **Activating the lock.** ``useKioskLock`` is the shared logic behind the lock
+   buttons: with no PIN it opens first-time setup, otherwise it locks and force-enables
+   screen keep-awake (restoring the prior value on unlock).
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useKioskLock.ts#L22>`__
+   · → :doc:`05-component-architecture`
+
+#. **The trigger.** The sidebar lock button calls that hook to lock, or signals the
+   overlay to begin unlock when already locked. The fullscreen montage controls
+   expose the same button.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/layout/SidebarContent.tsx#L406>`__
+   · → :doc:`05-component-architecture`
+
+#. **The gate.** ``KioskOverlay`` renders nothing until locked, then mounts a
+   full-screen overlay that captures pointer events, swallows keyboard shortcuts, and
+   blocks browser and Android hardware back. The live view keeps updating underneath.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/kiosk/KioskOverlay.tsx#L26>`__
+   · → :doc:`05-component-architecture`
+
+#. **Unlock: biometric first.** ``handleUnlockTap`` checks the cooldown, tries
+   biometrics, and unlocks on success; if biometrics are unavailable or cancelled it
+   falls through to the PIN pad.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/kiosk/KioskOverlay.tsx#L99>`__
+   · → :doc:`05-component-architecture`
+
+#. **The native prompt and its web fallback.** ``useBiometricAuth`` dynamically
+   imports the biometric plugin inside try/catch, so on web or desktop the import
+   throws and the flow degrades to PIN. Cancelling routes to the PIN pad, not the OS
+   passcode.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useBiometricAuth.ts#L19>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **PIN entry.** ``PinPad`` (in unlock mode) verifies the entry; a miss records a
+   failed attempt and, after five, surfaces a 30-second cooldown. The same component
+   serves first-time set and PIN change.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/kiosk/PinPad.tsx#L26>`__
+   · → :doc:`05-component-architecture`
+
+#. **Mount and restore.** ``AppLayout`` mounts the overlay and, on unlock, restores
+   the pre-lock keep-awake state, closing the lock lifecycle.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/layout/AppLayout.tsx#L111>`__
+   · → :doc:`11-application-lifecycle`
+
+Flow 14: Capturing a snapshot
+-----------------------------
+
+Saving a still of a live monitor. The source is whatever the tile is currently
+showing: a WebRTC ``<video>`` is drawn to a canvas, while an MJPEG ``<img>`` is
+either reused as-is or re-fetched as a single still. The save then splits by
+platform, base64 on mobile and an anchor download on web.
+
+.. mermaid::
+
+   sequenceDiagram
+       autonumber
+       participant Btn as Snapshot button
+       participant Cap as downloadSnapshotFromElement
+       participant ZM as ZoneMinder
+       participant Save as Platform save
+
+       Btn->>Cap: pass the live media element
+       alt video element
+           Cap->>Cap: draw current frame to canvas, toDataURL
+       else img element
+           Cap->>ZM: re-fetch as mode=single still (if not a data URL)
+       end
+       Cap->>Save: base64 on mobile / anchor on web
+       Save-->>Btn: toast: saved
+
+#. **The button.** ``handleDownloadSnapshot`` on a monitor card reads the live media
+   ref and shows a success or failure toast; ``MonitorDetail`` has the same button.
+   Snapshots show a toast and are not tracked as background tasks.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/MonitorCard.tsx#L83>`__
+   · → :doc:`05-component-architecture`
+
+#. **What the ref points at.** ``LiveMonitorPlayer`` syncs the external media ref to
+   the ``<img>`` for MJPEG or the ``<video>`` for WebRTC, which is what makes the
+   downstream branch real.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/LiveMonitorPlayer.tsx#L440>`__
+   · → :doc:`05-component-architecture`
+
+#. **Capture dispatch.** ``downloadSnapshotFromElement`` builds a timestamped
+   filename, then for a ``<video>`` draws the current frame to a canvas and reads a
+   JPEG data URL; for an ``<img>`` it reuses a data URL or sends the stream URL on to
+   be re-fetched.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L279>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **Rewriting a stream to one frame.** ``convertToSnapshotUrl`` unwraps any image
+   proxy, then sets ``mode=single`` and strips the streaming params so ZoneMinder
+   returns a single still instead of a live multipart stream.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L49>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **Data-URL dispatch.** ``downloadSnapshot`` builds the ``.jpg`` filename and picks
+   the platform-specific data-URL handler, or falls back to fetching a converted
+   still.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L261>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **Mobile save (no Blob).** ``downloadDataUrlNative`` splits the base64 off the data
+   URL and writes it straight to Documents via Capacitor Filesystem, then adds it to
+   the photo library. It never builds a Blob, per the OOM rule.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L317>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **Web save.** ``downloadFromDataUrlWeb`` creates a temporary ``<a download>`` with
+   the data URL as its href, clicks it, and removes it, triggering the browser's
+   native download.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L346>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **The MJPEG-still fetch path.** When an ``<img>`` carries a stream URL rather than a
+   data URL, the same ``downloadFile`` split from Flow 10 fetches the ``mode=single``
+   still: base64 on mobile, Blob on web.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L133>`__
+   · → :doc:`07-api-and-data-fetching`
+
 These flows touch most of the moving parts of the app. When you need to change
 something, find the nearest scene, open its ``source`` link to land on the exact
 code, and follow the ``→`` link for the chapter that explains that layer.
