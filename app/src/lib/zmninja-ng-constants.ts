@@ -475,16 +475,6 @@ export const DISCOVERY_TIMEOUTS = {
 } as const;
 
 /**
- * Valid ZoneMinder Monitor Functions
- *
- * NOTE: These are duplicated from zm-constants for backward compatibility.
- * New code should import from zm-constants.ts instead.
- *
- * @deprecated Use ZM_MONITOR_FUNCTIONS from zm-constants.ts
- */
-export const MONITOR_FUNCTIONS = ['None', 'Monitor', 'Modect', 'Record', 'Mocord', 'Nodect'] as const;
-
-/**
  * Bandwidth Mode Types
  */
 export type BandwidthMode = 'normal' | 'low';
