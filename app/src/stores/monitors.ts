@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { STORAGE_KEYS } from '../lib/zmninja-ng-constants';
 
 interface MonitorStore {
     connKeys: Record<string, number>;
@@ -52,7 +53,7 @@ export const useMonitorStore = create<MonitorStore>()(
             },
         }),
         {
-            name: 'zm-monitor-store',
+            name: STORAGE_KEYS.monitorStore,
         }
     )
 );

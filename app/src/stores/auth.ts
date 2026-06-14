@@ -20,7 +20,7 @@ import type { LoginResponse } from '../api/types';
 import { log, LogLevel } from '../lib/logger';
 import { decrypt, isCryptoAvailable } from '../lib/crypto';
 import { setSecureValue, getSecureValue, removeSecureValue } from '../lib/secureStorage';
-import { ZM_INTEGRATION } from '../lib/zmninja-ng-constants';
+import { ZM_INTEGRATION, STORAGE_KEYS } from '../lib/zmninja-ng-constants';
 
 interface AuthState {
   accessToken: string | null;
@@ -70,7 +70,7 @@ function getStorage(): Storage | null {
  * Keychain/Keystore; on web/desktop it is AES-GCM in localStorage (which is
  * obfuscation, not confidentiality, against a local reader).
  */
-const AUTH_REFRESH_TOKEN_KEY = 'auth_refresh_token';
+const AUTH_REFRESH_TOKEN_KEY = STORAGE_KEYS.authRefreshToken;
 
 /**
  * Persistence adapter for the auth store. The refresh token is the only
@@ -517,7 +517,7 @@ export const useAuthStore = create<AuthState>()(
       },
     }),
     {
-      name: 'zmng-auth',
+      name: STORAGE_KEYS.authStore,
       storage: encryptedAuthStorage,
       // Only persist refresh token and server version info
       // Access token is kept in memory for better security

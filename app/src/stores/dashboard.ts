@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { log, LogLevel } from '../lib/logger';
 import type { MonitorFeedFit } from './settings';
-import { GRID_LAYOUT } from '../lib/zmninja-ng-constants';
+import { GRID_LAYOUT, STORAGE_KEYS } from '../lib/zmninja-ng-constants';
 
 export type WidgetType = 'monitor' | 'events' | 'timeline' | 'heatmap';
 
@@ -179,7 +179,7 @@ export const useDashboardStore = create<DashboardState>()(
                 set((state) => ({ isEditing: !state.isEditing })),
         }),
         {
-            name: 'dashboard-storage',
+            name: STORAGE_KEYS.dashboardStore,
             partialize: (state) => ({ widgets: state.widgets }), // Only persist widgets
             version: 3,
             // Migrations operate on unknown persisted state shapes from previous versions.

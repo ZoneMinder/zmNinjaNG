@@ -21,7 +21,7 @@ import { updateNotification } from '../api/notifications';
 import { useProfileStore } from './profile';
 import { useAuthStore } from './auth';
 import { useSettingsStore } from './settings';
-import { getBandwidthSettings, NOTIFICATIONS_SERVICE } from '../lib/zmninja-ng-constants';
+import { getBandwidthSettings, NOTIFICATIONS_SERVICE, STORAGE_KEYS } from '../lib/zmninja-ng-constants';
 
 export interface NotificationSettings {
   enabled: boolean;
@@ -651,7 +651,7 @@ export const useNotificationStore = create<NotificationState>()(
       },
     }),
     {
-      name: 'zmng-notifications',
+      name: STORAGE_KEYS.notificationsStore,
       // Only persist settings and events, not connection state
       partialize: (state) => ({
         profileSettings: state.profileSettings,

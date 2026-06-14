@@ -8,6 +8,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { log, LogLevel } from '../lib/logger';
+import { STORAGE_KEYS } from '../lib/zmninja-ng-constants';
 
 interface EventFavoritesState {
   // Favorites per profile ID (profileId -> Set of event IDs)
@@ -130,7 +131,7 @@ export const useEventFavoritesStore = create<EventFavoritesState>()(
       },
     }),
     {
-      name: 'zmng-event-favorites',
+      name: STORAGE_KEYS.eventFavoritesStore,
     }
   )
 );

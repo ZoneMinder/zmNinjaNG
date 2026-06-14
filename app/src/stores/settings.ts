@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 import type { Layout, Layouts } from 'react-grid-layout';
 import { LogLevel } from '../lib/log-level';
 import type { BandwidthMode } from '../lib/zmninja-ng-constants';
-import { API_REQUEST } from '../lib/zmninja-ng-constants';
+import { API_REQUEST, STORAGE_KEYS } from '../lib/zmninja-ng-constants';
 
 export type ViewMode = 'snapshot' | 'streaming';
 export type DisplayMode = 'normal' | 'compact';
@@ -434,7 +434,7 @@ export const useSettingsStore = create<SettingsState>()(
       },
     }),
     {
-      name: 'zmng-settings',
+      name: STORAGE_KEYS.settingsStore,
       version: 1,
       migrate: migrateSettings,
     }
