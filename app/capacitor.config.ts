@@ -25,9 +25,9 @@ const config: CapacitorConfig = {
     backgroundColor: '#020817',
     allowsInlineMediaPlayback: true,
   },
-  android: {
-    adjustMarginsForEdgeToEdge: 'force',
-  },
+  // Capacitor 8 removed `android.adjustMarginsForEdgeToEdge`; edge-to-edge is
+  // now always on and insets are handled via CSS env(safe-area-inset-*) plus the
+  // custom SafeArea plugin. Verify Android montage/montage-bar layout on device.
   plugins: {
     SplashScreen: {
       launchShowDuration: 3000,

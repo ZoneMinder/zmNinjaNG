@@ -10,14 +10,19 @@ Prerequisites
 Before you begin, ensure you have the following:
 
 - **macOS** (required for iOS development)
-- **Xcode 14+** - `Download from App
-  Store <https://apps.apple.com/us/app/xcode/id497799835>`__
+- **Xcode 26+** - `Download from App
+  Store <https://apps.apple.com/us/app/xcode/id497799835>`__ (Capacitor 8
+  requires Xcode 26 and an iOS 15.0 minimum deployment target)
 - **Xcode Command Line Tools**
-- **CocoaPods** - Dependency manager for iOS
-- **Node.js ^20.19.0 \|\| >=22.12.0** and npm - `Download
+- **Node.js 22+** and npm - `Download
   here <https://nodejs.org/en/download>`__
 - **Apple Developer Account** (for device testing and App Store
   distribution)
+
+The iOS project uses **Swift Package Manager (SPM)**, not CocoaPods.
+Dependencies are declared in ``ios/App/CapApp-SPM/Package.swift`` and
+resolve automatically when you open the project in Xcode. There is no
+``pod install`` step.
 
 Environment Setup
 -----------------
@@ -28,19 +33,6 @@ Environment Setup
 .. code:: bash
 
    xcode-select --install
-
-2. Install CocoaPods
-~~~~~~~~~~~~~~~~~~~~
-
-.. code:: bash
-
-   sudo gem install cocoapods
-
-Verify installation:
-
-.. code:: bash
-
-   pod --version
 
 Project Setup
 -------------
@@ -60,14 +52,17 @@ Project Setup
 
    npm install
 
-3. Install iOS Dependencies
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+3. Sync the iOS Project
+~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code:: bash
 
-   cd ios/App
-   pod install
-   cd ../..
+   npm run build
+   npx cap sync ios
+
+``cap sync`` regenerates ``ios/App/CapApp-SPM/Package.swift`` from the
+installed plugins. SPM resolves the packages when the project is opened
+in Xcode; no ``pod install`` is needed.
 
 Push Notifications Setup
 ------------------------
@@ -247,28 +242,19 @@ to testers
 Troubleshooting
 ---------------
 
-CocoaPods Installation Fails
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Swift Package Resolution Fails
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Try updating RubyGems:
+If plugins do not resolve after a ``cap sync``, reset the package state
+in Xcode:
 
-.. code:: bash
+- Product > **Reset Package Caches**
+- File > Packages > **Resolve Package Versions**
 
-   sudo gem update --system
-   sudo gem install cocoapods
-
-Pod Install Fails
-~~~~~~~~~~~~~~~~~
-
-Clean and retry:
-
-.. code:: bash
-
-   cd ios/App
-   pod deintegrate
-   pod cache clean --all
-   pod install
-   cd ../..
+If a plugin is still missing, confirm the App target references the
+``CapApp-SPM`` local package: select the **App** target > **Package
+Dependencies**, and re-add ``ios/App/CapApp-SPM`` via **Add Local…** if
+absent.
 
 Push Notifications Don’t Work
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
