@@ -1,5 +1,4 @@
 import {
-  format,
   startOfMinute,
   startOfHour,
   startOfDay,
@@ -19,6 +18,7 @@ import {
 
 import {
   formatAppDate,
+  formatAppWeekday,
   formatAppTime,
   formatAppTimeShort,
   type FormatSettings,
@@ -119,7 +119,7 @@ function getTickIntervals(fmt: FormatSettings): TickInterval[] {
   const fmtTime = (d: Date) => formatAppTimeShort(d, fmt);
   const fmtDate = (d: Date) => formatAppDate(d, fmt);
   const fmtDateLong = (d: Date) => {
-    const weekday = format(d, 'EEE');
+    const weekday = formatAppWeekday(d);
     return `${weekday} ${formatAppDate(d, fmt)}`;
   };
 

@@ -44,6 +44,18 @@ export function formatAppDate(date: Date, settings: FormatSettings): string {
   }
 }
 
+/**
+ * Format a short weekday name (e.g. "Mon").
+ *
+ * Weekday has no user-facing format preset, so this routes through the same
+ * date-fns layer as the other helpers to keep weekday labels consistent with
+ * the rest of the app rather than diverging on locale. The pattern is fixed,
+ * so no per-setting fallback is needed.
+ */
+export function formatAppWeekday(date: Date): string {
+  return dateFnsFormat(date, 'EEE');
+}
+
 /** Format time only (with seconds) according to user settings */
 export function formatAppTime(date: Date, settings: FormatSettings): string {
   try {
