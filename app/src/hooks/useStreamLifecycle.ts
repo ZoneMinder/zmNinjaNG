@@ -10,16 +10,81 @@
  * - cleanupParamsRef pattern to capture latest values for the unmount effect
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useId } from 'react';
 import { getZmsControlUrl } from '../lib/url-builder';
 import { ZMS_COMMANDS } from '../lib/zm-constants';
 import { httpGet } from '../lib/http';
 import { API_REQUEST } from '../lib/zmninja-ng-constants';
 import { useMonitorStore } from '../stores/monitors';
+import { registerActiveStream, unregisterActiveStream } from '../lib/active-streams';
 import { log, LogLevel } from '../lib/logger';
 
 /** Signature of a component-scoped log helper (e.g. log.monitor, log.dashboard). */
 type ComponentLogger = (message: string, level?: LogLevel, details?: unknown) => void;
+
+/** Captured stream context used to send CMD_QUIT outside of render. */
+interface StreamCleanupParams {
+  monitorId: string;
+  monitorName: string;
+  connKey: number;
+  portalUrl: string | undefined;
+  token: string | null;
+  viewMode: 'streaming' | 'snapshot';
+  minStreamingPort: number | undefined;
+  cmdQuitTimeoutMs: number | undefined;
+}
+
+/**
+ * Send CMD_QUIT for a stream and clear its stored connkey. Shared by the
+ * unmount cleanup and the profile-switch teardown registry so both build the
+ * exact same per-server quit URL. `reason` only affects the log line. Resolves
+ * once the request settles; never rejects (the connection may already be gone).
+ */
+async function quitStreamForParams(
+  params: StreamCleanupParams,
+  logFn: ComponentLogger,
+  reason: 'unmount' | 'profile-switch',
+): Promise<void> {
+  if (
+    params.viewMode !== 'streaming' ||
+    !params.portalUrl ||
+    !params.monitorId ||
+    params.connKey === 0
+  ) {
+    return;
+  }
+
+  const controlUrl = getZmsControlUrl(
+    params.portalUrl,
+    ZMS_COMMANDS.cmdQuit,
+    params.connKey.toString(),
+    { token: params.token || undefined, minStreamingPort: params.minStreamingPort, monitorId: params.monitorId },
+  );
+
+  log.dedupe(`connkey-cmd-quit-${reason}`, 3000, (suffix) =>
+    logFn(`Sending CMD_QUIT on ${reason}${suffix}`, LogLevel.DEBUG, {
+      monitorId: params.monitorId,
+      monitorName: params.monitorName,
+      connkey: params.connKey,
+    }),
+  );
+
+  // Drop the stored connkey BEFORE awaiting the request so a fast remount gets a
+  // fresh key (a quit key can collide with the server-side stream state) and the
+  // unmount caller's clear stays synchronous. The store comparison keeps a
+  // concurrent mount's newer key intact: only the key this teardown quit is
+  // cleared, never a newer one.
+  const store = useMonitorStore.getState();
+  if (store.connKeys[params.monitorId] === params.connKey) {
+    store.clearConnKey(params.monitorId);
+  }
+
+  try {
+    await httpGet(controlUrl, { timeoutMs: params.cmdQuitTimeoutMs });
+  } catch {
+    // Silently ignore - server connection may already be closed
+  }
+}
 
 export interface UseStreamLifecycleOptions {
   /** Monitor ID to generate a connKey for. When undefined the hook is inert. */
@@ -188,49 +253,28 @@ export function useStreamLifecycle({
     mediaElRef.current = mediaRef.current;
   });
 
+  // Register a profile-switch teardown thunk. A profile switch awaits this
+  // (via quitAllActiveStreams) before tearing down the old profile's auth and
+  // SSL trust, so the old server's stream is quit while its trust setting and
+  // token are still in effect. The thunk reads cleanupParamsRef at call time so
+  // it always uses the latest connkey. refs #188
+  const streamId = useId();
+  useEffect(() => {
+    if (!enabled) return;
+    registerActiveStream(streamId, () =>
+      quitStreamForParams(cleanupParamsRef.current, logFn, 'profile-switch'),
+    );
+    return () => unregisterActiveStream(streamId);
+  }, [streamId, enabled, logFn]);
+
   // Cleanup: send CMD_QUIT and abort image loading on unmount ONLY
   useEffect(() => {
     return () => {
       const params = cleanupParamsRef.current;
 
-      // Send CMD_QUIT to properly close the stream connection (only in streaming mode)
-      if (
-        params.viewMode === 'streaming' &&
-        params.portalUrl &&
-        params.monitorId &&
-        params.connKey !== 0
-      ) {
-        const controlUrl = getZmsControlUrl(
-          params.portalUrl,
-          ZMS_COMMANDS.cmdQuit,
-          params.connKey.toString(),
-          { token: params.token || undefined, minStreamingPort: params.minStreamingPort, monitorId: params.monitorId },
-        );
-
-        log.dedupe('connkey-cmd-quit-unmount', 3000, (suffix) =>
-          logFn(`Sending CMD_QUIT on unmount${suffix}`, LogLevel.DEBUG, {
-            monitorId: params.monitorId,
-            monitorName: params.monitorName,
-            connkey: params.connKey,
-          }),
-        );
-
-        // Send CMD_QUIT asynchronously, ignore errors (connection may already be closed)
-        httpGet(controlUrl, { timeoutMs: params.cmdQuitTimeoutMs }).catch(() => {
-          // Silently ignore errors - server connection may already be closed
-        });
-
-        // Drop the stored connkey so the next mount of this monitor gets a
-        // fresh key instead of reusing the one we just quit (a quit key can
-        // collide with the server-side stream state). The params.connKey !== 0
-        // guard above keeps the StrictMode throwaway-mount cleanup out of this
-        // path; the store comparison keeps a concurrent mount's newer key
-        // intact: only the key this cleanup quit is cleared, never a newer one.
-        const store = useMonitorStore.getState();
-        if (store.connKeys[params.monitorId] === params.connKey) {
-          store.clearConnKey(params.monitorId);
-        }
-      }
+      // Send CMD_QUIT to properly close the stream connection (streaming mode
+      // only). Fire-and-forget: the unmount is not an async context.
+      void quitStreamForParams(params, logFn, 'unmount');
 
       // After CMD_QUIT, tear down the client side: removing the src aborts the
       // in-flight nph-zms connection and frees the browser connection slot.

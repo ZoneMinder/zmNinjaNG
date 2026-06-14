@@ -265,6 +265,14 @@ export const useProfileStore = create<ProfileState>()(
 
           switchInProgress = true;
           try {
+            // STEP 0: Quit the previous profile's active streams while its SSL
+            // trust and access token are still in effect. Done before logout and
+            // the new profile's SSL-trust flip so a self-signed old server's
+            // CMD_QUIT is not rejected, which would orphan its nph-zms. refs #188
+            log.profileService('Step 0: Quitting previous profile streams', LogLevel.INFO);
+            const { quitAllActiveStreams } = await import('../lib/active-streams');
+            await quitAllActiveStreams();
+
             // STEP 1: Clear ALL existing state FIRST (critical for avoiding data mixing)
             log.profileService('Step 1: Clearing all existing state', LogLevel.INFO);
 

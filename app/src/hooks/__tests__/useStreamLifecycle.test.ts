@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { StrictMode } from 'react';
 import { useStreamLifecycle } from '../useStreamLifecycle';
+import { quitAllActiveStreams } from '../../lib/active-streams';
 
 // Mock logger
 vi.mock('../../lib/logger', () => ({
@@ -591,6 +592,50 @@ describe('useStreamLifecycle', () => {
       await waitFor(() => {
         expect(result.current.connKey).not.toBe(0);
       });
+    });
+  });
+
+  describe('profile-switch teardown registry', () => {
+    it('registers a teardown that quits the stream, and unregisters on unmount', async () => {
+      const mediaRef = makeMediaRef();
+      const { result, unmount } = renderHook(() =>
+        useStreamLifecycle({ ...baseOptions, mediaRef }),
+      );
+
+      await waitFor(() => {
+        expect(result.current.connKey).not.toBe(0);
+      });
+      const activeKey = result.current.connKey;
+
+      mockHttpGet.mockClear();
+      // A profile switch quits all registered streams before tearing down.
+      await quitAllActiveStreams();
+      expect(mockHttpGet).toHaveBeenCalledWith(
+        expect.stringContaining(`connkey=${activeKey}`),
+        expect.objectContaining({ timeoutMs: 12000 }),
+      );
+
+      unmount();
+      mockHttpGet.mockClear();
+      // After unmount the tile is unregistered, so a later switch ignores it.
+      await quitAllActiveStreams();
+      expect(mockHttpGet).not.toHaveBeenCalled();
+    });
+
+    it('does not register a teardown in snapshot mode', async () => {
+      const mediaRef = makeMediaRef();
+      const { result } = renderHook(() =>
+        useStreamLifecycle({ ...baseOptions, viewMode: 'snapshot', mediaRef }),
+      );
+
+      await waitFor(() => {
+        expect(result.current.connKey).not.toBe(0);
+      });
+
+      mockHttpGet.mockClear();
+      await quitAllActiveStreams();
+      // Snapshot mode never sends CMD_QUIT.
+      expect(mockHttpGet).not.toHaveBeenCalled();
     });
   });
 });
