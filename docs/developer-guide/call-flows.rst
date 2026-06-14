@@ -31,85 +31,120 @@ The layers a request moves through, top to bottom:
 Flow 1: Cold start to an authenticated session
 ----------------------------------------------
 
-What happens between launching the app and seeing the monitor list, for a user
-who already has a saved profile.
+When you launch the app with a profile already saved, a lot happens before the
+monitor list appears, but the shape is simple: the app restores your saved
+profile, throws away any leftover session from last time, points its HTTP client
+at your server, and then does the slow network setup (logging in, fetching
+server details) **in the background** so the splash screen never sits there
+waiting on the network.
 
-#. ``main.tsx`` (module top level) installs global error handlers, tags
-   ``<html>`` as native, mirrors iOS safe-area insets into CSS variables, then
-   renders ``<App/>``. Logging and error capture are live before any app code
-   runs. → :doc:`11-application-lifecycle`
+Here is the whole flow at a glance. Read down the page: each arrow is one step,
+and the dashed box marks the moment the UI becomes usable.
 
-#. ``App.tsx`` builds the single React Query ``queryClient`` and hands it to
-   ``setQueryClient()`` so non-React code (cache clearing on switch/rehydrate)
-   can reach the same cache. → :doc:`07-api-and-data-fetching`
+.. mermaid::
 
-#. ``stores/profile.ts`` ``create(persist(...))``: importing the profile store
-   constructs it and Zustand-persist immediately reads
-   ``STORAGE_KEYS.profilesStore`` from local storage. This is the entry point
-   for all rehydration. → :doc:`03-state-management-zustand`
+   sequenceDiagram
+       autonumber
+       participant Shell as App shell
+       participant Store as Profile store
+       participant Boot as Bootstrap services
+       participant Auth as Auth + HTTP client
+       participant ZM as ZoneMinder server
+       participant UI as Monitors page
 
-#. ``stores/profile.ts`` ``onRehydrateStorage`` fires once storage is read and
-   delegates to ``handleProfileRehydration``, inside a try/catch that force-sets
-   ``isInitialized: true`` on any error so the splash can never hang.
-   → :doc:`03-state-management-zustand`
+       Shell->>Store: import store, persist restores the saved profile
+       Store->>Boot: onRehydrateStorage then handleProfileRehydration
+       Boot->>Auth: clear stale auth and query cache
+       Boot->>Auth: create and install the API client
+       Boot->>Store: mark initialized
+       Note over Shell,UI: UI unblocks here. Splash hides, routes render.
+       Boot->>Boot: run bootstrap tasks in the background
+       Boot->>Auth: apply SSL trust, then log in
+       Auth->>ZM: POST /host/login.json
+       ZM-->>Auth: access and refresh tokens
+       Boot->>ZM: servers, timezone, ZMS path, multi-port
+       UI->>ZM: GET /monitors.json once authenticated
+       ZM-->>UI: monitor list, rendered
 
-#. ``services/profile-initialization.ts`` ``handleProfileRehydration`` branches:
-   no current profile sends the user to ``/profiles``; a valid profile proceeds
-   to clear, init, and bootstrap. This decides whether we authenticate at all.
-   → :doc:`11-application-lifecycle`
+Now the same steps in detail.
 
-#. ``services/profile-initialization.ts`` ``clearStaleState`` calls
-   ``useAuthStore.getState().logout()`` and ``clearQueryCache()``. Stale data
-   from a previous session must not bleed into the new one before re-auth.
-   → :doc:`03-state-management-zustand`
+#. **Before React mounts, the safety nets go up.** ``main.tsx`` is the very
+   first code to run. It installs the global error handlers (so an uncaught
+   error anywhere ends up in the in-app log instead of vanishing), tags the
+   ``<html>`` element as native vs web, and starts the iOS safe-area bootstrap,
+   then renders ``<App/>``. The reason this is first: nothing that happens later
+   should be invisible. → :doc:`11-application-lifecycle`
 
-#. ``services/profile-initialization.ts`` ``initializeApiClient`` calls
-   ``setApiClient(createStoreApiClient(profile.apiUrl, reLogin))``. Every later
-   ``httpGet``/``httpPost`` resolves through ``getApiClient()``; the ``reLogin``
-   callback lets the client self-heal a lapsed token.
-   → :doc:`07-api-and-data-fetching`
+#. **The stores wake up and read the disk.** Importing the app pulls in the
+   Zustand stores. In particular ``stores/profile.ts`` is wrapped in
+   ``persist(...)``, so the moment it loads it reads your saved profiles from
+   local storage (``STORAGE_KEYS.profilesStore``). ``App.tsx`` also builds the
+   single React Query ``queryClient`` and registers it with ``setQueryClient()``
+   so non-React code can reach the same cache later. → :doc:`03-state-management-zustand`
 
-#. ``services/profile-initialization.ts`` ``setInitializationState(true)`` sets
-   ``isInitialized: true`` and ``isBootstrapping: true``. This unblocks the UI:
-   the splash hides and routing renders while network bootstrap runs in the
-   background. → :doc:`11-application-lifecycle`
+#. **Rehydration decides what kind of start this is.** Once persist finishes
+   reading, ``stores/profile.ts`` fires ``onRehydrateStorage``, which calls
+   ``handleProfileRehydration`` in ``services/profile-initialization.ts``. If
+   there is no saved profile it sends you to the Profiles screen and stops; if
+   there is one, it continues. The whole thing is wrapped so that any error
+   still flips ``isInitialized: true``, which guarantees the splash can never
+   hang forever. → :doc:`11-application-lifecycle`
 
-#. ``services/profile-bootstrap.ts`` ``performBootstrap`` runs
-   ``bootstrapSSLTrust`` first, before any network call. For a self-signed
-   profile it applies the trust override (and, with no stored fingerprint,
-   triggers the trust-on-first-use dialog). SSL trust must be in effect before
-   the login HTTPS call or self-signed servers fail. → :doc:`13-network-endpoints`
+#. **Throw away last session's leftovers.** ``clearStaleState`` calls
+   ``logout()`` on the auth store and ``clearQueryCache()``. This matters because
+   a persisted token or cached monitor list from a previous run must not be
+   shown before we have re-authenticated this run, especially after switching
+   servers. → :doc:`03-state-management-zustand`
 
-#. ``lib/ssl-trust.ts`` ``applySSLTrustSetting`` is platform-dispatched: native
-   uses the ``ssl-trust`` Capacitor plugin, Electron uses
-   ``window.electronSsl``, web is a no-op. This is a manual-device-verify path.
-   → :doc:`12-shared-services-and-components`
+#. **Point the HTTP client at this server.** ``initializeApiClient`` calls
+   ``setApiClient(createStoreApiClient(profile.apiUrl, reLogin))``. From here on,
+   every ``httpGet`` / ``httpPost`` in the app resolves through
+   ``getApiClient()``, so this one call decides which server all later requests
+   talk to. The ``reLogin`` callback it passes in is what lets the client quietly
+   re-authenticate when a token lapses. → :doc:`07-api-and-data-fetching`
 
-#. ``services/profile-bootstrap.ts`` ``bootstrapAuth`` decrypts the stored
-   password and calls ``useAuthStore.getState().login()``, which is single-flight
-   and on success sets ``accessToken``, expiries, and ``isAuthenticated: true``.
-   Auth failure is a warning, not fatal (the server may not require auth). This
-   produces the authenticated session. → :doc:`07-api-and-data-fetching`
+#. **Let the user in (the important bit).** ``setInitializationState(true)``
+   flips ``isInitialized`` and ``isBootstrapping``. This is the moment the UI
+   becomes usable: the splash hides, routing renders, and the slow network setup
+   is kicked off **without** being awaited, so it runs in the background. The app
+   is interactive even while it is still logging in. → :doc:`11-application-lifecycle`
 
-#. ``services/profile-bootstrap.ts`` then runs ``bootstrapServerMap``,
-   ``bootstrapTimezone``, ``bootstrapZmsPath``, ``bootstrapGo2RTCPath``, and
-   ``bootstrapMultiPortStreaming`` (each independently try/caught), then clears
-   ``isBootstrapping``. These resolve the stream and routing config the monitor
-   views depend on. → :doc:`13-network-endpoints`
+#. **Background setup, SSL trust first.** ``performBootstrap`` in
+   ``services/profile-bootstrap.ts`` runs ``bootstrapSSLTrust`` before any network
+   call. For a self-signed server it applies the trust override (and, the first
+   time, shows the trust-on-first-use dialog) via ``lib/ssl-trust.ts``
+   ``applySSLTrustSetting``, which dispatches to the native ``ssl-trust`` plugin
+   or Electron. If trust were applied after the login call, a self-signed server
+   would reject it. → :doc:`13-network-endpoints`
 
-#. ``App.tsx`` splash-hide effect dynamically imports ``@capacitor/splash-screen``
-   and hides it once ``isInitialized`` flips; ``AppRoutes`` navigates to the last
-   route or ``/monitors`` and starts ``useTokenRefresh()``.
-   → :doc:`04-pages-and-views`
+#. **Log in.** ``bootstrapAuth`` decrypts the stored password and calls the auth
+   store's ``login()``, which is single-flight (concurrent callers share one
+   request) and POSTs to ``/host/login.json``. On success it stores the access
+   and refresh tokens and sets ``isAuthenticated: true``. A failure here is only
+   a warning, not fatal, because some servers do not require auth. This is the
+   step that produces the authenticated session. → :doc:`07-api-and-data-fetching`
 
-#. ``pages/Monitors.tsx`` runs ``useQuery(['monitors', currentProfile?.id], ...)``
-   gated on ``isAuthenticated`` and polled at ``bandwidth.monitorStatusInterval``.
-   This is the first data loaded: the monitor list rendered to the user.
-   → :doc:`07-api-and-data-fetching`
+#. **Fetch the server's shape.** Still in the background, ``performBootstrap``
+   runs ``bootstrapServerMap`` (multi-server routing), ``bootstrapTimezone``,
+   ``bootstrapZmsPath``, ``bootstrapGo2RTCPath``, and
+   ``bootstrapMultiPortStreaming``, each wrapped on its own so one failure does
+   not sink the rest, then clears ``isBootstrapping``. These resolve the
+   streaming and routing details the monitor and montage views rely on.
+   → :doc:`13-network-endpoints`
 
-The runtime profile switch (``stores/profile.ts`` ``switchProfile``) converges
-on the same ``performBootstrap``; it additionally tears down the old profile's
-streams and resets the client first (see Flow 2, last scene).
+#. **Hide the splash, land on a page.** An effect in ``App.tsx`` hides the
+   native splash once ``isInitialized`` is set, and ``AppRoutes`` navigates to
+   your last route (or ``/monitors``) and starts the periodic token refresh
+   (``useTokenRefresh``). → :doc:`04-pages-and-views`
+
+#. **First real data.** ``pages/Monitors.tsx`` runs a React Query for the monitor
+   list, keyed by profile and **gated on ``isAuthenticated``**, so it only fires
+   after step 8 set the token. It polls at the bandwidth-profile interval. The
+   rendered monitor list is what you finally see. → :doc:`07-api-and-data-fetching`
+
+Switching profiles at runtime (``stores/profile.ts`` ``switchProfile``) converges
+on this same ``performBootstrap``; it just tears down the old profile's streams
+and resets the client first. That teardown is the last scene of Flow 2.
 
 Flow 2: Montage opens and a live MJPEG stream runs
 --------------------------------------------------
