@@ -420,15 +420,21 @@ export function LiveMonitorPlayer({
 
   const handleMjpegLoad = useCallback(() => {
     setMjpegError(false);
+    // A good frame resets the reconnect backoff so a later drop starts fresh.
+    mjpegStream.reportStreamLoad();
     onLoad?.();
-  }, [onLoad]);
+  }, [onLoad, mjpegStream]);
 
   const handleMjpegError = useCallback(() => {
     // Log so an occlusion-induced drop is visible. The <img> onError is
     // otherwise silent, which made this look like "0 logs". refs #150
     log.videoPlayer('MJPEG stream error', LogLevel.WARN, { monitorId: monitor.Id });
     setMjpegError(true);
-  }, [monitor.Id]);
+    // Schedule an auto-reconnect with backoff. This releases the errored
+    // connkey before minting a new one, so a dropped feed recovers without a
+    // manual Retry. refs #187
+    mjpegStream.reportStreamError();
+  }, [monitor.Id, mjpegStream]);
 
   // Sync media ref for snapshot capture
   useEffect(() => {
