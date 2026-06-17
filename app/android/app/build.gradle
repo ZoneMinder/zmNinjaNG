@@ -23,8 +23,8 @@ android {
         applicationId "com.zoneminder.zmNinjaNG"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 101549
-        versionName "1.1.14"
+        versionCode 101635
+        versionName "1.1.15"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
