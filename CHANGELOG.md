@@ -1,5 +1,30 @@
 # Changelog
 
+## [zmNinjaNg-1.1.15](https://github.com/ZoneMinder/zmNinjaNg/tree/zmNinjaNg-1.1.15) (2026-06-17)
+
+[Full Changelog](https://github.com/ZoneMinder/zmNinjaNg/compare/zmNinjaNg-1.1.14...zmNinjaNg-1.1.15)
+
+**Implemented enhancements:**
+
+- feat: auto-reconnect MJPEG stream on error with backoff and connkey release [\#187](https://github.com/ZoneMinder/zmNinjaNg/issues/187)
+- refactor: code review cleanups \(reuse, dead code, multi-profile cache key, rule-25/23\) [\#186](https://github.com/ZoneMinder/zmNinjaNg/issues/186)
+- refactor: code quality pass from architecture review \(DRY, SOLID, clarity\) [\#184](https://github.com/ZoneMinder/zmNinjaNg/issues/184)
+- chore: delete or wire lib/tv-dpad-nav.ts \(dead code superseded by tv-spatial-nav\) [\#183](https://github.com/ZoneMinder/zmNinjaNg/issues/183)
+- feat: Add per-profile 'Force disable multiport streaming' advanced toggle [\#179](https://github.com/ZoneMinder/zmNinjaNg/issues/179)
+
+**Fixed bugs:**
+
+- fix\(stream\): orphaned nph-zms on profile switch \(CMD\_QUIT races SSL-trust flip\) [\#188](https://github.com/ZoneMinder/zmNinjaNg/issues/188)
+- fix: stability fixes from architecture review \(streams, error handling, resource bounds\) [\#182](https://github.com/ZoneMinder/zmNinjaNg/issues/182)
+- fix\(http\): API requests can hang forever; add configurable request timeout + CMD\_QUIT timeout [\#181](https://github.com/ZoneMinder/zmNinjaNg/issues/181)
+- fix\(monitor-detail\): back button returns to previous monitor instead of origin after prev/next [\#180](https://github.com/ZoneMinder/zmNinjaNg/issues/180)
+- fix\(monitors\): leaving montage leaks live streams, starving the single-monitor view [\#178](https://github.com/ZoneMinder/zmNinjaNg/issues/178)
+
+**Refactoring:**
+
+- security review comparison of Faros \(partial\) and Opus [\#185](https://github.com/ZoneMinder/zmNinjaNg/issues/185)
+- track: migrate iOS Firebase SDK off CocoaPods before Oct 2026 [\#134](https://github.com/ZoneMinder/zmNinjaNg/issues/134)
+
 ## [zmNinjaNg-1.1.14](https://github.com/ZoneMinder/zmNinjaNg/tree/zmNinjaNg-1.1.14) (2026-06-04)
 
 [Full Changelog](https://github.com/ZoneMinder/zmNinjaNg/compare/zmNinjaNg-1.1.13...zmNinjaNg-1.1.14)
