@@ -65,10 +65,11 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <!-- @capacitor-community/media saves downloads to the app's own gallery album
+         via MediaStore. In basic (non-gallery) mode it requests no storage/media
+         permissions, so READ_MEDIA_IMAGES/READ_MEDIA_VIDEO and the legacy
+         external-storage permissions are not declared. Google Play rejects
+         READ_MEDIA_* unless broad library access is the core purpose (refs #190). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.VIBRATE" />
