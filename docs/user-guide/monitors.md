@@ -44,6 +44,21 @@ The protocol label (enabled in {doc}`settings`) shows which streaming protocol i
 
 For tile views (Monitors list, Montage, Dashboard widgets), the *Streaming Mode* setting does apply, see {doc}`settings` for details.
 
+#### Digital Zoom and Pan
+
+The zoom controls in the corner of the live view zoom into the streamed image (this is digital zoom in the app, not camera PTZ). You can also zoom with the mouse:
+
+- **Scroll wheel**: scroll up over the image to zoom in around the cursor, scroll down to zoom out (desktop).
+
+Once zoomed in, you can pan the view in several ways:
+
+- **On-screen arrows**: the directional buttons that appear next to the zoom controls when zoomed.
+- **Keyboard arrow keys**: pan the zoomed view (desktop). Arrow keys only pan while zoomed in; at normal zoom they behave as usual.
+- **Mouse drag**: click and drag the image to move it. The pointer shows a grab cursor when the view is zoomed.
+- **Touch**: pinch to zoom, then drag with one finger to pan.
+
+Press the reset button to return to the full, unzoomed image.
+
 #### Per-Monitor Override
 
 You can force MJPEG for individual monitors via the monitor's Settings dialog (Video tab). When Go2RTC is enabled for a monitor, a toggle appears to turn it off for that monitor only. See {doc}`settings` for details.

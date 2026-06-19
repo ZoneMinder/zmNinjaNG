@@ -367,7 +367,7 @@ export default function MonitorDetail() {
           )}
           data-testid="monitor-player"
         >
-          <div ref={zoomPan.innerRef}>
+          <div ref={zoomPan.innerRef} data-testid="monitor-zoom-content">
             <LiveMonitorPlayer
               monitor={monitor.Monitor}
               profile={currentProfile}

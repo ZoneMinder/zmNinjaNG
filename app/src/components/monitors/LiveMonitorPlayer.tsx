@@ -547,6 +547,9 @@ export function LiveMonitorPlayer({
           data-testid="video-player-mjpeg"
           src={mjpegStream.imageSrc}
           alt={monitor.Name}
+          // Disable the browser's native image drag so a mouse drag pans the
+          // zoomed view instead of dragging a ghost of the picture (issue #191).
+          draggable={false}
           onLoad={handleMjpegLoad}
           onError={handleMjpegError}
         />
