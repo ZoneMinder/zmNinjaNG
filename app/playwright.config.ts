@@ -45,12 +45,27 @@ export default defineConfig({
     },
   ],
 
-  webServer: {
-    command: 'npm run dev:all',
-    url: 'http://localhost:5173',
-    reuseExistingServer: true,
-    stdout: 'ignore',
-    stderr: 'pipe',
-    timeout: 120 * 1000,
-  },
+  // Two servers: the CORS proxy (3001) and Vite (5173). They are listed
+  // separately, rather than as a single `dev:all`, so Playwright waits for
+  // both to be ready before running. Web login fails without the proxy, and
+  // waiting only on 5173 let tests start before the proxy was up. The proxy
+  // returns 400 on /proxy with no target, which Playwright accepts as ready.
+  webServer: [
+    {
+      command: 'npm run proxy',
+      url: 'http://localhost:3001/proxy',
+      reuseExistingServer: true,
+      stdout: 'ignore',
+      stderr: 'pipe',
+      timeout: 60 * 1000,
+    },
+    {
+      command: 'npm run dev',
+      url: 'http://localhost:5173',
+      reuseExistingServer: true,
+      stdout: 'ignore',
+      stderr: 'pipe',
+      timeout: 120 * 1000,
+    },
+  ],
 });

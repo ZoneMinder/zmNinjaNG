@@ -54,6 +54,24 @@ Feature: Monitor Detail Page
     When I click outside the dialog
     Then the dialog should close
 
+  @web
+  Scenario: Scroll wheel zooms the monitor view
+    Then I should see the monitor player
+    When I scroll the wheel up over the monitor view
+    Then the pan controls should be visible
+
+  @web
+  Scenario: Keyboard and mouse pan the zoomed view
+    Then I should see the monitor player
+    When I zoom into the monitor view
+    Then the pan controls should be visible
+    When I pan the view with the "ArrowRight" arrow key
+    Then the view should pan
+    When I pan the view with the "ArrowDown" arrow key
+    Then the view should pan
+    When I drag the monitor view with the mouse
+    Then the view should pan
+
   @ios-phone @android @visual
   Scenario: Phone layout stacks controls below video
     Given the viewport is mobile size

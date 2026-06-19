@@ -25,6 +25,8 @@ interface TransformState {
 const ZOOM_THRESHOLD = 1.05;
 const ZOOM_STEP = 0.5;
 const PAN_STEP = 80;
+// Per wheel notch: multiply/divide the scale by this fraction.
+const WHEEL_STEP = 0.15;
 
 export function useZoomPan({
   minScale = 1,
@@ -148,9 +150,31 @@ export function useZoomPan({
     syncState();
   }, [applyTransform, syncState]);
 
-  // Pinch-to-zoom only (touch devices) + swipe navigation
+  // Wheel zoom around the cursor (desktop), pinch-to-zoom (touch),
+  // drag-to-pan (mouse + touch), and swipe navigation.
   useGesture(
     {
+      onWheel: ({ event, direction: [, dirY], active }) => {
+        if (!active) return;
+        const container = containerRef.current;
+        if (!container) return;
+        event.preventDefault();
+
+        const rect = container.getBoundingClientRect();
+        const fx = event.clientX - rect.left;
+        const fy = event.clientY - rect.top;
+
+        const cur = stateRef.current;
+        // Scroll up zooms in, scroll down zooms out. Lower bound is 1 (fit) so
+        // the wheel never shrinks the image below the container.
+        const factor = dirY < 0 ? 1 + WHEEL_STEP : 1 - WHEEL_STEP;
+        const newScale = Math.max(1, Math.min(maxScale, cur.scale * factor));
+        if (newScale === cur.scale) return;
+        const ratio = newScale / cur.scale;
+        applyTransform(newScale, fx - (fx - cur.x) * ratio, fy - (fy - cur.y) * ratio, false);
+        syncState();
+      },
+
       onPinch: ({ offset: [newScale], origin: [ox, oy], first, last, memo }) => {
         const container = containerRef.current;
         if (!container) return;
@@ -192,6 +216,7 @@ export function useZoomPan({
         pinching,
         cancel,
         tap,
+        event,
       }) => {
         if (pinching) { cancel(); return; }
         if (tap) return;
@@ -199,11 +224,13 @@ export function useZoomPan({
         const cur = stateRef.current;
 
         if (cur.scale > ZOOM_THRESHOLD) {
-          // Touch pan when zoomed
+          // Mouse/touch drag pan when zoomed
           applyTransform(cur.scale, cur.x + dx, cur.y + dy, false);
           if (last) syncState();
         } else if (swipeEnabled && last) {
-          // Swipe navigation when not zoomed
+          // Swipe navigation when not zoomed. Touch only: a mouse drag at 1x
+          // would otherwise switch monitors unexpectedly on desktop.
+          if ((event as PointerEvent).pointerType === 'mouse') return;
           const didSwipe = Math.abs(mx) > 80 || vx > 0.5;
           if (didSwipe) {
             if (xDir < 0) onSwipeLeft?.();
@@ -216,19 +243,72 @@ export function useZoomPan({
       target: containerRef,
       eventOptions: { passive: false },
       pinch: { scaleBounds: { min: minScale, max: maxScale }, rubberband: true },
-      drag: { filterTaps: true, pointer: { touch: true } },
+      // Pointer events (no touch:true) so mouse drag pans on desktop too.
+      drag: { filterTaps: true },
+      // Non-passive so the wheel handler can preventDefault page scroll.
+      wheel: { eventOptions: { passive: false } },
     },
   );
 
-  // Apply touch/drag styles to container
+  // Keyboard pan when zoomed (desktop). Only intercepts arrows while zoomed so
+  // native page scrolling and other shortcuts keep working at 1x. Ignores
+  // arrows while typing in a form field.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (stateRef.current.scale <= ZOOM_THRESHOLD) return;
+      const el = document.activeElement as HTMLElement | null;
+      if (
+        el &&
+        (el.tagName === 'INPUT' ||
+          el.tagName === 'TEXTAREA' ||
+          el.tagName === 'SELECT' ||
+          el.isContentEditable)
+      ) {
+        return;
+      }
+      switch (e.key) {
+        case 'ArrowLeft':
+          e.preventDefault();
+          panLeft();
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          panRight();
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          panUp();
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          panDown();
+          break;
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [panLeft, panRight, panUp, panDown]);
+
+  // Grab cursor when zoomed so desktop users discover drag-to-pan.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    el.style.cursor = isZoomed ? 'grab' : '';
+  }, [isZoomed]);
+
+  // Apply touch/drag styles to container and block the browser's native image
+  // drag (ghost image) so a mouse drag pans instead of dragging the picture.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     el.classList.add('no-native-drag');
     el.style.touchAction = 'none';
+    const onDragStart = (e: Event) => e.preventDefault();
+    el.addEventListener('dragstart', onDragStart);
     return () => {
       el.classList.remove('no-native-drag');
       el.style.touchAction = '';
+      el.removeEventListener('dragstart', onDragStart);
     };
   }, []);
 
