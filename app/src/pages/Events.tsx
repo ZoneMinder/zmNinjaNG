@@ -23,6 +23,7 @@ import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import { useEventPagination } from '../hooks/useEventPagination';
 import { useEventMontageGrid } from '../hooks/useEventMontageGrid';
 import { useEventTags, useEventTagMapping } from '../hooks/useEventTags';
+import { useScrollRestoration } from '../hooks/useScrollRestoration';
 import { PullToRefreshIndicator } from '../components/ui/pull-to-refresh-indicator';
 import { Button } from '../components/ui/button';
 import { Filter, AlertCircle, ArrowLeft, LayoutGrid, List, Clock, X } from 'lucide-react';
@@ -243,6 +244,11 @@ export default function Events() {
     return filtered;
   }, [eventsData?.events, favoritesOnly, favoriteIds, selectedTagIds, eventTagMap]);
 
+  // Restore the list scroll position when returning from an event detail.
+  // /events and /events/:id are sibling routes, so this component unmounts when
+  // opening an event; without this the list snaps back to the top (refs #197).
+  const restoreScrollRef = useScrollRestoration(location.key, !isLoading && allEvents.length > 0);
+
   // Use grid management hook (only active when in montage mode)
   const gridControls = useEventMontageGrid({
     initialCols: eventCols,
@@ -326,9 +332,11 @@ export default function Events() {
         ref={(el) => {
           parentRef.current = el;
           pullToRefresh.containerRef.current = el;
+          restoreScrollRef(el);
         }}
         {...pullToRefresh.bind()}
         className="h-full overflow-auto p-3 sm:p-4 md:p-6 relative touch-pan-y"
+        data-testid="events-scroll-container"
       >
         <PullToRefreshIndicator
           isPulling={pullToRefresh.isPulling}

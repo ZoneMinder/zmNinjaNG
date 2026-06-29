@@ -1655,6 +1655,23 @@ setters, no "Apply" button needed for persistence.
 
 **Used By:** Events page, EventsFilterPopover
 
+useScrollRestoration (``hooks/useScrollRestoration.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Restores a scroll container's position across unmount/remount cycles. Takes
+``key`` (pass ``useLocation().key``) and ``ready`` (true once the scrollable
+content has rendered), and returns a callback ref for the container.
+
+Sibling routes such as ``/events`` and ``/events/:id`` unmount each other, so the
+list's scroll container is destroyed when opening an event and recreated empty on
+the way back. Positions are stored in a module-level map keyed by the history
+entry's ``location.key``: browser back reuses the same key and restores the prior
+offset, while fresh navigation (a new key) starts at the top. Restore is deferred
+until ``ready`` so the container is tall enough to accept the saved offset, and
+runs once per entry so a later scroll is not clobbered.
+
+**Used By:** Events page
+
 Event Notes Display
 ~~~~~~~~~~~~~~~~~~~
 

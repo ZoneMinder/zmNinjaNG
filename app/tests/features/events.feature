@@ -28,6 +28,13 @@ Feature: Event Browsing and Management
     Then I should see events list or empty state
 
   @all
+  Scenario: Returning from an event keeps the list scroll position
+    When I scroll the events list down if it is scrollable
+    And I open a visible event after scrolling if the list was scrolled
+    And I navigate back to the events list if I opened an event
+    Then the events list scroll position should be restored if it was scrolled
+
+  @all
   Scenario: Clearing the quick time filter keeps the events list usable
     When I select the past week quick time filter
     Then I should see events list or empty state

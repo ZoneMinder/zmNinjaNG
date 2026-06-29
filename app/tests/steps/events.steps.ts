@@ -39,6 +39,72 @@ Then('I should see events list or empty state', async ({ page }) => {
   }
 });
 
+// Scroll restoration (refs #197)
+let savedScrollTop = 0;
+let scrolledList = false;
+let openedAfterScroll = false;
+
+When('I scroll the events list down if it is scrollable', async ({ page }) => {
+  savedScrollTop = 0;
+  scrolledList = false;
+
+  const container = page.getByTestId('events-scroll-container');
+  await container.waitFor({ state: 'visible', timeout: testConfig.timeouts.element });
+
+  // Wait for cards to render so the list has scrollable height.
+  const cards = page.getByTestId('event-card');
+  await expect
+    .poll(async () => cards.count(), { timeout: testConfig.timeouts.transition * 3 })
+    .toBeGreaterThan(0);
+
+  await container.evaluate((el) => el.scrollTo(0, 800));
+  savedScrollTop = await container.evaluate((el) => el.scrollTop);
+  scrolledList = savedScrollTop > 0;
+  log.info('E2E events scrolled', { component: 'e2e', action: 'scroll', savedScrollTop });
+});
+
+When('I open a visible event after scrolling if the list was scrolled', async ({ page }) => {
+  openedAfterScroll = false;
+  if (!scrolledList) return;
+
+  // Click a card already within the viewport so Playwright does not auto-scroll
+  // (which would change the position we are trying to preserve).
+  const viewport = page.viewportSize();
+  const maxY = viewport?.height ?? 800;
+  const cards = page.getByTestId('event-card');
+  const count = await cards.count();
+  for (let i = 0; i < count; i++) {
+    const card = cards.nth(i);
+    const box = await card.boundingBox();
+    if (box && box.y >= 0 && box.y + box.height <= maxY) {
+      await card.click();
+      await page.waitForURL(/.*events\/\d+/, { timeout: testConfig.timeouts.transition });
+      openedAfterScroll = true;
+      return;
+    }
+  }
+});
+
+When('I navigate back to the events list if I opened an event', async ({ page }) => {
+  if (!openedAfterScroll) return;
+  await page.goBack();
+  await page.getByTestId('events-scroll-container').waitFor({
+    state: 'visible',
+    timeout: testConfig.timeouts.element,
+  });
+});
+
+Then('the events list scroll position should be restored if it was scrolled', async ({ page }) => {
+  if (!openedAfterScroll) return;
+  const container = page.getByTestId('events-scroll-container');
+  await expect
+    .poll(async () => container.evaluate((el) => el.scrollTop), {
+      timeout: testConfig.timeouts.transition * 3,
+    })
+    // Allow tolerance for layout settling; a reset would read ~0.
+    .toBeGreaterThan(savedScrollTop - 100);
+});
+
 When('I switch events view to montage', async ({ page }) => {
   const montageGrid = page.getByTestId('events-montage-grid');
   if (await montageGrid.isVisible().catch(() => false)) {
