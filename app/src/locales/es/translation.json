@@ -42,7 +42,8 @@
     "auth_required": "Autenticación requerida",
     "running": "En ejecución",
     "stopped": "Detenido",
-    "done": "Listo"
+    "done": "Listo",
+    "press_back_again_to_exit": "Pulsa atrás de nuevo para salir"
   },
   "app": {
     "name": "zmNinjaNg",

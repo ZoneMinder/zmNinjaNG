@@ -428,6 +428,14 @@ export const KIOSK = {
 } as const;
 
 /**
+ * Android hardware back button.
+ */
+export const ANDROID_BACK = {
+  // At a root view, a second back press within this window exits the app.
+  exitConfirmWindowMs: 2000,
+} as const;
+
+/**
  * Montage Grid Constants
  *
  * Internal grid sizing for the Montage view.

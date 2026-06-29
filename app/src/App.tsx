@@ -24,6 +24,7 @@ import { X } from 'lucide-react';
 import { log, LogLevel, logger } from './lib/logger';
 import { initializeLogFile, hydrateLogStoreFromFile, getLogFile } from './lib/log-file';
 import { useCapacitorListener } from './hooks/useCapacitorListener';
+import { useAndroidBackButton } from './hooks/useAndroidBackButton';
 import { PipProvider } from './contexts/PipContext';
 import { BOOTSTRAP_TIMEOUTS, Z_INDEX } from './lib/zmninja-ng-constants';
 
@@ -113,6 +114,9 @@ function AppRoutes() {
     'pause',
     () => { void getLogFile().flush(); },
   );
+
+  // Android hardware back: close overlays, go back on detail views, exit at root.
+  useAndroidBackButton();
 
   // Always apply compact mode
   useEffect(() => {

@@ -42,7 +42,8 @@
     "auth_required": "需要身份验证",
     "running": "运行中",
     "stopped": "已停止",
-    "done": "完成"
+    "done": "完成",
+    "press_back_again_to_exit": "再次返回以退出"
   },
   "app": {
     "name": "zmNinjaNg",

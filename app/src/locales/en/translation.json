@@ -42,7 +42,8 @@
     "auth_required": "Authentication required",
     "done": "Done",
     "default": "Default",
-    "server": "Server"
+    "server": "Server",
+    "press_back_again_to_exit": "Press back again to exit"
   },
   "app": {
     "name": "zmNinjaNg",

@@ -1672,6 +1672,18 @@ runs once per entry so a later scroll is not clobbered.
 
 **Used By:** Events page
 
+useAndroidBackButton (``hooks/useAndroidBackButton.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Registers one global Android hardware-back handler (native only, disabled while
+the kiosk lock is engaged). The pure ``decideBackAction`` picks the response:
+close an open dialog/popover, else navigate back on a detail route, else on a
+root (menu) route show "press back again to exit" and exit on a second press
+within ``ANDROID_BACK.exitConfirmWindowMs`` (2s). ``isRootRoute`` lists the
+top-level menu paths. Called once from ``AppRoutes``.
+
+**Used By:** AppRoutes
+
 Event Notes Display
 ~~~~~~~~~~~~~~~~~~~
 

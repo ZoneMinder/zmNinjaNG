@@ -42,7 +42,8 @@
     "auth_required": "Authentifizierung erforderlich",
     "running": "Läuft",
     "stopped": "Gestoppt",
-    "done": "Fertig"
+    "done": "Fertig",
+    "press_back_again_to_exit": "Zum Beenden erneut zurück"
   },
   "app": {
     "name": "zmNinjaNg",
