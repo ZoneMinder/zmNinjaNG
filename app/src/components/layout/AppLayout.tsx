@@ -32,7 +32,6 @@ import { useTvMode } from '../../hooks/useTvMode';
 import { enableSpatialNavigation, checkIsTV } from '../../lib/tv-spatial-nav';
 import { useKioskStore } from '../../stores/kioskStore';
 import { KioskOverlay } from '../kiosk/KioskOverlay';
-import { LanguageSwitcher } from './LanguageSwitcher';
 import { SidebarContent } from './SidebarContent';
 import { DeveloperNoticeBanner } from './DeveloperNoticeBanner';
 import { CertTrustBanner } from '../CertTrustBanner';
@@ -201,9 +200,23 @@ export default function AppLayout() {
       {!isLocked && (
       <div className="md:hidden fixed top-0 left-0 right-0 h-[calc(3rem+var(--sai-top,env(safe-area-inset-top)))] pt-[var(--sai-top,env(safe-area-inset-top))] border-b bg-background z-30 flex items-center px-3 justify-between">
         <div className="flex items-center gap-2">
+          {/* Menu on the left so the button sits on the side the drawer opens from. */}
+          <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon" data-testid="mobile-menu-button">
+                <Menu className="h-5 w-5" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="p-0 w-64 sm:w-72 flex flex-col pt-[var(--sai-top,env(safe-area-inset-top))]">
+              <SheetTitle className="sr-only">{t('app.navigation_menu')}</SheetTitle>
+              <SheetDescription className="sr-only">{t('app.navigation_menu_desc')}</SheetDescription>
+              <div className="flex-1 overflow-y-auto">
+                <SidebarContent onMobileClose={() => setIsMobileOpen(false)} />
+              </div>
+            </SheetContent>
+          </Sheet>
           <img src={logoUrl} alt={t('app.logo_alt')} className="h-8 w-8 rounded-lg" />
           <span className="font-bold">{t('app.name')}</span>
-          <LanguageSwitcher />
         </div>
         <div className="flex items-center gap-1">
           {location.pathname === '/montage' && (
@@ -223,20 +236,6 @@ export default function AppLayout() {
               {settings.montageShowToolbar ? <Eye className="h-5 w-5" /> : <EyeOff className="h-5 w-5" />}
             </Button>
           )}
-          <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" data-testid="mobile-menu-button">
-                <Menu className="h-5 w-5" />
-              </Button>
-            </SheetTrigger>
-          <SheetContent side="left" className="p-0 w-64 sm:w-72 flex flex-col pt-[var(--sai-top,env(safe-area-inset-top))]">
-            <SheetTitle className="sr-only">{t('app.navigation_menu')}</SheetTitle>
-            <SheetDescription className="sr-only">{t('app.navigation_menu_desc')}</SheetDescription>
-            <div className="flex-1 overflow-y-auto">
-              <SidebarContent onMobileClose={() => setIsMobileOpen(false)} />
-            </div>
-          </SheetContent>
-          </Sheet>
         </div>
       </div>
       )}

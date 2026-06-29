@@ -1704,10 +1704,12 @@ in the sidebar). Order is saved per profile in
 sorts ``navItems`` by saved order using a ``useMemo``. Reorder uses
 pointer events for drag-and-drop with live swap on midpoint crossing.
 
-``AppLayout.tsx`` is a thin shell that composes ``SidebarContent``
-(navigation, reorder, user controls) and ``LanguageSwitcher``
-(self-contained language dropdown). The bulk of sidebar logic lives in
-``SidebarContent.tsx``.
+``AppLayout.tsx`` is a thin shell: a desktop sidebar and a mobile header
+both render ``SidebarContent`` (navigation, reorder, user controls), where
+the bulk of sidebar logic lives. The mobile menu button sits on the left so
+it matches the side the drawer opens from. ``LanguageSwitcher`` is a
+self-contained language dropdown shown in the ``SidebarContent`` footer
+next to the theme and lock controls (a set-once control), not in the header.
 
 --------------
 

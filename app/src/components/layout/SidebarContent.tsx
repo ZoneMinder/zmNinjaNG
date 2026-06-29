@@ -192,13 +192,9 @@ export function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentPro
         <div className={cn("flex items-center gap-2 mb-1", isCollapsed && "flex-col mb-2")}>
           <img src={logoUrl} alt={t('app.logo_alt')} className={cn("rounded-lg", isMobileDrawer ? "h-6 w-6" : "h-8 w-8")} />
           {!isCollapsed && (
-            <>
-              <h1 className="text-base font-bold tracking-tight whitespace-nowrap">{t('app.name')}</h1>
-              <LanguageSwitcher />
-            </>
+            <h1 className="text-base font-bold tracking-tight whitespace-nowrap">{t('app.name')}</h1>
           )}
         </div>
-        {isCollapsed && <LanguageSwitcher collapsed />}
         {!isCollapsed && currentProfile && (
           <p className="text-xs text-muted-foreground font-medium px-1 truncate">
             {currentProfile.name}
@@ -386,6 +382,10 @@ export function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentPro
               <ModeToggle className={isMobileDrawer ? "h-7 w-7" : "h-8 w-8"} />
             </div>
             <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-muted-foreground">{t('settings.language')}</span>
+              <LanguageSwitcher />
+            </div>
+            <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-muted-foreground">{t('monitor_detail.insomnia_label')}</span>
               <Button
                 onClick={handleInsomniaToggle}
@@ -416,6 +416,7 @@ export function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentPro
           </>
         ) : (
           <>
+            <LanguageSwitcher collapsed />
             <Button
               onClick={handleInsomniaToggle}
               variant={profileSettings?.insomnia ? "default" : "outline"}
