@@ -19,6 +19,7 @@ vi.mock('react-i18next', () => ({
 vi.mock('../../../lib/logger', () => ({
   log: {
     zmsEventPlayer: vi.fn(),
+    eventProgressBar: vi.fn(),
   },
   LogLevel: {
     DEBUG: 0,
@@ -155,19 +156,21 @@ describe('ZmsEventPlayer', () => {
     expect(new URL(seek![0] as string).searchParams.get('offset')).toBe('20');
   });
 
-  it('pauses the stream while scrubbing and resumes playing on release', () => {
+  it('scrubs with seek alone, without pausing or resuming the stream', () => {
     renderPlayer();
     fireEvent.load(getStreamImg());
     const track = stubTrack();
 
-    // Grabbing the scrub bar pauses the running stream (CMD_PAUSE = 1) so the
-    // video does not play forward between seeks.
+    // Grabbing/moving the scrub bar issues a seek (CMD_SEEK = 14)...
     fireEvent.mouseDown(track, { clientX: 100 });
-    expect(callsForCommand('1').length).toBeGreaterThan(0);
+    expect(callsForCommand('14').length).toBeGreaterThan(0);
 
-    // Releasing resumes playback (CMD_PLAY = 2).
     fireEvent.mouseUp(window);
-    expect(callsForCommand('2').length).toBeGreaterThan(0);
+
+    // ...but never pauses (CMD_PAUSE = 1) or resumes (CMD_PLAY = 2): the seek
+    // drives playback by itself (refs #196).
+    expect(callsForCommand('1')).toHaveLength(0);
+    expect(callsForCommand('2')).toHaveLength(0);
   });
 
   it('keeps the img src and connkey unchanged when playback speed changes', () => {

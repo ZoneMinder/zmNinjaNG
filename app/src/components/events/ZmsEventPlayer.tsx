@@ -79,10 +79,8 @@ export function ZmsEventPlayer({
 
   // While the user drags the scrub bar, the status poll must not write the
   // playhead back from the stream: that fight makes the cursor and video jump
-  // around mid-drag (refs #196). The grab also pauses the stream so it does not
-  // play forward between seeks. wasPlayingRef remembers whether to resume.
+  // around mid-drag (refs #196). Each scrub position is sent as a CMD_SEEK.
   const isScrubbingRef = useRef(false);
-  const wasPlayingRef = useRef(false);
 
   // Unique connection key for this stream, stable for the component's lifetime.
   // Speed changes are sent as CMD_VARPLAY over this same connkey instead of
@@ -323,19 +321,17 @@ export function ZmsEventPlayer({
     goToFrame(totalFrames);
   }, [goToFrame, totalFrames]);
 
-  // Grab the scrub bar: pause the stream so it shows a single still frame per
-  // seek instead of playing forward between drags, and silence the status poll.
+  // Grab the scrub bar: just silence the status poll so it does not write the
+  // playhead back mid-drag. Each scrub position is a CMD_SEEK; ZMS handles the
+  // seek without a surrounding pause/play, so we do not send them (refs #196).
   const handleScrubStart = useCallback(() => {
     isScrubbingRef.current = true;
-    wasPlayingRef.current = isPlaying;
-    if (isPlaying) sendCommand(ZMS_COMMANDS.cmdPause);
-  }, [isPlaying, sendCommand]);
+  }, []);
 
-  // Release: resume playback only if it was playing when the drag began.
+  // Release: re-enable the status poll. Playback state is unchanged by scrubbing.
   const handleScrubEnd = useCallback(() => {
     isScrubbingRef.current = false;
-    if (wasPlayingRef.current) sendCommand(ZMS_COMMANDS.cmdPlay);
-  }, [sendCommand]);
+  }, []);
 
   // Jump to alarm frame
   const jumpToAlarmFrame = useCallback(() => {
