@@ -68,15 +68,12 @@ export function EventProgressBar({
     handleSeek(e.clientX);
   }, [handleSeek]);
 
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (isDragging) {
-      handleSeek(e.clientX);
-    }
-  }, [isDragging, handleSeek]);
-
-  const handleMouseUp = useCallback(() => {
-    setIsDragging(false);
-  }, []);
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    if (!touch) return;
+    setIsDragging(true);
+    handleSeek(touch.clientX);
+  }, [handleSeek]);
 
   const handleHover = useCallback((e: React.MouseEvent) => {
     if (!progressRef.current) return;
@@ -92,15 +89,31 @@ export function EventProgressBar({
   }, []);
 
   useEffect(() => {
-    if (isDragging) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
-      return () => {
-        window.removeEventListener('mousemove', handleMouseMove);
-        window.removeEventListener('mouseup', handleMouseUp);
-      };
-    }
-  }, [isDragging, handleMouseMove, handleMouseUp]);
+    if (!isDragging) return;
+
+    const onMouseMove = (e: MouseEvent) => handleSeek(e.clientX);
+    const onTouchMove = (e: TouchEvent) => {
+      const touch = e.touches[0];
+      if (!touch) return;
+      // Stop the page from scrolling while dragging the scrubber.
+      e.preventDefault();
+      handleSeek(touch.clientX);
+    };
+    const stop = () => setIsDragging(false);
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', stop);
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
+    window.addEventListener('touchend', stop);
+    window.addEventListener('touchcancel', stop);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', stop);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', stop);
+      window.removeEventListener('touchcancel', stop);
+    };
+  }, [isDragging, handleSeek]);
 
   return (
     <div className={cn('space-y-2', className)} data-testid="event-progress-bar">
@@ -111,6 +124,7 @@ export function EventProgressBar({
         onMouseDown={handleMouseDown}
         onMouseMove={handleHover}
         onMouseLeave={handleMouseLeave}
+        onTouchStart={handleTouchStart}
         data-testid="event-progress-track"
       >
         {/* Background grid lines for visual reference */}
