@@ -12,13 +12,12 @@
  * own back-swallowing handler stays in control.
  */
 
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { Platform } from '../lib/platform';
 import { useKioskStore } from '../stores/kioskStore';
-import { useCapacitorListener } from './useCapacitorListener';
 import { ANDROID_BACK } from '../lib/zmninja-ng-constants';
 import { hasOpenOverlay } from '../lib/overlay';
 import { log, LogLevel } from '../lib/logger';
@@ -67,11 +66,10 @@ export function useAndroidBackButton(): void {
 
   const handleBack = useCallback(async () => {
     const now = Date.now();
-    const action = decideBackAction({
-      hasOpenOverlay: hasOpenOverlay(),
-      isRootRoute: isRootRoute(location.pathname),
-      doubleTapActive: now - lastBackRef.current < ANDROID_BACK.exitConfirmWindowMs,
-    });
+    const overlay = hasOpenOverlay();
+    const root = isRootRoute(location.pathname);
+    const doubleTapActive = now - lastBackRef.current < ANDROID_BACK.exitConfirmWindowMs;
+    const action = decideBackAction({ hasOpenOverlay: overlay, isRootRoute: root, doubleTapActive });
 
     switch (action) {
       case 'close-overlay':
@@ -96,10 +94,35 @@ export function useAndroidBackButton(): void {
     }
   }, [navigate, location.pathname, t]);
 
-  useCapacitorListener(
-    () => import('@capacitor/app').then((m) => m.App),
-    'backButton',
-    handleBack,
-    { enabled: Platform.isNative && !isLocked },
-  );
+  // Keep the latest handler and lock state in refs so the listener can register
+  // once and never re-subscribe. useCapacitorListener was unreliable here: its
+  // re-subscribe-on-enabled-change path could cancel the in-flight registration,
+  // leaving no listener so Capacitor fell back to walking WebView history.
+  const handleBackRef = useRef(handleBack);
+  handleBackRef.current = handleBack;
+  const isLockedRef = useRef(isLocked);
+  isLockedRef.current = isLocked;
+
+  useEffect(() => {
+    if (!Platform.isNative) return;
+    let handle: { remove: () => void } | undefined;
+    let removed = false;
+    import('@capacitor/app')
+      .then(({ App }) =>
+        App.addListener('backButton', () => {
+          // While the kiosk lock is on, its own handler swallows back.
+          if (isLockedRef.current) return;
+          void handleBackRef.current();
+        }),
+      )
+      .then((h) => {
+        if (removed) h.remove();
+        else handle = h;
+      })
+      .catch((error) => log.app('back button listener failed', LogLevel.WARN, { error }));
+    return () => {
+      removed = true;
+      handle?.remove();
+    };
+  }, []);
 }
