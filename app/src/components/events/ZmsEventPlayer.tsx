@@ -25,7 +25,7 @@ import { useTranslation } from 'react-i18next';
 import { httpGet } from '../../lib/http';
 import { log, LogLevel } from '../../lib/logger';
 import { getEventZmsUrl, getZmsControlUrl } from '../../lib/url-builder';
-import { ZMS_COMMANDS } from '../../lib/zm-constants';
+import { ZMS_COMMANDS, zmsCommandName } from '../../lib/zm-constants';
 import { sendDelayedCmdQuit, cancelPendingQuit } from '../../lib/zms-quit';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useZoomPan } from '../../hooks/useZoomPan';
@@ -147,9 +147,11 @@ export function ZmsEventPlayer({
 
     // The seek/control request hits ZMS server-side (visible in ZM logs as
     // command=14&offset=...), so log it client-side too (refs #196). Token is
-    // omitted; the URL would otherwise leak it.
-    log.zmsEventPlayer('Sending stream command', LogLevel.DEBUG, {
+    // omitted; the URL would otherwise leak it. offset is only set for Seek and
+    // rate only for VarPlay, so they are undefined for Play/Pause.
+    log.zmsEventPlayer(`Sending stream command: ${zmsCommandName(cmd)}`, LogLevel.DEBUG, {
       command: cmd,
+      commandName: zmsCommandName(cmd),
       offset: opts?.offset,
       rate: opts?.rate,
       connkey: connKey,

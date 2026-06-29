@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ZMS_COMMANDS } from '../zm-constants';
+import { ZMS_COMMANDS, zmsCommandName } from '../zm-constants';
 
 describe('ZMS_COMMANDS', () => {
   it('matches the ZoneMinder MsgCommand enum (src/zm_stream.h)', () => {
@@ -25,5 +25,17 @@ describe('ZMS_COMMANDS', () => {
       cmdMaxFps: 18,
       cmdQuery: 99,
     });
+  });
+});
+
+describe('zmsCommandName', () => {
+  it('maps command numbers to readable names', () => {
+    expect(zmsCommandName(ZMS_COMMANDS.cmdSeek)).toBe('Seek');
+    expect(zmsCommandName(ZMS_COMMANDS.cmdPlay)).toBe('Play');
+    expect(zmsCommandName(ZMS_COMMANDS.cmdVarPlay)).toBe('VarPlay');
+  });
+
+  it('falls back to Unknown for unmapped values', () => {
+    expect(zmsCommandName(123)).toBe('Unknown(123)');
   });
 });

@@ -81,6 +81,21 @@ export const ZMS_COMMANDS = {
   cmdQuery: 99,
 } as const;
 
+/** Reverse lookup: ZMS command number to a readable name (e.g. 14 -> "Seek"). */
+const ZMS_COMMAND_NAMES: Record<number, string> = Object.fromEntries(
+  Object.entries(ZMS_COMMANDS).map(([key, value]) => [value, key.replace(/^cmd/, '')])
+);
+
+/**
+ * Human-readable name for a ZMS command number, for logging.
+ *
+ * @param command - A ZMS command value (see ZMS_COMMANDS)
+ * @returns The command name (e.g. "Seek", "Play"), or "Unknown(<n>)"
+ */
+export function zmsCommandName(command: number): string {
+  return ZMS_COMMAND_NAMES[command] ?? `Unknown(${command})`;
+}
+
 /**
  * ZMS Stream Modes
  *
