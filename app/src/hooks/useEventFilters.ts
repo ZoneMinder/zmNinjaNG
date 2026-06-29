@@ -16,6 +16,18 @@ import { log, LogLevel } from '../lib/logger';
 /** Sentinel value for the "All tagged events" filter option */
 export const ALL_TAGS_FILTER_ID = '__all_tags__';
 
+/**
+ * Explicit date range to write to the URL, bypassing component state.
+ * Quick-range buttons set state and call applyFilters() in the same handler, so
+ * applyFilters would otherwise close over the pre-click (stale) date range. The
+ * URL-readback effect then reflects that stale range back into state, applying
+ * the previously selected window instead of the one just clicked (refs #193).
+ */
+interface DateRangeOverrides {
+  startDateTime?: string;
+  endDateTime?: string;
+}
+
 interface UseEventFiltersReturn {
   filters: EventFilters;
   selectedMonitorIds: string[];
@@ -32,7 +44,7 @@ interface UseEventFiltersReturn {
   setFavoritesOnly: (enabled: boolean) => void;
   setOnlyDetectedObjects: (enabled: boolean) => void;
   setActiveQuickRange: (hours: number | null) => void;
-  applyFilters: () => void;
+  applyFilters: (overrides?: DateRangeOverrides) => void;
   clearFilters: () => void;
   toggleMonitorSelection: (monitorId: string) => void;
   toggleTagSelection: (tagId: string) => void;
@@ -206,7 +218,12 @@ export function useEventFilters(): UseEventFiltersReturn {
   );
 
   // "Apply" syncs current filters to URL for deep linking / sharing.
-  const applyFilters = useCallback(() => {
+  // Callers that change the date range in the same handler must pass it via
+  // `overrides`, since this closure still sees the pre-update state (refs #193).
+  const applyFilters = useCallback((overrides?: DateRangeOverrides) => {
+    const effectiveStart = overrides && 'startDateTime' in overrides ? overrides.startDateTime : startDateInput;
+    const effectiveEnd = overrides && 'endDateTime' in overrides ? overrides.endDateTime : endDateInput;
+
     const newParams = new URLSearchParams(searchParams);
     if (!newParams.has('sort')) newParams.set('sort', 'StartDateTime');
     if (!newParams.has('direction')) newParams.set('direction', 'desc');
@@ -216,13 +233,13 @@ export function useEventFilters(): UseEventFiltersReturn {
     } else {
       newParams.delete('monitorId');
     }
-    if (startDateInput) {
-      newParams.set('startDateTime', startDateInput);
+    if (effectiveStart) {
+      newParams.set('startDateTime', effectiveStart);
     } else {
       newParams.delete('startDateTime');
     }
-    if (endDateInput) {
-      newParams.set('endDateTime', endDateInput);
+    if (effectiveEnd) {
+      newParams.set('endDateTime', effectiveEnd);
     } else {
       newParams.delete('endDateTime');
     }

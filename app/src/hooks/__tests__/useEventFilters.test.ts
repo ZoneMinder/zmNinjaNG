@@ -425,6 +425,46 @@ describe('useEventFilters', () => {
     });
   });
 
+  describe('applyFilters with date overrides (refs #193)', () => {
+    it('writes override dates to URL instead of current state values', () => {
+      const { result } = renderHook(() => useEventFilters());
+
+      // Simulate the stale state: a previously selected range is in state...
+      act(() => {
+        result.current.setStartDateInput('2024-01-01T00:00');
+        result.current.setEndDateInput('2024-01-02T00:00');
+      });
+
+      // ...but the quick-range handler passes the freshly computed range as overrides.
+      act(() => {
+        result.current.applyFilters({
+          startDateTime: '2024-06-01T06:00',
+          endDateTime: '2024-06-01T10:00',
+        });
+      });
+
+      const [newParams] = mockSetSearchParams.mock.calls[mockSetSearchParams.mock.calls.length - 1];
+      expect(newParams.get('startDateTime')).toBe('2024-06-01T06:00');
+      expect(newParams.get('endDateTime')).toBe('2024-06-01T10:00');
+    });
+
+    it('falls back to current date state when no overrides are passed', () => {
+      const { result } = renderHook(() => useEventFilters());
+
+      act(() => {
+        result.current.setStartDateInput('2024-03-03T03:00');
+        result.current.setEndDateInput('2024-03-04T04:00');
+      });
+      act(() => {
+        result.current.applyFilters();
+      });
+
+      const [newParams] = mockSetSearchParams.mock.calls[mockSetSearchParams.mock.calls.length - 1];
+      expect(newParams.get('startDateTime')).toBe('2024-03-03T03:00');
+      expect(newParams.get('endDateTime')).toBe('2024-03-04T04:00');
+    });
+  });
+
   describe('activeFilterCount', () => {
     it('counts each active filter type once', () => {
       const { result } = renderHook(() => useEventFilters());

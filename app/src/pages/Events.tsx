@@ -450,10 +450,15 @@ export default function Events() {
             <QuickDateRangeButtons
               activeHours={activeQuickRange}
               onRangeSelect={({ start, end, hours }) => {
-                setStartDateInput(formatLocalDateTime(start));
-                setEndDateInput(formatLocalDateTime(end));
+                const startInput = formatLocalDateTime(start);
+                const endInput = formatLocalDateTime(end);
+                setStartDateInput(startInput);
+                setEndDateInput(endInput);
                 setActiveQuickRange(hours);
-                applyFilters();
+                // Pass the new range explicitly: applyFilters still closes over the
+                // pre-click date state, and the URL-readback effect would otherwise
+                // reapply the previous window (refs #193).
+                applyFilters({ startDateTime: startInput, endDateTime: endInput });
               }}
             />
             {activeQuickRange !== null && (
