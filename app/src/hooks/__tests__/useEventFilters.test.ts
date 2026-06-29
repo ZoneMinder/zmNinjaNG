@@ -465,6 +465,43 @@ describe('useEventFilters', () => {
     });
   });
 
+  describe('clearDateRange (refs #194)', () => {
+    it('clears the date range and active quick range but keeps monitor selection', () => {
+      const { result } = renderHook(() => useEventFilters());
+
+      act(() => {
+        result.current.setSelectedMonitorIds(['5']);
+        result.current.setStartDateInput('2024-01-01T00:00');
+        result.current.setEndDateInput('2024-01-02T00:00');
+        result.current.setActiveQuickRange(4);
+      });
+
+      act(() => {
+        result.current.clearDateRange();
+      });
+
+      expect(result.current.startDateInput).toBe('');
+      expect(result.current.endDateInput).toBe('');
+      expect(result.current.activeQuickRange).toBeNull();
+      // Monitor scope must survive clearing the time filter.
+      expect(result.current.selectedMonitorIds).toEqual(['5']);
+    });
+
+    it('removes only the date params from the URL, preserving monitorId', () => {
+      mockSearchParams.set('monitorId', '5');
+      const { result } = renderHook(() => useEventFilters());
+
+      act(() => {
+        result.current.clearDateRange();
+      });
+
+      const [newParams] = mockSetSearchParams.mock.calls[mockSetSearchParams.mock.calls.length - 1];
+      expect(newParams.get('monitorId')).toBe('5');
+      expect(newParams.get('startDateTime')).toBeNull();
+      expect(newParams.get('endDateTime')).toBeNull();
+    });
+  });
+
   describe('activeFilterCount', () => {
     it('counts each active filter type once', () => {
       const { result } = renderHook(() => useEventFilters());

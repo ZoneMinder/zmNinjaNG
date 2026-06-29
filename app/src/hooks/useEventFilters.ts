@@ -46,6 +46,7 @@ interface UseEventFiltersReturn {
   setActiveQuickRange: (hours: number | null) => void;
   applyFilters: (overrides?: DateRangeOverrides) => void;
   clearFilters: () => void;
+  clearDateRange: () => void;
   toggleMonitorSelection: (monitorId: string) => void;
   toggleTagSelection: (tagId: string) => void;
   activeFilterCount: number;
@@ -281,6 +282,20 @@ export function useEventFilters(): UseEventFiltersReturn {
     setSearchParams(newParams, { replace: true, state: location.state });
   }, [searchParams, setSearchParams, location.state, setSelectedMonitorIds, setSelectedTagIds, setStartDateInput, setEndDateInput, setFavoritesOnly, setOnlyDetectedObjects]);
 
+  // Clear only the time filter, leaving monitor/tag/favorite scope intact.
+  // The "x" beside the quick-range chips uses this so removing the time window
+  // does not also widen the view to every monitor (refs #194).
+  const clearDateRange = useCallback(() => {
+    setStartDateInput('');
+    setEndDateInput('');
+    setActiveQuickRange(null);
+
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete('startDateTime');
+    newParams.delete('endDateTime');
+    setSearchParams(newParams, { replace: true, state: location.state });
+  }, [searchParams, setSearchParams, location.state, setStartDateInput, setEndDateInput, setActiveQuickRange]);
+
   const toggleMonitorSelection = useCallback((monitorId: string) => {
     _setMonitorIds((prev) => {
       const next = prev.includes(monitorId)
@@ -317,6 +332,6 @@ export function useEventFilters(): UseEventFiltersReturn {
   return {
     filters, selectedMonitorIds, selectedTagIds, startDateInput, endDateInput, favoritesOnly, onlyDetectedObjects, activeQuickRange,
     setSelectedMonitorIds, setSelectedTagIds, setStartDateInput, setEndDateInput, setFavoritesOnly, setOnlyDetectedObjects, setActiveQuickRange,
-    applyFilters, clearFilters, toggleMonitorSelection, toggleTagSelection, activeFilterCount,
+    applyFilters, clearFilters, clearDateRange, toggleMonitorSelection, toggleTagSelection, activeFilterCount,
   };
 }

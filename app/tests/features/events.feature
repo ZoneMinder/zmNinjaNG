@@ -28,6 +28,14 @@ Feature: Event Browsing and Management
     Then I should see events list or empty state
 
   @all
+  Scenario: Clearing the quick time filter keeps the events list usable
+    When I select the past week quick time filter
+    Then I should see events list or empty state
+    When I clear the quick time filter
+    Then the quick time filter clear button should be gone
+    And I should see events list or empty state
+
+  @all
   Scenario: Filter events by monitor
     When I open the events filter panel
     And I select a monitor filter if available

@@ -114,6 +114,7 @@ export function QuickDateRangeButtons({
             className={className}
             onClick={() => handleRangeClick(hours)}
             title={fullLabel}
+            data-testid={`quick-range-${hours}`}
           >
             {label}
           </Button>

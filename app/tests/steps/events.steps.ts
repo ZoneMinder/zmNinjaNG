@@ -145,6 +145,25 @@ When('I clear event filters', async ({ page }) => {
   await clearButton.click();
 });
 
+When('I select the past week quick time filter', async ({ page }) => {
+  // hours=168 (past week) is wide enough to usually include events on a live server.
+  const weekChip = page.getByTestId('quick-range-168');
+  await weekChip.waitFor({ state: 'visible', timeout: testConfig.timeouts.element });
+  await weekChip.click();
+});
+
+When('I clear the quick time filter', async ({ page }) => {
+  const clearButton = page.getByTestId('events-clear-quick-range');
+  await clearButton.waitFor({ state: 'visible', timeout: testConfig.timeouts.element });
+  await clearButton.click();
+});
+
+Then('the quick time filter clear button should be gone', async ({ page }) => {
+  await expect(page.getByTestId('events-clear-quick-range')).toHaveCount(0, {
+    timeout: testConfig.timeouts.transition,
+  });
+});
+
 When('I select a monitor filter if available', async ({ page }) => {
   const panel = page.getByTestId('events-filter-panel');
   // Look for a monitor select/checkbox in the filter panel

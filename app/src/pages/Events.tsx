@@ -105,6 +105,7 @@ export default function Events() {
     setActiveQuickRange,
     applyFilters,
     clearFilters,
+    clearDateRange,
     activeFilterCount,
   } = useEventFilters();
 
@@ -466,10 +467,7 @@ export default function Events() {
                 variant="ghost"
                 size="icon"
                 className="text-muted-foreground h-7 w-7"
-                onClick={() => {
-                  clearFilters();
-                  setActiveQuickRange(null);
-                }}
+                onClick={clearDateRange}
                 title={t('common.clear')}
                 data-testid="events-clear-quick-range"
               >
