@@ -17,6 +17,7 @@ import {
 } from '../lib/url-builder';
 import { wrapWithImageProxy } from '../lib/proxy-utils';
 import { getExcludedMonitorIdSet } from '../lib/profile-settings';
+import { API_PAGINATION } from '../lib/zmninja-ng-constants';
 
 export interface EventFilters {
   monitorId?: string;
@@ -26,17 +27,127 @@ export interface EventFilters {
   minAlarmFrames?: number;
   notesRegexp?: string; // REGEXP filter on Notes field (e.g., "detected:" for object detection)
   cause?: string; // Filter by event cause (e.g., "Motion", "Continuous", "Signal", "Forced")
+  // Restrict results to these event IDs via ZM's "Id IN:" filter. Used for
+  // client-side concepts (favorites, tags) that must compose with pagination:
+  // passing the IDs to the server keeps totalCount and "Load More" accurate
+  // (refs #205). An empty array matches no events (returns an empty list with
+  // no request). undefined means "no Id filter".
+  eventIds?: string[];
   limit?: number;
   sort?: string;
   direction?: 'asc' | 'desc';
 }
 
+/** Drop events belonging to per-profile excluded monitors. */
+function dropExcludedMonitorEvents(events: EventData[]): EventData[] {
+  const excludedIds = getExcludedMonitorIdSet();
+  if (excludedIds.size === 0) return events;
+  return events.filter(event => !excludedIds.has(event.Event.MonitorId));
+}
+
+/** Build the EventsResponse for a fully-resolved, ordered event list. */
+function buildEventsResponse(
+  orderedEvents: EventData[],
+  desiredLimit: number,
+  totalCount: number
+): EventsResponse {
+  const finalEvents = orderedEvents.slice(0, desiredLimit);
+  return {
+    events: finalEvents,
+    pagination: {
+      page: 1,
+      pageCount: Math.ceil(totalCount / desiredLimit),
+      current: 1,
+      count: finalEvents.length,
+      prevPage: false,
+      nextPage: finalEvents.length < totalCount,
+      limit: desiredLimit,
+      totalCount,
+    },
+  };
+}
+
+/**
+ * Fetch events restricted to a set of IDs (favorites, tags) via ZM's "Id IN:"
+ * filter, so the result composes with pagination instead of being filtered
+ * client-side after a server page (refs #205).
+ *
+ * The ID set is chunked to stay under ZM's request-line length limit. Each
+ * chunk is fetched in full (a chunk yields at most chunkSize events), then the
+ * chunks are merged, de-duplicated, ordered by StartDateTime, and sliced to the
+ * caller's limit. totalCount reflects the matched set, so "Load More" stops once
+ * every match is shown.
+ */
+async function getEventsByIds(
+  baseSegments: string[],
+  filters: EventFilters
+): Promise<EventsResponse> {
+  const client = getApiClient();
+  const ids = filters.eventIds ?? [];
+  const desiredLimit = filters.limit || API_PAGINATION.eventsPerPage;
+
+  // Empty set matches nothing; skip the request entirely.
+  if (ids.length === 0) {
+    return buildEventsResponse([], desiredLimit, 0);
+  }
+
+  const collected: EventData[] = [];
+  for (let i = 0; i < ids.length; i += API_PAGINATION.eventIdFilterChunkSize) {
+    const chunk = ids.slice(i, i + API_PAGINATION.eventIdFilterChunkSize);
+    const segments = [...baseSegments, `/${encodeURIComponent(`Id IN:${chunk.join(',')}`)}`];
+    const url = `/events/index${segments.join('')}.json`;
+
+    let currentPage = 1;
+    let hasMore = true;
+    while (hasMore && currentPage <= API_PAGINATION.maxEventPages) {
+      const params: Record<string, string | number> = {
+        page: currentPage,
+        limit: API_PAGINATION.eventsPerPage,
+      };
+      if (filters.sort) params.sort = filters.sort;
+      if (filters.direction) params.direction = filters.direction;
+
+      const response = await client.get<EventsResponse>(url, {
+        params,
+        intent: `Fetch events by id (chunk page ${currentPage})`,
+      });
+      const validated = validateApiResponse(EventsResponseSchema, response.data, {
+        endpoint: url,
+        method: 'GET',
+      });
+      collected.push(...validated.events);
+      if (validated.pagination?.nextPage) {
+        currentPage++;
+      } else {
+        hasMore = false;
+      }
+    }
+  }
+
+  // De-duplicate across chunks and pages, drop excluded monitors.
+  const uniqueEvents = Array.from(
+    new Map(collected.map(event => [event.Event.Id, event])).values()
+  );
+  const visibleEvents = dropExcludedMonitorEvents(uniqueEvents);
+
+  // Order by StartDateTime (lexicographic on 'YYYY-MM-DD HH:MM:SS' is chronological).
+  const sortDir = filters.direction === 'asc' ? 1 : -1;
+  visibleEvents.sort((a, b) => {
+    const aTime = a.Event.StartDateTime ?? '';
+    const bTime = b.Event.StartDateTime ?? '';
+    if (aTime === bTime) return 0;
+    return (aTime < bTime ? -1 : 1) * sortDir;
+  });
+
+  return buildEventsResponse(visibleEvents, desiredLimit, visibleEvents.length);
+}
+
 /**
  * Get events with optional filtering.
- * 
+ *
  * Automatically fetches multiple pages if needed to reach the desired limit.
  * Handles ZM API pagination logic internally.
- * 
+ *
  * @param filters - Object containing filter criteria (monitor, date, etc.)
  * @returns Promise resolving to EventsResponse with list of events and pagination info
  */
@@ -73,6 +184,12 @@ export async function getEvents(filters: EventFilters = {}): Promise<EventsRespo
   }
   if (filters.cause) {
     addFilterSegment(`Cause REGEXP:${filters.cause}`);
+  }
+
+  // Favorites/tags pass an explicit ID set. Route through the "Id IN:" path so
+  // the filter is applied server-side and pagination stays accurate (refs #205).
+  if (filters.eventIds !== undefined) {
+    return getEventsByIds(filterSegments, filters);
   }
 
   const filterPath = filterSegments.join('');
@@ -127,13 +244,7 @@ export async function getEvents(filters: EventFilters = {}): Promise<EventsRespo
   );
 
   // Drop events belonging to per-profile excluded monitors at the API boundary
-  const excludedIds = getExcludedMonitorIdSet();
-  const visibleEvents = excludedIds.size === 0
-    ? uniqueEvents
-    : uniqueEvents.filter(event => !excludedIds.has(event.Event.MonitorId));
-
-  // Return only the requested number of events
-  const finalEvents = visibleEvents.slice(0, desiredLimit);
+  const visibleEvents = dropExcludedMonitorEvents(uniqueEvents);
 
   // Warn if we hit the max pages limit
   if (currentPage > maxPages && allEvents.length < desiredLimit) {
@@ -147,23 +258,11 @@ export async function getEvents(filters: EventFilters = {}): Promise<EventsRespo
   log.api(
     `Fetched events complete`,
     LogLevel.DEBUG,
-    { total: allEvents.length, returning: finalEvents.length, requested: desiredLimit }
+    { total: allEvents.length, returning: Math.min(visibleEvents.length, desiredLimit), requested: desiredLimit }
   );
 
   // Return with pagination info set to indicate if there are more events available
-  return {
-    events: finalEvents,
-    pagination: {
-      page: 1,
-      pageCount: Math.ceil(totalCount / desiredLimit),
-      current: 1,
-      count: finalEvents.length,
-      prevPage: false,
-      nextPage: finalEvents.length < totalCount,
-      limit: desiredLimit,
-      totalCount, // Total events matching filters (from server)
-    },
-  };
+  return buildEventsResponse(visibleEvents, desiredLimit, totalCount);
 }
 
 /**

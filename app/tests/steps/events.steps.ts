@@ -8,6 +8,7 @@ const { When, Then } = createBdd();
 // Shared state for event steps
 let hasEvents = false;
 let favoriteToggled = false;
+let favoritedEventId: string | null = null;
 let archiveToggled = false;
 let detailArchiveToggled = false;
 let downloadClicked = false;
@@ -267,6 +268,7 @@ When('I favorite the first event if events exist', async ({ page }) => {
   try {
     const firstEventCard = page.getByTestId('event-card').first();
     await firstEventCard.waitFor({ state: 'visible', timeout: testConfig.timeouts.element });
+    favoritedEventId = await firstEventCard.getAttribute('data-event-id');
 
     const favoriteButton = firstEventCard.getByTestId('event-favorite-button');
     await favoriteButton.waitFor({ state: 'visible', timeout: testConfig.timeouts.element });
@@ -308,6 +310,22 @@ Then('I should see the event marked as favorited if action was taken', async ({ 
 
   // Star should have fill-yellow-500 class when favorited
   await expect(starIcon).toHaveClass(/fill-yellow-500/);
+});
+
+Then('I should see the favorited event in the filtered list if action was taken', async ({ page }) => {
+  if (!favoriteToggled || !favoritedEventId) {
+    log.info('E2E: Skipping favorites-filter outcome check - no favorite action was taken', { component: 'e2e' });
+    return;
+  }
+
+  // The favorites filter is applied server-side via the "Id IN:" event query
+  // (refs #205), so the favorited event must be present in the filtered list,
+  // not filtered away after a server page. Verify the specific event is shown.
+  const favoritedCard = page.locator(`[data-testid="event-card"][data-event-id="${favoritedEventId}"]`);
+  await expect(favoritedCard).toBeVisible({ timeout: testConfig.timeouts.transition * 3 });
+
+  // And the list must not be empty while a favorite exists.
+  await expect(page.getByTestId('events-empty-state')).toBeHidden();
 });
 
 Then('I should see the event not marked as favorited if action was taken', async ({ page }) => {
@@ -430,9 +448,20 @@ When('I enable favorites only filter', async ({ page }) => {
   const favoritesToggle = page.getByTestId('events-favorites-toggle');
   await favoritesToggle.waitFor({ state: 'visible', timeout: testConfig.timeouts.element });
 
-  // Check if already enabled
-  const isChecked = await favoritesToggle.isChecked().catch(() => false);
+  // Radix Switch exposes state via aria-checked (role="switch"), not isChecked.
+  const isChecked = (await favoritesToggle.getAttribute('aria-checked')) === 'true';
   if (!isChecked) {
+    await favoritesToggle.click();
+    await page.waitForTimeout(300);
+  }
+});
+
+When('I disable favorites only filter', async ({ page }) => {
+  const favoritesToggle = page.getByTestId('events-favorites-toggle');
+  await favoritesToggle.waitFor({ state: 'visible', timeout: testConfig.timeouts.element });
+
+  const isChecked = (await favoritesToggle.getAttribute('aria-checked')) === 'true';
+  if (isChecked) {
     await favoritesToggle.click();
     await page.waitForTimeout(300);
   }

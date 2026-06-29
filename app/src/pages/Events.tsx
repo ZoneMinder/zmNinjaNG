@@ -166,11 +166,20 @@ export default function Events() {
     monitorId: effectiveMonitorId,
   }), [filters, effectiveMonitorId]);
 
+  // Favorites are stored locally, so push them into the server query as an
+  // explicit ID set. This keeps the favorites filter consistent with pagination:
+  // totalCount and "Load More" reflect the favorites, and favorites beyond the
+  // first fetched page stay reachable (refs #205). undefined = no favorites filter.
+  const eventIdFilter = useMemo(
+    () => (favoritesOnly ? favoriteIds : undefined),
+    [favoritesOnly, favoriteIds]
+  );
+
   // Fetch events with configured limit
   // Include effectiveMonitorId and group filter state in query key for proper cache invalidation
   const [currentEventLimit, setCurrentEventLimit] = useState(settings.defaultEventLimit || 100);
   const { data: eventsData, isLoading, isFetching, error, refetch } = useQuery({
-    queryKey: ['events', filters, currentEventLimit, effectiveMonitorId, isGroupFilterActive],
+    queryKey: ['events', filters, currentEventLimit, effectiveMonitorId, isGroupFilterActive, eventIdFilter],
     queryFn: () =>
       getEvents({
         ...filters,
@@ -179,6 +188,7 @@ export default function Events() {
         // Convert local time inputs to server time for the API
         startDateTime: filters.startDateTime ? formatForServer(new Date(filters.startDateTime)) : undefined,
         endDateTime: filters.endDateTime ? formatForServer(new Date(filters.endDateTime)) : undefined,
+        eventIds: eventIdFilter,
         limit: currentEventLimit,
       }),
     enabled: !!currentProfile && isAuthenticated,
@@ -218,14 +228,10 @@ export default function Events() {
     enabled: tagsSupported && eventIdsForTagFetch.length > 0,
   });
 
-  // Memoize filtered events (server already filtered by monitor/group, apply client-side filters here)
+  // Memoize filtered events. The server already applied monitor/group, date, and
+  // favorites (via the eventIds filter); only the tag filter remains client-side.
   const allEvents = useMemo(() => {
     let filtered = eventsData?.events || [];
-
-    // Apply favorites filter if enabled (client-side only - favorites stored locally)
-    if (favoritesOnly) {
-      filtered = filtered.filter(({ Event }: EventData) => favoriteIds.includes(Event.Id));
-    }
 
     // Apply tag filter if tags are selected (client-side)
     if (selectedTagIds.length > 0 && eventTagMap.size > 0) {
@@ -242,7 +248,7 @@ export default function Events() {
     }
 
     return filtered;
-  }, [eventsData?.events, favoritesOnly, favoriteIds, selectedTagIds, eventTagMap]);
+  }, [eventsData?.events, selectedTagIds, eventTagMap]);
 
   // Restore the list scroll position when returning from an event detail.
   // /events and /events/:id are sibling routes, so this component unmounts when

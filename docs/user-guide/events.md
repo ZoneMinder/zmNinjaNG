@@ -24,6 +24,7 @@ Filter events using the controls at the top:
 - **Date range** - Select a start and end date
 - **Monitor** - Show events from a specific camera only
 - **Groups** - Filter by monitor group
+- **Favorites only** - Show only events you have starred. This works across all your favorites, including ones older than the first page of results.
 
 ## Event Playback
 

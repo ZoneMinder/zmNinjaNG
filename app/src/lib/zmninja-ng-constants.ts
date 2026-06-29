@@ -213,6 +213,11 @@ export const API_PAGINATION = {
   eventsPerPage: 100,
 
   // Total max events = maxEventPages * eventsPerPage = 1000
+
+  // Max event IDs per "Id IN:" filter request. ZM's Apache caps the request
+  // line near 8 KB; ~500 IDs (4.8 KB) was the verified ceiling on ZM 1.36, so
+  // 200 leaves headroom for the token and other filter segments in the URL.
+  eventIdFilterChunkSize: 200,
 } as const;
 
 /**

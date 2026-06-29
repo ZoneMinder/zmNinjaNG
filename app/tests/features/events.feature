@@ -84,12 +84,16 @@ Feature: Event Browsing and Management
     Then I should see the detail archive button inactive if action was taken
 
   @all
-  Scenario: Filter to show only favorited events
+  Scenario: Favorites-only filter shows the favorited event
     When I favorite the first event if events exist
     And I open the events filter panel
     And I enable favorites only filter
     And I apply event filters
-    Then I should see events list or empty state
+    Then I should see the favorited event in the filtered list if action was taken
+    When I open the events filter panel
+    And I disable favorites only filter
+    And I apply event filters
+    And I unfavorite the first event if it was favorited
 
   @all
   Scenario: Download event video triggers background task

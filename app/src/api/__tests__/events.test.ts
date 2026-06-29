@@ -9,6 +9,7 @@ import {
 import { getApiClient } from '../client';
 import { validateApiResponse } from '../../lib/api-validator';
 import { getExcludedMonitorIds } from '../../lib/profile-settings';
+import { API_PAGINATION } from '../../lib/zmninja-ng-constants';
 import type { ApiClient } from '../client';
 
 const mockGet = vi.fn();
@@ -45,15 +46,15 @@ vi.mock('../../lib/logger', () => ({
   },
 }));
 
-const buildEventData = (id: number, monitorId = '1') => ({
+const buildEventData = (id: number, monitorId = '1', startDateTime = '2024-01-01 00:00:00') => ({
   Event: {
     Id: String(id),
     MonitorId: monitorId,
+    StartDateTime: startDateTime,
     StorageId: null,
     SecondaryStorageId: null,
     Name: `Event ${id}`,
     Cause: 'Motion',
-    StartDateTime: '2024-01-01 00:00:00',
     EndDateTime: null,
     Width: '640',
     Height: '480',
@@ -284,6 +285,107 @@ describe('Events API', () => {
 
     const call = mockGet.mock.calls[0][0] as string;
     expect(call).toContain('Cause%20REGEXP%3AContinuous');
+  });
+
+  describe('eventIds (Id IN: filter)', () => {
+    it('returns empty without any request when eventIds is empty', async () => {
+      const response = await getEvents({ eventIds: [], limit: 100 });
+
+      expect(mockGet).not.toHaveBeenCalled();
+      expect(response.events).toEqual([]);
+      expect(response.pagination.totalCount).toBe(0);
+      expect(response.pagination.nextPage).toBe(false);
+    });
+
+    it('sends an Id IN: segment and reports the matched count as totalCount', async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          events: [buildEventData(201134), buildEventData(201150)],
+          pagination: {
+            pageCount: 1, page: 1, current: 1, count: 2,
+            prevPage: false, nextPage: false, limit: 100,
+          },
+        },
+      });
+
+      const response = await getEvents({ eventIds: ['201134', '201150'], limit: 100 });
+
+      const call = mockGet.mock.calls[0][0] as string;
+      expect(call).toContain('Id%20IN%3A201134%2C201150');
+      expect(response.events.map((e) => e.Event.Id)).toEqual(['201134', '201150']);
+      // totalCount must reflect the favorite/tag set, not the server-wide event count
+      expect(response.pagination.totalCount).toBe(2);
+    });
+
+    it('combines the Id IN: segment with other server filters', async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          events: [buildEventData(201134, '7')],
+          pagination: {
+            pageCount: 1, page: 1, current: 1, count: 1,
+            prevPage: false, nextPage: false, limit: 100,
+          },
+        },
+      });
+
+      await getEvents({ eventIds: ['201134'], monitorId: '7', limit: 100 });
+
+      const call = mockGet.mock.calls[0][0] as string;
+      expect(call).toContain('MonitorId%3A7');
+      expect(call).toContain('Id%20IN%3A201134');
+    });
+
+    it('sorts the merged matches by StartDateTime descending', async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          events: [
+            buildEventData(1, '1', '2024-01-01 00:00:00'),
+            buildEventData(2, '1', '2024-03-01 00:00:00'),
+            buildEventData(3, '1', '2024-02-01 00:00:00'),
+          ],
+          pagination: {
+            pageCount: 1, page: 1, current: 1, count: 3,
+            prevPage: false, nextPage: false, limit: 100,
+          },
+        },
+      });
+
+      const response = await getEvents({ eventIds: ['1', '2', '3'], limit: 100, direction: 'desc' });
+
+      expect(response.events.map((e) => e.Event.Id)).toEqual(['2', '3', '1']);
+    });
+
+    it('chunks large id sets across multiple requests and merges them', async () => {
+      const chunkSize = API_PAGINATION.eventIdFilterChunkSize;
+      const ids = Array.from({ length: chunkSize + 1 }, (_, i) => String(1000 + i));
+
+      mockGet
+        .mockResolvedValueOnce({
+          data: {
+            events: ids.slice(0, chunkSize).map((id) => buildEventData(Number(id))),
+            pagination: {
+              pageCount: 1, page: 1, current: 1, count: chunkSize,
+              prevPage: false, nextPage: false, limit: 100,
+            },
+          },
+        })
+        .mockResolvedValueOnce({
+          data: {
+            events: [buildEventData(Number(ids[chunkSize]))],
+            pagination: {
+              pageCount: 1, page: 1, current: 1, count: 1,
+              prevPage: false, nextPage: false, limit: 100,
+            },
+          },
+        });
+
+      const response = await getEvents({ eventIds: ids, limit: chunkSize + 1 });
+
+      // Two chunks => two distinct id-filter requests
+      expect(mockGet).toHaveBeenCalledTimes(2);
+      expect(response.events).toHaveLength(chunkSize + 1);
+      expect(response.pagination.totalCount).toBe(chunkSize + 1);
+    });
   });
 
   it('validates responses through api-validator', async () => {

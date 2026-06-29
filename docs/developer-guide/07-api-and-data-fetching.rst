@@ -1585,6 +1585,36 @@ and deduplicating events, it removes any event whose ``MonitorId`` is in the
 excluded set, so events for hidden monitors do not show in event lists, the
 console, montage, or the timeline.
 
+Filtering by event ID (favorites)
+---------------------------------
+
+Favorites are stored locally (``stores/eventFavorites.ts``), so the server
+does not know about them. Filtering the list client-side after a server page
+breaks pagination: a favorite past the first 100-event page is never fetched,
+so it cannot be shown, and ``totalCount`` keeps counting non-favorites, so
+"Load More" never stops (refs #205).
+
+``getEvents`` instead accepts an ``eventIds`` array and pushes it to the server
+as a ``Id IN:<id1,id2,...>`` filter segment, composed (AND) with the other
+filters. ``Events.tsx`` passes the favorite IDs when the favorites-only toggle
+is on:
+
+.. code:: tsx
+
+   const eventIdFilter = favoritesOnly ? favoriteIds : undefined;
+   getEvents({ ...filters, eventIds: eventIdFilter, limit: currentEventLimit });
+
+Behavior of the ``eventIds`` path:
+
+- ``undefined`` means no ID filter (normal query).
+- An empty array matches nothing and returns an empty list without a request.
+- The IDs are chunked by ``API_PAGINATION.eventIdFilterChunkSize`` (200) to
+  stay under ZM's request-line length limit (HTTP 414 above ~500 IDs on ZM
+  1.36). Each chunk is fetched in full, then the chunks are merged,
+  de-duplicated, ordered by ``StartDateTime``, and sliced to ``limit``.
+- ``totalCount`` reflects the matched set, so "Load More" disappears once every
+  matching event is shown.
+
 Monitor Groups API
 ------------------
 
