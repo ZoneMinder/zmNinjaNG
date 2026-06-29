@@ -79,6 +79,36 @@ export function filterMonitorsByGroup(
 }
 
 /**
+ * Build the ZM "MonitorId" query value covering only the non-excluded monitors.
+ *
+ * Excluded monitors are normally dropped after fetching, but that leaves the
+ * server's totalCount (and "Load More") counting events the user cannot see
+ * (refs #205). When monitors are excluded, the events query sends the included
+ * IDs instead so the count matches what is shown.
+ *
+ * Returns undefined to mean "no monitor filter, fetch all" when nothing is
+ * excluded, when the monitor list has not loaded yet, or in the degenerate case
+ * where every monitor is excluded (the post-fetch drop still empties the list).
+ *
+ * @param monitors - Full monitor list for the profile
+ * @param excludedIds - Monitor IDs excluded for the current profile
+ * @returns Comma-separated included IDs, or undefined
+ */
+export function includedMonitorIdParam(
+  monitors: MonitorData[],
+  excludedIds: string[]
+): string | undefined {
+  if (excludedIds.length === 0 || monitors.length === 0) {
+    return undefined;
+  }
+  const excluded = new Set(excludedIds);
+  const included = monitors
+    .map(({ Monitor }) => Monitor.Id)
+    .filter(id => !excluded.has(id));
+  return included.length > 0 ? included.join(',') : undefined;
+}
+
+/**
  * Represents a group with its hierarchy level for display.
  */
 export interface GroupHierarchyItem {

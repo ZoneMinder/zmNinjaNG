@@ -52,10 +52,11 @@ vi.mock('../../stores/settings', () => ({
     defaultEventLimit: 50,
     eventsViewMode: 'list',
     eventMontageByGroup: { '__all__': { gridCols: 3 } },
+    excludedMonitorIds: [],
   },
   useSettingsStore: (selector: (state: { getProfileSettings: (id: string) => { defaultEventLimit: number; eventsViewMode: 'list'; eventMontageByGroup: Record<string, { gridCols: number }> }; updateProfileSettings: () => void; updateEventMontageGroupLayout: () => void }) => unknown) =>
     selector({
-      getProfileSettings: () => ({ defaultEventLimit: 50, eventsViewMode: 'list', eventMontageByGroup: { '__all__': { gridCols: 3 } } }),
+      getProfileSettings: () => ({ defaultEventLimit: 50, eventsViewMode: 'list', eventMontageByGroup: { '__all__': { gridCols: 3 } }, excludedMonitorIds: [] }),
       updateProfileSettings: vi.fn(),
       updateEventMontageGroupLayout: vi.fn(),
     }),

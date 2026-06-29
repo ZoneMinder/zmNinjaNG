@@ -10,6 +10,7 @@ import {
   isMonitorEnabled,
   filterMonitorsByGroup,
   buildGroupHierarchy,
+  includedMonitorIdParam,
 } from '../filters';
 import type { MonitorData, GroupData } from '../../api/types';
 
@@ -473,5 +474,30 @@ describe('buildGroupHierarchy', () => {
     expect(result[0].group.Group.Name).toBe('Alpha');
     expect(result[1].group.Group.Name).toBe('Mango');
     expect(result[2].group.Group.Name).toBe('Zebra');
+  });
+});
+
+describe('includedMonitorIdParam', () => {
+  const monitors = [
+    createMockMonitor('1'),
+    createMockMonitor('2'),
+    createMockMonitor('3'),
+  ];
+
+  it('returns undefined when nothing is excluded (fetch all)', () => {
+    expect(includedMonitorIdParam(monitors, [])).toBeUndefined();
+  });
+
+  it('returns the included monitor IDs when some are excluded', () => {
+    // So the server filter (and totalCount) covers only visible monitors.
+    expect(includedMonitorIdParam(monitors, ['2'])).toBe('1,3');
+  });
+
+  it('returns undefined when the monitor list is not loaded yet', () => {
+    expect(includedMonitorIdParam([], ['2'])).toBeUndefined();
+  });
+
+  it('returns undefined when every monitor is excluded', () => {
+    expect(includedMonitorIdParam(monitors, ['1', '2', '3'])).toBeUndefined();
   });
 });

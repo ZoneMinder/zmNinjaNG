@@ -28,7 +28,7 @@ import { PullToRefreshIndicator } from '../components/ui/pull-to-refresh-indicat
 import { Button } from '../components/ui/button';
 import { Filter, AlertCircle, ArrowLeft, LayoutGrid, List, Clock, X } from 'lucide-react';
 import { RefreshButton } from '../components/common/RefreshButton';
-import { filterMonitorsByGroup } from '../lib/filters';
+import { filterMonitorsByGroup, includedMonitorIdParam } from '../lib/filters';
 import { useGroupFilter } from '../hooks/useGroupFilter';
 import { GroupFilterSelect } from '../components/filters/GroupFilterSelect';
 import { Popover, PopoverTrigger } from '../components/ui/popover';
@@ -154,9 +154,11 @@ export default function Events() {
     if (isGroupFilterActive && groupMonitorIds.length > 0) {
       return groupMonitorIds.join(',');
     }
-    // No filter - fetch all
-    return undefined;
-  }, [filters.monitorId, isGroupFilterActive, groupMonitorIds]);
+    // No explicit filter: if monitors are excluded, send the included set so the
+    // server's totalCount and "Load More" exclude them too, instead of counting
+    // events that get dropped after fetching (refs #205). Otherwise fetch all.
+    return includedMonitorIdParam(allMonitors, settings.excludedMonitorIds);
+  }, [filters.monitorId, isGroupFilterActive, groupMonitorIds, allMonitors, settings.excludedMonitorIds]);
 
   // Build filters with server-formatted dates for passing to EventDetail
   const serverFilters: EventFilters = useMemo(() => ({

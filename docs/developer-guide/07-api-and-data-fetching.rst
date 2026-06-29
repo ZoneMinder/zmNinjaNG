@@ -1585,6 +1585,15 @@ and deduplicating events, it removes any event whose ``MonitorId`` is in the
 excluded set, so events for hidden monitors do not show in event lists, the
 console, montage, or the timeline.
 
+Dropping events after the fetch leaves the server's ``totalCount`` counting
+hidden events, which keeps "Load More" running past the visible end (refs #205).
+So the events list also narrows the query: when monitors are excluded and the
+user has not picked a monitor or group, ``Events.tsx`` sends the included
+monitor IDs (``includedMonitorIdParam`` in ``src/lib/filters.ts``) as the
+``MonitorId`` filter. The post-fetch drop stays as a safety net for callers that
+do not pass that filter (timeline, console) and for races where a monitor is
+hidden mid-session.
+
 Filtering by event ID (favorites)
 ---------------------------------
 
