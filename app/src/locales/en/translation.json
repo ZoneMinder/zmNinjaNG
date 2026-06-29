@@ -1178,5 +1178,14 @@
     "pin_cleared": "Kiosk PIN removed",
     "pin_setting_label": "Kiosk PIN",
     "pin_setting_desc": "PIN used to lock and unlock kiosk mode"
+  },
+  "shortcuts": {
+    "title": "Keyboard shortcuts",
+    "subtitle": "Press a key to navigate. Works anywhere outside text fields.",
+    "monitor_by_number": "Open monitor by number",
+    "back": "Back / close",
+    "show_help": "Show this help",
+    "go_to_monitor": "Go to monitor: {{n}}",
+    "no_such_monitor": "No monitor #{{n}}"
   }
 }

@@ -1178,5 +1178,14 @@
     "pin_cleared": "PIN kiosque supprimé",
     "pin_setting_label": "PIN kiosque",
     "pin_setting_desc": "PIN pour verrouiller et déverrouiller le mode kiosque"
+  },
+  "shortcuts": {
+    "title": "Raccourcis clavier",
+    "subtitle": "Appuyez sur une touche pour naviguer. Hors des champs de texte.",
+    "monitor_by_number": "Ouvrir le moniteur par numéro",
+    "back": "Retour / fermer",
+    "show_help": "Afficher cette aide",
+    "go_to_monitor": "Aller au moniteur : {{n}}",
+    "no_such_monitor": "Aucun moniteur n°{{n}}"
   }
 }

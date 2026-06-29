@@ -436,6 +436,16 @@ export const ANDROID_BACK = {
 } as const;
 
 /**
+ * Global keyboard shortcuts.
+ */
+export const KEYBOARD_SHORTCUTS = {
+  // Idle delay before a typed monitor number commits and navigates.
+  monitorJumpCommitMs: 1000,
+  // Cap on digits buffered for the monitor jump.
+  maxMonitorDigits: 4,
+} as const;
+
+/**
  * Montage Grid Constants
  *
  * Internal grid sizing for the Montage view.

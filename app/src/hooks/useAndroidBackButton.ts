@@ -20,6 +20,7 @@ import { Platform } from '../lib/platform';
 import { useKioskStore } from '../stores/kioskStore';
 import { useCapacitorListener } from './useCapacitorListener';
 import { ANDROID_BACK } from '../lib/zmninja-ng-constants';
+import { hasOpenOverlay } from '../lib/overlay';
 import { log, LogLevel } from '../lib/logger';
 
 /** Top-level menu destinations. Back here confirms/exits rather than navigating. */
@@ -55,13 +56,6 @@ export function decideBackAction(params: {
   if (params.hasOpenOverlay) return 'close-overlay';
   if (!params.isRootRoute) return 'navigate-back';
   return params.doubleTapActive ? 'exit' : 'confirm-exit';
-}
-
-/** True when a Radix dialog/alert-dialog or a popper (popover/dropdown/select) is open. */
-function hasOpenOverlay(): boolean {
-  return !!document.querySelector(
-    '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"], [data-radix-popper-content-wrapper]'
-  );
 }
 
 export function useAndroidBackButton(): void {

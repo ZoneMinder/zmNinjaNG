@@ -1178,5 +1178,14 @@
     "pin_cleared": "Kiosk-PIN entfernt",
     "pin_setting_label": "Kiosk-PIN",
     "pin_setting_desc": "PIN zum Sperren und Entsperren des Kiosk-Modus"
+  },
+  "shortcuts": {
+    "title": "Tastenkürzel",
+    "subtitle": "Taste drücken zum Navigieren. Funktioniert außerhalb von Textfeldern.",
+    "monitor_by_number": "Monitor per Nummer öffnen",
+    "back": "Zurück / schließen",
+    "show_help": "Diese Hilfe anzeigen",
+    "go_to_monitor": "Zu Monitor: {{n}}",
+    "no_such_monitor": "Kein Monitor #{{n}}"
   }
 }

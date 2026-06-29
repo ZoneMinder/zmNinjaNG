@@ -1178,5 +1178,14 @@
     "pin_cleared": "PIN de kiosco eliminado",
     "pin_setting_label": "PIN de kiosco",
     "pin_setting_desc": "PIN para bloquear y desbloquear el modo kiosco"
+  },
+  "shortcuts": {
+    "title": "Atajos de teclado",
+    "subtitle": "Pulsa una tecla para navegar. Funciona fuera de los campos de texto.",
+    "monitor_by_number": "Abrir monitor por número",
+    "back": "Atrás / cerrar",
+    "show_help": "Mostrar esta ayuda",
+    "go_to_monitor": "Ir al monitor: {{n}}",
+    "no_such_monitor": "No hay monitor #{{n}}"
   }
 }

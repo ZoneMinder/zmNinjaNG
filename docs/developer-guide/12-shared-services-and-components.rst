@@ -1684,6 +1684,21 @@ top-level menu paths. Called once from ``AppRoutes``.
 
 **Used By:** AppRoutes
 
+KeyboardShortcuts (``components/KeyboardShortcuts.tsx``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Global keyboard shortcuts, mounted once under the router. Single letters jump to
+each menu section (``d`` Dashboard, ``m`` Montage, ``e`` Events, ``v`` Monitors,
+``t`` Timeline, ``n`` Notifications, ``l`` Logs, ``g`` Settings, ``p`` Profiles,
+``r`` Server). Digits buffer a monitor number shown in an overlay and, on Enter or
+after ``KEYBOARD_SHORTCUTS.monitorJumpCommitMs`` (1s), open that monitor by its
+list position. ``Esc`` goes back (closing an open layer first via
+``hasOpenOverlay``), ``?`` toggles a help dialog. Inactive while typing
+(``isTypingTarget``), when a modifier is held, when the kiosk is locked, or in TV
+mode. The shortcut table and pure helpers live in ``lib/keyboard-shortcuts.ts``.
+
+**Used By:** App (mounted in ``HashRouter``)
+
 Event Notes Display
 ~~~~~~~~~~~~~~~~~~~
 
