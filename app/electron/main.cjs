@@ -6,8 +6,9 @@
 // as a plain web page (no Tauri/Capacitor runtime), so it uses the browser
 // <img src> streaming path. no Rust reader, no cache purge, no auto-restart.
 
-const { app, BrowserWindow, Menu, nativeImage, net, ipcMain, session, shell, safeStorage } = require('electron');
+const { app, BrowserWindow, Menu, nativeImage, net, ipcMain, session, shell, safeStorage, screen } = require('electron');
 const path = require('node:path');
+const { isBoundsVisible, loadWindowState, saveWindowState } = require('./window-state.cjs');
 
 // Lift Chromium's default 6-connection-per-origin cap so Montage views with
 // many MJPEG tiles aren't bottlenecked. Each MJPEG stream holds an HTTP/1.1
@@ -103,10 +104,20 @@ const ICON_PATH = path.join(__dirname, 'icons', 'icon.png');
 // This is an experiment shell, not a hardened production build.
 const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL;
 
+// Persist the window size/position so it reopens where the user left it (refs
+// #195). Wayland ignores programmatic placement, so position only restores on
+// X11/macOS/Windows; the size restores everywhere.
+const stateFile = () => path.join(app.getPath('userData'), 'window-state.json');
+
 function createWindow() {
+  const saved = loadWindowState(stateFile());
+  const useSavedPosition =
+    saved && isBoundsVisible(saved, screen.getAllDisplays());
+
   const win = new BrowserWindow({
-    width: 1280,
-    height: 800,
+    width: saved?.width || 1280,
+    height: saved?.height || 800,
+    ...(useSavedPosition ? { x: saved.x, y: saved.y } : {}),
     title: 'zmNinjaNg',
     icon: ICON_PATH,
     backgroundColor: '#0b0f14',
@@ -119,6 +130,26 @@ function createWindow() {
       // Allow cross-origin requests to the ZoneMinder server and mixed content.
       webSecurity: false,
     },
+  });
+
+  if (saved?.isMaximized) win.maximize();
+
+  // Save bounds on change (debounced) and at close. getNormalBounds() reports the
+  // un-maximized size, so maximizing does not overwrite the restore size.
+  let saveTimer = null;
+  const persist = () => {
+    if (win.isDestroyed()) return;
+    saveWindowState(stateFile(), { ...win.getNormalBounds(), isMaximized: win.isMaximized() });
+  };
+  const persistDebounced = () => {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(persist, 500);
+  };
+  win.on('resize', persistDebounced);
+  win.on('move', persistDebounced);
+  win.on('close', () => {
+    if (saveTimer) clearTimeout(saveTimer);
+    persist();
   });
 
   // Reveal once content is ready. ready-to-show can fail to fire on some
