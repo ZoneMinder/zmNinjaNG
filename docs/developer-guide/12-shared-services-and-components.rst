@@ -1641,6 +1641,17 @@ setters, no "Apply" button needed for persistence.
 - ``onlyDetectedObjects`` flag adds ``notesRegexp: 'detected:'``
   to the API filter (server-side Notes REGEXP filter)
 - The "Filter" button syncs state to URL params for deep linking
+- ``clearFilters()`` resets every filter (used by the popover "Clear"
+  button). ``clearDateRange()`` resets only the date range and active
+  quick range, leaving the monitor/tag/favorite scope intact. The "x"
+  beside the quick-range chips uses ``clearDateRange()`` so removing a
+  time window does not widen the list back to all monitors.
+- ``applyFilters()`` accepts an optional date-range override. Callers
+  that set the date state and call ``applyFilters()`` in the same handler
+  (the quick-range chips) must pass the new range, because the callback
+  still closes over the pre-update state. Without the override it would
+  write the previous range to the URL, and the URL-readback effect would
+  reflect that stale range back into state.
 
 **Used By:** Events page, EventsFilterPopover
 
