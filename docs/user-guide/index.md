@@ -17,6 +17,7 @@ settings
 server
 notifications
 logs
+keyboard-shortcuts
 kiosk
 faq
 ```
