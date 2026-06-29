@@ -457,6 +457,50 @@ When('I click the previous monitor button if visible', async ({ page }) => {
   }
 });
 
+// Stream follows the selected monitor (refs #201)
+let streamMonitorIdBefore: string | null = null;
+let urlIdBefore: string | null = null;
+let streamCheckable = false;
+
+function urlMonitorId(page: import('@playwright/test').Page): string | null {
+  const m = page.url().match(/monitors\/(\d+)/);
+  return m ? m[1] : null;
+}
+
+async function mjpegMonitorId(page: import('@playwright/test').Page): Promise<string | null> {
+  const img = page.getByTestId('video-player-mjpeg');
+  if (!(await img.isVisible().catch(() => false))) return null;
+  const src = await img.getAttribute('src').catch(() => null);
+  const m = src?.match(/[?&]monitor=(\d+)/);
+  return m ? m[1] : null;
+}
+
+When('I note the current monitor stream source', async ({ page }) => {
+  urlIdBefore = urlMonitorId(page);
+  streamMonitorIdBefore = await mjpegMonitorId(page);
+  // Only the MJPEG transport exposes the monitor id in the element. When the
+  // server serves go2rtc/WebRTC there is nothing to assert, so skip downstream.
+  streamCheckable = streamMonitorIdBefore != null;
+  log.info('E2E stream source before switch', {
+    component: 'e2e',
+    urlIdBefore,
+    streamMonitorIdBefore,
+    streamCheckable,
+  });
+});
+
+Then('the live stream should follow the newly selected monitor', async ({ page }) => {
+  if (!streamCheckable) return;
+  const urlIdAfter = urlMonitorId(page);
+  // No second monitor to switch to: nothing changed, nothing to assert.
+  if (!urlIdAfter || urlIdAfter === urlIdBefore) return;
+  // With the bug the <img> keeps the old monitor id until the ~60s token cycle;
+  // a few seconds is enough to distinguish a real switch from the stale stream.
+  await expect
+    .poll(async () => mjpegMonitorId(page), { timeout: testConfig.timeouts.transition * 4 })
+    .toBe(urlIdAfter);
+});
+
 Then('the monitor should change to next in list', async ({ page }) => {
   await page.waitForURL(/monitors\/\d+/, { timeout: testConfig.timeouts.transition });
 });

@@ -36,6 +36,13 @@ Feature: Monitor Detail Page
     Then the monitor should change to previous in list
 
   @all
+  Scenario: Switching monitor updates the live stream, not just the name
+    Then I should see the monitor player
+    When I note the current monitor stream source
+    And I click the next monitor button if visible
+    Then the live stream should follow the newly selected monitor
+
+  @all
   Scenario: Mode dropdown shows current mode
     Then I should see the monitor mode dropdown
     And the current mode should be displayed

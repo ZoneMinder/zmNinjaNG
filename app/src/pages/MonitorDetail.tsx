@@ -369,6 +369,12 @@ export default function MonitorDetail() {
         >
           <div ref={zoomPan.innerRef} data-testid="monitor-zoom-content">
             <LiveMonitorPlayer
+              // Remount on monitor change so the stream gets a fresh connkey and
+              // the old monitor's nph-zms connection is torn down immediately.
+              // Without this the prev/next buttons change the name but the feed
+              // keeps showing the previous monitor until the next token cycle
+              // (~60s) rebuilds the stream URL (refs #201).
+              key={monitor.Monitor.Id}
               monitor={monitor.Monitor}
               profile={currentProfile}
               externalMediaRef={mediaRef}
