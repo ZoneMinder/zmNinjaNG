@@ -684,6 +684,17 @@ is tracked by polling ``ZM_CMD.QUERY`` at the bandwidth-aware
 ``zmsStatusInterval``; the poll is cancelled via an ``AbortController``
 on unmount.
 
+Seeks use the duration the stream reports back in that query, not the
+DB ``eventLength`` prop. The two can disagree on variable-rate or
+still-recording events, and seeking against ``eventLength`` lands the
+playhead at the wrong spot (refs #196). ``eventLength`` is the fallback
+until the first query returns. While the scrub bar is held
+(``onScrubStart``/``onScrubEnd`` on ``EventProgressBar``), the status
+poll is suspended so it does not fight the drag, and the stream is
+paused so each seek shows one still frame instead of playing forward
+between drag updates; playback resumes on release only if it was
+playing when the drag began.
+
 URL construction is gated on a fresh access token via
 ``useFreshAccessToken``. When the token is stale, ``zmsUrl`` evaluates
 to ``''`` and the ``<img>`` does not render until the auth store

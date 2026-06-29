@@ -68,4 +68,52 @@ describe('EventProgressBar seek mapping', () => {
     fireEvent.touchStart(track, { touches: [{ clientX: 999 }] });
     expect(onSeek).toHaveBeenCalledWith(100);
   });
+
+  // Scrub lifecycle: the player pauses the stream and stops its status poll
+  // from fighting the cursor while a drag is in progress (refs #196).
+  it('signals scrub start on mouse down and scrub end on mouse up', () => {
+    const onScrubStart = vi.fn();
+    const onScrubEnd = vi.fn();
+    const { getByTestId } = render(
+      <EventProgressBar
+        currentFrame={1}
+        totalFrames={100}
+        onSeek={vi.fn()}
+        onScrubStart={onScrubStart}
+        onScrubEnd={onScrubEnd}
+      />
+    );
+    const track = getByTestId('event-progress-track');
+    stubTrackGeometry(track);
+
+    fireEvent.mouseDown(track, { clientX: 100 });
+    expect(onScrubStart).toHaveBeenCalledTimes(1);
+    expect(onScrubEnd).not.toHaveBeenCalled();
+
+    fireEvent.mouseUp(window);
+    expect(onScrubEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it('signals scrub start on touch start and scrub end on touch end', () => {
+    const onScrubStart = vi.fn();
+    const onScrubEnd = vi.fn();
+    const { getByTestId } = render(
+      <EventProgressBar
+        currentFrame={1}
+        totalFrames={100}
+        onSeek={vi.fn()}
+        onScrubStart={onScrubStart}
+        onScrubEnd={onScrubEnd}
+      />
+    );
+    const track = getByTestId('event-progress-track');
+    stubTrackGeometry(track);
+
+    fireEvent.touchStart(track, { touches: [{ clientX: 100 }] });
+    expect(onScrubStart).toHaveBeenCalledTimes(1);
+    expect(onScrubEnd).not.toHaveBeenCalled();
+
+    fireEvent.touchEnd(window);
+    expect(onScrubEnd).toHaveBeenCalledTimes(1);
+  });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import { StrictMode } from 'react';
 import { ZmsEventPlayer } from '../ZmsEventPlayer';
 import { ZM_INTEGRATION } from '../../../lib/zmninja-ng-constants';
@@ -92,6 +92,24 @@ function quitCalls() {
   );
 }
 
+function commandOf(url: string): string | null {
+  return new URL(url).searchParams.get('command');
+}
+
+function callsForCommand(cmd: string) {
+  return httpGetMock.mock.calls.filter((call) => commandOf(call[0] as string) === cmd);
+}
+
+// jsdom does no layout, so stub the scrub track as a 0..200px-wide element.
+function stubTrack(): HTMLElement {
+  const track = screen.getByTestId('event-progress-track');
+  vi.spyOn(track, 'getBoundingClientRect').mockReturnValue({
+    left: 0, width: 200, top: 0, height: 8, right: 200, bottom: 8, x: 0, y: 0,
+    toJSON: () => ({}),
+  } as DOMRect);
+  return track;
+}
+
 describe('ZmsEventPlayer', () => {
   beforeEach(() => {
     cleanup();
@@ -100,9 +118,56 @@ describe('ZmsEventPlayer', () => {
 
   afterEach(() => {
     if (vi.isFakeTimers()) {
-      vi.runAllTimers();
+      // clear, not run: the status poll is a setInterval that runAllTimers
+      // would loop on forever.
+      vi.clearAllTimers();
       vi.useRealTimers();
     }
+    // Restore the default resolved value: a test that installs its own
+    // implementation must not leak into the next one.
+    httpGetMock.mockReset();
+    httpGetMock.mockResolvedValue({ data: {} });
+  });
+
+  it('seeks against the ZMS-reported duration, not the DB event length', async () => {
+    vi.useFakeTimers();
+    // eventLength prop is 10, but the running stream reports a 20s duration.
+    httpGetMock.mockImplementation((url: string) => {
+      if (commandOf(url) === '99') {
+        return Promise.resolve({ data: { status: { progress: 0, duration: 20 } } });
+      }
+      return Promise.resolve({ data: {} });
+    });
+    renderPlayer();
+    fireEvent.load(getStreamImg());
+
+    // Fire one status poll so the player learns the real duration (20s).
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(600000);
+    });
+
+    // Seek to the end: the offset must be the full reported duration (20s),
+    // not the DB Length (10s).
+    fireEvent.click(screen.getByTestId('zms-go-to-end'));
+
+    const seek = callsForCommand('14').at(-1);
+    expect(seek).toBeDefined();
+    expect(new URL(seek![0] as string).searchParams.get('offset')).toBe('20');
+  });
+
+  it('pauses the stream while scrubbing and resumes playing on release', () => {
+    renderPlayer();
+    fireEvent.load(getStreamImg());
+    const track = stubTrack();
+
+    // Grabbing the scrub bar pauses the running stream (CMD_PAUSE = 1) so the
+    // video does not play forward between seeks.
+    fireEvent.mouseDown(track, { clientX: 100 });
+    expect(callsForCommand('1').length).toBeGreaterThan(0);
+
+    // Releasing resumes playback (CMD_PLAY = 2).
+    fireEvent.mouseUp(window);
+    expect(callsForCommand('2').length).toBeGreaterThan(0);
   });
 
   it('keeps the img src and connkey unchanged when playback speed changes', () => {

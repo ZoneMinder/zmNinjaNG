@@ -24,6 +24,10 @@ interface EventProgressBarProps {
   className?: string;
   /** Event duration in seconds. When provided, displays time instead of frame numbers. */
   duration?: number;
+  /** Fired when a scrub gesture begins (mouse/touch down on the track). */
+  onScrubStart?: () => void;
+  /** Fired when a scrub gesture ends (pointer release or cancel). */
+  onScrubEnd?: () => void;
 }
 
 export function EventProgressBar({
@@ -33,6 +37,8 @@ export function EventProgressBar({
   onSeek,
   className,
   duration,
+  onScrubStart,
+  onScrubEnd,
 }: EventProgressBarProps) {
   const { t } = useTranslation();
 
@@ -65,15 +71,17 @@ export function EventProgressBar({
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     setIsDragging(true);
+    onScrubStart?.();
     handleSeek(e.clientX);
-  }, [handleSeek]);
+  }, [handleSeek, onScrubStart]);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     const touch = e.touches[0];
     if (!touch) return;
     setIsDragging(true);
+    onScrubStart?.();
     handleSeek(touch.clientX);
-  }, [handleSeek]);
+  }, [handleSeek, onScrubStart]);
 
   const handleHover = useCallback((e: React.MouseEvent) => {
     if (!progressRef.current) return;
@@ -99,7 +107,10 @@ export function EventProgressBar({
       e.preventDefault();
       handleSeek(touch.clientX);
     };
-    const stop = () => setIsDragging(false);
+    const stop = () => {
+      setIsDragging(false);
+      onScrubEnd?.();
+    };
 
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', stop);
@@ -113,7 +124,7 @@ export function EventProgressBar({
       window.removeEventListener('touchend', stop);
       window.removeEventListener('touchcancel', stop);
     };
-  }, [isDragging, handleSeek]);
+  }, [isDragging, handleSeek, onScrubEnd]);
 
   return (
     <div className={cn('space-y-2', className)} data-testid="event-progress-bar">

@@ -70,6 +70,20 @@ export function ZmsEventPlayer({
   const [isPlaying, setIsPlaying] = useState(true);
   const [playbackSpeed, setPlaybackSpeed] = useState(100); // 100 = 1x speed
 
+  // Duration in seconds as reported by the running ZMS stream. The DB event
+  // Length and the stream's own duration can disagree (variable capture rate,
+  // still-recording events), so seeks must use this value, not eventLength,
+  // or the playhead lands at the wrong spot (refs #196).
+  const [streamDuration, setStreamDuration] = useState<number | null>(null);
+  const effectiveDuration = streamDuration && streamDuration > 0 ? streamDuration : eventLength;
+
+  // While the user drags the scrub bar, the status poll must not write the
+  // playhead back from the stream: that fight makes the cursor and video jump
+  // around mid-drag (refs #196). The grab also pauses the stream so it does not
+  // play forward between seeks. wasPlayingRef remembers whether to resume.
+  const isScrubbingRef = useRef(false);
+  const wasPlayingRef = useRef(false);
+
   // Unique connection key for this stream, stable for the component's lifetime.
   // Speed changes are sent as CMD_VARPLAY over this same connkey instead of
   // restarting the stream with a new one.
@@ -193,12 +207,15 @@ export function ZmsEventPlayer({
 
     const tick = async () => {
       if (signal.aborted) return;
+      // Don't query or move the playhead mid-scrub: the drag owns the position.
+      if (isScrubbingRef.current) return;
       const url = getZmsControlUrl(portalUrl, ZMS_COMMANDS.cmdQuery, connKey, { token, apiUrl, minStreamingPort, monitorId });
       try {
         const resp = await httpGet<{ status?: { progress?: number; duration?: number } }>(url, { signal });
-        if (signal.aborted) return;
+        if (signal.aborted || isScrubbingRef.current) return;
         const status = resp.data?.status;
         if (status && typeof status.progress === 'number' && typeof status.duration === 'number' && status.duration > 0) {
+          setStreamDuration(status.duration);
           const fraction = status.progress / status.duration;
           const frame = Math.max(1, Math.round(fraction * totalFrames));
           setCurrentFrame(frame);
@@ -226,10 +243,11 @@ export function ZmsEventPlayer({
     };
   }, [isPlaying, bandwidth.zmsStatusInterval, portalUrl, connKey, token, apiUrl, totalFrames, minStreamingPort, monitorId, sendCommand]);
 
-  // Calculate time offset from frame number
+  // Calculate time offset from frame number. Uses the stream-reported duration
+  // so the seek lands where the progress bar says it will (refs #196).
   const frameToOffset = useCallback((frame: number) => {
-    return (frame / totalFrames) * eventLength;
-  }, [totalFrames, eventLength]);
+    return (frame / totalFrames) * effectiveDuration;
+  }, [totalFrames, effectiveDuration]);
 
   // Handle play/pause
   const togglePlayPause = useCallback(() => {
@@ -263,16 +281,16 @@ export function ZmsEventPlayer({
   const seekBack = useCallback(() => {
     // Seek back 5 seconds
     const targetOffset = Math.max(0, frameToOffset(currentFrame) - 5);
-    const targetFrame = Math.max(1, Math.round((targetOffset / eventLength) * totalFrames));
+    const targetFrame = Math.max(1, Math.round((targetOffset / effectiveDuration) * totalFrames));
     goToFrame(targetFrame);
-  }, [currentFrame, frameToOffset, eventLength, totalFrames, goToFrame]);
+  }, [currentFrame, frameToOffset, effectiveDuration, totalFrames, goToFrame]);
 
   const seekForward = useCallback(() => {
     // Seek forward 5 seconds
-    const targetOffset = Math.min(eventLength, frameToOffset(currentFrame) + 5);
-    const targetFrame = Math.min(totalFrames, Math.round((targetOffset / eventLength) * totalFrames));
+    const targetOffset = Math.min(effectiveDuration, frameToOffset(currentFrame) + 5);
+    const targetFrame = Math.min(totalFrames, Math.round((targetOffset / effectiveDuration) * totalFrames));
     goToFrame(targetFrame);
-  }, [currentFrame, frameToOffset, eventLength, totalFrames, goToFrame]);
+  }, [currentFrame, frameToOffset, effectiveDuration, totalFrames, goToFrame]);
 
   const goToStart = useCallback(() => {
     goToFrame(1);
@@ -281,6 +299,20 @@ export function ZmsEventPlayer({
   const goToEnd = useCallback(() => {
     goToFrame(totalFrames);
   }, [goToFrame, totalFrames]);
+
+  // Grab the scrub bar: pause the stream so it shows a single still frame per
+  // seek instead of playing forward between drags, and silence the status poll.
+  const handleScrubStart = useCallback(() => {
+    isScrubbingRef.current = true;
+    wasPlayingRef.current = isPlaying;
+    if (isPlaying) sendCommand(ZMS_COMMANDS.cmdPause);
+  }, [isPlaying, sendCommand]);
+
+  // Release: resume playback only if it was playing when the drag began.
+  const handleScrubEnd = useCallback(() => {
+    isScrubbingRef.current = false;
+    if (wasPlayingRef.current) sendCommand(ZMS_COMMANDS.cmdPlay);
+  }, [sendCommand]);
 
   // Jump to alarm frame
   const jumpToAlarmFrame = useCallback(() => {
@@ -425,7 +457,9 @@ export function ZmsEventPlayer({
           totalFrames={totalFrames}
           alarmFrames={alarmFramePositions}
           onSeek={goToFrame}
-          duration={eventLength}
+          duration={effectiveDuration}
+          onScrubStart={handleScrubStart}
+          onScrubEnd={handleScrubEnd}
         />
 
         {/* Speed Controls */}
