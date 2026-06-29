@@ -94,6 +94,18 @@ When('I navigate back to the events list if I opened an event', async ({ page })
   });
 });
 
+// The in-app back arrow takes a different path than browser/Esc back: it must
+// pop history so the list scroll position is restored, not push a fresh entry
+// (refs #197).
+When('I press the event detail back button if I opened an event', async ({ page }) => {
+  if (!openedAfterScroll) return;
+  await page.getByTestId('event-detail-back').click();
+  await page.getByTestId('events-scroll-container').waitFor({
+    state: 'visible',
+    timeout: testConfig.timeouts.element,
+  });
+});
+
 Then('the events list scroll position should be restored if it was scrolled', async ({ page }) => {
   if (!openedAfterScroll) return;
   const container = page.getByTestId('events-scroll-container');

@@ -1670,6 +1670,15 @@ offset, while fresh navigation (a new key) starts at the top. Restore is deferre
 until ``ready`` so the container is tall enough to accept the saved offset, and
 runs once per entry so a later scroll is not clobbered.
 
+Because restoration is keyed by the history entry, every "back" affordance must
+**pop** history rather than push a path. Esc (``KeyboardShortcuts``) and the
+Android back button (``useAndroidBackButton``) call ``navigate(-1)``. The event
+detail back arrow routes through ``resolveBackNavigation``
+(``lib/back-navigation.ts``), which returns ``pop`` whenever a prior entry exists
+and only pushes (to the referrer or ``/events``) on a cold deep-link with no
+history. A ``navigate(referrer)`` push would mint a new key and lose the position
+(refs #197).
+
 **Used By:** Events page
 
 useAndroidBackButton (``hooks/useAndroidBackButton.ts``)

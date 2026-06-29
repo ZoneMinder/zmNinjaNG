@@ -9,6 +9,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getEvent, getEventVideoUrl, getEventImageUrl, setEventArchived } from '../api/events';
 import { resolveFallbackFids } from '../lib/thumbnail-chain';
+import { resolveBackNavigation } from '../lib/back-navigation';
 import { getMonitor } from '../api/monitors';
 import { resolveMinStreamingPort } from '../lib/multiport';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
@@ -50,8 +51,13 @@ export default function EventDetail() {
 
   // Check if user came from another page (navigation state tracking)
   const referrer = location.state?.from as string | undefined;
-  const canGoBack = referrer || window.history.length > 1;
-  const goBack = () => referrer ? navigate(referrer) : canGoBack ? navigate(-1) : navigate('/events');
+  const goBack = () => {
+    // Pop history when possible so the events list restores its scroll position;
+    // navigate(referrer) would push a new entry and lose it (refs #197).
+    const action = resolveBackNavigation({ referrer, historyLength: window.history.length });
+    if (action.type === 'pop') navigate(-1);
+    else navigate(action.to);
+  };
   const [useZmsFallback, setUseZmsFallback] = useState(isTvMode || Platform.isTVDevice);
 
   // On TV devices, use ZMS stream instead of MP4 (Fire Stick WebView has video rendering issues)
@@ -273,6 +279,7 @@ export default function EventDetail() {
             onClick={goBack}
             aria-label={t('common.go_back')}
             className="h-8 w-8"
+            data-testid="event-detail-back"
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
