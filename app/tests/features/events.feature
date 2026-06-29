@@ -96,6 +96,13 @@ Feature: Event Browsing and Management
     And I unfavorite the first event if it was favorited
 
   @all
+  Scenario: Filtering by a tag returns only tagged events
+    When I open the events filter panel
+    And I select the first available tag if tags exist
+    And I apply event filters
+    Then I should see only tagged events if a tag was applied
+
+  @all
   Scenario: Download event video triggers background task
     When I click into the first event if events exist
     And I click the download video button if video exists

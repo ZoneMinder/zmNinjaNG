@@ -9,6 +9,7 @@ const { When, Then } = createBdd();
 let hasEvents = false;
 let favoriteToggled = false;
 let favoritedEventId: string | null = null;
+let tagFilterApplied = false;
 let archiveToggled = false;
 let detailArchiveToggled = false;
 let downloadClicked = false;
@@ -464,6 +465,51 @@ When('I disable favorites only filter', async ({ page }) => {
   if (isChecked) {
     await favoritesToggle.click();
     await page.waitForTimeout(300);
+  }
+});
+
+When('I select the first available tag if tags exist', async ({ page }) => {
+  tagFilterApplied = false;
+  // Concrete tag options are data-testid="tag-option-<id>" (the "all" option is
+  // tag-option-all). Skip when the server has no tags configured.
+  const tagOption = page.locator('[data-testid^="tag-option-"]:not([data-testid="tag-option-all"])').first();
+  if (!(await tagOption.isVisible({ timeout: testConfig.timeouts.element }).catch(() => false))) {
+    log.info('E2E: Skipping tag filter - no tags available', { component: 'e2e' });
+    return;
+  }
+  await tagOption.click();
+  tagFilterApplied = true;
+  await page.waitForTimeout(300);
+});
+
+Then('I should see only tagged events if a tag was applied', async ({ page }) => {
+  if (!tagFilterApplied) {
+    log.info('E2E: Skipping tagged-events check - no tag was applied', { component: 'e2e' });
+    return;
+  }
+
+  const eventCards = page.getByTestId('event-card');
+  const emptyState = page.getByTestId('events-empty-state');
+
+  // The tag filter is applied server-side (refs #205), so the list settles into
+  // either tagged events or an empty state, never a partial/stuck list.
+  await expect
+    .poll(async () => {
+      const count = await eventCards.count();
+      const emptyVisible = await emptyState.isVisible().catch(() => false);
+      return count > 0 || emptyVisible;
+    }, { timeout: testConfig.timeouts.transition * 3 })
+    .toBeTruthy();
+
+  // When events come back, every one of them must carry a tag chip: a tag filter
+  // that returned untagged events would mean the filter did not actually apply.
+  const count = await eventCards.count();
+  if (count > 0) {
+    for (let i = 0; i < count; i++) {
+      await expect(eventCards.nth(i).getByTestId('tag-chip').first()).toBeVisible({
+        timeout: testConfig.timeouts.transition * 3,
+      });
+    }
   }
 });
 

@@ -388,6 +388,76 @@ describe('Events API', () => {
     });
   });
 
+  describe('tagIds (Tags.Id: filter)', () => {
+    it('sends one Tags.Id: query per tag and reports the merged count', async () => {
+      mockGet
+        .mockResolvedValueOnce({
+          data: {
+            events: [buildEventData(10), buildEventData(11)],
+            pagination: {
+              pageCount: 1, page: 1, current: 1, count: 2,
+              prevPage: false, nextPage: false, limit: 100,
+            },
+          },
+        })
+        .mockResolvedValueOnce({
+          data: {
+            events: [buildEventData(11), buildEventData(12)],
+            pagination: {
+              pageCount: 1, page: 1, current: 1, count: 2,
+              prevPage: false, nextPage: false, limit: 100,
+            },
+          },
+        });
+
+      const response = await getEvents({ tagIds: ['1', '2'], limit: 100 });
+
+      // One request per tag.
+      expect(mockGet).toHaveBeenCalledTimes(2);
+      expect((mockGet.mock.calls[0][0] as string)).toContain('Tags.Id%3A1');
+      expect((mockGet.mock.calls[1][0] as string)).toContain('Tags.Id%3A2');
+      // Union, de-duplicated (event 11 appears in both tags).
+      expect(response.events.map((e) => e.Event.Id).sort()).toEqual(['10', '11', '12']);
+      expect(response.pagination.totalCount).toBe(3);
+    });
+
+    it('combines the Tags.Id: segment with other server filters', async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          events: [buildEventData(10, '2')],
+          pagination: {
+            pageCount: 1, page: 1, current: 1, count: 1,
+            prevPage: false, nextPage: false, limit: 100,
+          },
+        },
+      });
+
+      await getEvents({ tagIds: ['1'], monitorId: '2', limit: 100 });
+
+      const call = mockGet.mock.calls[0][0] as string;
+      expect(call).toContain('MonitorId%3A2');
+      expect(call).toContain('Tags.Id%3A1');
+    });
+
+    it('ignores an empty tagIds array (normal query)', async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          events: [buildEventData(10)],
+          pagination: {
+            pageCount: 1, page: 1, current: 1, count: 1,
+            prevPage: false, nextPage: false, limit: 100,
+          },
+        },
+      });
+
+      await getEvents({ tagIds: [], limit: 100 });
+
+      const call = mockGet.mock.calls[0][0] as string;
+      expect(call).not.toContain('Tags.Id');
+      expect(call).toBe('/events/index.json');
+    });
+  });
+
   it('validates responses through api-validator', async () => {
     mockGet.mockResolvedValue({
       data: {

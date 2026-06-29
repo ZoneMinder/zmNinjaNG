@@ -175,11 +175,25 @@ export default function Events() {
     [favoritesOnly, favoriteIds]
   );
 
+  // Tags filter server-side too, so tagged events past the first page stay
+  // reachable and "Load More" is accurate (refs #205). ZM cannot combine its
+  // "Tags.Id:" filter with the favorites "Id IN:" query, so when favorites is
+  // also on we leave tags to the client-side pass below (the favorite set is
+  // fetched in full there, so that pass stays accurate). "All tags" expands to
+  // every available tag id, i.e. events carrying any tag.
+  const tagIdFilter = useMemo(() => {
+    if (favoritesOnly || selectedTagIds.length === 0) return undefined;
+    if (selectedTagIds.includes(ALL_TAGS_FILTER_ID)) {
+      return availableTags.map((tag) => tag.Id);
+    }
+    return selectedTagIds;
+  }, [favoritesOnly, selectedTagIds, availableTags]);
+
   // Fetch events with configured limit
   // Include effectiveMonitorId and group filter state in query key for proper cache invalidation
   const [currentEventLimit, setCurrentEventLimit] = useState(settings.defaultEventLimit || 100);
   const { data: eventsData, isLoading, isFetching, error, refetch } = useQuery({
-    queryKey: ['events', filters, currentEventLimit, effectiveMonitorId, isGroupFilterActive, eventIdFilter],
+    queryKey: ['events', filters, currentEventLimit, effectiveMonitorId, isGroupFilterActive, eventIdFilter, tagIdFilter],
     queryFn: () =>
       getEvents({
         ...filters,
@@ -189,6 +203,7 @@ export default function Events() {
         startDateTime: filters.startDateTime ? formatForServer(new Date(filters.startDateTime)) : undefined,
         endDateTime: filters.endDateTime ? formatForServer(new Date(filters.endDateTime)) : undefined,
         eventIds: eventIdFilter,
+        tagIds: tagIdFilter,
         limit: currentEventLimit,
       }),
     enabled: !!currentProfile && isAuthenticated,
@@ -228,13 +243,14 @@ export default function Events() {
     enabled: tagsSupported && eventIdsForTagFetch.length > 0,
   });
 
-  // Memoize filtered events. The server already applied monitor/group, date, and
-  // favorites (via the eventIds filter); only the tag filter remains client-side.
+  // Memoize filtered events. The server applied monitor/group, date, favorites
+  // (eventIds), and tags (tagIds). The one case left for the client is tags
+  // while favorites is also on: ZM can't run both server-side, but the favorite
+  // set is fetched in full above, so filtering it here by tag stays accurate.
   const allEvents = useMemo(() => {
     let filtered = eventsData?.events || [];
 
-    // Apply tag filter if tags are selected (client-side)
-    if (selectedTagIds.length > 0 && eventTagMap.size > 0) {
+    if (favoritesOnly && selectedTagIds.length > 0 && eventTagMap.size > 0) {
       const isAllTagsFilter = selectedTagIds.includes(ALL_TAGS_FILTER_ID);
       filtered = filtered.filter(({ Event }: EventData) => {
         const eventTags = eventTagMap.get(Event.Id) || [];
@@ -248,7 +264,7 @@ export default function Events() {
     }
 
     return filtered;
-  }, [eventsData?.events, selectedTagIds, eventTagMap]);
+  }, [eventsData?.events, favoritesOnly, selectedTagIds, eventTagMap]);
 
   // Restore the list scroll position when returning from an event detail.
   // /events and /events/:id are sibling routes, so this component unmounts when

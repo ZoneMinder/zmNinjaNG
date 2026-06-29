@@ -1694,6 +1694,23 @@ degradation.
    ['tags', profileId]           // All available tags
    ['eventTags', profileId, eventIds]  // Tags for specific events
 
+``getEventTags`` is a forward lookup (event IDs to their tags) used to show tag
+chips on the events already on screen. Filtering the list *by* tag is the
+reverse, and is done server-side: ``getEvents`` accepts ``tagIds`` and queries
+``/events/index/Tags.Id:<id>.json``, so tagged events past the first page stay
+reachable and ``totalCount`` is accurate (same pagination concern as favorites,
+refs #205).
+
+ZoneMinder rejects ``Tags.Id IN:`` and cannot combine ``Tags.Id:`` with the
+favorites ``Id IN:`` filter in one query, so:
+
+- Each selected tag is a separate ``Tags.Id:<id>`` request; the results are
+  merged by ``fetchEventsByVariants`` (the same merge used for favorites
+  chunks). "All tags" expands to every available tag ID.
+- When the favorites toggle is also on, tags are not sent to the server.
+  ``Events.tsx`` filters the (fully fetched) favorite set by tag client-side
+  instead, which is accurate because the whole favorite set is in hand.
+
 Adjacent Event Navigation
 -------------------------
 

@@ -25,6 +25,7 @@ Filter events using the controls at the top:
 - **Monitor** - Show events from a specific camera only
 - **Groups** - Filter by monitor group
 - **Favorites only** - Show only events you have starred. This works across all your favorites, including ones older than the first page of results.
+- **Tags** - Show only events carrying the tags you pick (if your server supports tags). Select several tags to see events with any of them, or "All" for events with any tag. Like favorites, this covers tagged events older than the first page.
 
 ## Event Playback
 

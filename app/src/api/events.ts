@@ -27,12 +27,18 @@ export interface EventFilters {
   minAlarmFrames?: number;
   notesRegexp?: string; // REGEXP filter on Notes field (e.g., "detected:" for object detection)
   cause?: string; // Filter by event cause (e.g., "Motion", "Continuous", "Signal", "Forced")
-  // Restrict results to these event IDs via ZM's "Id IN:" filter. Used for
-  // client-side concepts (favorites, tags) that must compose with pagination:
+  // Restrict results to these event IDs via ZM's "Id IN:" filter. Used for the
+  // locally-stored favorites concept, which must compose with pagination:
   // passing the IDs to the server keeps totalCount and "Load More" accurate
   // (refs #205). An empty array matches no events (returns an empty list with
   // no request). undefined means "no Id filter".
   eventIds?: string[];
+  // Restrict results to events carrying any of these ZM tag IDs, via the
+  // server-side "Tags.Id:" filter (one request per tag, merged). Concrete tag
+  // IDs only; the caller expands the "all tags" option to the full tag list.
+  // ZM cannot combine "Tags.Id:" with "Id IN:" in one query, so callers must
+  // not set both eventIds and tagIds (eventIds wins if they do).
+  tagIds?: string[];
   limit?: number;
   sort?: string;
   direction?: 'asc' | 'desc';
@@ -68,33 +74,27 @@ function buildEventsResponse(
 }
 
 /**
- * Fetch events restricted to a set of IDs (favorites, tags) via ZM's "Id IN:"
- * filter, so the result composes with pagination instead of being filtered
- * client-side after a server page (refs #205).
- *
- * The ID set is chunked to stay under ZM's request-line length limit. Each
- * chunk is fetched in full (a chunk yields at most chunkSize events), then the
- * chunks are merged, de-duplicated, ordered by StartDateTime, and sliced to the
- * caller's limit. totalCount reflects the matched set, so "Load More" stops once
- * every match is shown.
+ * Fetch events for each of several filter variants, then merge them into one
+ * paginated result. A "variant" is one extra ZM filter segment that the server
+ * cannot express in a single query alongside the others: an "Id IN:<chunk>"
+ * (favorites, chunked for URL length) or a "Tags.Id:<id>" (one per selected
+ * tag, since ZM rejects "Tags.Id IN:"). Each variant is fetched in full, then
+ * the variants are merged, de-duplicated, ordered by StartDateTime, and sliced
+ * to the caller's limit. totalCount reflects the merged match set, so the result
+ * composes with pagination instead of being filtered client-side after a server
+ * page (refs #205).
  */
-async function getEventsByIds(
+async function fetchEventsByVariants(
   baseSegments: string[],
+  variantSegments: string[],
   filters: EventFilters
 ): Promise<EventsResponse> {
   const client = getApiClient();
-  const ids = filters.eventIds ?? [];
   const desiredLimit = filters.limit || API_PAGINATION.eventsPerPage;
 
-  // Empty set matches nothing; skip the request entirely.
-  if (ids.length === 0) {
-    return buildEventsResponse([], desiredLimit, 0);
-  }
-
   const collected: EventData[] = [];
-  for (let i = 0; i < ids.length; i += API_PAGINATION.eventIdFilterChunkSize) {
-    const chunk = ids.slice(i, i + API_PAGINATION.eventIdFilterChunkSize);
-    const segments = [...baseSegments, `/${encodeURIComponent(`Id IN:${chunk.join(',')}`)}`];
+  for (const variant of variantSegments) {
+    const segments = [...baseSegments, `/${encodeURIComponent(variant)}`];
     const url = `/events/index${segments.join('')}.json`;
 
     let currentPage = 1;
@@ -109,7 +109,7 @@ async function getEventsByIds(
 
       const response = await client.get<EventsResponse>(url, {
         params,
-        intent: `Fetch events by id (chunk page ${currentPage})`,
+        intent: `Fetch events by membership (${variant}, page ${currentPage})`,
       });
       const validated = validateApiResponse(EventsResponseSchema, response.data, {
         endpoint: url,
@@ -124,7 +124,7 @@ async function getEventsByIds(
     }
   }
 
-  // De-duplicate across chunks and pages, drop excluded monitors.
+  // De-duplicate across variants and pages, drop excluded monitors.
   const uniqueEvents = Array.from(
     new Map(collected.map(event => [event.Event.Id, event])).values()
   );
@@ -186,10 +186,27 @@ export async function getEvents(filters: EventFilters = {}): Promise<EventsRespo
     addFilterSegment(`Cause REGEXP:${filters.cause}`);
   }
 
-  // Favorites/tags pass an explicit ID set. Route through the "Id IN:" path so
-  // the filter is applied server-side and pagination stays accurate (refs #205).
+  // Favorites pass an explicit ID set; route through the server-side "Id IN:"
+  // filter so pagination stays accurate (refs #205). An empty set matches
+  // nothing and skips the request.
   if (filters.eventIds !== undefined) {
-    return getEventsByIds(filterSegments, filters);
+    const desiredLimit = filters.limit || API_PAGINATION.eventsPerPage;
+    if (filters.eventIds.length === 0) {
+      return buildEventsResponse([], desiredLimit, 0);
+    }
+    const variants: string[] = [];
+    for (let i = 0; i < filters.eventIds.length; i += API_PAGINATION.eventIdFilterChunkSize) {
+      const chunk = filters.eventIds.slice(i, i + API_PAGINATION.eventIdFilterChunkSize);
+      variants.push(`Id IN:${chunk.join(',')}`);
+    }
+    return fetchEventsByVariants(filterSegments, variants, filters);
+  }
+
+  // Tags filter server-side via one "Tags.Id:" query per selected tag (ZM
+  // rejects "Tags.Id IN:"), merged so it composes with pagination (refs #205).
+  if (filters.tagIds && filters.tagIds.length > 0) {
+    const variants = filters.tagIds.map(tagId => `Tags.Id:${tagId}`);
+    return fetchEventsByVariants(filterSegments, variants, filters);
   }
 
   const filterPath = filterSegments.join('');
