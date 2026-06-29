@@ -395,6 +395,7 @@ class Logger {
   videoPlayer = this.makeComponentLogger('VideoPlayer');
   sslTrust = this.makeComponentLogger('SSLTrust');
   zmsEventPlayer = this.makeComponentLogger('ZmsEventPlayer');
+  eventProgressBar = this.makeComponentLogger('EventProgressBar');
 
   // Factory method to create component loggers with optional default level
   private makeComponentLogger(componentName: string, defaultLevel?: LogLevel) {
@@ -421,7 +422,7 @@ const componentLoggers = [
   'monitorDetail', 'montageMonitor', 'navigation', 'notificationHandler', 'notifications',
   'notificationSettings', 'profile', 'profileForm', 'profileService', 'profileSwitcher',
   'push', 'queryCache', 'secureImage', 'secureStorage', 'server', 'sslTrust', 'time', 'timeline',
-  'videoMarkers', 'videoPlayer', 'zmsEventPlayer'
+  'videoMarkers', 'videoPlayer', 'zmsEventPlayer', 'eventProgressBar'
 ] as const;
 
 type ComponentLoggerKey = typeof componentLoggers[number];

@@ -145,6 +145,16 @@ export function ZmsEventPlayer({
       monitorId,
     });
 
+    // The seek/control request hits ZMS server-side (visible in ZM logs as
+    // command=14&offset=...), so log it client-side too (refs #196). Token is
+    // omitted; the URL would otherwise leak it.
+    log.zmsEventPlayer('Sending stream command', LogLevel.DEBUG, {
+      command: cmd,
+      offset: opts?.offset,
+      rate: opts?.rate,
+      connkey: connKey,
+    });
+
     try {
       await httpGet(url);
     } catch (err) {
@@ -275,8 +285,19 @@ export function ZmsEventPlayer({
 
     // Seek to offset in seconds
     const offset = frameToOffset(newFrame);
+    // Log the frame->offset translation and which duration drove it, so a seek
+    // that lands at the wrong spot can be traced to the inputs (refs #196).
+    log.zmsEventPlayer('Seeking to frame', LogLevel.DEBUG, {
+      frame: newFrame,
+      totalFrames,
+      offset,
+      effectiveDuration,
+      streamDuration,
+      eventLength,
+      usingStreamDuration: streamDuration != null && streamDuration > 0,
+    });
     sendCommand(ZMS_COMMANDS.cmdSeek, { offset });
-  }, [totalFrames, frameToOffset, sendCommand]);
+  }, [totalFrames, frameToOffset, sendCommand, effectiveDuration, streamDuration, eventLength]);
 
   const seekBack = useCallback(() => {
     // Seek back 5 seconds

@@ -10,6 +10,7 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/utils';
+import { log, LogLevel } from '../../lib/logger';
 
 interface AlarmFrame {
   frameId: number;
@@ -65,8 +66,15 @@ export function EventProgressBar({
     const x = clientX - rect.left;
     const percentage = Math.max(0, Math.min(100, (x / rect.width) * 100));
     const targetFrame = Math.round((percentage / 100) * totalFrames);
+    const clampedFrame = Math.max(1, Math.min(targetFrame, totalFrames));
 
-    onSeek(Math.max(1, Math.min(targetFrame, totalFrames)));
+    log.eventProgressBar('Scrub target', LogLevel.DEBUG, {
+      percentage: Math.round(percentage * 10) / 10,
+      targetFrame: clampedFrame,
+      totalFrames,
+    });
+
+    onSeek(clampedFrame);
   }, [totalFrames, onSeek]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
