@@ -20,6 +20,7 @@ import { useTokenRefresh } from './hooks/useTokenRefresh';
 import AppLayout from './components/layout/AppLayout';
 import { NotificationHandler } from './components/NotificationHandler';
 import { KeyboardShortcuts } from './components/KeyboardShortcuts';
+import { CommandPalette } from './components/CommandPalette';
 import { Button } from './components/ui/button';
 import { X } from 'lucide-react';
 import { log, LogLevel, logger } from './lib/logger';
@@ -360,6 +361,7 @@ function App() {
               <HashRouter>
                 <NotificationHandler />
                 <KeyboardShortcuts />
+                <CommandPalette />
                 <AppRoutes />
               </HashRouter>
             </div>
