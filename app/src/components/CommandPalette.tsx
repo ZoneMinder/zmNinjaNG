@@ -171,7 +171,7 @@ export function CommandPalette() {
                     </kbd>
                   )}
                   {item.kind === 'monitor' && (
-                    <span className="shrink-0 text-xs text-muted-foreground">id {item.monitorId}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">{t('command_palette.monitor_id_label')} {item.monitorId}</span>
                   )}
                 </button>
               </div>

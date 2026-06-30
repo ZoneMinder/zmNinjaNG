@@ -1186,7 +1186,8 @@
     "group_groups": "Gruppen",
     "group_monitors": "Monitore",
     "empty": "Keine Treffer",
-    "search": "Suchen"
+    "search": "Suchen",
+    "monitor_id_label": "ID"
   },
   "shortcuts": {
     "title": "Tastenkürzel",

@@ -1186,7 +1186,8 @@
     "group_groups": "Groupes",
     "group_monitors": "Moniteurs",
     "empty": "Aucun resultat",
-    "search": "Rechercher"
+    "search": "Rechercher",
+    "monitor_id_label": "id"
   },
   "shortcuts": {
     "title": "Raccourcis clavier",

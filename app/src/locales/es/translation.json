@@ -1186,7 +1186,8 @@
     "group_groups": "Grupos",
     "group_monitors": "Monitores",
     "empty": "Sin resultados",
-    "search": "Buscar"
+    "search": "Buscar",
+    "monitor_id_label": "id"
   },
   "shortcuts": {
     "title": "Atajos de teclado",

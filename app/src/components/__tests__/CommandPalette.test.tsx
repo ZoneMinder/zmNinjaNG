@@ -34,6 +34,7 @@ vi.mock('../../lib/profile-settings', () => ({ getExcludedMonitorIdSet: () => ne
 describe('CommandPalette', () => {
   beforeEach(() => {
     navigateMock.mockClear();
+    setSelectedGroup.mockClear();
     useCommandPaletteStore.setState({ open: true });
   });
 

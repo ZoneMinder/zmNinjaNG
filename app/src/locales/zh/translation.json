@@ -1186,7 +1186,8 @@
     "group_groups": "分组",
     "group_monitors": "监视器",
     "empty": "无匹配项",
-    "search": "搜索"
+    "search": "搜索",
+    "monitor_id_label": "ID"
   },
   "shortcuts": {
     "title": "键盘快捷键",
