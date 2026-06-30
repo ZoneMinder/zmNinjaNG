@@ -24,7 +24,7 @@ import {
   NAV_SHORTCUTS,
   routeForKey,
   isTypingTarget,
-  monitorIndexFromBuffer,
+  monitorIdFromBuffer,
 } from '../lib/keyboard-shortcuts';
 import {
   Dialog,
@@ -54,9 +54,10 @@ export function KeyboardShortcuts() {
     enabled: !!currentProfile && isAuthenticated,
   });
 
-  // Same order the Monitors/Montage views show, minus hidden monitors. Group
-  // filtering is intentionally ignored so a number maps to the same monitor
-  // regardless of the active group.
+  // Available monitors minus hidden ones. A typed number is matched against the
+  // actual ZoneMinder monitor ID (not the list position), so it stays stable as
+  // monitors are added or removed (refs #200). Group filtering is intentionally
+  // ignored so a number maps to the same monitor regardless of the active group.
   const monitors = useMemo(() => {
     const all = monitorsData?.monitors || [];
     const excluded = getExcludedMonitorIdSet();
@@ -76,12 +77,12 @@ export function KeyboardShortcuts() {
     const value = bufferRef.current;
     clearBuffer();
     if (!value) return;
-    const index = monitorIndexFromBuffer(value, monitors.length);
-    if (index === null) {
+    const monitorId = monitorIdFromBuffer(value, monitors.map((m) => m.Monitor.Id));
+    if (monitorId === null) {
       toast.error(t('shortcuts.no_such_monitor', { n: value }));
       return;
     }
-    navigate(`/monitors/${monitors[index].Monitor.Id}`, { state: { from: location.pathname } });
+    navigate(`/monitors/${monitorId}`, { state: { from: location.pathname } });
   }, [monitors, navigate, location.pathname, clearBuffer, t]);
 
   const onKeyDown = useCallback(

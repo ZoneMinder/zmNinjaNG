@@ -1182,7 +1182,7 @@
   "shortcuts": {
     "title": "Atajos de teclado",
     "subtitle": "Pulsa una tecla para navegar. Funciona fuera de los campos de texto.",
-    "monitor_by_number": "Abrir monitor por número",
+    "monitor_by_number": "Abrir monitor por ID",
     "back": "Atrás / cerrar",
     "show_help": "Mostrar esta ayuda",
     "go_to_monitor": "Ir al monitor: {{n}}",

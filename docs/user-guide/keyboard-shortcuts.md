@@ -23,13 +23,14 @@ Press a single key to jump to a section:
 | `p` | Profiles |
 | `r` | Server |
 
-## Open a monitor by number
+## Open a monitor by ID
 
-Type a monitor's number to open its live view. The number is the monitor's
-position in the list (the same order shown in Monitors and Montage), so `1` is
-the first monitor.
+Type a monitor's ID to open its live view. The number is the ZoneMinder monitor
+ID (the same ID ZoneMinder shows for the monitor), not its position in the list,
+so it stays the same as you add or remove monitors. If no monitor has that ID
+(or it is hidden), you get a "No monitor" message.
 
-For numbers above 9, keep typing: the digits collect in a small indicator at the
+For IDs above 9, keep typing: the digits collect in a small indicator at the
 bottom of the screen (for example `12`). Press `Enter` to go there immediately,
 or wait about a second and it goes on its own. Press `Esc` to cancel.
 

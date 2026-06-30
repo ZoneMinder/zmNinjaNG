@@ -43,12 +43,16 @@ export function isTypingTarget(target: EventTarget | null): boolean {
 }
 
 /**
- * Convert a buffered monitor number to a 0-based index into the monitor list,
- * or null when it is out of range. `count` is the number of monitors.
+ * Resolve a buffered monitor number to the ZoneMinder monitor ID that matches
+ * it, or null when no monitor has that ID. The typed number is the actual
+ * monitor ID, not its position in the list, so it stays stable as monitors are
+ * added or removed (refs #200). `monitorIds` is the list of available IDs.
  */
-export function monitorIndexFromBuffer(buffer: string, count: number): number | null {
+export function monitorIdFromBuffer(buffer: string, monitorIds: string[]): string | null {
   if (!/^\d+$/.test(buffer)) return null;
   const n = parseInt(buffer, 10);
-  if (n < 1 || n > count) return null;
-  return n - 1;
+  if (n < 1) return null;
+  // Normalize leading zeros to the canonical ID form (ZM IDs have none).
+  const target = String(n);
+  return monitorIds.includes(target) ? target : null;
 }

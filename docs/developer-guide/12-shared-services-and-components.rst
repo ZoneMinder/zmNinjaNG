@@ -1700,8 +1700,9 @@ Global keyboard shortcuts, mounted once under the router. Single letters jump to
 each menu section (``d`` Dashboard, ``m`` Montage, ``e`` Events, ``v`` Monitors,
 ``t`` Timeline, ``n`` Notifications, ``l`` Logs, ``g`` Settings, ``p`` Profiles,
 ``r`` Server). Digits buffer a monitor number shown in an overlay and, on Enter or
-after ``KEYBOARD_SHORTCUTS.monitorJumpCommitMs`` (1s), open that monitor by its
-list position. ``Esc`` goes back (closing an open layer first via
+after ``KEYBOARD_SHORTCUTS.monitorJumpCommitMs`` (1s), open the monitor whose
+ZoneMinder ID matches (``monitorIdFromBuffer``), not its list position (refs
+#200). ``Esc`` goes back (closing an open layer first via
 ``hasOpenOverlay``), ``?`` toggles a help dialog. Inactive while typing
 (``isTypingTarget``), when a modifier is held, when the kiosk is locked, or in TV
 mode. The shortcut table and pure helpers live in ``lib/keyboard-shortcuts.ts``.

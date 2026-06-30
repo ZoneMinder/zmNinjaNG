@@ -7,7 +7,7 @@ import {
   NAV_SHORTCUTS,
   routeForKey,
   isTypingTarget,
-  monitorIndexFromBuffer,
+  monitorIdFromBuffer,
 } from '../keyboard-shortcuts';
 
 describe('routeForKey', () => {
@@ -53,20 +53,29 @@ describe('isTypingTarget', () => {
   });
 });
 
-describe('monitorIndexFromBuffer', () => {
-  it('converts a 1-based number to a 0-based index', () => {
-    expect(monitorIndexFromBuffer('1', 10)).toBe(0);
-    expect(monitorIndexFromBuffer('10', 10)).toBe(9);
-    expect(monitorIndexFromBuffer('12', 20)).toBe(11);
+describe('monitorIdFromBuffer', () => {
+  // Real ZM IDs are sparse: gaps from deleted monitors, and the list order is
+  // not the IDs (refs #200).
+  const ids = ['1', '2', '3', '7', '12'];
+
+  it('returns the monitor ID matching the typed number', () => {
+    expect(monitorIdFromBuffer('1', ids)).toBe('1');
+    expect(monitorIdFromBuffer('7', ids)).toBe('7');
+    expect(monitorIdFromBuffer('12', ids)).toBe('12');
   });
 
-  it('returns null when out of range', () => {
-    expect(monitorIndexFromBuffer('0', 10)).toBeNull();
-    expect(monitorIndexFromBuffer('11', 10)).toBeNull();
+  it('returns null when no monitor has that ID', () => {
+    expect(monitorIdFromBuffer('4', ids)).toBeNull();
+    expect(monitorIdFromBuffer('9', ids)).toBeNull();
+    expect(monitorIdFromBuffer('0', ids)).toBeNull();
   });
 
-  it('returns null for non-numeric buffers', () => {
-    expect(monitorIndexFromBuffer('', 10)).toBeNull();
-    expect(monitorIndexFromBuffer('1a', 10)).toBeNull();
+  it('normalizes leading zeros to the canonical ID', () => {
+    expect(monitorIdFromBuffer('07', ids)).toBe('7');
+  });
+
+  it('returns null for non-numeric or empty buffers', () => {
+    expect(monitorIdFromBuffer('', ids)).toBeNull();
+    expect(monitorIdFromBuffer('1a', ids)).toBeNull();
   });
 });

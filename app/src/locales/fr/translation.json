@@ -1182,7 +1182,7 @@
   "shortcuts": {
     "title": "Raccourcis clavier",
     "subtitle": "Appuyez sur une touche pour naviguer. Hors des champs de texte.",
-    "monitor_by_number": "Ouvrir le moniteur par numéro",
+    "monitor_by_number": "Ouvrir le moniteur par ID",
     "back": "Retour / fermer",
     "show_help": "Afficher cette aide",
     "go_to_monitor": "Aller au moniteur : {{n}}",

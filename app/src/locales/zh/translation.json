@@ -1182,7 +1182,7 @@
   "shortcuts": {
     "title": "键盘快捷键",
     "subtitle": "按键进行导航。在文本框之外有效。",
-    "monitor_by_number": "按编号打开监视器",
+    "monitor_by_number": "按 ID 打开监视器",
     "back": "返回 / 关闭",
     "show_help": "显示此帮助",
     "go_to_monitor": "前往监视器：{{n}}",

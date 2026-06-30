@@ -23,7 +23,7 @@ Feature: Global Keyboard Shortcuts
     Then the keyboard shortcuts help should close
 
   @web
-  Scenario: Number keys jump to a monitor by position
+  Scenario: Number keys jump to a monitor by ZoneMinder ID
     When I navigate to the "Monitors" page
     And I jump to monitor number "1"
     Then I should be on a monitor detail page

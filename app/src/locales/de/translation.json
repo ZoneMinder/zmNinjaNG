@@ -1182,7 +1182,7 @@
   "shortcuts": {
     "title": "Tastenkürzel",
     "subtitle": "Taste drücken zum Navigieren. Funktioniert außerhalb von Textfeldern.",
-    "monitor_by_number": "Monitor per Nummer öffnen",
+    "monitor_by_number": "Monitor per ID öffnen",
     "back": "Zurück / schließen",
     "show_help": "Diese Hilfe anzeigen",
     "go_to_monitor": "Zu Monitor: {{n}}",

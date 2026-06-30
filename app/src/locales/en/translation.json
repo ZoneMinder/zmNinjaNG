@@ -1182,7 +1182,7 @@
   "shortcuts": {
     "title": "Keyboard shortcuts",
     "subtitle": "Press a key to navigate. Works anywhere outside text fields.",
-    "monitor_by_number": "Open monitor by number",
+    "monitor_by_number": "Open monitor by ID",
     "back": "Back / close",
     "show_help": "Show this help",
     "go_to_monitor": "Go to monitor: {{n}}",
