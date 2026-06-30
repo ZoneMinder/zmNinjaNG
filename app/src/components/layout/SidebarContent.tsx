@@ -34,7 +34,9 @@ import {
   LockOpen,
   HelpCircle,
   Megaphone,
+  Search,
 } from 'lucide-react';
+import { useCommandPaletteStore } from '../../stores/commandPalette';
 import { useDeveloperNotices } from '../../hooks/useDeveloperNotices';
 
 const HELP_DOCS_URL = 'https://zmninjang.readthedocs.io/en/latest/';
@@ -236,6 +238,18 @@ export function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentPro
           onPointerMove={isReordering ? handlePointerMove : undefined}
           onPointerUp={isReordering ? handlePointerUp : undefined}
         >
+          <button
+            type="button"
+            onClick={() => useCommandPaletteStore.getState().setOpen(true)}
+            className="flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted"
+            data-testid="command-palette-trigger-sidebar"
+          >
+            <span className="flex items-center gap-2">
+              <Search className="h-4 w-4" />
+              {t('command_palette.search')}
+            </span>
+            <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-xs">/</kbd>
+          </button>
           {navItems.map((item, index) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;

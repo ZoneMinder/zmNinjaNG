@@ -26,6 +26,7 @@ import {
   isTypingTarget,
   monitorIdFromBuffer,
 } from '../lib/keyboard-shortcuts';
+import { useCommandPaletteStore } from '../stores/commandPalette';
 import {
   Dialog,
   DialogContent,
@@ -42,6 +43,8 @@ export function KeyboardShortcuts() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const isLocked = useKioskStore((state) => state.isLocked);
   const { isTvMode } = useTvMode();
+
+  const openPalette = useCommandPaletteStore((s) => s.setOpen);
 
   const [buffer, setBuffer] = useState('');
   const [helpOpen, setHelpOpen] = useState(false);
@@ -121,6 +124,12 @@ export function KeyboardShortcuts() {
         return;
       }
 
+      if (e.key === '/') {
+        e.preventDefault();
+        openPalette(true);
+        return;
+      }
+
       // Shift is only used for '?'. Other shifted keys are ignored.
       if (e.shiftKey) return;
 
@@ -141,7 +150,7 @@ export function KeyboardShortcuts() {
         navigate(route);
       }
     },
-    [currentProfile, isLocked, isTvMode, helpOpen, navigate, commitBuffer, clearBuffer]
+    [currentProfile, isLocked, isTvMode, helpOpen, navigate, commitBuffer, clearBuffer, openPalette]
   );
 
   useEffect(() => {
@@ -177,6 +186,7 @@ export function KeyboardShortcuts() {
             <ShortcutRow keys="1–9, …" label={t('shortcuts.monitor_by_number')} />
             <ShortcutRow keys="Esc" label={t('shortcuts.back')} />
             <ShortcutRow keys="?" label={t('shortcuts.show_help')} />
+            <ShortcutRow keys="/" label={t('command_palette.search')} />
           </div>
         </DialogContent>
       </Dialog>

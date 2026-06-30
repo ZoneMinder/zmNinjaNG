@@ -21,7 +21,9 @@ import {
   ChevronRight,
   Eye,
   EyeOff,
+  Search,
 } from 'lucide-react';
+import { useCommandPaletteStore } from '../../stores/commandPalette';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from '../ui/sheet';
 import { useTranslation } from 'react-i18next';
@@ -219,6 +221,15 @@ export default function AppLayout() {
           <span className="font-bold">{t('app.name')}</span>
         </div>
         <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => useCommandPaletteStore.getState().setOpen(true)}
+            title={t('command_palette.search')}
+            data-testid="command-palette-trigger-mobile"
+          >
+            <Search className="h-5 w-5" />
+          </Button>
           {location.pathname === '/montage' && (
             <Button
               variant="ghost"
