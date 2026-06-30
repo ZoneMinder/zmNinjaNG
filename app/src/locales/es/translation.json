@@ -1181,8 +1181,8 @@
   },
   "command_palette": {
     "title": "Ir a",
-    "placeholder": "Buscar paginas, monitores, grupos...",
-    "group_pages": "Paginas",
+    "placeholder": "Buscar páginas, monitores, grupos...",
+    "group_pages": "Páginas",
     "group_groups": "Grupos",
     "group_monitors": "Monitores",
     "empty": "Sin resultados",

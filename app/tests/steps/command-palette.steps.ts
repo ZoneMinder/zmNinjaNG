@@ -34,3 +34,7 @@ When('I open the command palette from the sidebar', async ({ page }) => {
 Then('the command palette should close', async ({ page }) => {
   await expect(page.getByTestId('command-palette')).toBeHidden({ timeout: testConfig.timeouts.element });
 });
+
+When('I go back from the monitor detail page', async ({ page }) => {
+  await page.getByTestId('monitor-detail-back').click();
+});

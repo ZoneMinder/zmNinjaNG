@@ -1180,12 +1180,12 @@
     "pin_setting_desc": "PIN pour verrouiller et déverrouiller le mode kiosque"
   },
   "command_palette": {
-    "title": "Aller a",
+    "title": "Aller à",
     "placeholder": "Rechercher pages, moniteurs, groupes...",
     "group_pages": "Pages",
     "group_groups": "Groupes",
     "group_monitors": "Moniteurs",
-    "empty": "Aucun resultat",
+    "empty": "Aucun résultat",
     "search": "Rechercher",
     "monitor_id_label": "id"
   },

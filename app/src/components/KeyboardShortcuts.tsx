@@ -126,6 +126,7 @@ export function KeyboardShortcuts() {
 
       if (e.key === '/') {
         e.preventDefault();
+        setHelpOpen(false);
         openPalette(true);
         return;
       }

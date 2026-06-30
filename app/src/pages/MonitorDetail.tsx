@@ -237,6 +237,7 @@ export default function MonitorDetail() {
             onClick={goBack}
             aria-label={t('common.go_back')}
             className="h-8 w-8"
+            data-testid="monitor-detail-back"
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>

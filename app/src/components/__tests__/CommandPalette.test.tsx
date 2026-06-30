@@ -6,6 +6,7 @@ import { useCommandPaletteStore } from '../../stores/commandPalette';
 const navigateMock = vi.fn();
 vi.mock('react-router-dom', () => ({
   useNavigate: () => navigateMock,
+  useLocation: () => ({ pathname: '/dashboard' }),
 }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (k: string) => k }) }));
 vi.mock('@tanstack/react-query', () => ({

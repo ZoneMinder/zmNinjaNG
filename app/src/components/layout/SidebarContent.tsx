@@ -241,14 +241,20 @@ export function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentPro
           <button
             type="button"
             onClick={() => useCommandPaletteStore.getState().setOpen(true)}
-            className="flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted"
+            className={cn(
+              "flex w-full items-center rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted",
+              isCollapsed ? "justify-center px-2" : "justify-between gap-2"
+            )}
+            title={isCollapsed ? t('command_palette.search') : undefined}
             data-testid="command-palette-trigger-sidebar"
           >
             <span className="flex items-center gap-2">
               <Search className="h-4 w-4" />
-              {t('command_palette.search')}
+              {!isCollapsed && t('command_palette.search')}
             </span>
-            <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-xs">/</kbd>
+            {!isCollapsed && (
+              <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-xs">/</kbd>
+            )}
           </button>
           {navItems.map((item, index) => {
             const Icon = item.icon;

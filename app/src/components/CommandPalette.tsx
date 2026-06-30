@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Search } from 'lucide-react';
@@ -32,6 +32,7 @@ const GROUP_LABEL_KEY: Record<CommandItem['kind'], string> = {
 export function CommandPalette() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
   const open = useCommandPaletteStore((s) => s.open);
   const setOpen = useCommandPaletteStore((s) => s.setOpen);
   const { currentProfile } = useCurrentProfile();
@@ -90,7 +91,7 @@ export function CommandPalette() {
     if (item.kind === 'page') {
       navigate(item.route);
     } else if (item.kind === 'monitor') {
-      navigate(`/monitors/${item.monitorId}`, { state: { from: 'command-palette' } });
+      navigate(`/monitors/${item.monitorId}`, { state: { from: location.pathname } });
     } else {
       setSelectedGroup(item.groupId);
       navigate('/montage');
