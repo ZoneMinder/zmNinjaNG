@@ -1179,6 +1179,15 @@
     "pin_setting_label": "Kiosk PIN",
     "pin_setting_desc": "PIN used to lock and unlock kiosk mode"
   },
+  "command_palette": {
+    "title": "Go to",
+    "placeholder": "Search pages, monitors, groups...",
+    "group_pages": "Pages",
+    "group_groups": "Groups",
+    "group_monitors": "Monitors",
+    "empty": "No matches",
+    "search": "Search"
+  },
   "shortcuts": {
     "title": "Keyboard shortcuts",
     "subtitle": "Press a key to navigate. Works anywhere outside text fields.",

@@ -1179,6 +1179,15 @@
     "pin_setting_label": "PIN kiosque",
     "pin_setting_desc": "PIN pour verrouiller et déverrouiller le mode kiosque"
   },
+  "command_palette": {
+    "title": "Aller a",
+    "placeholder": "Rechercher pages, moniteurs, groupes...",
+    "group_pages": "Pages",
+    "group_groups": "Groupes",
+    "group_monitors": "Moniteurs",
+    "empty": "Aucun resultat",
+    "search": "Rechercher"
+  },
   "shortcuts": {
     "title": "Raccourcis clavier",
     "subtitle": "Appuyez sur une touche pour naviguer. Hors des champs de texte.",

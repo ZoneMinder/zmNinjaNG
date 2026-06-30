@@ -1179,6 +1179,15 @@
     "pin_setting_label": "PIN de kiosco",
     "pin_setting_desc": "PIN para bloquear y desbloquear el modo kiosco"
   },
+  "command_palette": {
+    "title": "Ir a",
+    "placeholder": "Buscar paginas, monitores, grupos...",
+    "group_pages": "Paginas",
+    "group_groups": "Grupos",
+    "group_monitors": "Monitores",
+    "empty": "Sin resultados",
+    "search": "Buscar"
+  },
   "shortcuts": {
     "title": "Atajos de teclado",
     "subtitle": "Pulsa una tecla para navegar. Funciona fuera de los campos de texto.",

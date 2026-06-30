@@ -1179,6 +1179,15 @@
     "pin_setting_label": "Kiosk-PIN",
     "pin_setting_desc": "PIN zum Sperren und Entsperren des Kiosk-Modus"
   },
+  "command_palette": {
+    "title": "Gehe zu",
+    "placeholder": "Seiten, Monitore, Gruppen suchen...",
+    "group_pages": "Seiten",
+    "group_groups": "Gruppen",
+    "group_monitors": "Monitore",
+    "empty": "Keine Treffer",
+    "search": "Suchen"
+  },
   "shortcuts": {
     "title": "Tastenkürzel",
     "subtitle": "Taste drücken zum Navigieren. Funktioniert außerhalb von Textfeldern.",
