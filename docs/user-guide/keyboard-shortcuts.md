@@ -23,6 +23,14 @@ Press a single key to jump to a section:
 | `p` | Profiles |
 | `r` | Server |
 
+## Command palette
+
+Press `/` (desktop) or tap the search icon in the top bar (phone) to open the
+command palette. Type to filter, then press `Enter` or tap a result. You can
+jump to any app page, to a monitor by name or ID, or to a monitor group. On a
+phone this is the quick way to navigate, since the letter keys need a hardware
+keyboard.
+
 ## Open a monitor by ID
 
 Type a monitor's ID to open its live view. The number is the ZoneMinder monitor

@@ -1709,6 +1709,16 @@ mode. The shortcut table and pure helpers live in ``lib/keyboard-shortcuts.ts``.
 
 **Used By:** App (mounted in ``HashRouter``)
 
+Command Palette
+~~~~~~~~~~~~~~~
+
+``src/components/CommandPalette.tsx`` is a global palette (refs #207) opened by
+the ``/`` key (via ``KeyboardShortcuts``), a sidebar button, or the mobile-header
+icon, all through ``useCommandPaletteStore``. It lists pages, monitors (by name
+and ID), and groups, filtered by the pure ``filterCommandItems`` helper in
+``src/lib/command-palette.ts``. Selecting a page navigates to it, a monitor opens
+its live view, and a group sets the group filter and opens Montage.
+
 Event Notes Display
 ~~~~~~~~~~~~~~~~~~~
 
