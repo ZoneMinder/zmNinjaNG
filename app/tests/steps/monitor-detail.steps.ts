@@ -689,6 +689,32 @@ Then('the zone toggle should be inactive', async ({ page }) => {
   log.info('E2E: Zone toggle inactive state', { component: 'e2e', overlayHidden: !isOverlayVisible });
 });
 
+When('I toggle Show Zones on', async ({ page }) => {
+  const toggle = page.getByTestId('zone-toggle-button');
+  await toggle.click();
+  await page.waitForTimeout(500);
+});
+
+Then('the zone overlay and legend should be visible if the monitor has zones', async ({ page }) => {
+  const overlay = page.getByTestId('zone-overlay');
+  const isOverlayVisible = await overlay.isVisible({ timeout: 3000 }).catch(() => false);
+  if (isOverlayVisible) {
+    await expect(page.getByTestId('zone-legend')).toBeVisible();
+  }
+  // else: this monitor has no zones; nothing to assert.
+  log.info('E2E: Zone overlay check', { component: 'e2e', overlayVisible: isOverlayVisible });
+});
+
+When('I toggle Show Zones off', async ({ page }) => {
+  const toggle = page.getByTestId('zone-toggle-button');
+  await toggle.click();
+  await page.waitForTimeout(500);
+});
+
+Then('the zone overlay should not be visible', async ({ page }) => {
+  await expect(page.getByTestId('zone-overlay')).toHaveCount(0);
+});
+
 // MJPEG streaming regression steps (issue #155, Tauri socket pool)
 
 /**

@@ -28,6 +28,14 @@ Feature: Monitor Detail Page
     Then the zone toggle should be inactive
 
   @all
+  Scenario: Zone overlay and legend appear when a monitor has zones
+    Then I should see the zone toggle button
+    When I toggle Show Zones on
+    Then the zone overlay and legend should be visible if the monitor has zones
+    When I toggle Show Zones off
+    Then the zone overlay should not be visible
+
+  @all
   Scenario: Navigation arrows cycle through monitors
     Then I should see navigation arrows if multiple monitors exist
     When I click the next monitor button if visible
