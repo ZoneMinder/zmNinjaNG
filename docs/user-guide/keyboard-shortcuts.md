@@ -25,11 +25,12 @@ Press a single key to jump to a section:
 
 ## Command palette
 
-Press `/` (desktop) or tap the search icon in the top bar (phone) to open the
-command palette. Type to filter, then press `Enter` or tap a result. You can
-jump to any app page, to a monitor by name or ID, or to a monitor group. On a
-phone this is the quick way to navigate, since the letter keys need a hardware
-keyboard.
+Open the "Jump to" palette in any of three ways: press `/` (desktop/web), tap
+the command icon in the top bar (phone), or use the "Jump to" button in the
+sidebar. Type to filter, then press `Enter` or tap a result. Use the up and down
+arrows to move the highlight. You can jump to any app page, to a monitor by name
+or ID, or to a monitor group. On a phone this is the quick way to navigate,
+since the letter keys need a hardware keyboard.
 
 ## Open a monitor by ID
 
@@ -46,5 +47,6 @@ or wait about a second and it goes on its own. Press `Esc` to cancel.
 
 | Key | Action |
 |-----|--------|
+| `/` | Open the "Jump to" command palette |
 | `Esc` | Go back. Closes an open dialog first. |
 | `?` | Show the keyboard shortcuts |
