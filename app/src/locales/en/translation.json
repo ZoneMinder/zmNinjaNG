@@ -219,7 +219,8 @@
     "tags": {
       "loading": "Loading tags...",
       "moreCount": "+{{count}} more"
-    }
+    },
+    "just_now": "just now"
   },
   "event_detail": {
     "event_id": "Event ID",

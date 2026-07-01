@@ -219,7 +219,8 @@
     "tags": {
       "loading": "Cargando etiquetas...",
       "moreCount": "+{{count}} más"
-    }
+    },
+    "just_now": "ahora mismo"
   },
   "event_detail": {
     "event_id": "ID de Evento",
