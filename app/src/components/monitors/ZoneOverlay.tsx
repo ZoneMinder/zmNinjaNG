@@ -99,7 +99,14 @@ export function ZoneOverlay({
             />
             {/* Zone label - shown on hover */}
             {isHovered && (
-              <ZoneLabel zone={zone} color={color} transform={transform} t={t} />
+              <ZoneLabel
+                zone={zone}
+                color={color}
+                transform={transform}
+                t={t}
+                viewBoxWidth={viewBoxWidth}
+                viewBoxHeight={viewBoxHeight}
+              />
             )}
           </g>
         );
@@ -111,45 +118,68 @@ export function ZoneOverlay({
 /**
  * Zone label component shown on hover.
  */
-function ZoneLabel({ zone, color, transform, t }: {
+function ZoneLabel({ zone, color, transform, t, viewBoxWidth, viewBoxHeight }: {
   zone: Zone; color: string; transform: ZoneTransform;
   t: (key: string) => string;
+  viewBoxWidth: number; viewBoxHeight: number;
 }) {
   const center = calculatePolygonCenter(zone.Coords, transform);
   const typeLabel = t(`monitor_detail.zone_type.${zone.Type.toLowerCase()}`);
 
+  // Font and box sizes are in viewBox units (the monitor's native resolution).
+  // The SVG is scaled to fit the player, so a fixed size would shrink on
+  // high-resolution monitors. Scaling to the viewBox keeps the label a
+  // consistent size on screen at any resolution.
+  const scale = Math.max(viewBoxWidth, viewBoxHeight);
+  const nameFont = scale * 0.022;
+  const typeFont = scale * 0.018;
+  const padX = nameFont * 0.7;
+  const padY = nameFont * 0.45;
+  const lineGap = nameFont * 0.3;
+  const dotR = nameFont * 0.32;
+
+  // SVG text has no auto-sized background, so estimate the text width from the
+  // character count (~0.62em per character) to size the box.
+  const nameWidth = zone.Name.length * nameFont * 0.62 + dotR * 3;
+  const typeWidth = typeLabel.length * typeFont * 0.62;
+  const rectW = Math.max(nameWidth, typeWidth) + padX * 2;
+  const rectH = nameFont + lineGap + typeFont + padY * 2;
+  const rectX = center.x - rectW / 2;
+  const rectY = center.y - rectH / 2;
+  const nameBaseline = rectY + padY + nameFont * 0.85;
+  const typeBaseline = nameBaseline + lineGap + typeFont * 0.9;
+  const dotX = center.x - (zone.Name.length * nameFont * 0.62) / 2 - dotR * 1.5;
+
   return (
-    <g>
+    <g className="select-none pointer-events-none">
       <rect
-        x={center.x - 60}
-        y={center.y - 16}
-        width={120}
-        height={34}
-        fill="rgba(0, 0, 0, 0.75)"
-        rx={4}
+        x={rectX}
+        y={rectY}
+        width={rectW}
+        height={rectH}
+        fill="rgba(0, 0, 0, 0.78)"
+        rx={nameFont * 0.3}
       />
+      <circle cx={dotX} cy={nameBaseline - nameFont * 0.32} r={dotR} fill={color} />
       <text
         x={center.x}
-        y={center.y - 1}
+        y={nameBaseline}
         textAnchor="middle"
         fill="white"
-        fontSize="14"
-        fontWeight="500"
-        className="select-none pointer-events-none"
+        fontSize={nameFont}
+        fontWeight="600"
       >
         {zone.Name}
       </text>
       <text
         x={center.x}
-        y={center.y + 13}
+        y={typeBaseline}
         textAnchor="middle"
-        fill="#d1d5db"
-        fontSize="11"
-        className="select-none pointer-events-none"
+        fill="#e5e7eb"
+        fontSize={typeFont}
       >
         {typeLabel}
       </text>
-      <circle cx={center.x - 50} cy={center.y - 5} r={4} fill={color} />
     </g>
   );
 }
