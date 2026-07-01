@@ -35,17 +35,22 @@ describe('formatEventRelative', () => {
     expect(formatEventRelative(new Date(NOW.getTime() + 30_000), 'en', t, NOW)).toBe('events.now');
   });
 
-  it('returns short-style "ago" strings in English', () => {
-    expect(formatEventRelative(ago(40 * MIN), 'en', t, NOW)).toBe('40 min. ago');
-    expect(formatEventRelative(ago(3 * HOUR), 'en', t, NOW)).toBe('3 hr. ago');
-    expect(formatEventRelative(ago(2 * DAY), 'en', t, NOW)).toBe('2 days ago');
+  it('returns narrow-style "ago" strings in English', () => {
+    expect(formatEventRelative(ago(40 * MIN), 'en', t, NOW)).toBe('40m ago');
+    expect(formatEventRelative(ago(3 * HOUR), 'en', t, NOW)).toBe('3h ago');
+    expect(formatEventRelative(ago(2 * DAY), 'en', t, NOW)).toBe('2d ago');
   });
 
   it('localizes the suffix per language', () => {
     expect(formatEventRelative(ago(40 * MIN), 'es', t, NOW)).toContain('hace');
     expect(formatEventRelative(ago(40 * MIN), 'de', t, NOW)).toContain('vor');
-    expect(formatEventRelative(ago(40 * MIN), 'fr', t, NOW)).toContain('il y a');
     expect(formatEventRelative(ago(40 * MIN), 'zh', t, NOW)).toContain('前');
+  });
+
+  it('falls back to short style for French so "ago" is spelled, not a bare minus', () => {
+    const fr = formatEventRelative(ago(40 * MIN), 'fr', t, NOW);
+    expect(fr).toContain('il y a');
+    expect(fr.trim().startsWith('-')).toBe(false);
   });
 
   it('returns an empty string for an invalid date', () => {

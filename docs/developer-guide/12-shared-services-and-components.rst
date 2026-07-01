@@ -608,9 +608,12 @@ Relative Time Labels (``lib/relative-time.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Event list cards and the event detail screen show a compact "how long ago" label.
-``Intl.RelativeTimeFormat`` with ``style: 'short'`` produces abbreviated, localized
-output ("40 min. ago", "3 hr. ago") without a date-fns locale map. The BCP-47
-language tag from the app's i18n state is passed directly. Under 60 000 ms
+``Intl.RelativeTimeFormat`` with ``style: 'narrow'`` produces abbreviated, localized
+output ("40m ago", "3h ago") without a date-fns locale map. The BCP-47 language tag
+from the app's i18n state is passed directly. Some locales render the narrow form as
+a bare signed number (French gives "-40 min", which reads as negative rather than
+"ago"), so when the narrow output starts with a sign the helper falls back to
+``style: 'short'``, which spells the direction ("il y a 40 min"). Under 60 000 ms
 (``RELATIVE_TIME_JUST_NOW_MS``) the label returns ``t('events.now')`` instead of a
 numeric distance. ``isWithinDays`` gates the chip: only events within 7 days
 (``RELATIVE_TIME_LIST_WINDOW_DAYS``) receive a relative label in the list view.
@@ -625,7 +628,7 @@ numeric distance. ``isWithinDays`` gates the chip: only events within 7 days
    }
 
    // Returns t('events.now') when |diffMs| < RELATIVE_TIME_JUST_NOW_MS;
-   // otherwise a short "N unit ago" string via Intl.RelativeTimeFormat.
+   // otherwise a narrow "Nm ago" string via Intl.RelativeTimeFormat.
    const label = formatEventRelative(date, i18n.language, t);
 
 **Consumer behavior:**
