@@ -468,6 +468,10 @@ When('I disable favorites only filter', async ({ page }) => {
   }
 });
 
+When('I toggle the archived-only filter', async ({ page }) => {
+  await page.getByTestId('events-archived-toggle').click();
+});
+
 When('I select the first available tag if tags exist', async ({ page }) => {
   tagFilterApplied = false;
   // Concrete tag options are data-testid="tag-option-<id>" (the "all" option is

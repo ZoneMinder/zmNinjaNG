@@ -96,6 +96,13 @@ Feature: Event Browsing and Management
     And I unfavorite the first event if it was favorited
 
   @all
+  Scenario: Filter events to archived only
+    When I open the events filter panel
+    And I toggle the archived-only filter
+    And I apply event filters
+    Then I should see events list or empty state
+
+  @all
   Scenario: Filtering by a tag returns only tagged events
     When I open the events filter panel
     And I select the first available tag if tags exist
