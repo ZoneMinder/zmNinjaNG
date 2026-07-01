@@ -5,7 +5,7 @@
  * Provides filtering UI for events by monitors, favorites, tags, and date range.
  */
 
-import { Star, Tag, X, Loader2, ScanSearch } from 'lucide-react';
+import { Archive, Star, Tag, X, Loader2, ScanSearch } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { MonitorData, Tag as TagType } from '../../api/types';
 import { ALL_TAGS_FILTER_ID } from '../../hooks/useEventFilters';
@@ -25,6 +25,8 @@ interface EventsFilterPopoverProps {
   onMonitorSelectionChange: (ids: string[]) => void;
   favoritesOnly: boolean;
   onFavoritesOnlyChange: (value: boolean) => void;
+  archivedOnly: boolean;
+  onArchivedOnlyChange: (value: boolean) => void;
   startDateInput: string;
   onStartDateChange: (value: string) => void;
   endDateInput: string;
@@ -49,6 +51,8 @@ export function EventsFilterPopover({
   onMonitorSelectionChange,
   favoritesOnly,
   onFavoritesOnlyChange,
+  archivedOnly,
+  onArchivedOnlyChange,
   startDateInput,
   onStartDateChange,
   endDateInput,
@@ -134,6 +138,22 @@ export function EventsFilterPopover({
             checked={favoritesOnly}
             onCheckedChange={onFavoritesOnlyChange}
             data-testid="events-favorites-toggle"
+          />
+        </div>
+
+        {/* Archived filter */}
+        <div className="flex items-center justify-between p-3 rounded-md border bg-card">
+          <div className="flex items-center gap-2">
+            <Archive className="h-4 w-4 text-muted-foreground" />
+            <Label htmlFor="archived-only" className="cursor-pointer">
+              {t('events.archived_only')}
+            </Label>
+          </div>
+          <Switch
+            id="archived-only"
+            checked={archivedOnly}
+            onCheckedChange={onArchivedOnlyChange}
+            data-testid="events-archived-toggle"
           />
         </div>
 

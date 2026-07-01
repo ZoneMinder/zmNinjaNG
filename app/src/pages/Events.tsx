@@ -95,11 +95,13 @@ export default function Events() {
     startDateInput,
     endDateInput,
     favoritesOnly,
+    archivedOnly,
     setSelectedMonitorIds,
     setSelectedTagIds,
     setStartDateInput,
     setEndDateInput,
     setFavoritesOnly,
+    setArchivedOnly,
     onlyDetectedObjects,
     setOnlyDetectedObjects,
     activeQuickRange,
@@ -448,6 +450,8 @@ export default function Events() {
                   onMonitorSelectionChange={setSelectedMonitorIds}
                   favoritesOnly={favoritesOnly}
                   onFavoritesOnlyChange={setFavoritesOnly}
+                  archivedOnly={archivedOnly}
+                  onArchivedOnlyChange={setArchivedOnly}
                   startDateInput={startDateInput}
                   onStartDateChange={setStartDateInput}
                   endDateInput={endDateInput}
