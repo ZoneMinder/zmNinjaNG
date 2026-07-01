@@ -40,12 +40,13 @@ import { ZoomControls } from '../components/ui/zoom-controls';
 import { useEventNavigation } from '../hooks/useEventNavigation';
 import { useServerUrls } from '../hooks/useServerUrls';
 import { cn } from '../lib/utils';
+import { formatEventRelative } from '../lib/relative-time';
 
 export default function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { fmtDate, fmtTime } = useDateTimeFormat();
   const { isTvMode } = useTvMode();
 
@@ -511,6 +512,9 @@ export default function EventDetail() {
                   <div>
                     <div className="text-sm font-medium">{t('event_detail.time')}</div>
                     <div className="text-sm text-muted-foreground">{fmtTime(startTime)}</div>
+                    <div className="text-xs text-muted-foreground/70" data-testid="event-detail-relative-time">
+                      {formatEventRelative(startTime, i18n.language, t)}
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
