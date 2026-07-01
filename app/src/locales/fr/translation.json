@@ -566,6 +566,14 @@
     "mode_none": "None",
     "show_zones": "Afficher les zones",
     "hide_zones": "Masquer les zones",
+    "zone_type": {
+      "active": "Active",
+      "inclusive": "Inclusive",
+      "exclusive": "Exclusive",
+      "preclusive": "Préclusive",
+      "inactive": "Inactive",
+      "privacy": "Confidentialité"
+    },
     "zones_loading": "Chargement des zones...",
     "no_zones": "Aucune zone définie",
     "exit_fullscreen": "Quitter le plein écran",

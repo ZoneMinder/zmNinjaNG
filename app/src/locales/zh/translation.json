@@ -566,6 +566,14 @@
     "mode_none": "None",
     "show_zones": "显示区域",
     "hide_zones": "隐藏区域",
+    "zone_type": {
+      "active": "活动",
+      "inclusive": "包含",
+      "exclusive": "排除",
+      "preclusive": "预排除",
+      "inactive": "非活动",
+      "privacy": "隐私"
+    },
     "zones_loading": "正在加载区域...",
     "no_zones": "未定义区域",
     "exit_fullscreen": "退出全屏",
