@@ -15,7 +15,7 @@ import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { EventThumbnail } from './EventThumbnail';
 import { EventThumbnailHoverPreview } from './EventThumbnailHoverPreview';
-import { Video, Calendar, Clock, Star, Archive } from 'lucide-react';
+import { Video, Calendar, Clock, Star, Archive, Hourglass } from 'lucide-react';
 import { getEventCauseIcon } from '../../lib/event-icons';
 import { getObjectClassIconFromList } from '../../lib/object-class-icons';
 import type { EventCardProps } from '../../api/types';
@@ -26,6 +26,8 @@ import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { setEventArchived } from '../../api/events';
 import { log, LogLevel } from '../../lib/logger';
 import { TagChipList } from './TagChip';
+import { formatEventRelative, isWithinDays } from '../../lib/relative-time';
+import { RELATIVE_TIME_LIST_WINDOW_DAYS } from '../../lib/zmninja-ng-constants';
 
 /**
  * EventCard component.
@@ -38,7 +40,7 @@ import { TagChipList } from './TagChip';
  */
 function EventCardComponent({ event, monitorName, thumbnailUrls, largeThumbnailUrls, objectFit = 'contain', thumbnailWidth, thumbnailHeight, tags, eventFilters }: EventCardProps) {
   const navigate = useNavigate();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { fmtDate, fmtTime } = useDateTimeFormat();
   const { currentProfile, settings } = useCurrentProfile();
   const queryClient = useQueryClient();
@@ -223,6 +225,15 @@ function EventCardComponent({ event, monitorName, thumbnailUrls, largeThumbnailU
                 <Clock className="h-3 w-3 sm:h-4 sm:w-4" />
                 {fmtTime(startTime)}
               </div>
+              {isWithinDays(startTime, RELATIVE_TIME_LIST_WINDOW_DAYS) && (
+                <div
+                  className="flex items-center gap-1 sm:gap-1.5 bg-primary/10 rounded px-1.5 py-0.5 min-w-0"
+                  data-testid="event-relative-time"
+                >
+                  <Hourglass className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+                  <span className="truncate min-w-0">{formatEventRelative(startTime, i18n.language, t)}</span>
+                </div>
+              )}
             </div>
           </div>
 
