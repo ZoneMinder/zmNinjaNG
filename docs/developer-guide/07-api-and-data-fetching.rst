@@ -1624,6 +1624,22 @@ Behavior of the ``eventIds`` path:
 - ``totalCount`` reflects the matched set, so "Load More" disappears once every
   matching event is shown.
 
+Filtering by archived status
+----------------------------
+
+``EventFilters.archived`` (``src/api/events.ts``) is a boolean that, when
+``true``, adds an ``Archived:1`` path segment to the server query. The segment
+is composed with the monitor, date, favorites, and tag filter segments in the
+same AND chain. When ``archived`` is ``undefined`` or ``false``, no segment is
+added and the server returns all events regardless of archived status.
+
+``archivedOnly`` in ``useEventFilters`` mirrors ``favoritesOnly``: the state
+is persisted per profile in ``settings.eventsPageFilters.archivedOnly``,
+reflected in the ``archived=true`` URL search parameter, and counted in the
+active-filter badge. Archiving or unarchiving an event is a separate action
+(``setEventArchived`` in ``src/api/events.ts``) available in the event detail
+screen.
+
 Monitor Groups API
 ------------------
 
