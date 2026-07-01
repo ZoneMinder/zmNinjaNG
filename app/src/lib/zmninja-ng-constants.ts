@@ -233,6 +233,14 @@ export const EVENT_LIST = {
 } as const;
 
 /**
+ * Relative time labels on events (issue #210).
+ * List chip only renders for events within this many days; older events read
+ * fine from the absolute date. Below the just-now threshold we show "just now".
+ */
+export const RELATIVE_TIME_LIST_WINDOW_DAYS = 7;
+export const RELATIVE_TIME_JUST_NOW_MS = 60_000;
+
+/**
  * Development Proxy Server Configuration
  *
  * DEVELOPMENT ONLY: Used by the local proxy server for CORS bypass during development.
