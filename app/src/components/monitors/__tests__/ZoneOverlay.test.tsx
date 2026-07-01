@@ -25,7 +25,7 @@ describe('ZoneOverlay', () => {
   it('colors an inactive zone by type (gray), ignoring red AlarmRGB', () => {
     render(<ZoneOverlay {...base} zones={[zone({ Id: 7, Type: 'Inactive' })]} />);
     const poly = screen.getByTestId('zone-polygon-7');
-    expect(poly.getAttribute('fill')).toBe('#9ca3af');
+    expect(poly.getAttribute('fill')).toBe('#6b7280');
     expect(poly.getAttribute('fill')).not.toBe('#ff0000');
   });
 
@@ -37,7 +37,7 @@ describe('ZoneOverlay', () => {
       ]} />
     );
     expect(screen.getByTestId('zone-polygon-1').getAttribute('fill')).toBe('#22c55e');
-    expect(screen.getByTestId('zone-polygon-2').getAttribute('fill')).toBe('#9ca3af');
+    expect(screen.getByTestId('zone-polygon-2').getAttribute('fill')).toBe('#6b7280');
   });
 
   it('shows the translated zone type in the hover label', () => {

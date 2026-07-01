@@ -71,7 +71,7 @@ describe('getZoneColor palette', () => {
     expect(getZoneColor('Inclusive')).toBe('#3b82f6');
     expect(getZoneColor('Exclusive')).toBe('#ef4444');
     expect(getZoneColor('Preclusive')).toBe('#f59e0b');
-    expect(getZoneColor('Inactive')).toBe('#9ca3af');
+    expect(getZoneColor('Inactive')).toBe('#6b7280');
     expect(getZoneColor('Privacy')).toBe('#a855f7');
   });
 
