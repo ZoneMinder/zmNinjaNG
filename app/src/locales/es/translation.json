@@ -202,6 +202,7 @@
     "unfavorite": "Quitar de favoritos",
     "favorited": "Marcado como favorito",
     "favorites_only": "Solo Favoritos",
+    "archived_only": "Solo archivados",
     "added_to_favorites": "Evento añadido a favoritos",
     "removed_from_favorites": "Evento eliminado de favoritos",
     "archive": "Archivar",

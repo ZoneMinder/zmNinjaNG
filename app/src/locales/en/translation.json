@@ -202,6 +202,7 @@
     "unfavorite": "Unfavorite",
     "favorited": "Favorited",
     "favorites_only": "Favorites Only",
+    "archived_only": "Archived only",
     "added_to_favorites": "Event added to favorites",
     "removed_from_favorites": "Event removed from favorites",
     "archive": "Archive",

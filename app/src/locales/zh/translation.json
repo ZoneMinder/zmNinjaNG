@@ -202,6 +202,7 @@
     "unfavorite": "取消收藏",
     "favorited": "已收藏",
     "favorites_only": "仅显示收藏",
+    "archived_only": "仅已存档",
     "added_to_favorites": "事件已添加到收藏",
     "removed_from_favorites": "事件已从收藏中移除",
     "archive": "归档",
