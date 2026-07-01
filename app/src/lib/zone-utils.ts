@@ -33,7 +33,7 @@ const zoneColors: Record<ZoneType, string> = {
   Inclusive: '#3b82f6',  // blue-500
   Exclusive: '#ef4444',  // red-500
   Preclusive: '#f59e0b', // amber-500
-  Inactive: '#6b7280',   // gray-500
+  Inactive: '#4b5563',   // gray-600
   Privacy: '#a855f7',    // purple-500
 };
 

@@ -1263,7 +1263,7 @@ Utilities for parsing and rendering zone data from ZoneMinder.
 +-------------+--------+-------------+
 | Preclusive  | amber  | ``#f59e0b`` |
 +-------------+--------+-------------+
-| Inactive    | gray   | ``#6b7280`` |
+| Inactive    | gray   | ``#4b5563`` |
 +-------------+--------+-------------+
 | Privacy     | purple | ``#a855f7`` |
 +-------------+--------+-------------+
