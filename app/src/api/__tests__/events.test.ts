@@ -287,6 +287,35 @@ describe('Events API', () => {
     expect(call).toContain('Cause%20REGEXP%3AContinuous');
   });
 
+  it('adds the Archived segment when archived is set', async () => {
+    mockGet.mockResolvedValue({
+      data: {
+        events: [buildEventData(10)],
+        pagination: { pageCount: 1, page: 1, current: 1, count: 1, prevPage: false, nextPage: false, limit: 100 },
+      },
+    });
+
+    await getEvents({ archived: true, monitorId: '1' });
+
+    const call = mockGet.mock.calls[0][0] as string;
+    expect(call).toContain('Archived%3A1');
+    expect(call).toContain('MonitorId%3A1');
+  });
+
+  it('does not add the Archived segment when archived is false', async () => {
+    mockGet.mockResolvedValue({
+      data: {
+        events: [buildEventData(10)],
+        pagination: { pageCount: 1, page: 1, current: 1, count: 1, prevPage: false, nextPage: false, limit: 100 },
+      },
+    });
+
+    await getEvents({ archived: false });
+
+    const call = mockGet.mock.calls[0][0] as string;
+    expect(call).not.toContain('Archived');
+  });
+
   describe('eventIds (Id IN: filter)', () => {
     it('returns empty without any request when eventIds is empty', async () => {
       const response = await getEvents({ eventIds: [], limit: 100 });

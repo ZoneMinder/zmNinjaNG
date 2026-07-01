@@ -185,6 +185,9 @@ export async function getEvents(filters: EventFilters = {}): Promise<EventsRespo
   if (filters.cause) {
     addFilterSegment(`Cause REGEXP:${filters.cause}`);
   }
+  if (filters.archived) {
+    addFilterSegment('Archived:1');
+  }
 
   // Favorites pass an explicit ID set; route through the server-side "Id IN:"
   // filter so pagination stays accurate (refs #205). An empty set matches
