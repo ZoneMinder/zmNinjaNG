@@ -2,8 +2,9 @@
  * Zone Legend
  *
  * Small color key for the Show Zones overlay. Lists the zone types present on
- * the current monitor with their palette color and translated label. Fixed
- * position, non-interactive, shown only while the overlay is visible.
+ * the current monitor with their palette color and translated label.
+ * Absolutely positioned within the player, non-interactive, shown only while
+ * the overlay is visible.
  */
 
 import { useMemo } from 'react';
