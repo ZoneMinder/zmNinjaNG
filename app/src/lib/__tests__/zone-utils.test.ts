@@ -6,6 +6,7 @@ import { describe, it, expect } from 'vitest';
 import {
   parseZoneCoords,
   getZoneColor,
+  ZONE_TYPE_ORDER,
   coordsToSvgPoints,
   alarmRGBToHex,
   transformPoint,
@@ -64,29 +65,27 @@ describe('parseZoneCoords', () => {
   });
 });
 
-describe('getZoneColor', () => {
-  it('returns green for Active zones', () => {
+describe('getZoneColor palette', () => {
+  it('returns the refined palette per type', () => {
     expect(getZoneColor('Active')).toBe('#22c55e');
-  });
-
-  it('returns blue for Inclusive zones', () => {
     expect(getZoneColor('Inclusive')).toBe('#3b82f6');
-  });
-
-  it('returns red for Exclusive zones', () => {
     expect(getZoneColor('Exclusive')).toBe('#ef4444');
+    expect(getZoneColor('Preclusive')).toBe('#f59e0b');
+    expect(getZoneColor('Inactive')).toBe('#9ca3af');
+    expect(getZoneColor('Privacy')).toBe('#a855f7');
   });
 
-  it('returns yellow for Preclusive zones', () => {
-    expect(getZoneColor('Preclusive')).toBe('#eab308');
+  it('falls back to gray for an unknown type', () => {
+    // @ts-expect-error intentional invalid type
+    expect(getZoneColor('Nope')).toBe('#6b7280');
   });
+});
 
-  it('returns gray for Inactive zones', () => {
-    expect(getZoneColor('Inactive')).toBe('#6b7280');
-  });
-
-  it('returns black for Privacy zones', () => {
-    expect(getZoneColor('Privacy')).toBe('#000000');
+describe('ZONE_TYPE_ORDER', () => {
+  it('lists all six types in palette order', () => {
+    expect(ZONE_TYPE_ORDER).toEqual([
+      'Active', 'Inclusive', 'Exclusive', 'Preclusive', 'Inactive', 'Privacy',
+    ]);
   });
 });
 

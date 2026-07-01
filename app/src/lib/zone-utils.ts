@@ -32,10 +32,15 @@ const zoneColors: Record<ZoneType, string> = {
   Active: '#22c55e',     // green-500
   Inclusive: '#3b82f6',  // blue-500
   Exclusive: '#ef4444',  // red-500
-  Preclusive: '#eab308', // yellow-500
-  Inactive: '#6b7280',   // gray-500
-  Privacy: '#000000',    // black
+  Preclusive: '#f59e0b', // amber-500
+  Inactive: '#9ca3af',   // gray-400
+  Privacy: '#a855f7',    // purple-500
 };
+
+/** Zone types in palette order, for legend rows and stable ordering. */
+export const ZONE_TYPE_ORDER: ZoneType[] = [
+  'Active', 'Inclusive', 'Exclusive', 'Preclusive', 'Inactive', 'Privacy',
+];
 
 /**
  * Parses zone coordinates from ZoneMinder format.
