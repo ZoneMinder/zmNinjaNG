@@ -80,6 +80,14 @@ class MockWebSocket {
 
 global.WebSocket = MockWebSocket as unknown as typeof WebSocket;
 
+// jsdom has no ResizeObserver. Provide a no-op so components that observe
+// element size (ZoneOverlay, montage grid, timeline) can mount in tests.
+global.ResizeObserver = class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+} as unknown as typeof ResizeObserver;
+
 // Mock Audio for notification sounds
 global.AudioContext = vi.fn(() => ({
   createOscillator: vi.fn(() => ({

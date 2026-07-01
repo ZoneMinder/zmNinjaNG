@@ -5,7 +5,7 @@
  * on top of a video player or image. Read-only visualization.
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Zone } from '../../api/types';
 import type { MonitorRotation } from '../../lib/monitor-rotation';
@@ -46,6 +46,11 @@ export function ZoneOverlay({
 }: ZoneOverlayProps) {
   const { t } = useTranslation();
   const [hoveredZoneId, setHoveredZoneId] = useState<number | null>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  // Rendered pixels per viewBox unit, so the hover label can be sized to a
+  // fixed on-screen pixel size (like the HTML legend) instead of scaling with
+  // the monitor resolution. Measured from the SVG's actual rendered size.
+  const [pxPerUnit, setPxPerUnit] = useState(0);
 
   // Filter zones to only show zones for this monitor
   const filteredZones = useMemo(() => {
@@ -67,12 +72,28 @@ export function ZoneOverlay({
     };
   }, [rotation, monitorWidth, monitorHeight]);
 
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el || !viewBoxWidth || !viewBoxHeight) return;
+    const measure = () => {
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        setPxPerUnit(Math.min(rect.width / viewBoxWidth, rect.height / viewBoxHeight));
+      }
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [viewBoxWidth, viewBoxHeight, visible]);
+
   if (!visible || filteredZones.length === 0) {
     return null;
   }
 
   return (
     <svg
+      ref={svgRef}
       className="absolute inset-0 w-full h-full"
       viewBox={`0 0 ${viewBoxWidth} ${viewBoxHeight}`}
       preserveAspectRatio="xMidYMid meet"
@@ -104,6 +125,7 @@ export function ZoneOverlay({
                 color={color}
                 transform={transform}
                 t={t}
+                pxPerUnit={pxPerUnit}
                 viewBoxWidth={viewBoxWidth}
                 viewBoxHeight={viewBoxHeight}
               />
@@ -118,21 +140,22 @@ export function ZoneOverlay({
 /**
  * Zone label component shown on hover.
  */
-function ZoneLabel({ zone, color, transform, t, viewBoxWidth, viewBoxHeight }: {
+function ZoneLabel({ zone, color, transform, t, pxPerUnit, viewBoxWidth, viewBoxHeight }: {
   zone: Zone; color: string; transform: ZoneTransform;
   t: (key: string) => string;
-  viewBoxWidth: number; viewBoxHeight: number;
+  pxPerUnit: number; viewBoxWidth: number; viewBoxHeight: number;
 }) {
   const center = calculatePolygonCenter(zone.Coords, transform);
   const typeLabel = t(`monitor_detail.zone_type.${zone.Type.toLowerCase()}`);
 
-  // Font and box sizes are in viewBox units (the monitor's native resolution).
-  // The SVG is scaled to fit the player, so a fixed size would shrink on
-  // high-resolution monitors. Scaling to the viewBox keeps the label a
-  // consistent size on screen at any resolution.
-  const scale = Math.max(viewBoxWidth, viewBoxHeight);
-  const nameFont = scale * 0.022;
-  const typeFont = scale * 0.018;
+  // Convert a target on-screen pixel size to viewBox units so the label renders
+  // at a fixed size on screen (matching the HTML legend), regardless of the
+  // monitor resolution. Fall back to a viewBox fraction before the first
+  // measurement.
+  const unitsFor = (px: number) =>
+    pxPerUnit > 0 ? px / pxPerUnit : Math.max(viewBoxWidth, viewBoxHeight) * (px / 640);
+  const nameFont = unitsFor(14);
+  const typeFont = unitsFor(11);
   const padX = nameFont * 0.7;
   const padY = nameFont * 0.45;
   const lineGap = nameFont * 0.3;
