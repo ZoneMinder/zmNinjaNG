@@ -126,3 +126,7 @@ Feature: Event Browsing and Management
     Then I should see events list or empty state
     And no element should overflow the viewport horizontally
     And the page should match the visual baseline
+
+  @all
+  Scenario: Recent events show a human-readable relative time
+    Then any relative time labels in the list read as a duration

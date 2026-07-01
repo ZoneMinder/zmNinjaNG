@@ -513,6 +513,43 @@ Then('I should see only tagged events if a tag was applied', async ({ page }) =>
   }
 });
 
+// Relative-time chip assertion (refs #210)
+Then('any relative time labels in the list read as a duration', async ({ page }) => {
+  // Wait for the list to settle: either cards rendered or empty state visible.
+  const eventCards = page.getByTestId('event-card');
+  const emptyState = page.getByTestId('events-empty-state');
+
+  await expect.poll(async () => {
+    const count = await eventCards.count();
+    const emptyVisible = await emptyState.isVisible().catch(() => false);
+    return count > 0 || emptyVisible;
+  }, { timeout: testConfig.timeouts.transition * 3 }).toBeTruthy();
+
+  const cardCount = await eventCards.count();
+  if (cardCount === 0) {
+    // Empty state with no cards. Nothing to verify.
+    return;
+  }
+
+  const chips = page.getByTestId('event-relative-time');
+  const chipCount = await chips.count();
+
+  if (chipCount > 0) {
+    // Assert the first chip is visible and shows a recognisable relative-time string.
+    // Pattern covers date-fns addSuffix output ("ago", "vor", "hace", "il y a", "前")
+    // and the app's just_now translations across all 5 supported languages
+    // (en: "just now", es: "ahora mismo", de: "gerade eben", fr: "a l'instant", zh: "just now" alias).
+    const relativeTimePattern = /(ago|just now|vor|hace|il y a|gerade|ahora|前|刚刚)/i;
+    const firstChip = chips.first();
+    await expect(firstChip).toBeVisible();
+    const text = await firstChip.innerText();
+    expect(text.trim()).not.toBe('');
+    expect(text).toMatch(relativeTimePattern);
+  }
+  // chipCount === 0 while cards exist: no event falls within the 7-day window
+  // that gates chip rendering. Valid server state; no assertion needed.
+});
+
 When('I favorite the event from detail page if on detail page', async ({ page }) => {
   if (!hasEvents) {
     log.info('E2E: Skipping favorite from detail - no events exist', { component: 'e2e' });
