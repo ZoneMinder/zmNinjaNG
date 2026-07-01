@@ -27,6 +27,7 @@ import { useInsomnia } from '../hooks/useInsomnia';
 import { PTZControls } from '../components/monitors/PTZControls';
 import { LiveMonitorPlayer } from '../components/monitors/LiveMonitorPlayer';
 import { ZoneOverlay } from '../components/monitors/ZoneOverlay';
+import { ZoneLegend } from '../components/monitors/ZoneLegend';
 import { log, LogLevel } from '../lib/logger';
 import { getOrientedResolution, parseMonitorRotation } from '../lib/monitor-rotation';
 import { isZmVersionAtLeast } from '../lib/zm-version';
@@ -394,6 +395,11 @@ export default function MonitorDetail() {
               visible={showZones && !isZonesLoading}
             />
           </div>
+          <ZoneLegend
+            zones={zones}
+            monitorId={monitor.Monitor.Id}
+            visible={showZones && !isZonesLoading}
+          />
           {settings.showProtocolLabel && (
             <span className="absolute bottom-2 right-2 z-10 text-[10px] px-1.5 py-0.5 rounded bg-black/50 text-white/90 font-medium pointer-events-none">
               {protocol}
