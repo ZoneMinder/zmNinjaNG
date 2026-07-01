@@ -35,6 +35,7 @@ interface UseEventFiltersReturn {
   startDateInput: string;
   endDateInput: string;
   favoritesOnly: boolean;
+  archivedOnly: boolean;
   onlyDetectedObjects: boolean;
   activeQuickRange: number | null;
   setSelectedMonitorIds: (ids: string[]) => void;
@@ -42,6 +43,7 @@ interface UseEventFiltersReturn {
   setStartDateInput: (date: string) => void;
   setEndDateInput: (date: string) => void;
   setFavoritesOnly: (enabled: boolean) => void;
+  setArchivedOnly: (enabled: boolean) => void;
   setOnlyDetectedObjects: (enabled: boolean) => void;
   setActiveQuickRange: (hours: number | null) => void;
   applyFilters: (overrides?: DateRangeOverrides) => void;
@@ -88,6 +90,7 @@ export function useEventFilters(): UseEventFiltersReturn {
   const [startDateInput, _setStartDate] = useState('');
   const [endDateInput, _setEndDate] = useState('');
   const [favoritesOnly, _setFavoritesOnly] = useState(false);
+  const [archivedOnly, _setArchivedOnly] = useState(false);
   const [selectedTagIds, _setTagIds] = useState<string[]>([]);
   const [onlyDetectedObjects, _setOnlyDetected] = useState(false);
   const [activeQuickRange, _setActiveQuickRange] = useState<number | null>(null);
@@ -122,6 +125,11 @@ export function useEventFilters(): UseEventFiltersReturn {
     if (profileIdRef.current) saveFilterField(profileIdRef.current, 'favoritesOnly', enabled);
   }, []);
 
+  const setArchivedOnly = useCallback((enabled: boolean) => {
+    _setArchivedOnly(enabled);
+    if (profileIdRef.current) saveFilterField(profileIdRef.current, 'archivedOnly', enabled);
+  }, []);
+
   const setOnlyDetectedObjects = useCallback((enabled: boolean) => {
     _setOnlyDetected(enabled);
     if (profileIdRef.current) saveFilterField(profileIdRef.current, 'onlyDetectedObjects', enabled);
@@ -144,7 +152,8 @@ export function useEventFilters(): UseEventFiltersReturn {
       searchParams.has('tagIds') ||
       searchParams.has('startDateTime') ||
       searchParams.has('endDateTime') ||
-      searchParams.has('favorites')
+      searchParams.has('favorites') ||
+      searchParams.has('archived')
     ) {
       return;
     }
@@ -159,6 +168,7 @@ export function useEventFilters(): UseEventFiltersReturn {
     _setStartDate(saved.startDateTime);
     _setEndDate(saved.endDateTime);
     _setFavoritesOnly(saved.favoritesOnly);
+    _setArchivedOnly(saved.archivedOnly ?? false);
     _setOnlyDetected(saved.onlyDetectedObjects);
     _setActiveQuickRange(saved.activeQuickRange ?? null);
   }, [currentProfile?.id, settings.eventsPageFilters, searchParams]);
@@ -173,7 +183,8 @@ export function useEventFilters(): UseEventFiltersReturn {
         searchParams.has('tagIds') ||
         searchParams.has('startDateTime') ||
         searchParams.has('endDateTime') ||
-        searchParams.has('favorites');
+        searchParams.has('favorites') ||
+        searchParams.has('archived');
 
       if (hasUrlFilters) {
         const m = searchParams.get('monitorId');
@@ -181,12 +192,14 @@ export function useEventFilters(): UseEventFiltersReturn {
         const s = searchParams.get('startDateTime');
         const e = searchParams.get('endDateTime');
         const f = searchParams.get('favorites');
+        const a = searchParams.get('archived');
         // Use wrapped setters so URL filters persist to settings store
         setSelectedMonitorIds(m ? m.split(',') : []);
         setSelectedTagIds(t ? t.split(',') : []);
         setStartDateInput(s ? formatInputDate(s) : '');
         setEndDateInput(e ? formatInputDate(e) : '');
         setFavoritesOnly(f === 'true');
+        setArchivedOnly(a === 'true');
       }
       return;
     }
@@ -196,12 +209,14 @@ export function useEventFilters(): UseEventFiltersReturn {
     const startDT = searchParams.get('startDateTime');
     const endDT = searchParams.get('endDateTime');
     const favorites = searchParams.get('favorites');
+    const archived = searchParams.get('archived');
 
     if (monitorId !== null) _setMonitorIds(monitorId ? monitorId.split(',') : []);
     if (tagIds !== null) _setTagIds(tagIds ? tagIds.split(',') : []);
     if (startDT !== null) _setStartDate(formatInputDate(startDT));
     if (endDT !== null) _setEndDate(formatInputDate(endDT));
     if (favorites !== null) _setFavoritesOnly(favorites === 'true');
+    if (archived !== null) _setArchivedOnly(archived === 'true');
   }, [searchParams]);
 
   // Derive EventFilters from local state (not URL).
@@ -214,8 +229,9 @@ export function useEventFilters(): UseEventFiltersReturn {
       startDateTime: startDateInput || undefined,
       endDateTime: endDateInput || undefined,
       notesRegexp: onlyDetectedObjects ? 'detected:' : undefined,
+      archived: archivedOnly || undefined,
     }),
-    [searchParams, settings.defaultEventLimit, selectedMonitorIds, startDateInput, endDateInput, onlyDetectedObjects]
+    [searchParams, settings.defaultEventLimit, selectedMonitorIds, startDateInput, endDateInput, onlyDetectedObjects, archivedOnly]
   );
 
   // "Apply" syncs current filters to URL for deep linking / sharing.
@@ -249,6 +265,11 @@ export function useEventFilters(): UseEventFiltersReturn {
     } else {
       newParams.delete('favorites');
     }
+    if (archivedOnly) {
+      newParams.set('archived', 'true');
+    } else {
+      newParams.delete('archived');
+    }
     if (selectedTagIds.length > 0) {
       newParams.set('tagIds', selectedTagIds.join(','));
     } else {
@@ -257,7 +278,7 @@ export function useEventFilters(): UseEventFiltersReturn {
 
     setSearchParams(newParams, { replace: true, state: location.state });
   }, [
-    selectedMonitorIds, selectedTagIds, startDateInput, endDateInput, favoritesOnly,
+    selectedMonitorIds, selectedTagIds, startDateInput, endDateInput, favoritesOnly, archivedOnly,
     searchParams, setSearchParams, location.state,
   ]);
 
@@ -268,6 +289,7 @@ export function useEventFilters(): UseEventFiltersReturn {
     setStartDateInput('');
     setEndDateInput('');
     setFavoritesOnly(false);
+    setArchivedOnly(false);
     setOnlyDetectedObjects(false);
     setActiveQuickRange(null);
 
@@ -279,8 +301,9 @@ export function useEventFilters(): UseEventFiltersReturn {
     newParams.delete('startDateTime');
     newParams.delete('endDateTime');
     newParams.delete('favorites');
+    newParams.delete('archived');
     setSearchParams(newParams, { replace: true, state: location.state });
-  }, [searchParams, setSearchParams, location.state, setSelectedMonitorIds, setSelectedTagIds, setStartDateInput, setEndDateInput, setFavoritesOnly, setOnlyDetectedObjects]);
+  }, [searchParams, setSearchParams, location.state, setSelectedMonitorIds, setSelectedTagIds, setStartDateInput, setEndDateInput, setFavoritesOnly, setArchivedOnly, setOnlyDetectedObjects]);
 
   // Clear only the time filter, leaving monitor/tag/favorite scope intact.
   // The "x" beside the quick-range chips uses this so removing the time window
@@ -324,14 +347,15 @@ export function useEventFilters(): UseEventFiltersReturn {
         startDateInput ? 1 : null,
         endDateInput ? 1 : null,
         favoritesOnly ? 1 : null,
+        archivedOnly ? 1 : null,
         onlyDetectedObjects ? 1 : null,
       ].filter(Boolean).length,
-    [selectedMonitorIds.length, selectedTagIds.length, startDateInput, endDateInput, favoritesOnly, onlyDetectedObjects]
+    [selectedMonitorIds.length, selectedTagIds.length, startDateInput, endDateInput, favoritesOnly, archivedOnly, onlyDetectedObjects]
   );
 
   return {
-    filters, selectedMonitorIds, selectedTagIds, startDateInput, endDateInput, favoritesOnly, onlyDetectedObjects, activeQuickRange,
-    setSelectedMonitorIds, setSelectedTagIds, setStartDateInput, setEndDateInput, setFavoritesOnly, setOnlyDetectedObjects, setActiveQuickRange,
+    filters, selectedMonitorIds, selectedTagIds, startDateInput, endDateInput, favoritesOnly, archivedOnly, onlyDetectedObjects, activeQuickRange,
+    setSelectedMonitorIds, setSelectedTagIds, setStartDateInput, setEndDateInput, setFavoritesOnly, setArchivedOnly, setOnlyDetectedObjects, setActiveQuickRange,
     applyFilters, clearFilters, clearDateRange, toggleMonitorSelection, toggleTagSelection, activeFilterCount,
   };
 }

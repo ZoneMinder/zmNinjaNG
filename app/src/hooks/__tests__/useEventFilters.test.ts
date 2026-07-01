@@ -269,6 +269,57 @@ describe('useEventFilters', () => {
     });
   });
 
+  describe('archivedOnly filter', () => {
+    it('toggles archivedOnly on', () => {
+      const { result } = renderHook(() => useEventFilters());
+
+      act(() => {
+        result.current.setArchivedOnly(true);
+      });
+
+      expect(result.current.archivedOnly).toBe(true);
+      expect(result.current.activeFilterCount).toBe(1);
+    });
+
+    it('toggles archivedOnly off', () => {
+      const { result } = renderHook(() => useEventFilters());
+
+      act(() => {
+        result.current.setArchivedOnly(true);
+      });
+      act(() => {
+        result.current.setArchivedOnly(false);
+      });
+
+      expect(result.current.archivedOnly).toBe(false);
+      expect(result.current.activeFilterCount).toBe(0);
+    });
+
+    it('reflects archivedOnly in the archived URL param', () => {
+      const { result } = renderHook(() => useEventFilters());
+
+      act(() => {
+        result.current.setArchivedOnly(true);
+      });
+      act(() => {
+        result.current.applyFilters();
+      });
+
+      const [newParams] = mockSetSearchParams.mock.calls[mockSetSearchParams.mock.calls.length - 1];
+      expect(newParams.get('archived')).toBe('true');
+    });
+
+    it('sets filters.archived to true when archivedOnly is enabled', () => {
+      const { result } = renderHook(() => useEventFilters());
+
+      act(() => {
+        result.current.setArchivedOnly(true);
+      });
+
+      expect(result.current.filters.archived).toBe(true);
+    });
+  });
+
   describe('onlyDetectedObjects filter', () => {
     it('enables onlyDetectedObjects and sets notesRegexp', () => {
       const { result } = renderHook(() => useEventFilters());

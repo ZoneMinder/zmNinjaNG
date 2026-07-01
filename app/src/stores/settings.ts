@@ -133,6 +133,7 @@ export interface ProfileSettings {
     startDateTime: string;
     endDateTime: string;
     favoritesOnly: boolean;
+    archivedOnly: boolean;
     onlyDetectedObjects: boolean;
     activeQuickRange: number | null;
   };
@@ -276,6 +277,7 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
     startDateTime: '',
     endDateTime: '',
     favoritesOnly: false,
+    archivedOnly: false,
     onlyDetectedObjects: false,
     activeQuickRange: null,
   },
