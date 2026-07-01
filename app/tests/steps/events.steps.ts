@@ -469,7 +469,10 @@ When('I disable favorites only filter', async ({ page }) => {
 });
 
 When('I toggle the archived-only filter', async ({ page }) => {
-  await page.getByTestId('events-archived-toggle').click();
+  const toggle = page.getByTestId('events-archived-toggle');
+  await toggle.waitFor({ state: 'visible', timeout: testConfig.timeouts.element });
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-checked', 'true');
 });
 
 When('I select the first available tag if tags exist', async ({ page }) => {
