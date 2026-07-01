@@ -29,6 +29,11 @@ const GROUP_LABEL_KEY: Record<CommandItem['kind'], string> = {
   monitor: 'command_palette.group_monitors',
 };
 
+// Stable ids for the ARIA combobox/listbox relationship. Only one palette is
+// mounted, so a static listbox id is fine; option ids key off the flat index.
+const LISTBOX_ID = 'command-palette-listbox';
+const optionId = (index: number) => `command-option-${index}`;
+
 export function CommandPalette() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -85,6 +90,12 @@ export function CommandPalette() {
 
   useEffect(() => setActiveIndex(0), [query]);
 
+  // Keep the highlighted row visible when it moves past the scrollable list's
+  // edge (keyboard navigation in a long result set). No-op when already visible.
+  useEffect(() => {
+    document.getElementById(optionId(activeIndex))?.scrollIntoView({ block: 'nearest' });
+  }, [activeIndex]);
+
   const commit = (item: CommandItem | undefined) => {
     if (!item) return;
     setOpen(false);
@@ -137,9 +148,14 @@ export function CommandPalette() {
             autoComplete="off"
             autoCorrect="off"
             spellCheck={false}
+            role="combobox"
+            aria-expanded
+            aria-controls={LISTBOX_ID}
+            aria-autocomplete="list"
+            aria-activedescendant={results.length > 0 ? optionId(activeIndex) : undefined}
           />
         </div>
-        <div className="max-h-[50vh] overflow-y-auto py-1" data-testid="command-palette-results">
+        <div className="max-h-[50vh] overflow-y-auto py-1" data-testid="command-palette-results" role="listbox" id={LISTBOX_ID}>
           {results.length === 0 && (
             <p className="px-3 py-6 text-center text-sm text-muted-foreground">
               {t('command_palette.empty')}
@@ -157,6 +173,9 @@ export function CommandPalette() {
                 )}
                 <button
                   type="button"
+                  role="option"
+                  id={optionId(index)}
+                  aria-selected={index === activeIndex}
                   onClick={() => commit(item)}
                   onMouseEnter={() => setActiveIndex(index)}
                   className={cn(
