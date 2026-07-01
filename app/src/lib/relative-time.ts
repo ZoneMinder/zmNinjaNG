@@ -50,6 +50,7 @@ export function formatEventRelative(
       return rtf.format(past ? -value : value, unit);
     }
   }
-  // Sub-minute values above the just-now threshold round to one minute.
+  // Unreachable while RELATIVE_TIME_JUST_NOW_MS >= 60_000 (the loop's last unit
+  // is minute at 60s). Kept as a defensive default if that threshold ever drops.
   return rtf.format(past ? -1 : 1, 'minute');
 }
