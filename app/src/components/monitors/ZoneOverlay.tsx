@@ -6,11 +6,11 @@
  */
 
 import { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { Zone } from '../../api/types';
 import type { MonitorRotation } from '../../lib/monitor-rotation';
 import {
   getZoneColor,
-  alarmRGBToHex,
   coordsToSvgPointsWithTransform,
   getOrientedDimensions,
   parseZoneCoords,
@@ -44,6 +44,7 @@ export function ZoneOverlay({
   monitorId,
   visible,
 }: ZoneOverlayProps) {
+  const { t } = useTranslation();
   const [hoveredZoneId, setHoveredZoneId] = useState<number | null>(null);
 
   // Filter zones to only show zones for this monitor
@@ -79,8 +80,7 @@ export function ZoneOverlay({
     >
       {filteredZones.map((zone) => {
         const points = coordsToSvgPointsWithTransform(zone.Coords, transform);
-        // Use AlarmRGB color if available, otherwise fall back to type-based color
-        const color = alarmRGBToHex(zone.AlarmRGB) || getZoneColor(zone.Type);
+        const color = getZoneColor(zone.Type);
         const isHovered = hoveredZoneId === zone.Id;
 
         return (
@@ -99,7 +99,7 @@ export function ZoneOverlay({
             />
             {/* Zone label - shown on hover */}
             {isHovered && (
-              <ZoneLabel zone={zone} color={color} transform={transform} />
+              <ZoneLabel zone={zone} color={color} transform={transform} t={t} />
             )}
           </g>
         );
@@ -111,25 +111,26 @@ export function ZoneOverlay({
 /**
  * Zone label component shown on hover.
  */
-function ZoneLabel({ zone, color, transform }: { zone: Zone; color: string; transform: ZoneTransform }) {
-  // Calculate center of the polygon for label placement (with transformation applied)
+function ZoneLabel({ zone, color, transform, t }: {
+  zone: Zone; color: string; transform: ZoneTransform;
+  t: (key: string) => string;
+}) {
   const center = calculatePolygonCenter(zone.Coords, transform);
+  const typeLabel = t(`monitor_detail.zone_type.${zone.Type.toLowerCase()}`);
 
   return (
     <g>
-      {/* Background for readability */}
       <rect
-        x={center.x - 50}
-        y={center.y - 12}
-        width={100}
-        height={24}
+        x={center.x - 60}
+        y={center.y - 16}
+        width={120}
+        height={34}
         fill="rgba(0, 0, 0, 0.75)"
         rx={4}
       />
-      {/* Zone name */}
       <text
         x={center.x}
-        y={center.y + 5}
+        y={center.y - 1}
         textAnchor="middle"
         fill="white"
         fontSize="14"
@@ -138,13 +139,17 @@ function ZoneLabel({ zone, color, transform }: { zone: Zone; color: string; tran
       >
         {zone.Name}
       </text>
-      {/* Zone type indicator */}
-      <circle
-        cx={center.x - 40}
-        cy={center.y}
-        r={4}
-        fill={color}
-      />
+      <text
+        x={center.x}
+        y={center.y + 13}
+        textAnchor="middle"
+        fill="#d1d5db"
+        fontSize="11"
+        className="select-none pointer-events-none"
+      >
+        {typeLabel}
+      </text>
+      <circle cx={center.x - 50} cy={center.y - 5} r={4} fill={color} />
     </g>
   );
 }
