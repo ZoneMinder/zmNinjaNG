@@ -539,7 +539,7 @@ Then('any relative time labels in the list read as a duration', async ({ page })
   expect(chipCount).toBeGreaterThan(0);
 
   // Assert the first chip is visible and shows a recognisable relative-time string.
-  // Pattern covers Intl.RelativeTimeFormat short output ("ago", "vor", "hace", "il y a", "前")
+  // Pattern covers Intl.RelativeTimeFormat narrow output ("ago", "vor", "hace", "il y a", "前")
   // and the app's now translations across all 5 supported languages:
   // en: "now", de: "jetzt", es: "ahora", fr: "maintenant", zh: "现在".
   const relativeTimePattern = /(ago|vor|hace|il y a|前|now|jetzt|ahora|maintenant|现在)/i;
