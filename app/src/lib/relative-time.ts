@@ -35,6 +35,8 @@ export function formatEventRelative(
   t: TFunction,
   now: Date = new Date()
 ): string {
+  // Guard against a malformed date so an invalid StartDateTime cannot crash the render.
+  if (Number.isNaN(date.getTime())) return '';
   const diffMs = now.getTime() - date.getTime();
   if (diffMs >= 0 && diffMs < RELATIVE_TIME_JUST_NOW_MS) return t('events.just_now');
   return formatDistanceStrict(date, now, {

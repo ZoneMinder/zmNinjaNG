@@ -60,4 +60,8 @@ describe('formatEventRelative', () => {
     expect(formatEventRelative(ago(40 * MIN), 'fr', t, NOW)).toContain('il y a');
     expect(formatEventRelative(ago(40 * MIN), 'zh', t, NOW)).toContain('前');
   });
+
+  it('returns an empty string for an invalid date', () => {
+    expect(formatEventRelative(new Date('not-a-date'), 'en', t, NOW)).toBe('');
+  });
 });
