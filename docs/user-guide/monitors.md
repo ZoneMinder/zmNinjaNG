@@ -63,6 +63,10 @@ Press the reset button to return to the full, unzoomed image.
 
 You can force MJPEG for individual monitors via the monitor's Settings dialog (Video tab). When Go2RTC is enabled for a monitor, a toggle appears to turn it off for that monitor only. See {doc}`settings` for details.
 
+#### Show Zones
+
+The Layers button in the live view toolbar toggles the zone overlay. When active, each detection zone is drawn as a semi-transparent polygon colored by its type: Active (green), Inclusive (blue), Exclusive (red), Preclusive (amber), Inactive (gray), Privacy (purple). A legend in the bottom-left of the player lists the types present on that monitor. Hovering a zone shows its name and type. Inactive zones appear gray.
+
 ### PTZ Controls
 
 If the monitor has PTZ (Pan-Tilt-Zoom) configured in ZoneMinder, directional controls appear below the live view. Use these to pan, tilt, and zoom the camera.

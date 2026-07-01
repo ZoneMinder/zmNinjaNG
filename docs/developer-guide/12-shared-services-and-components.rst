@@ -1237,6 +1237,41 @@ cannot do this, since it has no record of which server each stream used.
 
 --------------
 
+Zone Utilities (``lib/zone-utils.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Utilities for parsing and rendering zone data from ZoneMinder.
+
+**Key functions:**
+
+- ``getZoneColor(type)`` - returns the hex color for a zone type based on the fixed palette below
+- ``ZONE_TYPE_ORDER`` - ordered list of zone types: ``['Active', 'Inclusive', 'Exclusive', 'Preclusive', 'Inactive', 'Privacy']``; used by ``ZoneLegend`` to produce a stable row order
+- ``parseZoneCoords(coords)`` - parses the ZoneMinder ``"x,y x,y..."`` coordinate string into ``Point[]``
+- ``coordsToSvgPointsWithTransform(coords, transform?)`` - converts coordinates to an SVG polygon points string, applying optional rotation
+- ``alarmRGBToHex(alarmRGB)`` - converts a ZoneMinder ``AlarmRGB`` integer to a hex color string. The overlay does not use ``AlarmRGB`` for color; this function is available for other consumers.
+
+**Color palette:**
+
++-------------+--------+-------------+
+| Zone Type   | Color  | Hex         |
++=============+========+=============+
+| Active      | green  | ``#22c55e`` |
++-------------+--------+-------------+
+| Inclusive   | blue   | ``#3b82f6`` |
++-------------+--------+-------------+
+| Exclusive   | red    | ``#ef4444`` |
++-------------+--------+-------------+
+| Preclusive  | amber  | ``#f59e0b`` |
++-------------+--------+-------------+
+| Inactive    | gray   | ``#9ca3af`` |
++-------------+--------+-------------+
+| Privacy     | purple | ``#a855f7`` |
++-------------+--------+-------------+
+
+**Used By:** ``ZoneOverlay``, ``ZoneLegend``
+
+--------------
+
 Reusable UI Components
 ----------------------
 
@@ -1903,6 +1938,49 @@ Drawer UI for background tasks (downloads, uploads, syncs).
 
 --------------
 
+ZoneOverlay (``monitors/ZoneOverlay.tsx``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+SVG overlay that renders detection zones as semi-transparent polygons on top of a video player or image. Read-only visualization.
+
+Each zone polygon is colored by zone type via ``getZoneColor(zone.Type)``. The ``AlarmRGB`` field stored by ZoneMinder is not used for overlay color. Hovering a polygon shows a tooltip with the zone name and translated zone type (i18n key: ``monitor_detail.zone_type.{type}``). Zones are filtered to the current monitor by ``MonitorId``, and coordinates are transformed to match any active monitor rotation.
+
+**Props:**
+
+.. code:: ts
+
+   interface ZoneOverlayProps {
+     zones: Zone[];
+     monitorWidth: number;   // original, before rotation
+     monitorHeight: number;  // original, before rotation
+     rotation: MonitorRotation;
+     monitorId: string;
+     visible: boolean;
+   }
+
+**Used By:** MonitorDetail
+
+--------------
+
+ZoneLegend (``monitors/ZoneLegend.tsx``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Color key for the zone overlay. Lists only the zone types present on the current monitor, in ``ZONE_TYPE_ORDER``, each with a color swatch and translated label. Absolutely positioned at the bottom-left of the player container, ``pointer-events-none``, and rendered only while the overlay is visible.
+
+**Props:**
+
+.. code:: ts
+
+   interface ZoneLegendProps {
+     zones: Zone[];
+     monitorId: string;
+     visible: boolean;
+   }
+
+**Used By:** MonitorDetail
+
+--------------
+
 Usage Matrix
 ------------
 
@@ -1945,6 +2023,9 @@ This table shows which components/pages use which shared services:
 +---------------------------------------------+------------------------+
 | **grid-utils**                              | Montage, EventMontage, |
 |                                             | Dashboard              |
++---------------------------------------------+------------------------+
+| **zone-utils**                              | ZoneOverlay,           |
+|                                             | ZoneLegend             |
 +---------------------------------------------+------------------------+
 
 --------------
@@ -2005,6 +2086,10 @@ This table shows which components/pages use which shared services:
 +----------------------------------------------+-----------------------+
 | **BackgroundTaskDrawer**                     | App layout            |
 |                                              | (auto-rendered)       |
++----------------------------------------------+-----------------------+
+| **ZoneOverlay**                              | MonitorDetail         |
++----------------------------------------------+-----------------------+
+| **ZoneLegend**                               | MonitorDetail         |
 +----------------------------------------------+-----------------------+
 
 --------------
