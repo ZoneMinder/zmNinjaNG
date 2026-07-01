@@ -527,27 +527,28 @@ Then('any relative time labels in the list read as a duration', async ({ page })
 
   const cardCount = await eventCards.count();
   if (cardCount === 0) {
-    // Empty state with no cards. Nothing to verify.
+    log.info('E2E: Skipping relative-time check - no event cards (empty state)', { component: 'e2e' });
     return;
   }
 
+  // Cards are present. This test runs against a live server that records continuously,
+  // so events within the 7-day chip window must exist. Missing chips while cards are
+  // present is a rendering regression that the test must catch.
   const chips = page.getByTestId('event-relative-time');
   const chipCount = await chips.count();
+  expect(chipCount).toBeGreaterThan(0);
 
-  if (chipCount > 0) {
-    // Assert the first chip is visible and shows a recognisable relative-time string.
-    // Pattern covers date-fns addSuffix output ("ago", "vor", "hace", "il y a", "前")
-    // and the app's just_now translations across all 5 supported languages
-    // (en: "just now", es: "ahora mismo", de: "gerade eben", fr: "a l'instant", zh: "just now" alias).
-    const relativeTimePattern = /(ago|just now|vor|hace|il y a|gerade|ahora|前|刚刚)/i;
-    const firstChip = chips.first();
-    await expect(firstChip).toBeVisible();
-    const text = await firstChip.innerText();
-    expect(text.trim()).not.toBe('');
-    expect(text).toMatch(relativeTimePattern);
-  }
-  // chipCount === 0 while cards exist: no event falls within the 7-day window
-  // that gates chip rendering. Valid server state; no assertion needed.
+  // Assert the first chip is visible and shows a recognisable relative-time string.
+  // Pattern covers date-fns addSuffix output ("ago", "vor", "hace", "il y a", "前")
+  // and the app's just_now translations across all 5 supported languages:
+  // en: "just now", de: "gerade eben", es: "ahora mismo",
+  // fr: "a l'instant" / "a l instant" / "instant", zh: "刚刚".
+  const relativeTimePattern = /(ago|just now|vor|hace|il y a|instant|gerade|ahora|前|刚刚)/i;
+  const firstChip = chips.first();
+  await expect(firstChip).toBeVisible();
+  const text = await firstChip.innerText();
+  expect(text.trim()).not.toBe('');
+  expect(text).toMatch(relativeTimePattern);
 });
 
 When('I favorite the event from detail page if on detail page', async ({ page }) => {
