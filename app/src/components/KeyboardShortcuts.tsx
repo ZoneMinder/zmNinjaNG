@@ -187,7 +187,7 @@ export function KeyboardShortcuts() {
             <ShortcutRow keys="1–9, …" label={t('shortcuts.monitor_by_number')} />
             <ShortcutRow keys="Esc" label={t('shortcuts.back')} />
             <ShortcutRow keys="?" label={t('shortcuts.show_help')} />
-            <ShortcutRow keys="/" label={t('command_palette.search')} />
+            <ShortcutRow keys="/" label={t('command_palette.jump_to')} />
           </div>
         </DialogContent>
       </Dialog>

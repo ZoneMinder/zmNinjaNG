@@ -1180,13 +1180,13 @@
     "pin_setting_desc": "用于锁定和解锁展台模式的PIN"
   },
   "command_palette": {
-    "title": "前往",
-    "placeholder": "搜索页面、监视器、分组...",
+    "title": "跳转至",
+    "placeholder": "跳转至页面、监视器或分组...",
     "group_pages": "页面",
     "group_groups": "分组",
     "group_monitors": "监视器",
     "empty": "无匹配项",
-    "search": "搜索",
+    "jump_to": "跳转至",
     "monitor_id_label": "ID"
   },
   "shortcuts": {

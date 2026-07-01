@@ -21,7 +21,7 @@ import {
   ChevronRight,
   Eye,
   EyeOff,
-  Search,
+  Command,
 } from 'lucide-react';
 import { useCommandPaletteStore } from '../../stores/commandPalette';
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -225,10 +225,10 @@ export default function AppLayout() {
             variant="ghost"
             size="icon"
             onClick={() => useCommandPaletteStore.getState().setOpen(true)}
-            title={t('command_palette.search')}
+            title={t('command_palette.jump_to')}
             data-testid="command-palette-trigger-mobile"
           >
-            <Search className="h-5 w-5" />
+            <Command className="h-5 w-5" />
           </Button>
           {location.pathname === '/montage' && (
             <Button

@@ -34,7 +34,7 @@ import {
   LockOpen,
   HelpCircle,
   Megaphone,
-  Search,
+  Command,
 } from 'lucide-react';
 import { useCommandPaletteStore } from '../../stores/commandPalette';
 import { useDeveloperNotices } from '../../hooks/useDeveloperNotices';
@@ -245,12 +245,12 @@ export function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentPro
               "flex w-full items-center rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted",
               isCollapsed ? "justify-center px-2" : "justify-between gap-2"
             )}
-            title={isCollapsed ? t('command_palette.search') : undefined}
+            title={isCollapsed ? t('command_palette.jump_to') : undefined}
             data-testid="command-palette-trigger-sidebar"
           >
             <span className="flex items-center gap-2">
-              <Search className="h-4 w-4" />
-              {!isCollapsed && t('command_palette.search')}
+              <Command className="h-4 w-4" />
+              {!isCollapsed && t('command_palette.jump_to')}
             </span>
             {!isCollapsed && (
               <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-xs">/</kbd>

@@ -1181,12 +1181,12 @@
   },
   "command_palette": {
     "title": "Aller à",
-    "placeholder": "Rechercher pages, moniteurs, groupes...",
+    "placeholder": "Aller à une page, un moniteur ou un groupe...",
     "group_pages": "Pages",
     "group_groups": "Groupes",
     "group_monitors": "Moniteurs",
     "empty": "Aucun résultat",
-    "search": "Rechercher",
+    "jump_to": "Aller à",
     "monitor_id_label": "id"
   },
   "shortcuts": {

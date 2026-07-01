@@ -10,7 +10,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Search } from 'lucide-react';
+import { Command } from 'lucide-react';
 import { getMonitors } from '../api/monitors';
 import { useGroups } from '../hooks/useGroups';
 import { useGroupFilter } from '../hooks/useGroupFilter';
@@ -125,7 +125,7 @@ export function CommandPalette() {
         <DialogTitle className="sr-only">{t('command_palette.title')}</DialogTitle>
         <DialogDescription className="sr-only">{t('command_palette.placeholder')}</DialogDescription>
         <div className="flex items-center gap-2 border-b px-3 py-2">
-          <Search className="h-4 w-4 text-muted-foreground shrink-0" />
+          <Command className="h-4 w-4 text-muted-foreground shrink-0" />
           <input
             ref={inputRef}
             value={query}

@@ -1180,13 +1180,13 @@
     "pin_setting_desc": "PIN zum Sperren und Entsperren des Kiosk-Modus"
   },
   "command_palette": {
-    "title": "Gehe zu",
-    "placeholder": "Seiten, Monitore, Gruppen suchen...",
+    "title": "Springe zu",
+    "placeholder": "Zu Seite, Monitor oder Gruppe springen...",
     "group_pages": "Seiten",
     "group_groups": "Gruppen",
     "group_monitors": "Monitore",
     "empty": "Keine Treffer",
-    "search": "Suchen",
+    "jump_to": "Springe zu",
     "monitor_id_label": "ID"
   },
   "shortcuts": {

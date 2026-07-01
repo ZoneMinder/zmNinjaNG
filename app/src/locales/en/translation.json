@@ -1180,13 +1180,13 @@
     "pin_setting_desc": "PIN used to lock and unlock kiosk mode"
   },
   "command_palette": {
-    "title": "Go to",
-    "placeholder": "Search pages, monitors, groups...",
+    "title": "Jump to",
+    "placeholder": "Jump to a page, monitor, or group...",
     "group_pages": "Pages",
     "group_groups": "Groups",
     "group_monitors": "Monitors",
     "empty": "No matches",
-    "search": "Search",
+    "jump_to": "Jump to",
     "monitor_id_label": "id"
   },
   "shortcuts": {
