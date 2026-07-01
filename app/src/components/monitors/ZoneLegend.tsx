@@ -16,9 +16,12 @@ interface ZoneLegendProps {
   zones: Zone[];
   monitorId: string;
   visible: boolean;
+  /** Position classes for the legend (default top-left). Set by the page so it
+   *  clears the zoom controls (bottom-left) and the fullscreen bar (top). */
+  positionClassName?: string;
 }
 
-export function ZoneLegend({ zones, monitorId, visible }: ZoneLegendProps) {
+export function ZoneLegend({ zones, monitorId, visible, positionClassName = 'top-2 left-2' }: ZoneLegendProps) {
   const { t } = useTranslation();
 
   const presentTypes = useMemo(() => {
@@ -36,7 +39,7 @@ export function ZoneLegend({ zones, monitorId, visible }: ZoneLegendProps) {
 
   return (
     <div
-      className="absolute bottom-2 left-2 z-10 flex flex-col gap-1 rounded bg-black/60 px-2 py-1.5 pointer-events-none"
+      className={`absolute ${positionClassName} z-10 flex flex-col gap-1 rounded bg-black/60 px-2 py-1.5 pointer-events-none`}
       data-testid="zone-legend"
     >
       {presentTypes.map((type) => (

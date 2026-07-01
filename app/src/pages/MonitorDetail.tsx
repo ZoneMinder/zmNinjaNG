@@ -399,6 +399,12 @@ export default function MonitorDetail() {
             zones={zones}
             monitorId={monitor.Monitor.Id}
             visible={showZones && !isZonesLoading}
+            positionClassName={cn(
+              'left-2',
+              isFullscreen
+                ? 'top-[calc(2.75rem+var(--sai-top,env(safe-area-inset-top)))]'
+                : 'top-2'
+            )}
           />
           {settings.showProtocolLabel && (
             <span className="absolute bottom-2 right-2 z-10 text-[10px] px-1.5 py-0.5 rounded bg-black/50 text-white/90 font-medium pointer-events-none">
