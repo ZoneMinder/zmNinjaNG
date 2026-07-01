@@ -539,11 +539,10 @@ Then('any relative time labels in the list read as a duration', async ({ page })
   expect(chipCount).toBeGreaterThan(0);
 
   // Assert the first chip is visible and shows a recognisable relative-time string.
-  // Pattern covers date-fns addSuffix output ("ago", "vor", "hace", "il y a", "前")
-  // and the app's just_now translations across all 5 supported languages:
-  // en: "just now", de: "gerade eben", es: "ahora mismo",
-  // fr: "a l'instant" / "a l instant" / "instant", zh: "刚刚".
-  const relativeTimePattern = /(ago|just now|vor|hace|il y a|instant|gerade|ahora|前|刚刚)/i;
+  // Pattern covers Intl.RelativeTimeFormat short output ("ago", "vor", "hace", "il y a", "前")
+  // and the app's now translations across all 5 supported languages:
+  // en: "now", de: "jetzt", es: "ahora", fr: "maintenant", zh: "现在".
+  const relativeTimePattern = /(ago|vor|hace|il y a|前|now|jetzt|ahora|maintenant|现在)/i;
   const firstChip = chips.first();
   await expect(firstChip).toBeVisible();
   const text = await firstChip.innerText();

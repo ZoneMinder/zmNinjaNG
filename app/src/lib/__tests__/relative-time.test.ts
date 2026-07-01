@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { dateFnsLocaleFor, isWithinDays, formatEventRelative } from '../relative-time';
-import { enUS, de, es, fr, zhCN } from 'date-fns/locale';
+import { isWithinDays, formatEventRelative } from '../relative-time';
 
 // Minimal t stub: returns the key, matching i18next behaviour for a missing value.
 const t = ((key: string) => key) as unknown as Parameters<typeof formatEventRelative>[2];
@@ -10,22 +9,6 @@ const ago = (ms: number) => new Date(NOW.getTime() - ms);
 const MIN = 60_000;
 const HOUR = 60 * MIN;
 const DAY = 24 * HOUR;
-
-describe('dateFnsLocaleFor', () => {
-  it('maps base language codes to date-fns locales', () => {
-    expect(dateFnsLocaleFor('en')).toBe(enUS);
-    expect(dateFnsLocaleFor('en-US')).toBe(enUS);
-    expect(dateFnsLocaleFor('de')).toBe(de);
-    expect(dateFnsLocaleFor('es')).toBe(es);
-    expect(dateFnsLocaleFor('fr')).toBe(fr);
-    expect(dateFnsLocaleFor('zh')).toBe(zhCN);
-  });
-
-  it('falls back to enUS for unknown or missing input', () => {
-    expect(dateFnsLocaleFor('xx')).toBe(enUS);
-    expect(dateFnsLocaleFor(undefined)).toBe(enUS);
-  });
-});
 
 describe('isWithinDays', () => {
   it('is true inside the window', () => {
@@ -44,13 +27,17 @@ describe('isWithinDays', () => {
 });
 
 describe('formatEventRelative', () => {
-  it('returns the just-now key under 60s', () => {
-    expect(formatEventRelative(ago(30_000), 'en', t, NOW)).toBe('events.just_now');
+  it('returns the now key under 60s', () => {
+    expect(formatEventRelative(ago(30_000), 'en', t, NOW)).toBe('events.now');
   });
 
-  it('returns single-unit "ago" strings in English', () => {
-    expect(formatEventRelative(ago(40 * MIN), 'en', t, NOW)).toBe('40 minutes ago');
-    expect(formatEventRelative(ago(3 * HOUR), 'en', t, NOW)).toBe('3 hours ago');
+  it('returns the now key for a future date within 60s', () => {
+    expect(formatEventRelative(new Date(NOW.getTime() + 30_000), 'en', t, NOW)).toBe('events.now');
+  });
+
+  it('returns short-style "ago" strings in English', () => {
+    expect(formatEventRelative(ago(40 * MIN), 'en', t, NOW)).toBe('40 min. ago');
+    expect(formatEventRelative(ago(3 * HOUR), 'en', t, NOW)).toBe('3 hr. ago');
     expect(formatEventRelative(ago(2 * DAY), 'en', t, NOW)).toBe('2 days ago');
   });
 

@@ -607,41 +607,25 @@ Maps event causes from ZoneMinder to Lucide icons for visual display.
 Relative Time Labels (``lib/relative-time.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Localized "how long ago" labels for event times. Wraps date-fns
-``formatDistanceStrict`` (single unit, e.g. "40 minutes ago") and maps
-the app language code to a date-fns locale so the suffix is translated
-for all five supported languages.
+Event list cards and the event detail screen show a compact "how long ago" label.
+``Intl.RelativeTimeFormat`` with ``style: 'short'`` produces abbreviated, localized
+output ("40 min. ago", "3 hr. ago") without a date-fns locale map. The BCP-47
+language tag from the app's i18n state is passed directly. Under 60 000 ms
+(``RELATIVE_TIME_JUST_NOW_MS``) the label returns ``t('events.now')`` instead of a
+numeric distance. ``isWithinDays`` gates the chip: only events within 7 days
+(``RELATIVE_TIME_LIST_WINDOW_DAYS``) receive a relative label in the list view.
 
-Two constants from ``lib/zmninja-ng-constants.ts`` control the behavior:
+.. code-block:: typescript
 
-- ``RELATIVE_TIME_LIST_WINDOW_DAYS = 7``: only events within the last 7
-  days receive a relative label in the list view
-- ``RELATIVE_TIME_JUST_NOW_MS = 60000``: events under 60 s old show
-  ``t('events.just_now')`` instead of a numeric distance
-
-**Exports:**
-
-.. code:: typescript
-
-   import {
-     dateFnsLocaleFor,
-     isWithinDays,
-     formatEventRelative,
-   } from '../lib/relative-time';
-
-   // Map an i18n language code to a date-fns locale.
-   // Supported codes: en (enUS), de, es, fr, zh (zhCN).
-   // Unrecognized codes and undefined fall back to enUS.
-   // Strips the region suffix ("en-US" becomes "en").
-   const locale = dateFnsLocaleFor(i18n.language);
+   import { isWithinDays, formatEventRelative } from '../lib/relative-time';
 
    // True if date is between now and `days` days before now (inclusive).
    if (isWithinDays(event.startTime, RELATIVE_TIME_LIST_WINDOW_DAYS)) {
      // show relative chip
    }
 
-   // Returns t('events.just_now') when diffMs < RELATIVE_TIME_JUST_NOW_MS;
-   // otherwise a single-unit "N units ago" string via formatDistanceStrict.
+   // Returns t('events.now') when |diffMs| < RELATIVE_TIME_JUST_NOW_MS;
+   // otherwise a short "N unit ago" string via Intl.RelativeTimeFormat.
    const label = formatEventRelative(date, i18n.language, t);
 
 **Consumer behavior:**

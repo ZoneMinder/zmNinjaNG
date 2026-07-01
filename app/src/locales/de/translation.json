@@ -220,7 +220,7 @@
       "loading": "Tags werden geladen...",
       "moreCount": "+{{count}} mehr"
     },
-    "just_now": "gerade eben"
+    "now": "jetzt"
   },
   "event_detail": {
     "event_id": "Ereignis ID",

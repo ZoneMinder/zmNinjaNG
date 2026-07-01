@@ -220,7 +220,7 @@
       "loading": "Loading tags...",
       "moreCount": "+{{count}} more"
     },
-    "just_now": "just now"
+    "now": "now"
   },
   "event_detail": {
     "event_id": "Event ID",

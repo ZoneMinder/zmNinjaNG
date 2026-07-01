@@ -1,33 +1,35 @@
 /**
  * Compact, localized "how long ago" labels for event times (issue #210).
  *
- * Wraps date-fns formatDistanceStrict (single unit, e.g. "40 minutes ago")
- * rather than formatDistanceToNow (fuzzy "about 1 hour ago"), and maps the app
- * language to a date-fns locale so the suffix is translated for all 5 languages.
+ * Uses Intl.RelativeTimeFormat with the short style so labels read as
+ * "40 min. ago" / "3 hr. ago" rather than full words, localized per app
+ * language. Under RELATIVE_TIME_JUST_NOW_MS the label is t('events.now').
  */
 
-import { formatDistanceStrict, type Locale } from 'date-fns';
-import { enUS, de, es, fr, zhCN } from 'date-fns/locale';
 import type { TFunction } from 'i18next';
 import { RELATIVE_TIME_JUST_NOW_MS } from './zmninja-ng-constants';
 
-const LOCALES: Record<string, Locale> = { en: enUS, de, es, fr, zh: zhCN };
+// Unit thresholds in seconds, largest first. The first unit whose size fits
+// within the elapsed time is used.
+const UNITS: Array<[Intl.RelativeTimeFormatUnit, number]> = [
+  ['year', 31557600],
+  ['month', 2629800],
+  ['week', 604800],
+  ['day', 86400],
+  ['hour', 3600],
+  ['minute', 60],
+];
 
-/** Map an i18n language code (e.g. "en", "en-US", "zh") to a date-fns locale. */
-export function dateFnsLocaleFor(lang: string | undefined): Locale {
-  const base = (lang || 'en').split('-')[0];
-  return LOCALES[base] ?? enUS;
-}
-
-/** True if `date` is between `now` and `days` days before `now` (inclusive). */
+/** True if `date` is between `now` and `days` days before it (inclusive). */
 export function isWithinDays(date: Date, days: number, now: Date = new Date()): boolean {
   const diffMs = now.getTime() - date.getTime();
   return diffMs >= 0 && diffMs <= days * 24 * 60 * 60 * 1000;
 }
 
 /**
- * Compact localized relative label. Under the just-now threshold returns
- * t('events.just_now'); otherwise a single-unit "N units ago" string.
+ * Compact localized relative label. Within RELATIVE_TIME_JUST_NOW_MS of now
+ * returns t('events.now'). Otherwise a short "N unit ago" string (or "in N
+ * unit" for a future date) localized to `lang`.
  */
 export function formatEventRelative(
   date: Date,
@@ -35,12 +37,19 @@ export function formatEventRelative(
   t: TFunction,
   now: Date = new Date()
 ): string {
-  // Guard against a malformed date so an invalid StartDateTime cannot crash the render.
   if (Number.isNaN(date.getTime())) return '';
   const diffMs = now.getTime() - date.getTime();
-  if (diffMs >= 0 && diffMs < RELATIVE_TIME_JUST_NOW_MS) return t('events.just_now');
-  return formatDistanceStrict(date, now, {
-    addSuffix: true,
-    locale: dateFnsLocaleFor(lang),
-  });
+  if (Math.abs(diffMs) < RELATIVE_TIME_JUST_NOW_MS) return t('events.now');
+
+  const rtf = new Intl.RelativeTimeFormat(lang || 'en', { style: 'short', numeric: 'always' });
+  const absSec = Math.abs(diffMs) / 1000;
+  const past = diffMs >= 0;
+  for (const [unit, secs] of UNITS) {
+    if (absSec >= secs) {
+      const value = Math.floor(absSec / secs);
+      return rtf.format(past ? -value : value, unit);
+    }
+  }
+  // Sub-minute values above the just-now threshold round to one minute.
+  return rtf.format(past ? -1 : 1, 'minute');
 }

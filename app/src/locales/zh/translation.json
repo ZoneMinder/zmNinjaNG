@@ -220,7 +220,7 @@
       "loading": "正在加载标签...",
       "moreCount": "+{{count}} 更多"
     },
-    "just_now": "刚刚"
+    "now": "现在"
   },
   "event_detail": {
     "event_id": "事件 ID",
