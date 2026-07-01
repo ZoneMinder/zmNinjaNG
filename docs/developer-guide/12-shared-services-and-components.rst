@@ -604,6 +604,59 @@ Maps event causes from ZoneMinder to Lucide icons for visual display.
 
 --------------
 
+Relative Time Labels (``lib/relative-time.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Localized "how long ago" labels for event times. Wraps date-fns
+``formatDistanceStrict`` (single unit, e.g. "40 minutes ago") and maps
+the app language code to a date-fns locale so the suffix is translated
+for all five supported languages.
+
+Two constants from ``lib/zmninja-ng-constants.ts`` control the behavior:
+
+- ``RELATIVE_TIME_LIST_WINDOW_DAYS = 7``: only events within the last 7
+  days receive a relative label in the list view
+- ``RELATIVE_TIME_JUST_NOW_MS = 60000``: events under 60 s old show
+  ``t('events.just_now')`` instead of a numeric distance
+
+**Exports:**
+
+.. code:: typescript
+
+   import {
+     dateFnsLocaleFor,
+     isWithinDays,
+     formatEventRelative,
+   } from '../lib/relative-time';
+
+   // Map an i18n language code to a date-fns locale.
+   // Supported codes: en (enUS), de, es, fr, zh (zhCN).
+   // Unrecognized codes and undefined fall back to enUS.
+   // Strips the region suffix ("en-US" becomes "en").
+   const locale = dateFnsLocaleFor(i18n.language);
+
+   // True if date is between now and `days` days before now (inclusive).
+   if (isWithinDays(event.startTime, RELATIVE_TIME_LIST_WINDOW_DAYS)) {
+     // show relative chip
+   }
+
+   // Returns t('events.just_now') when diffMs < RELATIVE_TIME_JUST_NOW_MS;
+   // otherwise a single-unit "N units ago" string via formatDistanceStrict.
+   const label = formatEventRelative(date, i18n.language, t);
+
+**Consumer behavior:**
+
+``EventCard`` renders an ``Hourglass`` chip (``data-testid="event-relative-time"``)
+only when ``isWithinDays(startTime, RELATIVE_TIME_LIST_WINDOW_DAYS)`` is true.
+Events older than 7 days show no chip.
+
+``EventDetail`` always shows a muted relative line under the Time value
+(``data-testid="event-detail-relative-time"``), regardless of age.
+
+**Used By:** EventCard, EventDetail
+
+--------------
+
 Time Utilities (``lib/time.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

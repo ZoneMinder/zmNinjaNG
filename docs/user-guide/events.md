@@ -13,6 +13,8 @@ Events are displayed as cards showing:
 - **Frames** - Number of frames in the event
 - **Tags** - Any tags applied to the event in ZoneMinder
 
+Events from the last 7 days also show how long ago they occurred, displayed next to the date and time.
+
 Older events load automatically as you scroll.
 
 On desktop, hovering over a thumbnail for a moment shows a 400px-wide preview anchored next to the row. The preview loads a higher-resolution image from the server. The underlying card remains clickable while the preview is visible, so you can still click to open the event.
