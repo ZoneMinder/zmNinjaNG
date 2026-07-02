@@ -210,6 +210,8 @@
     "archived_success": "Evento archivado",
     "unarchived_success": "Evento desarchivado",
     "archive_failed": "No se pudo actualizar el archivo",
+    "delete_success": "Evento eliminado",
+    "delete_failed": "Error al eliminar",
     "filter": {
       "tags": "Etiquetas",
       "selectTags": "Seleccionar etiquetas...",

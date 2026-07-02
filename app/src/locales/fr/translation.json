@@ -210,6 +210,8 @@
     "archived_success": "Événement archivé",
     "unarchived_success": "Événement désarchivé",
     "archive_failed": "Échec de la mise à jour de l'archive",
+    "delete_success": "Événement supprimé",
+    "delete_failed": "Échec de la suppression",
     "filter": {
       "tags": "Tags",
       "selectTags": "Sélectionner des tags...",

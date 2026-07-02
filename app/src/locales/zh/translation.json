@@ -210,6 +210,8 @@
     "archived_success": "事件已归档",
     "unarchived_success": "事件已取消归档",
     "archive_failed": "无法更新归档状态",
+    "delete_success": "事件已删除",
+    "delete_failed": "删除失败",
     "filter": {
       "tags": "标签",
       "selectTags": "选择标签...",

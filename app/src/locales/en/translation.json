@@ -210,6 +210,8 @@
     "archived_success": "Event archived",
     "unarchived_success": "Event unarchived",
     "archive_failed": "Failed to update archive status",
+    "delete_success": "Event deleted",
+    "delete_failed": "Delete failed",
     "filter": {
       "tags": "Tags",
       "selectTags": "Select tags...",

@@ -210,6 +210,8 @@
     "archived_success": "Ereignis archiviert",
     "unarchived_success": "Ereignis wiederhergestellt",
     "archive_failed": "Archivstatus konnte nicht aktualisiert werden",
+    "delete_success": "Ereignis gelöscht",
+    "delete_failed": "Löschen fehlgeschlagen",
     "filter": {
       "tags": "Tags",
       "selectTags": "Tags auswählen...",
