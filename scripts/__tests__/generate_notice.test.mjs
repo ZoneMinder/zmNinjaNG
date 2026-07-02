@@ -2,9 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   parseVersionParts, isFeatureRelease, releaseUrl,
-  extractChangelogSection, parseClaudeNotice, assembleNotice, prependNotice,
+  extractChangelogSection, parseClaudeNotice, assembleNotice,
   deriveTag, upsertNotice,
-} from '../generate-release-notice.mjs';
+} from '../generate_notice.mjs';
 
 test('parseVersionParts splits semver', () => {
   assert.deepEqual(parseVersionParts('1.2.0'), { major: 1, minor: 2, patch: 0 });
@@ -69,15 +69,6 @@ test('assembleNotice sets script-owned fields', () => {
   assert.equal(n.title, 'T');
   assert.equal(n.body, 'B');
   assert.equal(n.publishedAt, '2026-07-01T00:00:00Z');
-});
-
-test('prependNotice adds to front and rejects duplicate id', () => {
-  const feed = [{ id: 'old' }];
-  const n = { id: 'release-1.2.0' };
-  const out = prependNotice(feed, n);
-  assert.equal(out[0].id, 'release-1.2.0');
-  assert.equal(out.length, 2);
-  assert.throws(() => prependNotice(out, n), /already exists/);
 });
 
 test('deriveTag builds the tag', () => {
