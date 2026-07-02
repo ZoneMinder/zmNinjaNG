@@ -1,5 +1,37 @@
 # Changelog
 
+## [zmNinjaNg-1.2.0](https://github.com/ZoneMinder/zmNinjaNg/tree/zmNinjaNg-1.2.0) (2026-07-02)
+
+[Full Changelog](https://github.com/ZoneMinder/zmNinjaNg/compare/zmNinjaNg-1.1.15...zmNinjaNg-1.2.0)
+
+**Implemented enhancements:**
+
+- feat: dev-only preview of developer notices \(local file + skip version gate\) [\#212](https://github.com/ZoneMinder/zmNinjaNg/issues/212)
+- feat: auto-draft a developer notice for minor/major releases in make\_release.sh [\#211](https://github.com/ZoneMinder/zmNinjaNg/issues/211)
+- Ability to see Relative time in Events view [\#210](https://github.com/ZoneMinder/zmNinjaNg/issues/210)
+- All zones on a monitor are shown the same, even inactive ones [\#208](https://github.com/ZoneMinder/zmNinjaNg/issues/208)
+- feat: Global command palette for quick navigation \(/, sidebar, mobile\) [\#207](https://github.com/ZoneMinder/zmNinjaNg/issues/207)
+- Support for keyboard controls to navigate through screens [\#200](https://github.com/ZoneMinder/zmNinjaNg/issues/200)
+- Language and Menu button placements seem intuitive [\#199](https://github.com/ZoneMinder/zmNinjaNg/issues/199)
+- Window does not remember previous placement or size on launching [\#195](https://github.com/ZoneMinder/zmNinjaNg/issues/195)
+
+**Fixed bugs:**
+
+- Filtering for Favorites in Events view doesn't show any events past the "Load More" line [\#205](https://github.com/ZoneMinder/zmNinjaNg/issues/205)
+- Changing monitor while viewing live stream does not always change to the new stream [\#201](https://github.com/ZoneMinder/zmNinjaNg/issues/201)
+- Viewing an event, then using a back gesture or back button at top of view resets to very top of events [\#197](https://github.com/ZoneMinder/zmNinjaNg/issues/197)
+- Clearing event time filtering clears filter for monitor being viewed, not just time filtering [\#194](https://github.com/ZoneMinder/zmNinjaNg/issues/194)
+- Event filtering does't work or is inconsistent [\#193](https://github.com/ZoneMinder/zmNinjaNg/issues/193)
+- Back gesture on Android just goes to previous screen, never exits [\#192](https://github.com/ZoneMinder/zmNinjaNg/issues/192)
+- Monitor view panning could use some improvements [\#191](https://github.com/ZoneMinder/zmNinjaNg/issues/191)
+- fix: remove READ\_MEDIA\_IMAGES/READ\_MEDIA\_VIDEO permissions rejected by Google Play [\#190](https://github.com/ZoneMinder/zmNinjaNg/issues/190)
+
+**Closed issues:**
+
+- Filter option for viewing only Archived events, possibly ability to Mark Archived [\#209](https://github.com/ZoneMinder/zmNinjaNg/issues/209)
+- \[Bug / Regression\] Monitor filtering no longer works in Monitors view [\#204](https://github.com/ZoneMinder/zmNinjaNg/issues/204)
+- Enlarge view of monitor when zooming in, like zminja did in the past [\#198](https://github.com/ZoneMinder/zmNinjaNg/issues/198)
+
 ## [zmNinjaNg-1.1.15](https://github.com/ZoneMinder/zmNinjaNg/tree/zmNinjaNg-1.1.15) (2026-06-17)
 
 [Full Changelog](https://github.com/ZoneMinder/zmNinjaNg/compare/zmNinjaNg-1.1.14...zmNinjaNg-1.1.15)
