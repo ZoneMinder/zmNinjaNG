@@ -212,6 +212,9 @@
     "archive_failed": "Échec de la mise à jour de l'archive",
     "delete_success": "Événement supprimé",
     "delete_failed": "Échec de la suppression",
+    "delete_confirm_title": "Supprimer l'événement ?",
+    "delete_confirm_desc": "L'événement #{{id}} ({{monitor}}) sera supprimé définitivement.",
+    "delete_aria": "Supprimer l'événement",
     "filter": {
       "tags": "Tags",
       "selectTags": "Sélectionner des tags...",

@@ -212,6 +212,9 @@
     "archive_failed": "Failed to update archive status",
     "delete_success": "Event deleted",
     "delete_failed": "Delete failed",
+    "delete_confirm_title": "Delete event?",
+    "delete_confirm_desc": "Event #{{id}} ({{monitor}}) will be permanently deleted.",
+    "delete_aria": "Delete event",
     "filter": {
       "tags": "Tags",
       "selectTags": "Select tags...",

@@ -212,6 +212,9 @@
     "archive_failed": "Archivstatus konnte nicht aktualisiert werden",
     "delete_success": "Ereignis gelöscht",
     "delete_failed": "Löschen fehlgeschlagen",
+    "delete_confirm_title": "Ereignis löschen?",
+    "delete_confirm_desc": "Ereignis #{{id}} ({{monitor}}) wird dauerhaft gelöscht.",
+    "delete_aria": "Ereignis löschen",
     "filter": {
       "tags": "Tags",
       "selectTags": "Tags auswählen...",

@@ -212,6 +212,9 @@
     "archive_failed": "No se pudo actualizar el archivo",
     "delete_success": "Evento eliminado",
     "delete_failed": "Error al eliminar",
+    "delete_confirm_title": "¿Eliminar evento?",
+    "delete_confirm_desc": "El evento #{{id}} ({{monitor}}) se eliminará permanentemente.",
+    "delete_aria": "Eliminar evento",
     "filter": {
       "tags": "Etiquetas",
       "selectTags": "Seleccionar etiquetas...",
