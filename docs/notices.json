@@ -1,5 +1,14 @@
 [
   {
+    "id": "release-1.2.0",
+    "title": "What's new in zmNinjaNg 1.2.0",
+    "body": "- Events view can now show relative times, like \"5 minutes ago\".\n- Inactive zones on a monitor now look different from active ones.\n- A command palette lets you jump to any screen quickly. Open it with the / key, the sidebar, or on mobile.\n- Keyboard shortcuts can move you between screens.\n- The language and menu buttons have been moved to more predictable spots.\n- The desktop app now remembers its window position and size between launches.\n- You can filter events to show only archived ones, and mark events as archived.\n- Favorite events now keep loading past the \"Load More\" point.\n- Switching monitors while watching a live stream now reliably shows the new stream.\n- Returning from an event with the back gesture or button now keeps your place in the events list instead of jumping to the top.\n- Clearing a time filter no longer also clears the monitor you were viewing.\n- Event filtering now works consistently.\n- Monitor filtering in the Monitors view works again.\n- On Android, the back gesture now exits the app from the main screen instead of getting stuck.\n- Panning around a monitor view has been improved.\n- Zooming in on a monitor now enlarges the view.\n\n[Full changelog](https://github.com/ZoneMinder/zmNinjaNg/releases/tag/zmNinjaNg-1.2.0)",
+    "publishedAt": "2026-07-02T14:52:55.178Z",
+    "severity": "info",
+    "link": "https://github.com/ZoneMinder/zmNinjaNg/releases/tag/zmNinjaNg-1.2.0",
+    "minAppVersion": "1.2.0"
+  },
+  {
     "id": "2026-05-30-desktop-electron-switch",
     "title": "Desktop app 1.1.14: switched from Tauri to Electron",
     "body": "The 1.1.14 desktop builds (Linux, macOS, Windows) moved from Tauri to Electron. Tauri's WebKit backend had memory leaks I couldn't work around. They slowly drained RAM until live streams stopped working.\n\n**Action needed**: your existing server profiles do not carry over to the Electron build. Please add your ZoneMinder server again from the **Profiles** page.\n\nSorry for the inconvenience. Web, iOS, and Android builds are unaffected.\n\nFor background see [#150](https://github.com/ZoneMinder/zmNinjaNg/issues/150).",
