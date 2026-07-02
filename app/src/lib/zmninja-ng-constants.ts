@@ -232,9 +232,10 @@ export const EVENT_LIST = {
   virtualizationThreshold: 100,
 } as const;
 
-/** Minimum gap between scrub-bar seeks while dragging, so a drag does not flood
- *  the ZMS stream with a seek per pointer-move (refs #196). */
-export const EVENT_SCRUB_SEEK_THROTTLE_MS = 150;
+/** How long the scrub bar waits after the last drag movement before seeking, so
+ *  a continuous back-and-forth drag does not flood the ZMS stream. A seek also
+ *  always fires on release (refs #196). */
+export const EVENT_SCRUB_SEEK_DEBOUNCE_MS = 200;
 
 /**
  * Relative time labels on events (issue #210).

@@ -3,13 +3,14 @@
  *
  * Covers click/tap-to-seek mapping. The scrubber previously had only mouse
  * handlers, so touch seeking did nothing on mobile (refs #196).
- * Also covers throttle/dedup/flush behavior added in refs #196 to stop
+ * Also covers debounce/dedup behavior added in refs #196 to stop
  * the ZMS seek flood during drags.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent, act } from '@testing-library/react';
 import { EventProgressBar } from '../EventProgressBar';
+import { EVENT_SCRUB_SEEK_DEBOUNCE_MS } from '../../../lib/zmninja-ng-constants';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -120,13 +121,16 @@ describe('EventProgressBar seek mapping', () => {
   });
 });
 
-describe('EventProgressBar throttle/dedup/flush (refs #196)', () => {
+describe('EventProgressBar debounce/dedup (refs #196)', () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.clearAllMocks();
   });
 
-  it('20 rapid mousemove events within one throttle window produce at most 3 onSeek calls', () => {
+  // Case 1: mousemove events during continuous drag must NOT seek; only
+  // mousedown fires an immediate seek. Debounce must keep resetting so
+  // continuous motion never triggers the timer.
+  it('does not seek during continuous drag motion', () => {
     vi.useFakeTimers();
     const onSeek = vi.fn();
     const { getByTestId } = render(
@@ -135,52 +139,27 @@ describe('EventProgressBar throttle/dedup/flush (refs #196)', () => {
     const track = getByTestId('event-progress-track');
     stubTrackGeometry(track);
 
-    // Initiate drag. mouseDown calls flush -> leading seek at frame 10.
-    fireEvent.mouseDown(track, { clientX: 10 });
+    // mousedown fires 1 immediate seek.
+    fireEvent.mouseDown(track, { clientX: 20 });
+    expect(onSeek).toHaveBeenCalledTimes(1);
     onSeek.mockClear();
 
-    // Fire 20 mousemove events sweeping from px 20 to px 40 (frames 20-40).
-    // All within the same 150ms throttle window.
-    for (let px = 20; px <= 40; px++) {
+    // Rapid moves, each advancing less than the debounce threshold so the timer
+    // is always reset before it can fire.
+    for (let px = 30; px <= 80; px += 10) {
       fireEvent.mouseMove(window, { clientX: px });
+      act(() => { vi.advanceTimersByTime(50); }); // 50ms < EVENT_SCRUB_SEEK_DEBOUNCE_MS
     }
 
-    // Advance timers past throttle to flush the trailing call.
-    act(() => { vi.advanceTimersByTime(200); });
-
-    // 20 moves should produce far fewer than 20 seeks.
-    // Leading edge fires immediately on first move; trailing fires once after timeout.
-    expect(onSeek.mock.calls.length).toBeLessThanOrEqual(3);
-
-    fireEvent.mouseUp(window);
-  });
-
-  it('two moves resolving to the same frame do not produce two onSeek calls', () => {
-    vi.useFakeTimers();
-    const onSeek = vi.fn();
-    const { getByTestId } = render(
-      <EventProgressBar currentFrame={1} totalFrames={200} onSeek={onSeek} />
-    );
-    const track = getByTestId('event-progress-track');
-    stubTrackGeometry(track);
-
-    // Start drag at px 100 -> frame 100.
-    fireEvent.mouseDown(track, { clientX: 100 });
-    onSeek.mockClear();
-
-    // Two moves to the exact same pixel (same resulting frame).
-    fireEvent.mouseMove(window, { clientX: 100 });
-    act(() => { vi.advanceTimersByTime(200); });
-    fireEvent.mouseMove(window, { clientX: 100 });
-    act(() => { vi.advanceTimersByTime(200); });
-
-    // Dedup: frame 100 was already the last-sent frame, so no new seeks.
+    // No seeks during motion.
     expect(onSeek).not.toHaveBeenCalled();
 
     fireEvent.mouseUp(window);
   });
 
-  it('mouseup after a throttled move immediately seeks to the final frame', () => {
+  // Case 2: when the user pauses (motion stops and the debounce elapses), exactly
+  // one seek fires with the last dragged-to frame.
+  it('fires exactly one seek to the last frame when motion pauses', () => {
     vi.useFakeTimers();
     const onSeek = vi.fn();
     const { getByTestId } = render(
@@ -189,19 +168,77 @@ describe('EventProgressBar throttle/dedup/flush (refs #196)', () => {
     const track = getByTestId('event-progress-track');
     stubTrackGeometry(track);
 
-    // Start drag at px 20 -> frame 20.
-    fireEvent.mouseDown(track, { clientX: 20 });
+    fireEvent.mouseDown(track, { clientX: 20 }); // frame 20
     onSeek.mockClear();
 
-    // Move to px 120 (frame 120) without advancing time (timer still pending).
-    fireEvent.mouseMove(window, { clientX: 120 });
+    // Three rapid moves, each resetting the debounce timer.
+    fireEvent.mouseMove(window, { clientX: 60 }); // frame 60
+    act(() => { vi.advanceTimersByTime(50); });
+    fireEvent.mouseMove(window, { clientX: 100 }); // frame 100
+    act(() => { vi.advanceTimersByTime(50); });
+    fireEvent.mouseMove(window, { clientX: 140 }); // frame 140 (last)
 
-    // Move again to px 160 (frame 160) - this is the final drag position.
-    fireEvent.mouseMove(window, { clientX: 160 });
+    // Advance past the debounce threshold: timer fires for the last position.
+    act(() => { vi.advanceTimersByTime(EVENT_SCRUB_SEEK_DEBOUNCE_MS); });
 
-    // Release without advancing timers. The flush on mouseup must send frame 160 now.
+    expect(onSeek).toHaveBeenCalledTimes(1);
+    expect(onSeek).toHaveBeenCalledWith(140);
+
     fireEvent.mouseUp(window);
+  });
 
-    expect(onSeek).toHaveBeenLastCalledWith(160);
+  // Case 3: mouseup before the debounce elapses must cancel the pending timer
+  // and seek to the FINAL drag frame immediately. No extra seek after the
+  // debounce interval passes.
+  it('mouseup cancels pending debounce and seeks to the final frame immediately', () => {
+    vi.useFakeTimers();
+    const onSeek = vi.fn();
+    const { getByTestId } = render(
+      <EventProgressBar currentFrame={1} totalFrames={200} onSeek={onSeek} />
+    );
+    const track = getByTestId('event-progress-track');
+    stubTrackGeometry(track);
+
+    fireEvent.mouseDown(track, { clientX: 20 }); // frame 20
+    onSeek.mockClear();
+
+    // Move twice: timer is pending after each.
+    fireEvent.mouseMove(window, { clientX: 100 }); // frame 100
+    fireEvent.mouseMove(window, { clientX: 160 }); // frame 160 (final)
+
+    // Release before debounce fires: must cancel timer and seek once to frame 160.
+    fireEvent.mouseUp(window);
+    expect(onSeek).toHaveBeenCalledTimes(1);
+    expect(onSeek).toHaveBeenCalledWith(160);
+
+    // No extra seek after the debounce interval would have elapsed.
+    act(() => { vi.advanceTimersByTime(EVENT_SCRUB_SEEK_DEBOUNCE_MS + 50); });
+    expect(onSeek).toHaveBeenCalledTimes(1);
+  });
+
+  // Case 4: if the debounce already seeked the final frame, the release seek
+  // must not duplicate it.
+  it('release does not duplicate seek when debounce already committed the final frame', () => {
+    vi.useFakeTimers();
+    const onSeek = vi.fn();
+    const { getByTestId } = render(
+      <EventProgressBar currentFrame={1} totalFrames={200} onSeek={onSeek} />
+    );
+    const track = getByTestId('event-progress-track');
+    stubTrackGeometry(track);
+
+    fireEvent.mouseDown(track, { clientX: 20 }); // frame 20
+    onSeek.mockClear();
+
+    // Move to frame 160 and let the debounce fire.
+    fireEvent.mouseMove(window, { clientX: 160 }); // frame 160
+    act(() => { vi.advanceTimersByTime(EVENT_SCRUB_SEEK_DEBOUNCE_MS); });
+    expect(onSeek).toHaveBeenCalledTimes(1);
+    expect(onSeek).toHaveBeenCalledWith(160);
+    onSeek.mockClear();
+
+    // Release at the same position: dedup must suppress the redundant seek.
+    fireEvent.mouseUp(window);
+    expect(onSeek).not.toHaveBeenCalled();
   });
 });

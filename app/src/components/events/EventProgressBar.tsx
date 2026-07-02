@@ -11,7 +11,7 @@ import { useRef, useState, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/utils';
 import { log, LogLevel } from '../../lib/logger';
-import { EVENT_SCRUB_SEEK_THROTTLE_MS } from '../../lib/zmninja-ng-constants';
+import { EVENT_SCRUB_SEEK_DEBOUNCE_MS } from '../../lib/zmninja-ng-constants';
 
 interface AlarmFrame {
   frameId: number;
@@ -57,22 +57,27 @@ export function EventProgressBar({
 
   const progressRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
+  // Local drag position: drives the handle, played-width, and counter while dragging,
+  // so the handle follows the cursor immediately without waiting for a seek round-trip.
+  const [dragFrame, setDragFrame] = useState<number | null>(null);
   const [hoverPosition, setHoverPosition] = useState<number | null>(null);
 
-  // Throttle state for drag seeks (refs #196).
-  const throttleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Latest frame position seen during the current drag (updated on every move).
+  // Debounce timer for drag seeks (refs #196).
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Latest frame position seen during the current drag (updated on every move/down).
   const latestFrameRef = useRef<number>(0);
   // Last frame actually sent to onSeek (used for dedup).
-  const lastSentFrameRef = useRef<number>(-1);
+  const lastSeekedFrameRef = useRef<number>(-1);
 
-  const progress = (currentFrame / totalFrames) * 100;
+  // Drive handle, played-width, and counter from drag position during a drag.
+  const displayFrame = isDragging && dragFrame != null ? dragFrame : currentFrame;
+  const progress = (displayFrame / totalFrames) * 100;
 
   // Deduplicate + log + call onSeek. Returns without calling onSeek if the
   // frame is the same as the previous one, avoiding duplicate ZMS requests.
   const commit = useCallback((frame: number) => {
-    if (frame === lastSentFrameRef.current) return;
-    lastSentFrameRef.current = frame;
+    if (frame === lastSeekedFrameRef.current) return;
+    lastSeekedFrameRef.current = frame;
     log.eventProgressBar('Scrub target', LogLevel.DEBUG, {
       targetFrame: frame,
       totalFrames,
@@ -90,43 +95,32 @@ export function EventProgressBar({
     return Math.max(1, Math.min(targetFrame, totalFrames));
   }, [totalFrames]);
 
-  // Cancel any pending throttle timer and commit the frame immediately.
-  // Used for mousedown/touchstart (initial click) and on release (exact landing).
+  // Cancel any pending debounce timer and commit the frame immediately.
+  // Used on mousedown/touchstart (initial click) and on release (exact landing).
   const flush = useCallback((frame: number) => {
-    if (throttleTimerRef.current !== null) {
-      clearTimeout(throttleTimerRef.current);
-      throttleTimerRef.current = null;
+    if (debounceTimerRef.current !== null) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
     }
     commit(frame);
   }, [commit]);
 
-  // Throttled seek for drag moves. Fires at most once per
-  // EVENT_SCRUB_SEEK_THROTTLE_MS: leading edge commits immediately, trailing
-  // edge commits the latest position once the timer expires.
-  const throttledSeek = useCallback((clientX: number) => {
+  // Update the drag handle position immediately and (re)start the debounce timer.
+  // Every move resets the timer, so continuous motion never triggers a seek.
+  // When the timer fires (the user paused), it seeks to the latest known position.
+  const handleDragMove = useCallback((clientX: number) => {
     const frame = computeFrame(clientX);
     if (frame === null) return;
+    setDragFrame(frame);
     latestFrameRef.current = frame;
 
-    if (throttleTimerRef.current !== null) {
-      // Timer already running: just update the latest target. The trailing
-      // commit will pick it up when the timer fires.
-      return;
+    if (debounceTimerRef.current !== null) {
+      clearTimeout(debounceTimerRef.current);
     }
-
-    // Leading edge: skip if same as last sent (dedup).
-    if (frame === lastSentFrameRef.current) return;
-
-    commit(frame);
-
-    // Trailing timer: emit the final position from this throttle window.
-    throttleTimerRef.current = setTimeout(() => {
-      throttleTimerRef.current = null;
-      const latest = latestFrameRef.current;
-      if (latest !== lastSentFrameRef.current) {
-        commit(latest);
-      }
-    }, EVENT_SCRUB_SEEK_THROTTLE_MS);
+    debounceTimerRef.current = setTimeout(() => {
+      debounceTimerRef.current = null;
+      commit(latestFrameRef.current);
+    }, EVENT_SCRUB_SEEK_DEBOUNCE_MS);
   }, [computeFrame, commit]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -134,6 +128,7 @@ export function EventProgressBar({
     onScrubStart?.();
     const frame = computeFrame(e.clientX);
     if (frame !== null) {
+      setDragFrame(frame);
       latestFrameRef.current = frame;
       flush(frame);
     }
@@ -146,6 +141,7 @@ export function EventProgressBar({
     onScrubStart?.();
     const frame = computeFrame(touch.clientX);
     if (frame !== null) {
+      setDragFrame(frame);
       latestFrameRef.current = frame;
       flush(frame);
     }
@@ -167,17 +163,18 @@ export function EventProgressBar({
   useEffect(() => {
     if (!isDragging) return;
 
-    const onMouseMove = (e: MouseEvent) => throttledSeek(e.clientX);
+    const onMouseMove = (e: MouseEvent) => handleDragMove(e.clientX);
     const onTouchMove = (e: TouchEvent) => {
       const touch = e.touches[0];
       if (!touch) return;
       // Stop the page from scrolling while dragging the scrubber.
       e.preventDefault();
-      throttledSeek(touch.clientX);
+      handleDragMove(touch.clientX);
     };
     const stop = () => {
-      // Flush the exact release position so the playhead lands precisely.
+      // Cancel debounce and seek to the exact release position.
       flush(latestFrameRef.current);
+      setDragFrame(null);
       setIsDragging(false);
       onScrubEnd?.();
     };
@@ -194,13 +191,13 @@ export function EventProgressBar({
       window.removeEventListener('touchend', stop);
       window.removeEventListener('touchcancel', stop);
     };
-  }, [isDragging, throttledSeek, flush, onScrubEnd]);
+  }, [isDragging, handleDragMove, flush, onScrubEnd]);
 
-  // Clear the throttle timer on unmount to avoid a stale callback leak.
+  // Clear the debounce timer on unmount to avoid a stale callback leak.
   useEffect(() => {
     return () => {
-      if (throttleTimerRef.current !== null) {
-        clearTimeout(throttleTimerRef.current);
+      if (debounceTimerRef.current !== null) {
+        clearTimeout(debounceTimerRef.current);
       }
     };
   }, []);
@@ -277,7 +274,7 @@ export function EventProgressBar({
 
       {/* Time / Frame counter */}
       <div className="flex justify-between text-xs text-muted-foreground px-1" data-testid="frame-counter">
-        <span data-testid="current-frame">{duration ? frameToTime(currentFrame) : t('events.frame_number', { number: currentFrame })}</span>
+        <span data-testid="current-frame">{duration ? frameToTime(displayFrame) : t('events.frame_number', { number: displayFrame })}</span>
         <span data-testid="total-frames">{duration ? formatTime(duration) : t('events.total_frames', { count: totalFrames })}</span>
       </div>
     </div>
