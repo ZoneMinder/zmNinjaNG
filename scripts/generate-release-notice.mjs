@@ -157,8 +157,8 @@ async function main() {
     // Let the maintainer edit title/body via $EDITOR.
     const editor = process.env.EDITOR || 'vi';
     const tmp = `.notice-draft-${version}.json`;
-    writeFileSync(tmp, JSON.stringify({ title: notice.title, body: notice.body }, null, 2));
     try {
+      writeFileSync(tmp, JSON.stringify({ title: notice.title, body: notice.body }, null, 2));
       execFileSync(editor, [tmp], { stdio: 'inherit' });
       const edited = JSON.parse(readFileSync(tmp, 'utf8'));
       notice = assembleNotice({ version, tag, title: edited.title, body: edited.body, publishedAt: notice.publishedAt });
@@ -177,11 +177,11 @@ async function main() {
   try {
     feed = JSON.parse(readFileSync(NOTICES_PATH, 'utf8'));
     feed = prependNotice(feed, notice);
+    writeFileSync(NOTICES_PATH, JSON.stringify(feed, null, 2) + '\n');
   } catch (err) {
-    console.error(`Could not update ${NOTICES_PATH} (${err?.message ?? err}); skipping notice.`);
+    console.error(`Could not write ${NOTICES_PATH} (${err?.message ?? err}); skipping notice.`);
     process.exit(0);
   }
-  writeFileSync(NOTICES_PATH, JSON.stringify(feed, null, 2) + '\n');
 
   if (flags.has('--dry-run')) {
     console.log(`Dry run: wrote ${NOTICES_PATH} but did not commit or push.`);
@@ -200,5 +200,8 @@ async function main() {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main();
+  main().catch((err) => {
+    console.error(`Unexpected error: ${err?.message ?? err}; release continues.`);
+    process.exit(0);
+  });
 }
