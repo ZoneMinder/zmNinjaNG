@@ -221,6 +221,16 @@ export const API_PAGINATION = {
 } as const;
 
 /**
+ * Recent-events list shown under the live view on the monitor detail page.
+ * Count is a per-profile setting; these are its default and clamp bounds.
+ */
+export const MONITOR_DETAIL_RECENT_EVENTS = {
+  defaultCount: 5,
+  minCount: 1,
+  maxCount: 20,
+} as const;
+
+/**
  * Event List View Constants
  *
  * Configuration for the events list display.
