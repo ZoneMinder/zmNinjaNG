@@ -52,7 +52,7 @@ export function useDeveloperNotices() {
     const appVersion = getAppVersion();
     const read = new Set(readIds);
     return feed
-      .filter((n) => !n.minAppVersion || compareSemver(appVersion, n.minAppVersion) >= 0)
+      .filter((n) => import.meta.env.DEV || !n.minAppVersion || compareSemver(appVersion, n.minAppVersion) >= 0)
       .map((n) => ({ ...n, isRead: read.has(n.id) }))
       .sort((a, b) => (a.publishedAt < b.publishedAt ? 1 : a.publishedAt > b.publishedAt ? -1 : 0));
   }, [query.data, readIds]);

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createElement, type ReactNode } from 'react';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -115,5 +115,46 @@ describe('useDeveloperNotices: feed deletions', () => {
     await waitFor(() => expect(result.current.notices.length).toBe(1));
     // criticalUnread exists (unread on the page), but the banner won't render because the id is in dismissedBannerIds
     expect(result.current.criticalUnread.map((n) => n.id)).toEqual(['crit-1']);
+  });
+});
+
+describe('useDeveloperNotices: minAppVersion gate', () => {
+  beforeEach(() => {
+    fetchMock.mockReset();
+    useDeveloperNoticeStore.setState({ readIds: [], dismissedBannerIds: [] });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  // The notice has a minAppVersion higher than the running app version (0.0.0 from tests).
+  const futureNotice = {
+    id: 'future-1',
+    title: 'Future Feature',
+    body: 'Requires v99.0.0',
+    publishedAt: '2026-06-01T00:00:00Z',
+    severity: 'info' as const,
+    minAppVersion: '99.0.0',
+  };
+
+  it('hides a notice whose minAppVersion exceeds the app version in production (DEV=false)', async () => {
+    vi.stubEnv('DEV', false);
+    fetchMock.mockResolvedValue([futureNotice]);
+
+    const { result } = renderHook(() => useDeveloperNotices(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.notices.map((n) => n.id)).not.toContain('future-1');
+  });
+
+  it('shows a notice whose minAppVersion exceeds the app version in dev (DEV=true)', async () => {
+    vi.stubEnv('DEV', true);
+    fetchMock.mockResolvedValue([futureNotice]);
+
+    const { result } = renderHook(() => useDeveloperNotices(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.notices.map((n) => n.id)).toContain('future-1');
   });
 });

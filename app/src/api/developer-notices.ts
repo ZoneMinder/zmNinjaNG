@@ -40,14 +40,17 @@ export const DeveloperNoticeFeedSchema = z.array(DeveloperNoticeSchema);
  * Parse defensively before handing to Zod.
  */
 export async function fetchDeveloperNotices(): Promise<DeveloperNotice[]> {
-  const response = await httpGet<unknown>(DEVELOPER_NOTICES.feedUrl, {
+  const url = import.meta.env.DEV
+    ? `${window.location.origin}/__dev-notices.json`
+    : DEVELOPER_NOTICES.feedUrl;
+  const response = await httpGet<unknown>(url, {
     headers: { 'Skip-Auth': 'true' },
     timeoutMs: 10_000,
     intent: 'Fetch developer notices',
   });
   const data = typeof response.data === 'string' ? JSON.parse(response.data) : response.data;
   return validateApiResponse(DeveloperNoticeFeedSchema, data, {
-    endpoint: DEVELOPER_NOTICES.feedUrl,
+    endpoint: url,
     method: 'GET',
   });
 }

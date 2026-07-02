@@ -1,4 +1,5 @@
 import { execSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { viteStaticCopy } from 'vite-plugin-static-copy'
@@ -23,6 +24,20 @@ export default defineConfig({
   },
   plugins: [
     react(),
+    {
+      name: 'dev-notices',
+      configureServer(server) {
+        server.middlewares.use('/__dev-notices.json', (_req, res) => {
+          res.setHeader('Content-Type', 'application/json')
+          try {
+            // vite.config.ts is in app/; ../docs/notices.json is the repo file.
+            res.end(readFileSync(new URL('../docs/notices.json', import.meta.url), 'utf8'))
+          } catch {
+            res.end('[]')
+          }
+        })
+      },
+    },
     viteStaticCopy({
       targets: []
     }),
