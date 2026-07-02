@@ -17,6 +17,7 @@
     "test:e2e": "npm --prefix app run test:e2e",
     "test:e2e:ui": "npm --prefix app run test:e2e:ui",
     "test:all": "npm --prefix app run test:all",
+    "test:scripts": "node --test scripts/__tests__/*.test.mjs",
     "analyze": "npm --prefix app run analyze",
     "android:sync": "npm --prefix app run android:sync",
     "android:run": "npm --prefix app run android:run",
