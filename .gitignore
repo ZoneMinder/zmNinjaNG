@@ -63,3 +63,6 @@ docs/_build/
 vendor/bundle/
 .grepai/
 .superpowers/
+
+# Release notice temp drafts
+.notice-draft-*.json

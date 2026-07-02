@@ -4,7 +4,7 @@
  * only runs when the file is executed directly.
  */
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { createInterface } from 'node:readline';
@@ -157,16 +157,31 @@ async function main() {
   // Resolve tag: positional[1] or derive from version.
   const tag = positional[1] ?? deriveTag(version);
 
+  if (!version) {
+    console.error('Could not determine version; skipping notice.');
+    process.exit(0);
+  }
+
   // Early existence check: avoid wasting a claude call if notice already exists.
   if (!flags.has('--replace')) {
     try {
-      const existing = JSON.parse(readFileSync(NOTICES_PATH, 'utf8'));
-      if (Array.isArray(existing) && existing.some((n) => n && n.id === `release-${version}`)) {
-        console.log(`A notice for ${version} already exists. Pass --replace to overwrite.`);
+      const raw = readFileSync(NOTICES_PATH, 'utf8');
+      try {
+        const existing = JSON.parse(raw);
+        if (Array.isArray(existing) && existing.some((n) => n && n.id === `release-${version}`)) {
+          console.log(`A notice for ${version} already exists. Pass --replace to overwrite.`);
+          process.exit(0);
+        }
+      } catch (parseErr) {
+        console.error(`${NOTICES_PATH} exists but is not valid JSON (${parseErr?.message ?? parseErr}); not overwriting. Fix it and re-run.`);
         process.exit(0);
       }
-    } catch {
-      // File missing or corrupt; skip the check and continue.
+    } catch (err) {
+      if (err?.code !== 'ENOENT') {
+        console.error(`Could not read ${NOTICES_PATH} (${err?.message ?? err}); not overwriting.`);
+        process.exit(0);
+      }
+      // File missing; skip the check and continue.
     }
   }
 
@@ -202,7 +217,7 @@ async function main() {
     } catch (err) {
       console.error(`Edit failed (${err?.message ?? err}); keeping the original draft.`);
     } finally {
-      try { execFileSync('rm', ['-f', tmp]); } catch { /* ignore */ }
+      rmSync(tmp, { force: true });
     }
   } else if (choice !== 'y') {
     console.log('Skipped adding a developer notice.');
@@ -214,9 +229,21 @@ async function main() {
   try {
     let existing = [];
     try {
-      existing = JSON.parse(readFileSync(NOTICES_PATH, 'utf8'));
-      if (!Array.isArray(existing)) existing = [];
-    } catch { /* file missing or corrupt; start with empty feed */ }
+      const raw = readFileSync(NOTICES_PATH, 'utf8');
+      try {
+        existing = JSON.parse(raw);
+        if (!Array.isArray(existing)) existing = [];
+      } catch (parseErr) {
+        console.error(`${NOTICES_PATH} exists but is not valid JSON (${parseErr?.message ?? parseErr}); not overwriting. Fix it and re-run.`);
+        process.exit(0);
+      }
+    } catch (err) {
+      if (err?.code !== 'ENOENT') {
+        console.error(`Could not read ${NOTICES_PATH} (${err?.message ?? err}); not overwriting.`);
+        process.exit(0);
+      }
+      // ENOENT: start with empty feed
+    }
     feed = flags.has('--replace')
       ? upsertNotice(existing, notice)
       : prependNotice(existing, notice);
