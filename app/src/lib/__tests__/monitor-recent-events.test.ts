@@ -17,8 +17,8 @@ describe('clampRecentEventsCount', () => {
     expect(clampRecentEventsCount(4.6)).toBe(5);
   });
   it('falls back to default for non-finite input', () => {
-    expect(clampRecentEventsCount(NaN)).toBe(5);
-    expect(clampRecentEventsCount(undefined as unknown as number)).toBe(5);
+    expect(clampRecentEventsCount(NaN)).toBe(20);
+    expect(clampRecentEventsCount(undefined as unknown as number)).toBe(20);
   });
   it('passes through an in-range value', () => {
     expect(clampRecentEventsCount(8)).toBe(8);

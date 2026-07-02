@@ -4,6 +4,7 @@
  * Event autoplay, events per page, and dashboard refresh interval settings.
  */
 
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Switch } from '../ui/switch';
 import { Button } from '../ui/button';
@@ -28,6 +29,16 @@ export function PlaybackSection({
   updateSettings,
 }: PlaybackSectionProps) {
   const { t } = useTranslation();
+
+  // Local text buffer for the recent-events count so the field can be cleared
+  // to empty while typing (a controlled numeric value would snap back and block
+  // deleting the last digit). Non-empty input is clamped and committed live;
+  // blur restores the stored value if left empty/invalid.
+  const recentEventsCount = settings.monitorDetailRecentEventsCount ?? MONITOR_DETAIL_RECENT_EVENTS.defaultCount;
+  const [recentEventsText, setRecentEventsText] = useState(String(recentEventsCount));
+  useEffect(() => {
+    setRecentEventsText(String(recentEventsCount));
+  }, [recentEventsCount]);
 
   return (
     <section>
@@ -98,28 +109,34 @@ export function PlaybackSection({
               min={MONITOR_DETAIL_RECENT_EVENTS.minCount}
               max={MONITOR_DETAIL_RECENT_EVENTS.maxCount}
               step="1"
-              value={settings.monitorDetailRecentEventsCount ?? MONITOR_DETAIL_RECENT_EVENTS.defaultCount}
+              value={recentEventsText}
               onChange={(e) => {
                 if (!currentProfile) return;
                 const raw = e.target.value;
+                setRecentEventsText(raw);
                 if (raw === '') return;
                 updateSettings(currentProfile.id, {
                   monitorDetailRecentEventsCount: clampRecentEventsCount(Number(raw)),
                 });
+              }}
+              onBlur={() => {
+                if (recentEventsText === '' || Number.isNaN(Number(recentEventsText))) {
+                  setRecentEventsText(String(recentEventsCount));
+                }
               }}
               className="w-24"
               data-testid="settings-monitor-recent-events-count"
             />
             <span className="text-xs text-muted-foreground">{t('settings.events_per_page_suffix')}</span>
             <div className="flex gap-1.5">
-              {[3, 5, 10].map((val) => (
+              {[10, 20, 50].map((val) => (
                 <Button key={val} variant="outline" size="sm" className="h-7 text-xs px-2"
                   onClick={() =>
                     currentProfile &&
                     updateSettings(currentProfile.id, { monitorDetailRecentEventsCount: val })
                   }
                   data-testid={`monitor-recent-events-count-preset-${val}`}>
-                  {val}{val === 5 ? ` (${t('settings.default')})` : ''}
+                  {val}{val === 20 ? ` (${t('settings.default')})` : ''}
                 </Button>
               ))}
             </div>

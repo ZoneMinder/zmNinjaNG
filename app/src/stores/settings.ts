@@ -253,7 +253,7 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   streamMaxFps: 10,
   streamScale: 50,
   defaultEventLimit: 100,
-  monitorDetailRecentEventsCount: 5,
+  monitorDetailRecentEventsCount: 20,
   monitorDetailRecentEventsHidden: [],
   dashboardRefreshInterval: 30,
   montageByGroup: {},

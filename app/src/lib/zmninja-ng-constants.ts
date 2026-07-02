@@ -225,7 +225,7 @@ export const API_PAGINATION = {
  * Count is a per-profile setting; these are its default and clamp bounds.
  */
 export const MONITOR_DETAIL_RECENT_EVENTS = {
-  defaultCount: 5,
+  defaultCount: 20,
   minCount: 1,
   maxCount: 50,
 } as const;

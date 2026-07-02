@@ -4,7 +4,7 @@ import { BANDWIDTH_SETTINGS } from '../../lib/zmninja-ng-constants';
 
 describe('recent-events settings defaults', () => {
   it('defaults the count to 5', () => {
-    expect(DEFAULT_SETTINGS.monitorDetailRecentEventsCount).toBe(5);
+    expect(DEFAULT_SETTINGS.monitorDetailRecentEventsCount).toBe(20);
   });
   it('defaults the hidden set to empty', () => {
     expect(DEFAULT_SETTINGS.monitorDetailRecentEventsHidden).toEqual([]);
