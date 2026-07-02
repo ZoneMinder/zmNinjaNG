@@ -501,8 +501,6 @@
     "clear_confirm_action": "Clear"
   },
   "monitor_detail": {
-    "events": "Events",
-    "view_events": "Events",
     "recent_events": "Recent Events",
     "all_events": "All events",
     "no_recent_events": "No recent events",

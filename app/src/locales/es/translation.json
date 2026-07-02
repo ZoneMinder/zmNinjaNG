@@ -501,8 +501,6 @@
     "clear_confirm_action": "Borrar"
   },
   "monitor_detail": {
-    "events": "Eventos",
-    "view_events": "Eventos",
     "recent_events": "Eventos recientes",
     "all_events": "Todos los eventos",
     "no_recent_events": "Sin eventos",

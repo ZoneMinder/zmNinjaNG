@@ -501,8 +501,6 @@
     "clear_confirm_action": "清除"
   },
   "monitor_detail": {
-    "events": "事件",
-    "view_events": "事件",
     "recent_events": "最近事件",
     "all_events": "全部事件",
     "no_recent_events": "暂无事件",
