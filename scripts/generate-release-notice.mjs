@@ -74,6 +74,19 @@ export function prependNotice(feed, notice) {
   return [notice, ...feed];
 }
 
+/** Build the release tag for a version, e.g. "1.2.0" -> "zmNinjaNg-1.2.0". */
+export function deriveTag(version) {
+  return `zmNinjaNg-${version}`;
+}
+
+/** Replace an existing notice with the same id (moving it to the front with its
+ *  new content), or prepend it if absent. Used for regeneration. */
+export function upsertNotice(feed, notice) {
+  if (!Array.isArray(feed)) throw new Error('feed must be an array');
+  const without = feed.filter((n) => !(n && n.id === notice.id));
+  return [notice, ...without];
+}
+
 const NOTICES_PATH = 'docs/notices.json';
 const CHANGELOG_PATH = 'CHANGELOG.md';
 
@@ -127,10 +140,34 @@ function ask(question) {
 async function main() {
   const args = process.argv.slice(2);
   const flags = new Set(args.filter((a) => a.startsWith('--')));
-  const [version, tag] = args.filter((a) => !a.startsWith('--'));
-  if (!version || !tag) {
-    console.error('Usage: generate-release-notice.mjs <version> <tag> [--stub-claude] [--dry-run]');
-    process.exit(0); // do not block the release
+  const positional = args.filter((a) => !a.startsWith('--'));
+
+  // Resolve version: positional[0] or read from app/package.json.
+  let version = positional[0];
+  if (!version) {
+    try {
+      const pkg = JSON.parse(readFileSync('app/package.json', 'utf8'));
+      version = pkg.version;
+    } catch (err) {
+      console.error(`Could not read app/package.json (${err?.message ?? err}); pass version as an argument.`);
+      process.exit(0);
+    }
+  }
+
+  // Resolve tag: positional[1] or derive from version.
+  const tag = positional[1] ?? deriveTag(version);
+
+  // Early existence check: avoid wasting a claude call if notice already exists.
+  if (!flags.has('--replace')) {
+    try {
+      const existing = JSON.parse(readFileSync(NOTICES_PATH, 'utf8'));
+      if (Array.isArray(existing) && existing.some((n) => n && n.id === `release-${version}`)) {
+        console.log(`A notice for ${version} already exists. Pass --replace to overwrite.`);
+        process.exit(0);
+      }
+    } catch {
+      // File missing or corrupt; skip the check and continue.
+    }
   }
 
   let section = '';
@@ -172,11 +209,17 @@ async function main() {
     process.exit(0);
   }
 
-  // Prepend and write.
+  // Write: upsert when --replace is set, prepend otherwise.
   let feed;
   try {
-    feed = JSON.parse(readFileSync(NOTICES_PATH, 'utf8'));
-    feed = prependNotice(feed, notice);
+    let existing = [];
+    try {
+      existing = JSON.parse(readFileSync(NOTICES_PATH, 'utf8'));
+      if (!Array.isArray(existing)) existing = [];
+    } catch { /* file missing or corrupt; start with empty feed */ }
+    feed = flags.has('--replace')
+      ? upsertNotice(existing, notice)
+      : prependNotice(existing, notice);
     writeFileSync(NOTICES_PATH, JSON.stringify(feed, null, 2) + '\n');
   } catch (err) {
     console.error(`Could not write ${NOTICES_PATH} (${err?.message ?? err}); skipping notice.`);

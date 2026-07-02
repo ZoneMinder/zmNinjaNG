@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   parseVersionParts, isFeatureRelease, releaseUrl,
   extractChangelogSection, parseClaudeNotice, assembleNotice, prependNotice,
+  deriveTag, upsertNotice,
 } from '../generate-release-notice.mjs';
 
 test('parseVersionParts splits semver', () => {
@@ -77,4 +78,23 @@ test('prependNotice adds to front and rejects duplicate id', () => {
   assert.equal(out[0].id, 'release-1.2.0');
   assert.equal(out.length, 2);
   assert.throws(() => prependNotice(out, n), /already exists/);
+});
+
+test('deriveTag builds the tag', () => {
+  assert.equal(deriveTag('1.2.0'), 'zmNinjaNg-1.2.0');
+});
+
+test('upsertNotice replaces an existing id and moves it to the front', () => {
+  const feed = [{ id: 'a' }, { id: 'release-1.2.0', body: 'old' }, { id: 'b' }];
+  const out = upsertNotice(feed, { id: 'release-1.2.0', body: 'new' });
+  assert.equal(out.length, 3);
+  assert.equal(out[0].id, 'release-1.2.0');
+  assert.equal(out[0].body, 'new');
+  assert.equal(out.filter((n) => n.id === 'release-1.2.0').length, 1);
+});
+
+test('upsertNotice prepends when the id is absent', () => {
+  const out = upsertNotice([{ id: 'a' }], { id: 'release-9.9.9' });
+  assert.equal(out[0].id, 'release-9.9.9');
+  assert.equal(out.length, 2);
 });
