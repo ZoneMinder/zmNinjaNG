@@ -11,6 +11,7 @@ import { Input } from '../ui/input';
 import { SectionHeader, SettingsCard, SettingsRow, RowLabel } from './SettingsLayout';
 import type { Profile } from '../../api/types';
 import type { ProfileSettings } from '../../stores/settings';
+import { MONITOR_DETAIL_RECENT_EVENTS } from '../../lib/zmninja-ng-constants';
 
 export interface PlaybackSectionProps {
   settings: ProfileSettings;
@@ -81,6 +82,45 @@ export function PlaybackSection({
             </div>
           </div>
           <p className="text-xs text-muted-foreground">{t('settings.event_limit_tip')}</p>
+        </div>
+
+        {/* Recent events on monitor detail */}
+        <div className="px-4 py-3 space-y-2">
+          <RowLabel
+            label={t('settings.monitor_recent_events_count')}
+            desc={t('settings.monitor_recent_events_count_desc')}
+          />
+          <div className="flex flex-wrap items-center gap-3">
+            <Input
+              id="monitor-recent-events-count"
+              type="number"
+              min={MONITOR_DETAIL_RECENT_EVENTS.minCount}
+              max={MONITOR_DETAIL_RECENT_EVENTS.maxCount}
+              step="1"
+              value={settings.monitorDetailRecentEventsCount ?? MONITOR_DETAIL_RECENT_EVENTS.defaultCount}
+              onChange={(e) =>
+                currentProfile &&
+                updateSettings(currentProfile.id, {
+                  monitorDetailRecentEventsCount: Number(e.target.value),
+                })
+              }
+              className="w-24"
+              data-testid="settings-monitor-recent-events-count"
+            />
+            <span className="text-xs text-muted-foreground">{t('settings.events_per_page_suffix')}</span>
+            <div className="flex gap-1.5">
+              {[3, 5, 10].map((val) => (
+                <Button key={val} variant="outline" size="sm" className="h-7 text-xs px-2"
+                  onClick={() =>
+                    currentProfile &&
+                    updateSettings(currentProfile.id, { monitorDetailRecentEventsCount: val })
+                  }
+                  data-testid={`monitor-recent-events-count-preset-${val}`}>
+                  {val}{val === 5 ? ` (${t('settings.default')})` : ''}
+                </Button>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* Dashboard Refresh */}

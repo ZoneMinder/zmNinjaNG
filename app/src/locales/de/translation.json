@@ -331,6 +331,8 @@
     "events_per_page_desc": "Anzahl der Ereignisse, die auf einmal geladen werden",
     "events_per_page_suffix": "Ereignisse",
     "event_limit_tip": "Höhere Limits können die Leistung beeinträchtigen",
+    "monitor_recent_events_count": "Letzte Ereignisse",
+    "monitor_recent_events_count_desc": "Anzahl der Ereignisse unter dem Livebild",
     "dashboard_settings": "Dashboard-Einstellungen",
     "dashboard_settings_desc": "Dashboard-Widgets konfigurieren",
     "dashboard_refresh_interval": "Dashboard-Aktualisierungsintervall",
