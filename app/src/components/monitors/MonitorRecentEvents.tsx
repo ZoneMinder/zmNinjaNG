@@ -132,6 +132,7 @@ export function MonitorRecentEvents({ monitor }: MonitorRecentEventsProps) {
                     thumbnailUrls={urls}
                     aspectRatio={aspectRatio}
                     objectFit={thumbnailFit}
+                    monitorName={monitor.Name}
                   />
                 );
               })}
