@@ -151,8 +151,16 @@ async function main() {
   }
 
   // 5. Extract the version section, then delete the temp file.
-  const section = extractChangelogSection(readFileSync(tmp, 'utf8'), tag);
-  rmSync(tmp, { force: true });
+  let changelogText;
+  try {
+    changelogText = readFileSync(tmp, 'utf8');
+  } catch {
+    console.error('github_changelog_generator did not write the expected output file; cannot generate notice.');
+    process.exit(1);
+  } finally {
+    rmSync(tmp, { force: true });
+  }
+  const section = extractChangelogSection(changelogText, tag);
   if (!section) {
     console.error(`No changelog entries found for ${version}.`);
     process.exit(1);
