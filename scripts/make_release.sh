@@ -174,11 +174,21 @@ fi
 NOTICE_PATCH=$(echo "$VERSION" | cut -d. -f3)
 if [ "$NOTICE_PATCH" = "0" ]; then
     echo ""
-    read -p "Generate a developer notice for this release? [y/N] " -n 1 -r
-    echo ""
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        node scripts/generate-release-notice.mjs "$VERSION" "$TAG" \
-            || echo "Notice generation skipped or failed; continuing with the release."
+    if grep -qF "\"release-$VERSION\"" docs/notices.json 2>/dev/null; then
+        echo "A developer notice for $VERSION already exists."
+        read -p "Regenerate it? [y/N] " -n 1 -r
+        echo ""
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            node scripts/generate-release-notice.mjs "$VERSION" "$TAG" --replace \
+                || echo "Notice generation skipped or failed; continuing with the release."
+        fi
+    else
+        read -p "Generate a developer notice for this release? [y/N] " -n 1 -r
+        echo ""
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            node scripts/generate-release-notice.mjs "$VERSION" "$TAG" \
+                || echo "Notice generation skipped or failed; continuing with the release."
+        fi
     fi
 fi
 
