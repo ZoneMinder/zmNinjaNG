@@ -125,6 +125,26 @@ async function main() {
     process.exit(1);
   }
 
+  // Read the notices feed up front so a corrupt file halts before the slow
+  // changelog and claude steps. ENOENT means start with an empty feed.
+  let feed = [];
+  try {
+    const raw = readFileSync(NOTICES_PATH, 'utf8');
+    try {
+      feed = JSON.parse(raw);
+      if (!Array.isArray(feed)) feed = [];
+    } catch {
+      console.error(`${NOTICES_PATH} exists but is not valid JSON; not overwriting.`);
+      process.exit(1);
+    }
+  } catch (err) {
+    if (err?.code !== 'ENOENT') {
+      console.error(`Could not read ${NOTICES_PATH} (${err?.message ?? err}); not overwriting.`);
+      process.exit(1);
+    }
+    // ENOENT: start with an empty feed.
+  }
+
   // 2. Derive tag.
   const tag = deriveTag(version);
 
@@ -217,25 +237,7 @@ async function main() {
     process.exit(0);
   }
 
-  // 9. Read notices.json (ENOENT = start fresh), upsert, write. No git.
-  let feed = [];
-  try {
-    const raw = readFileSync(NOTICES_PATH, 'utf8');
-    try {
-      feed = JSON.parse(raw);
-      if (!Array.isArray(feed)) feed = [];
-    } catch {
-      console.error(`${NOTICES_PATH} exists but is not valid JSON; not overwriting.`);
-      process.exit(1);
-    }
-  } catch (err) {
-    if (err?.code !== 'ENOENT') {
-      console.error(`Could not read ${NOTICES_PATH} (${err?.message ?? err}); not overwriting.`);
-      process.exit(1);
-    }
-    // ENOENT: start with empty feed.
-  }
-
+  // 9. Upsert the notice into the feed read earlier and write. No git.
   feed = upsertNotice(feed, notice);
   writeFileSync(NOTICES_PATH, JSON.stringify(feed, null, 2) + '\n');
   console.log('Wrote docs/notices.json.');

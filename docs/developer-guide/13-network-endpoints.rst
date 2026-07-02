@@ -131,8 +131,9 @@ in ``app/package.json``. The tag is always derived as ``zmNinjaNg-<version>``.
 The script:
 
 1. Runs ``bundle exec github_changelog_generator --future-release zmNinjaNg-<version>``
-   into a temporary file to collect closed issues and merged PRs since the last
-   tag. ``CHANGELOG.md`` is not modified.
+   into a temporary file to collect the closed issues since the last tag (the
+   repo's ``.github_changelog_generator`` sets ``pulls=false``, matching
+   ``CHANGELOG.md``). ``CHANGELOG.md`` is not modified.
 2. Calls ``claude -p`` with the relevant changelog section and asks for
    ``{"title": "...", "body": "..."}``.
 3. Prints the proposed notice and asks:
