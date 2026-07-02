@@ -103,6 +103,10 @@ export interface ProfileSettings {
   streamMaxFps: number; // Max FPS for live streams
   streamScale: number; // Scale percentage for live streams (1-100)
   defaultEventLimit: number; // Default number of events to fetch when no filters applied
+  /** Number of recent events shown under the live view on the monitor detail page. */
+  monitorDetailRecentEventsCount: number;
+  /** Monitor IDs whose recent-events list is collapsed/hidden on the detail page. */
+  monitorDetailRecentEventsHidden: string[];
   dashboardRefreshInterval: number; // in seconds, for dashboard widgets (events/timeline)
   // Per-group live montage layout state. Key = group ID or ALL_GROUPS_KEY.
   montageByGroup: Record<string, MontageGroupLayout>;
@@ -249,6 +253,8 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   streamMaxFps: 10,
   streamScale: 50,
   defaultEventLimit: 100,
+  monitorDetailRecentEventsCount: 5,
+  monitorDetailRecentEventsHidden: [],
   dashboardRefreshInterval: 30,
   montageByGroup: {},
   eventMontageByGroup: {},
