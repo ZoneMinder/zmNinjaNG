@@ -40,7 +40,7 @@ export function useMonitorRecentEvents(monitorId: string): UseMonitorRecentEvent
 
   const { data, isLoading, isError, isFetching, refetch } = useQuery({
     queryKey: [currentProfile?.id, 'monitorRecentEvents', monitorId, count],
-    queryFn: () => getEvents({ monitorId, limit: count, sort: 'StartTime', direction: 'desc' }),
+    queryFn: () => getEvents({ monitorId, limit: count, sort: 'StartDateTime', direction: 'desc' }),
     enabled: !!currentProfile && isAuthenticated && !hidden,
     refetchInterval: hidden ? false : bandwidth.monitorRecentEventsInterval,
   });

@@ -46,7 +46,7 @@ describe('useMonitorRecentEvents', () => {
     const { result } = renderHook(() => useMonitorRecentEvents('4'), { wrapper });
     await waitFor(() => expect(result.current.events.length).toBe(2));
     expect(getEvents).toHaveBeenCalledWith({
-      monitorId: '4', limit: 5, sort: 'StartTime', direction: 'desc',
+      monitorId: '4', limit: 5, sort: 'StartDateTime', direction: 'desc',
     });
   });
 
