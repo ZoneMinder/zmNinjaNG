@@ -117,3 +117,14 @@ Feature: Monitor Detail Page
     Then the event delete confirm dialog should be visible
     When I cancel the event delete dialog
     Then the first recent event should still be present
+
+  @web
+  Scenario: Scroll position on monitor detail is restored after returning from an event
+    Given I am logged into zmNinjaNg
+    When I open the first monitor's detail view
+    Then the recent events list should be visible
+    When I scroll the main container down and record its scroll position
+    And I click the first recent event row
+    And I go back
+    Then the recent events list should be visible
+    And the main container scroll position should be restored

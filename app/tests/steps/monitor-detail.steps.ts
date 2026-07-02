@@ -903,3 +903,52 @@ Then('the first recent event should still be present', async ({ page }) => {
   const firstRow = page.locator('[data-testid="monitor-recent-events-body"] [data-testid="compact-event-row"]').first();
   await expect(firstRow).toBeVisible({ timeout: testConfig.timeouts.transition });
 });
+
+// Shared <main> scroll restoration on monitor detail (refs #196)
+let mainScrollBefore = 0;
+
+function readMainScrollTop(page: import('@playwright/test').Page): Promise<number> {
+  return page.evaluate(() => {
+    const el = document.querySelector('[data-tv-region="main"]') as HTMLElement | null;
+    return el ? el.scrollTop : 0;
+  });
+}
+
+When('I scroll the main container down and record its scroll position', async ({ page }) => {
+  // Let the recent-events list finish loading so the page has enough content to overflow.
+  await expect(page.getByTestId('monitor-recent-events-body')).toBeVisible({
+    timeout: testConfig.timeouts.transition,
+  });
+  await page.evaluate(() => {
+    const el = document.querySelector('[data-tv-region="main"]') as HTMLElement | null;
+    if (el) el.scrollTop = el.scrollHeight;
+  });
+  mainScrollBefore = await readMainScrollTop(page);
+  log.info('E2E: main container scrolled before opening event', { component: 'e2e', mainScrollBefore });
+  expect(mainScrollBefore).toBeGreaterThan(0);
+});
+
+When('I click the first recent event row', async ({ page }) => {
+  const firstRow = page.locator('[data-testid="compact-event-row"]').first();
+  await expect(firstRow).toBeVisible({ timeout: testConfig.timeouts.transition });
+  await firstRow.click();
+  await page.waitForURL(/\/events\/\d+/, { timeout: testConfig.timeouts.transition });
+});
+
+When('I go back', async ({ page }) => {
+  await page.goBack();
+  await page.waitForURL(/\/monitors\/\d+/, { timeout: testConfig.timeouts.transition });
+});
+
+Then('the main container scroll position should be restored', async ({ page }) => {
+  await expect.poll(() => readMainScrollTop(page), { timeout: 2000 }).toBeGreaterThan(0);
+
+  const after = await readMainScrollTop(page);
+  log.info('E2E: main container scroll after back navigation', {
+    component: 'e2e',
+    mainScrollBefore,
+    after,
+  });
+  expect(after).toBeGreaterThan(0);
+  expect(Math.abs(after - mainScrollBefore)).toBeLessThanOrEqual(40);
+});

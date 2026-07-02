@@ -231,6 +231,20 @@ export const MONITOR_DETAIL_RECENT_EVENTS = {
 } as const;
 
 /**
+ * The app shell's single scroll container (AppLayout's <main>). Pages without
+ * their own overflow container scroll this element, so scroll restoration for
+ * those pages targets it.
+ */
+export const MAIN_SCROLL_SELECTOR = '[data-tv-region="main"]';
+
+/**
+ * How long to keep re-applying a restored scroll offset while a page's async
+ * content is still growing (ms). Restoration stops early once the target is
+ * reached or the user scrolls.
+ */
+export const SCROLL_RESTORE_MAX_MS = 1000;
+
+/**
  * Event List View Constants
  *
  * Configuration for the events list display.

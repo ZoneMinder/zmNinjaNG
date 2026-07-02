@@ -42,12 +42,18 @@ import { MonitorSettingsDialog } from '../components/monitor-detail/MonitorSetti
 import { MonitorControlsCard } from '../components/monitor-detail/MonitorControlsCard';
 import { ZoomControls } from '../components/ui/zoom-controls';
 import { MonitorRecentEvents } from '../components/monitors/MonitorRecentEvents';
+import { useMainScrollRestoration } from '../hooks/useMainScrollRestoration';
 
 export default function MonitorDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useTranslation();
+
+  // This page scrolls the shared app-shell <main> (it has no overflow container
+  // of its own). Restore that scroll position when returning from an event
+  // opened in the recent-events list, instead of snapping to the top (refs #213).
+  useMainScrollRestoration(location.key);
 
   // Local UI state
   const [showPTZ, setShowPTZ] = useState(true);
