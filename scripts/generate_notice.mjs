@@ -90,7 +90,7 @@ const NOTICES_PATH = 'docs/notices.json';
 function buildPrompt(tag, section) {
   return [
     'You are drafting a short in-app "developer notice" for zmNinjaNg, shown to end users.',
-    'List the key changes that might be interesting to users, as a markdown bullet list. Each bullet starts with "- " on its own line and describes one change in plain terms. Include every user-facing change worth mentioning; skip internal or developer-only changes.',
+    'List the changes a user would actually notice or benefit from, as a markdown bullet list. Each bullet starts with "- " on its own line and describes one change in plain terms. Include new features, visible improvements, and fixes to things users interact with. Skip anything a user would not notice: internal refactors, build or CI changes, dependency updates, test changes, and store-compliance or permission changes (for example, removing an Android permission to satisfy Google Play).',
     'Rules: plain language, no jargon, no PR or issue numbers, no em-dashes, no marketing words (comprehensive, powerful, seamless, robust, etc.). Do not use first person (no "I added", "I fixed"); state each change as a plain fact, for example "Fixed the Android back button".',
     `After the bullets, add a blank line, then this exact markdown link on its own line: [Full changelog](${releaseUrl(tag)})`,
     'Output ONLY a JSON object, no code fence, no prose: {"title": "...", "body": "..."}',
