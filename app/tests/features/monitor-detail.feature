@@ -107,3 +107,13 @@ Feature: Monitor Detail Page
     Then the recent events body should be visible
     When I tap "All events"
     Then I should be on the events page filtered to that monitor
+
+  @all
+  Scenario: Delete confirm dialog on a recent event can be cancelled
+    Given I am logged into zmNinjaNg
+    When I open the first monitor's detail view
+    Then the recent events list should be visible
+    When I tap the delete button on the first recent event
+    Then the event delete confirm dialog should be visible
+    When I cancel the event delete dialog
+    Then the first recent event should still be present

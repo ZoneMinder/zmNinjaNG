@@ -404,10 +404,20 @@ CompactEventRow
 
 **Location**: ``src/components/events/CompactEventRow.tsx``
 
-Single row in the recent-events list: thumbnail, cause, start time, and
-score. Clicking (or Enter/Space when focused) navigates to
+Single row in the recent-events list: thumbnail, detected objects (or
+``Cause`` if none), event id, start time, relative time, score, and a
+delete button. Clicking (or Enter/Space when focused) navigates to
 ``/events/<id>`` with ``state: { from: '/monitors/<monitorId>' }`` so
 the event detail page's back action returns to the monitor.
+
+The primary text line comes from ``parseDetectedObjects(event.Notes)``:
+if it returns any classes they are joined with commas and shown with
+an icon from ``getObjectClassIconFromList``; otherwise the row falls
+back to ``event.Cause``. The id is rendered as ``#<event.Id>`` next to
+that text. The second line is the start time via ``fmtTime`` from
+``useDateTimeFormat()``, followed by a relative time
+(``formatEventRelative``) when the event falls within
+``RELATIVE_TIME_LIST_WINDOW_DAYS`` (``isWithinDays``).
 
 **Props:**
 
@@ -416,9 +426,76 @@ the event detail page's back action returns to the monitor.
 - ``aspectRatio`` – thumbnail aspect ratio
 - ``objectFit`` – CSS ``object-fit`` value for the thumbnail (default
   ``cover``)
+- ``monitorName`` – passed through to ``EventDeleteButton`` for the
+  confirm dialog's description
 
 **Test ids**: row ``compact-event-row``, thumbnail
 ``compact-event-thumbnail``.
+
+parseDetectedObjects
+~~~~~~~~~~~~~~~~~~~~
+
+**Location**: ``src/lib/event-detection.ts``
+
+**Signature**: ``parseDetectedObjects(notes: string | null): string[]``
+
+Extracts detected object classes from a ZoneMinder event ``Notes``
+field. Notes look like ``"detected:person,car|Motion: All"``; the
+function matches everything after ``detected:``, splits on commas, and
+for each entry keeps only the part before ``|``. Returns ``[]`` when
+``notes`` is ``null`` or has no ``detected:`` segment. Shared by
+``CompactEventRow`` and other event views that need the same parsing.
+
+EventDeleteButton
+~~~~~~~~~~~~~~~~~
+
+**Location**: ``src/components/events/EventDeleteButton.tsx``
+
+Trash icon button that opens an ``AlertDialog`` to confirm deletion of
+a ZoneMinder event, then calls ``useDeleteEvent``. Used by both
+``CompactEventRow`` (recent-events list) and ``EventCard`` (full event
+list/detail views). The trigger button and the dialog content both
+call ``e.stopPropagation()`` so opening or interacting with the dialog
+never fires the parent row/card's click-to-navigate handler.
+
+**Props:**
+
+- ``eventId`` – event id to delete
+- ``eventName`` – event name, used as the dialog description's fallback
+  subject
+- ``monitorName`` – optional, preferred over ``eventName`` in the
+  dialog description when present
+- ``size`` – ``'sm' | 'md'``, controls icon size (default ``'md'``)
+- ``className`` – merged onto the trigger button
+
+**Test ids**: trigger ``event-delete-button``, dialog
+``event-delete-dialog``, cancel action ``event-delete-cancel``,
+confirm action ``event-delete-confirm``. The confirm button is
+disabled while the delete request is in flight (``isDeleting``).
+
+useDeleteEvent
+~~~~~~~~~~~~~~
+
+**Location**: ``src/hooks/useDeleteEvent.ts``
+
+**Signature**: ``useDeleteEvent(): { deleteEvent: (eventId: string) => Promise<void>; isDeleting: boolean }``
+
+Calls the API layer's ``deleteEvent`` (imported as ``apiDeleteEvent``
+to avoid a name clash with the hook's own returned ``deleteEvent``),
+then invalidates three query sets so every view that lists or shows
+the deleted event refreshes:
+
+- ``['events']`` – event list queries
+- ``['event', eventId]`` – the single-event query
+- a predicate matching ``queryKey.includes('monitorRecentEvents')`` –
+  every ``useMonitorRecentEvents`` query, for any monitor, since the
+  key includes the monitor id and row count
+
+Shows a success toast (``events.delete_success``) after the
+invalidations resolve, or an error toast (``events.delete_failed``)
+plus an error log via ``log.eventCard`` on failure. ``isDeleting``
+tracks the in-flight request so callers (``EventDeleteButton``) can
+disable the confirm action.
 
 Dashboard Components
 --------------------

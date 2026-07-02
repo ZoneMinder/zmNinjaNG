@@ -879,3 +879,27 @@ When('I tap {string}', async ({ page }, label: string) => {
 Then('I should be on the events page filtered to that monitor', async ({ page }) => {
   await page.waitForURL(/\/events\?monitorId=\d+/, { timeout: testConfig.timeouts.transition });
 });
+
+// Recent event delete confirm (cancel path only, refs #213). This must never
+// click event-delete-confirm: the events on the live ZM server are real and
+// deletion is permanent.
+When('I tap the delete button on the first recent event', async ({ page }) => {
+  const firstRow = page.locator('[data-testid="monitor-recent-events-body"] [data-testid="compact-event-row"]').first();
+  await expect(firstRow).toBeVisible({ timeout: testConfig.timeouts.pageLoad });
+  await firstRow.getByTestId('event-delete-button').click();
+});
+
+Then('the event delete confirm dialog should be visible', async ({ page }) => {
+  await expect(page.getByTestId('event-delete-dialog')).toBeVisible({
+    timeout: testConfig.timeouts.transition,
+  });
+});
+
+When('I cancel the event delete dialog', async ({ page }) => {
+  await page.getByTestId('event-delete-cancel').click();
+});
+
+Then('the first recent event should still be present', async ({ page }) => {
+  const firstRow = page.locator('[data-testid="monitor-recent-events-body"] [data-testid="compact-event-row"]').first();
+  await expect(firstRow).toBeVisible({ timeout: testConfig.timeouts.transition });
+});
