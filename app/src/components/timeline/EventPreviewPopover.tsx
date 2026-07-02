@@ -17,6 +17,7 @@ import { getEventImageUrl } from '../../api/events';
 import { getPortalUrlForEvent } from '../../lib/server-resolver';
 import { resolveFallbackFids } from '../../lib/thumbnail-chain';
 import { resolveMinStreamingPort } from '../../lib/multiport';
+import { parseDetectedObjects } from '../../lib/event-detection';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useDateTimeFormat } from '../../hooks/useDateTimeFormat';
 import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
@@ -46,17 +47,6 @@ function formatDuration(seconds: number): string {
   const mins = Math.floor(seconds / 60);
   const secs = Math.round(seconds % 60);
   return `${mins}m ${secs}s`;
-}
-
-/** Extract detected objects from Notes, stripping everything after | in each entry. */
-function parseDetectedObjects(notes: string | null): string[] {
-  if (!notes) return [];
-  const match = notes.match(/detected:(.*)/i);
-  if (!match) return [];
-  return match[1]
-    .split(',')
-    .map((s) => s.split('|')[0].trim())
-    .filter(Boolean);
 }
 
 export const EventPreviewPopover = memo(function EventPreviewPopover({
