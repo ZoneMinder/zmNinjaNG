@@ -91,7 +91,7 @@ function buildPrompt(tag, section) {
   return [
     'You are drafting a short in-app "developer notice" for zmNinjaNg, shown to end users.',
     'Summarize what is new for a non-technical user as a short markdown bullet list of 2 to 5 bullets. Each bullet starts with "- " on its own line and describes one change in plain terms.',
-    'Rules: plain language, no jargon, no PR or issue numbers, no em-dashes, no marketing words (comprehensive, powerful, seamless, robust, etc.). First person is fine.',
+    'Rules: plain language, no jargon, no PR or issue numbers, no em-dashes, no marketing words (comprehensive, powerful, seamless, robust, etc.). Do not use first person (no "I added", "I fixed"); state each change as a plain fact, for example "Fixed the Android back button".',
     `After the bullets, add a blank line, then this exact markdown link on its own line: [Full changelog](${releaseUrl(tag)})`,
     'Output ONLY a JSON object, no code fence, no prose: {"title": "...", "body": "..."}',
     'Keep the title under 60 characters.',
