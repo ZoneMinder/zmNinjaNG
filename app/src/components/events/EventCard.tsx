@@ -15,6 +15,7 @@ import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { EventThumbnail } from './EventThumbnail';
 import { EventThumbnailHoverPreview } from './EventThumbnailHoverPreview';
+import { EventDeleteButton } from './EventDeleteButton';
 import { Video, Calendar, Clock, Star, Archive, Hourglass } from 'lucide-react';
 import { getEventCauseIcon } from '../../lib/event-icons';
 import { getObjectClassIconFromList } from '../../lib/object-class-icons';
@@ -198,6 +199,11 @@ function EventCardComponent({ event, monitorName, thumbnailUrls, largeThumbnailU
                     )}
                   />
                 </button>
+                <EventDeleteButton
+                  eventId={event.Id}
+                  eventName={event.Name}
+                  monitorName={monitorName}
+                />
                 {(() => {
                   const CauseIcon = getEventCauseIcon(event.Cause);
                   return (
