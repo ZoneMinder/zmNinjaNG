@@ -507,6 +507,7 @@
   },
   "monitor_detail": {
     "recent_events": "最近事件",
+    "recent_events_last": "最近 {{count}} 条",
     "all_events": "全部事件",
     "no_recent_events": "暂无事件",
     "refresh_events": "刷新",

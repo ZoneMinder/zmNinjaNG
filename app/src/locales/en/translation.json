@@ -507,6 +507,7 @@
   },
   "monitor_detail": {
     "recent_events": "Recent Events",
+    "recent_events_last": "last {{count}}",
     "all_events": "All events",
     "no_recent_events": "No recent events",
     "refresh_events": "Refresh",

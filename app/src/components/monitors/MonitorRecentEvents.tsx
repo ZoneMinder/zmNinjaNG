@@ -32,7 +32,7 @@ export function MonitorRecentEvents({ monitor }: MonitorRecentEventsProps) {
   const { currentProfile, settings } = useCurrentProfile();
   const { token: accessToken, isFresh } = useFreshAccessToken();
   const monitorId = monitor.Id;
-  const { events, isLoading, isError, isFetching, hidden, toggleHidden, refetch } =
+  const { events, isLoading, isError, isFetching, hidden, count, toggleHidden, refetch } =
     useMonitorRecentEvents(monitorId);
 
   const portalUrl = currentProfile?.portalUrl || '';
@@ -74,7 +74,12 @@ export function MonitorRecentEvents({ monitor }: MonitorRecentEventsProps) {
           data-testid="monitor-recent-events-toggle"
         >
           {hidden ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          <span className="truncate">{t('monitor_detail.recent_events')}</span>
+          <span className="truncate">
+            {t('monitor_detail.recent_events')}
+            <span className="ml-1 font-normal text-muted-foreground">
+              ({t('monitor_detail.recent_events_last', { count })})
+            </span>
+          </span>
         </button>
         <div className="flex items-center gap-1">
           {!hidden && (
