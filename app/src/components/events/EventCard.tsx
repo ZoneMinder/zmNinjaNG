@@ -29,6 +29,9 @@ import { log, LogLevel } from '../../lib/logger';
 import { TagChipList } from './TagChip';
 import { formatEventRelative, isWithinDays } from '../../lib/relative-time';
 import { RELATIVE_TIME_LIST_WINDOW_DAYS } from '../../lib/zmninja-ng-constants';
+import { ReturnFlashArrow } from './ReturnFlashArrow';
+import { useReturnFlash } from '../../hooks/useReturnFlash';
+import { useReturnHighlightStore } from '../../stores/returnHighlight';
 
 /**
  * EventCard component.
@@ -56,6 +59,13 @@ function EventCardComponent({ event, monitorName, thumbnailUrls, largeThumbnailU
 
   const isArchived = event.Archived === '1';
   const [isArchiving, setIsArchiving] = useState(false);
+
+  const markViewed = useReturnHighlightStore((s) => s.markViewed);
+  const flash = useReturnFlash(event.Id);
+  const openEvent = () => {
+    markViewed(event.Id);
+    navigate(`/events/${event.Id}`, { state: { from: '/events', eventFilters } });
+  };
 
   const startTime = new Date(event.StartDateTime.replace(' ', 'T'));
 
@@ -92,12 +102,15 @@ function EventCardComponent({ event, monitorName, thumbnailUrls, largeThumbnailU
 
   return (
     <Card
-      className="group overflow-hidden cursor-pointer hover:shadow-lg transition-all duration-200 hover:ring-2 hover:ring-primary/50 focus:outline-none focus:ring-2 focus:ring-primary"
-      onClick={() => navigate(`/events/${event.Id}`, { state: { from: '/events', eventFilters } })}
+      className={cn(
+        'group relative overflow-hidden cursor-pointer hover:shadow-lg transition-all duration-200 hover:ring-2 hover:ring-primary/50 focus:outline-none focus:ring-2 focus:ring-primary',
+        flash && 'ring-2 ring-primary/60 bg-primary/5'
+      )}
+      onClick={openEvent}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
-          navigate(`/events/${event.Id}`, { state: { from: '/events', eventFilters } });
+          openEvent();
         }
       }}
       role="button"
@@ -106,6 +119,7 @@ function EventCardComponent({ event, monitorName, thumbnailUrls, largeThumbnailU
       data-testid="event-card"
       data-event-id={event.Id}
     >
+      {flash && <ReturnFlashArrow />}
       <div className="flex gap-2 sm:gap-3 p-2 sm:p-3">
         {/* Thumbnail - Fixed width container for consistent text alignment */}
         <div className="relative flex-shrink-0 rounded overflow-hidden bg-card border border-border/40 w-24 sm:w-28 md:w-32 max-w-[40%]">
