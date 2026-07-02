@@ -168,5 +168,6 @@ pip install -r docs/requirements.txt sphinx-autobuild && cd docs && make clean &
 ### Making releases
 - See `scripts/make_release.sh` [here](scripts/make_release.sh). This automatically tags the current state and triggers release builds
 - `app/package.json` is the source of truth for the version number
+- **In-app release notice**: run `npm run notice <version>` to draft a short "what's new" notice from the closed issues since the last release (Claude writes it, you approve it). It only writes `docs/notices.json` for you to test; nothing is committed. On minor/major releases `make_release.sh` offers to generate one for you. Details in the [developer guide](docs/developer-guide/13-network-endpoints.rst).
 
 
