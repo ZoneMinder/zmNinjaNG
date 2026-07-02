@@ -503,6 +503,10 @@
   "monitor_detail": {
     "events": "Events",
     "view_events": "Events",
+    "recent_events": "Recent Events",
+    "all_events": "All events",
+    "no_recent_events": "No recent events",
+    "refresh_events": "Refresh",
     "timeline": "Timeline",
     "settings": "Settings",
     "server": "Server",
