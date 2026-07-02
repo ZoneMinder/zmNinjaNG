@@ -170,22 +170,22 @@ else
     exit 1
 fi
 
-# --- Step 3.5: Optional developer notice (minor/major releases only) ---
+# --- Step 3.5: Developer notice (minor/major releases only) ---
+# Offer a notice only for minor/major releases (patch = 0) that don't already
+# have one. generate_notice halts the release on any failure (no error guard):
+# a missing tool or unparseable draft must stop the release, not ship silently.
 NOTICE_PATCH=$(echo "$VERSION" | cut -d. -f3)
-if [ "$NOTICE_PATCH" = "0" ]; then
+if [ "$NOTICE_PATCH" = "0" ] && ! grep -qF "\"release-$VERSION\"" docs/notices.json 2>/dev/null; then
     echo ""
-    if grep -qF "\"release-$VERSION\"" docs/notices.json 2>/dev/null; then
-        echo "A developer notice for $VERSION already exists."
-        read -p "Regenerate it? [y/N] " -r
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            node scripts/generate-release-notice.mjs "$VERSION" "$TAG" --replace \
-                || echo "Notice generation skipped or failed; continuing with the release."
-        fi
-    else
-        read -p "Generate a developer notice for this release? [y/N] " -r
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            node scripts/generate-release-notice.mjs "$VERSION" "$TAG" \
-                || echo "Notice generation skipped or failed; continuing with the release."
+    read -p "Generate a developer notice for $VERSION? [y/N] " -r
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        node scripts/generate_notice.mjs "$VERSION"
+        # generate_notice only writes docs/notices.json; commit and push it so
+        # the release ships the notice (the feed is served from this branch).
+        if [[ -n $(git status --porcelain docs/notices.json) ]]; then
+            git add docs/notices.json
+            git commit -m "chore: add release notice for $VERSION"
+            git push origin "$CURRENT_BRANCH"
         fi
     fi
 fi
