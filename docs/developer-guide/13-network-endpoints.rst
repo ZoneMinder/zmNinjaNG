@@ -116,75 +116,59 @@ validated on load against this schema:
 Generating a release notice
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``scripts/generate-release-notice.mjs`` drafts a notice and prepends it to
-``docs/notices.json``. A root-level shortcut runs it with no arguments:
+``scripts/generate_notice.mjs`` drafts a notice and upserts it into
+``docs/notices.json``. Run it from the repo root:
 
 .. code-block:: bash
 
-   npm run notice          # reads version from app/package.json
+   npm run notice            # prompts for version, defaulting to app/package.json
+   npm run notice 1.8.0     # pass version directly
+   node scripts/generate_notice.mjs 1.8.0
 
-Pass the version (and optionally the tag) as positional arguments:
+If no version is passed, the script prompts for one and defaults to the version
+in ``app/package.json``. The tag is always derived as ``zmNinjaNg-<version>``.
 
-.. code-block:: bash
+The script:
 
-   node scripts/generate-release-notice.mjs 1.8.0
-   node scripts/generate-release-notice.mjs 1.8.0 zmNinjaNg-1.8.0
-
-With no arguments, the script reads ``version`` from ``app/package.json`` and
-derives the tag as ``zmNinjaNg-<version>``.
-
-The script calls ``claude -p`` with a prompt that includes the relevant
-``CHANGELOG.md`` section and asks for ``{"title": "...", "body": "..."}``.
-If ``claude`` is not on PATH, or if its output cannot be parsed as JSON, the
-script falls back to a link-only draft and continues. It never blocks the
-release.
-
-After printing the proposed notice, the script asks:
+1. Runs ``bundle exec github_changelog_generator --future-release zmNinjaNg-<version>``
+   into a temporary file to collect closed issues and merged PRs since the last
+   tag. ``CHANGELOG.md`` is not modified.
+2. Calls ``claude -p`` with the relevant changelog section and asks for
+   ``{"title": "...", "body": "..."}``.
+3. Prints the proposed notice and asks:
 
 .. code-block:: text
 
-   Add and push this notice? [y/N/e(dit)]
+   Add this notice? [y/N/e(dit)]
 
-- ``y``: writes ``docs/notices.json``, commits with
-  ``chore: add release notice for <version> (refs #211)``, and pushes.
+- ``y``: upserts the notice into ``docs/notices.json`` (overwrites an existing
+  entry with the same ``id``, or prepends if new). No git commit or push.
 - ``e``: opens the draft in ``$EDITOR``; the edited version is written after
   the editor closes.
-- ``N`` (or anything else): exits without writing.
+- ``N`` (or anything else): exits 0 without writing.
 
-If the git step fails, the notice is already written locally and can be
-committed manually. The script always exits with code 0 so the release is
-not blocked.
+There are no fallbacks. If ``gh``, ``bundle``/``github_changelog_generator``,
+or ``claude`` is missing or fails, if the output is not parseable JSON, or if
+``docs/notices.json`` is corrupt, the script prints a clear error and exits
+non-zero.
 
-Flags
-^^^^^
-
-.. list-table::
-   :header-rows: 1
-   :widths: 22 78
-
-   * - Flag
-     - Effect
-   * - ``--replace``
-     - Upsert: overwrite an existing ``release-<version>`` entry and move it
-       to the front of the feed. Without this flag, if the notice already
-       exists the script prints ``A notice for <version> already exists. Pass
-       --replace to overwrite.`` and exits.
-   * - ``--stub-claude``
-     - Skip the ``claude -p`` call and use a static stub draft. Useful for
-       testing the write path without a Claude API call.
-   * - ``--dry-run``
-     - Write ``docs/notices.json`` but do not commit or push.
+To test without keeping the result: run the script, verify in the app, then
+``git checkout -- docs/notices.json`` to discard.
 
 Integration with make_release.sh
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-On minor and major releases (patch = 0), ``scripts/make_release.sh`` offers
-to generate a notice after the changelog step. It checks ``docs/notices.json``:
+On minor and major releases (patch = 0) that do not already have a notice in
+``docs/notices.json``, ``scripts/make_release.sh`` asks:
 
-- If a notice for the version already exists, it prints ``A developer notice
-  for <version> already exists.`` and asks ``Regenerate it? [y/N]``. Answering
-  ``y`` re-runs the generator with ``--replace``.
-- Otherwise it asks ``Generate a developer notice for this release? [y/N]``.
-  Answering ``y`` runs the generator without ``--replace``.
+.. code-block:: text
 
-Either step can be skipped; the release continues either way.
+   Generate a developer notice for <version>? [y/N]
+
+Answering ``y`` runs ``node scripts/generate_notice.mjs <version>`` with no
+error guard. Any failure halts the release (``set -e``). After a successful
+generation, ``make_release.sh`` commits and pushes ``docs/notices.json`` so
+the notice ships with the release.
+
+If the version already has a notice in ``docs/notices.json``, or if the
+release is a patch release, the prompt is skipped.
