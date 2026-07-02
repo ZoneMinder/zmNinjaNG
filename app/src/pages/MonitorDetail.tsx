@@ -17,7 +17,7 @@ import { useSettingsStore } from '../stores/settings';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { ArrowLeft, Settings, Maximize2, Minimize2, Clock, AlertTriangle, Download, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Layers, Video, Eye, Disc } from 'lucide-react';
+import { ArrowLeft, Settings, Maximize2, Minimize2, AlertTriangle, Download, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Layers, Video, Eye, Disc } from 'lucide-react';
 import { useState, useRef, useMemo, useCallback } from 'react';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
@@ -41,6 +41,7 @@ import { usePTZControl, useAlarmControl, useModeControl, useMonitorNavigation } 
 import { MonitorSettingsDialog } from '../components/monitor-detail/MonitorSettingsDialog';
 import { MonitorControlsCard } from '../components/monitor-detail/MonitorControlsCard';
 import { ZoomControls } from '../components/ui/zoom-controls';
+import { MonitorRecentEvents } from '../components/monitors/MonitorRecentEvents';
 
 export default function MonitorDetail() {
   const { id } = useParams<{ id: string }>();
@@ -288,16 +289,6 @@ export default function MonitorDetail() {
           </Button>
         </div>
         <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate(`/events?monitorId=${monitor.Monitor.Id}`)}
-            className="h-8 sm:h-9"
-            title={t('monitor_detail.events')}
-          >
-            <Clock className="h-4 w-4 sm:mr-2" />
-            <span className="hidden sm:inline">{t('monitor_detail.events')}</span>
-          </Button>
           <Select value={settings.monitorDetailFeedFit} onValueChange={handleFeedFitChange}>
             <SelectTrigger className="h-8 sm:h-9 w-[100px]" data-testid="monitor-detail-fit-select">
               <SelectValue placeholder={t('monitor_detail.feed_fit')} />
@@ -452,16 +443,6 @@ export default function MonitorDetail() {
               <Download className="h-4 w-4" />
             </Button>
             <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => navigate(`/events?monitorId=${monitor.Monitor.Id}`)}
-              title={t('monitor_detail.view_events')}
-              aria-label={t('monitor_detail.view_events')}
-            >
-              <Clock className="h-4 w-4" />
-            </Button>
-            <Button
               variant={showZones ? 'secondary' : 'ghost'}
               size="icon"
               className="h-8 w-8"
@@ -486,6 +467,11 @@ export default function MonitorDetail() {
             </Button>
           </div>
         </div>
+        )}
+
+        {/* Recent events - Hidden in fullscreen */}
+        {!isFullscreen && (
+          <MonitorRecentEvents monitor={monitor.Monitor} />
         )}
 
         {/* PTZ Controls - Hidden in fullscreen */}
