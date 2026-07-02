@@ -25,6 +25,7 @@ const base = {
   Cause: 'Motion:All',
   StartDateTime: '2026-07-02 14:19:00',
   MaxScore: '43',
+  Length: '30',
   Notes: 'detected:person|Motion: All',
 };
 
@@ -41,12 +42,13 @@ const render1 = (event: typeof base = base) =>
   );
 
 describe('CompactEventRow', () => {
-  it('shows detection, event id, time and a delete button', () => {
+  it('shows detection, event id, time, duration and a delete button', () => {
     render1();
     expect(screen.getByText('person')).toBeTruthy();
     expect(screen.getByText(/#233228/)).toBeTruthy();
     expect(screen.getByText(/2:19 PM/)).toBeTruthy();
-    expect(screen.getByText('43')).toBeTruthy();
+    expect(screen.getByText('30s')).toBeTruthy();
+    expect(screen.queryByText('43')).toBeNull();
     expect(screen.getByTestId('event-delete-button')).toBeTruthy();
   });
 

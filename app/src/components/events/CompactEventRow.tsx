@@ -1,6 +1,6 @@
 /**
  * Compact event row for the monitor-detail recent-events list.
- * Thumbnail + detection (or cause) + event id + time + relative time + score,
+ * Thumbnail + detection (or cause) + event id + time + relative time + duration,
  * with a delete button. Clicking the row opens the event detail.
  */
 import type { CSSProperties } from 'react';
@@ -32,6 +32,11 @@ export function CompactEventRow({ event, thumbnailUrls, aspectRatio, objectFit =
   const DetIcon = detected.length ? getObjectClassIconFromList(detected.join(',')) : null;
   const primaryText = detected.length ? detected.join(', ') : event.Cause;
   const showRelative = isWithinDays(startTime, RELATIVE_TIME_LIST_WINDOW_DAYS);
+  const durationSecs = Math.max(0, Math.round(Number(event.Length) || 0));
+  const durationLabel =
+    durationSecs >= 60
+      ? `${Math.floor(durationSecs / 60)}:${String(durationSecs % 60).padStart(2, '0')}`
+      : `${durationSecs}s`;
   const open = () =>
     navigate(`/events/${event.Id}`, { state: { from: `/monitors/${event.MonitorId}` } });
 
@@ -78,9 +83,9 @@ export function CompactEventRow({ event, thumbnailUrls, aspectRatio, objectFit =
       </div>
       <span
         className="flex-shrink-0 text-xs font-medium tabular-nums px-1.5 py-0.5 rounded bg-muted text-muted-foreground"
-        title={t('events.score')}
+        title={t('events.duration')}
       >
-        {event.MaxScore}
+        {durationLabel}
       </span>
       <EventDeleteButton
         eventId={event.Id}
