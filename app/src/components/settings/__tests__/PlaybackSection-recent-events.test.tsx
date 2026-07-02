@@ -39,4 +39,19 @@ describe('PlaybackSection recent-events count', () => {
     fireEvent.click(screen.getByTestId('monitor-recent-events-count-preset-10'));
     expect(updateSettings).toHaveBeenCalledWith('p1', { monitorDetailRecentEventsCount: 10 });
   });
+
+  it('clamps a typed value above the max down to 50', () => {
+    const updateSettings = vi.fn();
+    render(
+      <PlaybackSection
+        settings={{ ...DEFAULT_SETTINGS }}
+        update={vi.fn()}
+        currentProfile={profile}
+        updateSettings={updateSettings}
+      />
+    );
+    const input = screen.getByTestId('settings-monitor-recent-events-count') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '244' } });
+    expect(updateSettings).toHaveBeenCalledWith('p1', { monitorDetailRecentEventsCount: 50 });
+  });
 });

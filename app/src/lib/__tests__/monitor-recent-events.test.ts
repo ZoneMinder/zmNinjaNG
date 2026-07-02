@@ -11,7 +11,7 @@ describe('clampRecentEventsCount', () => {
     expect(clampRecentEventsCount(-5)).toBe(1);
   });
   it('clamps above max down to max', () => {
-    expect(clampRecentEventsCount(999)).toBe(20);
+    expect(clampRecentEventsCount(999)).toBe(50);
   });
   it('rounds fractional values', () => {
     expect(clampRecentEventsCount(4.6)).toBe(5);

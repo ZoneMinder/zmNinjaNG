@@ -227,7 +227,7 @@ export const API_PAGINATION = {
 export const MONITOR_DETAIL_RECENT_EVENTS = {
   defaultCount: 5,
   minCount: 1,
-  maxCount: 20,
+  maxCount: 50,
 } as const;
 
 /**

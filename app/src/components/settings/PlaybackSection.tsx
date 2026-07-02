@@ -12,6 +12,7 @@ import { SectionHeader, SettingsCard, SettingsRow, RowLabel } from './SettingsLa
 import type { Profile } from '../../api/types';
 import type { ProfileSettings } from '../../stores/settings';
 import { MONITOR_DETAIL_RECENT_EVENTS } from '../../lib/zmninja-ng-constants';
+import { clampRecentEventsCount } from '../../lib/monitor-recent-events';
 
 export interface PlaybackSectionProps {
   settings: ProfileSettings;
@@ -98,12 +99,14 @@ export function PlaybackSection({
               max={MONITOR_DETAIL_RECENT_EVENTS.maxCount}
               step="1"
               value={settings.monitorDetailRecentEventsCount ?? MONITOR_DETAIL_RECENT_EVENTS.defaultCount}
-              onChange={(e) =>
-                currentProfile &&
+              onChange={(e) => {
+                if (!currentProfile) return;
+                const raw = e.target.value;
+                if (raw === '') return;
                 updateSettings(currentProfile.id, {
-                  monitorDetailRecentEventsCount: Number(e.target.value),
-                })
-              }
+                  monitorDetailRecentEventsCount: clampRecentEventsCount(Number(raw)),
+                });
+              }}
               className="w-24"
               data-testid="settings-monitor-recent-events-count"
             />
