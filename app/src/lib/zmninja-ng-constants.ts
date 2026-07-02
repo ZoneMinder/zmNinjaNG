@@ -232,6 +232,10 @@ export const EVENT_LIST = {
   virtualizationThreshold: 100,
 } as const;
 
+/** Minimum gap between scrub-bar seeks while dragging, so a drag does not flood
+ *  the ZMS stream with a seek per pointer-move (refs #196). */
+export const EVENT_SCRUB_SEEK_THROTTLE_MS = 150;
+
 /**
  * Relative time labels on events (issue #210).
  * List chip only renders for events within this many days; older events read

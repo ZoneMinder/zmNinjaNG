@@ -11,6 +11,7 @@ import { useRef, useState, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/utils';
 import { log, LogLevel } from '../../lib/logger';
+import { EVENT_SCRUB_SEEK_THROTTLE_MS } from '../../lib/zmninja-ng-constants';
 
 interface AlarmFrame {
   frameId: number;
@@ -53,43 +54,102 @@ export function EventProgressBar({
     if (!duration || totalFrames <= 0) return '';
     return formatTime((frame / totalFrames) * duration);
   }, [duration, totalFrames, formatTime]);
+
   const progressRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [hoverPosition, setHoverPosition] = useState<number | null>(null);
 
+  // Throttle state for drag seeks (refs #196).
+  const throttleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Latest frame position seen during the current drag (updated on every move).
+  const latestFrameRef = useRef<number>(0);
+  // Last frame actually sent to onSeek (used for dedup).
+  const lastSentFrameRef = useRef<number>(-1);
+
   const progress = (currentFrame / totalFrames) * 100;
 
-  const handleSeek = useCallback((clientX: number) => {
-    if (!progressRef.current) return;
+  // Deduplicate + log + call onSeek. Returns without calling onSeek if the
+  // frame is the same as the previous one, avoiding duplicate ZMS requests.
+  const commit = useCallback((frame: number) => {
+    if (frame === lastSentFrameRef.current) return;
+    lastSentFrameRef.current = frame;
+    log.eventProgressBar('Scrub target', LogLevel.DEBUG, {
+      targetFrame: frame,
+      totalFrames,
+    });
+    onSeek(frame);
+  }, [onSeek, totalFrames]);
 
+  // Compute the target frame from a clientX coordinate.
+  const computeFrame = useCallback((clientX: number): number | null => {
+    if (!progressRef.current) return null;
     const rect = progressRef.current.getBoundingClientRect();
     const x = clientX - rect.left;
     const percentage = Math.max(0, Math.min(100, (x / rect.width) * 100));
     const targetFrame = Math.round((percentage / 100) * totalFrames);
-    const clampedFrame = Math.max(1, Math.min(targetFrame, totalFrames));
+    return Math.max(1, Math.min(targetFrame, totalFrames));
+  }, [totalFrames]);
 
-    log.eventProgressBar('Scrub target', LogLevel.DEBUG, {
-      percentage: Math.round(percentage * 10) / 10,
-      targetFrame: clampedFrame,
-      totalFrames,
-    });
+  // Cancel any pending throttle timer and commit the frame immediately.
+  // Used for mousedown/touchstart (initial click) and on release (exact landing).
+  const flush = useCallback((frame: number) => {
+    if (throttleTimerRef.current !== null) {
+      clearTimeout(throttleTimerRef.current);
+      throttleTimerRef.current = null;
+    }
+    commit(frame);
+  }, [commit]);
 
-    onSeek(clampedFrame);
-  }, [totalFrames, onSeek]);
+  // Throttled seek for drag moves. Fires at most once per
+  // EVENT_SCRUB_SEEK_THROTTLE_MS: leading edge commits immediately, trailing
+  // edge commits the latest position once the timer expires.
+  const throttledSeek = useCallback((clientX: number) => {
+    const frame = computeFrame(clientX);
+    if (frame === null) return;
+    latestFrameRef.current = frame;
+
+    if (throttleTimerRef.current !== null) {
+      // Timer already running: just update the latest target. The trailing
+      // commit will pick it up when the timer fires.
+      return;
+    }
+
+    // Leading edge: skip if same as last sent (dedup).
+    if (frame === lastSentFrameRef.current) return;
+
+    commit(frame);
+
+    // Trailing timer: emit the final position from this throttle window.
+    throttleTimerRef.current = setTimeout(() => {
+      throttleTimerRef.current = null;
+      const latest = latestFrameRef.current;
+      if (latest !== lastSentFrameRef.current) {
+        commit(latest);
+      }
+    }, EVENT_SCRUB_SEEK_THROTTLE_MS);
+  }, [computeFrame, commit]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     setIsDragging(true);
     onScrubStart?.();
-    handleSeek(e.clientX);
-  }, [handleSeek, onScrubStart]);
+    const frame = computeFrame(e.clientX);
+    if (frame !== null) {
+      latestFrameRef.current = frame;
+      flush(frame);
+    }
+  }, [computeFrame, flush, onScrubStart]);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     const touch = e.touches[0];
     if (!touch) return;
     setIsDragging(true);
     onScrubStart?.();
-    handleSeek(touch.clientX);
-  }, [handleSeek, onScrubStart]);
+    const frame = computeFrame(touch.clientX);
+    if (frame !== null) {
+      latestFrameRef.current = frame;
+      flush(frame);
+    }
+  }, [computeFrame, flush, onScrubStart]);
 
   const handleHover = useCallback((e: React.MouseEvent) => {
     if (!progressRef.current) return;
@@ -107,15 +167,17 @@ export function EventProgressBar({
   useEffect(() => {
     if (!isDragging) return;
 
-    const onMouseMove = (e: MouseEvent) => handleSeek(e.clientX);
+    const onMouseMove = (e: MouseEvent) => throttledSeek(e.clientX);
     const onTouchMove = (e: TouchEvent) => {
       const touch = e.touches[0];
       if (!touch) return;
       // Stop the page from scrolling while dragging the scrubber.
       e.preventDefault();
-      handleSeek(touch.clientX);
+      throttledSeek(touch.clientX);
     };
     const stop = () => {
+      // Flush the exact release position so the playhead lands precisely.
+      flush(latestFrameRef.current);
       setIsDragging(false);
       onScrubEnd?.();
     };
@@ -132,7 +194,16 @@ export function EventProgressBar({
       window.removeEventListener('touchend', stop);
       window.removeEventListener('touchcancel', stop);
     };
-  }, [isDragging, handleSeek, onScrubEnd]);
+  }, [isDragging, throttledSeek, flush, onScrubEnd]);
+
+  // Clear the throttle timer on unmount to avoid a stale callback leak.
+  useEffect(() => {
+    return () => {
+      if (throttleTimerRef.current !== null) {
+        clearTimeout(throttleTimerRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div className={cn('space-y-2', className)} data-testid="event-progress-bar">
