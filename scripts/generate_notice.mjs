@@ -188,7 +188,7 @@ async function main() {
   }
 
   // 6. Draft with claude. All failure modes exit 1.
-  console.log('Asking Claude to summarize the changes (this can take a minute)...');
+  console.log('\nAsking Claude to summarize the changes (this can take a minute)...');
   let out;
   try {
     out = execFileSync('claude', ['-p', buildPrompt(tag, section)], {
