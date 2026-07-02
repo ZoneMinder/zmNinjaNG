@@ -116,6 +116,10 @@ When('I navigate back', async ({ page }) => {
   await page.waitForTimeout(500);
 });
 
+When('I refresh the page', async ({ page }) => {
+  await page.reload({ waitUntil: 'domcontentloaded' });
+});
+
 // Page Headings
 Then('I should see the page heading {string}', async ({ page }, heading: string) => {
   await expect(page.getByRole('heading', { name: new RegExp(heading, 'i') }).first()).toBeVisible();

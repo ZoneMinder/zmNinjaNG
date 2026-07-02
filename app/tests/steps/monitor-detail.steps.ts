@@ -818,3 +818,64 @@ Then('the view should pan', async ({ page }) => {
   const after = await readZoomTransform(page);
   expect(after).not.toBe(panTransformBefore);
 });
+
+// Monitor Recent Events (refs #213)
+// The scenario's own "Given I am logged into zmNinjaNg" navigates back to "/",
+// undoing the Background's monitor-detail navigation, so this step always
+// navigates to Monitors and clicks into the first monitor rather than
+// assuming Background already put us there.
+When("I open the first monitor's detail view", async ({ page }) => {
+  if (!/\/monitors\/\d+/.test(page.url())) {
+    const mobileMenuButton = page.getByTestId('mobile-menu-button');
+    if (await mobileMenuButton.isVisible().catch(() => false)) {
+      await mobileMenuButton.click();
+      await page.waitForTimeout(300);
+    }
+    const navItem = page.locator('[data-testid="nav-item-monitors"]').locator('visible=true').first();
+    await navItem.click();
+    await page.waitForURL(/.*monitors$/, { timeout: testConfig.timeouts.transition });
+
+    const monitorPlayer = page.getByTestId('monitor-player').first();
+    await expect(monitorPlayer).toBeVisible({ timeout: testConfig.timeouts.pageLoad });
+    await monitorPlayer.click();
+    await page.waitForURL(/.*monitors\/\d+/, { timeout: testConfig.timeouts.transition });
+  }
+});
+
+Then('the recent events list should be visible', async ({ page }) => {
+  await expect(page.getByTestId('monitor-recent-events')).toBeVisible({
+    timeout: testConfig.timeouts.pageLoad,
+  });
+});
+
+When('I tap the recent events collapse toggle', async ({ page }) => {
+  await page.getByTestId('monitor-recent-events-toggle').click();
+  await page.waitForTimeout(200);
+});
+
+Then('the recent events body should be hidden', async ({ page }) => {
+  await expect(page.getByTestId('monitor-recent-events-body')).toBeHidden({
+    timeout: testConfig.timeouts.transition,
+  });
+});
+
+Then('the recent events body should still be hidden', async ({ page }) => {
+  await expect(page.getByTestId('monitor-recent-events-body')).toBeHidden({
+    timeout: testConfig.timeouts.transition,
+  });
+});
+
+Then('the recent events body should be visible', async ({ page }) => {
+  await expect(page.getByTestId('monitor-recent-events-body')).toBeVisible({
+    timeout: testConfig.timeouts.transition,
+  });
+});
+
+// Generic tap-by-label step; matches any visible button by its accessible name.
+When('I tap {string}', async ({ page }, label: string) => {
+  await page.getByRole('button', { name: label }).first().click();
+});
+
+Then('I should be on the events page filtered to that monitor', async ({ page }) => {
+  await page.waitForURL(/\/events\?monitorId=\d+/, { timeout: testConfig.timeouts.transition });
+});

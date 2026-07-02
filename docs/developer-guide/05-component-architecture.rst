@@ -322,6 +322,104 @@ Pan-Tilt-Zoom control interface for controllable cameras.
      });
    };
 
+MonitorRecentEvents
+~~~~~~~~~~~~~~~~~~~
+
+**Location**: ``src/components/monitors/MonitorRecentEvents.tsx``
+
+Collapsible list of the newest events for the current monitor, rendered
+under the live view on ``MonitorDetail``. The header (title, refresh
+button, collapse toggle, "All events" link) always renders; the body
+collapses per monitor.
+
+**Props:**
+
+- ``monitor`` – the ``Monitor`` object for the page. ``MonitorDetail.tsx``
+  passes ``monitor.Monitor`` (the inner ``Monitor``, not the API response
+  envelope)
+
+**Behavior:**
+
+- Reads state from ``useMonitorRecentEvents(monitor.Id)``: ``events``,
+  ``isLoading``, ``isError``, ``isFetching``, ``hidden``,
+  ``toggleHidden``, ``refetch``
+- The collapse toggle calls ``toggleHidden``. While collapsed
+  (``hidden`` is ``true``) the body is unmounted and the underlying
+  query is disabled, so no request or refresh fires
+- The refresh button (hidden while collapsed) calls ``refetch`` and is
+  disabled while ``isFetching``
+- "All events" navigates to ``/events?monitorId=<id>``
+- Builds each row's thumbnail chain the same way ``EventListView``'s
+  ``EventItem`` does: ``getMonitorDimensions`` then
+  ``calculateThumbnailDimensions`` then ``getPortalUrlForEvent`` then
+  ``buildThumbnailChain``, gating the token on ``isFresh`` from
+  ``useFreshAccessToken``
+
+**Test ids**: root ``monitor-recent-events``, collapse toggle
+``monitor-recent-events-toggle``, refresh button
+``monitor-recent-events-refresh``, "All events" link
+``monitor-recent-events-all``, collapsible body
+``monitor-recent-events-body``.
+
+useMonitorRecentEvents
+~~~~~~~~~~~~~~~~~~~~~~
+
+**Location**: ``src/hooks/useMonitorRecentEvents.ts``
+
+Data hook backing ``MonitorRecentEvents``. Wraps a React Query
+``useQuery`` call for the monitor's events plus the per-monitor
+collapsed state.
+
+**Signature**: ``useMonitorRecentEvents(monitorId: string): UseMonitorRecentEvents``
+
+**Returns:**
+
+- ``events`` – ``EventData[]``, capped to
+  ``clampRecentEventsCount(settings.monitorDetailRecentEventsCount)``
+- ``isLoading`` / ``isError`` / ``isFetching`` – query status
+- ``hidden`` – collapsed state for this monitor, read from
+  ``settings.monitorDetailRecentEventsHidden`` via
+  ``isMonitorRecentEventsHidden``
+- ``count`` – the clamped row count
+- ``toggleHidden()`` – flips the collapsed state for this monitor and
+  persists it via ``updateProfileSettings`` (profile-scoped, per rule 7)
+- ``refetch()`` – re-runs the query
+
+The query key is ``[currentProfile?.id, 'monitorRecentEvents', monitorId, count]``
+and calls ``getEvents({ monitorId, limit: count, sort: 'StartTime', direction: 'desc' })``,
+so the newest events come first regardless of the server's default sort.
+The query is ``enabled: !!currentProfile && isAuthenticated && !hidden``.
+``refetchInterval`` is ``false`` while hidden, otherwise
+``bandwidth.monitorRecentEventsInterval`` from ``useBandwidthSettings()``:
+30 seconds in normal mode, 60 seconds in low-bandwidth mode (see
+``BANDWIDTH_SETTINGS`` in ``lib/zmninja-ng-constants.ts``).
+
+React Query v5 reports ``isLoading`` as ``false`` for a disabled query.
+That is not an issue here because ``MonitorRecentEvents`` only renders
+the body, and reads ``isLoading``, when ``hidden`` is ``false`` and the
+query is enabled.
+
+CompactEventRow
+~~~~~~~~~~~~~~~
+
+**Location**: ``src/components/events/CompactEventRow.tsx``
+
+Single row in the recent-events list: thumbnail, cause, start time, and
+score. Clicking (or Enter/Space when focused) navigates to
+``/events/<id>`` with ``state: { from: '/monitors/<monitorId>' }`` so
+the event detail page's back action returns to the monitor.
+
+**Props:**
+
+- ``event`` – the ``Event`` object
+- ``thumbnailUrls`` – ordered fallback chain from ``buildThumbnailChain``
+- ``aspectRatio`` – thumbnail aspect ratio
+- ``objectFit`` – CSS ``object-fit`` value for the thumbnail (default
+  ``cover``)
+
+**Test ids**: row ``compact-event-row``, thumbnail
+``compact-event-thumbnail``.
+
 Dashboard Components
 --------------------
 

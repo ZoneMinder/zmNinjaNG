@@ -93,3 +93,17 @@ Feature: Monitor Detail Page
     Then I should see the monitor player
     And no element should overflow the viewport horizontally
     And the page should match the visual baseline
+
+  @all
+  Scenario: Recent events list under the live view
+    Given I am logged into zmNinjaNg
+    When I open the first monitor's detail view
+    Then the recent events list should be visible
+    When I tap the recent events collapse toggle
+    Then the recent events body should be hidden
+    When I refresh the page
+    Then the recent events body should still be hidden
+    When I tap the recent events collapse toggle
+    Then the recent events body should be visible
+    When I tap "All events"
+    Then I should be on the events page filtered to that monitor
