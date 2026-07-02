@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { CompactEventRow } from '../CompactEventRow';
+import { useReturnHighlightStore } from '../../../stores/returnHighlight';
 
 const navigate = vi.fn();
 vi.mock('react-router-dom', async (orig) => ({
@@ -61,5 +62,18 @@ describe('CompactEventRow', () => {
     render1();
     fireEvent.click(screen.getByTestId('compact-event-row'));
     expect(navigate).toHaveBeenCalledWith('/events/233228', { state: { from: '/monitors/4' } });
+  });
+
+  it('shows the return-flash indicator when returning to this event', () => {
+    useReturnHighlightStore.getState().markViewed('233228');
+    render1();
+    expect(screen.getByTestId('return-flash-indicator')).toBeTruthy();
+    useReturnHighlightStore.getState().clear();
+  });
+
+  it('does not show the indicator normally', () => {
+    useReturnHighlightStore.getState().clear();
+    render1();
+    expect(screen.queryByTestId('return-flash-indicator')).toBeNull();
   });
 });
