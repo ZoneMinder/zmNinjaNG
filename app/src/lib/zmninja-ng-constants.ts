@@ -245,6 +245,12 @@ export const MAIN_SCROLL_SELECTOR = '[data-tv-region="main"]';
 export const SCROLL_RESTORE_MAX_MS = 1000;
 
 /**
+ * How long (ms) to flag the event row a user just returned from, with a blinking
+ * arrow and a soft highlight, in the recent-events and main event lists.
+ */
+export const RETURN_FLASH_MS = 4000;
+
+/**
  * Event List View Constants
  *
  * Configuration for the events list display.
