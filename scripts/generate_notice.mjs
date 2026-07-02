@@ -158,6 +158,7 @@ async function main() {
   }
 
   // 4. Run github_changelog_generator into a temp file. Do NOT touch CHANGELOG.md.
+  console.log(`Collecting closed issues for ${tag} (this can take a moment)...`);
   const tmp = join(tmpdir(), `notice-changelog-${version}.md`);
   try {
     execFileSync(
@@ -187,6 +188,7 @@ async function main() {
   }
 
   // 6. Draft with claude. All failure modes exit 1.
+  console.log('Asking Claude to summarize the changes (this can take a minute)...');
   let out;
   try {
     out = execFileSync('claude', ['-p', buildPrompt(tag, section)], {
