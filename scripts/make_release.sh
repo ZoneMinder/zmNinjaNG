@@ -170,6 +170,18 @@ else
     exit 1
 fi
 
+# --- Step 3.5: Optional developer notice (minor/major releases only) ---
+NOTICE_PATCH=$(echo "$VERSION" | cut -d. -f3)
+if [ "$NOTICE_PATCH" = "0" ]; then
+    echo ""
+    read -p "Generate a developer notice for this release? [y/N] " -n 1 -r
+    echo ""
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        node scripts/generate-release-notice.mjs "$VERSION" "$TAG" \
+            || echo "Notice generation skipped or failed; continuing with the release."
+    fi
+fi
+
 # --- Step 4: Tag ---
 if [ "$choice" = "2" ]; then
     echo ""
