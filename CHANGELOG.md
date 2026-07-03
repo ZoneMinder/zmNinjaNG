@@ -1,5 +1,18 @@
 # Changelog
 
+## [zmNinjaNg-1.3.0](https://github.com/ZoneMinder/zmNinjaNg/tree/zmNinjaNg-1.3.0) (2026-07-03)
+
+[Full Changelog](https://github.com/ZoneMinder/zmNinjaNg/compare/zmNinjaNg-1.2.0...zmNinjaNg-1.3.0)
+
+**Implemented enhancements:**
+
+- feat: let users delete developer notices \(per-device\), with clear-all and reset [\#215](https://github.com/ZoneMinder/zmNinjaNg/issues/215)
+- feat: Recent events list on monitor detail view [\#213](https://github.com/ZoneMinder/zmNinjaNg/issues/213)
+
+**Fixed bugs:**
+
+- Scrubbing in an event view works inconsistently [\#196](https://github.com/ZoneMinder/zmNinjaNg/issues/196)
+
 ## [zmNinjaNg-1.2.0](https://github.com/ZoneMinder/zmNinjaNg/tree/zmNinjaNg-1.2.0) (2026-07-02)
 
 [Full Changelog](https://github.com/ZoneMinder/zmNinjaNg/compare/zmNinjaNg-1.1.15...zmNinjaNg-1.2.0)
