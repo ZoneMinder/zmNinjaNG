@@ -486,18 +486,8 @@ export const useNotificationStore = create<NotificationState>()(
           const { currentProfileId } = get();
           if (currentProfileId) {
             get().addEvent(currentProfileId, event);
-
-            const settings = get().getProfileSettings(currentProfileId);
-
-            // Show toast if enabled
-            if (settings.showToasts) {
-              // Toast will be shown by the UI component listening to the store
-            }
-
-            // Play sound if enabled
-            if (settings.playSound) {
-              log.notifications('Playing notification sound', LogLevel.INFO);
-            }
+            // Toast display and sound playback are handled by NotificationHandler,
+            // which reacts to the added event and reads showToasts/playSound itself.
           }
         });
 
