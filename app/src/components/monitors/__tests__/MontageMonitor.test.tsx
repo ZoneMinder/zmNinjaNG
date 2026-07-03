@@ -76,8 +76,9 @@ vi.mock('../../../stores/auth', () => ({
 }));
 
 vi.mock('../../../stores/notifications', () => {
-  const store = () => 0;
-  store.getState = () => ({ profileEvents: {} });
+  const state = { profileEvents: {} };
+  const store = (selector: (s: typeof state) => unknown) => selector(state);
+  store.getState = () => state;
   store.subscribe = () => () => {};
   return { useNotificationStore: store };
 });

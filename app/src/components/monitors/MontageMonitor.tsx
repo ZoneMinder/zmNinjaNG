@@ -37,6 +37,11 @@ import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { handleKeyClick } from '../../lib/tv-a11y';
 import { useNotificationStore } from '../../stores/notifications';
+import type { NotificationEvent } from '../../stores/notifications';
+
+// Stable empty-array reference so the selector doesn't force a re-render
+// every time it returns "no events" for this monitor.
+const NO_MONITOR_EVENTS: NotificationEvent[] = [];
 
 interface MontageMonitorProps {
   monitor: Monitor;
@@ -77,49 +82,59 @@ function MontageMonitorComponent({
   const resolvedFit = objectFit ?? 'cover';
   const isRTC = monitor.Go2RTCEnabled === true && !!currentProfile?.go2rtcUrl;
 
-  // Alarm pulse: subscribe to notification store for new events on this monitor
+  // Alarm pulse: select only this monitor's events out of the notifications
+  // store, so mutations to other monitors/profiles/settings in that store
+  // don't re-render this tile. useShallow keeps the filtered array reference
+  // stable across renders when the underlying events for this monitor haven't
+  // actually changed.
   const [isAlarming, setIsAlarming] = useState(false);
   const [monitorEventCount, setMonitorEventCount] = useState(0);
   const alarmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSeenRef = useRef(0);
+  const seedKeyRef = useRef<string | null>(null);
+
+  const profileId = currentProfile?.id;
+  const monitorId = monitor.Id;
+
+  const monitorEvents = useNotificationStore(
+    useShallow((state) => {
+      const events = profileId ? state.profileEvents[profileId] : undefined;
+      if (!events?.length) return NO_MONITOR_EVENTS;
+      return events.filter((e) => String(e.MonitorId) === monitorId);
+    })
+  );
 
   useEffect(() => {
-    if (!currentProfile) return;
-    const profileId = currentProfile.id;
-    const monitorId = monitor.Id;
+    const seedKey = `${profileId ?? ''}:${monitorId}`;
+    const isNewKey = seedKeyRef.current !== seedKey;
+    seedKeyRef.current = seedKey;
 
-    const updateFromState = (state: { profileEvents: Record<string, Array<{ MonitorId: number; receivedAt: number }>> }) => {
-      const events = state.profileEvents[profileId];
-      if (!events?.length) return;
-      const monitorEvents = events.filter((e) => String(e.MonitorId) === monitorId);
-      setMonitorEventCount(monitorEvents.length);
-      const latest = monitorEvents[0];
-      if (!latest || latest.receivedAt === lastSeenRef.current) return;
+    setMonitorEventCount(monitorEvents.length);
+
+    const latest = monitorEvents[0];
+    if (!latest) return;
+
+    if (isNewKey) {
+      // Seed lastSeen without triggering the alarm pulse for pre-existing events
       lastSeenRef.current = latest.receivedAt;
-      if (Date.now() - latest.receivedAt < MONITOR_UI.alarmPulseMs) {
-        if (alarmTimerRef.current) clearTimeout(alarmTimerRef.current);
-        setIsAlarming(true);
-        alarmTimerRef.current = setTimeout(() => setIsAlarming(false), MONITOR_UI.alarmPulseMs);
-      }
-    };
-
-    // Seed initial count and lastSeen
-    const initialState = useNotificationStore.getState();
-    const initialEvents = initialState.profileEvents[profileId];
-    if (initialEvents?.length) {
-      const count = initialEvents.filter((e) => String(e.MonitorId) === monitorId).length;
-      setMonitorEventCount(count);
-      const match = initialEvents.find((e) => String(e.MonitorId) === monitorId);
-      if (match) lastSeenRef.current = match.receivedAt;
+      return;
     }
 
-    const unsub = useNotificationStore.subscribe(updateFromState);
+    if (latest.receivedAt === lastSeenRef.current) return;
+    lastSeenRef.current = latest.receivedAt;
 
+    if (Date.now() - latest.receivedAt < MONITOR_UI.alarmPulseMs) {
+      if (alarmTimerRef.current) clearTimeout(alarmTimerRef.current);
+      setIsAlarming(true);
+      alarmTimerRef.current = setTimeout(() => setIsAlarming(false), MONITOR_UI.alarmPulseMs);
+    }
+  }, [monitorEvents, profileId, monitorId]);
+
+  useEffect(() => {
     return () => {
-      unsub();
       if (alarmTimerRef.current) clearTimeout(alarmTimerRef.current);
     };
-  }, [currentProfile?.id, monitor.Id]);
+  }, []);
 
   // Handle snapshot download
   const handleDownload = (e: React.MouseEvent) => {
