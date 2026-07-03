@@ -123,6 +123,16 @@ zmNinjaNg uses GitHub Actions to build release binaries automatically. See
 `make_release.sh <https://github.com/ZoneMinder/zmNinjaNg/blob/main/scripts/make_release.sh>`_
 for the release workflow.
 
+When the version in ``app/package.json`` already has a tag, ``make_release.sh``
+offers to pick a new version. It runs ``generate_notice.mjs --plan`` once, which
+feeds the closed issues since the last release (from ``github_changelog_generator``)
+to a single ``claude -p`` call and gets back a recommended bump (major, minor, or
+patch) plus the developer-notice draft. The recommended version is pre-selected
+in the menu; you confirm or override it. If ``claude``, ``gh``, or the changelog
+tool is unavailable, the suggestion falls back to a patch bump and the release
+still proceeds. For a minor or major release the same draft is reused to write
+the in-app notice (``docs/notices.json``), so Claude runs at most once per release.
+
 To enable automated builds on your fork:
 
 1. Go to **Settings > Actions > General** in your GitHub repository

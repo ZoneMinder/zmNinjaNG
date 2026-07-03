@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   parseVersionParts, isFeatureRelease, releaseUrl,
   extractChangelogSection, parseClaudeNotice, assembleNotice,
-  deriveTag, upsertNotice,
+  deriveTag, upsertNotice, bumpVersion, VALID_BUMPS,
 } from '../generate_notice.mjs';
 
 test('parseVersionParts splits semver', () => {
@@ -37,27 +37,50 @@ test('extractChangelogSection returns only the target version block', () => {
   assert.doesNotMatch(section, /Old thing/);
 });
 
-test('parseClaudeNotice parses bare JSON', () => {
+test('parseClaudeNotice parses bare JSON, bump defaults to null', () => {
   assert.deepEqual(
     parseClaudeNotice('{"title":"T","body":"B"}'),
-    { title: 'T', body: 'B' }
+    { title: 'T', body: 'B', bump: null, bumpReason: '' }
   );
 });
 
 test('parseClaudeNotice strips a code fence', () => {
   assert.deepEqual(
     parseClaudeNotice('```json\n{"title":"T","body":"B"}\n```'),
-    { title: 'T', body: 'B' }
+    { title: 'T', body: 'B', bump: null, bumpReason: '' }
   );
 });
 
-test('parseClaudeNotice returns null on garbage or missing fields', () => {
+test('parseClaudeNotice reads a valid bump and reason', () => {
+  assert.deepEqual(
+    parseClaudeNotice('{"title":"T","body":"B","bump":"minor","bumpReason":"adds a feature"}'),
+    { title: 'T', body: 'B', bump: 'minor', bumpReason: 'adds a feature' }
+  );
+});
+
+test('parseClaudeNotice rejects an out-of-range bump to null', () => {
+  const parsed = parseClaudeNotice('{"title":"T","body":"B","bump":"huge"}');
+  assert.equal(parsed.bump, null);
+});
+
+test('parseClaudeNotice returns null on garbage or missing title/body', () => {
   assert.equal(parseClaudeNotice('not json at all'), null);
   assert.equal(parseClaudeNotice('{"title":""}'), null);
   assert.equal(parseClaudeNotice(''), null);
 });
 
-test('assembleNotice sets script-owned fields', () => {
+test('VALID_BUMPS lists the three semver levels', () => {
+  assert.deepEqual([...VALID_BUMPS].sort(), ['major', 'minor', 'patch']);
+});
+
+test('bumpVersion advances the right field and zeroes the rest', () => {
+  assert.equal(bumpVersion('1.2.3', 'patch'), '1.2.4');
+  assert.equal(bumpVersion('1.2.3', 'minor'), '1.3.0');
+  assert.equal(bumpVersion('1.2.3', 'major'), '2.0.0');
+  assert.throws(() => bumpVersion('1.2.3', 'nope'));
+});
+
+test('assembleNotice sets script-owned fields and appends the changelog link', () => {
   const n = assembleNotice({
     version: '1.2.0', tag: 'zmNinjaNg-1.2.0',
     title: 'T', body: 'B', publishedAt: '2026-07-01T00:00:00Z',
@@ -67,8 +90,16 @@ test('assembleNotice sets script-owned fields', () => {
   assert.equal(n.minAppVersion, '1.2.0');
   assert.equal(n.link, 'https://github.com/ZoneMinder/zmNinjaNg/releases/tag/zmNinjaNg-1.2.0');
   assert.equal(n.title, 'T');
-  assert.equal(n.body, 'B');
+  assert.equal(n.body, 'B\n\n[Full changelog](https://github.com/ZoneMinder/zmNinjaNg/releases/tag/zmNinjaNg-1.2.0)');
   assert.equal(n.publishedAt, '2026-07-01T00:00:00Z');
+});
+
+test('assembleNotice does not double the changelog link if body already has one', () => {
+  const body = 'B\n\n[Full changelog](https://example.com)';
+  const n = assembleNotice({
+    version: '1.2.0', tag: 'zmNinjaNg-1.2.0', title: 'T', body, publishedAt: '2026-07-01T00:00:00Z',
+  });
+  assert.equal(n.body, body);
 });
 
 test('deriveTag builds the tag', () => {

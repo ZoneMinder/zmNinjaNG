@@ -52,33 +52,85 @@ if git ls-remote --exit-code --tags origin "$TAG" >/dev/null 2>&1; then
     TAG_EXISTS=true
 fi
 
+# Draft cache shared between the bump suggestion below and the developer-notice
+# step later, so Claude is called at most once per release. Cleaned up on exit.
+RELEASE_DRAFT_CACHE="$(mktemp -t zmninja-release-draft.XXXXXX)"
+DRAFT_CACHE_VALID=false
+OVERWRITE_TAG=false
+cleanup() { rm -f "$RELEASE_DRAFT_CACHE"; }
+trap cleanup EXIT
+
+# Commit and push a version bump, then update VERSION/TAG for the rest of the run.
+apply_bump() {
+    local new_ver="$1"
+    echo ""
+    echo "Bumping version: $VERSION -> $new_ver"
+    set_version "$new_ver"
+    VERSION="$new_ver"
+    TAG="zmNinjaNg-$VERSION"
+    git add "$PKG_JSON" app/ios/App/App.xcodeproj/project.pbxproj app/android/app/build.gradle
+    git commit -m "chore: bump version to $VERSION"
+    git push origin "$CURRENT_BRANCH"
+    echo "✅ Version bumped to $VERSION, committed and pushed"
+    echo ""
+}
+
 if [ "$TAG_EXISTS" = true ]; then
-    # Compute bumped patch version
+    # Deterministic bump targets for the menu (also the fallback when Claude is unavailable).
     MAJOR=$(echo "$VERSION" | cut -d. -f1)
     MINOR=$(echo "$VERSION" | cut -d. -f2)
     PATCH=$(echo "$VERSION" | cut -d. -f3)
-    BUMPED="${MAJOR}.${MINOR}.$((PATCH + 1))"
+    V_PATCH="${MAJOR}.${MINOR}.$((PATCH + 1))"
+    V_MINOR="${MAJOR}.$((MINOR + 1)).0"
+    V_MAJOR="$((MAJOR + 1)).0.0"
 
-    echo "⚠️  Tag '$TAG' already exists."
-    echo "  1) Bump version: $VERSION -> $BUMPED"
-    echo "  2) Move existing tag to current commit (overwrite)"
-    read -p "Choose [1/2] or anything else to abort: " choice
+    echo "⚠️  Tag '$TAG' already exists. You likely want a new version."
+    echo ""
+    echo "Analyzing closed issues to recommend a bump (one Claude call, closed-issue based)..."
+
+    # --plan is best-effort: it always exits 0. Human progress prints to stderr
+    # (visible); the KEY=VALUE result lines print to stdout (captured here).
+    PLAN_OUT="$(node scripts/generate_notice.mjs --plan --version "$VERSION" --cache "$RELEASE_DRAFT_CACHE")" || true
+    REC_BUMP="$(printf '%s\n' "$PLAN_OUT" | sed -n 's/^RECOMMENDED_BUMP=//p' | tail -1)"
+    SUGGESTED_VERSION="$(printf '%s\n' "$PLAN_OUT" | sed -n 's/^SUGGESTED_VERSION=//p' | tail -1)"
+
+    if [ -n "$REC_BUMP" ] && [ -n "$SUGGESTED_VERSION" ]; then
+        DRAFT_CACHE_VALID=true
+        echo ""
+        echo "🤖 Claude recommends a ${REC_BUMP} release: $VERSION -> ${SUGGESTED_VERSION}"
+    else
+        REC_BUMP="patch"
+        SUGGESTED_VERSION="$V_PATCH"
+        echo ""
+        echo "ℹ️  No Claude suggestion available. Defaulting to a patch bump; you can still choose below."
+    fi
+
+    echo ""
+    echo "How should this release be versioned?"
+    echo "  1) Suggested: ${REC_BUMP} -> ${SUGGESTED_VERSION}"
+    echo "  2) patch      -> ${V_PATCH}"
+    echo "  3) minor      -> ${V_MINOR}"
+    echo "  4) major      -> ${V_MAJOR}"
+    echo "  5) Enter a version manually"
+    echo "  6) Move existing tag to current commit (no bump, overwrite)"
+    read -p "Choose [1-6] or anything else to abort: " choice
     case "$choice" in
-        1)
-            echo ""
-            echo "Bumping version: $VERSION -> $BUMPED"
-            set_version "$BUMPED"
-            VERSION="$BUMPED"
-            TAG="zmNinjaNg-$VERSION"
-            git add "$PKG_JSON" app/ios/App/App.xcodeproj/project.pbxproj app/android/app/build.gradle
-            git commit -m "chore: bump version to $VERSION"
-            git push origin "$CURRENT_BRANCH"
-            echo "✅ Version bumped to $VERSION, committed and pushed"
-            echo ""
+        1) apply_bump "$SUGGESTED_VERSION" ;;
+        2) apply_bump "$V_PATCH" ;;
+        3) apply_bump "$V_MINOR" ;;
+        4) apply_bump "$V_MAJOR" ;;
+        5)
+            read -p "New version (X.Y.Z): " manual_ver
+            if ! printf '%s' "$manual_ver" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+                echo "❌ '$manual_ver' is not a valid X.Y.Z version. Aborting."
+                exit 1
+            fi
+            apply_bump "$manual_ver"
             ;;
-        2)
+        6)
             echo ""
             echo "Will move tag '$TAG' to current commit."
+            OVERWRITE_TAG=true
             echo ""
             ;;
         *)
@@ -172,14 +224,21 @@ fi
 
 # --- Step 3.5: Developer notice (minor/major releases only) ---
 # Offer a notice only for minor/major releases (patch = 0) that don't already
-# have one. generate_notice halts the release on any failure (no error guard):
-# a missing tool or unparseable draft must stop the release, not ship silently.
+# have one. When the bump step above already ran --plan, reuse that cached draft
+# so Claude is not called a second time; otherwise generate_notice makes its own
+# call. It halts the release on any failure (no error guard): a missing tool or
+# unparseable draft must stop the release, not ship silently.
 NOTICE_PATCH=$(echo "$VERSION" | cut -d. -f3)
 if [ "$NOTICE_PATCH" = "0" ] && ! grep -qF "\"release-$VERSION\"" docs/notices.json 2>/dev/null; then
     echo ""
     read -p "Generate a developer notice for $VERSION? [y/N] " -r
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        node scripts/generate_notice.mjs "$VERSION"
+        if [ "$DRAFT_CACHE_VALID" = true ] && [ -s "$RELEASE_DRAFT_CACHE" ]; then
+            echo "Reusing the draft Claude already produced for the bump (no second Claude call)."
+            node scripts/generate_notice.mjs --write --version "$VERSION" --cache "$RELEASE_DRAFT_CACHE"
+        else
+            node scripts/generate_notice.mjs "$VERSION"
+        fi
         # generate_notice only writes docs/notices.json; commit and push it so
         # the release ships the notice (the feed is served from this branch).
         if [[ -n $(git status --porcelain docs/notices.json) ]]; then
@@ -191,7 +250,7 @@ if [ "$NOTICE_PATCH" = "0" ] && ! grep -qF "\"release-$VERSION\"" docs/notices.j
 fi
 
 # --- Step 4: Tag ---
-if [ "$choice" = "2" ]; then
+if [ "$OVERWRITE_TAG" = true ]; then
     echo ""
     echo "Removing existing tag $TAG..."
     git tag -d "$TAG" 2>/dev/null || true
