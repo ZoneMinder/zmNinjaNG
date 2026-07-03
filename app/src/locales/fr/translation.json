@@ -404,6 +404,8 @@
     "disable_log_redaction_desc": "Afficher les mots de passe/jetons dans les journaux",
     "force_disable_multiport": "Désactiver le streaming multiport",
     "force_disable_multiport_desc": "Ignorer les ports de flux par moniteur du serveur et utiliser le port par défaut",
+    "show_developer_notices": "Afficher avis développeur",
+    "show_developer_notices_desc": "Afficher les annonces du développeur dans l'appli",
     "api_timeout": "Délai API",
     "api_timeout_desc": "Secondes d'attente d'une requête serveur avant son annulation pour que l'app réessaie. 0 désactive le délai.",
     "api_timeout_unit": "secondes",
