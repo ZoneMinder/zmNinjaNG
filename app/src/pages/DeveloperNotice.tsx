@@ -21,6 +21,8 @@ import { Markdown } from '../lib/markdown';
 import { isSafeLinkHref } from '../lib/safe-url';
 import { DEVELOPER_NOTICES } from '../lib/zmninja-ng-constants';
 import { cn } from '../lib/utils';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../components/ui/alert-dialog';
 
 function severityIcon(severity: DeveloperNoticeView['severity']) {
   if (severity === 'critical') return AlertCircle;
@@ -149,9 +151,16 @@ export default function DeveloperNotice() {
   const { notices, isLoading, isError, error, refetch } = useDeveloperNotices();
   const markAllRead = useDeveloperNoticeStore((s) => s.markAllRead);
   const markAllUnread = useDeveloperNoticeStore((s) => s.markAllUnread);
+  const deleteNotices = useDeveloperNoticeStore((s) => s.deleteNotices);
+  const restoreAllDeleted = useDeveloperNoticeStore((s) => s.restoreAllDeleted);
+  const deletedIds = useDeveloperNoticeStore((s) => s.deletedIds);
+  const [clearAllOpen, setClearAllOpen] = useState(false);
 
   const unreadIds = notices.filter((n) => !n.isRead).map((n) => n.id);
   const readIds = notices.filter((n) => n.isRead).map((n) => n.id);
+  const hasDeleted = deletedIds.length > 0;
+  const visibleIds = notices.map((n) => n.id);
+  const handleRestore = () => { restoreAllDeleted(); refetch(); };
 
   return (
     <div className="max-w-3xl mx-auto p-3 sm:p-6 space-y-4">
@@ -192,54 +201,117 @@ export default function DeveloperNotice() {
 
       {!isLoading && !isError && notices.length === 0 && (
         <Card>
-          <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            {t('developer_notice.empty_state')}
+          <CardContent className="py-10 text-center text-sm text-muted-foreground space-y-3">
+            <p>{t('developer_notice.empty_state')}</p>
+            {hasDeleted && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRestore}
+                data-testid="developer-notice-restore-deleted-empty"
+              >
+                <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                {t('developer_notice.restore_deleted')}
+              </Button>
+            )}
           </CardContent>
         </Card>
       )}
 
-      {notices.length > 0 && (
-        <>
-          <div className="flex items-center justify-end gap-2">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => refetch()}
-              title={t('developer_notice.reload')}
-              aria-label={t('developer_notice.reload')}
-              data-testid="developer-notice-reload"
-              className="h-9 w-9"
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => markAllRead(unreadIds)}
-              disabled={unreadIds.length === 0}
-              data-testid="developer-notice-mark-all-read"
-            >
-              <CheckCheck className="h-3.5 w-3.5 mr-1" />
-              {t('developer_notice.mark_all_read')}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => markAllUnread(readIds)}
-              disabled={readIds.length === 0}
-              data-testid="developer-notice-mark-all-unread"
-            >
-              <Mail className="h-3.5 w-3.5 mr-1" />
-              {t('developer_notice.mark_all_unread')}
-            </Button>
-          </div>
-          <div className="space-y-2" data-testid="developer-notice-list">
-            {notices.map((n) => (
-              <NoticeRow key={n.id} notice={n} />
-            ))}
-          </div>
-        </>
+      {(notices.length > 0 || hasDeleted) && (
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => refetch()}
+            title={t('developer_notice.reload')}
+            aria-label={t('developer_notice.reload')}
+            data-testid="developer-notice-reload"
+            className="h-9 w-9"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-9 w-9"
+                aria-label={t('developer_notice.more_actions')}
+                data-testid="developer-notice-actions-menu"
+              >
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                disabled={unreadIds.length === 0}
+                onClick={() => markAllRead(unreadIds)}
+                data-testid="developer-notice-mark-all-read"
+              >
+                <CheckCheck className="h-3.5 w-3.5 mr-2" />
+                {t('developer_notice.mark_all_read')}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={readIds.length === 0}
+                onClick={() => markAllUnread(readIds)}
+                data-testid="developer-notice-mark-all-unread"
+              >
+                <Mail className="h-3.5 w-3.5 mr-2" />
+                {t('developer_notice.mark_all_unread')}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={notices.length === 0}
+                onClick={() => setClearAllOpen(true)}
+                className="text-destructive focus:text-destructive"
+                data-testid="developer-notice-clear-all"
+              >
+                <Trash2 className="h-3.5 w-3.5 mr-2" />
+                {t('developer_notice.clear_all')}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!hasDeleted}
+                onClick={handleRestore}
+                data-testid="developer-notice-restore-deleted"
+              >
+                <RotateCcw className="h-3.5 w-3.5 mr-2" />
+                {t('developer_notice.restore_deleted')}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       )}
+      {notices.length > 0 && (
+        <div className="space-y-2" data-testid="developer-notice-list">
+          {notices.map((n) => (
+            <NoticeRow key={n.id} notice={n} />
+          ))}
+        </div>
+      )}
+
+      <AlertDialog open={clearAllOpen} onOpenChange={setClearAllOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('developer_notice.clear_all_confirm_title')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('developer_notice.clear_all_confirm_body', { count: notices.length })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="developer-notice-clear-all-cancel">
+              {t('common.cancel')}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteNotices(visibleIds)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="developer-notice-clear-all-confirm"
+            >
+              {t('common.delete')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
