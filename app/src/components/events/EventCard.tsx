@@ -215,11 +215,7 @@ function EventCardComponent({ event, monitorName, thumbnailUrls, largeThumbnailU
                     )}
                   />
                 </button>
-                <EventDeleteButton
-                  eventId={event.Id}
-                  eventName={event.Name}
-                  monitorName={monitorName}
-                />
+                <EventDeleteButton eventId={event.Id} />
                 {(() => {
                   const CauseIcon = getEventCauseIcon(event.Cause);
                   return (

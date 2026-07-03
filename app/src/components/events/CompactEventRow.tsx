@@ -24,10 +24,9 @@ interface CompactEventRowProps {
   thumbnailUrls: string[];
   aspectRatio: number;
   objectFit?: CSSProperties['objectFit'];
-  monitorName?: string;
 }
 
-export function CompactEventRow({ event, thumbnailUrls, aspectRatio, objectFit = 'cover', monitorName }: CompactEventRowProps) {
+export function CompactEventRow({ event, thumbnailUrls, aspectRatio, objectFit = 'cover' }: CompactEventRowProps) {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   const { fmtTime } = useDateTimeFormat();
@@ -101,13 +100,7 @@ export function CompactEventRow({ event, thumbnailUrls, aspectRatio, objectFit =
       >
         {durationLabel}
       </span>
-      <EventDeleteButton
-        eventId={event.Id}
-        eventName={event.Name}
-        monitorName={monitorName}
-        size="sm"
-        className="flex-shrink-0"
-      />
+      <EventDeleteButton eventId={event.Id} size="sm" className="flex-shrink-0" />
     </div>
   );
 }

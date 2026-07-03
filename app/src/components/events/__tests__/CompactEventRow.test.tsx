@@ -15,9 +15,6 @@ vi.mock('react-i18next', () => ({
 vi.mock('../../../hooks/useDateTimeFormat', () => ({
   useDateTimeFormat: () => ({ fmtTime: () => '2:19 PM' }),
 }));
-vi.mock('../../../hooks/useDeleteEvent', () => ({
-  useDeleteEvent: () => ({ deleteEvent: vi.fn(), isDeleting: false }),
-}));
 
 const base = {
   Id: '233228',
@@ -37,7 +34,6 @@ const render1 = (event: typeof base = base) =>
         event={event as never}
         thumbnailUrls={['http://x/1.jpg']}
         aspectRatio={1.6}
-        monitorName="FrontDoor"
       />
     </MemoryRouter>
   );

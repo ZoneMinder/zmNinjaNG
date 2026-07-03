@@ -1,38 +1,31 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { EventDeleteButton } from '../EventDeleteButton';
+import { useDeleteSelectionStore } from '../../../stores/deleteSelection';
 
-const deleteEvent = vi.fn().mockResolvedValue(undefined);
-vi.mock('../../../hooks/useDeleteEvent', () => ({
-  useDeleteEvent: () => ({ deleteEvent, isDeleting: false }),
-}));
-vi.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (k: string) => k }),
-}));
-
-beforeEach(() => deleteEvent.mockClear());
+beforeEach(() => useDeleteSelectionStore.getState().clear());
 
 describe('EventDeleteButton', () => {
-  it('opens the confirm dialog and deletes on confirm', async () => {
-    render(<EventDeleteButton eventId="42" eventName="Cam-42" monitorName="FrontDoor" />);
+  it('toggles the event id in the selection store on click', () => {
+    render(<EventDeleteButton eventId="42" />);
     fireEvent.click(screen.getByTestId('event-delete-button'));
-    expect(screen.getByTestId('event-delete-dialog')).toBeTruthy();
-    fireEvent.click(screen.getByTestId('event-delete-confirm'));
-    expect(deleteEvent).toHaveBeenCalledWith('42');
+    expect(useDeleteSelectionStore.getState().selectedIds).toEqual(['42']);
+    fireEvent.click(screen.getByTestId('event-delete-button'));
+    expect(useDeleteSelectionStore.getState().selectedIds).toEqual([]);
   });
 
-  it('does not delete when cancelled', () => {
-    render(<EventDeleteButton eventId="42" eventName="Cam-42" monitorName="FrontDoor" />);
-    fireEvent.click(screen.getByTestId('event-delete-button'));
-    fireEvent.click(screen.getByTestId('event-delete-cancel'));
-    expect(deleteEvent).not.toHaveBeenCalled();
+  it('reflects the selected state via aria-pressed', () => {
+    useDeleteSelectionStore.getState().toggle('42');
+    render(<EventDeleteButton eventId="42" />);
+    expect(screen.getByTestId('event-delete-button').getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('stops click propagation so a parent row does not navigate', () => {
+  it('does not bubble the click to a parent row', () => {
     const parentClick = vi.fn();
     render(
       <div onClick={parentClick}>
-        <EventDeleteButton eventId="42" eventName="Cam-42" />
+        <EventDeleteButton eventId="42" />
       </div>
     );
     fireEvent.click(screen.getByTestId('event-delete-button'));
