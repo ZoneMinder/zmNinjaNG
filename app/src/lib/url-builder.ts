@@ -250,7 +250,7 @@ export function getEventImageUrl(
   const params: Record<string, string | number> = {
     view: 'image',
     eid: eventId,
-    fid: typeof frame === 'number' ? frame : frame,
+    fid: frame,
   };
 
   if (width) params.width = width;
