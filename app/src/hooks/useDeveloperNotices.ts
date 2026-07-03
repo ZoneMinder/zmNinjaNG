@@ -36,6 +36,8 @@ export function compareSemver(a: string, b: string): number {
 }
 
 export function useDeveloperNotices() {
+  const showNotices = useDeveloperNoticeStore((s) => s.showNotices);
+
   const query = useQuery({
     queryKey: ['developer-notices'],
     queryFn: fetchDeveloperNotices,
@@ -43,12 +45,16 @@ export function useDeveloperNotices() {
     refetchInterval: DEVELOPER_NOTICES.pollIntervalMs,
     refetchOnWindowFocus: true,
     retry: 1,
+    enabled: showNotices,
   });
 
   const readIds = useDeveloperNoticeStore((s) => s.readIds);
   const deletedIds = useDeveloperNoticeStore((s) => s.deletedIds);
 
   const notices = useMemo<DeveloperNoticeView[]>(() => {
+    // react-query's `enabled: false` does not clear already-cached data, so
+    // this gate must run before any filtering of the raw feed.
+    if (!showNotices) return [];
     const feed = query.data ?? [];
     const appVersion = getAppVersion();
     const read = new Set(readIds);
@@ -58,7 +64,7 @@ export function useDeveloperNotices() {
       .filter((n) => !deleted.has(n.id))
       .map((n) => ({ ...n, isRead: read.has(n.id) }))
       .sort((a, b) => (a.publishedAt < b.publishedAt ? 1 : a.publishedAt > b.publishedAt ? -1 : 0));
-  }, [query.data, readIds, deletedIds]);
+  }, [query.data, readIds, deletedIds, showNotices]);
 
   const unreadCount = notices.reduce((n, v) => n + (v.isRead ? 0 : 1), 0);
   const criticalUnread = notices.filter((n) => n.severity === 'critical' && !n.isRead);
