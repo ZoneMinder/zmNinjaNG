@@ -46,16 +46,19 @@ export function useDeveloperNotices() {
   });
 
   const readIds = useDeveloperNoticeStore((s) => s.readIds);
+  const deletedIds = useDeveloperNoticeStore((s) => s.deletedIds);
 
   const notices = useMemo<DeveloperNoticeView[]>(() => {
     const feed = query.data ?? [];
     const appVersion = getAppVersion();
     const read = new Set(readIds);
+    const deleted = new Set(deletedIds);
     return feed
       .filter((n) => import.meta.env.DEV || !n.minAppVersion || compareSemver(appVersion, n.minAppVersion) >= 0)
+      .filter((n) => !deleted.has(n.id))
       .map((n) => ({ ...n, isRead: read.has(n.id) }))
       .sort((a, b) => (a.publishedAt < b.publishedAt ? 1 : a.publishedAt > b.publishedAt ? -1 : 0));
-  }, [query.data, readIds]);
+  }, [query.data, readIds, deletedIds]);
 
   const unreadCount = notices.reduce((n, v) => n + (v.isRead ? 0 : 1), 0);
   const criticalUnread = notices.filter((n) => n.severity === 'critical' && !n.isRead);

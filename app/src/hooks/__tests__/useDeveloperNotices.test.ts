@@ -52,7 +52,7 @@ describe('compareSemver', () => {
 describe('useDeveloperNotices: feed deletions', () => {
   beforeEach(() => {
     fetchMock.mockReset();
-    useDeveloperNoticeStore.setState({ readIds: [], dismissedBannerIds: [] });
+    useDeveloperNoticeStore.setState({ readIds: [], dismissedBannerIds: [], deletedIds: [] });
   });
 
   it('drops a notice the developer deleted from the feed; orphan readIds stay in storage but cause no UI', async () => {
@@ -116,12 +116,26 @@ describe('useDeveloperNotices: feed deletions', () => {
     // criticalUnread exists (unread on the page), but the banner won't render because the id is in dismissedBannerIds
     expect(result.current.criticalUnread.map((n) => n.id)).toEqual(['crit-1']);
   });
+
+  it('excludes locally deleted ids from notices, unreadCount, and criticalUnread', async () => {
+    useDeveloperNoticeStore.setState({ readIds: [], dismissedBannerIds: [], deletedIds: ['b', 'crit'] });
+    fetchMock.mockResolvedValue([
+      { id: 'a', title: 'A', body: '', publishedAt: '2026-05-30T18:00:00Z', severity: 'info' },
+      { id: 'b', title: 'B', body: '', publishedAt: '2026-05-30T19:00:00Z', severity: 'info' },
+      { id: 'crit', title: 'C', body: '', publishedAt: '2026-05-30T20:00:00Z', severity: 'critical' },
+    ]);
+    const { result } = renderHook(() => useDeveloperNotices(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.notices.map((n) => n.id)).toEqual(['a']);
+    expect(result.current.unreadCount).toBe(1);
+    expect(result.current.criticalUnread).toEqual([]);
+  });
 });
 
 describe('useDeveloperNotices: minAppVersion gate', () => {
   beforeEach(() => {
     fetchMock.mockReset();
-    useDeveloperNoticeStore.setState({ readIds: [], dismissedBannerIds: [] });
+    useDeveloperNoticeStore.setState({ readIds: [], dismissedBannerIds: [], deletedIds: [] });
   });
 
   afterEach(() => {
