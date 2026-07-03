@@ -119,10 +119,11 @@ function EventCardComponent({ event, monitorName, thumbnailUrls, largeThumbnailU
       data-testid="event-card"
       data-event-id={event.Id}
     >
-      {flash && <ReturnFlashArrow />}
       <div className="flex gap-2 sm:gap-3 p-2 sm:p-3">
         {/* Thumbnail - Fixed width container for consistent text alignment */}
-        <div className="relative flex-shrink-0 rounded overflow-hidden bg-card border border-border/40 w-24 sm:w-28 md:w-32 max-w-[40%]">
+        <div className="relative flex-shrink-0 w-24 sm:w-28 md:w-32 max-w-[40%]">
+          {flash && <ReturnFlashArrow />}
+          <div className="relative rounded overflow-hidden bg-card border border-border/40">
           <div
             className="w-full max-h-28"
             style={{ aspectRatio: aspectRatio.toString() }}
@@ -163,6 +164,7 @@ function EventCardComponent({ event, monitorName, thumbnailUrls, largeThumbnailU
           </div>
           <div className="absolute bottom-0.5 left-1/2 -translate-x-1/2 sm:bottom-1 bg-black/50 text-white text-[10px] sm:text-xs px-1 sm:px-1.5 py-0.5 rounded font-medium">
             {event.Length}s
+          </div>
           </div>
         </div>
 
