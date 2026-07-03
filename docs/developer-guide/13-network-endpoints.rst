@@ -113,6 +113,14 @@ validated on load against this schema:
      - When set, notices are hidden on app versions older than this value.
        Release notices set it to the released version.
 
+Deleting a notice on the client is a per-device exclusion, not a change to
+``docs/notices.json``. ``useDeveloperNoticeStore`` (``app/src/stores/developerNotices.ts``)
+persists a ``deletedIds`` array alongside the existing ``readIds`` and
+``dismissedBannerIds``, and ``useDeveloperNotices`` (``app/src/hooks/useDeveloperNotices.ts``)
+filters those ids out of the fetched feed on every refetch. The Developer
+Notice page offers a per-row delete button, a confirmed Clear all action, and
+a Restore action that clears ``deletedIds`` and refetches.
+
 Generating a release notice
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
