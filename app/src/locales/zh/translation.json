@@ -404,6 +404,8 @@
     "disable_log_redaction_desc": "在日志中显示密码/令牌",
     "force_disable_multiport": "强制禁用多端口流",
     "force_disable_multiport_desc": "忽略服务器的每监视器流端口，使用默认端口",
+    "show_developer_notices": "显示开发者通知",
+    "show_developer_notices_desc": "在应用内显示开发者公告",
     "api_timeout": "API 超时",
     "api_timeout_desc": "中止服务器请求前等待的秒数，以便应用重试。0 表示禁用超时。",
     "api_timeout_unit": "秒",

@@ -404,6 +404,8 @@
     "disable_log_redaction_desc": "Mostrar contraseñas/tokens en registros",
     "force_disable_multiport": "Desactivar streaming multipuerto",
     "force_disable_multiport_desc": "Ignorar los puertos de stream por monitor del servidor y usar el puerto predeterminado",
+    "show_developer_notices": "Mostrar avisos del desarrollador",
+    "show_developer_notices_desc": "Mostrar anuncios del desarrollador en la app",
     "api_timeout": "Tiempo de espera API",
     "api_timeout_desc": "Segundos a esperar una solicitud al servidor antes de cancelarla para que la app reintente. 0 desactiva el tiempo de espera.",
     "api_timeout_unit": "segundos",

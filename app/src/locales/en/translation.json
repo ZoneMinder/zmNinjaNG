@@ -404,6 +404,8 @@
     "disable_log_redaction_desc": "Show passwords/tokens in logs",
     "force_disable_multiport": "Force disable multi-port streaming",
     "force_disable_multiport_desc": "Ignore the server's per-monitor stream ports and use the default port",
+    "show_developer_notices": "Show developer notices",
+    "show_developer_notices_desc": "Show maintainer announcements in the app",
     "api_timeout": "API timeout",
     "api_timeout_desc": "Seconds to wait for a server request before it's aborted so the app can retry. 0 disables the timeout.",
     "api_timeout_unit": "seconds",
