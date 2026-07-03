@@ -426,8 +426,6 @@ that text. The second line is the start time via ``fmtTime`` from
 - ``aspectRatio`` – thumbnail aspect ratio
 - ``objectFit`` – CSS ``object-fit`` value for the thumbnail (default
   ``cover``)
-- ``monitorName`` – unused by the row itself; kept for callers that
-  still pass it through
 
 **Test ids**: row ``compact-event-row``, thumbnail
 ``compact-event-thumbnail``.
