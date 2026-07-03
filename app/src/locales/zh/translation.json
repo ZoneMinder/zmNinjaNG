@@ -943,7 +943,13 @@
     "mark_unread": "标记为未读",
     "mark_all_read": "全部标记已读",
     "mark_all_unread": "全部标记未读",
-    "reload": "重新加载"
+    "reload": "重新加载",
+    "delete": "删除",
+    "more_actions": "更多",
+    "clear_all": "全部清除",
+    "clear_all_confirm_title": "删除所有通知？",
+    "clear_all_confirm_body": "将从此设备删除 {{count}} 条通知。恢复可将其找回。",
+    "restore_deleted": "恢复已删除"
   },
   "server": {
     "title": "服务器",
