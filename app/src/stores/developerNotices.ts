@@ -14,6 +14,7 @@ import { STORAGE_KEYS } from '../lib/zmninja-ng-constants';
 interface DeveloperNoticeState {
   readIds: string[];
   dismissedBannerIds: string[];
+  deletedIds: string[];
 
   isRead: (id: string) => boolean;
   markRead: (id: string) => void;
@@ -23,6 +24,11 @@ interface DeveloperNoticeState {
 
   isBannerDismissed: (id: string) => boolean;
   dismissBanner: (id: string) => void;
+
+  isDeleted: (id: string) => boolean;
+  deleteNotice: (id: string) => void;
+  deleteNotices: (ids: string[]) => void;
+  restoreAllDeleted: () => void;
 }
 
 export const useDeveloperNoticeStore = create<DeveloperNoticeState>()(
@@ -30,6 +36,7 @@ export const useDeveloperNoticeStore = create<DeveloperNoticeState>()(
     (set, get) => ({
       readIds: [],
       dismissedBannerIds: [],
+      deletedIds: [],
 
       isRead: (id) => get().readIds.includes(id),
       markRead: (id) => {
@@ -64,6 +71,24 @@ export const useDeveloperNoticeStore = create<DeveloperNoticeState>()(
           if (state.dismissedBannerIds.includes(id)) return state;
           return { ...state, dismissedBannerIds: [...state.dismissedBannerIds, id] };
         });
+      },
+
+      isDeleted: (id) => get().deletedIds.includes(id),
+      deleteNotice: (id) => {
+        set((state) => {
+          if (state.deletedIds.includes(id)) return state;
+          return { ...state, deletedIds: [...state.deletedIds, id] };
+        });
+      },
+      deleteNotices: (ids) => {
+        set((state) => {
+          const merged = new Set(state.deletedIds);
+          ids.forEach((id) => merged.add(id));
+          return { ...state, deletedIds: Array.from(merged) };
+        });
+      },
+      restoreAllDeleted: () => {
+        set((state) => (state.deletedIds.length === 0 ? state : { ...state, deletedIds: [] }));
       },
     }),
     {
