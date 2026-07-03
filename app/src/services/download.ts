@@ -18,6 +18,7 @@ import { wrapWithImageProxyIfNeeded } from '../lib/proxy-utils';
 import { httpRequest, type HttpProgress } from '../lib/http';
 
 import { getEventVideoUrl as buildEventVideoUrl } from '../lib/url-builder';
+import { DOWNLOAD } from '../lib/zmninja-ng-constants';
 import { useBackgroundTasks } from '../stores/backgroundTasks';
 
 /**
@@ -349,7 +350,7 @@ async function downloadFromDataUrlWeb(dataUrl: string, filename: string): Promis
   link.download = filename;
   document.body.appendChild(link);
   link.click();
-  setTimeout(() => document.body.removeChild(link), 100);
+  setTimeout(() => document.body.removeChild(link), DOWNLOAD.webLinkCleanupDelayMs);
 }
 
 /**

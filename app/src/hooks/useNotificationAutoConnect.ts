@@ -18,6 +18,7 @@ import { useNotificationStore, startEventPoller } from '../stores/notifications'
 import { getEventPoller } from '../services/eventPoller';
 import { getNotificationService } from '../services/notifications';
 import { useCapacitorListener } from './useCapacitorListener';
+import { NOTIFICATIONS_SERVICE } from '../lib/zmninja-ng-constants';
 import type { Profile } from '../api/types';
 
 interface AutoConnectParams {
@@ -148,7 +149,7 @@ export function useNotificationAutoConnect({
     };
 
     // Small delay to ensure store initialization is complete
-    setTimeout(() => attemptConnect(), 500);
+    setTimeout(() => attemptConnect(), NOTIFICATIONS_SERVICE.autoConnectInitDelayMs);
   }, [settings?.enabled, settings?.notificationMode, settings?.host, isConnected, connectionState, currentProfile, connect, getDecryptedPassword]);
 
   // Stop event poller on cleanup or when mode/profile changes

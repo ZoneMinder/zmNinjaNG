@@ -16,7 +16,7 @@ import { PinPad } from './PinPad';
 import { useToast } from '../../hooks/use-toast';
 import { log, LogLevel } from '../../lib/logger';
 import { Platform } from '../../lib/platform';
-import { Z_INDEX } from '../../lib/zmninja-ng-constants';
+import { KIOSK, Z_INDEX } from '../../lib/zmninja-ng-constants';
 import { useCapacitorListener } from '../../hooks/useCapacitorListener';
 
 interface KioskOverlayProps {
@@ -44,7 +44,7 @@ export function KioskOverlay({ onUnlock }: KioskOverlayProps) {
     };
 
     tick();
-    const interval = setInterval(tick, 1000);
+    const interval = setInterval(tick, KIOSK.cooldownTickIntervalMs);
     return () => clearInterval(interval);
   }, [cooldownUntil]);
 
