@@ -426,11 +426,17 @@ that text. The second line is the start time via ``fmtTime`` from
 - ``aspectRatio`` – thumbnail aspect ratio
 - ``objectFit`` – CSS ``object-fit`` value for the thumbnail (default
   ``cover``)
-- ``monitorName`` – passed through to ``EventDeleteButton`` for the
-  confirm dialog's description
+- ``monitorName`` – unused by the row itself; kept for callers that
+  still pass it through
 
 **Test ids**: row ``compact-event-row``, thumbnail
 ``compact-event-thumbnail``.
+
+The row reads ``selectedForDelete`` from ``useDeleteSelectionStore`` and
+adds ``ring-2 ring-destructive/60 bg-destructive/5`` when the event is
+queued for deletion. This class is listed after the return-flash
+classes in the row's ``cn(...)`` call, so a queued row that is also
+mid-flash shows the destructive ring rather than the flash styling.
 
 Return Highlight
 ~~~~~~~~~~~~~~~~~
@@ -488,56 +494,63 @@ for each entry keeps only the part before ``|``. Returns ``[]`` when
 ``notes`` is ``null`` or has no ``detected:`` segment. Shared by
 ``CompactEventRow`` and other event views that need the same parsing.
 
-EventDeleteButton
+Bulk Event Delete
 ~~~~~~~~~~~~~~~~~
 
-**Location**: ``src/components/events/EventDeleteButton.tsx``
+Deleting events is a batch operation (refs #213): clicking the trash
+icon on a row queues it rather than opening a per-event confirm
+dialog. Four pieces implement this.
 
-Trash icon button that opens an ``AlertDialog`` to confirm deletion of
-a ZoneMinder event, then calls ``useDeleteEvent``. Used by both
-``CompactEventRow`` (recent-events list) and ``EventCard`` (full event
-list/detail views). The trigger button and the dialog content both
-call ``e.stopPropagation()`` so opening or interacting with the dialog
-never fires the parent row/card's click-to-navigate handler.
+``useDeleteSelectionStore`` (``src/stores/deleteSelection.ts``) is a
+Zustand store holding ``selectedIds: string[]``, with ``toggle(eventId)``
+and ``clear()`` actions. It is session-only and not persisted, and
+persists across navigation on purpose: opening an event from the
+queued list does not clear the selection. It only clears on Cancel or
+after a successful bulk delete.
 
-**Props:**
+``EventDeleteButton`` (``src/components/events/EventDeleteButton.tsx``)
+is a trash icon toggle, not a dialog trigger. It reads whether its
+``eventId`` is in ``selectedIds`` and calls ``toggle`` on click,
+stopping propagation so it never fires the parent row/card's
+click-to-navigate handler. Selected state fills the icon
+(``fill-destructive text-destructive``) instead of the default muted
+stroke, and sets ``aria-pressed``. Used by both ``CompactEventRow``
+(recent-events list) and ``EventCard`` (full event list/detail views).
 
-- ``eventId`` – event id to delete
-- ``eventName`` – event name, used as the dialog description's fallback
-  subject
-- ``monitorName`` – optional, preferred over ``eventName`` in the
-  dialog description when present
-- ``size`` – ``'sm' | 'md'``, controls icon size (default ``'md'``)
-- ``className`` – merged onto the trigger button
+**Props**: ``eventId``, ``size`` (``'sm' | 'md'``, default ``'md'``),
+``className`` merged onto the button.
 
-**Test ids**: trigger ``event-delete-button``, dialog
-``event-delete-dialog``, cancel action ``event-delete-cancel``,
-confirm action ``event-delete-confirm``. The confirm button is
-disabled while the delete request is in flight (``isDeleting``).
+**Test id**: ``event-delete-button``.
 
-useDeleteEvent
-~~~~~~~~~~~~~~
+``DeleteBatchBar`` (``src/components/events/DeleteBatchBar.tsx``) is
+rendered once, in ``AppLayout``, so it floats above every page rather
+than being duplicated inside each list. It reads ``selectedIds`` from
+the store and renders nothing when the array is empty. While events
+are queued it shows a pill with the queued count
+(``events.delete_selected``, pluralized), a Cancel button that calls
+``clear()``, and a Delete button that calls ``useBulkDeleteEvents``
+then ``clear()``. The Delete button is disabled while a delete is in
+flight (``isDeleting``).
 
-**Location**: ``src/hooks/useDeleteEvent.ts``
+**Test ids**: bar ``delete-batch-bar``, cancel ``delete-batch-cancel``,
+confirm ``delete-batch-confirm``.
 
-**Signature**: ``useDeleteEvent(): { deleteEvent: (eventId: string) => Promise<void>; isDeleting: boolean }``
-
-Calls the API layer's ``deleteEvent`` (imported as ``apiDeleteEvent``
-to avoid a name clash with the hook's own returned ``deleteEvent``),
-then invalidates three query sets so every view that lists or shows
-the deleted event refreshes:
+``useBulkDeleteEvents`` (``src/hooks/useBulkDeleteEvents.ts``) exposes
+``deleteEvents(eventIds: string[]): Promise<void>`` and ``isDeleting``.
+It calls the API layer's ``deleteEvent`` (imported as ``apiDeleteEvent``
+to avoid a name clash) for every id via ``Promise.allSettled``, so one
+failed deletion does not stop the rest. After the settle, it
+invalidates the same three query sets the old single-event delete
+used:
 
 - ``['events']`` – event list queries
-- ``['event', eventId]`` – the single-event query
+- ``['event', eventId]`` for each deleted id – the single-event queries
 - a predicate matching ``queryKey.includes('monitorRecentEvents')`` –
-  every ``useMonitorRecentEvents`` query, for any monitor, since the
-  key includes the monitor id and row count
+  every ``useMonitorRecentEvents`` query, for any monitor
 
-Shows a success toast (``events.delete_success``) after the
-invalidations resolve, or an error toast (``events.delete_failed``)
-plus an error log via ``log.eventCard`` on failure. ``isDeleting``
-tracks the in-flight request so callers (``EventDeleteButton``) can
-disable the confirm action.
+If any deletion failed it logs via ``log.eventCard`` and shows an
+error toast (``events.delete_failed``); otherwise it shows a success
+toast pluralized on the deleted count (``events.delete_selected_success``).
 
 Dashboard Components
 --------------------

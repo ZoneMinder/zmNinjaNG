@@ -880,28 +880,32 @@ Then('I should be on the events page filtered to that monitor', async ({ page })
   await page.waitForURL(/\/events\?monitorId=\d+/, { timeout: testConfig.timeouts.transition });
 });
 
-// Recent event delete confirm (cancel path only, refs #213). This must never
-// click event-delete-confirm: the events on the live ZM server are real and
+// Bulk delete batch bar (cancel path only, refs #213). This must never click
+// delete-batch-confirm: the events on the live ZM server are real and
 // deletion is permanent.
-When('I tap the delete button on the first recent event', async ({ page }) => {
-  const firstRow = page.locator('[data-testid="monitor-recent-events-body"] [data-testid="compact-event-row"]').first();
-  await expect(firstRow).toBeVisible({ timeout: testConfig.timeouts.pageLoad });
-  await firstRow.getByTestId('event-delete-button').click();
+When('I queue the first two recent events for deletion', async ({ page }) => {
+  const rows = page.locator('[data-testid="monitor-recent-events-body"] [data-testid="compact-event-row"]');
+  await expect(rows.first()).toBeVisible({ timeout: testConfig.timeouts.pageLoad });
+  const count = await rows.count();
+  for (let i = 0; i < Math.min(2, count); i++) {
+    await rows.nth(i).getByTestId('event-delete-button').click();
+  }
 });
 
-Then('the event delete confirm dialog should be visible', async ({ page }) => {
-  await expect(page.getByTestId('event-delete-dialog')).toBeVisible({
+Then('the delete batch bar should show {int} events', async ({ page }, count: number) => {
+  const bar = page.getByTestId('delete-batch-bar');
+  await expect(bar).toBeVisible({ timeout: testConfig.timeouts.transition });
+  await expect(bar).toContainText(String(count));
+});
+
+When('I cancel the delete batch', async ({ page }) => {
+  await page.getByTestId('delete-batch-cancel').click();
+});
+
+Then('the delete batch bar should be gone', async ({ page }) => {
+  await expect(page.getByTestId('delete-batch-bar')).not.toBeVisible({
     timeout: testConfig.timeouts.transition,
   });
-});
-
-When('I cancel the event delete dialog', async ({ page }) => {
-  await page.getByTestId('event-delete-cancel').click();
-});
-
-Then('the first recent event should still be present', async ({ page }) => {
-  const firstRow = page.locator('[data-testid="monitor-recent-events-body"] [data-testid="compact-event-row"]').first();
-  await expect(firstRow).toBeVisible({ timeout: testConfig.timeouts.transition });
 });
 
 // Shared <main> scroll restoration on monitor detail (refs #196)

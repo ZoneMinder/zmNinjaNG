@@ -108,16 +108,6 @@ Feature: Monitor Detail Page
     When I tap "All events"
     Then I should be on the events page filtered to that monitor
 
-  @all
-  Scenario: Delete confirm dialog on a recent event can be cancelled
-    Given I am logged into zmNinjaNg
-    When I open the first monitor's detail view
-    Then the recent events list should be visible
-    When I tap the delete button on the first recent event
-    Then the event delete confirm dialog should be visible
-    When I cancel the event delete dialog
-    Then the first recent event should still be present
-
   @web
   Scenario: Scroll position on monitor detail is restored after returning from an event
     Given I am logged into zmNinjaNg
@@ -137,3 +127,13 @@ Feature: Monitor Detail Page
     When I open the first recent event
     And I navigate back
     Then the returned-from recent event should be flagged
+
+  @web
+  Scenario: Queue two events for deletion and cancel the batch
+    Given I am logged into zmNinjaNg
+    When I open the first monitor's detail view
+    Then the recent events list should be visible
+    When I queue the first two recent events for deletion
+    Then the delete batch bar should show 2 events
+    When I cancel the delete batch
+    Then the delete batch bar should be gone
