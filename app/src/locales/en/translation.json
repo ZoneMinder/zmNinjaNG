@@ -215,6 +215,8 @@
     "delete_confirm_title": "Delete event?",
     "delete_confirm_desc": "Event #{{id}} ({{monitor}}) will be permanently deleted.",
     "delete_aria": "Delete event",
+    "delete_selected_success_one": "Deleted {{count}} event",
+    "delete_selected_success_other": "Deleted {{count}} events",
     "filter": {
       "tags": "Tags",
       "selectTags": "Select tags...",

@@ -215,6 +215,8 @@
     "delete_confirm_title": "Supprimer l'événement ?",
     "delete_confirm_desc": "L'événement #{{id}} ({{monitor}}) sera supprimé définitivement.",
     "delete_aria": "Supprimer l'événement",
+    "delete_selected_success_one": "{{count}} événement supprimé",
+    "delete_selected_success_other": "{{count}} événements supprimés",
     "filter": {
       "tags": "Tags",
       "selectTags": "Sélectionner des tags...",

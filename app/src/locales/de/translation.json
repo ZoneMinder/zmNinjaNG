@@ -215,6 +215,8 @@
     "delete_confirm_title": "Ereignis löschen?",
     "delete_confirm_desc": "Ereignis #{{id}} ({{monitor}}) wird dauerhaft gelöscht.",
     "delete_aria": "Ereignis löschen",
+    "delete_selected_success_one": "{{count}} Ereignis gelöscht",
+    "delete_selected_success_other": "{{count}} Ereignisse gelöscht",
     "filter": {
       "tags": "Tags",
       "selectTags": "Tags auswählen...",

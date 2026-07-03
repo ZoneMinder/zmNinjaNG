@@ -215,6 +215,8 @@
     "delete_confirm_title": "删除事件？",
     "delete_confirm_desc": "事件 #{{id}}（{{monitor}}）将被永久删除。",
     "delete_aria": "删除事件",
+    "delete_selected_success_one": "已删除 {{count}} 个事件",
+    "delete_selected_success_other": "已删除 {{count}} 个事件",
     "filter": {
       "tags": "标签",
       "selectTags": "选择标签...",

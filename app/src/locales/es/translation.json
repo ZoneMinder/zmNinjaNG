@@ -215,6 +215,8 @@
     "delete_confirm_title": "¿Eliminar evento?",
     "delete_confirm_desc": "El evento #{{id}} ({{monitor}}) se eliminará permanentemente.",
     "delete_aria": "Eliminar evento",
+    "delete_selected_success_one": "{{count}} evento eliminado",
+    "delete_selected_success_other": "{{count}} eventos eliminados",
     "filter": {
       "tags": "Etiquetas",
       "selectTags": "Seleccionar etiquetas...",
