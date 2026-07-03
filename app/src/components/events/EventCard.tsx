@@ -104,7 +104,7 @@ function EventCardComponent({ event, monitorName, thumbnailUrls, largeThumbnailU
     <Card
       className={cn(
         'group relative overflow-hidden cursor-pointer hover:shadow-lg transition-all duration-200 hover:ring-2 hover:ring-primary/50 focus:outline-none focus:ring-2 focus:ring-primary',
-        flash && 'ring-2 ring-primary/60 bg-primary/5'
+        flash && 'ring-2 ring-primary/60 bg-primary/5 pl-9'
       )}
       onClick={openEvent}
       onKeyDown={(e) => {
