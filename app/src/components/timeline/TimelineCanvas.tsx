@@ -3,7 +3,7 @@
  * the viewport, gestures, rendering, and hit-testing.
  */
 
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useTimelineViewport } from './useTimelineViewport';
 import { useTimelineGestures } from './useTimelineGestures';
@@ -157,8 +157,13 @@ const TimelineCanvasInner = ({
   }, [bandwidth.timelineNowRefreshInterval]);
 
   const pulseRafRef = useRef<number | null>(null);
+  // Tracks the last pixel dimensions actually assigned to canvas.width/height,
+  // so the render loop below can skip reassignment when nothing changed.
+  const lastCanvasDimsRef = useRef<{ width: number; height: number } | null>(null);
 
-  const monitorIds = monitors.map((m) => m.id);
+  // Stable identity across re-renders (hover/playhead/now-tick) that don't
+  // change the monitors list itself; keeps handleHover/handleClick stable.
+  const monitorIds = useMemo(() => monitors.map((m) => m.id), [monitors]);
   const height = canvasHeight(monitors.length);
 
   // Gesture callbacks
@@ -240,10 +245,22 @@ const TimelineCanvasInner = ({
     if (!canvas || containerWidth === 0) return;
 
     const dpr = window.devicePixelRatio || 1;
-    canvas.width = containerWidth * dpr;
-    canvas.height = height * dpr;
-    canvas.style.width = `${containerWidth}px`;
-    canvas.style.height = `${height}px`;
+    const pixelWidth = containerWidth * dpr;
+    const pixelHeight = height * dpr;
+    // Assigning canvas.width/height reallocates and clears the GPU-backed
+    // bitmap even when set to the same value, so only touch it when the
+    // pixel dimensions actually changed. This effect otherwise runs on every
+    // render (hover, playhead move, now-tick), so an unconditional assignment
+    // here would tear down and rebuild the bitmap dozens of times a minute.
+    // The paint below still runs unconditionally every render.
+    const prevDims = lastCanvasDimsRef.current;
+    if (!prevDims || prevDims.width !== pixelWidth || prevDims.height !== pixelHeight) {
+      canvas.width = pixelWidth;
+      canvas.height = pixelHeight;
+      canvas.style.width = `${containerWidth}px`;
+      canvas.style.height = `${height}px`;
+      lastCanvasDimsRef.current = { width: pixelWidth, height: pixelHeight };
+    }
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
