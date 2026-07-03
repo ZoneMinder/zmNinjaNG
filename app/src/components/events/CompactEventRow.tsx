@@ -67,6 +67,7 @@ export function CompactEventRow({ event, thumbnailUrls, aspectRatio, objectFit =
       data-event-id={event.Id}
       aria-label={`${t('common.view')}: ${event.Name}`}
     >
+      {flash && <ReturnFlashArrow />}
       <div
         className="relative flex-shrink-0 w-16 rounded overflow-hidden bg-card border border-border/40"
         style={{ aspectRatio: aspectRatio.toString() }}
@@ -80,7 +81,6 @@ export function CompactEventRow({ event, thumbnailUrls, aspectRatio, objectFit =
           loading="lazy"
           data-testid="compact-event-thumbnail"
         />
-        {flash && <ReturnFlashArrow />}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1 min-w-0">
