@@ -1089,6 +1089,8 @@
     "center_view": "居中",
     "go_to_now": "现在",
     "select_to_zoom": "选择缩放",
+    "zoom_in": "放大",
+    "zoom_out": "缩小",
     "help": {
       "title": "操作",
       "navigate": "捏合/拖动/滚动导航",

@@ -1089,6 +1089,8 @@
     "center_view": "Center",
     "go_to_now": "Now",
     "select_to_zoom": "Select to zoom",
+    "zoom_in": "Zoom in",
+    "zoom_out": "Zoom out",
     "help": {
       "title": "Controls",
       "navigate": "Pinch/drag/scroll",

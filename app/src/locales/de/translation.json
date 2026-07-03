@@ -1089,6 +1089,8 @@
     "center_view": "Zentrieren",
     "go_to_now": "Jetzt",
     "select_to_zoom": "Bereich wählen",
+    "zoom_in": "Vergrößern",
+    "zoom_out": "Verkleinern",
     "help": {
       "title": "Steuerung",
       "navigate": "Pinch/Ziehen/Scrollen",
