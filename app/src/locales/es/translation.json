@@ -943,7 +943,13 @@
     "mark_unread": "Marcar como no leído",
     "mark_all_read": "Marcar todos leídos",
     "mark_all_unread": "Marcar todos no leídos",
-    "reload": "Recargar"
+    "reload": "Recargar",
+    "delete": "Eliminar",
+    "more_actions": "Más",
+    "clear_all": "Borrar todo",
+    "clear_all_confirm_title": "¿Eliminar todos los avisos?",
+    "clear_all_confirm_body": "Elimina {{count}} avisos de este dispositivo. Restaurar los recupera.",
+    "restore_deleted": "Restaurar"
   },
   "server": {
     "title": "Servidor",

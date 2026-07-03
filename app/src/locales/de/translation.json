@@ -943,7 +943,13 @@
     "mark_unread": "Als ungelesen markieren",
     "mark_all_read": "Alle gelesen",
     "mark_all_unread": "Alle ungelesen",
-    "reload": "Neu laden"
+    "reload": "Neu laden",
+    "delete": "Löschen",
+    "more_actions": "Mehr",
+    "clear_all": "Alle löschen",
+    "clear_all_confirm_title": "Alle Hinweise löschen?",
+    "clear_all_confirm_body": "Löscht {{count}} Hinweise auf diesem Gerät. Wiederherstellen holt sie zurück.",
+    "restore_deleted": "Wiederherstellen"
   },
   "server": {
     "title": "Server",

@@ -943,7 +943,13 @@
     "mark_unread": "Mark as unread",
     "mark_all_read": "Mark all read",
     "mark_all_unread": "Mark all unread",
-    "reload": "Reload"
+    "reload": "Reload",
+    "delete": "Delete",
+    "more_actions": "More",
+    "clear_all": "Clear all",
+    "clear_all_confirm_title": "Delete all notices?",
+    "clear_all_confirm_body": "This deletes {{count}} notices from this device. Restore brings them back.",
+    "restore_deleted": "Restore deleted"
   },
   "server": {
     "title": "Server",
