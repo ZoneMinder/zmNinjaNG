@@ -90,6 +90,7 @@ export function ProfileSwitcher() {
         <Button
           variant="ghost"
           className="flex items-center gap-2 w-full justify-between focus-visible:ring-0 focus-visible:ring-offset-0"
+          data-testid="profile-switcher-trigger"
         >
           <div className="flex items-center gap-2 min-w-0">
             {isLoading ? (
@@ -110,6 +111,7 @@ export function ProfileSwitcher() {
             key={profile.id}
             onClick={() => handleSwitch(profile.id)}
             className="flex items-center justify-between cursor-pointer"
+            data-testid={`profile-switcher-item-${profile.id}`}
           >
             <div className="flex flex-col gap-1">
               <span className="font-medium">{profile.name}</span>
@@ -130,7 +132,7 @@ export function ProfileSwitcher() {
           </DropdownMenuItem>
         ))}
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={handleAddProfile} className="cursor-pointer">
+        <DropdownMenuItem onClick={handleAddProfile} className="cursor-pointer" data-testid="profile-switcher-add-profile">
           <Plus className="h-4 w-4 mr-2" />
           {t('profiles.add_new_profile')}
         </DropdownMenuItem>

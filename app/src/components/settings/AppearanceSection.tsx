@@ -142,7 +142,7 @@ export function AppearanceSection({ settings, update }: AppearanceSectionProps) 
                 </SelectTrigger>
                 <SelectContent>
                   {DATE_FORMAT_VALUES.map(({ value, labelKey }) => (
-                    <SelectItem key={value} value={value}>
+                    <SelectItem key={value} value={value} data-testid={`settings-date-format-option-${value}`}>
                       {labelKey ? t(labelKey) : DATE_FORMAT_DISPLAY[value]}
                     </SelectItem>
                   ))}
@@ -189,7 +189,7 @@ export function AppearanceSection({ settings, update }: AppearanceSectionProps) 
                 </SelectTrigger>
                 <SelectContent>
                   {TIME_FORMAT_VALUES.map(({ value, labelKey }) => (
-                    <SelectItem key={value} value={value}>
+                    <SelectItem key={value} value={value} data-testid={`settings-time-format-option-${value}`}>
                       {labelKey ? t(labelKey) : value}
                     </SelectItem>
                   ))}
