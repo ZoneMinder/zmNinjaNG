@@ -78,7 +78,9 @@ describe('CompactEventRow', () => {
     useDeleteSelectionStore.getState().clear();
     useDeleteSelectionStore.getState().toggle('233228');
     render1();
-    expect(screen.getByTestId('compact-event-row').className).toContain('ring-destructive/60');
+    const cls = screen.getByTestId('compact-event-row').className;
+    expect(cls).toContain('bg-destructive/10');
+    expect(cls).toContain('opacity-60');
     useDeleteSelectionStore.getState().clear();
   });
 });

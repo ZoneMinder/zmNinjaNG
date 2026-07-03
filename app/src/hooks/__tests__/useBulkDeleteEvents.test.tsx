@@ -53,4 +53,16 @@ describe('useBulkDeleteEvents', () => {
     await act(async () => { await result.current.deleteEvents([]); });
     expect(deleteEvent).not.toHaveBeenCalled();
   });
+
+  it('removes the deleted events from a cached events list immediately', async () => {
+    (deleteEvent as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+    qc.setQueryData(['events', 'x'], {
+      events: [{ Event: { Id: '1' } }, { Event: { Id: '2' } }],
+      pagination: {},
+    });
+    const { result } = renderHook(() => useBulkDeleteEvents(), { wrapper });
+    await act(async () => { await result.current.deleteEvents(['1']); });
+    const cached = qc.getQueryData(['events', 'x']) as { events: { Event: { Id: string } }[] };
+    expect(cached.events.map((e) => e.Event.Id)).toEqual(['2']);
+  });
 });

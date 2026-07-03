@@ -28,8 +28,8 @@ export function EventDeleteButton({ eventId, size = 'md', className }: EventDele
         toggle(eventId);
       }}
       className={cn(
-        'p-1 rounded-full hover:bg-accent transition-colors',
-        'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
+        'p-1 rounded transition-colors',
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         className
       )}
       aria-label={t('events.delete_toggle_aria')}
@@ -41,7 +41,7 @@ export function EventDeleteButton({ eventId, size = 'md', className }: EventDele
         className={cn(
           iconSize,
           'transition-colors',
-          selected ? 'fill-destructive text-destructive' : 'stroke-muted-foreground hover:stroke-destructive'
+          selected ? 'text-destructive' : 'stroke-muted-foreground hover:stroke-destructive'
         )}
       />
     </button>

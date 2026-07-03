@@ -1,14 +1,24 @@
 /**
  * Delete several ZoneMinder events at once (refs #213). Uses Promise.allSettled
- * so one failure does not abort the rest, invalidates the events / single-event
- * / monitorRecentEvents queries, and toasts a count (or a failure).
+ * so one failure does not abort the rest. Removes the deleted events from the
+ * events / monitorRecentEvents caches immediately (so the list updates even if
+ * the server is briefly slow to drop them), invalidates to reconcile, and
+ * toasts a count (or a failure).
  */
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { deleteEvent as apiDeleteEvent } from '../api/events';
+import type { EventData, EventsResponse } from '../api/types';
 import { log, LogLevel } from '../lib/logger';
+
+/** Drop the given event ids from any cached events-list response. */
+function removeFromEventsCache(old: unknown, deleted: Set<string>): unknown {
+  const data = old as EventsResponse | undefined;
+  if (!data || !Array.isArray(data.events)) return old;
+  return { ...data, events: data.events.filter((e: EventData) => !deleted.has(e.Event.Id)) };
+}
 
 export function useBulkDeleteEvents(): {
   deleteEvents: (eventIds: string[]) => Promise<void>;
@@ -24,6 +34,20 @@ export function useBulkDeleteEvents(): {
     try {
       const results = await Promise.allSettled(eventIds.map((id) => apiDeleteEvent(id)));
       const failed = results.filter((r) => r.status === 'rejected').length;
+
+      // Remove the successfully deleted events from cached lists right away so
+      // the UI reflects the deletion immediately, then invalidate to reconcile.
+      const deletedIds = new Set(
+        eventIds.filter((_, i) => results[i].status === 'fulfilled')
+      );
+      queryClient.setQueriesData(
+        {
+          predicate: (q) =>
+            q.queryKey[0] === 'events' || q.queryKey.includes('monitorRecentEvents'),
+        },
+        (old) => removeFromEventsCache(old, deletedIds)
+      );
+
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['events'] }),
         ...eventIds.map((id) => queryClient.invalidateQueries({ queryKey: ['event', id] })),

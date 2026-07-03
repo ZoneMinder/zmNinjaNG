@@ -63,7 +63,7 @@ export function CompactEventRow({ event, thumbnailUrls, aspectRatio, objectFit =
       className={cn(
         'relative flex items-center gap-2.5 rounded-md p-1.5 cursor-pointer hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary',
         flash && 'ring-2 ring-primary/60 bg-primary/5',
-        selectedForDelete && 'ring-2 ring-destructive/60 bg-destructive/5'
+        selectedForDelete && 'bg-destructive/10 opacity-60'
       )}
       data-testid="compact-event-row"
       data-event-id={event.Id}
