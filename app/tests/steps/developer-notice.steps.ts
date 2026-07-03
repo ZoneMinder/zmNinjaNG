@@ -54,3 +54,33 @@ Then('the notice list should not be empty', async ({ page }) => {
   await expect(page.getByTestId('developer-notice-list')).toBeVisible();
   await expect(page.locator('[data-testid^="developer-notice-delete-"]').first()).toBeVisible();
 });
+
+// --- Show Developer Notices toggle ---
+
+// Set the Radix switch to the desired state only if it is not already there,
+// so "turn off" then "turn on" are idempotent regardless of the starting value.
+async function setNoticeToggle(page: import('@playwright/test').Page, on: boolean) {
+  const sw = page.getByTestId('settings-show-developer-notices');
+  await expect(sw).toBeVisible();
+  const checked = (await sw.getAttribute('aria-checked')) === 'true';
+  if (checked !== on) await sw.click();
+}
+
+// Note: "I expand the Advanced settings section" is defined in settings.steps.ts
+// and reused here.
+
+When('I turn off developer notices in settings', async ({ page }) => {
+  await setNoticeToggle(page, false);
+});
+
+When('I turn on developer notices in settings', async ({ page }) => {
+  await setNoticeToggle(page, true);
+});
+
+Then('the developer notices sidebar entry should be hidden', async ({ page }) => {
+  await expect(page.getByTestId('nav-item-developer-notice')).toHaveCount(0);
+});
+
+Then('the developer notices sidebar entry should be visible', async ({ page }) => {
+  await expect(page.getByTestId('nav-item-developer-notice').first()).toBeVisible();
+});
