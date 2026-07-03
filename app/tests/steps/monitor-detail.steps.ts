@@ -952,3 +952,18 @@ Then('the main container scroll position should be restored', async ({ page }) =
   expect(after).toBeGreaterThan(0);
   expect(Math.abs(after - mainScrollBefore)).toBeLessThanOrEqual(40);
 });
+
+// Return highlight indicator (refs #213)
+When('I open the first recent event', async ({ page }) => {
+  const firstRow = page.locator('[data-testid="monitor-recent-events-body"] [data-testid="compact-event-row"]').first();
+  await expect(firstRow).toBeVisible({ timeout: testConfig.timeouts.transition });
+  await firstRow.click();
+  await page.waitForURL(/\/events\//, { timeout: testConfig.timeouts.transition });
+});
+
+Then('the returned-from recent event should be flagged', async ({ page }) => {
+  await expect(page.getByTestId('monitor-recent-events-body')).toBeVisible({
+    timeout: testConfig.timeouts.pageLoad,
+  });
+  await expect(page.getByTestId('return-flash-indicator')).toBeVisible();
+});

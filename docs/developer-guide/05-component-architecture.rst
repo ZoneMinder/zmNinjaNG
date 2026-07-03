@@ -432,6 +432,44 @@ that text. The second line is the start time via ``fmtTime`` from
 **Test ids**: row ``compact-event-row``, thumbnail
 ``compact-event-thumbnail``.
 
+Return Highlight
+~~~~~~~~~~~~~~~~~
+
+**Location**: ``src/stores/returnHighlight.ts``, ``src/hooks/useReturnFlash.ts``,
+``src/components/events/ReturnFlashArrow.tsx``
+
+When a user opens an event from a list and then navigates back, the row
+they came from flashes for a few seconds so it stays easy to find.
+Three pieces implement this:
+
+``useReturnHighlightStore`` is a Zustand store holding
+``lastViewedEventId: string | null``, with ``markViewed(eventId)`` and
+``clear()`` actions. It is session-only and not persisted.
+``CompactEventRow`` and ``EventCard`` both call ``markViewed(event.Id)``
+in their open handler, before ``navigate``, on both click and
+Enter/Space keyboard activation.
+
+``useReturnFlash(eventId: string): boolean`` reads
+``useReturnHighlightStore.getState().lastViewedEventId`` once at mount
+(captured with ``useState(() => ...)``, so it does not react to later
+store updates). If the captured id matches ``eventId``, it calls
+``clear()`` right away, so a later mount of the same row does not flash
+again, sets its returned boolean to ``true``, and starts a
+``window.setTimeout`` that flips it back to ``false`` after
+``RETURN_FLASH_MS`` (4000ms, defined in ``lib/zmninja-ng-constants.ts``).
+
+``ReturnFlashArrow`` renders a decorative ``ChevronRight`` icon
+(``aria-hidden``, test id ``return-flash-indicator``), absolutely
+positioned at the row's left edge (``absolute left-0 top-1/2
+-translate-y-1/2``). The blink is ``motion-safe:animate-blink``: the
+``motion-safe:`` gate exists so that users with
+``prefers-reduced-motion`` set get a static arrow instead of a blinking
+one, so it must not be removed. Because the arrow is absolutely
+positioned, its parent needs ``relative``: ``CompactEventRow``'s row
+``div`` and ``EventCard``'s ``Card`` both carry ``relative`` for this
+reason, and both render ``<ReturnFlashArrow />`` conditionally when
+their local ``flash`` boolean (from ``useReturnFlash``) is ``true``.
+
 parseDetectedObjects
 ~~~~~~~~~~~~~~~~~~~~
 
@@ -619,6 +657,8 @@ Displays a single event with thumbnail, details, and actions.
 - Delete/download actions
 - Desktop hover preview of the thumbnail via
   ``EventThumbnailHoverPreview`` (see below)
+- Return highlight flash when returned to from the event detail page
+  (see Return Highlight, above)
 
 EventThumbnailHoverPreview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~

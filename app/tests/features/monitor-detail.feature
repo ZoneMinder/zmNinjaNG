@@ -128,3 +128,12 @@ Feature: Monitor Detail Page
     And I go back
     Then the recent events list should be visible
     And the main container scroll position should be restored
+
+  @web
+  Scenario: Returning from a recent event flags the row I came from
+    Given I am logged into zmNinjaNg
+    When I open the first monitor's detail view
+    Then the recent events list should be visible
+    When I open the first recent event
+    And I navigate back
+    Then the returned-from recent event should be flagged
