@@ -217,6 +217,8 @@
     "delete_aria": "Delete event",
     "delete_selected_success_one": "Deleted {{count}} event",
     "delete_selected_success_other": "Deleted {{count}} events",
+    "delete_selected_one": "Delete {{count}} event",
+    "delete_selected_other": "Delete {{count}} events",
     "filter": {
       "tags": "Tags",
       "selectTags": "Select tags...",

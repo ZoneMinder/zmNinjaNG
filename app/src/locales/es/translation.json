@@ -217,6 +217,8 @@
     "delete_aria": "Eliminar evento",
     "delete_selected_success_one": "{{count}} evento eliminado",
     "delete_selected_success_other": "{{count}} eventos eliminados",
+    "delete_selected_one": "Eliminar {{count}} evento",
+    "delete_selected_other": "Eliminar {{count}} eventos",
     "filter": {
       "tags": "Etiquetas",
       "selectTags": "Seleccionar etiquetas...",

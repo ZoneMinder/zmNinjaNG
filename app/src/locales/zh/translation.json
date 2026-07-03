@@ -217,6 +217,8 @@
     "delete_aria": "删除事件",
     "delete_selected_success_one": "已删除 {{count}} 个事件",
     "delete_selected_success_other": "已删除 {{count}} 个事件",
+    "delete_selected_one": "删除 {{count}} 个事件",
+    "delete_selected_other": "删除 {{count}} 个事件",
     "filter": {
       "tags": "标签",
       "selectTags": "选择标签...",

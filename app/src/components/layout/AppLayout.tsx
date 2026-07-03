@@ -37,6 +37,7 @@ import { KioskOverlay } from '../kiosk/KioskOverlay';
 import { SidebarContent } from './SidebarContent';
 import { DeveloperNoticeBanner } from './DeveloperNoticeBanner';
 import { CertTrustBanner } from '../CertTrustBanner';
+import { DeleteBatchBar } from '../events/DeleteBatchBar';
 
 
 /**
@@ -259,6 +260,7 @@ export default function AppLayout() {
         <DeveloperNoticeBanner />
         <CertTrustBanner />
         <Outlet />
+        <DeleteBatchBar />
       </main>
 
       {/* Global Background Task Drawer */}
