@@ -948,7 +948,8 @@
     "more_actions": "Más",
     "clear_all": "Borrar todo",
     "clear_all_confirm_title": "¿Eliminar todos los avisos?",
-    "clear_all_confirm_body": "Elimina {{count}} avisos de este dispositivo. Restaurar los recupera.",
+    "clear_all_confirm_body_one": "Elimina {{count}} aviso de este dispositivo. Restaurar lo recupera.",
+    "clear_all_confirm_body_other": "Elimina {{count}} avisos de este dispositivo. Restaurar los recupera.",
     "restore_deleted": "Restaurar"
   },
   "server": {

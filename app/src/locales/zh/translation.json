@@ -948,7 +948,8 @@
     "more_actions": "更多",
     "clear_all": "全部清除",
     "clear_all_confirm_title": "删除所有通知？",
-    "clear_all_confirm_body": "将从此设备删除 {{count}} 条通知。恢复可将其找回。",
+    "clear_all_confirm_body_one": "将从此设备删除 {{count}} 条通知。恢复可将其找回。",
+    "clear_all_confirm_body_other": "将从此设备删除 {{count}} 条通知。恢复可将其找回。",
     "restore_deleted": "恢复已删除"
   },
   "server": {

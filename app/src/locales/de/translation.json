@@ -948,7 +948,8 @@
     "more_actions": "Mehr",
     "clear_all": "Alle löschen",
     "clear_all_confirm_title": "Alle Hinweise löschen?",
-    "clear_all_confirm_body": "Löscht {{count}} Hinweise auf diesem Gerät. Wiederherstellen holt sie zurück.",
+    "clear_all_confirm_body_one": "Löscht {{count}} Hinweis auf diesem Gerät. Wiederherstellen holt ihn zurück.",
+    "clear_all_confirm_body_other": "Löscht {{count}} Hinweise auf diesem Gerät. Wiederherstellen holt sie zurück.",
     "restore_deleted": "Wiederherstellen"
   },
   "server": {

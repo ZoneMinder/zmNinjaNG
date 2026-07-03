@@ -948,7 +948,8 @@
     "more_actions": "More",
     "clear_all": "Clear all",
     "clear_all_confirm_title": "Delete all notices?",
-    "clear_all_confirm_body": "This deletes {{count}} notices from this device. Restore brings them back.",
+    "clear_all_confirm_body_one": "This deletes {{count}} notice from this device. Restore brings it back.",
+    "clear_all_confirm_body_other": "This deletes {{count}} notices from this device. Restore brings them back.",
     "restore_deleted": "Restore deleted"
   },
   "server": {
