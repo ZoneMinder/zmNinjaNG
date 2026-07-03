@@ -61,13 +61,12 @@ export function CompactEventRow({ event, thumbnailUrls, aspectRatio, objectFit =
       }}
       className={cn(
         'relative flex items-center gap-2.5 rounded-md p-1.5 cursor-pointer hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary',
-        flash && 'ring-2 ring-primary/60 bg-primary/5 pl-9'
+        flash && 'ring-2 ring-primary/60 bg-primary/5'
       )}
       data-testid="compact-event-row"
       data-event-id={event.Id}
       aria-label={`${t('common.view')}: ${event.Name}`}
     >
-      {flash && <ReturnFlashArrow />}
       <div
         className="relative flex-shrink-0 w-16 rounded overflow-hidden bg-card border border-border/40"
         style={{ aspectRatio: aspectRatio.toString() }}
@@ -81,6 +80,7 @@ export function CompactEventRow({ event, thumbnailUrls, aspectRatio, objectFit =
           loading="lazy"
           data-testid="compact-event-thumbnail"
         />
+        {flash && <ReturnFlashArrow />}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1 min-w-0">
