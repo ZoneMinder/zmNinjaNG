@@ -18,6 +18,7 @@ import { Label } from '../ui/label';
 import { API_REQUEST } from '../../lib/zmninja-ng-constants';
 import { CertTrustDialog } from '../CertTrustDialog';
 import { SectionHeader, SettingsCard, SettingsRow, RowLabel } from './SettingsLayout';
+import { useDeveloperNoticeStore } from '../../stores/developerNotices';
 import { Platform } from '../../lib/platform';
 import { log, LogLevel } from '../../lib/logger';
 import type { CertInfo } from '../../lib/ssl-trust';
@@ -56,6 +57,11 @@ export function AdvancedSection({
 }: AdvancedSectionProps) {
   const { t } = useTranslation();
   const { toast } = useToast();
+
+  // Developer notices visibility is device-global, so it reads/writes the
+  // developer notice store directly rather than the profile settings helper.
+  const showDeveloperNotices = useDeveloperNoticeStore((s) => s.showNotices);
+  const setShowDeveloperNotices = useDeveloperNoticeStore((s) => s.setShowNotices);
 
   // The whole Advanced section collapses (power-user settings; collapsed by default).
   const [advancedExpanded, setAdvancedExpanded] = useState(false);
@@ -330,6 +336,20 @@ export function AdvancedSection({
                 updateSettings(currentProfile.id, { forceDisableMultiPort: checked })
               }
               data-testid="settings-force-disable-multiport-switch"
+            />
+          </SettingsRow>
+
+          {/* Show developer notices (device-global, not profile-scoped) */}
+          <SettingsRow>
+            <RowLabel
+              label={t('settings.show_developer_notices')}
+              desc={t('settings.show_developer_notices_desc')}
+            />
+            <Switch
+              id="show-developer-notices"
+              checked={showDeveloperNotices}
+              onCheckedChange={setShowDeveloperNotices}
+              data-testid="settings-show-developer-notices"
             />
           </SettingsRow>
 
