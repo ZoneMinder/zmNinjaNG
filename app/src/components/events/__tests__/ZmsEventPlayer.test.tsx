@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import { StrictMode } from 'react';
 import { ZmsEventPlayer } from '../ZmsEventPlayer';
-import { ZM_INTEGRATION } from '../../../lib/zmninja-ng-constants';
+import { ZM_INTEGRATION, EVENT_SEEK_FLUSH_DELAY_MS } from '../../../lib/zmninja-ng-constants';
 
 const httpGetMock = vi.fn().mockResolvedValue({ data: {} });
 
@@ -171,6 +171,66 @@ describe('ZmsEventPlayer', () => {
     // drives playback by itself (refs #196).
     expect(callsForCommand('1')).toHaveLength(0);
     expect(callsForCommand('2')).toHaveLength(0);
+  });
+
+  it('repeats a settled seek after a delay to flush the paused frame (refs #196)', async () => {
+    // A paused/idle zms only pushes its next MJPEG frame on the 5s keepalive, so
+    // a lone seek shows ~5s late in the <img>. Repeating the seek makes a second
+    // frame flush the first. streamDuration is null here (no poll yet), so the
+    // stream is not confirmed advancing and the flush must fire.
+    vi.useFakeTimers();
+    renderPlayer();
+    fireEvent.load(getStreamImg());
+
+    fireEvent.click(screen.getByTestId('zms-go-to-end'));
+
+    // The immediate seek goes out first.
+    let seeks = callsForCommand('14');
+    expect(seeks).toHaveLength(1);
+    const offset = new URL(seeks[0][0] as string).searchParams.get('offset');
+
+    // Before the delay elapses, no repeat yet.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(EVENT_SEEK_FLUSH_DELAY_MS - 50);
+    });
+    expect(callsForCommand('14')).toHaveLength(1);
+
+    // After the delay, a second seek to the same offset flushes the frame.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    seeks = callsForCommand('14');
+    expect(seeks).toHaveLength(2);
+    expect(new URL(seeks[1][0] as string).searchParams.get('offset')).toBe(offset);
+  });
+
+  it('does not repeat the seek while the stream is confirmed playing (refs #196)', async () => {
+    // With a working status poll and isPlaying, frames already flow, so the next
+    // played frame flushes the seek. Repeating it would yank playback backward.
+    vi.useFakeTimers();
+    httpGetMock.mockImplementation((url: string) => {
+      if (commandOf(url) === '99') {
+        return Promise.resolve({ data: { status: { progress: 1, duration: 20 } } });
+      }
+      return Promise.resolve({ data: {} });
+    });
+    renderPlayer();
+    fireEvent.load(getStreamImg());
+
+    // One poll teaches the player the stream is advancing (duration known).
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(600000);
+    });
+    httpGetMock.mockClear();
+
+    fireEvent.click(screen.getByTestId('zms-go-to-end'));
+    expect(callsForCommand('14')).toHaveLength(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(EVENT_SEEK_FLUSH_DELAY_MS + 100);
+    });
+    // Still only the one seek: no flush repeat while playing.
+    expect(callsForCommand('14')).toHaveLength(1);
   });
 
   it('keeps the img src and connkey unchanged when playback speed changes', () => {

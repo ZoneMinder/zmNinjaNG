@@ -920,10 +920,20 @@ still-recording events, and seeking against ``eventLength`` lands the
 playhead at the wrong spot (refs #196). ``eventLength`` is the fallback
 until the first query returns. While the scrub bar is held
 (``onScrubStart``/``onScrubEnd`` on ``EventProgressBar``), the status
-poll is suspended so it does not fight the drag, and the stream is
-paused so each seek shows one still frame instead of playing forward
-between drag updates; playback resumes on release only if it was
-playing when the drag began.
+poll is suspended so it does not fight the drag. Each scrub position is
+a bare ``CMD_SEEK``; the seek drives playback by itself, with no
+surrounding pause or resume.
+
+A settled seek is repeated once to the same offset after
+``EVENT_SEEK_FLUSH_DELAY_MS`` (400 ms) unless the stream is confirmed to
+be advancing (``isPlaying`` with a known ``streamDuration``). MJPEG in an
+``<img>`` only paints a multipart part once the next part's boundary
+starts arriving, and a paused or idle zms only emits its next frame on
+its ``MAX_STREAM_DELAY`` keepalive (5 s), so a lone seek to a stopped
+stream shows its frame about 5 s late. Newer zms sends the sought frame
+twice to fix this server-side; ZM 1.36 does not, so the repeat supplies
+the second frame that flushes the first. A newer seek cancels a
+still-pending repeat, so a drag only flushes its final resting position.
 
 URL construction is gated on a fresh access token via
 ``useFreshAccessToken``. When the token is stale, ``zmsUrl`` evaluates

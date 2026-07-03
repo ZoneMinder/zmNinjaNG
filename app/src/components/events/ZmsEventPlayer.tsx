@@ -26,6 +26,7 @@ import { httpGet } from '../../lib/http';
 import { log, LogLevel } from '../../lib/logger';
 import { getEventZmsUrl, getZmsControlUrl } from '../../lib/url-builder';
 import { ZMS_COMMANDS, zmsCommandName } from '../../lib/zm-constants';
+import { EVENT_SEEK_FLUSH_DELAY_MS } from '../../lib/zmninja-ng-constants';
 import { sendDelayedCmdQuit, cancelPendingQuit } from '../../lib/zms-quit';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useZoomPan } from '../../hooks/useZoomPan';
@@ -81,6 +82,12 @@ export function ZmsEventPlayer({
   // playhead back from the stream: that fight makes the cursor and video jump
   // around mid-drag (refs #196). Each scrub position is sent as a CMD_SEEK.
   const isScrubbingRef = useRef(false);
+
+  // Pending "flush" repeat of the last settled seek. A paused/idle zms shows a
+  // lone seek's frame ~5s late (see EVENT_SEEK_FLUSH_DELAY_MS); repeating the
+  // seek makes a second frame flush the first. Kept in a ref so a newer seek can
+  // cancel a still-pending flush (refs #196).
+  const seekFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Unique connection key for this stream, stable for the component's lifetime.
   // Speed changes are sent as CMD_VARPLAY over this same connkey instead of
@@ -297,7 +304,33 @@ export function ZmsEventPlayer({
       usingStreamDuration: streamDuration != null && streamDuration > 0,
     });
     sendCommand(ZMS_COMMANDS.cmdSeek, { offset });
-  }, [totalFrames, frameToOffset, sendCommand, effectiveDuration, streamDuration, eventLength]);
+
+    // MJPEG in an <img> renders a frame only when the next multipart boundary
+    // arrives, and a paused/idle zms only emits its next frame on the 5s
+    // keepalive, so a lone seek's frame lands ~5s late. Newer zms sends the
+    // sought frame twice to fix this; older servers (ZM 1.36) do not, so repeat
+    // the seek to force a second, flushing frame. Skip it when the stream is
+    // confirmed to be advancing on its own: a played frame already flushes the
+    // seek, and repeating would yank playback backward (refs #196).
+    if (seekFlushTimerRef.current) {
+      clearTimeout(seekFlushTimerRef.current);
+      seekFlushTimerRef.current = null;
+    }
+    const streamAdvancing = isPlaying && streamDuration != null && streamDuration > 0;
+    if (!streamAdvancing) {
+      seekFlushTimerRef.current = setTimeout(() => {
+        seekFlushTimerRef.current = null;
+        sendCommand(ZMS_COMMANDS.cmdSeek, { offset });
+      }, EVENT_SEEK_FLUSH_DELAY_MS);
+    }
+  }, [totalFrames, frameToOffset, sendCommand, effectiveDuration, streamDuration, eventLength, isPlaying]);
+
+  // Cancel any pending seek-flush repeat on unmount.
+  useEffect(() => {
+    return () => {
+      if (seekFlushTimerRef.current) clearTimeout(seekFlushTimerRef.current);
+    };
+  }, []);
 
   const seekBack = useCallback(() => {
     // Seek back 5 seconds

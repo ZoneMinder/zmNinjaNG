@@ -268,6 +268,20 @@ export const EVENT_LIST = {
 export const EVENT_SCRUB_SEEK_DEBOUNCE_MS = 200;
 
 /**
+ * Delay before a settled ZMS seek is repeated to the same offset (refs #196).
+ *
+ * MJPEG in an <img> renders a multipart part only when the next part's boundary
+ * begins to arrive, and a paused or idle zms only emits its next frame on the
+ * MAX_STREAM_DELAY (5s) keepalive. So a lone seek to a stopped stream shows its
+ * frame ~5s late. Newer zms fixes this server-side by sending the sought frame
+ * twice; on older servers (ZM 1.36) we emulate that by repeating the seek so a
+ * second frame flushes the first. The delay must exceed one zms loop tick so
+ * the two seeks are not drained into a single frame send. 400ms clears the
+ * paused tick for any event above ~2 fps while staying well under the 5s fallback.
+ */
+export const EVENT_SEEK_FLUSH_DELAY_MS = 400;
+
+/**
  * Relative time labels on events (issue #210).
  * List chip only renders for events within this many days; older events read
  * fine from the absolute date. Below the just-now threshold we show "just now".
