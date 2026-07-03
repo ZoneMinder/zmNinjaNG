@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { CompactEventRow } from '../CompactEventRow';
 import { useReturnHighlightStore } from '../../../stores/returnHighlight';
+import { useDeleteSelectionStore } from '../../../stores/deleteSelection';
 
 const navigate = vi.fn();
 vi.mock('react-router-dom', async (orig) => ({
@@ -71,5 +72,13 @@ describe('CompactEventRow', () => {
     useReturnHighlightStore.getState().clear();
     render1();
     expect(screen.queryByTestId('return-flash-indicator')).toBeNull();
+  });
+
+  it('marks the row for deletion when its event is queued', () => {
+    useDeleteSelectionStore.getState().clear();
+    useDeleteSelectionStore.getState().toggle('233228');
+    render1();
+    expect(screen.getByTestId('compact-event-row').className).toContain('ring-destructive/60');
+    useDeleteSelectionStore.getState().clear();
   });
 });

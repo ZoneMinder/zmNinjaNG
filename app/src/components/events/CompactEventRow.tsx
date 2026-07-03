@@ -17,6 +17,7 @@ import { RELATIVE_TIME_LIST_WINDOW_DAYS } from '../../lib/zmninja-ng-constants';
 import { cn } from '../../lib/utils';
 import { useReturnFlash } from '../../hooks/useReturnFlash';
 import { useReturnHighlightStore } from '../../stores/returnHighlight';
+import { useDeleteSelectionStore } from '../../stores/deleteSelection';
 import type { Event } from '../../api/types';
 
 interface CompactEventRowProps {
@@ -32,6 +33,7 @@ export function CompactEventRow({ event, thumbnailUrls, aspectRatio, objectFit =
   const { fmtTime } = useDateTimeFormat();
   const markViewed = useReturnHighlightStore((s) => s.markViewed);
   const flash = useReturnFlash(event.Id);
+  const selectedForDelete = useDeleteSelectionStore((s) => s.selectedIds.includes(event.Id));
   const startTime = new Date(event.StartDateTime.replace(' ', 'T'));
   const detected = parseDetectedObjects(event.Notes);
   const DetIcon = detected.length ? getObjectClassIconFromList(detected.join(',')) : null;
@@ -60,7 +62,8 @@ export function CompactEventRow({ event, thumbnailUrls, aspectRatio, objectFit =
       }}
       className={cn(
         'relative flex items-center gap-2.5 rounded-md p-1.5 cursor-pointer hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary',
-        flash && 'ring-2 ring-primary/60 bg-primary/5'
+        flash && 'ring-2 ring-primary/60 bg-primary/5',
+        selectedForDelete && 'ring-2 ring-destructive/60 bg-destructive/5'
       )}
       data-testid="compact-event-row"
       data-event-id={event.Id}

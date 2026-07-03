@@ -32,6 +32,7 @@ import { RELATIVE_TIME_LIST_WINDOW_DAYS } from '../../lib/zmninja-ng-constants';
 import { ReturnFlashArrow } from './ReturnFlashArrow';
 import { useReturnFlash } from '../../hooks/useReturnFlash';
 import { useReturnHighlightStore } from '../../stores/returnHighlight';
+import { useDeleteSelectionStore } from '../../stores/deleteSelection';
 
 /**
  * EventCard component.
@@ -62,6 +63,7 @@ function EventCardComponent({ event, monitorName, thumbnailUrls, largeThumbnailU
 
   const markViewed = useReturnHighlightStore((s) => s.markViewed);
   const flash = useReturnFlash(event.Id);
+  const selectedForDelete = useDeleteSelectionStore((s) => s.selectedIds.includes(event.Id));
   const openEvent = () => {
     markViewed(event.Id);
     navigate(`/events/${event.Id}`, { state: { from: '/events', eventFilters } });
@@ -104,7 +106,8 @@ function EventCardComponent({ event, monitorName, thumbnailUrls, largeThumbnailU
     <Card
       className={cn(
         'group relative overflow-hidden cursor-pointer hover:shadow-lg transition-all duration-200 hover:ring-2 hover:ring-primary/50 focus:outline-none focus:ring-2 focus:ring-primary',
-        flash && 'ring-2 ring-primary/60 bg-primary/5'
+        flash && 'ring-2 ring-primary/60 bg-primary/5',
+        selectedForDelete && 'ring-2 ring-destructive/60 bg-destructive/5'
       )}
       onClick={openEvent}
       onKeyDown={(e) => {
