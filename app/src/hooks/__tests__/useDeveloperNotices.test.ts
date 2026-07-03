@@ -52,7 +52,12 @@ describe('compareSemver', () => {
 describe('useDeveloperNotices: feed deletions', () => {
   beforeEach(() => {
     fetchMock.mockReset();
-    useDeveloperNoticeStore.setState({ readIds: [], dismissedBannerIds: [], deletedIds: [] });
+    useDeveloperNoticeStore.setState({
+      readIds: [],
+      dismissedBannerIds: [],
+      deletedIds: [],
+      showNotices: true,
+    });
   });
 
   it('drops a notice the developer deleted from the feed; orphan readIds stay in storage but cause no UI', async () => {
@@ -132,10 +137,59 @@ describe('useDeveloperNotices: feed deletions', () => {
   });
 });
 
+describe('useDeveloperNotices: showNotices gate', () => {
+  beforeEach(() => {
+    fetchMock.mockReset();
+    useDeveloperNoticeStore.setState({
+      readIds: [],
+      dismissedBannerIds: [],
+      deletedIds: [],
+      showNotices: true,
+    });
+  });
+
+  it('returns empty notices/unreadCount/criticalUnread and does not fetch when showNotices is false', async () => {
+    useDeveloperNoticeStore.setState({ showNotices: false });
+    fetchMock.mockResolvedValue([
+      { id: 'a', title: 'A', body: '', publishedAt: '2026-05-30T18:00:00Z', severity: 'info' },
+      { id: 'crit', title: 'C', body: '', publishedAt: '2026-05-30T20:00:00Z', severity: 'critical' },
+    ]);
+
+    const { result } = renderHook(() => useDeveloperNotices(), { wrapper });
+
+    // Give any (unwanted) fetch a chance to fire before asserting it did not.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(result.current.notices).toEqual([]);
+    expect(result.current.unreadCount).toBe(0);
+    expect(result.current.criticalUnread).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('shows normal behavior when showNotices is true', async () => {
+    useDeveloperNoticeStore.setState({ showNotices: true });
+    fetchMock.mockResolvedValue([
+      { id: 'a', title: 'A', body: '', publishedAt: '2026-05-30T18:00:00Z', severity: 'info' },
+    ]);
+
+    const { result } = renderHook(() => useDeveloperNotices(), { wrapper });
+    await waitFor(() => expect(result.current.notices.length).toBe(1));
+
+    expect(result.current.notices.map((n) => n.id)).toEqual(['a']);
+    expect(result.current.unreadCount).toBe(1);
+    expect(fetchMock).toHaveBeenCalled();
+  });
+});
+
 describe('useDeveloperNotices: minAppVersion gate', () => {
   beforeEach(() => {
     fetchMock.mockReset();
-    useDeveloperNoticeStore.setState({ readIds: [], dismissedBannerIds: [], deletedIds: [] });
+    useDeveloperNoticeStore.setState({
+      readIds: [],
+      dismissedBannerIds: [],
+      deletedIds: [],
+      showNotices: true,
+    });
   });
 
   afterEach(() => {
