@@ -2,7 +2,12 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { useDeveloperNoticeStore } from '../developerNotices';
 
 beforeEach(() => {
-  useDeveloperNoticeStore.setState({ readIds: [], dismissedBannerIds: [], deletedIds: [] });
+  useDeveloperNoticeStore.setState({
+    readIds: [],
+    dismissedBannerIds: [],
+    deletedIds: [],
+    showNotices: true,
+  });
 });
 
 describe('useDeveloperNoticeStore', () => {
@@ -63,5 +68,22 @@ describe('useDeveloperNoticeStore', () => {
     restoreAllDeleted();
     expect(useDeveloperNoticeStore.getState().deletedIds).toEqual([]);
     expect(useDeveloperNoticeStore.getState().readIds).toEqual(['a']);
+  });
+
+  it('showNotices defaults to true', () => {
+    expect(useDeveloperNoticeStore.getState().showNotices).toBe(true);
+  });
+
+  it('setShowNotices(false) flips showNotices to false', () => {
+    const { setShowNotices } = useDeveloperNoticeStore.getState();
+    setShowNotices(false);
+    expect(useDeveloperNoticeStore.getState().showNotices).toBe(false);
+  });
+
+  it('setShowNotices(true) flips showNotices back on', () => {
+    const { setShowNotices } = useDeveloperNoticeStore.getState();
+    setShowNotices(false);
+    setShowNotices(true);
+    expect(useDeveloperNoticeStore.getState().showNotices).toBe(true);
   });
 });

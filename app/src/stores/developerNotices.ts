@@ -15,6 +15,7 @@ interface DeveloperNoticeState {
   readIds: string[];
   dismissedBannerIds: string[];
   deletedIds: string[];
+  showNotices: boolean;
 
   isRead: (id: string) => boolean;
   markRead: (id: string) => void;
@@ -29,6 +30,8 @@ interface DeveloperNoticeState {
   deleteNotice: (id: string) => void;
   deleteNotices: (ids: string[]) => void;
   restoreAllDeleted: () => void;
+
+  setShowNotices: (value: boolean) => void;
 }
 
 export const useDeveloperNoticeStore = create<DeveloperNoticeState>()(
@@ -37,6 +40,7 @@ export const useDeveloperNoticeStore = create<DeveloperNoticeState>()(
       readIds: [],
       dismissedBannerIds: [],
       deletedIds: [],
+      showNotices: true,
 
       isRead: (id) => get().readIds.includes(id),
       markRead: (id) => {
@@ -89,6 +93,10 @@ export const useDeveloperNoticeStore = create<DeveloperNoticeState>()(
       },
       restoreAllDeleted: () => {
         set((state) => (state.deletedIds.length === 0 ? state : { ...state, deletedIds: [] }));
+      },
+
+      setShowNotices: (value) => {
+        set((state) => (state.showNotices === value ? state : { ...state, showNotices: value }));
       },
     }),
     {
