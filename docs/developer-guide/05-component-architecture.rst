@@ -449,14 +449,18 @@ Three pieces implement this:
 in their open handler, before ``navigate``, on both click and
 Enter/Space keyboard activation.
 
-``useReturnFlash(eventId: string): boolean`` reads
-``useReturnHighlightStore.getState().lastViewedEventId`` once at mount
-(captured with ``useState(() => ...)``, so it does not react to later
-store updates). If the captured id matches ``eventId``, it calls
-``clear()`` right away, so a later mount of the same row does not flash
-again, sets its returned boolean to ``true``, and starts a
+``useReturnFlash(eventId: string): boolean`` subscribes reactively to
+``useReturnHighlightStore``'s ``lastViewedEventId``. When that id becomes
+``eventId``, the hook sets its returned boolean to ``true`` and starts a
 ``window.setTimeout`` that flips it back to ``false`` after
 ``RETURN_FLASH_MS`` (4000ms, defined in ``lib/zmninja-ng-constants.ts``).
+It reacts to the store rather than capturing the id at mount because the
+returning row's mount does not reliably line up with when the id is set,
+so a mount-time read saw the wrong value. The id is consumed (``clear()``)
+when the flash ends, and only if it still matches ``eventId``, so exactly
+one row flashes once per return. The timer is cancelled only on unmount:
+the row that set the id then navigates away, and dropping its pending timer
+without consuming keeps the id available for the row that flashes on return.
 
 ``ReturnFlashArrow`` renders a decorative ``ChevronRight`` icon
 (``aria-hidden``, test id ``return-flash-indicator``), absolutely
