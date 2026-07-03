@@ -948,7 +948,8 @@
     "more_actions": "Plus",
     "clear_all": "Tout effacer",
     "clear_all_confirm_title": "Supprimer tous les avis ?",
-    "clear_all_confirm_body": "Supprime {{count}} avis de cet appareil. Restaurer les récupère.",
+    "clear_all_confirm_body_one": "Supprime {{count}} avis de cet appareil. Restaurer le récupère.",
+    "clear_all_confirm_body_other": "Supprime {{count}} avis de cet appareil. Restaurer les récupère.",
     "restore_deleted": "Restaurer"
   },
   "server": {
