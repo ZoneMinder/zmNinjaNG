@@ -12,7 +12,7 @@ export function ReturnFlashArrow({ className }: { className?: string }) {
       aria-hidden
       data-testid="return-flash-indicator"
       className={cn(
-        'pointer-events-none absolute left-0 top-1/2 -translate-y-1/2 h-5 w-5 text-primary drop-shadow motion-safe:animate-blink',
+        'pointer-events-none absolute left-0 top-1/2 z-20 -translate-y-1/2 h-6 w-6 rounded-full bg-background/70 p-0.5 text-primary shadow drop-shadow motion-safe:animate-blink',
         className
       )}
     />
