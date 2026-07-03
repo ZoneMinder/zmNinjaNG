@@ -38,6 +38,7 @@ import {
 } from 'lucide-react';
 import { useCommandPaletteStore } from '../../stores/commandPalette';
 import { useDeveloperNotices } from '../../hooks/useDeveloperNotices';
+import { useDeveloperNoticeStore } from '../../stores/developerNotices';
 
 const HELP_DOCS_URL = 'https://zmninjang.readthedocs.io/en/latest/';
 
@@ -66,6 +67,7 @@ export function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentPro
   const isMobileDrawer = !!onMobileClose;
   const { isTvMode } = useTvMode();
   const { unreadCount: developerNoticeUnread } = useDeveloperNotices();
+  const showDeveloperNotices = useDeveloperNoticeStore((s) => s.showNotices);
   const currentProfile = useProfileStore(
     useShallow((state) => {
       const { profiles, currentProfileId } = state;
@@ -111,7 +113,10 @@ export function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentPro
     { path: '/settings', label: t('sidebar.settings'), icon: Settings },
     { path: '/server', label: t('sidebar.server'), icon: Server },
     { path: '/logs', label: t('sidebar.logs'), icon: FileText },
-    { path: '/developer-notice', label: t('sidebar.developer_notice'), icon: Megaphone },
+    // The developer-notice entry hides entirely when notices are turned off.
+    ...(showDeveloperNotices
+      ? [{ path: '/developer-notice', label: t('sidebar.developer_notice'), icon: Megaphone }]
+      : []),
   ];
 
   const savedOrder = profileSettings?.sidebarNavOrder;
@@ -124,8 +129,9 @@ export function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentPro
       return ai - bi;
     });
     // `defaultNavItems` is rebuilt every render; `t` covers label refresh on language change.
+    // `showDeveloperNotices` gates whether the developer-notice item is present.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [savedOrder, t]);
+  }, [savedOrder, t, showDeveloperNotices]);
 
   const [isReordering, setIsReordering] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
