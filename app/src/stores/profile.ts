@@ -19,8 +19,11 @@ import { createStoreApiClient } from '../api/store-gates';
 import { getServerTimeZone } from '../api/time';
 import { ProfileService } from '../services/profile';
 import { log, LogLevel } from '../lib/logger';
+import { setLogRedactionGate } from '../lib/log-sanitizer';
+import { setProfileSettingsGate } from '../lib/profile-settings';
 import { STORAGE_KEYS } from '../lib/zmninja-ng-constants';
 import { useAuthStore } from './auth';
+import { useSettingsStore } from './settings';
 import { performBootstrap } from '../services/profile-bootstrap';
 import { handleProfileRehydration } from '../services/profile-initialization';
 
@@ -462,6 +465,29 @@ export const useProfileStore = create<ProfileState>()(
     }
   )
 );
+
+// lib/log-sanitizer.ts has no store imports; this module assembles the real
+// redaction check from the profile and settings stores and registers it here
+// at load time, breaking the logger -> log-sanitizer -> profile store cycle.
+// Refs #217.
+setLogRedactionGate({
+  isRedactionDisabled: () => {
+    const { currentProfileId } = useProfileStore.getState();
+    if (!currentProfileId) return false;
+    return useSettingsStore.getState().getProfileSettings(currentProfileId).disableLogRedaction;
+  },
+});
+
+// lib/profile-settings.ts has no store imports for the same reason (it's
+// imported by api/events.ts and other api modules downstream of this store).
+// Refs #217.
+setProfileSettingsGate({
+  getExcludedMonitorIds: () => {
+    const { currentProfileId } = useProfileStore.getState();
+    if (!currentProfileId) return [];
+    return useSettingsStore.getState().getProfileSettings(currentProfileId).excludedMonitorIds;
+  },
+});
 
 // Subscribe to auth store to update refresh token in profile
 useAuthStore.subscribe((state) => {

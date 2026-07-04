@@ -2,12 +2,26 @@
  * Non-React accessors for the current profile's settings.
  *
  * API modules and other services run outside React and cannot use hooks.
- * These helpers read profile-scoped settings via the store getState() pattern,
- * matching how lib/log-sanitizer.ts reads disableLogRedaction.
+ * These helpers used to read profile-scoped settings via useProfileStore and
+ * useSettingsStore directly, but api/events.ts (and other api modules
+ * downstream of stores/profile.ts) import this file, which formed a static
+ * cycle back through stores/profile.ts. A gate is injected instead;
+ * stores/profile.ts assembles the real implementation and registers it here
+ * at module load. Refs #217.
  */
 
-import { useProfileStore } from '../stores/profile';
-import { useSettingsStore } from '../stores/settings';
+export interface ProfileSettingsGate {
+  getExcludedMonitorIds(): string[];
+}
+
+let gate: ProfileSettingsGate = {
+  // Safe default before the store registers: no monitors excluded.
+  getExcludedMonitorIds: () => [],
+};
+
+export function setProfileSettingsGate(g: ProfileSettingsGate): void {
+  gate = g;
+}
 
 /**
  * Get the excluded monitor IDs for the current profile.
@@ -17,12 +31,9 @@ import { useSettingsStore } from '../stores/settings';
  */
 export function getExcludedMonitorIds(): string[] {
   try {
-    const currentProfileId = useProfileStore.getState().currentProfileId;
-    if (currentProfileId) {
-      return useSettingsStore.getState().getProfileSettings(currentProfileId).excludedMonitorIds;
-    }
+    return gate.getExcludedMonitorIds();
   } catch {
-    // Ignore errors accessing stores (e.g. during initialization)
+    // Ignore errors accessing the gate (e.g. during initialization)
   }
   return [];
 }
