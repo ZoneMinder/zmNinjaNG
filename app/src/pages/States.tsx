@@ -9,6 +9,8 @@ import { useTranslation } from 'react-i18next';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useAuthStore } from '../stores/auth';
 import { EmptyState } from '../components/ui/empty-state';
+import { ErrorBanner } from '../components/ui/query-state';
+import { resolveQueryError } from '../lib/query-error';
 
 export default function States() {
   const queryClient = useQueryClient();
@@ -49,9 +51,7 @@ export default function States() {
     return (
       <div className="p-8">
         <h1 className="text-lg font-bold mb-6">{t('states.title')}</h1>
-        <div className="p-4 bg-destructive/10 text-destructive rounded-md">
-          {t('states.load_error')}: {(error as Error).message}
-        </div>
+        <ErrorBanner message={resolveQueryError(error, t, { fallbackKey: 'states.load_error' })} />
       </div>
     );
   }

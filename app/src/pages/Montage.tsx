@@ -23,6 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Video, Maximize, Pencil, ArrowLeftRight } from 'lucide-react';
 import { RefreshButton } from '../components/common/RefreshButton';
 import { ErrorBanner } from '../components/ui/query-state';
+import { resolveQueryError } from '../lib/query-error';
 import { EmptyState } from '../components/ui/empty-state';
 import { filterEnabledMonitors, filterMonitorsByGroup } from '../lib/filters';
 import { useGroupFilter } from '../hooks/useGroupFilter';
@@ -303,7 +304,7 @@ export default function Montage() {
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-lg font-bold tracking-tight">{t('montage.title')}</h1>
         </div>
-        <ErrorBanner message={`${t('common.error')}: ${(error as Error).message}`} />
+        <ErrorBanner message={resolveQueryError(error, t)} />
       </div>
     );
   }

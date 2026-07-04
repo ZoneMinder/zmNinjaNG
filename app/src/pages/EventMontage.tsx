@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Clock, LayoutGrid } from 'lucide-react';
 import { PageContainer } from '../components/common/PageContainer';
 import { ErrorBanner } from '../components/ui/query-state';
+import { resolveQueryError } from '../lib/query-error';
 import { RefreshButton } from '../components/common/RefreshButton';
 import { filterEnabledMonitors } from '../lib/filters';
 import { EventMontageView } from '../components/events/EventMontageView';
@@ -213,7 +214,7 @@ export default function EventMontage() {
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-lg font-bold tracking-tight">{t('eventMontage.title')}</h1>
         </div>
-        <ErrorBanner message={`${t('eventMontage.load_error')}: ${(error as Error).message}`} />
+        <ErrorBanner message={resolveQueryError(error, t, { fallbackKey: 'eventMontage.load_error' })} />
       </div>
     );
   }

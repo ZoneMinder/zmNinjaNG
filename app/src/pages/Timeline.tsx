@@ -4,6 +4,8 @@ import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { FilterX, Clock } from 'lucide-react';
 import { PageContainer } from '../components/common/PageContainer';
+import { ErrorBanner } from '../components/ui/query-state';
+import { resolveQueryError } from '../lib/query-error';
 import { subDays } from 'date-fns';
 import { formatLocalDateTime } from '../lib/time';
 import { useTranslation } from 'react-i18next';
@@ -205,9 +207,7 @@ export default function Timeline() {
     return (
       <div className="p-8">
         <h1 className="text-lg font-bold mb-6">{t('timeline.title')}</h1>
-        <div className="p-4 bg-destructive/10 text-destructive rounded-md">
-          {t('timeline.load_error')}: {(error as Error).message}
-        </div>
+        <ErrorBanner message={resolveQueryError(error, t, { fallbackKey: 'timeline.load_error' })} />
       </div>
     );
   }
