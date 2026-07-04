@@ -332,7 +332,34 @@ Then('the alarm border class should change', async ({ page }) => {
 });
 
 // PTZ Steps
+//
+// PTZ commands are dispatched as GET requests carrying `request=control` and
+// `control=<command>` (see src/lib/url-builder.ts getMonitorControlUrl). There
+// is no success toast and no DOM state change on success, so the only real
+// signal that "a command was sent" is the network request itself. We attach a
+// request listener once per page and record matching URLs so later `Then`
+// steps can assert on what actually happened, instead of sleeping and hoping.
+const ptzListenerPages = new WeakSet<import('@playwright/test').Page>();
+let ptzRequestUrls: string[] = [];
+let ptzStopClicked = false;
+let continuousToggleClicked = false;
+
+function attachPtzRequestCapture(page: import('@playwright/test').Page): void {
+  if (ptzListenerPages.has(page)) return;
+  ptzListenerPages.add(page);
+  page.on('request', (req) => {
+    const url = req.url();
+    if (url.includes('request=control')) {
+      ptzRequestUrls.push(url);
+    }
+  });
+}
+
 Given('the current monitor supports PTZ', async ({ page }) => {
+  attachPtzRequestCapture(page);
+  ptzRequestUrls = [];
+  ptzStopClicked = false;
+  continuousToggleClicked = false;
   const ptzControls = page.getByTestId('ptz-controls')
     .or(page.locator('[data-testid*="ptz"]'));
   hasPTZ = await ptzControls.isVisible({ timeout: 2000 }).catch(() => false);
@@ -361,42 +388,53 @@ Then('I should see zoom controls', async ({ page }) => {
 
 When('I click the PTZ pan left button', async ({ page }) => {
   if (!hasPTZ) return;
+  ptzRequestUrls = [];
   const leftBtn = page.getByTestId('ptz-left').or(page.getByRole('button', { name: /left/i }));
   await leftBtn.first().click();
 });
 
 When('I click the PTZ pan right button', async ({ page }) => {
   if (!hasPTZ) return;
+  ptzRequestUrls = [];
   const rightBtn = page.getByTestId('ptz-right').or(page.getByRole('button', { name: /right/i }));
   await rightBtn.first().click();
 });
 
 When('I click the PTZ tilt up button', async ({ page }) => {
   if (!hasPTZ) return;
+  ptzRequestUrls = [];
   const upBtn = page.getByTestId('ptz-up').or(page.getByRole('button', { name: /up/i }));
   await upBtn.first().click();
 });
 
 When('I click the PTZ tilt down button', async ({ page }) => {
   if (!hasPTZ) return;
+  ptzRequestUrls = [];
   const downBtn = page.getByTestId('ptz-down').or(page.getByRole('button', { name: /down/i }));
   await downBtn.first().click();
 });
 
 When('I click the PTZ zoom in button', async ({ page }) => {
   if (!hasPTZ) return;
+  ptzRequestUrls = [];
   const zoomIn = page.getByTestId('ptz-zoom-in').or(page.getByRole('button', { name: /zoom.*in/i }));
   await zoomIn.first().click();
 });
 
 When('I click the PTZ zoom out button', async ({ page }) => {
   if (!hasPTZ) return;
+  ptzRequestUrls = [];
   const zoomOut = page.getByTestId('ptz-zoom-out').or(page.getByRole('button', { name: /zoom.*out/i }));
   await zoomOut.first().click();
 });
 
 Then('the PTZ command should be sent', async ({ page }) => {
   if (!hasPTZ) return;
+  // Real outcome: the control request for this button press must have actually
+  // reached the network layer, not merely "no error toast appeared yet".
+  await expect.poll(() => ptzRequestUrls.length > 0, {
+    timeout: testConfig.timeouts.transition,
+  }).toBeTruthy();
   const errorToast = page.locator('text=/ptz.*failed|error/i');
   const hasError = await errorToast.isVisible().catch(() => false);
   expect(hasError).toBeFalsy();
@@ -404,56 +442,92 @@ Then('the PTZ command should be sent', async ({ page }) => {
 
 Then('the auto-stop should trigger after delay', async ({ page }) => {
   if (!hasPTZ) return;
-  await page.waitForTimeout(600);
+  // HoldButton fires stopCommand (moveStop) on pointerup; there is no separate
+  // client-side timer. Playwright's .click() already completes pointerdown +
+  // pointerup, so this verifies the release-triggered stop request landed.
+  await expect.poll(() => ptzRequestUrls.some((u) => u.includes('control=moveStop')), {
+    timeout: testConfig.timeouts.transition,
+  }).toBeTruthy();
 });
 
 When('I toggle continuous PTZ mode on', async ({ page }) => {
   if (!hasPTZ) return;
+  // No standalone "continuous mode" toggle exists in PTZControls today - hold-to-move
+  // is automatic based on driver capability (CanMoveCon). Guard for a future toggle;
+  // this genuinely no-ops against the current UI.
   const toggle = page.getByTestId('ptz-continuous-toggle');
-  if (await toggle.isVisible().catch(() => false)) {
+  continuousToggleClicked = await toggle.isVisible().catch(() => false);
+  if (continuousToggleClicked) {
+    ptzRequestUrls = [];
     await toggle.click();
   }
 });
 
 Then('the command should continue until stop pressed', async ({ page }) => {
   if (!hasPTZ) return;
-  await page.waitForTimeout(300);
+  if (!continuousToggleClicked) {
+    log.info('E2E: Skipping continuous-mode assertion - no continuous PTZ toggle in current UI', { component: 'e2e' });
+    return;
+  }
+  await expect.poll(() => ptzRequestUrls.length > 1, {
+    timeout: testConfig.timeouts.transition,
+  }).toBeTruthy();
 });
 
 When('I click the PTZ stop button', async ({ page }) => {
   if (!hasPTZ) return;
+  ptzRequestUrls = [];
   const stopBtn = page.getByTestId('ptz-stop').or(page.getByRole('button', { name: /stop/i }));
-  if (await stopBtn.isVisible().catch(() => false)) {
+  ptzStopClicked = await stopBtn.isVisible().catch(() => false);
+  if (ptzStopClicked) {
     await stopBtn.click();
   }
 });
 
 Then('the movement should stop', async ({ page }) => {
   if (!hasPTZ) return;
-  await page.waitForTimeout(300);
+  if (!ptzStopClicked) {
+    log.info('E2E: Skipping movement-stop assertion - stop button not present for this control set', { component: 'e2e' });
+    return;
+  }
+  await expect.poll(() => ptzRequestUrls.some((u) => u.includes('control=moveStop')), {
+    timeout: testConfig.timeouts.transition,
+  }).toBeTruthy();
 });
 
 // Monitor Navigation
+let navMonitorIdBeforeNext: string | null = null;
+let nextClickPerformed = false;
+let navMonitorIdBeforePrev: string | null = null;
+let prevClickPerformed = false;
+
 Then('I should see navigation arrows if multiple monitors exist', async ({ page }) => {
   const nextBtn = page.getByTestId('monitor-detail-next');
   const prevBtn = page.getByTestId('monitor-detail-prev');
   const hasNav = await nextBtn.isVisible().catch(() => false) || await prevBtn.isVisible().catch(() => false);
+  if (hasNav) {
+    // A single-monitor test server legitimately has no nav arrows; when they do
+    // exist, at least one must actually be visible, not just present in the DOM.
+    await expect(nextBtn.or(prevBtn).first()).toBeVisible();
+  }
   log.info('E2E: Monitor navigation arrows', { component: 'e2e', hasNav });
 });
 
 When('I click the next monitor button if visible', async ({ page }) => {
   const nextBtn = page.getByTestId('monitor-detail-next');
-  if (await nextBtn.isVisible().catch(() => false) && await nextBtn.isEnabled().catch(() => false)) {
+  navMonitorIdBeforeNext = urlMonitorId(page);
+  nextClickPerformed = await nextBtn.isVisible().catch(() => false) && await nextBtn.isEnabled().catch(() => false);
+  if (nextClickPerformed) {
     await nextBtn.click();
-    await page.waitForTimeout(500);
   }
 });
 
 When('I click the previous monitor button if visible', async ({ page }) => {
   const prevBtn = page.getByTestId('monitor-detail-prev');
-  if (await prevBtn.isVisible().catch(() => false) && await prevBtn.isEnabled().catch(() => false)) {
+  navMonitorIdBeforePrev = urlMonitorId(page);
+  prevClickPerformed = await prevBtn.isVisible().catch(() => false) && await prevBtn.isEnabled().catch(() => false);
+  if (prevClickPerformed) {
     await prevBtn.click();
-    await page.waitForTimeout(500);
   }
 });
 
@@ -502,11 +576,24 @@ Then('the live stream should follow the newly selected monitor', async ({ page }
 });
 
 Then('the monitor should change to next in list', async ({ page }) => {
-  await page.waitForURL(/monitors\/\d+/, { timeout: testConfig.timeouts.transition });
+  if (!nextClickPerformed) {
+    log.info('E2E: Skipping next-monitor assertion - next button not available (single monitor)', { component: 'e2e' });
+    return;
+  }
+  // The URL always matches /monitors/\d+ on this page, before and after the
+  // click, so matching the pattern alone proves nothing changed. Assert the
+  // actual monitor id differs from the one recorded before the click.
+  await expect.poll(() => urlMonitorId(page), { timeout: testConfig.timeouts.transition })
+    .not.toBe(navMonitorIdBeforeNext);
 });
 
 Then('the monitor should change to previous in list', async ({ page }) => {
-  await page.waitForURL(/monitors\/\d+/, { timeout: testConfig.timeouts.transition });
+  if (!prevClickPerformed) {
+    log.info('E2E: Skipping previous-monitor assertion - previous button not available (single monitor)', { component: 'e2e' });
+    return;
+  }
+  await expect.poll(() => urlMonitorId(page), { timeout: testConfig.timeouts.transition })
+    .not.toBe(navMonitorIdBeforePrev);
 });
 
 // Swipe Navigation
