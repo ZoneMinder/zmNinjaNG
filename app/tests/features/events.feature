@@ -85,6 +85,14 @@ Feature: Event Browsing and Management
     Then I should see the detail archive button inactive if action was taken
 
   @all
+  Scenario: Favorite an event from the detail page
+    When I click into the first event if events exist
+    And I favorite the event from detail page if on detail page
+    Then I should see the detail favorite button active if action was taken
+    When I favorite the event from detail page if on detail page
+    Then I should see the detail favorite button inactive if action was taken
+
+  @all
   Scenario: Favorites-only filter shows the favorited event
     When I favorite the first event if events exist
     And I open the events filter panel

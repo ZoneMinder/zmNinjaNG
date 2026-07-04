@@ -12,6 +12,7 @@ let favoritedEventId: string | null = null;
 let tagFilterApplied = false;
 let archiveToggled = false;
 let detailArchiveToggled = false;
+let detailFavoriteToggled = false;
 let downloadClicked = false;
 let hoverPerformed = false;
 
@@ -597,14 +598,31 @@ When('I favorite the event from detail page if on detail page', async ({ page })
     return;
   }
 
+  // hasEvents true means the earlier "I click into the first event if events
+  // exist" step already navigated here and waited for the /events/:id URL, so
+  // we are genuinely on the detail page and its favorite button must exist.
+  // Same reasoning as the sibling detail-archive step: swallowing a missing
+  // button behind isVisible().catch() masked a real rendering regression as
+  // "nothing to do here" - assert it hard instead.
   const favoriteButton = page.getByTestId('event-detail-favorite-button');
-  const isVisible = await favoriteButton.isVisible({ timeout: testConfig.timeouts.element }).catch(() => false);
-  if (isVisible) {
-    await favoriteButton.click();
-    await page.waitForTimeout(500);
-  } else {
-    log.info('E2E: Skipping favorite from detail - button not visible', { component: 'e2e' });
-  }
+  await expect(favoriteButton).toBeVisible({ timeout: testConfig.timeouts.element });
+  await favoriteButton.click();
+  detailFavoriteToggled = true;
+  await page.waitForTimeout(700);
+});
+
+Then('I should see the detail favorite button active if action was taken', async ({ page }) => {
+  if (!detailFavoriteToggled) return;
+  const favoriteButton = page.getByTestId('event-detail-favorite-button');
+  const icon = favoriteButton.locator('svg').first();
+  await expect(icon).toHaveClass(/fill-current/);
+});
+
+Then('I should see the detail favorite button inactive if action was taken', async ({ page }) => {
+  if (!detailFavoriteToggled) return;
+  const favoriteButton = page.getByTestId('event-detail-favorite-button');
+  const icon = favoriteButton.locator('svg').first();
+  await expect(icon).not.toHaveClass(/fill-current/);
 });
 
 // Event Detail Steps
