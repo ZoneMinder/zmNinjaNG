@@ -4,7 +4,7 @@ import type { Profile } from '../../api/types';
 import { asProfileId } from '../../api/types';
 
 // Mock secure storage
-vi.mock('../../lib/secureStorage', () => ({
+vi.mock('../../lib/security/secureStorage', () => ({
   setSecureValue: vi.fn(),
   getSecureValue: vi.fn(),
   removeSecureValue: vi.fn(),
@@ -26,7 +26,7 @@ vi.mock('../../lib/logger', () => ({
   },
 }));
 
-import { setSecureValue, getSecureValue, removeSecureValue } from '../../lib/secureStorage';
+import { setSecureValue, getSecureValue, removeSecureValue } from '../../lib/security/secureStorage';
 
 describe('ProfileService', () => {
   beforeEach(() => {

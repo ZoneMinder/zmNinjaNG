@@ -36,7 +36,7 @@ The ``useProfileStore`` attempts to read saved profiles and the last
 active user from browser ``localStorage`` (the default Zustand
 ``persist`` storage; this is what runs on web, Electron, and the
 Capacitor webviews). Sensitive values like the encrypted password go
-through ``lib/secureStorage.ts``, which delegates to the Capacitor
+through ``lib/security/secureStorage.ts``, which delegates to the Capacitor
 secure-storage plugin on iOS/Android and to encrypted localStorage on
 web/Electron.
 
@@ -72,7 +72,7 @@ After authentication, the bootstrap process calls
 
 1. Fetches ``/servers.json`` from the ZoneMinder API
 2. Builds a ServerId-to-URLs map via ``buildServerMap()`` from
-   ``lib/server-resolver.ts``
+   ``lib/zm/server-resolver.ts``
 3. Stores the map in the module-level cache via ``setServerMap()``
 4. The cache is cleared on profile switch
 

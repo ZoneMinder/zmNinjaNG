@@ -9,7 +9,7 @@ const { Given, When, Then } = createBdd();
 // PTZ Steps
 //
 // PTZ commands are dispatched as GET requests carrying `request=control` and
-// `control=<command>` (see src/lib/url-builder.ts getMonitorControlUrl). There
+// `control=<command>` (see src/lib/zm/url-builder.ts getMonitorControlUrl). There
 // is no success toast and no DOM state change on success, so the only real
 // signal that "a command was sent" is the network request itself. We attach a
 // request listener once per page and record matching URLs so later `Then`

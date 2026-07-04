@@ -221,7 +221,7 @@ setter, a store assembles the real implementation from ``getState()`` and
 registers it once at load time) is used wherever a low-level module would
 otherwise need a static import of a zustand store that itself depends on
 that module, forming a cycle: ``lib/log-sanitizer.ts`` and
-``lib/profile-settings.ts`` (:doc:`12-shared-services-and-components`) take
+``lib/profile/profile-settings.ts`` (:doc:`12-shared-services-and-components`) take
 their profile/settings reads this way, and
 ``services/pushNotifications.ts`` (:doc:`12-shared-services-and-components`)
 takes its notifications/profile/auth reads this way. Refs #217.
@@ -440,7 +440,7 @@ Streaming Mechanics
 
 Browsers cache image URLs aggressively. In ``mode=single`` (snapshot)
 or after a stream reconnects, the same URL would yield a stale frame.
-``src/lib/url-builder.ts`` appends a ``_t=<timestamp>`` cache buster:
+``src/lib/zm/url-builder.ts`` appends a ``_t=<timestamp>`` cache buster:
 
 ::
 
@@ -1315,7 +1315,7 @@ Platform-Specific Implementations
 
 Bypasses CORS, uses the native networking stack, handles TLS
 natively, and supports self-signed certificates via the ``SSLTrust``
-Capacitor plugin (see ``lib/ssl-trust.ts``).
+Capacitor plugin (see ``lib/security/ssl-trust.ts``).
 
 **Electron (Desktop) and Web (Browser) - Standard Fetch:**
 
@@ -1500,7 +1500,7 @@ Server API (``api/server.ts``)
 
 Functions for querying ZoneMinder server info, storage, and health
 checks. Several functions accept an optional ``apiBaseUrl`` parameter for
-multi-server routing (see ``lib/server-resolver.ts``).
+multi-server routing (see ``lib/zm/server-resolver.ts``).
 
 **Key functions:**
 
@@ -1636,7 +1636,7 @@ Dropping events after the fetch leaves the server's ``totalCount`` counting
 hidden events, which keeps "Load More" running past the visible end (refs #205).
 So the events list also narrows the query: when monitors are excluded and the
 user has not picked a monitor or group, ``Events.tsx`` sends the included
-monitor IDs (``includedMonitorIdParam`` in ``src/lib/filters.ts``) as the
+monitor IDs (``includedMonitorIdParam`` in ``src/lib/monitor/filters.ts``) as the
 ``MonitorId`` filter. The post-fetch drop stays as a safety net for callers that
 do not pass that filter (timeline, console) and for races where a monitor is
 hidden mid-session.
@@ -1932,7 +1932,7 @@ End-to-end Flow: Viewing Monitors
    stored under the query key.
 5. ``MonitorGrid`` renders ``MonitorCard`` per monitor; each card calls
    ``useMonitorStream({ monitorId })`` to get a connkey-authenticated
-   stream URL via ``lib/url-builder.ts`` and renders an ``<img>``.
+   stream URL via ``lib/zm/url-builder.ts`` and renders an ``<img>``.
 
 .. _error-handling-1:
 
@@ -2054,8 +2054,8 @@ When a stream is no longer needed, send ``CMD_QUIT`` to the ZMS daemon:
 
 .. code:: tsx
 
-   import { getZmsControlUrl } from '../lib/url-builder';
-   import { ZMS_COMMANDS } from '../lib/zm-constants';
+   import { getZmsControlUrl } from '../lib/zm/url-builder';
+   import { ZMS_COMMANDS } from '../lib/zm/zm-constants';
    import { httpGet } from '../lib/http';
 
    useEffect(() => {
@@ -2106,7 +2106,7 @@ terminated. Only build a stream URL once ``connKey !== 0``:
 Stream Modes
 ~~~~~~~~~~~~
 
-Defined in ``src/lib/zm-constants.ts``:
+Defined in ``src/lib/zm/zm-constants.ts``:
 
 - ``jpeg``: MJPEG streaming (continuous multipart JPEG frames)
 - ``single``: Single frame snapshot (one JPEG image)
@@ -2119,7 +2119,7 @@ The ZMS daemon accepts various control commands via HTTP requests:
 
 .. code:: tsx
 
-   // src/lib/zm-constants.ts
+   // src/lib/zm/zm-constants.ts
    export const ZMS_COMMANDS = {
      cmdPause: 1,     // Pause playback
      cmdPlay: 2,      // Start/resume playback

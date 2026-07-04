@@ -16,7 +16,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getTags, getEventTags, extractUniqueTags } from '../api/tags';
 import { useCurrentProfile } from './useCurrentProfile';
 import { useAuthStore } from '../stores/auth';
-import { queryKeys } from '../lib/query-keys';
+import { queryKeys } from '../lib/query/query-keys';
 import type { Tag } from '../api/types';
 
 export interface UseEventTagsReturn {

@@ -21,7 +21,7 @@ import {
 } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { Plus, Video, Clock, ChartGantt, TrendingUp } from 'lucide-react';
-import { queryKeys } from '../../lib/query-keys';
+import { queryKeys } from '../../lib/query/query-keys';
 import type { DashboardWidget, WidgetType } from '../../stores/dashboard';
 import type { MonitorFeedFit } from '../../stores/settings';
 import { useDashboardStore } from '../../stores/dashboard';
@@ -30,7 +30,7 @@ import { asProfileId } from '../../api/types';
 import { useShallow } from 'zustand/react/shallow';
 import { useQuery } from '@tanstack/react-query';
 import { getMonitors } from '../../api/monitors';
-import { filterEnabledMonitors } from '../../lib/filters';
+import { filterEnabledMonitors } from '../../lib/monitor/filters';
 import { GRID_LAYOUT } from '../../lib/zmninja-ng-constants';
 import { activateOnEnterOrSpace } from '../../lib/utils';
 import { Label } from '../ui/label';

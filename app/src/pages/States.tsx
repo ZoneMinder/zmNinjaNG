@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { queryKeys } from '../lib/query-keys';
+import { queryKeys } from '../lib/query/query-keys';
 import { getStates, changeState } from '../api/states';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -10,7 +10,7 @@ import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useAuthStore } from '../stores/auth';
 import { EmptyState } from '../components/ui/empty-state';
 import { ErrorBanner } from '../components/ui/query-state';
-import { resolveQueryError } from '../lib/query-error';
+import { resolveQueryError } from '../lib/query/query-error';
 
 export default function States() {
   const queryClient = useQueryClient();

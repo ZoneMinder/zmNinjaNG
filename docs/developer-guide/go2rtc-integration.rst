@@ -44,7 +44,7 @@ New Files
 Modified Files
 ^^^^^^^^^^^^^^
 
-- ``/app/src/lib/url-builder.ts`` - Added ``getGo2RTCWebSocketUrl()``
+- ``/app/src/lib/zm/url-builder.ts`` - Added ``getGo2RTCWebSocketUrl()``
   and ``getGo2RTCStreamUrl()``
 - ``/app/src/services/discovery.ts`` - Added Go2RTC endpoint detection (port
   1984)
@@ -201,7 +201,7 @@ shows an empty window for streaming sources (both WebRTC and MSE).
 URL Building
 ~~~~~~~~~~~~
 
-Two new URL builder functions in ``lib/url-builder.ts``:
+Two new URL builder functions in ``lib/zm/url-builder.ts``:
 
 .. code:: typescript
 

@@ -15,8 +15,8 @@ import {
 import { log, LogLevel } from '../lib/logger';
 import { Platform } from '../lib/platform';
 import { getAppVersion } from '../lib/version';
-import { getEventImageUrl } from '../lib/url-builder';
-import { getEffectiveMinStreamingPort } from '../lib/multiport';
+import { getEventImageUrl } from '../lib/zm/url-builder';
+import { getEffectiveMinStreamingPort } from '../lib/monitor/multiport';
 import { updateNotification } from '../api/notifications';
 import { useProfileStore } from './profile';
 import { useAuthStore } from './auth';

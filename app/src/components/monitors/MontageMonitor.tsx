@@ -17,7 +17,7 @@ import type { NavigateFunction } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
 import type { Monitor, MonitorStatus, Profile } from '../../api/types';
 import { useAuthStore } from '../../stores/auth';
-import { getMonitorRunState, monitorDotColor } from '../../lib/monitor-status';
+import { getMonitorRunState, monitorDotColor } from '../../lib/monitor/monitor-status';
 import { MONITOR_UI } from '../../lib/zmninja-ng-constants';
 import { useSettingsStore } from '../../stores/settings';
 import { Card } from '../ui/card';

@@ -14,7 +14,7 @@ type Player = ReturnType<typeof videojs>;
 import { cn } from '../../lib/utils';
 import { log, LogLevel } from '../../lib/logger';
 import { Platform } from '../../lib/platform';
-import { applyVideoJsMarkers, type VideoMarker, type VideoJsMarkersHost } from '../../lib/video-markers';
+import { applyVideoJsMarkers, type VideoMarker, type VideoJsMarkersHost } from '../../lib/event/video-markers';
 import type { MarkerConfig } from '../../types/videojs-markers';
 import { usePip } from '../../contexts/PipContext';
 import { Pip } from '../../plugins/pip';

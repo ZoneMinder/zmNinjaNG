@@ -15,11 +15,11 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getMonitors } from '../api/monitors';
-import { filterEnabledMonitors } from '../lib/filters';
+import { filterEnabledMonitors } from '../lib/monitor/filters';
 import { useCurrentProfile } from './useCurrentProfile';
 import { useBandwidthSettings } from './useBandwidthSettings';
 import { useAuthStore } from '../stores/auth';
-import { queryKeys } from '../lib/query-keys';
+import { queryKeys } from '../lib/query/query-keys';
 import type { MonitorData } from '../api/types';
 
 export interface UseMonitorsOptions {

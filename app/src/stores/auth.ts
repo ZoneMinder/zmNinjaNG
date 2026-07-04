@@ -18,8 +18,8 @@ import { login as apiLogin, refreshToken as apiRefreshToken } from '../api/auth'
 import { isApiClientInitialized } from '../api/client-ready';
 import type { LoginResponse } from '../api/types';
 import { log, LogLevel } from '../lib/logger';
-import { decrypt, isCryptoAvailable } from '../lib/crypto';
-import { setSecureValue, getSecureValue, removeSecureValue } from '../lib/secureStorage';
+import { decrypt, isCryptoAvailable } from '../lib/security/crypto';
+import { setSecureValue, getSecureValue, removeSecureValue } from '../lib/security/secureStorage';
 import { ZM_INTEGRATION, STORAGE_KEYS } from '../lib/zmninja-ng-constants';
 
 interface AuthState {

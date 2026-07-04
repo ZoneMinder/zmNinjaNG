@@ -13,7 +13,7 @@ import { SectionHeader, SettingsCard, SettingsRow, RowLabel } from './SettingsLa
 import type { Profile } from '../../api/types';
 import type { ProfileSettings } from '../../stores/settings';
 import { MONITOR_DETAIL_RECENT_EVENTS } from '../../lib/zmninja-ng-constants';
-import { clampRecentEventsCount } from '../../lib/monitor-recent-events';
+import { clampRecentEventsCount } from '../../lib/monitor/monitor-recent-events';
 
 export interface PlaybackSectionProps {
   settings: ProfileSettings;

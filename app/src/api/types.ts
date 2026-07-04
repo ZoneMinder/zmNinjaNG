@@ -509,7 +509,7 @@ export type StatesResponse = z.infer<typeof StatesResponseSchema>;
  * Nominal type for a real profile id. A plain `string` cannot be assigned
  * where `ProfileId` is required; it must go through `asProfileId` first.
  * This stops an arbitrary string (or the wrong kind of id) from building a
- * profile-scoped query-cache key (see lib/query-keys.ts). Because the brand
+ * profile-scoped query-cache key (see lib/query/query-keys.ts). Because the brand
  * is structurally still a string, a `ProfileId` is assignable anywhere a
  * plain `string` is expected, so existing reads are unaffected.
  */

@@ -23,7 +23,7 @@ vi.mock('../../api/client', () => ({ setApiClient: vi.fn(), resetApiClient: vi.f
 vi.mock('../../api/store-gates', () => ({ createStoreApiClient: vi.fn(() => ({})) }));
 vi.mock('../../api/time', () => ({ getServerTimeZone: vi.fn() }));
 vi.mock('../../services/profile-bootstrap', () => ({ performBootstrap: vi.fn() }));
-vi.mock('../../lib/secureStorage', () => ({
+vi.mock('../../lib/security/secureStorage', () => ({
   setSecureValue: vi.fn().mockResolvedValue(undefined),
   getSecureValue: vi.fn().mockResolvedValue(undefined),
   removeSecureValue: vi.fn().mockResolvedValue(undefined),

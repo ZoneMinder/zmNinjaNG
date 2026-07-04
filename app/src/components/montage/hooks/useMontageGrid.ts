@@ -11,7 +11,7 @@ import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { GRID_LAYOUT, MONTAGE_GRID } from '../../../lib/zmninja-ng-constants';
 import { useSettingsStore, DEFAULT_MONTAGE_GROUP_LAYOUT } from '../../../stores/settings';
-import { getMonitorAspectRatio } from '../../../lib/monitor-rotation';
+import { getMonitorAspectRatio } from '../../../lib/monitor/monitor-rotation';
 import type { Layout } from 'react-grid-layout';
 import type { Monitor, MonitorData } from '../../../api/types';
 import type { Profile } from '../../../api/types';

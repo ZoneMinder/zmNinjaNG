@@ -9,13 +9,13 @@
 import { memo, useState, useCallback, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
-import { getPortalUrlForEvent } from '../../lib/server-resolver';
-import { queryKeys } from '../../lib/query-keys';
-import { buildThumbnailChain } from '../../lib/thumbnail-chain';
+import { getPortalUrlForEvent } from '../../lib/zm/server-resolver';
+import { queryKeys } from '../../lib/query/query-keys';
+import { buildThumbnailChain } from '../../lib/event/thumbnail-chain';
 import { EventThumbnail } from '../events/EventThumbnail';
 import { HoverPreview } from '../ui/hover-preview';
 import { EventZmsHoverPlayer } from '../events/EventThumbnailHoverPreview';
-import { resolveMinStreamingPort } from '../../lib/multiport';
+import { resolveMinStreamingPort } from '../../lib/monitor/multiport';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
 import type { MonitorsResponse } from '../../api/types';

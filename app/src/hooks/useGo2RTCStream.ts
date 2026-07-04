@@ -8,7 +8,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { VideoRTC } from '../lib/vendor/go2rtc/video-rtc';
-import { getGo2RTCWebSocketUrl } from '../lib/url-builder';
+import { getGo2RTCWebSocketUrl } from '../lib/zm/url-builder';
 import { GO2RTC_CONNECT_DELAY_MS } from '../lib/zmninja-ng-constants';
 import { log, LogLevel } from '../lib/logger';
 

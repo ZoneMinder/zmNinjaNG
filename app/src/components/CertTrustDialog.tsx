@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { ShieldAlert, ShieldCheck } from 'lucide-react';
-import type { CertInfo } from '../lib/ssl-trust';
+import type { CertInfo } from '../lib/security/ssl-trust';
 
 interface CertTrustDialogProps {
   open: boolean;

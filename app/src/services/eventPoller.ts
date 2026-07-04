@@ -13,7 +13,7 @@
 import { getEvents, getEventImageUrl } from '../api/events';
 import type { EventFilters } from '../api/events';
 import { getMonitors } from '../api/monitors';
-import { getPortalUrlForEvent } from '../lib/server-resolver';
+import { getPortalUrlForEvent } from '../lib/zm/server-resolver';
 import { NOTIFICATIONS_SERVICE } from '../lib/zmninja-ng-constants';
 import type { ZMAlarmEvent } from '../types/notifications';
 import { log, LogLevel } from '../lib/logger';

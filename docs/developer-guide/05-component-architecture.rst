@@ -211,7 +211,7 @@ props change.
 - Generates authenticated stream URL with connection key
 - Regenerates the key on stream failure
 - Returns a ref to the ``<img>`` element for snapshot downloads
-- Builds URLs via ``src/lib/url-builder.ts``
+- Builds URLs via ``src/lib/zm/url-builder.ts``
 - Exposes ``imageSrc``, the value to bind to ``<img src>``. It equals
   ``streamUrl`` on every platform.
 
@@ -481,7 +481,7 @@ their local ``flash`` boolean (from ``useReturnFlash``) is ``true``.
 parseDetectedObjects
 ~~~~~~~~~~~~~~~~~~~~
 
-**Location**: ``src/lib/event-detection.ts``
+**Location**: ``src/lib/event/event-detection.ts``
 
 **Signature**: ``parseDetectedObjects(notes: string | null): string[]``
 
@@ -872,7 +872,7 @@ Calling it detached (``const f = player.markers; f(opts)``) leaves
 "Failed to update video markers" errors on events that have markers. On
 init the plugin replaces ``player.markers`` with an API object, so a
 function value means "not initialized". The ``applyVideoJsMarkers``
-helper in ``lib/video-markers.ts`` initializes once via a method call
+helper in ``lib/event/video-markers.ts`` initializes once via a method call
 and uses ``removeAll()`` / ``add()`` for later updates. Marker updates
 are gated on the player's ready callback (the plugin reads the player
 DOM), ``onMarkerClick`` is read through a ref inside a stable click
@@ -1571,7 +1571,7 @@ TvDetector (native plugin)
 **Location**: ``android/app/src/main/java/com/zoneminder/zmNinjaNG/TvDetectorPlugin.java``
 
 Capacitor plugin registered as ``TvDetector``, called from
-``lib/tv-spatial-nav.ts``. Two methods:
+``lib/tv/tv-spatial-nav.ts``. Two methods:
 
 - ``isTV()``: true if ``UiModeManager.getCurrentModeType()`` equals
   ``UI_MODE_TYPE_TELEVISION``.
@@ -1579,7 +1579,7 @@ Capacitor plugin registered as ``TvDetector``, called from
   navigation by calling the hidden ``WebSettings.setSpatialNavigationEnabled(true)``
   API via reflection, then makes the WebView focusable and requests focus.
 
-lib/tv-spatial-nav.ts
+lib/tv/tv-spatial-nav.ts
 ~~~~~~~~~~~~~~~~~~~~~
 
 - ``checkIsTV()``: checks ``Platform.isTVDevice`` first (a native-injected
@@ -1628,7 +1628,7 @@ Registers a ``window`` ``keydown`` listener, active only while
 - ``Enter`` has a built-in fallback even with no map entry: if the focused
   element isn't natively clickable (``BUTTON``, ``A``, ``INPUT``,
   ``SELECT``, ``TEXTAREA``), it synthesizes a ``.click()`` on it. Combined
-  with ``lib/tv-a11y.ts``'s ``clickableProps()`` / ``handleKeyClick()``
+  with ``lib/tv/tv-a11y.ts``'s ``clickableProps()`` / ``handleKeyClick()``
   (``tabIndex={0}`` + ``role="button"`` + Enter/Space ``onKeyDown``), this
   lets ``div``/``span`` "buttons" (e.g. monitor tiles) respond to Enter.
 
@@ -1928,7 +1928,7 @@ Platform Integrations (``src/services/``)
 The ``src/services/`` directory bridges the React app to native device
 features provided by Capacitor. UI code stays platform-agnostic.
 
-Storage Service (``lib/secureStorage.ts``)
+Storage Service (``lib/security/secureStorage.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Hybrid storage:

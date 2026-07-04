@@ -15,11 +15,11 @@ import type { NotificationSettings, NotificationSource } from '../stores/notific
 import type { Profile } from '../api/types';
 import { registerToken, deleteNotification } from '../api/notifications';
 import { getAppVersion } from '../lib/version';
-import { getEventImageUrl } from '../lib/url-builder';
+import { getEventImageUrl } from '../lib/zm/url-builder';
 import { NOTIFICATIONS_SERVICE } from '../lib/zmninja-ng-constants';
 import { ZMNotificationService } from './notifications';
 import type { ZMEventServerConfig, ZMAlarmEvent } from '../types/notifications';
-import { resolveProfileForNotification, requestProfileSwitch } from '../lib/notification-profile';
+import { resolveProfileForNotification, requestProfileSwitch } from '../lib/profile/notification-profile';
 
 /**
  * Store-derived gates for MobilePushService, injected instead of importing

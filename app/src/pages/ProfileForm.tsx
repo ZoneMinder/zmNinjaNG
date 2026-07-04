@@ -26,7 +26,7 @@ import { parseQRProfile } from '../services/qr-profile';
 import { toast } from 'sonner';
 import { CertTrustDialog } from '../components/CertTrustDialog';
 import { Platform } from '../lib/platform';
-import type { CertInfo } from '../lib/ssl-trust';
+import type { CertInfo } from '../lib/security/ssl-trust';
 
 export default function ProfileForm() {
   const navigate = useNavigate();
@@ -141,7 +141,7 @@ export default function ProfileForm() {
     try {
       // Enable trust-all for HTTP before any network calls (needed for discovery)
       if (allowSelfSignedCerts) {
-        const { applySSLTrustSetting } = await import('../lib/ssl-trust');
+        const { applySSLTrustSetting } = await import('../lib/security/ssl-trust');
         await applySSLTrustSetting(true);
       }
 
@@ -217,7 +217,7 @@ export default function ProfileForm() {
 
       // TOFU: after discovery succeeds, fetch the server cert and ask user to trust it
       if (allowSelfSignedCerts && Platform.isNative) {
-        const { getServerCertFingerprint, applySSLTrustSetting } = await import('../lib/ssl-trust');
+        const { getServerCertFingerprint, applySSLTrustSetting } = await import('../lib/security/ssl-trust');
         const info = await getServerCertFingerprint(confirmedPortalUrl);
         if (info) {
           const trusted = await requestCertTrust(info);

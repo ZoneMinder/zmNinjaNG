@@ -7,7 +7,7 @@
 
 import { useState, useMemo, useCallback, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { queryKeys } from '../lib/query-keys';
+import { queryKeys } from '../lib/query/query-keys';
 import { useTranslation } from 'react-i18next';
 import { getMonitors, updateMonitor } from '../api/monitors';
 import { getConsoleEvents } from '../api/events';
@@ -20,12 +20,12 @@ import { LayoutGrid, List, Video } from 'lucide-react';
 import { PageContainer } from '../components/common/PageContainer';
 import { ErrorBanner } from '../components/ui/query-state';
 import { EmptyState } from '../components/ui/empty-state';
-import { resolveQueryError } from '../lib/query-error';
+import { resolveQueryError } from '../lib/query/query-error';
 import { RefreshButton } from '../components/common/RefreshButton';
 import { MonitorCard } from '../components/monitors/MonitorCard';
 import { MonitorSettingsDialog } from '../components/monitor-detail/MonitorSettingsDialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { filterEnabledMonitors, filterMonitorsByGroup } from '../lib/filters';
+import { filterEnabledMonitors, filterMonitorsByGroup } from '../lib/monitor/filters';
 import { useGroupFilter } from '../hooks/useGroupFilter';
 import { GroupFilterSelect } from '../components/filters/GroupFilterSelect';
 import type { Monitor } from '../api/types';

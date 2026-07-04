@@ -8,11 +8,11 @@ import { useMemo, useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getMonitors } from '../../api/monitors';
-import { filterEnabledMonitors } from '../../lib/filters';
+import { filterEnabledMonitors } from '../../lib/monitor/filters';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useSwipeNavigation } from '../../hooks/useSwipeNavigation';
 import { MONITOR_NAVIGATION } from '../../lib/zmninja-ng-constants';
-import { queryKeys } from '../../lib/query-keys';
+import { queryKeys } from '../../lib/query/query-keys';
 import type { MonitorData } from '../../api/types';
 
 interface UseMonitorNavigationOptions {

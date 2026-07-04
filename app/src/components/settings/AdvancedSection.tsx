@@ -21,7 +21,7 @@ import { SectionHeader, SettingsCard, SettingsRow, RowLabel } from './SettingsLa
 import { useDeveloperNoticeStore } from '../../stores/developerNotices';
 import { Platform } from '../../lib/platform';
 import { log, LogLevel } from '../../lib/logger';
-import type { CertInfo } from '../../lib/ssl-trust';
+import type { CertInfo } from '../../lib/security/ssl-trust';
 import type { Profile } from '../../api/types';
 import type { ProfileSettings } from '../../stores/settings';
 
@@ -193,7 +193,7 @@ export function AdvancedSection({
 
     if (checked && Platform.isNative) {
       try {
-        const { applySSLTrustSetting, getServerCertFingerprint } = await import('../../lib/ssl-trust');
+        const { applySSLTrustSetting, getServerCertFingerprint } = await import('../../lib/security/ssl-trust');
         await applySSLTrustSetting(true);
         const info = await getServerCertFingerprint(currentProfile.portalUrl);
         if (info) {
@@ -209,7 +209,7 @@ export function AdvancedSection({
     }
 
     if (!checked) {
-      const { applySSLTrustSetting } = await import('../../lib/ssl-trust');
+      const { applySSLTrustSetting } = await import('../../lib/security/ssl-trust');
       await applySSLTrustSetting(false);
     }
   };
@@ -221,13 +221,13 @@ export function AdvancedSection({
       allowSelfSignedCerts: true,
       trustedCertFingerprint: certInfo.fingerprint,
     });
-    const { applySSLTrustSetting } = await import('../../lib/ssl-trust');
+    const { applySSLTrustSetting } = await import('../../lib/security/ssl-trust');
     await applySSLTrustSetting(true, certInfo.fingerprint);
   };
 
   const handleCancelTrust = async () => {
     setCertDialogOpen(false);
-    const { applySSLTrustSetting } = await import('../../lib/ssl-trust');
+    const { applySSLTrustSetting } = await import('../../lib/security/ssl-trust');
     await applySSLTrustSetting(false);
   };
 
@@ -235,7 +235,7 @@ export function AdvancedSection({
     if (!currentProfile) return;
     setReverifying(true);
     try {
-      const { applySSLTrustSetting, getServerCertFingerprint } = await import('../../lib/ssl-trust');
+      const { applySSLTrustSetting, getServerCertFingerprint } = await import('../../lib/security/ssl-trust');
       await applySSLTrustSetting(true);
       const info = await getServerCertFingerprint(currentProfile.portalUrl);
       if (info) {

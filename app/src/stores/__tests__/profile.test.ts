@@ -3,7 +3,7 @@ import { useProfileStore } from '../profile';
 import { setApiClient } from '../../api/client';
 import { createStoreApiClient } from '../../api/store-gates';
 import { getServerTimeZone } from '../../api/time';
-import { setSecureValue, removeSecureValue } from '../../lib/secureStorage';
+import { setSecureValue, removeSecureValue } from '../../lib/security/secureStorage';
 import { asProfileId } from '../../api/types';
 
 vi.mock('../../api/client', () => ({
@@ -18,7 +18,7 @@ vi.mock('../../api/time', () => ({
   getServerTimeZone: vi.fn(),
 }));
 
-vi.mock('../../lib/secureStorage', () => ({
+vi.mock('../../lib/security/secureStorage', () => ({
   setSecureValue: vi.fn().mockResolvedValue(undefined),
   getSecureValue: vi.fn().mockResolvedValue(undefined),
   removeSecureValue: vi.fn().mockResolvedValue(undefined),

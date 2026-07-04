@@ -9,9 +9,9 @@
 import { getApiClient } from './client';
 import type { TagsResponse, EventTagsResponse, Tag } from './types';
 import { TagsResponseSchema, EventTagsResponseSchema } from './types';
-import { safeValidateApiResponse, validateApiResponse } from '../lib/api-validator';
+import { safeValidateApiResponse, validateApiResponse } from '../lib/zm/api-validator';
 import { log, LogLevel } from '../lib/logger';
-import { TAGS_BATCH_SIZE } from '../lib/zm-constants';
+import { TAGS_BATCH_SIZE } from '../lib/zm/zm-constants';
 import type { HttpError } from '../lib/http';
 
 /**

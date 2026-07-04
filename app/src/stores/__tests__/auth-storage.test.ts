@@ -23,14 +23,14 @@ vi.mock('../../lib/logger', () => ({
   log: new Proxy({}, { get: () => vi.fn() }),
   LogLevel: { DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3, NONE: 4 },
 }));
-vi.mock('../../lib/crypto', async (importActual) => {
-  const actual = await importActual<typeof import('../../lib/crypto')>();
+vi.mock('../../lib/security/crypto', async (importActual) => {
+  const actual = await importActual<typeof import('../../lib/security/crypto')>();
   return { ...actual, isCryptoAvailable: vi.fn(() => true) };
 });
 
 import { encryptedAuthStorage } from '../auth';
-import { encrypt, isCryptoAvailable } from '../../lib/crypto';
-import { getSecureValue, clearSecureStorage } from '../../lib/secureStorage';
+import { encrypt, isCryptoAvailable } from '../../lib/security/crypto';
+import { getSecureValue, clearSecureStorage } from '../../lib/security/secureStorage';
 
 const NAME = 'zmng-auth';
 const SECURE_KEY = 'auth_refresh_token';

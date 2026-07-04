@@ -42,7 +42,7 @@ vi.mock('../../stores/settings', () => ({
     selector({ updateProfileSettings: h.updateProfileSettings }),
 }));
 
-vi.mock('../../lib/ssl-trust', () => ({
+vi.mock('../../lib/security/ssl-trust', () => ({
   applySSLTrustSetting: h.applySSLTrustSetting,
   getServerCertFingerprint: h.getServerCertFingerprint,
 }));

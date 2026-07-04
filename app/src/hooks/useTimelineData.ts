@@ -11,7 +11,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getEvents } from '../api/events';
 import { getMonitors } from '../api/monitors';
 import type { EventData } from '../api/types';
-import { filterEnabledMonitors } from '../lib/filters';
+import { filterEnabledMonitors } from '../lib/monitor/filters';
 import { formatForServer } from '../lib/time';
 import { TIMELINE } from '../lib/zmninja-ng-constants';
 import { mapWithConcurrency } from '../lib/async-pool';
@@ -19,11 +19,11 @@ import {
   causeToEventFilter,
   isCauseActive,
   mergeMonitorEvents,
-} from '../lib/timeline-cause-filter';
+} from '../lib/event/timeline-cause-filter';
 import { useNotificationStore } from '../stores/notifications';
 import { useProfileStore } from '../stores/profile';
 import { useBandwidthSettings } from './useBandwidthSettings';
-import { queryKeys } from '../lib/query-keys';
+import { queryKeys } from '../lib/query/query-keys';
 import { log, LogLevel } from '../lib/logger';
 import type { TimelineEvent } from '../components/timeline/timeline-layout';
 

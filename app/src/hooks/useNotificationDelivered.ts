@@ -13,8 +13,8 @@ import { Platform } from '../lib/platform';
 import { log, LogLevel } from '../lib/logger';
 import { useNotificationStore } from '../stores/notifications';
 import { useProfileStore } from '../stores/profile';
-import { resolveProfileForNotification } from '../lib/notification-profile';
-import { getEventImageUrl } from '../lib/url-builder';
+import { resolveProfileForNotification } from '../lib/profile/notification-profile';
+import { getEventImageUrl } from '../lib/zm/url-builder';
 import { useCapacitorListener } from './useCapacitorListener';
 import type { Profile } from '../api/types';
 

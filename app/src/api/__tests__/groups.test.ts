@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getGroups } from '../groups';
 import { getApiClient } from '../client';
-import { validateApiResponse } from '../../lib/api-validator';
+import { validateApiResponse } from '../../lib/zm/api-validator';
 import type { ApiClient } from '../client';
 
 const mockGet = vi.fn();
@@ -10,7 +10,7 @@ vi.mock('../client', () => ({
   getApiClient: vi.fn(),
 }));
 
-vi.mock('../../lib/api-validator', () => ({
+vi.mock('../../lib/zm/api-validator', () => ({
   validateApiResponse: vi.fn((_, data) => data),
 }));
 

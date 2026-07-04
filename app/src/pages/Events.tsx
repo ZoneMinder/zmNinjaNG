@@ -7,14 +7,14 @@
 
 import { useMemo, useRef, useState, useEffect } from 'react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
-import { queryKeys } from '../lib/query-keys';
+import { queryKeys } from '../lib/query/query-keys';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
 import { getEvents } from '../api/events';
 import type { EventFilters } from '../api/events';
 import type { EventData } from '../api/types';
 import { getMonitors } from '../api/monitors';
-import { resolveMinStreamingPort } from '../lib/multiport';
+import { resolveMinStreamingPort } from '../lib/monitor/multiport';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useAuthStore } from '../stores/auth';
 import { useFreshAccessToken } from '../hooks/useFreshAccessToken';
@@ -29,9 +29,9 @@ import { PullToRefreshIndicator } from '../components/ui/pull-to-refresh-indicat
 import { Button } from '../components/ui/button';
 import { Filter, ArrowLeft, LayoutGrid, List, Clock, X } from 'lucide-react';
 import { ErrorBanner } from '../components/ui/query-state';
-import { resolveQueryError } from '../lib/query-error';
+import { resolveQueryError } from '../lib/query/query-error';
 import { RefreshButton } from '../components/common/RefreshButton';
-import { filterMonitorsByGroup, includedMonitorIdParam } from '../lib/filters';
+import { filterMonitorsByGroup, includedMonitorIdParam } from '../lib/monitor/filters';
 import { useGroupFilter } from '../hooks/useGroupFilter';
 import { GroupFilterSelect } from '../components/filters/GroupFilterSelect';
 import { Popover, PopoverTrigger } from '../components/ui/popover';

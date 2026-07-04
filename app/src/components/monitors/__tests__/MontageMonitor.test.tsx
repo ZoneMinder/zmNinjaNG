@@ -53,7 +53,7 @@ vi.mock('../../../lib/logger', () => ({
   },
 }));
 
-vi.mock('../../../lib/monitor-rotation', () => ({
+vi.mock('../../../lib/monitor/monitor-rotation', () => ({
   getMonitorAspectRatio: (width: number, height: number) =>
     `${width}/${height}`,
 }));

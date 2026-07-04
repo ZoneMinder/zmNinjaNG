@@ -20,7 +20,7 @@ import {
     DialogFooter,
 } from '../ui/dialog';
 import { Button } from '../ui/button';
-import { queryKeys } from '../../lib/query-keys';
+import { queryKeys } from '../../lib/query/query-keys';
 import type { ProfileId } from '../../api/types';
 import type { DashboardWidget } from '../../stores/dashboard';
 import type { MonitorFeedFit } from '../../stores/settings';
@@ -33,7 +33,7 @@ import { Checkbox } from '../ui/checkbox';
 import { Switch } from '../ui/switch';
 import { ScrollArea } from '../ui/scroll-area';
 import { useTranslation } from 'react-i18next';
-import { filterEnabledMonitors } from '../../lib/filters';
+import { filterEnabledMonitors } from '../../lib/monitor/filters';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { useEventTags } from '../../hooks/useEventTags';
 import { ALL_TAGS_FILTER_ID } from '../../hooks/useEventFilters';

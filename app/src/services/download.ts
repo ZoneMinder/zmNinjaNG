@@ -14,10 +14,10 @@
 
 import { log, LogLevel } from '../lib/logger';
 import { Platform } from '../lib/platform';
-import { wrapWithImageProxyIfNeeded } from '../lib/proxy-utils';
+import { wrapWithImageProxyIfNeeded } from '../lib/zm/proxy-utils';
 import { httpRequest, type HttpProgress } from '../lib/http';
 
-import { getEventVideoUrl as buildEventVideoUrl } from '../lib/url-builder';
+import { getEventVideoUrl as buildEventVideoUrl } from '../lib/zm/url-builder';
 import { DOWNLOAD } from '../lib/zmninja-ng-constants';
 import { isAbortError } from '../lib/is-abort-error';
 import { useBackgroundTasks } from '../stores/backgroundTasks';

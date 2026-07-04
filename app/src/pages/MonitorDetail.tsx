@@ -8,10 +8,10 @@
 
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { queryKeys } from '../lib/query-keys';
+import { queryKeys } from '../lib/query/query-keys';
 import { getMonitor, getControl, updateMonitor } from '../api/monitors';
 import { getZones } from '../api/zones';
-import { resolveMinStreamingPort } from '../lib/multiport';
+import { resolveMinStreamingPort } from '../lib/monitor/multiport';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useAuthStore } from '../stores/auth';
 import { useSettingsStore } from '../stores/settings';
@@ -30,9 +30,9 @@ import { LiveMonitorPlayer } from '../components/monitors/LiveMonitorPlayer';
 import { ZoneOverlay } from '../components/monitors/ZoneOverlay';
 import { ZoneLegend } from '../components/monitors/ZoneLegend';
 import { log, LogLevel } from '../lib/logger';
-import { getOrientedResolution, parseMonitorRotation } from '../lib/monitor-rotation';
-import { isZmVersionAtLeast } from '../lib/zm-version';
-import { getMonitorRunState, monitorDotColor } from '../lib/monitor-status';
+import { getOrientedResolution, parseMonitorRotation } from '../lib/monitor/monitor-rotation';
+import { isZmVersionAtLeast } from '../lib/zm/zm-version';
+import { getMonitorRunState, monitorDotColor } from '../lib/monitor/monitor-status';
 import { useZoomPan } from '../hooks/useZoomPan';
 import { useServerUrls } from '../hooks/useServerUrls';
 

@@ -16,7 +16,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getGroups } from '../api/groups';
 import { useCurrentProfile } from './useCurrentProfile';
 import { useAuthStore } from '../stores/auth';
-import { queryKeys } from '../lib/query-keys';
+import { queryKeys } from '../lib/query/query-keys';
 import type { GroupData } from '../api/types';
 
 export interface UseGroupsReturn {

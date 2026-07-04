@@ -66,7 +66,7 @@ export const ZM_INTEGRATION = {
 
   // Grace delay before a scheduled CMD_QUIT fires. Lets React StrictMode's
   // dev double-mount cancel the quit instead of killing a stream the
-  // surviving mount is still using. See lib/zms-quit.ts.
+  // surviving mount is still using. See lib/zm/zms-quit.ts.
   cmdQuitGraceMs: 150,
 
   // Image quality settings

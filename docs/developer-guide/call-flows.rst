@@ -118,7 +118,7 @@ waiting on the network.
 #. **Background setup, SSL trust first.** ``performBootstrap`` runs
    ``bootstrapSSLTrust`` before any network call. For a self-signed server it
    applies the trust override (and, the first time, shows the trust-on-first-use
-   dialog) via ``lib/ssl-trust.ts`` ``applySSLTrustSetting``, dispatching to the
+   dialog) via ``lib/security/ssl-trust.ts`` ``applySSLTrustSetting``, dispatching to the
    native ``ssl-trust`` plugin or Electron. If trust were applied after the login
    call, a self-signed server would reject it.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/profile-bootstrap.ts#L266>`__
@@ -241,7 +241,7 @@ collide on the server and never leak a zombie process when they go away.
 
 #. **Build the stream URL (only when safe).** Once ``connKey !== 0`` and the
    token is fresh, ``useMonitorStream`` builds the URL via ``getStreamUrl``
-   (``api/monitors.ts`` then ``lib/url-builder.ts`` to ``/cgi-bin/nph-zms``) and
+   (``api/monitors.ts`` then ``lib/zm/url-builder.ts`` to ``/cgi-bin/nph-zms``) and
    mirrors it into ``imageSrc``. The double gate prevents minting a zombie stream
    before a key exists.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/monitors.ts#L296>`__
@@ -274,12 +274,12 @@ collide on the server and never leak a zombie process when they go away.
    · → :doc:`11-application-lifecycle`
 
 #. **A profile switch tears down all streams first.** Each lifecycle registers a
-   teardown thunk in ``lib/active-streams.ts``; ``stores/profile.ts``
+   teardown thunk in ``lib/monitor/active-streams.ts``; ``stores/profile.ts``
    ``switchProfile`` awaits ``quitAllActiveStreams()`` before logout and the
    SSL-trust flip, while the old profile's trust and token are still in effect.
    Relying on React unmount alone races the switch and can orphan an ``nph-zms``
    process on a self-signed server.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/active-streams.ts#L32>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/monitor/active-streams.ts#L32>`__
    · → :doc:`11-application-lifecycle`
 
 Flow 3: A push notification, from registration to tap
@@ -389,7 +389,7 @@ a token on startup, and reacting when a push arrives.
    payload's profile name to a stored profile. Same profile navigates directly; a
    different one calls ``requestProfileSwitch`` to ask first (the dialog lives in
    ``NotificationHandler``).
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/notification-profile.ts#L32>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/profile/notification-profile.ts#L32>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Navigate to the event.** A service cannot use React Router's hook, so it
@@ -446,7 +446,7 @@ time, logs in to confirm the details, then saves the profile and switches to it.
 #. **Trust the cert before probing.** When self-signed is on, ``applySSLTrustSetting``
    enables trust-all first, so the upcoming discovery calls can reach a
    self-signed host instead of failing the handshake.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/ssl-trust.ts#L18>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/security/ssl-trust.ts#L18>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Find the real URLs.** ``discoverUrls`` wraps ``discoverZoneminder`` with one
@@ -569,7 +569,7 @@ MJPEG player.
 #. **The URL shape.** ``url-builder.ts`` ``getEventVideoUrl`` emits the HLS
    (``view_event_hls``) or MP4 (``view_video``) ``/index.php`` URL, appends the
    token, and rewrites the port when multi-port streaming is on.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/url-builder.ts#L285>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/zm/url-builder.ts#L285>`__
    · → :doc:`10-key-libraries`
 
 #. **MP4/HLS playback.** ``Mp4EventPlayer`` creates a Video.js player, wires alarm
@@ -820,7 +820,7 @@ element, with a ladder of watchdogs that fall back to MJPEG if anything stalls.
 
 #. **Build the websocket URL.** ``getGo2RTCWebSocketUrl`` converts http(s) to
    ws(s), appends ``/ws``, and sets ``src={monitorId}_{channel}`` plus the token.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/url-builder.ts#L449>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/zm/url-builder.ts#L449>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **Create the element.** ``connect`` instantiates ``VideoRTC``, wraps its

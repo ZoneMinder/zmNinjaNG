@@ -17,7 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Filter, ScanSearch, X, ChevronDown } from 'lucide-react';
 import { QuickDateRangeButtons } from '../ui/quick-date-range-buttons';
 import { MonitorFilterPopoverContent } from '../filters/MonitorFilterPopover';
-import { CAUSE_ALL, TIMELINE_CAUSE_OPTIONS } from '../../lib/timeline-cause-filter';
+import { CAUSE_ALL, TIMELINE_CAUSE_OPTIONS } from '../../lib/event/timeline-cause-filter';
 import { formatLocalDateTime } from '../../lib/time';
 import type { MonitorData } from '../../api/types';
 import type { UseTimelineFiltersReturn } from '../../hooks/useTimelineFilters';

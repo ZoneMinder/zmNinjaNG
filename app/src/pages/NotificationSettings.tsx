@@ -7,7 +7,7 @@
 
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { queryKeys } from '../lib/query-keys';
+import { queryKeys } from '../lib/query/query-keys';
 import { useNotificationStore, startEventPoller } from '../stores/notifications';
 import { useShallow } from 'zustand/react/shallow';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';

@@ -7,10 +7,10 @@
 
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { queryKeys } from '../lib/query-keys';
+import { queryKeys } from '../lib/query/query-keys';
 import { getEvents } from '../api/events';
 import { getMonitors } from '../api/monitors';
-import { resolveMinStreamingPort } from '../lib/multiport';
+import { resolveMinStreamingPort } from '../lib/monitor/multiport';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useFreshAccessToken } from '../hooks/useFreshAccessToken';
 import { useSettingsStore } from '../stores/settings';
@@ -20,9 +20,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Clock, LayoutGrid } from 'lucide-react';
 import { PageContainer } from '../components/common/PageContainer';
 import { ErrorBanner } from '../components/ui/query-state';
-import { resolveQueryError } from '../lib/query-error';
+import { resolveQueryError } from '../lib/query/query-error';
 import { RefreshButton } from '../components/common/RefreshButton';
-import { filterEnabledMonitors } from '../lib/filters';
+import { filterEnabledMonitors } from '../lib/monitor/filters';
 import { EventMontageView } from '../components/events/EventMontageView';
 import { EventMontageGridControls } from '../components/events/EventMontageGridControls';
 import { EventMontageFilterPanel } from '../components/events/EventMontageFilterPanel';

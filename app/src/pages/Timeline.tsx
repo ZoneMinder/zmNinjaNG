@@ -5,7 +5,7 @@ import { Button } from '../components/ui/button';
 import { FilterX, Clock } from 'lucide-react';
 import { PageContainer } from '../components/common/PageContainer';
 import { ErrorBanner } from '../components/ui/query-state';
-import { resolveQueryError } from '../lib/query-error';
+import { resolveQueryError } from '../lib/query/query-error';
 import { subDays } from 'date-fns';
 import { formatLocalDateTime } from '../lib/time';
 import { useTranslation } from 'react-i18next';

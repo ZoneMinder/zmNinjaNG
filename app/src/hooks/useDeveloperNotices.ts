@@ -13,7 +13,7 @@ import { fetchDeveloperNotices, type DeveloperNotice } from '../api/developer-no
 import { useDeveloperNoticeStore } from '../stores/developerNotices';
 import { DEVELOPER_NOTICES } from '../lib/zmninja-ng-constants';
 import { getAppVersion } from '../lib/version';
-import { queryKeys } from '../lib/query-keys';
+import { queryKeys } from '../lib/query/query-keys';
 
 export interface DeveloperNoticeView extends DeveloperNotice {
   isRead: boolean;

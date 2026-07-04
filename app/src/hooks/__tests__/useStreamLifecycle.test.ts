@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { StrictMode } from 'react';
 import { useStreamLifecycle } from '../useStreamLifecycle';
-import { quitAllActiveStreams } from '../../lib/active-streams';
+import { quitAllActiveStreams } from '../../lib/monitor/active-streams';
 
 // Mock logger
 vi.mock('../../lib/logger', () => ({
@@ -32,13 +32,13 @@ vi.mock('../../lib/http', () => ({
 }));
 
 // Mock url-builder
-vi.mock('../../lib/url-builder', () => ({
+vi.mock('../../lib/zm/url-builder', () => ({
   getZmsControlUrl: (portalUrl: string, command: string, connkey: string) =>
     `${portalUrl}/control?command=${command}&connkey=${connkey}`,
 }));
 
 // Mock ZMS constants
-vi.mock('../../lib/zm-constants', () => ({
+vi.mock('../../lib/zm/zm-constants', () => ({
   ZMS_COMMANDS: { cmdQuit: 'quit' },
 }));
 

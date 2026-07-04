@@ -14,7 +14,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown } from 'lucide-react';
 import { useAuthStore } from '../../stores/auth';
 import { getMonitors } from '../../api/monitors';
-import { queryKeys } from '../../lib/query-keys';
+import { queryKeys } from '../../lib/query/query-keys';
 import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';

@@ -11,12 +11,12 @@ import { useCurrentProfile } from './useCurrentProfile';
 import { useAuthStore } from '../stores/auth';
 import { useSettingsStore } from '../stores/settings';
 import { useBandwidthSettings } from './useBandwidthSettings';
-import { queryKeys } from '../lib/query-keys';
+import { queryKeys } from '../lib/query/query-keys';
 import {
   clampRecentEventsCount,
   isMonitorRecentEventsHidden,
   toggleMonitorRecentEventsHidden,
-} from '../lib/monitor-recent-events';
+} from '../lib/monitor/monitor-recent-events';
 
 export interface UseMonitorRecentEvents {
   events: EventData[];

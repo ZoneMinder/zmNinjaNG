@@ -209,7 +209,7 @@ zmNinjaNg runs on web, Electron, and Capacitor, all expose
    );
 
 Sensitive data (passwords, tokens) is **not** persisted via this
-middleware. Profile passwords go through ``lib/secureStorage.ts``,
+middleware. Profile passwords go through ``lib/security/secureStorage.ts``,
 which wraps ``@aparajita/capacitor-secure-storage`` (Keychain on iOS,
 Keystore on Android, encrypted ``localStorage`` on web). The persisted
 profile keeps a sentinel like ``'stored-securely'`` instead.

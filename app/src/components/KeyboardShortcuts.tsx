@@ -13,12 +13,12 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { getMonitors } from '../api/monitors';
-import { queryKeys } from '../lib/query-keys';
+import { queryKeys } from '../lib/query/query-keys';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useAuthStore } from '../stores/auth';
 import { useKioskStore } from '../stores/kioskStore';
 import { useTvMode } from '../hooks/useTvMode';
-import { getExcludedMonitorIdSet } from '../lib/profile-settings';
+import { getExcludedMonitorIdSet } from '../lib/profile/profile-settings';
 import { hasOpenOverlay } from '../lib/overlay';
 import { KEYBOARD_SHORTCUTS } from '../lib/zmninja-ng-constants';
 import {

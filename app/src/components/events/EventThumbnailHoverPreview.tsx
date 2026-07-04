@@ -8,13 +8,13 @@
 
 import { useEffect, useMemo, type ReactNode } from 'react';
 import { HoverPreview } from '../ui/hover-preview';
-import { resolveMinStreamingPort } from '../../lib/multiport';
+import { resolveMinStreamingPort } from '../../lib/monitor/multiport';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
-import { getEventZmsUrl, getZmsControlUrl } from '../../lib/url-builder';
+import { getEventZmsUrl, getZmsControlUrl } from '../../lib/zm/url-builder';
 import { log, LogLevel } from '../../lib/logger';
-import { ZMS_COMMANDS } from '../../lib/zm-constants';
-import { sendDelayedCmdQuit, cancelPendingQuit } from '../../lib/zms-quit';
+import { ZMS_COMMANDS } from '../../lib/zm/zm-constants';
+import { sendDelayedCmdQuit, cancelPendingQuit } from '../../lib/zm/zms-quit';
 import { DEFAULT_HOVER_PREVIEW_PLAYBACK_RATE } from '../../stores/settings';
 import type { Event } from '../../api/types';
 

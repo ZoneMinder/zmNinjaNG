@@ -48,7 +48,7 @@ vi.mock('../../api/monitors', () => ({
   },
 }));
 
-vi.mock('../../lib/url-builder', () => ({
+vi.mock('../../lib/zm/url-builder', () => ({
   getZmsControlUrl: (portalUrl: string, command: string, connkey: string, options: any) => {
     const params = new URLSearchParams();
     params.set('command', command);
@@ -58,7 +58,7 @@ vi.mock('../../lib/url-builder', () => ({
   },
 }));
 
-vi.mock('../../lib/zm-constants', () => ({
+vi.mock('../../lib/zm/zm-constants', () => ({
   ZMS_COMMANDS: {
     cmdQuit: 'quit',
   },

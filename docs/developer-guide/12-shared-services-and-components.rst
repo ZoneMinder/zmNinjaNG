@@ -143,7 +143,7 @@ requests
 
 --------------
 
-SSL Trust (``lib/ssl-trust.ts``)
+SSL Trust (``lib/security/ssl-trust.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Controls whether the app accepts self-signed/untrusted HTTPS certificates
@@ -189,7 +189,7 @@ profile-scoped (``allowSelfSignedCerts`` + ``trustedCertFingerprint`` in
 
 .. code:: typescript
 
-   import { applySSLTrustSetting, getServerCertFingerprint } from '../lib/ssl-trust';
+   import { applySSLTrustSetting, getServerCertFingerprint } from '../lib/security/ssl-trust';
 
    // Enable with fingerprint (normal operation)
    await applySSLTrustSetting(true, storedFingerprint);
@@ -204,13 +204,13 @@ profile-scoped (``allowSelfSignedCerts`` + ``trustedCertFingerprint`` in
 **Bootstrap Order:** ``bootstrapSSLTrust()`` in ``stores/profile-bootstrap.ts``
 runs before ``bootstrapAuth()``. If ``allowSelfSignedCerts`` is true but
 ``trustedCertFingerprint`` is null (upgrade migration), it fetches the cert
-and signals the UI via ``lib/cert-trust-event.ts`` to show the trust dialog
+and signals the UI via ``lib/security/cert-trust-event.ts`` to show the trust dialog
 in ``AppLayout``.
 
 **Key Files:**
 
-- ``lib/ssl-trust.ts``: JS interface
-- ``lib/cert-trust-event.ts``: event bridge for bootstrap-to-UI TOFU dialog
+- ``lib/security/ssl-trust.ts``: JS interface
+- ``lib/security/cert-trust-event.ts``: event bridge for bootstrap-to-UI TOFU dialog
 - ``plugins/ssl-trust/``: Capacitor plugin definitions
 - ``components/CertTrustDialog.tsx``: trust dialog component
 - ``android/.../SSLTrustPlugin.java``: Android native implementation
@@ -364,7 +364,7 @@ out-of-memory errors on large video files.
 
 --------------
 
-Proxy URL Utilities (``lib/proxy-utils.ts``)
+Proxy URL Utilities (``lib/zm/proxy-utils.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Utilities for wrapping URLs with development proxy to handle CORS.
@@ -379,7 +379,7 @@ Utilities for wrapping URLs with development proxy to handle CORS.
 
 .. code:: typescript
 
-   import { wrapWithImageProxy, wrapWithImageProxyIfNeeded } from '../lib/proxy-utils';
+   import { wrapWithImageProxy, wrapWithImageProxyIfNeeded } from '../lib/zm/proxy-utils';
 
    // Always wrap if proxy is enabled
    const proxiedUrl = wrapWithImageProxy('https://zm.example.com/image.jpg');
@@ -393,7 +393,7 @@ client
 
 --------------
 
-Server Resolver (``lib/server-resolver.ts``)
+Server Resolver (``lib/zm/server-resolver.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Maps ZoneMinder ServerId values to per-server URLs for multi-server
@@ -410,7 +410,7 @@ profile defaults.
      getPortalUrlForMonitor,
      getPortalUrlForEvent,
      setServerMap,
-   } from '../lib/server-resolver';
+   } from '../lib/zm/server-resolver';
 
    // Build the map from /servers.json response
    const serverMap = buildServerMap(servers);
@@ -442,7 +442,7 @@ MonitorDetail, EventDetail
 
 --------------
 
-URL Builder (``lib/url-builder.ts``)
+URL Builder (``lib/zm/url-builder.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Centralized URL construction for ZoneMinder endpoints.
@@ -460,7 +460,7 @@ Centralized URL construction for ZoneMinder endpoints.
 
 .. code:: typescript
 
-   import { applyMultiPort } from '../lib/url-builder';
+   import { applyMultiPort } from '../lib/zm/url-builder';
 
    // Shared helper for per-monitor port routing
    // Formula: port = minStreamingPort + parseInt(monitorId)
@@ -481,7 +481,7 @@ formula.
      getMonitorStreamUrl,
      getEventImageUrl,
      getEventVideoUrl
-   } from '../lib/url-builder';
+   } from '../lib/zm/url-builder';
 
    // Monitor stream
    const streamUrl = getMonitorStreamUrl(cgiUrl, monitorId, {
@@ -518,7 +518,7 @@ hooks (``useStreamLifecycle``), and stream/playback components.
 
 --------------
 
-Delayed CMD_QUIT (``lib/zms-quit.ts``)
+Delayed CMD_QUIT (``lib/zm/zms-quit.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Schedules a fire-and-forget CMD_QUIT for a zms connkey after a grace
@@ -531,7 +531,7 @@ quit still fires.
 
 .. code:: typescript
 
-   import { sendDelayedCmdQuit, cancelPendingQuit } from '../lib/zms-quit';
+   import { sendDelayedCmdQuit, cancelPendingQuit } from '../lib/zm/zms-quit';
 
    // On mount: cancel a quit left over from a dev remount
    cancelPendingQuit(connkey);
@@ -547,7 +547,7 @@ quit still fires.
 
 --------------
 
-Multi-port Resolution (``lib/multiport.ts``)
+Multi-port Resolution (``lib/monitor/multiport.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The server's ``ZM_MIN_STREAMING_PORT`` is fetched once during profile
@@ -563,7 +563,7 @@ URLs use the portal's default port.
    import {
      resolveMinStreamingPort,
      getEffectiveMinStreamingPort,
-   } from '../lib/multiport';
+   } from '../lib/monitor/multiport';
 
    // In React components (settings already in scope via useCurrentProfile)
    const port = resolveMinStreamingPort(
@@ -580,7 +580,7 @@ toggle is bypassed.
 
 --------------
 
-Event Icons (``lib/event-icons.ts``)
+Event Icons (``lib/event/event-icons.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Maps event causes from ZoneMinder to Lucide icons for visual display.
@@ -596,7 +596,7 @@ Maps event causes from ZoneMinder to Lucide icons for visual display.
 
 .. code:: typescript
 
-   import { getEventCauseIcon, hasSpecificCauseIcon } from '../lib/event-icons';
+   import { getEventCauseIcon, hasSpecificCauseIcon } from '../lib/event/event-icons';
 
    // Get icon component for a cause
    const Icon = getEventCauseIcon('Motion');  // Returns Move icon
@@ -698,7 +698,7 @@ user preset, so it routes through the same layer for consistency. Never call
 
 --------------
 
-Crypto Utilities (``lib/crypto.ts``)
+Crypto Utilities (``lib/security/crypto.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Encryption/decryption for secure password storage (web platform).
@@ -714,7 +714,7 @@ Encryption/decryption for secure password storage (web platform).
 
 .. code:: typescript
 
-   import { encrypt, decrypt } from '../lib/crypto';
+   import { encrypt, decrypt } from '../lib/security/crypto';
 
    // Encrypt, key is internal (derived once per app install and cached)
    const encrypted = await encrypt('my-password');
@@ -732,7 +732,7 @@ data encrypted with an older key derivation; new code should use ``decrypt()``.
 
 --------------
 
-Secure Storage (``lib/secureStorage.ts``)
+Secure Storage (``lib/security/secureStorage.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Platform-specific secure storage abstraction.
@@ -748,7 +748,7 @@ Platform-specific secure storage abstraction.
 
 .. code:: typescript
 
-   import { saveSecure, getSecure, removeSecure } from '../lib/secureStorage';
+   import { saveSecure, getSecure, removeSecure } from '../lib/security/secureStorage';
 
    // Save password
    await saveSecure('password_profile_123', 'my-secure-password');
@@ -887,7 +887,7 @@ and component styles that consume ``var(--sai-*)``.
 
 --------------
 
-API Validator (``lib/api-validator.ts``)
+API Validator (``lib/zm/api-validator.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Zod-based runtime validation for API responses.
@@ -902,7 +902,7 @@ Zod-based runtime validation for API responses.
 
 .. code:: typescript
 
-   import { validateApiResponse } from '../lib/api-validator';
+   import { validateApiResponse } from '../lib/zm/api-validator';
    import { MonitorsResponseSchema } from '../api/types';
 
    const response = await fetch('/api/monitors.json');
@@ -990,7 +990,7 @@ any component that polls or auto-refreshes
 
 --------------
 
-Monitor Rotation (``lib/monitor-rotation.ts``)
+Monitor Rotation (``lib/monitor/monitor-rotation.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Utilities for handling monitor orientation and aspect ratio calculations.
@@ -1005,7 +1005,7 @@ Utilities for handling monitor orientation and aspect ratio calculations.
 
 --------------
 
-Event Utilities (``lib/event-utils.ts``)
+Event Utilities (``lib/event/event-utils.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Shared helpers for event and monitor grid calculations.
@@ -1019,7 +1019,7 @@ Shared helpers for event and monitor grid calculations.
 
 --------------
 
-Monitor Filters (``lib/filters.ts``)
+Monitor Filters (``lib/monitor/filters.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Pure functions that filter monitor lists. They take and return plain
@@ -1038,7 +1038,7 @@ arrays, so they are easy to unit test.
 
 .. code:: typescript
 
-   import { filterExcludedMonitors } from '../lib/filters';
+   import { filterExcludedMonitors } from '../lib/monitor/filters';
 
    const visible = filterExcludedMonitors(monitors, ['3', '7']);
 
@@ -1047,7 +1047,7 @@ exclusion).
 
 --------------
 
-Profile Settings Accessor (``lib/profile-settings.ts``)
+Profile Settings Accessor (``lib/profile/profile-settings.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Non-React accessors for the current profile's settings. API modules and
@@ -1074,7 +1074,7 @@ closed a static import cycle back into the profile store. It now takes a
 
 .. code:: typescript
 
-   import { getExcludedMonitorIds } from '../lib/profile-settings';
+   import { getExcludedMonitorIds } from '../lib/profile/profile-settings';
 
    const excluded = getExcludedMonitorIds();
 
@@ -1234,7 +1234,7 @@ left until unmount. Both are no-ops outside streaming mode.
 ``<img onLoad>``) resets the backoff after a good frame.
 
 Each lifecycle instance also registers a teardown thunk in the module-level
-registry ``lib/active-streams.ts`` (``registerActiveStream`` /
+registry ``lib/monitor/active-streams.ts`` (``registerActiveStream`` /
 ``unregisterActiveStream``). ``switchProfile`` (``stores/profile.ts``) awaits
 ``quitAllActiveStreams()`` as its first step, before logout and the SSL-trust
 flip, so each tile's CMD_QUIT (which captures that tile's own per-server URL
@@ -1263,7 +1263,7 @@ cannot do this, since it has no record of which server each stream used.
 
 --------------
 
-Zone Utilities (``lib/zone-utils.ts``)
+Zone Utilities (``lib/monitor/zone-utils.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Utilities for parsing and rendering zone data from ZoneMinder.
@@ -1298,7 +1298,7 @@ Utilities for parsing and rendering zone data from ZoneMinder.
 
 --------------
 
-Query Error Resolution (``lib/query-error.ts``)
+Query Error Resolution (``lib/query/query-error.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Maps a React Query ``error`` object to a user-facing message. Events and
@@ -1310,7 +1310,7 @@ generic message; ``resolveQueryError`` is that logic extracted once.
 
 .. code:: typescript
 
-   import { resolveQueryError } from '../lib/query-error';
+   import { resolveQueryError } from '../lib/query/query-error';
 
    const { error } = useQuery({ ... });
 
@@ -1498,7 +1498,7 @@ chain is walking. The winning index is kept in a session-scoped
 
 .. code:: tsx
 
-   import { buildThumbnailChain } from '../../lib/thumbnail-chain';
+   import { buildThumbnailChain } from '../../lib/event/thumbnail-chain';
    import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 
    const { settings } = useCurrentProfile();
@@ -1514,7 +1514,7 @@ chain is walking. The winning index is kept in a session-scoped
 
 The chain itself comes from the per-profile ``thumbnailFallbackChain``
 setting (see ``stores/settings.ts``). ``resolveFallbackFids`` and
-``buildThumbnailChain`` in ``lib/thumbnail-chain.ts`` translate the
+``buildThumbnailChain`` in ``lib/event/thumbnail-chain.ts`` translate the
 setting into ordered fids and full URLs. Disabled entries and empty
 custom rows are skipped.
 
@@ -2376,7 +2376,7 @@ Server (ES mode). Handles real-time alarm events via ``zmeventnotification.pl``.
   (60s normal, 120s low)
 - ``reconnectAttempts`` resets only after successful authentication
 - No store imports: ``stores/notifications.ts`` injects store-derived values
-  (fresh access token, event image URL builder via ``lib/url-builder``,
+  (fresh access token, event image URL builder via ``lib/zm/url-builder``,
   keepalive interval) as ``ZMNotificationProviders`` at connect time
 
 ``services/pushNotifications.ts``: FCM push notification handling for

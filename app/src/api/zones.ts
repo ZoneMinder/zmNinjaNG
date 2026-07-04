@@ -8,7 +8,7 @@
 import { getApiClient } from './client';
 import type { ZonesResponse, Zone } from './types';
 import { ZonesResponseSchema } from './types';
-import { validateApiResponse } from '../lib/api-validator';
+import { validateApiResponse } from '../lib/zm/api-validator';
 
 /**
  * Get all zones for a specific monitor.

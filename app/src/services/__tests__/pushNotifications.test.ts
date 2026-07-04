@@ -73,7 +73,7 @@ vi.mock('../../api/notifications', () => ({
 
 const mockResolveProfileForNotification = vi.fn();
 const mockRequestProfileSwitch = vi.fn();
-vi.mock('../../lib/notification-profile', () => ({
+vi.mock('../../lib/profile/notification-profile', () => ({
   resolveProfileForNotification: (...args: unknown[]) => mockResolveProfileForNotification(...args),
   requestProfileSwitch: (...args: unknown[]) => mockRequestProfileSwitch(...args),
 }));

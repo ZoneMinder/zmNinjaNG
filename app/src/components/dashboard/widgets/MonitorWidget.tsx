@@ -16,7 +16,7 @@ import { useMemo, memo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { getMonitor, getMonitors } from '../../../api/monitors';
-import { queryKeys } from '../../../lib/query-keys';
+import { queryKeys } from '../../../lib/query/query-keys';
 import type { MonitorFeedFit } from '../../../stores/settings';
 import { LiveMonitorPlayer } from '../../monitors/LiveMonitorPlayer';
 import { MonitorHoverPreview } from '../../monitors/MonitorHoverPreview';
@@ -25,7 +25,7 @@ import { AlertTriangle } from 'lucide-react';
 import { Skeleton } from '../../ui/skeleton';
 import { useTranslation } from 'react-i18next';
 import { calculateGridDimensions } from '../../../lib/grid-utils';
-import { filterEnabledMonitors } from '../../../lib/filters';
+import { filterEnabledMonitors } from '../../../lib/monitor/filters';
 import { activateOnEnterOrSpace } from '../../../lib/utils';
 
 interface MonitorWidgetProps {

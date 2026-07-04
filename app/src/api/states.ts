@@ -7,7 +7,7 @@
 import { getApiClient } from './client';
 import type { State } from './types';
 import { StatesResponseSchema } from './types';
-import { validateApiResponse } from '../lib/api-validator';
+import { validateApiResponse } from '../lib/zm/api-validator';
 import { log, LogLevel } from '../lib/logger';
 
 /**

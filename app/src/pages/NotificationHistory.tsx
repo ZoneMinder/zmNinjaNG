@@ -8,9 +8,9 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useNotificationStore, type NotificationEvent } from '../stores/notifications';
 import { useShallow } from 'zustand/react/shallow';
-import { resolveMinStreamingPort } from '../lib/multiport';
+import { resolveMinStreamingPort } from '../lib/monitor/multiport';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
-import { buildThumbnailChain } from '../lib/thumbnail-chain';
+import { buildThumbnailChain } from '../lib/event/thumbnail-chain';
 import { EventThumbnail } from '../components/events/EventThumbnail';
 import { HoverPreview } from '../components/ui/hover-preview';
 import { EventZmsHoverPlayer } from '../components/events/EventThumbnailHoverPreview';
@@ -28,7 +28,7 @@ import {
   AlertDialogTitle,
 } from '../components/ui/alert-dialog';
 import { Bell, Trash2, CheckCheck, ExternalLink, AlertCircle, Wifi, Smartphone, RefreshCw } from 'lucide-react';
-import { getEventCauseIcon } from '../lib/event-icons';
+import { getEventCauseIcon } from '../lib/event/event-icons';
 import { formatDistanceToNow, isToday, isYesterday, startOfWeek, startOfMonth } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';

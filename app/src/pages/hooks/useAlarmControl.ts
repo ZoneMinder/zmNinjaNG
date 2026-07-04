@@ -12,7 +12,7 @@ import { getAlarmStatus, triggerAlarm, cancelAlarm } from '../../api/monitors';
 import { log, LogLevel } from '../../lib/logger';
 import { useBandwidthSettings } from '../../hooks/useBandwidthSettings';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
-import { queryKeys } from '../../lib/query-keys';
+import { queryKeys } from '../../lib/query/query-keys';
 
 interface UseAlarmControlOptions {
   monitorId: string | undefined;

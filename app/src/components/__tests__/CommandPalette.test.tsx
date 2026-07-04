@@ -30,7 +30,7 @@ vi.mock('../../hooks/useCurrentProfile', () => ({
 vi.mock('../../stores/auth', () => ({
   useAuthStore: (sel: (s: { isAuthenticated: boolean }) => unknown) => sel({ isAuthenticated: true }),
 }));
-vi.mock('../../lib/profile-settings', () => ({ getExcludedMonitorIdSet: () => new Set<string>() }));
+vi.mock('../../lib/profile/profile-settings', () => ({ getExcludedMonitorIdSet: () => new Set<string>() }));
 
 // jsdom does not implement scrollIntoView; the keyboard-nav effect calls it.
 const scrollIntoViewMock = vi.fn();

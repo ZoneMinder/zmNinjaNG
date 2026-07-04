@@ -11,7 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { deleteEvent as apiDeleteEvent } from '../api/events';
 import type { EventData, EventsResponse } from '../api/types';
-import { queryKeys } from '../lib/query-keys';
+import { queryKeys } from '../lib/query/query-keys';
 import { useCurrentProfile } from './useCurrentProfile';
 import { log, LogLevel } from '../lib/logger';
 

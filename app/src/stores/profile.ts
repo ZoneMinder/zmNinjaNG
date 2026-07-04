@@ -21,7 +21,7 @@ import { getServerTimeZone } from '../api/time';
 import { ProfileService } from '../services/profile';
 import { log, LogLevel } from '../lib/logger';
 import { setLogRedactionGate } from '../lib/log-sanitizer';
-import { setProfileSettingsGate } from '../lib/profile-settings';
+import { setProfileSettingsGate } from '../lib/profile/profile-settings';
 import { STORAGE_KEYS } from '../lib/zmninja-ng-constants';
 import { useAuthStore } from './auth';
 import { useSettingsStore } from './settings';
@@ -277,7 +277,7 @@ export const useProfileStore = create<ProfileState>()(
             // the new profile's SSL-trust flip so a self-signed old server's
             // CMD_QUIT is not rejected, which would orphan its nph-zms. refs #188
             log.profileService('Step 0: Quitting previous profile streams', LogLevel.INFO);
-            const { quitAllActiveStreams } = await import('../lib/active-streams');
+            const { quitAllActiveStreams } = await import('../lib/monitor/active-streams');
             await quitAllActiveStreams();
 
             // STEP 1: Clear ALL existing state FIRST (critical for avoiding data mixing)
@@ -484,7 +484,7 @@ setLogRedactionGate({
   },
 });
 
-// lib/profile-settings.ts has no store imports for the same reason (it's
+// lib/profile/profile-settings.ts has no store imports for the same reason (it's
 // imported by api/events.ts and other api modules downstream of this store).
 // Refs #217.
 setProfileSettingsGate({

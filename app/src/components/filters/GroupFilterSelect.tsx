@@ -23,7 +23,7 @@ import {
 } from '../ui/select';
 import { useGroups } from '../../hooks/useGroups';
 import { useGroupFilter } from '../../hooks/useGroupFilter';
-import { buildGroupHierarchy } from '../../lib/filters';
+import { buildGroupHierarchy } from '../../lib/monitor/filters';
 
 interface GroupFilterSelectProps {
   /** Optional className for the trigger button */

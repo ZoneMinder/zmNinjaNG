@@ -8,14 +8,14 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Zone } from '../../api/types';
-import type { MonitorRotation } from '../../lib/monitor-rotation';
+import type { MonitorRotation } from '../../lib/monitor/monitor-rotation';
 import {
   getZoneColor,
   coordsToSvgPointsWithTransform,
   getOrientedDimensions,
   parseZoneCoords,
   type ZoneTransform,
-} from '../../lib/zone-utils';
+} from '../../lib/monitor/zone-utils';
 
 interface ZoneOverlayProps {
   /** Array of zones to display */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Monitor } from '../../api/types';
-import { getMonitorAspectRatio } from '../../lib/monitor-rotation';
+import { getMonitorAspectRatio } from '../../lib/monitor/monitor-rotation';
 import { GRID_LAYOUT } from '../../lib/zmninja-ng-constants';
 
 /**

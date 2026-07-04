@@ -32,7 +32,7 @@ vi.mock('@tanstack/react-query', () => ({
 }));
 
 vi.mock('../../../api/monitors', () => ({ getMonitors: vi.fn() }));
-vi.mock('../../../lib/filters', () => ({
+vi.mock('../../../lib/monitor/filters', () => ({
   filterEnabledMonitors: (monitors: unknown) => monitors,
 }));
 vi.mock('../../../hooks/useSwipeNavigation', () => ({

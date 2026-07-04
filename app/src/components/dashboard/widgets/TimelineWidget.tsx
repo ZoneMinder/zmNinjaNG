@@ -21,7 +21,7 @@ import { useDateTimeFormat } from '../../../hooks/useDateTimeFormat';
 import { Button } from '../../ui/button';
 import { useBandwidthSettings } from '../../../hooks/useBandwidthSettings';
 import { useCurrentProfile } from '../../../hooks/useCurrentProfile';
-import { queryKeys } from '../../../lib/query-keys';
+import { queryKeys } from '../../../lib/query/query-keys';
 
 type TimeRange = '24h' | '48h' | '1w' | '2w' | '1m';
 
