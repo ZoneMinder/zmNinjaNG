@@ -6,6 +6,7 @@
 
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
+import type { KeyboardEvent } from "react"
 
 /**
  * Merge Tailwind CSS classes with clsx.
@@ -46,14 +47,32 @@ export function escapeHtml(str: string): string {
  */
 export function formatEventCount(count: number | undefined): string {
   if (count === undefined || count === null) return '0';
-  
+
   if (count >= 1000000) {
     return `${Math.floor(count / 1000000)}M+`;
   }
-  
+
   if (count >= 1000) {
     return `${Math.floor(count / 1000)}k+`;
   }
-  
+
   return count.toString();
+}
+
+/**
+ * Builds a keydown handler that runs `handler` on Enter or Space, matching
+ * native button activation. Use on non-button elements (div/span) that carry
+ * an onClick and an interactive role (e.g. role="button"/"radio") so they're
+ * operable from the keyboard (WCAG 2.1.1). refs #217.
+ *
+ * @param handler - Callback to invoke on activation
+ * @returns A React onKeyDown handler
+ */
+export function activateOnEnterOrSpace(handler: () => void) {
+  return (e: KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handler();
+    }
+  };
 }

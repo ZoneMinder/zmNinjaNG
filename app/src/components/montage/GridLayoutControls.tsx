@@ -262,6 +262,9 @@ function SaveLayoutDialog({
                 if (e.key === 'Enter') onSubmit();
               }}
               placeholder={t('montage.layout_name_placeholder')}
+              // Focuses the only input inside a modal Dialog (not page-load
+              // autofocus); Radix already traps and manages focus for the dialog.
+              // eslint-disable-next-line jsx-a11y/no-autofocus
               autoFocus
               data-testid="montage-save-layout-name-input"
             />

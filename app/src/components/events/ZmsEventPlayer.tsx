@@ -576,7 +576,8 @@ export function ZmsEventPlayer({
           <h3 className="text-sm font-semibold mb-3">{t('event_detail.alarm_frames')}</h3>
           <div className="flex gap-2 overflow-x-auto pb-2">
             {/* First alarm frame */}
-            <div
+            <button
+              type="button"
               className="flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
               onClick={jumpToAlarmFrame}
             >
@@ -594,11 +595,12 @@ export function ZmsEventPlayer({
               <p className="text-xs text-center mt-1 text-muted-foreground">
                 {t('event_detail.frame')} {alarmFrameId}
               </p>
-            </div>
+            </button>
 
             {/* Max score frame if different from alarm frame */}
             {maxScoreFrameId && maxScoreFrameId !== alarmFrameId && (
-              <div
+              <button
+                type="button"
                 className="flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
                 onClick={jumpToMaxScoreFrame}
               >
@@ -616,7 +618,7 @@ export function ZmsEventPlayer({
                 <p className="text-xs text-center mt-1 text-muted-foreground">
                   {t('event_detail.frame')} {maxScoreFrameId}
                 </p>
-              </div>
+              </button>
             )}
           </div>
         </Card>

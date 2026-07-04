@@ -30,6 +30,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getMonitors } from '../../api/monitors';
 import { filterEnabledMonitors } from '../../lib/filters';
 import { GRID_LAYOUT } from '../../lib/zmninja-ng-constants';
+import { activateOnEnterOrSpace } from '../../lib/utils';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Input } from '../ui/input';
@@ -176,10 +177,18 @@ export function DashboardConfig() {
                 </DialogHeader>
 
                 <div className="space-y-4 py-4">
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div
+                        className="grid grid-cols-2 sm:grid-cols-4 gap-4"
+                        role="radiogroup"
+                        aria-label={t('dashboard.widget_type')}
+                    >
                         <div
                             className={`p-4 border rounded-lg cursor-pointer hover:bg-muted/50 flex flex-col items-center gap-2 ${selectedType === 'monitor' ? 'border-primary bg-primary/5' : ''}`}
+                            role="radio"
+                            aria-checked={selectedType === 'monitor'}
+                            tabIndex={0}
                             onClick={() => setSelectedType('monitor')}
+                            onKeyDown={activateOnEnterOrSpace(() => setSelectedType('monitor'))}
                             data-testid="widget-type-monitor"
                         >
                             <Video className="h-8 w-8" />
@@ -187,7 +196,11 @@ export function DashboardConfig() {
                         </div>
                         <div
                             className={`p-4 border rounded-lg cursor-pointer hover:bg-muted/50 flex flex-col items-center gap-2 ${selectedType === 'events' ? 'border-primary bg-primary/5' : ''}`}
+                            role="radio"
+                            aria-checked={selectedType === 'events'}
+                            tabIndex={0}
                             onClick={() => setSelectedType('events')}
+                            onKeyDown={activateOnEnterOrSpace(() => setSelectedType('events'))}
                             data-testid="widget-type-events"
                         >
                             <Clock className="h-8 w-8" />
@@ -195,7 +208,11 @@ export function DashboardConfig() {
                         </div>
                         <div
                             className={`p-4 border rounded-lg cursor-pointer hover:bg-muted/50 flex flex-col items-center gap-2 ${selectedType === 'timeline' ? 'border-primary bg-primary/5' : ''}`}
+                            role="radio"
+                            aria-checked={selectedType === 'timeline'}
+                            tabIndex={0}
                             onClick={() => setSelectedType('timeline')}
+                            onKeyDown={activateOnEnterOrSpace(() => setSelectedType('timeline'))}
                             data-testid="widget-type-timeline"
                         >
                             <ChartGantt className="h-8 w-8" />
@@ -203,7 +220,11 @@ export function DashboardConfig() {
                         </div>
                         <div
                             className={`p-4 border rounded-lg cursor-pointer hover:bg-muted/50 flex flex-col items-center gap-2 ${selectedType === 'heatmap' ? 'border-primary bg-primary/5' : ''}`}
+                            role="radio"
+                            aria-checked={selectedType === 'heatmap'}
+                            tabIndex={0}
                             onClick={() => setSelectedType('heatmap')}
+                            onKeyDown={activateOnEnterOrSpace(() => setSelectedType('heatmap'))}
                             data-testid="widget-type-heatmap"
                         >
                             <TrendingUp className="h-8 w-8" />

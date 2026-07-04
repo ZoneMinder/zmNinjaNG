@@ -73,6 +73,7 @@
     "widget_events": "Événements récents",
     "widget_timeline": "Chronologie",
     "widget_heatmap": "Carte de Chaleur d'Événements",
+    "widget_type": "Type de widget",
     "widget_title": "Titre du widget (Facultatif)",
     "widget_title_placeholder": "Mon Widget",
     "select_monitor": "Sélectionner un moniteur",
@@ -196,6 +197,7 @@
     "alarm_frame": "Image d'Alarme {{frameId}}",
     "frame_number": "Image {{number}}",
     "total_frames": "{{count}} images",
+    "seek_bar": "Rechercher",
     "view_list": "Vue en Liste",
     "view_montage": "Vue en Montage",
     "favorite": "Favori",
@@ -1091,6 +1093,7 @@
     "select_to_zoom": "Sélectionner",
     "zoom_in": "Agrandir",
     "zoom_out": "Réduire",
+    "scrubber_label": "Curseur de chronologie",
     "help": {
       "title": "Contrôles",
       "navigate": "Pinch/glisser/molette",

@@ -465,6 +465,8 @@ export default function Montage() {
                     isMonitorPinned(Monitor.Id) && "pin-locked",
                     isTvMode && idx === focusedMonitorIndex && "ring-2 ring-primary"
                   )}
+                  role="button"
+                  aria-label={Monitor.Name}
                   data-testid={`montage-monitor-${Monitor.Id}`}
                   tabIndex={isTvMode ? 0 : undefined}
                 >

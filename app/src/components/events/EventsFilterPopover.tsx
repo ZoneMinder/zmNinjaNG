@@ -200,13 +200,14 @@ export function EventsFilterPopover({
             {(isAllTagsSelected || selectedTags.length > 0) && (
               <div className="flex flex-wrap gap-1.5" data-testid="events-selected-tags">
                 {isAllTagsSelected && (
-                  <span
+                  <button
+                    type="button"
                     className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary cursor-pointer"
                     onClick={() => handleRemoveTag(ALL_TAGS_FILTER_ID)}
                   >
                     {t('events.filter.allTags')}
                     <X className="h-3 w-3" />
-                  </span>
+                  </button>
                 )}
                 {selectedTags.map((tag) => (
                   <TagChip

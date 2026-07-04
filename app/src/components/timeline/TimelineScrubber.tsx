@@ -7,6 +7,7 @@
  */
 
 import { memo, useState, useCallback, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import { getPortalUrlForEvent } from '../../lib/server-resolver';
 import { buildThumbnailChain } from '../../lib/thumbnail-chain';
@@ -152,6 +153,7 @@ function TimelineScrubberComponent({
   initialState,
   thumbnailPosition = 'above',
 }: TimelineScrubberProps) {
+  const { t } = useTranslation();
   const { fmtDateTime } = useDateTimeFormat();
   const trackRef = useRef<HTMLDivElement>(null);
   const [scrubbing, setScrubbing] = useState(false);
@@ -184,23 +186,61 @@ function TimelineScrubberComponent({
   // Debounce event lookup to reduce server load from thumbnail fetches
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  const updateScrub = useCallback(
-    (clientX: number) => {
-      const track = trackRef.current;
-      if (!track) return;
-      const rect = track.getBoundingClientRect();
-      const norm = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-      setHandleNorm(norm);
-      const timeMs = normToTime(norm);
+  const updateScrubNorm = useCallback(
+    (norm: number) => {
+      const clamped = Math.max(0, Math.min(1, norm));
+      setHandleNorm(clamped);
+      const timeMs = normToTime(clamped);
       // Playhead line updates immediately
       onPlayheadChange(timeMs);
       // Debounce thumbnail lookup (150ms)
       clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
-        setActiveEvents(eventsAtHandle(events, norm, viewStartMs, viewEndMs, rect.width));
+        const track = trackRef.current;
+        if (!track) return;
+        setActiveEvents(eventsAtHandle(events, clamped, viewStartMs, viewEndMs, track.getBoundingClientRect().width));
       }, 150);
     },
     [events, normToTime, onPlayheadChange, viewStartMs, viewEndMs],
+  );
+
+  const updateScrub = useCallback(
+    (clientX: number) => {
+      const track = trackRef.current;
+      if (!track) return;
+      const rect = track.getBoundingClientRect();
+      updateScrubNorm((clientX - rect.left) / rect.width);
+    },
+    [updateScrubNorm],
+  );
+
+  // Keyboard seeking: arrow keys nudge by 1%, Home/End jump to the ends.
+  const onTrackKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      const step = 0.01;
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        setActiveEvents([]);
+        setHasInteracted(true);
+        updateScrubNorm(handleNorm - step);
+      } else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        setActiveEvents([]);
+        setHasInteracted(true);
+        updateScrubNorm(handleNorm + step);
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        setActiveEvents([]);
+        setHasInteracted(true);
+        updateScrubNorm(0);
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        setActiveEvents([]);
+        setHasInteracted(true);
+        updateScrubNorm(1);
+      }
+    },
+    [handleNorm, updateScrubNorm],
   );
 
   // Mouse handlers
@@ -303,7 +343,6 @@ function TimelineScrubberComponent({
         maxWidth: '90%',
       }}
     >
-      {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
       <div
         className="flex gap-1.5 p-2 rounded-lg bg-popover/95 border border-border shadow-xl backdrop-blur-sm overflow-x-auto"
         style={{ touchAction: 'pan-x' }}
@@ -346,7 +385,7 @@ function TimelineScrubberComponent({
     <div className="relative" data-testid="timeline-scrubber">
       {/* Backdrop to dismiss thumbnails when tapping outside */}
       {!scrubbing && activeEvents.length > 0 && (
-        <div className="fixed inset-0 z-10" onClick={dismissThumbnails} />
+        <div className="fixed inset-0 z-10" role="presentation" onClick={dismissThumbnails} />
       )}
 
       {/* Thumbnails + floating time label */}
@@ -356,11 +395,18 @@ function TimelineScrubberComponent({
       {/* Scrubber track: z-30 so it's always above the dismiss backdrop (z-10) and thumbnails (z-20) */}
       <div
         ref={trackRef}
-        className="relative z-30 h-8 cursor-pointer select-none touch-none"
+        className="relative z-30 h-8 cursor-pointer select-none touch-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
+        role="slider"
+        tabIndex={0}
+        aria-label={t('timeline.scrubber_label')}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(handleNorm * 100)}
         onMouseDown={onMouseDown}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
+        onKeyDown={onTrackKeyDown}
         data-testid="scrubber-track"
       >
         {/* Track background */}

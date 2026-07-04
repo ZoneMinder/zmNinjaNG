@@ -112,6 +112,15 @@ export const EventPreviewPopover = memo(function EventPreviewPopover({
     return () => { cancelled = true; };
   }, [event.id, isAccessTokenFresh]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Keyboard users can't click the backdrop to dismiss; let Escape close the popover.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
   const frameLabels: Record<string, string> = {
     objdetect: 'AI Detect',
     alarm: 'Alarm',
@@ -130,6 +139,7 @@ export const EventPreviewPopover = memo(function EventPreviewPopover({
       {/* Invisible backdrop: tap anywhere outside to dismiss */}
       <div
         className="fixed inset-0 z-40"
+        role="presentation"
         onClick={onClose}
         data-testid="event-preview-backdrop"
       />

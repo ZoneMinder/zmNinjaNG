@@ -35,6 +35,7 @@ import { NotificationBadge } from '../components/NotificationBadge';
 import { PageContainer } from '../components/common/PageContainer';
 import { useFreshAccessToken } from '../hooks/useFreshAccessToken';
 import { useDateTimeFormat } from '../hooks/useDateTimeFormat';
+import { activateOnEnterOrSpace } from '../lib/utils';
 
 export default function NotificationHistory() {
   const navigate = useNavigate();
@@ -198,7 +199,10 @@ export default function NotificationHistory() {
                     <div
                       key={`${event.EventId}-${event.receivedAt}`}
                       className={`flex items-center gap-3 p-2 sm:p-3 hover:bg-muted/50 cursor-pointer transition-colors ${event.read ? 'opacity-50' : ''}`}
+                      role="button"
+                      tabIndex={0}
                       onClick={() => handleViewEvent(event.EventId)}
+                      onKeyDown={activateOnEnterOrSpace(() => handleViewEvent(event.EventId))}
                       data-testid="notification-history-item"
                     >
                       {/* Thumbnail */}
@@ -276,7 +280,7 @@ export default function NotificationHistory() {
                       </div>
 
                       {/* Actions */}
-                      <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center gap-1 shrink-0" role="presentation" onClick={(e) => e.stopPropagation()}>
                         {!event.read && currentProfile && (
                           <Button
                             variant="ghost"

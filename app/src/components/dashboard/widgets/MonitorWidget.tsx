@@ -25,6 +25,7 @@ import { Skeleton } from '../../ui/skeleton';
 import { useTranslation } from 'react-i18next';
 import { calculateGridDimensions } from '../../../lib/grid-utils';
 import { filterEnabledMonitors } from '../../../lib/filters';
+import { activateOnEnterOrSpace } from '../../../lib/utils';
 
 interface MonitorWidgetProps {
     /** Array of monitor IDs to display */
@@ -68,7 +69,11 @@ function SingleMonitor({ monitorId, objectFit }: { monitorId: string; objectFit:
     return (
         <div
             className="w-full h-full bg-black relative group overflow-hidden cursor-pointer"
+            role="button"
+            tabIndex={0}
+            aria-label={monitor.Monitor.Name}
             onClick={() => navigate(`/monitors/${monitor.Monitor.Id}`, { state: { from: '/dashboard' } })}
+            onKeyDown={activateOnEnterOrSpace(() => navigate(`/monitors/${monitor.Monitor.Id}`, { state: { from: '/dashboard' } }))}
         >
             {settings.hoverPreview.dashboard ? (
                 <MonitorHoverPreview monitor={monitor.Monitor}>

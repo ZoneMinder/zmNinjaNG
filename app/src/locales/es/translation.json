@@ -73,6 +73,7 @@
     "widget_events": "Eventos Recientes",
     "widget_timeline": "Línea de Tiempo",
     "widget_heatmap": "Mapa de Calor de Eventos",
+    "widget_type": "Tipo de widget",
     "widget_title": "Título del Widget (Opcional)",
     "widget_title_placeholder": "Mi Widget",
     "select_monitor": "Seleccionar Monitor",
@@ -196,6 +197,7 @@
     "alarm_frame": "Fotograma de Alarma {{frameId}}",
     "frame_number": "Fotograma {{number}}",
     "total_frames": "{{count}} fotogramas",
+    "seek_bar": "Buscar",
     "view_list": "Lista",
     "view_montage": "Montaje",
     "favorite": "Favorito",
@@ -1091,6 +1093,7 @@
     "select_to_zoom": "Seleccionar",
     "zoom_in": "Acercar",
     "zoom_out": "Alejar",
+    "scrubber_label": "Control de línea de tiempo",
     "help": {
       "title": "Controles",
       "navigate": "Pinch/arrastrar/scroll",
