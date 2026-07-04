@@ -177,56 +177,6 @@ class CertFetchDelegate: NSObject, URLSessionDelegate {
     }
 }
 
-// MARK: - Certificate issuer/expiry extraction
-
-/// Date formatter for cert expiry, matching the shape of Java's `Date.toString()`
-/// used on the Android side (e.g. "Thu Jul 02 00:00:00 PDT 2026") so both
-/// platforms show a comparable human-readable expiry string.
-private let certExpiryFormatter: DateFormatter = {
-    let formatter = DateFormatter()
-    formatter.locale = Locale(identifier: "en_US_POSIX")
-    formatter.dateFormat = "EEE MMM dd HH:mm:ss zzz yyyy"
-    return formatter
-}()
-
-/// Extract the issuer name and expiry date from a certificate using the Security
-/// framework. Returns nil for either field independently if it can't be read, so
-/// the caller can fall back per-field instead of discarding both.
-func certificateIssuerAndExpiry(_ certificate: SecCertificate) -> (issuer: String?, expiry: String?) {
-    let oids: [CFString] = [kSecOIDX509V1IssuerName, kSecOIDX509V1ValidityNotAfter]
-    guard let values = SecCertificateCopyValues(certificate, oids as CFArray, nil) as? [String: [String: Any]] else {
-        return (nil, nil)
-    }
-
-    var issuer: String?
-    if let issuerDict = values[kSecOIDX509V1IssuerName as String],
-       let rdnArray = issuerDict[kSecPropertyKeyValue as String] as? [[String: Any]] {
-        let parts = rdnArray.compactMap { rdn -> String? in
-            guard let label = rdn[kSecPropertyKeyLabel as String] as? String,
-                  let value = rdn[kSecPropertyKeyValue as String] as? String else { return nil }
-            return "\(label)=\(value)"
-        }
-        if !parts.isEmpty {
-            issuer = parts.joined(separator: ", ")
-        }
-    }
-
-    var expiry: String?
-    if let expiryDict = values[kSecOIDX509V1ValidityNotAfter as String],
-       let rawValue = expiryDict[kSecPropertyKeyValue as String] {
-        if let date = rawValue as? Date {
-            expiry = certExpiryFormatter.string(from: date)
-        } else if let seconds = rawValue as? NSNumber {
-            // kSecOIDX509V1ValidityNotAfter is a CFAbsoluteTime (seconds since the
-            // reference date 2001-01-01) when it isn't already bridged to Date.
-            let date = Date(timeIntervalSinceReferenceDate: seconds.doubleValue)
-            expiry = certExpiryFormatter.string(from: date)
-        }
-    }
-
-    return (issuer, expiry)
-}
-
 // MARK: - SHA-256 fingerprint helper
 
 func sha256Fingerprint(_ certificate: SecCertificate) -> String {
