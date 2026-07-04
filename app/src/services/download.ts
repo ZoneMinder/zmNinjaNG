@@ -424,13 +424,11 @@ export function downloadEventVideo(
           // Update file size metadata on first progress update. Read fresh
           // state here: `taskStore` is a snapshot captured before addTask()
           // ran, so `taskStore.tasks` never contains this task and this
-          // block was previously always a no-op.
+          // block was previously always a no-op. Go through updateTaskMetadata
+          // (an immutable set()) rather than mutating the task object in place.
           const currentTasks = useBackgroundTasks.getState().tasks;
           if (progress.total && !currentTasks.find(t => t.id === taskId)?.metadata.fileSize) {
-            const task = currentTasks.find(t => t.id === taskId);
-            if (task) {
-              task.metadata.fileSize = progress.total;
-            }
+            useBackgroundTasks.getState().updateTaskMetadata(taskId, { fileSize: progress.total });
           }
         },
       });

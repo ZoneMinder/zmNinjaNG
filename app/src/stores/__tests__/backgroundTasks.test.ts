@@ -123,6 +123,57 @@ describe('Background Tasks Store', () => {
     });
   });
 
+  describe('Updating Task Metadata', () => {
+    it('should merge partial metadata into the task without touching other fields', () => {
+      const { addTask, updateTaskMetadata } = useBackgroundTasks.getState();
+
+      const taskId = addTask({
+        type: 'download',
+        metadata: { title: 'test.mp4', description: 'Event 1' },
+      });
+
+      updateTaskMetadata(taskId, { fileSize: 2048 });
+
+      const task = useBackgroundTasks.getState().tasks.find((t) => t.id === taskId);
+      expect(task?.metadata.fileSize).toBe(2048);
+      expect(task?.metadata.title).toBe('test.mp4');
+      expect(task?.metadata.description).toBe('Event 1');
+    });
+
+    it('should update immutably: the pre-update task object is left untouched', () => {
+      const { addTask, updateTaskMetadata } = useBackgroundTasks.getState();
+
+      const taskId = addTask({
+        type: 'download',
+        metadata: { title: 'test.mp4' },
+      });
+      const before = useBackgroundTasks.getState().tasks.find((t) => t.id === taskId)!;
+
+      updateTaskMetadata(taskId, { fileSize: 4096 });
+
+      // The object reference captured before the update is unchanged: this
+      // guards against bypassing set() via direct mutation, which would
+      // silently update `before.metadata` too.
+      expect(before.metadata.fileSize).toBeUndefined();
+
+      const after = useBackgroundTasks.getState().tasks.find((t) => t.id === taskId);
+      expect(after?.metadata.fileSize).toBe(4096);
+      expect(after).not.toBe(before);
+    });
+
+    it('should be a no-op for an unknown task id', () => {
+      const { addTask, updateTaskMetadata } = useBackgroundTasks.getState();
+
+      addTask({ type: 'download', metadata: { title: 'test.mp4' } });
+      const before = useBackgroundTasks.getState().tasks;
+
+      updateTaskMetadata('nonexistent-id', { fileSize: 999 });
+
+      expect(useBackgroundTasks.getState().tasks[0].metadata.fileSize).toBeUndefined();
+      expect(before[0]).toBe(useBackgroundTasks.getState().tasks[0]);
+    });
+  });
+
   describe('Completing Tasks', () => {
     it('should mark task as completed', () => {
       const { addTask, completeTask } = useBackgroundTasks.getState();
