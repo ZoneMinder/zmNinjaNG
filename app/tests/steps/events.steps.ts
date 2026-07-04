@@ -39,6 +39,54 @@ Then('I should see events list or empty state', async ({ page }) => {
   } else {
     hasEvents = false;
   }
+
+  preFilterEventIds = await eventCards.evaluateAll((els) => els.map((el) => el.getAttribute('data-event-id')));
+});
+
+// Date-range filter actually changes the result set (refs #217, events.feature
+// "Filter events by date range and verify results change").
+let preFilterEventIds: (string | null)[] = [];
+
+Then('the filtered event set should differ from the unfiltered list', async ({ page }) => {
+  if (preFilterEventIds.length === 0) {
+    log.info('E2E: Skipping date-filter diff check - no events existed before filtering', { component: 'e2e' });
+    return;
+  }
+
+  const eventCards = page.getByTestId('event-card');
+  const emptyState = page.getByTestId('events-empty-state');
+
+  // useQuery keeps the previous (unfiltered) page visible via keepPreviousData
+  // while the filtered request is in flight, so the unfiltered list would
+  // satisfy a naive "list or empty" check immediately. Poll until the DOM
+  // actually reflects a different result set (or a real empty state) instead
+  // of accepting the stale snapshot.
+  await expect.poll(async () => {
+    const emptyVisible = await emptyState.isVisible().catch(() => false);
+    if (emptyVisible) return true;
+    const ids = await eventCards.evaluateAll((els) => els.map((el) => el.getAttribute('data-event-id')));
+    return JSON.stringify(ids) !== JSON.stringify(preFilterEventIds);
+  }, { timeout: testConfig.timeouts.transition * 4 }).toBeTruthy();
+
+  const emptyVisible = await emptyState.isVisible().catch(() => false);
+  if (emptyVisible) {
+    // The fixed 2024-01-01 hour window returned zero events: a real, verifiable
+    // change from the unfiltered "most recent" list, which was non-empty.
+    return;
+  }
+  const idsAfter = await eventCards.evaluateAll((els) => els.map((el) => el.getAttribute('data-event-id')));
+  expect(idsAfter).not.toEqual(preFilterEventIds);
+});
+
+Then('the events list should return to a non-empty state', async ({ page }) => {
+  if (preFilterEventIds.length === 0) {
+    log.info('E2E: Skipping post-clear check - no events existed before filtering', { component: 'e2e' });
+    return;
+  }
+  const eventCards = page.getByTestId('event-card');
+  await expect.poll(() => eventCards.count(), {
+    timeout: testConfig.timeouts.transition * 3,
+  }).toBeGreaterThan(0);
 });
 
 // Scroll restoration (refs #197)

@@ -20,12 +20,13 @@ Feature: Event Browsing and Management
 
   @all
   Scenario: Filter events by date range and verify results change
+    Then I should see events list or empty state
     When I open the events filter panel
     And I set the events date range
     And I apply event filters
-    Then I should see events list or empty state
+    Then the filtered event set should differ from the unfiltered list
     When I clear event filters
-    Then I should see events list or empty state
+    Then the events list should return to a non-empty state
 
   @all
   Scenario: Returning from an event keeps the list scroll position

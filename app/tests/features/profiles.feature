@@ -32,11 +32,28 @@ Feature: Profile Management
     Then I should see the new profile in the list
 
   @all
-  Scenario: Delete profile after confirmation
-    When I open the delete dialog for the first profile if possible
+  Scenario: Cancelling profile deletion keeps the profile in the list
+    When I click the add profile button
+    Then I should see the profile form
+    When I fill in new profile connection details
+    And I save the new profile
+    Then the newly added profile should appear in the list
+    When I open the delete dialog for the newly added profile
     Then I should see the profile delete dialog
     When I cancel profile deletion
-    Then I should see the profiles list
+    Then the newly added profile should still appear in the list
+
+  @all
+  Scenario: Deleting a profile removes it from the list
+    When I click the add profile button
+    Then I should see the profile form
+    When I fill in new profile connection details
+    And I save the new profile
+    Then the newly added profile should appear in the list
+    When I open the delete dialog for the newly added profile
+    Then I should see the profile delete dialog
+    When I confirm profile deletion
+    Then the newly added profile should no longer appear in the list
 
   @ios-phone @android @visual
   Scenario: Phone layout stacks profile cards
