@@ -187,11 +187,26 @@ export default function Events() {
     return selectedTagIds;
   }, [favoritesOnly, selectedTagIds, availableTags]);
 
+  // Manual "Load More" pagination. persistKey identifies the current result set
+  // (everything the query key encodes except the limit itself) so the expanded
+  // count survives the round-trip into an event and back, and resets when a
+  // filter changes (refs #197). Opening an event unmounts this page, so a
+  // component-local count would collapse back to the first page on return.
+  const paginationKey = useMemo(
+    () => JSON.stringify(
+      queryKeys.eventsList(currentProfile?.id, filters, 0, effectiveMonitorId, isGroupFilterActive, eventIdFilter, tagIdFilter)
+    ),
+    [currentProfile?.id, filters, effectiveMonitorId, isGroupFilterActive, eventIdFilter, tagIdFilter]
+  );
+  const { eventLimit, batchSize, isLoadingMore, loadNextPage } = useEventPagination({
+    defaultLimit: settings.defaultEventLimit || 100,
+    persistKey: paginationKey,
+  });
+
   // Fetch events with configured limit
   // Include effectiveMonitorId and group filter state in query key for proper cache invalidation
-  const [currentEventLimit, setCurrentEventLimit] = useState(settings.defaultEventLimit || 100);
   const { data: eventsData, isLoading, isFetching, error, refetch } = useQuery({
-    queryKey: queryKeys.eventsList(currentProfile?.id, filters, currentEventLimit, effectiveMonitorId, isGroupFilterActive, eventIdFilter, tagIdFilter),
+    queryKey: queryKeys.eventsList(currentProfile?.id, filters, eventLimit, effectiveMonitorId, isGroupFilterActive, eventIdFilter, tagIdFilter),
     queryFn: () =>
       getEvents({
         ...filters,
@@ -202,24 +217,12 @@ export default function Events() {
         endDateTime: filters.endDateTime ? formatForServer(new Date(filters.endDateTime)) : undefined,
         eventIds: eventIdFilter,
         tagIds: tagIdFilter,
-        limit: currentEventLimit,
+        limit: eventLimit,
       }),
     enabled: !!currentProfile && isAuthenticated,
     // Keep showing previous data while fetching more (prevents UI flash during pagination)
     placeholderData: keepPreviousData,
   });
-
-  // Use pagination hook for manual "Load More" button
-  const { eventLimit, batchSize, isLoadingMore, loadNextPage } = useEventPagination({
-    defaultLimit: settings.defaultEventLimit || 100,
-  });
-
-  // Sync pagination limit with query when it changes
-  useEffect(() => {
-    if (eventLimit !== currentEventLimit) {
-      setCurrentEventLimit(eventLimit);
-    }
-  }, [eventLimit, currentEventLimit]);
 
   // Pull-to-refresh gesture
   const pullToRefresh = usePullToRefresh({
