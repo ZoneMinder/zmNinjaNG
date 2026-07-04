@@ -425,18 +425,7 @@ export function ZmsEventPlayer({
             </Badge>
           </div>
         </div>
-        <ZoomControls
-          onZoomIn={zoomPan.zoomIn}
-          onZoomOut={zoomPan.zoomOut}
-          onReset={zoomPan.reset}
-          onPanLeft={zoomPan.panLeft}
-          onPanRight={zoomPan.panRight}
-          onPanUp={zoomPan.panUp}
-          onPanDown={zoomPan.panDown}
-          isZoomed={zoomPan.isZoomed}
-          scale={zoomPan.scale}
-          className="bottom-2 left-2"
-        />
+        <ZoomControls zoomPan={zoomPan} className="bottom-2 left-2" />
       </Card>
 
       {/* Playback Controls */}

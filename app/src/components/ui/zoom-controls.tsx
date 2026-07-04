@@ -13,7 +13,20 @@ import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/utils';
 import { UI_INTERACTIONS } from '../../lib/zmninja-ng-constants';
 
-interface ZoomControlsProps {
+/** Subset of `useZoomPan`'s return value that ZoomControls needs to render. */
+export interface ZoomPanControls {
+  zoomIn: () => void;
+  zoomOut: () => void;
+  reset: () => void;
+  panLeft: () => void;
+  panRight: () => void;
+  panUp: () => void;
+  panDown: () => void;
+  isZoomed: boolean;
+  scale: number;
+}
+
+interface ZoomControlsExplicitProps {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onReset: () => void;
@@ -24,6 +37,18 @@ interface ZoomControlsProps {
   isZoomed: boolean;
   scale: number;
   className?: string;
+}
+
+interface ZoomControlsFromHookProps {
+  /** Pass the object returned by `useZoomPan` directly instead of wiring each handler. */
+  zoomPan: ZoomPanControls;
+  className?: string;
+}
+
+type ZoomControlsProps = ZoomControlsExplicitProps | ZoomControlsFromHookProps;
+
+function isFromHookProps(props: ZoomControlsProps): props is ZoomControlsFromHookProps {
+  return 'zoomPan' in props;
 }
 
 /** Returns pointerDown/pointerUp/pointerLeave handlers that repeat `action` while held. */
@@ -56,18 +81,33 @@ function useHoldRepeat(action: () => void) {
 
 const btn = 'h-7 w-7 opacity-70 hover:opacity-100';
 
-export function ZoomControls({
-  onZoomIn,
-  onZoomOut,
-  onReset,
-  onPanLeft,
-  onPanRight,
-  onPanUp,
-  onPanDown,
-  isZoomed,
-  scale,
-  className,
-}: ZoomControlsProps) {
+export function ZoomControls(props: ZoomControlsProps) {
+  const {
+    onZoomIn,
+    onZoomOut,
+    onReset,
+    onPanLeft,
+    onPanRight,
+    onPanUp,
+    onPanDown,
+    isZoomed,
+    scale,
+    className,
+  } = isFromHookProps(props)
+    ? {
+        onZoomIn: props.zoomPan.zoomIn,
+        onZoomOut: props.zoomPan.zoomOut,
+        onReset: props.zoomPan.reset,
+        onPanLeft: props.zoomPan.panLeft,
+        onPanRight: props.zoomPan.panRight,
+        onPanUp: props.zoomPan.panUp,
+        onPanDown: props.zoomPan.panDown,
+        isZoomed: props.zoomPan.isZoomed,
+        scale: props.zoomPan.scale,
+        className: props.className,
+      }
+    : props;
+
   const { t } = useTranslation();
 
   const holdZoomIn = useHoldRepeat(onZoomIn);

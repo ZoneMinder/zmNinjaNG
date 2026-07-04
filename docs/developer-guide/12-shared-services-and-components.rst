@@ -1620,6 +1620,43 @@ different corner radius, not a real duplicate of this one.
 
 --------------
 
+ZoomControls (``ui/zoom-controls.tsx``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Zoom +/- and pan-arrow overlay for a ``useZoomPan``-controlled element.
+Click-and-hold repeats the action on every button.
+
+Accepts either the object returned by ``useZoomPan`` directly, or the nine
+explicit handler/state props for callers that only need a subset of it:
+
+.. code:: tsx
+
+   const zoomPan = useZoomPan({ maxScale: 4 });
+
+   <div ref={zoomPan.ref}>
+     <div ref={zoomPan.innerRef}>{/* zoomable content */}</div>
+     <ZoomControls zoomPan={zoomPan} className="bottom-2 left-2" />
+   </div>
+
+   // Explicit-props form still works for callers that don't hold the
+   // full useZoomPan object (or wrap only some of its handlers):
+   <ZoomControls
+     onZoomIn={zoomPan.zoomIn}
+     onZoomOut={zoomPan.zoomOut}
+     onReset={zoomPan.reset}
+     onPanLeft={zoomPan.panLeft}
+     onPanRight={zoomPan.panRight}
+     onPanUp={zoomPan.panUp}
+     onPanDown={zoomPan.panDown}
+     isZoomed={zoomPan.isZoomed}
+     scale={zoomPan.scale}
+   />
+
+**Used By:** MonitorDetail, ZmsEventPlayer (via the ``zoomPan`` form);
+EventDetail's MP4 player still uses the explicit-props form.
+
+--------------
+
 PullToRefresh (``ui/pull-to-refresh-indicator.tsx``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

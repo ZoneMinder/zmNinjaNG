@@ -402,15 +402,7 @@ export default function MonitorDetail() {
             </span>
           )}
           <ZoomControls
-            onZoomIn={zoomPan.zoomIn}
-            onZoomOut={zoomPan.zoomOut}
-            onReset={zoomPan.reset}
-            onPanLeft={zoomPan.panLeft}
-            onPanRight={zoomPan.panRight}
-            onPanUp={zoomPan.panUp}
-            onPanDown={zoomPan.panDown}
-            isZoomed={zoomPan.isZoomed}
-            scale={zoomPan.scale}
+            zoomPan={zoomPan}
             className={cn(
               'bottom-2 left-2',
               isFullscreen && 'bottom-[calc(0.5rem+var(--sai-bottom,env(safe-area-inset-bottom)))]'
