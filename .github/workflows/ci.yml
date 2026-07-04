@@ -66,6 +66,34 @@ jobs:
         continue-on-error: true
         run: npm run lint
 
+  lint-a11y:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./app
+        run: npm ci
+
+      # Hard gate: jsx-a11y is the one ruleset fully clean on this repo (all
+      # 35 pre-existing violations were fixed, refs #217). eslint.a11y.config.js
+      # enables only jsx-a11y rules (everything else off), so this job is not
+      # affected by the react-hooks/*, no-explicit-any backlog that keeps the
+      # `lint` job above advisory. No continue-on-error: a new a11y violation
+      # fails the PR.
+      - name: Run a11y lint
+        working-directory: ./app
+        run: npm run lint:a11y
+
   build:
     runs-on: ubuntu-latest
 

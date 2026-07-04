@@ -3,11 +3,20 @@
 # cwd, not the --cwd option, so `cd` first rather than passing `--cwd app`.
 cd app
 
-# Lint is advisory until the pre-existing backlog (~170 errors, react-hooks/*
-# and no-explicit-any) is burned down. lint-staged runs eslint on staged files
-# and surfaces problems, but does not block the commit, because editing any of
-# the ~94 backlog files would otherwise be blocked. Drop the `|| true` to make
-# lint a hard gate once the backlog is cleared (tracked in #217). tsc -b and the
-# commit-msg native-version guard stay hard gates.
+# Full lint is advisory until the pre-existing backlog (~170 errors,
+# react-hooks/* and no-explicit-any) is burned down. lint-staged runs eslint on
+# staged files and surfaces problems, but does not block the commit, because
+# editing any of the ~94 backlog files would otherwise be blocked. Drop the
+# `|| echo` to make lint a hard gate once the backlog is cleared (tracked in
+# #217).
 npx lint-staged || echo "lint reported issues (advisory; see #217 backlog)"
+
+# jsx-a11y IS a hard gate (refs #217 finding 7): all 35 pre-existing
+# violations were fixed on this branch, so the ruleset is green today and a
+# regression should block the commit. eslint.a11y.config.js enables only
+# jsx-a11y rules, so it isn't affected by the advisory backlog above. Runs
+# against the whole tree (not just staged files) since it's fast enough.
+npx eslint -c eslint.a11y.config.js .
+
+# tsc -b and the commit-msg native-version guard stay hard gates.
 npx tsc -b

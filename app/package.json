@@ -16,6 +16,7 @@
     "dev:notifications": "npm run proxy & npm run mock:notifications & npm run dev",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "lint:a11y": "eslint -c eslint.a11y.config.js .",
     "preview": "vite preview",
     "test": "vitest",
     "test:ui": "vitest --ui",
