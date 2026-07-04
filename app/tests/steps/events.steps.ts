@@ -453,17 +453,16 @@ When('I archive the event from detail page if on detail page', async ({ page }) 
     return;
   }
 
-  // Visibility is the only genuinely conditional part (are we actually on the
-  // detail page); once visible, a failed click is a real bug and should fail.
+  // hasEvents true means the earlier "I click into the first event if events
+  // exist" step already navigated here and waited for the /events/:id URL, so
+  // we are genuinely on the detail page and its archive button must exist.
+  // Swallowing a missing button behind isVisible().catch() masked a real
+  // rendering regression as "nothing to do here" - assert it hard instead.
   const archiveBtn = page.getByTestId('event-detail-archive');
-  const visible = await archiveBtn.isVisible({ timeout: testConfig.timeouts.element }).catch(() => false);
-  if (visible) {
-    await archiveBtn.click();
-    detailArchiveToggled = true;
-    await page.waitForTimeout(700);
-  } else {
-    log.info('E2E: Skipping archive from detail - button not visible', { component: 'e2e' });
-  }
+  await expect(archiveBtn).toBeVisible({ timeout: testConfig.timeouts.element });
+  await archiveBtn.click();
+  detailArchiveToggled = true;
+  await page.waitForTimeout(700);
 });
 
 Then('I should see the detail archive button active if action was taken', async ({ page }) => {

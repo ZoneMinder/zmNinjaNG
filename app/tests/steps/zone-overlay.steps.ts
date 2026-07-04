@@ -13,8 +13,14 @@ Then('I should see the zone toggle button', async ({ page }) => {
 
 When('I click the zone toggle button', async ({ page }) => {
   const zoneToggle = page.getByTestId('zone-toggle-button');
+  // aria-label flips between "Show Zones" / "Hide Zones" (MonitorDetail.tsx)
+  // independent of whether this monitor actually has zones, so it is a
+  // reliable signal that the click's state update has landed.
+  const beforeLabel = await zoneToggle.getAttribute('aria-label');
   await zoneToggle.click();
-  await page.waitForTimeout(500);
+  await expect(zoneToggle).not.toHaveAttribute('aria-label', beforeLabel ?? '', {
+    timeout: testConfig.timeouts.element,
+  });
 });
 
 Then('the zone toggle should be active', async ({ page }) => {
@@ -44,7 +50,7 @@ Then('the zone toggle should be inactive', async ({ page }) => {
 When('I toggle Show Zones on', async ({ page }) => {
   const toggle = page.getByTestId('zone-toggle-button');
   await toggle.click();
-  await page.waitForTimeout(500);
+  await expect(toggle).toHaveAttribute('aria-label', /hide/i, { timeout: testConfig.timeouts.element });
 });
 
 Then('the zone overlay and legend should be visible if the monitor has zones', async ({ page }) => {
@@ -60,7 +66,7 @@ Then('the zone overlay and legend should be visible if the monitor has zones', a
 When('I toggle Show Zones off', async ({ page }) => {
   const toggle = page.getByTestId('zone-toggle-button');
   await toggle.click();
-  await page.waitForTimeout(500);
+  await expect(toggle).toHaveAttribute('aria-label', /show/i, { timeout: testConfig.timeouts.element });
 });
 
 Then('the zone overlay should not be visible', async ({ page }) => {

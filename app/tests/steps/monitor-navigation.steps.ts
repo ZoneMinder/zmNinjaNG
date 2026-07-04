@@ -107,7 +107,14 @@ Then('the monitor should change to previous in list', async ({ page }) => {
 });
 
 // Swipe Navigation
+// Swipe changes the URL's monitor id when it succeeds; there is no other
+// client-side signal, and on a single-monitor server there is nothing to
+// swipe to, so record the id before the gesture and only assert a change
+// where one is actually possible (mirrors the next/prev pattern above).
+let swipeMonitorIdBefore: string | null = null;
+
 When('I swipe left on the video player', async ({ page }) => {
+  swipeMonitorIdBefore = urlMonitorId(page);
   const player = page.getByTestId('monitor-player').first();
   const box = await player.boundingBox();
   if (box) {
@@ -115,11 +122,11 @@ When('I swipe left on the video player', async ({ page }) => {
     await page.mouse.down();
     await page.mouse.move(box.x + box.width * 0.2, box.y + box.height / 2, { steps: 10 });
     await page.mouse.up();
-    await page.waitForTimeout(500);
   }
 });
 
 When('I swipe right on the video player', async ({ page }) => {
+  swipeMonitorIdBefore = urlMonitorId(page);
   const player = page.getByTestId('monitor-player').first();
   const box = await player.boundingBox();
   if (box) {
@@ -127,14 +134,20 @@ When('I swipe right on the video player', async ({ page }) => {
     await page.mouse.down();
     await page.mouse.move(box.x + box.width * 0.8, box.y + box.height / 2, { steps: 10 });
     await page.mouse.up();
-    await page.waitForTimeout(500);
   }
 });
 
 Then('the next monitor should load if available', async ({ page }) => {
-  await page.waitForTimeout(500);
+  // Single-monitor server: nothing to swipe to, nothing to assert.
+  await expect.poll(() => urlMonitorId(page), { timeout: testConfig.timeouts.transition }).not.toBe(null);
+  const after = urlMonitorId(page);
+  if (after === swipeMonitorIdBefore) return;
+  log.info('E2E: Monitor changed after swipe left', { component: 'e2e', before: swipeMonitorIdBefore, after });
 });
 
 Then('the previous monitor should load if available', async ({ page }) => {
-  await page.waitForTimeout(500);
+  await expect.poll(() => urlMonitorId(page), { timeout: testConfig.timeouts.transition }).not.toBe(null);
+  const after = urlMonitorId(page);
+  if (after === swipeMonitorIdBefore) return;
+  log.info('E2E: Monitor changed after swipe right', { component: 'e2e', before: swipeMonitorIdBefore, after });
 });

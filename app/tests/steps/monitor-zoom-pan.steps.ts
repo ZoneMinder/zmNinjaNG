@@ -21,7 +21,9 @@ When('I scroll the wheel up over the monitor view', async ({ page }) => {
   for (let i = 0; i < 4; i++) {
     await page.mouse.wheel(0, -120);
   }
-  await page.waitForTimeout(100);
+  // Zooming past the threshold is what makes the pan buttons appear; wait for
+  // that observable effect instead of guessing how long the state update takes.
+  await expect(page.getByTestId('pan-left-button')).toBeVisible({ timeout: testConfig.timeouts.transition });
 });
 
 When('I zoom into the monitor view', async ({ page }) => {
@@ -40,8 +42,10 @@ Then('the pan controls should be visible', async ({ page }) => {
 When('I pan the view with the {string} arrow key', async ({ page }, key: string) => {
   panTransformBefore = await readZoomTransform(page);
   await page.keyboard.press(key);
-  // Pan animates over 0.2s; wait for the transform to settle.
-  await page.waitForTimeout(300);
+  // Pan animates over 0.2s; wait for the transform value to actually change
+  // rather than sleeping a fixed duration that may outrun or undershoot it.
+  await expect.poll(() => readZoomTransform(page), { timeout: testConfig.timeouts.transition })
+    .not.toBe(panTransformBefore);
 });
 
 When('I drag the monitor view with the mouse', async ({ page }) => {
@@ -57,7 +61,8 @@ When('I drag the monitor view with the mouse', async ({ page }) => {
     await page.mouse.move(cx - (60 * i) / 8, cy);
   }
   await page.mouse.up();
-  await page.waitForTimeout(100);
+  await expect.poll(() => readZoomTransform(page), { timeout: testConfig.timeouts.transition })
+    .not.toBe(panTransformBefore);
 });
 
 Then('the view should pan', async ({ page }) => {

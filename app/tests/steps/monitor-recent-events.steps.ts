@@ -15,9 +15,12 @@ When("I open the first monitor's detail view", async ({ page }) => {
     const mobileMenuButton = page.getByTestId('mobile-menu-button');
     if (await mobileMenuButton.isVisible().catch(() => false)) {
       await mobileMenuButton.click();
-      await page.waitForTimeout(300);
     }
     const navItem = page.locator('[data-testid="nav-item-monitors"]').locator('visible=true').first();
+    // Wait for the (possibly still-animating) mobile menu to reveal the nav
+    // item rather than sleeping a fixed duration; click() would auto-wait too,
+    // but making the wait explicit documents what it is for.
+    await navItem.waitFor({ state: 'visible', timeout: testConfig.timeouts.element });
     await navItem.click();
     await page.waitForURL(/.*monitors$/, { timeout: testConfig.timeouts.transition });
 
@@ -36,7 +39,9 @@ Then('the recent events list should be visible', async ({ page }) => {
 
 When('I tap the recent events collapse toggle', async ({ page }) => {
   await page.getByTestId('monitor-recent-events-toggle').click();
-  await page.waitForTimeout(200);
+  // No fixed wait here: every scenario using this step follows immediately
+  // with a "Then ... body should be hidden/visible" assertion that polls for
+  // the resulting state (see below), so an extra sleep here is redundant.
 });
 
 Then('the recent events body should be hidden', async ({ page }) => {
