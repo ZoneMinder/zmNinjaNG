@@ -4,12 +4,13 @@
  * List view of events with thumbnails and metadata.
  */
 
+import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { EventCard } from './EventCard';
 import { type EventFilters } from '../../api/events';
-import { getPortalUrlForEvent } from '../../lib/server-resolver';
+import { getPortalUrlForMonitor } from '../../lib/server-resolver';
 import { buildThumbnailChain } from '../../lib/thumbnail-chain';
 import { calculateThumbnailDimensions, EVENT_GRID_CONSTANTS, getMonitorDimensions } from '../../lib/event-utils';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
@@ -33,9 +34,11 @@ interface EventListViewProps {
 }
 
 // Helper to render a single event item
-const EventItem = ({
+// Memoized: with a stable monitorMap and stable callback/array props from the
+// parent, this skips re-rendering rows unaffected by a given state change.
+const EventItem = memo(function EventItem({
   event,
-  monitors,
+  monitorMap,
   thumbnailFit,
   portalUrl,
   accessToken,
@@ -45,7 +48,7 @@ const EventItem = ({
   thumbnailChain,
 }: {
   event: EventData;
-  monitors: Array<{ Monitor: Monitor }>;
+  monitorMap: Map<string, Monitor>;
   thumbnailFit: 'contain' | 'cover' | 'none' | 'scale-down';
   portalUrl: string;
   accessToken?: string;
@@ -53,9 +56,11 @@ const EventItem = ({
   eventFilters?: EventFilters;
   minStreamingPort?: number;
   thumbnailChain: ThumbnailFallbackEntry[];
-}) => {
+}) {
   const { Event } = event;
-  const monitorData = monitors.find((m) => m.Monitor.Id === Event.MonitorId)?.Monitor;
+  // O(1) lookup via the id -> Monitor map built once per monitors change,
+  // instead of an O(monitors) `.find()` per row per render.
+  const monitorData = monitorMap.get(Event.MonitorId);
 
   const { width: monitorWidth, height: monitorHeight } = getMonitorDimensions(monitorData, Event.Width, Event.Height);
 
@@ -66,7 +71,10 @@ const EventItem = ({
     EVENT_GRID_CONSTANTS.LIST_VIEW_TARGET_SIZE
   );
 
-  const eventPortalUrl = getPortalUrlForEvent(Event.MonitorId, monitors, portalUrl);
+  // Resolve the portal URL directly from the already-looked-up monitor
+  // instead of getPortalUrlForEvent(), which would re-run its own
+  // O(monitors) find() over the full monitors array.
+  const eventPortalUrl = getPortalUrlForMonitor(monitorData?.ServerId, portalUrl);
   const thumbnailUrls = buildThumbnailChain(eventPortalUrl, Event.Id, thumbnailChain, {
     token: accessToken,
     width: thumbnailWidth,
@@ -100,7 +108,7 @@ const EventItem = ({
       />
     </div>
   );
-};
+});
 
 export const EventListView = ({
   events,
@@ -120,6 +128,14 @@ export const EventListView = ({
   const { t } = useTranslation();
   const { settings } = useCurrentProfile();
   const thumbnailChain = settings.thumbnailFallbackChain;
+
+  // id -> Monitor lookup, rebuilt only when the monitors array reference
+  // changes. Replaces a monitors.find() per event per render (O(events x
+  // monitors)) with an O(1) map.get() per event.
+  const monitorMap = useMemo(
+    () => new Map(monitors.map((m) => [m.Monitor.Id, m.Monitor])),
+    [monitors]
+  );
 
   const isLoadingData = isLoadingMore || isFetching;
   const hasMore = totalCount !== undefined ? events.length < totalCount : false;
@@ -165,7 +181,7 @@ export const EventListView = ({
         <EventItem
           key={event.Event.Id}
           event={event}
-          monitors={monitors}
+          monitorMap={monitorMap}
           thumbnailFit={thumbnailFit}
           portalUrl={portalUrl}
           accessToken={accessToken}
