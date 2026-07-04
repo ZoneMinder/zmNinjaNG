@@ -97,8 +97,11 @@ class NotificationService: UNNotificationServiceExtension {
 
             let tmpDir = FileManager.default.temporaryDirectory
             // ZM image URLs end in index.php with query params — always use .jpg
-            // so UNNotificationAttachment recognizes the file type
-            let tmpFile = tmpDir.appendingPathComponent("notification-image.jpg")
+            // so UNNotificationAttachment recognizes the file type.
+            // Filename is unique per download: a fixed name would let two pushes
+            // arriving close together (multiple monitors/events) clobber each
+            // other's temp file mid-write.
+            let tmpFile = tmpDir.appendingPathComponent("notification-image-\(UUID().uuidString).jpg")
 
             os_log("Moving downloaded file to %{public}@", log: logger, type: .debug, tmpFile.path)
 
