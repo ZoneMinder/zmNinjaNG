@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MontageMonitor } from '../MontageMonitor';
 import type { Monitor, MonitorStatus, Profile } from '../../../api/types';
+import { asProfileId } from '../../../api/types';
 import { useMonitorStore } from '../../../stores/monitors';
 import { useSettingsStore, DEFAULT_SETTINGS } from '../../../stores/settings';
 
@@ -104,7 +105,7 @@ describe('MontageMonitor', () => {
   };
 
   const mockProfile: Profile = {
-    id: 'profile-1',
+    id: asProfileId('profile-1'),
     name: 'Test Profile',
     apiUrl: 'https://test.com',
     portalUrl: 'https://test.com',

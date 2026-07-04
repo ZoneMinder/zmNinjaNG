@@ -20,6 +20,7 @@ import { useProfileStore } from '../../stores/profile';
 import { useAuthStore } from '../../stores/auth';
 import { useSettingsStore, DEFAULT_SETTINGS } from '../../stores/settings';
 import type { Profile } from '../../api/types';
+import { asProfileId } from '../../api/types';
 
 vi.mock('../../lib/http', () => ({
   httpGet: vi.fn().mockResolvedValue({}),
@@ -68,7 +69,7 @@ vi.mock('../../lib/zm-constants', () => ({
 
 describe('useMonitorStream: token freshness gate', () => {
   const mockProfile: Profile = {
-    id: 'profile-1',
+    id: asProfileId('profile-1'),
     name: 'Test Profile',
     apiUrl: 'https://test.com',
     portalUrl: 'https://test.com',
@@ -80,7 +81,7 @@ describe('useMonitorStream: token freshness gate', () => {
   beforeEach(() => {
     useProfileStore.setState({
       profiles: [mockProfile],
-      currentProfileId: 'profile-1',
+      currentProfileId: mockProfile.id,
       isInitialized: true,
       isBootstrapping: false,
       bootstrapStep: null,

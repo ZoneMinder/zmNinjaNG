@@ -13,7 +13,8 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Profile } from '../api/types';
+import type { Profile, ProfileId } from '../api/types';
+import { asProfileId } from '../api/types';
 import { setApiClient } from '../api/client';
 import { createStoreApiClient } from '../api/store-gates';
 import { getServerTimeZone } from '../api/time';
@@ -29,7 +30,7 @@ import { handleProfileRehydration } from '../services/profile-initialization';
 
 interface ProfileState {
   profiles: Profile[];
-  currentProfileId: string | null;
+  currentProfileId: ProfileId | null;
   isInitialized: boolean;
   isBootstrapping: boolean;
   bootstrapStep: 'start' | 'auth' | 'timezone' | 'zms' | 'finalize' | null;
@@ -99,7 +100,10 @@ export const useProfileStore = create<ProfileState>()(
             throw new Error(`Profile "${profileData.name}" already exists`);
           }
 
-          const newProfileId = crypto.randomUUID();
+          // Boundary: this is where a profile id is minted. Every ProfileId
+          // downstream (currentProfileId, query-key cache scoping) traces
+          // back to this cast. Refs #217.
+          const newProfileId = asProfileId(crypto.randomUUID());
 
           // Store password in secure storage (native keystore on mobile, encrypted on web)
           if (profileData.password) {
@@ -292,8 +296,10 @@ export const useProfileStore = create<ProfileState>()(
             resetApiClient();
 
             // STEP 2: Update current profile ID
+            // Use profile.id (already a ProfileId) rather than the raw `id`
+            // param so this assignment needs no cast.
             log.profileService('Step 2: Setting new profile as current', LogLevel.INFO);
-            set({ currentProfileId: id });
+            set({ currentProfileId: profile.id });
 
             // Update last used timestamp (don't await this)
             get().updateProfile(id, { lastUsed: Date.now() });

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ProfileService } from '../profile';
 import type { Profile } from '../../api/types';
+import { asProfileId } from '../../api/types';
 
 // Mock secure storage
 vi.mock('../../lib/secureStorage', () => ({
@@ -96,7 +97,7 @@ describe('ProfileService', () => {
   describe('validateNameAvailability', () => {
     const profiles: Profile[] = [
       {
-        id: '1',
+        id: asProfileId('1'),
         name: 'Home Server',
         portalUrl: 'https://home.example.com',
         apiUrl: 'https://home.example.com/zm/api',
@@ -105,7 +106,7 @@ describe('ProfileService', () => {
         createdAt: Date.now(),
       },
       {
-        id: '2',
+        id: asProfileId('2'),
         name: 'Office Server',
         portalUrl: 'https://office.example.com',
         apiUrl: 'https://office.example.com/zm/api',
@@ -114,7 +115,7 @@ describe('ProfileService', () => {
         createdAt: Date.now(),
       },
       {
-        id: '3',
+        id: asProfileId('3'),
         name: 'Demo Server',
         portalUrl: 'https://demo.example.com',
         apiUrl: 'https://demo.example.com/zm/api',

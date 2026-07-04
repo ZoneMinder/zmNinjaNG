@@ -5,11 +5,12 @@ import {
   validateProfileUrl,
 } from '../profile-validation';
 import type { Profile } from '../../api/types';
+import { asProfileId } from '../../api/types';
 
 describe('Profile Validation', () => {
   const profiles: Profile[] = [
     {
-      id: '1',
+      id: asProfileId('1'),
       name: 'Home Server',
       portalUrl: 'https://home.example.com',
       apiUrl: 'https://home.example.com/zm/api',
@@ -18,7 +19,7 @@ describe('Profile Validation', () => {
       createdAt: Date.now(),
     },
     {
-      id: '2',
+      id: asProfileId('2'),
       name: 'Office Server',
       portalUrl: 'https://office.example.com',
       apiUrl: 'https://office.example.com/zm/api',

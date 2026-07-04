@@ -26,6 +26,7 @@ import type { DashboardWidget, WidgetType } from '../../stores/dashboard';
 import type { MonitorFeedFit } from '../../stores/settings';
 import { useDashboardStore } from '../../stores/dashboard';
 import { useProfileStore } from '../../stores/profile';
+import { asProfileId } from '../../api/types';
 import { useShallow } from 'zustand/react/shallow';
 import { useQuery } from '@tanstack/react-query';
 import { getMonitors } from '../../api/monitors';
@@ -53,7 +54,10 @@ export function DashboardConfig() {
             return profiles.find((p) => p.id === currentProfileId) || null;
         })
     );
-    const profileId = currentProfile?.id || 'default';
+    // Boundary: 'default' is a synthesized placeholder key for the
+    // no-profile-selected case (dashboard widget storage keys still need a
+    // key). Not a real profile id, so it must be minted explicitly.
+    const profileId = currentProfile?.id || asProfileId('default');
 
     const { data: monitors } = useQuery({
         queryKey: queryKeys.monitors(profileId),

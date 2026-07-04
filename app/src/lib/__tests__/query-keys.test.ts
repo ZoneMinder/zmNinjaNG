@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { queryKeys } from '../query-keys';
+import { asProfileId } from '../../api/types';
 
-const PID = 'profile-1';
+const PID = asProfileId('profile-1');
 
 /** True when `prefix` is an element-wise prefix of `key` (React Query match). */
 function isPrefixOf(prefix: readonly unknown[], key: readonly unknown[]): boolean {
@@ -61,8 +62,10 @@ describe('queryKeys', () => {
   });
 
   it('scopes keys per profile so different profiles never match', () => {
-    expect(isPrefixOf(queryKeys.events('a'), queryKeys.eventsWidget('b', '1', 5, false))).toBe(false);
-    expect(queryKeys.monitors('a')).not.toEqual(queryKeys.monitors('b'));
+    const A = asProfileId('a');
+    const B = asProfileId('b');
+    expect(isPrefixOf(queryKeys.events(A), queryKeys.eventsWidget(B, '1', 5, false))).toBe(false);
+    expect(queryKeys.monitors(A)).not.toEqual(queryKeys.monitors(B));
   });
 
   it('keeps the app-level developer notices key profile-independent', () => {

@@ -43,7 +43,7 @@ describe('getEffectiveMinStreamingPort', () => {
   const profile = { id: profileId, name: 'Test', minStreamingPort: 9000 } as Profile;
 
   beforeEach(() => {
-    useProfileStore.setState({ profiles: [profile], currentProfileId: profileId });
+    useProfileStore.setState({ profiles: [profile], currentProfileId: profile.id });
     useSettingsStore.setState({
       profileSettings: { [profileId]: { ...DEFAULT_SETTINGS } },
     });

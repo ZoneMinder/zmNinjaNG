@@ -18,6 +18,7 @@ import {
 } from '../pushNotifications';
 import type { NotificationSettings } from '../../stores/notifications';
 import type { Profile } from '../../api/types';
+import { asProfileId } from '../../api/types';
 
 // @capacitor-firebase/messaging is mocked globally in src/tests/setup.ts
 // (not re-declared per-file here): pushNotifications.ts fires several
@@ -108,7 +109,7 @@ function makeSettings(overrides: Partial<NotificationSettings> = {}): Notificati
 }
 
 const PROFILE: Profile = {
-  id: 'profile-1',
+  id: asProfileId('profile-1'),
   name: 'Home',
   portalUrl: 'https://zm.example.com',
   apiUrl: 'https://zm.example.com/api',

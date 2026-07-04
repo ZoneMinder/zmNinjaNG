@@ -7,6 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useEventFilters, ALL_TAGS_FILTER_ID } from '../useEventFilters';
+import { asProfileId } from '../../api/types';
 
 // Mock react-router-dom
 const mockSearchParams = new URLSearchParams();
@@ -32,7 +33,7 @@ vi.mock('../../lib/logger', () => ({
 }));
 
 // Mock useCurrentProfile
-const mockCurrentProfile = { id: 'profile-1', name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 };
+const mockCurrentProfile = { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 };
 const mockGetProfileSettings = vi.fn();
 const mockUpdateProfileSettings = vi.fn();
 

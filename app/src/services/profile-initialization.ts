@@ -12,7 +12,7 @@
  * 5. Set initialization flags to allow UI to render
  */
 
-import type { Profile } from '../api/types';
+import type { Profile, ProfileId } from '../api/types';
 import { setApiClient } from '../api/client';
 import { createStoreApiClient } from '../api/store-gates';
 import { log, LogLevel } from '../lib/logger';
@@ -25,7 +25,7 @@ function safeLog(message: string, level: LogLevel, details?: Record<string, unkn
 
 interface ProfileState {
   profiles: Profile[];
-  currentProfileId: string | null;
+  currentProfileId: ProfileId | null;
   isInitialized: boolean;
   isBootstrapping: boolean;
   bootstrapStep: 'start' | 'auth' | 'timezone' | 'zms' | 'finalize' | null;

@@ -9,6 +9,7 @@ import {
   type BootstrapContext,
 } from '../../services/profile-bootstrap';
 import type { Profile } from '../../api/types';
+import { asProfileId } from '../../api/types';
 
 // Mock logger
 vi.mock('../../lib/logger', () => ({
@@ -74,7 +75,7 @@ describe('Profile Bootstrap', () => {
     };
 
     mockProfile = {
-      id: 'test-profile',
+      id: asProfileId('test-profile'),
       name: 'Test Profile',
       portalUrl: 'https://zm.example.com',
       apiUrl: 'https://zm.example.com/api',

@@ -5,6 +5,7 @@ import { INTERNAL_COLS, migrateLayout, useMontageGrid } from '../useMontageGrid'
 import { useSettingsStore } from '../../../../stores/settings';
 import type { MonitorData } from '../../../../api/types';
 import type { Profile } from '../../../../api/types';
+import { asProfileId } from '../../../../api/types';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -115,7 +116,7 @@ const makeMonitor = (id: string): MonitorData => ({
 });
 
 const makeProfile = (id: string): Profile => ({
-  id,
+  id: asProfileId(id),
   name: 'Test Profile',
   portalUrl: 'http://localhost',
   apiUrl: 'http://localhost/api',

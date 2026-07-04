@@ -4,6 +4,7 @@ import { setApiClient } from '../../api/client';
 import { createStoreApiClient } from '../../api/store-gates';
 import { getServerTimeZone } from '../../api/time';
 import { setSecureValue, removeSecureValue } from '../../lib/secureStorage';
+import { asProfileId } from '../../api/types';
 
 vi.mock('../../api/client', () => ({
   setApiClient: vi.fn(),
@@ -55,7 +56,7 @@ describe('Profile Store', () => {
     useProfileStore.setState({
       profiles: [
         {
-          id: 'p1',
+          id: asProfileId('p1'),
           name: 'Home',
           apiUrl: 'http://a',
           portalUrl: 'http://a',
@@ -99,7 +100,7 @@ describe('Profile Store', () => {
     useProfileStore.setState({
       profiles: [
         {
-          id: 'p1',
+          id: asProfileId('p1'),
           name: 'Home',
           apiUrl: 'http://a',
           portalUrl: 'http://a',
@@ -125,7 +126,7 @@ describe('Profile Store', () => {
     useProfileStore.setState({
       profiles: [
         {
-          id: 'p1',
+          id: asProfileId('p1'),
           name: 'Home',
           apiUrl: 'http://a',
           portalUrl: 'http://a',
@@ -134,7 +135,7 @@ describe('Profile Store', () => {
           createdAt: 1,
         },
         {
-          id: 'p2',
+          id: asProfileId('p2'),
           name: 'Office',
           apiUrl: 'http://b',
           portalUrl: 'http://b',
@@ -154,7 +155,7 @@ describe('Profile Store', () => {
     useProfileStore.setState({
       profiles: [
         {
-          id: 'p1',
+          id: asProfileId('p1'),
           name: 'Home',
           apiUrl: 'http://a',
           portalUrl: 'http://a',
@@ -163,7 +164,7 @@ describe('Profile Store', () => {
           createdAt: 1,
         },
       ],
-      currentProfileId: 'p1',
+      currentProfileId: asProfileId('p1'),
     });
 
     await useProfileStore.getState().deleteProfile('p1');

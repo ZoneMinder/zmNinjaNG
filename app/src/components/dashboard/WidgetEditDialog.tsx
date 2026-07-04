@@ -21,6 +21,7 @@ import {
 } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { queryKeys } from '../../lib/query-keys';
+import type { ProfileId } from '../../api/types';
 import type { DashboardWidget } from '../../stores/dashboard';
 import type { MonitorFeedFit } from '../../stores/settings';
 import { useDashboardStore } from '../../stores/dashboard';
@@ -43,7 +44,7 @@ interface WidgetEditDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     widget: DashboardWidget;
-    profileId: string;
+    profileId: ProfileId;
 }
 
 export function WidgetEditDialog({ open, onOpenChange, widget, profileId }: WidgetEditDialogProps) {

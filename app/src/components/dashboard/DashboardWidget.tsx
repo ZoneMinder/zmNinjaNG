@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import type { ProfileId } from '../../api/types';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { X, GripVertical, Pencil } from 'lucide-react';
@@ -18,7 +19,7 @@ interface DashboardWidgetProps {
     title?: string;
     children: ReactNode;
     className?: string;
-    profileId: string;
+    profileId: ProfileId;
     style?: React.CSSProperties;
     onMouseDown?: React.MouseEventHandler<HTMLDivElement>;
     onMouseUp?: React.MouseEventHandler<HTMLDivElement>;
