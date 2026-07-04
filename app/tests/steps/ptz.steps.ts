@@ -115,7 +115,7 @@ Then('the PTZ command should be sent', async ({ page }) => {
   expect(hasError).toBeFalsy();
 });
 
-Then('the auto-stop should trigger after delay', async ({ page }) => {
+Then('the auto-stop should trigger after delay', async () => {
   if (!hasPTZ) return;
   // HoldButton fires stopCommand (moveStop) on pointerup; there is no separate
   // client-side timer. Playwright's .click() already completes pointerdown +
@@ -138,7 +138,7 @@ When('I toggle continuous PTZ mode on', async ({ page }) => {
   }
 });
 
-Then('the command should continue until stop pressed', async ({ page }) => {
+Then('the command should continue until stop pressed', async () => {
   if (!hasPTZ) return;
   if (!continuousToggleClicked) {
     log.info('E2E: Skipping continuous-mode assertion - no continuous PTZ toggle in current UI', { component: 'e2e' });
@@ -159,7 +159,7 @@ When('I click the PTZ stop button', async ({ page }) => {
   }
 });
 
-Then('the movement should stop', async ({ page }) => {
+Then('the movement should stop', async () => {
   if (!hasPTZ) return;
   if (!ptzStopClicked) {
     log.info('E2E: Skipping movement-stop assertion - stop button not present for this control set', { component: 'e2e' });

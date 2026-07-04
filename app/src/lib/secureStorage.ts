@@ -138,7 +138,7 @@ export async function getSecureValue(key: string): Promise<string | null> {
       const value = await SecureStorage.get(fullKey);
       // We only store strings, so cast DataType to string
       return value as string | null;
-    } catch (error) {
+    } catch {
       // Key doesn't exist or error occurred
       log.secureStorage('Key not found in native secure storage', LogLevel.DEBUG, { key, });
       return null;
@@ -210,7 +210,7 @@ export async function removeSecureValue(key: string): Promise<void> {
     });
     try {
       await SecureStorage.remove(fullKey);
-    } catch (error) {
+    } catch {
       // Key might not exist, which is fine
       log.secureStorage('Key not found during removal (already deleted?)', LogLevel.DEBUG, { key, });
     }
@@ -232,7 +232,7 @@ export async function hasSecureValue(key: string): Promise<boolean> {
     try {
       const value = await SecureStorage.get(fullKey);
       return value !== null && value !== undefined;
-    } catch (error) {
+    } catch {
       return false;
     }
   } else {
@@ -256,7 +256,7 @@ export async function clearSecureStorage(): Promise<void> {
       for (const key of ourKeys) {
         try {
           await SecureStorage.remove(key);
-        } catch (error) {
+        } catch {
           log.secureStorage('Failed to remove key during clear', LogLevel.WARN, { key, });
         }
       }

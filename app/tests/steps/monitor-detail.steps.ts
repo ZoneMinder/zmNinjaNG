@@ -101,7 +101,7 @@ Then('I can change the streaming method preference', async ({ page }) => {
   await expect(element).toBeEnabled();
 });
 
-When('viewing a monitor without active profile', async ({ page }) => {
+When('viewing a monitor without active profile', async () => {
   // This scenario tests edge case handling - normally not reachable in UI
   // LiveMonitorPlayer should handle null profile gracefully
   log.info('E2E: Testing null profile handling (edge case)', { component: 'e2e' });
@@ -387,7 +387,7 @@ Then('I should see the settings button in controls card', async ({ page }) => {
 });
 
 // Stream Error Handling
-Given('the stream connection fails', async ({ page }) => {
+Given('the stream connection fails', async () => {
   log.info('E2E: Testing stream error handling', { component: 'e2e' });
 });
 

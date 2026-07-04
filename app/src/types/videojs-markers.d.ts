@@ -5,8 +5,6 @@
  * that adds timeline markers to video.js players.
  */
 
-import type videojs from 'video.js';
-
 /**
  * Markers plugin surface attached to a Video.js Player at runtime by the
  * videojs-markers package. The plugin does not ship type augmentation, so this

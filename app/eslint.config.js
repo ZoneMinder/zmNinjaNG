@@ -35,6 +35,15 @@ export default defineConfig([
           message: 'Use Platform.isNative from lib/platform.ts instead of Capacitor.isNativePlatform() directly.',
         },
       ],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          destructuredArrayIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
     },
   },
   {
