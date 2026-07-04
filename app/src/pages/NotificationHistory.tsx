@@ -6,7 +6,8 @@
  */
 
 import { useState, useMemo, useCallback } from 'react';
-import { useNotificationStore } from '../stores/notifications';
+import { useNotificationStore, type NotificationEvent } from '../stores/notifications';
+import { useShallow } from 'zustand/react/shallow';
 import { resolveMinStreamingPort } from '../lib/multiport';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { buildThumbnailChain } from '../lib/thumbnail-chain';
@@ -38,12 +39,14 @@ import { useDateTimeFormat } from '../hooks/useDateTimeFormat';
 import { activateOnEnterOrSpace } from '../lib/utils';
 import { EmptyState } from '../components/ui/empty-state';
 
+// Stable empty reference for the no-profile case, so the selector below does
+// not return a fresh array each render.
+const EMPTY_EVENTS: NotificationEvent[] = [];
+
 export default function NotificationHistory() {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { currentProfile, settings } = useCurrentProfile();
-  const getEvents = useNotificationStore((s) => s.getEvents);
-  const getUnreadCount = useNotificationStore((s) => s.getUnreadCount);
   const markEventRead = useNotificationStore((s) => s.markEventRead);
   const markAllRead = useNotificationStore((s) => s.markAllRead);
   const clearEvents = useNotificationStore((s) => s.clearEvents);
@@ -51,9 +54,14 @@ export default function NotificationHistory() {
   const { fmtDateTimeShort } = useDateTimeFormat();
   const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
 
-  // Get events and unread count for current profile
-  const events = currentProfile ? getEvents(currentProfile.id) : [];
-  const unreadCount = currentProfile ? getUnreadCount(currentProfile.id) : 0;
+  // Subscribe reactively to this profile's events so the list, unread count,
+  // and mark-read actions update live. Selecting only the store's action
+  // functions (stable refs) would not re-render on new/changed events.
+  const profileId = currentProfile?.id;
+  const events = useNotificationStore(
+    useShallow((s) => (profileId ? s.getEvents(profileId) : EMPTY_EVENTS))
+  );
+  const unreadCount = useMemo(() => events.filter((e) => !e.read).length, [events]);
 
   const handleViewEvent = (eventId: number) => {
     if (currentProfile) {
