@@ -159,11 +159,22 @@ When('I toggle a notification setting', async ({ page }) => {
 
 Then('the notification toggle state should be preserved', async ({ page }) => {
   const toggle = page.locator('[role="switch"]').first();
-  if (await toggle.isVisible({ timeout: testConfig.timeouts.element }).catch(() => false)) {
-    const currentState = await toggle.isChecked().catch(() => false);
-    // State should be the opposite of what it was before toggling
-    expect(currentState).not.toBe(notificationToggleState);
+  if (!(await toggle.isVisible().catch(() => false))) {
+    return;
   }
+
+  // "I navigate to the ... page" only waits for the URL to change
+  // (common.steps.ts), not for the destination route to render. Notifications
+  // is a React.lazy route (src/App.tsx) behind a Suspense boundary, and its
+  // toggle state is read from the notification store at render time
+  // (src/pages/NotificationSettings.tsx:61,366), so the first paint after
+  // navigating back can lag the URL update by a tick and briefly show a
+  // stale/default value before settling on the real persisted state. Poll for
+  // that real state instead of taking a single reading, so the assertion
+  // reflects what actually persisted rather than a race with initial render.
+  await expect.poll(() => toggle.isChecked().catch(() => false), {
+    timeout: testConfig.timeouts.element,
+  }).toBe(!notificationToggleState);
 });
 
 When('I toggle bandwidth mode', async ({ page }) => {
