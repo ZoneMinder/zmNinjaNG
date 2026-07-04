@@ -387,20 +387,20 @@ Full-screen view of a single monitor with live stream.
            </h1>
          </div>
          <div className="flex-1 min-h-0">
-           <VideoPlayer monitor={monitor?.Monitor} />
-           <MonitorControls monitorId={id!} />
+           <LiveMonitorPlayer monitor={monitor?.Monitor} profile={currentProfile} />
+           <MonitorControlsCard monitorId={id!} />
          </div>
        </div>
      );
    }
 
-Stream URLs are built by helpers in ``src/lib/url-builder.ts``
+Stream URLs are built by helpers in ``src/lib/zm/url-builder.ts``
 (``getMonitorStreamUrl``, ``getMonitorControlUrl``, ``getEventZmsUrl``,
 ``getGo2RTCStreamUrl``, etc.). These handle ``connkey`` generation,
 token attachment, and protocol selection, never hand-build a ZM
 stream URL in a page or component.
 
-Event thumbnails go through ``src/lib/thumbnail-chain.ts``, which
+Event thumbnails go through ``src/lib/event/thumbnail-chain.ts``, which
 chooses among ``zms``, cached, or API sources.
 
 Non-stream HTTP traffic uses ``httpGet`` / ``httpPost`` /

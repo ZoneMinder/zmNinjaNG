@@ -45,7 +45,10 @@ export function FullscreenControls({
             variant="ghost"
             size="icon"
             className={cn(
-              "h-7 w-7",
+              // Visible icon stays 28px (h-7 w-7); ::before expands the hit
+              // area to the 44px WCAG target size without growing the icon
+              // over the live video feed. refs #217.
+              "relative h-7 w-7 before:absolute before:-inset-2 before:content-['']",
               showLabels
                 ? "text-white bg-white/20 hover:bg-white/30"
                 : "text-white/70 hover:text-white hover:bg-white/10"
@@ -60,7 +63,7 @@ export function FullscreenControls({
             onClick={reloadApp}
             variant="ghost"
             size="icon"
-            className="text-white/70 hover:text-white hover:bg-white/10 h-7 w-7"
+            className="relative text-white/70 hover:text-white hover:bg-white/10 h-7 w-7 before:absolute before:-inset-2 before:content-['']"
             title={t('common.refresh')}
             aria-label={t('common.refresh')}
             data-testid="montage-fullscreen-refresh"
@@ -71,7 +74,7 @@ export function FullscreenControls({
             onClick={handleLockToggle}
             variant="ghost"
             size="icon"
-            className="text-white/70 hover:text-white hover:bg-white/10 h-7 w-7"
+            className="relative text-white/70 hover:text-white hover:bg-white/10 h-7 w-7 before:absolute before:-inset-2 before:content-['']"
             title={t('kiosk.lock_label')}
             data-testid="fullscreen-kiosk-lock"
           >

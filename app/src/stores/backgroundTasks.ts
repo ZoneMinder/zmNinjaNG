@@ -32,6 +32,7 @@ interface BackgroundTasksState {
   // Actions
   addTask: (task: Omit<BackgroundTask, 'id' | 'createdAt' | 'status' | 'progress'>) => string;
   updateProgress: (taskId: string, progress: number, bytesProcessed?: number) => void;
+  updateTaskMetadata: (taskId: string, metadata: Partial<BackgroundTask['metadata']>) => void;
   completeTask: (taskId: string) => void;
   failTask: (taskId: string, error: Error) => void;
   cancelTask: (taskId: string) => void;
@@ -102,6 +103,16 @@ export const useBackgroundTasks = create<BackgroundTasksState>((set, get) => ({
                 ? { ...task.metadata, bytesProcessed }
                 : task.metadata,
             }
+          : task
+      ),
+    }));
+  },
+
+  updateTaskMetadata: (taskId, metadata) => {
+    set((state) => ({
+      tasks: state.tasks.map((task) =>
+        task.id === taskId
+          ? { ...task, metadata: { ...task.metadata, ...metadata } }
           : task
       ),
     }));

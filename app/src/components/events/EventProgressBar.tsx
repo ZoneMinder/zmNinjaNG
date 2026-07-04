@@ -160,6 +160,23 @@ export function EventProgressBar({
     setHoverPosition(null);
   }, []);
 
+  // Keyboard seeking: arrow keys step one frame, Home/End jump to the ends.
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      flush(Math.max(1, displayFrame - 1));
+    } else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      flush(Math.min(totalFrames, displayFrame + 1));
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      flush(1);
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      flush(totalFrames);
+    }
+  }, [displayFrame, totalFrames, flush]);
+
   useEffect(() => {
     if (!isDragging) return;
 
@@ -207,11 +224,18 @@ export function EventProgressBar({
       {/* Progress Bar */}
       <div
         ref={progressRef}
-        className="relative h-8 bg-secondary/50 rounded-lg cursor-pointer overflow-hidden border border-border/50 hover:border-border transition-colors"
+        className="relative h-8 bg-secondary/50 rounded-lg cursor-pointer overflow-hidden border border-border/50 hover:border-border transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
+        role="slider"
+        tabIndex={0}
+        aria-label={t('events.seek_bar')}
+        aria-valuemin={1}
+        aria-valuemax={totalFrames}
+        aria-valuenow={displayFrame}
         onMouseDown={handleMouseDown}
         onMouseMove={handleHover}
         onMouseLeave={handleMouseLeave}
         onTouchStart={handleTouchStart}
+        onKeyDown={handleKeyDown}
         data-testid="event-progress-track"
       >
         {/* Background grid lines for visual reference */}

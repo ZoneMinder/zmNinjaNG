@@ -1,9 +1,26 @@
-import { useSettingsStore } from '../stores/settings';
-import { useProfileStore } from '../stores/profile';
-
 /**
  * Utility functions for sanitizing sensitive data in logs
  */
+
+/**
+ * Redaction gate, injected instead of importing stores/profile and
+ * stores/settings directly. Without this, lib/logger -> lib/log-sanitizer ->
+ * stores/profile forms a static import cycle back to lib/logger (every
+ * store/service imports the logger). stores/profile.ts assembles the real
+ * gate from both stores and registers it here at module load. Refs #217.
+ */
+export interface LogRedactionGate {
+  isRedactionDisabled(): boolean;
+}
+
+let redactionGate: LogRedactionGate = {
+  // Safe default before the store registers: never suppress redaction.
+  isRedactionDisabled: () => false,
+};
+
+export function setLogRedactionGate(gate: LogRedactionGate): void {
+  redactionGate = gate;
+}
 
 const SENSITIVE_KEYS = [
     'password',
@@ -171,13 +188,9 @@ function sanitizeUrl(url: string): string {
  */
 function isRedactionDisabled(): boolean {
     try {
-        const currentProfileId = useProfileStore.getState().currentProfileId;
-        if (currentProfileId) {
-            const settings = useSettingsStore.getState().getProfileSettings(currentProfileId);
-            return settings.disableLogRedaction;
-        }
+        return redactionGate.isRedactionDisabled();
     } catch {
-        // Ignore errors accessing stores (e.g. during initialization)
+        // Ignore errors accessing the gate (e.g. during initialization)
     }
     return false;
 }

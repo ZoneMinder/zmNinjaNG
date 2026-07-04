@@ -13,6 +13,7 @@ import { useAuthStore } from '../../stores/auth';
 import { useSettingsStore, DEFAULT_SETTINGS } from '../../stores/settings';
 import { httpGet } from '../../lib/http';
 import type { Profile } from '../../api/types';
+import { asProfileId } from '../../api/types';
 
 // Mock dependencies
 vi.mock('../../lib/http', () => ({
@@ -47,7 +48,7 @@ vi.mock('../../api/monitors', () => ({
   },
 }));
 
-vi.mock('../../lib/url-builder', () => ({
+vi.mock('../../lib/zm/url-builder', () => ({
   getZmsControlUrl: (portalUrl: string, command: string, connkey: string, options: any) => {
     const params = new URLSearchParams();
     params.set('command', command);
@@ -57,7 +58,7 @@ vi.mock('../../lib/url-builder', () => ({
   },
 }));
 
-vi.mock('../../lib/zm-constants', () => ({
+vi.mock('../../lib/zm/zm-constants', () => ({
   ZMS_COMMANDS: {
     cmdQuit: 'quit',
   },
@@ -65,7 +66,7 @@ vi.mock('../../lib/zm-constants', () => ({
 
 describe('useMonitorStream', () => {
   const mockProfile: Profile = {
-    id: 'profile-1',
+    id: asProfileId('profile-1'),
     name: 'Test Profile',
     apiUrl: 'https://test.com',
     portalUrl: 'https://test.com',
@@ -78,7 +79,7 @@ describe('useMonitorStream', () => {
     // Reset stores
     useProfileStore.setState({
       profiles: [mockProfile],
-      currentProfileId: 'profile-1',
+      currentProfileId: mockProfile.id,
       isInitialized: true,
       isBootstrapping: false,
       bootstrapStep: null,

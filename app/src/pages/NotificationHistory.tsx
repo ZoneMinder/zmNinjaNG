@@ -6,10 +6,11 @@
  */
 
 import { useState, useMemo, useCallback } from 'react';
-import { useNotificationStore } from '../stores/notifications';
-import { resolveMinStreamingPort } from '../lib/multiport';
+import { useNotificationStore, type NotificationEvent } from '../stores/notifications';
+import { useShallow } from 'zustand/react/shallow';
+import { resolveMinStreamingPort } from '../lib/monitor/multiport';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
-import { buildThumbnailChain } from '../lib/thumbnail-chain';
+import { buildThumbnailChain } from '../lib/event/thumbnail-chain';
 import { EventThumbnail } from '../components/events/EventThumbnail';
 import { HoverPreview } from '../components/ui/hover-preview';
 import { EventZmsHoverPlayer } from '../components/events/EventThumbnailHoverPreview';
@@ -27,7 +28,7 @@ import {
   AlertDialogTitle,
 } from '../components/ui/alert-dialog';
 import { Bell, Trash2, CheckCheck, ExternalLink, AlertCircle, Wifi, Smartphone, RefreshCw } from 'lucide-react';
-import { getEventCauseIcon } from '../lib/event-icons';
+import { getEventCauseIcon } from '../lib/event/event-icons';
 import { formatDistanceToNow, isToday, isYesterday, startOfWeek, startOfMonth } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -35,19 +36,32 @@ import { NotificationBadge } from '../components/NotificationBadge';
 import { PageContainer } from '../components/common/PageContainer';
 import { useFreshAccessToken } from '../hooks/useFreshAccessToken';
 import { useDateTimeFormat } from '../hooks/useDateTimeFormat';
+import { activateOnEnterOrSpace } from '../lib/utils';
+import { EmptyState } from '../components/ui/empty-state';
+
+// Stable empty reference for the no-profile case, so the selector below does
+// not return a fresh array each render.
+const EMPTY_EVENTS: NotificationEvent[] = [];
 
 export default function NotificationHistory() {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { currentProfile, settings } = useCurrentProfile();
-  const { getEvents, getUnreadCount, markEventRead, markAllRead, clearEvents } = useNotificationStore();
+  const markEventRead = useNotificationStore((s) => s.markEventRead);
+  const markAllRead = useNotificationStore((s) => s.markAllRead);
+  const clearEvents = useNotificationStore((s) => s.clearEvents);
   const { token: accessToken, isFresh: isAccessTokenFresh } = useFreshAccessToken();
   const { fmtDateTimeShort } = useDateTimeFormat();
   const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
 
-  // Get events and unread count for current profile
-  const events = currentProfile ? getEvents(currentProfile.id) : [];
-  const unreadCount = currentProfile ? getUnreadCount(currentProfile.id) : 0;
+  // Subscribe reactively to this profile's events so the list, unread count,
+  // and mark-read actions update live. Selecting only the store's action
+  // functions (stable refs) would not re-render on new/changed events.
+  const profileId = currentProfile?.id;
+  const events = useNotificationStore(
+    useShallow((s) => (profileId ? s.getEvents(profileId) : EMPTY_EVENTS))
+  );
+  const unreadCount = useMemo(() => events.filter((e) => !e.read).length, [events]);
 
   const handleViewEvent = (eventId: number) => {
     if (currentProfile) {
@@ -166,12 +180,12 @@ export default function NotificationHistory() {
 
       {events.length === 0 ? (
         <Card data-testid="notification-history-empty">
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Bell className="h-10 w-10 text-muted-foreground mb-3" />
-            <h3 className="text-sm font-semibold mb-1">{t('notification_history.no_notifications')}</h3>
-            <p className="text-xs text-muted-foreground text-center max-w-md">
-              {t('notification_history.no_notifications_desc')}
-            </p>
+          <CardContent className="py-4">
+            <EmptyState
+              icon={Bell}
+              title={t('notification_history.no_notifications')}
+              description={t('notification_history.no_notifications_desc')}
+            />
           </CardContent>
         </Card>
       ) : (
@@ -194,7 +208,10 @@ export default function NotificationHistory() {
                     <div
                       key={`${event.EventId}-${event.receivedAt}`}
                       className={`flex items-center gap-3 p-2 sm:p-3 hover:bg-muted/50 cursor-pointer transition-colors ${event.read ? 'opacity-50' : ''}`}
+                      role="button"
+                      tabIndex={0}
                       onClick={() => handleViewEvent(event.EventId)}
+                      onKeyDown={activateOnEnterOrSpace(() => handleViewEvent(event.EventId))}
                       data-testid="notification-history-item"
                     >
                       {/* Thumbnail */}
@@ -272,7 +289,7 @@ export default function NotificationHistory() {
                       </div>
 
                       {/* Actions */}
-                      <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center gap-1 shrink-0" role="presentation" onClick={(e) => e.stopPropagation()}>
                         {!event.read && currentProfile && (
                           <Button
                             variant="ghost"

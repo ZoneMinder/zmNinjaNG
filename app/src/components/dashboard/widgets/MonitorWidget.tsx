@@ -16,6 +16,7 @@ import { useMemo, memo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { getMonitor, getMonitors } from '../../../api/monitors';
+import { queryKeys } from '../../../lib/query/query-keys';
 import type { MonitorFeedFit } from '../../../stores/settings';
 import { LiveMonitorPlayer } from '../../monitors/LiveMonitorPlayer';
 import { MonitorHoverPreview } from '../../monitors/MonitorHoverPreview';
@@ -24,7 +25,8 @@ import { AlertTriangle } from 'lucide-react';
 import { Skeleton } from '../../ui/skeleton';
 import { useTranslation } from 'react-i18next';
 import { calculateGridDimensions } from '../../../lib/grid-utils';
-import { filterEnabledMonitors } from '../../../lib/filters';
+import { filterEnabledMonitors } from '../../../lib/monitor/filters';
+import { activateOnEnterOrSpace } from '../../../lib/utils';
 
 interface MonitorWidgetProps {
     /** Array of monitor IDs to display */
@@ -43,7 +45,7 @@ function SingleMonitor({ monitorId, objectFit }: { monitorId: string; objectFit:
     const { currentProfile, settings } = useCurrentProfile();
     const [protocol, setProtocol] = useState('MJPEG');
     const { data: monitor, isLoading, error } = useQuery({
-        queryKey: ['monitor', monitorId],
+        queryKey: queryKeys.monitor(currentProfile?.id, monitorId),
         queryFn: () => getMonitor(monitorId),
         enabled: !!monitorId,
     });
@@ -68,7 +70,11 @@ function SingleMonitor({ monitorId, objectFit }: { monitorId: string; objectFit:
     return (
         <div
             className="w-full h-full bg-black relative group overflow-hidden cursor-pointer"
+            role="button"
+            tabIndex={0}
+            aria-label={monitor.Monitor.Name}
             onClick={() => navigate(`/monitors/${monitor.Monitor.Id}`, { state: { from: '/dashboard' } })}
+            onKeyDown={activateOnEnterOrSpace(() => navigate(`/monitors/${monitor.Monitor.Id}`, { state: { from: '/dashboard' } }))}
         >
             {settings.hoverPreview.dashboard ? (
                 <MonitorHoverPreview monitor={monitor.Monitor}>
@@ -107,7 +113,7 @@ export const MonitorWidget = memo(function MonitorWidget({ monitorIds, objectFit
 
     // Fetch all monitors to check which ones are deleted
     const { data: monitorsData } = useQuery({
-        queryKey: ['monitors', currentProfile?.id],
+        queryKey: queryKeys.monitors(currentProfile?.id),
         queryFn: () => getMonitors(),
     });
 

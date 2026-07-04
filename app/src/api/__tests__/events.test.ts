@@ -7,8 +7,8 @@ import {
   setEventArchived,
 } from '../events';
 import { getApiClient } from '../client';
-import { validateApiResponse } from '../../lib/api-validator';
-import { getExcludedMonitorIds } from '../../lib/profile-settings';
+import { validateApiResponse } from '../../lib/zm/api-validator';
+import { getExcludedMonitorIds } from '../../lib/profile/profile-settings';
 import { API_PAGINATION } from '../../lib/zmninja-ng-constants';
 import type { ApiClient } from '../client';
 
@@ -20,11 +20,11 @@ vi.mock('../client', () => ({
   getApiClient: vi.fn(),
 }));
 
-vi.mock('../../lib/api-validator', () => ({
+vi.mock('../../lib/zm/api-validator', () => ({
   validateApiResponse: vi.fn((_, data) => data),
 }));
 
-vi.mock('../../lib/profile-settings', () => {
+vi.mock('../../lib/profile/profile-settings', () => {
   const getExcludedMonitorIds = vi.fn(() => [] as string[]);
   return {
     getExcludedMonitorIds,

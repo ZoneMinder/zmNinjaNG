@@ -16,6 +16,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getTags, getEventTags, extractUniqueTags } from '../api/tags';
 import { useCurrentProfile } from './useCurrentProfile';
 import { useAuthStore } from '../stores/auth';
+import { queryKeys } from '../lib/query/query-keys';
 import type { Tag } from '../api/types';
 
 export interface UseEventTagsReturn {
@@ -52,7 +53,7 @@ export function useEventTags(): UseEventTagsReturn {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['tags', currentProfile?.id],
+    queryKey: queryKeys.tags(currentProfile?.id),
     queryFn: getTags,
     enabled: !!currentProfile?.id && isAuthenticated,
     // Tags list rarely changes, use longer stale time
@@ -128,7 +129,7 @@ export function useEventTagMapping(options: UseEventTagMappingOptions): UseEvent
 
   const { data, isLoading, error, refetch } = useQuery({
     // Include sorted event IDs in query key for proper caching
-    queryKey: ['eventTags', currentProfile?.id, sortedEventIds],
+    queryKey: queryKeys.eventTags(currentProfile?.id, sortedEventIds),
     queryFn: () => getEventTags(eventIds),
     enabled: enabled && !!currentProfile?.id && isAuthenticated && eventIds.length > 0,
     // Event tags can change when tags are assigned, use moderate stale time

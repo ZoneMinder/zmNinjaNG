@@ -18,6 +18,13 @@ Feature: Montage Live Grid
     When I click into the first monitor detail page
     Then I should see the monitor player
 
+  @web
+  Scenario: Montage tile is keyboard-focusable and Enter opens its detail page
+    Then I should see at least 1 monitor in montage grid
+    When I focus the first montage tile with the keyboard
+    And I press Enter on the focused montage tile
+    Then I should see the monitor player
+
   @all
   Scenario: Snapshot download from montage
     Then I should see at least 1 monitor in montage grid

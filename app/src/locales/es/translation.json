@@ -51,6 +51,9 @@
     "navigation_menu": "Menú de navegación",
     "navigation_menu_desc": "Navegación principal de la aplicación."
   },
+  "network": {
+    "offline_banner": "Sin conexión. Mostrando datos en caché."
+  },
   "app_init": {
     "toast_title": "Finalizando la configuración",
     "toast_description": "Preparando tu perfil y la conexión al servidor.",
@@ -73,6 +76,7 @@
     "widget_events": "Eventos Recientes",
     "widget_timeline": "Línea de Tiempo",
     "widget_heatmap": "Mapa de Calor de Eventos",
+    "widget_type": "Tipo de widget",
     "widget_title": "Título del Widget (Opcional)",
     "widget_title_placeholder": "Mi Widget",
     "select_monitor": "Seleccionar Monitor",
@@ -196,6 +200,7 @@
     "alarm_frame": "Fotograma de Alarma {{frameId}}",
     "frame_number": "Fotograma {{number}}",
     "total_frames": "{{count}} fotogramas",
+    "seek_bar": "Buscar",
     "view_list": "Lista",
     "view_montage": "Montaje",
     "favorite": "Favorito",
@@ -1005,7 +1010,7 @@
     "title": "Montaje de Eventos",
     "grid_layout_applied": "Diseño de cuadrícula aplicado: {{cols}} columnas",
     "invalid_columns": "Número inválido de columnas",
-    "load_error": "Error al cargar eventos",
+    "load_error": "Error al cargar eventos: {{error}}",
     "grid_layout": "Diseño de Cuadrícula",
     "screen_too_small": "El ancho de la pantalla es demasiado pequeño para tantas columnas",
     "columns": "{{count}} cols",
@@ -1041,16 +1046,17 @@
     "title": "Estados",
     "change_success": "Estado cambiado exitosamente",
     "change_error": "Fallo al cambiar estado",
-    "load_error": "Fallo al cargar estados",
+    "load_error": "Fallo al cargar estados: {{error}}",
     "description": "Descripción",
     "no_description": "No hay descripción disponible",
-    "activate": "Activar"
+    "activate": "Activar",
+    "no_states": "No hay estados configurados"
   },
   "timeline": {
     "title": "Línea de Tiempo",
     "subtitle": "Línea de tiempo de eventos",
     "loading": "Cargando línea de tiempo...",
-    "load_error": "Error cargando línea de tiempo",
+    "load_error": "Error cargando línea de tiempo: {{error}}",
     "no_events_found": "No se encontraron eventos para este período",
     "adjust_filters": "Ajustar Filtros",
     "tip": "Consejo: Arrastra para panear, desplaza para zoom",
@@ -1089,6 +1095,9 @@
     "center_view": "Centrar",
     "go_to_now": "Ahora",
     "select_to_zoom": "Seleccionar",
+    "zoom_in": "Acercar",
+    "zoom_out": "Alejar",
+    "scrubber_label": "Control de línea de tiempo",
     "help": {
       "title": "Controles",
       "navigate": "Pinch/arrastrar/scroll",

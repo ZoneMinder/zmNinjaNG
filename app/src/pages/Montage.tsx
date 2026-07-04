@@ -6,6 +6,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
+import { queryKeys } from '../lib/query/query-keys';
 import { getMonitors } from '../api/monitors';
 import { GRID_LAYOUT } from '../lib/zmninja-ng-constants';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
@@ -19,13 +20,17 @@ import { useTvMode } from '../hooks/useTvMode';
 import { Button } from '../components/ui/button';
 import { MontageMonitor } from '../components/monitors/MontageMonitor';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { Video, AlertCircle, Maximize, Pencil, ArrowLeftRight } from 'lucide-react';
+import { Video, Maximize, Pencil, ArrowLeftRight } from 'lucide-react';
 import { RefreshButton } from '../components/common/RefreshButton';
-import { filterEnabledMonitors, filterMonitorsByGroup } from '../lib/filters';
+import { ErrorBanner } from '../components/ui/query-state';
+import { resolveQueryError } from '../lib/query/query-error';
+import { EmptyState } from '../components/ui/empty-state';
+import { filterEnabledMonitors, filterMonitorsByGroup } from '../lib/monitor/filters';
 import { useGroupFilter } from '../hooks/useGroupFilter';
 import { useMontageGroupState } from '../hooks/useMontageGroupState';
 import { GroupFilterSelect } from '../components/filters/GroupFilterSelect';
 import { cn } from '../lib/utils';
+import { handleKeyClick } from '../lib/tv/tv-a11y';
 import { useTranslation } from 'react-i18next';
 import { usePinchZoom } from '../hooks/usePinchZoom';
 import { useInsomnia } from '../hooks/useInsomnia';
@@ -58,7 +63,7 @@ export default function Montage() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['monitors', currentProfile?.id],
+    queryKey: queryKeys.monitors(currentProfile?.id),
     queryFn: () => getMonitors(),
     enabled: !!currentProfile && isAuthenticated,
     refetchInterval: bandwidth.monitorStatusInterval,
@@ -289,17 +294,17 @@ export default function Montage() {
     );
   }
 
-  // Error state
-  if (error) {
+  // Error state. A background refetch error while cached monitors are
+  // already loaded falls through to the normal grid below instead of this
+  // error wall; the OfflineBanner in AppLayout covers that case. Only a cold
+  // start with no cached data hits the error wall.
+  if (error && !data) {
     return (
       <div className="p-8">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-lg font-bold tracking-tight">{t('montage.title')}</h1>
         </div>
-        <div className="p-4 bg-destructive/10 text-destructive rounded-lg flex items-center gap-2">
-          <AlertCircle className="h-5 w-5" />
-          {t('common.error')}: {(error as Error).message}
-        </div>
+        <ErrorBanner message={resolveQueryError(error, t)} />
       </div>
     );
   }
@@ -312,10 +317,7 @@ export default function Montage() {
           <h1 className="text-lg font-bold tracking-tight">{t('montage.title')}</h1>
           <RefreshButton size="sm" />
         </div>
-        <div className="text-center py-20 text-muted-foreground">
-          <Video className="h-12 w-12 mx-auto mb-4 opacity-20" />
-          <p>{t('montage.no_monitors')}</p>
-        </div>
+        <EmptyState icon={Video} title={t('montage.no_monitors')} />
       </div>
     );
   }
@@ -461,12 +463,16 @@ export default function Montage() {
                 <div
                   key={Monitor.Id}
                   className={cn(
-                    "relative",
+                    "relative focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
                     isMonitorPinned(Monitor.Id) && "pin-locked",
                     isTvMode && idx === focusedMonitorIndex && "ring-2 ring-primary"
                   )}
+                  role="button"
+                  aria-label={Monitor.Name}
                   data-testid={`montage-monitor-${Monitor.Id}`}
-                  tabIndex={isTvMode ? 0 : undefined}
+                  tabIndex={isEditMode ? -1 : 0}
+                  onClick={() => !isEditMode && navigate(`/monitors/${Monitor.Id}`, { state: { from: '/montage' } })}
+                  onKeyDown={handleKeyClick}
                 >
                   <MontageTileErrorBoundary monitorId={Monitor.Id} monitorName={Monitor.Name}>
                     <MontageMonitor

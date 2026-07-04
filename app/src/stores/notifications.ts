@@ -15,12 +15,13 @@ import {
 import { log, LogLevel } from '../lib/logger';
 import { Platform } from '../lib/platform';
 import { getAppVersion } from '../lib/version';
-import { getEventImageUrl } from '../lib/url-builder';
-import { getEffectiveMinStreamingPort } from '../lib/multiport';
+import { getEventImageUrl } from '../lib/zm/url-builder';
+import { getEffectiveMinStreamingPort } from '../lib/monitor/multiport';
 import { updateNotification } from '../api/notifications';
 import { useProfileStore } from './profile';
 import { useAuthStore } from './auth';
 import { useSettingsStore } from './settings';
+import { setPushServiceStoreGates } from '../services/pushNotifications';
 import { getBandwidthSettings, NOTIFICATIONS_SERVICE, STORAGE_KEYS } from '../lib/zmninja-ng-constants';
 
 export interface NotificationSettings {
@@ -486,18 +487,8 @@ export const useNotificationStore = create<NotificationState>()(
           const { currentProfileId } = get();
           if (currentProfileId) {
             get().addEvent(currentProfileId, event);
-
-            const settings = get().getProfileSettings(currentProfileId);
-
-            // Show toast if enabled
-            if (settings.showToasts) {
-              // Toast will be shown by the UI component listening to the store
-            }
-
-            // Play sound if enabled
-            if (settings.playSound) {
-              log.notifications('Playing notification sound', LogLevel.INFO);
-            }
+            // Toast display and sound playback are handled by NotificationHandler,
+            // which reacts to the added event and reads showToasts/playSound itself.
           }
         });
 
@@ -718,3 +709,30 @@ export function startEventPoller(profileId: string): Promise<void> {
   };
   return getEventPoller().start(profileId, deps);
 }
+
+// services/pushNotifications.ts has no zustand imports; this store assembles
+// its store-derived dependencies from all three stores it already has access
+// to and registers them here at module load, breaking the services -> stores
+// static import cycle. Refs #217.
+setPushServiceStoreGates({
+  notifications: {
+    getCurrentProfileId: () => useNotificationStore.getState().currentProfileId,
+    getProfileSettings: (profileId) => useNotificationStore.getState().getProfileSettings(profileId),
+    isConnected: () => useNotificationStore.getState().isConnected,
+    updateProfileSettings: (profileId, updates) =>
+      useNotificationStore.getState().updateProfileSettings(profileId, updates),
+    deregisterPushToken: (token, platform) =>
+      useNotificationStore.getState().deregisterPushToken(token, platform),
+    registerPushToken: (token, platform) =>
+      useNotificationStore.getState().registerPushToken(token, platform),
+    addEvent: (profileId, event, source) => useNotificationStore.getState().addEvent(profileId, event, source),
+    markEventRead: (profileId, eventId) => useNotificationStore.getState().markEventRead(profileId, eventId),
+  },
+  profile: {
+    getProfiles: () => useProfileStore.getState().profiles,
+    getDecryptedPassword: (profileId) => useProfileStore.getState().getDecryptedPassword(profileId),
+  },
+  auth: {
+    getAccessToken: () => useAuthStore.getState().accessToken,
+  },
+});

@@ -32,6 +32,7 @@ playwright-report/
 playwright/.auth/
 .features-gen/
 tests/screenshots/
+tests/platforms.config.local.ts
 
 # Capacitor/Android
 android/app/build/

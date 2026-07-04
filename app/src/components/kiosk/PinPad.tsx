@@ -9,7 +9,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../ui/button';
 import { Delete } from 'lucide-react';
-import { Z_INDEX } from '../../lib/zmninja-ng-constants';
+import { KIOSK, Z_INDEX } from '../../lib/zmninja-ng-constants';
 
 export type PinPadMode = 'set' | 'confirm' | 'unlock';
 
@@ -54,7 +54,7 @@ export function PinPad({ mode, onSubmit, onCancel, error, cooldownSeconds }: Pin
       if (next.length === PIN_LENGTH) {
         // Auto-submit when 4 digits entered
         if (submitTimerRef.current !== null) clearTimeout(submitTimerRef.current);
-        submitTimerRef.current = setTimeout(() => onSubmit(next), 100);
+        submitTimerRef.current = setTimeout(() => onSubmit(next), KIOSK.pinAutoSubmitDelayMs);
       }
       return next;
     });

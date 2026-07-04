@@ -130,6 +130,7 @@ export function GridLayoutControls({
                         closeSheet();
                       }}
                       className="justify-start flex-1"
+                      data-testid={`montage-load-layout-sheet-${index}`}
                     >
                       <Bookmark className="h-4 w-4 mr-2" />
                       {saved.name}
@@ -138,7 +139,9 @@ export function GridLayoutControls({
                       variant="ghost"
                       size="icon"
                       className="h-9 w-9 text-destructive shrink-0"
+                      aria-label={`${t('common.delete')}: ${saved.name}`}
                       onClick={(e) => handleDeleteLayout(index, saved.name, e)}
+                      data-testid={`montage-delete-layout-sheet-${index}`}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -153,6 +156,7 @@ export function GridLayoutControls({
                 setIsSaveDialogOpen(true);
               }}
               className="justify-start"
+              data-testid="montage-save-layout-sheet-trigger"
             >
               <Save className="h-4 w-4 mr-2" />
               {t('montage.save_layout')}
@@ -172,6 +176,7 @@ export function GridLayoutControls({
                     key={index}
                     onClick={() => onLoadLayout(saved)}
                     className="flex items-center justify-between"
+                    data-testid={`montage-load-layout-menu-${index}`}
                   >
                     <span className="flex items-center">
                       <Bookmark className="h-4 w-4 mr-2" />
@@ -180,8 +185,12 @@ export function GridLayoutControls({
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-5 w-5 text-destructive hover:text-destructive ml-2 shrink-0"
+                      // Visible icon stays 20px (h-5 w-5); ::before expands
+                      // the hit area to the 44px WCAG target size. refs #217.
+                      className="relative h-5 w-5 text-destructive hover:text-destructive ml-2 shrink-0 before:absolute before:-inset-3 before:content-['']"
+                      aria-label={`${t('common.delete')}: ${saved.name}`}
                       onClick={(e) => handleDeleteLayout(index, saved.name, e)}
+                      data-testid={`montage-delete-layout-menu-${index}`}
                     >
                       <Trash2 className="h-3 w-3" />
                     </Button>
@@ -190,7 +199,7 @@ export function GridLayoutControls({
               </>
             )}
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => setIsSaveDialogOpen(true)}>
+            <DropdownMenuItem onClick={() => setIsSaveDialogOpen(true)} data-testid="montage-save-layout-menu-trigger">
               <Save className="h-4 w-4 mr-2" />
               {t('montage.save_layout')}
             </DropdownMenuItem>
@@ -255,15 +264,19 @@ function SaveLayoutDialog({
                 if (e.key === 'Enter') onSubmit();
               }}
               placeholder={t('montage.layout_name_placeholder')}
+              // Focuses the only input inside a modal Dialog (not page-load
+              // autofocus); Radix already traps and manages focus for the dialog.
+              // eslint-disable-next-line jsx-a11y/no-autofocus
               autoFocus
+              data-testid="montage-save-layout-name-input"
             />
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="montage-save-layout-cancel">
             {t('common.cancel')}
           </Button>
-          <Button onClick={onSubmit}>
+          <Button onClick={onSubmit} data-testid="montage-save-layout-confirm">
             <Save className="h-4 w-4 mr-2" />
             {t('common.save')}
           </Button>

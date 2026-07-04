@@ -14,14 +14,14 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNotificationStore } from '../stores/notifications';
 import { useShallow } from 'zustand/react/shallow';
-import { resolveMinStreamingPort } from '../lib/multiport';
+import { resolveMinStreamingPort } from '../lib/monitor/multiport';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useProfileStore } from '../stores/profile';
 import { useFreshAccessToken } from '../hooks/useFreshAccessToken';
 import { toast } from 'sonner';
 import { Bell } from 'lucide-react';
-import { getEventCauseIcon } from '../lib/event-icons';
-import { buildThumbnailChain } from '../lib/thumbnail-chain';
+import { getEventCauseIcon } from '../lib/event/event-icons';
+import { buildThumbnailChain } from '../lib/event/thumbnail-chain';
 import { EventThumbnail } from './events/EventThumbnail';
 import { log, LogLevel } from '../lib/logger';
 import { navigationService } from '../lib/navigation';
@@ -30,7 +30,7 @@ import {
   onProfileSwitchRequest,
   clearPendingProfileSwitch,
   type PendingProfileSwitch,
-} from '../lib/notification-profile';
+} from '../lib/profile/notification-profile';
 import { useNotificationAutoConnect } from '../hooks/useNotificationAutoConnect';
 import { useNotificationPushSetup } from '../hooks/useNotificationPushSetup';
 import { useNotificationDelivered } from '../hooks/useNotificationDelivered';

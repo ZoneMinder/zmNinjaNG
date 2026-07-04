@@ -41,7 +41,7 @@ export function TimelineToolbar({
           size="icon"
           className="h-6 w-6 text-muted-foreground"
           onClick={onZoomIn}
-          title="Zoom in"
+          title={t('timeline.zoom_in')}
           data-testid="timeline-zoom-in-button"
         >
           <ZoomIn className="h-3.5 w-3.5" />
@@ -51,7 +51,7 @@ export function TimelineToolbar({
           size="icon"
           className="h-6 w-6 text-muted-foreground"
           onClick={onZoomOut}
-          title="Zoom out"
+          title={t('timeline.zoom_out')}
           data-testid="timeline-zoom-out-button"
         >
           <ZoomOut className="h-3.5 w-3.5" />
@@ -104,6 +104,7 @@ export function TimelineToolbar({
               variant="ghost"
               size="icon"
               className="h-6 w-6 text-muted-foreground"
+              aria-label={t('sidebar.help')}
               data-testid="timeline-help-button"
             >
               <Info className="h-3.5 w-3.5" />

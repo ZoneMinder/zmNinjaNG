@@ -19,7 +19,7 @@ import { PasswordInput } from '../ui/password-input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import type { Monitor } from '../../api/types';
 import type { MonitorFunction } from '../../pages/hooks/useModeControl';
-import { isZmVersionAtLeast } from '../../lib/zm-version';
+import { isZmVersionAtLeast } from '../../lib/zm/zm-version';
 import { useSettingsStore } from '../../stores/settings';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { toast } from 'sonner';

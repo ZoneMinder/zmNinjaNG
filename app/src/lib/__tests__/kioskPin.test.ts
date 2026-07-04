@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-vi.mock('../secureStorage', () => ({
+vi.mock('../security/secureStorage', () => ({
   setSecureValue: vi.fn().mockResolvedValue(undefined),
   getSecureValue: vi.fn().mockResolvedValue(null),
   hasSecureValue: vi.fn().mockResolvedValue(false),
@@ -8,7 +8,7 @@ vi.mock('../secureStorage', () => ({
 }));
 
 import { hashPin, verifyPin, storePin, hasPinStored, clearPin } from '../kioskPin';
-import { setSecureValue, getSecureValue, hasSecureValue, removeSecureValue } from '../secureStorage';
+import { setSecureValue, getSecureValue, hasSecureValue, removeSecureValue } from '../security/secureStorage';
 
 describe('kioskPin', () => {
   beforeEach(() => {

@@ -11,21 +11,22 @@
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Download, Loader2 } from 'lucide-react';
-import { getEventCauseIcon } from '../../lib/event-icons';
-import { getObjectClassIconFromList } from '../../lib/object-class-icons';
+import { getEventCauseIcon } from '../../lib/event/event-icons';
+import { getObjectClassIconFromList } from '../../lib/event/object-class-icons';
 import { useDateTimeFormat } from '../../hooks/useDateTimeFormat';
+import { formatEventRelative, isWithinDays } from '../../lib/relative-time';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { EventThumbnail } from './EventThumbnail';
 import { downloadEventVideo } from '../../services/download';
 import { type EventFilters } from '../../api/events';
-import { getPortalUrlForEvent } from '../../lib/server-resolver';
-import { buildThumbnailChain } from '../../lib/thumbnail-chain';
+import { getPortalUrlForEvent } from '../../lib/zm/server-resolver';
+import { buildThumbnailChain } from '../../lib/event/thumbnail-chain';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { EventThumbnailHoverPreview } from './EventThumbnailHoverPreview';
-import { calculateThumbnailDimensions, getMonitorDimensions } from '../../lib/event-utils';
-import { ZM_INTEGRATION } from '../../lib/zmninja-ng-constants';
+import { calculateThumbnailDimensions, getMonitorDimensions } from '../../lib/event/event-utils';
+import { ZM_INTEGRATION, RELATIVE_TIME_LIST_WINDOW_DAYS } from '../../lib/zmninja-ng-constants';
 import type { EventData, Monitor, Tag } from '../../api/types';
 import { Platform } from '../../lib/platform';
 import { TagChipList } from './TagChip';
@@ -64,7 +65,7 @@ export const EventMontageView = ({
   minStreamingPort,
 }: EventMontageViewProps) => {
   const navigate = useNavigate();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { fmtDateTimeShort } = useDateTimeFormat();
   const { settings } = useCurrentProfile();
   const thumbnailChain = settings.thumbnailFallbackChain;
@@ -127,6 +128,7 @@ export const EventMontageView = ({
           return (
             <Card
               key={event.Id}
+              data-testid="event-montage-tile"
               className="overflow-hidden cursor-pointer hover:ring-2 hover:ring-primary transition-all"
               onClick={() => navigate(`/events/${event.Id}`, { state: { from: '/events', eventFilters } })}
             >
@@ -181,7 +183,14 @@ export const EventMontageView = ({
                   {event.Name}
                 </div>
                 <div className="text-xs text-muted-foreground truncate">{monitorName}</div>
-                <div className="text-xs text-muted-foreground">{fmtDateTimeShort(startTime)}</div>
+                <div className="text-xs text-muted-foreground truncate">
+                  {fmtDateTimeShort(startTime)}
+                  {isWithinDays(startTime, RELATIVE_TIME_LIST_WINDOW_DAYS) && (
+                    <span data-testid="event-montage-relative-time">
+                      {` · ${formatEventRelative(startTime, i18n.language, t)}`}
+                    </span>
+                  )}
+                </div>
                 {event.Cause && (() => {
                   const CauseIcon = getEventCauseIcon(event.Cause);
                   return (

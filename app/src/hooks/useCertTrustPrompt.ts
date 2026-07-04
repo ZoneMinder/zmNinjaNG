@@ -15,7 +15,7 @@ import { Platform } from '../lib/platform';
 import { useCurrentProfile } from './useCurrentProfile';
 import { useSettingsStore } from '../stores/settings';
 import { log, LogLevel } from '../lib/logger';
-import type { CertInfo } from '../lib/ssl-trust';
+import type { CertInfo } from '../lib/security/ssl-trust';
 
 export interface CertTrustDialogProps {
   open: boolean;
@@ -47,7 +47,7 @@ export function useCertTrustPrompt(): UseCertTrustPromptResult {
     if (!currentProfile || !Platform.isNative) return;
     setVerifying(true);
     try {
-      const { applySSLTrustSetting, getServerCertFingerprint } = await import('../lib/ssl-trust');
+      const { applySSLTrustSetting, getServerCertFingerprint } = await import('../lib/security/ssl-trust');
       await applySSLTrustSetting(true);
       const info = await getServerCertFingerprint(currentProfile.portalUrl);
       if (info) {
@@ -72,7 +72,7 @@ export function useCertTrustPrompt(): UseCertTrustPromptResult {
       allowSelfSignedCerts: true,
       trustedCertFingerprint: certInfo.fingerprint,
     });
-    const { applySSLTrustSetting } = await import('../lib/ssl-trust');
+    const { applySSLTrustSetting } = await import('../lib/security/ssl-trust');
     await applySSLTrustSetting(true, certInfo.fingerprint);
   }, [currentProfile, certInfo, updateProfileSettings]);
 

@@ -6,6 +6,7 @@ import { useGroups } from '../useGroups';
 import { getGroups } from '../../api/groups';
 import { useCurrentProfile } from '../useCurrentProfile';
 import type { GroupData } from '../../api/types';
+import { asProfileId } from '../../api/types';
 
 // Mock dependencies
 vi.mock('../../api/groups', () => ({
@@ -53,7 +54,7 @@ describe('useGroups', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: { id: 'profile-1', name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
+      currentProfile: { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
       settings: {} as never,
       hasProfile: true,
     });

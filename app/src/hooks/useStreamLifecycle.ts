@@ -11,12 +11,12 @@
  */
 
 import { useState, useEffect, useRef, useId } from 'react';
-import { getZmsControlUrl } from '../lib/url-builder';
-import { ZMS_COMMANDS } from '../lib/zm-constants';
+import { getZmsControlUrl } from '../lib/zm/url-builder';
+import { ZMS_COMMANDS } from '../lib/zm/zm-constants';
 import { httpGet } from '../lib/http';
 import { API_REQUEST } from '../lib/zmninja-ng-constants';
 import { useMonitorStore } from '../stores/monitors';
-import { registerActiveStream, unregisterActiveStream } from '../lib/active-streams';
+import { registerActiveStream, unregisterActiveStream } from '../lib/monitor/active-streams';
 import { log, LogLevel } from '../lib/logger';
 
 /** Signature of a component-scoped log helper (e.g. log.monitor, log.dashboard). */

@@ -3,6 +3,7 @@ import { setApiClient, type ApiClient } from '../api/client';
 import { createStoreApiClient } from '../api/store-gates';
 import type { HttpError } from '../lib/http';
 import { log, LogLevel } from '../lib/logger';
+import { isAbortError } from '../lib/is-abort-error';
 import { DISCOVERY_TIMEOUTS } from '../lib/zmninja-ng-constants';
 
 /**
@@ -106,7 +107,7 @@ async function probeApi(apiUrl: string, signal?: AbortSignal): Promise<boolean> 
         }
     } catch (error: unknown) {
         // Re-throw abort errors
-        if (error instanceof Error && error.name === 'AbortError') {
+        if (isAbortError(error)) {
             throw new DiscoveryError('Discovery cancelled', 'CANCELLED');
         }
         const status = (error as HttpError)?.status;
@@ -146,7 +147,7 @@ async function probeApi(apiUrl: string, signal?: AbortSignal): Promise<boolean> 
         }
     } catch (loginError: unknown) {
         // Re-throw abort errors
-        if (loginError instanceof Error && loginError.name === 'AbortError') {
+        if (isAbortError(loginError)) {
             throw new DiscoveryError('Discovery cancelled', 'CANCELLED');
         }
         const loginStatus = (loginError as HttpError)?.status;
@@ -223,7 +224,7 @@ async function fetchCgiUrl(apiUrl: string, portalUrl: string, options: Discovery
         if (error instanceof DiscoveryError && error.code === 'CANCELLED') {
             throw error;
         }
-        if (error instanceof Error && error.name === 'AbortError') {
+        if (isAbortError(error)) {
             throw new DiscoveryError('Discovery cancelled', 'CANCELLED');
         }
         log.discovery('Failed to fetch ZMS path (will use default)', LogLevel.DEBUG, {

@@ -80,7 +80,7 @@ waiting on the network.
    moment it loads it reads your saved profiles from local storage. ``App.tsx``
    also builds the single React Query ``queryClient`` and registers it with
    ``setQueryClient()`` so non-React code can reach the same cache later.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/profile.ts#L65>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/profile.ts#L68>`__
    · → :doc:`03-state-management-zustand`
 
 #. **Rehydration decides what kind of start this is.** Once persist finishes
@@ -118,7 +118,7 @@ waiting on the network.
 #. **Background setup, SSL trust first.** ``performBootstrap`` runs
    ``bootstrapSSLTrust`` before any network call. For a self-signed server it
    applies the trust override (and, the first time, shows the trust-on-first-use
-   dialog) via ``lib/ssl-trust.ts`` ``applySSLTrustSetting``, dispatching to the
+   dialog) via ``lib/security/ssl-trust.ts`` ``applySSLTrustSetting``, dispatching to the
    native ``ssl-trust`` plugin or Electron. If trust were applied after the login
    call, a self-signed server would reject it.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/profile-bootstrap.ts#L266>`__
@@ -241,7 +241,7 @@ collide on the server and never leak a zombie process when they go away.
 
 #. **Build the stream URL (only when safe).** Once ``connKey !== 0`` and the
    token is fresh, ``useMonitorStream`` builds the URL via ``getStreamUrl``
-   (``api/monitors.ts`` then ``lib/url-builder.ts`` to ``/cgi-bin/nph-zms``) and
+   (``api/monitors.ts`` then ``lib/zm/url-builder.ts`` to ``/cgi-bin/nph-zms``) and
    mirrors it into ``imageSrc``. The double gate prevents minting a zombie stream
    before a key exists.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/monitors.ts#L296>`__
@@ -274,12 +274,12 @@ collide on the server and never leak a zombie process when they go away.
    · → :doc:`11-application-lifecycle`
 
 #. **A profile switch tears down all streams first.** Each lifecycle registers a
-   teardown thunk in ``lib/active-streams.ts``; ``stores/profile.ts``
+   teardown thunk in ``lib/monitor/active-streams.ts``; ``stores/profile.ts``
    ``switchProfile`` awaits ``quitAllActiveStreams()`` before logout and the
    SSL-trust flip, while the old profile's trust and token are still in effect.
    Relying on React unmount alone races the switch and can orphan an ``nph-zms``
    process on a self-signed server.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/active-streams.ts#L32>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/monitor/active-streams.ts#L32>`__
    · → :doc:`11-application-lifecycle`
 
 Flow 3: A push notification, from registration to tap
@@ -329,13 +329,13 @@ a token on startup, and reacting when a push arrives.
    exposes ``getPushService``, a module-level singleton holding ``currentToken``
    and init state, so token state survives re-renders and profile switches
    instead of being recreated.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L586>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L626>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Ask permission.** ``initialize`` imports ``FirebaseMessaging`` and calls
    ``requestPermissions()``, continuing only if granted. No token can be obtained
    without OS push permission.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L63>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L104>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Create the Android channel.** ``_createNotificationChannel`` (Android only)
@@ -343,25 +343,25 @@ a token on startup, and reacting when a push arrives.
    Android needs a high-importance channel for heads-up banners, and the
    manifest's ``default_notification_channel_id`` routes channel-less server
    pushes here so they alert instead of landing silently.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L70>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L111>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Listen before fetching the token.** ``_setupListeners`` registers
    ``tokenReceived``, ``notificationReceived``, and ``notificationActionPerformed``
    *before* ``getToken`` so a token refresh is never missed.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L75>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L116>`__
    · → :doc:`11-application-lifecycle`
 
 #. **Get the FCM token.** ``getToken`` requests the token, stores it in
    ``currentToken``, and retries once after 5s on a transient failure.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L80>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L121>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Register the token with the server.** ``_registerWithServer`` forks on
    ``settings.notificationMode``: direct mode calls ``api/notifications``
    ``registerToken``; ES mode registers over the websocket, deferring until
    connected.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L92>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L133>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **The actual REST call.** ``api/notifications.ts`` ``registerToken`` POSTs a
@@ -376,20 +376,20 @@ a token on startup, and reacting when a push arrives.
    server (the same event also arrives over the websocket), otherwise it builds a
    snapshot URL for the current profile and adds the event to the notification
    store.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L354>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L394>`__
    · → :doc:`03-state-management-zustand`
 
 #. **The user taps the notification.** ``notificationActionPerformed`` →
    ``_handleNotificationAction`` resolves the target profile and stores the event
    under it.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L367>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L407>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Same profile or switch?** ``resolveProfileForNotification`` matches the
    payload's profile name to a stored profile. Same profile navigates directly; a
    different one calls ``requestProfileSwitch`` to ask first (the dialog lives in
    ``NotificationHandler``).
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/notification-profile.ts#L32>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/profile/notification-profile.ts#L32>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Navigate to the event.** A service cannot use React Router's hook, so it
@@ -446,7 +446,7 @@ time, logs in to confirm the details, then saves the profile and switches to it.
 #. **Trust the cert before probing.** When self-signed is on, ``applySSLTrustSetting``
    enables trust-all first, so the upcoming discovery calls can reach a
    self-signed host instead of failing the handshake.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/ssl-trust.ts#L18>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/security/ssl-trust.ts#L18>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Find the real URLs.** ``discoverUrls`` wraps ``discoverZoneminder`` with one
@@ -483,13 +483,13 @@ time, logs in to confirm the details, then saves the profile and switches to it.
 #. **Save it.** ``addProfile`` validates the name, generates a UUID, writes the
    password to secure storage (never to Zustand), appends the profile, and makes
    it current if it is the first.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/profile.ts#L93>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/profile.ts#L96>`__
    · → :doc:`11-application-lifecycle`
 
 #. **Switch to it.** For a non-first profile, ``switchProfile`` quits the old
    profile's streams, resets the client, and runs ``performBootstrap`` (the same
    bootstrap as Flow 1) before navigating away.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/profile.ts#L247>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/profile.ts#L250>`__
    · → :doc:`11-application-lifecycle`
 
 Flow 5: Browse events and play a video
@@ -569,7 +569,7 @@ MJPEG player.
 #. **The URL shape.** ``url-builder.ts`` ``getEventVideoUrl`` emits the HLS
    (``view_event_hls``) or MP4 (``view_video``) ``/index.php`` URL, appends the
    token, and rewrites the port when multi-port streaming is on.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/url-builder.ts#L285>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/zm/url-builder.ts#L285>`__
    · → :doc:`10-key-libraries`
 
 #. **MP4/HLS playback.** ``Mp4EventPlayer`` creates a Video.js player, wires alarm
@@ -717,13 +717,13 @@ alive, and turns each live alarm into an event in the store and a toast on scree
 #. **Store builds the config and listeners.** ``connect`` disconnects any other
    profile, builds the server config, registers state/event listeners, and awaits
    the service connect.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts#L253>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts#L254>`__
    · → :doc:`03-state-management-zustand`
 
 #. **Inject store-derived providers.** ``_buildServiceProviders`` hands the
    import-free service its token getter, image-URL builder, and bandwidth-derived
    keepalive interval.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts#L683>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts#L674>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Open the socket.** The service ``connect`` builds the ``ws(s)://host:port``
@@ -757,13 +757,13 @@ alive, and turns each live alarm into an event in the store and a toast on scree
 #. **Bridge events into the store.** ``_initialize`` subscribes to the service's
    state and event streams, mirroring connection state and calling ``addEvent`` per
    alarm.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts#L472>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts#L473>`__
    · → :doc:`03-state-management-zustand`
 
 #. **Record the alarm.** ``addEvent`` wraps it as a notification, dedupes and caps
    the history, recomputes the unread badge, and pushes the count back to the
    server. A toast then shows for the latest event.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts#L349>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts#L350>`__
    · → :doc:`03-state-management-zustand`
 
 Flow 8: A go2rtc WebRTC live stream
@@ -820,7 +820,7 @@ element, with a ladder of watchdogs that fall back to MJPEG if anything stalls.
 
 #. **Build the websocket URL.** ``getGo2RTCWebSocketUrl`` converts http(s) to
    ws(s), appends ``/ws``, and sets ``src={monitorId}_{channel}`` plus the token.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/url-builder.ts#L449>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/zm/url-builder.ts#L449>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **Create the element.** ``connect`` instantiates ``VideoRTC``, wraps its
@@ -1080,7 +1080,7 @@ from that one place, so flipping low mode re-cadences the whole app at once.
 #. **The non-React consumers.** Outside React, the notification keepalive and the
    direct-mode poller call ``getBandwidthSettings`` directly for their intervals,
    the same presets without a hardcoded number anywhere.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts#L691>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts#L682>`__
    · → :doc:`03-state-management-zustand`
 
 Flow 12: A Dashboard widget

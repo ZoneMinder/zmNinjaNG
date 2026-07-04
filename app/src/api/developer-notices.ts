@@ -10,7 +10,7 @@
 import { z } from 'zod';
 import { httpGet } from '../lib/http';
 import { DEVELOPER_NOTICES } from '../lib/zmninja-ng-constants';
-import { validateApiResponse } from '../lib/api-validator';
+import { validateApiResponse } from '../lib/zm/api-validator';
 
 export const DeveloperNoticeSeveritySchema = z.enum(['info', 'warning', 'critical']);
 export type DeveloperNoticeSeverity = z.infer<typeof DeveloperNoticeSeveritySchema>;

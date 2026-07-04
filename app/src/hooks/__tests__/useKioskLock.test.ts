@@ -71,10 +71,10 @@ import { useProfileStore } from '../../stores/profile';
 function setupStoreMocks(options?: { isLocked?: boolean; hasInsomnia?: boolean; profileId?: string }) {
   mockIsLocked = options?.isLocked ?? false;
 
-  vi.mocked(useKioskStore).mockReturnValue({
-    isLocked: mockIsLocked,
-    lock: mockKioskLock,
-  } as never);
+  vi.mocked(useKioskStore).mockImplementation((selector) => {
+    const state = { isLocked: mockIsLocked, lock: mockKioskLock };
+    return (selector as unknown as (s: typeof state) => unknown)(state);
+  });
 
   vi.mocked(useProfileStore).mockImplementation((selector) => {
     const state = { currentProfileId: options?.profileId ?? 'profile-1' };
@@ -85,10 +85,13 @@ function setupStoreMocks(options?: { isLocked?: boolean; hasInsomnia?: boolean; 
     insomnia: options?.hasInsomnia ?? false,
   });
 
-  vi.mocked(useSettingsStore).mockReturnValue({
-    getProfileSettings: mockGetProfileSettings,
-    updateProfileSettings: mockUpdateProfileSettings,
-  } as never);
+  vi.mocked(useSettingsStore).mockImplementation((selector) => {
+    const state = {
+      getProfileSettings: mockGetProfileSettings,
+      updateProfileSettings: mockUpdateProfileSettings,
+    };
+    return (selector as unknown as (s: typeof state) => unknown)(state);
+  });
 }
 
 describe('useKioskLock', () => {

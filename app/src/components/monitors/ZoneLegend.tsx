@@ -10,7 +10,7 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Zone } from '../../api/types';
-import { getZoneColor, ZONE_TYPE_ORDER } from '../../lib/zone-utils';
+import { getZoneColor, ZONE_TYPE_ORDER } from '../../lib/monitor/zone-utils';
 
 interface ZoneLegendProps {
   zones: Zone[];

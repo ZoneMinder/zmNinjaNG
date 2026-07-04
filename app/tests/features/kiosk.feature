@@ -14,6 +14,9 @@ Feature: Kiosk Mode
     And I confirm the PIN "1234"
     Then the kiosk overlay should be visible
     And the sidebar should not be visible
+    When I try to click a navigation link
+    Then the kiosk overlay should still be visible
+    And the page should not have changed
 
   @all
   Scenario: Correct PIN unlocks the overlay

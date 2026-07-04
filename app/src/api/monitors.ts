@@ -8,15 +8,15 @@
 import { getApiClient } from './client';
 import type { MonitorsResponse, MonitorData, ControlData, AlarmStatusResponse, DaemonStatusResponse } from './types';
 import { MonitorsResponseSchema, MonitorDataSchema, ControlDataSchema, AlarmStatusResponseSchema, DaemonStatusResponseSchema } from './types';
-import { validateApiResponse } from '../lib/api-validator';
+import { validateApiResponse } from '../lib/zm/api-validator';
 import {
   getMonitorStreamUrl as buildMonitorStreamUrl,
   getMonitorControlUrl as buildMonitorControlUrl,
-} from '../lib/url-builder';
+} from '../lib/zm/url-builder';
 import { log, LogLevel } from '../lib/logger';
-import { wrapWithImageProxy } from '../lib/proxy-utils';
-import { filterExcludedMonitors } from '../lib/filters';
-import { getExcludedMonitorIds } from '../lib/profile-settings';
+import { wrapWithImageProxy } from '../lib/zm/proxy-utils';
+import { filterExcludedMonitors } from '../lib/monitor/filters';
+import { getExcludedMonitorIds } from '../lib/profile/profile-settings';
 
 /**
  * Get all monitors.

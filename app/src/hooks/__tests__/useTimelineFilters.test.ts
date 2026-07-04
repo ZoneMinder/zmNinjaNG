@@ -7,8 +7,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useTimelineFilters } from '../useTimelineFilters';
+import { asProfileId } from '../../api/types';
 
-const mockCurrentProfile = { id: 'profile-1', name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 };
+const mockCurrentProfile = { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 };
 const mockGetProfileSettings = vi.fn();
 const mockUpdateProfileSettings = vi.fn();
 

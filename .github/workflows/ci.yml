@@ -1,0 +1,186 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Cancel superseded runs on PR branches, but never on main: each commit to
+  # main must keep its own completed CI status, so two merges minutes apart
+  # do not leave the first commit with a cancelled, statusless run.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  native-version-guard:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Rule 28 / refs #217 finding 1: the local commit-msg hook that blocks
+      # incidental native build-number bumps (versionCode / CURRENT_PROJECT_VERSION)
+      # from landing outside a `chore:` commit only runs if a contributor ran
+      # `npm install` at the repo root, and `git commit -n` skips it outright.
+      # This job re-checks every commit on the PR/push so the rule can't be
+      # bypassed by a missing hook install or a --no-verify commit.
+      - name: Check native-version-bump guard on every commit
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            RANGE="${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
+          else
+            RANGE="${{ github.event.before }}..${{ github.event.after }}"
+          fi
+          node scripts/check-native-version-bump.mjs --ci "$RANGE"
+
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./app
+        run: npm ci
+
+      # Advisory only: the repo has a pre-existing lint backlog (~196 errors,
+      # mostly react-hooks/* and no-explicit-any) that is out of scope to fix
+      # here. continue-on-error keeps this from blocking PRs. Remove it to make
+      # lint a hard gate once the backlog is burned down (tracked in #217).
+      - name: Run lint
+        working-directory: ./app
+        continue-on-error: true
+        run: npm run lint
+
+  lint-a11y:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./app
+        run: npm ci
+
+      # Hard gate: jsx-a11y is the one ruleset fully clean on this repo (all
+      # 35 pre-existing violations were fixed, refs #217). eslint.a11y.config.js
+      # enables only jsx-a11y rules (everything else off), so this job is not
+      # affected by the react-hooks/*, no-explicit-any backlog that keeps the
+      # `lint` job above advisory. No continue-on-error: a new a11y violation
+      # fails the PR.
+      - name: Run a11y lint
+        working-directory: ./app
+        run: npm run lint:a11y
+
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./app
+        run: npm ci
+
+      - name: Typecheck and build
+        working-directory: ./app
+        run: npm run build
+
+  unit-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./app
+        run: npm ci
+
+      - name: Run unit tests
+        working-directory: ./app
+        run: npm run test:unit
+
+  e2e-tests:
+    runs-on: ubuntu-latest
+    needs: [lint, build, unit-tests]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check E2E secrets
+        id: e2e-secrets
+        run: |
+          if [ -n "${{ secrets.ZM_HOST_1 }}" ] && [ -n "${{ secrets.ZM_USER_1 }}" ] && [ -n "${{ secrets.ZM_PASSWORD_1 }}" ]; then
+            echo "has_secrets=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_secrets=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Node.js
+        if: steps.e2e-secrets.outputs.has_secrets == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        if: steps.e2e-secrets.outputs.has_secrets == 'true'
+        working-directory: ./app
+        run: npm ci
+
+      - name: Install Playwright browsers
+        if: steps.e2e-secrets.outputs.has_secrets == 'true'
+        working-directory: ./app
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        if: steps.e2e-secrets.outputs.has_secrets == 'true'
+        working-directory: ./app
+        env:
+          ZM_HOST_1: ${{ secrets.ZM_HOST_1 }}
+          ZM_USER_1: ${{ secrets.ZM_USER_1 }}
+          ZM_PASSWORD_1: ${{ secrets.ZM_PASSWORD_1 }}
+        run: npm run test:e2e

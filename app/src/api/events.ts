@@ -9,14 +9,14 @@ import { getApiClient } from './client';
 import type { EventsResponse, EventData } from './types';
 import { EventsResponseSchema, EventResponseSchema, ConsoleEventsResponseSchema } from './types';
 import { log, LogLevel } from '../lib/logger';
-import { validateApiResponse } from '../lib/api-validator';
+import { validateApiResponse } from '../lib/zm/api-validator';
 import {
   getEventImageUrl as buildEventImageUrl,
   getEventVideoUrl as buildEventVideoUrl,
   getEventZmsUrl as buildEventZmsUrl,
-} from '../lib/url-builder';
-import { wrapWithImageProxy } from '../lib/proxy-utils';
-import { getExcludedMonitorIdSet } from '../lib/profile-settings';
+} from '../lib/zm/url-builder';
+import { wrapWithImageProxy } from '../lib/zm/proxy-utils';
+import { getExcludedMonitorIdSet } from '../lib/profile/profile-settings';
 import { API_PAGINATION } from '../lib/zmninja-ng-constants';
 
 export interface EventFilters {

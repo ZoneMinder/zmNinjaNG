@@ -133,7 +133,7 @@ export default function Profiles() {
     setIsSaving(true);
     try {
       // Apply SSL trust before discovery so it works against a self-signed server.
-      const { applySSLTrustSetting } = await import('../lib/ssl-trust');
+      const { applySSLTrustSetting } = await import('../lib/security/ssl-trust');
       await applySSLTrustSetting(formData.allowSelfSignedCerts);
 
       let portalUrl = formData.portalUrl.replace(/\/$/, '');

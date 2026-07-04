@@ -34,6 +34,19 @@ export const API_REQUEST = {
  */
 export const MAX_QUERY_RETRIES = 1;
 
+/**
+ * App-wide default React Query `staleTime` (ms). Keeps the last successful
+ * response visible and "fresh" for this long instead of re-flagging it stale
+ * (and re-fetching / erroring) the instant a component using it mounts or a
+ * network blip hits. Queries with their own `refetchInterval` (monitor
+ * status, etc.) still refetch on that schedule regardless; this only affects
+ * queries relying on mount/reconnect-triggered refetches (states, groups,
+ * tags, server info). Chosen shorter than the shortest bandwidth-mode
+ * refetch interval (monitorStatusInterval, 20s in normal mode) so it never
+ * masks a legitimate periodic refresh. refs #217
+ */
+export const DEFAULT_QUERY_STALE_TIME_MS = 15000;
+
 export const ZM_INTEGRATION = {
   // HTTP timeouts for ZM API calls
   httpTimeout: 10000, // 10 seconds - standard API calls
@@ -53,7 +66,7 @@ export const ZM_INTEGRATION = {
 
   // Grace delay before a scheduled CMD_QUIT fires. Lets React StrictMode's
   // dev double-mount cancel the quit instead of killing a stream the
-  // surviving mount is still using. See lib/zms-quit.ts.
+  // surviving mount is still using. See lib/zm/zms-quit.ts.
   cmdQuitGraceMs: 150,
 
   // Image quality settings
@@ -181,6 +194,10 @@ export const NOTIFICATIONS_SERVICE = {
 
   // Width (px) requested for event snapshot images in notifications
   snapshotImageWidth: 600,
+
+  // Delay before the first ES-mode auto-connect attempt, to let profile/auth
+  // store rehydration finish (ms)
+  autoConnectInitDelayMs: 500,
 } as const;
 
 /**
@@ -487,6 +504,13 @@ export const KIOSK = {
 
   // Cooldown duration after exceeding max attempts (ms)
   cooldownMs: 30_000,
+
+  // How often the kiosk overlay's cooldown countdown re-renders (ms)
+  cooldownTickIntervalMs: 1000,
+
+  // Delay between the 4th PIN digit being entered and auto-submit, so the
+  // filled-in last digit is visible before the pad reacts (ms)
+  pinAutoSubmitDelayMs: 100,
 } as const;
 
 /**
@@ -505,6 +529,17 @@ export const KEYBOARD_SHORTCUTS = {
   monitorJumpCommitMs: 1000,
   // Cap on digits buffered for the monitor jump.
   maxMonitorDigits: 4,
+} as const;
+
+/**
+ * Monitor Detail Navigation
+ *
+ * Swipe/prev-next navigation between monitors on the monitor detail page.
+ */
+export const MONITOR_NAVIGATION = {
+  // How long the slide-transition state stays active after switching monitors,
+  // matching the CSS slide animation duration (ms)
+  slideAnimationMs: 450,
 } as const;
 
 /**
@@ -555,6 +590,17 @@ export const GO2RTC_MAX_FREEZE_RETRIES = 2;
 
 /** Seconds an MSE stream must advance healthily before the freeze-retry counter resets */
 export const GO2RTC_FREEZE_RESET_S = 60;
+
+/**
+ * Downloads
+ *
+ * Timing for browser-triggered file downloads (web platform).
+ */
+export const DOWNLOAD = {
+  // Delay before removing the temporary anchor element used to trigger a
+  // data-URL download, so the browser has time to start the download (ms)
+  webLinkCleanupDelayMs: 100,
+} as const;
 
 /**
  * Discovery Timeouts

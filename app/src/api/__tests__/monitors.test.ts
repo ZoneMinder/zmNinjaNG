@@ -13,9 +13,9 @@ import {
   updateMonitor,
 } from '../monitors';
 import { getApiClient } from '../client';
-import { validateApiResponse } from '../../lib/api-validator';
-import { getMonitorStreamUrl } from '../../lib/url-builder';
-import { getExcludedMonitorIds } from '../../lib/profile-settings';
+import { validateApiResponse } from '../../lib/zm/api-validator';
+import { getMonitorStreamUrl } from '../../lib/zm/url-builder';
+import { getExcludedMonitorIds } from '../../lib/profile/profile-settings';
 import type { ApiClient } from '../client';
 
 const mockGet = vi.fn();
@@ -25,15 +25,15 @@ vi.mock('../client', () => ({
   getApiClient: vi.fn(),
 }));
 
-vi.mock('../../lib/api-validator', () => ({
+vi.mock('../../lib/zm/api-validator', () => ({
   validateApiResponse: vi.fn((_, data) => data),
 }));
 
-vi.mock('../../lib/profile-settings', () => ({
+vi.mock('../../lib/profile/profile-settings', () => ({
   getExcludedMonitorIds: vi.fn(() => []),
 }));
 
-vi.mock('../../lib/url-builder', () => ({
+vi.mock('../../lib/zm/url-builder', () => ({
   getMonitorStreamUrl: vi.fn(() => 'https://stream.test'),
   getMonitorControlUrl: vi.fn(() => 'https://control.test'),
 }));

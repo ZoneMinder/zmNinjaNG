@@ -2,36 +2,19 @@
  * Unit tests for log sanitizer (security-critical)
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   sanitizeObject,
   sanitizeLogMessage,
   sanitizeLogArgs,
+  setLogRedactionGate,
 } from '../log-sanitizer';
-import { useSettingsStore } from '../../stores/settings';
-
-// Mock the stores
-vi.mock('../../stores/settings', () => ({
-  useSettingsStore: {
-    getState: vi.fn(() => ({
-      getProfileSettings: vi.fn(() => ({
-        disableLogRedaction: false,
-      })),
-    })),
-  },
-}));
-
-vi.mock('../../stores/profile', () => ({
-  useProfileStore: {
-    getState: vi.fn(() => ({
-      currentProfileId: 'test-profile-id',
-    })),
-  },
-}));
 
 describe('sanitizeObject', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    // Redaction gate has no store imports (refs #217); set it directly
+    // instead of mocking stores/profile and stores/settings.
+    setLogRedactionGate({ isRedactionDisabled: () => false });
   });
 
   describe('Password Redaction', () => {
@@ -269,15 +252,11 @@ describe('sanitizeObject', () => {
 
   describe('Nested secrets under whitelisted keys when redaction is disabled', () => {
     afterEach(() => {
-      vi.mocked(useSettingsStore.getState).mockReturnValue({
-        getProfileSettings: () => ({ disableLogRedaction: false }),
-      } as any);
+      setLogRedactionGate({ isRedactionDisabled: () => false });
     });
 
     it('shows the nested password verbatim when redaction is disabled', () => {
-      vi.mocked(useSettingsStore.getState).mockReturnValue({
-        getProfileSettings: () => ({ disableLogRedaction: true }),
-      } as any);
+      setLogRedactionGate({ isRedactionDisabled: () => true });
 
       const obj = {
         message: { event: 'auth', data: { user: 'admin', password: 'hunter2' } },

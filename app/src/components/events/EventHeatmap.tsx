@@ -18,6 +18,7 @@ import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { startOfHour, startOfDay, differenceInDays, addHours, addDays } from 'date-fns';
 import type { EventData } from '../../api/types';
+import { activateOnEnterOrSpace } from '../../lib/utils';
 
 interface EventHeatmapProps {
   events: EventData[];
@@ -173,7 +174,11 @@ export function EventHeatmap({
                     flex: '1 1 0',
                     minWidth: '4px',
                   }}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`${fmtDate(bucket.time)}: ${bucket.count} ${t('events.heatmap_events', 'events')}`}
                   onClick={() => handleBarClick(bucket)}
+                  onKeyDown={activateOnEnterOrSpace(() => handleBarClick(bucket))}
                 >
                   <div
                     className="w-full h-full rounded-sm transition-all"

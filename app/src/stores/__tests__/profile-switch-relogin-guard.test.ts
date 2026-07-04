@@ -23,7 +23,7 @@ vi.mock('../../api/client', () => ({ setApiClient: vi.fn(), resetApiClient: vi.f
 vi.mock('../../api/store-gates', () => ({ createStoreApiClient: vi.fn(() => ({})) }));
 vi.mock('../../api/time', () => ({ getServerTimeZone: vi.fn() }));
 vi.mock('../../services/profile-bootstrap', () => ({ performBootstrap: vi.fn() }));
-vi.mock('../../lib/secureStorage', () => ({
+vi.mock('../../lib/security/secureStorage', () => ({
   setSecureValue: vi.fn().mockResolvedValue(undefined),
   getSecureValue: vi.fn().mockResolvedValue(undefined),
   removeSecureValue: vi.fn().mockResolvedValue(undefined),
@@ -35,10 +35,11 @@ vi.mock('../../lib/logger', () => ({
 
 import { useProfileStore } from '../profile';
 import { performBootstrap } from '../../services/profile-bootstrap';
+import { asProfileId } from '../../api/types';
 
 function profile(id: string, name: string, username: string) {
   return {
-    id,
+    id: asProfileId(id),
     name,
     apiUrl: `http://${name}/api`,
     portalUrl: `http://${name}`,
@@ -52,7 +53,7 @@ describe('switchProfile reLogin guard', () => {
     vi.clearAllMocks();
     useProfileStore.setState({
       profiles: [profile('p-old', 'home', 'admin'), profile('p-new', 'isaac', 'asker')],
-      currentProfileId: 'p-old',
+      currentProfileId: asProfileId('p-old'),
       isInitialized: true,
       // Avoid real decryption; reLogin uses this when it is not suppressed.
       getDecryptedPassword: (async () => 'decrypted') as never,

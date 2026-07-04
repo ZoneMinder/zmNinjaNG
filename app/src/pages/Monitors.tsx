@@ -7,6 +7,7 @@
 
 import { useState, useMemo, useCallback, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { queryKeys } from '../lib/query/query-keys';
 import { useTranslation } from 'react-i18next';
 import { getMonitors, updateMonitor } from '../api/monitors';
 import { getConsoleEvents } from '../api/events';
@@ -15,13 +16,16 @@ import { useBandwidthSettings } from '../hooks/useBandwidthSettings';
 import { useAuthStore } from '../stores/auth';
 import { useSettingsStore } from '../stores/settings';
 import { Button } from '../components/ui/button';
-import { AlertCircle, LayoutGrid, List } from 'lucide-react';
+import { LayoutGrid, List, Video } from 'lucide-react';
 import { PageContainer } from '../components/common/PageContainer';
+import { ErrorBanner } from '../components/ui/query-state';
+import { EmptyState } from '../components/ui/empty-state';
+import { resolveQueryError } from '../lib/query/query-error';
 import { RefreshButton } from '../components/common/RefreshButton';
 import { MonitorCard } from '../components/monitors/MonitorCard';
 import { MonitorSettingsDialog } from '../components/monitor-detail/MonitorSettingsDialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { filterEnabledMonitors, filterMonitorsByGroup } from '../lib/filters';
+import { filterEnabledMonitors, filterMonitorsByGroup } from '../lib/monitor/filters';
 import { useGroupFilter } from '../hooks/useGroupFilter';
 import { GroupFilterSelect } from '../components/filters/GroupFilterSelect';
 import type { Monitor } from '../api/types';
@@ -63,25 +67,16 @@ export default function Monitors() {
   });
 
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['monitors', currentProfile?.id],
+    queryKey: queryKeys.monitors(currentProfile?.id),
     queryFn: () => getMonitors(),
     enabled: !!currentProfile && isAuthenticated,
     refetchInterval: bandwidth.monitorStatusInterval,
   });
 
 
-  const resolveErrorMessage = (err: unknown) => {
-    const message = (err as Error)?.message || t('common.unknown_error');
-    const status = (err as { response?: { status?: number } })?.response?.status;
-    if (status === 401 || /unauthorized/i.test(message)) {
-      return t('common.auth_required');
-    }
-    return t('monitors.failed_to_load', { error: message });
-  };
-
   // Fetch event counts for the last week
   const { data: eventCounts } = useQuery({
-    queryKey: ['consoleEvents', '1 week'],
+    queryKey: queryKeys.consoleEventsList(currentProfile?.id, '1 week'),
     queryFn: () => getConsoleEvents('1 week'),
     enabled: !!currentProfile && isAuthenticated,
     refetchInterval: bandwidth.consoleEventsInterval,
@@ -153,16 +148,17 @@ export default function Monitors() {
     );
   }
 
-  if (error) {
+  // A background refetch error (e.g. offline) while cached monitors are
+  // already loaded falls through to the normal view below instead of this
+  // error wall; the OfflineBanner in AppLayout covers that case. Only a cold
+  // start with no cached data (no `data` yet) hits the error wall.
+  if (error && !data) {
     return (
       <div className="p-8">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-lg font-bold tracking-tight">{t('monitors.title')}</h1>
         </div>
-        <div className="p-4 bg-destructive/10 text-destructive rounded-lg flex items-center gap-2">
-          <AlertCircle className="h-5 w-5" />
-          {resolveErrorMessage(error)}
-        </div>
+        <ErrorBanner message={resolveQueryError(error, t, { fallbackKey: 'monitors.failed_to_load' })} />
       </div>
     );
   }
@@ -229,8 +225,12 @@ export default function Monitors() {
       {/* All Cameras */}
       <div className="space-y-3 sm:space-y-4">
         {allMonitors.length === 0 ? (
-          <div className="p-8 text-center border rounded-lg bg-muted/20 text-muted-foreground" data-testid="monitors-empty-state">
-            {t('monitors.no_cameras')}
+          <div data-testid="monitors-empty-state">
+            <EmptyState
+              icon={Video}
+              title={t('monitors.no_cameras')}
+              className="p-8 text-center border rounded-lg bg-muted/20 text-muted-foreground"
+            />
           </div>
         ) : settings.monitorsViewMode === 'grid' ? (
             <div

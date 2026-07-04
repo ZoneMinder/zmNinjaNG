@@ -8,7 +8,7 @@ import { useState, useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
-import { getMaxColsForWidth, EVENT_GRID_CONSTANTS } from '../lib/event-utils';
+import { getMaxColsForWidth, EVENT_GRID_CONSTANTS } from '../lib/event/event-utils';
 
 interface UseEventMontageGridProps {
   initialCols: number;

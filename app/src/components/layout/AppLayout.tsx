@@ -29,13 +29,14 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from 
 import { useTranslation } from 'react-i18next';
 import { BackgroundTaskDrawer } from '../BackgroundTaskDrawer';
 import { CertTrustDialog } from '../CertTrustDialog';
-import { onCertTrustRequest, type PendingCertTrust } from '../../lib/cert-trust-event';
+import { onCertTrustRequest, type PendingCertTrust } from '../../lib/security/cert-trust-event';
 import { useTvMode } from '../../hooks/useTvMode';
-import { enableSpatialNavigation, checkIsTV } from '../../lib/tv-spatial-nav';
+import { enableSpatialNavigation, checkIsTV } from '../../lib/tv/tv-spatial-nav';
 import { useKioskStore } from '../../stores/kioskStore';
 import { KioskOverlay } from '../kiosk/KioskOverlay';
 import { SidebarContent } from './SidebarContent';
 import { DeveloperNoticeBanner } from './DeveloperNoticeBanner';
+import { OfflineBanner } from './OfflineBanner';
 import { CertTrustBanner } from '../CertTrustBanner';
 import { DeleteBatchBar } from '../events/DeleteBatchBar';
 
@@ -144,7 +145,7 @@ export default function AppLayout() {
     setPendingCert(null);
 
     updateProfileSettings(profileId, { trustedCertFingerprint: certInfo.fingerprint });
-    const { applySSLTrustSetting } = await import('../../lib/ssl-trust');
+    const { applySSLTrustSetting } = await import('../../lib/security/ssl-trust');
     await applySSLTrustSetting(true, certInfo.fingerprint);
     log.app('Certificate trusted via TOFU migration', LogLevel.INFO);
   }, [pendingCert, updateProfileSettings]);
@@ -156,7 +157,7 @@ export default function AppLayout() {
 
     // Disable self-signed certs since user rejected the certificate
     updateProfileSettings(profileId, { allowSelfSignedCerts: false, trustedCertFingerprint: null });
-    const { applySSLTrustSetting } = await import('../../lib/ssl-trust');
+    const { applySSLTrustSetting } = await import('../../lib/security/ssl-trust');
     await applySSLTrustSetting(false);
     log.app('Certificate rejected, disabling self-signed cert support', LogLevel.INFO);
   }, [pendingCert, updateProfileSettings]);
@@ -206,7 +207,7 @@ export default function AppLayout() {
           {/* Menu on the left so the button sits on the side the drawer opens from. */}
           <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" data-testid="mobile-menu-button">
+              <Button variant="ghost" size="icon" aria-label={t('app.navigation_menu')} data-testid="mobile-menu-button">
                 <Menu className="h-5 w-5" />
               </Button>
             </SheetTrigger>
@@ -258,6 +259,7 @@ export default function AppLayout() {
         <div className="absolute top-0 left-0 w-full h-96 bg-gradient-to-b from-primary/5 to-transparent -z-10 pointer-events-none" />
 
         <DeveloperNoticeBanner />
+        <OfflineBanner />
         <CertTrustBanner />
         <Outlet />
         <DeleteBatchBar />

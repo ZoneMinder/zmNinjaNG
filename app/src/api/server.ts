@@ -6,7 +6,7 @@
  */
 
 import { getApiClient } from './client';
-import { validateApiResponse } from '../lib/api-validator';
+import { validateApiResponse } from '../lib/zm/api-validator';
 import { z } from 'zod';
 import { log, LogLevel } from '../lib/logger';
 import type { HttpError } from '../lib/http';

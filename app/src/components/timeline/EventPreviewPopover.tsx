@@ -14,10 +14,11 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { getEventImageUrl } from '../../api/events';
-import { getPortalUrlForEvent } from '../../lib/server-resolver';
-import { resolveFallbackFids } from '../../lib/thumbnail-chain';
-import { resolveMinStreamingPort } from '../../lib/multiport';
-import { parseDetectedObjects } from '../../lib/event-detection';
+import { queryKeys } from '../../lib/query/query-keys';
+import { getPortalUrlForEvent } from '../../lib/zm/server-resolver';
+import { resolveFallbackFids } from '../../lib/event/thumbnail-chain';
+import { resolveMinStreamingPort } from '../../lib/monitor/multiport';
+import { parseDetectedObjects } from '../../lib/event/event-detection';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useDateTimeFormat } from '../../hooks/useDateTimeFormat';
 import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
@@ -62,7 +63,7 @@ export const EventPreviewPopover = memo(function EventPreviewPopover({
   const queryClient = useQueryClient();
 
   const profilePortalUrl = currentProfile?.portalUrl ?? '';
-  const monitors = (queryClient.getQueryData<MonitorsResponse>(['monitors']))?.monitors ?? [];
+  const monitors = (queryClient.getQueryData<MonitorsResponse>(queryKeys.monitors(currentProfile?.id)))?.monitors ?? [];
   const portalUrl = getPortalUrlForEvent(event.monitorId, monitors, profilePortalUrl);
   const tokenOpts = {
     token: accessToken ?? undefined,
@@ -112,6 +113,15 @@ export const EventPreviewPopover = memo(function EventPreviewPopover({
     return () => { cancelled = true; };
   }, [event.id, isAccessTokenFresh]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Keyboard users can't click the backdrop to dismiss; let Escape close the popover.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
   const frameLabels: Record<string, string> = {
     objdetect: 'AI Detect',
     alarm: 'Alarm',
@@ -130,6 +140,7 @@ export const EventPreviewPopover = memo(function EventPreviewPopover({
       {/* Invisible backdrop: tap anywhere outside to dismiss */}
       <div
         className="fixed inset-0 z-40"
+        role="presentation"
         onClick={onClose}
         data-testid="event-preview-backdrop"
       />

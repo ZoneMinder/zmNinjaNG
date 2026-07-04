@@ -20,6 +20,8 @@ import {
     DialogFooter,
 } from '../ui/dialog';
 import { Button } from '../ui/button';
+import { queryKeys } from '../../lib/query/query-keys';
+import type { ProfileId } from '../../api/types';
 import type { DashboardWidget } from '../../stores/dashboard';
 import type { MonitorFeedFit } from '../../stores/settings';
 import { useDashboardStore } from '../../stores/dashboard';
@@ -31,7 +33,7 @@ import { Checkbox } from '../ui/checkbox';
 import { Switch } from '../ui/switch';
 import { ScrollArea } from '../ui/scroll-area';
 import { useTranslation } from 'react-i18next';
-import { filterEnabledMonitors } from '../../lib/filters';
+import { filterEnabledMonitors } from '../../lib/monitor/filters';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { useEventTags } from '../../hooks/useEventTags';
 import { ALL_TAGS_FILTER_ID } from '../../hooks/useEventFilters';
@@ -42,7 +44,7 @@ interface WidgetEditDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     widget: DashboardWidget;
-    profileId: string;
+    profileId: ProfileId;
 }
 
 export function WidgetEditDialog({ open, onOpenChange, widget, profileId }: WidgetEditDialogProps) {
@@ -57,7 +59,7 @@ export function WidgetEditDialog({ open, onOpenChange, widget, profileId }: Widg
     const updateWidget = useDashboardStore((state) => state.updateWidget);
 
     const { data: monitors } = useQuery({
-        queryKey: ['monitors', profileId],
+        queryKey: queryKeys.monitors(profileId),
         queryFn: () => getMonitors(),
     });
 

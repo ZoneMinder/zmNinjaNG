@@ -12,14 +12,14 @@ import { CompactEventRow } from '../events/CompactEventRow';
 import { useMonitorRecentEvents } from '../../hooks/useMonitorRecentEvents';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
-import { resolveMinStreamingPort } from '../../lib/multiport';
-import { getPortalUrlForEvent } from '../../lib/server-resolver';
-import { buildThumbnailChain } from '../../lib/thumbnail-chain';
+import { resolveMinStreamingPort } from '../../lib/monitor/multiport';
+import { getPortalUrlForEvent } from '../../lib/zm/server-resolver';
+import { buildThumbnailChain } from '../../lib/event/thumbnail-chain';
 import {
   calculateThumbnailDimensions,
   getMonitorDimensions,
   EVENT_GRID_CONSTANTS,
-} from '../../lib/event-utils';
+} from '../../lib/event/event-utils';
 import type { Event, Monitor } from '../../api/types';
 
 interface MonitorRecentEventsProps {

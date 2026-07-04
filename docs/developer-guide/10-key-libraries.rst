@@ -128,7 +128,7 @@ the ZoneMinder streaming daemon.
 
 .. code:: tsx
 
-   import { ZMS_COMMANDS, ZMS_MODES, ZM_MONITOR_FUNCTIONS } from '../lib/zm-constants';
+   import { ZMS_COMMANDS, ZMS_MODES, ZM_MONITOR_FUNCTIONS } from '../lib/zm/zm-constants';
 
    // Stream control commands
    ZMS_COMMANDS.cmdQuit   // 17 - Close stream connection

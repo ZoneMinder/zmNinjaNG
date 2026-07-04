@@ -18,7 +18,7 @@ import {
   getServerMapVersion,
   subscribeServerMap,
   type ResolvedMonitorUrls,
-} from '../lib/server-resolver';
+} from '../lib/zm/server-resolver';
 
 export function useServerUrls(serverId: string | null | undefined): ResolvedMonitorUrls {
   const { currentProfile } = useCurrentProfile();

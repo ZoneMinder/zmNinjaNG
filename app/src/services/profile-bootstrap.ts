@@ -233,7 +233,7 @@ export async function bootstrapMultiPortStreaming(
 export async function bootstrapServerMap(): Promise<void> {
   try {
     const { getServers } = await import('../api/server');
-    const { buildServerMap, setServerMap } = await import('../lib/server-resolver');
+    const { buildServerMap, setServerMap } = await import('../lib/zm/server-resolver');
 
     log.profileService('Fetching server list for multi-server routing', LogLevel.INFO);
     const servers = await getServers();
@@ -269,7 +269,7 @@ export async function bootstrapSSLTrust(
   try {
     const { useSettingsStore } = await import('../stores/settings');
     const settings = useSettingsStore.getState().getProfileSettings(profile.id);
-    const { applySSLTrustSetting, getServerCertFingerprint } = await import('../lib/ssl-trust');
+    const { applySSLTrustSetting, getServerCertFingerprint } = await import('../lib/security/ssl-trust');
 
     log.sslTrust(
       `Profile "${profile.name}" allowSelfSignedCerts=${settings.allowSelfSignedCerts}; setting SSL trust override to ${settings.allowSelfSignedCerts}`,
@@ -291,7 +291,7 @@ export async function bootstrapSSLTrust(
       log.profileService('Self-signed certs enabled without fingerprint, triggering TOFU migration', LogLevel.INFO);
       const certInfo = await getServerCertFingerprint(profile.portalUrl);
       if (certInfo) {
-        const { requestCertTrust } = await import('../lib/cert-trust-event');
+        const { requestCertTrust } = await import('../lib/security/cert-trust-event');
         requestCertTrust(profile.id, certInfo);
       }
     }
@@ -304,7 +304,7 @@ export async function performBootstrap(
   profile: Profile,
   context: BootstrapContext
 ): Promise<void> {
-  const { clearServerMap } = await import('../lib/server-resolver');
+  const { clearServerMap } = await import('../lib/zm/server-resolver');
   clearServerMap();
   // SSL trust must be configured before any API calls
   await bootstrapSSLTrust(profile);

@@ -35,7 +35,7 @@ vi.mock('../../api/store-gates', () => ({
   createStoreApiClient: vi.fn(() => ({})),
 }));
 
-vi.mock('../../lib/secureStorage', () => ({
+vi.mock('../../lib/security/secureStorage', () => ({
   getSecureValue: vi.fn(async () => 'password'),
   setSecureValue: vi.fn(),
   removeSecureValue: vi.fn(),

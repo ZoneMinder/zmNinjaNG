@@ -162,7 +162,6 @@ class Logger {
     try {
       getLogFile().append(entry);
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.warn('[logger] log-file append threw', err);
     }
   }
@@ -235,7 +234,6 @@ class Logger {
     try {
       getLogFile().append(entry);
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.warn('[logger] log-file append threw', err);
     }
   }
@@ -292,7 +290,6 @@ class Logger {
       getLogFile().append(entry);
     } catch (err) {
       // Fire-and-forget contract: a buggy impl must not break the caller.
-      // eslint-disable-next-line no-console
       console.warn('[logger] log-file append threw', err);
     }
   }

@@ -99,6 +99,21 @@
   }
 }
 
+/* Global prefers-reduced-motion: neutralize all CSS animations and
+   transitions app-wide (animate-spin, animate-pulse, keyframe animations,
+   hover/focus transitions). Spinners stay visible as a static loading
+   indicator; they just stop rotating/pulsing. refs #217. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 @keyframes ring {
   0% { transform: rotate(0deg) scale(1); }
   10% { transform: rotate(25deg) scale(1.15); }
@@ -119,12 +134,6 @@
   to {
     transform: translateX(0);
     opacity: 1;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .monitor-slide-in {
-    animation: none;
   }
 }
 
@@ -155,13 +164,6 @@
   to {
     transform: translateX(0);
     opacity: 1;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .event-slide-left,
-  .event-slide-right {
-    animation: none;
   }
 }
 
@@ -231,7 +233,7 @@
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
     --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted-foreground: 215.4 16.3% 44%;
     --accent: 210 40% 96.1%;
     --accent-foreground: 222.2 47.4% 11.2%;
     --destructive: 0 84.2% 60.2%;
@@ -298,7 +300,7 @@
     --secondary: 30 4% 18%;
     --secondary-foreground: 40 10% 92%;
     --muted: 30 4% 18%;
-    --muted-foreground: 30 5% 55%;
+    --muted-foreground: 30 5% 59%;
     --accent: 41 20% 20%;
     --accent-foreground: 40 10% 92%;
     --destructive: 0 62.8% 30.6%;

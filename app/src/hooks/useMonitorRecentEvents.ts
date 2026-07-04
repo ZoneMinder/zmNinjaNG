@@ -11,11 +11,12 @@ import { useCurrentProfile } from './useCurrentProfile';
 import { useAuthStore } from '../stores/auth';
 import { useSettingsStore } from '../stores/settings';
 import { useBandwidthSettings } from './useBandwidthSettings';
+import { queryKeys } from '../lib/query/query-keys';
 import {
   clampRecentEventsCount,
   isMonitorRecentEventsHidden,
   toggleMonitorRecentEventsHidden,
-} from '../lib/monitor-recent-events';
+} from '../lib/monitor/monitor-recent-events';
 
 export interface UseMonitorRecentEvents {
   events: EventData[];
@@ -39,7 +40,7 @@ export function useMonitorRecentEvents(monitorId: string): UseMonitorRecentEvent
   const hidden = isMonitorRecentEventsHidden(hiddenList, monitorId);
 
   const { data, isLoading, isError, isFetching, refetch } = useQuery({
-    queryKey: [currentProfile?.id, 'monitorRecentEvents', monitorId, count],
+    queryKey: queryKeys.monitorRecentEvents(currentProfile?.id, monitorId, count),
     queryFn: () => getEvents({ monitorId, limit: count, sort: 'StartDateTime', direction: 'desc' }),
     enabled: !!currentProfile && isAuthenticated && !hidden,
     refetchInterval: hidden ? false : bandwidth.monitorRecentEventsInterval,

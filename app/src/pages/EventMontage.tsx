@@ -7,19 +7,22 @@
 
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { queryKeys } from '../lib/query/query-keys';
 import { getEvents } from '../api/events';
 import { getMonitors } from '../api/monitors';
-import { resolveMinStreamingPort } from '../lib/multiport';
+import { resolveMinStreamingPort } from '../lib/monitor/multiport';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useFreshAccessToken } from '../hooks/useFreshAccessToken';
 import { useSettingsStore } from '../stores/settings';
 import { useEventPagination } from '../hooks/useEventPagination';
 import { useEventMontageGrid } from '../hooks/useEventMontageGrid';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { AlertCircle, Clock, LayoutGrid } from 'lucide-react';
+import { Clock, LayoutGrid } from 'lucide-react';
 import { PageContainer } from '../components/common/PageContainer';
+import { ErrorBanner } from '../components/ui/query-state';
+import { resolveQueryError } from '../lib/query/query-error';
 import { RefreshButton } from '../components/common/RefreshButton';
-import { filterEnabledMonitors } from '../lib/filters';
+import { filterEnabledMonitors } from '../lib/monitor/filters';
 import { EventMontageView } from '../components/events/EventMontageView';
 import { EventMontageGridControls } from '../components/events/EventMontageGridControls';
 import { EventMontageFilterPanel } from '../components/events/EventMontageFilterPanel';
@@ -57,7 +60,7 @@ export default function EventMontage() {
 
   // Fetch monitors for filter
   const { data: monitorsData } = useQuery({
-    queryKey: ['monitors', currentProfile?.id],
+    queryKey: queryKeys.monitors(currentProfile?.id),
     queryFn: () => getMonitors(),
   });
 
@@ -94,7 +97,7 @@ export default function EventMontage() {
 
   // Fetch events
   const { data: eventsData, isLoading, error } = useQuery({
-    queryKey: ['event-montage', filterParams],
+    queryKey: queryKeys.eventMontageList(currentProfile?.id, filterParams),
     queryFn: () => getEvents(filterParams),
   });
 
@@ -202,16 +205,16 @@ export default function EventMontage() {
     );
   }
 
-  if (error) {
+  // A background refetch error while cached events are already loaded falls
+  // through to the normal view below instead of this error wall. Only a cold
+  // start with no cached data hits the error wall.
+  if (error && !eventsData) {
     return (
       <div className="p-8">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-lg font-bold tracking-tight">{t('eventMontage.title')}</h1>
         </div>
-        <div className="p-4 bg-destructive/10 text-destructive rounded-lg flex items-center gap-2">
-          <AlertCircle className="h-5 w-5" />
-          {t('eventMontage.load_error')}: {(error as Error).message}
-        </div>
+        <ErrorBanner message={resolveQueryError(error, t, { fallbackKey: 'eventMontage.load_error' })} />
       </div>
     );
   }

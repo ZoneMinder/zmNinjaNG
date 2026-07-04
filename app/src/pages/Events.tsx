@@ -7,13 +7,14 @@
 
 import { useMemo, useRef, useState, useEffect } from 'react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { queryKeys } from '../lib/query/query-keys';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
 import { getEvents } from '../api/events';
 import type { EventFilters } from '../api/events';
 import type { EventData } from '../api/types';
 import { getMonitors } from '../api/monitors';
-import { resolveMinStreamingPort } from '../lib/multiport';
+import { resolveMinStreamingPort } from '../lib/monitor/multiport';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useAuthStore } from '../stores/auth';
 import { useFreshAccessToken } from '../hooks/useFreshAccessToken';
@@ -26,9 +27,11 @@ import { useEventTags, useEventTagMapping } from '../hooks/useEventTags';
 import { useScrollRestoration } from '../hooks/useScrollRestoration';
 import { PullToRefreshIndicator } from '../components/ui/pull-to-refresh-indicator';
 import { Button } from '../components/ui/button';
-import { Filter, AlertCircle, ArrowLeft, LayoutGrid, List, Clock, X } from 'lucide-react';
+import { Filter, ArrowLeft, LayoutGrid, List, Clock, X } from 'lucide-react';
+import { ErrorBanner } from '../components/ui/query-state';
+import { resolveQueryError } from '../lib/query/query-error';
 import { RefreshButton } from '../components/common/RefreshButton';
-import { filterMonitorsByGroup, includedMonitorIdParam } from '../lib/filters';
+import { filterMonitorsByGroup, includedMonitorIdParam } from '../lib/monitor/filters';
 import { useGroupFilter } from '../hooks/useGroupFilter';
 import { GroupFilterSelect } from '../components/filters/GroupFilterSelect';
 import { Popover, PopoverTrigger } from '../components/ui/popover';
@@ -79,15 +82,6 @@ export default function Events() {
   // Check if user came from another page (navigation state tracking)
   const referrer = location.state?.from as string | undefined;
 
-  const resolveErrorMessage = (err: unknown) => {
-    const message = (err as Error)?.message || t('common.unknown_error');
-    const status = (err as { response?: { status?: number } })?.response?.status;
-    if (status === 401 || /unauthorized/i.test(message)) {
-      return t('common.auth_required');
-    }
-    return `${t('common.error')}: ${message}`;
-  };
-
   const {
     filters,
     selectedMonitorIds,
@@ -129,7 +123,7 @@ export default function Events() {
 
   // Fetch monitors for display in filter UI
   const { data: monitorsData } = useQuery({
-    queryKey: ['monitors', currentProfile?.id],
+    queryKey: queryKeys.monitors(currentProfile?.id),
     queryFn: () => getMonitors(),
     enabled: !!currentProfile && isAuthenticated,
   });
@@ -197,7 +191,7 @@ export default function Events() {
   // Include effectiveMonitorId and group filter state in query key for proper cache invalidation
   const [currentEventLimit, setCurrentEventLimit] = useState(settings.defaultEventLimit || 100);
   const { data: eventsData, isLoading, isFetching, error, refetch } = useQuery({
-    queryKey: ['events', filters, currentEventLimit, effectiveMonitorId, isGroupFilterActive, eventIdFilter, tagIdFilter],
+    queryKey: queryKeys.eventsList(currentProfile?.id, filters, currentEventLimit, effectiveMonitorId, isGroupFilterActive, eventIdFilter, tagIdFilter),
     queryFn: () =>
       getEvents({
         ...filters,
@@ -270,6 +264,22 @@ export default function Events() {
     return filtered;
   }, [eventsData?.events, favoritesOnly, selectedTagIds, eventTagMap]);
 
+  // Date range shown on the heatmap: explicit filters win, otherwise infer
+  // the span from the loaded events.
+  const heatmapDateRange = useMemo(() => {
+    if (allEvents.length === 0) return null;
+
+    if (filters.startDateTime && filters.endDateTime) {
+      return { startDate: new Date(filters.startDateTime), endDate: new Date(filters.endDateTime) };
+    }
+
+    const eventDates = allEvents.map((e) => new Date(e.Event.StartDateTime));
+    return {
+      startDate: new Date(Math.min(...eventDates.map((d) => d.getTime()))),
+      endDate: new Date(Math.max(...eventDates.map((d) => d.getTime()))),
+    };
+  }, [allEvents, filters.startDateTime, filters.endDateTime]);
+
   // Restore the list scroll position when returning from an event detail.
   // /events and /events/:id are sibling routes, so this component unmounts when
   // opening an event; without this the list snaps back to the top (refs #197).
@@ -341,13 +351,13 @@ export default function Events() {
     );
   }
 
-  if (error) {
+  // A background refetch error while cached events are already loaded falls
+  // through to the normal list below instead of this error wall. Only a cold
+  // start with no cached data hits the error wall.
+  if (error && !eventsData) {
     return (
       <div className="p-8">
-        <div className="p-4 bg-destructive/10 text-destructive rounded-lg flex items-center gap-2">
-          <AlertCircle className="h-5 w-5" />
-          {resolveErrorMessage(error)}
-        </div>
+        <ErrorBanner message={resolveQueryError(error, t)} />
       </div>
     );
   }
@@ -514,35 +524,18 @@ export default function Events() {
         </div>
 
         {/* Event Heatmap */}
-        {allEvents.length > 0 &&
-          (() => {
-            // Use explicit date filters if available, otherwise infer from events
-            let startDate: Date;
-            let endDate: Date;
-
-            if (filters.startDateTime && filters.endDateTime) {
-              startDate = new Date(filters.startDateTime);
-              endDate = new Date(filters.endDateTime);
-            } else {
-              // Infer date range from events
-              const eventDates = allEvents.map((e) => new Date(e.Event.StartDateTime));
-              startDate = new Date(Math.min(...eventDates.map((d) => d.getTime())));
-              endDate = new Date(Math.max(...eventDates.map((d) => d.getTime())));
-            }
-
-            return (
-              <EventHeatmap
-                events={allEvents}
-                startDate={startDate}
-                endDate={endDate}
-                onTimeRangeClick={(startDateTime, endDateTime) => {
-                  setStartDateInput(formatLocalDateTime(new Date(startDateTime)));
-                  setEndDateInput(formatLocalDateTime(new Date(endDateTime)));
-                  applyFilters();
-                }}
-              />
-            );
-          })()}
+        {heatmapDateRange && (
+          <EventHeatmap
+            events={allEvents}
+            startDate={heatmapDateRange.startDate}
+            endDate={heatmapDateRange.endDate}
+            onTimeRangeClick={(startDateTime, endDateTime) => {
+              setStartDateInput(formatLocalDateTime(new Date(startDateTime)));
+              setEndDateInput(formatLocalDateTime(new Date(endDateTime)));
+              applyFilters();
+            }}
+          />
+        )}
 
         {/* Events List or Montage View */}
         {allEvents.length === 0 ? (

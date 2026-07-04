@@ -35,6 +35,6 @@ Then('no element should overflow the viewport horizontally', async ({ page }) =>
 });
 
 Then('the page should match the visual baseline', async ({ page }) => {
-  // Placeholder -- will be connected to TestActions.compareScreenshot in a later task
+  // Placeholder -- visual comparison is not wired up yet
   await page.waitForTimeout(500);
 });

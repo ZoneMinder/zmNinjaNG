@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MontageMonitor } from '../MontageMonitor';
 import type { Monitor, MonitorStatus, Profile } from '../../../api/types';
+import { asProfileId } from '../../../api/types';
 import { useMonitorStore } from '../../../stores/monitors';
 import { useSettingsStore, DEFAULT_SETTINGS } from '../../../stores/settings';
 
@@ -52,7 +53,7 @@ vi.mock('../../../lib/logger', () => ({
   },
 }));
 
-vi.mock('../../../lib/monitor-rotation', () => ({
+vi.mock('../../../lib/monitor/monitor-rotation', () => ({
   getMonitorAspectRatio: (width: number, height: number) =>
     `${width}/${height}`,
 }));
@@ -76,8 +77,9 @@ vi.mock('../../../stores/auth', () => ({
 }));
 
 vi.mock('../../../stores/notifications', () => {
-  const store = () => 0;
-  store.getState = () => ({ profileEvents: {} });
+  const state = { profileEvents: {} };
+  const store = (selector: (s: typeof state) => unknown) => selector(state);
+  store.getState = () => state;
   store.subscribe = () => () => {};
   return { useNotificationStore: store };
 });
@@ -103,7 +105,7 @@ describe('MontageMonitor', () => {
   };
 
   const mockProfile: Profile = {
-    id: 'profile-1',
+    id: asProfileId('profile-1'),
     name: 'Test Profile',
     apiUrl: 'https://test.com',
     portalUrl: 'https://test.com',

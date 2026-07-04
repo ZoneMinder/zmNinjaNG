@@ -211,7 +211,7 @@ props change.
 - Generates authenticated stream URL with connection key
 - Regenerates the key on stream failure
 - Returns a ref to the ``<img>`` element for snapshot downloads
-- Builds URLs via ``src/lib/url-builder.ts``
+- Builds URLs via ``src/lib/zm/url-builder.ts``
 - Exposes ``imageSrc``, the value to bind to ``<img src>``. It equals
   ``streamUrl`` on every platform.
 
@@ -481,7 +481,7 @@ their local ``flash`` boolean (from ``useReturnFlash``) is ``true``.
 parseDetectedObjects
 ~~~~~~~~~~~~~~~~~~~~
 
-**Location**: ``src/lib/event-detection.ts``
+**Location**: ``src/lib/event/event-detection.ts``
 
 **Signature**: ``parseDetectedObjects(notes: string | null): string[]``
 
@@ -872,7 +872,7 @@ Calling it detached (``const f = player.markers; f(opts)``) leaves
 "Failed to update video markers" errors on events that have markers. On
 init the plugin replaces ``player.markers`` with an API object, so a
 function value means "not initialized". The ``applyVideoJsMarkers``
-helper in ``lib/video-markers.ts`` initializes once via a method call
+helper in ``lib/event/video-markers.ts`` initializes once via a method call
 and uses ``removeAll()`` / ``add()`` for later updates. Marker updates
 are gated on the player's ready callback (the plugin reads the player
 DOM), ``onMarkerClick`` is read through a ref inside a stable click
@@ -1253,8 +1253,9 @@ video that survives route changes.
 **Integration:**
 
 ``PipProvider`` wraps the app in ``App.tsx`` and renders a hidden portal
-``div`` as a sibling of the router. VideoPlayer uses ``usePip()`` to
-adopt/reclaim its player element during PiP transitions.
+``div`` as a sibling of the router. ``Mp4EventPlayer`` (recorded event
+playback) uses ``usePip()`` to adopt/reclaim its player element during
+PiP transitions. ``LiveMonitorPlayer`` (live streams) does not use PiP.
 
 PasswordInput
 ~~~~~~~~~~~~~
@@ -1557,6 +1558,108 @@ Clear buttons (``data-testid="settings-kiosk-change-pin"`` and
      if (result.success) { /* unlock */ }
    }
 
+TV Mode
+-------
+
+Best-effort d-pad support for Android TV / Fire TV. It layers a couple of
+page-specific keymaps on top of the WebView's own spatial navigation; it is
+not a full app-wide focus-management system.
+
+TvDetector (native plugin)
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**Location**: ``android/app/src/main/java/com/zoneminder/zmNinjaNG/TvDetectorPlugin.java``
+
+Capacitor plugin registered as ``TvDetector``, called from
+``lib/tv/tv-spatial-nav.ts``. Two methods:
+
+- ``isTV()``: true if ``UiModeManager.getCurrentModeType()`` equals
+  ``UI_MODE_TYPE_TELEVISION``.
+- ``enableSpatialNavigation()``: enables the WebView's built-in spatial
+  navigation by calling the hidden ``WebSettings.setSpatialNavigationEnabled(true)``
+  API via reflection, then makes the WebView focusable and requests focus.
+
+lib/tv/tv-spatial-nav.ts
+~~~~~~~~~~~~~~~~~~~~~
+
+- ``checkIsTV()``: checks ``Platform.isTVDevice`` first (a native-injected
+  flag, or a user-agent match against ``tv``/``aft``/``stb``/``fire tv``/etc.
+  in ``lib/platform.ts``), then falls back to the native plugin's ``isTV()``
+  on native platforms. Always ``false`` on web.
+- ``enableSpatialNavigation()``: no-op outside native platforms; swallows
+  errors if the plugin isn't available.
+
+Wiring (AppLayout.tsx)
+~~~~~~~~~~~~~~~~~~~~~~
+
+- ``useTvMode()`` reads ``settings.tvMode``, a profile-scoped setting with a
+  manual toggle in Settings > Appearance (``data-testid="settings-tv-mode"``).
+- On mount, ``checkIsTV()`` runs once per profile switch; if the device is
+  detected as a TV and ``tvMode`` isn't already on, ``updateProfileSettings``
+  flips it on automatically.
+- While TV mode is active: a ``tv-mode`` class is toggled on ``<html>``
+  (``index.css`` bumps the base font size to 20px and gives
+  ``:focus-visible`` elements a heavier ring, for 10-foot viewing), and
+  ``enableSpatialNavigation()`` is called once.
+
+Hooks
+~~~~~
+
+useTvMode
+^^^^^^^^^
+
+**Location**: ``src/hooks/useTvMode.ts``
+
+Returns ``{ isTvMode }`` from ``settings.tvMode``. A thin read of the
+profile-scoped setting, nothing more.
+
+useTvKeyHandler
+^^^^^^^^^^^^^^^
+
+**Location**: ``src/hooks/useTvKeyHandler.ts``
+
+Registers a ``window`` ``keydown`` listener, active only while
+``isTvMode`` is true. Pages pass a ``TvKeyMap``
+(``{ ArrowLeft?, ArrowRight?, ArrowUp?, ArrowDown?, Enter? }``):
+
+- A key with a handler in the map calls ``preventDefault()`` and runs the
+  handler; a key without one falls through to the WebView's native spatial
+  navigation.
+- ``Enter`` has a built-in fallback even with no map entry: if the focused
+  element isn't natively clickable (``BUTTON``, ``A``, ``INPUT``,
+  ``SELECT``, ``TEXTAREA``), it synthesizes a ``.click()`` on it. Combined
+  with ``lib/tv/tv-a11y.ts``'s ``clickableProps()`` / ``handleKeyClick()``
+  (``tabIndex={0}`` + ``role="button"`` + Enter/Space ``onKeyDown``), this
+  lets ``div``/``span`` "buttons" (e.g. monitor tiles) respond to Enter.
+
+Per-Page Keymaps
+~~~~~~~~~~~~~~~~
+
+- **Montage** (``src/pages/Montage.tsx``): arrow keys move a
+  focused-tile index (``handleDpadNav``) through the monitor grid; Enter
+  navigates to that monitor's detail page. A separate effect calls
+  ``.focus()`` on the tile's DOM node
+  (``data-testid="montage-monitor-<id>"``) whenever the index changes,
+  since the index is plain state, not real DOM focus.
+- **Timeline** (``src/pages/Timeline.tsx``): arrow keys pan/zoom the
+  timeline canvas viewport (``panLeft``, ``panRight``, ``zoomIn``,
+  ``zoomOut``) instead of moving between DOM elements. No ``Enter``
+  handler is registered; Enter falls through to ``useTvKeyHandler``'s
+  default synthesize-click behavior.
+- **EventDetail** (``src/pages/EventDetail.tsx``) does not register a
+  keymap. It only reads ``isTvMode`` to force ZMS playback
+  (``useZmsFallback``) instead of the Video.js-based ``Mp4EventPlayer``.
+
+What This Does Not Do
+~~~~~~~~~~~~~~~~~~~~~~
+
+This is best-effort WebView spatial navigation plus two page-specific
+keymaps (Montage, Timeline), not app-wide d-pad coverage. Pages without a
+``TvKeyMap`` (Dashboard, Events, Settings, etc.) rely entirely on the
+WebView's native spatial navigation moving focus between focusable
+elements. An earlier, more complete d-pad/cursor implementation was
+removed as dead code; nothing in the current tree depends on it.
+
 Component Composition
 ---------------------
 
@@ -1651,6 +1754,8 @@ Complex logic is extracted into hooks:
 - ``useEventNavigation()`` - Adjacent event navigation (see below)
 - ``useCapacitorListener()`` - Capacitor plugin event listeners with async
   registration and teardown (see below)
+- ``useNetworkStatus()`` - Online/offline connectivity for the app-wide
+  offline banner (see below)
 
 useEventNavigation
 ^^^^^^^^^^^^^^^^^^
@@ -1712,6 +1817,39 @@ of dynamic import, ``await addListener``, and cancelled-flag teardown.
 Used by ``App.tsx`` (flush logs on pause), ``HoverPreview``,
 ``KioskOverlay``, ``Mp4EventPlayer``, ``useNotificationAutoConnect``, and
 ``useNotificationDelivered``.
+
+useNetworkStatus
+^^^^^^^^^^^^^^^^
+
+**Location**: ``src/hooks/useNetworkStatus.ts``
+
+Tracks online/offline connectivity and drives the ``OfflineBanner`` shown
+in ``AppLayout.tsx``. Returns ``{ isOnline: boolean }``.
+
+.. code:: tsx
+
+   const { isOnline } = useNetworkStatus();
+   if (!isOnline) return <OfflineIndicator />;
+
+**Behaviour:**
+
+- Web/desktop: ``navigator.onLine`` plus the ``online``/``offline`` window
+  events.
+- Native (iOS/Android): a single effect dynamically imports
+  ``@capacitor/network``, reads ``Network.getStatus()`` once so the banner
+  doesn't wait for the first transition, then registers a
+  ``networkStatusChange`` listener on the same import. Both steps share one
+  ``import('@capacitor/network')`` call; two separate dynamic imports of the
+  same plugin from two effects on one mount is unnecessary and, under
+  Vitest's module mocking, races.
+- Presentation-only: it does not touch the WebSocket/event-poller reconnect
+  logic in ``useNotificationAutoConnect.ts``, which already listens for the
+  same browser/native connectivity signals to trigger a reconnect.
+
+Used by ``OfflineBanner`` (``src/components/layout/OfflineBanner.tsx``),
+rendered in ``AppLayout`` alongside ``DeveloperNoticeBanner`` and
+``CertTrustBanner``. The banner is not dismissible: it tracks live state and
+disappears on its own once the connection returns.
 
 3. Refs for DOM Access
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -1790,7 +1928,7 @@ Platform Integrations (``src/services/``)
 The ``src/services/`` directory bridges the React app to native device
 features provided by Capacitor. UI code stays platform-agnostic.
 
-Storage Service (``lib/secureStorage.ts``)
+Storage Service (``lib/security/secureStorage.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Hybrid storage:

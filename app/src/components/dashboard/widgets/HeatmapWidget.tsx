@@ -14,6 +14,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { getEvents } from '../../../api/events';
 import { useCurrentProfile } from '../../../hooks/useCurrentProfile';
+import { queryKeys } from '../../../lib/query/query-keys';
 import { useBandwidthSettings } from '../../../hooks/useBandwidthSettings';
 import { useAuthStore } from '../../../stores/auth';
 import { Card, CardHeader, CardTitle, CardContent } from '../../ui/card';
@@ -70,7 +71,7 @@ export const HeatmapWidget = memo(function HeatmapWidget({ title }: HeatmapWidge
 
   // Fetch events for the time range
   const { data: eventsData, isLoading, error } = useQuery({
-    queryKey: ['events-heatmap', timeRange, currentProfile?.id],
+    queryKey: queryKeys.eventsHeatmap(currentProfile?.id, timeRange),
     queryFn: () =>
       getEvents({
         startDateTime: formatForServer(startDate),

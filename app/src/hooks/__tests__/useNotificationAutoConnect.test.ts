@@ -9,6 +9,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import type { PluginListenerHandle } from '@capacitor/core';
 import { useNotificationAutoConnect } from '../useNotificationAutoConnect';
+import { asProfileId } from '../../api/types';
 
 // Mock logger
 vi.mock('../../lib/logger', () => ({
@@ -76,7 +77,7 @@ type Settings = {
 };
 
 const defaultProfile = {
-  id: 'profile-1' as string,
+  id: asProfileId('profile-1'),
   username: 'admin' as string | undefined,
   password: 'secret' as string | undefined,
   portalUrl: 'http://zm.local',
@@ -334,7 +335,7 @@ describe('useNotificationAutoConnect', () => {
       const params = makeParams({
         isConnected: true,
         currentProfileId: 'profile-OLD',
-        currentProfile: { ...defaultProfile, id: 'profile-NEW' },
+        currentProfile: { ...defaultProfile, id: asProfileId('profile-NEW') },
       });
       renderHook(() => useNotificationAutoConnect(params));
 

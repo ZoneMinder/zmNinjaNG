@@ -24,7 +24,7 @@ describe('EventDeleteButton', () => {
   it('does not bubble the click to a parent row', () => {
     const parentClick = vi.fn();
     render(
-      <div onClick={parentClick}>
+      <div role="presentation" onClick={parentClick}>
         <EventDeleteButton eventId="42" />
       </div>
     );

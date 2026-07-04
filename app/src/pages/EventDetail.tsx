@@ -7,11 +7,12 @@
 
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '../lib/query/query-keys';
 import { getEvent, getEventVideoUrl, getEventImageUrl, setEventArchived } from '../api/events';
-import { resolveFallbackFids } from '../lib/thumbnail-chain';
+import { resolveFallbackFids } from '../lib/event/thumbnail-chain';
 import { resolveBackNavigation } from '../lib/back-navigation';
 import { getMonitor } from '../api/monitors';
-import { resolveMinStreamingPort } from '../lib/multiport';
+import { resolveMinStreamingPort } from '../lib/monitor/multiport';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useFreshAccessToken } from '../hooks/useFreshAccessToken';
 import { useEventTagMapping } from '../hooks/useEventTags';
@@ -22,21 +23,22 @@ import { Mp4EventPlayer } from '../components/events/Mp4EventPlayer';
 import { ZmsEventPlayer } from '../components/events/ZmsEventPlayer';
 import { TagChip } from '../components/events/TagChip';
 import { ArrowLeft, Calendar, Clock, HardDrive, AlertTriangle, Download, Archive, Video, Star, Timer, Tag, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
-import { getEventCauseIcon } from '../lib/event-icons';
-import { getObjectClassIconFromList } from '../lib/object-class-icons';
+import { getEventCauseIcon } from '../lib/event/event-icons';
+import { getObjectClassIconFromList } from '../lib/event/object-class-icons';
 import { useDateTimeFormat } from '../hooks/useDateTimeFormat';
 import { useTvMode } from '../hooks/useTvMode';
 import { Platform } from '../lib/platform';
 import { downloadEventVideo } from '../services/download';
-import { getOrientedResolution } from '../lib/monitor-rotation';
+import { getOrientedResolution } from '../lib/monitor/monitor-rotation';
 import { toast } from 'sonner';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { log, LogLevel } from '../lib/logger';
-import { generateEventMarkers, type VideoMarker } from '../lib/video-markers';
+import { generateEventMarkers, type VideoMarker } from '../lib/event/video-markers';
 import { useEventFavoritesStore } from '../stores/eventFavorites';
 import { useZoomPan } from '../hooks/useZoomPan';
 import { ZoomControls } from '../components/ui/zoom-controls';
+import { ErrorBanner, DetailPageSkeleton } from '../components/ui/query-state';
 import { useEventNavigation } from '../hooks/useEventNavigation';
 import { useServerUrls } from '../hooks/useServerUrls';
 import { cn } from '../lib/utils';
@@ -67,18 +69,17 @@ export default function EventDetail() {
   }, [isTvMode]);
 
   const queryClient = useQueryClient();
+  const { currentProfile, settings } = useCurrentProfile();
   const { data: event, isLoading, error } = useQuery({
-    queryKey: ['event', id],
+    queryKey: queryKeys.event(currentProfile?.id, id),
     queryFn: () => getEvent(id!),
     enabled: !!id,
   });
   const { data: monitorData } = useQuery({
-    queryKey: ['monitor', event?.Event.MonitorId],
+    queryKey: queryKeys.monitor(currentProfile?.id, event?.Event.MonitorId),
     queryFn: () => getMonitor(event!.Event.MonitorId),
     enabled: !!event?.Event.MonitorId,
   });
-
-  const { currentProfile, settings } = useCurrentProfile();
   const { token: accessToken, isFresh: isAccessTokenFresh } = useFreshAccessToken();
   const effectiveMinStreamingPort = resolveMinStreamingPort(
     currentProfile?.minStreamingPort,
@@ -128,8 +129,8 @@ export default function EventDetail() {
     try {
       await setEventArchived(event.Event.Id, next);
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['event', event.Event.Id] }),
-        queryClient.invalidateQueries({ queryKey: ['events'] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.event(currentProfile?.id, event.Event.Id) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.events(currentProfile?.id) }),
       ]);
       toast.success(next ? t('events.archived_success') : t('events.unarchived_success'));
     } catch (err) {
@@ -231,22 +232,31 @@ export default function EventDetail() {
     setUseZmsFallback(true);
   }, [t]);
 
+  // Icon for the event's cause badge. Safe to compute before `event` exists
+  // since getEventCauseIcon falls back gracefully on an empty cause.
+  const EventCauseIcon = useMemo(
+    () => getEventCauseIcon(event?.Event.Cause ?? ''),
+    [event?.Event.Cause]
+  );
+
+  // "detected:<classList>|..." notes render an extra row with the detected
+  // object class and icon; parse once and reuse for both the guard and the row.
+  const detectedClassInfo = useMemo(() => {
+    const notes = event?.Event.Notes;
+    if (!notes || !notes.startsWith('detected:')) return null;
+    const classList = notes.slice('detected:'.length).split('|')[0].trim();
+    if (!classList) return null;
+    return { classList, DetectIcon: getObjectClassIconFromList(classList) };
+  }, [event?.Event.Notes]);
+
   if (isLoading) {
-    return (
-      <div className="p-8 space-y-6">
-        <div className="h-8 w-32 bg-muted rounded animate-pulse" />
-        <div className="aspect-video w-full max-w-4xl bg-muted rounded-xl animate-pulse" />
-      </div>
-    );
+    return <DetailPageSkeleton />;
   }
 
   if (error || !event) {
     return (
       <div className="p-8">
-        <div className="p-4 bg-destructive/10 text-destructive rounded-lg flex items-center gap-2">
-          <AlertTriangle className="h-5 w-5" />
-          {t('event_detail.load_error')}
-        </div>
+        <ErrorBanner icon={AlertTriangle} message={t('event_detail.load_error')} />
         <Button onClick={goBack} className="mt-4">
           {t('common.go_back')}
         </Button>
@@ -302,15 +312,10 @@ export default function EventDetail() {
           <div>
             <h1 className="text-sm sm:text-base font-semibold truncate max-w-[200px] sm:max-w-none">{event.Event.Name}</h1>
             <div className="flex items-center gap-1.5 text-[10px] sm:text-xs text-muted-foreground">
-              {(() => {
-                const CauseIcon = getEventCauseIcon(event.Event.Cause);
-                return (
-                  <Badge variant="outline" className="text-[10px] h-4 gap-1">
-                    <CauseIcon className="h-3 w-3" />
-                    {event.Event.Cause}
-                  </Badge>
-                );
-              })()}
+              <Badge variant="outline" className="text-[10px] h-4 gap-1">
+                <EventCauseIcon className="h-3 w-3" />
+                {event.Event.Cause}
+              </Badge>
               {monitorData && (
                 <span className="hidden sm:inline">{monitorData.Monitor.Name}</span>
               )}
@@ -449,18 +454,7 @@ export default function EventDetail() {
                     )}
                   </div>
                 </div>
-                <ZoomControls
-                  onZoomIn={zoomPan.zoomIn}
-                  onZoomOut={zoomPan.zoomOut}
-                  onReset={zoomPan.reset}
-                  onPanLeft={zoomPan.panLeft}
-                  onPanRight={zoomPan.panRight}
-                  onPanUp={zoomPan.panUp}
-                  onPanDown={zoomPan.panDown}
-                  isZoomed={zoomPan.isZoomed}
-                  scale={zoomPan.scale}
-                  className="bottom-12 left-2"
-                />
+                <ZoomControls zoomPan={zoomPan} className="bottom-12 left-2" />
               </Card>
             )
           ) : hasJPEGs ? (
@@ -542,20 +536,15 @@ export default function EventDetail() {
                   <span className="text-sm text-muted-foreground">{t('event_detail.score')}</span>
                   <span className="text-sm font-medium">{event.Event.AvgScore} / {event.Event.MaxScore}</span>
                 </div>
-                {event.Event.Notes && event.Event.Notes.startsWith('detected:') && (() => {
-                  const classList = event.Event.Notes.slice('detected:'.length).split('|')[0].trim();
-                  if (!classList) return null;
-                  const DetectIcon = getObjectClassIconFromList(classList);
-                  return (
-                    <div className="flex justify-between items-center py-1 border-b border-border/50" data-testid="event-detail-detected-row">
-                      <span className="text-sm text-muted-foreground">{t('event_detail.detected')}</span>
-                      <span className="flex items-center gap-1.5 text-sm font-medium">
-                        <DetectIcon className="h-3.5 w-3.5 shrink-0" />
-                        {classList}
-                      </span>
-                    </div>
-                  );
-                })()}
+                {detectedClassInfo && (
+                  <div className="flex justify-between items-center py-1 border-b border-border/50" data-testid="event-detail-detected-row">
+                    <span className="text-sm text-muted-foreground">{t('event_detail.detected')}</span>
+                    <span className="flex items-center gap-1.5 text-sm font-medium">
+                      <detectedClassInfo.DetectIcon className="h-3.5 w-3.5 shrink-0" />
+                      {detectedClassInfo.classList}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between py-1 border-b border-border/50">
                   <span className="text-sm text-muted-foreground">{t('event_detail.resolution')}</span>
                   <span className="text-sm font-medium">{orientedResolution}</span>

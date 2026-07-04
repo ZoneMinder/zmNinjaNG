@@ -14,7 +14,7 @@ type Player = ReturnType<typeof videojs>;
 import { cn } from '../../lib/utils';
 import { log, LogLevel } from '../../lib/logger';
 import { Platform } from '../../lib/platform';
-import { applyVideoJsMarkers, type VideoMarker, type VideoJsMarkersHost } from '../../lib/video-markers';
+import { applyVideoJsMarkers, type VideoMarker, type VideoJsMarkersHost } from '../../lib/event/video-markers';
 import type { MarkerConfig } from '../../types/videojs-markers';
 import { usePip } from '../../contexts/PipContext';
 import { Pip } from '../../plugins/pip';
@@ -179,7 +179,6 @@ export function Mp4EventPlayer({
 
   // Init effect: create the player exactly once per mount.
   // Deliberately mount-only: prop updates are handled by the dedicated effect below.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     // Reclaimed-from-PiP path populates playerRef.current before this runs;
     // in that case we adopt the existing player and skip re-init.

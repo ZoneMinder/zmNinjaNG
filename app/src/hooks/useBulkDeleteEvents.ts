@@ -11,6 +11,8 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { deleteEvent as apiDeleteEvent } from '../api/events';
 import type { EventData, EventsResponse } from '../api/types';
+import { queryKeys } from '../lib/query/query-keys';
+import { useCurrentProfile } from './useCurrentProfile';
 import { log, LogLevel } from '../lib/logger';
 
 /** Drop the given event ids from any cached events-list response. */
@@ -26,6 +28,7 @@ export function useBulkDeleteEvents(): {
 } {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const { currentProfile } = useCurrentProfile();
   const [isDeleting, setIsDeleting] = useState(false);
 
   const deleteEvents = async (eventIds: string[]) => {
@@ -49,8 +52,9 @@ export function useBulkDeleteEvents(): {
       );
 
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['events'] }),
-        ...eventIds.map((id) => queryClient.invalidateQueries({ queryKey: ['event', id] })),
+        queryClient.invalidateQueries({ queryKey: queryKeys.events(currentProfile?.id) }),
+        ...eventIds.map((id) =>
+          queryClient.invalidateQueries({ queryKey: queryKeys.event(currentProfile?.id, id) })),
         queryClient.invalidateQueries({
           predicate: (q) => q.queryKey.includes('monitorRecentEvents'),
         }),

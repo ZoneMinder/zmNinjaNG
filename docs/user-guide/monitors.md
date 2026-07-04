@@ -73,7 +73,7 @@ If the monitor has PTZ (Pan-Tilt-Zoom) configured in ZoneMinder, directional con
 
 ### Recent Events
 
-A list of recent events for this specific monitor, with thumbnails and timestamps.
+A list of recent events for this specific monitor, with thumbnails and timestamps. You can select and delete multiple events from this list the same way as on the main Events screen, see {doc}`events`.
 
 ### Monitor Info
 

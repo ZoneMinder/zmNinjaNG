@@ -51,6 +51,9 @@
     "navigation_menu": "Navigationsmenü",
     "navigation_menu_desc": "Primäre Anwendungsnavigation."
   },
+  "network": {
+    "offline_banner": "Offline. Zeigt zwischengespeicherte Daten."
+  },
   "app_init": {
     "toast_title": "Einrichtung wird abgeschlossen",
     "toast_description": "Profil und Serververbindung werden vorbereitet.",
@@ -73,6 +76,7 @@
     "widget_events": "Neueste Ereignisse",
     "widget_timeline": "Zeitachse",
     "widget_heatmap": "Ereignis-Heatmap",
+    "widget_type": "Widget-Typ",
     "widget_title": "Widget-Titel (Optional)",
     "widget_title_placeholder": "Mein Widget",
     "select_monitor": "Monitor auswählen",
@@ -196,6 +200,7 @@
     "alarm_frame": "Alarm-Frame {{frameId}}",
     "frame_number": "Frame {{number}}",
     "total_frames": "{{count}} Frames",
+    "seek_bar": "Suchen",
     "view_list": "Liste",
     "view_montage": "Montage",
     "favorite": "Favorisieren",
@@ -1005,7 +1010,7 @@
     "title": "Ereignis-Montage",
     "grid_layout_applied": "Rasterlayout angewendet: {{cols}} Spalten",
     "invalid_columns": "Ungültige Anzahl von Spalten",
-    "load_error": "Fehler beim Laden der Ereignisse",
+    "load_error": "Fehler beim Laden der Ereignisse: {{error}}",
     "grid_layout": "Rasterlayout",
     "screen_too_small": "Bildschirmbreite ist für so viele Spalten zu klein",
     "columns": "{{count}} Sp.",
@@ -1041,16 +1046,17 @@
     "title": "Zustände",
     "change_success": "Zustand erfolgreich geändert",
     "change_error": "Fehler beim Ändern des Zustands",
-    "load_error": "Fehler beim Laden der Zustände",
+    "load_error": "Fehler beim Laden der Zustände: {{error}}",
     "description": "Beschreibung",
     "no_description": "Keine Beschreibung verfügbar",
-    "activate": "Aktivieren"
+    "activate": "Aktivieren",
+    "no_states": "Keine Zustände konfiguriert"
   },
   "timeline": {
     "title": "Zeitachse",
     "subtitle": "Ereignis-Zeitachse",
     "loading": "Lade Zeitachse...",
-    "load_error": "Fehler beim Laden der Zeitachse",
+    "load_error": "Fehler beim Laden der Zeitachse: {{error}}",
     "no_events_found": "Keine Ereignisse für diesen Zeitraum gefunden",
     "adjust_filters": "Filter anpassen",
     "tip": "Tipp: Ziehen zum Verschieben, Scrollen zum Zoomen",
@@ -1089,6 +1095,9 @@
     "center_view": "Zentrieren",
     "go_to_now": "Jetzt",
     "select_to_zoom": "Bereich wählen",
+    "zoom_in": "Vergrößern",
+    "zoom_out": "Verkleinern",
+    "scrubber_label": "Zeitleisten-Regler",
     "help": {
       "title": "Steuerung",
       "navigate": "Pinch/Ziehen/Scrollen",

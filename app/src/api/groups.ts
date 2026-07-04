@@ -8,7 +8,7 @@
 import { getApiClient } from './client';
 import type { GroupsResponse } from './types';
 import { GroupsResponseSchema } from './types';
-import { validateApiResponse } from '../lib/api-validator';
+import { validateApiResponse } from '../lib/zm/api-validator';
 
 /**
  * Get all monitor groups.

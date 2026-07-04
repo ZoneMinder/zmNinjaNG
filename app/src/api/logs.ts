@@ -7,7 +7,7 @@
 import { getApiClient } from './client';
 import type { ZMLogsResponse, ZMLog } from './types';
 import { ZMLogsResponseSchema } from './types';
-import { validateApiResponse } from '../lib/api-validator';
+import { validateApiResponse } from '../lib/zm/api-validator';
 
 export interface ZMLogFilters {
   component?: string;

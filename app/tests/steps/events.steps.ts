@@ -12,6 +12,7 @@ let favoritedEventId: string | null = null;
 let tagFilterApplied = false;
 let archiveToggled = false;
 let detailArchiveToggled = false;
+let detailFavoriteToggled = false;
 let downloadClicked = false;
 let hoverPerformed = false;
 
@@ -39,6 +40,54 @@ Then('I should see events list or empty state', async ({ page }) => {
   } else {
     hasEvents = false;
   }
+
+  preFilterEventIds = await eventCards.evaluateAll((els) => els.map((el) => el.getAttribute('data-event-id')));
+});
+
+// Date-range filter actually changes the result set (refs #217, events.feature
+// "Filter events by date range and verify results change").
+let preFilterEventIds: (string | null)[] = [];
+
+Then('the filtered event set should differ from the unfiltered list', async ({ page }) => {
+  if (preFilterEventIds.length === 0) {
+    log.info('E2E: Skipping date-filter diff check - no events existed before filtering', { component: 'e2e' });
+    return;
+  }
+
+  const eventCards = page.getByTestId('event-card');
+  const emptyState = page.getByTestId('events-empty-state');
+
+  // useQuery keeps the previous (unfiltered) page visible via keepPreviousData
+  // while the filtered request is in flight, so the unfiltered list would
+  // satisfy a naive "list or empty" check immediately. Poll until the DOM
+  // actually reflects a different result set (or a real empty state) instead
+  // of accepting the stale snapshot.
+  await expect.poll(async () => {
+    const emptyVisible = await emptyState.isVisible().catch(() => false);
+    if (emptyVisible) return true;
+    const ids = await eventCards.evaluateAll((els) => els.map((el) => el.getAttribute('data-event-id')));
+    return JSON.stringify(ids) !== JSON.stringify(preFilterEventIds);
+  }, { timeout: testConfig.timeouts.transition * 4 }).toBeTruthy();
+
+  const emptyVisible = await emptyState.isVisible().catch(() => false);
+  if (emptyVisible) {
+    // The fixed 2024-01-01 hour window returned zero events: a real, verifiable
+    // change from the unfiltered "most recent" list, which was non-empty.
+    return;
+  }
+  const idsAfter = await eventCards.evaluateAll((els) => els.map((el) => el.getAttribute('data-event-id')));
+  expect(idsAfter).not.toEqual(preFilterEventIds);
+});
+
+Then('the events list should return to a non-empty state', async ({ page }) => {
+  if (preFilterEventIds.length === 0) {
+    log.info('E2E: Skipping post-clear check - no events existed before filtering', { component: 'e2e' });
+    return;
+  }
+  const eventCards = page.getByTestId('event-card');
+  await expect.poll(() => eventCards.count(), {
+    timeout: testConfig.timeouts.transition * 3,
+  }).toBeGreaterThan(0);
 });
 
 // Scroll restoration (refs #197)
@@ -266,20 +315,18 @@ When('I favorite the first event if events exist', async ({ page }) => {
     return;
   }
 
-  try {
-    const firstEventCard = page.getByTestId('event-card').first();
-    await firstEventCard.waitFor({ state: 'visible', timeout: testConfig.timeouts.element });
-    favoritedEventId = await firstEventCard.getAttribute('data-event-id');
+  // The card is already known to exist (hasEvents), and the favorite button is
+  // part of every event card, so a failure here is a real regression, not
+  // absent content - let it propagate instead of masking it as "skipped".
+  const firstEventCard = page.getByTestId('event-card').first();
+  await firstEventCard.waitFor({ state: 'visible', timeout: testConfig.timeouts.element });
+  favoritedEventId = await firstEventCard.getAttribute('data-event-id');
 
-    const favoriteButton = firstEventCard.getByTestId('event-favorite-button');
-    await favoriteButton.waitFor({ state: 'visible', timeout: testConfig.timeouts.element });
-    await favoriteButton.click();
-    favoriteToggled = true;
-    await page.waitForTimeout(500);
-  } catch (error) {
-    log.info('E2E: Could not favorite event', { component: 'e2e', error });
-    favoriteToggled = false;
-  }
+  const favoriteButton = firstEventCard.getByTestId('event-favorite-button');
+  await favoriteButton.waitFor({ state: 'visible', timeout: testConfig.timeouts.element });
+  await favoriteButton.click();
+  favoriteToggled = true;
+  await page.waitForTimeout(500);
 });
 
 When('I unfavorite the first event if it was favorited', async ({ page }) => {
@@ -288,15 +335,11 @@ When('I unfavorite the first event if it was favorited', async ({ page }) => {
     return;
   }
 
-  try {
-    const firstEventCard = page.getByTestId('event-card').first();
-    const favoriteButton = firstEventCard.getByTestId('event-favorite-button');
-    await favoriteButton.click();
-    favoriteToggled = false;
-    await page.waitForTimeout(500);
-  } catch (error) {
-    log.info('E2E: Could not unfavorite event', { component: 'e2e', error });
-  }
+  const firstEventCard = page.getByTestId('event-card').first();
+  const favoriteButton = firstEventCard.getByTestId('event-favorite-button');
+  await favoriteButton.click();
+  favoriteToggled = false;
+  await page.waitForTimeout(500);
 });
 
 Then('I should see the event marked as favorited if action was taken', async ({ page }) => {
@@ -351,22 +394,19 @@ When('I archive the first event if events exist', async ({ page }) => {
     return;
   }
 
-  try {
-    const firstEventCard = page.getByTestId('event-card').first();
-    await firstEventCard.waitFor({ state: 'visible', timeout: testConfig.timeouts.element });
+  // Same reasoning as favorite above: the card and archive button are
+  // guaranteed to exist here, so let a real failure fail the test.
+  const firstEventCard = page.getByTestId('event-card').first();
+  await firstEventCard.waitFor({ state: 'visible', timeout: testConfig.timeouts.element });
 
-    const archiveButton = firstEventCard.getByTestId('event-archive-button');
-    await archiveButton.waitFor({ state: 'visible', timeout: testConfig.timeouts.element });
-    await archiveButton.click();
-    archiveToggled = true;
-    // Wait for toast (also confirms API completed)
-    await expect(page.getByText(/archived|archivé|archiviert|archivad/i).first())
-      .toBeVisible({ timeout: testConfig.timeouts.transition });
-    await page.waitForTimeout(500);
-  } catch (error) {
-    log.info('E2E: Could not archive event', { component: 'e2e', error });
-    archiveToggled = false;
-  }
+  const archiveButton = firstEventCard.getByTestId('event-archive-button');
+  await archiveButton.waitFor({ state: 'visible', timeout: testConfig.timeouts.element });
+  await archiveButton.click();
+  archiveToggled = true;
+  // Wait for toast (also confirms API completed)
+  await expect(page.getByText(/archived|archivé|archiviert|archivad/i).first())
+    .toBeVisible({ timeout: testConfig.timeouts.transition });
+  await page.waitForTimeout(500);
 });
 
 When('I unarchive the first event if it was archived', async ({ page }) => {
@@ -375,15 +415,11 @@ When('I unarchive the first event if it was archived', async ({ page }) => {
     return;
   }
 
-  try {
-    const firstEventCard = page.getByTestId('event-card').first();
-    const archiveButton = firstEventCard.getByTestId('event-archive-button');
-    await archiveButton.click();
-    archiveToggled = false;
-    await page.waitForTimeout(500);
-  } catch (error) {
-    log.info('E2E: Could not unarchive event', { component: 'e2e', error });
-  }
+  const firstEventCard = page.getByTestId('event-card').first();
+  const archiveButton = firstEventCard.getByTestId('event-archive-button');
+  await archiveButton.click();
+  archiveToggled = false;
+  await page.waitForTimeout(500);
 });
 
 Then('I should see the event marked as archived if action was taken', async ({ page }) => {
@@ -418,17 +454,16 @@ When('I archive the event from detail page if on detail page', async ({ page }) 
     return;
   }
 
-  try {
-    const archiveBtn = page.getByTestId('event-detail-archive');
-    const visible = await archiveBtn.isVisible({ timeout: testConfig.timeouts.element });
-    if (visible) {
-      await archiveBtn.click();
-      detailArchiveToggled = true;
-      await page.waitForTimeout(700);
-    }
-  } catch (error) {
-    log.info('E2E: Could not archive from detail page', { component: 'e2e', error });
-  }
+  // hasEvents true means the earlier "I click into the first event if events
+  // exist" step already navigated here and waited for the /events/:id URL, so
+  // we are genuinely on the detail page and its archive button must exist.
+  // Swallowing a missing button behind isVisible().catch() masked a real
+  // rendering regression as "nothing to do here" - assert it hard instead.
+  const archiveBtn = page.getByTestId('event-detail-archive');
+  await expect(archiveBtn).toBeVisible({ timeout: testConfig.timeouts.element });
+  await archiveBtn.click();
+  detailArchiveToggled = true;
+  await page.waitForTimeout(700);
 });
 
 Then('I should see the detail archive button active if action was taken', async ({ page }) => {
@@ -557,22 +592,69 @@ Then('any relative time labels in the list read as a duration', async ({ page })
   expect(text).toMatch(relativeTimePattern);
 });
 
+Then('any relative time labels in the montage read as a duration', async ({ page }) => {
+  const grid = page.getByTestId('events-montage-grid');
+  const emptyState = page.getByTestId('events-empty-state');
+  const tiles = grid.getByTestId('event-montage-tile');
+
+  // Wait for the montage to settle: tiles rendered or the empty state shown.
+  await expect.poll(async () => {
+    const count = await tiles.count();
+    const emptyVisible = await emptyState.isVisible().catch(() => false);
+    return count > 0 || emptyVisible;
+  }, { timeout: testConfig.timeouts.transition * 3 }).toBeTruthy();
+
+  const tileCount = await tiles.count();
+  if (tileCount === 0) {
+    log.info('E2E: Skipping montage relative-time check - no event tiles', { component: 'e2e' });
+    return;
+  }
+
+  // Same reasoning as the list: the live server records continuously, so events
+  // within the 7-day window exist. Missing chips while tiles are present is a
+  // rendering regression the test must catch.
+  const chips = page.getByTestId('event-montage-relative-time');
+  expect(await chips.count()).toBeGreaterThan(0);
+
+  const relativeTimePattern = /(ago|vor|hace|il y a|前|now|jetzt|ahora|maintenant|现在)/i;
+  const firstChip = chips.first();
+  await expect(firstChip).toBeVisible();
+  const text = await firstChip.innerText();
+  expect(text.trim()).not.toBe('');
+  expect(text).toMatch(relativeTimePattern);
+});
+
 When('I favorite the event from detail page if on detail page', async ({ page }) => {
   if (!hasEvents) {
     log.info('E2E: Skipping favorite from detail - no events exist', { component: 'e2e' });
     return;
   }
 
-  try {
-    const favoriteButton = page.getByTestId('event-detail-favorite-button');
-    const isVisible = await favoriteButton.isVisible({ timeout: testConfig.timeouts.element });
-    if (isVisible) {
-      await favoriteButton.click();
-      await page.waitForTimeout(500);
-    }
-  } catch (error) {
-    log.info('E2E: Could not favorite event from detail page', { component: 'e2e', error });
-  }
+  // hasEvents true means the earlier "I click into the first event if events
+  // exist" step already navigated here and waited for the /events/:id URL, so
+  // we are genuinely on the detail page and its favorite button must exist.
+  // Same reasoning as the sibling detail-archive step: swallowing a missing
+  // button behind isVisible().catch() masked a real rendering regression as
+  // "nothing to do here" - assert it hard instead.
+  const favoriteButton = page.getByTestId('event-detail-favorite-button');
+  await expect(favoriteButton).toBeVisible({ timeout: testConfig.timeouts.element });
+  await favoriteButton.click();
+  detailFavoriteToggled = true;
+  await page.waitForTimeout(700);
+});
+
+Then('I should see the detail favorite button active if action was taken', async ({ page }) => {
+  if (!detailFavoriteToggled) return;
+  const favoriteButton = page.getByTestId('event-detail-favorite-button');
+  const icon = favoriteButton.locator('svg').first();
+  await expect(icon).toHaveClass(/fill-current/);
+});
+
+Then('I should see the detail favorite button inactive if action was taken', async ({ page }) => {
+  if (!detailFavoriteToggled) return;
+  const favoriteButton = page.getByTestId('event-detail-favorite-button');
+  const icon = favoriteButton.locator('svg').first();
+  await expect(icon).not.toHaveClass(/fill-current/);
 });
 
 // Event Detail Steps
@@ -600,38 +682,28 @@ Then('I should see event detail elements if on detail page', async ({ page }) =>
 When('I click the download video button if video exists', async ({ page }) => {
   downloadClicked = false;
   const downloadButton = page.getByTestId('download-video-button');
-
-  try {
-    const isVisible = await downloadButton.isVisible({ timeout: testConfig.timeouts.element });
-    if (isVisible) {
-      await downloadButton.click();
-      downloadClicked = true;
-      // Give background task time to start
-      await page.waitForTimeout(1000);
-    }
-  } catch {
-    // Button doesn't exist, that's okay
-    downloadClicked = false;
+  // Visibility is the genuinely conditional part (no video on this event);
+  // once visible, addTask() runs synchronously on click, so the follow-up
+  // "Then" step's poll for the drawer replaces the need for a blind sleep here.
+  const isVisible = await downloadButton.isVisible({ timeout: testConfig.timeouts.element }).catch(() => false);
+  if (isVisible) {
+    await downloadButton.click();
+    downloadClicked = true;
+  } else {
+    log.info('E2E: Skipping download click - button not visible (no video)', { component: 'e2e' });
   }
 });
 
 When('I download snapshot from first event in montage', async ({ page }) => {
   downloadClicked = false;
-
-  try {
-    const downloadButton = page.getByTestId('event-download-button').first();
-    const isVisible = await downloadButton.isVisible({ timeout: testConfig.timeouts.element });
-
-    if (isVisible) {
-      await downloadButton.hover();
-      await downloadButton.click();
-      downloadClicked = true;
-      // Give background task time to start
-      await page.waitForTimeout(1000);
-    }
-  } catch {
-    // Button doesn't exist, that's okay
-    downloadClicked = false;
+  const downloadButton = page.getByTestId('event-download-button').first();
+  const isVisible = await downloadButton.isVisible({ timeout: testConfig.timeouts.element }).catch(() => false);
+  if (isVisible) {
+    await downloadButton.hover();
+    await downloadButton.click();
+    downloadClicked = true;
+  } else {
+    log.info('E2E: Skipping snapshot download - button not visible', { component: 'e2e' });
   }
 });
 
@@ -642,22 +714,11 @@ Then('I should see the background task drawer if download was triggered', async 
     return;
   }
 
-  // Drawer can be in badge, collapsed, or expanded state
+  // Drawer can be in badge, collapsed, or expanded state. addTask() runs
+  // synchronously in the click handler (src/services/download.ts) before any
+  // network request, so once the button was clicked the drawer must appear -
+  // a missing drawer here is a real regression, not a timing fluke to shrug off.
   const drawer = page.locator('[data-testid="background-tasks-drawer"], [data-testid="background-tasks-collapsed"], [data-testid="background-tasks-badge"]');
-
-  try {
-    await expect(drawer.first()).toBeVisible({ timeout: testConfig.timeouts.transition * 2 });
-    log.info('E2E: Background task drawer visible', { component: 'e2e' });
-  } catch (error) {
-    // Download might have failed instantly or completed too quickly
-    // Check if there's any sign the download was attempted
-    const hasAnyDrawerElement = await page.locator('[data-testid^="background-task"]').count();
-    log.info('E2E: Drawer not visible but download was clicked', {
-      component: 'e2e',
-      drawerElements: hasAnyDrawerElement
-    });
-
-    // Don't fail - download might have failed instantly which is okay for E2E
-    // The important part is that clicking the button doesn't crash
-  }
+  await expect(drawer.first()).toBeVisible({ timeout: testConfig.timeouts.transition * 2 });
+  log.info('E2E: Background task drawer visible', { component: 'e2e' });
 });

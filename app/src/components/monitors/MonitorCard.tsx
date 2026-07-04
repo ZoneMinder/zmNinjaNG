@@ -13,7 +13,7 @@ import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Activity, Settings, Download, Clock, Video, Eye, Disc, Volume2, VolumeX } from 'lucide-react';
 import { cn, formatEventCount } from '../../lib/utils';
-import { handleKeyClick } from '../../lib/tv-a11y';
+import { handleKeyClick } from '../../lib/tv/tv-a11y';
 import { downloadSnapshotFromElement } from '../../services/download';
 import { toast } from 'sonner';
 import { LiveMonitorPlayer } from './LiveMonitorPlayer';
@@ -22,8 +22,8 @@ import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import type { MonitorCardProps } from '../../api/types';
 import { log, LogLevel } from '../../lib/logger';
 import { useTranslation } from 'react-i18next';
-import { getMonitorAspectRatio } from '../../lib/monitor-rotation';
-import { getMonitorRunState, monitorDotColor } from '../../lib/monitor-status';
+import { getMonitorAspectRatio } from '../../lib/monitor/monitor-rotation';
+import { getMonitorRunState, monitorDotColor } from '../../lib/monitor/monitor-status';
 import { useAuthStore } from '../../stores/auth';
 
 interface MonitorCardComponentProps extends MonitorCardProps {

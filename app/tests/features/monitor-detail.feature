@@ -36,6 +36,16 @@ Feature: Monitor Detail Page
     Then the zone overlay should not be visible
 
   @all
+  Scenario: PTZ controls send move and stop commands
+    Given the current monitor supports PTZ
+    Then I should see the PTZ control panel
+    And I should see directional arrows
+    When I click the PTZ pan right button
+    Then the PTZ command should be sent
+    When I click the PTZ stop button
+    Then the movement should stop
+
+  @all
   Scenario: Navigation arrows cycle through monitors
     Then I should see navigation arrows if multiple monitors exist
     When I click the next monitor button if visible

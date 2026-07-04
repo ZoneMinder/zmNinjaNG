@@ -21,7 +21,7 @@ Component Hierarchy
 
 ::
 
-   VideoPlayer (Smart Component)
+   LiveMonitorPlayer (Smart Component)
    ├── useGo2RTCStream (WebRTC Hook)
    │   └── VideoRTC (Vendored Library)
    │       └── WebSocket Signaling
@@ -38,14 +38,13 @@ New Files
   library (~500 lines)
 - ``/app/src/hooks/useGo2RTCStream.ts`` - React hook for WebRTC
   lifecycle management
-- ``/app/src/components/video/VideoPlayer.tsx`` - Smart player component
-  with auto-selection
-- ``/app/tests/features/go2rtc-streaming.feature`` - E2E Gherkin tests
+- ``/app/src/components/monitors/LiveMonitorPlayer.tsx`` - Smart player
+  component with auto-selection
 
 Modified Files
 ^^^^^^^^^^^^^^
 
-- ``/app/src/lib/url-builder.ts`` - Added ``getGo2RTCWebSocketUrl()``
+- ``/app/src/lib/zm/url-builder.ts`` - Added ``getGo2RTCWebSocketUrl()``
   and ``getGo2RTCStreamUrl()``
 - ``/app/src/services/discovery.ts`` - Added Go2RTC endpoint detection (port
   1984)
@@ -53,10 +52,10 @@ Modified Files
   types
 - ``/app/src/stores/settings.ts`` - Added ``streamingMethod`` and
   ``webrtcFallbackEnabled``
-- ``/app/src/pages/MonitorDetail.tsx`` - Uses VideoPlayer instead of
-  ``<img>``
-- ``/app/src/components/monitors/MontageMonitor.tsx`` - Uses VideoPlayer
-  instead of ``<img>``
+- ``/app/src/pages/MonitorDetail.tsx`` - Uses LiveMonitorPlayer instead
+  of ``<img>``
+- ``/app/src/components/monitors/MontageMonitor.tsx`` - Uses
+  LiveMonitorPlayer instead of ``<img>``
 
 Stream Selection Logic
 ----------------------
@@ -64,7 +63,7 @@ Stream Selection Logic
 Decision Tree
 ~~~~~~~~~~~~~
 
-The ``VideoPlayer`` component automatically selects the streaming method
+The ``LiveMonitorPlayer`` component automatically selects the streaming method
 based on:
 
 .. code:: typescript
@@ -202,7 +201,7 @@ shows an empty window for streaming sources (both WebRTC and MSE).
 URL Building
 ~~~~~~~~~~~~
 
-Two new URL builder functions in ``lib/url-builder.ts``:
+Two new URL builder functions in ``lib/zm/url-builder.ts``:
 
 .. code:: typescript
 
@@ -325,7 +324,7 @@ Controls
 --------
 
 Native video controls are enabled only on MonitorDetail (via the
-``showControls`` prop on ``VideoPlayer``):
+``showControls`` prop on ``LiveMonitorPlayer``):
 
 - ``controlsList='nodownload noplaybackrate'``: hides download and
   playback rate options
@@ -393,17 +392,11 @@ hook implementation is correct.
 E2E Tests
 ~~~~~~~~~
 
-Located in: ``/app/tests/features/go2rtc-streaming.feature``
-
-**Scenarios:** 1. View monitor with VideoPlayer in Montage 2. View
-monitor detail with video player 3. Download snapshot from monitor
-detail
-
-**Run tests:**
-
-.. code:: bash
-
-   npm run test:e2e -- tests/features/go2rtc-streaming.feature
+No dedicated go2rtc/WebRTC e2e feature file exists today. Montage and
+monitor-detail e2e coverage (``app/tests/features/montage.feature``,
+``monitor-detail.feature``) exercises ``LiveMonitorPlayer`` but does not
+assert on the WebRTC/MJPEG protocol path specifically. Manual testing
+(below) is the only current coverage for the fallback ladder.
 
 Manual Testing Checklist
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -430,14 +423,14 @@ Edge Cases Handled
 ~~~~~~~~~~~~~~~~~~~~~
 
 **Scenario:** Server doesn't have Go2RTC installed/running.
-**Handling:** Discovery leaves ``profile.go2rtcUrl`` unset; VideoPlayer
-falls back to MJPEG.
+**Handling:** Discovery leaves ``profile.go2rtcUrl`` unset;
+LiveMonitorPlayer falls back to MJPEG.
 
 2. Monitor Not Configured for Go2RTC
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 **Scenario:** Monitor exists but ``Go2RTCEnabled`` is false or missing
-**Handling:** VideoPlayer checks flag, falls back to MJPEG even if
+**Handling:** LiveMonitorPlayer checks flag, falls back to MJPEG even if
 Go2RTC available
 
 3. WebRTC Connection Failure
@@ -482,8 +475,8 @@ available
 Troubleshooting
 ---------------
 
-Issue: VideoPlayer shows “Connection failed”
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Issue: LiveMonitorPlayer shows “Connection failed”
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 **Check:** 1. Is Go2RTC running?
 ``curl http://localhost:1984/api/config`` 2. Is monitor configured in

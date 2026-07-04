@@ -20,12 +20,13 @@ Feature: Event Browsing and Management
 
   @all
   Scenario: Filter events by date range and verify results change
+    Then I should see events list or empty state
     When I open the events filter panel
     And I set the events date range
     And I apply event filters
-    Then I should see events list or empty state
+    Then the filtered event set should differ from the unfiltered list
     When I clear event filters
-    Then I should see events list or empty state
+    Then the events list should return to a non-empty state
 
   @all
   Scenario: Returning from an event keeps the list scroll position
@@ -84,6 +85,14 @@ Feature: Event Browsing and Management
     Then I should see the detail archive button inactive if action was taken
 
   @all
+  Scenario: Favorite an event from the detail page
+    When I click into the first event if events exist
+    And I favorite the event from detail page if on detail page
+    Then I should see the detail favorite button active if action was taken
+    When I favorite the event from detail page if on detail page
+    Then I should see the detail favorite button inactive if action was taken
+
+  @all
   Scenario: Favorites-only filter shows the favorited event
     When I favorite the first event if events exist
     And I open the events filter panel
@@ -137,3 +146,9 @@ Feature: Event Browsing and Management
   @all
   Scenario: Recent events show a human-readable relative time
     Then any relative time labels in the list read as a duration
+
+  @all
+  Scenario: Recent events show a relative time in the grid view
+    When I switch events view to montage
+    Then I should see the events montage grid
+    And any relative time labels in the montage read as a duration

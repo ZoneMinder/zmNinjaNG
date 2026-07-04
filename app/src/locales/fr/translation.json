@@ -51,6 +51,9 @@
     "navigation_menu": "Menu de navigation",
     "navigation_menu_desc": "Navigation principale de l'application."
   },
+  "network": {
+    "offline_banner": "Hors ligne. Données en cache affichées."
+  },
   "app_init": {
     "toast_title": "Finalisation de la configuration",
     "toast_description": "Préparation de votre profil et de la connexion au serveur.",
@@ -73,6 +76,7 @@
     "widget_events": "Événements récents",
     "widget_timeline": "Chronologie",
     "widget_heatmap": "Carte de Chaleur d'Événements",
+    "widget_type": "Type de widget",
     "widget_title": "Titre du widget (Facultatif)",
     "widget_title_placeholder": "Mon Widget",
     "select_monitor": "Sélectionner un moniteur",
@@ -196,6 +200,7 @@
     "alarm_frame": "Image d'Alarme {{frameId}}",
     "frame_number": "Image {{number}}",
     "total_frames": "{{count}} images",
+    "seek_bar": "Rechercher",
     "view_list": "Vue en Liste",
     "view_montage": "Vue en Montage",
     "favorite": "Favori",
@@ -1005,7 +1010,7 @@
     "title": "Montage d'événements",
     "grid_layout_applied": "Grille appliquée : {{cols}} colonnes",
     "invalid_columns": "Nombre de colonnes invalide",
-    "load_error": "Erreur de chargement des événements",
+    "load_error": "Erreur de chargement des événements: {{error}}",
     "grid_layout": "Mise en page de la grille",
     "screen_too_small": "La largeur de l'écran est trop petite pour autant de colonnes",
     "columns": "{{count}} cols",
@@ -1041,16 +1046,17 @@
     "title": "États",
     "change_success": "État changé avec succès",
     "change_error": "Échec du changement d'état",
-    "load_error": "Échec du chargement des états",
+    "load_error": "Échec du chargement des états: {{error}}",
     "description": "Description",
     "no_description": "Pas de description disponible",
-    "activate": "Activer"
+    "activate": "Activer",
+    "no_states": "Aucun état configuré"
   },
   "timeline": {
     "title": "Chronologie",
     "subtitle": "Chronologie des événements",
     "loading": "Chargement de la chronologie...",
-    "load_error": "Erreur de chargement de la chronologie",
+    "load_error": "Erreur de chargement de la chronologie: {{error}}",
     "no_events_found": "Aucun événement trouvé pour cette période",
     "adjust_filters": "Ajuster les filtres",
     "tip": "Conseil : Glisser pour déplacer, défiler pour zoomer",
@@ -1089,6 +1095,9 @@
     "center_view": "Centrer",
     "go_to_now": "Maintenant",
     "select_to_zoom": "Sélectionner",
+    "zoom_in": "Agrandir",
+    "zoom_out": "Réduire",
+    "scrubber_label": "Curseur de chronologie",
     "help": {
       "title": "Contrôles",
       "navigate": "Pinch/glisser/molette",

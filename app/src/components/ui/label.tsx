@@ -13,6 +13,10 @@ export interface LabelProps
 
 const Label = React.forwardRef<HTMLLabelElement, LabelProps>(
   ({ className, ...props }, ref) => (
+    // This is the generic primitive; every call site supplies htmlFor or
+    // wraps a control as children, which the linter can't see through prop
+    // spreading.
+    // eslint-disable-next-line jsx-a11y/label-has-associated-control
     <label
       ref={ref}
       className={cn(

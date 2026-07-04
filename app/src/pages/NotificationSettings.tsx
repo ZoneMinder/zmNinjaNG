@@ -7,7 +7,9 @@
 
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { queryKeys } from '../lib/query/query-keys';
 import { useNotificationStore, startEventPoller } from '../stores/notifications';
+import { useShallow } from 'zustand/react/shallow';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useProfileStore } from '../stores/profile';
 import { getMonitors } from '../api/monitors';
@@ -47,24 +49,27 @@ export default function NotificationSettings() {
   const getDecryptedPassword = useProfileStore((state) => state.getDecryptedPassword);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
-  const {
-    getProfileSettings,
-    updateProfileSettings,
-    setMonitorFilter,
-    connect,
-    disconnect,
-    connectionState,
-    isConnected,
-    getUnreadCount,
-  } = useNotificationStore();
+  const updateProfileSettings = useNotificationStore((s) => s.updateProfileSettings);
+  const setMonitorFilter = useNotificationStore((s) => s.setMonitorFilter);
+  const connect = useNotificationStore((s) => s.connect);
+  const disconnect = useNotificationStore((s) => s.disconnect);
+  const connectionState = useNotificationStore((s) => s.connectionState);
+  const isConnected = useNotificationStore((s) => s.isConnected);
 
-  // Get settings for current profile
-  const settings = currentProfile ? getProfileSettings(currentProfile.id) : null;
-  const unreadCount = currentProfile ? getUnreadCount(currentProfile.id) : 0;
+  // Subscribe reactively to this profile's settings and unread count so the
+  // enable switch and dependent sections update live. getProfileSettings is a
+  // stable action; selecting it and calling it at render would not re-render
+  // when settings change on the same mount. useShallow handles the fresh
+  // object getProfileSettings returns each call.
+  const profileId = currentProfile?.id;
+  const settings = useNotificationStore(
+    useShallow((s) => (profileId ? s.getProfileSettings(profileId) : null))
+  );
+  const unreadCount = useNotificationStore((s) => (profileId ? s.getUnreadCount(profileId) : 0));
 
   // Fetch monitors
   const { data: monitorsData } = useQuery({
-    queryKey: ['monitors', currentProfile?.id],
+    queryKey: queryKeys.monitors(currentProfile?.id),
     queryFn: () => getMonitors(),
     enabled: !!currentProfile && isAuthenticated,
   });

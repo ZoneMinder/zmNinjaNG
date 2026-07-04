@@ -19,6 +19,19 @@ Older events load automatically as you scroll.
 
 On desktop, hovering over a thumbnail for a moment shows a 400px-wide preview anchored next to the row. The preview loads a higher-resolution image from the server. The underlying card remains clickable while the preview is visible, so you can still click to open the event.
 
+## Deleting Multiple Events
+
+Each event card has a trash icon. Tap it to queue that event for deletion without opening it, the card dims and tints red to show it is selected. Tap the icon again to remove it from the selection.
+
+Once at least one event is selected, a floating bar appears showing how many events are queued (for example, "Delete 3 events"), with **Cancel** and **Delete** buttons:
+
+- **Cancel** - Clears the selection without deleting anything
+- **Delete** - Permanently deletes all selected events from your ZoneMinder server
+
+Deletion is permanent and cannot be undone. If some events fail to delete (for example, a server error), the app shows an error and leaves the successful ones deleted.
+
+The same selection and delete flow is available in the Recent Events list on a monitor's detail page.
+
 ## Filtering Events
 
 Filter events using the controls at the top:

@@ -6,7 +6,7 @@
  * in secure storage (Keychain/Keystore on mobile, encrypted localStorage on web).
  */
 
-import { setSecureValue, getSecureValue, hasSecureValue, removeSecureValue } from './secureStorage';
+import { setSecureValue, getSecureValue, hasSecureValue, removeSecureValue } from './security/secureStorage';
 import { log, LogLevel } from './logger';
 
 const PIN_HASH_KEY = 'kiosk_pin_hash';

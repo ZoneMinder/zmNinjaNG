@@ -257,6 +257,6 @@ describe('useTimelineData', () => {
       vi.advanceTimersByTime(1);
     });
     expect(invalidateSpy).toHaveBeenCalledTimes(1);
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['timeline-events'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['timeline-events', 'profile-1'] });
   });
 });

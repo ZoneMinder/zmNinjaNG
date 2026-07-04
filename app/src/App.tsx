@@ -28,7 +28,7 @@ import { initializeLogFile, hydrateLogStoreFromFile, getLogFile } from './lib/lo
 import { useCapacitorListener } from './hooks/useCapacitorListener';
 import { useAndroidBackButton } from './hooks/useAndroidBackButton';
 import { PipProvider } from './contexts/PipContext';
-import { BOOTSTRAP_TIMEOUTS, Z_INDEX } from './lib/zmninja-ng-constants';
+import { BOOTSTRAP_TIMEOUTS, Z_INDEX, DEFAULT_QUERY_STALE_TIME_MS } from './lib/zmninja-ng-constants';
 
 // Lazy load route components for code splitting
 const ProfileForm = lazy(() => import('./pages/ProfileForm'));
@@ -65,6 +65,11 @@ const queryClient = new QueryClient({
     queries: {
       retry: shouldRetryQuery,
       refetchOnWindowFocus: false,
+      // Keeps last-good data visible/fresh briefly instead of hitting an
+      // error wall the instant a query mounts during a network blip.
+      // refetchOnReconnect stays at its default (true) so queries still
+      // refresh once connectivity returns.
+      staleTime: DEFAULT_QUERY_STALE_TIME_MS,
     },
   },
 });

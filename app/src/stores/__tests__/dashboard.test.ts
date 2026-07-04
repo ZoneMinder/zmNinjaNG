@@ -85,7 +85,7 @@ describe('Dashboard Store', () => {
                 layout: { w: 2, h: 1 },
             });
 
-            let { widgets } = useDashboardStore.getState();
+            const { widgets } = useDashboardStore.getState();
             const widgetId = widgets[profileId][0].id;
 
             // Remove widget
@@ -107,7 +107,7 @@ describe('Dashboard Store', () => {
                 layout: { w: 2, h: 1 },
             });
 
-            let { widgets } = useDashboardStore.getState();
+            const { widgets } = useDashboardStore.getState();
             const widgetId = widgets[profileId][0].id;
 
             // Update widget
@@ -135,7 +135,7 @@ describe('Dashboard Store', () => {
                 layout: { w: 2, h: 1 },
             });
 
-            let { widgets } = useDashboardStore.getState();
+            const { widgets } = useDashboardStore.getState();
             const widgetId = widgets[profileId][0].id;
 
             // Update layout
@@ -207,7 +207,7 @@ describe('Dashboard Store', () => {
                 layout: { w: 1, h: 1 },
             });
 
-            let { widgets } = useDashboardStore.getState();
+            const { widgets } = useDashboardStore.getState();
             const profile1WidgetId = widgets['profile-1'][0].id;
 
             // Remove widget from profile-1
@@ -356,7 +356,7 @@ describe('Dashboard Store', () => {
                 layout: { w: 3, h: 1 },
             });
 
-            let { widgets } = useDashboardStore.getState();
+            const { widgets } = useDashboardStore.getState();
             const widget1Id = widgets[profileId][0].id;
             const widget2Id = widgets[profileId][1].id;
 
@@ -401,7 +401,7 @@ describe('Dashboard Store', () => {
                 layout: { w: 6, h: 2 },
             });
 
-            let { widgets } = useDashboardStore.getState();
+            const { widgets } = useDashboardStore.getState();
             const widgetId = widgets[profileId][0].id;
 
             // Set custom position

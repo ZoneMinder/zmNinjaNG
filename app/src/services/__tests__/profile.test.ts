@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ProfileService } from '../profile';
 import type { Profile } from '../../api/types';
+import { asProfileId } from '../../api/types';
 
 // Mock secure storage
-vi.mock('../../lib/secureStorage', () => ({
+vi.mock('../../lib/security/secureStorage', () => ({
   setSecureValue: vi.fn(),
   getSecureValue: vi.fn(),
   removeSecureValue: vi.fn(),
@@ -25,7 +26,7 @@ vi.mock('../../lib/logger', () => ({
   },
 }));
 
-import { setSecureValue, getSecureValue, removeSecureValue } from '../../lib/secureStorage';
+import { setSecureValue, getSecureValue, removeSecureValue } from '../../lib/security/secureStorage';
 
 describe('ProfileService', () => {
   beforeEach(() => {
@@ -96,7 +97,7 @@ describe('ProfileService', () => {
   describe('validateNameAvailability', () => {
     const profiles: Profile[] = [
       {
-        id: '1',
+        id: asProfileId('1'),
         name: 'Home Server',
         portalUrl: 'https://home.example.com',
         apiUrl: 'https://home.example.com/zm/api',
@@ -105,7 +106,7 @@ describe('ProfileService', () => {
         createdAt: Date.now(),
       },
       {
-        id: '2',
+        id: asProfileId('2'),
         name: 'Office Server',
         portalUrl: 'https://office.example.com',
         apiUrl: 'https://office.example.com/zm/api',
@@ -114,7 +115,7 @@ describe('ProfileService', () => {
         createdAt: Date.now(),
       },
       {
-        id: '3',
+        id: asProfileId('3'),
         name: 'Demo Server',
         portalUrl: 'https://demo.example.com',
         apiUrl: 'https://demo.example.com/zm/api',

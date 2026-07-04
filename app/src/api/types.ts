@@ -504,8 +504,28 @@ export type StateData = z.infer<typeof StateDataSchema>;
 export type StatesResponse = z.infer<typeof StatesResponseSchema>;
 
 // Profile types (app-specific, not from ZM API)
+
+/**
+ * Nominal type for a real profile id. A plain `string` cannot be assigned
+ * where `ProfileId` is required; it must go through `asProfileId` first.
+ * This stops an arbitrary string (or the wrong kind of id) from building a
+ * profile-scoped query-cache key (see lib/query/query-keys.ts). Because the brand
+ * is structurally still a string, a `ProfileId` is assignable anywhere a
+ * plain `string` is expected, so existing reads are unaffected.
+ */
+export type ProfileId = string & { readonly __brand: 'ProfileId' };
+
+/**
+ * Casts a raw string into a `ProfileId`. Use only at the point a profile id
+ * is minted or parsed (profile creation, a synthesized fallback id, or a
+ * test fixture) - never to silence a type error at an unrelated call site.
+ */
+export function asProfileId(id: string): ProfileId {
+  return id as ProfileId;
+}
+
 export interface Profile {
-  id: string;
+  id: ProfileId;
   name: string;
   portalUrl: string;
   apiUrl: string;

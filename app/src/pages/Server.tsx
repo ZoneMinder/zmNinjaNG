@@ -6,6 +6,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '../lib/query/query-keys';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useBandwidthSettings } from '../hooks/useBandwidthSettings';
 import { useAuthStore } from '../stores/auth';
@@ -50,19 +51,21 @@ export default function Server() {
   const queryClient = useQueryClient();
   const { currentProfile } = useCurrentProfile();
   const bandwidth = useBandwidthSettings();
-  const { version, apiVersion, isAuthenticated } = useAuthStore();
+  const version = useAuthStore((s) => s.version);
+  const apiVersion = useAuthStore((s) => s.apiVersion);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const [selectedAction, setSelectedAction] = useState<string>('');
 
   // Fetch server information
   const { data: servers, isLoading: serversLoading } = useQuery({
-    queryKey: ['servers', currentProfile?.id],
+    queryKey: queryKeys.servers(currentProfile?.id),
     queryFn: getServers,
     enabled: !!currentProfile && isAuthenticated,
   });
 
   // Fetch daemon status
   const { data: isDaemonRunning, isLoading: daemonLoading } = useQuery({
-    queryKey: ['daemon-check', currentProfile?.id],
+    queryKey: queryKeys.daemonCheck(currentProfile?.id),
     queryFn: () => getDaemonCheck(),
     enabled: !!currentProfile && isAuthenticated,
     refetchInterval: bandwidth.daemonCheckInterval,
@@ -70,35 +73,35 @@ export default function Server() {
 
   // Fetch load average
   const { data: loadData, isLoading: loadLoading } = useQuery({
-    queryKey: ['server-load', currentProfile?.id],
+    queryKey: queryKeys.serverLoad(currentProfile?.id),
     queryFn: () => getLoad(),
     enabled: !!currentProfile && isAuthenticated,
   });
 
   // Fetch disk usage
   const { data: diskData, isLoading: diskLoading } = useQuery({
-    queryKey: ['disk-usage', currentProfile?.id],
+    queryKey: queryKeys.diskUsage(currentProfile?.id),
     queryFn: () => getDiskPercent(),
     enabled: !!currentProfile && isAuthenticated,
   });
 
   // Fetch states
   const { data: states, isLoading: statesLoading } = useQuery({
-    queryKey: ['states', currentProfile?.id],
+    queryKey: queryKeys.states(currentProfile?.id),
     queryFn: getStates,
     enabled: !!currentProfile && isAuthenticated,
   });
 
   // Fetch timezone
   const { data: timezone } = useQuery({
-    queryKey: ['timezone', currentProfile?.id],
+    queryKey: queryKeys.timezone(currentProfile?.id),
     queryFn: () => getServerTimeZone(),
     enabled: !!currentProfile && isAuthenticated,
   });
 
   // Fetch storages
   const { data: storages } = useQuery({
-    queryKey: ['storages', currentProfile?.id],
+    queryKey: queryKeys.storages(currentProfile?.id),
     queryFn: getStorages,
     enabled: !!currentProfile && isAuthenticated,
   });
@@ -111,7 +114,7 @@ export default function Server() {
         title: t('common.success'),
         description: t('server.state_applied'),
       });
-      queryClient.invalidateQueries({ queryKey: ['states'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.states(currentProfile?.id) });
       log.server('State/action applied', LogLevel.INFO, { action: selectedAction });
     },
     onError: (error) => {

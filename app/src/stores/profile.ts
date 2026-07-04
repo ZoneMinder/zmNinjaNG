@@ -13,20 +13,24 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Profile } from '../api/types';
+import type { Profile, ProfileId } from '../api/types';
+import { asProfileId } from '../api/types';
 import { setApiClient } from '../api/client';
 import { createStoreApiClient } from '../api/store-gates';
 import { getServerTimeZone } from '../api/time';
 import { ProfileService } from '../services/profile';
 import { log, LogLevel } from '../lib/logger';
+import { setLogRedactionGate } from '../lib/log-sanitizer';
+import { setProfileSettingsGate } from '../lib/profile/profile-settings';
 import { STORAGE_KEYS } from '../lib/zmninja-ng-constants';
 import { useAuthStore } from './auth';
+import { useSettingsStore } from './settings';
 import { performBootstrap } from '../services/profile-bootstrap';
 import { handleProfileRehydration } from '../services/profile-initialization';
 
 interface ProfileState {
   profiles: Profile[];
-  currentProfileId: string | null;
+  currentProfileId: ProfileId | null;
   isInitialized: boolean;
   isBootstrapping: boolean;
   bootstrapStep: 'start' | 'auth' | 'timezone' | 'zms' | 'finalize' | null;
@@ -96,7 +100,10 @@ export const useProfileStore = create<ProfileState>()(
             throw new Error(`Profile "${profileData.name}" already exists`);
           }
 
-          const newProfileId = crypto.randomUUID();
+          // Boundary: this is where a profile id is minted. Every ProfileId
+          // downstream (currentProfileId, query-key cache scoping) traces
+          // back to this cast. Refs #217.
+          const newProfileId = asProfileId(crypto.randomUUID());
 
           // Store password in secure storage (native keystore on mobile, encrypted on web)
           if (profileData.password) {
@@ -156,7 +163,7 @@ export const useProfileStore = create<ProfileState>()(
           }
 
           // Store password in secure storage if provided
-          let processedUpdates = { ...updates };
+          const processedUpdates = { ...updates };
           if (updates.password) {
             await ProfileService.savePassword(id, updates.password);
             // Set flag instead of actual password
@@ -270,7 +277,7 @@ export const useProfileStore = create<ProfileState>()(
             // the new profile's SSL-trust flip so a self-signed old server's
             // CMD_QUIT is not rejected, which would orphan its nph-zms. refs #188
             log.profileService('Step 0: Quitting previous profile streams', LogLevel.INFO);
-            const { quitAllActiveStreams } = await import('../lib/active-streams');
+            const { quitAllActiveStreams } = await import('../lib/monitor/active-streams');
             await quitAllActiveStreams();
 
             // STEP 1: Clear ALL existing state FIRST (critical for avoiding data mixing)
@@ -289,8 +296,10 @@ export const useProfileStore = create<ProfileState>()(
             resetApiClient();
 
             // STEP 2: Update current profile ID
+            // Use profile.id (already a ProfileId) rather than the raw `id`
+            // param so this assignment needs no cast.
             log.profileService('Step 2: Setting new profile as current', LogLevel.INFO);
-            set({ currentProfileId: id });
+            set({ currentProfileId: profile.id });
 
             // Update last used timestamp (don't await this)
             get().updateProfile(id, { lastUsed: Date.now() });
@@ -462,6 +471,29 @@ export const useProfileStore = create<ProfileState>()(
     }
   )
 );
+
+// lib/log-sanitizer.ts has no store imports; this module assembles the real
+// redaction check from the profile and settings stores and registers it here
+// at load time, breaking the logger -> log-sanitizer -> profile store cycle.
+// Refs #217.
+setLogRedactionGate({
+  isRedactionDisabled: () => {
+    const { currentProfileId } = useProfileStore.getState();
+    if (!currentProfileId) return false;
+    return useSettingsStore.getState().getProfileSettings(currentProfileId).disableLogRedaction;
+  },
+});
+
+// lib/profile/profile-settings.ts has no store imports for the same reason (it's
+// imported by api/events.ts and other api modules downstream of this store).
+// Refs #217.
+setProfileSettingsGate({
+  getExcludedMonitorIds: () => {
+    const { currentProfileId } = useProfileStore.getState();
+    if (!currentProfileId) return [];
+    return useSettingsStore.getState().getProfileSettings(currentProfileId).excludedMonitorIds;
+  },
+});
 
 // Subscribe to auth store to update refresh token in profile
 useAuthStore.subscribe((state) => {

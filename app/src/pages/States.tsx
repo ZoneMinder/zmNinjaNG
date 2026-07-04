@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '../lib/query/query-keys';
 import { getStates, changeState } from '../api/states';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -7,6 +8,9 @@ import { Activity, Check } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useAuthStore } from '../stores/auth';
+import { EmptyState } from '../components/ui/empty-state';
+import { ErrorBanner } from '../components/ui/query-state';
+import { resolveQueryError } from '../lib/query/query-error';
 
 export default function States() {
   const queryClient = useQueryClient();
@@ -15,7 +19,7 @@ export default function States() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
   const { data: states, isLoading, error } = useQuery({
-    queryKey: ['states'],
+    queryKey: queryKeys.states(currentProfile?.id),
     queryFn: getStates,
     enabled: !!currentProfile && isAuthenticated,
   });
@@ -23,7 +27,7 @@ export default function States() {
   const changeMutation = useMutation({
     mutationFn: changeState,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['states'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.states(currentProfile?.id) });
       toast.success(t('states.change_success'));
     },
     onError: (error: Error) => {
@@ -40,13 +44,14 @@ export default function States() {
     );
   }
 
-  if (error) {
+  // A background refetch error while cached states are already loaded falls
+  // through to the normal view below instead of this error wall. Only a cold
+  // start with no cached data hits the error wall.
+  if (error && !states) {
     return (
       <div className="p-8">
         <h1 className="text-lg font-bold mb-6">{t('states.title')}</h1>
-        <div className="p-4 bg-destructive/10 text-destructive rounded-md">
-          {t('states.load_error')}: {(error as Error).message}
-        </div>
+        <ErrorBanner message={resolveQueryError(error, t, { fallbackKey: 'states.load_error' })} />
       </div>
     );
   }
@@ -62,6 +67,11 @@ export default function States() {
         {t('states.description')}
       </p>
 
+      {states && states.length === 0 ? (
+        <div data-testid="states-empty-state">
+          <EmptyState icon={Activity} title={t('states.no_states')} />
+        </div>
+      ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {states?.map((state) => (
           <Card key={state.Id} className={state.IsActive === '1' ? 'border-primary' : ''}>
@@ -94,6 +104,7 @@ export default function States() {
           </Card>
         ))}
       </div>
+      )}
     </div>
   );
 }

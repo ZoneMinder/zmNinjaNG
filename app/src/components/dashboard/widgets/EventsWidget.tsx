@@ -19,11 +19,14 @@ import { getEvents } from '../../../api/events';
 import { useDateTimeFormat } from '../../../hooks/useDateTimeFormat';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { getEventCauseIcon } from '../../../lib/event-icons';
+import { getEventCauseIcon } from '../../../lib/event/event-icons';
 import { useBandwidthSettings } from '../../../hooks/useBandwidthSettings';
+import { useCurrentProfile } from '../../../hooks/useCurrentProfile';
+import { queryKeys } from '../../../lib/query/query-keys';
 import { useEventTagMapping } from '../../../hooks/useEventTags';
 import { TagChipList } from '../../events/TagChip';
 import { ALL_TAGS_FILTER_ID } from '../../../hooks/useEventFilters';
+import { activateOnEnterOrSpace } from '../../../lib/utils';
 
 interface EventsWidgetProps {
     /** Optional monitor IDs to filter events */
@@ -49,9 +52,10 @@ export const EventsWidget = memo(function EventsWidget({
     const { fmtDateTimeShort } = useDateTimeFormat();
     const navigate = useNavigate();
     const bandwidth = useBandwidthSettings();
+    const { currentProfile } = useCurrentProfile();
     const monitorIdFilter = monitorIds?.length ? monitorIds.join(',') : undefined;
     const { data: eventsData, isLoading } = useQuery({
-        queryKey: ['events', monitorIdFilter, limit, onlyDetectedObjects],
+        queryKey: queryKeys.eventsWidget(currentProfile?.id, monitorIdFilter, limit, onlyDetectedObjects),
         queryFn: () => getEvents({
             monitorId: monitorIdFilter,
             limit,
@@ -112,7 +116,10 @@ export const EventsWidget = memo(function EventsWidget({
                         <div
                             key={event.Event.Id}
                             className="p-3 hover:bg-muted/50 cursor-pointer transition-colors flex items-center gap-3"
+                            role="button"
+                            tabIndex={0}
                             onClick={() => navigate(`/events/${event.Event.Id}`, { state: { from: '/dashboard' } })}
+                            onKeyDown={activateOnEnterOrSpace(() => navigate(`/events/${event.Event.Id}`, { state: { from: '/dashboard' } }))}
                         >
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-center justify-between mb-1">

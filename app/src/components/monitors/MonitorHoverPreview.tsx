@@ -9,11 +9,11 @@
 
 import { useRef, type ReactNode } from 'react';
 import { getStreamUrl } from '../../api/monitors';
-import { resolveMinStreamingPort } from '../../lib/multiport';
+import { resolveMinStreamingPort } from '../../lib/monitor/multiport';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useStreamLifecycle } from '../../hooks/useStreamLifecycle';
 import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
-import { parseMonitorRotation } from '../../lib/monitor-rotation';
+import { parseMonitorRotation } from '../../lib/monitor/monitor-rotation';
 import { log } from '../../lib/logger';
 import type { Monitor } from '../../api/types';
 import { HoverPreview } from '../ui/hover-preview';

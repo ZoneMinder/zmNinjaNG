@@ -53,7 +53,6 @@ export class CapacitorLogFileStore implements LogFileStore {
       }
     } catch (err) {
       // Best-effort. Don't recurse through the logger.
-      // eslint-disable-next-line no-console
       console.warn('[log-file] append failed', err);
     }
   }

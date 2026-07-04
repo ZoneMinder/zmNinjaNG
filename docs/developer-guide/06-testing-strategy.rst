@@ -42,33 +42,16 @@ Tests run on 4 platform profiles using two drivers:
 Playwright connects to Chromium WebViews via CDP. iOS uses WKWebView
 (WebKit), which requires WebDriverIO + Appium.
 
-TestActions Abstraction
-~~~~~~~~~~~~~~~~~~~~~~~
+Driver Access
+~~~~~~~~~~~~~
 
-Step definitions don't call Playwright or WebDriverIO APIs directly.
-They use a shared ``TestActions`` interface
-(``tests/actions/types.ts``) so the same Gherkin steps run on every
-platform:
+Step definitions in ``tests/steps/`` use Playwright's ``page``
+fixture directly (``page.getByTestId(...)``, ``page.click(...)``,
+etc.). There is no shared driver abstraction layer.
 
-.. code:: typescript
-
-   export interface TestActions {
-     goto(path: string): Promise<void>;
-     click(testId: string): Promise<void>;
-     fill(testId: string, value: string): Promise<void>;
-     getText(testId: string): Promise<string>;
-     isVisible(testId: string, timeout?: number): Promise<boolean>;
-     screenshot(name: string): Promise<Buffer>;
-     compareScreenshot(name: string, threshold?: number): Promise<void>;
-     platform(): PlatformProfile;
-     // ... more methods in types.ts
-   }
-
-Two implementations exist:
-
-- ``PlaywrightActions`` (``tests/actions/playwright-actions.ts``), for
-  web and Android
-- ``WebDriverIOActions``: for iOS
+iOS phone and tablet e2e run through a separate WebDriverIO + Appium
+harness and are manual-invoke-only: only the web suite
+(``npm run test:e2e``) runs in the automated CI workflow.
 
 Unit Tests
 ----------
@@ -259,9 +242,6 @@ File Organization
    │   ├── kiosk.steps.ts
    │   ├── group-filter.steps.ts
    │   └── platform.steps.ts
-   ├── actions/                # Driver abstraction
-   │   ├── types.ts            # TestActions interface
-   │   └── playwright-actions.ts
    ├── helpers/
    │   ├── config.ts           # Server credentials from .env
    │   ├── ios-launcher.ts     # Build iOS app, boot simulator, Appium caps
@@ -334,8 +314,8 @@ Scenarios test user goals, not element presence.
 Step Definitions
 ~~~~~~~~~~~~~~~~
 
-Step definitions go in per-screen files under ``tests/steps/``. Use
-``TestActions`` methods so steps work across all drivers:
+Step definitions go in per-screen files under ``tests/steps/``, using
+Playwright's ``page`` fixture directly:
 
 .. code:: tsx
 

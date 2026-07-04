@@ -51,6 +51,9 @@
     "navigation_menu": "导航菜单",
     "navigation_menu_desc": "应用程序主导航。"
   },
+  "network": {
+    "offline_banner": "离线。正在显示缓存数据。"
+  },
   "app_init": {
     "toast_title": "正在完成设置",
     "toast_description": "正在准备你的个人资料和服务器连接。",
@@ -73,6 +76,7 @@
     "widget_events": "最近事件",
     "widget_timeline": "时间线",
     "widget_heatmap": "事件热图",
+    "widget_type": "小部件类型",
     "widget_title": "小部件标题（可选）",
     "widget_title_placeholder": "我的小部件",
     "select_monitor": "选择监控",
@@ -196,6 +200,7 @@
     "alarm_frame": "报警帧 {{frameId}}",
     "frame_number": "帧 {{number}}",
     "total_frames": "{{count}} 帧",
+    "seek_bar": "快进",
     "view_list": "列表视图",
     "view_montage": "蒙太奇视图",
     "favorite": "收藏",
@@ -1005,7 +1010,7 @@
     "title": "事件蒙太奇",
     "grid_layout_applied": "网格布局应用: {{cols}} 列",
     "invalid_columns": "无效的列数",
-    "load_error": "加载事件错误",
+    "load_error": "加载事件错误: {{error}}",
     "grid_layout": "网格布局",
     "screen_too_small": "屏幕宽度太小，无法使用这么多列",
     "columns": "{{count}} 列",
@@ -1041,16 +1046,17 @@
     "title": "状态",
     "change_success": "状态更改成功",
     "change_error": "更改状态失败",
-    "load_error": "加载状态失败",
+    "load_error": "加载状态失败: {{error}}",
     "description": "描述",
     "no_description": "无描述可用",
-    "activate": "激活"
+    "activate": "激活",
+    "no_states": "未配置状态"
   },
   "timeline": {
     "title": "时间轴",
     "subtitle": "事件时间轴",
     "loading": "加载时间轴...",
-    "load_error": "加载时间轴错误",
+    "load_error": "加载时间轴错误: {{error}}",
     "no_events_found": "此期间未找到事件",
     "adjust_filters": "调整筛选",
     "tip": "提示：拖动移动，滚动缩放",
@@ -1089,6 +1095,9 @@
     "center_view": "居中",
     "go_to_now": "现在",
     "select_to_zoom": "选择缩放",
+    "zoom_in": "放大",
+    "zoom_out": "缩小",
+    "scrubber_label": "时间线拖动条",
     "help": {
       "title": "操作",
       "navigate": "捏合/拖动/滚动导航",

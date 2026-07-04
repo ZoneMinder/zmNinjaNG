@@ -4,6 +4,7 @@ import { useGroupFilter } from '../useGroupFilter';
 import { useCurrentProfile } from '../useCurrentProfile';
 import { useGroups } from '../useGroups';
 import { useSettingsStore } from '../../stores/settings';
+import { asProfileId } from '../../api/types';
 
 // Mock dependencies
 vi.mock('../useCurrentProfile', () => ({
@@ -25,7 +26,7 @@ describe('useGroupFilter', () => {
     vi.clearAllMocks();
 
     vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: { id: 'profile-1', name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
+      currentProfile: { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
       settings: { selectedGroupId: null } as never,
       hasProfile: true,
     });
@@ -71,7 +72,7 @@ describe('useGroupFilter', () => {
 
   it('returns selected group info when filter is active', () => {
     vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: { id: 'profile-1', name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
+      currentProfile: { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
       settings: { selectedGroupId: '1' } as never,
       hasProfile: true,
     });
@@ -96,7 +97,7 @@ describe('useGroupFilter', () => {
 
   it('clearGroupFilter sets selectedGroupId to null', () => {
     vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: { id: 'profile-1', name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
+      currentProfile: { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
       settings: { selectedGroupId: '1' } as never,
       hasProfile: true,
     });
@@ -124,7 +125,7 @@ describe('useGroupFilter', () => {
 
   it('isFilterReady is true when a filter is active and groups have loaded', () => {
     vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: { id: 'profile-1', name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
+      currentProfile: { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
       settings: { selectedGroupId: '1' } as never,
       hasProfile: true,
     });
@@ -136,7 +137,7 @@ describe('useGroupFilter', () => {
 
   it('isFilterReady is false when a filter is active but groups have not loaded yet', () => {
     vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: { id: 'profile-1', name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
+      currentProfile: { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
       settings: { selectedGroupId: '1' } as never,
       hasProfile: true,
     });
@@ -157,7 +158,7 @@ describe('useGroupFilter', () => {
 
   it('isFilterReady is true when a filter is active but the groups query errored', () => {
     vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: { id: 'profile-1', name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
+      currentProfile: { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
       settings: { selectedGroupId: '1' } as never,
       hasProfile: true,
     });
@@ -178,7 +179,7 @@ describe('useGroupFilter', () => {
 
   it('returns null selectedGroupName when selected group does not exist', () => {
     vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: { id: 'profile-1', name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
+      currentProfile: { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
       settings: { selectedGroupId: '999' } as never,
       hasProfile: true,
     });
@@ -206,7 +207,7 @@ describe('useGroupFilter', () => {
 
   it('resets a dangling selectedGroupId after a successful groups load', async () => {
     vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: { id: 'profile-1', name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
+      currentProfile: { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
       settings: { selectedGroupId: '999' } as never,
       hasProfile: true,
     });
@@ -229,7 +230,7 @@ describe('useGroupFilter', () => {
 
   it('does not reset while groups are still loading', () => {
     vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: { id: 'profile-1', name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
+      currentProfile: { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
       settings: { selectedGroupId: '999' } as never,
       hasProfile: true,
     });
@@ -248,7 +249,7 @@ describe('useGroupFilter', () => {
 
   it('does not reset when the groups query errored', () => {
     vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: { id: 'profile-1', name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
+      currentProfile: { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
       settings: { selectedGroupId: '999' } as never,
       hasProfile: true,
     });
@@ -271,7 +272,7 @@ describe('useGroupFilter', () => {
   // a valid persisted selection and Montage fell back to streaming all monitors.
   it('does not reset while the groups query is disabled and not yet fetched', () => {
     vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: { id: 'profile-1', name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
+      currentProfile: { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
       settings: { selectedGroupId: '1' } as never,
       hasProfile: true,
     });

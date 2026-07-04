@@ -14,7 +14,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { getStreamUrl } from '../api/monitors';
-import { resolveMinStreamingPort } from '../lib/multiport';
+import { resolveMinStreamingPort } from '../lib/monitor/multiport';
 import { useCurrentProfile } from './useCurrentProfile';
 import { useBandwidthSettings } from './useBandwidthSettings';
 import { useStreamLifecycle } from './useStreamLifecycle';

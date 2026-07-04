@@ -19,9 +19,16 @@ Before You Start
 
       # Clone the repository
       git clone https://github.com/your-org/zmNinjaNg.git
-      cd zmNinjaNg/app
+      cd zmNinjaNg
 
-      # Install dependencies
+      # One-time: install the repo-root tooling (husky, lint-staged) so the
+      # git hooks below are wired up. `.git` lives at the repo root, so this
+      # install has to run from here, not from app/.
+      npm install
+
+      cd app
+
+      # Install app dependencies
       npm install
 
       # Set up test server credentials
@@ -132,7 +139,29 @@ All tests must pass before committing.
 - Never commit failing tests
 - Never skip tests
 
-5. Commit Changes
+5. Git Hooks (Automated Checks)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``git commit`` runs two local hooks (refs #217, husky + lint-staged, hook
+scripts live in ``.husky/`` at the repo root):
+
+- **pre-commit**: runs ``eslint`` on staged ``.ts``/``.tsx`` files only
+  (``lint-staged``, config at ``app/.lintstagedrc.json``), then ``tsc -b`` for
+  the whole project. Only staged files are linted so the pre-existing lint
+  backlog in files you didn't touch never blocks a commit. ``tsc -b`` runs in
+  pre-commit rather than pre-push because a full project typecheck finishes
+  in a few seconds here; it wasn't slow enough to justify deferring it.
+- **commit-msg**: rejects a commit if the staged diff modifies a native
+  build-number line (``versionCode`` in ``app/android/app/build.gradle`` or
+  ``CURRENT_PROJECT_VERSION`` in ``app/ios/App/App.xcodeproj/project.pbxproj``)
+  and the commit message isn't a ``chore:`` commit (rule 28 in
+  ``AGENTS.md``). ``npm run build`` bumps these as a side effect; the guard
+  (``scripts/check-native-version-bump.mjs``) stops that bump from riding
+  along in an unrelated feature or fix commit. If it fires and the bump
+  wasn't intentional, revert it: ``git checkout -- app/android/app/build.gradle
+  app/ios/App/App.xcodeproj/project.pbxproj``.
+
+6. Commit Changes
 ~~~~~~~~~~~~~~~~~
 
 **Commit message format:**
@@ -213,7 +242,7 @@ All tests must pass before committing.
 
    Fixes #45"
 
-6. Push and Create Pull Request
+7. Push and Create Pull Request
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code:: bash
@@ -270,7 +299,7 @@ All tests must pass before committing.
    - [ ] No sensitive data in logs
    - [ ] Code is DRY and modular
 
-7. Code Review
+8. Code Review
 ~~~~~~~~~~~~~~
 
 - Address reviewer feedback promptly
@@ -288,7 +317,7 @@ All tests must pass before committing.
 - Complex code needs comments
 - Performance issues (missing memo/useMemo)
 
-8. Merge
+9. Merge
 ~~~~~~~~
 
 Once approved:

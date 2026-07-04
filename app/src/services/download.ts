@@ -14,10 +14,12 @@
 
 import { log, LogLevel } from '../lib/logger';
 import { Platform } from '../lib/platform';
-import { wrapWithImageProxyIfNeeded } from '../lib/proxy-utils';
+import { wrapWithImageProxyIfNeeded } from '../lib/zm/proxy-utils';
 import { httpRequest, type HttpProgress } from '../lib/http';
 
-import { getEventVideoUrl as buildEventVideoUrl } from '../lib/url-builder';
+import { getEventVideoUrl as buildEventVideoUrl } from '../lib/zm/url-builder';
+import { DOWNLOAD } from '../lib/zmninja-ng-constants';
+import { isAbortError } from '../lib/is-abort-error';
 import { useBackgroundTasks } from '../stores/backgroundTasks';
 
 /**
@@ -137,58 +139,55 @@ async function downloadFileNative(url: string, filename: string, options?: Downl
   const { Media } = await import('@capacitor-community/media');
   const { Filesystem, Directory } = await import('@capacitor/filesystem');
 
+  // Use unified HTTP to get base64 data without blob conversion
+  // This avoids loading the entire file as a Blob in memory (OOM prevention)
+  log.download('[Download] Fetching file via native HTTP', LogLevel.INFO, { url });
+
+  const response = await httpRequest<string>(url, {
+    method: 'GET',
+    responseType: 'base64',
+    signal: options?.signal,
+  });
+
+  if (response.status !== 200) {
+    throw new Error(`Failed to download: HTTP ${response.status}`);
+  }
+
+  // Native HTTP returns base64 string when responseType is base64/blob
+  // We use it directly without converting to Blob (avoids OOM)
+  const base64Data = response.data as string;
+
+  if (options?.onProgress) {
+    options.onProgress({
+      loaded: base64Data.length,
+      total: base64Data.length,
+      percentage: 100,
+    });
+  }
+
+  // Write directly to Documents directory
+  const writeResult = await Filesystem.writeFile({
+    path: filename,
+    data: base64Data,
+    directory: Directory.Documents,
+  });
+
+  log.download('[Download] File saved to Documents', LogLevel.INFO, {
+    path: writeResult.uri,
+    filename
+  });
+
+  // Save to Photo/Video Library using the file:// URI
   try {
-    // Use unified HTTP to get base64 data without blob conversion
-    // This avoids loading the entire file as a Blob in memory (OOM prevention)
-    log.download('[Download] Fetching file via native HTTP', LogLevel.INFO, { url });
-
-    const response = await httpRequest<string>(url, {
-      method: 'GET',
-      responseType: 'base64',
-    });
-
-    if (response.status !== 200) {
-      throw new Error(`Failed to download: HTTP ${response.status}`);
+    if (filename.match(/\.(jpg|jpeg|png|gif)$/i)) {
+      await Media.savePhoto({ path: writeResult.uri });
+      log.download('[Download] Saved to Photo Library', LogLevel.INFO, { filename });
+    } else if (filename.match(/\.(mp4|mov|avi)$/i)) {
+      await Media.saveVideo({ path: writeResult.uri });
+      log.download('[Download] Saved to Video Library', LogLevel.INFO, { filename });
     }
-
-    // Native HTTP returns base64 string when responseType is base64/blob
-    // We use it directly without converting to Blob (avoids OOM)
-    const base64Data = response.data as string;
-
-    if (options?.onProgress) {
-      options.onProgress({
-        loaded: base64Data.length,
-        total: base64Data.length,
-        percentage: 100,
-      });
-    }
-
-    // Write directly to Documents directory
-    const writeResult = await Filesystem.writeFile({
-      path: filename,
-      data: base64Data,
-      directory: Directory.Documents,
-    });
-
-    log.download('[Download] File saved to Documents', LogLevel.INFO, {
-      path: writeResult.uri,
-      filename
-    });
-
-    // Save to Photo/Video Library using the file:// URI
-    try {
-      if (filename.match(/\.(jpg|jpeg|png|gif)$/i)) {
-        await Media.savePhoto({ path: writeResult.uri });
-        log.download('[Download] Saved to Photo Library', LogLevel.INFO, { filename });
-      } else if (filename.match(/\.(mp4|mov|avi)$/i)) {
-        await Media.saveVideo({ path: writeResult.uri });
-        log.download('[Download] Saved to Video Library', LogLevel.INFO, { filename });
-      }
-    } catch (mediaError) {
-      log.download('[Download] Failed to save to media library, but file is in Documents', LogLevel.WARN, { filename, error: mediaError });
-    }
-  } catch (error) {
-    throw error;
+  } catch (mediaError) {
+    log.download('[Download] Failed to save to media library, but file is in Documents', LogLevel.WARN, { filename, error: mediaError });
   }
 }
 
@@ -231,10 +230,18 @@ async function downloadFileWeb(url: string, filename: string, options?: Download
     setTimeout(() => {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(blobUrl);
-    }, 100);
+    }, DOWNLOAD.webLinkCleanupDelayMs);
 
     log.download('File downloaded via browser', LogLevel.INFO, { filename });
   } catch (fetchError) {
+    // A caller-initiated cancellation (e.g. the user tapping Cancel on a
+    // background download task) must propagate as a cancellation, not fall
+    // back to a direct link: that would silently start a new-tab download
+    // for a request the user just cancelled.
+    if (options?.signal?.aborted) {
+      throw fetchError;
+    }
+
     // If unified HTTP fails, fall back to direct download link
     // This will open in a new tab and rely on browser's download handling
     log.download('API client download failed, falling back to direct link', LogLevel.WARN, { url, error: fetchError });
@@ -249,7 +256,7 @@ async function downloadFileWeb(url: string, filename: string, options?: Download
 
     setTimeout(() => {
       document.body.removeChild(link);
-    }, 100);
+    }, DOWNLOAD.webLinkCleanupDelayMs);
 
     log.download('Initiated direct download', LogLevel.INFO, { filename });
   }
@@ -349,7 +356,7 @@ async function downloadFromDataUrlWeb(dataUrl: string, filename: string): Promis
   link.download = filename;
   document.body.appendChild(link);
   link.click();
-  setTimeout(() => document.body.removeChild(link), 100);
+  setTimeout(() => document.body.removeChild(link), DOWNLOAD.webLinkCleanupDelayMs);
 }
 
 /**
@@ -414,12 +421,14 @@ export function downloadEventVideo(
         onProgress: (progress) => {
           taskStore.updateProgress(taskId, progress.percentage, progress.loaded);
 
-          // Update file size metadata on first progress update
-          if (progress.total && !taskStore.tasks.find(t => t.id === taskId)?.metadata.fileSize) {
-            const task = taskStore.tasks.find(t => t.id === taskId);
-            if (task) {
-              task.metadata.fileSize = progress.total;
-            }
+          // Update file size metadata on first progress update. Read fresh
+          // state here: `taskStore` is a snapshot captured before addTask()
+          // ran, so `taskStore.tasks` never contains this task and this
+          // block was previously always a no-op. Go through updateTaskMetadata
+          // (an immutable set()) rather than mutating the task object in place.
+          const currentTasks = useBackgroundTasks.getState().tasks;
+          if (progress.total && !currentTasks.find(t => t.id === taskId)?.metadata.fileSize) {
+            useBackgroundTasks.getState().updateTaskMetadata(taskId, { fileSize: progress.total });
           }
         },
       });
@@ -429,7 +438,7 @@ export function downloadEventVideo(
       log.download('Video download completed', LogLevel.INFO, { eventId, filename });
     } catch (error) {
       // Check if it was an abort
-      if (error instanceof Error && error.name === 'AbortError') {
+      if (isAbortError(error)) {
         // Already marked as cancelled by cancelFn
         return;
       }

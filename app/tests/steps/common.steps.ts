@@ -86,10 +86,6 @@ When('I navigate to the {string} page', async ({ page }, pageName: string) => {
   const navItemSelector = `[data-testid="nav-item-${route}"]`;
   const mobileMenuButton = page.getByTestId('mobile-menu-button');
 
-  // On mobile, the desktop sidebar nav items exist but are aria-hidden
-  // We need to use the visible nav item, which may require opening the mobile menu first
-  const visibleNavItem = page.locator(navItemSelector).filter({ hasNot: page.locator('[aria-hidden="true"]') });
-
   // Check if we need to open mobile menu
   if (await mobileMenuButton.isVisible()) {
     // Mobile layout - open menu first
@@ -135,7 +131,7 @@ Then('I should be on the {string} page', async ({ page }, pageName: string) => {
 // Check for console errors
 Then('no console errors should be present', async ({ page }) => {
   // Get console messages from the page
-  const errors = page.context().on('console', msg => {
+  page.context().on('console', msg => {
     if (msg.type() === 'error') {
       console.error('Console error:', msg.text());
     }

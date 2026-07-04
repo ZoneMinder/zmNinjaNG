@@ -8,9 +8,10 @@
 
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { queryKeys } from '../lib/query/query-keys';
 import { getMonitor, getControl, updateMonitor } from '../api/monitors';
 import { getZones } from '../api/zones';
-import { resolveMinStreamingPort } from '../lib/multiport';
+import { resolveMinStreamingPort } from '../lib/monitor/multiport';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useAuthStore } from '../stores/auth';
 import { useSettingsStore } from '../stores/settings';
@@ -29,9 +30,9 @@ import { LiveMonitorPlayer } from '../components/monitors/LiveMonitorPlayer';
 import { ZoneOverlay } from '../components/monitors/ZoneOverlay';
 import { ZoneLegend } from '../components/monitors/ZoneLegend';
 import { log, LogLevel } from '../lib/logger';
-import { getOrientedResolution, parseMonitorRotation } from '../lib/monitor-rotation';
-import { isZmVersionAtLeast } from '../lib/zm-version';
-import { getMonitorRunState, monitorDotColor } from '../lib/monitor-status';
+import { getOrientedResolution, parseMonitorRotation } from '../lib/monitor/monitor-rotation';
+import { isZmVersionAtLeast } from '../lib/zm/zm-version';
+import { getMonitorRunState, monitorDotColor } from '../lib/monitor/monitor-status';
 import { useZoomPan } from '../hooks/useZoomPan';
 import { useServerUrls } from '../hooks/useServerUrls';
 
@@ -41,6 +42,7 @@ import { usePTZControl, useAlarmControl, useModeControl, useMonitorNavigation } 
 import { MonitorSettingsDialog } from '../components/monitor-detail/MonitorSettingsDialog';
 import { MonitorControlsCard } from '../components/monitor-detail/MonitorControlsCard';
 import { ZoomControls } from '../components/ui/zoom-controls';
+import { ErrorBanner, DetailPageSkeleton } from '../components/ui/query-state';
 import { MonitorRecentEvents } from '../components/monitors/MonitorRecentEvents';
 import { useMainScrollRestoration } from '../hooks/useMainScrollRestoration';
 
@@ -78,21 +80,21 @@ export default function MonitorDetail() {
 
   // Fetch monitor data
   const { data: monitor, isLoading, error, refetch } = useQuery({
-    queryKey: ['monitor', id],
+    queryKey: queryKeys.monitor(currentProfile?.id, id),
     queryFn: () => getMonitor(id!),
     enabled: !!id,
   });
 
   // Fetch control capabilities if monitor is controllable
   const { data: controlData } = useQuery({
-    queryKey: ['control', monitor?.Monitor.ControlId],
+    queryKey: queryKeys.control(currentProfile?.id, monitor?.Monitor.ControlId),
     queryFn: () => getControl(monitor!.Monitor.ControlId!),
     enabled: !!monitor?.Monitor.ControlId && monitor.Monitor.Controllable === '1',
   });
 
   // Fetch zones when showZones is enabled
   const { data: zones = [], isLoading: isZonesLoading } = useQuery({
-    queryKey: ['zones', id],
+    queryKey: queryKeys.zones(currentProfile?.id, id),
     queryFn: () => getZones(id!),
     enabled: !!id && showZones,
   });
@@ -207,22 +209,14 @@ export default function MonitorDetail() {
 
   // Loading state
   if (isLoading) {
-    return (
-      <div className="p-8 space-y-6">
-        <div className="h-8 w-32 bg-muted rounded animate-pulse" />
-        <div className="aspect-video w-full max-w-4xl bg-muted rounded-xl animate-pulse" />
-      </div>
-    );
+    return <DetailPageSkeleton />;
   }
 
   // Error state
   if (error || !monitor || !currentProfile) {
     return (
       <div className="p-8">
-        <div className="p-4 bg-destructive/10 text-destructive rounded-lg flex items-center gap-2">
-          <AlertTriangle className="h-5 w-5" />
-          {t('monitor_detail.load_error')}
-        </div>
+        <ErrorBanner icon={AlertTriangle} message={t('monitor_detail.load_error')} />
         <Button onClick={goBack} className="mt-4">
           {t('common.go_back')}
         </Button>
@@ -409,15 +403,7 @@ export default function MonitorDetail() {
             </span>
           )}
           <ZoomControls
-            onZoomIn={zoomPan.zoomIn}
-            onZoomOut={zoomPan.zoomOut}
-            onReset={zoomPan.reset}
-            onPanLeft={zoomPan.panLeft}
-            onPanRight={zoomPan.panRight}
-            onPanUp={zoomPan.panUp}
-            onPanDown={zoomPan.panDown}
-            isZoomed={zoomPan.isZoomed}
-            scale={zoomPan.scale}
+            zoomPan={zoomPan}
             className={cn(
               'bottom-2 left-2',
               isFullscreen && 'bottom-[calc(0.5rem+var(--sai-bottom,env(safe-area-inset-bottom)))]'

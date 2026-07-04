@@ -24,10 +24,10 @@ import { getEventImageUrl } from '../../api/events';
 import { useTranslation } from 'react-i18next';
 import { httpGet } from '../../lib/http';
 import { log, LogLevel } from '../../lib/logger';
-import { getEventZmsUrl, getZmsControlUrl } from '../../lib/url-builder';
-import { ZMS_COMMANDS, zmsCommandName } from '../../lib/zm-constants';
+import { getEventZmsUrl, getZmsControlUrl } from '../../lib/zm/url-builder';
+import { ZMS_COMMANDS, zmsCommandName } from '../../lib/zm/zm-constants';
 import { EVENT_SEEK_FLUSH_DELAY_MS } from '../../lib/zmninja-ng-constants';
-import { sendDelayedCmdQuit, cancelPendingQuit } from '../../lib/zms-quit';
+import { sendDelayedCmdQuit, cancelPendingQuit } from '../../lib/zm/zms-quit';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useZoomPan } from '../../hooks/useZoomPan';
 import { ZoomControls } from '../ui/zoom-controls';
@@ -425,18 +425,7 @@ export function ZmsEventPlayer({
             </Badge>
           </div>
         </div>
-        <ZoomControls
-          onZoomIn={zoomPan.zoomIn}
-          onZoomOut={zoomPan.zoomOut}
-          onReset={zoomPan.reset}
-          onPanLeft={zoomPan.panLeft}
-          onPanRight={zoomPan.panRight}
-          onPanUp={zoomPan.panUp}
-          onPanDown={zoomPan.panDown}
-          isZoomed={zoomPan.isZoomed}
-          scale={zoomPan.scale}
-          className="bottom-2 left-2"
-        />
+        <ZoomControls zoomPan={zoomPan} className="bottom-2 left-2" />
       </Card>
 
       {/* Playback Controls */}
@@ -543,6 +532,7 @@ export function ZmsEventPlayer({
                 size="sm"
                 onClick={jumpToAlarmFrame}
                 className="gap-2"
+                data-testid="zms-quick-jump-alarm-frame"
               >
                 <AlertCircle className="h-4 w-4 text-destructive" />
                 {t('event_detail.first_alarm_frame')}
@@ -554,6 +544,7 @@ export function ZmsEventPlayer({
                 size="sm"
                 onClick={jumpToMaxScoreFrame}
                 className="gap-2"
+                data-testid="zms-quick-jump-max-score-frame"
               >
                 <AlertCircle className="h-4 w-4 text-yellow-500" />
                 {t('event_detail.max_score_frame')}
@@ -576,9 +567,11 @@ export function ZmsEventPlayer({
           <h3 className="text-sm font-semibold mb-3">{t('event_detail.alarm_frames')}</h3>
           <div className="flex gap-2 overflow-x-auto pb-2">
             {/* First alarm frame */}
-            <div
+            <button
+              type="button"
               className="flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
               onClick={jumpToAlarmFrame}
+              data-testid="zms-jump-to-alarm-frame"
             >
               <img
                 src={isAccessTokenFresh ? getEventImageUrl(portalUrl, eventId, parseInt(alarmFrameId), {
@@ -594,13 +587,15 @@ export function ZmsEventPlayer({
               <p className="text-xs text-center mt-1 text-muted-foreground">
                 {t('event_detail.frame')} {alarmFrameId}
               </p>
-            </div>
+            </button>
 
             {/* Max score frame if different from alarm frame */}
             {maxScoreFrameId && maxScoreFrameId !== alarmFrameId && (
-              <div
+              <button
+                type="button"
                 className="flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
                 onClick={jumpToMaxScoreFrame}
+                data-testid="zms-jump-to-max-score-frame"
               >
                 <img
                   src={isAccessTokenFresh ? getEventImageUrl(portalUrl, eventId, parseInt(maxScoreFrameId), {
@@ -616,7 +611,7 @@ export function ZmsEventPlayer({
                 <p className="text-xs text-center mt-1 text-muted-foreground">
                   {t('event_detail.frame')} {maxScoreFrameId}
                 </p>
-              </div>
+              </button>
             )}
           </div>
         </Card>

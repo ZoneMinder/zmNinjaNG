@@ -12,11 +12,12 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Command } from 'lucide-react';
 import { getMonitors } from '../api/monitors';
+import { queryKeys } from '../lib/query/query-keys';
 import { useGroups } from '../hooks/useGroups';
 import { useGroupFilter } from '../hooks/useGroupFilter';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useAuthStore } from '../stores/auth';
-import { getExcludedMonitorIdSet } from '../lib/profile-settings';
+import { getExcludedMonitorIdSet } from '../lib/profile/profile-settings';
 import { NAV_SHORTCUTS } from '../lib/keyboard-shortcuts';
 import { filterCommandItems, type CommandItem } from '../lib/command-palette';
 import { useCommandPaletteStore } from '../stores/commandPalette';
@@ -50,7 +51,7 @@ export function CommandPalette() {
   const [activeIndex, setActiveIndex] = useState(0);
 
   const { data: monitorsData } = useQuery({
-    queryKey: ['monitors', currentProfile?.id],
+    queryKey: queryKeys.monitors(currentProfile?.id),
     queryFn: () => getMonitors(),
     enabled: !!currentProfile && isAuthenticated,
   });

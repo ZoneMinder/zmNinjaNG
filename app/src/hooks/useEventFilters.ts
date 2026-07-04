@@ -80,12 +80,46 @@ function saveFilterField(profileId: string, field: string, value: unknown) {
   });
 }
 
+/** The 6 URL params that make up a deep-linked filter set. */
+const URL_FILTER_KEYS = ['monitorId', 'tagIds', 'startDateTime', 'endDateTime', 'favorites', 'archived'] as const;
+
+interface UrlFilterValues {
+  monitorId: string | null;
+  tagIds: string | null;
+  startDateTime: string | null;
+  endDateTime: string | null;
+  favorites: string | null;
+  archived: string | null;
+}
+
+/** True if any deep-link filter param is present in the URL. */
+function hasUrlFilters(searchParams: URLSearchParams): boolean {
+  return URL_FILTER_KEYS.some((key) => searchParams.has(key));
+}
+
+/** Raw string values (or null if absent) for all deep-link filter params. */
+function readUrlFilters(searchParams: URLSearchParams): UrlFilterValues {
+  return {
+    monitorId: searchParams.get('monitorId'),
+    tagIds: searchParams.get('tagIds'),
+    startDateTime: searchParams.get('startDateTime'),
+    endDateTime: searchParams.get('endDateTime'),
+    favorites: searchParams.get('favorites'),
+    archived: searchParams.get('archived'),
+  };
+}
+
 export function useEventFilters(): UseEventFiltersReturn {
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
   const { currentProfile, settings } = useCurrentProfile();
 
-  // Local filter state
+  // Local filter state. The `_set*` setters below are raw React setters: they
+  // update state only and do NOT persist to the settings store. Reserve them
+  // for restoring state from an external source (settings, URL) where saving
+  // back would be redundant or create a feedback loop. Any user-driven change
+  // must go through the wrapped `set*` functions defined below instead, so the
+  // change is also saved.
   const [selectedMonitorIds, _setMonitorIds] = useState<string[]>([]);
   const [startDateInput, _setStartDate] = useState('');
   const [endDateInput, _setEndDate] = useState('');
@@ -147,14 +181,7 @@ export function useEventFilters(): UseEventFiltersReturn {
     if (!currentProfile) return;
 
     // Deep-link URL params take priority
-    if (
-      searchParams.has('monitorId') ||
-      searchParams.has('tagIds') ||
-      searchParams.has('startDateTime') ||
-      searchParams.has('endDateTime') ||
-      searchParams.has('favorites') ||
-      searchParams.has('archived')
-    ) {
+    if (hasUrlFilters(searchParams)) {
       return;
     }
 
@@ -178,21 +205,9 @@ export function useEventFilters(): UseEventFiltersReturn {
   useEffect(() => {
     if (isFirstRender.current) {
       isFirstRender.current = false;
-      const hasUrlFilters =
-        searchParams.has('monitorId') ||
-        searchParams.has('tagIds') ||
-        searchParams.has('startDateTime') ||
-        searchParams.has('endDateTime') ||
-        searchParams.has('favorites') ||
-        searchParams.has('archived');
 
-      if (hasUrlFilters) {
-        const m = searchParams.get('monitorId');
-        const t = searchParams.get('tagIds');
-        const s = searchParams.get('startDateTime');
-        const e = searchParams.get('endDateTime');
-        const f = searchParams.get('favorites');
-        const a = searchParams.get('archived');
+      if (hasUrlFilters(searchParams)) {
+        const { monitorId: m, tagIds: t, startDateTime: s, endDateTime: e, favorites: f, archived: a } = readUrlFilters(searchParams);
         // Use wrapped setters so URL filters persist to settings store
         setSelectedMonitorIds(m ? m.split(',') : []);
         setSelectedTagIds(t ? t.split(',') : []);
@@ -204,12 +219,7 @@ export function useEventFilters(): UseEventFiltersReturn {
       return;
     }
 
-    const monitorId = searchParams.get('monitorId');
-    const tagIds = searchParams.get('tagIds');
-    const startDT = searchParams.get('startDateTime');
-    const endDT = searchParams.get('endDateTime');
-    const favorites = searchParams.get('favorites');
-    const archived = searchParams.get('archived');
+    const { monitorId, tagIds, startDateTime: startDT, endDateTime: endDT, favorites, archived } = readUrlFilters(searchParams);
 
     if (monitorId !== null) _setMonitorIds(monitorId ? monitorId.split(',') : []);
     if (tagIds !== null) _setTagIds(tagIds ? tagIds.split(',') : []);

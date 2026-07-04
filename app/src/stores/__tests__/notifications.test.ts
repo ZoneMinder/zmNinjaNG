@@ -69,6 +69,18 @@ vi.mock('../../api/notifications', () => ({
   updateNotification: vi.fn().mockResolvedValue({}),
 }));
 
+// services/pushNotifications.ts is only reachable dynamically from this store
+// (native-only token registration); mock it so the store test doesn't need
+// to evaluate the real push service module. setPushServiceStoreGates is
+// called at this module's top level (refs #217), so it must exist on the mock.
+vi.mock('../../services/pushNotifications', () => ({
+  setPushServiceStoreGates: vi.fn(),
+  getPushService: vi.fn(() => ({
+    isReady: vi.fn(() => false),
+    registerTokenWithServer: vi.fn().mockResolvedValue(undefined),
+  })),
+}));
+
 describe('Notification Store', () => {
   const profileId = 'profile-1';
   const baseEvent: ZMAlarmEvent = {

@@ -51,6 +51,9 @@
     "navigation_menu": "Navigation menu",
     "navigation_menu_desc": "Primary application navigation."
   },
+  "network": {
+    "offline_banner": "Offline. Showing cached data."
+  },
   "app_init": {
     "toast_title": "Finishing setup",
     "toast_description": "Preparing your profile and server connection.",
@@ -73,6 +76,7 @@
     "widget_events": "Recent Events",
     "widget_timeline": "Timeline",
     "widget_heatmap": "Event Heatmap",
+    "widget_type": "Widget type",
     "widget_title": "Widget Title (Optional)",
     "widget_title_placeholder": "My Widget",
     "select_monitor": "Select Monitor",
@@ -196,6 +200,7 @@
     "alarm_frame": "Alarm Frame {{frameId}}",
     "frame_number": "Frame {{number}}",
     "total_frames": "{{count}} frames",
+    "seek_bar": "Seek",
     "view_list": "List View",
     "view_montage": "Montage View",
     "favorite": "Favorite",
@@ -1005,7 +1010,7 @@
     "title": "Event Montage",
     "grid_layout_applied": "Grid layout applied: {{cols}} columns",
     "invalid_columns": "Invalid number of columns",
-    "load_error": "Error loading events",
+    "load_error": "Error loading events: {{error}}",
     "grid_layout": "Grid Layout",
     "screen_too_small": "Screen width is too small for that many columns",
     "columns": "{{count}} cols",
@@ -1041,16 +1046,17 @@
     "title": "States",
     "change_success": "State changed successfully",
     "change_error": "Failed to change state",
-    "load_error": "Failed to load states",
+    "load_error": "Failed to load states: {{error}}",
     "description": "Description",
     "no_description": "No description available",
-    "activate": "Activate"
+    "activate": "Activate",
+    "no_states": "No states configured"
   },
   "timeline": {
     "title": "Timeline",
     "subtitle": "Event timeline",
     "loading": "Loading timeline...",
-    "load_error": "Error loading timeline",
+    "load_error": "Error loading timeline: {{error}}",
     "no_events_found": "No events found for this period",
     "adjust_filters": "Adjust Filters",
     "tip": "Tip: Drag to pan, scroll to zoom",
@@ -1089,6 +1095,9 @@
     "center_view": "Center",
     "go_to_now": "Now",
     "select_to_zoom": "Select to zoom",
+    "zoom_in": "Zoom in",
+    "zoom_out": "Zoom out",
+    "scrubber_label": "Timeline scrubber",
     "help": {
       "title": "Controls",
       "navigate": "Pinch/drag/scroll",
