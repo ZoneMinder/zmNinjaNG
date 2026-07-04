@@ -1046,7 +1046,8 @@
     "load_error": "Failed to load states",
     "description": "Description",
     "no_description": "No description available",
-    "activate": "Activate"
+    "activate": "Activate",
+    "no_states": "No states configured"
   },
   "timeline": {
     "title": "Timeline",

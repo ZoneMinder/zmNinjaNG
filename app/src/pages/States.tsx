@@ -7,6 +7,7 @@ import { Activity, Check } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useAuthStore } from '../stores/auth';
+import { EmptyState } from '../components/ui/empty-state';
 
 export default function States() {
   const queryClient = useQueryClient();
@@ -62,6 +63,11 @@ export default function States() {
         {t('states.description')}
       </p>
 
+      {states && states.length === 0 ? (
+        <div data-testid="states-empty-state">
+          <EmptyState icon={Activity} title={t('states.no_states')} />
+        </div>
+      ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {states?.map((state) => (
           <Card key={state.Id} className={state.IsActive === '1' ? 'border-primary' : ''}>
@@ -94,6 +100,7 @@ export default function States() {
           </Card>
         ))}
       </div>
+      )}
     </div>
   );
 }

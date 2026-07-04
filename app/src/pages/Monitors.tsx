@@ -15,9 +15,10 @@ import { useBandwidthSettings } from '../hooks/useBandwidthSettings';
 import { useAuthStore } from '../stores/auth';
 import { useSettingsStore } from '../stores/settings';
 import { Button } from '../components/ui/button';
-import { LayoutGrid, List } from 'lucide-react';
+import { LayoutGrid, List, Video } from 'lucide-react';
 import { PageContainer } from '../components/common/PageContainer';
 import { ErrorBanner } from '../components/ui/query-state';
+import { EmptyState } from '../components/ui/empty-state';
 import { resolveQueryError } from '../lib/query-error';
 import { RefreshButton } from '../components/common/RefreshButton';
 import { MonitorCard } from '../components/monitors/MonitorCard';
@@ -219,8 +220,12 @@ export default function Monitors() {
       {/* All Cameras */}
       <div className="space-y-3 sm:space-y-4">
         {allMonitors.length === 0 ? (
-          <div className="p-8 text-center border rounded-lg bg-muted/20 text-muted-foreground" data-testid="monitors-empty-state">
-            {t('monitors.no_cameras')}
+          <div data-testid="monitors-empty-state">
+            <EmptyState
+              icon={Video}
+              title={t('monitors.no_cameras')}
+              className="p-8 text-center border rounded-lg bg-muted/20 text-muted-foreground"
+            />
           </div>
         ) : settings.monitorsViewMode === 'grid' ? (
             <div

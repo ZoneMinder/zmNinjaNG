@@ -1046,7 +1046,8 @@
     "load_error": "Fehler beim Laden der Zustände",
     "description": "Beschreibung",
     "no_description": "Keine Beschreibung verfügbar",
-    "activate": "Aktivieren"
+    "activate": "Aktivieren",
+    "no_states": "Keine Zustände konfiguriert"
   },
   "timeline": {
     "title": "Zeitachse",

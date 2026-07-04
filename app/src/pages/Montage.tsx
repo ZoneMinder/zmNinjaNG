@@ -22,6 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Video, Maximize, Pencil, ArrowLeftRight } from 'lucide-react';
 import { RefreshButton } from '../components/common/RefreshButton';
 import { ErrorBanner } from '../components/ui/query-state';
+import { EmptyState } from '../components/ui/empty-state';
 import { filterEnabledMonitors, filterMonitorsByGroup } from '../lib/filters';
 import { useGroupFilter } from '../hooks/useGroupFilter';
 import { useMontageGroupState } from '../hooks/useMontageGroupState';
@@ -311,10 +312,7 @@ export default function Montage() {
           <h1 className="text-lg font-bold tracking-tight">{t('montage.title')}</h1>
           <RefreshButton size="sm" />
         </div>
-        <div className="text-center py-20 text-muted-foreground">
-          <Video className="h-12 w-12 mx-auto mb-4 opacity-20" />
-          <p>{t('montage.no_monitors')}</p>
-        </div>
+        <EmptyState icon={Video} title={t('montage.no_monitors')} />
       </div>
     );
   }

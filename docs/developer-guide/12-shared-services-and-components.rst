@@ -1576,7 +1576,8 @@ Placeholder component for empty lists/states.
      }
    />
 
-**Used By:** Events page, Monitors page, Dashboard (when no widgets)
+**Used By:** Events, EventMontage, Monitors, Montage, NotificationHistory,
+States, Timeline, Dashboard (when no widgets)
 
 --------------
 

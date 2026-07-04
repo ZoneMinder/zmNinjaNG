@@ -36,6 +36,7 @@ import { PageContainer } from '../components/common/PageContainer';
 import { useFreshAccessToken } from '../hooks/useFreshAccessToken';
 import { useDateTimeFormat } from '../hooks/useDateTimeFormat';
 import { activateOnEnterOrSpace } from '../lib/utils';
+import { EmptyState } from '../components/ui/empty-state';
 
 export default function NotificationHistory() {
   const navigate = useNavigate();
@@ -171,12 +172,12 @@ export default function NotificationHistory() {
 
       {events.length === 0 ? (
         <Card data-testid="notification-history-empty">
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Bell className="h-10 w-10 text-muted-foreground mb-3" />
-            <h3 className="text-sm font-semibold mb-1">{t('notification_history.no_notifications')}</h3>
-            <p className="text-xs text-muted-foreground text-center max-w-md">
-              {t('notification_history.no_notifications_desc')}
-            </p>
+          <CardContent className="py-4">
+            <EmptyState
+              icon={Bell}
+              title={t('notification_history.no_notifications')}
+              description={t('notification_history.no_notifications_desc')}
+            />
           </CardContent>
         </Card>
       ) : (

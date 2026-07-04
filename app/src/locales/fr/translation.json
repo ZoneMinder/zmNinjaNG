@@ -1046,7 +1046,8 @@
     "load_error": "Échec du chargement des états",
     "description": "Description",
     "no_description": "Pas de description disponible",
-    "activate": "Activer"
+    "activate": "Activer",
+    "no_states": "Aucun état configuré"
   },
   "timeline": {
     "title": "Chronologie",

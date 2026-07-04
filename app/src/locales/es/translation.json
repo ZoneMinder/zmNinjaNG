@@ -1046,7 +1046,8 @@
     "load_error": "Fallo al cargar estados",
     "description": "Descripción",
     "no_description": "No hay descripción disponible",
-    "activate": "Activar"
+    "activate": "Activar",
+    "no_states": "No hay estados configurados"
   },
   "timeline": {
     "title": "Línea de Tiempo",

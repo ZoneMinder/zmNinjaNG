@@ -1046,7 +1046,8 @@
     "load_error": "加载状态失败",
     "description": "描述",
     "no_description": "无描述可用",
-    "activate": "激活"
+    "activate": "激活",
+    "no_states": "未配置状态"
   },
   "timeline": {
     "title": "时间轴",
