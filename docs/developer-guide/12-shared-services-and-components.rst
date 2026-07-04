@@ -1035,14 +1035,24 @@ Profile Settings Accessor (``lib/profile-settings.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Non-React accessors for the current profile's settings. API modules and
-other services run outside React and cannot use hooks, so these read the
-profile-scoped settings through the Zustand ``getState()`` pattern.
+other services run outside React and cannot use hooks, so these need a way
+to read profile-scoped settings without a component tree. This file used to
+call ``useProfileStore``/``useSettingsStore`` directly, but ``api/events.ts``
+(and other api modules downstream of ``stores/profile.ts``) import it, which
+closed a static import cycle back into the profile store. It now takes a
+``ProfileSettingsGate`` instead, the same DI-gate shape as
+``api/store-gates.ts`` (:doc:`07-api-and-data-fetching`):
+``stores/profile.ts`` builds the gate from both stores and registers it with
+``setProfileSettingsGate`` at module load. Refs #217.
 
 **Key Functions:**
 
 - ``getExcludedMonitorIds()``: Returns the ``excludedMonitorIds`` array for
-  the current profile, or an empty array when there is no current profile or
-  the stores are not yet initialized.
+  the current profile, or an empty array when there is no current profile,
+  the gate has not registered yet, or the stores are not yet initialized.
+- ``setProfileSettingsGate(gate)``: Registers the real implementation. Called
+  once by ``stores/profile.ts``; tests can call it directly instead of
+  mocking ``stores/profile`` and ``stores/settings``.
 
 **Usage:**
 
@@ -2318,6 +2328,14 @@ iOS and Android.
 - Foreground notifications are processed and added to the notification store
   (but ignored if WebSocket is already connected, to avoid duplicates)
 - Handles notification tap to navigate to event detail
+- No store imports: took ``useNotificationStore``/``useProfileStore``/
+  ``useAuthStore`` directly until ``stores/notifications.ts`` dynamically
+  importing this file (native token registration) closed a static cycle back
+  through this file's static imports of those same stores. Now takes a
+  ``PushServiceStoreGates`` via ``setPushServiceStoreGates``, the same
+  DI-gate shape as ``api/store-gates.ts`` (:doc:`07-api-and-data-fetching`);
+  ``stores/notifications.ts`` assembles the real gate and registers it at
+  module load. Refs #217.
 
 ``services/eventPoller.ts``: Polls ZM events API for new events in
 Direct notification mode on desktop/web.

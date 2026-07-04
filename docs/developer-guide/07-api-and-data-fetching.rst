@@ -216,6 +216,16 @@ clears them all and runs from ``resetApiClient()`` on profile switch so a
 new profile never attaches to a login, refresh, or recovery started for
 the old one.
 
+The same DI-gate shape (module defines a narrow gate interface and a
+setter, a store assembles the real implementation from ``getState()`` and
+registers it once at load time) is used wherever a low-level module would
+otherwise need a static import of a zustand store that itself depends on
+that module, forming a cycle: ``lib/log-sanitizer.ts`` and
+``lib/profile-settings.ts`` (:doc:`12-shared-services-and-components`) take
+their profile/settings reads this way, and
+``services/pushNotifications.ts`` (:doc:`12-shared-services-and-components`)
+takes its notifications/profile/auth reads this way. Refs #217.
+
 Proactive Authentication
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
