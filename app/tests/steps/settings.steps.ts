@@ -138,10 +138,16 @@ Then('a visible menu item should change to the selected language', async ({ page
 });
 
 When('I toggle a notification setting', async ({ page }) => {
-  // Wait for notification page content to load
-  await page.waitForTimeout(1000);
+  // NotificationSettings renders either "notification-settings" or its
+  // "-empty" variant once the profile/settings are ready (src/pages/
+  // NotificationSettings.tsx:297-312). Wait for that real "page settled"
+  // signal before looking for a switch, instead of a blind sleep that could
+  // race the initial render on a slow run.
+  const container = page.getByTestId('notification-settings');
+  const empty = page.getByTestId('notification-settings-empty');
+  await expect(container.or(empty).first()).toBeVisible({ timeout: testConfig.timeouts.transition });
 
-  const toggle = page.locator('[role="switch"]').first();
+  const toggle = container.locator('[role="switch"]').first();
   if (await toggle.isVisible({ timeout: testConfig.timeouts.element }).catch(() => false)) {
     notificationToggleState = await toggle.isChecked().catch(() => false);
     await toggle.click();
@@ -179,30 +185,28 @@ Then('the bandwidth mode label should update', async ({ page }) => {
 
 // Server Steps
 Then('I should see server information displayed', async ({ page }) => {
-  // Wait for the server page content to render (it fetches data from the API)
-  await page.waitForTimeout(1000);
-
-  // Check for any content on the server page
-  const hasHeading = await page.getByRole('heading', { name: /server/i }).isVisible().catch(() => false);
-  const hasVersion = await page.getByText(/version/i).isVisible().catch(() => false);
-  const hasStatus = await page.getByText(/status/i).isVisible().catch(() => false);
-  const hasCards = await page.locator('[role="region"]').count() > 0;
-  const hasAnyContent = await page.locator('main').locator('*').count() > 3;
-
-  expect(hasHeading || hasVersion || hasStatus || hasCards || hasAnyContent).toBeTruthy();
+  // Poll for any content on the server page (it fetches data from the API)
+  // instead of guessing how long the fetch takes with a fixed sleep.
+  await expect.poll(async () => {
+    const hasHeading = await page.getByRole('heading', { name: /server/i }).isVisible().catch(() => false);
+    const hasVersion = await page.getByText(/version/i).isVisible().catch(() => false);
+    const hasStatus = await page.getByText(/status/i).isVisible().catch(() => false);
+    const hasCards = await page.locator('[role="region"]').count() > 0;
+    const hasAnyContent = await page.locator('main').locator('*').count() > 3;
+    return hasHeading || hasVersion || hasStatus || hasCards || hasAnyContent;
+  }, { timeout: testConfig.timeouts.transition }).toBeTruthy();
 });
 
 // Notification Steps
 Then('I should see notification interface elements', async ({ page }) => {
-  // Wait for the notification page to load its content
-  await page.waitForTimeout(1000);
-
-  const hasSettings = await page.getByTestId('notification-settings').isVisible().catch(() => false);
-  const hasEmpty = await page.getByTestId('notification-settings-empty').isVisible().catch(() => false);
-  const hasSwitches = await page.locator('[role="switch"]').count() > 0;
-  const hasHeading = await page.getByRole('heading').first().isVisible().catch(() => false);
-
-  expect(hasSettings || hasEmpty || hasSwitches || hasHeading).toBeTruthy();
+  // Poll for the notification page's content instead of a fixed sleep.
+  await expect.poll(async () => {
+    const hasSettings = await page.getByTestId('notification-settings').isVisible().catch(() => false);
+    const hasEmpty = await page.getByTestId('notification-settings-empty').isVisible().catch(() => false);
+    const hasSwitches = await page.locator('[role="switch"]').count() > 0;
+    const hasHeading = await page.getByRole('heading').first().isVisible().catch(() => false);
+    return hasSettings || hasEmpty || hasSwitches || hasHeading;
+  }, { timeout: testConfig.timeouts.transition }).toBeTruthy();
 });
 
 When('I navigate to the notification history', async ({ page }) => {
