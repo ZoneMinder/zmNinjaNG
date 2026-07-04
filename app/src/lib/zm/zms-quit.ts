@@ -50,7 +50,13 @@ export function sendDelayedCmdQuit(
   const timerId = setTimeout(() => {
     pendingQuits.delete(connkey);
     log.zmsEventPlayer('Sending CMD_QUIT', LogLevel.DEBUG, { connkey, ...logContext });
-    httpGet(controlUrl, { timeoutMs }).catch((err) => {
+    // Fire-and-forget: this timer intentionally fires after teardown/unmount,
+    // so it must never surface an unhandled error. Call httpGet synchronously
+    // (callers/tests rely on that), then guard the result: Promise.resolve(p)
+    // returns p itself for a real promise, so a rejection is still caught here,
+    // while a non-promise return (e.g. undefined from a reset mock in tests)
+    // resolves to a no-op instead of throwing on `.catch`.
+    Promise.resolve(httpGet(controlUrl, { timeoutMs })).catch((err) => {
       log.zmsEventPlayer('CMD_QUIT failed', LogLevel.DEBUG, {
         connkey,
         error: String(err),
