@@ -26,6 +26,7 @@ import { useGroupFilter } from '../hooks/useGroupFilter';
 import { useMontageGroupState } from '../hooks/useMontageGroupState';
 import { GroupFilterSelect } from '../components/filters/GroupFilterSelect';
 import { cn } from '../lib/utils';
+import { handleKeyClick } from '../lib/tv-a11y';
 import { useTranslation } from 'react-i18next';
 import { usePinchZoom } from '../hooks/usePinchZoom';
 import { useInsomnia } from '../hooks/useInsomnia';
@@ -461,14 +462,16 @@ export default function Montage() {
                 <div
                   key={Monitor.Id}
                   className={cn(
-                    "relative",
+                    "relative focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
                     isMonitorPinned(Monitor.Id) && "pin-locked",
                     isTvMode && idx === focusedMonitorIndex && "ring-2 ring-primary"
                   )}
                   role="button"
                   aria-label={Monitor.Name}
                   data-testid={`montage-monitor-${Monitor.Id}`}
-                  tabIndex={isTvMode ? 0 : undefined}
+                  tabIndex={isEditMode ? -1 : 0}
+                  onClick={() => !isEditMode && navigate(`/monitors/${Monitor.Id}`, { state: { from: '/montage' } })}
+                  onKeyDown={handleKeyClick}
                 >
                   <MontageTileErrorBoundary monitorId={Monitor.Id} monitorName={Monitor.Name}>
                     <MontageMonitor

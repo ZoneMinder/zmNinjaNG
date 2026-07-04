@@ -35,7 +35,6 @@ import {
 } from '../ui/dropdown-menu';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
-import { handleKeyClick } from '../../lib/tv-a11y';
 import { useNotificationStore } from '../../stores/notifications';
 import type { NotificationEvent } from '../../stores/notifications';
 
@@ -274,17 +273,15 @@ function MontageMonitorComponent({
         </div>
       </div>
 
-      {/* Video Content */}
+      {/* Video Content. Click/keyboard navigation to monitor detail lives on
+          the tile wrapper in Montage.tsx (one tab stop per tile, not two);
+          this div just needs the pointer cursor hint. refs #217. */}
       <div
         className={cn(
           "flex-1 relative overflow-hidden",
           isFullscreen ? "bg-black" : "bg-black/90",
           !isFullscreen && "cursor-pointer"
         )}
-        onClick={() => !isEditing && navigate(`/monitors/${monitor.Id}`, { state: { from: '/montage' } })}
-        onKeyDown={handleKeyClick}
-        tabIndex={isEditing ? -1 : 0}
-        role="button"
       >
         <LiveMonitorPlayer
           monitor={monitor}

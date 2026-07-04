@@ -6,6 +6,17 @@ const { When, Then } = createBdd();
 
 let capturedMonitorTestId: string | null = null;
 
+When('I focus the first montage tile with the keyboard', async ({ page }) => {
+  const tile = page.locator('[data-testid^="montage-monitor-"]').first();
+  await expect(tile).toBeVisible({ timeout: testConfig.timeouts.transition });
+  await tile.focus();
+  await expect(tile).toBeFocused();
+});
+
+When('I press Enter on the focused montage tile', async ({ page }) => {
+  await page.keyboard.press('Enter');
+});
+
 When('I capture the first montage monitor id', async ({ page }) => {
   const tile = page.locator('[data-testid^="montage-monitor-"]').first();
   await expect(tile).toBeVisible({ timeout: testConfig.timeouts.transition });
