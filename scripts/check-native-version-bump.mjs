@@ -10,7 +10,15 @@
  * and the message isn't a `chore` commit, reject with instructions to revert
  * the bump or reword as `chore:`.
  *
- * Usage: check-native-version-bump.mjs <path-to-commit-msg-file>
+ * Usage (commit-msg hook):
+ *   check-native-version-bump.mjs <path-to-commit-msg-file>
+ *
+ * Usage (CI, refs #217 finding 1 - the commit-msg hook only runs if a
+ * contributor ran `npm install` at the repo root and doesn't fire at all on
+ * `git commit -n`, so it's advisory-only without a CI backstop):
+ *   check-native-version-bump.mjs --ci <git-commit-range>
+ * Walks every commit in the range (e.g. `origin/main..HEAD` or
+ * `<base-sha>..<head-sha>`) and applies the same rule to each one.
  */
 
 import { readFileSync } from 'node:fs';
@@ -51,6 +59,84 @@ function getStagedDiff(files) {
   }
 }
 
+/**
+ * Pure helper (refs #217 finding 1): given a list of already-collected
+ * `{ sha, message, diff }` commits, returns the subset that violate rule 28.
+ * Kept separate from the git plumbing in `runCi` so it's testable without a
+ * real repo.
+ */
+export function checkCommits(commits) {
+  const failures = [];
+  for (const commit of commits) {
+    const result = checkNativeVersionBump(commit.message, commit.diff);
+    if (!result.ok) {
+      failures.push({ sha: commit.sha, message: commit.message, reason: result.reason });
+    }
+  }
+  return failures;
+}
+
+/** True if `sha` is a real commit hash (guards against a git "zero SHA" on a push event). */
+function isRealSha(sha) {
+  return /^[0-9a-f]{7,40}$/i.test(sha) && !/^0+$/.test(sha);
+}
+
+/**
+ * CLI entry point for CI (refs #217 finding 1). Lists every commit in
+ * `range`, loads its message and its diff restricted to the native-version
+ * files, and runs `checkCommits` over the result. Returns a process exit
+ * code (0 = pass).
+ */
+export function runCi(range) {
+  const [fromRef, toRef] = range.includes('...') ? range.split('...') : range.split('..');
+  if (!fromRef || !toRef || !isRealSha(fromRef) || !isRealSha(toRef)) {
+    console.log(
+      `check-native-version-bump: skipping CI check, no valid commit range ("${range}"). ` +
+        'This is expected on the first push of a new branch.'
+    );
+    return 0;
+  }
+
+  let shas;
+  try {
+    shas = execFileSync('git', ['rev-list', range], { encoding: 'utf8' })
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+  } catch (err) {
+    console.error(`check-native-version-bump: failed to list commits for range "${range}": ${err.message}`);
+    return 1;
+  }
+
+  if (shas.length === 0) {
+    console.log('check-native-version-bump: no commits in range, nothing to check');
+    return 0;
+  }
+
+  const commits = shas.map((sha) => {
+    const message = execFileSync('git', ['log', '-1', '--format=%B', sha], { encoding: 'utf8' });
+    let diff = '';
+    try {
+      diff = execFileSync('git', ['show', sha, '--', ...NATIVE_VERSION_FILES], { encoding: 'utf8' });
+    } catch {
+      diff = '';
+    }
+    return { sha, message, diff };
+  });
+
+  const failures = checkCommits(commits);
+  if (failures.length === 0) {
+    console.log(`check-native-version-bump: ${commits.length} commit(s) checked, no rule-28 violations`);
+    return 0;
+  }
+
+  for (const failure of failures) {
+    console.error(`\ncommit ${failure.sha.slice(0, 12)} "${failure.message.split('\n')[0]}"`);
+    console.error(failure.reason);
+  }
+  return 1;
+}
+
 export function checkNativeVersionBump(commitMessage, diffText) {
   if (!diffTouchesVersionLine(diffText)) return { ok: true };
   if (isChoreCommit(commitMessage)) return { ok: true };
@@ -68,6 +154,15 @@ export function checkNativeVersionBump(commitMessage, diffText) {
 }
 
 function main() {
+  if (process.argv[2] === '--ci') {
+    const range = process.argv[3];
+    if (!range) {
+      console.error('check-native-version-bump: --ci requires a commit range argument');
+      process.exit(1);
+    }
+    process.exit(runCi(range));
+  }
+
   const commitMsgFile = process.argv[2];
   if (!commitMsgFile) {
     console.error('check-native-version-bump: missing commit-msg file argument');

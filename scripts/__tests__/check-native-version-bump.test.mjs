@@ -4,6 +4,7 @@ import {
   diffTouchesVersionLine,
   isChoreCommit,
   checkNativeVersionBump,
+  checkCommits,
   NATIVE_VERSION_FILES,
 } from '../check-native-version-bump.mjs';
 
@@ -102,4 +103,46 @@ test('checkNativeVersionBump allows a chore commit that bumps CURRENT_PROJECT_VE
 test('checkNativeVersionBump rejects a chore commit missing the colon', () => {
   const result = checkNativeVersionBump('chore bump version', GRADLE_DIFF);
   assert.equal(result.ok, false);
+});
+
+// checkCommits (refs #217 finding 1): the CI-mode helper that walks a list of
+// commits already collected from git plumbing. Kept as a pure function of
+// plain data so it's testable without a real git repo.
+
+test('checkCommits returns no failures for an empty commit list', () => {
+  assert.deepEqual(checkCommits([]), []);
+});
+
+test('checkCommits passes commits that do not touch version lines', () => {
+  const failures = checkCommits([
+    { sha: 'aaa1111', message: 'feat: add widget', diff: UNRELATED_DIFF },
+    { sha: 'bbb2222', message: 'fix: correct bug', diff: '' },
+  ]);
+  assert.deepEqual(failures, []);
+});
+
+test('checkCommits passes a chore commit that bumps the native version', () => {
+  const failures = checkCommits([
+    { sha: 'ccc3333', message: 'chore: bump version to 1.3.1', diff: GRADLE_DIFF },
+  ]);
+  assert.deepEqual(failures, []);
+});
+
+test('checkCommits flags a non-chore commit that bumps versionCode', () => {
+  const failures = checkCommits([
+    { sha: 'ddd4444', message: 'feat: add widget', diff: GRADLE_DIFF },
+  ]);
+  assert.equal(failures.length, 1);
+  assert.equal(failures[0].sha, 'ddd4444');
+  assert.match(failures[0].reason, /chore:/);
+});
+
+test('checkCommits flags only the offending commit among several', () => {
+  const failures = checkCommits([
+    { sha: 'aaa1111', message: 'feat: add widget', diff: UNRELATED_DIFF },
+    { sha: 'eee5555', message: 'fix: bump native build', diff: PBXPROJ_DIFF },
+    { sha: 'ccc3333', message: 'chore: bump version to 1.3.1', diff: GRADLE_DIFF },
+  ]);
+  assert.equal(failures.length, 1);
+  assert.equal(failures[0].sha, 'eee5555');
 });

@@ -50,6 +50,8 @@ Structure:
 - `app/src/`: source code
 - `app/tests/`: e2e test features and helpers
 
+One-time setup exception: run `npm install` at the repo root (`./`) once, before `cd app && npm install`. `.git` lives at the repo root, so the root install is what wires up the husky git hooks (commit-msg rule-28 native-version guard, pre-commit lint/tsc). Skipping it means every hook silently no-ops; CI (`.github/workflows/ci.yml`, `native-version-guard` job) re-checks rule 28 on every commit so a missing root install can't bypass it.
+
 ---
 
 ## Testing

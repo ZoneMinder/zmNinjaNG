@@ -6,6 +6,35 @@ on:
     branches: [main]
 
 jobs:
+  native-version-guard:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Rule 28 / refs #217 finding 1: the local commit-msg hook that blocks
+      # incidental native build-number bumps (versionCode / CURRENT_PROJECT_VERSION)
+      # from landing outside a `chore:` commit only runs if a contributor ran
+      # `npm install` at the repo root, and `git commit -n` skips it outright.
+      # This job re-checks every commit on the PR/push so the rule can't be
+      # bypassed by a missing hook install or a --no-verify commit.
+      - name: Check native-version-bump guard on every commit
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            RANGE="${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
+          else
+            RANGE="${{ github.event.before }}..${{ github.event.after }}"
+          fi
+          node scripts/check-native-version-bump.mjs --ci "$RANGE"
+
   lint:
     runs-on: ubuntu-latest
 
