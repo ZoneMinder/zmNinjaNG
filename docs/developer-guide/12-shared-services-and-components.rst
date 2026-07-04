@@ -1272,6 +1272,37 @@ Utilities for parsing and rendering zone data from ZoneMinder.
 
 --------------
 
+Query Error Resolution (``lib/query-error.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Maps a React Query ``error`` object to a user-facing message. Events and
+Monitors both special-cased a 401 status or an "unauthorized" substring in
+the error message into ``common.auth_required`` before falling back to a
+generic message; ``resolveQueryError`` is that logic extracted once.
+
+**Implementation:**
+
+.. code:: typescript
+
+   import { resolveQueryError } from '../lib/query-error';
+
+   const { error } = useQuery({ ... });
+
+   // Default fallback: `${t('common.error')}: ${message}`
+   resolveQueryError(error, t);
+
+   // Custom fallback key, interpolated with { error: message }
+   resolveQueryError(error, t, { fallbackKey: 'monitors.failed_to_load' });
+
+Pages whose error banner does not distinguish a 401 (EventMontage, Montage)
+or that show a fixed message with no interpolated error text at all
+(MonitorDetail, EventDetail) build their message inline instead of calling
+this helper, and pass it straight to ``ErrorBanner`` below.
+
+**Used By:** Events, Monitors
+
+--------------
+
 Reusable UI Components
 ----------------------
 
@@ -1546,6 +1577,45 @@ Placeholder component for empty lists/states.
    />
 
 **Used By:** Events page, Monitors page, Dashboard (when no widgets)
+
+--------------
+
+ErrorBanner and DetailPageSkeleton (``ui/query-state.tsx``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Two small presentational pieces factored out of the six pages that render
+a query's ``error`` state as an icon-and-message banner in a
+destructive-tinted box: ``ErrorBanner`` renders that box, and
+``DetailPageSkeleton`` renders the loading skeleton MonitorDetail and
+EventDetail both used to define inline (a title bar plus one aspect-video
+placeholder).
+
+**Usage:**
+
+.. code:: tsx
+
+   import { ErrorBanner, DetailPageSkeleton } from '../components/ui/query-state';
+   import { AlertTriangle } from 'lucide-react';
+
+   if (isLoading) return <DetailPageSkeleton />;
+
+   if (error) {
+     return (
+       <div className="p-8">
+         <ErrorBanner icon={AlertTriangle} message={t('monitor_detail.load_error')} />
+       </div>
+     );
+   }
+
+``icon`` defaults to ``AlertCircle``; pass a different ``LucideIcon`` where
+a page used a different one (MonitorDetail and EventDetail use
+``AlertTriangle``). ``message`` accepts any ``ReactNode``, so callers that
+build their own interpolated string (EventMontage, Montage) can still use
+the banner without going through ``resolveQueryError``.
+
+**Used By:** Events, Monitors, EventMontage, Montage, MonitorDetail,
+EventDetail. States and Timeline keep their own error box: no icon and a
+different corner radius, not a real duplicate of this one.
 
 --------------
 

@@ -16,8 +16,9 @@ import { useSettingsStore } from '../stores/settings';
 import { useEventPagination } from '../hooks/useEventPagination';
 import { useEventMontageGrid } from '../hooks/useEventMontageGrid';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { AlertCircle, Clock, LayoutGrid } from 'lucide-react';
+import { Clock, LayoutGrid } from 'lucide-react';
 import { PageContainer } from '../components/common/PageContainer';
+import { ErrorBanner } from '../components/ui/query-state';
 import { RefreshButton } from '../components/common/RefreshButton';
 import { filterEnabledMonitors } from '../lib/filters';
 import { EventMontageView } from '../components/events/EventMontageView';
@@ -208,10 +209,7 @@ export default function EventMontage() {
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-lg font-bold tracking-tight">{t('eventMontage.title')}</h1>
         </div>
-        <div className="p-4 bg-destructive/10 text-destructive rounded-lg flex items-center gap-2">
-          <AlertCircle className="h-5 w-5" />
-          {t('eventMontage.load_error')}: {(error as Error).message}
-        </div>
+        <ErrorBanner message={`${t('eventMontage.load_error')}: ${(error as Error).message}`} />
       </div>
     );
   }

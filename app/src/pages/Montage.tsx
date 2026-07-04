@@ -19,8 +19,9 @@ import { useTvMode } from '../hooks/useTvMode';
 import { Button } from '../components/ui/button';
 import { MontageMonitor } from '../components/monitors/MontageMonitor';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { Video, AlertCircle, Maximize, Pencil, ArrowLeftRight } from 'lucide-react';
+import { Video, Maximize, Pencil, ArrowLeftRight } from 'lucide-react';
 import { RefreshButton } from '../components/common/RefreshButton';
+import { ErrorBanner } from '../components/ui/query-state';
 import { filterEnabledMonitors, filterMonitorsByGroup } from '../lib/filters';
 import { useGroupFilter } from '../hooks/useGroupFilter';
 import { useMontageGroupState } from '../hooks/useMontageGroupState';
@@ -297,10 +298,7 @@ export default function Montage() {
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-lg font-bold tracking-tight">{t('montage.title')}</h1>
         </div>
-        <div className="p-4 bg-destructive/10 text-destructive rounded-lg flex items-center gap-2">
-          <AlertCircle className="h-5 w-5" />
-          {t('common.error')}: {(error as Error).message}
-        </div>
+        <ErrorBanner message={`${t('common.error')}: ${(error as Error).message}`} />
       </div>
     );
   }

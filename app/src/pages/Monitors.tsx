@@ -15,8 +15,10 @@ import { useBandwidthSettings } from '../hooks/useBandwidthSettings';
 import { useAuthStore } from '../stores/auth';
 import { useSettingsStore } from '../stores/settings';
 import { Button } from '../components/ui/button';
-import { AlertCircle, LayoutGrid, List } from 'lucide-react';
+import { LayoutGrid, List } from 'lucide-react';
 import { PageContainer } from '../components/common/PageContainer';
+import { ErrorBanner } from '../components/ui/query-state';
+import { resolveQueryError } from '../lib/query-error';
 import { RefreshButton } from '../components/common/RefreshButton';
 import { MonitorCard } from '../components/monitors/MonitorCard';
 import { MonitorSettingsDialog } from '../components/monitor-detail/MonitorSettingsDialog';
@@ -69,15 +71,6 @@ export default function Monitors() {
     refetchInterval: bandwidth.monitorStatusInterval,
   });
 
-
-  const resolveErrorMessage = (err: unknown) => {
-    const message = (err as Error)?.message || t('common.unknown_error');
-    const status = (err as { response?: { status?: number } })?.response?.status;
-    if (status === 401 || /unauthorized/i.test(message)) {
-      return t('common.auth_required');
-    }
-    return t('monitors.failed_to_load', { error: message });
-  };
 
   // Fetch event counts for the last week
   const { data: eventCounts } = useQuery({
@@ -159,10 +152,7 @@ export default function Monitors() {
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-lg font-bold tracking-tight">{t('monitors.title')}</h1>
         </div>
-        <div className="p-4 bg-destructive/10 text-destructive rounded-lg flex items-center gap-2">
-          <AlertCircle className="h-5 w-5" />
-          {resolveErrorMessage(error)}
-        </div>
+        <ErrorBanner message={resolveQueryError(error, t, { fallbackKey: 'monitors.failed_to_load' })} />
       </div>
     );
   }

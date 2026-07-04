@@ -26,7 +26,9 @@ import { useEventTags, useEventTagMapping } from '../hooks/useEventTags';
 import { useScrollRestoration } from '../hooks/useScrollRestoration';
 import { PullToRefreshIndicator } from '../components/ui/pull-to-refresh-indicator';
 import { Button } from '../components/ui/button';
-import { Filter, AlertCircle, ArrowLeft, LayoutGrid, List, Clock, X } from 'lucide-react';
+import { Filter, ArrowLeft, LayoutGrid, List, Clock, X } from 'lucide-react';
+import { ErrorBanner } from '../components/ui/query-state';
+import { resolveQueryError } from '../lib/query-error';
 import { RefreshButton } from '../components/common/RefreshButton';
 import { filterMonitorsByGroup, includedMonitorIdParam } from '../lib/filters';
 import { useGroupFilter } from '../hooks/useGroupFilter';
@@ -78,15 +80,6 @@ export default function Events() {
 
   // Check if user came from another page (navigation state tracking)
   const referrer = location.state?.from as string | undefined;
-
-  const resolveErrorMessage = (err: unknown) => {
-    const message = (err as Error)?.message || t('common.unknown_error');
-    const status = (err as { response?: { status?: number } })?.response?.status;
-    if (status === 401 || /unauthorized/i.test(message)) {
-      return t('common.auth_required');
-    }
-    return `${t('common.error')}: ${message}`;
-  };
 
   const {
     filters,
@@ -344,10 +337,7 @@ export default function Events() {
   if (error) {
     return (
       <div className="p-8">
-        <div className="p-4 bg-destructive/10 text-destructive rounded-lg flex items-center gap-2">
-          <AlertCircle className="h-5 w-5" />
-          {resolveErrorMessage(error)}
-        </div>
+        <ErrorBanner message={resolveQueryError(error, t)} />
       </div>
     );
   }

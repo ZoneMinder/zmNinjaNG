@@ -37,6 +37,7 @@ import { generateEventMarkers, type VideoMarker } from '../lib/video-markers';
 import { useEventFavoritesStore } from '../stores/eventFavorites';
 import { useZoomPan } from '../hooks/useZoomPan';
 import { ZoomControls } from '../components/ui/zoom-controls';
+import { ErrorBanner, DetailPageSkeleton } from '../components/ui/query-state';
 import { useEventNavigation } from '../hooks/useEventNavigation';
 import { useServerUrls } from '../hooks/useServerUrls';
 import { cn } from '../lib/utils';
@@ -232,21 +233,13 @@ export default function EventDetail() {
   }, [t]);
 
   if (isLoading) {
-    return (
-      <div className="p-8 space-y-6">
-        <div className="h-8 w-32 bg-muted rounded animate-pulse" />
-        <div className="aspect-video w-full max-w-4xl bg-muted rounded-xl animate-pulse" />
-      </div>
-    );
+    return <DetailPageSkeleton />;
   }
 
   if (error || !event) {
     return (
       <div className="p-8">
-        <div className="p-4 bg-destructive/10 text-destructive rounded-lg flex items-center gap-2">
-          <AlertTriangle className="h-5 w-5" />
-          {t('event_detail.load_error')}
-        </div>
+        <ErrorBanner icon={AlertTriangle} message={t('event_detail.load_error')} />
         <Button onClick={goBack} className="mt-4">
           {t('common.go_back')}
         </Button>

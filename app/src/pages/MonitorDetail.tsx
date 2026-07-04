@@ -41,6 +41,7 @@ import { usePTZControl, useAlarmControl, useModeControl, useMonitorNavigation } 
 import { MonitorSettingsDialog } from '../components/monitor-detail/MonitorSettingsDialog';
 import { MonitorControlsCard } from '../components/monitor-detail/MonitorControlsCard';
 import { ZoomControls } from '../components/ui/zoom-controls';
+import { ErrorBanner, DetailPageSkeleton } from '../components/ui/query-state';
 import { MonitorRecentEvents } from '../components/monitors/MonitorRecentEvents';
 import { useMainScrollRestoration } from '../hooks/useMainScrollRestoration';
 
@@ -207,22 +208,14 @@ export default function MonitorDetail() {
 
   // Loading state
   if (isLoading) {
-    return (
-      <div className="p-8 space-y-6">
-        <div className="h-8 w-32 bg-muted rounded animate-pulse" />
-        <div className="aspect-video w-full max-w-4xl bg-muted rounded-xl animate-pulse" />
-      </div>
-    );
+    return <DetailPageSkeleton />;
   }
 
   // Error state
   if (error || !monitor || !currentProfile) {
     return (
       <div className="p-8">
-        <div className="p-4 bg-destructive/10 text-destructive rounded-lg flex items-center gap-2">
-          <AlertTriangle className="h-5 w-5" />
-          {t('monitor_detail.load_error')}
-        </div>
+        <ErrorBanner icon={AlertTriangle} message={t('monitor_detail.load_error')} />
         <Button onClick={goBack} className="mt-4">
           {t('common.go_back')}
         </Button>
