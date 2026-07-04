@@ -1558,6 +1558,108 @@ Clear buttons (``data-testid="settings-kiosk-change-pin"`` and
      if (result.success) { /* unlock */ }
    }
 
+TV Mode
+-------
+
+Best-effort d-pad support for Android TV / Fire TV. It layers a couple of
+page-specific keymaps on top of the WebView's own spatial navigation; it is
+not a full app-wide focus-management system.
+
+TvDetector (native plugin)
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**Location**: ``android/app/src/main/java/com/zoneminder/zmNinjaNG/TvDetectorPlugin.java``
+
+Capacitor plugin registered as ``TvDetector``, called from
+``lib/tv-spatial-nav.ts``. Two methods:
+
+- ``isTV()``: true if ``UiModeManager.getCurrentModeType()`` equals
+  ``UI_MODE_TYPE_TELEVISION``.
+- ``enableSpatialNavigation()``: enables the WebView's built-in spatial
+  navigation by calling the hidden ``WebSettings.setSpatialNavigationEnabled(true)``
+  API via reflection, then makes the WebView focusable and requests focus.
+
+lib/tv-spatial-nav.ts
+~~~~~~~~~~~~~~~~~~~~~
+
+- ``checkIsTV()``: checks ``Platform.isTVDevice`` first (a native-injected
+  flag, or a user-agent match against ``tv``/``aft``/``stb``/``fire tv``/etc.
+  in ``lib/platform.ts``), then falls back to the native plugin's ``isTV()``
+  on native platforms. Always ``false`` on web.
+- ``enableSpatialNavigation()``: no-op outside native platforms; swallows
+  errors if the plugin isn't available.
+
+Wiring (AppLayout.tsx)
+~~~~~~~~~~~~~~~~~~~~~~
+
+- ``useTvMode()`` reads ``settings.tvMode``, a profile-scoped setting with a
+  manual toggle in Settings > Appearance (``data-testid="settings-tv-mode"``).
+- On mount, ``checkIsTV()`` runs once per profile switch; if the device is
+  detected as a TV and ``tvMode`` isn't already on, ``updateProfileSettings``
+  flips it on automatically.
+- While TV mode is active: a ``tv-mode`` class is toggled on ``<html>``
+  (``index.css`` bumps the base font size to 20px and gives
+  ``:focus-visible`` elements a heavier ring, for 10-foot viewing), and
+  ``enableSpatialNavigation()`` is called once.
+
+Hooks
+~~~~~
+
+useTvMode
+^^^^^^^^^
+
+**Location**: ``src/hooks/useTvMode.ts``
+
+Returns ``{ isTvMode }`` from ``settings.tvMode``. A thin read of the
+profile-scoped setting, nothing more.
+
+useTvKeyHandler
+^^^^^^^^^^^^^^^
+
+**Location**: ``src/hooks/useTvKeyHandler.ts``
+
+Registers a ``window`` ``keydown`` listener, active only while
+``isTvMode`` is true. Pages pass a ``TvKeyMap``
+(``{ ArrowLeft?, ArrowRight?, ArrowUp?, ArrowDown?, Enter? }``):
+
+- A key with a handler in the map calls ``preventDefault()`` and runs the
+  handler; a key without one falls through to the WebView's native spatial
+  navigation.
+- ``Enter`` has a built-in fallback even with no map entry: if the focused
+  element isn't natively clickable (``BUTTON``, ``A``, ``INPUT``,
+  ``SELECT``, ``TEXTAREA``), it synthesizes a ``.click()`` on it. Combined
+  with ``lib/tv-a11y.ts``'s ``clickableProps()`` / ``handleKeyClick()``
+  (``tabIndex={0}`` + ``role="button"`` + Enter/Space ``onKeyDown``), this
+  lets ``div``/``span`` "buttons" (e.g. monitor tiles) respond to Enter.
+
+Per-Page Keymaps
+~~~~~~~~~~~~~~~~
+
+- **Montage** (``src/pages/Montage.tsx``): arrow keys move a
+  focused-tile index (``handleDpadNav``) through the monitor grid; Enter
+  navigates to that monitor's detail page. A separate effect calls
+  ``.focus()`` on the tile's DOM node
+  (``data-testid="montage-monitor-<id>"``) whenever the index changes,
+  since the index is plain state, not real DOM focus.
+- **Timeline** (``src/pages/Timeline.tsx``): arrow keys pan/zoom the
+  timeline canvas viewport (``panLeft``, ``panRight``, ``zoomIn``,
+  ``zoomOut``) instead of moving between DOM elements. No ``Enter``
+  handler is registered; Enter falls through to ``useTvKeyHandler``'s
+  default synthesize-click behavior.
+- **EventDetail** (``src/pages/EventDetail.tsx``) does not register a
+  keymap. It only reads ``isTvMode`` to force ZMS playback
+  (``useZmsFallback``) instead of the Video.js-based ``Mp4EventPlayer``.
+
+What This Does Not Do
+~~~~~~~~~~~~~~~~~~~~~~
+
+This is best-effort WebView spatial navigation plus two page-specific
+keymaps (Montage, Timeline), not app-wide d-pad coverage. Pages without a
+``TvKeyMap`` (Dashboard, Events, Settings, etc.) rely entirely on the
+WebView's native spatial navigation moving focus between focusable
+elements. An earlier, more complete d-pad/cursor implementation was
+removed as dead code; nothing in the current tree depends on it.
+
 Component Composition
 ---------------------
 
