@@ -51,6 +51,9 @@
     "navigation_menu": "导航菜单",
     "navigation_menu_desc": "应用程序主导航。"
   },
+  "network": {
+    "offline_banner": "离线。正在显示缓存数据。"
+  },
   "app_init": {
     "toast_title": "正在完成设置",
     "toast_description": "正在准备你的个人资料和服务器连接。",

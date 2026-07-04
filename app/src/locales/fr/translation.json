@@ -51,6 +51,9 @@
     "navigation_menu": "Menu de navigation",
     "navigation_menu_desc": "Navigation principale de l'application."
   },
+  "network": {
+    "offline_banner": "Hors ligne. Données en cache affichées."
+  },
   "app_init": {
     "toast_title": "Finalisation de la configuration",
     "toast_description": "Préparation de votre profil et de la connexion au serveur.",

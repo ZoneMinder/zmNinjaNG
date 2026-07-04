@@ -51,6 +51,9 @@
     "navigation_menu": "Navigationsmenü",
     "navigation_menu_desc": "Primäre Anwendungsnavigation."
   },
+  "network": {
+    "offline_banner": "Offline. Zeigt zwischengespeicherte Daten."
+  },
   "app_init": {
     "toast_title": "Einrichtung wird abgeschlossen",
     "toast_description": "Profil und Serververbindung werden vorbereitet.",

@@ -51,6 +51,9 @@
     "navigation_menu": "Navigation menu",
     "navigation_menu_desc": "Primary application navigation."
   },
+  "network": {
+    "offline_banner": "Offline. Showing cached data."
+  },
   "app_init": {
     "toast_title": "Finishing setup",
     "toast_description": "Preparing your profile and server connection.",

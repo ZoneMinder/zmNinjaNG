@@ -36,6 +36,7 @@ import { useKioskStore } from '../../stores/kioskStore';
 import { KioskOverlay } from '../kiosk/KioskOverlay';
 import { SidebarContent } from './SidebarContent';
 import { DeveloperNoticeBanner } from './DeveloperNoticeBanner';
+import { OfflineBanner } from './OfflineBanner';
 import { CertTrustBanner } from '../CertTrustBanner';
 import { DeleteBatchBar } from '../events/DeleteBatchBar';
 
@@ -258,6 +259,7 @@ export default function AppLayout() {
         <div className="absolute top-0 left-0 w-full h-96 bg-gradient-to-b from-primary/5 to-transparent -z-10 pointer-events-none" />
 
         <DeveloperNoticeBanner />
+        <OfflineBanner />
         <CertTrustBanner />
         <Outlet />
         <DeleteBatchBar />
