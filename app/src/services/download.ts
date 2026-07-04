@@ -139,59 +139,55 @@ async function downloadFileNative(url: string, filename: string, options?: Downl
   const { Media } = await import('@capacitor-community/media');
   const { Filesystem, Directory } = await import('@capacitor/filesystem');
 
+  // Use unified HTTP to get base64 data without blob conversion
+  // This avoids loading the entire file as a Blob in memory (OOM prevention)
+  log.download('[Download] Fetching file via native HTTP', LogLevel.INFO, { url });
+
+  const response = await httpRequest<string>(url, {
+    method: 'GET',
+    responseType: 'base64',
+    signal: options?.signal,
+  });
+
+  if (response.status !== 200) {
+    throw new Error(`Failed to download: HTTP ${response.status}`);
+  }
+
+  // Native HTTP returns base64 string when responseType is base64/blob
+  // We use it directly without converting to Blob (avoids OOM)
+  const base64Data = response.data as string;
+
+  if (options?.onProgress) {
+    options.onProgress({
+      loaded: base64Data.length,
+      total: base64Data.length,
+      percentage: 100,
+    });
+  }
+
+  // Write directly to Documents directory
+  const writeResult = await Filesystem.writeFile({
+    path: filename,
+    data: base64Data,
+    directory: Directory.Documents,
+  });
+
+  log.download('[Download] File saved to Documents', LogLevel.INFO, {
+    path: writeResult.uri,
+    filename
+  });
+
+  // Save to Photo/Video Library using the file:// URI
   try {
-    // Use unified HTTP to get base64 data without blob conversion
-    // This avoids loading the entire file as a Blob in memory (OOM prevention)
-    log.download('[Download] Fetching file via native HTTP', LogLevel.INFO, { url });
-
-    const response = await httpRequest<string>(url, {
-      method: 'GET',
-      responseType: 'base64',
-      signal: options?.signal,
-    });
-
-    if (response.status !== 200) {
-      throw new Error(`Failed to download: HTTP ${response.status}`);
+    if (filename.match(/\.(jpg|jpeg|png|gif)$/i)) {
+      await Media.savePhoto({ path: writeResult.uri });
+      log.download('[Download] Saved to Photo Library', LogLevel.INFO, { filename });
+    } else if (filename.match(/\.(mp4|mov|avi)$/i)) {
+      await Media.saveVideo({ path: writeResult.uri });
+      log.download('[Download] Saved to Video Library', LogLevel.INFO, { filename });
     }
-
-    // Native HTTP returns base64 string when responseType is base64/blob
-    // We use it directly without converting to Blob (avoids OOM)
-    const base64Data = response.data as string;
-
-    if (options?.onProgress) {
-      options.onProgress({
-        loaded: base64Data.length,
-        total: base64Data.length,
-        percentage: 100,
-      });
-    }
-
-    // Write directly to Documents directory
-    const writeResult = await Filesystem.writeFile({
-      path: filename,
-      data: base64Data,
-      directory: Directory.Documents,
-    });
-
-    log.download('[Download] File saved to Documents', LogLevel.INFO, {
-      path: writeResult.uri,
-      filename
-    });
-
-    // Save to Photo/Video Library using the file:// URI
-    try {
-      if (filename.match(/\.(jpg|jpeg|png|gif)$/i)) {
-        await Media.savePhoto({ path: writeResult.uri });
-        log.download('[Download] Saved to Photo Library', LogLevel.INFO, { filename });
-      } else if (filename.match(/\.(mp4|mov|avi)$/i)) {
-        await Media.saveVideo({ path: writeResult.uri });
-        log.download('[Download] Saved to Video Library', LogLevel.INFO, { filename });
-      }
-    } catch (mediaError) {
-      log.download('[Download] Failed to save to media library, but file is in Documents', LogLevel.WARN, { filename, error: mediaError });
-    }
-  } catch (error) {
-    throw error;
+  } catch (mediaError) {
+    log.download('[Download] Failed to save to media library, but file is in Documents', LogLevel.WARN, { filename, error: mediaError });
   }
 }
 
