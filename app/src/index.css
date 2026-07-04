@@ -99,6 +99,21 @@
   }
 }
 
+/* Global prefers-reduced-motion: neutralize all CSS animations and
+   transitions app-wide (animate-spin, animate-pulse, keyframe animations,
+   hover/focus transitions). Spinners stay visible as a static loading
+   indicator; they just stop rotating/pulsing. refs #217. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 @keyframes ring {
   0% { transform: rotate(0deg) scale(1); }
   10% { transform: rotate(25deg) scale(1.15); }
@@ -119,12 +134,6 @@
   to {
     transform: translateX(0);
     opacity: 1;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .monitor-slide-in {
-    animation: none;
   }
 }
 
@@ -155,13 +164,6 @@
   to {
     transform: translateX(0);
     opacity: 1;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .event-slide-left,
-  .event-slide-right {
-    animation: none;
   }
 }
 
