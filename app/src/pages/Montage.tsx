@@ -293,8 +293,11 @@ export default function Montage() {
     );
   }
 
-  // Error state
-  if (error) {
+  // Error state. A background refetch error while cached monitors are
+  // already loaded falls through to the normal grid below instead of this
+  // error wall; the OfflineBanner in AppLayout covers that case. Only a cold
+  // start with no cached data hits the error wall.
+  if (error && !data) {
     return (
       <div className="p-8">
         <div className="flex items-center justify-between mb-6">

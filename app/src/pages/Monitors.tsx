@@ -148,7 +148,11 @@ export default function Monitors() {
     );
   }
 
-  if (error) {
+  // A background refetch error (e.g. offline) while cached monitors are
+  // already loaded falls through to the normal view below instead of this
+  // error wall; the OfflineBanner in AppLayout covers that case. Only a cold
+  // start with no cached data (no `data` yet) hits the error wall.
+  if (error && !data) {
     return (
       <div className="p-8">
         <div className="flex items-center justify-between mb-6">

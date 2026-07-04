@@ -502,10 +502,16 @@ Server state is managed via ``@tanstack/react-query``. See the
 `TanStack Query docs <https://tanstack.com/query/latest>`_ for general
 behaviour. zmNinjaNg-specific notes follow.
 
-zmNinjaNg runs with ``staleTime: 0``, so React Query's "cache" is
-effectively last-response storage rather than a hit/miss cache,
-``refetchInterval`` always hits the server, but stored data prevents
-loading spinners between polls and deduplicates concurrent subscribers.
+zmNinjaNg runs with a 15 second global ``staleTime``
+(``DEFAULT_QUERY_STALE_TIME_MS`` in ``lib/zmninja-ng-constants.ts``), so
+React Query's "cache" holds the last response as fresh for that long
+before a new subscriber's mount triggers a background refetch.
+``refetchInterval`` queries still hit the server on their own schedule
+regardless of ``staleTime``; the setting mainly affects mount- and
+reconnect-triggered refetches on queries without one (states, groups,
+tags, server info). It also means a query mounting shortly after a brief
+network blip shows the last-good data instead of an immediate error wall;
+see the "Offline Behaviour" section below.
 
 Key Settings
 ~~~~~~~~~~~~
@@ -513,11 +519,11 @@ Key Settings
 +---------------------+------------------------+---------------------------+
 | Setting             | zmNinjaNg Value        | What It Does              |
 +=====================+========================+===========================+
-| ``staleTime``       | ``0`` (default)        | How long data is “fresh”. |
-|                     |                        | At 0, data is immediately |
-|                     |                        | stale, so any new         |
-|                     |                        | subscriber triggers a     |
-|                     |                        | background refetch.       |
+| ``staleTime``       | ``15000`` ms           | How long data is “fresh”. |
+|                     |                        | A subscriber mounting     |
+|                     |                        | within this window reuses |
+|                     |                        | the cached data instead   |
+|                     |                        | of triggering a refetch.  |
 +---------------------+------------------------+---------------------------+
 | ``gcTime``          | ``5 min`` (default)    | How long unused data      |
 |                     |                        | stays in memory. After 5  |
@@ -527,11 +533,13 @@ Key Settings
 +---------------------+------------------------+---------------------------+
 | ``refetchInterval`` | varies                 | **Always makes a network  |
 |                     |                        | request** at this         |
-|                     |                        | interval. Not cached.     |
+|                     |                        | interval, regardless of   |
+|                     |                        | ``staleTime``.            |
 +---------------------+------------------------+---------------------------+
 
-``refetchOnWindowFocus`` is disabled globally; the client otherwise
-behaves per the TanStack defaults.
+``refetchOnWindowFocus`` is disabled globally; ``refetchOnReconnect``
+stays at the TanStack default (``true``) so queries refresh once
+connectivity returns.
 
 Example: Monitor Polling
 ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -558,13 +566,14 @@ Query Client Setup
 
    import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
    import { setQueryClient, shouldRetryQuery } from './stores/query-cache';
+   import { DEFAULT_QUERY_STALE_TIME_MS } from './lib/zmninja-ng-constants';
 
    const queryClient = new QueryClient({
      defaultOptions: {
        queries: {
          retry: shouldRetryQuery,       // Single retry, but never on 401/403
          refetchOnWindowFocus: false,   // Don't refetch when window focused
-         // staleTime: 0 (default)      // Data immediately stale
+         staleTime: DEFAULT_QUERY_STALE_TIME_MS, // 15 sec
          // gcTime: 5 min (default)     // Unused data kept 5 min
        },
      },
@@ -576,9 +585,37 @@ for HTTP 401/403 errors, which are never retried. The API client already
 performs token recovery inside the request, so an auth error that
 reaches React Query is final.
 
-With ``staleTime: 0``, every query subscriber triggers a fetch. The
-HTTP layer (``lib/http.ts``) logs every call with a correlation ID;
-there are no skipped-network "cache hits" to log separately.
+A query mounting more than 15 seconds after the last successful fetch
+still triggers a background refetch, same as before; the HTTP layer
+(``lib/http.ts``) logs every call with a correlation ID.
+
+Offline Behaviour
+~~~~~~~~~~~~~~~~~
+
+``useNetworkStatus()`` (``src/hooks/useNetworkStatus.ts``, see
+:doc:`05-component-architecture`) drives a sticky ``OfflineBanner`` in
+``AppLayout.tsx`` while the device/browser has no connectivity. Pages that
+render the shared ``ErrorBanner`` (``components/ui/query-state.tsx``) on a
+query error gate it on the query also having no data, e.g. in
+``pages/Monitors.tsx``:
+
+.. code:: tsx
+
+   if (error && !data) {
+     return <ErrorBanner message={...} />;
+   }
+
+So a background refetch failure (offline, server blip) while cached data
+is already on screen falls through to the normal view instead of an error
+wall; the ``OfflineBanner`` covers telling the user why. A cold start with
+no cached data still hits the error wall. Applied to
+``pages/Monitors.tsx``, ``Montage.tsx``, ``States.tsx``, ``Events.tsx``,
+and ``EventMontage.tsx``. ``MonitorDetail.tsx`` and ``EventDetail.tsx``
+keep the plain error wall: their guard already combines the query error
+with other required values (``!monitor || !currentProfile``,
+``!event``), and dropping the error term there changes what a falsy value
+without an error means, so it was left alone rather than risk a subtle
+behavior change.
 
 Basic Queries
 ~~~~~~~~~~~~~

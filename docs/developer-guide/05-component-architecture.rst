@@ -1651,6 +1651,8 @@ Complex logic is extracted into hooks:
 - ``useEventNavigation()`` - Adjacent event navigation (see below)
 - ``useCapacitorListener()`` - Capacitor plugin event listeners with async
   registration and teardown (see below)
+- ``useNetworkStatus()`` - Online/offline connectivity for the app-wide
+  offline banner (see below)
 
 useEventNavigation
 ^^^^^^^^^^^^^^^^^^
@@ -1712,6 +1714,39 @@ of dynamic import, ``await addListener``, and cancelled-flag teardown.
 Used by ``App.tsx`` (flush logs on pause), ``HoverPreview``,
 ``KioskOverlay``, ``Mp4EventPlayer``, ``useNotificationAutoConnect``, and
 ``useNotificationDelivered``.
+
+useNetworkStatus
+^^^^^^^^^^^^^^^^
+
+**Location**: ``src/hooks/useNetworkStatus.ts``
+
+Tracks online/offline connectivity and drives the ``OfflineBanner`` shown
+in ``AppLayout.tsx``. Returns ``{ isOnline: boolean }``.
+
+.. code:: tsx
+
+   const { isOnline } = useNetworkStatus();
+   if (!isOnline) return <OfflineIndicator />;
+
+**Behaviour:**
+
+- Web/desktop: ``navigator.onLine`` plus the ``online``/``offline`` window
+  events.
+- Native (iOS/Android): a single effect dynamically imports
+  ``@capacitor/network``, reads ``Network.getStatus()`` once so the banner
+  doesn't wait for the first transition, then registers a
+  ``networkStatusChange`` listener on the same import. Both steps share one
+  ``import('@capacitor/network')`` call; two separate dynamic imports of the
+  same plugin from two effects on one mount is unnecessary and, under
+  Vitest's module mocking, races.
+- Presentation-only: it does not touch the WebSocket/event-poller reconnect
+  logic in ``useNotificationAutoConnect.ts``, which already listens for the
+  same browser/native connectivity signals to trigger a reconnect.
+
+Used by ``OfflineBanner`` (``src/components/layout/OfflineBanner.tsx``),
+rendered in ``AppLayout`` alongside ``DeveloperNoticeBanner`` and
+``CertTrustBanner``. The banner is not dismissible: it tracks live state and
+disappears on its own once the connection returns.
 
 3. Refs for DOM Access
 ~~~~~~~~~~~~~~~~~~~~~~

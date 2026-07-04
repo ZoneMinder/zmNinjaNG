@@ -204,7 +204,10 @@ export default function EventMontage() {
     );
   }
 
-  if (error) {
+  // A background refetch error while cached events are already loaded falls
+  // through to the normal view below instead of this error wall. Only a cold
+  // start with no cached data hits the error wall.
+  if (error && !eventsData) {
     return (
       <div className="p-8">
         <div className="flex items-center justify-between mb-6">

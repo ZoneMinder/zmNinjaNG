@@ -34,6 +34,19 @@ export const API_REQUEST = {
  */
 export const MAX_QUERY_RETRIES = 1;
 
+/**
+ * App-wide default React Query `staleTime` (ms). Keeps the last successful
+ * response visible and "fresh" for this long instead of re-flagging it stale
+ * (and re-fetching / erroring) the instant a component using it mounts or a
+ * network blip hits. Queries with their own `refetchInterval` (monitor
+ * status, etc.) still refetch on that schedule regardless; this only affects
+ * queries relying on mount/reconnect-triggered refetches (states, groups,
+ * tags, server info). Chosen shorter than the shortest bandwidth-mode
+ * refetch interval (monitorStatusInterval, 20s in normal mode) so it never
+ * masks a legitimate periodic refresh. refs #217
+ */
+export const DEFAULT_QUERY_STALE_TIME_MS = 15000;
+
 export const ZM_INTEGRATION = {
   // HTTP timeouts for ZM API calls
   httpTimeout: 10000, // 10 seconds - standard API calls

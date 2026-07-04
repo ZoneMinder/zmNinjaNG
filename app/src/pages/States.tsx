@@ -42,7 +42,10 @@ export default function States() {
     );
   }
 
-  if (error) {
+  // A background refetch error while cached states are already loaded falls
+  // through to the normal view below instead of this error wall. Only a cold
+  // start with no cached data hits the error wall.
+  if (error && !states) {
     return (
       <div className="p-8">
         <h1 className="text-lg font-bold mb-6">{t('states.title')}</h1>

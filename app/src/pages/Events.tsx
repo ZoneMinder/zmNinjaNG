@@ -335,7 +335,10 @@ export default function Events() {
     );
   }
 
-  if (error) {
+  // A background refetch error while cached events are already loaded falls
+  // through to the normal list below instead of this error wall. Only a cold
+  // start with no cached data hits the error wall.
+  if (error && !eventsData) {
     return (
       <div className="p-8">
         <ErrorBanner message={resolveQueryError(error, t)} />
