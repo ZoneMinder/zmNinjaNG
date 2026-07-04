@@ -111,7 +111,6 @@ beforeAll(async () => {
   // main.cjs's `require('electron')` call resolves to our fake module.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const Module = require('node:module');
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const electronPath = require.resolve('electron');
   const fakeModule = new Module(electronPath, null);
   fakeModule.exports = fakeElectron;

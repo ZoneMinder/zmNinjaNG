@@ -179,7 +179,6 @@ export function Mp4EventPlayer({
 
   // Init effect: create the player exactly once per mount.
   // Deliberately mount-only: prop updates are handled by the dedicated effect below.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     // Reclaimed-from-PiP path populates playerRef.current before this runs;
     // in that case we adopt the existing player and skip re-init.
