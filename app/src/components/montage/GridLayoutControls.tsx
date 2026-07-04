@@ -185,7 +185,9 @@ export function GridLayoutControls({
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-5 w-5 text-destructive hover:text-destructive ml-2 shrink-0"
+                      // Visible icon stays 20px (h-5 w-5); ::before expands
+                      // the hit area to the 44px WCAG target size. refs #217.
+                      className="relative h-5 w-5 text-destructive hover:text-destructive ml-2 shrink-0 before:absolute before:-inset-3 before:content-['']"
                       aria-label={`${t('common.delete')}: ${saved.name}`}
                       onClick={(e) => handleDeleteLayout(index, saved.name, e)}
                       data-testid={`montage-delete-layout-menu-${index}`}
