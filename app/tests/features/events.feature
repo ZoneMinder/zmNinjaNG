@@ -146,3 +146,9 @@ Feature: Event Browsing and Management
   @all
   Scenario: Recent events show a human-readable relative time
     Then any relative time labels in the list read as a duration
+
+  @all
+  Scenario: Recent events show a relative time in the grid view
+    When I switch events view to montage
+    Then I should see the events montage grid
+    And any relative time labels in the montage read as a duration

@@ -592,6 +592,38 @@ Then('any relative time labels in the list read as a duration', async ({ page })
   expect(text).toMatch(relativeTimePattern);
 });
 
+Then('any relative time labels in the montage read as a duration', async ({ page }) => {
+  const grid = page.getByTestId('events-montage-grid');
+  const emptyState = page.getByTestId('events-empty-state');
+  const tiles = grid.getByTestId('event-montage-tile');
+
+  // Wait for the montage to settle: tiles rendered or the empty state shown.
+  await expect.poll(async () => {
+    const count = await tiles.count();
+    const emptyVisible = await emptyState.isVisible().catch(() => false);
+    return count > 0 || emptyVisible;
+  }, { timeout: testConfig.timeouts.transition * 3 }).toBeTruthy();
+
+  const tileCount = await tiles.count();
+  if (tileCount === 0) {
+    log.info('E2E: Skipping montage relative-time check - no event tiles', { component: 'e2e' });
+    return;
+  }
+
+  // Same reasoning as the list: the live server records continuously, so events
+  // within the 7-day window exist. Missing chips while tiles are present is a
+  // rendering regression the test must catch.
+  const chips = page.getByTestId('event-montage-relative-time');
+  expect(await chips.count()).toBeGreaterThan(0);
+
+  const relativeTimePattern = /(ago|vor|hace|il y a|前|now|jetzt|ahora|maintenant|现在)/i;
+  const firstChip = chips.first();
+  await expect(firstChip).toBeVisible();
+  const text = await firstChip.innerText();
+  expect(text.trim()).not.toBe('');
+  expect(text).toMatch(relativeTimePattern);
+});
+
 When('I favorite the event from detail page if on detail page', async ({ page }) => {
   if (!hasEvents) {
     log.info('E2E: Skipping favorite from detail - no events exist', { component: 'e2e' });
