@@ -17,6 +17,7 @@
 
 import { useLayoutEffect } from 'react';
 import { MAIN_SCROLL_SELECTOR, SCROLL_RESTORE_MAX_MS } from '../lib/zmninja-ng-constants';
+import { restoreScrollWhileGrowing } from '../lib/scroll-restore';
 
 // history-entry key -> last scrollTop of the shared <main>. Lives for the SPA
 // session (cleared on a full reload).
@@ -41,44 +42,6 @@ export function useMainScrollRestoration(key: string): void {
     if (saved == null || saved <= 0) return;
     const el = getMain();
     if (!el) return;
-
-    const start = performance.now();
-    let stopped = false;
-    let observer: ResizeObserver | null = null;
-
-    const stop = () => {
-      if (stopped) return;
-      stopped = true;
-      observer?.disconnect();
-      el.removeEventListener('wheel', stop);
-      el.removeEventListener('touchstart', stop);
-      window.removeEventListener('keydown', stop);
-    };
-
-    const apply = () => {
-      if (stopped) return;
-      el.scrollTop = saved;
-      const reached = Math.abs(el.scrollTop - saved) <= 1;
-      if (reached || performance.now() - start > SCROLL_RESTORE_MAX_MS) stop();
-    };
-
-    // Don't fight the user if they scroll during the restore window.
-    el.addEventListener('wheel', stop, { passive: true });
-    el.addEventListener('touchstart', stop, { passive: true });
-    window.addEventListener('keydown', stop);
-
-    if (typeof ResizeObserver !== 'undefined') {
-      observer = new ResizeObserver(() => apply());
-      observer.observe(el);
-      if (el.firstElementChild) observer.observe(el.firstElementChild);
-    }
-
-    apply();
-    const timer = window.setTimeout(stop, SCROLL_RESTORE_MAX_MS);
-
-    return () => {
-      window.clearTimeout(timer);
-      stop();
-    };
+    return restoreScrollWhileGrowing(el, saved, SCROLL_RESTORE_MAX_MS);
   }, [key]);
 }

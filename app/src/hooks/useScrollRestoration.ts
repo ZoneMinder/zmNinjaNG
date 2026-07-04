@@ -9,9 +9,16 @@
  * Needed because sibling routes such as /events and /events/:id unmount each
  * other, so the list's scroll container is destroyed when opening an event and
  * recreated empty on the way back (refs #197).
+ *
+ * Once content is `ready`, the saved offset is re-applied while the container
+ * keeps growing (the Events list fills in a heatmap header and per-row tag
+ * chips from a separate query after first paint), so a deep position doesn't
+ * clamp short or drift as rows grow. Handled by restoreScrollWhileGrowing.
  */
 
 import { useCallback, useLayoutEffect, useRef } from 'react';
+import { SCROLL_RESTORE_MAX_MS } from '../lib/zmninja-ng-constants';
+import { restoreScrollWhileGrowing } from '../lib/scroll-restore';
 
 // history-entry key -> last scrollTop. Lives for the SPA session (cleared on a
 // full reload, which is acceptable: a hard reload starts a new browsing state).
@@ -46,14 +53,17 @@ export function useScrollRestoration(key: string, ready: boolean) {
     };
   }, [key]);
 
-  // Restore once, after the content is ready and the container exists.
+  // Restore after content is ready and the container exists. Started once per
+  // entry; the helper keeps re-applying while the list grows, then stops on
+  // reach, user scroll, or timeout.
   useLayoutEffect(() => {
     if (!ready || restoredRef.current) return;
     const el = elRef.current;
     if (!el) return;
-    const saved = scrollPositions.get(key);
-    if (saved != null) el.scrollTop = saved;
     restoredRef.current = true;
+    const saved = scrollPositions.get(key);
+    if (saved == null || saved <= 0) return;
+    return restoreScrollWhileGrowing(el, saved, SCROLL_RESTORE_MAX_MS);
   }, [ready, key]);
 
   return containerRef;

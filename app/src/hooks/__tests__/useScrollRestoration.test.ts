@@ -10,8 +10,17 @@ import { describe, it, expect } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useScrollRestoration } from '../useScrollRestoration';
 
+// jsdom reads a real element's scrollTop as 0, so the container is a stand-in.
+// It needs the listener/observer surface restoreScrollWhileGrowing touches; the
+// no-op ResizeObserver from tests/setup never fires, so the restore applies the
+// saved value once (jsdom does not clamp scrollTop) and settles.
 function fakeEl(scrollTop = 0): HTMLElement {
-  return { scrollTop } as HTMLElement;
+  return {
+    scrollTop,
+    firstElementChild: null,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  } as unknown as HTMLElement;
 }
 
 describe('useScrollRestoration', () => {
