@@ -232,6 +232,23 @@ export default function EventDetail() {
     setUseZmsFallback(true);
   }, [t]);
 
+  // Icon for the event's cause badge. Safe to compute before `event` exists
+  // since getEventCauseIcon falls back gracefully on an empty cause.
+  const EventCauseIcon = useMemo(
+    () => getEventCauseIcon(event?.Event.Cause ?? ''),
+    [event?.Event.Cause]
+  );
+
+  // "detected:<classList>|..." notes render an extra row with the detected
+  // object class and icon; parse once and reuse for both the guard and the row.
+  const detectedClassInfo = useMemo(() => {
+    const notes = event?.Event.Notes;
+    if (!notes || !notes.startsWith('detected:')) return null;
+    const classList = notes.slice('detected:'.length).split('|')[0].trim();
+    if (!classList) return null;
+    return { classList, DetectIcon: getObjectClassIconFromList(classList) };
+  }, [event?.Event.Notes]);
+
   if (isLoading) {
     return <DetailPageSkeleton />;
   }
@@ -295,15 +312,10 @@ export default function EventDetail() {
           <div>
             <h1 className="text-sm sm:text-base font-semibold truncate max-w-[200px] sm:max-w-none">{event.Event.Name}</h1>
             <div className="flex items-center gap-1.5 text-[10px] sm:text-xs text-muted-foreground">
-              {(() => {
-                const CauseIcon = getEventCauseIcon(event.Event.Cause);
-                return (
-                  <Badge variant="outline" className="text-[10px] h-4 gap-1">
-                    <CauseIcon className="h-3 w-3" />
-                    {event.Event.Cause}
-                  </Badge>
-                );
-              })()}
+              <Badge variant="outline" className="text-[10px] h-4 gap-1">
+                <EventCauseIcon className="h-3 w-3" />
+                {event.Event.Cause}
+              </Badge>
               {monitorData && (
                 <span className="hidden sm:inline">{monitorData.Monitor.Name}</span>
               )}
@@ -524,20 +536,15 @@ export default function EventDetail() {
                   <span className="text-sm text-muted-foreground">{t('event_detail.score')}</span>
                   <span className="text-sm font-medium">{event.Event.AvgScore} / {event.Event.MaxScore}</span>
                 </div>
-                {event.Event.Notes && event.Event.Notes.startsWith('detected:') && (() => {
-                  const classList = event.Event.Notes.slice('detected:'.length).split('|')[0].trim();
-                  if (!classList) return null;
-                  const DetectIcon = getObjectClassIconFromList(classList);
-                  return (
-                    <div className="flex justify-between items-center py-1 border-b border-border/50" data-testid="event-detail-detected-row">
-                      <span className="text-sm text-muted-foreground">{t('event_detail.detected')}</span>
-                      <span className="flex items-center gap-1.5 text-sm font-medium">
-                        <DetectIcon className="h-3.5 w-3.5 shrink-0" />
-                        {classList}
-                      </span>
-                    </div>
-                  );
-                })()}
+                {detectedClassInfo && (
+                  <div className="flex justify-between items-center py-1 border-b border-border/50" data-testid="event-detail-detected-row">
+                    <span className="text-sm text-muted-foreground">{t('event_detail.detected')}</span>
+                    <span className="flex items-center gap-1.5 text-sm font-medium">
+                      <detectedClassInfo.DetectIcon className="h-3.5 w-3.5 shrink-0" />
+                      {detectedClassInfo.classList}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between py-1 border-b border-border/50">
                   <span className="text-sm text-muted-foreground">{t('event_detail.resolution')}</span>
                   <span className="text-sm font-medium">{orientedResolution}</span>

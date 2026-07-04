@@ -264,6 +264,22 @@ export default function Events() {
     return filtered;
   }, [eventsData?.events, favoritesOnly, selectedTagIds, eventTagMap]);
 
+  // Date range shown on the heatmap: explicit filters win, otherwise infer
+  // the span from the loaded events.
+  const heatmapDateRange = useMemo(() => {
+    if (allEvents.length === 0) return null;
+
+    if (filters.startDateTime && filters.endDateTime) {
+      return { startDate: new Date(filters.startDateTime), endDate: new Date(filters.endDateTime) };
+    }
+
+    const eventDates = allEvents.map((e) => new Date(e.Event.StartDateTime));
+    return {
+      startDate: new Date(Math.min(...eventDates.map((d) => d.getTime()))),
+      endDate: new Date(Math.max(...eventDates.map((d) => d.getTime()))),
+    };
+  }, [allEvents, filters.startDateTime, filters.endDateTime]);
+
   // Restore the list scroll position when returning from an event detail.
   // /events and /events/:id are sibling routes, so this component unmounts when
   // opening an event; without this the list snaps back to the top (refs #197).
@@ -508,35 +524,18 @@ export default function Events() {
         </div>
 
         {/* Event Heatmap */}
-        {allEvents.length > 0 &&
-          (() => {
-            // Use explicit date filters if available, otherwise infer from events
-            let startDate: Date;
-            let endDate: Date;
-
-            if (filters.startDateTime && filters.endDateTime) {
-              startDate = new Date(filters.startDateTime);
-              endDate = new Date(filters.endDateTime);
-            } else {
-              // Infer date range from events
-              const eventDates = allEvents.map((e) => new Date(e.Event.StartDateTime));
-              startDate = new Date(Math.min(...eventDates.map((d) => d.getTime())));
-              endDate = new Date(Math.max(...eventDates.map((d) => d.getTime())));
-            }
-
-            return (
-              <EventHeatmap
-                events={allEvents}
-                startDate={startDate}
-                endDate={endDate}
-                onTimeRangeClick={(startDateTime, endDateTime) => {
-                  setStartDateInput(formatLocalDateTime(new Date(startDateTime)));
-                  setEndDateInput(formatLocalDateTime(new Date(endDateTime)));
-                  applyFilters();
-                }}
-              />
-            );
-          })()}
+        {heatmapDateRange && (
+          <EventHeatmap
+            events={allEvents}
+            startDate={heatmapDateRange.startDate}
+            endDate={heatmapDateRange.endDate}
+            onTimeRangeClick={(startDateTime, endDateTime) => {
+              setStartDateInput(formatLocalDateTime(new Date(startDateTime)));
+              setEndDateInput(formatLocalDateTime(new Date(endDateTime)));
+              applyFilters();
+            }}
+          />
+        )}
 
         {/* Events List or Montage View */}
         {allEvents.length === 0 ? (
