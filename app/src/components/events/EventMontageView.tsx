@@ -10,7 +10,7 @@
 
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Download, Loader2, Hourglass } from 'lucide-react';
+import { Download, Loader2 } from 'lucide-react';
 import { getEventCauseIcon } from '../../lib/event/event-icons';
 import { getObjectClassIconFromList } from '../../lib/event/object-class-icons';
 import { useDateTimeFormat } from '../../hooks/useDateTimeFormat';
@@ -183,16 +183,14 @@ export const EventMontageView = ({
                   {event.Name}
                 </div>
                 <div className="text-xs text-muted-foreground truncate">{monitorName}</div>
-                <div className="text-xs text-muted-foreground">{fmtDateTimeShort(startTime)}</div>
-                {isWithinDays(startTime, RELATIVE_TIME_LIST_WINDOW_DAYS) && (
-                  <div
-                    className="flex items-center gap-1 text-xs text-muted-foreground truncate min-w-0"
-                    data-testid="event-montage-relative-time"
-                  >
-                    <Hourglass className="h-3 w-3 flex-shrink-0" />
-                    <span className="truncate min-w-0">{formatEventRelative(startTime, i18n.language, t)}</span>
-                  </div>
-                )}
+                <div className="text-xs text-muted-foreground truncate">
+                  {fmtDateTimeShort(startTime)}
+                  {isWithinDays(startTime, RELATIVE_TIME_LIST_WINDOW_DAYS) && (
+                    <span data-testid="event-montage-relative-time">
+                      {` · ${formatEventRelative(startTime, i18n.language, t)}`}
+                    </span>
+                  )}
+                </div>
                 {event.Cause && (() => {
                   const CauseIcon = getEventCauseIcon(event.Cause);
                   return (
