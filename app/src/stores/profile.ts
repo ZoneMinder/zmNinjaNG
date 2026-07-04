@@ -159,7 +159,7 @@ export const useProfileStore = create<ProfileState>()(
           }
 
           // Store password in secure storage if provided
-          let processedUpdates = { ...updates };
+          const processedUpdates = { ...updates };
           if (updates.password) {
             await ProfileService.savePassword(id, updates.password);
             // Set flag instead of actual password

@@ -237,16 +237,16 @@ Line 3`;
     const plaintext = 'sensitive data';
 
     // Encrypt and decrypt multiple times
-    let encrypted1 = await encrypt(plaintext);
-    let decrypted1 = await decrypt(encrypted1);
+    const encrypted1 = await encrypt(plaintext);
+    const decrypted1 = await decrypt(encrypted1);
     expect(decrypted1).toBe(plaintext);
 
-    let encrypted2 = await encrypt(decrypted1);
-    let decrypted2 = await decrypt(encrypted2);
+    const encrypted2 = await encrypt(decrypted1);
+    const decrypted2 = await decrypt(encrypted2);
     expect(decrypted2).toBe(plaintext);
 
-    let encrypted3 = await encrypt(decrypted2);
-    let decrypted3 = await decrypt(encrypted3);
+    const encrypted3 = await encrypt(decrypted2);
+    const decrypted3 = await decrypt(encrypted3);
     expect(decrypted3).toBe(plaintext);
   });
 
