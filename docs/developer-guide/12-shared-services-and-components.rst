@@ -220,6 +220,22 @@ in ``AppLayout``.
 ``components/settings/ConnectionSettings.tsx``,
 ``components/layout/AppLayout.tsx`` (migration dialog)
 
+**Known limitation: iOS rich-push images and self-signed servers.**
+Rich push notifications download their preview image via a Notification
+Service Extension (``ios/App/ImageNotification/NotificationService.swift``),
+which runs as a separate OS process from the main app. It downloads with a
+plain ``URLSession.shared.downloadTask`` and has no ``URLSessionDelegate``.
+The pinned fingerprint (``SSLTrustPlugin.trustedFingerprint``) is a static
+Swift variable in the main app's process and the ``SSLTrustURLProtocol``
+that consults it is only registered there, so neither is reachable from the
+extension. On a self-signed server the image download's TLS handshake fails
+and the push arrives without its image (silently, the extension just
+delivers the notification unchanged). Fixing this needs an App Group (or a
+shared Keychain access group) so the extension can read the trusted
+fingerprint and validate the cert itself; neither the app's entitlements
+(``ios/App/App/App.entitlements``) nor the extension's currently declare
+one.
+
 --------------
 
 Discovery (``services/discovery.ts``)
