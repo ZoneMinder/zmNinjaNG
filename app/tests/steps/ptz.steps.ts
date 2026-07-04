@@ -1,6 +1,7 @@
 import { createBdd } from 'playwright-bdd';
 import { expect } from '@playwright/test';
 import { testConfig } from '../helpers/config';
+import { isMonitorControllable } from '../helpers/zm-api';
 import { log } from '../../src/lib/logger';
 
 const { Given, When, Then } = createBdd();
@@ -35,11 +36,20 @@ Given('the current monitor supports PTZ', async ({ page }) => {
   ptzRequestUrls = [];
   ptzStopClicked = false;
   continuousToggleClicked = false;
-  const ptzControls = page.getByTestId('ptz-controls')
-    .or(page.locator('[data-testid*="ptz"]'));
-  hasPTZ = await ptzControls.isVisible({ timeout: 2000 }).catch(() => false);
+
+  const urlMatch = page.url().match(/monitors\/(\d+)/);
+  if (!urlMatch) {
+    throw new Error('E2E: PTZ scenario ran without a monitor id in the URL');
+  }
+
+  // Capability comes from the ZoneMinder API's Controllable field, not from
+  // whether the ptz-controls panel happens to be visible. Deriving it from
+  // the panel under test was self-defeating: a regression that stopped the
+  // panel rendering would make hasPTZ false and every downstream assertion
+  // would silently no-op instead of failing (refs #217, #218).
+  hasPTZ = await isMonitorControllable(urlMatch[1]);
   if (!hasPTZ) {
-    log.info('E2E: Current monitor does not support PTZ', { component: 'e2e' });
+    log.info('E2E: Current monitor does not support PTZ', { component: 'e2e', monitorId: urlMatch[1] });
   }
 });
 
