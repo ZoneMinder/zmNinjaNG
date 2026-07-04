@@ -387,8 +387,8 @@ Full-screen view of a single monitor with live stream.
            </h1>
          </div>
          <div className="flex-1 min-h-0">
-           <VideoPlayer monitor={monitor?.Monitor} />
-           <MonitorControls monitorId={id!} />
+           <LiveMonitorPlayer monitor={monitor?.Monitor} profile={currentProfile} />
+           <MonitorControlsCard monitorId={id!} />
          </div>
        </div>
      );

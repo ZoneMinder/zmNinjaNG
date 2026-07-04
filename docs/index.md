@@ -25,7 +25,7 @@ user-guide/index
 
 ## Developer Guide
 
-A 12-chapter guide covering React fundamentals, the zmNinjaNg architecture, testing, and how to contribute. Written for experienced programmers who may be new to React.
+A 15-page guide (13 numbered chapters plus a call-flow walkthrough and a go2rtc integration deep-dive) covering React fundamentals, the zmNinjaNg architecture, testing, and how to contribute. Written for experienced programmers who may be new to React.
 
 ```{toctree}
 :maxdepth: 2

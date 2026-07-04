@@ -696,7 +696,7 @@ Sometimes one query depends on another’s result:
        enabled: !!monitor && !!currentProfile,  // Wait for monitor to load
      });
 
-     return streamUrl ? <VideoPlayer src={streamUrl} /> : <Spinner />;
+     return streamUrl ? <video src={streamUrl} /> : <Spinner />;
    }
 
 Polling / Auto-Refetch

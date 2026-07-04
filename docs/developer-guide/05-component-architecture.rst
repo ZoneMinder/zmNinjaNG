@@ -1253,8 +1253,9 @@ video that survives route changes.
 **Integration:**
 
 ``PipProvider`` wraps the app in ``App.tsx`` and renders a hidden portal
-``div`` as a sibling of the router. VideoPlayer uses ``usePip()`` to
-adopt/reclaim its player element during PiP transitions.
+``div`` as a sibling of the router. ``Mp4EventPlayer`` (recorded event
+playback) uses ``usePip()`` to adopt/reclaim its player element during
+PiP transitions. ``LiveMonitorPlayer`` (live streams) does not use PiP.
 
 PasswordInput
 ~~~~~~~~~~~~~

@@ -344,7 +344,7 @@ support.
 **Note:** Mobile uses base64 directly (not Blob conversion) to avoid
 out-of-memory errors on large video files.
 
-**Used By:** MonitorCard, EventDetail, EventCard, VideoPlayer
+**Used By:** MonitorCard, EventDetail, EventCard, MontageMonitor
 
 --------------
 
@@ -1509,31 +1509,70 @@ chain instead of hardcoding ``snapshot``/``alarm``.
 
 --------------
 
-VideoPlayer (``ui/video-player.tsx``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+LiveMonitorPlayer (``components/monitors/LiveMonitorPlayer.tsx``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-HTML5 video wrapper with platform integration.
+Live stream player. Selects Go2RTC WebRTC or MJPEG based on user
+preference and monitor capability, with a fallback ladder (WebRTC ->
+MSE -> HLS -> MJPEG). See :doc:`go2rtc-integration` for the selection
+logic and protocol fallback.
 
 **Features:**
 
-- Autoplay control
-- Fullscreen support
-- Error handling
-- Play/pause callbacks
+- ``objectFit``, ``showControls``, ``muted``, ``externalMediaRef`` props
+- ``onProtocolChange`` callback (reports the effective protocol: MSE,
+  WebRTC, or MJPEG)
+- ``forceViewMode`` to pin a monitor to streaming or snapshot mode
+  regardless of the global Streaming Mode setting
+- ``bypassGo2rtcFailureCache`` to opt a single-monitor view out of the
+  shared, module-level Go2RTC failure cache montage tiles use
 
 **Usage:**
 
 .. code:: tsx
 
-   <VideoPlayer
-     src={videoUrl}
-     autoplay={true}
-     onPlay={() => console.log('Playing')}
-     onPause={() => console.log('Paused')}
+   <LiveMonitorPlayer
+     monitor={monitor.Monitor}
+     profile={currentProfile}
+     objectFit="contain"
+     showControls={true}
    />
 
-**Used By:** EventDetail page (MP4 playback), MonitorDetail (live
-streams)
+**Used By:** MonitorDetail, MonitorCard, MontageMonitor, MonitorWidget
+(dashboard).
+
+--------------
+
+Mp4EventPlayer (``components/events/Mp4EventPlayer.tsx``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Video.js wrapper for recorded event playback (MP4 or HLS). Handles
+alarm-frame markers and Picture-in-Picture via ``usePip()``
+(``contexts/PipContext.tsx``).
+
+**Features:**
+
+- ``autoplay``, ``controls``, ``muted``, ``aspectRatio`` props
+- ``markers`` / ``onMarkerClick`` for alarm-frame timeline markers
+- ``onReady`` / ``onError`` callbacks
+- ``eventId`` enables PiP survival across navigation
+
+**Usage:**
+
+.. code:: tsx
+
+   <Mp4EventPlayer
+     src={videoUrl}
+     type={videoMimeType}
+     poster={posterUrl}
+     autoplay={settings.eventVideoAutoplay}
+     markers={videoMarkers}
+     onMarkerClick={handleMarkerClick}
+     eventId={event.Event.Id}
+     onError={handleVideoError}
+   />
+
+**Used By:** EventDetail page (MP4 playback).
 
 --------------
 
@@ -2115,7 +2154,8 @@ This table shows which components/pages use which shared services:
 +---------------------------------------------+------------------------+
 | **download**                                | MonitorCard,           |
 |                                             | EventDetail,           |
-|                                             | EventCard, VideoPlayer |
+|                                             | EventCard,             |
+|                                             | MontageMonitor         |
 +---------------------------------------------+------------------------+
 | **proxy-utils**                             | API functions          |
 |                                             | (monitors, events),    |
@@ -2167,7 +2207,11 @@ This table shows which components/pages use which shared services:
 | **SecureImage**                         | (Rare - authenticated      |
 |                                         | images)                    |
 +-----------------------------------------+----------------------------+
-| **VideoPlayer**                         | EventDetail, MonitorDetail |
+| **LiveMonitorPlayer**                   | MonitorDetail, MonitorCard,|
+|                                         | MontageMonitor,            |
+|                                         | MonitorWidget              |
++-----------------------------------------+----------------------------+
+| **Mp4EventPlayer**                      | EventDetail                |
 +-----------------------------------------+----------------------------+
 | **PasswordInput**                       | ProfileForm                |
 +-----------------------------------------+----------------------------+
