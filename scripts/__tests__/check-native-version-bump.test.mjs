@@ -1,10 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   diffTouchesVersionLine,
   isChoreCommit,
   checkNativeVersionBump,
   checkCommits,
+  isUnreachableRangeError,
+  runCi,
   NATIVE_VERSION_FILES,
 } from '../check-native-version-bump.mjs';
 
@@ -145,4 +151,55 @@ test('checkCommits flags only the offending commit among several', () => {
   ]);
   assert.equal(failures.length, 1);
   assert.equal(failures[0].sha, 'eee5555');
+});
+
+// isUnreachableRangeError / runCi (refs #217 residual finding): `git rev-list`
+// throws when a range endpoint doesn't exist in the object database, which
+// happens on a force-push that rewrites the branch away from the previous
+// tip. That must not be a spurious CI red.
+
+test('isUnreachableRangeError matches common git "missing object" phrasing', () => {
+  assert.equal(isUnreachableRangeError("fatal: bad revision 'deadbeef..HEAD'"), true);
+  assert.equal(isUnreachableRangeError('fatal: bad object deadbeefdeadbeefdeadbeefdeadbeefdeadbeef'), true);
+  assert.equal(
+    isUnreachableRangeError("fatal: ambiguous argument 'deadbeef..HEAD': unknown revision or path not in the working tree."),
+    true
+  );
+});
+
+test('isUnreachableRangeError is false for unrelated git errors', () => {
+  assert.equal(isUnreachableRangeError('fatal: not a git repository'), false);
+  assert.equal(isUnreachableRangeError(''), false);
+  assert.equal(isUnreachableRangeError(undefined), false);
+});
+
+test('runCi skips gracefully when the before SHA is orphaned/unreachable (force-push)', () => {
+  // Real repo, real git binary: exercise the actual failure path rev-list
+  // takes rather than mocking child_process.
+  const repoDir = mkdtempSync(join(tmpdir(), 'native-version-guard-'));
+  const git = (...args) => execFileSync('git', args, { cwd: repoDir, encoding: 'utf8' });
+  try {
+    git('init', '-q');
+    git('config', 'user.email', 'test@example.com');
+    git('config', 'user.name', 'Test');
+    writeFileSync(join(repoDir, 'a.txt'), '1');
+    git('add', 'a.txt');
+    git('commit', '-q', '-m', 'init');
+    const head = git('rev-parse', 'HEAD').trim();
+
+    // Well-formed 40-char SHA that was never committed in this repo -
+    // stands in for a commit orphaned by a force-push and pruned by gc.
+    const orphanedSha = '1234567890abcdef1234567890abcdef12345678';
+
+    const cwdBefore = process.cwd();
+    process.chdir(repoDir);
+    try {
+      const exitCode = runCi(`${orphanedSha}..${head}`);
+      assert.equal(exitCode, 0);
+    } finally {
+      process.chdir(cwdBefore);
+    }
+  } finally {
+    rmSync(repoDir, { recursive: true, force: true });
+  }
 });

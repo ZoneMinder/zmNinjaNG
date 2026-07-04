@@ -82,6 +82,20 @@ function isRealSha(sha) {
 }
 
 /**
+ * True if a git error message indicates a range endpoint that doesn't exist
+ * in this repo's object database (refs #217 finding: a force-push can
+ * rewrite history away from a stale `before` SHA, orphaning it before CI
+ * checks out the new range). Treated like the existing all-zero-SHA case:
+ * skip the check rather than failing CI red for something out of the
+ * contributor's control.
+ */
+export function isUnreachableRangeError(errText) {
+  return /bad revision|unknown revision|bad object|ambiguous argument|not a valid object name|invalid revision range/i.test(
+    errText || ''
+  );
+}
+
+/**
  * CLI entry point for CI (refs #217 finding 1). Lists every commit in
  * `range`, loads its message and its diff restricted to the native-version
  * files, and runs `checkCommits` over the result. Returns a process exit
@@ -104,6 +118,15 @@ export function runCi(range) {
       .map((line) => line.trim())
       .filter(Boolean);
   } catch (err) {
+    const errText = `${err.stderr ? err.stderr.toString() : ''}${err.message || ''}`;
+    if (isUnreachableRangeError(errText)) {
+      console.log(
+        `check-native-version-bump: skipping CI check, range "${range}" has an unreachable endpoint ` +
+          '(likely a force-push that rewrote history away from the previous branch tip). ' +
+          'Treating as nothing-to-check.'
+      );
+      return 0;
+    }
     console.error(`check-native-version-bump: failed to list commits for range "${range}": ${err.message}`);
     return 1;
   }
