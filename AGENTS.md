@@ -11,7 +11,7 @@ These are non-negotiable. Every rule applies to all communication: responses, co
    - **No em-dashes** (—). Use a period, comma, colon, or rephrase. Example: replace "Token refresh runs every 60s — checks expiry and refreshes if within leeway" with "Token refresh runs every 60s. It checks expiry and refreshes if within leeway."
    - First-person honesty is fine ("this was primarily to educate me as I did not have React experience"). Don't sand it off.
 2. **Issues first**: create a GitHub issue before implementing features or fixing bugs. If an issue already exists, refer to it. 
-3. **Test first, verify before commit**: write tests first, run `npm test` + `tsc --noEmit` + `npm run build` + relevant e2e tests before every commit. Build passing is not proof code works. **Always run `npm run build` (not just `tsc --noEmit`) as the final check**: `tsc -b` used by the build catches stricter errors (unused variables, type narrowing) that `tsc --noEmit` misses. Never commit if the build fails.
+3. **Test first, verify before commit**: write the failing test first. Before every commit run `npm test`, `npx tsc -b`, `npm run build`, and the relevant e2e feature. Use `tsc -b`, not `tsc --noEmit`; the build's `tsc -b` catches stricter errors (unused variables, type narrowing). Never commit if any step fails.
 4. **Update docs**: update `docs/developer-guide/` in the same session when adding new APIs, components, utilities, or hooks and/or `docs/user-guide` for changed/updated or new functionality
 5. **i18n all languages**: never hardcode user-facing strings. Update ALL translation files: en, de, es, fr, zh.
 6. **Cross-platform**: test on iOS, Android, Electron desktop, phone portrait + landscape. Device e2e tests (`ios-phone`, `android`, etc.) are manual-invoke-only. Only `npm run test:e2e` (web) runs in the automated workflow.
@@ -20,22 +20,22 @@ These are non-negotiable. Every rule applies to all communication: responses, co
 9. **Logging**: use `log.*` component helpers with explicit LogLevel, never `console.*`. See `lib/logger.ts` for available helpers.
 10. **HTTP**: use `lib/http.ts` abstractions (`httpGet`, `httpPost`, etc.), never raw `fetch()` or `axios`.
 11. **Text overflow**: use `truncate` + `min-w-0` in flex containers; add `title` for tooltips. Multi-line: `line-clamp-N`.
-12. **Small files**: DRY, ~400 LOC max, extract complex logic to separate modules.
+12. **Small files, no dead code**: ~400 LOC max; extract complex logic to separate modules. DRY, but three similar lines beat a premature abstraction. Delete replaced code completely; no unused files or commented-out blocks.
 13. **`data-testid`**: add `data-testid="kebab-case-name"` to all interactive elements. Required for e2e tests.
 14. **Capacitor plugins**: dynamic imports only with platform checks. Never static imports. Match `@capacitor/core` major version. Add mock to `tests/setup.ts`.
 15. **Mobile downloads**: use CapacitorHttp base64 directly. Never convert to Blob on mobile (OOM risk).
 16. **No plan files in git**: delete `.md` plan files once the feature is complete.
-17. **Complete features fully**: don't leave features half-implemented.
+17. **Complete features fully**: don't leave features half-implemented. When multiple viable approaches or UX changes exist, present options and get approval before implementing.
 18. **User approval before merge**: never merge to main without user approval.
 19. **One logical change per commit**: use conventional format: `feat:`, `fix:`, `docs:`, `test:`, `chore:`, `refactor:`. Reference issues with `refs #<id>` or `fixes #<id>`.
 20. **Don't batch unrelated changes**: split into separate commits.
 21. **Analyze test failures**: read error output and fix systematically. Don't retry blindly.
-22. **Concise i18n labels**: button, tab, and action labels must be short across all languages. Prefer single-word synonyms (ES: "Ajustes" not "Configuración", DE: "Speichern" not "Änderungen speichern", FR: "Enregistrer" not "Enregistrer les modifications"). Test translations fit on a 320px-wide phone screen. Add `min-w-0` + `truncate` to flex containers with translated button text as a safety net.
+22. **Concise i18n labels**: button, tab, and action labels must be short in all languages; prefer single-word synonyms (ES "Ajustes" not "Configuración", DE "Speichern", FR "Enregistrer"). Translations must fit a 320px-wide screen; rule 11 is the safety net.
 23. **Date/time formatting**: all user-facing date/time display must use `useDateTimeFormat()` hook (or `formatAppDate`/`formatAppTime`/`formatAppDateTime` from `lib/format-date-time.ts` outside React). Never hardcode date-fns `format()` with literal patterns for user-visible output. This includes canvas rendering, tooltips, labels, and scrubber overlays.
-24. **Self-correcting rules**: this file is a living guardrail set; keep it current in the same session. Add or tighten a rule whenever (a) the user gives guidance that establishes a general pattern (e.g., "all X should use Y"), or (b) a bug, regression, or mistake surfaces that a rule could have prevented, including ones you introduced. Write the smallest general rule that would have caught it, plus the why in a few words. Prefer a one-line rule to a retelling of the incident. When the lesson is a one-off fact tied to specific code rather than a general pattern, put it in a code comment at that site instead of here.
+24. **Self-correcting rules**: keep this file current in the same session. Add or tighten a rule when user guidance establishes a general pattern, or when a bug or mistake surfaces that a rule could have prevented (including yours). Write the smallest general rule plus the why in a few words; never renumber existing rules (scripts and commits cite them). One-off facts tied to specific code go in a code comment at that site, not here.
 25. **Centralized constants**: every named constant (timeouts, thresholds, storage keys, animation durations, magic numbers with semantic meaning) lives in `lib/zmninja-ng-constants.ts` (app-level) or `lib/zm-constants.ts` (ZoneMinder protocol-level). Import from there; do not redeclare per file. CSS pixel values inline in JSX/styles are fine; ad-hoc numbers used once with no semantic name are fine.
 26. **Identify yourself on GitHub**: whenever you post a comment on a GitHub issue or PR, identify yourself as Claude assisting @pliablepixels. End the comment with a line such as `Posted by Claude, assisting @pliablepixels.` This line is only for GitHub comments. Never put it in git commit messages: commits use the usual `Co-Authored-By: Claude ...` signature and nothing else.
-27. **Hardening must not silently break a feature**: a security or behavioral change on a native or CI-untestable path (TLS/cert handling, WebView, native plugins, Electron) is not done until the affected feature is verified on a real device. Prefer the least-breaking option. If a finding can only be resolved by breaking a working feature (trust-on-first-use has to accept a cert before it can pin it; ZoneMinder authenticates go2rtc via the credentials embedded in its URL), document it as accepted risk instead of shipping the break. Flag every native/Electron change as needing a manual device pass before merge.
+27. **Hardening must not silently break a feature**: a change on a native or CI-untestable path (TLS/certs, WebView, native plugins, Electron) is not done until the affected feature is verified on a real device. Prefer the least-breaking option; if a fix can only ship by breaking a working feature (TOFU must accept a cert before it can pin it), document it as accepted risk instead. Flag every native/Electron change as needing a device pass before merge.
 28. **Don't commit incidental build artifacts**: `npm run build` bumps native build numbers (`app/android/app/build.gradle` `versionCode`, `app/ios/App/App.xcodeproj/project.pbxproj` `CURRENT_PROJECT_VERSION`). Revert them with `git checkout --` before committing a feature or fix; only ever commit a bump in a dedicated `chore:` commit.
 29. **Query keys via the factory**: every React Query key and invalidation comes from `lib/query/query-keys.ts`; never write inline key arrays. Profile-scoped keys take a `ProfileId` minted through `asProfileId()`. Why: inline keys drift out of sync with invalidators and break cross-profile cache isolation.
 30. **Zustand subscriptions are selective and immutable**: subscribe with field selectors or `useShallow`, never whole-store. When narrowing an existing subscription, keep every reactively-read field in the selector; an action-only selector compiles, renders once, then goes stale. Never mutate objects obtained from `getState()`; all changes go through store actions (in-place edits skip subscribers).
@@ -63,23 +63,7 @@ One-time setup exception: run `npm install` at the repo root (`./`) once, before
 
 ## Testing
 
-### Philosophy: Be a Human Tester
-Every test must verify what a real human would verify: "Can I accomplish this task? Does this look right? Does the data make sense?"
-
-- Verify outcomes (data changed, navigation happened, file downloaded), not just element presence
-- Fill forms and verify data persists after refresh or navigation
-- Test error states, edge cases, and device-specific layout behavior
-- Add `@visual` screenshots to catch layout regressions
-- Never write "check heading is visible" as a test. That's not testing anything
-- Never mock the thing you're testing
-
-### Test-First Workflow
-1. Understand the bug/feature requirement
-2. Write a failing test that reproduces the issue
-3. Implement the fix/feature
-4. Run tests, verify they pass
-5. Run full test suite to check for regressions
-6. Commit
+Every test verifies what a human tester would: outcomes (data changed, navigation happened, data persists after refresh), never just element presence. Cover error states and edge cases. Never mock the thing under test.
 
 ### Unit Tests
 **Location**: Next to source in `__tests__/` subdirectory (e.g., `lib/crypto.ts` → `lib/__tests__/crypto.test.ts`)
@@ -212,25 +196,25 @@ For flows requiring native OS interaction (PiP, biometric auth, push, native fil
 For every code change, execute in order:
 
 1. `npm test`: must pass
-2. `npx tsc --noEmit`: must pass
+2. `npx tsc -b`: must pass
 3. `npm run build`: must succeed
 4. `npm run test:e2e -- <feature>.feature` (if UI/navigation changed)
 5. Commit only after all pass
 
-State which tests were run: "Tests verified: npm test ✓, tsc --noEmit ✓, build ✓, test:e2e -- dashboard.feature ✓"
+State which tests were run: "Tests verified: npm test ✓, tsc -b ✓, build ✓, test:e2e -- dashboard.feature ✓"
 
 **UI changes also require**: `data-testid` on new elements, e2e tests in `.feature` file with platform tags, visual baselines updated, all language files updated.
 
 **Native plugin changes also require**: Appium test in `app/tests/native/specs/`.
 
-**Never commit if**: tests are failing, tests don't exist for new functionality, you haven't actually run the tests, or you wrote a scenario that only checks element presence without interaction.
+**Never commit if**: tests are failing, tests are missing for new functionality, or you haven't actually run them.
 
 ### Feature Workflow
-1. Create GitHub issue: `gh issue create --title "feat: Description" --body "..." --label "enhancement"` (or `--label "bug"` for bugs)
+1. Create GitHub issue: `gh issue create --title "feat: Description" --body "..." --label "enhancement"` (or `--label "bug"`)
 2. Create branch: `git checkout -b feature/<short-description>` (no branch needed for bug fixes)
-3. Implement with tests
-4. Request user approval before merging
-5. Tag commits: `refs #<id>`, use `fixes #<id>` in final commit only after user confirms the fix works
+3. Write the failing test, implement, make it pass; run the full suite for regressions
+4. Verify per the checklist above, then request user approval before merging
+5. Tag commits `refs #<id>`; use `fixes #<id>` only after the user confirms the fix works
 
 ---
 
@@ -274,13 +258,6 @@ formatAppTimeShort(date, settings);
 ```
 Never use `format(date, 'HH:mm')` or similar hardcoded patterns for user-visible output.
 
-### Text Overflow
-```tsx
-<div className="flex items-center gap-2">
-  <span className="truncate min-w-0" title={text}>{text}</span>
-</div>
-```
-
 ### Capacitor Dynamic Imports
 ```typescript
 // Good
@@ -307,7 +284,6 @@ const taskId = taskStore.addTask({
 taskStore.updateProgress(taskId, percentage, bytesProcessed);
 taskStore.completeTask(taskId);
 ```
-On mobile, use CapacitorHttp base64 directly. Never convert to Blob (OOM risk).
 
 ### Bandwidth Settings
 Use `useBandwidthSettings()` in React components or `getBandwidthSettings(mode)` in services. See `BandwidthSettings` interface in `lib/zmninja-ng-constants.ts` for available properties.
@@ -317,7 +293,7 @@ import { useBandwidthSettings } from '../hooks/useBandwidthSettings';
 const bandwidth = useBandwidthSettings();
 
 const { data } = useQuery({
-  queryKey: ['monitors'],
+  queryKey: queryKeys.monitors(profileId), // rule 29: factory keys only
   queryFn: getMonitors,
   refetchInterval: bandwidth.monitorStatusInterval,
 });
@@ -373,12 +349,3 @@ grep -n "—" <file>   # em-dashes
 ```
 
 Both should return zero hits.
-
----
-
-## Code Quality
-
-- DRY, modular code. Three similar lines > premature abstraction.
-- Target ~400 LOC max per file. Extract cohesive blocks to separate modules.
-- Delete old code completely when replacing functionality. Don't leave unused files or commented code.
-- For complex features with multiple approaches or UX changes: present options and get user approval before implementing.
