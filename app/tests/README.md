@@ -278,13 +278,13 @@ Tests use two browser automation drivers:
 | **Playwright** | Web, Android | Connects to Chromium-based WebViews via CDP |
 | **WebDriverIO + Appium** | iOS | Drives WKWebView (WebKit) via XCUITest |
 
-### TestActions Abstraction
+### Step Definitions
 
-Step definitions never call Playwright or WebDriverIO APIs directly. They use a shared `TestActions` interface (`tests/actions/types.ts`) so the same `.feature` files and step definitions work across all platforms.
+Step definitions in `tests/steps/` use Playwright's `page` fixture directly (`page.getByTestId(...)`, `page.click(...)`, etc.). There is no shared driver abstraction layer.
 
-Implementations:
-- `PlaywrightActions` (`tests/actions/playwright-actions.ts`): for web and Android
-- `WebDriverIOActions`: for iOS
+### iOS
+
+iOS phone and tablet e2e (`npm run test:e2e:ios-phone`, `test:e2e:ios-tablet`) run through a separate WebDriverIO + Appium harness. They are manual-invoke-only: only `npm run test:e2e` (web) runs in the automated CI workflow.
 
 ### Config Loader
 
@@ -308,7 +308,7 @@ Summary:
 
 1. Write a human test plan. What would a QA tester check on each device?
 2. Add Gherkin scenarios to the appropriate `tests/features/<screen>.feature` file. Tag with `@all`, `@ios-phone`, etc. as needed.
-3. Add step definitions to `tests/steps/<screen>.steps.ts`. Use `TestActions` interface methods (not raw Playwright or WebDriverIO APIs) so steps work across all drivers.
+3. Add step definitions to `tests/steps/<screen>.steps.ts` using Playwright's `page` fixture directly.
 4. If the feature uses a native plugin (haptics, filesystem, camera, etc.), add a test to `tests/native/specs/`.
 5. Run with `--update-snapshots` on each platform to generate visual baselines, then commit them.
 

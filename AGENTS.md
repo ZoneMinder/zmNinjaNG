@@ -89,7 +89,7 @@ Every test must verify what a real human would verify: "Can I accomplish this ta
 **Run**: `npm run test:e2e -- <feature>.feature`
 
 ### Cross-Platform E2E Tests
-Tests run on 4 platform profiles using two drivers. Playwright drives Chromium-based platforms (web, Android) via CDP. WebDriverIO + Appium drives WebKit-based iOS platforms via XCUITest. A shared `TestActions` abstraction keeps step definitions driver-agnostic.
+Tests run on 4 platform profiles using two drivers. Playwright drives Chromium-based platforms (web, Android) via CDP. WebDriverIO + Appium drives WebKit-based iOS platforms via XCUITest. iOS phone and tablet e2e are manual-invoke-only; only the web suite (`npm run test:e2e`) runs in the automated CI workflow.
 
 | Profile | Device | Driver | Connection |
 |---|---|---|---|
@@ -168,7 +168,7 @@ Scenario: Create and verify a new widget
 
 - One scenario per user goal, not per element
 - Add `@ios-phone @android` for phone layout, `@ios-tablet` for tablet
-- Step definitions in `app/tests/steps/<screen>.steps.ts` using `TestActions` (not raw Playwright/WebDriverIO)
+- Step definitions in `app/tests/steps/<screen>.steps.ts` using Playwright's `page` fixture
 - Run `--update-snapshots` on each platform for visual baselines
 
 ### Conditional Testing Pattern
