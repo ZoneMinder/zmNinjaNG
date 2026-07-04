@@ -235,6 +235,24 @@ vi.mock('@capacitor/share', () => ({
   },
 }));
 
+// Mock @capacitor-firebase/messaging for push notification tests. Declared
+// globally (rather than per test file) because pushNotifications.ts performs
+// several overlapping `await import('@capacitor-firebase/messaging')` calls
+// the first time initialize() runs, and a per-file vi.mock factory raced one
+// of those call sites into loading the real package, which then calls the
+// real registerPlugin() and throws trying to reach an uninitialized Firebase
+// app. See services/__tests__/pushNotifications.test.ts.
+vi.mock('@capacitor-firebase/messaging', () => ({
+  FirebaseMessaging: {
+    requestPermissions: vi.fn().mockResolvedValue({ receive: 'granted' }),
+    getToken: vi.fn().mockResolvedValue({ token: 'mock-fcm-token' }),
+    createChannel: vi.fn().mockResolvedValue(undefined),
+    addListener: vi.fn().mockResolvedValue({ remove: vi.fn() }),
+    removeAllListeners: vi.fn().mockResolvedValue(undefined),
+    deleteToken: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
 // Mock @aparajita/capacitor-biometric-auth
 vi.mock('@aparajita/capacitor-biometric-auth', () => ({
   BiometricAuth: {
