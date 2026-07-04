@@ -1,0 +1,1 @@
+node scripts/check-native-version-bump.mjs "$1"

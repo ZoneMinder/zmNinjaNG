@@ -1,0 +1,7 @@
+# lint-staged and tsc must run with cwd=app/: tinyexec (used by lint-staged
+# to spawn eslint) resolves node_modules/.bin relative to the real process
+# cwd, not the --cwd option, so `cd` first rather than passing `--cwd app`.
+cd app
+
+npx lint-staged
+npx tsc -b
