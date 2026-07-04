@@ -228,6 +228,9 @@ func isServerTrustValid(_ serverTrust: SecTrust) -> Bool {
 /// URLSession.shared which has no delegate.
 class SSLTrustURLProtocol: URLProtocol, URLSessionDelegate, URLSessionDataDelegate {
     private var dataTask: URLSessionDataTask?
+    private var session: URLSession?
+    private let invalidationLock = NSLock()
+    private var didInvalidate = false
     private static let handledKey = "SSLTrustURLProtocolHandled"
 
     override class func canInit(with request: URLRequest) -> Bool {
@@ -253,13 +256,28 @@ class SSLTrustURLProtocol: URLProtocol, URLSessionDelegate, URLSessionDataDelega
         URLProtocol.setProperty(true, forKey: SSLTrustURLProtocol.handledKey, in: mutableRequest)
 
         let config = URLSessionConfiguration.default
-        let session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
-        dataTask = session.dataTask(with: mutableRequest as URLRequest)
+        let newSession = URLSession(configuration: config, delegate: self, delegateQueue: nil)
+        session = newSession
+        dataTask = newSession.dataTask(with: mutableRequest as URLRequest)
         dataTask?.resume()
     }
 
     override func stopLoading() {
         dataTask?.cancel()
+        invalidateSession()
+    }
+
+    /// Invalidate the per-request URLSession exactly once. URLSession retains its
+    /// delegate until invalidated, so without this every intercepted HTTPS request
+    /// leaks a session + protocol instance. Both stopLoading() (client cancel/teardown)
+    /// and didCompleteWithError (natural completion) can each try to invalidate, so
+    /// guard with a lock to avoid invalidating twice.
+    private func invalidateSession() {
+        invalidationLock.lock()
+        defer { invalidationLock.unlock() }
+        guard !didInvalidate else { return }
+        didInvalidate = true
+        session?.finishTasksAndInvalidate()
     }
 
     // MARK: URLSessionDelegate — validate certificate fingerprint
@@ -319,6 +337,7 @@ class SSLTrustURLProtocol: URLProtocol, URLSessionDelegate, URLSessionDataDelega
         } else {
             client?.urlProtocolDidFinishLoading(self)
         }
+        invalidateSession()
     }
 
     func urlSession(
