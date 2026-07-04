@@ -111,9 +111,12 @@ export class MobilePushService {
           await this._createNotificationChannel();
         }
 
-        // Setup listeners BEFORE requesting token to ensure we catch token refreshes
+        // Setup listeners BEFORE requesting token to ensure we catch token refreshes.
+        // Must be awaited: this was previously fire-and-forget, so there was no
+        // actual guarantee the listeners were attached before the token request
+        // below completed, despite the comment's stated intent.
         if (!this.isInitialized) {
-          this._setupListeners();
+          await this._setupListeners();
           this.isInitialized = true;
         }
 
