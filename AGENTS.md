@@ -37,6 +37,13 @@ These are non-negotiable. Every rule applies to all communication: responses, co
 26. **Identify yourself on GitHub**: whenever you post a comment on a GitHub issue or PR, identify yourself as Claude assisting @pliablepixels. End the comment with a line such as `Posted by Claude, assisting @pliablepixels.` This line is only for GitHub comments. Never put it in git commit messages: commits use the usual `Co-Authored-By: Claude ...` signature and nothing else.
 27. **Hardening must not silently break a feature**: a security or behavioral change on a native or CI-untestable path (TLS/cert handling, WebView, native plugins, Electron) is not done until the affected feature is verified on a real device. Prefer the least-breaking option. If a finding can only be resolved by breaking a working feature (trust-on-first-use has to accept a cert before it can pin it; ZoneMinder authenticates go2rtc via the credentials embedded in its URL), document it as accepted risk instead of shipping the break. Flag every native/Electron change as needing a manual device pass before merge.
 28. **Don't commit incidental build artifacts**: `npm run build` bumps native build numbers (`app/android/app/build.gradle` `versionCode`, `app/ios/App/App.xcodeproj/project.pbxproj` `CURRENT_PROJECT_VERSION`). Revert them with `git checkout --` before committing a feature or fix; only ever commit a bump in a dedicated `chore:` commit.
+29. **Query keys via the factory**: every React Query key and invalidation comes from `lib/query/query-keys.ts`; never write inline key arrays. Profile-scoped keys take a `ProfileId` minted through `asProfileId()`. Why: inline keys drift out of sync with invalidators and break cross-profile cache isolation.
+30. **Zustand subscriptions are selective and immutable**: subscribe with field selectors or `useShallow`, never whole-store. When narrowing an existing subscription, keep every reactively-read field in the selector; an action-only selector compiles, renders once, then goes stale. Never mutate objects obtained from `getState()`; all changes go through store actions (in-place edits skip subscribers).
+31. **Services never statically import stores**: invert the dependency with the gate/registration pattern (`api/store-gates.ts`, `setPushServiceStoreGates`). Keep `npx madge --circular` at zero; a new static store/service edge is a review blocker.
+32. **Shared query error and loading UI**: error walls use `ErrorBanner` with `resolveQueryError(err, t)` (folds 401 into the localized auth prompt); loading states use the shared skeletons in `components/ui/query-state.tsx`. No hand-rolled `bg-destructive/10` divs or raw `error.message` rendering.
+33. **lib/ placement**: new `lib/` modules go in their domain subfolder (`monitor/`, `event/`, `zm/`, `tv/`, `profile/`, `query/`, `security/`); top-level is reserved for cross-cutting singles (logger, platform, http, utils). No one-file folders.
+34. **E2e steps assert, never mask**: no fixed `waitForTimeout` in new steps; use auto-retrying `expect` waits. Conditional guards must derive from API or fixture data (e.g. monitor `Controllable`), never from visibility of the element under test; when the capability is present, `Then` steps hard-assert. Why: a guard keyed on the UI under test turns its own regression into a green pass.
+35. **Lint gates**: `lint:a11y` is blocking in CI and pre-commit; new interactive elements must pass it. The general lint gate is advisory only until the #217 backlog clears; new and edited files must not add violations to that backlog.
 
 ---
 
@@ -174,23 +181,26 @@ Scenario: Create and verify a new widget
 - Run `--update-snapshots` on each platform for visual baselines
 
 ### Conditional Testing Pattern
-For features depending on dynamic content:
+For features that depend on server data or device capability, gate on the capability from an INDEPENDENT source (API, fixture), never on visibility of the UI under test. A guard derived from the element under test converts that element's regression into a green pass (rule 34).
+
 ```typescript
-let actionPerformed = false;
+// Good: capability from the API decides whether the feature applies.
+let hasPTZ = false;
 
-When('I click download if exists', async ({ page }) => {
-  const button = page.getByTestId('download-button');
-  if (await button.isVisible({ timeout: 1000 })) {
-    await button.click();
-    actionPerformed = true;
-  }
+Given('I know the monitor capabilities', async () => {
+  hasPTZ = await isMonitorControllable(monitorId); // tests/helpers/zm-api.ts
 });
 
-Then('I should see progress if started', async ({ page }) => {
-  if (!actionPerformed) return;
-  await expect(page.getByTestId('progress')).toBeVisible();
+Then('I should see the PTZ control panel', async ({ page }) => {
+  if (!hasPTZ) return; // monitor genuinely has no PTZ: not applicable
+  await expect(page.getByTestId('ptz-controls')).toBeVisible(); // capability present: hard assert
 });
+
+// Bad: self-defeating. If the panel breaks, hasPTZ is false and every step skips.
+// hasPTZ = await page.getByTestId('ptz-controls').isVisible().catch(() => false);
 ```
+
+When an earlier step legitimately performed no action (zero events on a test server), downstream `Then` steps may skip, but the skip condition must be data (`eventCount === 0`), not a swallowed locator failure.
 
 ### Native-Only Tests (Appium)
 For flows requiring native OS interaction (PiP, biometric auth, push, native file downloads, share sheet, app lifecycle): `app/tests/native/specs/<feature>.spec.ts`
@@ -283,6 +293,8 @@ if (Capacitor.isNativePlatform()) {
 // Bad: static import breaks on web
 import { Haptics } from '@capacitor/haptics';
 ```
+
+For plugin event listeners in React, use `hooks/useCapacitorListener` instead of hand-rolling the dynamic-import + `addListener` + cleanup lifecycle; it handles the async-remove race on unmount.
 
 ### Background Tasks & Downloads
 ```typescript
