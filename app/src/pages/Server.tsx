@@ -50,7 +50,9 @@ export default function Server() {
   const queryClient = useQueryClient();
   const { currentProfile } = useCurrentProfile();
   const bandwidth = useBandwidthSettings();
-  const { version, apiVersion, isAuthenticated } = useAuthStore();
+  const version = useAuthStore((s) => s.version);
+  const apiVersion = useAuthStore((s) => s.apiVersion);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const [selectedAction, setSelectedAction] = useState<string>('');
 
   // Fetch server information

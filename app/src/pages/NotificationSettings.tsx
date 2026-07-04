@@ -47,16 +47,14 @@ export default function NotificationSettings() {
   const getDecryptedPassword = useProfileStore((state) => state.getDecryptedPassword);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
-  const {
-    getProfileSettings,
-    updateProfileSettings,
-    setMonitorFilter,
-    connect,
-    disconnect,
-    connectionState,
-    isConnected,
-    getUnreadCount,
-  } = useNotificationStore();
+  const getProfileSettings = useNotificationStore((s) => s.getProfileSettings);
+  const updateProfileSettings = useNotificationStore((s) => s.updateProfileSettings);
+  const setMonitorFilter = useNotificationStore((s) => s.setMonitorFilter);
+  const connect = useNotificationStore((s) => s.connect);
+  const disconnect = useNotificationStore((s) => s.disconnect);
+  const connectionState = useNotificationStore((s) => s.connectionState);
+  const isConnected = useNotificationStore((s) => s.isConnected);
+  const getUnreadCount = useNotificationStore((s) => s.getUnreadCount);
 
   // Get settings for current profile
   const settings = currentProfile ? getProfileSettings(currentProfile.id) : null;

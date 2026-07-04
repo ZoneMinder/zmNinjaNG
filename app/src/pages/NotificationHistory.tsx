@@ -40,7 +40,11 @@ export default function NotificationHistory() {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { currentProfile, settings } = useCurrentProfile();
-  const { getEvents, getUnreadCount, markEventRead, markAllRead, clearEvents } = useNotificationStore();
+  const getEvents = useNotificationStore((s) => s.getEvents);
+  const getUnreadCount = useNotificationStore((s) => s.getUnreadCount);
+  const markEventRead = useNotificationStore((s) => s.markEventRead);
+  const markAllRead = useNotificationStore((s) => s.markAllRead);
+  const clearEvents = useNotificationStore((s) => s.clearEvents);
   const { token: accessToken, isFresh: isAccessTokenFresh } = useFreshAccessToken();
   const { fmtDateTimeShort } = useDateTimeFormat();
   const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);

@@ -22,9 +22,11 @@ interface UseKioskLockOptions {
 export function useKioskLock(options?: UseKioskLockOptions) {
   const { t } = useTranslation();
   const { toast } = useToast();
-  const { isLocked, lock: kioskLock } = useKioskStore();
+  const isLocked = useKioskStore((s) => s.isLocked);
+  const kioskLock = useKioskStore((s) => s.lock);
   const currentProfileId = useProfileStore((s) => s.currentProfileId);
-  const { getProfileSettings, updateProfileSettings } = useSettingsStore();
+  const getProfileSettings = useSettingsStore((s) => s.getProfileSettings);
+  const updateProfileSettings = useSettingsStore((s) => s.updateProfileSettings);
 
   const [showSetPin, setShowSetPin] = useState(false);
   const [setPinMode, setSetPinMode] = useState<PinPadMode>('set');
