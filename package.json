@@ -32,7 +32,6 @@
     "ios:run": "npm --prefix app run ios:run",
     "ios": "npm --prefix app run ios",
     "ios:open": "npm --prefix app run ios:open",
-    "tauri:build:dmg:nosign": "scripts/build-desktop.sh --nosign",
     "electron:dev": "npm --prefix app run electron:dev",
     "electron:start": "npm --prefix app run electron:start",
     "electron:build": "npm --prefix app run electron:build",
