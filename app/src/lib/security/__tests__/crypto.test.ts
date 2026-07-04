@@ -283,10 +283,17 @@ describe('Security properties', () => {
     const plaintext = 'MyVerySecretPassword123';
     const encrypted = await encrypt(plaintext);
 
-    // Encrypted should not contain any part of the plaintext
-    expect(encrypted.toLowerCase()).not.toContain('secret');
-    expect(encrypted.toLowerCase()).not.toContain('password');
-    expect(encrypted).not.toContain('123');
+    // Check the raw ciphertext bytes, not the base64 string. The base64
+    // alphabet contains digits and letters, so a short substring like '123'
+    // (or 'secret') can appear in the encoded output by chance, which makes a
+    // substring check on `encrypted` flaky. Decoding to bytes and checking the
+    // full plaintext is the real "no readable plaintext" property and is not
+    // subject to coincidental base64 matches.
+    const rawBytes = Buffer.from(encrypted, 'base64').toString('latin1');
+    expect(rawBytes).not.toContain(plaintext);
+    expect(rawBytes.toLowerCase()).not.toContain('secret');
+    expect(rawBytes.toLowerCase()).not.toContain('password');
+    expect(encrypted).not.toBe(plaintext);
   });
 
   it('different plaintexts produce different ciphertexts', async () => {
