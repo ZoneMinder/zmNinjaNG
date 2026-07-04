@@ -31,6 +31,18 @@ export function sanitizeFilename(name: string): string {
 }
 
 /**
+ * True when `error` represents a caller-initiated cancellation (fetch's
+ * AbortController, and the native/Electron adapters' timeout.ts, all reject
+ * with a `DOMException` named 'AbortError'). `DOMException` does NOT extend
+ * `Error` in browsers/jsdom (only Node's built-in DOMException happens to),
+ * so a plain `error instanceof Error` guard misses it there and treats a
+ * user-cancelled download as a failure.
+ */
+function isAbortError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && (error as { name?: unknown }).name === 'AbortError';
+}
+
+/**
  * Progress callback for download operations
  */
 export interface DownloadProgress {
@@ -146,6 +158,7 @@ async function downloadFileNative(url: string, filename: string, options?: Downl
     const response = await httpRequest<string>(url, {
       method: 'GET',
       responseType: 'base64',
+      signal: options?.signal,
     });
 
     if (response.status !== 200) {
@@ -232,10 +245,18 @@ async function downloadFileWeb(url: string, filename: string, options?: Download
     setTimeout(() => {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(blobUrl);
-    }, 100);
+    }, DOWNLOAD.webLinkCleanupDelayMs);
 
     log.download('File downloaded via browser', LogLevel.INFO, { filename });
   } catch (fetchError) {
+    // A caller-initiated cancellation (e.g. the user tapping Cancel on a
+    // background download task) must propagate as a cancellation, not fall
+    // back to a direct link: that would silently start a new-tab download
+    // for a request the user just cancelled.
+    if (options?.signal?.aborted) {
+      throw fetchError;
+    }
+
     // If unified HTTP fails, fall back to direct download link
     // This will open in a new tab and rely on browser's download handling
     log.download('API client download failed, falling back to direct link', LogLevel.WARN, { url, error: fetchError });
@@ -250,7 +271,7 @@ async function downloadFileWeb(url: string, filename: string, options?: Download
 
     setTimeout(() => {
       document.body.removeChild(link);
-    }, 100);
+    }, DOWNLOAD.webLinkCleanupDelayMs);
 
     log.download('Initiated direct download', LogLevel.INFO, { filename });
   }
@@ -415,9 +436,13 @@ export function downloadEventVideo(
         onProgress: (progress) => {
           taskStore.updateProgress(taskId, progress.percentage, progress.loaded);
 
-          // Update file size metadata on first progress update
-          if (progress.total && !taskStore.tasks.find(t => t.id === taskId)?.metadata.fileSize) {
-            const task = taskStore.tasks.find(t => t.id === taskId);
+          // Update file size metadata on first progress update. Read fresh
+          // state here: `taskStore` is a snapshot captured before addTask()
+          // ran, so `taskStore.tasks` never contains this task and this
+          // block was previously always a no-op.
+          const currentTasks = useBackgroundTasks.getState().tasks;
+          if (progress.total && !currentTasks.find(t => t.id === taskId)?.metadata.fileSize) {
+            const task = currentTasks.find(t => t.id === taskId);
             if (task) {
               task.metadata.fileSize = progress.total;
             }
@@ -430,7 +455,7 @@ export function downloadEventVideo(
       log.download('Video download completed', LogLevel.INFO, { eventId, filename });
     } catch (error) {
       // Check if it was an abort
-      if (error instanceof Error && error.name === 'AbortError') {
+      if (isAbortError(error)) {
         // Already marked as cancelled by cancelFn
         return;
       }
