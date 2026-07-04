@@ -47,6 +47,55 @@ function markGo2rtcFailed(monitorId: string): void {
   go2rtcFailureCache.set(monitorId, Date.now());
 }
 
+/**
+ * Explicit content view state for the player. Replaces the previously scattered
+ * showMjpeg / showConnectingBadge / showNoVideo render booleans with one named
+ * value derived from the streaming signals.
+ *
+ * State machine (content layer; the WebRTC container mount and the error overlay
+ * are separate concerns handled directly in render, see below):
+ *
+ *   connecting        WebRTC selected, negotiating, no decoded frame and no MJPEG
+ *                     placeholder frame yet. Shows the VideoOff placeholder + the
+ *                     connecting badge.
+ *   mjpeg-placeholder WebRTC selected, negotiating (no decoded frame yet), MJPEG
+ *                     placeholder frame available. Shows the MJPEG <img> under the
+ *                     (empty) <video> container + the connecting badge.
+ *   mse-playing       WebRTC decoded frames flowing. Shows the <video> only.
+ *   mjpeg             MJPEG is the real stream and a frame is available.
+ *   no-video          MJPEG is the real stream but no frame yet / errored. Shows
+ *                     the VideoOff placeholder.
+ *
+ * Transitions are driven by the effect-managed signals, not by this function:
+ *   isWebRTC        flips false when go2rtcFailed latches (Go2RTC error, no-frame
+ *                   timeout, or freeze-watchdog max retries) -> webrtc path leaves.
+ *   hasVideoFrames  flips true when the frame poll / timeout sees videoWidth>0;
+ *                   flips false when the freeze watchdog retries the connection.
+ *   hasMjpegFrame   tracks the MJPEG <img> having a live, non-errored connkey.
+ *
+ * The error overlay (Go2RTC 'error' state) composites on top of these and is kept
+ * as a direct status.state check in render rather than a mutually-exclusive state,
+ * because it does not unmount the underlying content layer.
+ */
+export type PlayerViewState =
+  | 'connecting'
+  | 'mjpeg-placeholder'
+  | 'mse-playing'
+  | 'mjpeg'
+  | 'no-video';
+
+export function derivePlayerViewState(input: {
+  isWebRTC: boolean;
+  hasVideoFrames: boolean;
+  hasMjpegFrame: boolean;
+}): PlayerViewState {
+  if (input.isWebRTC) {
+    if (input.hasVideoFrames) return 'mse-playing';
+    return input.hasMjpegFrame ? 'mjpeg-placeholder' : 'connecting';
+  }
+  return input.hasMjpegFrame ? 'mjpeg' : 'no-video';
+}
+
 export interface LiveMonitorPlayerProps {
   monitor: Monitor;
   profile: Profile | null;
@@ -501,26 +550,18 @@ export function LiveMonitorPlayer({
   // MJPEG-first placeholder while MSE connects. It has a frame to show whenever
   // the stream is configured and not errored.
   const hasMjpegFrame = !!mjpegStream.streamUrl && !!mjpegStream.imageSrc && !mjpegError;
-  const showMjpeg = !isWebRTC || showMjpegPlaceholder;
 
-  // The MSE "connecting" badge shows while we display the MJPEG placeholder and
-  // the go2rtc stream is still establishing (not yet failed/errored). Once MSE
-  // has frames we swap to <video> and showMjpegPlaceholder is false; if MSE
-  // fails, effectiveStreamingMethod flips to 'mjpeg' so isWebRTC is false.
-  const showConnectingBadge = isWebRTC && showMjpegPlaceholder && status.state !== 'error';
-
-  // Whether we're in a "waiting for video" state
-  // Show VideoOff placeholder only when truly no video:
-  // - Go2RTC connecting and the MJPEG placeholder has no frame yet either
-  // - MJPEG with no stream configured, no frame yet, or an error.
-  //   imageSrc equals streamUrl once a connkey has been minted.
-  const showNoVideo = (isWebRTC && !hasVideoFrames && !hasMjpegFrame) ||
-    (!isWebRTC && (!mjpegStream.streamUrl || !mjpegStream.imageSrc || mjpegError));
+  // Single named content state feeding the render branches below. See the
+  // PlayerViewState doc comment for the state machine and what drives each
+  // transition. showMjpegPlaceholder (used above by the stream hooks/effects)
+  // is retained as an input; the error overlay stays a direct status check.
+  const viewState = derivePlayerViewState({ isWebRTC, hasVideoFrames, hasMjpegFrame });
 
   return (
     <div className="relative w-full h-full" data-testid="video-player">
-      {/* Background placeholder: shown until video/image loads */}
-      {showNoVideo && (
+      {/* VideoOff placeholder: waiting for video (WebRTC negotiating with no
+          placeholder frame, or MJPEG with no frame yet / errored). */}
+      {(viewState === 'connecting' || viewState === 'no-video') && (
         <div className="absolute inset-0 flex items-center justify-center bg-muted/30" data-testid="video-player-loading">
           <VideoOff className="h-8 w-8 text-muted-foreground/40" />
         </div>
@@ -535,7 +576,7 @@ export function LiveMonitorPlayer({
         />
       )}
 
-      {showMjpeg && hasMjpegFrame && (
+      {(viewState === 'mjpeg-placeholder' || viewState === 'mjpeg') && (
         <img
           ref={mjpegStream.imgRef}
           className={`w-full h-full ${className}`}
@@ -555,8 +596,9 @@ export function LiveMonitorPlayer({
         />
       )}
 
-      {/* MSE-connecting badge: blinking dots while MJPEG placeholder is shown */}
-      {showConnectingBadge && (
+      {/* MSE-connecting badge: blinking dots while WebRTC negotiates (connecting
+          or showing the MJPEG placeholder) and the stream has not errored. */}
+      {(viewState === 'connecting' || viewState === 'mjpeg-placeholder') && status.state !== 'error' && (
         <div
           className="absolute top-1.5 right-1.5 z-20 px-1.5 py-0.5 rounded bg-black/50 text-white/90 text-xs font-bold leading-none animate-pulse pointer-events-none"
           data-testid="mse-connecting-badge"
