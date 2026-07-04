@@ -4,13 +4,13 @@
  * List view of events with thumbnails and metadata.
  */
 
-import { memo, useMemo } from 'react';
+import { memo, useMemo, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { EventCard } from './EventCard';
 import { type EventFilters } from '../../api/events';
-import { getPortalUrlForMonitor } from '../../lib/zm/server-resolver';
+import { getPortalUrlForMonitor, getServerMapVersion, subscribeServerMap } from '../../lib/zm/server-resolver';
 import { buildThumbnailChain } from '../../lib/event/thumbnail-chain';
 import { calculateThumbnailDimensions, EVENT_GRID_CONSTANTS, getMonitorDimensions } from '../../lib/event/event-utils';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
@@ -129,12 +129,21 @@ export const EventListView = ({
   const { settings } = useCurrentProfile();
   const thumbnailChain = settings.thumbnailFallbackChain;
 
-  // id -> Monitor lookup, rebuilt only when the monitors array reference
-  // changes. Replaces a monitors.find() per event per render (O(events x
-  // monitors)) with an O(1) map.get() per event.
+  // Re-render when the server map changes (e.g. multi-server bootstrap
+  // populating it after this list's first render). EventItem below is
+  // memo()-wrapped and resolves its portal URL from that module-global map
+  // directly in getPortalUrlForMonitor, so without this the memoized rows
+  // would keep the stale (possibly empty) URL forever once mounted.
+  const serverMapVersion = useSyncExternalStore(subscribeServerMap, getServerMapVersion);
+
+  // id -> Monitor lookup, rebuilt when the monitors array reference changes
+  // or the server map version bumps (see above). Replaces a monitors.find()
+  // per event per render (O(events x monitors)) with an O(1) map.get() per
+  // event, while still forcing memoized EventItem rows to refresh their
+  // per-server URLs once the server map arrives.
   const monitorMap = useMemo(
     () => new Map(monitors.map((m) => [m.Monitor.Id, m.Monitor])),
-    [monitors]
+    [monitors, serverMapVersion]
   );
 
   const isLoadingData = isLoadingMore || isFetching;
