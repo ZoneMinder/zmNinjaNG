@@ -19,6 +19,7 @@ import { useDeveloperNoticeStore } from '../stores/developerNotices';
 import { useDateTimeFormat } from '../hooks/useDateTimeFormat';
 import { Markdown } from '../lib/markdown';
 import { isSafeLinkHref } from '../lib/safe-url';
+import { resolveQueryError } from '../lib/query/query-error';
 import { DEVELOPER_NOTICES } from '../lib/zmninja-ng-constants';
 import { cn } from '../lib/utils';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
@@ -185,7 +186,7 @@ export default function DeveloperNotice() {
           </CardHeader>
           <CardContent className="flex items-center justify-between gap-3">
             <p className="text-sm text-muted-foreground">
-              {error instanceof Error ? error.message : t('developer_notice.fetch_failed_generic')}
+              {resolveQueryError(error, t, { fallbackKey: 'developer_notice.fetch_failed_generic' })}
             </p>
             <Button size="sm" onClick={() => refetch()} data-testid="developer-notice-retry">
               <RefreshCw className="h-3.5 w-3.5 mr-1" />
