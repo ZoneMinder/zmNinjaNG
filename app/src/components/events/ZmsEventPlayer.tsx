@@ -569,6 +569,7 @@ export function ZmsEventPlayer({
               type="button"
               className="flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
               onClick={jumpToAlarmFrame}
+              data-testid="zms-jump-to-alarm-frame"
             >
               <img
                 src={isAccessTokenFresh ? getEventImageUrl(portalUrl, eventId, parseInt(alarmFrameId), {
@@ -592,6 +593,7 @@ export function ZmsEventPlayer({
                 type="button"
                 className="flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
                 onClick={jumpToMaxScoreFrame}
+                data-testid="zms-jump-to-max-score-frame"
               >
                 <img
                   src={isAccessTokenFresh ? getEventImageUrl(portalUrl, eventId, parseInt(maxScoreFrameId), {

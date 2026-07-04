@@ -442,18 +442,7 @@ export default function EventDetail() {
                     )}
                   </div>
                 </div>
-                <ZoomControls
-                  onZoomIn={zoomPan.zoomIn}
-                  onZoomOut={zoomPan.zoomOut}
-                  onReset={zoomPan.reset}
-                  onPanLeft={zoomPan.panLeft}
-                  onPanRight={zoomPan.panRight}
-                  onPanUp={zoomPan.panUp}
-                  onPanDown={zoomPan.panDown}
-                  isZoomed={zoomPan.isZoomed}
-                  scale={zoomPan.scale}
-                  className="bottom-12 left-2"
-                />
+                <ZoomControls zoomPan={zoomPan} className="bottom-12 left-2" />
               </Card>
             )
           ) : hasJPEGs ? (

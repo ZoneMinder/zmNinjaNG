@@ -26,29 +26,10 @@ export interface ZoomPanControls {
   scale: number;
 }
 
-interface ZoomControlsExplicitProps {
-  onZoomIn: () => void;
-  onZoomOut: () => void;
-  onReset: () => void;
-  onPanLeft: () => void;
-  onPanRight: () => void;
-  onPanUp: () => void;
-  onPanDown: () => void;
-  isZoomed: boolean;
-  scale: number;
-  className?: string;
-}
-
-interface ZoomControlsFromHookProps {
-  /** Pass the object returned by `useZoomPan` directly instead of wiring each handler. */
+interface ZoomControlsProps {
+  /** The object returned by `useZoomPan`. */
   zoomPan: ZoomPanControls;
   className?: string;
-}
-
-type ZoomControlsProps = ZoomControlsExplicitProps | ZoomControlsFromHookProps;
-
-function isFromHookProps(props: ZoomControlsProps): props is ZoomControlsFromHookProps {
-  return 'zoomPan' in props;
 }
 
 /** Returns pointerDown/pointerUp/pointerLeave handlers that repeat `action` while held. */
@@ -81,32 +62,18 @@ function useHoldRepeat(action: () => void) {
 
 const btn = 'h-7 w-7 opacity-70 hover:opacity-100';
 
-export function ZoomControls(props: ZoomControlsProps) {
+export function ZoomControls({ zoomPan, className }: ZoomControlsProps) {
   const {
-    onZoomIn,
-    onZoomOut,
-    onReset,
-    onPanLeft,
-    onPanRight,
-    onPanUp,
-    onPanDown,
+    zoomIn: onZoomIn,
+    zoomOut: onZoomOut,
+    reset: onReset,
+    panLeft: onPanLeft,
+    panRight: onPanRight,
+    panUp: onPanUp,
+    panDown: onPanDown,
     isZoomed,
     scale,
-    className,
-  } = isFromHookProps(props)
-    ? {
-        onZoomIn: props.zoomPan.zoomIn,
-        onZoomOut: props.zoomPan.zoomOut,
-        onReset: props.zoomPan.reset,
-        onPanLeft: props.zoomPan.panLeft,
-        onPanRight: props.zoomPan.panRight,
-        onPanUp: props.zoomPan.panUp,
-        onPanDown: props.zoomPan.panDown,
-        isZoomed: props.zoomPan.isZoomed,
-        scale: props.zoomPan.scale,
-        className: props.className,
-      }
-    : props;
+  } = zoomPan;
 
   const { t } = useTranslation();
 
