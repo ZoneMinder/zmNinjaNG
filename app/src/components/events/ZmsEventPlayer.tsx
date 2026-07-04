@@ -532,6 +532,7 @@ export function ZmsEventPlayer({
                 size="sm"
                 onClick={jumpToAlarmFrame}
                 className="gap-2"
+                data-testid="zms-quick-jump-alarm-frame"
               >
                 <AlertCircle className="h-4 w-4 text-destructive" />
                 {t('event_detail.first_alarm_frame')}
@@ -543,6 +544,7 @@ export function ZmsEventPlayer({
                 size="sm"
                 onClick={jumpToMaxScoreFrame}
                 className="gap-2"
+                data-testid="zms-quick-jump-max-score-frame"
               >
                 <AlertCircle className="h-4 w-4 text-yellow-500" />
                 {t('event_detail.max_score_frame')}
