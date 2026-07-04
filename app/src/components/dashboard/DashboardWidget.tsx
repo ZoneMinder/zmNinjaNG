@@ -6,6 +6,7 @@ import { useDashboardStore } from '../../stores/dashboard';
 import { cn } from '../../lib/utils';
 import { useRef, useState, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
+import { useTranslation } from 'react-i18next';
 import { WidgetEditDialog } from './WidgetEditDialog';
 
 /**
@@ -61,6 +62,7 @@ export function DashboardWidget({
     onTouchEnd,
     'data-grid': dataGrid,
 }: DashboardWidgetProps) {
+    const { t } = useTranslation();
     const isEditing = useDashboardStore((state) => state.isEditing);
     const removeWidget = useDashboardStore((state) => state.removeWidget);
     // Use useShallow to prevent re-renders when other widgets change
@@ -93,6 +95,7 @@ export function DashboardWidget({
                             variant="secondary"
                             size="icon"
                             className="h-6 w-6"
+                            aria-label={t('common.edit')}
                             onClick={(e) => {
                                 e.stopPropagation(); // Prevent drag start
                                 setEditDialogOpen(true);
@@ -105,6 +108,7 @@ export function DashboardWidget({
                             variant="destructive"
                             size="icon"
                             className="h-6 w-6"
+                            aria-label={t('common.delete')}
                             onClick={(e) => {
                                 e.stopPropagation(); // Prevent drag start
                                 removeWidget(profileId, id);

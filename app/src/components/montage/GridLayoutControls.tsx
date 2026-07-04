@@ -139,6 +139,7 @@ export function GridLayoutControls({
                       variant="ghost"
                       size="icon"
                       className="h-9 w-9 text-destructive shrink-0"
+                      aria-label={`${t('common.delete')}: ${saved.name}`}
                       onClick={(e) => handleDeleteLayout(index, saved.name, e)}
                       data-testid={`montage-delete-layout-sheet-${index}`}
                     >
@@ -185,6 +186,7 @@ export function GridLayoutControls({
                       variant="ghost"
                       size="icon"
                       className="h-5 w-5 text-destructive hover:text-destructive ml-2 shrink-0"
+                      aria-label={`${t('common.delete')}: ${saved.name}`}
                       onClick={(e) => handleDeleteLayout(index, saved.name, e)}
                       data-testid={`montage-delete-layout-menu-${index}`}
                     >
