@@ -19,6 +19,7 @@ import { httpRequest, type HttpProgress } from '../lib/http';
 
 import { getEventVideoUrl as buildEventVideoUrl } from '../lib/url-builder';
 import { DOWNLOAD } from '../lib/zmninja-ng-constants';
+import { isAbortError } from '../lib/is-abort-error';
 import { useBackgroundTasks } from '../stores/backgroundTasks';
 
 /**
@@ -28,18 +29,6 @@ import { useBackgroundTasks } from '../stores/backgroundTasks';
  */
 export function sanitizeFilename(name: string): string {
   return name.replace(/[^a-zA-Z0-9-_]/g, '_');
-}
-
-/**
- * True when `error` represents a caller-initiated cancellation (fetch's
- * AbortController, and the native/Electron adapters' timeout.ts, all reject
- * with a `DOMException` named 'AbortError'). `DOMException` does NOT extend
- * `Error` in browsers/jsdom (only Node's built-in DOMException happens to),
- * so a plain `error instanceof Error` guard misses it there and treats a
- * user-cancelled download as a failure.
- */
-function isAbortError(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && (error as { name?: unknown }).name === 'AbortError';
 }
 
 /**
