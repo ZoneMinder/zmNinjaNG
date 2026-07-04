@@ -23,6 +23,7 @@ import {
 import { useNotificationStore } from '../stores/notifications';
 import { useProfileStore } from '../stores/profile';
 import { useBandwidthSettings } from './useBandwidthSettings';
+import { queryKeys } from '../lib/query-keys';
 import { log, LogLevel } from '../lib/logger';
 import type { TimelineEvent } from '../components/timeline/timeline-layout';
 
@@ -55,7 +56,7 @@ export function useTimelineData({
 
   // Fetch monitors
   const { data: monitorsData } = useQuery({
-    queryKey: ['monitors', currentProfileId],
+    queryKey: queryKeys.monitors(currentProfileId),
     queryFn: () => getMonitors(),
   });
 
@@ -83,7 +84,7 @@ export function useTimelineData({
   }, [causeFilter, selectedMonitorIds, enabledMonitors]);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['timeline-events', startDate, endDate, monitorFilter, onlyDetectedObjects, causeFilter],
+    queryKey: queryKeys.timelineEventsList(currentProfileId, startDate, endDate, monitorFilter, onlyDetectedObjects, causeFilter),
     queryFn: async () => {
       const startDateTime = formatForServer(new Date(startDate));
       const endDateTime = formatForServer(liveMode ? new Date() : new Date(endDate));
@@ -188,7 +189,7 @@ export function useTimelineData({
         if (refetchTimerRef.current) clearTimeout(refetchTimerRef.current);
         refetchTimerRef.current = setTimeout(() => {
           log.timeline('Refetching timeline after delay', LogLevel.DEBUG);
-          queryClient.invalidateQueries({ queryKey: ['timeline-events'] });
+          queryClient.invalidateQueries({ queryKey: queryKeys.timelineEvents(currentProfileId) });
         }, TIMELINE.liveRefetchDebounceMs);
       }
     });

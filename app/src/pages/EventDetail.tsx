@@ -7,6 +7,7 @@
 
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '../lib/query-keys';
 import { getEvent, getEventVideoUrl, getEventImageUrl, setEventArchived } from '../api/events';
 import { resolveFallbackFids } from '../lib/thumbnail-chain';
 import { resolveBackNavigation } from '../lib/back-navigation';
@@ -68,18 +69,17 @@ export default function EventDetail() {
   }, [isTvMode]);
 
   const queryClient = useQueryClient();
+  const { currentProfile, settings } = useCurrentProfile();
   const { data: event, isLoading, error } = useQuery({
-    queryKey: ['event', id],
+    queryKey: queryKeys.event(currentProfile?.id, id),
     queryFn: () => getEvent(id!),
     enabled: !!id,
   });
   const { data: monitorData } = useQuery({
-    queryKey: ['monitor', event?.Event.MonitorId],
+    queryKey: queryKeys.monitor(currentProfile?.id, event?.Event.MonitorId),
     queryFn: () => getMonitor(event!.Event.MonitorId),
     enabled: !!event?.Event.MonitorId,
   });
-
-  const { currentProfile, settings } = useCurrentProfile();
   const { token: accessToken, isFresh: isAccessTokenFresh } = useFreshAccessToken();
   const effectiveMinStreamingPort = resolveMinStreamingPort(
     currentProfile?.minStreamingPort,
@@ -129,8 +129,8 @@ export default function EventDetail() {
     try {
       await setEventArchived(event.Event.Id, next);
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['event', event.Event.Id] }),
-        queryClient.invalidateQueries({ queryKey: ['events'] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.event(currentProfile?.id, event.Event.Id) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.events(currentProfile?.id) }),
       ]);
       toast.success(next ? t('events.archived_success') : t('events.unarchived_success'));
     } catch (err) {

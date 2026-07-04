@@ -11,6 +11,8 @@ import { useTranslation } from 'react-i18next';
 import { getAlarmStatus, triggerAlarm, cancelAlarm } from '../../api/monitors';
 import { log, LogLevel } from '../../lib/logger';
 import { useBandwidthSettings } from '../../hooks/useBandwidthSettings';
+import { useCurrentProfile } from '../../hooks/useCurrentProfile';
+import { queryKeys } from '../../lib/query-keys';
 
 interface UseAlarmControlOptions {
   monitorId: string | undefined;
@@ -31,6 +33,7 @@ interface UseAlarmControlReturn {
 export function useAlarmControl({ monitorId, apiBaseUrl }: UseAlarmControlOptions): UseAlarmControlReturn {
   const { t } = useTranslation();
   const bandwidth = useBandwidthSettings();
+  const { currentProfile } = useCurrentProfile();
   const [isAlarmUpdating, setIsAlarmUpdating] = useState(false);
   const [alarmToggleValue, setAlarmToggleValue] = useState(false);
   const [alarmPendingValue, setAlarmPendingValue] = useState<boolean | null>(null);
@@ -40,7 +43,7 @@ export function useAlarmControl({ monitorId, apiBaseUrl }: UseAlarmControlOption
     isLoading: isAlarmLoading,
     refetch: refetchAlarmStatus,
   } = useQuery({
-    queryKey: ['monitor-alarm-status', monitorId],
+    queryKey: queryKeys.monitorAlarmStatus(currentProfile?.id, monitorId),
     queryFn: () => getAlarmStatus(monitorId!, apiBaseUrl),
     enabled: !!monitorId,
     refetchInterval: bandwidth.alarmStatusInterval,

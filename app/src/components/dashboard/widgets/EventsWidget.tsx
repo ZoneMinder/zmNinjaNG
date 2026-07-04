@@ -21,6 +21,8 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { getEventCauseIcon } from '../../../lib/event-icons';
 import { useBandwidthSettings } from '../../../hooks/useBandwidthSettings';
+import { useCurrentProfile } from '../../../hooks/useCurrentProfile';
+import { queryKeys } from '../../../lib/query-keys';
 import { useEventTagMapping } from '../../../hooks/useEventTags';
 import { TagChipList } from '../../events/TagChip';
 import { ALL_TAGS_FILTER_ID } from '../../../hooks/useEventFilters';
@@ -50,9 +52,10 @@ export const EventsWidget = memo(function EventsWidget({
     const { fmtDateTimeShort } = useDateTimeFormat();
     const navigate = useNavigate();
     const bandwidth = useBandwidthSettings();
+    const { currentProfile } = useCurrentProfile();
     const monitorIdFilter = monitorIds?.length ? monitorIds.join(',') : undefined;
     const { data: eventsData, isLoading } = useQuery({
-        queryKey: ['events', monitorIdFilter, limit, onlyDetectedObjects],
+        queryKey: queryKeys.eventsWidget(currentProfile?.id, monitorIdFilter, limit, onlyDetectedObjects),
         queryFn: () => getEvents({
             monitorId: monitorIdFilter,
             limit,

@@ -13,6 +13,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { getMonitors } from '../api/monitors';
+import { queryKeys } from '../lib/query-keys';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useAuthStore } from '../stores/auth';
 import { useKioskStore } from '../stores/kioskStore';
@@ -52,7 +53,7 @@ export function KeyboardShortcuts() {
   const commitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { data: monitorsData } = useQuery({
-    queryKey: ['monitors', currentProfile?.id],
+    queryKey: queryKeys.monitors(currentProfile?.id),
     queryFn: () => getMonitors(),
     enabled: !!currentProfile && isAuthenticated,
   });

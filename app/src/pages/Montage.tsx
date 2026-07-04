@@ -6,6 +6,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
+import { queryKeys } from '../lib/query-keys';
 import { getMonitors } from '../api/monitors';
 import { GRID_LAYOUT } from '../lib/zmninja-ng-constants';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
@@ -61,7 +62,7 @@ export default function Montage() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['monitors', currentProfile?.id],
+    queryKey: queryKeys.monitors(currentProfile?.id),
     queryFn: () => getMonitors(),
     enabled: !!currentProfile && isAuthenticated,
     refetchInterval: bandwidth.monitorStatusInterval,

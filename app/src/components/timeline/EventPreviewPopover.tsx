@@ -14,6 +14,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { getEventImageUrl } from '../../api/events';
+import { queryKeys } from '../../lib/query-keys';
 import { getPortalUrlForEvent } from '../../lib/server-resolver';
 import { resolveFallbackFids } from '../../lib/thumbnail-chain';
 import { resolveMinStreamingPort } from '../../lib/multiport';
@@ -62,7 +63,7 @@ export const EventPreviewPopover = memo(function EventPreviewPopover({
   const queryClient = useQueryClient();
 
   const profilePortalUrl = currentProfile?.portalUrl ?? '';
-  const monitors = (queryClient.getQueryData<MonitorsResponse>(['monitors']))?.monitors ?? [];
+  const monitors = (queryClient.getQueryData<MonitorsResponse>(queryKeys.monitors(currentProfile?.id)))?.monitors ?? [];
   const portalUrl = getPortalUrlForEvent(event.monitorId, monitors, profilePortalUrl);
   const tokenOpts = {
     token: accessToken ?? undefined,

@@ -7,6 +7,7 @@
 
 import { useState, useMemo, useCallback, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { queryKeys } from '../lib/query-keys';
 import { useTranslation } from 'react-i18next';
 import { getMonitors, updateMonitor } from '../api/monitors';
 import { getConsoleEvents } from '../api/events';
@@ -66,7 +67,7 @@ export default function Monitors() {
   });
 
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['monitors', currentProfile?.id],
+    queryKey: queryKeys.monitors(currentProfile?.id),
     queryFn: () => getMonitors(),
     enabled: !!currentProfile && isAuthenticated,
     refetchInterval: bandwidth.monitorStatusInterval,
@@ -75,7 +76,7 @@ export default function Monitors() {
 
   // Fetch event counts for the last week
   const { data: eventCounts } = useQuery({
-    queryKey: ['consoleEvents', '1 week'],
+    queryKey: queryKeys.consoleEventsList(currentProfile?.id, '1 week'),
     queryFn: () => getConsoleEvents('1 week'),
     enabled: !!currentProfile && isAuthenticated,
     refetchInterval: bandwidth.consoleEventsInterval,

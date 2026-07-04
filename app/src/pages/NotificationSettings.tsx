@@ -7,6 +7,7 @@
 
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { queryKeys } from '../lib/query-keys';
 import { useNotificationStore, startEventPoller } from '../stores/notifications';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useProfileStore } from '../stores/profile';
@@ -62,7 +63,7 @@ export default function NotificationSettings() {
 
   // Fetch monitors
   const { data: monitorsData } = useQuery({
-    queryKey: ['monitors', currentProfile?.id],
+    queryKey: queryKeys.monitors(currentProfile?.id),
     queryFn: () => getMonitors(),
     enabled: !!currentProfile && isAuthenticated,
   });

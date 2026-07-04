@@ -7,6 +7,7 @@
 
 import { useMemo, useRef, useState, useEffect } from 'react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { queryKeys } from '../lib/query-keys';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
 import { getEvents } from '../api/events';
@@ -122,7 +123,7 @@ export default function Events() {
 
   // Fetch monitors for display in filter UI
   const { data: monitorsData } = useQuery({
-    queryKey: ['monitors', currentProfile?.id],
+    queryKey: queryKeys.monitors(currentProfile?.id),
     queryFn: () => getMonitors(),
     enabled: !!currentProfile && isAuthenticated,
   });
@@ -190,7 +191,7 @@ export default function Events() {
   // Include effectiveMonitorId and group filter state in query key for proper cache invalidation
   const [currentEventLimit, setCurrentEventLimit] = useState(settings.defaultEventLimit || 100);
   const { data: eventsData, isLoading, isFetching, error, refetch } = useQuery({
-    queryKey: ['events', filters, currentEventLimit, effectiveMonitorId, isGroupFilterActive, eventIdFilter, tagIdFilter],
+    queryKey: queryKeys.eventsList(currentProfile?.id, filters, currentEventLimit, effectiveMonitorId, isGroupFilterActive, eventIdFilter, tagIdFilter),
     queryFn: () =>
       getEvents({
         ...filters,

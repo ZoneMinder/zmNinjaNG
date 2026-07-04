@@ -24,6 +24,7 @@ import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/utils';
 import { useEventFavoritesStore } from '../../stores/eventFavorites';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
+import { queryKeys } from '../../lib/query-keys';
 import { setEventArchived } from '../../api/events';
 import { log, LogLevel } from '../../lib/logger';
 import { TagChipList } from './TagChip';
@@ -90,8 +91,8 @@ function EventCardComponent({ event, monitorName, thumbnailUrls, largeThumbnailU
     try {
       await setEventArchived(event.Id, next);
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['events'] }),
-        queryClient.invalidateQueries({ queryKey: ['event', event.Id] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.events(currentProfile?.id) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.event(currentProfile?.id, event.Id) }),
       ]);
       toast.success(next ? t('events.archived_success') : t('events.unarchived_success'));
     } catch (err) {

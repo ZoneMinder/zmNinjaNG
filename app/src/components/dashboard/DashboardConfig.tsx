@@ -21,6 +21,7 @@ import {
 } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { Plus, Video, Clock, ChartGantt, TrendingUp } from 'lucide-react';
+import { queryKeys } from '../../lib/query-keys';
 import type { DashboardWidget, WidgetType } from '../../stores/dashboard';
 import type { MonitorFeedFit } from '../../stores/settings';
 import { useDashboardStore } from '../../stores/dashboard';
@@ -55,7 +56,7 @@ export function DashboardConfig() {
     const profileId = currentProfile?.id || 'default';
 
     const { data: monitors } = useQuery({
-        queryKey: ['monitors', profileId],
+        queryKey: queryKeys.monitors(profileId),
         queryFn: () => getMonitors(),
     });
 

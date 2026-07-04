@@ -20,6 +20,7 @@ import {
     DialogFooter,
 } from '../ui/dialog';
 import { Button } from '../ui/button';
+import { queryKeys } from '../../lib/query-keys';
 import type { DashboardWidget } from '../../stores/dashboard';
 import type { MonitorFeedFit } from '../../stores/settings';
 import { useDashboardStore } from '../../stores/dashboard';
@@ -57,7 +58,7 @@ export function WidgetEditDialog({ open, onOpenChange, widget, profileId }: Widg
     const updateWidget = useDashboardStore((state) => state.updateWidget);
 
     const { data: monitors } = useQuery({
-        queryKey: ['monitors', profileId],
+        queryKey: queryKeys.monitors(profileId),
         queryFn: () => getMonitors(),
     });
 

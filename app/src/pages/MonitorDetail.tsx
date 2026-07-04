@@ -8,6 +8,7 @@
 
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { queryKeys } from '../lib/query-keys';
 import { getMonitor, getControl, updateMonitor } from '../api/monitors';
 import { getZones } from '../api/zones';
 import { resolveMinStreamingPort } from '../lib/multiport';
@@ -79,21 +80,21 @@ export default function MonitorDetail() {
 
   // Fetch monitor data
   const { data: monitor, isLoading, error, refetch } = useQuery({
-    queryKey: ['monitor', id],
+    queryKey: queryKeys.monitor(currentProfile?.id, id),
     queryFn: () => getMonitor(id!),
     enabled: !!id,
   });
 
   // Fetch control capabilities if monitor is controllable
   const { data: controlData } = useQuery({
-    queryKey: ['control', monitor?.Monitor.ControlId],
+    queryKey: queryKeys.control(currentProfile?.id, monitor?.Monitor.ControlId),
     queryFn: () => getControl(monitor!.Monitor.ControlId!),
     enabled: !!monitor?.Monitor.ControlId && monitor.Monitor.Controllable === '1',
   });
 
   // Fetch zones when showZones is enabled
   const { data: zones = [], isLoading: isZonesLoading } = useQuery({
-    queryKey: ['zones', id],
+    queryKey: queryKeys.zones(currentProfile?.id, id),
     queryFn: () => getZones(id!),
     enabled: !!id && showZones,
   });

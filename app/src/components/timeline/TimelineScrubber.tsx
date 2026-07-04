@@ -10,6 +10,7 @@ import { memo, useState, useCallback, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import { getPortalUrlForEvent } from '../../lib/server-resolver';
+import { queryKeys } from '../../lib/query-keys';
 import { buildThumbnailChain } from '../../lib/thumbnail-chain';
 import { EventThumbnail } from '../events/EventThumbnail';
 import { HoverPreview } from '../ui/hover-preview';
@@ -94,7 +95,7 @@ function ScrubberThumbnail({
   const queryClient = useQueryClient();
 
   const profilePortalUrl = currentProfile?.portalUrl ?? '';
-  const monitors = (queryClient.getQueryData<MonitorsResponse>(['monitors']))?.monitors ?? [];
+  const monitors = (queryClient.getQueryData<MonitorsResponse>(queryKeys.monitors(currentProfile?.id)))?.monitors ?? [];
   const portalUrl = getPortalUrlForEvent(event.monitorId, monitors, profilePortalUrl);
   const thumbnailUrls = buildThumbnailChain(portalUrl, event.id, settings.thumbnailFallbackChain, {
     token: isAccessTokenFresh ? accessToken ?? undefined : undefined,

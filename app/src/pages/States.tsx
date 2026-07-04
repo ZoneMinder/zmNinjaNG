@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '../lib/query-keys';
 import { getStates, changeState } from '../api/states';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -16,7 +17,7 @@ export default function States() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
   const { data: states, isLoading, error } = useQuery({
-    queryKey: ['states'],
+    queryKey: queryKeys.states(currentProfile?.id),
     queryFn: getStates,
     enabled: !!currentProfile && isAuthenticated,
   });
@@ -24,7 +25,7 @@ export default function States() {
   const changeMutation = useMutation({
     mutationFn: changeState,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['states'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.states(currentProfile?.id) });
       toast.success(t('states.change_success'));
     },
     onError: (error: Error) => {

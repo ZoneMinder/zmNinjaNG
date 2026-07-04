@@ -7,6 +7,7 @@
 
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { queryKeys } from '../lib/query-keys';
 import { getEvents } from '../api/events';
 import { getMonitors } from '../api/monitors';
 import { resolveMinStreamingPort } from '../lib/multiport';
@@ -58,7 +59,7 @@ export default function EventMontage() {
 
   // Fetch monitors for filter
   const { data: monitorsData } = useQuery({
-    queryKey: ['monitors', currentProfile?.id],
+    queryKey: queryKeys.monitors(currentProfile?.id),
     queryFn: () => getMonitors(),
   });
 
@@ -95,7 +96,7 @@ export default function EventMontage() {
 
   // Fetch events
   const { data: eventsData, isLoading, error } = useQuery({
-    queryKey: ['event-montage', filterParams],
+    queryKey: queryKeys.eventMontageList(currentProfile?.id, filterParams),
     queryFn: () => getEvents(filterParams),
   });
 

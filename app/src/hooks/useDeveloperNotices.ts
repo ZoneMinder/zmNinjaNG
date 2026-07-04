@@ -13,6 +13,7 @@ import { fetchDeveloperNotices, type DeveloperNotice } from '../api/developer-no
 import { useDeveloperNoticeStore } from '../stores/developerNotices';
 import { DEVELOPER_NOTICES } from '../lib/zmninja-ng-constants';
 import { getAppVersion } from '../lib/version';
+import { queryKeys } from '../lib/query-keys';
 
 export interface DeveloperNoticeView extends DeveloperNotice {
   isRead: boolean;
@@ -39,7 +40,7 @@ export function useDeveloperNotices() {
   const showNotices = useDeveloperNoticeStore((s) => s.showNotices);
 
   const query = useQuery({
-    queryKey: ['developer-notices'],
+    queryKey: queryKeys.developerNotices(),
     queryFn: fetchDeveloperNotices,
     staleTime: DEVELOPER_NOTICES.staleTimeMs,
     refetchInterval: DEVELOPER_NOTICES.pollIntervalMs,

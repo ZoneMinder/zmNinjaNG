@@ -20,6 +20,8 @@ import { useTranslation } from 'react-i18next';
 import { useDateTimeFormat } from '../../../hooks/useDateTimeFormat';
 import { Button } from '../../ui/button';
 import { useBandwidthSettings } from '../../../hooks/useBandwidthSettings';
+import { useCurrentProfile } from '../../../hooks/useCurrentProfile';
+import { queryKeys } from '../../../lib/query-keys';
 
 type TimeRange = '24h' | '48h' | '1w' | '2w' | '1m';
 
@@ -41,6 +43,7 @@ export const TimelineWidget = memo(function TimelineWidget() {
     const { fmtDate, fmtWeekday, fmtTimeShort, fmtDateTimeShort } = useDateTimeFormat();
     const navigate = useNavigate();
     const bandwidth = useBandwidthSettings();
+    const { currentProfile } = useCurrentProfile();
     const [start, setStart] = useState(() => subHours(new Date(), 24));
     const [selectedRange, setSelectedRange] = useState<TimeRange>('24h');
     const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
@@ -80,7 +83,7 @@ export const TimelineWidget = memo(function TimelineWidget() {
     }, []);
 
     const { data: events } = useQuery({
-        queryKey: ['events', 'timeline-widget', start.getTime()],
+        queryKey: queryKeys.eventsTimelineWidget(currentProfile?.id, start.getTime()),
         queryFn: () => getEvents({
             startDateTime: formatForServer(start),
             limit: 1000,

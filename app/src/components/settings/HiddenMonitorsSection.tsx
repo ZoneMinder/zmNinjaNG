@@ -14,6 +14,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown } from 'lucide-react';
 import { useAuthStore } from '../../stores/auth';
 import { getMonitors } from '../../api/monitors';
+import { queryKeys } from '../../lib/query-keys';
 import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
@@ -41,7 +42,7 @@ export function HiddenMonitorsSection({
   // Distinct query key so this full list (including excluded) never clobbers the
   // filtered ['monitors', ...] cache the rest of the app relies on.
   const { data, isLoading, error } = useQuery({
-    queryKey: ['monitors', 'all-including-excluded', currentProfile?.id],
+    queryKey: queryKeys.monitorsAllIncludingExcluded(currentProfile?.id),
     queryFn: () => getMonitors({ includeExcluded: true }),
     enabled: !!currentProfile && isAuthenticated,
   });
@@ -59,11 +60,11 @@ export function HiddenMonitorsSection({
     updateSettings(currentProfile.id, { excludedMonitorIds: next });
     // Refresh every view that derives from monitors or events. Partial keys
     // match all queries that start with them (e.g. ['monitors', profileId]).
-    queryClient.invalidateQueries({ queryKey: ['monitors'] });
-    queryClient.invalidateQueries({ queryKey: ['events'] });
-    queryClient.invalidateQueries({ queryKey: ['consoleEvents'] });
-    queryClient.invalidateQueries({ queryKey: ['timeline-events'] });
-    queryClient.invalidateQueries({ queryKey: ['event-montage'] });
+    queryClient.invalidateQueries({ queryKey: queryKeys.monitors(currentProfile?.id) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.events(currentProfile?.id) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.consoleEvents(currentProfile?.id) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.timelineEvents(currentProfile?.id) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.eventMontage(currentProfile?.id) });
   };
 
   const triggerDisabled = isLoading || !!error || monitors.length === 0;
