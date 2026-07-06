@@ -174,10 +174,14 @@ Montage
 
 **Location**: ``src/pages/Montage.tsx``
 
-Edge-to-edge grid of all monitors. Uses ``react-grid-layout`` with a
-fixed 12-column internal grid; the user's "display columns" setting
-(1–5) controls the default item width, but items can be resized to
-any width 1–12.
+Edge-to-edge grid of all monitors. Uses ``react-grid-layout`` with an
+internal grid sized to ``displayColumns * COL_SUBDIVISION`` units, so N
+display columns always renders exactly N. Each default tile is one
+column wide (``COL_SUBDIVISION`` units) and can be resized down to a
+single unit (1/``COL_SUBDIVISION`` of a column). A fixed 12-column
+grid was used previously, which rendered the wrong count for column
+values that do not divide 12 (5 rendered 6, 9 rendered 12); see issue
+#220.
 
 Layout logic lives in hooks under ``src/components/montage/``:
 
@@ -197,7 +201,7 @@ Layout logic lives in hooks under ``src/components/montage/``:
      useContainerResize,
      useFullscreenMode,
    } from '../components/montage';
-   import { INTERNAL_COLS } from '../components/montage/hooks/useMontageGrid';
+   import { internalColsForCols } from '../components/montage/hooks/useMontageGrid';
 
    export default function Montage() {
      const { currentProfile, settings } = useCurrentProfile();
@@ -217,7 +221,7 @@ Layout logic lives in hooks under ``src/components/montage/``:
 
      return (
        <WrappedGridLayout
-         cols={INTERNAL_COLS}          // always 12
+         cols={internalColsForCols(gridCols)}   // gridCols * COL_SUBDIVISION
          layout={layout}
          rowHeight={GRID_LAYOUT.montageRowHeight}
          margin={[0, 0]}
@@ -232,12 +236,15 @@ Layout logic lives in hooks under ``src/components/montage/``:
      );
    }
 
-12-Column Internal Grid
-~~~~~~~~~~~~~~~~~~~~~~~
+Proportional Internal Grid
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``INTERNAL_COLS = 12`` is the fixed column count. The user's display-
-columns value sets default item width as ``w = 12 / displayCols``.
-Vertical compaction reflows items automatically.
+``COL_SUBDIVISION = 12`` is the number of internal units per display
+column. ``internalColsForCols(displayCols)`` returns the total grid
+width, ``displayCols * COL_SUBDIVISION``. Default item width is one
+column (``COL_SUBDIVISION`` units), so ``perRow == displayCols``
+exactly for every column count. Vertical compaction reflows items
+automatically.
 
 Saved Layouts
 ~~~~~~~~~~~~~
@@ -258,9 +265,13 @@ Each saved layout stores the ``Layout[]`` array and the
 Layout Migration
 ~~~~~~~~~~~~~~~~
 
-``migrateLayout()`` in ``useMontageGrid`` handles old layouts where
-``w`` ranged 1–5. If ``max(w) <= 5``, it scales ``w`` and ``x`` into
-the 12-column space: ``w * (12 / displayCols)``.
+``isLegacyLayout(stored, displayCols)`` in ``useMontageGrid`` detects
+layouts saved on the old fixed 12-column grid (rightmost edge within
+one ``COL_SUBDIVISION`` block for 2+ columns). Those layouts can encode
+the wrong column count, so the restore effect rebuilds the default
+layout for the stored ``gridCols`` and persists it, replacing the stale
+coordinates. The column-count setting is kept; a custom tile
+arrangement is rebuilt once.
 
 Aspect-Ratio Height
 ~~~~~~~~~~~~~~~~~~~
@@ -268,7 +279,8 @@ Aspect-Ratio Height
 .. code:: typescript
 
    const CARD_HEADER_HEIGHT = 32;  // h-8 header bar
-   const columnWidth = (gridWidth - margin * (INTERNAL_COLS - 1)) / INTERNAL_COLS;
+   const internalCols = internalColsForCols(displayCols);
+   const columnWidth = (gridWidth - margin * (internalCols - 1)) / internalCols;
    const itemWidth = columnWidth * widthUnits + margin * (widthUnits - 1);
    const videoPx = itemWidth * (height / width);
    const heightPx = videoPx + CARD_HEADER_HEIGHT;

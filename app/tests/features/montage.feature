@@ -59,6 +59,17 @@ Feature: Montage Live Grid
     And I check the visibility for the captured monitor
     Then the captured monitor tile should be present in the montage grid
 
+  @all
+  Scenario Outline: Montage renders exactly the selected number of columns
+    Then I should see at least 1 monitor in montage grid
+    When I set the montage column count to <cols>
+    Then the montage grid should render <cols> columns
+
+    Examples:
+      | cols |
+      | 2    |
+      | 5    |
+
   @web
   Scenario: Montage arrangements follow the selected group
     Then I should see at least 1 monitor in montage grid

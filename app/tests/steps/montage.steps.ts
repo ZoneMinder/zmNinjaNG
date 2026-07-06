@@ -1,10 +1,56 @@
 import { createBdd } from 'playwright-bdd';
 import { expect } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import { testConfig } from '../helpers/config';
 
 const { When, Then } = createBdd();
 
 let capturedMonitorTestId: string | null = null;
+
+// Presets 1-5 are buttons; higher counts use the custom dialog. The tested
+// values (2, 5) are both presets.
+async function setMontageColumns(page: Page, cols: number) {
+  const trigger = page.getByTestId('montage-layout-trigger');
+  await trigger.click();
+  const preset = page.getByTestId(`montage-grid-preset-${cols}`);
+  await expect(preset).toBeVisible({ timeout: testConfig.timeouts.element });
+  await preset.click();
+  await expect(trigger).toHaveAttribute('data-grid-cols', String(cols), {
+    timeout: testConfig.timeouts.element,
+  });
+}
+
+// Count tiles whose top edge matches the topmost tile: that is the rendered
+// column count of the first row. Reads geometry, not the column setting, so it
+// catches a mismatch between the selected count and what is actually laid out.
+async function countTopRowTiles(page: Page): Promise<{ topRow: number; total: number }> {
+  const tiles = page.locator('[data-testid^="montage-monitor-"]');
+  const total = await tiles.count();
+  const tops: number[] = [];
+  for (let i = 0; i < total; i++) {
+    const box = await tiles.nth(i).boundingBox();
+    if (box) tops.push(box.y);
+  }
+  if (tops.length === 0) return { topRow: 0, total };
+  const minTop = Math.min(...tops);
+  const topRow = tops.filter((tp) => Math.abs(tp - minTop) <= 4).length;
+  return { topRow, total };
+}
+
+When('I set the montage column count to {int}', async ({ page }, cols: number) => {
+  await setMontageColumns(page, cols);
+});
+
+Then('the montage grid should render {int} columns', async ({ page }, cols: number) => {
+  // Invariant: the first row holds min(cols, total) tiles. With more monitors
+  // than columns the bug (5 -> 6) breaks it; with fewer, the row is capped by
+  // the monitor count (derived from the tiles present, independent of the
+  // column setting under test).
+  await expect(async () => {
+    const { topRow, total } = await countTopRowTiles(page);
+    expect(topRow).toBe(Math.min(cols, total));
+  }).toPass({ timeout: testConfig.timeouts.element });
+});
 
 When('I focus the first montage tile with the keyboard', async ({ page }) => {
   const tile = page.locator('[data-testid^="montage-monitor-"]').first();

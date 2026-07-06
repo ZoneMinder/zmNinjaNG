@@ -17,8 +17,19 @@ import type { Monitor, MonitorData } from '../../../api/types';
 import type { Profile } from '../../../api/types';
 import type { ProfileSettings } from '../../../stores/settings';
 
-/** Internal grid always uses 12 columns for fine-grained positioning. Re-exported from MONTAGE_GRID. */
-export const INTERNAL_COLS = MONTAGE_GRID.internalCols;
+/**
+ * Sub-units per display column. Re-exported from MONTAGE_GRID. Each default
+ * tile is one column wide (COL_SUBDIVISION units); a tile can be resized down
+ * to 1 unit (1/COL_SUBDIVISION of a column) for fine-grained arrangements.
+ */
+export const COL_SUBDIVISION = MONTAGE_GRID.colSubdivision;
+
+/**
+ * Total internal grid columns for a given display column count. The grid is
+ * proportional to the selection so N columns always renders exactly N.
+ */
+export const internalColsForCols = (displayCols: number): number =>
+  Math.max(1, Math.round(displayCols)) * COL_SUBDIVISION;
 
 const parseAspectRatioValue = (monitor: Monitor): number => {
   const ratio = getMonitorAspectRatio(monitor.Width, monitor.Height, monitor.Orientation);
@@ -43,13 +54,14 @@ const calculateHeightUnits = (
   monitorId: string,
   widthUnits: number,
   gridWidth: number,
-  margin: number
+  margin: number,
+  internalCols: number
 ): number => {
   const monitor = monitorMap.get(monitorId);
   if (!monitor) return 200;
 
   const aspectRatio = parseAspectRatioValue(monitor);
-  const columnWidth = (gridWidth - margin * (INTERNAL_COLS - 1)) / INTERNAL_COLS;
+  const columnWidth = (gridWidth - margin * (internalCols - 1)) / internalCols;
   const itemWidth = columnWidth * widthUnits + margin * (widthUnits - 1);
   const videoPx = itemWidth * aspectRatio;
   const heightPx = videoPx + MONTAGE_GRID.cardHeaderHeightPx;
@@ -59,22 +71,22 @@ const calculateHeightUnits = (
 };
 
 /**
- * Migrate legacy layouts from when the grid used `displayCols` columns directly
- * (each item stored with `w=1`) to the current 12-column internal grid.
- * Detection: legacy layouts always have every item at `w=1`. New-format layouts
- * use `w = floor(12/displayCols)`, which is ≥ 2 for displayCols 1–10 (the UI cap).
+ * Detect layouts saved before the internal grid became proportional to the
+ * column count (the old fixed 12-column grid, or the even older `w=1` format).
+ * Those layouts must be rebuilt because a non-divisor column count (5, 7, 8, 9,
+ * 10) rendered the wrong number of columns on the fixed grid (issue #220).
+ *
+ * The proportional grid for N columns spans `N * COL_SUBDIVISION` units, so for
+ * 2+ columns a current layout has a rightmost edge beyond one subdivision block;
+ * a layout whose rightmost edge fits within COL_SUBDIVISION is legacy. For a
+ * single column the legacy and proportional spaces coincide, so nothing needs
+ * migrating.
  */
-export const migrateLayout = (stored: Layout[], displayCols: number): Layout[] => {
-  if (stored.length === 0) return stored;
-  const maxW = Math.max(...stored.map((item) => item.w));
-  if (maxW !== 1) return stored;
-
-  const scale = Math.floor(INTERNAL_COLS / displayCols);
-  return stored.map((item) => ({
-    ...item,
-    w: Math.min(INTERNAL_COLS, item.w * scale),
-    x: Math.min(INTERNAL_COLS - 1, item.x * scale),
-  }));
+export const isLegacyLayout = (stored: Layout[], displayCols: number): boolean => {
+  if (stored.length === 0) return false;
+  if (displayCols < 2) return false;
+  const maxRight = Math.max(...stored.map((item) => item.x + item.w));
+  return maxRight <= COL_SUBDIVISION;
 };
 
 const areLayoutsEqual = (a: Layout[], b: Layout[]): boolean => {
@@ -129,6 +141,9 @@ export function useMontageGrid({
   const bucketGridCols =
     settings.montageByGroup?.[groupKey]?.gridCols ?? DEFAULT_MONTAGE_GROUP_LAYOUT.gridCols;
   const [displayCols, setDisplayCols] = useState<number>(bucketGridCols);
+  // Mirror of displayCols for stable access inside callbacks (width/resize/fill).
+  const displayColsRef = useRef(bucketGridCols);
+  useEffect(() => { displayColsRef.current = displayCols; }, [displayCols]);
   const [layout, setLayout] = useState<Layout[]>([]);
   const [hasWidth, setHasWidth] = useState(false);
   // Track whether initial layout has been built (prevent re-running on monitor refetch)
@@ -159,16 +174,16 @@ export function useMontageGrid({
 
   useEffect(() => { monitorMapRef.current = monitorMap; }, [monitorMap]);
 
-  /** Default item width in internal-col units for the current display setting. */
-  const defaultItemWidth = (cols: number) => Math.max(1, Math.floor(INTERNAL_COLS / cols));
-
   const buildDefaultLayout = useCallback(
     (monitorList: MonitorData[], cols: number, gridWidth: number): Layout[] => {
-      const w = defaultItemWidth(cols);
+      // Each default tile is exactly one column wide. perRow == cols exactly,
+      // so N columns always renders N regardless of whether N divides evenly.
+      const w = COL_SUBDIVISION;
+      const perRow = Math.max(1, Math.round(cols));
+      const internalCols = internalColsForCols(cols);
       const map = monitorMapRef.current;
       return monitorList.map(({ Monitor }, index) => {
-        const h = calculateHeightUnits(map, Monitor.Id, w, gridWidth, 0);
-        const perRow = Math.floor(INTERNAL_COLS / w);
+        const h = calculateHeightUnits(map, Monitor.Id, w, gridWidth, 0, internalCols);
         return {
           i: Monitor.Id,
           x: (index % perRow) * w,
@@ -184,13 +199,14 @@ export function useMontageGrid({
   );
 
   const recalcHeights = useCallback(
-    (current: Layout[], gridWidth: number): Layout[] => {
+    (current: Layout[], gridWidth: number, cols: number): Layout[] => {
       const map = monitorMapRef.current;
+      const internalCols = internalColsForCols(cols);
       return current.map((item) => ({
         ...item,
-        w: Math.min(item.w, INTERNAL_COLS),
-        x: Math.min(item.x, INTERNAL_COLS - item.w),
-        h: calculateHeightUnits(map, item.i, item.w, gridWidth, 0),
+        w: Math.min(item.w, internalCols),
+        x: Math.min(item.x, internalCols - item.w),
+        h: calculateHeightUnits(map, item.i, item.w, gridWidth, 0, internalCols),
       }));
     },
     [] // Uses ref, stable identity
@@ -216,11 +232,14 @@ export function useMontageGrid({
 
     const stored = settingsRef.current.montageByGroup?.[groupKeyRef.current]?.workingLayout;
     let nextLayout: Layout[];
+    // Layouts saved on the old fixed 12-column grid are rebuilt once: their
+    // arrangement can encode the wrong column count (issue #220), so the
+    // rebuilt layout is persisted to replace the stale coordinates.
+    const legacy = !!stored && isLegacyLayout(stored, displayCols);
 
-    if (stored && stored.length > 0) {
-      const migrated = migrateLayout(stored, displayCols);
+    if (stored && stored.length > 0 && !legacy) {
       const existingIds = new Set(monitors.map((item) => item.Monitor.Id));
-      const filtered = migrated.filter((item) => existingIds.has(item.i));
+      const filtered = stored.filter((item) => existingIds.has(item.i));
       const presentIds = new Set(filtered.map((item) => item.i));
       const missing = monitors.filter((item) => !presentIds.has(item.Monitor.Id));
       const defaults = buildDefaultLayout(missing, displayCols, currentWidthRef.current);
@@ -229,8 +248,13 @@ export function useMontageGrid({
       nextLayout = buildDefaultLayout(monitors, displayCols, currentWidthRef.current);
     }
 
-    const normalized = recalcHeights(nextLayout, currentWidthRef.current);
+    const normalized = recalcHeights(nextLayout, currentWidthRef.current, displayCols);
     setLayout((prev) => (areLayoutsEqual(prev, normalized) ? prev : normalized));
+    if (legacy && currentProfileRef.current) {
+      updateMontageGroupLayout(currentProfileRef.current.id, groupKeyRef.current, {
+        workingLayout: normalized,
+      });
+    }
     initializedRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayCols, hasWidth, groupKey]);
@@ -281,7 +305,7 @@ export function useMontageGrid({
       if (!currentProfileRef.current) return;
 
       skipRestoreRef.current = true;
-      const normalized = recalcHeights(savedLayout, currentWidthRef.current);
+      const normalized = recalcHeights(savedLayout, currentWidthRef.current, cols);
       setDisplayCols(cols);
       setLayout(normalized);
 
@@ -310,7 +334,7 @@ export function useMontageGrid({
       // Jiggle is prevented by handleLayoutChange being a no-op in
       // non-edit mode: RGL compaction won't trigger re-render loops.
       lastCalcWidthRef.current = width;
-      setLayout((prev) => recalcHeights(prev, width));
+      setLayout((prev) => recalcHeights(prev, width, displayColsRef.current));
     },
     [recalcHeights]
   );
@@ -342,7 +366,8 @@ export function useMontageGrid({
         newItem.i,
         newItem.w,
         currentWidthRef.current,
-        0
+        0,
+        internalColsForCols(displayColsRef.current)
       );
 
       setLayout((prev) => {
@@ -365,12 +390,14 @@ export function useMontageGrid({
     const profileId = currentProfileRef.current?.id;
     if (!profileId) return;
 
+    const cols = displayColsRef.current;
+    const internalCols = internalColsForCols(cols);
     setLayout((prev) => {
       // Find the rightmost edge of any item
       const maxRight = Math.max(...prev.map((item) => item.x + item.w));
-      if (maxRight <= 0 || maxRight === INTERNAL_COLS) return prev;
+      if (maxRight <= 0 || maxRight === internalCols) return prev;
 
-      const scale = INTERNAL_COLS / maxRight;
+      const scale = internalCols / maxRight;
 
       const nextLayout = prev.map((item) => ({
         ...item,
@@ -379,7 +406,7 @@ export function useMontageGrid({
       }));
 
       // Recalculate heights for new widths
-      const recalculated = recalcHeights(nextLayout, currentWidthRef.current);
+      const recalculated = recalcHeights(nextLayout, currentWidthRef.current, cols);
 
       updateMontageGroupLayout(profileId, groupKeyRef.current, {
         workingLayout: recalculated,

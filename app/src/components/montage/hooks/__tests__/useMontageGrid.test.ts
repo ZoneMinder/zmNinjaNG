@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import type { Layout } from 'react-grid-layout';
-import { INTERNAL_COLS, migrateLayout, useMontageGrid } from '../useMontageGrid';
+import { COL_SUBDIVISION, isLegacyLayout, useMontageGrid } from '../useMontageGrid';
 import { useSettingsStore } from '../../../../stores/settings';
 import type { MonitorData } from '../../../../api/types';
 import type { Profile } from '../../../../api/types';
@@ -125,72 +125,131 @@ const makeProfile = (id: string): Profile => ({
   createdAt: 0,
 });
 
+// Proportional (current) format: each default tile is one column wide
+// (COL_SUBDIVISION units) and perRow == displayCols exactly.
 const buildNewFormatLayout = (displayCols: number, count: number): Layout[] => {
-  const w = Math.max(1, Math.floor(INTERNAL_COLS / displayCols));
-  const perRow = Math.floor(INTERNAL_COLS / w);
+  const w = COL_SUBDIVISION;
   return Array.from({ length: count }, (_, i) => ({
     i: `m${i}`,
-    x: (i % perRow) * w,
-    y: Math.floor(i / perRow) * 2,
+    x: (i % displayCols) * w,
+    y: Math.floor(i / displayCols) * 2,
     w,
     h: 2,
   }));
 };
 
-const buildLegacyLayout = (displayCols: number, count: number): Layout[] =>
-  Array.from({ length: count }, (_, i) => ({
+// Legacy fixed 12-column format: w = floor(12/cols), rightmost edge within 12.
+const buildLegacyLayout = (displayCols: number, count: number): Layout[] => {
+  const w = Math.max(1, Math.floor(12 / displayCols));
+  const perRow = Math.floor(12 / w);
+  return Array.from({ length: count }, (_, i) => ({
     i: `m${i}`,
-    x: i % displayCols,
-    y: Math.floor(i / displayCols) * 3,
-    w: 1,
+    x: (i % perRow) * w,
+    y: Math.floor(i / perRow) * 3,
+    w,
     h: 3,
   }));
+};
 
-describe('migrateLayout', () => {
-  it('returns empty input unchanged', () => {
-    expect(migrateLayout([], 5)).toEqual([]);
+describe('isLegacyLayout', () => {
+  it('treats an empty layout as non-legacy', () => {
+    expect(isLegacyLayout([], 5)).toBe(false);
   });
 
-  it.each([1, 2, 3, 4, 5, 6])(
-    'leaves new-format layouts (%i columns) untouched',
+  it('never flags single-column layouts (spaces coincide)', () => {
+    expect(isLegacyLayout(buildLegacyLayout(1, 4), 1)).toBe(false);
+  });
+
+  it.each([2, 3, 4, 5, 6, 9])(
+    'flags a legacy fixed-12 layout for %i columns',
     (cols) => {
-      const layout = buildNewFormatLayout(cols, 6);
-      expect(migrateLayout(layout, cols)).toEqual(layout);
+      expect(isLegacyLayout(buildLegacyLayout(cols, 6), cols)).toBe(true);
     }
   );
 
-  it('migrates legacy w=1 layouts to the 12-col grid', () => {
-    const legacy = buildLegacyLayout(5, 5);
-    const migrated = migrateLayout(legacy, 5);
+  it('flags the older w=1 format', () => {
+    const w1: Layout[] = Array.from({ length: 5 }, (_, i) => ({
+      i: `m${i}`, x: i % 5, y: 0, w: 1, h: 3,
+    }));
+    expect(isLegacyLayout(w1, 5)).toBe(true);
+  });
 
-    const scale = Math.floor(INTERNAL_COLS / 5);
-    expect(migrated).toEqual(
-      legacy.map((item) => ({
-        ...item,
-        w: item.w * scale,
-        x: item.x * scale,
-      }))
+  it.each([2, 3, 4, 5, 6, 9])(
+    'does not flag a current proportional layout for %i columns',
+    (cols) => {
+      expect(isLegacyLayout(buildNewFormatLayout(cols, 6), cols)).toBe(false);
+    }
+  );
+});
+
+describe('proportional columns (#220)', () => {
+  const profileId = 'cols-profile';
+  const profile = makeProfile(profileId);
+  // 12 monitors: enough to fill more than one row for every tested column count.
+  const monitors = Array.from({ length: 12 }, (_, i) => makeMonitor(`${i + 1}`));
+
+  const renderWithCols = (cols: number) => {
+    useSettingsStore.setState({ profileSettings: {} });
+    useSettingsStore.getState().updateMontageGroupLayout(profileId, 'A', {
+      gridCols: cols,
+      workingLayout: [],
+    });
+    const settings = useSettingsStore.getState().getProfileSettings(profileId);
+
+    type HookProps = Parameters<typeof useMontageGrid>[0];
+    const { result } = renderHook(
+      (props: HookProps) => useMontageGrid(props),
+      { initialProps: { monitors, currentProfile: profile, settings, isEditMode: false, groupKey: 'A' } }
     );
-    expect(Math.max(...migrated.map((m) => m.w))).toBe(scale);
-  });
+    act(() => { result.current.handleWidthChange(1200); });
+    return result;
+  };
 
-  it('clamps oversized scaled values to internal grid bounds', () => {
-    const legacy: Layout[] = [{ i: 'a', x: 11, y: 0, w: 1, h: 2 }];
-    const migrated = migrateLayout(legacy, 1);
-    expect(migrated[0].w).toBeLessThanOrEqual(INTERNAL_COLS);
-    expect(migrated[0].x).toBeLessThanOrEqual(INTERNAL_COLS - 1);
-  });
+  // The bug: 5 rendered 6 columns, 9 rendered 12. Assert the top row of the
+  // default layout has exactly `cols` tiles for divisors and non-divisors alike.
+  it.each([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])(
+    'renders exactly %i columns in the first row',
+    (cols) => {
+      const result = renderWithCols(cols);
+      const items = result.current.layout;
+      expect(items.length).toBe(monitors.length);
 
-  it('does not corrupt a 5-column layout into a 3-column layout (regression for #135)', () => {
-    const fiveCol = buildNewFormatLayout(5, 6);
-    const result = migrateLayout(fiveCol, 5);
-    expect(Math.max(...result.map((m) => m.w))).toBe(2);
-  });
+      const minY = Math.min(...items.map((i) => i.y));
+      const firstRow = items.filter((i) => i.y === minY);
+      expect(firstRow.length).toBe(Math.min(cols, monitors.length));
 
-  it('does not corrupt a 6-column custom layout (regression for #135)', () => {
-    const sixCol = buildNewFormatLayout(6, 6);
-    const result = migrateLayout(sixCol, 6);
-    expect(Math.max(...result.map((m) => m.w))).toBe(2);
+      // Distinct x positions in the first row also equal the column count.
+      const xs = new Set(firstRow.map((i) => i.x));
+      expect(xs.size).toBe(Math.min(cols, monitors.length));
+    }
+  );
+
+  it('rebuilds a legacy fixed-12 layout to the selected column count', () => {
+    useSettingsStore.setState({ profileSettings: {} });
+    // Stored as the old 5-column layout, which actually encoded 6 columns.
+    useSettingsStore.getState().updateMontageGroupLayout(profileId, 'A', {
+      gridCols: 5,
+      workingLayout: buildLegacyLayout(5, 12).map((item, i) => ({ ...item, i: `${i + 1}` })),
+    });
+    const settings = useSettingsStore.getState().getProfileSettings(profileId);
+
+    type HookProps = Parameters<typeof useMontageGrid>[0];
+    const { result } = renderHook(
+      (props: HookProps) => useMontageGrid(props),
+      { initialProps: { monitors, currentProfile: profile, settings, isEditMode: false, groupKey: 'A' } }
+    );
+    act(() => { result.current.handleWidthChange(1200); });
+
+    const items = result.current.layout;
+    const minY = Math.min(...items.map((i) => i.y));
+    const firstRow = items.filter((i) => i.y === minY);
+    expect(firstRow.length).toBe(5);
+    expect(firstRow.every((i) => i.w === COL_SUBDIVISION)).toBe(true);
+
+    // The rebuilt layout is persisted so it isn't re-migrated on next load.
+    const persisted = useSettingsStore.getState()
+      .getProfileSettings(profileId).montageByGroup?.['A']?.workingLayout;
+    expect(persisted && isLegacyLayout(persisted, 5)).toBe(false);
   });
 });
 
@@ -199,7 +258,9 @@ describe('group-switch re-init', () => {
   const monitors = [makeMonitor('10'), makeMonitor('20')];
   const profile = makeProfile(profileId);
 
-  // Working layouts for each group: use new-format (w > 1) so migrateLayout is a no-op
+  // Working layouts for each group. Legacy-format positions are rebuilt to the
+  // group's column count on restore; the assertions below only check gridCols
+  // and that every tile maps to a fixture monitor, which holds either way.
   const workingLayoutA: Layout[] = [
     { i: '10', x: 0, y: 0, w: 6, h: 2 },
     { i: '20', x: 6, y: 0, w: 6, h: 2 },

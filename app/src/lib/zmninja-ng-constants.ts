@@ -548,8 +548,10 @@ export const MONITOR_NAVIGATION = {
  * Internal grid sizing for the Montage view.
  */
 export const MONTAGE_GRID = {
-  // Internal grid column count for fine-grained positioning
-  internalCols: 12,
+  // Sub-units per display column. The internal react-grid-layout grid spans
+  // (displayColumns * colSubdivision) units, so any column count renders
+  // exactly, while tiles still resize in fractions of a column.
+  colSubdivision: 12,
 
   // h-8 header bar height with monitor name + buttons (px)
   cardHeaderHeightPx: 32,

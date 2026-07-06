@@ -50,7 +50,7 @@ import {
   useContainerResize,
   useFullscreenMode,
 } from '../components/montage';
-import { INTERNAL_COLS } from '../components/montage/hooks/useMontageGrid';
+import { internalColsForCols } from '../components/montage/hooks/useMontageGrid';
 
 const WrappedGridLayout = WidthProvider(GridLayout);
 
@@ -445,7 +445,7 @@ export default function Montage() {
           >
             <WrappedGridLayout
               layout={layout}
-              cols={INTERNAL_COLS}
+              cols={internalColsForCols(gridCols)}
               rowHeight={GRID_LAYOUT.montageRowHeight}
               margin={[0, 0]}
               containerPadding={[0, 0]}
