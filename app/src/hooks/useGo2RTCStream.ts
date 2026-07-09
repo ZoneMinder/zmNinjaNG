@@ -267,6 +267,15 @@ export function useGo2RTCStream(options: UseGo2RTCStreamOptions): UseGo2RTCStrea
       videoRtc.onpcvideo = (video: HTMLVideoElement) => {
         log.videoPlayer('GO2RTC: Video track received', LogLevel.INFO, { monitorId, videoWidth: video.videoWidth, videoHeight: video.videoHeight });
         originalOnpcvideo(video);  // Call original first - handles MSE vs WebRTC priority
+        // onopen reported whichever of MSE/HLS video-rtc started first. That
+        // race is only decided here: the original handler adopts the WebRTC
+        // stream and leaves pcState OPEN when it wins, or closes the peer
+        // connection when it loses. Without this, the badge keeps saying MSE
+        // while WebRTC carries the picture.
+        if (videoRtc.pcState === WebSocket.OPEN) {
+          setActiveProtocol('webrtc');
+          log.videoPlayer('GO2RTC: WebRTC won the priority race', LogLevel.INFO, { monitorId });
+        }
         applyMuted(videoRtc.video);  // Apply muted to the final video element
       };
 

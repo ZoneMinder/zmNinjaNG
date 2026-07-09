@@ -176,9 +176,13 @@ The protocol the UI reports is not necessarily the winner:
    }
 
 ``modes[0]`` is whichever of MSE/HLS/MP4 started, because ``video-rtc`` pushes it
-before WebRTC. So the badge on a tile usually reads ``MSE`` even on a stream that
-WebRTC went on to win. It reports what was attempted first, not what carried the
-frames. The badge is rendered only when the ``showProtocolLabel`` setting is on.
+before WebRTC. That is only the protocol attempted first. The race is decided
+later, in ``onpcvideo``, which adopts the WebRTC stream and leaves ``pcState``
+open when WebRTC wins, or closes the peer connection when it loses. The hook's
+``onpcvideo`` wrapper reads that flag and promotes ``activeProtocol`` to
+``webrtc``, so the badge names the protocol carrying the frames rather than the
+one that started first. The badge is rendered only when the
+``showProtocolLabel`` setting is on.
 
 STUN servers
 ------------

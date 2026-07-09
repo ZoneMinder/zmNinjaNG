@@ -48,6 +48,44 @@ import { VideoRTC } from '../../lib/vendor/go2rtc/video-rtc';
 // Track instances created
 const mockVideoRtcInstances: any[] = [];
 
+/**
+ * Rebuild the VideoRTC mock so its onopen reports a concrete protocol list and
+ * its onpcvideo leaves pcState the way video-rtc would: OPEN when WebRTC wins
+ * the priority race, CLOSED when it loses and the peer connection is torn down.
+ * The hook wraps both handlers, so they must be in place before renderHook.
+ */
+function installProtocolMock(opts: {
+  modes: string[];
+  pcStateAfterOnpcvideo: number;
+  video: HTMLVideoElement;
+  onpcvideoSpy?: (video: HTMLVideoElement) => void;
+}) {
+  (VideoRTC as any).mockImplementation(function (this: any) {
+    const self = this;
+    self.mode = '';
+    self.media = '';
+    self.src = '';
+    self.style = {};
+    self.background = false;
+    self.pcConfig = { iceServers: [] };
+    self.video = opts.video;
+    self.pcState = WebSocket.CLOSED;
+    self.oninit = vi.fn();
+    self.onconnect = vi.fn();
+    self.ondisconnect = vi.fn();
+    self.onopen = vi.fn(() => opts.modes);
+    self.onclose = vi.fn();
+    self.onpcvideo = vi.fn((video: HTMLVideoElement) => {
+      opts.onpcvideoSpy?.(video);
+      self.pcState = opts.pcStateAfterOnpcvideo;
+    });
+    self.play = vi.fn().mockResolvedValue(undefined);
+    self.parentNode = null;
+    mockVideoRtcInstances.push(self);
+    return self;
+  });
+}
+
 describe('useGo2RTCStream', () => {
   let containerElement: HTMLDivElement;
 
@@ -572,6 +610,126 @@ describe('useGo2RTCStream', () => {
       await waitFor(() => {
         expect(result.current.state).toBe('connected');
       });
+    });
+
+    it('reports the protocol that actually carries video, not the one negotiated first', async () => {
+      // video-rtc runs MSE and WebRTC in parallel. onopen() lists MSE first, but
+      // onpcvideo() picks the winner: pcState === OPEN means WebRTC won.
+      const video = document.createElement('video');
+      installProtocolMock({ modes: ['mse', 'hls'], pcStateAfterOnpcvideo: WebSocket.OPEN, video });
+
+      const containerRef = { current: containerElement };
+      const { result } = renderHook(() =>
+        useGo2RTCStream({
+          go2rtcUrl: 'http://localhost:1984',
+          monitorId: '1',
+          containerRef,
+          enabled: true,
+        })
+      );
+
+      await waitFor(() => {
+        expect(VideoRTC).toHaveBeenCalled();
+      });
+
+      const instance = mockVideoRtcInstances[0];
+      act(() => {
+        instance.onopen();
+      });
+
+      // onopen only knows the first mode video-rtc tried.
+      await waitFor(() => {
+        expect(result.current.activeProtocol).toBe('mse');
+      });
+
+      act(() => {
+        instance.onpcvideo(video);
+      });
+
+      await waitFor(() => {
+        expect(result.current.activeProtocol).toBe('webrtc');
+      });
+    });
+
+    it('leaves the protocol at the MSE/HLS mode when WebRTC loses the priority race', async () => {
+      const video = document.createElement('video');
+      installProtocolMock({ modes: ['mse', 'hls'], pcStateAfterOnpcvideo: WebSocket.CLOSED, video });
+
+      const containerRef = { current: containerElement };
+      const { result } = renderHook(() =>
+        useGo2RTCStream({
+          go2rtcUrl: 'http://localhost:1984',
+          monitorId: '1',
+          containerRef,
+          enabled: true,
+        })
+      );
+
+      await waitFor(() => {
+        expect(VideoRTC).toHaveBeenCalled();
+      });
+
+      const instance = mockVideoRtcInstances[0];
+      act(() => {
+        instance.onopen();
+      });
+
+      await waitFor(() => {
+        expect(result.current.activeProtocol).toBe('mse');
+      });
+
+      act(() => {
+        instance.onpcvideo(video);
+      });
+
+      // WebRTC lost, video-rtc closed the peer connection, MSE still carries video.
+      await waitFor(() => {
+        expect(result.current.activeProtocol).toBe('mse');
+      });
+    });
+
+    it('still applies the muted state after onpcvideo has chosen the winning stream', async () => {
+      const video = document.createElement('video');
+      video.muted = false;
+      video.volume = 1;
+
+      // Record what the muted flag was while onpcvideo ran, to prove applyMuted
+      // runs after it rather than before.
+      let mutedDuringOnpcvideo: boolean | null = null;
+      installProtocolMock({
+        modes: ['mse', 'hls'],
+        pcStateAfterOnpcvideo: WebSocket.OPEN,
+        video,
+        onpcvideoSpy: (v) => {
+          mutedDuringOnpcvideo = v.muted;
+        },
+      });
+
+      const containerRef = { current: containerElement };
+      renderHook(() =>
+        useGo2RTCStream({
+          go2rtcUrl: 'http://localhost:1984',
+          monitorId: '1',
+          containerRef,
+          enabled: true,
+          muted: true,
+        })
+      );
+
+      await waitFor(() => {
+        expect(VideoRTC).toHaveBeenCalled();
+      });
+
+      const instance = mockVideoRtcInstances[0];
+      act(() => {
+        instance.onpcvideo(video);
+      });
+
+      // The spy ran (so the original handler was delegated to) and muting was
+      // applied afterwards, not before.
+      expect(mutedDuringOnpcvideo).toBe(false);
+      expect(video.muted).toBe(true);
+      expect(video.volume).toBe(0);
     });
 
     it('transitions to disconnected on ondisconnect', async () => {
