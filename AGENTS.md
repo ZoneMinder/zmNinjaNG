@@ -27,7 +27,7 @@ These are non-negotiable. Every rule applies to all communication: responses, co
 16. **No plan files in git**: delete `.md` plan files once the feature is complete.
 17. **Complete features fully**: don't leave features half-implemented. When multiple viable approaches or UX changes exist, present options and get approval before implementing.
 18. **User approval before merge**: never merge to main without user approval.
-19. **One logical change per commit**: use conventional format: `feat:`, `fix:`, `docs:`, `test:`, `chore:`, `refactor:`. Reference issues with `refs #<id>` or `fixes #<id>`.
+19. **One logical change per commit**: use conventional format: `feat:`, `fix:`, `docs:`, `test:`, `chore:`, `refactor:`. When an issue exists for the work, every commit for it MUST reference it (`refs #<id>`; use `fixes #<id>` only after the user confirms the fix works). Never leave a commit unreferenced while an issue is open for it.
 20. **Don't batch unrelated changes**: split into separate commits.
 21. **Analyze test failures**: read error output and fix systematically. Don't retry blindly.
 22. **Concise i18n labels**: button, tab, and action labels must be short in all languages; prefer single-word synonyms (ES "Ajustes" not "Configuración", DE "Speichern", FR "Enregistrer"). Translations must fit a 320px-wide screen; rule 11 is the safety net.
@@ -44,6 +44,7 @@ These are non-negotiable. Every rule applies to all communication: responses, co
 33. **lib/ placement**: new `lib/` modules go in their domain subfolder (`monitor/`, `event/`, `zm/`, `tv/`, `profile/`, `query/`, `security/`); top-level is reserved for cross-cutting singles (logger, platform, http, utils). No one-file folders.
 34. **E2e steps assert, never mask**: no fixed `waitForTimeout` in new steps; use auto-retrying `expect` waits. Conditional guards must derive from API or fixture data (e.g. monitor `Controllable`), never from visibility of the element under test; when the capability is present, `Then` steps hard-assert. Why: a guard keyed on the UI under test turns its own regression into a green pass.
 35. **Lint gates**: `lint:a11y` is blocking in CI and pre-commit; new interactive elements must pass it. The general lint gate is advisory only until the #217 backlog clears; new and edited files must not add violations to that backlog.
+36. **Issue links must land, not be patched with a comment**: for issue-tracked work, land it via a PR that references the issue so GitHub links the commits automatically. Pushing commits to a scratch branch and then fast-forwarding them onto the default branch can consume the auto-reference (GitHub ties it to the first push it saw), leaving the issue unlinked. If told to commit straight to the default branch, push directly to it with no intermediate scratch branch, then check the issue timeline; post a manual linking comment (rule 26) only if the reference is still missing. Why: stops the repeated manual linking comments.
 
 ---
 
