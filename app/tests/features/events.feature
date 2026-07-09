@@ -136,12 +136,11 @@ Feature: Event Browsing and Management
     When I hover the first event thumbnail if events exist
     Then I should see the enlarged event thumbnail preview if hover was performed
 
-  @ios-phone @android @visual
+  @ios-phone @android
   Scenario: Phone layout shows readable event cards
     Given the viewport is mobile size
     Then I should see events list or empty state
     And no element should overflow the viewport horizontally
-    And the page should match the visual baseline
 
   @all
   Scenario: Recent events show a human-readable relative time

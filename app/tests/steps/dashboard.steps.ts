@@ -73,12 +73,37 @@ Then('the widget {string} should appear on the dashboard', async ({ page }, _tit
     .toBeVisible({ timeout: testConfig.timeouts.element });
 });
 
+// DashboardConfig gives every widget type w: GRID_LAYOUT.cols (12 of 12), so the
+// dashboard is a one-widget-per-row grid at every viewport. This asserts that
+// contract: react-grid-layout must resolve w=12 to the full container width.
+Then('every dashboard widget should span the full grid width', async ({ page }) => {
+  const grid = page.locator('.react-grid-layout');
+  await expect(grid).toBeVisible({ timeout: testConfig.timeouts.element });
+
+  await expect(async () => {
+    const gridBox = await grid.boundingBox();
+    expect(gridBox).not.toBeNull();
+
+    const items = page.locator('.react-grid-item');
+    const count = await items.count();
+    expect(count).toBeGreaterThan(0);
+
+    for (let i = 0; i < count; i++) {
+      const box = await items.nth(i).boundingBox();
+      expect(box).not.toBeNull();
+      // Exact in theory (w*colWidth + (w-1)*margin === containerWidth); 1% of
+      // slack absorbs sub-pixel rounding.
+      expect(box!.width).toBeGreaterThanOrEqual(gridBox!.width * 0.99);
+    }
+  }).toPass({ timeout: testConfig.timeouts.pageLoad });
+});
+
 Then('the widget should contain non-empty content', async ({ page }) => {
   const widget = page.locator('.react-grid-item').filter({ hasText: lastWidgetTitle });
   // Verify the widget has visible child content (text, images, or data elements)
   await expect.poll(async () => {
     const textContent = await widget.innerText();
-    // Widget should have more than just its title — it should have data content
+    // Widget should have more than just its title. It should have data content.
     return textContent.trim().length > 0;
   }, { timeout: testConfig.timeouts.pageLoad }).toBeTruthy();
 });

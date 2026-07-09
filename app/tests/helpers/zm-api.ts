@@ -73,3 +73,23 @@ export async function isMonitorControllable(monitorId: string): Promise<boolean>
   const controllable = data.monitor?.Monitor?.Controllable;
   return controllable === '1' || controllable === 1;
 }
+
+/**
+ * How many monitors the server has.
+ *
+ * Multi-column layout assertions need to know whether a second card can exist
+ * at all. Counting the rendered cards instead would make a layout regression
+ * look like "the server only has one monitor" and pass (refs #233).
+ */
+export async function getMonitorCount(): Promise<number> {
+  const token = await getAccessToken();
+  const { host } = testConfig.server;
+
+  const res = await fetch(`${host}/api/monitors.json?token=${encodeURIComponent(token)}`);
+  if (!res.ok) {
+    throw new Error(`ZM API monitor list fetch failed: ${res.status} ${res.statusText}`);
+  }
+
+  const data = (await res.json()) as { monitors?: unknown[] };
+  return data.monitors?.length ?? 0;
+}

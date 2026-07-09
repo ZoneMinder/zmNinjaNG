@@ -2,6 +2,7 @@ import { createBdd } from 'playwright-bdd';
 import { expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { testConfig } from '../helpers/config';
+import { getMonitorCount } from '../helpers/zm-api';
 
 const { When, Then } = createBdd();
 
@@ -50,6 +51,25 @@ Then('the montage grid should render {int} columns', async ({ page }, cols: numb
     const { topRow, total } = await countTopRowTiles(page);
     expect(topRow).toBe(Math.min(cols, total));
   }).toPass({ timeout: testConfig.timeouts.element });
+});
+
+Then('the montage grid should lay out tiles in more than one column', async ({ page }) => {
+  // Ground truth from the API, not from the tiles under test (rule 34): a
+  // server with a single monitor genuinely cannot fill a second column.
+  const monitorCount = await getMonitorCount();
+  if (monitorCount < 2) return;
+
+  // The grid mounts tiles before react-grid-layout has positioned them, so a
+  // geometry read can land while only the first tile exists. Wait for a second
+  // tile to exist, then measure. Both are hard assertions.
+  await expect
+    .poll(async () => (await countTopRowTiles(page)).total, { timeout: testConfig.timeouts.pageLoad })
+    .toBeGreaterThanOrEqual(2);
+
+  await expect(async () => {
+    const { topRow } = await countTopRowTiles(page);
+    expect(topRow).toBeGreaterThan(1);
+  }).toPass({ timeout: testConfig.timeouts.pageLoad });
 });
 
 When('I focus the first montage tile with the keyboard', async ({ page }) => {

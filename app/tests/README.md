@@ -1,6 +1,17 @@
 # Cross-Platform Test Setup
 
-This guide covers setting up and running the full cross-platform test suite, which drives the actual app on Android Emulator, iOS Simulator (iPhone and iPad), and web browser.
+This guide covers setting up and running the cross-platform tests.
+
+Two separate suites exist, and they do different things:
+
+| Suite | Driver | What it runs | When |
+|---|---|---|---|
+| Web e2e | Playwright | The Gherkin feature files in `tests/features/` | `npm run test:e2e`, and in CI |
+| Device screenshots | WebDriverIO + Appium | `tests/device-screenshots/specs/capture-screens.spec.ts` | Manual invocation only |
+
+The feature files run on desktop Chromium and nowhere else. `playwright.config.ts` declares a single `chromium` project and nothing filters scenarios by tag, so every scenario runs on every `npm run test:e2e`, whatever its tags say. The device suite never reads the feature files: it logs in, walks each screen, and saves PNGs.
+
+There is no visual comparison. Nothing in this repo diffs a screenshot against a baseline.
 
 ---
 
@@ -77,10 +88,9 @@ This checks Xcode, iOS runtime, simulators, Android SDK, AVD, adb, Appium driver
 `app/tests/platforms.config.defaults.ts` ships with the repo and contains the default simulator names, ports, and timeouts:
 
 - Android AVD: `Pixel_7_API_34`
-- Android CDP port: `9222`
 - iOS phone simulator: `iPhone 15` (iOS 17.5)
 - iOS tablet simulator: `iPad Air 11-inch (M2)` (iOS 17.5)
-- Appium port: `4723`
+- Appium port: `4723` (iOS). The Android run uses `4724`, hardcoded in `wdio.config.device-screenshots.ts`.
 - App launch timeout: `30000` ms
 - WebView switch timeout: `10000` ms
 
@@ -131,160 +141,89 @@ All commands run from the `app/` directory.
 | `npm run test:e2e` | All web browser tests |
 | `npm run test:e2e -- tests/features/dashboard.feature` | Single feature file |
 | `npm run test:e2e -- --headed` | See the browser |
-| `npm run test:e2e:visual-update` | Regenerate web visual baselines |
 | `npm test` | Unit tests (Vitest, no server needed) |
 | `npm run test:all` | Unit + web E2E |
 | `npm run test:platform:setup` | Verify tools and simulators are ready |
 
-### Device E2E (requires simulators/emulators)
+### Device Screenshot Capture (requires simulators/emulators)
 
-Device tests are run via shell scripts from the repo root. Each script handles building the app, booting the device, and running the tests.
+Every device command below runs the same thing: `wdio.config.device-screenshots.ts`, whose only spec is `tests/device-screenshots/specs/capture-screens.spec.ts`. It logs in, visits each screen, and writes a portrait and a landscape PNG. It runs no Gherkin scenario and asserts nothing.
 
-| Command | What it does |
-|---|---|
-| `bash scripts/test-android.sh` | Build APK, boot emulator, forward CDP port, run Playwright |
-| `bash scripts/test-ios.sh phone` | Build iOS app, boot iPhone 15 sim, start Appium, run WebDriverIO |
-| `bash scripts/test-ios.sh tablet` | Build iOS app, boot iPad Air sim, start Appium, run WebDriverIO |
-| `bash scripts/test-all-platforms.sh` | Run all platforms sequentially (web, Android, iOS phone, iOS tablet) |
+The `test:e2e:*` names are historical. They do not run the e2e feature suite.
 
-### Running Device Tests Step by Step
+| Command | Equivalent | Target |
+|---|---|---|
+| `npm run test:screenshots:android` | `bash scripts/test-android.sh` | Pixel 7 emulator |
+| `npm run test:screenshots:ios-phone` | `bash scripts/test-ios.sh phone` | iPhone 15 simulator |
+| `npm run test:screenshots:ios-tablet` | `bash scripts/test-ios.sh tablet` | iPad Air simulator |
+| `npm run test:e2e:android` | same script as `test:screenshots:android` | Pixel 7 emulator |
+| `npm run test:e2e:ios-phone` | same script as `test:screenshots:ios-phone` | iPhone 15 simulator |
+| `npm run test:e2e:ios-tablet` | same script as `test:screenshots:ios-tablet` | iPad Air simulator |
+| `bash scripts/test-all-platforms.sh` | web e2e, then all three device captures | all |
+
+The `scripts/test-*.sh` wrappers add a Capacitor sync (`npm run android:sync` / `npm run ios:sync`) before launching wdio. That sync bumps native build numbers; see rule 28 in `AGENTS.md` before committing.
 
 #### Android
 
 ```bash
-# 1. Build and sync the Capacitor app to Android
 cd app && npm run android:sync
-
-# 2. Run the test script. It builds the APK, boots the emulator,
-#    installs the app, forwards the CDP port, and runs Playwright
-#    against the Android WebView.
 bash scripts/test-android.sh
-
-# Run a single feature file:
-bash scripts/test-android.sh tests/features/dashboard.feature
 ```
 
-**How it works:** The Android WebView exposes Chrome DevTools Protocol on a debug socket. The script uses `adb forward` to map it to `localhost:9222`, then Playwright connects via `connectOverCDP()` and drives the app like a regular browser.
+**How it works:** Appium's UiAutomator2 driver installs and launches the APK on the emulator, with `autoWebview` switching into the Capacitor WebView context. WebDriverIO then finds elements by `data-testid`. Appium listens on port `4724` for Android.
 
-#### iOS (iPhone)
-
-```bash
-# 1. Build and sync the Capacitor app to iOS
-cd app && npm run ios:sync
-
-# 2. Run the test script. It builds the app via xcodebuild for the
-#    simulator, boots iPhone 15, starts Appium with XCUITest driver,
-#    launches the app, switches to the WebView context, and runs
-#    WebDriverIO tests.
-bash scripts/test-ios.sh phone
-```
-
-**How it works:** Appium's XCUITest driver launches the app on the iOS simulator. WebDriverIO connects to Appium (default port 4723), which switches into the WKWebView context. From there, WebDriverIO can find elements by `data-testid` and drive the app.
-
-#### iOS (iPad)
+#### iOS (iPhone and iPad)
 
 ```bash
 cd app && npm run ios:sync
-bash scripts/test-ios.sh tablet
+bash scripts/test-ios.sh phone     # or: tablet
 ```
 
-Same flow as iPhone, but targets `iPad Air 11-inch (M2)`.
+**How it works:** Appium's XCUITest driver launches the app on the simulator and switches into the WKWebView context. WebDriverIO connects to Appium on port `4723`. The tablet variant targets `iPad Air 11-inch (M2)`.
 
-#### All Platforms
+#### Output
 
-```bash
-bash scripts/test-all-platforms.sh
+Screenshots land in a dated directory per device:
+
+```
+tests/screenshots/devices/<device-name>-<YYYY-MM-DD>/
 ```
 
-Runs in order: web, Android, iOS phone, iOS tablet.
-
-### Device Screenshot Capture
-
-For capturing device screenshots without running the full E2E suite:
-
-| Command | Description |
-|---|---|
-| `npm run test:screenshots:ios-phone` | Capture screenshots on iPhone sim |
-| `npm run test:screenshots:ios-tablet` | Capture screenshots on iPad sim |
-| `npm run test:screenshots:android` | Capture screenshots on Android emulator |
-
-These use `wdio.config.device-screenshots.ts` with Appium to launch the app and capture screenshots of each screen.
+Nothing compares them against a reference. They are for a human to look at. Do not commit them.
 
 ### Platform Tags
 
-Scenarios are tagged to control which platforms run them:
+Scenarios carry tags, but no runner filters on them today: `npm run test:e2e` runs every scenario in `tests/features/` on desktop Chromium. Treat a tag as a statement of where the scenario is *meant* to be meaningful.
 
-| Tag | Runs on |
+| Tag | Meaning |
 |---|---|
-| `@all` | All platforms |
-| `@android` | Android emulator only |
-| `@ios` | iPhone + iPad simulators |
-| `@ios-phone` | iPhone simulator only |
-| `@ios-tablet` | iPad simulator only |
-| `@web` | Web browser only |
-| `@visual` | Triggers screenshot comparison |
-| `@native` | Appium native suite only |
+| `@all` | Not specific to one platform |
+| `@web` | Browser only (for example, hover, or an explicit `setViewportSize`) |
+| `@tauri` | Tauri desktop |
+| `@android` | Android-specific behavior |
+| `@ios-phone` | iPhone form factor |
+| `@ios-tablet` | iPad form factor |
+
+There is no bare `@ios` tag. Scenarios that need a phone or tablet viewport set it explicitly with `Given the viewport is mobile size` or `Given the viewport is tablet size`, which is why they are tagged `@web`: a real device ignores `setViewportSize`.
 
 ---
 
-## 5. Visual Baselines
-
-### Storage
-
-Screenshot baselines are stored in `app/tests/screenshots/` per platform:
-
-```
-tests/screenshots/
-├── web-chromium/
-├── android-phone/
-├── ios-phone/
-└── ios-tablet/
-```
-
-Baselines are checked into git so every developer and CI run compares against the same reference images.
-
-### Generating Baselines
-
-On first run for a platform, or after intentional UI changes, generate new baselines:
-
-```bash
-# Web baselines
-npm run test:e2e:visual-update
-
-# Device baselines (pass the update flag through the test script)
-bash scripts/test-android.sh --update-snapshots
-bash scripts/test-ios.sh phone --update-snapshots
-bash scripts/test-ios.sh tablet --update-snapshots
-```
-
-### Threshold
-
-The pixel diff threshold is **0.2%**. Differences within this threshold pass. Differences above it fail.
-
-### Reviewing Failures
-
-When a visual test fails, a diff image is saved next to the baseline file showing the changed pixels. Inspect the diff to determine whether the change is intentional (update the baseline) or a regression (fix the code).
-
----
-
-## 6. Architecture
+## 5. Architecture
 
 ### Two-Driver Design
 
-Tests use two browser automation drivers:
-
-| Driver | Platforms | Why |
+| Driver | Suite | Why |
 |---|---|---|
-| **Playwright** | Web, Android | Connects to Chromium-based WebViews via CDP |
-| **WebDriverIO + Appium** | iOS | Drives WKWebView (WebKit) via XCUITest |
+| **Playwright** | Web e2e (the feature files) | Drives desktop Chromium directly |
+| **WebDriverIO + Appium** | Device screenshot capture | Drives the Capacitor WebView inside a real app process (UiAutomator2 on Android, XCUITest on iOS) |
+
+Playwright never touches a device. There is no `connectOverCDP()` anywhere in this repo.
 
 ### Step Definitions
 
-Step definitions in `tests/steps/` use Playwright's `page` fixture directly (`page.getByTestId(...)`, `page.click(...)`, etc.). There is no shared driver abstraction layer.
+Step definitions in `tests/steps/` use Playwright's `page` fixture directly (`page.getByTestId(...)`, `page.click(...)`, etc.). There is no shared driver abstraction layer, because only Playwright reads them.
 
-### iOS
-
-iOS phone and tablet e2e (`npm run test:e2e:ios-phone`, `test:e2e:ios-tablet`) run through a separate WebDriverIO + Appium harness. They are manual-invoke-only: only `npm run test:e2e` (web) runs in the automated CI workflow.
+Steps must assert, not sleep. See rule 34 in `AGENTS.md`.
 
 ### Config Loader
 
@@ -296,25 +235,27 @@ iOS phone and tablet e2e (`npm run test:e2e:ios-phone`, `test:e2e:ios-tablet`) r
 |---|---|
 | `tests/helpers/config.ts` | Loads server credentials from `.env` |
 | `tests/helpers/ios-launcher.ts` | Builds iOS app, boots simulators, generates Appium capabilities |
-| `tests/helpers/visual-regression.ts` | Screenshot paths and diff threshold constants |
+| `tests/helpers/zm-api.ts` | Talks to the ZoneMinder API directly, so a step can learn a server-side fact (monitor count, PTZ capability) without asking the UI it is testing |
 
 ---
 
-## 7. Adding Tests
+## 6. Adding Tests
 
-See the **"Extending Tests for New Features"** section in `AGENTS.md` for the full workflow.
+See the **Testing** section in `AGENTS.md` for the full workflow.
 
 Summary:
 
-1. Write a human test plan. What would a QA tester check on each device?
-2. Add Gherkin scenarios to the appropriate `tests/features/<screen>.feature` file. Tag with `@all`, `@ios-phone`, etc. as needed.
+1. Write a human test plan. What would a QA tester check?
+2. Add Gherkin scenarios to the appropriate `tests/features/<screen>.feature` file.
 3. Add step definitions to `tests/steps/<screen>.steps.ts` using Playwright's `page` fixture directly.
-4. If the feature uses a native plugin (haptics, filesystem, camera, etc.), add a test to `tests/native/specs/`.
-5. Run with `--update-snapshots` on each platform to generate visual baselines, then commit them.
+4. Assert the outcome the scenario name promises. A scenario that cannot assert its name at desktop Chromium width must be renamed to what it does assert.
+5. Run `npm run test:e2e -- <feature>.feature` and confirm it fails before your change and passes after.
+
+Native-only flows (biometrics, push, the share sheet, app lifecycle) have no automated coverage. Verify them by hand on a device and say so in the PR. See rule 27 in `AGENTS.md`.
 
 ---
 
-## 8. Troubleshooting
+## 7. Troubleshooting
 
 ### "WebView context not found"
 
@@ -342,8 +283,8 @@ Update `platforms.config.local.ts` with the exact name shown.
 A previous test run left a process holding the port. Find and kill it:
 
 ```bash
-lsof -ti :4723 | xargs kill   # Appium port
-lsof -ti :9222 | xargs kill   # Android CDP port
+lsof -ti :4723 | xargs kill   # Appium port (iOS)
+lsof -ti :4724 | xargs kill   # Appium port (Android)
 ```
 
 Or change the port in `platforms.config.local.ts` to an unused one.

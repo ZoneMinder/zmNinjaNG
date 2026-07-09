@@ -124,17 +124,15 @@ try {
   fail('Cannot check Appium drivers', 'ensure Appium is installed: npm install -g appium');
 }
 
-// 11. Ports 4723, 9222 available
-const ports = [4723, 9222];
-for (const port of ports) {
-  try {
-    // Use lsof to check if port is in use (avoids async)
-    run(`lsof -i :${port} -sTCP:LISTEN`);
-    fail(`Port ${port} in use`, `stop whatever is using port ${port} before running tests`);
-  } catch {
-    // lsof exits non-zero when nothing is listening — port is free
-    pass(`Port ${port} available`, 'not in use');
-  }
+// 11. Appium port 4723 available
+const APPIUM_PORT = 4723;
+try {
+  // Use lsof to check if port is in use (avoids async)
+  run(`lsof -i :${APPIUM_PORT} -sTCP:LISTEN`);
+  fail(`Port ${APPIUM_PORT} in use`, `stop whatever is using port ${APPIUM_PORT} before running tests`);
+} catch {
+  // lsof exits non-zero when nothing is listening: port is free
+  pass(`Port ${APPIUM_PORT} available`, 'not in use');
 }
 
 // 13. platforms.config.local.ts existence

@@ -31,17 +31,17 @@ Feature: Montage Live Grid
     When I click the snapshot button on the first montage monitor
     Then the snapshot should be saved successfully
 
-  @ios-phone @android @visual
+  @ios-phone @android
   Scenario: Phone portrait shows 1-2 columns with readable feeds
     Given the viewport is mobile size
     Then I should see at least 1 monitor in montage grid
     And no element should overflow the viewport horizontally
-    And the page should match the visual baseline
 
-  @ios-tablet @visual
-  Scenario: Tablet shows wider montage grid
+  @web
+  Scenario: Montage grid lays out tiles in more than one column at tablet width
+    Given the viewport is tablet size
     Then I should see at least 1 monitor in montage grid
-    And the page should match the visual baseline
+    And the montage grid should lay out tiles in more than one column
 
   @all
   Scenario: Hide a monitor from the montage view via the kebab menu

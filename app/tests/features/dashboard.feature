@@ -78,7 +78,7 @@ Feature: Dashboard Customization
     And I click the Add button in the dialog
     Then the widget "Heatmap" should appear on the dashboard
 
-  @ios-phone @android @visual
+  @ios-phone @android
   Scenario: Phone layout stacks widgets single-column with no overflow
     Given the viewport is mobile size
     When I open the Add Widget dialog
@@ -87,13 +87,12 @@ Feature: Dashboard Customization
     And I click the Add button in the dialog
     Then the widget "Phone Widget" should appear on the dashboard
     And no element should overflow the viewport horizontally
-    And the page should match the visual baseline
 
-  @ios-tablet @visual
-  Scenario: Tablet layout shows widgets in multi-column grid
+  @web
+  Scenario: Newly added widgets span the full width of the dashboard grid
     When I open the Add Widget dialog
     And I select the "Timeline" widget type
-    And I enter widget title "Tablet Widget"
+    And I enter widget title "Full Width Widget"
     And I click the Add button in the dialog
-    Then the widget "Tablet Widget" should appear on the dashboard
-    And the page should match the visual baseline
+    Then the widget "Full Width Widget" should appear on the dashboard
+    And every dashboard widget should span the full grid width

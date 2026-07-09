@@ -55,9 +55,8 @@ Feature: Profile Management
     When I confirm profile deletion
     Then the newly added profile should no longer appear in the list
 
-  @ios-phone @android @visual
+  @ios-phone @android
   Scenario: Phone layout stacks profile cards
     Given the viewport is mobile size
     Then I should see at least 1 profile cards
     And no element should overflow the viewport horizontally
-    And the page should match the visual baseline

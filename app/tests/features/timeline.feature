@@ -45,10 +45,9 @@ Feature: Timeline Visualization
     Then the timeline should reload
     And I should see the timeline visualization or empty state
 
-  @ios-phone @android @visual
+  @ios-phone @android
   Scenario: Phone layout has scrollable timeline and accessible controls
     Given the viewport is mobile size
     Then the timeline controls should be accessible
     And the timeline should be scrollable
     And no element should overflow the viewport horizontally
-    And the page should match the visual baseline

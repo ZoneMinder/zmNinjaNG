@@ -40,8 +40,7 @@ Feature: Kiosk Mode
     And I confirm the PIN "5678"
     Then I should see "PINs do not match"
 
-  @ios-phone @android @ios-tablet @visual
+  @ios-phone @android @ios-tablet
   Scenario: Kiosk overlay covers full screen on all devices
     Given kiosk mode is active with PIN "1234"
     Then the kiosk overlay should cover the full viewport
-    And the page should match the visual baseline

@@ -141,10 +141,17 @@ Then('no console errors should be present', async ({ page }) => {
   // This is more of a documentation step to indicate we care about console cleanliness
 });
 
-// Generic viewport step used across multiple features
+// Generic viewport steps used across multiple features
 Given('the viewport is mobile size', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await page.waitForTimeout(300);
+});
+
+// iPad Air landscape. Callers assert layout with auto-retrying expects, so no
+// settle wait here: the resize handlers (WidthProvider, the grid column hooks)
+// run before the first assertion retry succeeds.
+Given('the viewport is tablet size', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 768 });
 });
 
 // Generic application health check

@@ -33,8 +33,3 @@ Then('no element should overflow the viewport horizontally', async ({ page }) =>
   }
   expect(overflows).toHaveLength(0);
 });
-
-Then('the page should match the visual baseline', async ({ page }) => {
-  // Placeholder -- visual comparison is not wired up yet
-  await page.waitForTimeout(500);
-});

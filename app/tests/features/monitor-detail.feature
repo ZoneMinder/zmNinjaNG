@@ -97,12 +97,11 @@ Feature: Monitor Detail Page
     When I drag the monitor view with the mouse
     Then the view should pan
 
-  @ios-phone @android @visual
+  @ios-phone @android
   Scenario: Phone layout stacks controls below video
     Given the viewport is mobile size
     Then I should see the monitor player
     And no element should overflow the viewport horizontally
-    And the page should match the visual baseline
 
   @all
   Scenario: Recent events list under the live view

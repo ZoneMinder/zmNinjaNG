@@ -27,7 +27,7 @@ Feature: Monitor Group Filtering
     And I navigate to the "Monitors" page
     Then the group filter selection should persist
 
-  @ios-phone @android @visual
+  @ios-phone @android
   Scenario: Phone group filter dropdown is tappable without overflow
     Given the viewport is mobile size
     When I navigate to the "Monitors" page

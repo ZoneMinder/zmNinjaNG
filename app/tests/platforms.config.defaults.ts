@@ -3,7 +3,6 @@ export interface PlatformTestConfig {
     avdName: string;
     apiLevel: number;
     systemImage: string;
-    cdpPort: number;
     appId: string;
     apkPath: string;
     chromedriverPath?: string;
@@ -44,7 +43,6 @@ export const defaults: PlatformTestConfig = {
     avdName: 'Pixel_7_API_34',
     apiLevel: 34,
     systemImage: 'google_apis;arm64-v8a',
-    cdpPort: 9222,
     appId: 'com.zoneminder.zmNinjaNG',
     apkPath: 'android/app/build/outputs/apk/debug/app-debug.apk',
   },

@@ -38,14 +38,15 @@ Feature: Monitor List and Navigation
     When I hover the first monitor card
     Then I should see the monitor hover preview
 
-  @ios-phone @android @visual
+  @ios-phone @android
   Scenario: Phone layout shows single-column monitor cards
     Given the viewport is mobile size
     Then I should see at least 1 monitor cards
     And no element should overflow the viewport horizontally
-    And the page should match the visual baseline
 
-  @ios-tablet @visual
-  Scenario: Tablet layout shows multi-column monitor grid
+  @web
+  Scenario: Grid view lays out monitor cards in multiple columns at tablet width
+    Given the viewport is tablet size
+    When I switch the monitors view to grid
     Then I should see at least 1 monitor cards
-    And the page should match the visual baseline
+    And the monitor grid should lay out cards in more than one column

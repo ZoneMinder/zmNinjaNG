@@ -82,10 +82,9 @@ Feature: Application Settings
     Then the "snapshot" thumbnail fallback entry should be above the "alarm" entry
     And the "objdetect" thumbnail fallback entry should be disabled
 
-  @ios-phone @android @visual
+  @ios-phone @android
   Scenario: Phone layout makes all settings reachable via scroll
     Given the viewport is mobile size
     When I navigate to the "Settings" page
     Then I should see settings interface elements
     And no element should overflow the viewport horizontally
-    And the page should match the visual baseline
