@@ -1,0 +1,122 @@
+name: Moderate first-time spam links
+
+# Strips download links posted by first-time contributors (archive/binary files
+# or known file-drop/shortener hosts) and pings the maintainer. Targets the
+# "here's a fix in a zip" malware pattern. See issue #222.
+
+on:
+  issue_comment:
+    types: [created, edited]
+  issues:
+    types: [opened, edited]
+
+permissions:
+  issues: write
+
+jobs:
+  moderate:
+    runs-on: ubuntu-latest
+    # Skip anything a bot posted, including this workflow's own edits/comments,
+    # so it cannot loop on the edits it makes.
+    if: github.event.sender.type != 'Bot'
+    steps:
+      - name: Redact first-time download links
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const REDACTION = '«link removed by spam moderation»';
+            const MAINTAINER = 'pliablepixels';
+            const UNTRUSTED = new Set(['FIRST_TIME_CONTRIBUTOR', 'FIRST_TIMER', 'NONE', 'MANNEQUIN']);
+
+            const ARCHIVE_BINARY_EXT = new Set([
+              'zip', 'rar', '7z', 'gz', 'tgz', 'tar', 'bz2', 'xz', 'exe', 'msi',
+              'dmg', 'pkg', 'apk', 'deb', 'appimage', 'iso', 'img', 'bin', 'scr',
+              'bat', 'cmd', 'com', 'ps1', 'jar', 'vbs', 'sh', 'run',
+            ]);
+            // External hosts used to drop payloads or hide them behind a shortener.
+            const HOST_DENYLIST = [
+              'mega.nz', 'mediafire.com', 'anonfiles.com', 'gofile.io', 'bit.ly',
+              'tinyurl.com', 'cutt.ly', 'rebrand.ly', 'is.gd', 't.co',
+              'shorturl.at', 'discord.gg', 'telegra.ph',
+            ];
+
+            const extOf = (str) => {
+              const clean = String(str).split(/[?#]/)[0].trim().replace(/[)\].,'"]+$/, '');
+              const seg = clean.split('/').pop() || '';
+              const dot = seg.lastIndexOf('.');
+              return dot > 0 ? seg.slice(dot + 1).toLowerCase() : '';
+            };
+            const hostOf = (url) => {
+              try { return new URL(url).hostname.toLowerCase().replace(/^www\./, ''); }
+              catch { return ''; }
+            };
+            const isFlaggable = (label, url) => {
+              const host = hostOf(url);
+              if (HOST_DENYLIST.some((h) => host === h || host.endsWith('.' + h))) return true;
+              if (ARCHIVE_BINARY_EXT.has(extOf(url))) return true;   // payload in the URL
+              if (ARCHIVE_BINARY_EXT.has(extOf(label))) return true; // payload in the link text
+              return false;
+            };
+            const findFlaggable = (body) => {
+              if (!body || body.includes(REDACTION)) return [];
+              const hits = [];
+              const seen = new Set();
+              const md = /\[([^\]]*)\]\(\s*(https?:\/\/[^\s)]+)\s*\)/gi;
+              let m;
+              while ((m = md.exec(body)) !== null) {
+                const [raw, label, url] = m;
+                if (isFlaggable(label, url)) { hits.push({ raw, url, label }); seen.add(url); }
+              }
+              const bare = /(https?:\/\/[^\s<>()\[\]]+)/gi;
+              while ((m = bare.exec(body)) !== null) {
+                const url = m[1].replace(/[)\].,'"]+$/, '');
+                if (seen.has(url)) continue;
+                if (isFlaggable('', url)) hits.push({ raw: m[1], url, label: '' });
+              }
+              return hits;
+            };
+
+            const isComment = !!context.payload.comment;
+            const target = isComment ? context.payload.comment : context.payload.issue;
+            if (!target) { core.info('No comment/issue in payload.'); return; }
+
+            const association = target.author_association || '';
+            if (!UNTRUSTED.has(association)) {
+              core.info(`Skip: author_association=${association} is trusted.`);
+              return;
+            }
+
+            const body = target.body || '';
+            const hits = findFlaggable(body);
+            if (hits.length === 0) { core.info('No flaggable download links.'); return; }
+
+            let newBody = body;
+            for (const h of hits) newBody = newBody.split(h.raw).join(REDACTION);
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issueNumber = context.payload.issue.number;
+            const author = target.user.login;
+
+            if (isComment) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: target.id, body: newBody });
+            } else {
+              await github.rest.issues.update({ owner, repo, issue_number: issueNumber, body: newBody });
+            }
+
+            const where = isComment ? `comment (${target.html_url})` : 'issue body';
+            const list = hits
+              .map((h) => `- \`${h.label || '(bare link)'}\` → ${hostOf(h.url) || h.url}`)
+              .join('\n');
+            const historyOf = isComment ? "comment's" : "issue's";
+            const message = [
+              `@${MAINTAINER} automated moderation removed a download link from a first-time contributor (@${author}, \`${association}\`) in the ${where}.`,
+              '',
+              'Removed:',
+              list,
+              '',
+              `The link was stripped from the body pending review. It remains visible in the ${historyOf} edit history, so a false positive can be restored from there. If it is spam, hide/delete it and report the account.`,
+            ].join('\n');
+            await github.rest.issues.createComment({ owner, repo, issue_number: issueNumber, body: message });
+
+            core.info(`Redacted ${hits.length} link(s) from ${where} by @${author}.`);
