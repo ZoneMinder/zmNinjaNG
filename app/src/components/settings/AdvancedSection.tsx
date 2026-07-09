@@ -28,7 +28,7 @@ import type { ProfileSettings } from '../../stores/settings';
 /** All component logger names, matching Logger's component loggers. */
 const COMPONENT_NAMES = [
   'API', 'App', 'Auth', 'Crypto', 'Dashboard', 'Discovery', 'Download',
-  'ErrorBoundary', 'EventCard', 'EventDetail', 'EventMontage', 'HTTP',
+  'ErrorBoundary', 'EventCard', 'EventDetail', 'HTTP',
   'ImageError', 'Kiosk', 'Monitor', 'MonitorCard', 'MonitorDetail',
   'MontageMonitor', 'Navigation', 'NotificationHandler', 'Notifications',
   'NotificationSettings', 'Profile', 'ProfileForm', 'ProfileService',
