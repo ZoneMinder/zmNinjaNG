@@ -10,9 +10,10 @@ These are non-negotiable. Every rule applies to all communication: responses, co
    - **Banned hand-wavy claims**: "designed to scale", "built for the modern web", "production-ready". State the specific fact (e.g. "handles 50k events/min on a Pi 4") or cut the claim.
    - **No em-dashes** (—). Use a period, comma, colon, or rephrase. Example: replace "Token refresh runs every 60s — checks expiry and refreshes if within leeway" with "Token refresh runs every 60s. It checks expiry and refreshes if within leeway."
    - First-person honesty is fine ("this was primarily to educate me as I did not have React experience"). Don't sand it off.
+   - **Teaching is not slop**: in `docs/developer-guide/`, a short concrete explanation of how a React mechanism behaves, placed where a doc first relies on it, is a fact the reader lacks, not storytelling. The bans on filler openers and recap sections still apply to it (rule 37).
 2. **Issues first**: create a GitHub issue before implementing features or fixing bugs. If an issue already exists, refer to it. 
 3. **Test first, verify before commit**: write the failing test first. Before every commit run `npm test`, `npx tsc -b`, `npm run build`, and the relevant e2e feature. Use `tsc -b`, not `tsc --noEmit`; the build's `tsc -b` catches stricter errors (unused variables, type narrowing). Never commit if any step fails.
-4. **Update docs**: update `docs/developer-guide/` in the same session when adding new APIs, components, utilities, or hooks and/or `docs/user-guide` for changed/updated or new functionality
+4. **Update docs**: update `docs/developer-guide/` in the same session when adding new APIs, components, utilities, or hooks, or when a change alters a path that `docs/developer-guide/call-flows.rst` traces (update the trace, not just a chapter entry), and/or `docs/user-guide` for changed/updated or new functionality
 5. **i18n all languages**: never hardcode user-facing strings. Update ALL translation files: en, de, es, fr, zh.
 6. **Cross-platform**: test on iOS, Android, Electron desktop, phone portrait + landscape. Device e2e tests (`ios-phone`, `android`, etc.) are manual-invoke-only. Only `npm run test:e2e` (web) runs in the automated workflow.
 7. **Profile-scoped settings**: read/write via `getProfileSettings`/`updateProfileSettings`. Never use global singletons.
@@ -45,6 +46,8 @@ These are non-negotiable. Every rule applies to all communication: responses, co
 34. **E2e steps assert, never mask**: no fixed `waitForTimeout` in new steps; use auto-retrying `expect` waits. Conditional guards must derive from API or fixture data (e.g. monitor `Controllable`), never from visibility of the element under test; when the capability is present, `Then` steps hard-assert. Why: a guard keyed on the UI under test turns its own regression into a green pass.
 35. **Lint gates**: `lint:a11y` is blocking in CI and pre-commit; new interactive elements must pass it. The general lint gate is advisory only until the #217 backlog clears; new and edited files must not add violations to that backlog.
 36. **Issue links must land, not be patched with a comment**: for issue-tracked work, land it via a PR that references the issue so GitHub links the commits automatically. Pushing commits to a scratch branch and then fast-forwarding them onto the default branch can consume the auto-reference (GitHub ties it to the first push it saw), leaving the issue unlinked. If told to commit straight to the default branch, push directly to it with no intermediate scratch branch, then check the issue timeline; post a manual linking comment (rule 26) only if the reference is still missing. Why: stops the repeated manual linking comments.
+37. **Developer docs teach, they don't catalog**: `docs/developer-guide/` is written for a competent programmer with zero React experience. The first time a chapter relies on a React mechanism (effect, render, selector, query cache, portal), explain it in one or two sentences at the point of use or link the section of `02-react-fundamentals.rst` that covers it. Prefer narrative that follows real code end to end; `call-flows.rst` is the register to match (recipe in the Documentation section below). A new hook or component is not documented by appending a Location/Props/Used-By entry alone: connect it to the user-visible behavior it serves. Why: the #223 audit found reference-only appends and unexplained concepts were the guide's default failure mode.
+38. **AGENTS.md is the single source for process rules**: `docs/developer-guide/` (09-contributing and 06-testing especially) cites a rule by number and links this file, never restates the rule's content. Why: restated copies drift silently; `npx tsc --noEmit` survived in the guide four times after rule 3 banned it.
 
 ---
 
@@ -224,7 +227,7 @@ State which tests were run: "Tests verified: npm test ✓, tsc -b ✓, build ✓
 ### Internationalization
 ```typescript
 const { t } = useTranslation();
-<Text>{t('setup.title')}</Text>
+<h1>{t('setup.title')}</h1>
 toast.error(t('montage.screen_too_small'));
 ```
 Location: `app/src/locales/{lang}/translation.json`: update all 5 languages.
@@ -315,27 +318,47 @@ Settings must be profile-scoped via `getProfileSettings`/`updateProfileSettings`
 
 ## Documentation
 
+The developer guide's audience is a competent programmer with zero React experience (rule 37). Every doc change is judged against that reader.
+
 ### Where things go
 
-Update `docs/developer-guide/` when adding:
-- API modules (`api/*.ts`) → `07-api-and-data-fetching.rst`
-- Components (`components/*.tsx`) → `05-component-architecture.rst`
-- Utilities (`lib/*.ts`) → `12-shared-services-and-components.rst`
-- Hooks (`hooks/*.ts`) → `05-component-architecture.rst` or relevant chapter
+Decide what kind of change it is before picking a file:
 
-Document purpose, usage examples, key functions/props, integration patterns, and platform-specific gotchas.
+1. **The change alters a user-visible path** (data flow, auth, streaming, navigation, notifications, settings): the primary edit is the matching trace in `call-flows.rst`. If no flow covers the path and it is a main user journey, add one using the recipe below. A chapter entry is secondary.
+2. **New leaf artifact nothing traverses** (utility, small component, hook): a chapter entry is enough, but it must say what user-visible behavior the artifact serves, not just list props.
+
+Chapter homes:
+- API modules (`api/*.ts`) → `07-api-and-data-fetching.rst`
+- Feature components (`components/*.tsx`) → `05-component-architecture.rst`
+- Shared/reusable components, utilities (`lib/*.ts`), services (`services/*.ts`) → `12-shared-services-and-components.rst`
+- Hooks (`hooks/*.ts`) → the chapter of the feature they serve
+- Generic React mechanisms → `02-react-fundamentals.rst`, taught once, linked from everywhere else
+
+Document purpose, one usage example from real code, and platform-specific gotchas. Then connect it: name the behavior it serves and link the call flow or section that walks it.
+
+### Call-flow recipe
+
+Every flow in `call-flows.rst` follows this shape; new flows and flow edits must too:
+
+- Title the flow after a **user action** ("Arming a monitor"), never a subsystem ("States API").
+- Open with one paragraph giving the whole shape plus the single counterintuitive fact.
+- One mermaid diagram: `sequenceDiagram` + `autonumber` for time-ordered flows, `graph LR` for data propagation. Alias participants to role names. One `Note over` marking the pivotal moment.
+- 8 to 14 numbered steps. Each step: bold plain-language lead sentence stating behavior, then the file and exact symbol in double-backticks, then why the step sits where it does (prefer the counterfactual: "if X ran after Y, Z would break"), then one line with a `source` link and a `:doc:` link to the reference chapter for that layer.
+- Teach React only at the point of use, in a subordinate clause tied to a concrete consequence in this app.
+- State negatives where a reader would otherwise assume a feature exists ("there is no idle timeout").
+- End by naming the adjacent flow.
 
 ### Style
 
-The tone target is `docs/developer-guide/01-introduction.rst`. Match it.
+The tone target is `docs/developer-guide/01-introduction.rst`. The structure target for anything that explains behavior is `call-flows.rst`. Match them.
 
 In addition to rule 1 above:
 
 - **No top-of-file Table of Contents.** Sphinx generates one from headings.
 - **No "Next Steps" / "Continue to chapter X" sections.** The TOC handles forward navigation.
 - **No "Key Takeaways" or "Summary" recaps.** If a fact is worth restating, put it in the body. Don't restate the chapter at the end of the chapter.
-- **Don't reword passages already concise and factual.** Three similar lines beats a forced rewrite. Edit only what's wrong, padded, or unclear.
-- **Code examples must come from the actual codebase.** Verify with `grep` before writing or editing: function names get renamed, constants change values, files move. The doc must match `app/src/` as it stands today.
+- **Don't reword passages already concise and factual.** Three similar lines beats a forced rewrite. Edit only what's wrong, padded, or unclear. This does not protect a passage that relies on an unexplained React concept: fix that one by explaining or linking (rule 37), not rewording.
+- **Code examples must come from the actual codebase.** Verify with `grep` before writing or editing: every function, store, component, and prop name in an example must grep-hit in `app/src/` (or the example must be labeled as deliberately simplified from a named file). Function names get renamed, constants change values, files move. Why: the #223 audit found ~25 examples for code that never existed or was refactored away.
 - **Cite specific values, not ranges.** Read the constant from `lib/zmninja-ng-constants.ts` and write that. "Refreshes within 30 minutes of expiry" beats "refreshes shortly before expiry".
 - **Cross-references**: `:doc:\`relative-path\`` in RST, `{doc}\`relative-path\`` in Markdown. Verify the target file exists.
 - **Honest first-person framing is welcome** when it's accurate ("I built this to learn React"). Don't replace it with corporate voice.
