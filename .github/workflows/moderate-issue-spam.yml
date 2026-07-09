@@ -1,8 +1,10 @@
 name: Moderate first-time spam links
 
-# Strips download links posted by first-time contributors (archive/binary files
-# or known file-drop/shortener hosts) and pings the maintainer. Targets the
-# "here's a fix in a zip" malware pattern. See issue #222.
+# Redacts links posted by first-time contributors to any host outside a small
+# allowlist (GitHub, image/video hosts), then pings the maintainer. Allowlist
+# beats a blocklist here: an unknown throwaway host is flagged by default, so the
+# "here's a fix in a zip" malware pattern (issue #221) can't evade it with a new
+# domain or an extension-less link. See issue #222.
 
 on:
   issue_comment:
@@ -28,35 +30,26 @@ jobs:
             const MAINTAINER = 'pliablepixels';
             const UNTRUSTED = new Set(['FIRST_TIME_CONTRIBUTOR', 'FIRST_TIMER', 'NONE', 'MANNEQUIN']);
 
-            const ARCHIVE_BINARY_EXT = new Set([
-              'zip', 'rar', '7z', 'gz', 'tgz', 'tar', 'bz2', 'xz', 'exe', 'msi',
-              'dmg', 'pkg', 'apk', 'deb', 'appimage', 'iso', 'img', 'bin', 'scr',
-              'bat', 'cmd', 'com', 'ps1', 'jar', 'vbs', 'sh', 'run',
-            ]);
-            // External hosts used to drop payloads or hide them behind a shortener.
-            const HOST_DENYLIST = [
-              'mega.nz', 'mediafire.com', 'anonfiles.com', 'gofile.io', 'bit.ly',
-              'tinyurl.com', 'cutt.ly', 'rebrand.ly', 'is.gd', 't.co',
-              'shorturl.at', 'discord.gg', 'telegra.ph',
+            // Hosts a first-time contributor may legitimately link. Suffix-matched,
+            // so 'github.com' also covers gist.github.com, raw.githubusercontent.com,
+            // etc. Deliberately excludes text-paste and file-locker hosts (pastebin,
+            // 0x0.st, mega, dropbox, drive.google, ...): those are the payload
+            // channel these bots use, and unknown hosts are flagged by default.
+            const HOST_ALLOWLIST = [
+              'github.com', 'githubusercontent.com', 'github.io',
+              'imgur.com',
+              'youtube.com', 'youtu.be', 'streamable.com',
+              'zoneminder.com',
             ];
 
-            const extOf = (str) => {
-              const clean = String(str).split(/[?#]/)[0].trim().replace(/[)\].,'"]+$/, '');
-              const seg = clean.split('/').pop() || '';
-              const dot = seg.lastIndexOf('.');
-              return dot > 0 ? seg.slice(dot + 1).toLowerCase() : '';
-            };
             const hostOf = (url) => {
               try { return new URL(url).hostname.toLowerCase().replace(/^www\./, ''); }
               catch { return ''; }
             };
-            const isFlaggable = (label, url) => {
-              const host = hostOf(url);
-              if (HOST_DENYLIST.some((h) => host === h || host.endsWith('.' + h))) return true;
-              if (ARCHIVE_BINARY_EXT.has(extOf(url))) return true;   // payload in the URL
-              if (ARCHIVE_BINARY_EXT.has(extOf(label))) return true; // payload in the link text
-              return false;
-            };
+            const isAllowed = (host) =>
+              !!host && HOST_ALLOWLIST.some((h) => host === h || host.endsWith('.' + h));
+
+            // Any http(s) link whose host is not on the allowlist is flaggable.
             const findFlaggable = (body) => {
               if (!body || body.includes(REDACTION)) return [];
               const hits = [];
@@ -65,13 +58,13 @@ jobs:
               let m;
               while ((m = md.exec(body)) !== null) {
                 const [raw, label, url] = m;
-                if (isFlaggable(label, url)) { hits.push({ raw, url, label }); seen.add(url); }
+                if (!isAllowed(hostOf(url))) { hits.push({ raw, url, label }); seen.add(url); }
               }
               const bare = /(https?:\/\/[^\s<>()\[\]]+)/gi;
               while ((m = bare.exec(body)) !== null) {
                 const url = m[1].replace(/[)\].,'"]+$/, '');
                 if (seen.has(url)) continue;
-                if (isFlaggable('', url)) hits.push({ raw: m[1], url, label: '' });
+                if (!isAllowed(hostOf(url))) hits.push({ raw: m[1], url, label: '' });
               }
               return hits;
             };
@@ -110,12 +103,13 @@ jobs:
               .join('\n');
             const historyOf = isComment ? "comment's" : "issue's";
             const message = [
-              `@${MAINTAINER} automated moderation removed a download link from a first-time contributor (@${author}, \`${association}\`) in the ${where}.`,
+              `Hi @${author}, links from new accounts are automatically held for review. The following off-site link was removed from your ${isComment ? 'comment' : 'issue'} for now; a maintainer will restore it shortly if it is legitimate:`,
               '',
-              'Removed:',
               list,
               '',
-              `The link was stripped from the body pending review. It remains visible in the ${historyOf} edit history, so a false positive can be restored from there. If it is spam, hide/delete it and report the account.`,
+              `Please do not download or run anything from links posted by new accounts until a maintainer confirms them.`,
+              '',
+              `@${MAINTAINER} first-time contributor (@${author}, \`${association}\`) posted an off-allowlist link in the ${where}. It stays in the ${historyOf} edit history, so restore it if this is a false positive; hide/delete and report the account if it is spam.`,
             ].join('\n');
             await github.rest.issues.createComment({ owner, repo, issue_number: issueNumber, body: message });
 
