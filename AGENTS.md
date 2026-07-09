@@ -96,8 +96,8 @@ Only the web profile runs the Gherkin feature suite: `playwright.config.ts` defi
 | `ios-tablet` | iPad Air Simulator | WebDriverIO + Appium XCUITest | Device screenshot suite (manual) |
 
 ### Platform Tags
-- `@all`: every platform | `@android`: Android only | `@ios`: iPhone + iPad
-- `@ios-phone` / `@ios-tablet`: specific iOS form factor
+- `@all`: every platform | `@android`: Android only | `@tauri`: Tauri desktop
+- `@ios-phone` / `@ios-tablet`: iOS form factors (no bare `@ios` tag exists)
 - `@web`: browser only
 - `@visual`: reserved for visual comparison; the comparison step is a placeholder today (issue #233)
 
