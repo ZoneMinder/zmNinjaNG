@@ -1,7 +1,16 @@
 API and Data Fetching
 =====================
 
-How zmNinjaNg talks to ZoneMinder's REST API and manages server data.
+How zmNinjaNg talks to ZoneMinder's REST API, keeps its access token usable,
+and turns responses into cached server state.
+
+Three layers stack up. ``lib/http.ts`` is the transport: it picks a platform
+implementation (native, Electron, browser, dev proxy), injects the token, and
+throws ``HttpError`` on non-2xx. ``api/client.ts`` wraps that with the
+ZoneMinder concerns: base URL, form encoding, proactive login, 401 recovery.
+The ``api/*.ts`` modules are thin functions over the client that validate
+responses with Zod. React Query sits on top and owns caching, polling, and
+invalidation.
 
 ZoneMinder API
 --------------
@@ -11,146 +20,47 @@ Base URL: ``https://your-server.com/zm/api/<endpoint>``
 Endpoint Reference
 ~~~~~~~~~~~~~~~~~~
 
-.. list-table::
-   :header-rows: 1
-   :widths: 10 40 30 20
+Every endpoint zmNinjaNg calls, and the module that owns the call. Reach for
+this when you need to know whether an operation already has a wrapper before
+writing a new one.
 
-   * - Method
-     - Endpoint
-     - Description
-     - Module
-   * - POST
-     - ``/host/login.json``
-     - Authenticate and receive tokens
-     - ``auth.ts``
-   * - GET
-     - ``/host/getVersion.json``
-     - Server version info
-     - ``auth.ts``
-   * - GET
-     - ``/monitors.json``
-     - List all monitors with status
-     - ``monitors.ts``
-   * - GET
-     - ``/monitors/<id>.json``
-     - Single monitor details
-     - ``monitors.ts``
-   * - POST
-     - ``/monitors/<id>.json``
-     - Update monitor settings
-     - ``monitors.ts``
-   * - GET
-     - ``/controls/<controlId>.json``
-     - PTZ control definition
-     - ``monitors.ts``
-   * - GET
-     - ``/monitors/alarm/id:<id>/command:<cmd>.json``
-     - Trigger/cancel/query alarm (cmd: on, off, status)
-     - ``monitors.ts``
-   * - GET
-     - ``/monitors/daemonStatus/id:<id>/daemon:<daemon>.json``
-     - Check daemon status for a monitor
-     - ``monitors.ts``
-   * - GET
-     - ``/events/index.json``
-     - List events (with query params)
-     - ``events.ts``
-   * - GET
-     - ``/events/index/<filterPath>.json``
-     - List events with URL-based filters
-     - ``events.ts``
-   * - GET
-     - ``/events/<id>.json``
-     - Single event details
-     - ``events.ts``
-   * - PUT
-     - ``/events/<id>.json``
-     - Update event metadata
-     - ``events.ts``
-   * - DELETE
-     - ``/events/<id>.json``
-     - Delete an event
-     - ``events.ts``
-   * - GET
-     - ``/events/consoleEvents/<interval>.json``
-     - Event counts per monitor for a time interval
-     - ``events.ts``
-   * - GET
-     - ``/servers.json``
-     - List ZoneMinder servers
-     - ``server.ts``
-   * - GET
-     - ``/host/daemonCheck.json``
-     - Check if ZoneMinder daemon is running
-     - ``server.ts``
-   * - GET
-     - ``/host/getLoad.json``
-     - Server CPU load
-     - ``server.ts``
-   * - GET
-     - ``/host/getDiskPercent.json``
-     - Disk usage percentage
-     - ``server.ts``
-   * - GET
-     - ``/host/getTimeZone.json``
-     - Server timezone
-     - ``time.ts``
-   * - GET
-     - ``/configs.json``
-     - All ZoneMinder config entries
-     - ``server.ts``
-   * - GET
-     - ``/configs/viewByName/<key>.json``
-     - Single config value (ZM_PATH_ZMS, ZM_GO2RTC_PATH, ZM_MIN_STREAMING_PORT)
-     - ``server.ts``
-   * - GET
-     - ``/groups.json``
-     - List monitor groups
-     - ``groups.ts``
-   * - GET
-     - ``/states.json``
-     - List run states
-     - ``states.ts``
-   * - POST
-     - ``/states/change/<stateName>.json``
-     - Switch to a run state
-     - ``states.ts``
-   * - GET
-     - ``/notifications.json``
-     - List push notification registrations
-     - ``notifications.ts``
-   * - POST
-     - ``/notifications.json``
-     - Register for push notifications
-     - ``notifications.ts``
-   * - PUT
-     - ``/notifications/<id>.json``
-     - Update a notification registration
-     - ``notifications.ts``
-   * - DELETE
-     - ``/notifications/<id>.json``
-     - Remove a notification registration
-     - ``notifications.ts``
-   * - GET
-     - ``/tags.json``
-     - List all tags
-     - ``tags.ts``
-   * - GET
-     - ``/tags/index/Events.Id:<ids>.json``
-     - Tags for specific events
-     - ``tags.ts``
-   * - GET
-     - ``/zones.json?MonitorId=<id>``
-     - Zones for a monitor
-     - ``zones.ts``
-   * - GET
-     - ``/logs.json``
-     - List server logs
-     - ``logs.ts``
-   * - GET
-     - ``/logs/index/<filterPath>.json``
-     - Filtered server logs
-     - ``logs.ts``
+======  =======================================================  ========================================================================  ====================
+Method  Endpoint                                                 Description                                                               Module
+======  =======================================================  ========================================================================  ====================
+POST    ``/host/login.json``                                     Authenticate and receive tokens                                           ``auth.ts``
+GET     ``/host/getVersion.json``                                Server version info                                                       ``auth.ts``
+GET     ``/monitors.json``                                       List all monitors with status                                             ``monitors.ts``
+GET     ``/monitors/<id>.json``                                  Single monitor details                                                    ``monitors.ts``
+POST    ``/monitors/<id>.json``                                  Update monitor settings                                                   ``monitors.ts``
+GET     ``/controls/<controlId>.json``                           PTZ control definition                                                    ``monitors.ts``
+GET     ``/monitors/alarm/id:<id>/command:<cmd>.json``           Trigger/cancel/query alarm (cmd: on, off, status)                         ``monitors.ts``
+GET     ``/monitors/daemonStatus/id:<id>/daemon:<daemon>.json``  Check daemon status for a monitor                                         ``monitors.ts``
+GET     ``/events/index.json``                                   List events (with query params)                                           ``events.ts``
+GET     ``/events/index/<filterPath>.json``                      List events with URL-based filters                                        ``events.ts``
+GET     ``/events/<id>.json``                                    Single event details                                                      ``events.ts``
+PUT     ``/events/<id>.json``                                    Update event metadata                                                     ``events.ts``
+DELETE  ``/events/<id>.json``                                    Delete an event                                                           ``events.ts``
+GET     ``/events/consoleEvents/<interval>.json``                Event counts per monitor for a time interval                              ``events.ts``
+GET     ``/servers.json``                                        List ZoneMinder servers                                                   ``server.ts``
+GET     ``/host/daemonCheck.json``                               Check if ZoneMinder daemon is running                                     ``server.ts``
+GET     ``/host/getLoad.json``                                   Server CPU load                                                           ``server.ts``
+GET     ``/host/getDiskPercent.json``                            Disk usage percentage                                                     ``server.ts``
+GET     ``/host/getTimeZone.json``                               Server timezone                                                           ``time.ts``
+GET     ``/configs.json``                                        All ZoneMinder config entries                                             ``server.ts``
+GET     ``/configs/viewByName/<key>.json``                       Single config value (ZM_PATH_ZMS, ZM_GO2RTC_PATH, ZM_MIN_STREAMING_PORT)  ``auth.ts``, ``server.ts``
+GET     ``/groups.json``                                         List monitor groups                                                       ``groups.ts``
+GET     ``/states.json``                                         List run states                                                           ``states.ts``
+POST    ``/states/change/<stateName>.json``                      Switch to a run state                                                     ``states.ts``
+GET     ``/notifications.json``                                  List push notification registrations                                      ``notifications.ts``
+POST    ``/notifications.json``                                  Register for push notifications                                           ``notifications.ts``
+PUT     ``/notifications/<id>.json``                             Update a notification registration                                        ``notifications.ts``
+DELETE  ``/notifications/<id>.json``                             Remove a notification registration                                        ``notifications.ts``
+GET     ``/tags.json``                                           List all tags                                                             ``tags.ts``
+GET     ``/tags/index/Events.Id:<ids>.json``                     Tags for specific events                                                  ``tags.ts``
+GET     ``/zones.json?MonitorId=<id>``                           Zones for a monitor                                                       ``zones.ts``
+GET     ``/logs.json``                                           List server logs                                                          ``logs.ts``
+GET     ``/logs/index/<filterPath>.json``                        Filtered server logs                                                      ``logs.ts``
+======  =======================================================  ========================================================================  ====================
 
 Authentication
 ~~~~~~~~~~~~~~
@@ -159,12 +69,13 @@ Token-based: POST credentials to ``/host/login.json``, receive an
 access and refresh token, send the access token on subsequent
 requests, refresh when it expires.
 
-**Implementation** (``src/api/auth.ts``):
+**Implementation** (``src/api/auth.ts``, simplified: the real function also
+logs and maps ``HttpError`` to a friendlier message):
 
 .. code:: tsx
 
    import { getApiClient } from './client';
-   import { LoginResponseSchema, type LoginCredentials, type LoginResponse } from './types';
+   import { LoginResponseSchema, type LoginResponse } from './types';
 
    export async function login(credentials: LoginCredentials): Promise<LoginResponse> {
      const client = getApiClient();
@@ -190,14 +101,29 @@ The returned ``LoginResponse`` carries ``access_token``,
 ``access_token_expires`` (seconds), ``refresh_token``, and
 ``refresh_token_expires``. The auth store converts the *_expires* fields to
 absolute ms-epoch deadlines before persisting. All HTTP goes through
-``getApiClient()`` from ``api/client.ts`` (CapacitorHttp on native, Axios on
-web), never raw ``fetch()``.
+``getApiClient()`` from ``api/client.ts`` (CapacitorHttp on native, fetch on
+web and Electron), never raw ``fetch()``.
 
-Tokens are stored encrypted in ``SecureStorage``:
+Only the refresh token is persisted, and never in plain localStorage. The
+custom persist adapter in ``stores/auth.ts`` strips ``refreshToken`` out of the
+serialized blob and writes it through ``setSecureValue`` from
+``lib/security/secureStorage.ts`` (native Keychain/Keystore, AES-GCM on web)
+under ``STORAGE_KEYS.authRefreshToken``:
 
 .. code:: tsx
 
-   await SecureStorage.set(`auth_tokens_${profileId}`, JSON.stringify(tokens));
+   // stores/auth.ts, persist storage adapter, trimmed
+   const toStore = { ...value, state: { ...value.state, refreshToken: null } };
+
+   if (value.state.refreshToken) {
+     await setSecureValue(AUTH_REFRESH_TOKEN_KEY, value.state.refreshToken);
+   }
+   storage.setItem(name, JSON.stringify(toStore));
+
+If secure storage is unavailable (no Web Crypto), the token is dropped rather
+than written in plaintext, and the user re-authenticates. The access token is
+never persisted at all, which has consequences on cold start (see the freshness
+gate below).
 
 Auth Gates
 ^^^^^^^^^^
@@ -261,6 +187,7 @@ retries once:
 .. code:: typescript
 
    catch (error) {
+     const httpError = error as HttpError;
      if (httpError.status === 401 && !hasRetried && !skipAuth && !isLoginRequest) {
        const recovered = await gates.auth.recoverFromAuthFailure(reLogin);
        if (recovered) {
@@ -293,8 +220,10 @@ in front of it. A 401 there shows up as a broken image, not a retry.
 
 Three things keep stale tokens in play between refresh ticks:
 
-- The interval is paused when the tab is hidden or the device sleeps,
-  so a token can be well past its leeway by the time the app wakes.
+- ``setInterval`` is throttled or suspended when the tab is hidden or the
+  device sleeps, so a token can be well past its leeway by the time the app
+  wakes. ``useTokenRefresh`` compensates with a ``visibilitychange`` listener,
+  but that fires after the first render of the restored view.
 - React Query reads from cache before re-fetching, so a component can
   render with a token value that was correct one second ago and stale
   now.
@@ -309,8 +238,11 @@ so ``isFresh`` is always true and ``token`` is null. On a server that
 uses auth, a token is fresh only when it has more than
 ``ZM_INTEGRATION.accessTokenLeewayMs`` (30 minutes) of validity left;
 when it is not fresh the hook returns ``{ token: null, isFresh: false }``
-and triggers ``authStore.getFreshAccessToken()`` from an effect.
-Subscribers re-render once the new token lands.
+and triggers ``authStore.getFreshAccessToken()`` from an effect. An effect is
+React's escape hatch for work that is not rendering output: it runs after the
+render commits, so the hook can return the "not fresh" answer immediately and
+kick off the network call without blocking the paint. Subscribers re-render
+once the new token lands.
 
 .. code:: typescript
 
@@ -346,15 +278,15 @@ issues one ``/host/login.json`` refresh, not thirteen.
 ``getFreshAccessToken`` returns ``null`` early when the API client is not
 yet initialized, checked via ``isApiClientInitialized()`` from
 ``api/client-ready.ts``. The access token is never persisted (only the
-refresh token is, see ``partialize`` in ``stores/auth.ts``), so on cold
-start a token-bearing component mounts with ``requiresAuth`` true and no
-token and calls this immediately, before profile bootstrap has created the
-client. Without the gate that refresh throws ``API client not
-initialized``, logs an error, and forces a logout, all pointless because
-``clearStaleState`` re-authenticates from stored credentials regardless.
-``client-ready.ts`` holds the flag in a module with no imports so
-``stores/auth.ts`` can read it without an ``auth`` <-> ``api/client`` load
-cycle; ``setApiClient``/``resetApiClient`` keep it in sync.
+refresh token is, see the persist adapter above), so on cold start a
+token-bearing component mounts with ``requiresAuth`` true and no token and
+calls this immediately, before profile bootstrap has created the client.
+Without the gate that refresh throws ``API client not initialized``, logs an
+error, and forces a logout, all pointless because ``clearStaleState``
+re-authenticates from stored credentials regardless. ``client-ready.ts``
+holds the flag in a module with no imports so ``stores/auth.ts`` can read it
+without an ``auth`` <-> ``api/client`` load cycle; ``setApiClient`` and
+``resetApiClient`` keep it in sync.
 
 Callsites render a ``VideoOff`` placeholder while ``isFresh`` is
 ``false`` rather than building a URL with a stale or empty token:
@@ -372,15 +304,16 @@ Callsites render a ``VideoOff`` placeholder while ``isFresh`` is
      mode: 'jpeg',
      token: accessToken || undefined,
      connkey: connKey,
-     minStreamingPort: currentProfile.minStreamingPort,
+     minStreamingPort: effectiveMinStreamingPort,
    });
 
 The hook is used by ``useMonitorStream``, ``MonitorHoverPreview``,
-``EventThumbnailHoverPreview``, ``EventPreviewPopover``,
-``TimelineScrubber``, ``ZmsEventPlayer``, ``NotificationHandler``,
-``EventMontage``, ``Events``, ``EventDetail``, and
-``NotificationHistory``. Anything that builds a token-bearing URL the
-runtime fetches directly should go through it.
+``MonitorRecentEvents``, ``EventThumbnailHoverPreview``,
+``EventPreviewPopover``, ``TimelineScrubber``, ``ZmsEventPlayer``,
+``NotificationHandler``, ``EventMontage``, ``Events``, ``EventDetail``,
+and ``NotificationHistory``. Anything that builds a token-bearing URL the
+runtime fetches directly should go through it (stores, which cannot call
+hooks, read ``getFreshAccessToken()`` from the auth store instead).
 
 The 30-minute leeway is deliberately larger than the 60-second
 ``tokenCheckInterval``. The background refresher prevents the leeway
@@ -392,21 +325,24 @@ retried).
 Connection Keys (connkey)
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Streaming URLs use connection keys instead of tokens. Connkeys are
-short-lived auth keys for media streams, appended to stream URLs and
-expiring server-side after a configured period.
+Streaming URLs use connection keys in addition to tokens. A connkey names one
+live ZMS stream so the client can later command that stream (pause, seek,
+quit) instead of just consuming its bytes.
 
 **Generation** (``src/stores/monitors.ts``):
 
-Connection keys are generated and managed by the monitors store.
-``regenerateConnKey(monitorId)`` produces a new random key for a given
-monitor and stores it in ``connKeys``. The ``useMonitorStream`` hook
-calls this when a stream needs a new key.
+Connection keys are generated and managed by the monitors store, not by a
+component. A component-local counter would reset on remount and hand out a key
+the server already has open. ``generateAndSetConnKey`` is the single private
+helper both public actions call:
 
 .. code:: tsx
 
-   // From stores/monitors.ts
-   regenerateConnKey: (monitorId: string) => {
+   // stores/monitors.ts
+   function generateAndSetConnKey(
+     monitorId: string,
+     set: (fn: (state: MonitorStore) => Partial<MonitorStore>) => void
+   ): number {
      const newKey = Math.floor(Math.random() * 100000);
      set((state) => ({
        connKeys: { ...state.connKeys, [monitorId]: newKey },
@@ -414,22 +350,31 @@ calls this when a stream needs a new key.
      return newKey;
    }
 
+The store returns a new object rather than editing ``state.connKeys`` in place.
+Zustand compares the old and new values to decide who re-renders; an in-place
+edit leaves the reference unchanged and every subscriber sleeps through it.
+
 **Usage in stream URLs:**
 
 .. code:: tsx
 
-   const streamUrl = `${portalUrl}/cgi-bin/nph-zms?mode=jpeg&monitor=${monitorId}&connkey=${connkey}`;
+   const streamUrl = getStreamUrl(currentProfile.cgiUrl, monitorId, {
+     mode: 'jpeg',
+     connkey: connKey,
+     token: accessToken || undefined,
+   });
 
 **Persistence:**
 
-Connection keys are stored in the Zustand monitors store (persisted via
-``localStorage``). ``getConnKey(monitorId)`` returns the existing key if
-one is already stored, or generates a new one. ``regenerateConnKey``
-always creates a fresh key (used on stream failure). ``clearConnKey``
-removes the stored key; ``useStreamLifecycle`` calls it on unmount after
-sending ``CMD_QUIT`` so the next mount generates a fresh key instead of
-reusing one tied to a quit stream. The cleanup only clears the key it
-quit: if the store already holds a newer key (another mount regenerated
+Connection keys are stored in the Zustand monitors store, persisted to
+``localStorage`` under ``STORAGE_KEYS.monitorStore``. ``getConnKey(monitorId)``
+returns the existing key if one is already stored, or generates a new one.
+``regenerateConnKey`` always creates a fresh key (used on stream failure).
+``clearConnKey`` removes the stored key; ``useStreamLifecycle`` calls it on
+unmount, deliberately clearing the store *before* awaiting the ``CMD_QUIT``
+request (the source comment says why: a fast remount must get a fresh key
+instead of reusing one tied to a quitting stream). The cleanup only clears the
+key it quit: if the store already holds a newer key (another mount regenerated
 it), the newer key is left intact.
 
 Streaming Mechanics
@@ -470,383 +415,438 @@ the WebView or browser loads each ``mode=single`` URL directly as the
 cache buster changes.
 
 Per-platform transport
-~~~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^
 
-Every platform fetches MJPEG feeds the same way: the ``<img>`` element
-loads ``nph-zms`` directly through the WebView or browser's network
-stack. The default view mode is Snapshot. The browser per-origin
-connection cap (~6 / origin) applies, mitigated by Snapshot mode and
-multi-port streaming.
-
-.. list-table::
-   :header-rows: 1
-   :widths: 28 28 14 30
-
-   * - Platform
-     - MJPEG frame transport
-     - Default mode
-     - Notes
-   * - Web browser (Chromium, Firefox, Safari)
-     - ``<img>`` loads ``nph-zms`` directly
-     - Snapshot
-     - Browser-managed memory
-   * - Android (Capacitor WebView)
-     - ``<img>`` loads ``nph-zms`` directly
-     - Snapshot
-     - WebView-managed memory
-   * - iOS / iPadOS (WKWebView)
-     - ``<img>`` loads ``nph-zms`` directly
-     - Snapshot
-     - OS-managed memory
-   * - Desktop (Electron / Chromium)
-     - ``<img>`` loads ``nph-zms`` directly
-     - Snapshot
-     - Chromium-managed memory
+Every platform fetches MJPEG feeds the same way: the ``<img>`` element loads
+``nph-zms`` directly through the WebView or browser's network stack, and frame
+memory is managed by that runtime (Chromium on web and Electron, the Android
+WebView, WKWebView on iOS and iPadOS). There is no per-platform decoding path
+and no JavaScript in the frame loop. The default view mode is Snapshot on all
+four. The browser per-origin connection cap (~6 / origin) applies everywhere,
+mitigated by Snapshot mode and multi-port streaming.
 
 Go2RTC-enabled monitors take a different path on every platform: native
 WebRTC/MSE/HLS into a ``<video>`` element, always continuous and
-independent of the Streaming Mode setting. The table above is the MJPEG
-(ZMS) path used when Go2RTC is off or unavailable.
+independent of the Streaming Mode setting. Everything described above is
+the MJPEG (ZMS) path used when Go2RTC is off or unavailable.
 
-Server state is managed via ``@tanstack/react-query``. See the
-`TanStack Query docs <https://tanstack.com/query/latest>`_ for general
-behaviour. zmNinjaNg-specific notes follow.
+How this app uses React Query
+-----------------------------
 
-zmNinjaNg runs with a 15 second global ``staleTime``
-(``DEFAULT_QUERY_STALE_TIME_MS`` in ``lib/zmninja-ng-constants.ts``), so
-React Query's "cache" holds the last response as fresh for that long
-before a new subscriber's mount triggers a background refetch.
-``refetchInterval`` queries still hit the server on their own schedule
-regardless of ``staleTime``; the setting mainly affects mount- and
-reconnect-triggered refetches on queries without one (states, groups,
-tags, server info). It also means a query mounting shortly after a brief
-network blip shows the last-good data instead of an immediate error wall;
-see the "Offline Behaviour" section below.
+Server state is managed with ``@tanstack/react-query``. :doc:`02-react-fundamentals`
+teaches the model (a query is a keyed cache entry plus a fetch function; a
+mutation writes and then invalidates keys). This section covers only what is
+specific to zmNinjaNg, and none of it is guessable from the TanStack docs.
 
-Key Settings
-~~~~~~~~~~~~
+Query keys come from a factory
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-+---------------------+------------------------+---------------------------+
-| Setting             | zmNinjaNg Value        | What It Does              |
-+=====================+========================+===========================+
-| ``staleTime``       | ``15000`` ms           | How long data is “fresh”. |
-|                     |                        | A subscriber mounting     |
-|                     |                        | within this window reuses |
-|                     |                        | the cached data instead   |
-|                     |                        | of triggering a refetch.  |
-+---------------------+------------------------+---------------------------+
-| ``gcTime``          | ``5 min`` (default)    | How long unused data      |
-|                     |                        | stays in memory. After 5  |
-|                     |                        | min with no subscribers,  |
-|                     |                        | data is garbage           |
-|                     |                        | collected.                |
-+---------------------+------------------------+---------------------------+
-| ``refetchInterval`` | varies                 | **Always makes a network  |
-|                     |                        | request** at this         |
-|                     |                        | interval, regardless of   |
-|                     |                        | ``staleTime``.            |
-+---------------------+------------------------+---------------------------+
-
-``refetchOnWindowFocus`` is disabled globally; ``refetchOnReconnect``
-stays at the TanStack default (``true``) so queries refresh once
-connectivity returns.
-
-Example: Monitor Polling
-^^^^^^^^^^^^^^^^^^^^^^^^
+Never write a key array inline. Every key comes from ``queryKeys`` in
+``lib/query/query-keys.ts`` (rule 29), and every key in a domain puts the
+profile id in the same position, immediately after the domain name:
 
 .. code:: tsx
 
-   // useMonitors.ts
-   const { data } = useQuery({
-     queryKey: ['monitors', currentProfile?.id],
-     queryFn: getMonitors,
-     refetchInterval: bandwidth.monitorStatusInterval,  // 20-40 sec
-   });
+   // lib/query/query-keys.ts
+   monitors: (profileId: MaybeProfileId) => ['monitors', profileId] as const,
+   monitor: (profileId: MaybeProfileId, monitorId: string | undefined) =>
+     ['monitor', profileId, monitorId] as const,
+   monitorAlarmStatus: (profileId: MaybeProfileId, monitorId: string | undefined) =>
+     ['monitor-alarm-status', profileId, monitorId] as const,
 
-Every 20-40 seconds, this makes a real network request to
-``/monitors.json``. Between polls, any component using ``useMonitors()``
-gets the stored response instantly without a new request.
-
-Query Client Setup
-~~~~~~~~~~~~~~~~~~
-
-**Location**: ``src/App.tsx``
+React Query matches invalidations by array *prefix*: invalidating
+``['events', profileId]`` marks every key that starts with those two elements
+as stale, including ``['events', profileId, filters, limit, ...]``. That is
+why the factory nests profile-scoped keys the way it does. Deleting one event
+invalidates the whole ``events`` domain for that profile with a single call:
 
 .. code:: tsx
 
-   import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-   import { setQueryClient, shouldRetryQuery } from './stores/query-cache';
-   import { DEFAULT_QUERY_STALE_TIME_MS } from './lib/zmninja-ng-constants';
+   // pages/EventDetail.tsx
+   await Promise.all([
+     queryClient.invalidateQueries({ queryKey: queryKeys.event(currentProfile?.id, event.Event.Id) }),
+     queryClient.invalidateQueries({ queryKey: queryKeys.events(currentProfile?.id) }),
+   ]);
 
+Put an optional parameter *before* the profile id in a key and prefix
+invalidation silently stops matching: the domain-level invalidator no longer
+shares a prefix with the leaf key, the leaf never refetches, and the list keeps
+showing a deleted event until the next poll.
+
+Profile ids are the branded type ``ProfileId`` (``api/types.ts``), minted
+through ``asProfileId()``. The branding means a key can only be scoped with a
+string that came from a real profile. The primary cross-profile safety net is
+still the global ``queryClient.clear()`` that ``stores/query-cache.ts`` runs on
+profile switch; profile-scoped keys are defense in depth.
+
+A few keys carry no profile id because the data is not tied to a server:
+``queryKeys.developerNotices()`` is the only one today.
+
+Stale time, and why fifteen seconds
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``staleTime`` is how long a cached response counts as fresh. While fresh, a
+newly mounting subscriber reuses it and fires no request. zmNinjaNg sets it
+globally to ``DEFAULT_QUERY_STALE_TIME_MS`` = 15000 ms:
+
+.. code:: tsx
+
+   // src/App.tsx
    const queryClient = new QueryClient({
      defaultOptions: {
        queries: {
-         retry: shouldRetryQuery,       // Single retry, but never on 401/403
-         refetchOnWindowFocus: false,   // Don't refetch when window focused
-         staleTime: DEFAULT_QUERY_STALE_TIME_MS, // 15 sec
-         // gcTime: 5 min (default)     // Unused data kept 5 min
+         retry: shouldRetryQuery,
+         refetchOnWindowFocus: false,
+         staleTime: DEFAULT_QUERY_STALE_TIME_MS,
        },
      },
    });
 
-``shouldRetryQuery`` (``stores/query-cache.ts``) retries a failed query
-once (``MAX_QUERY_RETRIES`` in ``lib/zmninja-ng-constants.ts``), except
-for HTTP 401/403 errors, which are never retried. The API client already
-performs token recovery inside the request, so an auth error that
-reaches React Query is final.
+   setQueryClient(queryClient);
 
-A query mounting more than 15 seconds after the last successful fetch
-still triggers a background refetch, same as before; the HTTP layer
-(``lib/http.ts``) logs every call with a correlation ID.
+Fifteen seconds is chosen to sit just under the shortest bandwidth-mode poll
+(``monitorStatusInterval``, 20 s in Normal). Any longer and a monitor-status
+refetch would land inside the fresh window and be skipped, which is exactly the
+periodic refresh the user asked for. Any shorter and a query mounting right
+after a network blip re-fetches, fails, and paints an error wall over data that
+is fine.
 
-Offline Behaviour
-~~~~~~~~~~~~~~~~~
+``refetchInterval`` queries hit the server on their own schedule regardless of
+``staleTime``. The setting mainly governs mount- and reconnect-triggered
+refetches on queries without one: states, groups, tags, server info.
+
+``refetchOnWindowFocus`` is off globally. ``refetchOnReconnect`` stays at the
+TanStack default (``true``) so queries refresh once connectivity returns.
+``gcTime`` (how long an unsubscribed cache entry survives before collection)
+is left at the TanStack default of five minutes.
+
+Two hooks override ``staleTime`` locally because their data barely moves:
+``useGroups`` and the tags list in ``useEventTags`` use 5 minutes; the
+per-event tag map in ``useEventTags`` uses 2 minutes because assigning a tag
+should show up sooner than that.
+
+Retries stop at auth errors
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``shouldRetryQuery`` (``stores/query-cache.ts``) is the global ``retry``
+predicate:
+
+.. code:: tsx
+
+   export function shouldRetryQuery(failureCount: number, error: unknown): boolean {
+     const status = (error as { status?: unknown } | null | undefined)?.status;
+     if (status === 401 || status === 403) {
+       return false;
+     }
+     return failureCount < MAX_QUERY_RETRIES;
+   }
+
+``MAX_QUERY_RETRIES`` is 1. 401 and 403 are never retried: the API client has
+already run token refresh and a reLogin inside the request (see "Reactive 401
+handling"), so an auth error that surfaces to React Query is final. Retrying it
+adds latency and server load and changes nothing.
+
+Offline behaviour, and the stale-over-error gate
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ``useNetworkStatus()`` (``src/hooks/useNetworkStatus.ts``, see
 :doc:`05-component-architecture`) drives a sticky ``OfflineBanner`` in
-``AppLayout.tsx`` while the device/browser has no connectivity. Pages that
-render the shared ``ErrorBanner`` (``components/ui/query-state.tsx``) on a
-query error gate it on the query also having no data, e.g. in
-``pages/Monitors.tsx``:
+``AppLayout.tsx`` while the device or browser has no connectivity.
+
+Pages that render an error wall gate it on the query *also* having no data:
 
 .. code:: tsx
 
+   // pages/Monitors.tsx
    if (error && !data) {
-     return <ErrorBanner message={...} />;
+     return <ErrorBanner message={resolveQueryError(error, t, { fallbackKey: 'monitors.failed_to_load' })} />;
    }
 
-So a background refetch failure (offline, server blip) while cached data
-is already on screen falls through to the normal view instead of an error
-wall; the ``OfflineBanner`` covers telling the user why. A cold start with
-no cached data still hits the error wall. Applied to
-``pages/Monitors.tsx``, ``Montage.tsx``, ``States.tsx``, ``Events.tsx``,
-and ``EventMontage.tsx``. ``MonitorDetail.tsx`` and ``EventDetail.tsx``
-keep the plain error wall: their guard already combines the query error
-with other required values (``!monitor || !currentProfile``,
+So a background refetch failure (offline, server blip) while cached data is
+already on screen falls through to the normal view instead of an error wall.
+The ``OfflineBanner`` covers telling the user why. A cold start with no cached
+data still hits the error wall.
+
+Applied in ``pages/Monitors.tsx``, ``Montage.tsx``, ``States.tsx``,
+``Events.tsx``, and ``EventMontage.tsx``. ``MonitorDetail.tsx`` and
+``EventDetail.tsx`` keep the plain error wall: their guard already combines the
+query error with other required values (``!monitor || !currentProfile``,
 ``!event``), and dropping the error term there changes what a falsy value
-without an error means, so it was left alone rather than risk a subtle
-behavior change.
+without an error means, so it was left alone rather than risk a subtle behavior
+change.
 
-Basic Queries
-~~~~~~~~~~~~~
+Error walls always go through ``ErrorBanner`` (``components/ui/query-state.tsx``)
+with ``resolveQueryError(err, t)`` (``lib/query/query-error.ts``), which folds a
+401 into the localized auth prompt and everything else into a translated
+fallback (rule 32). Never render ``error.message`` directly.
 
-**Fetching monitors:**
+Refetch intervals come from bandwidth settings
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. code:: tsx
-
-   function MonitorList() {
-     const { currentProfile } = useCurrentProfile();
-     const bandwidth = useBandwidthSettings();
-
-     const { data, isLoading, error, refetch } = useQuery({
-       queryKey: ['monitors', currentProfile?.id],
-       queryFn: getMonitors,
-       enabled: !!currentProfile,
-       refetchInterval: bandwidth.monitorStatusInterval,  // 20-40 sec polling
-     });
-
-     if (isLoading) return <Skeleton />;
-     if (error) return <ErrorDisplay error={error} onRetry={refetch} />;
-     if (!data) return null;
-
-     return (
-       <div>
-         {data.monitors.map(m => <MonitorCard key={m.Monitor.Id} monitor={m} />)}
-       </div>
-     );
-   }
-
-**Query key structure:**
+Any query that polls reads its interval from ``useBandwidthSettings()``, never
+a literal (rule 8). The user's Normal/Low choice is the single lever that
+changes network usage across every screen:
 
 .. code:: tsx
 
-   ['monitors']                    // All monitors
-   ['monitors', profileId]         // Monitors for specific profile
-   ['monitor', monitorId]          // Single monitor
-   ['events', profileId]           // Events for profile
-   ['events', profileId, filters]  // Filtered events
-   ['groups', profileId]           // Monitor groups for profile
-
-Query keys are used for:
-
-- Caching (same key = same cache entry)
-- Invalidation (clear specific cached data)
-- Deduplication (prevent duplicate requests)
-
-Dependent Queries
-~~~~~~~~~~~~~~~~~
-
-Sometimes one query depends on another’s result:
-
-.. code:: tsx
-
-   function MonitorStream({ monitorId }: { monitorId: string }) {
-     const { currentProfile } = useCurrentProfile();
-
-     // First query: Get monitor data
-     const { data: monitor } = useQuery({
-       queryKey: ['monitor', monitorId],
-       queryFn: () => fetchMonitor(monitorId),
-     });
-
-     // Second query: Only run if monitor exists
-     const { data: streamUrl } = useQuery({
-       queryKey: ['stream', monitorId, currentProfile?.id],
-       queryFn: () => generateStreamUrl(currentProfile!.id, monitorId),
-       enabled: !!monitor && !!currentProfile,  // Wait for monitor to load
-     });
-
-     return streamUrl ? <video src={streamUrl} /> : <Spinner />;
-   }
-
-Polling / Auto-Refetch
-~~~~~~~~~~~~~~~~~~~~~~
-
-Keep data fresh with automatic refetching:
-
-.. code:: tsx
-
-   const { data } = useQuery({
-     queryKey: ['monitors', profileId],
-     queryFn: () => fetchMonitors(profileId),
-     refetchInterval: 30000,  // Refetch every 30 seconds
-     refetchIntervalInBackground: false,  // Stop when app in background
+   // pages/Monitors.tsx
+   const { data, isLoading, error, refetch } = useQuery({
+     queryKey: queryKeys.monitors(currentProfile?.id),
+     queryFn: () => getMonitors(),
+     enabled: !!currentProfile && isAuthenticated,
+     refetchInterval: bandwidth.monitorStatusInterval,
    });
 
+See "Bandwidth Mode Settings" below for the property table.
+
+Mutations invalidate; they do not write the cache
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+There are exactly two ``useMutation`` call sites in the app, both wrapping
+``changeState`` (``pages/Server.tsx`` and ``pages/States.tsx``). Everything
+else mutates through a plain async handler and then invalidates.
+
+No mutation in zmNinjaNg does an optimistic update. There is no ``onMutate``
+anywhere in ``app/src``: nothing writes a predicted value into the cache and
+rolls it back on failure. A mutation succeeds, invalidates the affected keys,
+and lets the refetch supply the truth.
+
+.. code:: tsx
+
+   // pages/States.tsx
+   const changeMutation = useMutation({
+     mutationFn: changeState,
+     onSuccess: () => {
+       queryClient.invalidateQueries({ queryKey: queryKeys.states(currentProfile?.id) });
+       toast.success(t('states.change_success'));
+     },
+     onError: (error: Error) => {
+       toast.error(t('states.change_error', { error: error.message }));
+     },
+   });
+
+Run-state changes take seconds to settle on the server, so an optimistic write
+would show the wrong state for longer than the refetch takes. If you add a
+mutation where an optimistic write genuinely helps, it must snapshot and
+restore through factory keys, not inline arrays.
+
+Pagination without infinite queries
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The events list looks paginated but is not a ``useInfiniteQuery``. ZoneMinder's
+events endpoint takes a ``limit``, and "Load More" raises that limit and
+refetches the whole window. The key includes the limit, so each press is a new
+cache entry:
+
+.. code:: tsx
+
+   // pages/Events.tsx
+   const { data: eventsData, isLoading, isFetching, error, refetch } = useQuery({
+     queryKey: queryKeys.eventsList(
+       currentProfile?.id, filters, eventLimit, effectiveMonitorId,
+       isGroupFilterActive, eventIdFilter, tagIdFilter,
+     ),
+     queryFn: () => getEvents({ ...filters, eventIds: eventIdFilter, tagIds: tagIdFilter, limit: eventLimit }),
+     enabled: !!currentProfile && isAuthenticated,
+     // Keep showing previous data while fetching more (prevents UI flash during pagination)
+     placeholderData: keepPreviousData,
+   });
+
+``keepPreviousData`` is what makes that bearable: when the key changes, React
+Query would normally drop to ``undefined`` while the new key loads, blanking
+the list. ``placeholderData: keepPreviousData`` serves the previous key's data
+until the new one arrives, and flags ``isFetching`` so the UI can show a
+spinner without unmounting the rows.
+
+How this goes wrong
+~~~~~~~~~~~~~~~~~~~
+
+Three failure modes recur, and the factory only prevents part of the third.
+
+**Forgetting the ``enabled`` gate.** A query runs on mount whether or not its
+inputs exist. Without ``enabled``, a monitor-detail query fires with
+``monitorId`` undefined, the API 404s or 401s, and the user sees an error wall
+before a profile is even selected. Every profile-scoped query in this app
+carries ``enabled: !!currentProfile && isAuthenticated`` or equivalent.
+
+There is a v5 trap attached to this. For a *disabled* query, ``isLoading`` is
+``false``, not ``true``: React Query reports it as idle, not pending. Effects
+that self-heal or reset on ``!isLoading && !data`` will therefore fire against
+a query that never ran. Gate those on ``isSuccess`` instead.
+
+**Invalidating too narrow a prefix.** After hiding a monitor, invalidating only
+``queryKeys.monitors(profileId)`` leaves stale events, console counts, timeline
+rows, and montage tiles for a monitor the user just hid. The real handler
+invalidates every domain the change touches:
+
+.. code:: tsx
+
+   // components/settings/HiddenMonitorsSection.tsx
+   queryClient.invalidateQueries({ queryKey: queryKeys.monitors(currentProfile?.id) });
+   queryClient.invalidateQueries({ queryKey: queryKeys.events(currentProfile?.id) });
+   queryClient.invalidateQueries({ queryKey: queryKeys.consoleEvents(currentProfile?.id) });
+   queryClient.invalidateQueries({ queryKey: queryKeys.timelineEvents(currentProfile?.id) });
+   queryClient.invalidateQueries({ queryKey: queryKeys.eventMontage(currentProfile?.id) });
+
+Each of those is a domain-level factory entry that exists solely to be a
+prefix. When you add a domain, add its bare ``(profileId)`` entry too, or
+callers will invent narrower keys that miss.
+
+**Reaching around the factory.** Writing ``queryKey: ['monitors']`` compiles
+and works until a second profile exists, at which point two servers share one
+cache entry. The factory removes the chance to forget the profile id. It does
+not stop you from calling ``queryClient.setQueryData(['monitors'], ...)`` with
+a hand-built array, which will silently miss the real entry (``['monitors',
+profileId]``) and create a phantom one. Use the factory for reads and writes
+alike.
+
 Timers and Polling
-~~~~~~~~~~~~~~~~~~
+------------------
 
 App-level timers
-^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~
 
-- **Token refresh** (``hooks/useTokenRefresh.ts``), every 60 s; if the
-  access token expires within 30 min, refresh it.
-- **WebSocket keepalive** (``services/notifications.ts``), every 60 s;
-  sends a version-request ping. On disconnect, reconnects with
-  exponential backoff.
+- **Token refresh** (``hooks/useTokenRefresh.ts``), every 60 s
+  (``ZM_INTEGRATION.tokenCheckInterval``); if the access token expires within
+  30 minutes (``accessTokenLeewayMs``), refresh it.
+- **WebSocket keepalive** (``services/notifications.ts``), at the profile's
+  ``wsKeepaliveInterval`` (60 s Normal, 120 s Low); sends a version-request
+  ping. On disconnect, reconnects with exponential backoff.
 
 **Token Refresh Implementation:**
 
 .. code:: tsx
 
-   // hooks/useTokenRefresh.ts
+   // hooks/useTokenRefresh.ts, trimmed
    export function useTokenRefresh(): void {
      const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
      const accessTokenExpires = useAuthStore((state) => state.accessTokenExpires);
-     const refreshAccessToken = useAuthStore((state) => state.refreshAccessToken);
+     const getFreshAccessToken = useAuthStore((state) => state.getFreshAccessToken);
+     const isRefreshingRef = useRef(false);
 
      useEffect(() => {
        if (!isAuthenticated) return;
 
        const checkAndRefresh = async () => {
-         if (accessTokenExpires) {
+         if (accessTokenExpires && !isRefreshingRef.current) {
            const timeUntilExpiry = accessTokenExpires - Date.now();
-           // Refresh once we're within accessTokenLeewayMs (30 min) of expiry
-           if (timeUntilExpiry < ZM_INTEGRATION.accessTokenLeewayMs && timeUntilExpiry > 0) {
-             await refreshAccessToken();
+           // Refresh if expiring soon OR already expired. Already-expired
+           // tokens happen when the app returns from background and timers
+           // were paused.
+           if (timeUntilExpiry < ZM_INTEGRATION.accessTokenLeewayMs) {
+             isRefreshingRef.current = true;
+             try {
+               // Route through getFreshAccessToken so concurrent refreshes
+               // share one network call via the auth-store dedup.
+               await getFreshAccessToken();
+             } finally {
+               isRefreshingRef.current = false;
+             }
            }
          }
        };
 
        checkAndRefresh();
        const interval = setInterval(checkAndRefresh, ZM_INTEGRATION.tokenCheckInterval);
-       return () => clearInterval(interval);
-     }, [isAuthenticated, accessTokenExpires, refreshAccessToken]);
+
+       const handleVisibilityChange = () => {
+         if (document.visibilityState === 'visible') checkAndRefresh();
+       };
+       document.addEventListener('visibilitychange', handleVisibilityChange);
+
+       return () => {
+         clearInterval(interval);
+         document.removeEventListener('visibilitychange', handleVisibilityChange);
+       };
+     }, [isAuthenticated, accessTokenExpires, getFreshAccessToken]);
    }
 
-Screen-specific timers
-^^^^^^^^^^^^^^^^^^^^^^
+Two details are load-bearing. There is no ``timeUntilExpiry > 0`` guard: an
+already-expired token must still be refreshed, and that is the exact state the
+app wakes up in after the device sleeps. And ``isRefreshingRef`` is a ``ref``,
+not state: a ref holds a mutable value across renders without triggering one,
+so flipping it cannot re-run the effect that owns it.
 
-**Monitors** (``pages/Monitors.tsx``), event counts refresh every 60 s:
+Screen-specific timers
+~~~~~~~~~~~~~~~~~~~~~~
+
+**Monitors** (``pages/Monitors.tsx``), event counts for the last week refresh
+at ``consoleEventsInterval``:
 
 .. code:: tsx
 
    const { data: eventCounts } = useQuery({
-     queryKey: ['consoleEvents', '24 hour'],
-     queryFn: () => getConsoleEvents('24 hour'),
-     refetchInterval: 60000,
+     queryKey: queryKeys.consoleEventsList(currentProfile?.id, '1 week'),
+     queryFn: () => getConsoleEvents('1 week'),
+     enabled: !!currentProfile && isAuthenticated,
+     refetchInterval: bandwidth.consoleEventsInterval,
    });
 
-**Monitor Detail** (``pages/MonitorDetail.tsx``), alarm status polls
-every 5 s; monitor cycling on a user-configured interval.
+**Monitor Detail** (``pages/MonitorDetail.tsx`` via
+``pages/hooks/useAlarmControl.ts``), alarm status polls at
+``alarmStatusInterval``; monitor cycling on a user-configured interval
+(``settings.monitorDetailCycleSeconds``, 0 disables it).
 
 .. code:: tsx
 
-   const { data: alarmStatus } = useQuery({
-     queryKey: ['monitor-alarm-status', monitor?.Monitor.Id],
-     queryFn: () => getAlarmStatus(monitor!.Monitor.Id),
-     refetchInterval: 5000,
+   // pages/hooks/useAlarmControl.ts
+   const { data: alarmStatus, isLoading: isAlarmLoading, refetch: refetchAlarmStatus } = useQuery({
+     queryKey: queryKeys.monitorAlarmStatus(currentProfile?.id, monitorId),
+     queryFn: () => getAlarmStatus(monitorId!, apiBaseUrl),
+     enabled: !!monitorId,
+     refetchInterval: bandwidth.alarmStatusInterval,
      refetchIntervalInBackground: true,
+     refetchOnWindowFocus: false,
    });
 
-   // Monitor cycling (if enabled)
-   useEffect(() => {
-     const cycleSeconds = settings.monitorDetailCycleSeconds;
-     if (!cycleSeconds || cycleSeconds <= 0) return;
-     
-     const intervalId = window.setInterval(() => {
-       // Navigate to next monitor
-     }, cycleSeconds * 1000);
-     
-     return () => window.clearInterval(intervalId);
-   }, [settings.monitorDetailCycleSeconds]);
+Alarm status is the one poll that keeps running in the background
+(``refetchIntervalInBackground: true``): the arm/disarm badge would otherwise
+be wrong the instant the user returns to the tab.
 
-**Montage** (``pages/Montage.tsx`` + ``MontageMonitor.tsx``), snapshot
-mode reloads each image at ``snapshotRefreshInterval`` seconds; no
-timer in streaming mode.
+**Montage** (``pages/Montage.tsx`` + ``MontageMonitor.tsx``), snapshot mode
+reloads each image at ``snapshotRefreshInterval`` seconds; no timer in
+streaming mode, because the MJPEG connection pushes frames on its own.
 
 .. code:: tsx
 
-   // hooks/useMonitorStream.ts - Used by montage monitors
+   // hooks/useMonitorStream.ts, trimmed
    useEffect(() => {
-     if (settings.viewMode !== 'snapshot') return;
+     if (!enabled || effectiveViewMode !== 'snapshot') return;
 
      const interval = setInterval(() => {
        setCacheBuster(Date.now());  // Forces image reload
      }, settings.snapshotRefreshInterval * 1000);
 
      return () => clearInterval(interval);
-   }, [settings.viewMode, settings.snapshotRefreshInterval]);
+   }, [enabled, effectiveViewMode, settings.snapshotRefreshInterval]);
 
-**Server** (``pages/Server.tsx``), daemon-status check every 30 s:
+The function an effect returns is its cleanup; React runs it before the next
+run of the effect and once on unmount. Skip the ``clearInterval`` here and
+every montage navigation leaves another timer hammering the server.
 
-.. code:: tsx
-
-   const { data: isDaemonRunning } = useQuery({
-     queryKey: ['daemon-check', currentProfile?.id],
-     queryFn: getDaemonCheck,
-     refetchInterval: 30000,
-   });
+**Server** (``pages/Server.tsx``), daemon-status check at
+``bandwidth.daemonCheckInterval`` under ``queryKeys.daemonCheck(profileId)``.
+The other six queries on that page (servers, load, disk, states, timezone,
+storages) have no ``refetchInterval`` and refresh only on mount.
 
 Dashboard widget timers
-^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~
 
-- **EventsWidget**: events refetch every 30 s (default, configurable
-  via prop).
-- **TimelineWidget** / **HeatmapWidget**: events refetch every 60 s.
+- **EventsWidget**: ``bandwidth.eventsWidgetInterval``, overridable by a
+  ``refreshInterval`` prop.
+- **TimelineWidget** / **HeatmapWidget**: ``bandwidth.timelineHeatmapInterval``.
 - **MonitorWidget**: snapshot reload at ``snapshotRefreshInterval``
   in snapshot mode; no timer in streaming mode.
 
-Configuration Constants
-^^^^^^^^^^^^^^^^^^^^^^^
-
-Static defaults are defined in ``lib/zmninja-ng-constants.ts``:
-
-.. code:: tsx
-
-   export const ZM_INTEGRATION = {
-     // API timeouts
-     httpTimeout: 10000,              // 10 sec - standard API calls
-     streamMaxFps: 10,                // Max FPS for live monitor streams
-
-     // Token management
-     tokenCheckInterval: 60 * 1000,        // 60 sec - poll cadence for expiry check
-     accessTokenLeewayMs: 30 * 60 * 1000,  // 30 min - refresh once within this window of expiry
-     loginInterval: 1800000,               // 30 min - re-login interval
-   } as const;
+The token and stream constants live in ``ZM_INTEGRATION`` in
+``lib/zmninja-ng-constants.ts`` (rule 25), alongside ``httpTimeout`` (10 s),
+``largeHttpTimeout`` (30 s for event responses), and ``loginInterval``
+(30 min); the polling intervals above live in ``BANDWIDTH_SETTINGS`` in the
+same file, as the next section covers. Import them; do not redeclare a
+timeout per file.
 
 Default request timeout
-^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~
 
 REST calls have no built-in timeout, so a stalled request (for example when
 the HTTP connection pool is saturated by a burst of stream-teardown requests
@@ -870,413 +870,179 @@ and races the request against a JS timer (so the promise settles on time even
 though the underlying native request can't be cancelled).
 
 Bandwidth Mode Settings
-^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~
 
-Most polling intervals are controlled by the user’s **bandwidth mode**
-setting (Normal or Low). This allows users to reduce network usage on
-metered connections.
+Most polling intervals are controlled by the user's **bandwidth mode**
+setting (Normal or Low), so users can cut network usage on metered
+connections.
 
-**Configuration** (``lib/zmninja-ng-constants.ts``):
+Both modes are defined in ``BANDWIDTH_SETTINGS`` in
+``lib/zmninja-ng-constants.ts``. Read them with ``useBandwidthSettings()``
+inside React, ``getBandwidthSettings(mode)`` outside it (services, stores).
 
-.. code:: tsx
+The full property set, and where to look when a value seems wrong:
 
-   export const BANDWIDTH_SETTINGS: Record<BandwidthMode, BandwidthSettings> = {
-     normal: {
-       monitorStatusInterval: 20000,   // 20 sec
-       alarmStatusInterval: 5000,      // 5 sec
-       snapshotRefreshInterval: 3,     // 3 sec
-       eventsWidgetInterval: 30000,    // 30 sec
-       timelineHeatmapInterval: 60000, // 60 sec
-       consoleEventsInterval: 60000,   // 60 sec
-       daemonCheckInterval: 30000,     // 30 sec
-       imageScale: 100,                // 100%
-       imageQuality: 100,              // 100%
-       streamMaxFps: 10,               // 10 FPS
-     },
-     low: {
-       monitorStatusInterval: 40000,   // 40 sec
-       alarmStatusInterval: 10000,     // 10 sec
-       snapshotRefreshInterval: 10,    // 10 sec
-       eventsWidgetInterval: 60000,    // 60 sec
-       timelineHeatmapInterval: 120000,// 120 sec
-       consoleEventsInterval: 60000,   // 60 sec
-       daemonCheckInterval: 60000,     // 60 sec
-       imageScale: 50,                 // 50%
-       imageQuality: 50,               // 50%
-       streamMaxFps: 5,                // 5 FPS
-     },
-   };
+===============================  ======  =====  =========================================================
+Property                         Normal  Low    Where used
+===============================  ======  =====  =========================================================
+``monitorStatusInterval``        20 s    40 s   ``pages/Monitors.tsx``, ``hooks/useMonitors.ts``, Montage
+``alarmStatusInterval``          5 s     10 s   ``pages/hooks/useAlarmControl.ts``
+``consoleEventsInterval``        60 s    60 s   ``pages/Monitors.tsx`` event badges
+``eventsWidgetInterval``         30 s    60 s   ``components/dashboard/widgets/EventsWidget.tsx``
+``timelineHeatmapInterval``      60 s    120 s  ``TimelineWidget.tsx``, ``HeatmapWidget.tsx``
+``daemonCheckInterval``          30 s    60 s   ``pages/Server.tsx``
+``snapshotRefreshInterval``      3 s     10 s   ``hooks/useMonitorStream.ts`` (snapshot mode)
+``zmsStatusInterval``            3 s     5 s    ``components/events/ZmsEventPlayer.tsx`` playback poll
+``eventPollerInterval``          30 s    60 s   ``services/eventPoller.ts`` (Direct mode, desktop/web)
+``wsKeepaliveInterval``          60 s    120 s  ``services/notifications.ts`` keepalive ping
+``timelineNowRefreshInterval``   30 s    60 s   ``components/timeline/TimelineCanvas.tsx`` now-line
+``monitorRecentEventsInterval``  30 s    60 s   ``hooks/useMonitorRecentEvents.ts``
+``streamMaxFps``                 10      5      Live stream URL construction
+``imageScale``                   100%    50%    Image and stream requests
+``imageQuality``                 100%    50%    Image requests
+===============================  ======  =====  =========================================================
 
-**Accessing bandwidth settings** (``hooks/useBandwidthSettings.ts``):
+Two rows are indirect: ``snapshotRefreshInterval`` seeds the per-profile
+setting ``useMonitorStream`` actually reads, and ``eventPollerInterval`` is
+injected into the poller by ``stores/notifications.ts`` rather than read
+inside it.
 
-.. code:: tsx
+**What does not use bandwidth settings:**
 
-   import { useBandwidthSettings } from '../hooks/useBandwidthSettings';
+====================================  =============================  ===================================================================
+Feature                               Interval                       Reason
+====================================  =============================  ===================================================================
+Groups (``useGroups``)                ``staleTime: 5 min``           Rarely change; no poll, just a long fresh window
+Tags list (``useEventTags``)          ``staleTime: 5 min``           Rarely change
+Per-event tag map (``useEventTags``)  ``staleTime: 2 min``           Assigning a tag should surface sooner than the tags list
+Token expiry check                    60 s (``tokenCheckInterval``)  Security cadence, independent of network budget
+Monitor cycle navigation              User-configured                A UI timer, not data fetching
+One-time queries                      none                           Queries without ``refetchInterval`` (event lists, states, timezone)
+====================================  =============================  ===================================================================
 
-   function MyComponent() {
-     const bandwidth = useBandwidthSettings();
+**When to add a bandwidth setting.** Use one for background polling that
+fetches server data repeatedly, auto-refresh features on timers, and anything
+that adds up to noticeable bandwidth over a session. Do not use one for
+user-triggered actions, one-time fetches, or data that rarely changes (raise
+``staleTime`` instead). The WebSocket keepalive *is* on a bandwidth setting
+even though it is a protocol requirement: the protocol dictates that a ping
+exists, not how often.
 
-     const { data } = useQuery({
-       queryKey: ['monitors'],
-       queryFn: getMonitors,
-       refetchInterval: bandwidth.monitorStatusInterval,
-     });
-   }
-
-Components should use ``useBandwidthSettings()`` instead of hardcoded
-intervals for any polling that affects network usage.
-
-**What uses bandwidth settings:**
-
-+------------------+-----------------------------+------------+-------+------------------+
-| Feature          | Property                    | Normal     | Low   | Where Used       |
-+==================+=============================+============+=======+==================+
-| Monitor status   | ``monitorStatusInterval``   | 20s        | 40s   | Monitors,        |
-| polling          |                             |            |       | Montage pages    |
-+------------------+-----------------------------+------------+-------+------------------+
-| Alarm state      | ``alarmStatusInterval``     | 5s         | 10s   | useAlarmControl  |
-| checking         |                             |            |       | hook             |
-+------------------+-----------------------------+------------+-------+------------------+
-| Event count      | ``consoleEventsInterval``   | 60s        | 60s   | Monitors page    |
-| refresh          |                             |            |       | event badges     |
-+------------------+-----------------------------+------------+-------+------------------+
-| Dashboard events | ``eventsWidgetInterval``    | 30s        | 60s   | EventsWidget     |
-| widget           |                             |            |       |                  |
-+------------------+-----------------------------+------------+-------+------------------+
-| Timeline/heatmap | ``timelineHeatmapInterval`` | 60s        | 120s  | TimelineWidget,  |
-| data             |                             |            |       | HeatmapWidget    |
-+------------------+-----------------------------+------------+-------+------------------+
-| Daemon health    | ``daemonCheckInterval``     | 30s        | 60s   | Server page      |
-| checks           |                             |            |       |                  |
-+------------------+-----------------------------+------------+-------+------------------+
-| Snapshot image   | ``snapshotRefreshInterval`` | 3s         | 10s   | useMonitorStream |
-| refresh          |                             |            |       | (snapshot mode)  |
-+------------------+-----------------------------+------------+-------+------------------+
-| Stream FPS limit | ``streamMaxFps``            | 10         | 5     | Video streaming  |
-+------------------+-----------------------------+------------+-------+------------------+
-| Image scaling    | ``imageScale``              | 100%       | 50%   | Image requests   |
-+------------------+-----------------------------+------------+-------+------------------+
-| Image quality    | ``imageQuality``            | 100%       | 50%   | Image requests   |
-+------------------+-----------------------------+------------+-------+------------------+
-
-**What does NOT use bandwidth settings:**
-
-+-----------------------+-------------------------+---------------------+
-| Feature               | Interval                | Reason              |
-+=======================+=========================+=====================+
-| Groups data           | ``staleTime: 5min``     | Groups rarely       |
-| (``useGroups``)       |                         | change, uses React  |
-|                       |                         | Query cache         |
-+-----------------------+-------------------------+---------------------+
-| Event tags            | ``staleTime: 5min``     | Tags rarely change, |
-| (``useEventTags``)    |                         | uses React Query    |
-|                       |                         | cache               |
-+-----------------------+-------------------------+---------------------+
-| Token expiry check    | 60s (hardcoded)         | Security            |
-|                       |                         | requirement, must   |
-|                       |                         | check regularly     |
-+-----------------------+-------------------------+---------------------+
-| Monitor cycle         | User-configured         | User-controlled     |
-| navigation            |                         | timer, not data     |
-|                       |                         | fetching            |
-+-----------------------+-------------------------+---------------------+
-| WebSocket keepalive   | 60s (hardcoded)         | Protocol            |
-|                       |                         | requirement for     |
-|                       |                         | connection          |
-|                       |                         | stability           |
-+-----------------------+-------------------------+---------------------+
-| One-time queries      | N/A                     | Queries without     |
-|                       |                         | ``refetchInterval`` |
-|                       |                         | (event lists,       |
-|                       |                         | states, timezone)   |
-+-----------------------+-------------------------+---------------------+
-
-**When to add bandwidth settings:**
-
-Use bandwidth settings for:
-
-- Background polling that fetches server data repeatedly
-- Auto-refresh features that run on timers
-- Any operation that adds up to noticeable bandwidth over time
-
-Do NOT use bandwidth settings for:
-
-- User-triggered actions (button clicks, navigation)
-- One-time data fetches
-- Protocol requirements (authentication, keepalives)
-- Data that rarely changes (use ``staleTime`` instead)
+To add a property: extend the ``BandwidthSettings`` interface and both the
+``normal`` and ``low`` objects. Low mode should be roughly twice as slow.
 
 Timer rules
-^^^^^^^^^^^
+~~~~~~~~~~~
 
-- Prefer ``refetchInterval`` to manual ``setInterval``: React Query
-  handles cleanup.
-- For data polling, set ``refetchIntervalInBackground: false`` so the
-  poll stops when the app is backgrounded.
-- For manual ``setInterval``, always return a ``clearInterval`` from
-  the effect.
-- Guard the effect with the conditions that determine whether the
-  timer should run at all (don't start a no-op interval).
-
-Mutations
-~~~~~~~~~
-
-For creating, updating, or deleting data:
-
-.. code:: tsx
-
-   import { useMutation, useQueryClient } from '@tanstack/react-query';
-
-   function MonitorEditor({ monitor }: { monitor: Monitor }) {
-     const queryClient = useQueryClient();
-
-     const updateMutation = useMutation({
-       mutationFn: (updates: Partial<Monitor>) =>
-         updateMonitor(monitor.Id, updates),
-
-       onSuccess: (updatedMonitor) => {
-         // Invalidate related queries to trigger refetch
-         queryClient.invalidateQueries({ queryKey: ['monitor', monitor.Id] });
-         queryClient.invalidateQueries({ queryKey: ['monitors'] });
-
-         toast.success('Monitor updated');
-       },
-
-       onError: (error) => {
-         toast.error(`Failed to update monitor: ${error.message}`);
-       },
-     });
-
-     const handleSave = (formData: MonitorFormData) => {
-       updateMutation.mutate(formData);
-     };
-
-     return (
-       <Form
-         onSubmit={handleSave}
-         isLoading={updateMutation.isPending}
-         error={updateMutation.error}
-       />
-     );
-   }
-
-**Optimistic Updates:**
-
-For better UX, update the UI immediately before the server responds:
-
-.. code:: tsx
-
-   const deleteMutation = useMutation({
-     mutationFn: (monitorId: string) => deleteMonitor(monitorId),
-
-     onMutate: async (monitorId) => {
-       // Cancel ongoing queries
-       await queryClient.cancelQueries({ queryKey: ['monitors'] });
-
-       // Snapshot current data
-       const previousMonitors = queryClient.getQueryData(['monitors']);
-
-       // Optimistically update cache
-       queryClient.setQueryData(['monitors'], (old: MonitorsResponse) => ({
-         monitors: old.monitors.filter(m => m.Id !== monitorId),
-       }));
-
-       // Return context for rollback
-       return { previousMonitors };
-     },
-
-     onError: (err, monitorId, context) => {
-       // Rollback on error
-       if (context?.previousMonitors) {
-         queryClient.setQueryData(['monitors'], context.previousMonitors);
-       }
-       toast.error('Failed to delete monitor');
-     },
-
-     onSettled: () => {
-       // Refetch to sync with server
-       queryClient.invalidateQueries({ queryKey: ['monitors'] });
-     },
-   });
-
-The monitors list is cached under a profile-scoped key,
-``['monitors', currentProfile?.id]``, so different servers never share a cache
-entry. ``cancelQueries``/``getQueryData``/``setQueryData`` need the full key
-including the profile id to hit the right entry; ``invalidateQueries`` with the
-``['monitors']`` prefix matches every profile's entry, which is what you want on
-settle.
-
-Infinite Queries (Pagination)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-For paginated data like event lists:
-
-.. code:: tsx
-
-   function EventTimeline() {
-     const { currentProfile } = useCurrentProfile();
-
-     const {
-       data,
-       isLoading,
-       fetchNextPage,
-       hasNextPage,
-       isFetchingNextPage,
-     } = useInfiniteQuery({
-       queryKey: ['events', currentProfile?.id],
-       queryFn: ({ pageParam = 0 }) =>
-         fetchEvents(currentProfile!.id, { page: pageParam }),
-       getNextPageParam: (lastPage) => lastPage.nextPage,
-       enabled: !!currentProfile,
-     });
-
-     // Flatten pages into single array
-     const events = data?.pages.flatMap(page => page.events) ?? [];
-
-     return (
-       <div>
-         {events.map(event => <EventCard key={event.Id} event={event} />)}
-
-         {hasNextPage && (
-           <Button
-             onClick={() => fetchNextPage()}
-             disabled={isFetchingNextPage}
-           >
-             {isFetchingNextPage ? 'Loading...' : 'Load More'}
-           </Button>
-         )}
-       </div>
-     );
-   }
+- Prefer ``refetchInterval`` to a manual ``setInterval``: React Query owns the
+  cleanup and ties the timer to the query's subscriber count.
+- For data polling, leave ``refetchIntervalInBackground`` at its default
+  (``false``) so the poll stops when the app is backgrounded. Override it only
+  when a stale value would be actively misleading on return, as with alarm
+  status.
+- For a manual ``setInterval``, always return a ``clearInterval`` from the
+  effect.
+- Guard the effect with the conditions that determine whether the timer should
+  run at all, so you never start a no-op interval.
 
 HTTP Client Architecture
 ------------------------
 
-Overview
-~~~~~~~~
+``src/lib/http.ts`` is the single HTTP entry point across Web, iOS, Android,
+and Electron. Always use ``httpGet``, ``httpPost``, ``httpPut``, ``httpDelete``
+from it. Never raw ``fetch()`` or a third-party HTTP library (rule 10).
 
-The application uses a **unified HTTP client** (``src/lib/http.ts``)
-that provides platform-agnostic HTTP requests across Web, iOS, Android,
-and Desktop (Electron). This architecture provides:
-
-- Automatic platform detection (Native/Electron/Web/Proxy)
-- CORS handling via native HTTP or development proxy
-- Token injection for authenticated requests
-- Response type handling (json, blob, arraybuffer, text, base64)
-- Request/response correlation logging
-- Progress callbacks for downloads
-
-**IMPORTANT:** Always use the ``httpGet``, ``httpPost``, ``httpPut``,
-``httpDelete`` functions from ``lib/http.ts``. Never use raw ``fetch()``
-or third-party HTTP libraries directly.
-
-**Components:**
+The transport is ``lib/http.ts``, its shared shapes are ``lib/http/types.ts``,
+and it reads ``lib/platform.ts`` to pick an adapter. Above it:
 
 ::
 
-   src/lib/
-   ├── http.ts          # Unified HTTP client (USE THIS)
-   ├── platform.ts      # Platform detection utilities
-   └── logger.ts        # Logging utilities
-
    src/api/
-   ├── auth.ts          # Authentication endpoints
-   ├── client.ts        # HTTP client setup
-   ├── events.ts        # Event endpoints
-   ├── groups.ts        # Monitor group endpoints
-   ├── logs.ts          # Server log endpoints
-   ├── monitors.ts      # Monitor endpoints and stream URL generation
-   ├── notifications.ts # Push notification endpoints
-   ├── server.ts        # Server info and config endpoints
-   ├── states.ts        # Run state endpoints
-   ├── tags.ts          # Tag endpoints
-   ├── time.ts          # Timezone endpoint
-   ├── types.ts         # TypeScript types for API responses
-   └── zones.ts         # Zone endpoints
+   ├── auth.ts               # login(), refreshAccessToken(), getVersion()
+   ├── client.ts             # createApiClient(), getApiClient()
+   ├── client-ready.ts       # isApiClientInitialized() (no imports, breaks a cycle)
+   ├── store-gates.ts        # createStoreApiClient(), storeGates
+   ├── developer-notices.ts  # Developer notice feed
+   ├── events.ts             # getEvents(), getEvent(), deleteEvent(), URL helpers
+   ├── groups.ts             # getGroups()
+   ├── logs.ts               # Server log endpoints
+   ├── monitors.ts           # getMonitors(), getStreamUrl(), alarm + daemon calls
+   ├── notifications.ts      # FCM token registration via ZM's Notifications API
+   ├── server.ts             # getServers(), getStorages(), health checks, configs
+   ├── states.ts             # getStates(), changeState()
+   ├── tags.ts               # getTags(), extractUniqueTags(), getEventTags()
+   ├── time.ts               # getServerTimeZone()
+   ├── types.ts              # Zod schemas and TypeScript types
+   └── zones.ts              # Zone endpoints
 
-Unified HTTP Client (``src/lib/http.ts``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+There is no ``api/streaming.ts``. Stream URL construction is ``getStreamUrl`` in
+``api/monitors.ts``, which delegates to ``getMonitorStreamUrl`` in
+``lib/zm/url-builder.ts``. Connkey generation lives in ``stores/monitors.ts``.
 
-The HTTP client automatically selects the appropriate implementation
-based on platform:
+Platform implementations
+~~~~~~~~~~~~~~~~~~~~~~~~
 
-+---------------------+--------------------------------+----------------+
-| Platform            | Implementation                 | Notes          |
-+=====================+================================+================+
-| iOS/Android         | Capacitor HTTP plugin          | Bypasses CORS, |
-|                     |                                | uses native    |
-|                     |                                | networking     |
-+---------------------+--------------------------------+----------------+
-| Desktop (Electron)  | Chromium fetch                 | Same as web    |
-+---------------------+--------------------------------+----------------+
-| Web (dev)           | fetch + proxy                  | Routes through |
-|                     |                                | localhost:3001 |
-+---------------------+--------------------------------+----------------+
-| Web (prod)          | fetch                          | Standard       |
-|                     |                                | browser fetch  |
-+---------------------+--------------------------------+----------------+
+==================  =====================  ============================================
+Platform            Implementation         Notes
+==================  =====================  ============================================
+iOS / Android       Capacitor HTTP plugin  Bypasses CORS, native networking, native TLS
+Desktop (Electron)  Chromium fetch         Same code path as web
+Web (dev)           fetch + proxy          Routes through ``localhost:3001``
+Web (prod)          fetch                  Standard browser fetch
+==================  =====================  ============================================
 
 **Basic Usage:**
 
 .. code:: tsx
 
-   import { httpGet, httpPost, httpPut, httpDelete } from '../lib/http';
+   import { httpGet, httpPut } from '../lib/http';
 
-   // GET request
    const response = await httpGet<MonitorsResponse>(
      `${apiUrl}/api/monitors.json`,
      { token: accessToken }
    );
    const monitors = response.data;
 
-   // POST request
-   const result = await httpPost<AuthResponse>(
-     `${apiUrl}/api/host/login.json`,
-     { user: username, pass: password }
-   );
-
-   // PUT request with token
    await httpPut(
      `${apiUrl}/api/monitors/${id}.json`,
      { Monitor: updates },
      { token: accessToken }
    );
 
-   // DELETE request
-   await httpDelete(`${apiUrl}/api/events/${eventId}.json`, { token });
+``httpPost`` takes the same shape as ``httpPut``: body second, options third.
+``httpGet`` and ``httpDelete`` take no body, so options are the second
+argument.
 
-**Options Interface:**
+**Options** (``lib/http/types.ts``):
 
 .. code:: tsx
 
-   interface HttpOptions {
+   export interface HttpOptions {
      method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD';
      headers?: Record<string, string>;
-     params?: Record<string, string | number>;  // Query parameters
-     body?: unknown;                              // Request body (POST/PUT)
+     params?: Record<string, string | number>;
+     body?: unknown;
      responseType?: 'json' | 'blob' | 'arraybuffer' | 'text' | 'base64';
-     token?: string;                              // Auth token (added to params)
-     timeoutMs?: number;                          // Request timeout
-     signal?: AbortSignal;                        // For cancellation
+     token?: string;                  // Injected into params
+     timeoutMs?: number;
+     timeout?: number;
+     signal?: AbortSignal;
      validateStatus?: (status: number) => boolean;
      onDownloadProgress?: (progress: HttpProgress) => void;
+     correlationId?: number;          // Ties the wire log to the api/client.ts request
+     intent?: string;                 // Business-level label, e.g. "Fetch monitors list"
+     suppressLog?: boolean;           // For high-frequency internal fetches (snapshot frames)
    }
+
+``suppressLog`` exists because snapshot frames would otherwise emit a log line
+every three seconds per tile. A suppressed call still logs genuine failures via
+the caller.
 
 Request/Response Correlation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-All HTTP requests are assigned a monotonically increasing correlation ID
-for debugging.
-
-**How it works:**
-
-1. Request generates correlation ID: ``1, 2, 3, ...``
-2. Logs request with ID: ``[HTTP] Request #1 GET /api/monitors.json``
-3. Logs response with same ID:
-   ``[HTTP] Response #1 GET /api/monitors.json``
-4. Logs errors with same ID: ``[HTTP] Failed #1 GET /api/monitors.json``
-
-**Example logs:**
+Every HTTP request is assigned a monotonically increasing correlation ID, and
+``api/client.ts`` passes its own id down so a single line carries both.
 
 ::
 
@@ -1286,85 +1052,45 @@ for debugging.
    [HTTP] Response #1 GET https://server.com/api/monitors.json
      { requestId: 1, platform: 'Web', status: 200, duration: '145ms' }
 
-   [HTTP] Request #2 POST https://server.com/api/host/login.json
-     { requestId: 2, platform: 'Native', method: 'POST', url: '...' }
+Failures log as ``[HTTP] Failed #N`` with the same id. That matters most when
+tracing an auth flow, where one user action produces a request, a 401, a
+refresh, and a retry that all look alike in the log.
 
-   [HTTP] Failed #2 POST https://server.com/api/host/login.json
-     { requestId: 2, platform: 'Native', duration: '50ms', error: {...} }
-
-Correlation IDs let you match request/response pairs in logs when
-many requests overlap, trace auth flows (request → 401 → refresh →
-retry), and attribute durations per call.
-
-Platform-Specific Implementations
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-**Native (iOS/Android) - Capacitor HTTP:**
+Native (iOS/Android)
+~~~~~~~~~~~~~~~~~~~~
 
 .. code:: tsx
 
-   // Automatically used when Platform.isNative is true
+   // Used when Platform.isNative is true. Dynamic import: a static one
+   // breaks the web bundle (rule 14).
    const { CapacitorHttp } = await import('@capacitor/core');
    const response = await CapacitorHttp.request({
      method: 'GET',
      url: fullUrl,
      headers,
      data: body,
-     responseType: 'json', // or 'blob', 'arraybuffer'
+     responseType: 'json',
    });
 
-Bypasses CORS, uses the native networking stack, handles TLS
-natively, and supports self-signed certificates via the ``SSLTrust``
-Capacitor plugin (see ``lib/security/ssl-trust.ts``).
-
-**Electron (Desktop) and Web (Browser) - Standard Fetch:**
-
-.. code:: tsx
-
-   // Automatically used on web platform
-   const response = await fetch(url, {
-     method,
-     headers,
-     body: JSON.stringify(body),
-     signal,
-   });
+Bypasses CORS, uses the native networking stack, handles TLS natively, and
+supports self-signed certificates via the ``SSLTrust`` Capacitor plugin (see
+``lib/security/ssl-trust.ts``).
 
 Proxy Support (Development)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-In development (web only), requests are routed through a local proxy to
-bypass CORS.
+In development on web only, requests route through a local proxy to bypass
+CORS. ``Platform.shouldUseProxy`` (``lib/platform.ts``) is true only when
+``import.meta.env.DEV`` and the platform is web. Native bypasses CORS already;
+production builds talk to the server directly.
 
-**How it works:**
-
-1. ``Platform.shouldUseProxy`` returns true in dev mode on web
-2. HTTP client rewrites URLs: ``https://server.com/api`` →
-   ``http://localhost:3001/proxy/api``
-3. Adds ``X-Target-Host: https://server.com`` header
-4. Proxy server forwards request and returns response
-
-**Example:**
-
-.. code:: tsx
-
-   // Original URL
-   const url = 'https://zm.example.com/api/monitors.json';
-
-   // With proxy enabled (dev mode on web):
-   // Request URL: http://localhost:3001/proxy/api/monitors.json
-   // Header: X-Target-Host: https://zm.example.com
-
-**When proxy is used:**
-
-- Platform: Web
-- Environment: Development (``import.meta.env.DEV``)
-- NOT used on native platforms (they bypass CORS natively)
-- NOT used in production builds
+The client rewrites ``https://server.com/api`` to
+``http://localhost:3001/proxy/api`` and adds an ``X-Target-Host:
+https://server.com`` header (``lib/http.ts``). The proxy forwards and returns
+the response.
 
 Response Types
 ~~~~~~~~~~~~~~
-
-The HTTP client supports multiple response types:
 
 ================== ===================== ====================
 Type               Description           Use Case
@@ -1376,42 +1102,40 @@ Type               Description           Use Case
 ``base64``         Returns base64 string Mobile downloads
 ================== ===================== ====================
 
-**Example: Downloading a file**
-
 .. code:: tsx
 
-   // For web (blob)
+   import { log, LogLevel } from '../lib/logger';
+
+   // Web: blob
    const response = await httpGet<Blob>(url, {
      responseType: 'blob',
      onDownloadProgress: (progress) => {
-       console.log(`Downloaded ${progress.percentage}%`);
+       log.download('Download progress', LogLevel.DEBUG, { percentage: progress.percentage });
      },
    });
 
-   // For mobile (base64 to avoid OOM)
-   const response = await httpGet<string>(url, {
-     responseType: 'base64',
-   });
+   // Mobile: base64, written straight to the filesystem
+   const response = await httpGet<string>(url, { responseType: 'base64' });
 
-**Mobile downloads:** never convert to Blob on mobile, use
-``responseType: 'base64'`` and write directly to the filesystem.
-Large files OOM the WebView otherwise.
+On mobile, never convert to a Blob (rule 15). A large MP4 held as a Blob in the
+WebView heap will OOM the app.
 
 Error Handling
 ~~~~~~~~~~~~~~
 
-The HTTP client throws ``HttpError`` for non-2xx responses:
+The HTTP client throws ``HttpError`` (``lib/http/types.ts``, re-exported from
+``lib/http.ts``) for non-2xx responses. It is a plain ``Error`` with extra
+fields, created by ``createHttpError``, not a subclass, so use a status check
+rather than ``instanceof``:
 
 .. code:: tsx
 
-   interface HttpError extends Error {
+   export interface HttpError extends Error {
      status: number;
      statusText: string;
      data: unknown;
      headers: Record<string, string>;
    }
-
-**Example:**
 
 .. code:: tsx
 
@@ -1419,196 +1143,157 @@ The HTTP client throws ``HttpError`` for non-2xx responses:
      const response = await httpGet(url, { token });
      return response.data;
    } catch (error) {
-     if ((error as HttpError).status === 401) {
-       // Token expired - refresh and retry
-       await refreshAccessToken();
-       return httpGet(url, { token: newToken });
-     }
      if ((error as HttpError).status === 404) {
-       toast.error('Resource not found');
        return null;
      }
-     // Network error or other issue
-     toast.error('Request failed');
      throw error;
    }
 
-The client logs every non-2xx response at ERROR before the caller sees
-it. For endpoints where a status is expected and handled, pass
-``expectedStatuses`` so the client logs that status at DEBUG instead.
-The request still rejects, so the caller branches on it as before. Used
-by the event-tags probe, where a 404 means the server build predates
-tags rather than a real error:
+Inside React, do not hand-roll this branch. Let the error reach React Query and
+render it through ``ErrorBanner`` + ``resolveQueryError`` (rule 32).
+
+The client logs every non-2xx response at ERROR before the caller sees it. For
+endpoints where a status is expected and handled, pass ``expectedStatuses`` so
+the client logs that status at DEBUG instead. The request still rejects, so the
+caller branches on it as before. Used by the event-tags probe, where a 404
+means the server build predates tags rather than a real error:
 
 .. code:: tsx
 
    // api/tags.ts
    const response = await client.get<EventTagsResponse>(url, { expectedStatuses: [404] });
 
-API Functions
-~~~~~~~~~~~~~
+API Modules
+-----------
 
-API functions are thin wrappers around the HTTP client.
-
-**Example: Fetching monitors**
-
-.. code:: tsx
-
-   // src/api/monitors.ts
-   import { httpGet, httpPut } from '../lib/http';
-   import { useAuthStore } from '../stores/auth';
-
-   export async function fetchMonitors(apiUrl: string): Promise<MonitorsResponse> {
-     const { accessToken } = useAuthStore.getState();
-     const response = await httpGet<MonitorsResponse>(
-       `${apiUrl}/api/monitors.json`,
-       { token: accessToken }
-     );
-     return response.data;
-   }
-
-   export async function updateMonitor(
-     apiUrl: string,
-     monitorId: string,
-     updates: Partial<Monitor>
-   ): Promise<Monitor> {
-     const { accessToken } = useAuthStore.getState();
-     const response = await httpPut<{ monitor: Monitor }>(
-       `${apiUrl}/api/monitors/${monitorId}.json`,
-       { Monitor: updates },
-       { token: accessToken }
-     );
-     return response.data.monitor;
-   }
-
-**API organization:**
-
-::
-
-   src/api/
-   ├── auth.ts          # login(), logout(), refreshAccessToken()
-   ├── monitors.ts      # fetchMonitors(), updateMonitor(), getAlarmStatus(), getDaemonStatus()
-   ├── events.ts        # fetchEvents(), fetchEvent(), deleteEvent(), getAdjacentEvent()
-   ├── groups.ts        # getGroups() - monitor groups for filtering
-   ├── tags.ts          # getTags(), getEventTags() - event tagging (ZM 1.37+)
-   ├── states.ts        # fetchStates(), changeState()
-   ├── server.ts        # getServers(), getStorages(), getDaemonCheck(), getLoad(), getDiskPercent()
-   └── streaming.ts     # generateConnKey(), getStreamUrl()
+The ``api/*.ts`` functions are thin: build a URL, call the client, validate
+with Zod, return typed data. Business logic (filtering, merging, exclusion)
+that must apply to *every* caller lives here too, at the API boundary, so no
+screen can accidentally skip it.
 
 Server API (``api/server.ts``)
-------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Functions for querying ZoneMinder server info, storage, and health
-checks. Several functions accept an optional ``apiBaseUrl`` parameter for
-multi-server routing (see ``lib/zm/server-resolver.ts``).
-
-**Key functions:**
+Server info, storage, and health checks. Several functions accept an optional
+``apiBaseUrl`` for multi-server routing (see ``lib/zm/server-resolver.ts``).
 
 .. code:: typescript
 
-   import {
-     getServers,
-     getStorages,
-     getDaemonCheck,
-     getLoad,
-     getDiskPercent,
-   } from '../api/server';
+   import { getServers, getStorages, getDaemonCheck, getLoad, getDiskPercent } from '../api/server';
 
-   // Fetch all configured servers
-   const servers = await getServers();
-   // Returns Server[] with routing fields:
+   // All configured servers, with routing fields:
    // Protocol, Hostname, Port, PathToIndex, PathToZMS, PathToApi
+   const servers = await getServers();
 
-   // Fetch storage info
+   // Storage info: ServerId, DiskTotalSpace, DiskUsedSpace
    const storages = await getStorages();
-   // Returns Storage[] with ServerId, DiskTotalSpace, DiskUsedSpace
 
-   // Health checks, optional apiBaseUrl routes to a specific server
-   const daemonOk = await getDaemonCheck();                     // default server
+   const daemonOk = await getDaemonCheck();                      // profile default server
    const daemonOk2 = await getDaemonCheck('https://server2/zm'); // specific server
    const load = await getLoad(apiBaseUrl);
    const disk = await getDiskPercent(apiBaseUrl);
 
-When ``apiBaseUrl`` is omitted, requests go to the profile's default API
-URL. When provided, the request is routed to that server directly. This
-is used by the Server page to display per-server health.
+When ``apiBaseUrl`` is omitted, requests go to the profile's default API URL.
+The Server page passes it to display per-server health in a multi-server setup.
+``getConfigs()`` and ``fetchMinStreamingPort()`` live here too; the latter reads
+``ZM_MIN_STREAMING_PORT`` and drives multi-port streaming.
 
-Monitor API Updates (``api/monitors.ts``)
------------------------------------------
+Monitor API (``api/monitors.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Monitor functions that interact with per-monitor daemons or alarms now
-accept an optional ``apiBaseUrl`` for multi-server routing.
-
-**Multi-server-aware functions:**
+Monitor functions that touch per-monitor daemons or alarms accept an optional
+``apiBaseUrl`` for multi-server routing.
 
 .. code:: typescript
 
    import {
+     getMonitors,
      getDaemonStatus,
      getAlarmStatus,
      triggerAlarm,
      cancelAlarm,
      controlMonitor,
+     getStreamUrl,
    } from '../api/monitors';
 
-   // Daemon status, routes to the server hosting this monitor
-   const status = await getDaemonStatus(monitorId, 'zmc', apiBaseUrl);
+   const { monitors } = await getMonitors();
 
-   // Alarm operations, same routing
+   // Routed to the server hosting this monitor
+   const status = await getDaemonStatus(monitorId, 'zmc', apiBaseUrl);
    const alarm = await getAlarmStatus(monitorId, apiBaseUrl);
    await triggerAlarm(monitorId, apiBaseUrl);
    await cancelAlarm(monitorId, apiBaseUrl);
 
-   // Control monitor, multi-port support
+   // PTZ, multi-port aware
    await controlMonitor(portalUrl, monitorId, command, token, minStreamingPort);
 
-``controlMonitor`` accepts ``minStreamingPort`` to calculate the
-per-monitor port using the formula
-``port = minStreamingPort + parseInt(monitorId)``.
+``controlMonitor`` accepts ``minStreamingPort`` to compute the per-monitor port
+as ``minStreamingPort + parseInt(monitorId)``.
 
-Event API Updates (``api/events.ts``)
--------------------------------------
+``getStreamUrl(cgiUrl, monitorId, options)`` builds an ``nph-zms`` URL. Options
+are ``mode`` (``'jpeg' | 'single' | 'stream'``), ``scale``, ``width``,
+``height``, ``maxfps``, ``buffer``, ``token``, ``connkey``, ``cacheBuster``,
+and ``minStreamingPort``. It wraps the result in ``wrapWithImageProxy`` so the
+dev proxy applies on web.
 
-Event URL helpers now support HLS detection and multi-port routing.
+Event URL helpers (``api/events.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-**Updated functions:**
+Three URL builders, all taking ``portalUrl`` and ``eventId`` as positional
+arguments (not an event object), with multi-port and HLS support in options:
 
 .. code:: typescript
 
-   import {
-     getEventVideoUrl,
-     getEventImageUrl,
-     getEventZmsUrl,
-   } from '../api/events';
+   export function getEventImageUrl(
+     portalUrl: string,
+     eventId: string,
+     frame: number | 'snapshot' | 'alarm' | 'objdetect' | string,
+     options: { token?: string; width?: number; height?: number; apiUrl?: string;
+                minStreamingPort?: number; monitorId?: string } = {},
+   ): string;
 
-   // Video URL, hls flag detects HLS vs MP4 from DefaultVideo field
-   const videoUrl = getEventVideoUrl(event, { hls: true });
+   export function getEventVideoUrl(
+     portalUrl: string,
+     eventId: string,
+     token?: string,
+     apiUrl?: string,
+     hls?: boolean,
+     minStreamingPort?: number,
+     monitorId?: string,
+   ): string;
 
-   // Image and ZMS URLs accept minStreamingPort and monitorId for multi-port
-   const imageUrl = getEventImageUrl(event, {
-     minStreamingPort: 7100,
-     monitorId: '4',
-   });
-   const zmsUrl = getEventZmsUrl(event, {
-     minStreamingPort: 7100,
-     monitorId: '4',
-   });
+   export function getEventZmsUrl(
+     portalUrl: string,
+     eventId: string,
+     options: { token?: string; apiUrl?: string; frame?: number; rate?: number;
+                maxfps?: number; replay?: 'single' | 'all' | 'gapless' | 'none';
+                scale?: number; minStreamingPort?: number; monitorId?: string } = {},
+   ): string;
 
-When ``hls`` is true, ``getEventVideoUrl`` checks the event's
-``DefaultVideo`` field to determine whether the video is an HLS playlist
-or an MP4 file and returns the appropriate URL.
+The caller decides HLS, not the helper. ``EventDetail.tsx`` inspects the event's
+``DefaultVideo`` field, computes ``isHlsEvent``, and passes it through:
+
+.. code:: tsx
+
+   // pages/EventDetail.tsx
+   getEventVideoUrl(
+     resolvedPortalUrl, eventIdForUrls, accessToken || undefined,
+     currentProfile.apiUrl, isHlsEvent, effectiveMinStreamingPort, monitorIdForUrls,
+   );
+
+When ``hls`` is true the builder emits ``view_event_hls`` for the m3u8 manifest;
+otherwise ``mode=mp4``.
 
 Monitor Exclusion
------------------
+~~~~~~~~~~~~~~~~~
 
 Each profile can hide monitors. The hidden IDs live in
 ``excludedMonitorIds`` on the profile's settings, and the exclusion is
 applied at the API boundary so hidden monitors never enter the rest of the
 app.
 
-``getMonitors`` (``src/api/monitors.ts``) drops excluded monitors by
-default. Callers that need the full list, such as the Settings UI that
-restores monitors, pass ``includeExcluded``:
+``getMonitors`` drops excluded monitors by default. Callers that need the full
+list, such as the Settings UI that restores monitors, pass ``includeExcluded``:
 
 .. code:: typescript
 
@@ -1616,21 +1301,18 @@ restores monitors, pass ``includeExcluded``:
      options?: { includeExcluded?: boolean }
    ): Promise<MonitorsResponse>
 
-   // Default: excluded monitors removed
-   const visible = await getMonitors();
-
-   // Full list, including excluded monitors
-   const all = await getMonitors({ includeExcluded: true });
+   const visible = await getMonitors();                          // excluded removed
+   const all = await getMonitors({ includeExcluded: true });     // full list
 
 Deleted monitors are always dropped. The per-profile exclusion is applied
-afterwards via ``filterExcludedMonitors`` (see
+afterwards via ``filterExcludedMonitors`` (``lib/monitor/filters.ts``, see
 :doc:`12-shared-services-and-components`) using IDs from
 ``getExcludedMonitorIds``.
 
-The events API (``src/api/events.ts``) filters the same way. After fetching
-and deduplicating events, it removes any event whose ``MonitorId`` is in the
-excluded set, so events for hidden monitors do not show in event lists, the
-console, montage, or the timeline.
+The events API filters the same way. After fetching and deduplicating events,
+it removes any event whose ``MonitorId`` is in the excluded set, so events for
+hidden monitors do not show in event lists, the console, montage, or the
+timeline.
 
 Dropping events after the fetch leaves the server's ``totalCount`` counting
 hidden events, which keeps "Load More" running past the visible end (refs #205).
@@ -1642,7 +1324,7 @@ do not pass that filter (timeline, console) and for races where a monitor is
 hidden mid-session.
 
 Filtering by event ID (favorites)
----------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Favorites are stored locally (``stores/eventFavorites.ts``), so the server
 does not know about them. Filtering the list client-side after a server page
@@ -1651,7 +1333,7 @@ so it cannot be shown, and ``totalCount`` keeps counting non-favorites, so
 "Load More" never stops (refs #205).
 
 ``getEvents`` instead accepts an ``eventIds`` array and pushes it to the server
-as a ``Id IN:<id1,id2,...>`` filter segment, composed (AND) with the other
+as an ``Id IN:<id1,id2,...>`` filter segment, composed (AND) with the other
 filters. ``Events.tsx`` passes the favorite IDs when the favorites-only toggle
 is on:
 
@@ -1666,13 +1348,14 @@ Behavior of the ``eventIds`` path:
 - An empty array matches nothing and returns an empty list without a request.
 - The IDs are chunked by ``API_PAGINATION.eventIdFilterChunkSize`` (200) to
   stay under ZM's request-line length limit (HTTP 414 above ~500 IDs on ZM
-  1.36). Each chunk is fetched in full, then the chunks are merged,
-  de-duplicated, ordered by ``StartDateTime``, and sliced to ``limit``.
+  1.36). Each chunk is fetched in full by ``fetchEventsByVariants``, then the
+  chunks are merged, de-duplicated, ordered by ``StartDateTime``, and sliced to
+  ``limit``.
 - ``totalCount`` reflects the matched set, so "Load More" disappears once every
   matching event is shown.
 
 Filtering by archived status
-----------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ``EventFilters.archived`` (``src/api/events.ts``) is a boolean that, when
 ``true``, adds an ``Archived:1`` path segment to the server query. The segment
@@ -1687,22 +1370,18 @@ active-filter badge. Archiving or unarchiving an event is a separate action
 (``setEventArchived`` in ``src/api/events.ts``) available in the event detail
 screen.
 
-Monitor Groups API
-------------------
+Monitor Groups API (``api/groups.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The groups API (``src/api/groups.ts``) fetches monitor groups for
-filtering monitors.
-
-**Usage:**
+Fetches monitor groups, which the ``GroupFilterSelect`` component uses to
+filter monitors in the Monitors and Montage views.
 
 .. code:: tsx
 
    import { getGroups } from '../api/groups';
 
    const response = await getGroups();
-   // response.groups: Array of group objects with Id, Name, ParentId, MonitorIds
-
-**Response structure:**
+   // response.groups: Group[]
 
 .. code:: tsx
 
@@ -1713,41 +1392,33 @@ filtering monitors.
      MonitorIds: string;       // Comma-separated list of monitor IDs
    }
 
-Groups are used with the ``GroupFilterSelect`` component for filtering
-monitors in views.
+``useGroups`` wraps this with ``queryKeys.groups(profileId)`` and a 5-minute
+``staleTime``.
 
-Event Tags API
---------------
+Event Tags API (``api/tags.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The tags API (``src/api/tags.ts``) handles event tagging functionality.
-Tags are labels assigned to events (e.g., “person”, “car”, “cat”). Not
-all ZoneMinder servers support tags - the API handles graceful
-degradation.
-
-**Key functions:**
+Tags are labels assigned to events ("person", "car", "cat"). Not every
+ZoneMinder build supports them, so this module degrades instead of throwing.
+Its three exports:
 
 .. code:: tsx
 
-   import { getTags, getEventTags, checkTagsSupported } from '../api/tags';
+   import { getTags, extractUniqueTags, getEventTags } from '../api/tags';
 
-   // Check if tags are supported on this server
-   const supported = await checkTagsSupported();
-
-   // Get all available tags
+   // All available tags. Returns null (not a throw) if the server lacks tag
+   // support (404) or the user lacks permission (401/403).
    const tagsResponse = await getTags();
-   // Returns null if tags not supported (404) or permission denied (401/403)
+   const tags = tagsResponse ? extractUniqueTags(tagsResponse) : [];
 
-   // Get tags for specific events (batched automatically)
+   // Tags for specific events, batched at TAGS_BATCH_SIZE (100) per request.
+   // Returns Map<eventId, Tag[]>, or null if not supported.
    const eventTagMap = await getEventTags(['123', '456', '789']);
-   // Returns Map<eventId, Tag[]> or null if not supported
 
-**Features:**
-
-- Graceful degradation for servers without tag support
-- Automatic batching for large event ID lists (avoids URL length limits)
-- Returns ``null`` instead of throwing on 404/401/403 responses
-
-**Response structure:**
+There is no ``checkTagsSupported``. Support detection is the ``null`` return of
+``getTags`` itself. ``getTags`` returns the API's tag/event association rows,
+which repeat a tag once per associated event; ``extractUniqueTags``
+de-duplicates them by ID.
 
 .. code:: tsx
 
@@ -1759,12 +1430,10 @@ degradation.
      LastAssignedDate: string;
    }
 
-**Query key pattern:**
-
-.. code:: tsx
-
-   ['tags', profileId]           // All available tags
-   ['eventTags', profileId, eventIds]  // Tags for specific events
+Keys come from the factory: ``queryKeys.tags(profileId)`` and
+``queryKeys.eventTags(profileId, sortedEventIds)``. The event IDs are sorted
+before they enter the key, because React Query hashes the key structurally and
+``['1','2']`` would otherwise miss the cache entry stored under ``['2','1']``.
 
 ``getEventTags`` is a forward lookup (event IDs to their tags) used to show tag
 chips on the events already on screen. Filtering the list *by* tag is the
@@ -1784,13 +1453,11 @@ favorites ``Id IN:`` filter in one query, so:
   instead, which is accurate because the whole favorite set is in hand.
 
 Adjacent Event Navigation
--------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The ``getAdjacentEvent`` function (``src/api/events.ts``) fetches a single
-event adjacent to a given timestamp. It is used by the ``useEventNavigation``
-hook to provide prev/next event navigation in EventDetail.
-
-**Signature:**
+``getAdjacentEvent`` (``src/api/events.ts``) fetches a single event adjacent to
+a given timestamp. ``hooks/useEventNavigation.ts`` uses it for prev/next
+navigation in EventDetail.
 
 .. code:: typescript
 
@@ -1800,32 +1467,22 @@ hook to provide prev/next event navigation in EventDetail.
      filters?: EventFilters
    ): Promise<EventData | null>
 
-**How it works:**
+It builds a ZM filter path using ``StartDateTime >`` (next) or
+``StartDateTime <`` (prev) relative to the timestamp, applies the same
+server-side filters as the events list (``monitorId``, ``minAlarmFrames``,
+``notesRegexp``), requests one result sorted ascending (next) or descending
+(prev), and returns the closest match or ``null``.
 
-1. Builds a ZM API filter path using ``StartDateTime >`` (for next) or
-   ``StartDateTime <`` (for prev) relative to the provided timestamp
-2. Applies the same server-side filters as the events list: ``monitorId``,
-   ``minAlarmFrames``, and ``notesRegexp``
-3. Requests a single result (``limit: 1``) sorted by ``StartDateTime`` in
-   ascending order (next) or descending order (prev)
-4. Returns the closest matching event, or ``null`` if none exists
+Fetching one adjacent event per press, rather than paging the list, is what
+lets prev/next work from a deep-linked event whose neighbours were never in any
+list the app loaded.
 
-**Usage:**
+Notifications API (``api/notifications.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. code:: typescript
-
-   const nextEvent = await getAdjacentEvent('next', currentEvent.StartDateTime, filters);
-   const prevEvent = await getAdjacentEvent('prev', currentEvent.StartDateTime, filters);
-
-Notifications API
------------------
-
-The notifications API (``src/api/notifications.ts``) manages FCM push token
-registration via ZoneMinder’s Notifications REST API. Used in Direct ZM
-notification mode where tokens are registered via REST instead of the Event
-Server WebSocket.
-
-**Key functions:**
+Manages FCM push token registration through ZoneMinder's Notifications REST
+API. Used in Direct ZM notification mode, where tokens are registered via REST
+instead of over the Event Server WebSocket.
 
 .. code:: tsx
 
@@ -1833,307 +1490,267 @@ Server WebSocket.
      registerToken,
      updateNotification,
      deleteNotification,
-     listNotifications,
      checkNotificationsApiSupport,
-   } from ‘../api/notifications’;
+   } from '../api/notifications';
 
-   // Check if server supports the Notifications API
+   // false on 404 (older ZM builds), throws on anything else
    const supported = await checkNotificationsApiSupport();
-   // Returns false on 404 (older ZM versions)
 
-   // Register or upsert an FCM token
+   // Register or upsert an FCM token. POST with an existing token updates the row.
    const notif = await registerToken({
      token: fcmToken,
-     platform: ‘android’,
-     monitorList: ‘1,2,3’,
+     platform: 'android',
+     monitorList: '1,2,3',
      interval: 60,
-     pushState: ‘enabled’,
-     appVersion: ‘2.0.0’,
+     pushState: 'enabled',
+     appVersion: '2.0.0',
    });
 
-   // Update monitor filter or push state
-   await updateNotification(notif.Id, { monitorList: ‘1,2’, interval: 30 });
-
-   // Delete a registration
+   await updateNotification(notif.Id, { monitorList: '1,2', interval: 30 });
    await deleteNotification(notif.Id);
 
-**Features:**
+Both writes go through ``client.postForm`` / ``client.putForm`` with
+``Notification[Field]`` keys, the CakePHP form convention. Registrations are
+user-scoped: the server only returns the current user's tokens.
 
-- Upsert semantics (POST with existing token updates the row)
-- User-scoped (server returns only the current user’s tokens)
-- Feature detection via 404 response for older ZM versions
-
-Event Poller Service
---------------------
-
-The event poller (``src/services/eventPoller.ts``) polls the ZM events API
-for new events in Direct notification mode on desktop (Electron) and web.
-New events are fed into the notification store, which triggers toast
-display via ``NotificationHandler``.
-
-**Usage:** The poller is started through ``startEventPoller(profileId)`` in
-``stores/notifications.ts`` when ``notificationMode === ‘direct’`` on
-desktop/web (``Platform.isDesktopOrWeb``). The wiring function injects the
-poller's store-derived dependencies (``EventPollerDeps``: event sink, token
-provider, poll interval, portal URL, multi-port lookup); the poller itself has
-no store imports. On mobile (iOS/Android), FCM push notifications handle event
-delivery instead. The polling interval follows the profile's bandwidth mode
-(``eventPollerInterval``: 30 s normal, 60 s low). The poller uses recursive
-``setTimeout`` so interval changes take effect on the next tick.
-
-**Filters:** When ``onlyDetectedEvents`` is enabled in notification settings,
-the poller adds a ``Notes REGEXP:detected:`` filter to the events API request,
-limiting results to events with object detection data.
-
-WebSocket Notification Service
+Notification Delivery Services
 ------------------------------
 
-The WebSocket service (``src/services/notifications.ts``) connects to
-ZoneMinder’s Event Server (``zmeventnotification.pl``) for real-time alarm
-notifications in ES mode.
+Three services deliver events to the user, chosen by notification mode and
+platform. ``components/NotificationHandler.tsx`` is the headless component that
+turns delivered events into toasts; it mounts
+``hooks/useNotificationAutoConnect.ts``, which owns the choice of service and
+the listeners that keep it alive.
 
-**Reconnection strategy:**
+WebSocket to the Event Server (``services/notifications.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-- Exponential backoff with jitter: 2s, 4s, 8s, 16s, ... capped at 2 minutes
-- Jitter of ±25% prevents thundering herd when multiple clients reconnect
-- Reconnection continues indefinitely until the user explicitly disconnects
-- An ``intentionalDisconnect`` flag distinguishes user-initiated disconnect from
-  network failures, only the former stops reconnection
-- ``reconnectAttempts`` counter resets after successful authentication (not on
-  socket open), preventing auth failures from resetting the backoff
+Connects to ``zmeventnotification.pl`` for real-time alarms in ES mode.
+Singleton via ``getNotificationService()``.
 
-**Liveness detection:**
+**Reconnection:**
 
-- **Keepalive ping**: Sends a version-request every 60 seconds
-- ``checkAlive(timeoutMs)``: Sends a version request and resolves
-  ``true``/``false`` based on whether a response arrives within the timeout.
-  Used by ``NotificationHandler`` on app resume (mobile) and tab visibility
-  change (desktop) to detect dead connections
-- **Network change listener**: ``NotificationHandler`` listens to
-  ``window.addEventListener(‘online’)`` (desktop/web) and
-  ``@capacitor/network`` (mobile) to trigger immediate reconnect via
-  ``reconnectNow()`` when connectivity is restored
-- **App resume check** (mobile): On ``appStateChange`` active, a liveness
-  probe is sent; if unresponsive, reconnect is triggered
-- **Visibility change** (desktop): On ``visibilitychange`` to visible, a
-  liveness probe is sent to detect connections killed during tab backgrounding
+- Exponential backoff with jitter: 2 s, 4 s, 8 s, 16 s, capped at 2 minutes
+  (``baseReconnectDelay`` 2000, ``maxReconnectDelay`` 120000).
+- Jitter of ±25% prevents a thundering herd when many clients reconnect.
+- Reconnection continues indefinitely until the user explicitly disconnects.
+  An ``intentionalDisconnect`` flag distinguishes a user-initiated disconnect
+  from a network failure; only the former stops reconnection.
+- ``reconnectAttempts`` resets after successful *authentication*, not on socket
+  open, so a server that accepts the socket and then rejects the credentials
+  cannot reset the backoff into a hot loop.
+
+**Liveness:**
+
+- Keepalive ping (a version request) at the profile's bandwidth
+  ``wsKeepaliveInterval``: 60 s Normal, 120 s Low. This is a bandwidth setting,
+  read through ``providers.getKeepaliveIntervalMs()``, not a hardcoded value.
+- ``checkAlive(timeoutMs)`` sends a version request and resolves true/false on
+  whether a response arrives in time. ``useNotificationAutoConnect`` calls it
+  on app resume (mobile ``appStateChange``) and tab visibility change (desktop
+  ``visibilitychange``) to detect a socket the OS killed while backgrounded.
+- ``reconnectNow()`` fires on network restore. ``useNotificationAutoConnect``
+  listens to ``window.addEventListener('online')`` on desktop/web and
+  ``@capacitor/network`` on mobile.
+
+The service imports no stores. ``stores/notifications.ts`` injects a
+``ZMNotificationProviders`` object at connect time carrying the fresh-token
+getter, the event image URL builder, and the keepalive interval getter. The
+module-level ``DEFAULT_PROVIDERS`` fallback supplies a no-token, normal-bandwidth
+default for the temporary deregistration connection in ``pushNotifications.ts``.
+
+Event poller (``services/eventPoller.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Polls the ZM events API for new events in Direct notification mode on desktop
+(Electron) and web. Singleton via ``getEventPoller()``. On mobile, FCM push
+handles delivery and the poller never starts.
+
+``useNotificationAutoConnect`` decides: when ``notificationMode`` is
+``'direct'`` and ``Platform.isDesktopOrWeb``, it calls
+``startEventPoller(profileId)``, exported by ``stores/notifications.ts``. That
+wiring function builds ``EventPollerDeps`` (event sink, token provider,
+``getPollIntervalMs``, portal URL, multi-port lookup); the poller itself has no
+store imports.
+
+- Poll interval comes from the profile's bandwidth ``eventPollerInterval``
+  (30 s Normal, 60 s Low).
+- Scheduling is a recursive ``setTimeout``, not ``setInterval``, so an interval
+  change (the user switching to Low mode) takes effect on the next tick rather
+  than being frozen at the value captured when the timer was created.
+- A ``seenEventIds`` set, trimmed once it exceeds 500 entries, suppresses
+  duplicate notifications across polls.
+- When ``onlyDetectedEvents`` is enabled in notification settings, the poller
+  adds a ``Notes REGEXP:detected:`` filter, limiting results to events carrying
+  object-detection data.
+
+Push registration (``services/pushNotifications.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+FCM handling for iOS and Android. Singleton via ``getPushService()``. Requests
+permission, obtains the FCM token, and registers it with the server: over the
+WebSocket in ES mode, through ``api/notifications.ts`` in Direct mode.
+
+A foreground push is added to the notification store, unless the WebSocket is
+already connected, in which case it is dropped to avoid showing the same event
+twice. Tapping a notification navigates to the event detail screen.
+
+Like the API client, this service takes its store reads through a gate
+(``PushServiceStoreGates`` via ``setPushServiceStoreGates``, registered by
+``stores/notifications.ts`` at module load). See
+:doc:`12-shared-services-and-components`. Refs #217.
 
 End-to-end Flow: Viewing Monitors
 ---------------------------------
 
-1. ``Monitors.tsx`` calls ``useQuery({ queryKey: ['monitors', profileId],
-   queryFn: () => fetchMonitors(profileId), enabled: !!currentProfile })``.
-2. ``fetchMonitors`` (``src/api/monitors.ts``) calls
-   ``httpGet('/api/monitors.json', { token })``.
-3. ``lib/http.ts`` injects the token, assigns a correlation ID, and
-   dispatches via the platform implementation: ``fetch`` on web (with
-   dev proxy), Capacitor HTTP on iOS/Android, Chromium fetch on Electron desktop.
-4. Response and duration are logged with the same correlation ID, then
-   stored under the query key.
-5. ``MonitorGrid`` renders ``MonitorCard`` per monitor; each card calls
-   ``useMonitorStream({ monitorId })`` to get a connkey-authenticated
-   stream URL via ``lib/zm/url-builder.ts`` and renders an ``<img>``.
+1. ``pages/Monitors.tsx`` calls ``useQuery({ queryKey:
+   queryKeys.monitors(currentProfile?.id), queryFn: () => getMonitors(),
+   enabled: !!currentProfile && isAuthenticated, refetchInterval:
+   bandwidth.monitorStatusInterval })``.
+2. ``getMonitors`` (``src/api/monitors.ts``) calls ``client.get('/monitors.json')``,
+   validates the response against ``MonitorsResponseSchema``, drops deleted
+   monitors, then drops this profile's excluded monitors.
+3. ``api/client.ts`` checks authentication first and runs ``proactiveLogin`` if
+   needed, then hands the request to ``lib/http.ts``.
+4. ``lib/http.ts`` injects the token, assigns a correlation ID, and dispatches
+   via the platform implementation: ``fetch`` on web (with the dev proxy),
+   CapacitorHttp on iOS/Android, Chromium fetch on Electron.
+5. Response and duration are logged with the same correlation ID, and React
+   Query stores the validated data under the profile-scoped key.
+6. ``Monitors.tsx`` maps the (group-filtered) list to one ``MonitorCard`` per
+   monitor; each card calls ``useMonitorStream({ monitorId })``, which gates on
+   ``useFreshAccessToken()``, takes a connkey from the monitors store, builds a
+   URL through ``getStreamUrl``, and renders an ``<img>``.
 
-.. _error-handling-1:
-
-Error Handling
---------------
-
-API Errors
-~~~~~~~~~~
-
-.. code:: tsx
-
-   class ApiError extends Error {
-     constructor(
-       public status: number,
-       public statusText: string,
-       message?: string
-     ) {
-       super(message || `API Error: ${status} ${statusText}`);
-     }
-   }
-
-**Usage:**
-
-.. code:: tsx
-
-   try {
-     const data = await fetchMonitors(profileId);
-   } catch (error) {
-     if (error instanceof ApiError) {
-       if (error.status === 401) {
-         // Unauthorized - refresh tokens
-         await refreshAuthTokens(profileId);
-         // Retry request
-       } else if (error.status === 404) {
-         // Not found
-         toast.error('Monitor not found');
-       } else {
-         // Other error
-         toast.error(`Server error: ${error.statusText}`);
-       }
-     } else {
-       // Network error
-       toast.error('Network error - check connection');
-     }
-   }
-
-React Query Error Handling
-~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. code:: tsx
-
-   const { data, error } = useQuery({
-     queryKey: ['monitors'],
-     queryFn: fetchMonitors,
-     retry: (failureCount, error) => {
-       // Don't retry on 404
-       if (error instanceof ApiError && error.status === 404) {
-         return false;
-       }
-       // Retry network errors up to 3 times
-       return failureCount < 3;
-     },
-   });
-
-   if (error) {
-     return <ErrorDisplay error={error} onRetry={refetch} />;
-   }
+The stream URL never touches React Query. It is a plain string handed to the
+browser, which is the whole reason the freshness gate exists.
 
 ZoneMinder Streaming Protocol
 -----------------------------
 
-Video streams are served by a separate ZoneMinder daemon (ZMS).
-Tracking the stream lifecycle correctly avoids leaving zombie streams
-on the server.
+Video streams are served by a separate ZoneMinder daemon (ZMS). Tracking the
+stream lifecycle correctly avoids leaving zombie streams on the server.
 
 Stream Lifecycle
 ~~~~~~~~~~~~~~~~
 
-**1. Connection Key Generation**
+**1. Connection key generation**
 
-Each stream requires a unique connection key (connkey):
+``useStreamLifecycle`` subscribes to the store's ``regenerateConnKey`` action
+and calls it whenever the stream needs a fresh connection, reaching for
+``useMonitorStore.getState()`` in its unmount cleanup where a subscription
+would be stale. See "Connection Keys" above for the store code. Keys are
+per-monitor and persisted, never a component-local counter.
 
-.. code:: tsx
-
-   // src/stores/monitors.ts
-   const connKeyCounter = useRef(0);
-
-   export const regenerateConnKey = (monitorId: string) => {
-     connKeyCounter.current += 1;
-     return connKeyCounter.current;
-   };
-
-**2. Stream URL Construction**
+**2. Stream URL construction**
 
 .. code:: tsx
 
-   // src/api/monitors.ts
-   export function getStreamUrl(
-     cgiUrl: string,
-     monitorId: string,
-     options: StreamOptions
-   ): string {
-     const params = new URLSearchParams({
-       view: 'view_video',
-       mode: options.mode || 'jpeg',  // 'jpeg' for streaming, 'single' for snapshot
-       monitor: monitorId,
-       connkey: options.connkey.toString(),
-       scale: options.scale?.toString() || '100',
-       maxfps: options.maxfps?.toString() || '',
-       token: options.token || '',
-     });
+   // hooks/useMonitorStream.ts
+   const streamUrl = currentProfile && connKey !== 0 && isAccessTokenFresh
+     ? getStreamUrl(recordingUrl || currentProfile.cgiUrl, monitorId, {
+         mode: effectiveViewMode === 'snapshot' ? 'single' : 'jpeg',
+         scale: bandwidth.imageScale,
+         maxfps: effectiveViewMode === 'streaming' ? settings.streamMaxFps : undefined,
+         token: accessToken || undefined,
+         connkey: connKey,
+         cacheBuster: effectiveViewMode === 'snapshot' ? cacheBuster : undefined,
+         minStreamingPort: effectiveMinStreamingPort,
+       })
+     : '';
 
-     return `${cgiUrl}/nph-zms?${params.toString()}`;
-   }
+Three conditions gate the URL: a profile, a nonzero connkey, and a fresh token.
+Any one of them missing produces an empty string, and the consumer renders a
+placeholder instead of an ``<img>`` pointed at a broken URL.
 
-**3. Stream Cleanup with CMD_QUIT**
+**3. Cleanup with CMD_QUIT**
 
-When a stream is no longer needed, send ``CMD_QUIT`` to the ZMS daemon:
+When a stream is no longer needed, ``useStreamLifecycle`` builds the quit URL
+for the *old* connkey, clears that key from the store, and only then awaits
+the ``CMD_QUIT`` (17) request. The order is deliberate (the source comment
+says so): a fast remount must find the store empty and mint a fresh key, not
+reuse one attached to a stream that is mid-quit.
 
 .. code:: tsx
 
-   import { getZmsControlUrl } from '../lib/zm/url-builder';
-   import { ZMS_COMMANDS } from '../lib/zm/zm-constants';
-   import { httpGet } from '../lib/http';
+   // hooks/useStreamLifecycle.ts, trimmed (the real code awaits inside try/catch)
+   const controlUrl = getZmsControlUrl(
+     portalUrl,
+     ZMS_COMMANDS.cmdQuit,
+     prevConnKeyRef.current.toString(),
+     { token: accessToken || undefined, minStreamingPort, monitorId },
+   );
 
-   useEffect(() => {
-     return () => {
-       // Cleanup on unmount
-       if (connKey !== 0 && currentProfile) {
-         const controlUrl = getZmsControlUrl(
-           currentProfile.portalUrl,
-           ZMS_COMMANDS.cmdQuit,
-           connKey.toString(),
-           { token: accessToken }
-         );
+   httpGet(controlUrl, { timeoutMs: cmdQuitTimeoutMs }).catch(() => {
+     // Silently ignore errors - connection may already be closed
+   });
 
-         httpGet(controlUrl).catch(() => {
-           // Silently ignore errors - connection may already be closed
-         });
-       }
-     };
-   }, []); // Empty deps - only run on unmount
+The quit goes through ``httpGet``, not the API client, because it targets
+``nph-zms`` rather than the REST API. It carries the profile's
+``apiTimeoutSeconds`` so a slow quit cannot hold a connection slot while a
+montage tears down twelve streams at once.
 
-Never Render Without a Valid ConnKey
+``ZmsEventPlayer`` and ``EventThumbnailHoverPreview`` quit through
+``lib/zm/zms-quit.ts`` instead (``sendDelayedCmdQuit`` / ``cancelPendingQuit``),
+which delays the quit by ``ZM_INTEGRATION.cmdQuitGraceMs`` (150 ms). React's
+StrictMode double-mounts components in development; without the grace window,
+the first mount's cleanup would kill the stream the surviving mount is using,
+and ``cancelPendingQuit`` is what the surviving mount calls to stop it.
+
+Never render without a valid connkey
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-A stream started with ``connKey=0`` creates a zombie that can't be
-terminated. Only build a stream URL once ``connKey !== 0``:
+A stream started with ``connKey=0`` creates a zombie that cannot be terminated:
+``CMD_QUIT`` needs a connkey to name the stream it should close, and 0 names
+nothing. Only build a stream URL once ``connKey !== 0``, as the snippet above
+does.
 
-.. code:: tsx
-
-   const [connKey, setConnKey] = useState(0);
-
-   // Generate connKey in effect
-   useEffect(() => {
-     const newKey = regenerateConnKey(monitorId);
-     setConnKey(newKey);
-   }, [monitorId]);
-
-   // Check connKey before building URL
-   const streamUrl = currentProfile && connKey !== 0
-     ? getStreamUrl(currentProfile.cgiUrl, monitorId, {
-         connkey: connKey,
-         mode: 'jpeg',
-         // ...
-       })
-     : '';  // Empty string until connKey is valid
-
-   return <img src={streamUrl} />;
-
-Stream Modes
+Stream modes
 ~~~~~~~~~~~~
 
-Defined in ``src/lib/zm/zm-constants.ts``:
+Accepted by ``getStreamUrl``'s ``mode`` option:
 
 - ``jpeg``: MJPEG streaming (continuous multipart JPEG frames)
-- ``single``: Single frame snapshot (one JPEG image)
-- ``stream``: Raw stream (rarely used)
+- ``single``: single frame snapshot (one JPEG image)
+- ``stream``: raw stream (rarely used)
 
-ZMS Commands
+ZMS commands
 ~~~~~~~~~~~~
 
-The ZMS daemon accepts various control commands via HTTP requests:
+``ZMS_COMMANDS`` in ``src/lib/zm/zm-constants.ts`` maps names to the wire
+values ZMS expects:
 
 .. code:: tsx
 
-   // src/lib/zm/zm-constants.ts
    export const ZMS_COMMANDS = {
-     cmdPause: 1,     // Pause playback
-     cmdPlay: 2,      // Start/resume playback
-     cmdStop: 3,      // Stop playback
-     cmdVarPlay: 15,  // Change playback rate (with rate param)
-     cmdQuit: 17,     // Close stream connection
-     cmdQuery: 99,    // Query stream status
-     // ... more commands
+     cmdNone: 0,
+     cmdPause: 1,
+     cmdPlay: 2,
+     cmdStop: 3,
+     cmdFastFwd: 4,
+     cmdSlowFwd: 5,
+     cmdSlowRev: 6,
+     cmdFastRev: 7,
+     cmdZoomIn: 8,
+     cmdZoomOut: 9,
+     cmdPan: 10,
+     cmdScale: 11,
+     cmdPrev: 12,
+     cmdNext: 13,
+     cmdSeek: 14,
+     cmdVarPlay: 15,
+     cmdGetImage: 16,
+     cmdQuit: 17,
+     cmdMaxFps: 18,
+     cmdQuery: 99,
    } as const;
 
-``cmdQuit`` (17) is the one that matters for cleanup, always send it
-when unmounting to prevent zombie streams.
+``cmdQuit`` (17) is the one that matters for cleanup. ``ZmsEventPlayer`` is the
+only component that uses the rest: ``cmdPause``, ``cmdPlay``, ``cmdVarPlay``,
+``cmdSeek``, ``cmdQuery`` (polled at ``bandwidth.zmsStatusInterval``), and
+``cmdQuit`` on teardown.
 
-See :doc:`08-common-pitfalls` (pitfall #3) for the zombie-stream
-pattern and how to avoid it: never render with ``connKey === 0``,
-always send ``CMD_QUIT`` on unmount via ``httpGet`` (not raw
-``fetch``), and keep effect deps to primitive IDs.
+The zombie-stream trap and how to avoid it (never render with
+``connKey === 0``, always send ``CMD_QUIT`` on teardown, keep effect deps to
+primitive IDs) is covered in :doc:`05-component-architecture`; the narrative
+walk of the same code is Flow 2 in :doc:`call-flows`.
