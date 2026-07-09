@@ -381,6 +381,8 @@
     "go2rtc_disabled_note": "所有监控使用 MJPEG。",
     "show_protocol_label": "协议标签",
     "show_protocol_label_desc": "在视频源上显示流协议",
+    "webrtc_use_stun": "STUN 服务器",
+    "webrtc_use_stun_desc": "仅当通过公网直接访问 go2rtc 时启用。局域网或 VPN 下关闭。",
     "webrtc_protocols": "流媒体协议",
     "webrtc_protocols_desc": "并行尝试的协议 — 首先产生视频的获胜。",
     "protocol_webrtc_desc": "低延迟点对点流媒体（推荐）",

@@ -113,6 +113,7 @@ Profile-scoped settings in ``ProfileSettings``:
    interface ProfileSettings {
      streamingMethod: 'auto' | 'webrtc' | 'mjpeg'; // Default: 'auto'
      webrtcFallbackEnabled: boolean; // Default: true
+     webrtcUseStun: boolean; // Default: false
      // ... other settings
    }
 
@@ -121,6 +122,25 @@ Profile-scoped settings in ``ProfileSettings``:
 - **auto**: WebRTC when available, MJPEG otherwise. Default.
 - **webrtc**: Use WebRTC; falls back to MJPEG if unavailable.
 - **mjpeg**: Force MJPEG.
+
+STUN servers
+~~~~~~~~~~~~
+
+``video-rtc.js`` hardcodes ``stun.cloudflare.com`` and ``stun.l.google.com``
+into the browser ``RTCPeerConnection``. ``useGo2RTCStream`` overrides
+``videoRtc.pcConfig.iceServers`` on the element instance before the connection
+starts (the vendored file is left unchanged). ``onwebrtc()`` reads ``pcConfig``
+lazily when it builds the peer connection, so the override wins.
+
+``webrtcUseStun`` selects the list: off (default) applies ``[]``; on applies
+``GO2RTC_STUN_SERVERS``. It is off by default because LAN and portal/VPN reach
+go2rtc on host candidates, so STUN is never on the path. An empty list also
+stops Chromium from starting a STUN hostname lookup that it cancels when
+video-rtc tears the peer connection down (the WebRTC/MSE race, or a montage tile
+rotating), which otherwise logs ``Failed to resolve address for stun...
+errorcode: -105`` even though DNS resolves. Turn it on only to reach go2rtc
+directly over the public internet without a portal/VPN, where NAT traversal
+needs a server-reflexive candidate.
 
 Fallback Ladder
 ---------------

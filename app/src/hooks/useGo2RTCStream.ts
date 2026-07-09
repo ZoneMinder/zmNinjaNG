@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { VideoRTC } from '../lib/vendor/go2rtc/video-rtc';
 import { getGo2RTCWebSocketUrl } from '../lib/zm/url-builder';
-import { GO2RTC_CONNECT_DELAY_MS } from '../lib/zmninja-ng-constants';
+import { GO2RTC_CONNECT_DELAY_MS, GO2RTC_STUN_SERVERS } from '../lib/zmninja-ng-constants';
 import { log, LogLevel } from '../lib/logger';
 
 // Register VideoRTC custom element once
@@ -82,6 +82,12 @@ export interface UseGo2RTCStreamOptions {
   muted?: boolean;
   /** Show native video controls (play/pause, volume, fullscreen) */
   controls?: boolean;
+  /**
+   * Advertise STUN servers on the peer connection. Default false: LAN/portal
+   * connect on host candidates, so STUN is unused and only adds console noise.
+   * See GO2RTC_STUN_SERVERS.
+   */
+  useStun?: boolean;
 }
 
 export interface UseGo2RTCStreamResult {
@@ -107,6 +113,7 @@ export function useGo2RTCStream(options: UseGo2RTCStreamOptions): UseGo2RTCStrea
     enabled = true,
     muted = false,
     controls = false,
+    useStun = false,
   } = options;
 
   const [state, setState] = useState<ConnectionState>('idle');
@@ -193,6 +200,16 @@ export function useGo2RTCStream(options: UseGo2RTCStreamOptions): UseGo2RTCStrea
       videoRtc.media = 'video,audio';
       videoRtc.background = true;
 
+      // Override the STUN servers video-rtc.js hardcodes into pcConfig. onwebrtc()
+      // reads pcConfig lazily when it builds the pc (after the WebSocket opens),
+      // so setting it here wins without editing the vendored file. Default is an
+      // empty list (see GO2RTC_STUN_SERVERS); the per-profile webrtcUseStun
+      // setting opts back into STUN for direct-to-internet go2rtc access.
+      videoRtc.pcConfig = {
+        ...videoRtc.pcConfig,
+        iceServers: useStun ? GO2RTC_STUN_SERVERS : [],
+      };
+
       // Apply muted and configure video element after creation
       const originalOninit = videoRtc.oninit.bind(videoRtc);
       videoRtc.oninit = () => {
@@ -263,7 +280,7 @@ export function useGo2RTCStream(options: UseGo2RTCStreamOptions): UseGo2RTCStrea
       setState('error');
       setError(err instanceof Error ? err.message : 'Connection failed');
     }
-  }, [cleanup, containerRef, monitorId, go2rtcUrl, token, expectedHost, protocols, channel, applyMuted]);
+  }, [cleanup, containerRef, monitorId, go2rtcUrl, token, expectedHost, protocols, channel, applyMuted, useStun]);
 
   const retry = useCallback(() => {
     log.videoPlayer('GO2RTC: Retry requested', LogLevel.INFO, { monitorId });

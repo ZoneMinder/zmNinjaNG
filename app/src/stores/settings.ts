@@ -149,6 +149,11 @@ export interface ProfileSettings {
   webrtcFallbackEnabled: boolean;
   // Which protocols to try for WebRTC streaming (video-rtc runs them in parallel)
   webrtcProtocols: WebRTCProtocol[];
+  // Whether to advertise STUN servers on the WebRTC peer connection. Off by
+  // default: LAN and portal/VPN reach go2rtc on host candidates, so STUN is
+  // unused and only adds console noise. Turn on only for go2rtc reached directly
+  // over the public internet without a portal/VPN, where NAT traversal needs it.
+  webrtcUseStun: boolean;
   // Bandwidth mode: 'normal' for default intervals, 'low' for reduced bandwidth usage
   bandwidthMode: BandwidthMode;
   // Selected group ID for filtering monitors (null = show all monitors)
@@ -295,6 +300,8 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   webrtcFallbackEnabled: true,
   // Default: try all protocols (video-rtc runs them in parallel, first to produce video wins)
   webrtcProtocols: ['webrtc', 'mse', 'hls'],
+  // STUN off by default: unused on LAN/portal and avoids the -105 console log
+  webrtcUseStun: false,
   // Normal bandwidth mode by default
   bandwidthMode: 'normal',
   // No group filter by default (show all monitors)

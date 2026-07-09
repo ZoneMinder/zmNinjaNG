@@ -62,6 +62,13 @@ describe('useGo2RTCStream', () => {
       this.src = '';
       this.style = {};
       this.background = false;
+      // Mirror the STUN servers video-rtc.js hardcodes so tests can prove the
+      // hook overrides them.
+      this.pcConfig = {
+        bundlePolicy: 'max-bundle',
+        iceServers: [{ urls: ['stun:stun.cloudflare.com:3478', 'stun:stun.l.google.com:19302'] }],
+        sdpSemantics: 'unified-plan',
+      };
       this.oninit = vi.fn();
       this.onconnect = vi.fn();
       this.ondisconnect = vi.fn();
@@ -165,6 +172,53 @@ describe('useGo2RTCStream', () => {
       expect(instance.media).toBe('video,audio');
       expect(instance.src).toContain('ws://localhost:1984/ws');
       expect(instance.src).toContain('src=1_0');
+    });
+
+    it('clears the vendored STUN servers from pcConfig by default so no srflx DNS lookup is attempted', async () => {
+      const containerRef = { current: containerElement };
+      renderHook(() =>
+        useGo2RTCStream({
+          go2rtcUrl: 'http://localhost:1984',
+          monitorId: '1',
+          containerRef,
+          enabled: true,
+        })
+      );
+
+      await waitFor(() => {
+        expect(VideoRTC).toHaveBeenCalled();
+      });
+
+      const instance = mockVideoRtcInstances[0];
+      // The empty iceServers list is what suppresses the "-105" STUN resolve log.
+      expect(instance.pcConfig.iceServers).toEqual([]);
+      // Other pcConfig fields the vendor set must be preserved.
+      expect(instance.pcConfig.bundlePolicy).toBe('max-bundle');
+      expect(instance.pcConfig.sdpSemantics).toBe('unified-plan');
+    });
+
+    it('advertises STUN servers on pcConfig when useStun is enabled', async () => {
+      const containerRef = { current: containerElement };
+      renderHook(() =>
+        useGo2RTCStream({
+          go2rtcUrl: 'http://localhost:1984',
+          monitorId: '1',
+          containerRef,
+          enabled: true,
+          useStun: true,
+        })
+      );
+
+      await waitFor(() => {
+        expect(VideoRTC).toHaveBeenCalled();
+      });
+
+      const instance = mockVideoRtcInstances[0];
+      // With STUN on, the pc advertises the go2rtc default STUN servers.
+      expect(instance.pcConfig.iceServers).toEqual([
+        { urls: ['stun:stun.cloudflare.com:3478', 'stun:stun.l.google.com:19302'] },
+      ]);
+      expect(instance.pcConfig.bundlePolicy).toBe('max-bundle');
     });
 
     it('respects custom protocol order', async () => {

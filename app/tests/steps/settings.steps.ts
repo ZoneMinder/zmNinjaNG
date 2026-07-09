@@ -316,6 +316,20 @@ Then('the force-disable multiport toggle should be enabled', async ({ page }) =>
   await expect(page.getByTestId('settings-force-disable-multiport-switch')).toBeChecked();
 });
 
+// WebRTC STUN toggle (visible only when go2rtc/auto streaming is on, the default)
+When('I enable the WebRTC STUN toggle', async ({ page }) => {
+  const toggle = page.getByTestId('settings-webrtc-use-stun-switch');
+  await expect(toggle).toBeVisible({ timeout: testConfig.timeouts.pageLoad });
+  if (!(await toggle.isChecked().catch(() => false))) {
+    await toggle.click();
+  }
+  await expect(toggle).toBeChecked();
+});
+
+Then('the WebRTC STUN toggle should be enabled', async ({ page }) => {
+  await expect(page.getByTestId('settings-webrtc-use-stun-switch')).toBeChecked();
+});
+
 When('I expand the thumbnail fallback chain editor', async ({ page }) => {
   const trigger = page.getByTestId('settings-thumbnail-chain-trigger');
   await trigger.waitFor({ state: 'visible' });

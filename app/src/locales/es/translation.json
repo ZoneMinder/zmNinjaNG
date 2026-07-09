@@ -381,6 +381,8 @@
     "go2rtc_disabled_note": "Todos los monitores usan MJPEG.",
     "show_protocol_label": "Protocolo",
     "show_protocol_label_desc": "Mostrar protocolo en los feeds de video",
+    "webrtc_use_stun": "Servidores STUN",
+    "webrtc_use_stun_desc": "Actívalo solo para go2rtc accesible directamente por Internet. Desactivado en LAN o VPN.",
     "webrtc_protocols": "Protocolos de Streaming",
     "webrtc_protocols_desc": "Protocolos en paralelo — el primero en producir video gana.",
     "protocol_webrtc_desc": "Streaming peer-to-peer de baja latencia (recomendado)",

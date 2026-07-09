@@ -225,6 +225,22 @@ export function LiveStreamingSection({
           </div>
         )}
 
+        {/* WebRTC STUN (only relevant when go2rtc is on) */}
+        {settings.streamingMethod === 'auto' && (
+          <SettingsRow>
+            <RowLabel
+              label={t('settings.webrtc_use_stun')}
+              desc={t('settings.webrtc_use_stun_desc')}
+            />
+            <Switch
+              id="webrtc-use-stun"
+              checked={settings.webrtcUseStun ?? false}
+              onCheckedChange={(checked) => update('webrtcUseStun', checked)}
+              data-testid="settings-webrtc-use-stun-switch"
+            />
+          </SettingsRow>
+        )}
+
         {/* Protocol Label */}
         <SettingsRow>
           <RowLabel

@@ -62,6 +62,14 @@ Feature: Application Settings
     Then the force-disable multiport toggle should be enabled
 
   @all
+  Scenario: WebRTC STUN toggle persists across navigation
+    When I navigate to the "Settings" page
+    And I enable the WebRTC STUN toggle
+    And I navigate to the "Dashboard" page
+    And I navigate to the "Settings" page
+    Then the WebRTC STUN toggle should be enabled
+
+  @all
   Scenario: Thumbnail fallback chain reorder persists across reload
     When I navigate to the "Settings" page
     And I expand the thumbnail fallback chain editor

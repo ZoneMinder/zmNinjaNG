@@ -381,6 +381,8 @@
     "go2rtc_disabled_note": "Alle Monitore verwenden MJPEG.",
     "show_protocol_label": "Protokoll",
     "show_protocol_label_desc": "Streaming-Protokoll auf Videofeeds anzeigen",
+    "webrtc_use_stun": "STUN-Server",
+    "webrtc_use_stun_desc": "Nur für go2rtc direkt über das Internet aktivieren. Aus im LAN oder VPN.",
     "webrtc_protocols": "Streaming-Protokolle",
     "webrtc_protocols_desc": "Protokolle parallel ausprobieren — das erste mit Video gewinnt.",
     "protocol_webrtc_desc": "Niedriglatenz Peer-to-Peer-Streaming (empfohlen)",

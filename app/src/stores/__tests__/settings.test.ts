@@ -36,6 +36,8 @@ describe('Settings Store', () => {
       const settings = useSettingsStore.getState().getProfileSettings('new-profile');
       expect(settings.streamingMethod).toBe('auto');
       expect(settings.webrtcFallbackEnabled).toBe(true);
+      // STUN is off by default: unused on LAN/portal, avoids the -105 console log.
+      expect(settings.webrtcUseStun).toBe(false);
     });
 
     it('updates streaming method to mjpeg from default', () => {

@@ -594,6 +594,25 @@ export const GO2RTC_MAX_FREEZE_RETRIES = 2;
 export const GO2RTC_FREEZE_RESET_S = 60;
 
 /**
+ * STUN servers applied to the browser-side go2rtc RTCPeerConnection when the
+ * per-profile `webrtcUseStun` setting is on. These mirror the servers
+ * video-rtc.js hardcodes. STUN is only needed to reach go2rtc directly across
+ * the public internet without a portal/VPN, where NAT traversal needs a
+ * server-reflexive candidate.
+ *
+ * When the setting is off (the default), useGo2RTCStream applies an empty ICE
+ * list instead. On a LAN (and via a portal/VPN reverse proxy) the pc connects on
+ * host candidates, so STUN is never on the path. An empty list also stops
+ * Chromium from starting a STUN hostname lookup that it would cancel when
+ * video-rtc tears the pc down (WebRTC/MSE race, or tile rotation), which
+ * otherwise logs "Failed to resolve address for stun... errorcode: -105" even
+ * though DNS resolves fine.
+ */
+export const GO2RTC_STUN_SERVERS: RTCIceServer[] = [
+  { urls: ['stun:stun.cloudflare.com:3478', 'stun:stun.l.google.com:19302'] },
+];
+
+/**
  * Downloads
  *
  * Timing for browser-triggered file downloads (web platform).

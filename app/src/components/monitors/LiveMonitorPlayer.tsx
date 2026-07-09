@@ -223,6 +223,7 @@ export function LiveMonitorPlayer({
     enabled: streamingMethod === 'webrtc' && !!profile?.go2rtcUrl && !go2rtcFailed,
     muted,
     controls: showControls,
+    useStun: rawSettings?.webrtcUseStun ?? false,
   });
 
   // Fall back to MJPEG when Go2RTC reports error state
