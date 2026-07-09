@@ -117,11 +117,6 @@ substream). Monitors without one fall back to channel ``0``. Nothing reads
 ``RTSPStreamName``; that field exists on the schema because ZoneMinder returns
 it, and the stream name is derived from the id and channel alone.
 
-``getGo2RTCStreamUrl`` builds the HTTP equivalent
-(``.../stream.mse?src=1_0``, and the same for ``hls``, ``mp4``, ``mjpeg``). It is
-exported and unit-tested, but no player calls it today: streaming happens entirely
-over the WebSocket.
-
 Protocol negotiation runs in parallel
 -------------------------------------
 
@@ -463,9 +458,8 @@ On ``Profile``:
 Security
 --------
 
-**Authentication.** ``getGo2RTCWebSocketUrl`` and ``getGo2RTCStreamUrl`` accept a
-``token`` option and append it as a query parameter, but ``LiveMonitorPlayer``
-does not pass one. ZoneMinder authenticates the go2rtc WebSocket through
+**Authentication.** ``getGo2RTCWebSocketUrl`` accepts a ``token`` option and
+appends it as a query parameter, but ``LiveMonitorPlayer`` does not pass one. ZoneMinder authenticates the go2rtc WebSocket through
 credentials embedded in ``ZM_GO2RTC_PATH`` itself (``https://user:pass@host/...``),
 which the URL builder deliberately preserves rather than stripping. Stripping them
 breaks WebRTC streaming on setups that rely on them.
@@ -493,9 +487,9 @@ Unit tests, run with ``npm test`` from ``app/``:
   ``useStun`` is on, custom protocol order, WebSocket failure producing the error
   state, and teardown (element removed from the DOM, media tracks stopped,
   reconnect timers cancelled).
-- ``app/src/lib/zm/__tests__/url-builder.test.ts``: ``getGo2RTCWebSocketUrl`` and
-  ``getGo2RTCStreamUrl``, including scheme mapping, path prefixes, trailing
-  slashes, embedded credentials, and the cross-host token warning.
+- ``app/src/lib/zm/__tests__/url-builder.test.ts``: ``getGo2RTCWebSocketUrl``,
+  including scheme mapping, path prefixes, trailing slashes, embedded
+  credentials, and the cross-host token warning.
 - ``app/src/components/monitors/__tests__/LiveMonitorPlayer.test.tsx``: MJPEG
   error recovery, and failure-cache scoping (the detail view does not inherit a
   montage-recorded failure; montage tiles do share the cache).

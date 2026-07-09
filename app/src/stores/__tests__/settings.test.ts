@@ -35,7 +35,6 @@ describe('Settings Store', () => {
     it('defaults to auto streaming method', () => {
       const settings = useSettingsStore.getState().getProfileSettings('new-profile');
       expect(settings.streamingMethod).toBe('auto');
-      expect(settings.webrtcFallbackEnabled).toBe(true);
       // STUN is off by default: unused on LAN/portal, avoids the -105 console log.
       expect(settings.webrtcUseStun).toBe(false);
     });
@@ -65,39 +64,15 @@ describe('Settings Store', () => {
       expect(settings.streamingMethod).toBe('auto');
     });
 
-    it('disables webrtc fallback', () => {
-      const profileId = 'profile-1';
-      useSettingsStore.getState().updateProfileSettings(profileId, {
-        webrtcFallbackEnabled: false,
-      });
-
-      const settings = useSettingsStore.getState().getProfileSettings(profileId);
-      expect(settings.webrtcFallbackEnabled).toBe(false);
-    });
-
-    it('updates both streaming settings together', () => {
-      const profileId = 'profile-1';
-      useSettingsStore.getState().updateProfileSettings(profileId, {
-        streamingMethod: 'mjpeg',
-        webrtcFallbackEnabled: false,
-      });
-
-      const settings = useSettingsStore.getState().getProfileSettings(profileId);
-      expect(settings.streamingMethod).toBe('mjpeg');
-      expect(settings.webrtcFallbackEnabled).toBe(false);
-    });
-
     it('persists streaming method across store resets', () => {
       const profileId = 'profile-1';
       useSettingsStore.getState().updateProfileSettings(profileId, {
         streamingMethod: 'mjpeg',
-        webrtcFallbackEnabled: false,
       });
 
       // Verify settings are stored
       const storedSettings = useSettingsStore.getState().profileSettings[profileId];
       expect(storedSettings.streamingMethod).toBe('mjpeg');
-      expect(storedSettings.webrtcFallbackEnabled).toBe(false);
     });
   });
 });

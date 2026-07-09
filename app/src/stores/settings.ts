@@ -145,8 +145,6 @@ export interface ProfileSettings {
   lastRoute: string; // Last visited route for this profile
   // Streaming method: 'auto' tries WebRTC/MSE/HLS for Go2RTC-enabled monitors, 'mjpeg' forces MJPEG for all
   streamingMethod: StreamingMethod;
-  // Whether to enable fallback from WebRTC to MSE to HLS when protocols fail
-  webrtcFallbackEnabled: boolean;
   // Which protocols to try for WebRTC streaming (video-rtc runs them in parallel)
   webrtcProtocols: WebRTCProtocol[];
   // Whether to advertise STUN servers on the WebRTC peer connection. Off by
@@ -296,8 +294,6 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   lastRoute: '/monitors',
   // Auto mode: use WebRTC/MSE/HLS for Go2RTC-enabled monitors, MJPEG for others
   streamingMethod: 'auto',
-  // Enable fallback through protocols when one fails
-  webrtcFallbackEnabled: true,
   // Default: try all protocols (video-rtc runs them in parallel, first to produce video wins)
   webrtcProtocols: ['webrtc', 'mse', 'hls'],
   // STUN off by default: unused on LAN/portal and avoids the -105 console log

@@ -17,7 +17,6 @@ import {
   getEventZmsUrl,
   getZmsControlUrl,
   getGo2RTCWebSocketUrl,
-  getGo2RTCStreamUrl,
 } from '../url-builder';
 
 describe('normalizePortalUrl', () => {
@@ -454,64 +453,5 @@ describe('getGo2RTCWebSocketUrl', () => {
     );
     expect(mismatchCalls).toHaveLength(0);
     warnSpy.mockRestore();
-  });
-});
-
-describe('getGo2RTCStreamUrl', () => {
-  it('builds MSE stream URL when path includes /api', () => {
-    const result = getGo2RTCStreamUrl('http://zm.example.com:1984/api', '1', 0, 'mse');
-    expect(result).toBe('http://zm.example.com:1984/api/stream.mse?src=1_0');
-  });
-
-  it('builds HLS stream URL when path includes /api', () => {
-    const result = getGo2RTCStreamUrl('http://zm.example.com:1984/api', '2', 0, 'hls');
-    expect(result).toBe('http://zm.example.com:1984/api/stream.hls?src=2_0');
-  });
-
-  it('builds MP4 stream URL when no path provided', () => {
-    const result = getGo2RTCStreamUrl('http://zm.example.com:1984', '3', 0, 'mp4');
-    expect(result).toBe('http://zm.example.com:1984/stream.mp4?src=3_0');
-  });
-
-  it('builds MJPEG stream URL when no path provided', () => {
-    const result = getGo2RTCStreamUrl('http://zm.example.com:1984', '4', 0, 'mjpeg');
-    expect(result).toBe('http://zm.example.com:1984/stream.mjpeg?src=4_0');
-  });
-
-  it('builds stream name as {monitorId}_{channel}', () => {
-    const result = getGo2RTCStreamUrl('http://zm.example.com:1984/api', '5', 1, 'hls');
-    expect(result).toContain('src=5_1');
-  });
-
-  it('defaults channel to 0 when not provided', () => {
-    const result = getGo2RTCStreamUrl('http://zm.example.com:1984/api', '6', undefined, 'mse');
-    expect(result).toContain('src=6_0');
-  });
-
-  it('preserves https protocol', () => {
-    const result = getGo2RTCStreamUrl('https://zm.example.com:1984/api', '1', 0, 'hls');
-    expect(result).toBe('https://zm.example.com:1984/api/stream.hls?src=1_0');
-  });
-
-  it('includes auth token when provided', () => {
-    const result = getGo2RTCStreamUrl('http://zm.example.com:1984/api', '1', 0, 'mse', {
-      token: 'mytoken123',
-    });
-    expect(result).toBe('http://zm.example.com:1984/api/stream.mse?src=1_0&token=mytoken123');
-  });
-
-  it('handles URL with custom path (appends /stream.type)', () => {
-    const result = getGo2RTCStreamUrl('http://zm.example.com/go2rtc/api', '1', 0, 'hls');
-    expect(result).toBe('http://zm.example.com/go2rtc/api/stream.hls?src=1_0');
-  });
-
-  it('preserves explicit port', () => {
-    const result = getGo2RTCStreamUrl('http://zm.example.com:8080/api', '1', 0, 'hls');
-    expect(result).toBe('http://zm.example.com:8080/api/stream.hls?src=1_0');
-  });
-
-  it('handles trailing slash in path', () => {
-    const result = getGo2RTCStreamUrl('http://zm.example.com:1984/api/', '2', 0, 'mse');
-    expect(result).toBe('http://zm.example.com:1984/api/stream.mse?src=2_0');
   });
 });
