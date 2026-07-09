@@ -1,4 +1,4 @@
-import { useCallback, useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, type ReactNode } from 'react';
 import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, ZoomIn, ZoomOut, Home, Square, RotateCcw } from 'lucide-react';
 import { Button } from '../ui/button';
 import { cn } from '../../lib/utils';
@@ -82,6 +82,28 @@ function HoldButton({
     },
     [clearRepeat, onCommand, stopCommand]
   );
+
+  // The unmount cleanup runs with `[]` deps, so it would close over the
+  // handlers captured at mount. Mirror them, as useStreamLifecycle does.
+  const cleanupParamsRef = useRef({ onCommand, stopCommand });
+  useEffect(() => {
+    cleanupParamsRef.current = { onCommand, stopCommand };
+  }, [onCommand, stopCommand]);
+
+  // Unmount while held (panel collapsed, monitor switched, page left): pointerup
+  // never arrives, so a continuous driver would keep panning until it hits a
+  // physical limit, and the repeat timer would keep issuing requests from a dead
+  // component. The activePointerRef guard makes this a no-op on StrictMode's
+  // throwaway dev mount, where no pointer was ever captured.
+  useEffect(() => {
+    return () => {
+      clearRepeat();
+      if (activePointerRef.current === null) return;
+      activePointerRef.current = null;
+      const { onCommand: latestOnCommand, stopCommand: latestStopCommand } = cleanupParamsRef.current;
+      if (latestStopCommand) latestOnCommand(latestStopCommand);
+    };
+  }, [clearRepeat]);
 
   return (
     <Button
