@@ -96,10 +96,13 @@ export default function Monitors() {
     return filterMonitorsByGroup(enabledMonitors, filteredMonitorIds);
   }, [enabledMonitors, isFilterActive, filteredMonitorIds]);
 
-  const handleShowSettings = (monitor: Monitor) => {
+  // Stable identity: MonitorCard is memo()'d, and this is its only
+  // reference-unstable prop. A fresh function per render would re-render every
+  // card on every status poll.
+  const handleShowSettings = useCallback((monitor: Monitor) => {
     setSelectedMonitor(monitor);
     setShowPropertiesDialog(true);
-  };
+  }, []);
 
   // Settings dialog save handler
   const [isSavingSettings, setIsSavingSettings] = useState(false);

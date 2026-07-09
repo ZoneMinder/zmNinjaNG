@@ -593,6 +593,9 @@ export const GO2RTC_MAX_FREEZE_RETRIES = 2;
 /** Seconds an MSE stream must advance healthily before the freeze-retry counter resets */
 export const GO2RTC_FREEZE_RESET_S = 60;
 
+/** Minutes before retrying go2rtc on a monitor that previously failed */
+export const GO2RTC_RETRY_INTERVAL_MIN = 5;
+
 /**
  * STUN servers applied to the browser-side go2rtc RTCPeerConnection when the
  * per-profile `webrtcUseStun` setting is on. These mirror the servers

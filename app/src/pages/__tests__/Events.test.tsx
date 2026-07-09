@@ -11,13 +11,6 @@ vi.mock('@tanstack/react-query', () => ({
   keepPreviousData: (previousData: unknown) => previousData,
 }));
 
-vi.mock('@tanstack/react-virtual', () => ({
-  useVirtualizer: () => ({
-    getTotalSize: () => 120,
-    getVirtualItems: () => [{ index: 0, size: 120, start: 0 }],
-  }),
-}));
-
 vi.mock('../../stores/profile', () => ({
   useProfileStore: (selector: (state: { currentProfile: () => { id: string; portalUrl: string; apiUrl: string } }) => unknown) =>
     selector({

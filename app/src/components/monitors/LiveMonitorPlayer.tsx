@@ -2,9 +2,14 @@
  * LiveMonitorPlayer. Selects WebRTC (Go2RTC) or MJPEG based on user
  * preferences and monitor capabilities.
  *
- * Protocol negotiation: Go2RTC tries protocols in order (WebRTC → MSE → HLS).
- * If connected but no video frames arrive within a timeout, falls back to MJPEG.
- * The status badge updates in real-time to show which protocol is being tried.
+ * Protocol negotiation: video-rtc offers every compatible protocol over one
+ * WebSocket, not one at a time. MSE, HLS and MP4 are mutually exclusive branches
+ * picked from browser capability, and WebRTC is offered alongside the chosen one.
+ * Whichever delivers video first wins, resolved by a priority comparison in
+ * `onpcvideo`; the badge names the protocol that ends up carrying the picture.
+ *
+ * MJPEG is the fallback, on any of three triggers: a stream error, no decoded
+ * frame within GO2RTC_VIDEO_TIMEOUT_S of connecting, or the freeze watchdog.
  */
 
 import { useRef, useMemo, useState, useEffect, useCallback } from 'react';
@@ -23,12 +28,10 @@ import {
   GO2RTC_FREEZE_THRESHOLD_S,
   GO2RTC_MAX_FREEZE_RETRIES,
   GO2RTC_FREEZE_RESET_S,
+  GO2RTC_RETRY_INTERVAL_MIN,
 } from '../../lib/zmninja-ng-constants';
 import { Button } from '../ui/button';
 import { VideoOff } from 'lucide-react';
-
-/** Minutes before retrying Go2RTC on a monitor that previously failed */
-const GO2RTC_RETRY_INTERVAL_MIN = 5;
 
 /** Cache of monitors where Go2RTC failed: skip straight to MJPEG until TTL expires */
 const go2rtcFailureCache = new Map<string, number>();
