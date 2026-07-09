@@ -52,8 +52,8 @@ import { useCurrentProfile } from '../useCurrentProfile';
 import { useSettingsStore } from '../../stores/settings';
 
 const defaultEventsPageFilters = {
-  monitorIds: [],
-  tagIds: [],
+  monitorIds: [] as string[],
+  tagIds: [] as string[],
   startDateTime: '',
   endDateTime: '',
   favoritesOnly: false,
@@ -82,6 +82,53 @@ function setupMocks(overrides?: Partial<typeof mockProfileSettings>) {
     updateProfileSettings: mockUpdateProfileSettings,
   } as never);
 }
+
+/** Captures the hook's value on every render, so first-render state is observable. */
+function renderCapturingFilters() {
+  const monitorIdPerRender: (string | undefined)[] = [];
+  const view = renderHook(() => {
+    const r = useEventFilters();
+    monitorIdPerRender.push(r.filters.monitorId);
+    return r;
+  });
+  return { ...view, monitorIdPerRender };
+}
+
+describe('useEventFilters first-render hydration (refs #197)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSearchParams.forEach((_, key) => mockSearchParams.delete(key));
+    setupMocks();
+  });
+
+  // The Events page builds its React Query key from filters.monitorId on the
+  // first render. If the persisted filter only lands in a post-paint effect,
+  // that first render fetches the unfiltered list, and useScrollRestoration
+  // (a layout effect) restores against it before the filter narrows the list.
+  it('applies the persisted monitor filter on the very first render', () => {
+    setupMocks({ eventsPageFilters: { ...defaultEventsPageFilters, monitorIds: ['3'] } });
+
+    const { monitorIdPerRender, result } = renderCapturingFilters();
+
+    expect(monitorIdPerRender[0]).toBe('3');
+    expect(result.current.filters.monitorId).toBe('3');
+  });
+
+  it('lets a deep-link URL filter win over the persisted one, also on the first render', () => {
+    mockSearchParams.set('monitorId', '7');
+    setupMocks({ eventsPageFilters: { ...defaultEventsPageFilters, monitorIds: ['3'] } });
+
+    const { monitorIdPerRender, result } = renderCapturingFilters();
+
+    expect(monitorIdPerRender[0]).toBe('7');
+    expect(result.current.filters.monitorId).toBe('7');
+  });
+
+  it('renders no monitor filter when neither settings nor URL carry one', () => {
+    const { monitorIdPerRender } = renderCapturingFilters();
+    expect(monitorIdPerRender[0]).toBeUndefined();
+  });
+});
 
 describe('useEventFilters', () => {
   beforeEach(() => {

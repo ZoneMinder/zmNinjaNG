@@ -9,7 +9,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams, useLocation } from 'react-router-dom';
 import { useCurrentProfile } from './useCurrentProfile';
-import { useSettingsStore } from '../stores/settings';
+import { useSettingsStore, type ProfileSettings } from '../stores/settings';
 import type { EventFilters } from '../api/events';
 import { log, LogLevel } from '../lib/logger';
 
@@ -109,6 +109,56 @@ function readUrlFilters(searchParams: URLSearchParams): UrlFilterValues {
   };
 }
 
+interface InitialFilterState {
+  monitorIds: string[];
+  tagIds: string[];
+  startDateTime: string;
+  endDateTime: string;
+  favoritesOnly: boolean;
+  archivedOnly: boolean;
+  onlyDetectedObjects: boolean;
+  activeQuickRange: number | null;
+}
+
+/**
+ * The filter state the first render must already carry.
+ *
+ * The Events page derives its React Query key from these values, and
+ * `useScrollRestoration` runs in a layout effect on that same first render.
+ * Hydrating the filter in a post-paint effect instead made the first render
+ * fetch the unfiltered list, so the scroll offset was restored against it and
+ * then clamped away when the narrower filtered list replaced it (refs #197).
+ * The URL keeps priority over the persisted filter, as it does after mount.
+ */
+function resolveInitialFilters(
+  searchParams: URLSearchParams,
+  saved: ProfileSettings['eventsPageFilters'] | undefined
+): InitialFilterState {
+  if (hasUrlFilters(searchParams)) {
+    const url = readUrlFilters(searchParams);
+    return {
+      monitorIds: url.monitorId ? url.monitorId.split(',') : [],
+      tagIds: url.tagIds ? url.tagIds.split(',') : [],
+      startDateTime: formatInputDate(url.startDateTime),
+      endDateTime: formatInputDate(url.endDateTime),
+      favoritesOnly: url.favorites === 'true',
+      archivedOnly: url.archived === 'true',
+      onlyDetectedObjects: false,
+      activeQuickRange: null,
+    };
+  }
+  return {
+    monitorIds: saved?.monitorIds ?? [],
+    tagIds: saved?.tagIds ?? [],
+    startDateTime: saved?.startDateTime ?? '',
+    endDateTime: saved?.endDateTime ?? '',
+    favoritesOnly: saved?.favoritesOnly ?? false,
+    archivedOnly: saved?.archivedOnly ?? false,
+    onlyDetectedObjects: saved?.onlyDetectedObjects ?? false,
+    activeQuickRange: saved?.activeQuickRange ?? null,
+  };
+}
+
 export function useEventFilters(): UseEventFiltersReturn {
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
@@ -120,14 +170,18 @@ export function useEventFilters(): UseEventFiltersReturn {
   // back would be redundant or create a feedback loop. Any user-driven change
   // must go through the wrapped `set*` functions defined below instead, so the
   // change is also saved.
-  const [selectedMonitorIds, _setMonitorIds] = useState<string[]>([]);
-  const [startDateInput, _setStartDate] = useState('');
-  const [endDateInput, _setEndDate] = useState('');
-  const [favoritesOnly, _setFavoritesOnly] = useState(false);
-  const [archivedOnly, _setArchivedOnly] = useState(false);
-  const [selectedTagIds, _setTagIds] = useState<string[]>([]);
-  const [onlyDetectedObjects, _setOnlyDetected] = useState(false);
-  const [activeQuickRange, _setActiveQuickRange] = useState<number | null>(null);
+  // Hydrated synchronously: the first render must already carry the filter, or
+  // the Events page fetches the unfiltered list and restores scroll against it
+  // (refs #197). See resolveInitialFilters.
+  const [initial] = useState(() => resolveInitialFilters(searchParams, settings?.eventsPageFilters));
+  const [selectedMonitorIds, _setMonitorIds] = useState<string[]>(initial.monitorIds);
+  const [startDateInput, _setStartDate] = useState(initial.startDateTime);
+  const [endDateInput, _setEndDate] = useState(initial.endDateTime);
+  const [favoritesOnly, _setFavoritesOnly] = useState(initial.favoritesOnly);
+  const [archivedOnly, _setArchivedOnly] = useState(initial.archivedOnly);
+  const [selectedTagIds, _setTagIds] = useState<string[]>(initial.tagIds);
+  const [onlyDetectedObjects, _setOnlyDetected] = useState(initial.onlyDetectedObjects);
+  const [activeQuickRange, _setActiveQuickRange] = useState<number | null>(initial.activeQuickRange);
 
   // Wrapped setters that also save to settings store immediately.
   // No effects needed: saves happen synchronously on user action.
