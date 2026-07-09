@@ -48,6 +48,8 @@ These are non-negotiable. Every rule applies to all communication: responses, co
 36. **Issue links must land, not be patched with a comment**: for issue-tracked work, land it via a PR that references the issue so GitHub links the commits automatically. Pushing commits to a scratch branch and then fast-forwarding them onto the default branch can consume the auto-reference (GitHub ties it to the first push it saw), leaving the issue unlinked. If told to commit straight to the default branch, push directly to it with no intermediate scratch branch, then check the issue timeline; post a manual linking comment (rule 26) only if the reference is still missing. Why: stops the repeated manual linking comments.
 37. **Developer docs teach, they don't catalog**: `docs/developer-guide/` is written for a competent programmer with zero React experience. The first time a chapter relies on a React mechanism (effect, render, selector, query cache, portal), explain it in one or two sentences at the point of use or link the section of `02-react-fundamentals.rst` that covers it. Prefer narrative that follows real code end to end; `call-flows.rst` is the register to match (recipe in the Documentation section below). A new hook or component is not documented by appending a Location/Props/Used-By entry alone: connect it to the user-visible behavior it serves. Why: the #223 audit found reference-only appends and unexplained concepts were the guide's default failure mode.
 38. **AGENTS.md is the single source for process rules**: `docs/developer-guide/` (09-contributing and 06-testing especially) cites a rule by number and links this file, never restates the rule's content. Why: restated copies drift silently; `npx tsc --noEmit` survived in the guide four times after rule 3 banned it.
+39. **One e2e run per working tree**: never start a second `npm run test:e2e` while one is running in the same checkout. Playwright shares `test-results/` and `.features-gen/` across runs, so the second deletes the first's trace artifacts and the first reports `ENOENT` failures that look like real regressions. Wait, or use a separate checkout. Why: two agents running e2e concurrently produced 16 phantom failures.
+40. **Read compiler and test output unwrapped**: when a wrapper summarizes a command (`rtk`), trust it for search and listing but not for verification gates. Run `./node_modules/.bin/tsc -b --force`, `vitest run`, and the e2e suite directly before claiming a gate passed. Why: a summarized `tsc` printed "No errors found" over a real TS2554.
 
 ---
 
@@ -99,7 +101,7 @@ Only the web profile runs the Gherkin feature suite: `playwright.config.ts` defi
 - `@all`: every platform | `@android`: Android only | `@tauri`: Tauri desktop
 - `@ios-phone` / `@ios-tablet`: iOS form factors (no bare `@ios` tag exists)
 - `@web`: browser only
-- `@visual`: reserved for visual comparison; the comparison step is a placeholder today (issue #233)
+(There is no `@visual` tag; see Visual Regression below.)
 
 ### Test Commands
 ```bash
@@ -138,7 +140,7 @@ ZM_PASSWORD_1=password
 ```
 
 ### Visual Regression
-Not implemented. The `@visual` step in `app/tests/steps/platform.steps.ts` is a placeholder (no `toHaveScreenshot`, no baselines); `npm run test:e2e:visual-update` therefore updates nothing. Issue #233 tracks the build-it-or-drop-it decision. Do not write scenarios that rely on visual comparison until it lands.
+There is none, by decision. The placeholder step, its `@visual` tags, and the unused helper were deleted rather than left asserting nothing (#233). A scenario must assert the behavior its name promises with a real, auto-retrying expectation. If you want pixel comparison back, build it before writing scenarios that claim it.
 
 ### Writing Good E2E Tests
 
@@ -187,7 +189,7 @@ Then('I should see the PTZ control panel', async ({ page }) => {
 When an earlier step legitimately performed no action (zero events on a test server), downstream `Then` steps may skip, but the skip condition must be data (`eventCount === 0`), not a swallowed locator failure.
 
 ### Native-Only Tests (Appium)
-For flows requiring native OS interaction (PiP, biometric auth, push, native file downloads, share sheet, app lifecycle): `app/tests/native/specs/<feature>.spec.ts`. No npm script runs these specs today (issue #233); they are invoked ad hoc with wdio.
+There is no automated suite for flows requiring native OS interaction (PiP, biometric auth, push, native file downloads, share sheet, app lifecycle). The `tests/native/specs/` directory was deleted (#233): no runner ever globbed it, and its specs were `it.todo` stubs. Verify these flows on a device (rule 27) and say so in the PR. Wire a runner before adding specs back.
 
 ---
 
@@ -205,7 +207,7 @@ State which tests were run: "Tests verified: npm test ✓, tsc -b ✓, build ✓
 
 **UI changes also require**: `data-testid` on new elements, e2e tests in `.feature` file with platform tags, all language files updated.
 
-**Native plugin changes also require**: Appium test in `app/tests/native/specs/`.
+**Native plugin changes also require**: a device pass (rule 27), stated in the PR. There is no automated native suite.
 
 **Never commit if**: tests are failing, tests are missing for new functionality, or you haven't actually run them.
 
