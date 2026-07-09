@@ -377,7 +377,7 @@
     "streaming_method_mjpeg": "仅 MJPEG",
     "enable_go2rtc": "启用 WebRTC/HLS/MSE",
     "enable_go2rtc_desc": "Go2RTC 低延迟流媒体。关闭 = 仅 MJPEG。",
-    "go2rtc_enabled_note": "尝试 WebRTC → MSE → HLS，回退到 MJPEG。",
+    "go2rtc_enabled_note": "同时协商 WebRTC、MSE 和 HLS，采用最先送达视频的协议。若 Go2RTC 失败则回退到 MJPEG。",
     "go2rtc_disabled_note": "所有监控使用 MJPEG。",
     "show_protocol_label": "协议标签",
     "show_protocol_label_desc": "在视频源上显示流协议",

@@ -377,7 +377,7 @@
     "streaming_method_mjpeg": "MJPEG Seulement",
     "enable_go2rtc": "Activer WebRTC/HLS/MSE",
     "enable_go2rtc_desc": "Diffusion à faible latence via Go2RTC. Désactivé = MJPEG uniquement.",
-    "go2rtc_enabled_note": "Essaie WebRTC → MSE → HLS, repli sur MJPEG.",
+    "go2rtc_enabled_note": "Négocie WebRTC, MSE et HLS en parallèle et utilise celui qui fournit la vidéo en premier. Repli sur MJPEG si Go2RTC échoue.",
     "go2rtc_disabled_note": "Tous les moniteurs utilisent MJPEG.",
     "show_protocol_label": "Protocole",
     "show_protocol_label_desc": "Afficher le protocole sur les flux vidéo",

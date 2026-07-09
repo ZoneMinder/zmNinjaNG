@@ -377,7 +377,7 @@
     "streaming_method_mjpeg": "Solo MJPEG",
     "enable_go2rtc": "Habilitar WebRTC/HLS/MSE",
     "enable_go2rtc_desc": "Transmisión de baja latencia via Go2RTC. Desactivado = solo MJPEG.",
-    "go2rtc_enabled_note": "Intenta WebRTC → MSE → HLS, respaldo a MJPEG.",
+    "go2rtc_enabled_note": "Negocia WebRTC, MSE y HLS a la vez y usa el que entregue vídeo primero. Recurre a MJPEG si Go2RTC falla.",
     "go2rtc_disabled_note": "Todos los monitores usan MJPEG.",
     "show_protocol_label": "Protocolo",
     "show_protocol_label_desc": "Mostrar protocolo en los feeds de video",
