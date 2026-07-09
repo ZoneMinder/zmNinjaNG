@@ -52,6 +52,13 @@ is not HTML; it compiles to ``React.createElement`` calls.
    // compiles to:
    const element = React.createElement('span', null, 'Hello');
 
+``React.createElement`` does not touch the DOM. It returns an
+**element**: a plain JavaScript object describing what should be
+rendered. React compares this render's elements against the previous
+render's elements and uses the difference to decide which DOM nodes to
+create, update, or remove. Everything React does with your components
+operates on those objects, not on the browser's DOM.
+
 Three things to know:
 
 1. **Embed JS expressions in ``{}``**: ``<span>Hello, {name}</span>``,
@@ -81,20 +88,29 @@ an HTML element, ``<Welcome>`` as your component.
 Components compose. A page is a component that renders other
 components, which render other components.
 
-A real one from zmNinjaNg, simplified:
+A real one from zmNinjaNg, simplified from
+``app/src/components/monitors/MonitorCard.tsx`` (the original also
+handles hover previews, muting, and a compact layout). It uses a few
+things not introduced yet: calls starting with ``use`` are hooks,
+covered later in this chapter; take them on faith for now:
 
 .. code:: tsx
 
-   // app/src/components/monitors/MonitorCard.tsx
-   function MonitorCard({ monitor, status, eventCount, onShowSettings }) {
+   function MonitorCardComponent({ monitor, status, onShowSettings }: MonitorCardComponentProps) {
+     const navigate = useNavigate();
+     const runState = getMonitorRunState(monitor, status, zmVersion);
+
      return (
-       <Card>
-         <img src={monitor.streamUrl} alt={monitor.Name} />
-         <Badge variant={status === 'running' ? 'default' : 'destructive'}>
-           {status}
-         </Badge>
-         <div>{monitor.Name}</div>
-         <Button onClick={() => onShowSettings(monitor)}>Settings</Button>
+       <Card data-testid="monitor-card">
+         <div onClick={() => navigate(`/monitors/${monitor.Id}`)} data-testid="monitor-player">
+           <LiveMonitorPlayer monitor={monitor} profile={currentProfile} />
+         </div>
+         <span className={cn('block h-2 w-2 rounded-full', monitorDotColor(runState))} />
+         <div data-testid="monitor-name">{monitor.Name}</div>
+         <Badge variant="outline">{monitor.Id}</Badge>
+         <Button onClick={handleShowSettings} data-testid="monitor-settings-button">
+           {t('sidebar.settings')}
+         </Button>
        </Card>
      );
    }
@@ -102,6 +118,12 @@ A real one from zmNinjaNg, simplified:
 ``Card``, ``Badge``, ``Button`` are zmNinjaNg components built on top
 of the shadcn/ui primitives in ``app/src/components/ui/``. The pattern
 is the same as ``Welcome``: a function that returns JSX.
+
+Two habits visible here are house rules rather than React ones. Every
+interactive element carries a ``data-testid`` because the e2e suite
+selects on it, and no user-facing string is written inline: ``t()``
+looks it up in the five translation files. Neither is React; both are
+non-negotiable in this codebase.
 
 Props: data flowing in
 ----------------------
@@ -111,27 +133,84 @@ the child's perspective.
 
 .. code:: tsx
 
-   interface MonitorCardProps {
+   // app/src/api/types.ts
+   export interface MonitorCardProps {
      monitor: Monitor;
-     status: MonitorStatus;
-     eventCount: number;
-     onShowSettings: (monitor: Monitor) => void;
+     status: MonitorStatus | undefined;
+     eventCount?: number;
+     objectFit?: React.CSSProperties['objectFit'] | 'flex';
+     compact?: boolean;
    }
 
-   function MonitorCard({ monitor, eventCount, onShowSettings }: MonitorCardProps) {
-     return (
-       <Card>
-         <p>{monitor.Name}</p>
-         <p>{eventCount} events</p>
-         <Button onClick={() => onShowSettings(monitor)}>Settings</Button>
-       </Card>
-     );
+   // app/src/components/monitors/MonitorCard.tsx
+   interface MonitorCardComponentProps extends MonitorCardProps {
+     /** Callback to open the settings dialog for this monitor */
+     onShowSettings: (monitor: MonitorCardProps['monitor']) => void;
    }
+
+Note that ``status`` is ``MonitorStatus | undefined``. A card can render
+before the status query has returned, so the component is written to
+handle the gap rather than assume the data is there.
 
 To send data the *other* way (child notifies parent), the parent passes
 a function as a prop. By convention these props start with ``on``
 (``onClick``, ``onShowSettings``). The child calls them; the parent
-decides what to do.
+decides what to do. That is why ``onShowSettings`` lives on
+``MonitorCardComponentProps`` and not on the shared ``MonitorCardProps``
+in ``api/types.ts``: the data shape is common to every consumer, the
+callback belongs to the one component that renders a settings button.
+
+How this codebase writes a component
+------------------------------------
+
+A few conventions, none of them enforced by React, all of them assumed
+by the rest of the guide. ``ZoneLegend`` shows most of them at once:
+
+.. code:: tsx
+
+   // app/src/components/monitors/ZoneLegend.tsx
+   interface ZoneLegendProps {
+     zones: Zone[];
+     monitorId: string;
+     visible: boolean;
+     positionClassName?: string;
+   }
+
+   export function ZoneLegend({ zones, monitorId, visible, positionClassName = 'top-2 left-2' }: ZoneLegendProps) {
+     // ... hooks first ...
+     if (!visible || presentTypes.length === 0) {
+       return null;
+     }
+     return ( /* ... */ );
+   }
+
+**Props get an interface**, named ``<Component>Props``. Use ``type``
+instead when you are naming a union or an intersection rather than an
+object shape: ``export type MonitorRunState = 'live' | 'warning' |
+'offline' | 'disabled'`` in ``lib/monitor/monitor-status.ts``.
+
+**Destructure props in the parameter list**, not in the body. Defaults
+go right there too (``positionClassName = 'top-2 left-2'``), which is
+why the component never has to test for ``undefined``.
+
+**Exported functions declare their return type.** It is a check on the
+implementation, not documentation for the caller:
+``export const getMaxColsForWidth = (width: number, minWidth: number, gap: number): number =>``
+in ``lib/event/event-utils.ts``.
+
+**Never ``any``.** Use ``unknown`` and narrow. React Query hands errors
+back as ``unknown`` because a query function can throw anything, so
+``resolveQueryError(err: unknown, t: TFunction)`` narrows before it
+touches a field (``lib/query/query-error.ts``). ``any`` disables the
+type checker precisely where it earns its keep. ``unknown`` forces the
+narrowing to be written down.
+
+**Guard with early returns.** ``if (!visible) return null;`` reads
+better than wrapping the whole tree in a conditional, and returning
+``null`` from a component is how you render nothing. One constraint,
+from the rules of hooks below: every hook the component calls must run
+before any conditional ``return``, or the hook count changes between
+renders. Hooks first, guards second, JSX last.
 
 State: data the component owns
 ------------------------------
@@ -183,6 +262,29 @@ React will pass the latest queued value:
 Rule of thumb: if your call to the setter mentions the current value
 (``count + 1``, ``[...items, x]``), use the updater form.
 
+How this goes wrong: mutating state in place
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+React decides whether state changed by comparing the new value to the
+old one **by reference**. Mutating the existing array or object leaves
+the reference identical, so React concludes nothing changed and skips
+the re-render. The data is updated; the screen is not.
+
+.. code:: tsx
+
+   // Wrong: same array reference, no re-render.
+   const addItem = (item) => {
+     items.push(item);
+     setItems(items);
+   };
+
+   // Right: a new array.
+   const addItem = (item) => setItems(prev => [...prev, item]);
+
+This is the single rule behind a whole family of bugs. It applies to
+Zustand store state too, where mutating an object read from
+``getState()`` silently skips every subscriber (:doc:`03-state-management-zustand`).
+
 Render: what triggers it
 ------------------------
 
@@ -198,6 +300,36 @@ too. We'll see how to opt out (``memo``) later.
 
 A render is just a function call. React calls your component, gets the
 returned JSX, compares it to the previous result, and patches the DOM.
+
+Lists need stable keys
+~~~~~~~~~~~~~~~~~~~~~~
+
+When you render an array, React has to match each element in the new
+render to the corresponding element in the old one. It cannot do that
+positionally, because items get inserted, removed, and reordered. So it
+matches on the ``key`` prop.
+
+.. code:: tsx
+
+   // app/src/pages/Monitors.tsx, trimmed
+   {allMonitors.map(({ Monitor, Monitor_Status }) => (
+     <MonitorCard
+       key={Monitor.Id}
+       monitor={Monitor}
+       status={Monitor_Status}
+       eventCount={eventCounts?.[Monitor.Id]}
+       onShowSettings={handleShowSettings}
+       objectFit={settings.monitorsFeedFit}
+     />
+   ))}
+
+The key must identify the *item*, not its position. Using the array
+index means that deleting the first monitor tells React "item 0 changed
+its data" rather than "item 0 was removed". React keeps the first card's
+DOM node and component state and pours the second monitor's data into
+it. In this app that hands the wrong card a live video element, so the
+stream keeps playing under the wrong monitor's name. ``Monitor.Id``
+never moves, so the match is always right.
 
 Each render is a snapshot
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -251,6 +383,37 @@ which by the order of calls within a render:
 If you break rule 1, React's tracking gets out of sync and your state
 gets shuffled into the wrong slots. The ESLint plugin catches it.
 
+How this goes wrong: a hook behind an ``if``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+React stores hook state in a per-component list and walks that list in
+call order on every render. Skipping a call on one render shifts every
+later hook down a slot, so the second ``useState`` starts reading the
+third one's value.
+
+.. code:: tsx
+
+   // Wrong: the hook count changes with userId.
+   function Component({ userId }) {
+     if (userId) {
+       const [name, setName] = useState('');
+     }
+     const [error, setError] = useState(null);
+   }
+
+   // Right: call it unconditionally, branch on the value.
+   function Component({ userId }) {
+     const [name, setName] = useState('');
+     const [error, setError] = useState(null);
+     if (!userId) return <p>Select a user</p>;
+   }
+
+Early ``return`` statements are the same trap seen from the other side:
+every hook the component uses must be called before any conditional
+return. For data fetching, the hook that must not be skipped has a
+built-in way to sit idle, the ``enabled`` option covered under React
+Query below.
+
 The next sections cover the hooks you'll use constantly:
 ``useEffect``, ``useRef``, ``useMemo``, ``useCallback``.
 
@@ -286,20 +449,54 @@ unmounts.
 .. code:: tsx
 
    // app/src/hooks/useMonitorStream.ts
+   // Snapshot mode: periodic refresh
    useEffect(() => {
-     if (settings.viewMode !== 'snapshot') return;
+     if (!enabled || effectiveViewMode !== 'snapshot') return;
 
      const interval = setInterval(() => {
        setCacheBuster(Date.now());
      }, settings.snapshotRefreshInterval * 1000);
 
      return () => clearInterval(interval);   // cleanup
-   }, [settings.viewMode, settings.snapshotRefreshInterval]);
+   }, [enabled, effectiveViewMode, settings.snapshotRefreshInterval]);
 
-Effects fire after every render whose dependencies changed. If you
-forget the dependency array entirely, your fetch runs on every render
-and you get an infinite loop. See :doc:`08-common-pitfalls` for the
-full taxonomy.
+Read the guard and the dependency array together. ``enabled`` is false
+for a monitor card that the montage page has scrolled out of view. It
+appears in the guard so no interval starts, and it appears in the deps
+so that when a visible card scrolls away, the effect re-runs, the
+cleanup fires, and the timer stops. A dependency you read in the effect
+but leave out of the array is a dependency React cannot see: it will
+keep running the old effect body against the old values.
+
+Effects fire after every render whose dependencies changed. If you omit
+the dependency array entirely, the effect runs after every render. An
+effect that sets state and has no dependency array renders, sets state,
+renders again, and never stops.
+
+How this goes wrong: no cleanup
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+An effect that starts something and never stops it leaks. The component
+unmounts, the interval keeps firing, and the callback keeps calling a
+setter on a component React has already discarded.
+
+.. code:: tsx
+
+   // Wrong: the timer outlives the component.
+   useEffect(() => {
+     const timer = setInterval(() => refetchData(), 5000);
+   }, []);
+
+   // Right: return the teardown.
+   useEffect(() => {
+     const timer = setInterval(() => refetchData(), 5000);
+     return () => clearInterval(timer);
+   }, []);
+
+The rule generalizes past timers. If the effect adds an event listener,
+opens a WebSocket, or starts a ZoneMinder stream, the cleanup removes
+the listener, closes the socket, or quits the stream. React calls the
+cleanup before each re-run of the effect and once at unmount.
 
 useRef: a value that survives renders without triggering one
 ------------------------------------------------------------
@@ -329,29 +526,58 @@ Two common uses:
 methods like ``.play()``, ``.focus()``, ``.scrollIntoView()``.
 
 **2. Escape the closure snapshot** in a long-lived effect or cleanup.
-Refs read the latest value, not the captured one. From
-``useMonitorStream``:
+An unmount cleanup with ``[]`` deps is created during the mount render,
+so by "Each render is a snapshot" above it closes over the values from
+that render and nothing else. That captured-too-early read has a name:
+a **stale closure**. A ref is how you break out of one, because
+``.current`` is read at call time rather than captured at definition
+time.
+
+zmNinjaNg needs exactly that when it tears a stream down. Simplified
+from ``app/src/hooks/useStreamLifecycle.ts``, which carries four more
+fields (``token``, ``viewMode``, ``minStreamingPort``,
+``cmdQuitTimeoutMs``) through the same ref:
 
 .. code:: tsx
 
-   // app/src/hooks/useMonitorStream.ts
-   const cleanupParamsRef = useRef({ monitorId, connKey, profile: currentProfile });
+   // app/src/hooks/useStreamLifecycle.ts
+   // Store cleanup parameters in ref to access latest values on unmount
+   const cleanupParamsRef = useRef({
+     monitorId: monitorId || '',
+     monitorName: monitorName || '',
+     connKey: 0,
+     portalUrl,
+   });
 
-   // Keep the ref up to date with each render.
+   // Update cleanup params whenever they change.
    useEffect(() => {
-     cleanupParamsRef.current = { monitorId, connKey, profile: currentProfile };
-   }, [monitorId, connKey, currentProfile]);
+     if (!enabled) return;
+     cleanupParamsRef.current = {
+       monitorId: monitorId || '',
+       monitorName: monitorName || '',
+       connKey,
+       portalUrl,
+     };
+   }, [enabled, monitorId, monitorName, connKey, portalUrl]);
 
    // Cleanup runs once on unmount, but reads the *latest* values via the ref.
    useEffect(() => {
      return () => {
        const params = cleanupParamsRef.current;
-       sendQuitCommand(params.connKey);
+       void quitStreamForParams(params, logFn, 'unmount');
      };
    }, []);
 
-Without the ref, the cleanup would close over the ``connKey`` from the
-mount render and quit the wrong stream.
+``quitStreamForParams`` sends ZoneMinder's ``CMD_QUIT`` for
+``params.connKey``. The connection key is regenerated whenever the
+monitor changes, so it is almost never the value present at mount.
+Without the ref the cleanup would quit a connection key that no longer
+exists, the real stream would stay open on the server, and the user
+would accumulate one zombie ZMS process per monitor viewed.
+
+The same ref feeds the profile-switch teardown thunk registered a few
+lines up, for the same reason: the thunk is registered once but called
+much later, and it must quit the stream that is running *then*.
 
 Quick contrast:
 
@@ -377,8 +603,8 @@ that depends on it re-runs on every render.
 .. code:: tsx
 
    function Component({ userId }) {
-     const params = { userId, limit: 50 };       // new object every render
-     useEffect(() => fetch(params), [params]);   // runs every render
+     const params = { userId, limit: 50 };            // new object every render
+     useEffect(() => { loadEvents(params); }, [params]);  // runs every render
    }
 
 ``useMemo`` caches a computed value across renders, only recomputing
@@ -387,7 +613,7 @@ when its dependencies change:
 .. code:: tsx
 
    const params = useMemo(() => ({ userId, limit: 50 }), [userId]);
-   useEffect(() => fetch(params), [params]);  // runs only when userId changes
+   useEffect(() => { loadEvents(params); }, [params]);  // runs only when userId changes
 
 ``useCallback`` is the same idea for functions:
 
@@ -397,11 +623,35 @@ when its dependencies change:
      saveProfile(form);
    }, [form]);
 
+The second use of ``useMemo`` is to skip work rather than to stabilize
+a reference. The montage kebab menu sorts its monitor list by sequence
+number, then by name:
+
+.. code:: tsx
+
+   // app/src/components/montage/MontageKebabMenu.tsx
+   const sortedMonitors = useMemo(() => {
+     return [...monitors].sort((a, b) => {
+       const sa = Number(a.Sequence ?? 0);
+       const sb = Number(b.Sequence ?? 0);
+       if (sa !== sb) return sa - sb;
+       return (a.Name ?? '').localeCompare(b.Name ?? '');
+     });
+   }, [monitors]);
+
+Note the ``[...monitors]``. ``Array.prototype.sort`` sorts in place and
+returns the same array, so sorting ``monitors`` directly would reorder
+the caller's array. The parent still holds that array, React Query still
+has it in cache, and neither reference changed, so nothing re-renders to
+show the new order and the cache is now silently corrupted. Copy first,
+then sort. The same applies to ``reverse`` and ``splice``.
+
 Use them when:
 
 - The value is passed to ``React.memo``-wrapped children (see below).
 - The value is a hook dependency.
-- The value is genuinely expensive to recompute (rare).
+- The computation is genuinely expensive (sorting a list, building a
+  ``Set``), which is rarer than people assume.
 
 Don't use them everywhere. They cost memory and add reading overhead.
 A function used once inside a render and never passed down doesn't
@@ -419,22 +669,46 @@ source of "why is this re-rendering / re-fetching forever" bugs.
    [1, 2] === [1, 2]        // false
    () => {} === () => {}    // false
 
-Three ways to fix an unstable dependency:
+It bites hardest where you can't see the allocation. ``new Date()`` in
+a render body, an inline ``style={{ width: 100 }}``, an inline
+``onChange={(e) => ...}``, and a ``{ ...defaults, ...props }`` spread
+all mint a fresh reference on every render.
+
+Four ways to fix an unstable dependency, in the order to reach for them:
 
 .. code:: tsx
 
-   // 1. Memoize it.
-   const config = useMemo(() => ({ width: 100, height: 200 }), []);
-
-   // 2. Hoist it out of the component (truly constant).
+   // 1. Hoist it out of the component (it never depends on props or state).
    const CONFIG = { width: 100, height: 200 };
-   function Component() { useEffect(() => {}, [CONFIG]); }
+   function Component() { useEffect(() => { apply(CONFIG); }, []); }
 
-   // 3. Depend on the primitive fields instead.
-   useEffect(() => { /* ... */ }, [config.width, config.height]);
+   // 2. Depend on the primitive fields instead.
+   useEffect(() => { resize(config.width); }, [config.width, config.height]);
 
-The third option is usually the cleanest when you only need a couple
-of fields.
+   // 3. Memoize it.
+   const config = useMemo(() => ({ width: props.width, height: 200 }), [props.width]);
+
+   // 4. Mirror it in a ref (see below for when).
+   const configRef = useRef(config);
+   useEffect(() => { configRef.current = config; }, [config]);
+
+Options 1 and 2 are free; prefer them. Option 3, ``useMemo``, is the
+default for anything derived from props or state, and it is the right
+answer for effect dependencies.
+
+Option 4 is not a general-purpose alternative to option 3, and the
+difference matters. A ref mirror does not stabilize the value, it hides
+the change: an effect that reads ``configRef.current`` will not re-run
+when ``config`` changes. Reach for it only when re-running is exactly
+what you must avoid, which in practice means a callback that would
+otherwise tear down and rebuild a subscription, a listener, or a stream
+on every keystroke. That is why ``useStreamLifecycle`` mirrors its
+cleanup parameters rather than memoizing them: the unmount effect must
+never re-run, and it must still see the current connection key.
+
+If you use option 4 where option 3 belonged, you get an effect that
+silently keeps working from data that has since moved on. That is the
+stale closure again, this time self-inflicted.
 
 React.memo: skipping unnecessary renders
 ----------------------------------------
@@ -454,8 +728,8 @@ reference as last time, React skips the render entirely.
      return <p>Hello, {name}</p>;
    });
 
-In zmNinjaNg, list items use ``memo`` so a single event update doesn't
-re-render every card on screen:
+In zmNinjaNg, list items use ``memo`` so one monitor's status update
+doesn't re-render every card on screen:
 
 .. code:: tsx
 
@@ -464,6 +738,20 @@ re-render every card on screen:
 
    // app/src/components/events/EventCard.tsx
    export const EventCard = memo(EventCardComponent);
+
+The monitors page refetches monitor status every 20 seconds
+(``bandwidth.monitorStatusInterval``), and each refetch re-renders the
+page and therefore every card. A ``MonitorCard`` is a deep subtree: a
+player, a hover preview, badges, a dropdown. ``memo`` lets the cards
+whose ``monitor`` and ``status`` objects are unchanged skip that work
+entirely.
+
+Re-rendering a card does not by itself restart its stream. React
+reconciles the existing player element in place, and the stream URL it
+computes is the same string as before, so the ``<img>`` is never
+re-fetched. What *does* restart a stream is a remount, which is what an
+unstable ``key`` causes. That is the connection between the two
+sections.
 
 The catch: ``memo`` does a *shallow* prop check. If you pass an inline
 object or inline function, it's a new reference on every parent render
@@ -474,13 +762,297 @@ and ``memo`` is defeated:
    // memo can't help: both props are new each render.
    <ExpensiveChild
      config={{ width: 100 }}
-     onClick={() => console.log()}
+     onSelect={(id) => setSelected(id)}
    />
 
    // Stabilize, then memo works:
    const config = useMemo(() => ({ width: 100 }), []);
-   const handleClick = useCallback(() => console.log(), []);
-   <ExpensiveChild config={config} onClick={handleClick} />
+   const handleSelect = useCallback((id) => setSelected(id), []);
+   <ExpensiveChild config={config} onSelect={handleSelect} />
+
+Worth knowing that this codebase does not get this right everywhere.
+``Monitors.tsx`` declares ``handleShowSettings`` in the render body
+rather than wrapping it in ``useCallback``, so it is a new reference on
+every render, and the ``memo`` on ``MonitorCard`` compares it and finds
+it different. The cards re-render on every status poll regardless. The
+memo is not wrong, it just isn't buying anything until the callback is
+stabilized. Check both halves before you assume a ``memo`` is working.
+
+React Query: Server State
+-------------------------
+
+Everything so far treats state as something a component owns. Data that
+lives on the ZoneMinder server is a different animal. Several screens
+want the same monitor list at once, it goes out of date on its own
+while nobody is looking, fetching it is slow, and every fetch can fail.
+
+Written with ``useState`` and ``useEffect``, each screen re-implements
+the same four things: a cache so the second screen doesn't refetch,
+deduplication so two components mounting together fire one request,
+loading and error flags, and some way to refresh after a write. That is
+the code React Query replaces. zmNinjaNg uses it
+(``@tanstack/react-query``) for every read of server data.
+
+useQuery
+~~~~~~~~
+
+A query is a **key** that identifies some data plus a function that
+fetches it. React Query caches the result under the key.
+
+.. code:: tsx
+
+   // app/src/hooks/useMonitors.ts
+   import { useQuery } from '@tanstack/react-query';
+   import { queryKeys } from '../lib/query/query-keys';
+   import { getMonitors } from '../api/monitors';
+
+   const { data, isLoading, error, refetch } = useQuery({
+     queryKey: queryKeys.monitors(currentProfile?.id),
+     queryFn: () => getMonitors(),
+     enabled: (options?.enabled ?? true) && !!currentProfile?.id && isAuthenticated,
+     refetchInterval: options?.refetchInterval ?? bandwidth.monitorStatusInterval,
+   });
+
+The key is the whole trick. It is not a variable name; it is the cache
+address. Two components that call ``useMonitors()`` produce the same
+key, so they read the same cache entry, and if the request is still in
+flight the second one attaches to it instead of issuing another. Both
+re-render when the data lands. Nothing had to be lifted into a shared
+parent or a store to make that happen.
+
+Query keys come from a factory
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``queryKeys.monitors(profileId)`` returns ``['monitors', profileId]``.
+Never write that array inline. It is AGENTS.md rule 29, and both halves
+of the reason are things that have broken before.
+
+**Profile isolation.** zmNinjaNg talks to more than one ZoneMinder
+server. A key of ``['monitors']`` would make profile A's monitor list
+and profile B's monitor list the same cache entry, and switching
+profiles would show you the previous server's cameras. The profile id
+sits in the key so the two can never collide. The factory takes a
+branded ``ProfileId`` (``api/types.ts``), minted by ``asProfileId()``
+where a profile id is created (``stores/profile.ts``) or a ``'default'``
+fallback is synthesized (the dashboard components), so a bare string
+does not typecheck into a key position.
+
+**Prefix invalidation.** React Query matches keys by array prefix.
+``['monitors', profileId]`` is a prefix of
+``['monitors', profileId, 'all-including-excluded']``, so invalidating
+the short key invalidates the long one too. That is why the factory
+puts the profile id immediately after the domain name in every key, and
+why the comment at the top of ``lib/query/query-keys.ts`` warns against
+inserting an optional parameter before it. An inline array written by
+hand at a call site drifts out of that shape, and the invalidator that
+was supposed to refresh it silently stops matching. The failure is
+invisible: no error, just data that never updates.
+
+staleTime: what "stale" actually means
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Cached data is *fresh* or *stale*. Fresh data is served from cache and
+nothing else happens. Stale data is **still served from cache**, and a
+refetch is triggered in the background; when it returns, the component
+re-renders with the new data.
+
+Stale does not mean hidden, missing, or loading. This is the single
+most misread word in React Query. A stale query still hands you
+``data``.
+
+``staleTime`` is how long a result stays fresh. zmNinjaNg sets it once,
+app-wide:
+
+.. code:: tsx
+
+   // app/src/App.tsx
+   const queryClient = new QueryClient({
+     defaultOptions: {
+       queries: {
+         retry: shouldRetryQuery,
+         refetchOnWindowFocus: false,
+         staleTime: DEFAULT_QUERY_STALE_TIME_MS,
+       },
+     },
+   });
+
+``DEFAULT_QUERY_STALE_TIME_MS`` is 15000 ms
+(``lib/zmninja-ng-constants.ts``). It does not interact with polling:
+a query with its own ``refetchInterval`` refetches on that schedule
+regardless of freshness (the constant's own comment says so). Its job
+is to stop a query from re-fetching and error-walling the instant a
+component mounts during a network blip.
+
+Writes: useMutation and invalidateQueries
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``useQuery`` reads. ``useMutation`` writes. A mutation does not update
+the cache by itself, because it has no idea which cached queries its
+write affected. You tell it, by invalidating them.
+
+.. code:: tsx
+
+   // app/src/pages/States.tsx
+   const queryClient = useQueryClient();
+
+   const changeMutation = useMutation({
+     mutationFn: changeState,
+     onSuccess: () => {
+       queryClient.invalidateQueries({ queryKey: queryKeys.states(currentProfile?.id) });
+       toast.success(t('states.change_success'));
+     },
+     onError: (error: Error) => {
+       toast.error(t('states.change_error', { error: error.message }));
+     },
+   });
+
+``invalidateQueries`` marks the matching entries stale, which by the
+rule above means they refetch while continuing to show their old value.
+The user sees the current run state, then sees the new one, and never
+sees a spinner.
+
+Prefix matching is what makes this bearable. When the user hides a
+monitor, five different query domains hold data that is now wrong:
+
+.. code:: tsx
+
+   // app/src/components/settings/HiddenMonitorsSection.tsx
+   queryClient.invalidateQueries({ queryKey: queryKeys.monitors(currentProfile?.id) });
+   queryClient.invalidateQueries({ queryKey: queryKeys.events(currentProfile?.id) });
+   queryClient.invalidateQueries({ queryKey: queryKeys.consoleEvents(currentProfile?.id) });
+   queryClient.invalidateQueries({ queryKey: queryKeys.timelineEvents(currentProfile?.id) });
+   queryClient.invalidateQueries({ queryKey: queryKeys.eventMontage(currentProfile?.id) });
+
+``queryKeys.events(profileId)`` is ``['events', profileId]``, a
+two-element prefix. The events list on the Events page is cached under
+``['events', profileId, filters, limit, monitorId, ...]``, one entry per
+filter combination the user has visited. The single line above
+invalidates all of them without knowing what any of them are.
+
+How this goes wrong: forgetting to invalidate. The write succeeds, the
+toast says it worked, and the list still shows the old data until
+something else happens to refetch it. Users report it as "I have to
+restart the app". Any ``useMutation`` that changes server state needs
+an ``onSuccess`` that invalidates every domain the write touched.
+
+enabled: a query that isn't ready yet
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A query cannot be called conditionally (rules of hooks, above), but it
+often has nothing to fetch yet: no profile is selected, the user isn't
+authenticated, the monitor id hasn't arrived from the router. Setting
+``enabled: false`` calls the hook and keeps it idle. That is why
+``useMonitors`` guards on ``!!currentProfile?.id && isAuthenticated``.
+
+The gotcha, and this codebase has been bitten by it: **React Query v5
+reports** ``isLoading: false`` **for a disabled query.** A disabled
+query isn't loading, it simply isn't running, and its ``data`` is
+``undefined``. Code that reads "not loading, no data" as "the server
+returned nothing" will act on an empty list that never came from the
+server.
+
+.. code:: tsx
+
+   // app/src/hooks/useGroupFilter.ts
+   // Self-heal a dangling selection: if the selected group was deleted on the
+   // server, reset to the All-monitors bucket. Gate on a confirmed successful
+   // fetch (isSuccess), not isLoading.
+   useEffect(() => {
+     if (!isSuccess) return;
+     if (!selectedGroupId) return;
+     const exists = groups.some((g) => g.Group.Id === selectedGroupId);
+     if (!exists) setSelectedGroup(null);
+   }, [isSuccess, selectedGroupId, groups, setSelectedGroup]);
+
+Without the ``isSuccess`` gate, cold start ran this effect while the
+groups query was still disabled, found the user's persisted group
+missing from an empty list, and wiped a perfectly valid selection. Gate
+self-healing and reset effects on ``isSuccess``, never on ``!isLoading``.
+
+refetchInterval
+~~~~~~~~~~~~~~~
+
+``refetchInterval`` polls. Never hardcode the number. Every polling
+interval in this app comes from ``useBandwidthSettings()``, which
+returns roughly twice-as-slow values in low-bandwidth mode
+(``monitorStatusInterval`` is 20000 ms normal, 40000 ms low). That is
+AGENTS.md rule 8, and it is why ``useMonitors`` reads
+``bandwidth.monitorStatusInterval`` rather than writing ``20000``.
+
+Passing ``false`` stops the polling, which is how a hidden or
+backgrounded view stops costing the user battery and bandwidth:
+``refetchInterval: hidden ? false : bandwidth.monitorRecentEventsInterval``
+in ``hooks/useMonitorRecentEvents.ts``.
+
+Loading and error states get shared UI, not hand-rolled markup:
+``ErrorBanner`` with ``resolveQueryError(err, t)`` and the skeletons in
+``components/ui/query-state.tsx`` (rule 32). :doc:`07-api-and-data-fetching`
+covers the query layer in depth.
+
+Component communication
+-----------------------
+
+Data flows down through props; notifications flow back up through
+callback props. There is no third mechanism at the component level.
+
+.. code:: tsx
+
+   // app/src/pages/Monitors.tsx, trimmed  (parent owns the state)
+   const handleShowSettings = (monitor: Monitor) => {
+     setSelectedMonitor(monitor);
+     setShowPropertiesDialog(true);
+   };
+
+   <MonitorCard monitor={Monitor} status={Monitor_Status} onShowSettings={handleShowSettings} />
+
+.. code:: tsx
+
+   // app/src/components/monitors/MonitorCard.tsx  (child reports, doesn't decide)
+   const handleShowSettings = (e: React.MouseEvent) => {
+     e.stopPropagation();
+     onShowSettings(monitor);
+   };
+
+The child does not open the dialog and does not know a dialog exists.
+It reports that its settings button was pressed. The parent, which owns
+``showPropertiesDialog``, decides what that means. Keeping the decision
+next to the state is what stops two components from disagreeing about
+whether the dialog is open.
+
+State that genuinely belongs to no single parent (the active profile,
+the log level) does not get threaded through six layers of props. It
+goes in a Zustand store: :doc:`03-state-management-zustand`.
+
+Clicks bubble
+~~~~~~~~~~~~~
+
+Note the ``e.stopPropagation()`` in that handler. A DOM click fires on
+the element you pressed, then on each of its ancestors in turn. React
+attaches its handlers on top of that mechanism, so an ``onClick`` on a
+parent runs after the child's ``onClick``, without either one knowing
+about the other.
+
+That matters in card layouts, where a clickable region contains its own
+buttons. Press the mute toggle and, if the toggle sits inside the
+region that navigates to the monitor detail page, you toggle the audio
+and then immediately leave the page.
+
+.. code:: tsx
+
+   // app/src/components/monitors/MonitorCard.tsx
+   <button
+     onClick={(e) => { e.stopPropagation(); setIsMuted((m) => !m); }}
+     data-testid="monitor-volume-btn"
+   >
+
+``stopPropagation`` ends the walk at that element, so the ancestor's
+handler never runs. In ``MonitorCard`` as currently laid out these
+guards are precautionary: only the thumbnail ``<div>`` carries the
+navigate handler, and the buttons are siblings of it rather than
+children. They earn their keep the day someone moves a button inside
+the clickable region, which is a one-line JSX change that would
+otherwise introduce a navigation bug nowhere near the line that caused
+it.
 
 Putting it together
 -------------------
@@ -504,11 +1076,14 @@ of:
 - A dependency is an inline object/array/function (object identity).
 - The component reads a value via a ref but isn't updating the ref.
 - A parent passes new props on every render and the child isn't ``memo``'d.
+- A ``memo``'d child receives one unstable prop, which defeats the rest.
 
-See :doc:`08-common-pitfalls` for worked examples of each.
+Concepts taught elsewhere
+-------------------------
 
-Where to go next
-----------------
-
-State that needs to be shared across components belongs in a Zustand
-store. That's :doc:`03-state-management-zustand`.
+Four more React mechanisms are deliberately absent here, because each
+reads better against the code that first needs it. Context
+(``contexts/PipContext.tsx``), error boundaries
+(``components/montage/MontageTileErrorBoundary.tsx``), portals
+(``components/ui/hover-preview.tsx``), and Suspense (``App.tsx``) are
+introduced in the chapters covering the features that use them.

@@ -189,17 +189,23 @@ collide on the server and never leak a zombie process when they go away.
        Note over Tile,ZM: on img error: backoff, CMD_QUIT old key, mint new key
        Tile->>ZM: CMD_QUIT on unmount or profile switch
 
-#. **The page fetches its monitors.** ``pages/Montage.tsx`` runs the
-   profile-scoped, bandwidth-throttled ``useQuery(['monitors', ...])`` for the
-   list and live status the grid renders.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Montage.tsx#L61>`__
+#. **The page fetches its monitors.** ``pages/Montage.tsx`` runs a
+   profile-scoped, bandwidth-throttled ``useQuery`` keyed by
+   ``queryKeys.monitors(currentProfile?.id)`` for the list and live status the
+   grid renders. A React Query cache entry belongs to a key, not to a component,
+   so the app-wide ``staleTime`` that ``App.tsx`` sets on the ``queryClient``
+   (``DEFAULT_QUERY_STALE_TIME_MS``, 15000 ms) keeps the last good response
+   serving that key for 15 seconds and a remount during a network blip re-uses
+   it. The ``refetchInterval`` above is untouched by that: the grid still polls
+   on the bandwidth cadence.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Montage.tsx#L65>`__
    · → :doc:`04-pages-and-views`
 
 #. **Do not render until the filter is ready.** The page holds rendering behind
    ``isLoading || !isFilterReady``. This guard matters because mounting a tile
    starts a stream, so flashing the full monitor set for even one frame before
    the group/hidden filter narrows it would briefly open *every* stream at once.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Montage.tsx#L68>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Montage.tsx#L284>`__
    · → :doc:`04-pages-and-views`
 
 #. **One tile per monitor.** Each monitor becomes a grid cell wrapping an error
@@ -243,7 +249,8 @@ collide on the server and never leak a zombie process when they go away.
    token is fresh, ``useMonitorStream`` builds the URL via ``getStreamUrl``
    (``api/monitors.ts`` then ``lib/zm/url-builder.ts`` to ``/cgi-bin/nph-zms``) and
    mirrors it into ``imageSrc``. The double gate prevents minting a zombie stream
-   before a key exists.
+   before a key exists. The reference treatment of this trap, and of the connkey
+   lifecycle it protects, lives in :doc:`05-component-architecture`.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/monitors.ts#L296>`__
    · → :doc:`07-api-and-data-fetching`
 
@@ -329,7 +336,7 @@ a token on startup, and reacting when a push arrives.
    exposes ``getPushService``, a module-level singleton holding ``currentToken``
    and init state, so token state survives re-renders and profile switches
    instead of being recreated.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L626>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L629>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Ask permission.** ``initialize`` imports ``FirebaseMessaging`` and calls
@@ -343,25 +350,27 @@ a token on startup, and reacting when a push arrives.
    Android needs a high-importance channel for heads-up banners, and the
    manifest's ``default_notification_channel_id`` routes channel-less server
    pushes here so they alert instead of landing silently.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L111>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L354>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Listen before fetching the token.** ``_setupListeners`` registers
    ``tokenReceived``, ``notificationReceived``, and ``notificationActionPerformed``
    *before* ``getToken`` so a token refresh is never missed.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L116>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L370>`__
    · → :doc:`11-application-lifecycle`
 
-#. **Get the FCM token.** ``getToken`` requests the token, stores it in
-   ``currentToken``, and retries once after 5s on a transient failure.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L121>`__
+#. **Get the FCM token.** Back in ``initialize``, ``FirebaseMessaging.getToken()``
+   requests the token, stores it in ``currentToken``, and retries once after 5s on
+   a transient failure. The service's own ``getToken()`` is only an accessor for
+   that stored value.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L127>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Register the token with the server.** ``_registerWithServer`` forks on
    ``settings.notificationMode``: direct mode calls ``api/notifications``
    ``registerToken``; ES mode registers over the websocket, deferring until
    connected.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L133>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L415>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **The actual REST call.** ``api/notifications.ts`` ``registerToken`` POSTs a
@@ -376,13 +385,13 @@ a token on startup, and reacting when a push arrives.
    server (the same event also arrives over the websocket), otherwise it builds a
    snapshot URL for the current profile and adds the event to the notification
    store.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L394>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L479>`__
    · → :doc:`03-state-management-zustand`
 
 #. **The user taps the notification.** ``notificationActionPerformed`` →
    ``_handleNotificationAction`` resolves the target profile and stores the event
    under it.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L407>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L545>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Same profile or switch?** ``resolveProfileForNotification`` matches the
@@ -452,19 +461,19 @@ time, logs in to confirm the details, then saves the profile and switches to it.
 #. **Find the real URLs.** ``discoverUrls`` wraps ``discoverZoneminder`` with one
    retry (to absorb the iOS local-network permission prompt) and installs the API
    client once a candidate answers.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/discovery.ts#L329>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/discovery.ts#L330>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **Probe candidates.** ``discoverZoneminder`` crosses ``https``/``http`` with
    ``/api`` and ``/zm/api``, probing ``host/getVersion.json``, then derives the
    portal URL and CGI URL from whichever responds.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/discovery.ts#L249>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/discovery.ts#L250>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **Read the server's ZMS path.** With credentials, ``fetchCgiUrl`` logs in and
    reads ``ZM_PATH_ZMS`` from config, so the streaming URL matches the server's
    real setup rather than a guess.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/discovery.ts#L169>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/discovery.ts#L170>`__
    · → :doc:`13-network-endpoints`
 
 #. **Trust on first use.** On native with self-signed enabled,
@@ -525,9 +534,16 @@ MJPEG player.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Events.tsx#L90>`__
    · → :doc:`04-pages-and-views`
 
-#. **Run the events query.** A React Query keyed by filters calls ``getEvents``,
-   keeping the previous page visible during pagination, gated on auth.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Events.tsx#L170>`__
+#. **Run the events query.** A React Query keyed by
+   ``queryKeys.eventsList(...)`` calls ``getEvents``, keeping the previous page
+   visible during pagination (``placeholderData: keepPreviousData``), gated on
+   auth. Its error wall is guarded by ``error && !eventsData``: once a page of
+   events is cached, a failed background refetch leaves the stale list on screen
+   rather than replacing it. Only a cold start with nothing cached renders
+   ``ErrorBanner`` with ``resolveQueryError(error, t)``, which folds a 401 into
+   the localized ``common.auth_required`` message instead of leaking the raw
+   error text. ``pages/Montage.tsx`` and ``pages/Monitors.tsx`` guard the same way.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Events.tsx#L208>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **Build the ZM filter path and paginate.** ``getEvents`` turns filters into
@@ -551,19 +567,20 @@ MJPEG player.
 #. **Load the event.** ``EventDetail`` fetches the full event (``getEvent``) and
    its monitor, and resolves the monitor's portal URL and streaming port for
    multi-server support.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/EventDetail.tsx#L43>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/EventDetail.tsx#L73>`__
    · → :doc:`04-pages-and-views`
 
 #. **Pick the player.** ``isHlsEvent`` (an ``.m3u8`` ``DefaultVideo``) chooses HLS;
    otherwise MP4. JPEG-only events, TV devices, and any MP4 error flip
-   ``useZmsFallback`` to the ZMS player.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/EventDetail.tsx#L192>`__
+   ``useZmsFallback`` to the ZMS player; it is seeded from ``isTvMode`` at the top
+   of the component so a Fire Stick never even attempts the MP4 path.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/EventDetail.tsx#L201>`__
    · → :doc:`04-pages-and-views`
 
 #. **Build the video URL (stably).** ``videoUrl`` is memoized so its identity does
    not change mid-playback (re-issuing the source resets iOS WKWebView); it calls
    ``getEventVideoUrl`` with the token, port, and HLS flag.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/EventDetail.tsx#L201>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/EventDetail.tsx#L209>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **The URL shape.** ``url-builder.ts`` ``getEventVideoUrl`` emits the HLS
@@ -825,8 +842,13 @@ element, with a ladder of watchdogs that fall back to MJPEG if anything stalls.
 
 #. **Create the element.** ``connect`` instantiates ``VideoRTC``, wraps its
    ``oninit``/``onopen``/``ondisconnect`` handlers into React state, and assigns
-   ``src`` to kick off the socket.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useGo2RTCStream.ts#L157>`__
+   ``src`` to kick off the socket. It also overwrites the ``pcConfig.iceServers``
+   the vendored file hardcodes, with ``GO2RTC_STUN_SERVERS`` or an empty list
+   depending on the per-profile ``webrtcUseStun`` setting (off by default, since
+   LAN and VPN clients reach go2rtc on host candidates). The override has to
+   happen here rather than during negotiation: ``onwebrtc()`` reads ``pcConfig``
+   only when it builds the peer connection, after the websocket has opened.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useGo2RTCStream.ts#L164>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Negotiate protocols.** On open, the vendored element starts MSE (or HLS) and
@@ -966,13 +988,13 @@ streams a Blob with real progress. The drawer shows progress and a cancel button
 
 #. **The trigger.** The "Download video" button calls ``downloadEventVideo`` with
    the URL inputs and returns immediately; the drawer surfaces progress.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/EventDetail.tsx#L366>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/EventDetail.tsx#L379>`__
    · → :doc:`05-component-architecture`
 
 #. **Orchestrate and register a task.** ``downloadEventVideo`` builds the URL,
    sanitizes the filename, creates an ``AbortController``, registers a background
    task with a cancel function, and kicks off the work asynchronously.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L372>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L379>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **The task store.** ``addTask`` creates the task, trims old finished ones, and
@@ -983,13 +1005,13 @@ streams a Blob with real progress. The drawer shows progress and a cancel button
 
 #. **Platform dispatch.** ``downloadFile`` picks the native or web handler from the
    platform; this is the split point.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L119>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L121>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Mobile: base64, never a Blob.** ``downloadFileNative`` fetches with
    ``responseType: 'base64'`` and uses the string directly, explicitly avoiding a
    Blob to prevent out-of-memory on large videos.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L133>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L135>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **The native HTTP adapter.** ``nativeHttpRequest`` uses CapacitorHttp and returns
@@ -1000,13 +1022,13 @@ streams a Blob with real progress. The drawer shows progress and a cancel button
 #. **Mobile save.** The base64 is written to Documents, then added to the Photo or
    Video library by extension; a media-library failure is non-fatal because the
    file is already saved.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L167>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L169>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Web: streaming Blob.** ``downloadFileWeb`` fetches a Blob with streaming
    progress and triggers a browser download via a temporary anchor, falling back to
    a direct link if the fetch fails.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L199>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L198>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Progress feeds the store.** Each tick calls ``updateProgress`` (web has real
@@ -1153,7 +1175,9 @@ id, and each widget fetches its own live data.
 
 #. **Drag and resize persist.** ``handleLayoutChange`` fires on every move, and only
    while editing (guarded against a store→state→store feedback loop) writes the new
-   geometry back.
+   geometry back. The reference treatment of that feedback loop, and of the
+   subscription rules that keep it from re-arming, lives in
+   :doc:`05-component-architecture`.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/dashboard/DashboardLayout.tsx#L97>`__
    · → :doc:`05-component-architecture`
 
@@ -1295,38 +1319,202 @@ platform, base64 on mobile and an anchor download on web.
    filename, then for a ``<video>`` draws the current frame to a canvas and reads a
    JPEG data URL; for an ``<img>`` it reuses a data URL or sends the stream URL on to
    be re-fetched.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L279>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L286>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Rewriting a stream to one frame.** ``convertToSnapshotUrl`` unwraps any image
    proxy, then sets ``mode=single`` and strips the streaming params so ZoneMinder
-   returns a single still instead of a live multipart stream.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L49>`__
+   returns a single still instead of a live multipart stream. The reference
+   treatment of this trap, and of what happens when the stream URL is handed to a
+   downloader unrewritten, lives in :doc:`12-shared-services-and-components`.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L51>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Data-URL dispatch.** ``downloadSnapshot`` builds the ``.jpg`` filename and picks
    the platform-specific data-URL handler, or falls back to fetching a converted
    still.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L261>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L268>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Mobile save (no Blob).** ``downloadDataUrlNative`` splits the base64 off the data
    URL and writes it straight to Documents via Capacitor Filesystem, then adds it to
    the photo library. It never builds a Blob, per the OOM rule.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L317>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L324>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Web save.** ``downloadFromDataUrlWeb`` creates a temporary ``<a download>`` with
    the data URL as its href, clicks it, and removes it, triggering the browser's
    native download.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L346>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L353>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **The MJPEG-still fetch path.** When an ``<img>`` carries a stream URL rather than a
    data URL, the same ``downloadFile`` split from Flow 10 fetches the ``mode=single``
    still: base64 on mobile, Blob on web.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L133>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L121>`__
    · → :doc:`07-api-and-data-fetching`
+
+Flow 15: Changing the ZoneMinder run state
+------------------------------------------
+
+Every flow above is built around reads. This one is a write. ZoneMinder run
+states are named sets of monitor capture functions: the server ships one,
+``default``, and users add their own, commonly a Home and an Away. Picking one
+on the Server page is how you arm or disarm the system from the app. The counterintuitive part is what happens once the POST succeeds:
+the app never touches the cached state list. It invalidates the key and lets the
+query fetch the answer back, because the server, not the app, decides what a
+state change actually did. Sometimes it cannot decide even in principle, since
+the same control also sends ``start``, ``stop`` and ``restart``, which are not
+states at all.
+
+.. mermaid::
+
+   sequenceDiagram
+       autonumber
+       participant User as User
+       participant Page as Server page
+       participant Mut as changeStateMutation
+       participant API as api/states.ts
+       participant ZM as ZoneMinder
+       participant Cache as Query cache
+
+       Page->>ZM: GET /states.json (the states query)
+       ZM-->>Page: states, one flagged IsActive
+       Page->>Page: effect seeds selectedAction from activeState
+       User->>Mut: Apply, mutate(selectedAction)
+       Mut->>API: changeState(stateName)
+       API->>ZM: POST /states/change/{name}.json
+       ZM-->>API: 200, no useful body
+       Note over Mut,Cache: on success: invalidate the key, never patch it
+       Mut->>Cache: invalidateQueries(queryKeys.states(profileId))
+       Cache->>ZM: the mounted states query refetches
+       ZM-->>Page: new IsActive, the badge re-renders
+
+#. **Getting to the control.** The sidebar's Server entry routes to ``/server``
+   and renders ``pages/Server.tsx``. The run-state control is the last card on
+   that page, "ZoneMinder Control"; everything above it is read-only health and
+   storage reporting.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/layout/SidebarContent.tsx#L114>`__
+   · → :doc:`04-pages-and-views`
+
+#. **The state list arrives first, and quietly.** ``pages/Server.tsx`` runs a
+   ``useQuery`` keyed by ``queryKeys.states(currentProfile?.id)``, gated on
+   ``!!currentProfile && isAuthenticated``. Note what it does *not* destructure:
+   no ``error``, so this query has no error wall, and no ``refetchInterval``, so
+   it never polls. A failed fetch leaves the Current State badge reading
+   ``common.unknown`` and the dropdown holding only the three literal actions
+   from step 4.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Server.tsx#L89>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **The active state is derived, then copied into local state.** ``activeState``
+   is just ``states?.find((s) => s.IsActive === '1')``, recomputed on every
+   render. An effect then seeds ``selectedAction`` from it. An effect runs *after*
+   the render that scheduled it, so the dropdown paints empty for one frame and
+   fills on the next; the ``&& !selectedAction`` half of the guard is what stops
+   that effect from later stomping on a choice the user made by hand.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Server.tsx#L134>`__
+   · → :doc:`02-react-fundamentals`
+
+#. **The dropdown mixes two unlike things.** ``Select`` (``server-state-select``)
+   lists three hardcoded ``SelectItem`` values, ``start``, ``stop`` and
+   ``restart``, and then maps one item per fetched state, badging whichever is
+   active. Both kinds collapse to the same ``selectedAction`` string, and both
+   travel the identical write path below. ZoneMinder's endpoint accepts the daemon
+   verbs in the slot where a state name goes.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Server.tsx#L536>`__
+   · → :doc:`05-component-architecture`
+
+#. **Apply is the only trigger.** The ``server-apply-button`` calls
+   ``handleApply``, which fires ``changeStateMutation.mutate(selectedAction)``.
+   The button disables itself on ``!selectedAction || changeStateMutation.isPending``
+   and swaps its icon for a spinner. There is no confirm dialog, and the UI never
+   flips optimistically: the badge above it stays on the old state until the
+   server has been re-asked.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Server.tsx#L573>`__
+   · → :doc:`05-component-architecture`
+
+#. **What a mutation is.** ``useMutation`` is React Query's wrapper for a write.
+   Unlike a query it is never cached, never refetched, and never fires on its own:
+   you call ``mutate()`` and it runs ``mutationFn`` once. What it hands back is
+   lifecycle, ``isPending`` while the request is open plus ``onSuccess`` and
+   ``onError`` callbacks, which is exactly the surface step 5's button binds to.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Server.tsx#L110>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **The API call is one line.** ``changeState`` logs the intent and POSTs to
+   ``/states/change/{stateName}.json`` with no body. Note what is missing next to
+   ``getStates`` directly above it: no ``validateApiResponse``, no Zod schema. The
+   response carries nothing worth parsing, so the only signal is the HTTP status.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/states.ts#L44>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **The write rides the same client as every read.** ``client.post`` is a thin
+   alias for the shared ``request()`` in ``api/client.ts``, so this POST inherits
+   the auth gate, the just-in-time token refresh, and the single 401 recovery
+   retry that Flow 6 traces. A token that lapsed while the Server page sat open
+   therefore refreshes and re-sends the POST rather than failing the state change.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/client.ts#L289>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **A failed write is never retried.** ``App.tsx`` passes ``retry:
+   shouldRetryQuery`` under ``defaultOptions.queries`` and gives ``mutations`` no
+   entry at all, so mutations fall back to React Query's default of zero retries.
+   That asymmetry is deliberate. Re-issuing a GET is free; silently re-issuing
+   ``restart`` means the app bounces a server the user already watched fail to
+   bounce.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/App.tsx#L63>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **Success invalidates the key rather than editing the cache.** ``onSuccess``
+   toasts, then calls
+   ``queryClient.invalidateQueries({ queryKey: queryKeys.states(currentProfile?.id) })``.
+   Writing ``IsActive: '1'`` into the cached array by hand would be faster and
+   would be a lie. ZoneMinder may normalize the name or refuse the change, and
+   when the user picked ``start`` there is no matching entry in that array to
+   patch at all: the daemon verbs are not states. Refetching is the only answer
+   the app can actually justify.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Server.tsx#L117>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **The invalidated key comes from the factory.** ``queryKeys.states`` returns
+   ``['states', profileId]``, the same array the query in step 2 was keyed with.
+   Invalidation matches by key prefix, so this reaches that entry and any future
+   longer key under it. Rule 29 forbids writing the array inline precisely here:
+   an invalidator that spells its own key drifts away from the query that reads
+   it, and the symptom is a page that silently stops updating. The ``profileId``
+   is a branded ``ProfileId``, minted once by ``asProfileId`` when ``addProfile``
+   generates the UUID back in Flow 4, and it is what keeps one profile's states
+   out of another's cache.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/query/query-keys.ts#L138>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **The refetch is the only thing that can update the badge.** Invalidating marks
+   the entry stale and immediately refetches it if a mounted component is still
+   observing it, and the states query from step 2 is. That query has no
+   ``refetchInterval``, so without this invalidation the Current State badge would
+   keep showing the old state until the page remounted. The 15-second
+   ``staleTime`` from Flow 2 does not hold the refetch back either: freshness
+   governs whether a refetch is *needed*, invalidation declares that it is.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Server.tsx#L89>`__
+   · → :doc:`02-react-fundamentals`
+
+#. **The user hears about it through a toast.** ``onSuccess`` and ``onError`` raise
+   ``toast({ title, description })`` from ``hooks/use-toast``, the error variant
+   being ``destructive``, and each writes a ``log.server`` line. There is no
+   navigation and no modal; the page you changed the state from is the page you
+   stay on.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Server.tsx#L112>`__
+   · → :doc:`05-component-architecture`
+
+``pages/States.tsx`` wraps the same ``changeState`` in its own mutation, but
+nothing routes to it and nothing imports it, so no user ever walks that code
+(issue #231). The Server page holds the app's only ``useMutation`` and its only
+write to the ZoneMinder run state; other writes (PTZ, event delete, push
+registration) go through plain handlers, not mutations. Steps 8
+and 9 lean on the client behavior traced in Flow 6: if the access token lapsed
+while the page sat open, the 401 recovery there runs and re-sends this POST before
+the mutation ever reports a failure.
 
 These flows touch most of the moving parts of the app. When you need to change
 something, find the nearest scene, open its ``source`` link to land on the exact

@@ -9,322 +9,364 @@ Why Global State
 ----------------
 
 ``useState`` is fine for component-local state, but profile, auth,
-settings, monitors, and notifications need to be visible to many
-components across the tree. Without a shared store, you end up
-prop-drilling.
-
-What Zustand Gives You
-----------------------
-
-- A global ``useState``-like hook any component can call.
-- No Context Provider needed.
-- Works outside React via ``store.getState()``.
-- Optional persistence middleware.
+settings, and notifications need to be visible to many components across
+the tree. Without a shared store, you end up prop-drilling. Zustand gives
+you a global ``useState``-like hook any component can call, with no Context
+Provider, optional persistence middleware, and access from outside React
+via ``store.getState()``.
 
 Creating a Store
 ----------------
 
+``create`` takes a function that receives ``set`` (and optionally ``get``)
+and returns the store's initial state plus the actions that change it.
+Actions live next to the data they touch:
+
 .. code:: tsx
 
-   // src/stores/profile.ts
+   // src/stores/deleteSelection.ts
    import { create } from 'zustand';
 
-   interface ProfileState {
-     currentProfileId: string | null;
-     profiles: Profile[];
-
-     setCurrentProfile: (id: string) => void;
-     addProfile: (profileData: Omit<Profile, 'id' | 'createdAt'>) => Promise<string>;
+   interface DeleteSelectionState {
+     selectedIds: string[];
+     toggle: (eventId: string) => void;
+     clear: () => void;
    }
 
-   export const useProfileStore = create<ProfileState>((set) => ({
-     currentProfileId: null,
-     profiles: [],
-
-     setCurrentProfile: (id) => set({ currentProfileId: id }),
-
-     addProfile: async (profileData) => {
-       const id = crypto.randomUUID();
-       set((state) => ({
-         profiles: [...state.profiles, { ...profileData, id, createdAt: Date.now() }],
-       }));
-       return id;
-     },
+   export const useDeleteSelectionStore = create<DeleteSelectionState>((set) => ({
+     selectedIds: [],
+     toggle: (eventId) =>
+       set((s) => ({
+         selectedIds: s.selectedIds.includes(eventId)
+           ? s.selectedIds.filter((id) => id !== eventId)
+           : [...s.selectedIds, eventId],
+       })),
+     clear: () => set({ selectedIds: [] }),
    }));
+
+That is the whole store. ``useDeleteSelectionStore`` is both a React hook
+and an object with ``.getState()`` / ``.setState()`` on it, which is what
+makes the same store usable from non-React code later in this chapter.
 
 The ``set`` Function
 ~~~~~~~~~~~~~~~~~~~~
 
-Object form merges into state:
+``set`` takes either an object, which merges into state, or a function
+receiving the current state. Both forms must return *new* objects and
+arrays rather than mutating the existing ones:
 
 .. code:: tsx
 
-   set({ currentProfileId: id })
+   set({ selectedIds: [] })                                        // object form
+   set((state) => ({ selectedIds: [...state.selectedIds, id] }))   // function form
 
-Function form receives current state:
+   // Wrong: subscribers compare old and new by reference, see the same
+   // array, and skip the re-render. The UI never updates.
+   set((state) => { state.selectedIds.push(id); return state; })
 
-.. code:: tsx
+This is rule 30 in ``AGENTS.md``: never mutate an object you obtained from
+the store, including one you read through ``getState()``.
 
-   set((state) => ({ profiles: [...state.profiles, newProfile] }))
-
-Always return new objects/arrays, don't mutate:
-
-.. code:: tsx
-
-   // Wrong
-   set((state) => { state.profiles.push(newProfile); return state; })
-
-   // Right
-   set((state) => ({ profiles: [...state.profiles, newProfile] }))
+Initialize every field. ``items: undefined`` looks harmless until an action
+spreads it (``[...state.items, item]``) and crashes. Arrays start as ``[]``,
+counters as ``0``, nullable references as ``null``.
 
 Reading State in Components
 ---------------------------
 
+A component subscribes by calling the store hook with a *selector*, a
+function that picks one field out of the state. Zustand re-runs the
+selector whenever any part of the store changes and re-renders the
+component only when the selector's result changes. ``App`` re-renders when
+``isInitialized`` flips and ignores every profile add, rename, and switch:
+
 .. code:: tsx
 
-   import { useProfileStore } from '../stores/profile';
+   // src/App.tsx:82, 189
+   const isInitialized = useProfileStore((state) => state.isInitialized);
 
-   function ProfileSelector() {
-     const { currentProfileId, profiles, setCurrentProfile } = useProfileStore();
-     // ...
+   if (!isInitialized) {
+     return <RouteLoadingFallback />;
    }
 
-For the active profile object, prefer the ``useCurrentProfile`` hook
-(``hooks/useCurrentProfile.ts``). It derives ``currentProfile`` from
-``currentProfileId`` + ``profiles`` using ``useShallow`` and ``useMemo``,
-and also returns merged profile settings:
+Selecting an action works the same way. Actions are created once when the
+store is created and never replaced, so their reference is already stable:
 
 .. code:: tsx
 
-   import { useCurrentProfile } from '../hooks/useCurrentProfile';
+   // src/components/events/EventCard.tsx:54
+   const toggleFavorite = useEventFavoritesStore((state) => state.toggleFavorite);
 
-   function UserName() {
-     const { currentProfile, settings, hasProfile } = useCurrentProfile();
-     if (!hasProfile) return null;
-     return <Text>{currentProfile?.name}</Text>;
-   }
-
-Selectors
-~~~~~~~~~
-
-Calling ``useProfileStore()`` without a selector subscribes to the
-whole store, the component re-renders on any change. A selector
-narrows the subscription:
+Computed selectors are fine as long as the result is a primitive. Zustand
+compares the previous and next result with ``Object.is``, and two equal
+booleans stay equal no matter how many times you recompute them:
 
 .. code:: tsx
 
-   // Re-renders only when currentProfileId changes
-   const currentProfileId = useProfileStore((state) => state.currentProfileId);
-
-Use selectors for primitives and individual fields. Skip them when
-you genuinely need most of the store and the component renders rarely.
-
-Computed Selectors
-~~~~~~~~~~~~~~~~~~
-
-.. code:: tsx
-
-   const activeCount = useMonitorStore((state) =>
-     state.monitors.filter(m => !m.deleted).length
+   // src/components/events/EventCard.tsx:58
+   const isFav = useEventFavoritesStore((state) =>
+     currentProfile ? state.isFavorited(currentProfile.id, event.Id) : false
    );
 
-This is fine for a primitive result. For an object/array result,
-use ``useShallow`` (next section).
+``useShallow``: Stable Array and Object Selections
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-useShallow: Stable Array/Object Selections
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+The moment a selector *builds* an array or object rather than returning one
+that already lives in the store, ``Object.is`` fails. Each call produces a
+fresh reference, so Zustand concludes the value changed, re-renders, re-runs
+the selector, builds another fresh reference, and loops.
 
-A selector that returns a new array or object on each call will look
-"changed" to React even when its contents are identical. That breaks
-``useEffect`` deps and causes infinite loops.
-
-.. code:: tsx
-
-   // Bad, new array reference every selector run
-   const favoriteIds = useEventFavoritesStore((state) =>
-     state.profileFavorites[profileId] || []
-   );
-   useEffect(() => { /* ... */ }, [favoriteIds]);  // fires every render
-
-``useShallow`` does element-by-element comparison and returns the
-previous reference if contents match:
+``useShallow`` wraps a selector and compares the result one level deep (each
+array element, each object key). If the contents match, it hands back the
+*previous* reference and no re-render happens. ``DashboardLayout`` needs it
+because of the ``?? []`` fallback:
 
 .. code:: tsx
 
+   // src/components/dashboard/DashboardLayout.tsx:45
    import { useShallow } from 'zustand/react/shallow';
 
-   const favoriteIds = useEventFavoritesStore(
-     useShallow((state) => state.getFavorites(profileId))
+   const widgets = useDashboardStore(
+     useShallow((state) => state.widgets[profileId] ?? [])
    );
 
-Use ``useShallow`` when the selector returns:
+A profile with no widgets has no ``widgets[profileId]`` entry, so ``?? []``
+mints a brand new empty array on every selector run. Without ``useShallow``
+that empty dashboard would render forever. With it, every ``[]`` compares
+equal to the last ``[]`` and the component settles.
 
-- An array.
-- An object literal (e.g. ``{ a: state.a, b: state.b }``).
-- A computed/derived collection.
+``profile-switcher.tsx:36`` reaches for ``useShallow`` for a different
+reason. Its selector returns ``profiles.find((p) => p.id ===
+currentProfileId) || null``, an object that already lives in the store, so
+the selector mints nothing fresh. What shallow comparison buys there is the
+field-by-field check on that profile: ``setDefaultProfile`` rebuilds every
+element of ``profiles`` with a spread, and without ``useShallow`` the
+switcher would re-render even though none of its profile's fields changed.
 
-Skip it for primitives and for selecting a single store function, both
-are already reference-stable.
+Use ``useShallow`` when the selector returns an array, an object literal, or
+any derived collection. Skip it for primitives and for single actions, which
+are already reference-stable. This is the object-identity lesson from
+:doc:`02-react-fundamentals`, now at store scope: React and Zustand both
+decide "did this change?" by reference, and a freshly-built value is always
+a new reference.
+
+Anti-Pattern: Subscribing to the Whole Store
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Calling the hook with no selector subscribes to everything:
+
+.. code:: tsx
+
+   // Anti-pattern (rule 30). Re-renders on every store change,
+   // including fields this component never reads.
+   const { isFavorited, toggleFavorite } = useEventFavoritesStore();
+
+Any write anywhere in the store, to any profile's favorites, re-renders this
+component. Rule 30 in ``AGENTS.md`` bans the form. Three call sites predate
+the rule and are tracked in issue #230; do not add more.
+
+The mirror-image mistake is over-narrowing. Shrink a selector down to just
+the actions and the component reads its data once, on the first render, and
+never again: actions never change, so nothing is left to trigger an update.
+
+.. code:: tsx
+
+   // Compiles. Renders once. Then goes stale.
+   const toggleFavorite = useEventFavoritesStore((s) => s.toggleFavorite);
+   const favorites = useEventFavoritesStore.getState().getFavorites(profileId);
+
+Rule 30 covers both directions: every field the component reads reactively
+must be in the selector.
+
+Store Values as Effect Dependencies
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Derived values inherit the same problem. ``currentProfile`` is produced by
+``profiles.find((p) => p.id === currentProfileId)``, so it is a lookup, not a
+stored field. Anything that replaces the profile object (a ``lastUsed``
+timestamp write, for example) hands you a new reference for an unchanged
+profile, and an effect keyed on it re-runs. Depend on the primitive id
+instead; it only changes when the user really switched profiles:
+
+.. code:: tsx
+
+   const { currentProfile } = useCurrentProfile();
+   const profileId = useProfileStore((state) => state.currentProfileId);
+
+   // Wrong: fires more often than the profile actually changes
+   useEffect(() => { /* ... */ }, [currentProfile]);
+
+   // Right: a primitive, stable until the id itself changes
+   useEffect(() => { /* ... */ }, [profileId]);
+
+``hooks/useCurrentProfile.ts`` already does this work for you. It selects
+``currentProfileId`` as a bare primitive, wraps the ``profiles`` array in
+``useShallow``, and derives ``currentProfile`` inside a ``useMemo`` so the
+object identity only changes when one of those two inputs does. Prefer it
+over hand-rolling the lookup.
 
 Actions
 -------
 
-Actions live inside the store and encapsulate logic. Use ``get`` (the
-second argument to ``create``) to read current state inside an action:
+Actions encapsulate multi-field updates so callers cannot leave the store in
+a half-updated state. Where an action needs to read current state without
+subscribing, ``get`` (the second argument to ``create``) returns it;
+``profileExists`` in ``stores/profile.ts:84`` is the smallest example.
 
 .. code:: tsx
 
-   export const useProfileStore = create<ProfileState>((set, get) => ({
-     currentProfileId: null,
-     profiles: [],
+   // Simplified from src/stores/profile.ts (deleteProfile), secure-storage
+   // cleanup and API client re-init omitted
+   deleteProfile: async (id) => {
+     set((state) => {
+       const profiles = state.profiles.filter((p) => p.id !== id);
+       const currentProfileId =
+         state.currentProfileId === id
+           ? (profiles.length > 0 ? profiles[0].id : null)
+           : state.currentProfileId;
 
-     deleteProfile: (profileId) => {
-       const { profiles, currentProfileId } = get();
-       const newProfiles = profiles.filter(p => p.id !== profileId);
-       const newCurrentId =
-         currentProfileId === profileId
-           ? newProfiles[0]?.id ?? null
-           : currentProfileId;
-       set({ profiles: newProfiles, currentProfileId: newCurrentId });
-     },
-   }));
+       return { profiles, currentProfileId };
+     });
+   },
+
+Deleting the active profile has to pick a new ``currentProfileId`` in the
+same ``set`` call. Split across two writes, subscribers would observe a
+render where ``currentProfileId`` points at a profile that no longer exists.
 
 Persistence
 -----------
 
-The ``persist`` middleware writes to ``localStorage`` automatically.
-zmNinjaNg runs on web, Electron, and Capacitor, all expose
-``localStorage``: so no custom storage adapter is needed:
+The ``persist`` middleware writes state to ``localStorage`` after every
+change and reads it back at startup. zmNinjaNg runs on web, Electron, and
+Capacitor, all of which expose ``localStorage``, so no custom storage
+adapter is needed. Persist keys are never string literals at the call site.
+They live in ``STORAGE_KEYS`` in ``lib/zmninja-ng-constants.ts`` (rule 25),
+because the values are on-disk keys: changing one orphans every existing
+user's stored state.
 
 .. code:: tsx
 
-   import { create } from 'zustand';
+   // src/stores/eventFavorites.ts
    import { persist } from 'zustand/middleware';
+   import { STORAGE_KEYS } from '../lib/zmninja-ng-constants';
 
-   export const useProfileStore = create<ProfileState>()(
+   export const useEventFavoritesStore = create<EventFavoritesState>()(
      persist(
        (set, get) => ({ /* state and actions */ }),
-       { name: 'zmng-profiles' }
+       { name: STORAGE_KEYS.eventFavoritesStore }
      )
    );
 
-Sensitive data (passwords, tokens) is **not** persisted via this
-middleware. Profile passwords go through ``lib/security/secureStorage.ts``,
-which wraps ``@aparajita/capacitor-secure-storage`` (Keychain on iOS,
-Keystore on Android, encrypted ``localStorage`` on web). The persisted
-profile keeps a sentinel like ``'stored-securely'`` instead.
+Passwords and tokens are **not** persisted this way. Profile passwords go
+through ``lib/security/secureStorage.ts``, which wraps
+``@aparajita/capacitor-secure-storage`` (Keychain on iOS, Keystore on
+Android, encrypted ``localStorage`` on web). The persisted profile keeps the
+sentinel string ``'stored-securely'`` where the password would be, and
+``getDecryptedPassword`` fetches the real value on demand.
 
-Caveats:
-
-- ``localStorage`` is synchronous and ~5 MB, keep persisted state small.
-- Versioning is manual; detect format changes yourself.
+``localStorage`` is synchronous and capped near 5 MB, so keep persisted state
+small. Versioning is manual: detect format changes yourself rather than
+assuming stored data matches the current interface.
 
 Hydration
 ~~~~~~~~~
 
-Hydration runs once at startup. The store starts with its initial
-state and is replaced with persisted state a few milliseconds later.
-Use ``onRehydrateStorage`` to flag readiness and to run any post-load
-work (e.g. re-initializing the API client):
+Rehydration is asynchronous. The store is constructed with its initial state,
+the app renders once against those defaults, and persisted state replaces
+them a few milliseconds later. A component that reads ``profiles`` during
+that window sees an empty array, not the user's servers.
+``onRehydrateStorage`` returns a callback that fires once loading finishes.
+``stores/profile.ts`` uses it to re-initialize the API client, re-authenticate,
+and set ``isInitialized``:
 
 .. code:: tsx
 
-   export const useProfileStore = create<ProfileState>()(
-     persist(
-       (set, get) => ({ /* ... */, isInitialized: false }),
-       {
-         name: 'zmng-profiles',
-         onRehydrateStorage: () => (state, error) => {
-           if (error) {
-             console.error('Hydration failed', error);
-           } else {
-             state?.setInitialized(true);
-           }
-         },
-       }
-     )
-   );
+   // Simplified from src/stores/profile.ts:437 (log message shortened here)
+   persist(
+     (set, get) => ({ /* ... */ }),
+     {
+       name: STORAGE_KEYS.profilesStore,
+       onRehydrateStorage: () => async (state) => {
+         try {
+           await handleProfileRehydration(state, storeSet, storeGet);
+         } catch (error) {
+           log.profileService(
+             'Unexpected error in onRehydrateStorage - forcing initialization',
+             LogLevel.ERROR,
+             { error }
+           );
+           storeSet?.({ isInitialized: true, isBootstrapping: false, bootstrapStep: null });
+         }
+       },
+     }
+   )
 
-In ``App.tsx`` we gate routes on the flag:
-
-.. code:: tsx
-
-   function AppRoutes() {
-     const isInitialized = useProfileStore((state) => state.isInitialized);
-     if (!isInitialized) return <LoadingScreen />;
-     return <Routes>...</Routes>;
-   }
+The ``catch`` forces ``isInitialized`` to ``true``. Left unset, ``App``'s
+``if (!isInitialized)`` gate would hold the loading fallback on screen
+forever, so a rehydration bug would present as a permanently hung splash.
+Note the logging goes through ``log.profileService``, not ``console.error``;
+rule 9 routes every log line through ``lib/logger.ts`` so it lands in the
+in-app log viewer.
 
 Calling Stores Outside React
 ----------------------------
 
-.. code:: tsx
+``useProfileStore`` is a hook, but ``useProfileStore.getState()`` is a plain
+function call that reads current state from anywhere: services, API clients,
+event handlers. There is no subscription and no re-render; you get a
+snapshot of the values as of that instant.
 
-   import { useProfileStore } from '../stores/profile';
-
-   export function getCurrentProfile(): Profile | null {
-     const { profiles, currentProfileId } = useProfileStore.getState();
-     return profiles.find(p => p.id === currentProfileId) ?? null;
-   }
-
-   export async function switchToProfile(id: string): Promise<void> {
-     await useProfileStore.getState().switchProfile(id);
-   }
-
-Useful in utility modules, API clients, and event handlers outside
-the React tree.
-
-Reference Equality and Infinite Loops
--------------------------------------
-
-Zustand selectors that build new objects/arrays on each call return
-new references every render. Used as a hook dependency, that triggers
-re-runs even when the underlying values are unchanged.
+Which module performs that call matters. ``stores/notifications.ts:24``
+statically imports ``services/pushNotifications.ts`` for exactly one reason:
+to call ``setPushServiceStoreGates`` at module load and hand the service the
+state accessors it needs. When the store later wants a runtime function out of
+that service it uses a dynamic ``import()`` instead (``notifications.ts:630``).
+In the return direction the service imports only *types* from the store,
+``NotificationSettings`` and ``NotificationSource`` at
+``pushNotifications.ts:14``. TypeScript erases a type-only import at compile
+time, so it is not a module edge at runtime and ``madge`` does not see it. A
+*value* import there would close the cycle, and that is the static
+service-to-store edge rule 31 forbids. The inversion is a gate: the service
+declares the shape of the state it needs and exposes a registration function,
+and the store fills it in at module load.
 
 .. code:: tsx
 
-   function DashboardLayout() {
-     const { currentProfile } = useCurrentProfile();
-     const updateSettings = useSettingsStore((state) => state.updateSettings);
+   // src/services/pushNotifications.ts:52, the service declares what it needs
+   let storeGates: PushServiceStoreGates | null = null;
 
-     // currentProfile / updateSettings are unstable references
-     const handleResize = useCallback((width: number) => {
-       if (currentProfile) {
-         updateSettings(currentProfile.id, { layoutWidth: width });
-       }
-     }, [currentProfile, updateSettings]);
-     // handleResize changes -> ResizeObserver re-fires -> setState -> re-render
-     // -> new references -> handleResize changes again -> loop
+   export function setPushServiceStoreGates(gates: PushServiceStoreGates): void {
+     storeGates = gates;
    }
 
-Hold the unstable values in refs and keep the callback's deps to
-primitives:
+   // src/stores/notifications.ts:717, the store supplies it, using getState
+   setPushServiceStoreGates({
+     notifications: {
+       getCurrentProfileId: () => useNotificationStore.getState().currentProfileId,
+       isConnected: () => useNotificationStore.getState().isConnected,
+       // ...
+     },
+     auth: {
+       getAccessToken: () => useAuthStore.getState().accessToken,
+     },
+   });
 
-.. code:: tsx
+``api/store-gates.ts`` does the same for the API client, which needs the
+access token and the per-profile request timeout without importing either
+store. Keep ``npx madge --circular`` at zero.
 
-   function DashboardLayout() {
-     const { currentProfile } = useCurrentProfile();
-     const updateSettings = useSettingsStore((state) => state.updateSettings);
+An End-to-End Switch
+~~~~~~~~~~~~~~~~~~~~
 
-     const currentProfileRef = useRef(currentProfile);
-     const updateSettingsRef = useRef(updateSettings);
-
-     useEffect(() => {
-       currentProfileRef.current = currentProfile;
-       updateSettingsRef.current = updateSettings;
-     }, [currentProfile, updateSettings]);
-
-     const handleResize = useCallback((width: number) => {
-       if (currentProfileRef.current) {
-         updateSettingsRef.current(currentProfileRef.current.id, {
-           layoutWidth: width,
-         });
-       }
-     }, []);  // stable
-   }
-
-See :doc:`04-pages-and-views` for the full ``DashboardLayout`` /
-``Montage`` story.
+The two halves, subscription and ``getState``, meet when the user picks a
+different server. Tapping an entry in ``components/profile-switcher.tsx``
+calls the ``switchProfile`` action it selected from the store. The action
+tears down the outgoing profile (quit active streams, ``logout()``,
+``clearQueryCache()``, ``resetApiClient()``), then does the single write that
+matters, ``set({ currentProfileId: profile.id })``. Every component holding
+a ``currentProfileId`` selector re-renders against the new id, while the
+action continues outside React and calls ``setApiClient`` with a client built
+for the new server's URL.
 
 Stores in zmNinjaNg
 -------------------
@@ -332,201 +374,106 @@ Stores in zmNinjaNg
 ::
 
    src/stores/
-   ├── profile.ts                  # User profiles (useProfileStore)
-   ├── profile-bootstrap.ts        # Bootstrap helpers used by profile.ts
-   ├── profile-initialization.ts   # Rehydration helpers used by profile.ts
-   ├── auth.ts                     # Auth tokens and state (useAuthStore)
-   ├── settings.ts                 # App + profile settings (useSettingsStore)
-   ├── dashboard.ts                # Dashboard config (useDashboardStore)
-   ├── monitors.ts                 # Monitor data cache (useMonitorStore)
-   ├── notifications.ts            # Push notifications (useNotificationStore)
-   ├── logs.ts                     # App logs (useLogStore)
-   ├── query-cache.ts              # React Query cache helpers
-   ├── backgroundTasks.ts          # Background download/upload tasks
-   ├── eventFavorites.ts           # Per-profile favorited events
-   └── kioskStore.ts               # Kiosk lock state (ephemeral)
+   ├── auth.ts                # Access/refresh tokens, login, logout, token refresh
+   ├── backgroundTasks.ts     # Long-running downloads and their drawer state
+   ├── commandPalette.ts      # Whether the command palette is open
+   ├── dashboard.ts           # Per-profile dashboard widgets and grid layouts
+   ├── deleteSelection.ts     # Events ticked for bulk delete
+   ├── developerNotices.ts    # Read/dismissed/deleted ids for broadcast notices
+   ├── eventFavorites.ts      # Per-profile favorited event IDs
+   ├── eventPagination.ts     # Remembered "Load More" count, keyed by filter signature
+   ├── kioskStore.ts          # Kiosk lock state, PIN attempts, cooldown
+   ├── logs.ts                # In-memory ring of recent log entries
+   ├── monitors.ts            # Per-monitor ZoneMinder stream connection keys
+   ├── notifications.ts       # Push/event-poll config, connection state, alarm events
+   ├── profile.ts             # ZoneMinder server profiles and the active one
+   ├── query-cache.ts         # Not a store: global QueryClient handle for cache clearing
+   ├── returnHighlight.ts     # Last event opened, so the list can flag that row
+   └── settings.ts            # App-wide and per-profile settings
 
-Stores are split by domain so components subscribe only to what they
-need.
+Stores are split by domain so components subscribe only to what they need.
+Two things that look like stores are not: ``services/profile-bootstrap.ts``
+and ``services/profile-initialization.ts`` hold the login/timezone/rehydration
+logic that ``profile.ts`` calls, and live under ``services/`` for that reason.
 
-Kiosk Store (``stores/kioskStore.ts``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Three of these come up often enough to be worth a sentence each. Deep
+reference lives in :doc:`12-shared-services-and-components`.
 
-Manages kiosk (lock) mode. Ephemeral, not persisted, so the app
-always starts unlocked.
+**Kiosk** (``stores/kioskStore.ts``) holds lock state, the insomnia setting
+captured at lock time so unlocking can restore it, and the PIN cooldown.
+After ``KIOSK.maxPinAttempts`` (5) failures, ``recordFailedAttempt`` sets
+``cooldownUntil`` to ``KIOSK.cooldownMs`` (30 seconds) in the future. Nothing
+is persisted, so the app always starts unlocked. The PIN itself lives in
+``lib/kioskPin.ts``, in secure storage.
 
-State:
+**Background tasks** (``stores/backgroundTasks.ts``) tracks downloads and
+exports for the current session. ``addTask`` returns an id you then feed to
+``updateProgress``, ``completeTask``, or ``failTask``; ``cancelTask`` invokes
+the ``cancelFn`` you registered, which is how a download's ``AbortController``
+gets fired from the task drawer. ``activeTasks()`` and ``hasActiveTasks()``
+are functions, not fields, so they must be called.
 
-- ``isLocked``: kiosk mode active flag.
-- ``previousInsomniaState``: insomnia setting captured at lock time so
-  it can be restored on unlock.
-- ``pinAttempts``: consecutive failed PIN attempts in the current
-  cooldown window.
-- ``cooldownUntil``: Unix ms timestamp until which PIN entry is
-  blocked; ``null`` when not in cooldown.
-- ``unlockRequested``: flag set by external UI (e.g. sidebar) to ask
-  KioskOverlay to start the unlock flow.
+**Event favorites** (``stores/eventFavorites.ts``) maps profile id to an
+array of event ids and is persisted. Scoping by profile is what stops a
+favorite on one ZoneMinder server from showing up as a starred event on
+another.
 
-Actions:
+Reference Equality and Infinite Loops
+-------------------------------------
 
-- ``lock(currentInsomniaState)``: activate and capture insomnia state.
-- ``unlock()``: deactivate and reset attempt counters.
-- ``requestUnlock()``: set ``unlockRequested`` to ``true``.
-- ``clearUnlockRequest()``: reset ``unlockRequested``.
-- ``recordFailedAttempt()``: increment ``pinAttempts``; after 5
-  failures, set a 30-second ``cooldownUntil``. If a previous cooldown
-  has already expired, the counter resets to 0 first.
-- ``isCoolingDown()``: ``true`` if ``Date.now() < cooldownUntil``.
+Every trap in this chapter is the same trap. Zustand decides whether to
+re-render by comparing references. React decides whether to re-run an effect
+or rebuild a ``useCallback`` by comparing references. Hand either of them a
+value that is rebuilt on each pass and you get a cycle that never settles.
 
-PIN storage is in ``lib/kioskPin.ts``, not in this store.
+``DashboardLayout`` sits in the worst version of this. The store owns the
+widget layouts; the grid owns a local copy in ``useState`` so dragging feels
+immediate; and ``react-grid-layout`` fires ``onLayoutChange`` whenever that
+local copy moves. Writing every fired layout back to the store would mean:
+store changes, effect copies it into local state, local state change fires
+``onLayoutChange``, which writes to the store again.
 
-Background Tasks Store (``stores/backgroundTasks.ts``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Tracks long-running operations (downloads, uploads). Ephemeral, only
-the current session.
-
-State:
-
-- ``tasks``: array of ``BackgroundTask`` (id, type, status,
-  progress 0–100, metadata, optional error, timestamps, optional
-  ``cancelFn``).
-- ``drawerState``: ``'hidden' | 'badge' | 'collapsed' | 'expanded'``.
-
-Task types: ``'download' | 'upload' | 'sync' | 'export'``. Statuses:
-``'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled'``.
-
-Actions: ``addTask``, ``updateProgress``, ``completeTask``,
-``failTask``, ``cancelTask``, ``removeTask``, ``clearCompleted``,
-``setDrawerState``. Computed getters (call as functions):
-``activeTasks()``, ``completedTasks()``, ``hasActiveTasks()``.
-
-.. code:: typescript
-
-   import { useBackgroundTasks } from '../stores/backgroundTasks';
-
-   const taskStore = useBackgroundTasks.getState();
-   const taskId = taskStore.addTask({
-     type: 'download',
-     metadata: { title: 'Video.mp4', description: 'Event 12345' },
-     cancelFn: () => abortController.abort(),
-   });
-   taskStore.updateProgress(taskId, 50, 512000);
-   taskStore.completeTask(taskId);
-
-Event Favorites Store (``stores/eventFavorites.ts``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Per-profile favorited events. Persisted.
-
-State:
-
-- ``profileFavorites: Record<profileId, string[]>``: event IDs by
-  profile.
-
-Actions: ``isFavorited(profileId, eventId)``,
-``toggleFavorite(profileId, eventId)``,
-``addFavorite(profileId, eventId)``,
-``removeFavorite(profileId, eventId)``,
-``getFavorites(profileId)``, ``clearFavorites(profileId)``,
-``getFavoriteCount(profileId)``.
-
-.. code:: typescript
-
-   import { useEventFavoritesStore } from '../stores/eventFavorites';
-   import { useShallow } from 'zustand/react/shallow';
-
-   // Read array, wrap in useShallow
-   const favorites = useEventFavoritesStore(
-     useShallow((state) => state.getFavorites(profileId))
-   );
-
-   // Read action, no useShallow needed
-   const toggleFavorite = useEventFavoritesStore((state) => state.toggleFavorite);
-   toggleFavorite(profileId, eventId);
-
-Store Pattern
--------------
+Two refs break it. A ref is a mutable box whose ``.current`` you can read and
+write without triggering a render, which makes it the escape hatch for values
+you need to *read* but do not want to *react* to:
 
 .. code:: tsx
 
-   interface MyState {
-     items: Item[];
-     selectedId: string | null;
+   // src/components/dashboard/DashboardLayout.tsx:55
+   const profileIdRef = useRef(profileId);
+   const isSyncingFromStoreRef = useRef(false);
 
-     addItem: (item: Item) => void;
-     selectItem: (id: string) => void;
-     clearSelection: () => void;
-   }
+   useEffect(() => {
+     profileIdRef.current = profileId;
+   }, [profileId]);
 
-   export const useMyStore = create<MyState>()(
-     persist(
-       (set, get) => ({
-         items: [],
-         selectedId: null,
-
-         addItem: (item) =>
-           set((state) => ({ items: [...state.items, item] })),
-         selectItem: (id) => set({ selectedId: id }),
-         clearSelection: () => set({ selectedId: null }),
-       }),
-       { name: 'zmng-my-storage' }
-     )
-   );
-
-Testing Stores
---------------
-
-Stores can be tested directly via ``setState`` / ``getState``:
-
-.. code:: tsx
-
-   import { useProfileStore } from '../profile';
-
-   describe('ProfileStore', () => {
-     beforeEach(() => {
-       useProfileStore.setState({ currentProfileId: null, profiles: [] });
+   useEffect(() => {
+     isSyncingFromStoreRef.current = true;
+     setLayout((prev) => (areLayoutsEqual(prev, layouts) ? prev : layouts));
+     requestAnimationFrame(() => {
+       isSyncingFromStoreRef.current = false;
      });
+   }, [layouts, areLayoutsEqual]);
 
-     it('sets current profile', () => {
-       useProfileStore.setState({ profiles: [{ id: '1', name: 'Test' } as any] });
-       useProfileStore.getState().setCurrentProfile('1');
-       expect(useProfileStore.getState().currentProfileId).toBe('1');
-     });
-   });
+   const handleLayoutChange = useCallback((nextLayout: Layout[]) => {
+     setLayout((prev) => (areLayoutsEqual(prev, nextLayout) ? prev : nextLayout));
+     if (!isEditing || isSyncingFromStoreRef.current) return;
+     updateLayouts(profileIdRef.current, { lg: nextLayout });
+   }, [areLayoutsEqual, isEditing]);
 
-Common Patterns
----------------
+``isSyncingFromStoreRef`` marks the store-to-local direction so the
+resulting ``onLayoutChange`` is ignored rather than echoed back.
+``profileIdRef`` keeps ``profileId`` out of ``handleLayoutChange``'s
+dependency array, so the callback identity survives a profile change instead
+of being rebuilt and handed to ``react-grid-layout`` as a new prop.
 
-Derived state in a selector
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Notice the third defense, and the one to reach for first: ``areLayoutsEqual``
+compares layouts field by field, and ``setLayout((prev) => equal ? prev :
+next)`` returns the *previous* array when nothing moved. React bails out of a
+re-render when ``useState`` is set to the identical reference. Structural
+comparison plus returning the old reference is exactly what ``useShallow``
+does for selectors, applied here at component scope.
 
-.. code:: tsx
-
-   const hasActiveMonitors = useMonitorStore((state) =>
-     state.monitors.some(m => !m.deleted)
-   );
-
-Cross-store sequence
-~~~~~~~~~~~~~~~~~~~~
-
-.. code:: tsx
-
-   const resetApp = () => {
-     useProfileStore.getState().clearProfiles();
-     useDashboardStore.getState().resetDashboard();
-     useMonitorStore.getState().clearCache();
-   };
-
-Conditional update
-~~~~~~~~~~~~~~~~~~
-
-.. code:: tsx
-
-   addMonitor: (monitor) =>
-     set((state) => {
-       if (state.monitors.some(m => m.id === monitor.id)) {
-         return state;  // no-op
-       }
-       return { monitors: [...state.monitors, monitor] };
-     }),
+Reach for refs only after the cheaper move fails: select a primitive.
+``currentProfileId`` is a string, ``isEditing`` is a boolean, and neither can
+ever be a stale reference.

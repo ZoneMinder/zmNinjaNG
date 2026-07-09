@@ -1,1040 +1,756 @@
 Shared Services and Reusable Components
 =======================================
 
-Shared utilities, services, and reusable components in zmNinjaNg, with
-their consumers.
+Code that more than one page needs lives in four places: ``lib/`` for pure
+utilities with no React and no store imports, ``services/`` for platform
+bridges, ``hooks/`` for React-specific logic, and ``components/ui`` plus
+``components/common`` for shared components. This chapter walks the pieces
+that carry behavior worth explaining. Feature components that belong to one
+screen are in :doc:`05-component-architecture`; the API layer is in
+:doc:`07-api-and-data-fetching`.
 
-Shared Services (lib/)
-----------------------
-
-The ``lib/`` directory contains platform-agnostic utilities.
+Shared Services (lib/ and services/)
+------------------------------------
 
 Logger (``lib/logger.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Structured logging system with sanitization and component-specific
-helpers.
-
-**Features:**
-
-- Log levels: DEBUG, INFO, WARN, ERROR, NONE
-- Automatic sanitization of passwords, tokens, and sensitive data
-- Component-specific logger methods (e.g., ``log.api()``,
-  ``log.profile()``, ``log.download()``)
-- Centralized log storage for debug UI (``/logs`` page)
-
-**Implementation:**
+Structured logging with sanitization and component-scoped helpers. Every
+entry goes to ``useLogStore`` (which backs the ``/logs`` page) and, where
+the platform allows, to a file (see Log File below).
 
 .. code:: typescript
 
    import { log, LogLevel } from '../lib/logger';
 
-   // Basic logging
-   log.info('User logged in', { username: 'john' });
-   log.error('Failed to fetch', { endpoint: '/api/monitors' }, error);
-
-   // Component-specific (preferred)
    log.api('Fetching monitors', LogLevel.INFO, { endpoint: '/monitors.json' });
    log.download('Download started', LogLevel.INFO, { filename: 'video.mp4' });
    log.profileService('Switching profile', LogLevel.INFO, { from: 'A', to: 'B' });
 
-**Available Component Loggers:**
+Component helpers beat the bare ``log.info`` / ``log.error`` because the
+Logs page filters by component. The set comes from the ``componentLoggers``
+array in ``lib/logger.ts``; adding one means appending to that array and to
+the matching ``Logger`` class field. Levels are DEBUG, INFO, WARN, ERROR,
+NONE.
 
-- ``api``, ``app``, ``auth``, ``crypto``, ``dashboard``, ``discovery``,
-  ``download``
-- ``errorBoundary``, ``eventCard``, ``eventDetail``, ``eventMontage``
-- ``http``, ``imageError``, ``kiosk``, ``monitor``, ``monitorCard``,
-  ``monitorDetail``, ``montageMonitor``
-- ``navigation``, ``notificationHandler``, ``notifications``,
-  ``notificationSettings``
-- ``profile``, ``profileForm``, ``profileService``, ``profileSwitcher``
-- ``push``, ``queryCache``, ``secureImage``, ``secureStorage``,
-  ``server``, ``sslTrust``, ``time``, ``timeline``
-- ``videoMarkers``, ``videoPlayer``, ``zmsEventPlayer``
+``lib/log-sanitizer.ts`` strips passwords and tokens before an entry is
+stored. It recognizes field names, not free text, which is why values belong
+in the context object rather than interpolated into the message.
 
-The list is the source of truth in ``app/src/lib/logger.ts``
-(``componentLoggers`` array). Adding a new logger means appending to
-that array and to the matching ``Logger`` class field.
-
-**Used By:** Entire application (all components, stores, API functions)
-
---------------
+**Used by:** the whole app. Never call ``console.*`` directly.
 
 Global Error Sinks (``lib/global-error-handlers.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Window-level listeners for ``unhandledrejection`` and ``error`` that route
-async failures outside React Query and try/catch into the logger, so they
-appear on the Logs page and in exported log files. ``main.tsx`` calls
-``installGlobalErrorHandlers()`` once before React renders. The listeners
-log via ``log.app()`` at ``LogLevel.ERROR`` with the rejection reason or
-error message, source location, and stack, truncated to
-``LOGGING.maxStackLength`` characters (4000). They never call
-``preventDefault``, so browser console reporting is unchanged.
-``uninstallGlobalErrorHandlers()`` removes the listeners; tests use it.
-
-**Used By:** ``main.tsx`` (startup)
-
---------------
+Window-level listeners for ``unhandledrejection`` and ``error`` route the
+async failures that escape React Query and try/catch into the logger, so
+they still reach the Logs page and exported log files. ``main.tsx`` calls
+``installGlobalErrorHandlers()`` once before React renders. Each listener
+logs via ``log.app()`` at ``LogLevel.ERROR`` with the reason, source
+location, and stack, truncated to ``LOGGING.maxStackLength`` characters
+(4000). They never call ``preventDefault``, so browser console reporting is
+unchanged. ``uninstallGlobalErrorHandlers()`` removes them; tests use it.
 
 HTTP Client (``lib/http.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Platform-agnostic HTTP request abstraction that works on Web, iOS,
-Android, and Desktop.
-
-``lib/http.ts`` is the public facade and the only import path consumers
-use. It builds the final URL, dispatches to a platform adapter, validates
-the status, and logs the request. The internals live in ``lib/http/``:
-``types.ts`` (request/response/error shapes), ``encoding.ts`` (body
-serialization, base64/byte conversion), ``timeout.ts`` (abort-signal
-composition, native timeout race), ``logging.ts`` (request IDs,
-correlation tags), and one adapter per platform (``adapter-native.ts``,
-``adapter-electron.ts``, ``adapter-web.ts``).
-
-**Features:**
-
-- Automatic platform detection (Capacitor, Electron, or Web)
-- CORS handling via proxy in development
-- Request/response logging via logger
-- Token injection for authentication
-- Support for multiple response types (json, blob, arraybuffer, text)
-
-**Implementation:**
+One request abstraction over four runtimes. ``lib/http.ts`` is the facade
+and the only import path consumers use: it builds the URL, dispatches to a
+platform adapter, validates the status, and logs the request. Internals sit
+in ``lib/http/``: ``types.ts`` (request/response/error shapes),
+``encoding.ts`` (body serialization, base64/byte conversion), ``timeout.ts``
+(abort-signal composition, native timeout race), ``logging.ts`` (request IDs,
+correlation tags), and one adapter per platform.
 
 .. code:: typescript
 
-   import { httpGet, httpPost, httpPut, httpDelete } from '../lib/http';
+   import { httpGet, httpPost } from '../lib/http';
 
-   // GET request
    const data = await httpGet<MonitorsResponse>('/api/monitors.json');
+   await httpPost('/api/states/change.json', { monitorId: '1', newState: 'Alert' });
+   await httpGet('/api/events.json', { token: accessToken, params: { limit: 50 } });
+   const blob = await httpGet<Blob>('/video.mp4', { responseType: 'blob' });
 
-   // POST with body
-   await httpPost('/api/states/change.json', {
-     monitorId: '1',
-     newState: 'Alert'
-   });
+Web uses ``fetch()`` plus a dev proxy (see Proxy URL Utilities). Mobile uses
+``CapacitorHttp``, which bypasses the WebView's CORS enforcement entirely.
+Electron bridges the request over IPC (``electron/preload.cjs``) to the main
+process, which performs it with Electron's ``net`` module, again avoiding
+renderer CORS.
 
-   // With auth token
-   await httpGet('/api/events.json', {
-     token: accessToken,
-     params: { limit: 50 }
-   });
+Self-signed certificate handling is not part of this module, because the
+adapters differ in how they surface TLS errors. On mobile a native plugin
+owns it (see SSL Trust); on Electron and web the user must add the CA to the
+system trust store.
 
-   // Blob response (for downloads)
-   const blob = await httpGet<Blob>('/video.mp4', {
-     responseType: 'blob'
-   });
-
-**Platform Implementations:**
-
-- **Web**: Uses ``fetch()`` with standard CORS handling
-- **Mobile (Capacitor)**: Uses ``CapacitorHttp`` for native networking
-- **Desktop (Electron)**: Bridges the request over IPC
-  (``electron/preload.cjs``) to the main process, which performs it with
-  Electron's ``net`` module, avoiding renderer CORS
-
-**SSL Trust:** On mobile, the native Capacitor plugin handles SSL trust
-(see SSL Trust section below). On Electron desktop, the user must add
-the CA to the system trust store.
-
-**Used By:** API functions (``api/``), download utilities, all network
-requests
-
---------------
+**Used by:** every module in ``api/``, the download service, and anything
+that touches the network. Raw ``fetch()`` and ``axios`` are banned.
 
 SSL Trust (``lib/security/ssl-trust.ts``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Controls whether the app accepts self-signed/untrusted HTTPS certificates
-using TOFU (Trust On First Use) certificate pinning. The setting is
-profile-scoped (``allowSelfSignedCerts`` + ``trustedCertFingerprint`` in
-``ProfileSettings``) and disabled by default.
+Most ZoneMinder installs sit behind a self-signed certificate, so the app
+has to trust a certificate the OS does not. It does that with TOFU (Trust
+On First Use) pinning rather than a blanket "accept anything" switch: the
+first connection shows the user the certificate's SHA-256 fingerprint, and
+every connection afterward is validated against the fingerprint the user
+accepted. The setting is profile-scoped (``allowSelfSignedCerts`` and
+``trustedCertFingerprint`` in ``ProfileSettings``) and off by default.
 
-**TOFU Flow:**
+The user enables self-signed certificates and connects.
+``getServerCertFingerprint(url)`` fetches the server's leaf certificate,
+``CertTrustDialog`` shows its SHA-256 fingerprint, subject, issuer, and
+expiry, and on accept the fingerprint is written to
+``ProfileSettings.trustedCertFingerprint``. Every later connection validates
+against it and rejects a mismatch.
 
-1. User enables self-signed certs and connects to a server
-2. App fetches the server's TLS certificate via ``getServerCertFingerprint()``
-3. A dialog (``CertTrustDialog``) shows the cert's SHA-256 fingerprint
-4. If the user accepts, the fingerprint is stored in
-   ``ProfileSettings.trustedCertFingerprint``
-5. All subsequent connections validate the server cert against the stored
-   fingerprint, mismatches are rejected
-
-**Platform Implementations:**
-
-- **Mobile (iOS/Android)**: Uses a custom Capacitor plugin (``SSLTrust``)
-  registered in ``src/plugins/ssl-trust/``. On Android,
-  ``onReceivedSslError`` extracts the cert via ``SslCertificate.saveState()``,
-  computes SHA-256, and calls ``proceed()`` only on fingerprint match, never
-  without validation. The WebView handler is only installed when a fingerprint
-  is set (via ``setTrustedFingerprint()``). HTTP requests use a
-  ``TrustManager`` that validates fingerprints. On iOS, both ``URLProtocol``
-  and ``WKNavigationDelegate`` validate cert fingerprints via CommonCrypto
-  SHA-256.
-- **Desktop (Electron) and Web**: No-op (Chromium enforces certificate
-  validation). Users must add the CA to the system trust store.
-
-**Plugin Methods:**
-
-- ``enable()`` / ``disable()``: activate/deactivate the TrustManager
-  (HTTP requests). Does not install the WebView handler.
-- ``setTrustedFingerprint({ fingerprint })``: pass the pinned fingerprint.
-  Installs the WebView SSL handler only when fingerprint is non-null.
-- ``getServerCertFingerprint({ url })``: fetches the server's leaf
-  certificate and returns its SHA-256 fingerprint, subject, issuer, and
-  expiry.
-
-**Implementation:**
+The certificate fetch is the accepted risk: to read a certificate you must
+first complete a handshake with a server you do not yet trust, so during that
+one fetch the native layer accepts any certificate. Pinning cannot bootstrap
+itself otherwise.
 
 .. code:: typescript
 
    import { applySSLTrustSetting, getServerCertFingerprint } from '../lib/security/ssl-trust';
 
-   // Enable with fingerprint (normal operation)
+   // Normal operation: trust exactly this fingerprint.
    await applySSLTrustSetting(true, storedFingerprint);
 
-   // Fetch cert for TOFU dialog
+   // Fetch the cert for the TOFU dialog. No fingerprint yet, so this enables
+   // trust for HTTP requests only and does not install the WebView handler.
    const certInfo = await getServerCertFingerprint('https://zm.example.com');
-   // certInfo.fingerprint = "AB:CD:12:..."
 
-   // Enable trust-all for HTTP only (no WebView handler, used during cert fetch)
-   await applySSLTrustSetting(true);
+   // Pin (or unpin, with null) after the user decides.
+   await setTrustedFingerprint(certInfo.fingerprint);
 
-**Bootstrap Order:** ``bootstrapSSLTrust()`` in ``stores/profile-bootstrap.ts``
-runs before ``bootstrapAuth()``. If ``allowSelfSignedCerts`` is true but
-``trustedCertFingerprint`` is null (upgrade migration), it fetches the cert
-and signals the UI via ``lib/security/cert-trust-event.ts`` to show the trust dialog
-in ``AppLayout``.
+The three plugin methods behind those calls (``plugins/ssl-trust/definitions.ts``):
+``enable()`` / ``disable()`` activate the ``TrustManager`` used by HTTP
+requests and do not touch the WebView; ``setTrustedFingerprint({ fingerprint })``
+installs the WebView SSL handler only when the fingerprint is non-null;
+``getServerCertFingerprint({ url })`` returns the leaf certificate's
+fingerprint, subject, issuer, and expiry.
 
-**Key Files:**
+On Android, ``onReceivedSslError`` extracts the certificate via
+``SslCertificate.saveState()``, computes SHA-256, and calls ``proceed()``
+only on a fingerprint match, never unconditionally; HTTP requests go through
+a ``TrustManager`` that validates fingerprints. On iOS, both ``URLProtocol``
+and ``WKNavigationDelegate`` validate with CommonCrypto SHA-256.
 
-- ``lib/security/ssl-trust.ts``: JS interface
-- ``lib/security/cert-trust-event.ts``: event bridge for bootstrap-to-UI TOFU dialog
-- ``plugins/ssl-trust/``: Capacitor plugin definitions
-- ``components/CertTrustDialog.tsx``: trust dialog component
-- ``android/.../SSLTrustPlugin.java``: Android native implementation
-- ``ios/.../SSLTrustPlugin.swift``: iOS native implementation
+Electron gets trust without pinning. ``applySSLTrustSetting`` forwards to
+``window.electronSsl.setTrustSelfSigned`` over IPC, and while that flag is on
+the main process accepts any invalid certificate, both for renderer loads (the
+``certificate-error`` handler) and for the ``net.fetch`` the HTTP bridge uses
+(``setCertificateVerifyProc``). It never sees a fingerprint, because
+``getServerCertFingerprint`` is native-only; ``electron/main.cjs`` records that
+as a hardening item for the experimental desktop shell. On web the call is a
+no-op: Chromium validates the certificate and the page cannot override it.
 
-**Used By:** ``stores/profile-bootstrap.ts``, ``pages/ProfileForm.tsx``,
-``components/settings/ConnectionSettings.tsx``,
-``components/layout/AppLayout.tsx`` (migration dialog)
+**Bootstrap order.** ``bootstrapSSLTrust()`` in
+``services/profile-bootstrap.ts`` runs before ``bootstrapAuth()``, because a
+login request to a self-signed server fails if trust is not already applied.
+When ``allowSelfSignedCerts`` is true but ``trustedCertFingerprint`` is null
+(a profile created before pinning existed), it fetches the certificate and
+signals the UI through ``lib/security/cert-trust-event.ts``, which
+``AppLayout`` listens to in order to show the trust dialog.
 
-**Known limitation: iOS rich-push images and self-signed servers.**
-Rich push notifications download their preview image via a Notification
+The pieces: ``lib/security/ssl-trust.ts`` (JS interface),
+``lib/security/cert-trust-event.ts`` (bootstrap-to-UI bridge),
+``plugins/ssl-trust/`` (plugin definitions and web stub),
+``components/CertTrustDialog.tsx``, ``components/CertTrustBanner.tsx``,
+``hooks/useCertTrustPrompt.ts``, ``android/.../SSLTrustPlugin.java``,
+``ios/App/App/SSLTrustPlugin.swift``.
+
+**Used by:** ``services/profile-bootstrap.ts``, ``pages/ProfileForm.tsx``,
+``pages/Profiles.tsx``, ``components/settings/AdvancedSection.tsx``,
+``components/layout/AppLayout.tsx``, ``hooks/useCertTrustPrompt.ts``,
+``components/CertTrustDialog.tsx``.
+
+Known limitation: iOS rich-push images on self-signed servers
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Rich push notifications download their preview image in a Notification
 Service Extension (``ios/App/ImageNotification/NotificationService.swift``),
-which runs as a separate OS process from the main app. It downloads with a
-plain ``URLSession.shared.downloadTask`` and has no ``URLSessionDelegate``.
+which iOS runs as a separate OS process from the main app. It downloads with
+a plain ``URLSession.shared.downloadTask`` and has no ``URLSessionDelegate``.
 The pinned fingerprint (``SSLTrustPlugin.trustedFingerprint``) is a static
-Swift variable in the main app's process and the ``SSLTrustURLProtocol``
-that consults it is only registered there, so neither is reachable from the
+Swift variable in the main app's process, and the ``SSLTrustURLProtocol``
+that consults it is registered only there, so neither is reachable from the
 extension. On a self-signed server the image download's TLS handshake fails
-and the push arrives without its image (silently, the extension just
-delivers the notification unchanged). Fixing this needs an App Group (or a
-shared Keychain access group) so the extension can read the trusted
-fingerprint and validate the cert itself; neither the app's entitlements
-(``ios/App/App/App.entitlements``) nor the extension's currently declare
-one.
+and the push arrives without its image, silently: the extension just delivers
+the notification unchanged.
 
---------------
+Fixing this needs an App Group (or a shared Keychain access group) so the
+extension can read the fingerprint and validate the certificate itself.
+Neither the app's entitlements (``ios/App/App/App.entitlements``) nor the
+extension's declare one today.
+
+Never log or store secrets
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Two rules the security layer exists to enforce. Passwords and PINs never
+touch ``localStorage`` directly:
+
+.. code:: typescript
+
+   // Wrong: readable by anyone with filesystem access, and by browser extensions.
+   localStorage.setItem('password', password);
+
+   // Right: Keychain on iOS, Keystore on Android, encrypted localStorage on web.
+   import { setSecureValue } from '../lib/security/secureStorage';
+   await setSecureValue('password_profile_123', password);
+
+And credentials never appear in a log message:
+
+.. code:: typescript
+
+   // Wrong: the value lands in the Logs page and in exported log files.
+   log.auth('Login', LogLevel.DEBUG, { password, accessToken });
+
+   // Right: log that it happened, not what it was.
+   log.auth('Login successful', LogLevel.INFO, { username });
+   log.auth('Tokens received', LogLevel.DEBUG);
 
 Discovery (``services/discovery.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-ZoneMinder server discovery utility that probes for API endpoints and
-derives connection URLs.
-
-**Features:**
-
-- Automatic HTTPS/HTTP fallback for scheme-less URLs
-- Probes ``/zm/api`` and ``/api`` paths to find API endpoint
-- Derives ``portalUrl`` and ``cgiUrl`` from confirmed API location
-- Optional authentication to fetch accurate ``ZM_PATH_ZMS`` from server
-  config
-- Cancellable via AbortSignal
-- Skips redundant probes on connection errors (faster failure)
-
-**Implementation:**
-
-.. code:: typescript
-
-   import { discoverZoneminder, DiscoveryError } from '../services/discovery';
-
-   // Basic discovery (no auth)
-   const result = await discoverZoneminder('192.168.1.100');
-   // Returns: { portalUrl, apiUrl, cgiUrl }
-
-   // With credentials (fetches accurate ZMS path from server)
-   const result = await discoverZoneminder('myserver.com', {
-     username: 'admin',
-     password: 'secret'
-   });
-
-   // With cancellation support
-   const abortController = new AbortController();
-   try {
-     const result = await discoverZoneminder('192.168.1.100', {
-       signal: abortController.signal
-     });
-   } catch (error) {
-     if (error instanceof DiscoveryError && error.code === 'CANCELLED') {
-       console.log('Discovery was cancelled');
-     }
-   }
-
-   // Cancel from elsewhere
-   abortController.abort();
-
-**Error Codes:**
-
-- ``API_NOT_FOUND`` - No ZoneMinder API found at any probed path
-- ``PORTAL_UNREACHABLE`` - Server completely unreachable
-- ``CANCELLED`` - Discovery was cancelled via AbortSignal
-- ``UNKNOWN`` - Unexpected error
-
-A higher-level wrapper, ``discoverUrls``, bundles the common call pattern
-with iOS retry logic and an abort signal, so neither ``ProfileForm`` nor
-``Profiles`` need to duplicate that handling:
+Users type a hostname, not four URLs. Discovery probes for the API endpoint
+and derives ``portalUrl``, ``apiUrl``, and ``cgiUrl`` from wherever it finds
+one. It tries HTTPS before HTTP for a scheme-less input, probes ``/zm/api``
+then ``/api``, and skips the remaining probes on a connection error rather
+than a 404, since a refused connection means the host is wrong, not the path.
+Given credentials it also authenticates once, so it can read the real
+``ZM_PATH_ZMS`` from the server config instead of guessing the CGI path.
 
 .. code:: typescript
 
    import { discoverUrls } from '../services/discovery';
 
-   // Shared wrapper with iOS retry logic and abort signal
    const result = await discoverUrls(portalUrl, {
      credentials: { username, password },
      signal: abortController.signal,
      onClientCreated: (client) => setApiClient(client),
    });
-   // Returns: { portalUrl, apiUrl, cgiUrl }
+   // { portalUrl, apiUrl, cgiUrl }
 
-**Used By:** ``ProfileForm.tsx``, ``Profiles.tsx`` (both call
-``discoverUrls`` for profile creation/editing)
+``discoverUrls`` wraps the lower-level ``discoverZoneminder`` with the iOS
+retry logic and abort handling, so neither ``ProfileForm`` nor ``Profiles``
+duplicates it. Failures throw a ``DiscoveryError`` whose ``code`` is
+``API_NOT_FOUND``, ``PORTAL_UNREACHABLE``, ``CANCELLED``, or ``UNKNOWN``.
+``CANCELLED`` is the one to swallow: it means the user typed another
+character and the previous probe was aborted.
 
---------------
+**Used by:** ``pages/ProfileForm.tsx``, ``pages/Profiles.tsx``.
 
 Download Utilities (``services/download.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Cross-platform file download with progress tracking and cancellation
-support.
-
-**Features:**
-
-- Platform-specific implementations (Web, Mobile, Desktop)
-- Progress callbacks for UI updates
-- Cancellation via AbortSignal
-- Automatic file saving to appropriate locations
-- Mobile: Saves to Documents + Photo/Video library
-- Desktop: User selects save location
-- Web: Browser download
-
-**Implementation:**
+Cross-platform file download with progress and cancellation.
 
 .. code:: typescript
 
    import { downloadFile, downloadSnapshot } from '../services/download';
 
-   // Download a file with progress
    const abortController = new AbortController();
 
    await downloadFile('https://example.com/video.mp4', 'event-123.mp4', {
      signal: abortController.signal,
-     onProgress: (progress) => {
-       console.log(`${progress.percentage}% - ${progress.loaded}/${progress.total} bytes`);
-     },
+     onProgress: (progress) => setPercent(progress.percentage),
    });
 
-   // Cancel download
-   abortController.abort();
-
-   // Download monitor snapshot
    await downloadSnapshot(imageUrl, monitorName);
 
-**Platform Implementations:**
+Web builds a Blob and clicks an anchor, and Electron takes that same path: its
+renderer behaves like a regular browser here, so the module has no desktop
+branch. Mobile uses CapacitorHttp, then Filesystem, then the Media library. It
+keeps the payload as base64 all the way to Filesystem instead of converting to
+a Blob, because a Blob round-trip on a large event video is an out-of-memory
+crash on a phone.
 
-- **Web**: Blob + anchor download
-- **Mobile**: CapacitorHttp, Filesystem, then Media library
-- **Desktop (Electron)**: Chromium download to user-selected path
+Snapshot URLs must be normalized first
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-**Note:** Mobile uses base64 directly (not Blob conversion) to avoid
-out-of-memory errors on large video files.
+A ZMS URL with ``mode=jpeg`` and ``maxfps`` is a live MJPEG stream, not a
+file. It never ends, so an HTTP client waiting for the response body waits
+forever:
 
-**Used By:** MonitorCard, EventDetail, EventCard, MontageMonitor
+.. code:: typescript
 
---------------
+   const streamUrl = 'https://server/zm/cgi-bin/zms?monitor=1&mode=jpeg&maxfps=10&connkey=12345';
+   await downloadFile(streamUrl, 'snapshot.jpg');  // hangs indefinitely
+
+``convertToSnapshotUrl``, exported from the same module, rewrites the URL to
+request one frame. It treats a URL as ZMS when the path contains ``nph-zms``
+anywhere or ends with ``/zms``, returns anything else untouched, sets
+``mode=single``, and strips the
+streaming-only ``maxfps``, ``connkey``, ``buffer``, ``fps``, and the
+cache-busting ``_t`` and ``rand``. When the URL is a dev image-proxy wrapper
+it recurses into the wrapped ``url`` parameter first. ``downloadSnapshot``
+calls it for you; call it yourself if you hand a stream URL to
+``downloadFile``. :doc:`call-flows` traces the whole download.
+
+**Used by:** MonitorCard, MontageMonitor, and MonitorDetail for
+``downloadSnapshotFromElement``; EventMontageView and EventDetail for
+``downloadEventVideo``.
 
 Proxy URL Utilities (``lib/zm/proxy-utils.ts``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Utilities for wrapping URLs with development proxy to handle CORS.
-
-**Features:**
-
-- Automatically wraps external URLs with proxy in development mode
-- Preserves URLs in production
-- Platform-aware (only web development needs proxy)
-
-**Implementation:**
+In web development the Vite dev server runs on a different origin than the
+ZoneMinder server, so cross-origin images are blocked. These helpers wrap a
+URL with the dev image proxy when, and only when, that applies.
 
 .. code:: typescript
 
    import { wrapWithImageProxy, wrapWithImageProxyIfNeeded } from '../lib/zm/proxy-utils';
 
-   // Always wrap if proxy is enabled
-   const proxiedUrl = wrapWithImageProxy('https://zm.example.com/image.jpg');
-   // → 'http://localhost:3001/image-proxy?url=https%3A%2F%2Fzm.example.com%2Fimage.jpg'
+   wrapWithImageProxy('https://zm.example.com/image.jpg');
+   // 'http://localhost:3001/image-proxy?url=https%3A%2F%2Fzm.example.com%2Fimage.jpg'
 
-   // Conditionally wrap (checks if URL is external)
-   const url = wrapWithImageProxyIfNeeded('https://zm.example.com/image.jpg');
+   wrapWithImageProxyIfNeeded('https://zm.example.com/image.jpg');
 
-**Used By:** API functions (monitors, events), download utilities, HTTP
-client
+``wrapWithImageProxyIfNeeded`` checks ``Platform.shouldUseProxy`` first, so
+production, Electron, and native builds pass the URL through unchanged.
 
---------------
+**Used by:** API functions (monitors, events), download utilities, the HTTP
+client.
 
 Server Resolver (``lib/zm/server-resolver.ts``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Maps ZoneMinder ServerId values to per-server URLs for multi-server
-routing. In single-server setups the map is empty and all lookups return
-profile defaults.
-
-**Key functions:**
+A ZoneMinder install can spread monitors across several recording servers.
+Each monitor carries a ``ServerId``; this module maps that ID to the URLs of
+the server that actually holds the stream. In a single-server setup the map is
+empty and every lookup returns the profile's own URLs, so callers do not
+branch.
 
 .. code:: typescript
 
-   import {
-     buildServerMap,
-     resolveMonitorUrls,
-     getPortalUrlForMonitor,
-     getPortalUrlForEvent,
-     setServerMap,
-   } from '../lib/zm/server-resolver';
+   import { buildServerMap, setServerMap, resolveMonitorUrls } from '../lib/zm/server-resolver';
 
-   // Build the map from /servers.json response
-   const serverMap = buildServerMap(servers);
-   // Each entry contains: recordingUrl, portalPath, apiBaseUrl
+   const serverMap = buildServerMap(servers);   // from /servers.json
+   setServerMap(serverMap);                     // during bootstrap
 
-   // Store in module-level cache (called during bootstrap)
-   setServerMap(serverMap);
-
-   // Resolve URLs for a monitor by its ServerId
    const urls = resolveMonitorUrls(monitor.ServerId, serverMap, {
      portalUrl: profile.portalUrl,
      apiUrl: profile.apiUrl,
    });
 
-   // Quick lookups for list renderers
-   const portalUrl = getPortalUrlForMonitor(monitor.ServerId, profile.portalUrl);
-   const eventPortalUrl = getPortalUrlForEvent(monitorId, monitors, profile.portalUrl);
+Each map entry holds ``recordingUrl``, ``portalPath``, and ``apiBaseUrl``.
+``getPortalUrlForMonitor(serverId, fallback)`` and
+``getPortalUrlForEvent(monitorId, monitors, fallback)`` are the quick lookups
+list renderers use.
 
-**Caching:** The module maintains a module-level cache updated via
-``setServerMap()`` during bootstrap and cleared on profile switch.
-React components access the cache reactively via ``useSyncExternalStore``
-through the ``useServerUrls`` hook.
+The map is a module-level variable, not a store, because ``api/`` modules read
+it outside React. Components still need to re-render when bootstrap changes
+it, so the ``useServerUrls`` hook bridges the two with ``useSyncExternalStore``,
+a React hook that subscribes a component to a cache living outside React and
+re-renders it when that cache signals a change. Without the bridge a montage
+tile would build its stream URL from the profile default on first paint and
+never correct itself once the real server map arrived.
 
-**Fallback:** When no servers exist or a ServerId is not found in the
-map, all functions return the profile's default URLs.
-
-**Used By:** ``useServerUrls`` hook, ``useMonitorStream``, Server page,
-MonitorDetail, EventDetail
-
---------------
+**Used by:** ``hooks/useServerUrls.ts``, ``hooks/useMonitorStream.ts``, the
+Server page, MonitorDetail, EventDetail.
 
 URL Builder (``lib/zm/url-builder.ts``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Centralized URL construction for ZoneMinder endpoints.
-
-**Features:**
-
-- Stream URLs with authentication
-- Event image/video URLs
-- Control URLs for PTZ
-- Consistent parameter handling
-- Cache busting support
-- Multi-port routing via ``applyMultiPort``
-
-**Multi-port helper:**
+Every ZoneMinder URL the app constructs comes from here: streams
+(``getMonitorStreamUrl``), event images (``getEventImageUrl``), event videos
+(``getEventVideoUrl``), the ZMS event endpoint (``getEventZmsUrl``), PTZ
+control (``getMonitorControlUrl``), ZMS control (``getZmsControlUrl``), and
+the Go2RTC endpoints.
 
 .. code:: typescript
 
-   import { applyMultiPort } from '../lib/zm/url-builder';
+   import { getMonitorStreamUrl } from '../lib/zm/url-builder';
 
-   // Shared helper for per-monitor port routing
-   // Formula: port = minStreamingPort + parseInt(monitorId)
-   const url = applyMultiPort('https://zm.example.com/cgi-bin/nph-zms', '4', 7100);
-   // → URL with port 7104
-
-All URL builder functions (``getMonitorStreamUrl``, ``getEventImageUrl``,
-``getEventVideoUrl``, ``getEventZmsUrl``) accept optional
-``minStreamingPort`` and ``monitorId`` parameters. When both are
-provided, the output URL's port is rewritten using the multi-port
-formula.
-
-**Implementation:**
-
-.. code:: typescript
-
-   import {
-     getMonitorStreamUrl,
-     getEventImageUrl,
-     getEventVideoUrl
-   } from '../lib/zm/url-builder';
-
-   // Monitor stream
    const streamUrl = getMonitorStreamUrl(cgiUrl, monitorId, {
      token: accessToken,
      mode: 'jpeg',
      maxfps: 10,
      connkey: 12345,
+     minStreamingPort: 7100,   // with monitorId '4', rewrites the port to 7104
    });
 
-   // Event thumbnail
-   const imageUrl = getEventImageUrl(portalUrl, eventId, frameNumber, {
-     token: accessToken,
-     width: 320,
-     height: 240,
-   });
+**Multi-port routing.** ZoneMinder can serve each monitor's stream on its own
+port, computed as ``minStreamingPort + parseInt(monitorId)``. A private
+``applyMultiPort`` helper rewrites the port, and all six builders call it. Four
+of them (``getEventImageUrl``, ``getEventVideoUrl``, ``getEventZmsUrl``,
+``getZmsControlUrl``) take both ``minStreamingPort`` and ``monitorId`` as
+optional fields on their options object. ``getMonitorStreamUrl`` and
+``getMonitorControlUrl`` already take ``monitorId`` positionally and read only
+``minStreamingPort`` from options. With both present the
+port is rewritten; with either missing the URL keeps the portal's port. Do not
+compute the port at a call site: read it through ``lib/monitor/multiport.ts``
+below, which honors the user's opt-out.
 
-   // Event video download
-   const videoUrl = getEventVideoUrl(portalUrl, eventId, {
-     token: accessToken,
-     format: 'mp4',
-   });
-
-   // With multi-port routing
-   const streamUrl = getMonitorStreamUrl(cgiUrl, monitorId, {
-     token: accessToken,
-     mode: 'jpeg',
-     connkey: 12345,
-     minStreamingPort: 7100,
-     monitorId: '4',
-   });
-
-**Used By:** API functions (``api/events.ts``, ``api/monitors.ts``),
-hooks (``useStreamLifecycle``), and stream/playback components.
-
---------------
+**Used by:** ``api/events.ts``, ``api/monitors.ts``,
+``hooks/useStreamLifecycle.ts``, and the stream and playback components.
 
 Delayed CMD_QUIT (``lib/zm/zms-quit.ts``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Schedules a fire-and-forget CMD_QUIT for a zms connkey after a grace
-delay (``ZM_INTEGRATION.cmdQuitGraceMs``, 150 ms). Pending quits are
-tracked per connkey so a remount that reuses the connkey (React
-StrictMode's dev double-mount) cancels the quit instead of killing a
-stream the surviving mount is still using. A fresh mount generates a
-new connkey, so its cancel never matches and the abandoned stream's
-quit still fires.
+Closing a ZMS stream means sending ``CMD_QUIT`` for its connkey, or the server
+leaves an ``nph-zms`` process running. Sending it immediately on unmount breaks
+development, because React's ``StrictMode`` deliberately mounts every
+component, unmounts it, and mounts it again on the first render of a dev build,
+to surface effects that are not cleanup-safe. That second mount reuses the
+connkey the first mount's teardown just killed.
+
+So the quit is scheduled after a grace delay (``ZM_INTEGRATION.cmdQuitGraceMs``,
+150 ms) and tracked per connkey. A remount reusing the connkey cancels the
+pending quit; a genuinely fresh mount generates a new connkey, so its cancel
+matches nothing and the abandoned stream's quit still fires.
 
 .. code:: typescript
 
    import { sendDelayedCmdQuit, cancelPendingQuit } from '../lib/zm/zms-quit';
 
-   // On mount: cancel a quit left over from a dev remount
-   cancelPendingQuit(connkey);
+   cancelPendingQuit(connkey);   // on mount: undo a dev-remount quit
 
-   // On unmount: schedule the quit; pass a timeout so teardown against
-   // an unreachable server cannot hang
+   // On unmount. The timeout stops teardown hanging on an unreachable server.
    sendDelayedCmdQuit(controlUrl, connkey, {
      timeoutMs: apiTimeoutSeconds > 0 ? apiTimeoutSeconds * 1000 : undefined,
      logContext: { eventId },
    });
 
-**Used By:** ``ZmsEventPlayer``, ``EventThumbnailHoverPreview``.
+The request is fire-and-forget and its failures log at DEBUG, since the
+connection may already be gone by the time the timer runs.
 
---------------
+**Used by:** ``components/events/ZmsEventPlayer.tsx``,
+``components/events/EventThumbnailHoverPreview.tsx``.
 
 Multi-port Resolution (``lib/monitor/multiport.ts``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The server's ``ZM_MIN_STREAMING_PORT`` is fetched once during profile
-bootstrap and stored on the profile as ``minStreamingPort``. The
-per-profile setting ``forceDisableMultiPort`` lets a user opt out for
-servers whose per-monitor ports are not reachable. These helpers are the
-only sanctioned way to read the effective base port; when the override is
-on they return ``undefined``, so ``applyMultiPort`` becomes a no-op and
-URLs use the portal's default port.
+bootstrap and stored on the profile as ``minStreamingPort``. The per-profile
+setting ``forceDisableMultiPort`` lets a user opt out for servers whose
+per-monitor ports are unreachable. These two helpers are the only sanctioned
+way to read the effective base port: with the override on they return
+``undefined``, ``applyMultiPort`` becomes a no-op, and URLs fall back to the
+portal's default port.
 
 .. code:: typescript
 
-   import {
-     resolveMinStreamingPort,
-     getEffectiveMinStreamingPort,
-   } from '../lib/monitor/multiport';
+   import { resolveMinStreamingPort, getEffectiveMinStreamingPort } from '../lib/monitor/multiport';
 
-   // In React components (settings already in scope via useCurrentProfile)
-   const port = resolveMinStreamingPort(
-     currentProfile?.minStreamingPort,
-     settings.forceDisableMultiPort,
-   );
+   // In React, where useCurrentProfile already put settings in scope.
+   const port = resolveMinStreamingPort(currentProfile?.minStreamingPort, settings.forceDisableMultiPort);
 
-   // In services / non-React code (reads both stores by profile id)
+   // In services and other non-React code, which read both stores by profile id.
    const port = getEffectiveMinStreamingPort(currentProfileId);
 
-Pass the result as ``minStreamingPort`` to the URL builders. Never read
-``currentProfile.minStreamingPort`` directly at a call site, or the
-toggle is bypassed.
-
---------------
+Pass the result as ``minStreamingPort`` to the URL builders. Reading
+``currentProfile.minStreamingPort`` at a call site bypasses the toggle.
 
 Event Icons (``lib/event/event-icons.ts``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Maps event causes from ZoneMinder to Lucide icons for visual display.
-
-**Features:**
-
-- Exact match for known causes (Motion, Alarm, Signal, Linked, etc.)
-- Prefix matching for cause variants (e.g., “Motion:All”,
-  “Motion:Person” → Motion icon)
-- Fallback to Circle icon for unknown causes
-
-**Implementation:**
+Maps a ZoneMinder event cause to a Lucide icon. ZoneMinder writes variants
+like ``Motion:All`` and ``Motion:Person``, so the lookup tries a prefix match
+before falling back to the generic ``Circle``.
 
 .. code:: typescript
 
    import { getEventCauseIcon, hasSpecificCauseIcon } from '../lib/event/event-icons';
 
-   // Get icon component for a cause
-   const Icon = getEventCauseIcon('Motion');  // Returns Move icon
-   const Icon2 = getEventCauseIcon('Motion:Person');  // Also returns Move icon (prefix match)
-   const Icon3 = getEventCauseIcon('Unknown');  // Returns Circle icon (fallback)
+   getEventCauseIcon('Motion:Person');  // Move (prefix match)
+   getEventCauseIcon('Unknown');        // Circle (fallback)
+   hasSpecificCauseIcon('Custom');      // false
 
-   // Check if cause has a specific (non-fallback) icon
-   const hasIcon = hasSpecificCauseIcon('Motion');  // true
-   const hasIcon2 = hasSpecificCauseIcon('Custom');  // false
+Mapped causes: ``Motion`` to Move, ``Alarm`` to Bell, ``Signal`` to Wifi,
+``Linked`` to Link, ``Forced Web`` to Hand, ``Continuous`` to Video.
 
-**Mapped Causes:**
-
-- ``Motion`` → Move icon
-- ``Alarm`` → Bell icon
-- ``Signal`` → Wifi icon
-- ``Linked`` → Link icon
-- ``Forced Web`` → Hand icon
-- ``Continuous`` → Video icon
-
-**Used By:** EventCard, event list components
-
---------------
+**Used by:** EventCard and the event list components.
 
 Relative Time Labels (``lib/relative-time.ts``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Event list cards and the event detail screen show a compact "how long ago" label.
-``Intl.RelativeTimeFormat`` with ``style: 'narrow'`` produces abbreviated, localized
-output ("40m ago", "3h ago") without a date-fns locale map. The BCP-47 language tag
-from the app's i18n state is passed directly. Some locales render the narrow form as
-a bare signed number (French gives "-40 min", which reads as negative rather than
-"ago"), so when the narrow output starts with a sign the helper falls back to
-``style: 'short'``, which spells the direction ("il y a 40 min"). Under 60 000 ms
-(``RELATIVE_TIME_JUST_NOW_MS``) the label returns ``t('events.now')`` instead of a
-numeric distance. ``isWithinDays`` gates the chip: only events within 7 days
-(``RELATIVE_TIME_LIST_WINDOW_DAYS``) receive a relative label in the list view.
+Event cards and the event detail screen show a compact "how long ago" label.
+``Intl.RelativeTimeFormat`` with ``style: 'narrow'`` produces abbreviated,
+localized output ("40m ago", "3h ago") without a date-fns locale map; the
+BCP-47 tag from the app's i18n state passes straight through.
 
-.. code-block:: typescript
+Some locales render the narrow form as a bare signed number. French gives
+"-40 min", which reads as a negative quantity rather than a time in the past,
+so when the narrow output starts with a sign the helper falls back to
+``style: 'short'``, which spells the direction ("il y a 40 min"). Under
+60 000 ms (``RELATIVE_TIME_JUST_NOW_MS``) the label is ``t('events.now')``.
+
+.. code:: typescript
 
    import { isWithinDays, formatEventRelative } from '../lib/relative-time';
 
-   // True if date is between now and `days` days before now (inclusive).
    if (isWithinDays(event.startTime, RELATIVE_TIME_LIST_WINDOW_DAYS)) {
-     // show relative chip
+     const label = formatEventRelative(date, i18n.language, t);
    }
 
-   // Returns t('events.now') when |diffMs| < RELATIVE_TIME_JUST_NOW_MS;
-   // otherwise a narrow "Nm ago" string via Intl.RelativeTimeFormat.
-   const label = formatEventRelative(date, i18n.language, t);
-
-**Consumer behavior:**
-
-``EventCard`` renders an ``Hourglass`` chip (``data-testid="event-relative-time"``)
-only when ``isWithinDays(startTime, RELATIVE_TIME_LIST_WINDOW_DAYS)`` is true.
-Events older than 7 days show no chip.
-
+``EventCard`` renders an ``Hourglass`` chip
+(``data-testid="event-relative-time"``) only inside the 7-day window
+(``RELATIVE_TIME_LIST_WINDOW_DAYS``), so older events show no chip.
 ``EventDetail`` always shows a muted relative line under the Time value
 (``data-testid="event-detail-relative-time"``), regardless of age.
 
-**Used By:** EventCard, EventDetail
-
---------------
+**Used by:** EventCard, EventDetail.
 
 Time Utilities (``lib/time.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Date/time formatting and timezone conversion for ZoneMinder API.
-
-**Features:**
-
-- Server-compatible ISO format
-- Local datetime formatting for inputs
-- Timezone conversion
-- Duration formatting
-
-**Implementation:**
+Machine-facing date formatting: what the ZoneMinder API accepts and what an
+``<input type="datetime-local">`` accepts.
 
 .. code:: typescript
 
    import { formatForServer, formatLocalDateTime } from '../lib/time';
 
-   // For API requests (server timezone)
-   const serverTime = formatForServer(new Date());
-   // → '2024-01-10 15:30:45'
+   formatForServer(new Date());      // '2024-01-10 15:30:45'
+   formatLocalDateTime(new Date());  // '2024-01-10T15:30' (no seconds)
 
-   // For datetime-local inputs
-   const localTime = formatLocalDateTime(new Date());
-   // → '2024-01-10T15:30:45'
+Nothing a user reads comes from this module. User-facing dates go through
+``useDateTimeFormat()`` in React, or ``formatAppDate`` / ``formatAppTime`` /
+``formatAppDateTime`` from ``lib/format-date-time.ts`` outside it, because
+those honor the per-profile ``dateFormat`` and ``timeFormat`` settings. For a
+short weekday label use ``fmtWeekday`` (hook) or ``formatAppWeekday``
+(standalone); weekday has no user preset, but routing it through the same
+layer keeps every user-visible date on one seam. Never call date-fns
+``format()`` with a hard-coded pattern for output a user will see, including
+canvas rendering, tooltips, and scrubber overlays.
 
-For user-facing date/time display, use ``useDateTimeFormat()`` (React) or
-``formatAppDate``/``formatAppTime``/``formatAppDateTime`` from
-``lib/format-date-time.ts`` outside React. These honor the per-profile
-``dateFormat`` / ``timeFormat`` settings. For a short weekday label use
-``fmtWeekday`` (hook) or ``formatAppWeekday`` (standalone); weekday has no
-user preset, so it routes through the same layer for consistency. Never call
-``date-fns`` ``format()`` with hard-coded patterns for user-visible output.
-
-**Used By:** API functions, Events page, filters, dashboard widgets
-
---------------
+**Used by:** API functions, the Events page, filters, dashboard widgets.
 
 Crypto Utilities (``lib/security/crypto.ts``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Encryption/decryption for secure password storage (web platform).
-
-**Features:**
-
-- AES-256-GCM encryption
-- Secure key derivation
-- Browser SubtleCrypto API
-- Base64 encoding for storage
-
-**Implementation:**
+AES-256-GCM encryption over the browser's SubtleCrypto, used by the web
+fallback of secure storage. No key parameter appears at the call site: 16 bytes
+of random key material are generated once per install and kept in
+``localStorage``, and every ``encrypt`` or ``decrypt`` re-derives the
+``CryptoKey`` from that material with PBKDF2 (100,000 iterations, the fixed
+salt ``zmng-v1``). The material sits next to the ciphertext it protects, so
+this defeats a plaintext grep of ``localStorage``, not an attacker who can read
+it.
 
 .. code:: typescript
 
    import { encrypt, decrypt } from '../lib/security/crypto';
 
-   // Encrypt, key is internal (derived once per app install and cached)
-   const encrypted = await encrypt('my-password');
-   // → Base64 string (IV + ciphertext)
-
-   // Decrypt
+   const encrypted = await encrypt('my-password');  // base64: IV + ciphertext
    const password = await decrypt(encrypted);
-   // → 'my-password'
 
-The encryption key is generated and persisted internally (no key parameter is
-required at the call site). A ``decryptLegacy()`` helper exists for migrating
-data encrypted with an older key derivation; new code should use ``decrypt()``.
+``decryptLegacy()`` reads data written by an older key derivation and exists
+only for migration. ``isCryptoAvailable()`` reports whether SubtleCrypto is
+present, which it is not on an insecure origin.
 
-**Used By:** ProfileService, secure storage (web fallback)
-
---------------
+**Used by:** ``lib/security/secureStorage.ts`` (its web fallback) and
+``stores/auth.ts``.
 
 Secure Storage (``lib/security/secureStorage.ts``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Platform-specific secure storage abstraction.
-
-**Features:**
-
-- **Mobile**: Native keychain/keystore via
-  ``@aparajita/capacitor-secure-storage``
-- **Web**: Encrypted localStorage via crypto utilities
-- Consistent API across platforms
-
-**Implementation:**
+One API over the iOS Keychain, the Android Keystore
+(``@aparajita/capacitor-secure-storage``), and encrypted localStorage on web.
 
 .. code:: typescript
 
-   import { saveSecure, getSecure, removeSecure } from '../lib/security/secureStorage';
+   import { setSecureValue, getSecureValue, removeSecureValue } from '../lib/security/secureStorage';
 
-   // Save password
-   await saveSecure('password_profile_123', 'my-secure-password');
+   await setSecureValue('password_profile_123', 'my-secure-password');
+   const password = await getSecureValue('password_profile_123');  // string | null
+   await removeSecureValue('password_profile_123');
 
-   // Retrieve password
-   const password = await getSecure('password_profile_123');
+``hasSecureValue(key)`` tests presence, ``clearSecureStorage()`` wipes every
+key, and ``getStorageInfo()`` reports which backend is active.
 
-   // Delete password
-   await removeSecure('password_profile_123');
-
-**Used By:** ProfileService (password management)
-
---------------
+**Used by:** ProfileService (passwords), ``lib/kioskPin.ts`` (PIN hash and
+salt).
 
 Platform Detection (``lib/platform.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Platform detection utilities.
-
-**Features:**
-
-- Detects Electron (desktop), Capacitor (mobile), or Web
-- Proxy mode detection (development)
-- Consistent platform checks
-
-**Implementation:**
 
 .. code:: typescript
 
    import { Platform } from '../lib/platform';
 
-   if (Platform.isElectron) {
-     // Desktop-specific code
-   }
+   if (Platform.isElectron) { /* desktop */ }
+   if (Platform.isNative) { /* iOS or Android */ }
+   if (Platform.isDesktopOrWeb) { /* not Capacitor */ }
+   if (Platform.shouldUseProxy) { /* web dev server */ }
 
-   if (Platform.isNative) {
-     // Mobile-specific code
-   }
+These guards gate every dynamic Capacitor import. A static import of a
+Capacitor plugin breaks the web build, so the pattern is always a platform
+check followed by ``await import(...)``.
 
-   if (Platform.shouldUseProxy) {
-     // Wrap URLs with proxy
-   }
-
-**Used By:** HTTP client, download utilities, proxy utilities,
-platform-specific features
-
---------------
+**Used by:** the HTTP client, download utilities, proxy utilities, and every
+platform-specific branch.
 
 App Version (``lib/version.ts``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Exposes the app's marketing version and build number.
-
-The marketing version comes from ``package.json`` and is bumped only on a
-prod release. The build number is the git commit count
-(``git rev-list --count HEAD``), injected at build time as the
-``__BUILD_NUMBER__`` compile-time constant by ``vite.config.ts``. It
-increases on every commit, so two builds that share a marketing version
-are still distinguishable. Outside a git checkout the build number is
-``dev``. ``vitest.config.ts`` defines ``__BUILD_NUMBER__`` as ``test``.
-
-**Public API:**
+The marketing version comes from ``package.json`` and is bumped only on a prod
+release. The build number is the git commit count
+(``git rev-list --count HEAD``), injected by ``vite.config.ts`` as the
+``__BUILD_NUMBER__`` compile-time constant. It increases on every commit, so
+two builds sharing a marketing version are still distinguishable in a bug
+report. Outside a git checkout it is ``dev``; ``vitest.config.ts`` defines it
+as ``test``.
 
 .. code:: typescript
 
    import { getAppVersion, getBuildNumber, getFullVersion } from '../lib/version';
 
-   getAppVersion();   // "1.1.14"
+   getAppVersion();   // "1.3.0"
    getBuildNumber();  // "1509"
-   getFullVersion();  // "1.1.14 (1509)"
+   getFullVersion();  // "1.3.0 (1509)"
 
-**Used By:** ``SidebarContent`` renders ``getFullVersion()`` (expanded) or
-``getAppVersion()`` (collapsed) in the sidebar footer.
-
---------------
+**Used by:** ``SidebarContent``, which renders ``getFullVersion()`` expanded
+and ``getAppVersion()`` collapsed.
 
 Safe-Area Bootstrap (``lib/safe-area-bootstrap.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Mirrors iOS ``UIView.safeAreaInsets`` into ``--sai-top``/``--sai-right``/
-``--sai-bottom``/``--sai-left`` CSS custom properties on
-``document.documentElement``. Works around a bug in iOS WKWebView
-(Capacitor 8, ``contentInset='never'``, ``viewport-fit=cover``) where
-``env(safe-area-inset-*)`` reports stale values after rotation. On
-Dynamic Island devices ``env(top)`` stays ``0`` in portrait, and
-``env(left)``/``env(right)`` keep landscape-derived values regardless of
-orientation. The native ``SafeArea`` Capacitor plugin reads UIKit's
-source of truth and emits ``safeAreaInsetsChanged`` events that this
-module applies to the CSS variables.
+Mirrors iOS ``UIView.safeAreaInsets`` into ``--sai-top`` / ``--sai-right`` /
+``--sai-bottom`` / ``--sai-left`` CSS custom properties on
+``document.documentElement``. It works around a WKWebView bug (Capacitor 8,
+``contentInset='never'``, ``viewport-fit=cover``) where
+``env(safe-area-inset-*)`` reports stale values after rotation: on Dynamic
+Island devices ``env(top)`` stays ``0`` in portrait, and ``env(left)`` and
+``env(right)`` keep landscape-derived values regardless of orientation. The
+native ``SafeArea`` plugin reads UIKit's source of truth and emits
+``safeAreaInsetsChanged`` events this module applies to the variables.
 
-**Public API:**
-
-.. code:: typescript
-
-   export async function installSafeAreaBootstrap(): Promise<void>
-
-**Wiring:** Called once at app startup, before React mounts:
-
-.. code:: typescript
-
-   // app/src/main.tsx
-   import { installSafeAreaBootstrap } from './lib/safe-area-bootstrap'
-
-   void installSafeAreaBootstrap();
-
-   createRoot(document.getElementById('root')!).render(
-     <StrictMode><App /></StrictMode>,
-   )
-
-**Platform behavior:**
-
-- **iOS (Capacitor)**: Imports ``plugins/safe-area``, calls
-  ``SafeArea.getInsets()`` once at startup (initial paint), then
-  subscribes to ``safeAreaInsetsChanged`` to update the four
-  ``--sai-*`` variables on every UIKit-reported change.
-- **Android (Capacitor)**: Early-returns. The Android WebView's
-  ``env(safe-area-inset-*)`` resolves correctly, so the CSS fallback
-  is used.
-- **Web and Electron**: Early-returns. Same reasoning.
-
-**CSS usage:** Reference the variables with the native ``env()`` as the
-fallback so non-iOS platforms get the browser value:
+``main.tsx`` calls ``installSafeAreaBootstrap()`` once, before React mounts.
+On iOS it imports ``plugins/safe-area``, calls ``SafeArea.getInsets()`` once so
+the initial paint is correct, then subscribes to ``safeAreaInsetsChanged``. On
+Android, web, and Electron it early-returns: those engines resolve
+``env(safe-area-inset-*)`` correctly and the CSS fallback suffices. Reference
+the variables with the native ``env()`` as fallback so non-iOS platforms get
+the browser value:
 
 .. code:: css
 
    padding-top: var(--sai-top, env(safe-area-inset-top));
 
-**Plugin shape:** The Capacitor plugin is defined in
-``plugins/safe-area/`` with ``getInsets()`` and the
-``safeAreaInsetsChanged`` event. Its TypeScript surface is in
-``plugins/safe-area/definitions.ts`` (the ``SafeAreaInsets`` and
-``SafeAreaPlugin`` types). The web stub never invokes the listener.
+The plugin's TypeScript surface (``SafeAreaInsets``, ``SafeAreaPlugin``) is in
+``plugins/safe-area/definitions.ts``; the web stub never invokes the listener.
 
-**Used By:** ``main.tsx`` (single callsite), CSS rules in ``index.css``
-and component styles that consume ``var(--sai-*)``.
-
---------------
+**Used by:** ``main.tsx``, plus the CSS in ``index.css`` and component styles
+that consume ``var(--sai-*)``.
 
 API Validator (``lib/zm/api-validator.ts``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Zod-based runtime validation for API responses.
-
-**Features:**
-
-- Type-safe runtime validation
-- Detailed error messages
-- Schema coercion (e.g., numbers as strings)
-
-**Implementation:**
+ZoneMinder returns numbers as strings and omits fields between versions, so
+responses are validated and coerced with Zod at the API boundary rather than
+trusted.
 
 .. code:: typescript
 
+   import { httpGet } from '../lib/http';
    import { validateApiResponse } from '../lib/zm/api-validator';
    import { MonitorsResponseSchema } from '../api/types';
 
-   const response = await fetch('/api/monitors.json');
-   const data = await response.json();
+   const data = await httpGet<unknown>('/api/monitors.json');
 
-   // Validate and coerce types
    const validated = validateApiResponse(MonitorsResponseSchema, data, {
      endpoint: '/api/monitors.json',
      method: 'GET',
    });
 
-**Used By:** All API functions in ``api/`` directory
+The ``endpoint`` and ``method`` context lands in the thrown error, which is
+what makes a schema failure debuggable from a user's exported log file.
 
---------------
+**Used by:** every module in ``api/``. See :doc:`07-api-and-data-fetching`.
 
 Grid Utils (``lib/grid-utils.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Grid layout calculations for montage views.
-
-**Features:**
-
-- Responsive grid column calculations
-- Aspect ratio handling
-- Breakpoint support
-
-**Implementation:**
+Picks a grid shape for a small, fixed number of items: one item gets 1x1, two
+to four get two columns, five or more get three.
 
 .. code:: typescript
 
-   import { calculateGridCols, calculateItemHeight } from '../lib/grid-utils';
+   import { calculateGridDimensions, getGridTemplateStyle } from '../lib/grid-utils';
 
-   const cols = calculateGridCols(viewportWidth, minCardWidth);
-   const height = calculateItemHeight(cardWidth, aspectRatio);
+   const { cols, rows } = calculateGridDimensions(monitorIds.length);
+   const style = getGridTemplateStyle(cols, rows);
+   // { gridTemplateColumns: 'repeat(2, 1fr)', gridTemplateRows: 'repeat(2, 1fr)' }
 
-**Used By:** Montage page, EventMontage page, dashboard grid
-
---------------
+**Used by:** ``components/dashboard/widgets/MonitorWidget.tsx`` only. Montage
+and Monitors do not use it: their column count is user-chosen and stored per
+group (see Group-Keyed Montage Settings).
 
 Bandwidth Settings (``lib/zmninja-ng-constants.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Configurable polling and refresh intervals that adapt to the user's
-bandwidth mode (normal vs. low). Defined in the ``BandwidthSettings``
-interface and the ``BANDWIDTH_SETTINGS`` constant map.
-
-**Usage:**
+Every polling and refresh interval in the app is a field on the
+``BandwidthSettings`` interface, with one value in the ``normal`` bucket and
+a slower one in ``low``. Nothing hardcodes an interval.
 
 .. code:: typescript
 
+   import { useQuery } from '@tanstack/react-query';
+   import { queryKeys } from '../lib/query/query-keys';
    import { useBandwidthSettings } from '../hooks/useBandwidthSettings';
 
    const bandwidth = useBandwidthSettings();
 
-   // Use in React Query
    const { data } = useQuery({
-     queryKey: ['monitors'],
+     queryKey: queryKeys.monitors(profileId),
      queryFn: getMonitors,
      refetchInterval: bandwidth.monitorStatusInterval,
    });
 
-**Available Properties:**
+The query key comes from the ``queryKeys`` factory, never an inline array, so
+an invalidation elsewhere cannot drift out of sync with it.
 
-- ``monitorStatusInterval``: Monitor status updates
-- ``alarmStatusInterval``: Alarm state checking
-- ``consoleEventsInterval``: Event count refreshing
-- ``eventsWidgetInterval``: Dashboard events widget
-- ``timelineHeatmapInterval``: Timeline/heatmap data
-- ``daemonCheckInterval``: Server daemon health
-- ``snapshotRefreshInterval``: Snapshot image refresh
-- ``zmsStatusInterval``: ZMS playback status polling interval
-  (normal: 3000 ms, low: 5000 ms). Used by ``ZmsEventPlayer`` to poll
-  the ZMS stream status (``ZM_CMD.QUERY``) for tracking playback
-  position.
-- ``imageScale``: Image scaling percentage
-- ``imageQuality``: Image quality percentage
-- ``streamMaxFps``: Maximum stream FPS
+Fields include ``monitorStatusInterval``, ``alarmStatusInterval``,
+``consoleEventsInterval``, ``eventsWidgetInterval``,
+``timelineHeatmapInterval``, ``daemonCheckInterval``,
+``snapshotRefreshInterval``, ``zmsStatusInterval`` (3000 ms normal, 5000 ms
+low; ``ZmsEventPlayer`` polls ``ZMS_COMMANDS.cmdQuery`` at this rate to track
+playback position), ``imageScale``, ``imageQuality``, and ``streamMaxFps``. Adding one
+means adding the field with values for both modes, then reading it through
+``useBandwidthSettings()`` in React or ``getBandwidthSettings(mode)`` outside
+it.
 
-**Adding a new property:** Add the field to ``BandwidthSettings`` in
-``lib/zmninja-ng-constants.ts`` with values for both ``normal`` and
-``low`` modes, then consume it via ``useBandwidthSettings()``.
-
-**Used By:** Dashboard widgets, monitor views, event player, montage,
-any component that polls or auto-refreshes
-
---------------
+**Used by:** dashboard widgets, monitor views, the event player, montage, and
+anything that polls.
 
 Monitor Rotation (``lib/monitor/monitor-rotation.ts``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Utilities for handling monitor orientation and aspect ratio calculations.
+ZoneMinder stores a monitor's orientation separately from its width and
+height, so a 1920x1080 camera mounted sideways still reports 1920x1080.
+``parseMonitorRotation(orientation)`` turns the orientation string into
+degrees, ``getMonitorAspectRatio(width, height, orientation)`` returns an
+aspect-ratio string that accounts for it, and
+``getOrientedResolution(width, height, orientation)`` returns a ``WxH`` string
+with the dimensions swapped for 90 and 270 degrees.
 
-**Key Functions:**
-
-- ``parseMonitorRotation(orientation)``: Parses monitor orientation string to degrees
-- ``getMonitorAspectRatio(width, height, orientation)``: Returns aspect ratio string accounting for rotation
-- ``getOrientedResolution(width, height, orientation)``: Returns oriented ``WxH`` string (swaps dimensions for 90°/270° rotation)
-
-**Used By:** ``MonitorDetail.tsx``, ``EventDetail.tsx``, ``useMontageGrid.ts``
-
---------------
+**Used by:** ``pages/MonitorDetail.tsx``, ``pages/EventDetail.tsx``,
+``components/montage/hooks/useMontageGrid.ts``.
 
 Event Utilities (``lib/event/event-utils.ts``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Shared helpers for event and monitor grid calculations.
+``getMaxColsForWidth(width, minWidth, gap)`` returns how many columns of at
+least ``minWidth`` fit in ``width`` once the inter-column ``gap`` is
+subtracted. ``getMonitorDimensions(monitor, fallbackWidth, fallbackHeight)``
+returns a monitor's dimensions with fallbacks, for monitors the server reports
+as 0x0.
 
-**Key Functions:**
-
-- ``getMaxColsForWidth(width, minWidth, margin)``: Calculate maximum grid columns for a given container width
-- ``getMonitorDimensions(monitor, fallbackWidth, fallbackHeight)``: Extract monitor dimensions with fallbacks
-
-**Used By:** ``EventListView.tsx``, ``EventMontageView.tsx``, ``useEventMontageGrid.ts``
-
---------------
+**Used by:** ``components/events/EventListView.tsx``,
+``components/events/EventMontageView.tsx``, ``hooks/useEventMontageGrid.ts``.
 
 Monitor Filters (``lib/monitor/filters.ts``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Pure functions that filter monitor lists. They take and return plain
-arrays, so they are easy to unit test.
-
-**Key Functions:**
-
-- ``filterEnabledMonitors(monitors)``: Drop deleted monitors
-- ``filterExcludedMonitors(monitors, excludedIds)``: Drop monitors whose
-  ``Id`` is in ``excludedIds``. Returns the input unchanged when the list is
-  empty.
-- ``filterMonitorsByGroup(monitors, groupMonitorIds)``: Keep only monitors
-  in the given group
-
-**Usage:**
+Pure array-in, array-out functions, which is what makes them cheap to unit
+test. ``filterEnabledMonitors(monitors)`` drops deleted monitors.
+``filterExcludedMonitors(monitors, excludedIds)`` drops monitors whose ``Id``
+is in ``excludedIds`` and returns the input unchanged when that list is empty.
+``filterMonitorsByGroup(monitors, groupMonitorIds)`` keeps only monitors in the
+group.
 
 .. code:: typescript
 
@@ -1042,35 +758,21 @@ arrays, so they are easy to unit test.
 
    const visible = filterExcludedMonitors(monitors, ['3', '7']);
 
-**Used By:** ``getMonitors`` in ``api/monitors.ts`` (per-profile monitor
-exclusion).
-
---------------
+**Used by:** ``getMonitors`` in ``api/monitors.ts``, which applies the
+per-profile exclusion at the API boundary so no page has to remember to.
 
 Profile Settings Accessor (``lib/profile/profile-settings.ts``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Non-React accessors for the current profile's settings. API modules and
-other services run outside React and cannot use hooks, so these need a way
-to read profile-scoped settings without a component tree. This file used to
-call ``useProfileStore``/``useSettingsStore`` directly, but ``api/events.ts``
-(and other api modules downstream of ``stores/profile.ts``) import it, which
-closed a static import cycle back into the profile store. It now takes a
-``ProfileSettingsGate`` instead, the same DI-gate shape as
-``api/store-gates.ts`` (:doc:`07-api-and-data-fetching`):
-``stores/profile.ts`` builds the gate from both stores and registers it with
-``setProfileSettingsGate`` at module load. Refs #217.
-
-**Key Functions:**
-
-- ``getExcludedMonitorIds()``: Returns the ``excludedMonitorIds`` array for
-  the current profile, or an empty array when there is no current profile,
-  the gate has not registered yet, or the stores are not yet initialized.
-- ``setProfileSettingsGate(gate)``: Registers the real implementation. Called
-  once by ``stores/profile.ts``; tests can call it directly instead of
-  mocking ``stores/profile`` and ``stores/settings``.
-
-**Usage:**
+API modules run outside React and cannot call hooks, but they still need
+profile-scoped settings. This file used to read ``useProfileStore`` and
+``useSettingsStore`` directly, which closed a static import cycle:
+``api/events.ts`` imports this file, and ``stores/profile.ts`` reaches back
+into ``api/``. It now takes a ``ProfileSettingsGate``, the same
+dependency-injection shape as ``api/store-gates.ts``
+(:doc:`07-api-and-data-fetching`). ``stores/profile.ts`` builds the gate from
+both stores and registers it with ``setProfileSettingsGate(gate)`` at module
+load; tests call that directly instead of mocking two stores (refs #217).
 
 .. code:: typescript
 
@@ -1078,40 +780,35 @@ closed a static import cycle back into the profile store. It now takes a
 
    const excluded = getExcludedMonitorIds();
 
-The ``excludedMonitorIds`` setting itself is defined on ``ProfileSettings``
-in ``stores/settings.ts`` and written via ``updateProfileSettings``. It
-defaults to an empty array.
+``getExcludedMonitorIds()`` returns an empty array when there is no current
+profile, the gate has not registered yet, or the stores are not initialized.
+The ``excludedMonitorIds`` setting itself lives on ``ProfileSettings`` in
+``stores/settings.ts``, is written via ``updateProfileSettings``, and defaults
+to an empty array.
 
-**Used By:** ``api/monitors.ts`` and ``api/events.ts`` to apply the
-per-profile exclusion at the API boundary.
-
---------------
+**Used by:** ``api/monitors.ts`` and ``api/events.ts``.
 
 Group-Keyed Montage Settings (``stores/settings.ts``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Montage layout state is scoped per monitor group inside a profile. A
-profile can show all monitors or one selected group, and each group keeps
-its own grid columns, hidden monitors, and saved layouts. Two
-``ProfileSettings`` fields hold this state:
+A profile can show all monitors or one selected monitor group, and each group
+keeps its own grid columns, hidden monitors, and saved layouts. Two
+``ProfileSettings`` fields hold that:
 
 .. code:: typescript
 
    montageByGroup: Record<string, MontageGroupLayout>;
    eventMontageByGroup: Record<string, EventMontageGroupLayout>;
 
-The map key is the group ID, or the ``ALL_GROUPS_KEY`` sentinel when no
-group is selected:
+The map key is the group ID, or a sentinel when no group is selected:
 
 .. code:: typescript
 
    export const ALL_GROUPS_KEY = '__all__';
 
 The active key is ``selectedGroupId ?? ALL_GROUPS_KEY``, where
-``selectedGroupId`` is the profile's current group filter (``null`` for
-all monitors).
-
-The bucket shapes are:
+``selectedGroupId`` is the profile's current group filter (``null`` for all
+monitors).
 
 .. code:: typescript
 
@@ -1130,569 +827,723 @@ The bucket shapes are:
 
 ``DEFAULT_MONTAGE_GROUP_LAYOUT`` and ``DEFAULT_EVENT_MONTAGE_GROUP_LAYOUT``
 supply the values used when a group has no stored bucket. Both default
-``gridCols`` to ``2``; the montage default also has an empty
+``gridCols`` to ``2``; the montage default also carries an empty
 ``workingLayout``, empty ``savedLayouts``, ``activeLayoutName: null``, and
-empty ``hiddenMonitorIds``. ``DEFAULT_SETTINGS`` starts both maps empty
-(``{}``), so a group's bucket is created lazily on first write.
+empty ``hiddenMonitorIds``. ``DEFAULT_SETTINGS`` starts both maps empty, so a
+group's bucket is created lazily on first write.
 
-**Reading and writing.** Live montage components use the
-``useMontageGroupState()`` hook rather than touching ``montageByGroup``
-directly:
+**Reading and writing.** Montage components use ``useMontageGroupState()``
+rather than touching ``montageByGroup``:
 
 .. code:: typescript
 
    import { useMontageGroupState } from '../hooks/useMontageGroupState';
 
    const { groupKey, bucket, update } = useMontageGroupState();
-
-   // bucket is the active group's MontageGroupLayout (defaults when absent)
    update({ gridCols: 3, hiddenMonitorIds: ['12'] });
 
 The hook resolves ``groupKey`` from ``useGroupFilter``, reads the matching
 bucket (falling back to ``DEFAULT_MONTAGE_GROUP_LAYOUT``), and exposes
-``update`` as a partial patch. Internally it calls the store action
-``updateMontageGroupLayout(profileId, groupKey, patch)``, which merges the
-patch into that group's bucket.
+``update`` as a partial patch that calls the store action
+``updateMontageGroupLayout(profileId, groupKey, patch)``. Event montage
+columns go through the matching ``updateEventMontageGroupLayout`` action.
 
-Event montage columns are written through the matching store action:
+**Persist migration.** The store is at ``version: 1`` with ``migrateSettings``
+as its ``migrate`` callback. Persisted v0 state held flat montage fields
+(``montageLayouts``, ``montageSavedLayouts``, ``montageActiveLayoutName``,
+``montageGridCols``, ``montageGridRows``, ``montageHiddenMonitorIds``,
+``eventMontageGridCols``, ``eventMontageLayouts``). The migration removes those
+from each profile and seeds the ``ALL_GROUPS_KEY`` bucket from them; the old
+``montageLayouts.lg`` array becomes ``workingLayout``, and absent values fall
+back to the defaults. Profiles created after v1 skip it and start empty.
 
-.. code:: typescript
+**Dangling group filter self-heal.** A persisted ``selectedGroupId`` can point
+at a group that no longer exists on the server. ``useGroupFilter`` resets it to
+``null`` after a successful groups load when the stored ID is missing from the
+returned list. The reset is gated on the groups query's ``isSuccess`` flag, not
+``isLoading``: React Query v5 reports ``isLoading: false`` for a *disabled*
+query, and the groups query stays disabled until the profile is loaded and
+authenticated. Gating on ``isLoading`` let the empty disabled-state list wipe a
+valid selection during cold start, which dropped the montage back to the
+All-monitors bucket and streamed every monitor. ``isSuccess`` is false while a
+query is disabled, loading, or errored, so the reset fires only once a real
+fetch has returned. :doc:`02-react-fundamentals` covers the query-state flags.
 
-   const updateEventMontageGroupLayout = useSettingsStore(
-     (state) => state.updateEventMontageGroupLayout
-   );
-   updateEventMontageGroupLayout(profileId, groupKey, { gridCols: 4 });
+**Render gate (``isFilterReady``).** Monitors and groups load from two separate
+queries, and the monitors query usually returns first. A page that rendered as
+soon as monitors arrived would mount a tile per monitor before it knew the
+group membership, and mounting a tile starts its stream: that one frame opens a
+stream for every monitor on the server before the group narrows the list back
+down. ``useGroupFilter`` therefore exposes ``isFilterReady``, true when no
+filter is active or when an active filter's groups query has settled
+(``isSuccess`` or ``error``). Montage and Monitors hold their loading skeleton
+until ``isLoading`` is false and ``isFilterReady`` is true, so tiles first mount
+against the final filtered set. Both also render an empty list, not all
+monitors, when a filter is active but ``filteredMonitorIds`` is empty.
 
-**Persist migration.** The store is at ``version: 1`` and registers
-``migrateSettings`` as its ``migrate`` callback. Persisted state from v0
-held flat montage fields (``montageLayouts``, ``montageSavedLayouts``,
-``montageActiveLayoutName``, ``montageGridCols``, ``montageGridRows``,
-``montageHiddenMonitorIds``, ``eventMontageGridCols``,
-``eventMontageLayouts``). The migration removes those fields from each
-profile and seeds the ``ALL_GROUPS_KEY`` bucket from them. The old
-``montageLayouts.lg`` array becomes the new ``workingLayout``; absent
-values fall back to the defaults above. Profiles created after v1 skip
-the migration and start with empty maps.
-
-**Dangling group filter self-heal.** A persisted ``selectedGroupId`` can
-point at a group that no longer exists on the server. ``useGroupFilter``
-resets ``selectedGroupId`` to ``null`` after a successful groups load when
-the stored ID is not in the returned list. The reset is gated on the groups
-query ``isSuccess`` flag, not ``isLoading``. The groups query is disabled
-until the profile is loaded and authenticated, and React Query v5 reports
-``isLoading: false`` for a disabled query. Gating on ``isLoading`` let the
-empty disabled-state list wipe a valid selection during cold start, which
-dropped the montage back to the All-monitors bucket and streamed every
-monitor. ``isSuccess`` is false while the query is disabled, loading, or
-errored, so the reset only fires once a real fetch has returned.
-
-**Render gate (``isFilterReady``).** Monitor data and group data load from
-two separate queries. The monitors query usually returns first, so a page
-that renders as soon as monitors arrive would mount tiles before the group
-membership is known. Mounting a tile starts its stream, so that one frame
-opens streams for every monitor before the group narrows the list.
-``useGroupFilter`` exposes ``isFilterReady``: true when no filter is active,
-or when a filter is active and the groups query has settled (``isSuccess``
-or ``error``). The Montage and Monitors pages hold their loading skeleton
-until ``isLoading`` is false and ``isFilterReady`` is true, so tiles first
-mount against the final filtered set. The pages also render an empty list
-(not all monitors) when a filter is active but ``filteredMonitorIds`` is
-empty.
-
-**Used By:** ``useMontageGroupState`` (live montage pages and the grid
-hook), the Montage and Monitors page render gates, the event montage column
-control, and the persist layer of ``useSettingsStore``.
-
---------------
-
-Stream Lifecycle (``hooks/useStreamLifecycle.ts``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Shared hook for ZMS stream connection key management and cleanup.
-
-**Features:**
-
-- Generates unique connection keys per monitor
-- Sends CMD_QUIT before regenerating keys (prevents orphaned server streams)
-- Sends CMD_QUIT on component unmount
-- Aborts in-flight image loads on unmount
-- Accepts a logger function for component-specific logging
-
-Returns ``forceRegenerate({ killPrevious })`` and ``releaseConnection()``.
-``forceRegenerate`` mints a new connkey; pass ``killPrevious: true`` to
-CMD_QUIT the previous one first (visibility resume, manual retry, and the
-error-driven reconnect all do this, because an ``<img>`` error cannot tell a
-dead server process from a dropped-but-alive one, and skipping CMD_QUIT would
-orphan an nph-zms process). ``releaseConnection`` CMD_QUITs the current connkey
-and clears it from the store without minting a new one; ``useMonitorStream``
-calls it when its MJPEG reconnect loop gives up so the final connkey is not
-left until unmount. Both are no-ops outside streaming mode.
-
-``useMonitorStream`` builds on this: ``reportStreamError`` (wired to
-``<img onError>``) schedules an exponential-backoff reconnect (base 1s, max
-15s, cap 6 attempts unless insomnia is on), and ``reportStreamLoad`` (wired to
-``<img onLoad>``) resets the backoff after a good frame.
-
-Each lifecycle instance also registers a teardown thunk in the module-level
-registry ``lib/monitor/active-streams.ts`` (``registerActiveStream`` /
-``unregisterActiveStream``). ``switchProfile`` (``stores/profile.ts``) awaits
-``quitAllActiveStreams()`` as its first step, before logout and the SSL-trust
-flip, so each tile's CMD_QUIT (which captures that tile's own per-server URL
-and token) is sent while the previous profile's trust and token are still in
-effect. Relying on React unmount alone races the switch: the new profile's
-SSL-trust setting can flip before the old self-signed server's CMD_QUIT goes
-out, orphaning an nph-zms process. A central quit keyed only by monitor id
-cannot do this, since it has no record of which server each stream used.
-
-**Implementation:**
-
-.. code:: typescript
-
-   import { useStreamLifecycle } from '../hooks/useStreamLifecycle';
-
-   const { connKey } = useStreamLifecycle({
-     monitorId: monitor.Id,
-     portalUrl: profile.portalUrl,
-     accessToken: auth.accessToken,
-     viewMode: 'streaming', // CMD_QUIT only fires in streaming mode
-     mediaRef: imgRef,
-     logFn: log.montageMonitor,
-   });
-
-**Used By:** ``useMonitorStream``, ``MontageMonitor.tsx``, ``MonitorWidget.tsx``
-
---------------
+**Used by:** ``useMontageGroupState`` (montage pages and the grid hook), the
+Montage and Monitors render gates, the event montage column control, and the
+persist layer of ``useSettingsStore``.
 
 Zone Utilities (``lib/monitor/zone-utils.ts``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Utilities for parsing and rendering zone data from ZoneMinder.
+Parses and renders ZoneMinder zone data for the read-only overlay on the
+monitor detail page.
 
-**Key functions:**
+- ``getZoneColor(type)``: hex color for a zone type, from the fixed palette
+  ``Active`` ``#22c55e``, ``Inclusive`` ``#3b82f6``, ``Exclusive`` ``#ef4444``,
+  ``Preclusive`` ``#f59e0b``, ``Inactive`` ``#4b5563``, ``Privacy``
+  ``#a855f7``.
+- ``ZONE_TYPE_ORDER``: ``['Active', 'Inclusive', 'Exclusive', 'Preclusive',
+  'Inactive', 'Privacy']``. ``ZoneLegend`` iterates it, so legend rows keep a
+  stable order regardless of what order the API returned zones in.
+- ``parseZoneCoords(coords)``: the ZoneMinder ``"x,y x,y..."`` string to
+  ``Point[]``.
+- ``coordsToSvgPointsWithTransform(coords, transform?)``: coordinates to an SVG
+  polygon points string, applying optional rotation.
+- ``alarmRGBToHex(alarmRGB)``: a ZoneMinder ``AlarmRGB`` integer to a hex
+  string. The overlay does not use it for color; it exists for other consumers.
 
-- ``getZoneColor(type)`` - returns the hex color for a zone type based on the fixed palette below
-- ``ZONE_TYPE_ORDER`` - ordered list of zone types: ``['Active', 'Inclusive', 'Exclusive', 'Preclusive', 'Inactive', 'Privacy']``; used by ``ZoneLegend`` to produce a stable row order
-- ``parseZoneCoords(coords)`` - parses the ZoneMinder ``"x,y x,y..."`` coordinate string into ``Point[]``
-- ``coordsToSvgPointsWithTransform(coords, transform?)`` - converts coordinates to an SVG polygon points string, applying optional rotation
-- ``alarmRGBToHex(alarmRGB)`` - converts a ZoneMinder ``AlarmRGB`` integer to a hex color string. The overlay does not use ``AlarmRGB`` for color; this function is available for other consumers.
-
-**Color palette:**
-
-+-------------+--------+-------------+
-| Zone Type   | Color  | Hex         |
-+=============+========+=============+
-| Active      | green  | ``#22c55e`` |
-+-------------+--------+-------------+
-| Inclusive   | blue   | ``#3b82f6`` |
-+-------------+--------+-------------+
-| Exclusive   | red    | ``#ef4444`` |
-+-------------+--------+-------------+
-| Preclusive  | amber  | ``#f59e0b`` |
-+-------------+--------+-------------+
-| Inactive    | gray   | ``#4b5563`` |
-+-------------+--------+-------------+
-| Privacy     | purple | ``#a855f7`` |
-+-------------+--------+-------------+
-
-**Used By:** ``ZoneOverlay``, ``ZoneLegend``
-
---------------
+**Used by:** ``ZoneOverlay``, ``ZoneLegend``.
 
 Query Error Resolution (``lib/query/query-error.ts``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Maps a React Query ``error`` object to a user-facing message. Events and
-Monitors both special-cased a 401 status or an "unauthorized" substring in
-the error message into ``common.auth_required`` before falling back to a
-generic message; ``resolveQueryError`` is that logic extracted once.
-
-**Implementation:**
+Maps a React Query ``error`` to a message a user can act on. Events and
+Monitors both special-cased a 401 status, or an "unauthorized" substring in the
+message, into ``common.auth_required`` before falling back to a generic
+message. ``resolveQueryError`` is that logic extracted once.
 
 .. code:: typescript
 
    import { resolveQueryError } from '../lib/query/query-error';
 
-   const { error } = useQuery({ ... });
-
-   // Default fallback: `${t('common.error')}: ${message}`
-   resolveQueryError(error, t);
-
-   // Custom fallback key, interpolated with { error: message }
+   resolveQueryError(error, t);   // fallback: `${t('common.error')}: ${message}`
    resolveQueryError(error, t, { fallbackKey: 'monitors.failed_to_load' });
 
-Pages whose error banner does not distinguish a 401 (EventMontage, Montage)
-or that show a fixed message with no interpolated error text at all
-(MonitorDetail, EventDetail) build their message inline instead of calling
-this helper, and pass it straight to ``ErrorBanner`` below.
+Seven pages route their error text through it. Monitors, EventMontage, States,
+Timeline, and DeveloperNotice pass a ``fallbackKey`` naming what failed to
+load; Events and Montage take the generic fallback. Six of them hand the result
+to ``ErrorBanner``, while DeveloperNotice renders the string in its own layout.
 
-**Used By:** Events, Monitors
+MonitorDetail and EventDetail are the exceptions. Both show a fixed translated
+message with no interpolated error text, so they pass that string straight to
+``ErrorBanner`` and never call this function: a detail page that could not load
+its one record has nothing to interpolate.
 
---------------
+**Used by:** Events, Monitors, EventMontage, Montage, States, Timeline,
+DeveloperNotice.
 
-Reusable UI Components
-----------------------
+Navigation Service (``lib/navigation.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Located in ``src/components/ui/``, these are primitive components used
-throughout the app.
+Bridges non-React code with React Router. A push notification handler runs
+outside the component tree and cannot call ``useNavigate()``, so it emits a
+navigation event through this singleton, and ``NotificationHandler`` (a
+component that renders nothing and exists only to hold effects) listens and
+forwards it to the router.
 
-Button (``ui/button.tsx``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+.. code:: typescript
 
-Styled button component with variants.
+   import { navigationService } from '../lib/navigation';
 
-**Variants:** default, destructive, outline, secondary, ghost, link
-
-**Sizes:** default, sm, lg, icon
-
-**Usage:**
-
-.. code:: tsx
-
-   <Button variant="destructive" size="sm" onClick={handleDelete}>
-     Delete
-   </Button>
-
-**Used By:** All pages and components
-
---------------
-
-Card (``ui/card.tsx``)
-~~~~~~~~~~~~~~~~~~~~~~
-
-Container component for content sections.
-
-**Sub-components:** Card, CardHeader, CardTitle, CardContent, CardFooter
-
-**Usage:**
-
-.. code:: tsx
-
-   <Card>
-     <CardHeader>
-       <CardTitle>Monitor Name</CardTitle>
-     </CardHeader>
-     <CardContent>
-       <img src={streamUrl} />
-     </CardContent>
-     <CardFooter>
-       <Button>View Details</Button>
-     </CardFooter>
-   </Card>
-
-**Used By:** MonitorCard, EventCard, Dashboard widgets, Settings pages
-
---------------
-
-Dialog (``ui/dialog.tsx``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Modal dialog for confirmations and forms.
-
-**Sub-components:** Dialog, DialogTrigger, DialogContent, DialogHeader,
-DialogTitle, DialogDescription, DialogFooter
-
-**Usage:**
-
-.. code:: tsx
-
-   <Dialog open={isOpen} onOpenChange={setIsOpen}>
-     <DialogContent>
-       <DialogHeader>
-         <DialogTitle>Confirm Delete</DialogTitle>
-         <DialogDescription>
-           Are you sure you want to delete this event?
-         </DialogDescription>
-       </DialogHeader>
-       <DialogFooter>
-         <Button variant="outline" onClick={() => setIsOpen(false)}>Cancel</Button>
-         <Button variant="destructive" onClick={handleConfirm}>Delete</Button>
-       </DialogFooter>
-     </DialogContent>
-   </Dialog>
-
-**Used By:** Event deletion, profile deletion, widget editing, PTZ
-presets
-
---------------
-
-Popover (``ui/popover.tsx``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Floating content container for filters and actions.
-
-**Sub-components:** Popover, PopoverTrigger, PopoverContent
-
-**Usage:**
-
-.. code:: tsx
-
-   <Popover>
-     <PopoverTrigger asChild>
-       <Button variant="outline">
-         <Filter className="h-4 w-4" />
-       </Button>
-     </PopoverTrigger>
-     <PopoverContent>
-       {/* Filter controls */}
-     </PopoverContent>
-   </Popover>
-
-**Used By:** Filters (Events, Monitors, Timeline), date range selectors
-
---------------
-
-SecureImage (``ui/secure-image.tsx``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Image component that handles authenticated requests.
-
-**Features:**
-
-- Fetches images with credentials
-- Converts to blob URL
-- Automatic cleanup
-
-**Implementation:**
-
-.. code:: tsx
-
-   <SecureImage
-     src="https://zm.example.com/protected-image.jpg"
-     alt="Monitor snapshot"
-     className="w-full h-auto"
-   />
-
-**How it works:** 1. Fetches image with ``credentials: 'include'`` 2.
-Converts response to Blob 3. Creates local blob URL 4. Cleans up on
-unmount
-
-**Used By:** Components that need authenticated images (rare - most use
-stream URLs with tokens)
-
---------------
-
-EventThumbnail (``events/EventThumbnail.tsx``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Event thumbnail with a user-configurable fallback chain. Receives an
-ordered list of candidate URLs (``urls``) and a stable ``cacheKey``
-(typically the event id). On ``<img>`` ``onError`` it advances to the
-next URL. The image is rendered with ``opacity: 0`` until ``onLoad``
-fires, so the browser never flashes its broken-image glyph while the
-chain is walking. The winning index is kept in a session-scoped
-``Map<cacheKey, index>`` so list re-renders don't re-probe the chain.
-
-**Props:**
-
-.. code:: ts
-
-   interface EventThumbnailProps {
-     urls: string[];           // candidate URLs in order
-     cacheKey: string;         // stable per-event identifier
-     alt?: string;
-     objectFit?: CSSProperties['objectFit'];
-     className?: string;
-   }
-
-**Usage:**
-
-.. code:: tsx
-
-   import { buildThumbnailChain } from '../../lib/event/thumbnail-chain';
-   import { useCurrentProfile } from '../../hooks/useCurrentProfile';
-
-   const { settings } = useCurrentProfile();
-   const urls = buildThumbnailChain(portalUrl, event.Id, settings.thumbnailFallbackChain, {
-     token: accessToken,
-     width,
-     height,
-     minStreamingPort,
-     monitorId: event.MonitorId,
+   navigationService.navigateToEvent(eventId, {
+     from: '/monitors',        // back-button destination
+     fromNotification: true,   // skip lastRoute persistence
    });
 
-   <EventThumbnail urls={urls} cacheKey={event.Id} alt={event.Name} />
+   // In a React component:
+   useEffect(() => {
+     const unsubscribe = navigationService.addListener((event) => {
+       navigate(event.path, { replace: event.replace, state: event.state });
+     });
+     return unsubscribe;   // React runs this on unmount; without it the
+   }, [navigate]);         // listener leaks once per mount
 
-The chain itself comes from the per-profile ``thumbnailFallbackChain``
-setting (see ``stores/settings.ts``). ``resolveFallbackFids`` and
-``buildThumbnailChain`` in ``lib/event/thumbnail-chain.ts`` translate the
-setting into ordered fids and full URLs. Disabled entries and empty
-custom rows are skipped.
+``from`` is the explicit back-button destination, read by EventDetail and
+MonitorDetail via ``location.state?.from``. ``fromNotification`` tells
+AppLayout not to save the route as ``lastRoute``, so the app does not reopen
+weeks later straight into a transient event playback screen.
 
-**Used By:** EventCard (via EventListView and EventMontageView),
-TimelineScrubber thumbnails, NotificationHistory. The EventDetail hero
-poster and EventPreviewPopover pick the first fid from the resolved
-chain instead of hardcoding ``snapshot``/``alarm``.
+**Used by:** ``services/pushNotifications.ts``,
+``components/NotificationHandler.tsx``.
 
---------------
+Kiosk PIN (``lib/kioskPin.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-LiveMonitorPlayer (``components/monitors/LiveMonitorPlayer.tsx``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Hashes, stores, and verifies the kiosk-mode PIN. The PIN never exists in
+plain text at rest: it is hashed with SHA-256 over a random 128-bit salt, and
+both hash and salt go to secure storage under ``kiosk_pin_hash`` and
+``kiosk_pin_salt``.
 
-Live stream player. Selects Go2RTC WebRTC or MJPEG based on user
-preference and monitor capability, with a fallback ladder (WebRTC ->
-MSE -> HLS -> MJPEG). See :doc:`go2rtc-integration` for the selection
-logic and protocol fallback.
+.. code:: typescript
 
-**Features:**
+   import { storePin, verifyPin, hasPinStored, clearPin } from '../lib/kioskPin';
 
-- ``objectFit``, ``showControls``, ``muted``, ``externalMediaRef`` props
-- ``onProtocolChange`` callback (reports the effective protocol: MSE,
-  WebRTC, or MJPEG)
-- ``forceViewMode`` to pin a monitor to streaming or snapshot mode
-  regardless of the global Streaming Mode setting
-- ``bypassGo2rtcFailureCache`` to opt a single-monitor view out of the
-  shared, module-level Go2RTC failure cache montage tiles use
+   if (!(await hasPinStored())) await storePin('1234');
+   const ok = await verifyPin(enteredPin);
+   await clearPin();
 
-**Usage:**
+``hashPin(pin, salt)`` returns the hex-encoded digest of ``salt + pin``. It is
+exported for tests and not normally called directly.
+
+**Used by:** ``hooks/useKioskLock.ts`` (setup),
+``components/kiosk/KioskOverlay.tsx`` (unlock),
+``components/settings/AdvancedSection.tsx`` (set, change, clear).
+
+Log File (``lib/log-file/``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Mirrors entries from ``useLogStore`` to a file on disk, so a user can send a
+log from a session that has already ended.
+
+- **Capacitor (iOS, Android)**: NDJSON at ``Directory.Data/zmninja-ng.log``
+  in the app sandbox, resolved at runtime to a ``file://`` URI on iOS and a
+  ``content://`` URI on Android. Sharing goes through the system share sheet
+  and the recipient gets the file as an attachment.
+- **Electron, web**: no file. ``getLogFile()`` returns ``NoopLogFileStore``
+  unless ``Platform.isNative``, so logs live only in the in-memory store. Both
+  its ``capabilities`` are false, which hides the Logs page status line and
+  turns Share into a blob download of the current session's entries.
+  ``getDisplayPath()`` returns ``null``.
+
+``Logger.formatMessage`` builds each ``LogEntry`` once and hands the same
+object to both ``useLogStore.addLog`` and ``LogFileStore.append``, so the page
+and the file cannot disagree. The file caps at 10,000 entries and is rewritten
+with the last 5,000 on overflow. On app start ``hydrateLogStoreFromFile()``
+reads it back and replaces ``useLogStore.logs``, which is why the Logs page
+shows prior-session entries.
+
+**Used by:** ``lib/logger.ts``, ``pages/Logs.tsx``.
+
+Notification services
+~~~~~~~~~~~~~~~~~~~~~
+
+``services/notifications.ts`` (WebSocket to the ZoneMinder Event Server),
+``services/pushNotifications.ts`` (FCM), and ``services/eventPoller.ts``
+(polling fallback for desktop and web) are documented in
+:doc:`07-api-and-data-fetching`, alongside the store gates that keep them
+free of store imports.
+
+Token freshness
+~~~~~~~~~~~~~~~
+
+``useFreshAccessToken`` and ``useAuthStore.getState().getFreshAccessToken()``
+gate any URL that the browser or native runtime loads directly with a token
+embedded in it. :doc:`07-api-and-data-fetching` covers the leeway window and
+the refresh-then-relogin fallthrough.
+
+Shared Hooks (hooks/)
+---------------------
+
+useStreamLifecycle (``hooks/useStreamLifecycle.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Every ZMS stream is identified on the server by a connection key, and every
+key the app stops using must be closed with ``CMD_QUIT`` or the server keeps
+an ``nph-zms`` process alive for it. This hook owns that key's whole life.
+
+.. code:: typescript
+
+   import { useStreamLifecycle } from '../hooks/useStreamLifecycle';
+
+   const { connKey, forceRegenerate, releaseConnection } = useStreamLifecycle({
+     monitorId,
+     portalUrl: resolvedPortalUrl,
+     accessToken,
+     viewMode: effectiveViewMode,   // CMD_QUIT only fires in 'streaming'
+     mediaRef: imgRef,
+     logFn: log.monitor,
+     enabled,
+     minStreamingPort: effectiveMinStreamingPort,
+     apiTimeoutSeconds: settings.apiTimeoutSeconds,
+   });
+
+``forceRegenerate({ killPrevious })`` mints a new key. Pass
+``killPrevious: true`` when the old stream may still be alive on the server;
+visibility resume, manual retry, and the error-driven reconnect all do, because
+an ``<img>`` ``onError`` cannot distinguish a dead server process from a
+dropped-but-alive one, and guessing wrong leaves an orphan.
+``releaseConnection()`` quits the current key and clears it without minting a
+replacement; ``useMonitorStream`` calls it when its reconnect loop gives up, so
+the last key is not held until unmount. It returns early outside streaming
+mode. ``forceRegenerate`` does not: it mints a new key in any view mode, and
+only its optional ``killPrevious`` quit is streaming-gated, because the private
+``sendCmdQuit`` is what checks ``viewMode``.
+``mediaRef`` points at the ``<img>`` or ``<video>`` whose ``src`` is cleared on
+unmount, which is what actually releases the browser's connection.
+
+``useMonitorStream`` builds the retry behavior on top: ``reportStreamError``
+(wired to ``<img onError>``) schedules an exponential-backoff reconnect
+(``mjpegReconnectBaseDelayMs`` 1000 ms, doubling to ``mjpegReconnectMaxDelayMs``
+15000 ms, capped at ``mjpegReconnectMaxAttempts`` 6 attempts unless insomnia
+mode is on), and ``reportStreamLoad`` (wired to ``<img onLoad>``) resets the
+backoff after a good frame.
+
+Profile switch cannot rely on unmount
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Each lifecycle instance also registers a teardown thunk in the module-level
+registry ``lib/monitor/active-streams.ts`` (``registerActiveStream`` /
+``unregisterActiveStream``), and ``switchProfile`` in ``stores/profile.ts``
+awaits ``quitAllActiveStreams()`` as its very first step, before logout and
+before the SSL-trust flip.
+
+The ordering is the point. Each tile's ``CMD_QUIT`` captures that tile's own
+per-server URL and token, and has to go out while the previous profile's trust
+setting and token are still in effect. React unmount races the switch: the new
+profile's SSL-trust setting can flip before the old self-signed server's
+``CMD_QUIT`` leaves, the request then fails its TLS handshake, and an
+``nph-zms`` process is orphaned. A central quit keyed only by monitor ID could
+not do this either, having no record of which server each stream used.
+
+**Used by:** ``hooks/useMonitorStream.ts``,
+``components/monitors/MonitorHoverPreview.tsx``.
+
+useEventFilters (``hooks/useEventFilters.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Holds the Events page's filter state and persists it as the user changes it,
+with no Apply button in the persistence path.
+
+- Local state (``selectedMonitorIds``, ``selectedTagIds``, and so on) drives
+  both the UI and the ``filters`` object the API query consumes.
+- Wrapped setters (``setSelectedTagIds``) update local state and call
+  ``saveFilterField()`` to write to the settings store.
+- The restore effect reads settings on mount and on profile change using the
+  raw ``_set*`` functions, bypassing the save wrappers so restore does not
+  immediately re-save what it just read.
+- ``ALL_TAGS_FILTER_ID`` (``'__all_tags__'``) means "any tag" and is mutually
+  exclusive with individual tag selections.
+- ``onlyDetectedObjects`` adds ``notesRegexp: 'detected:'`` to the API filter,
+  which ZoneMinder evaluates server-side as a Notes REGEXP.
+- ``clearFilters()`` resets everything (the popover's Clear button).
+  ``clearDateRange()`` resets only the date range and active quick range. The
+  "x" beside a quick-range chip uses ``clearDateRange()``, so removing a time
+  window does not silently widen the list back to every monitor.
+- ``applyFilters()`` takes an optional date-range override. A handler that
+  sets the date state and calls ``applyFilters()`` in the same pass (the
+  quick-range chips) must pass the new range: the callback still closes over
+  the pre-update state, so without the override it writes the previous range
+  to the URL, and the URL-readback effect reflects that stale range back into
+  state.
+
+**Used by:** the Events page, ``EventsFilterPopover``.
+
+useScrollRestoration (``hooks/useScrollRestoration.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Restores a scroll container's position across unmount and remount. Takes
+``key`` (pass ``useLocation().key``) and ``ready`` (true once the scrollable
+content has rendered), and returns a callback ref for the container.
+
+Sibling routes such as ``/events`` and ``/events/:id`` unmount each other, so
+opening an event destroys the list's scroll container and coming back recreates
+it empty. Positions live in a module-level map keyed by the history entry's
+``location.key``: browser back reuses the same key and gets its offset restored,
+while fresh navigation mints a new key and starts at the top. Restore is
+deferred until ``ready`` so the container is tall enough to accept the saved
+offset, and runs once per entry so a later user scroll is not clobbered.
+
+Because restoration is keyed by the history entry, every "back" affordance must
+**pop** history rather than push a path. Esc (``KeyboardShortcuts``) and the
+Android hardware back button (``useAndroidBackButton``) call ``navigate(-1)``.
+The event detail back arrow routes through ``resolveBackNavigation``
+(``lib/back-navigation.ts``), which returns ``pop`` whenever a prior entry
+exists and pushes (to the referrer, or ``/events``) only on a cold deep-link
+with no history behind it. A plain ``navigate(referrer)`` push would mint a new
+key and lose the position (refs #197).
+
+**Used by:** the Events page.
+
+useAndroidBackButton (``hooks/useAndroidBackButton.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Registers one global Android hardware-back handler, native only, disabled
+while the kiosk lock is engaged. The decision is a pure function,
+``decideBackAction``, so it can be unit tested without a device: close an open
+dialog or popover, else navigate back on a detail route, else on a root (menu)
+route show "press back again to exit" and exit on a second press within
+``ANDROID_BACK.exitConfirmWindowMs`` (2000 ms). ``isRootRoute`` lists the
+top-level menu paths. Called once from ``AppRoutes``.
+
+**Used by:** ``AppRoutes``.
+
+useCapacitorListener (``hooks/useCapacitorListener.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Registers an event listener on a dynamically imported Capacitor plugin and
+removes it on unmount or when ``enabled`` turns false, replacing the per-site
+pattern of dynamic import, ``await addListener``, and a cancelled-flag
+teardown.
 
 .. code:: tsx
 
-   <LiveMonitorPlayer
-     monitor={monitor.Monitor}
-     profile={currentProfile}
-     objectFit="contain"
-     showControls={true}
-   />
+   useCapacitorListener(
+     () => import('@capacitor/app').then((m) => m.App),
+     'appStateChange',
+     (state: { isActive: boolean }) => {
+       if (!state.isActive) closePreview();
+     },
+     { enabled: open && Platform.isNative },
+   );
 
-**Used By:** MonitorDetail, MonitorCard, MontageMonitor, MonitorWidget
-(dashboard).
+``enabled`` defaults to ``Platform.isNative``. ``onError`` fires when the
+plugin import or the registration fails; without it failures are swallowed,
+which is right, because "plugin absent on this platform" is the common case.
 
---------------
+The handler is stored in a ref, a mutable box React keeps across renders
+without re-running anything when its contents change, so callers need no stable
+callback identity and the listener never re-registers on a re-render. A plugin
+handle that resolves *after* teardown (the component unmounted during the
+awaits) is removed the moment it arrives. The plugin getter must use a static
+import specifier so Vite can analyze and code-split it; never build the
+specifier from a template literal.
 
-Mp4EventPlayer (``components/events/Mp4EventPlayer.tsx``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+**Used by:** ``App.tsx`` (flush logs on pause), ``HoverPreview``,
+``KioskOverlay``, ``Mp4EventPlayer``, ``useNetworkStatus``,
+``useNotificationAutoConnect``, ``useNotificationDelivered``.
+``useAndroidBackButton`` deliberately does not: it registers its handler once
+and never re-subscribes.
 
-Video.js wrapper for recorded event playback (MP4 or HLS). Handles
-alarm-frame markers and Picture-in-Picture via ``usePip()``
-(``contexts/PipContext.tsx``).
+useNetworkStatus (``hooks/useNetworkStatus.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-**Features:**
-
-- ``autoplay``, ``controls``, ``muted``, ``aspectRatio`` props
-- ``markers`` / ``onMarkerClick`` for alarm-frame timeline markers
-- ``onReady`` / ``onError`` callbacks
-- ``eventId`` enables PiP survival across navigation
-
-**Usage:**
-
-.. code:: tsx
-
-   <Mp4EventPlayer
-     src={videoUrl}
-     type={videoMimeType}
-     poster={posterUrl}
-     autoplay={settings.eventVideoAutoplay}
-     markers={videoMarkers}
-     onMarkerClick={handleMarkerClick}
-     eventId={event.Event.Id}
-     onError={handleVideoError}
-   />
-
-**Used By:** EventDetail page (MP4 playback).
-
---------------
-
-PasswordInput (``ui/password-input.tsx``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Password input with show/hide toggle.
-
-**Features:**
-
-- Eye icon toggle
-- Keyboard-accessible
-- Standard input props
-
-**Usage:**
+Tracks connectivity and drives ``components/layout/OfflineBanner.tsx``, which
+``AppLayout`` renders. Returns ``{ isOnline }``.
 
 .. code:: tsx
 
-   <PasswordInput
-     value={password}
-     onChange={(e) => setPassword(e.target.value)}
-     placeholder="Enter password"
-   />
+   const { isOnline } = useNetworkStatus();
 
-**Used By:** ProfileForm, Login components
+On web and desktop it reads ``navigator.onLine`` and listens for the ``online``
+and ``offline`` window events. On iOS and Android one effect dynamically
+imports ``@capacitor/network``, reads ``Network.getStatus()`` once so the banner
+does not wait for the first transition, then registers a ``networkStatusChange``
+listener on the same import. Both steps share a single
+``import('@capacitor/network')`` call: importing the same plugin from two
+effects on one mount is wasted work, and under Vitest's module mocking the two
+race.
 
---------------
+**Used by:** ``components/layout/OfflineBanner.tsx``.
 
-EmptyState (``ui/empty-state.tsx``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Shared Components
+-----------------
 
-Placeholder component for empty lists/states.
+``components/ui/`` holds the unmodified shadcn/ui primitives (``button``,
+``card``, ``dialog``, ``popover``, ``select``, ``switch``, ``badge``,
+``progress``, and the rest). They behave as the
+`shadcn/ui documentation <https://ui.shadcn.com/docs/components>`_ describes
+and this guide does not restate it. What follows is what this project wrote.
 
-**Features:**
+PageContainer (``components/common/PageContainer.tsx``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-- Icon support
-- Title and description
-- Optional action button
-
-**Usage:**
+Gives every page the same responsive padding, so a screen does not drift on a
+phone because someone forgot a breakpoint. It always emits
+``p-3 sm:p-4 md:p-6``. The ``spacing`` prop maps to one fixed vertical gap:
+``'none'`` emits nothing, ``'tight'`` is ``space-y-3``, ``'normal'`` (the
+default) is ``space-y-4``, ``'loose'`` is ``space-y-6``.
 
 .. code:: tsx
 
-   <EmptyState
-     icon={<Inbox className="h-12 w-12" />}
-     title="No events found"
-     description="Try adjusting your filters"
-     action={
-       <Button onClick={clearFilters}>Clear Filters</Button>
-     }
-   />
+   // src/pages/Settings.tsx
+   <PageContainer spacing="loose">{/* ... */}</PageContainer>
 
-**Used By:** Events, EventMontage, Monitors, Montage, NotificationHistory,
-States, Timeline, Dashboard (when no widgets)
+   // src/pages/Monitors.tsx: needs a responsive gap, so opt out and pass one
+   <PageContainer className="space-y-4 sm:space-y-6" spacing="none">{/* ... */}</PageContainer>
 
---------------
+It is wrapped in ``forwardRef`` and spreads its remaining props onto the
+``<div>``, so ``ref`` and ``data-testid`` flow through. ``className`` is
+additive: extra classes merge via ``cn()`` and win on conflict.
 
-ErrorBanner and DetailPageSkeleton (``ui/query-state.tsx``)
+RefreshButton (``components/common/RefreshButton.tsx``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The refresh control in every page header. Pressing it reloads the whole app,
+not just the page's query: ``onRefresh`` defaults to ``reloadApp``
+(``lib/reload.ts``), which calls ``window.location.reload()``. That re-runs
+bootstrap, re-authenticates, re-fetches everything, and restarts streams,
+which is what a user pressing refresh after a server hiccup actually wants. A
+partial React Query refetch would leave a dead stream dead.
+
+.. code:: tsx
+
+   // src/pages/Monitors.tsx
+   <RefreshButton className="h-8 w-8 sm:h-9 sm:w-9" data-testid="monitors-refresh-button" />
+
+The icon gets ``animate-spin`` while ``isLoading``, and the button is disabled
+while loading or when ``disabled`` is set. ``label`` defaults to the
+``common.refresh`` translation key (present in en, de, es, fr, zh) and doubles
+as the ``title`` and ``aria-label`` when no explicit ``aria-label`` is passed.
+``showLabel`` (``'always'``, ``'never'``, ``'sm-and-up'``) defaults to
+``'never'``, so pages render it icon-only. The default ``data-testid`` is
+``refresh-button``; pages override it when more than one can be on screen.
+
+GridColumnsMenu (``components/common/GridColumnsMenu.tsx``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Two small presentational pieces factored out of the six pages that render
-a query's ``error`` state as an icon-and-message banner in a
-destructive-tinted box: ``ErrorBanner`` renders that box, and
-``DetailPageSkeleton`` renders the loading skeleton MonitorDetail and
-EventDetail both used to define inline (a title bar plus one aspect-video
-placeholder).
+Changing how many columns a grid shows. On a phone it renders a bottom
+``Sheet`` with large preset buttons; on a desktop, a ``DropdownMenu``. Both
+come from this one component, so the montage and event-montage controls cannot
+diverge. ``GridLayoutControls`` (montage) and ``EventMontageGridControls``
+(event montage, events, monitors) wrap it.
 
-**Usage:**
+It takes ``isMobile`` and ``gridCols`` for the rendering mode, ``title`` for
+the tooltip and sheet title, ``triggerIcon`` / ``triggerLabel`` /
+``triggerTestId`` for the trigger, ``presets`` as ``{ cols, icon, label,
+testId? }``, ``customIcon`` / ``customLabel`` for the custom-columns entry,
+and the ``onApplyGridLayout(cols)`` and ``onCustomSelect()`` callbacks.
+``showGridColsAttr`` renders ``data-grid-cols`` on the trigger for e2e tests.
+``renderSheetExtras(closeSheet)`` and ``renderMenuExtras()`` append optional
+content after the custom entry; the montage wrapper uses them for saved
+layouts and the save action.
+
+The file also exports ``CustomColumnsDialog``, a controlled number-input
+dialog (id ``custom-cols``, min 1, max 10, Enter submits). Validation stays
+with the caller: ``GridLayoutControls`` validates inline,
+``EventMontageGridControls`` delegates to
+``useEventMontageGrid.handleCustomGridSubmit``.
+
+CollapsibleCard (``components/ui/collapsible-card.tsx``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A Card whose header toggles its body, built on Radix Collapsible. Pass
+``storageKey`` and the open/closed state persists to ``localStorage``, so the
+Settings sections a user collapsed stay collapsed next launch.
+
+.. code:: tsx
+
+   <CollapsibleCard storageKey="settings-video" header={<CardTitle>Video</CardTitle>}>
+     {/* body */}
+   </CollapsibleCard>
+
+**Used by:** nothing today. It is the primitive to reach for when a section
+needs to remember that a user collapsed it; the example above is what a call
+site would look like, not one that exists.
+
+NotificationBadge (``components/NotificationBadge.tsx``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A bell with an unread count, placed beside page titles. It renders nothing
+when there are no unread notifications, and rings (a CSS animation) when a new
+one arrives.
+
+Two details. The last known count lives in a module-level variable rather than
+component state, so navigating between pages (which unmounts and remounts the
+badge) does not replay the ring for notifications the user has already seen.
+And the ring works by incrementing a ``ringKey`` used as the Bell's ``key``
+prop: React treats a changed ``key`` as a different element and remounts it,
+which restarts the CSS animation. Re-adding the class to an existing element
+would not.
+
+**Used by:** every page header.
+
+EmptyState (``components/ui/empty-state.tsx``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The placeholder for a list with nothing in it. ``icon`` takes the Lucide
+component itself, not a rendered element.
+
+.. code:: tsx
+
+   import { Clock } from 'lucide-react';
+
+   <EmptyState
+     icon={Clock}
+     title={t('events.no_events')}
+     action={{ label: t('events.clear_filters'), onClick: clearFilters }}
+   />
+
+**Used by:** Events, EventMontage, Monitors, Montage, NotificationHistory,
+States, Timeline, and the Dashboard when no widgets are configured.
+
+ErrorBanner and DetailPageSkeleton (``components/ui/query-state.tsx``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Every page rendered a query's ``error`` state as an icon-and-message box in a
+destructive tint, each with its own markup. ``ErrorBanner`` is that box.
+``DetailPageSkeleton`` is the loading skeleton MonitorDetail and EventDetail
+both defined inline: a title bar plus one aspect-video placeholder.
 
 .. code:: tsx
 
    import { ErrorBanner, DetailPageSkeleton } from '../components/ui/query-state';
+   import { resolveQueryError } from '../lib/query/query-error';
    import { AlertTriangle } from 'lucide-react';
 
    if (isLoading) return <DetailPageSkeleton />;
+   if (error) return <ErrorBanner icon={AlertTriangle} message={resolveQueryError(error, t)} />;
 
-   if (error) {
-     return (
-       <div className="p-8">
-         <ErrorBanner icon={AlertTriangle} message={t('monitor_detail.load_error')} />
-       </div>
-     );
+``icon`` defaults to ``AlertCircle``; MonitorDetail and EventDetail pass
+``AlertTriangle``. ``message`` accepts any ``ReactNode``, so a caller with
+nothing to interpolate can hand it a fixed translated string instead of a
+``resolveQueryError`` result, which is what those two detail pages do.
+
+**Used by:** Events, Monitors, EventMontage, Montage, States, Timeline,
+MonitorDetail, EventDetail. ``DetailPageSkeleton`` has only the two detail
+pages as callers.
+
+PasswordInput (``components/ui/password-input.tsx``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A text input with an eye-icon toggle between ``type="password"`` and
+``type="text"``. Accepts every standard input prop. Its one caller is
+``components/monitor-detail/MonitorSettingsDialog.tsx``, for the camera's
+source password.
+
+SecureImage (``components/ui/secure-image.tsx``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+An ``<img>`` with a fallback path for images the WebView cannot load on its
+own.
+
+.. code:: tsx
+
+   <SecureImage src={imageUrl} fallbackSrc={placeholderUrl} alt={alt} className="w-full" />
+
+It renders ``<img src={src}>`` plainly. The interesting part is ``onError``.
+On native, if the plain load failed, it retries through ``getApiClient()`` with
+``responseType: 'base64'``, builds a ``data:`` URL from the response and its
+``content-type`` header, and swaps that in. That second attempt exists because
+the native HTTP layer can reach servers the WebView refuses: a self-signed
+certificate the ``SSLTrust`` plugin trusts, or a CORS policy CapacitorHttp
+ignores. If it also fails, or the platform is not native, the component falls
+back to ``fallbackSrc``, and only then delegates to the caller's ``onError``.
+
+A ``mountedRef`` guards the state update, because the base64 fetch can resolve
+after the component unmounted.
+
+HoverPreview (``components/ui/hover-preview.tsx``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Hover a camera tile on a desktop and a larger live preview opens beside it;
+long-press the same tile on a phone and you get the same preview.
+
+.. code:: tsx
+
+   export interface HoverPreviewProps {
+     aspectRatio: number;
+     renderPreview: () => ReactNode;
+     children: ReactNode;
+     previewWidth?: number;   // default UI_INTERACTIONS.previewWidthPx (400)
+     hoverDelayMs?: number;   // default UI_INTERACTIONS.hoverDelayMs (700)
+     testId?: string;
+     className?: string;
    }
 
-``icon`` defaults to ``AlertCircle``; pass a different ``LucideIcon`` where
-a page used a different one (MonitorDetail and EventDetail use
-``AlertTriangle``). ``message`` accepts any ``ReactNode``, so callers that
-build their own interpolated string (EventMontage, Montage) can still use
-the banner without going through ``resolveQueryError``.
+``children`` is the trigger. ``renderPreview`` is a function, not a node, and
+runs only while the preview is open. That is what lets ``MonitorHoverPreview``
+mount a fresh stream on hover and tear it down on leave: the inner component's
+unmount runs ``useStreamLifecycle``'s cleanup, which sends ``CMD_QUIT`` for the
+preview's connkey. Passing a prebuilt element instead would keep that stream
+open forever.
 
-**Used By:** Events, Monitors, EventMontage, Montage, MonitorDetail,
-EventDetail. States and Timeline keep their own error box: no icon and a
-different corner radius, not a real duplicate of this one.
+The preview renders into a portal, a React feature that mounts an element into
+a different DOM node than its parent, so the popup escapes a tile's
+``overflow: hidden`` without leaving the component tree. On desktop the portal
+carries ``pointer-events: none`` so the trigger stays clickable underneath; on
+native it is ``'auto'``, since a long-press preview is dismissed by tapping it
+rather than by hovering off. Either way the portal flips left when there is no
+room on the right, and closes on mouse leave or on window scroll or wheel.
 
---------------
+On native (``!Platform.isDesktopOrWeb``) the trigger wires pointer handlers
+instead: a press held for ``UI_INTERACTIONS.longPressMs`` (500 ms) opens the
+preview, a backdrop at ``Z_INDEX.overlayBackdrop`` catches the dismissing tap,
+and dismissal fires on ``click`` rather than ``pointerdown``. Closing on
+pointerdown would restore ``#root``'s pointer events before the synthetic click
+arrived, and the tap would fall through to whatever sat underneath.
 
-ZoomControls (``ui/zoom-controls.tsx``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Wrappers: ``components/monitors/MonitorHoverPreview.tsx`` (a live monitor
+stream) and ``components/events/EventThumbnailHoverPreview.tsx``. The second
+one is not a bigger thumbnail: hovering an event card plays the recorded event
+back. Its inner ``EventZmsHoverPlayer`` mints a random connkey, builds a
+``getEventZmsUrl`` with ``replay: 'single'``, ``maxfps: 30``, and the
+per-profile ``hoverPreviewPlaybackRate``, and renders it in an ``<img>``. On
+unmount it sends ``ZMS_COMMANDS.cmdQuit`` through ``sendDelayedCmdQuit``, and
+on mount it calls ``cancelPendingQuit`` so a StrictMode remount reuses the same
+connkey rather than killing it.
 
-Zoom +/- and pan-arrow overlay for a ``useZoomPan``-controlled element.
+EventThumbnail (``components/events/EventThumbnail.tsx``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A thumbnail with a user-configurable fallback chain. Different ZoneMinder
+versions and storage configurations expose different frame images, so the user
+picks an ordered list of candidates and this component walks it. It takes
+``urls`` (candidates, in order), a stable ``cacheKey`` (the event id),
+``alt``, ``objectFit``, and any other ``<img>`` attribute.
+
+.. code:: tsx
+
+   const urls = buildThumbnailChain(portalUrl, event.Id, settings.thumbnailFallbackChain, {
+     token: accessToken, width, height, minStreamingPort, monitorId: event.MonitorId,
+   });
+
+   <EventThumbnail urls={urls} cacheKey={event.Id} alt={event.Name} />
+
+On ``onError`` it advances to the next URL. The image renders at ``opacity: 0``
+until ``onLoad`` fires, so the browser never flashes its broken-image glyph
+while the chain is walking. The winning index is kept in a session-scoped
+``Map<cacheKey, index>``, so scrolling a list back and forth does not re-probe
+a chain that already resolved.
+
+``resolveFallbackFids`` and ``buildThumbnailChain``
+(``lib/event/thumbnail-chain.ts``) turn the per-profile
+``thumbnailFallbackChain`` setting into ordered frame IDs and full URLs,
+skipping disabled entries and empty custom rows.
+
+**Used by:** EventCard (via EventListView and EventMontageView), the
+TimelineScrubber thumbnails, NotificationHistory. The EventDetail hero poster
+and EventPreviewPopover take the first frame ID from the resolved chain rather
+than hardcoding ``snapshot`` or ``alarm``.
+
+LiveMonitorPlayer (``components/monitors/LiveMonitorPlayer.tsx``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The live view of one camera, wherever it appears. It picks Go2RTC WebRTC or
+MJPEG from the user's preference and the monitor's capability, with a fallback
+ladder of WebRTC, then MSE, then HLS, then MJPEG. :doc:`go2rtc-integration`
+covers the selection logic.
+
+Beyond ``monitor``, ``profile``, ``className``, ``objectFit``,
+``showControls``, ``muted``, ``onLoad``, and ``externalMediaRef``, three props
+exist for specific callers. ``onProtocolChange(protocol)`` reports the protocol
+actually in use, which MonitorDetail displays: ``'MJPEG'``, or the Go2RTC
+protocol upper-cased (``'WEBRTC'``, ``'MSE'``, ``'HLS'``), or the literal
+``'Go2RTC'`` while a Go2RTC stream has not yet settled on one.
+``forceViewMode`` pins a monitor to ``'streaming'`` or ``'snapshot'``
+regardless of the global Streaming Mode setting; the single-monitor page uses
+``'streaming'`` so it never degrades to periodic snapshots.
+``bypassGo2rtcFailureCache`` opts a single-monitor view out of the shared,
+module-level Go2RTC failure cache the montage tiles consult, so one failing
+tile does not condemn the detail page to MJPEG.
+
+**Used by:** MonitorDetail, MonitorCard, MontageMonitor, MonitorWidget.
+
+Mp4EventPlayer (``components/events/Mp4EventPlayer.tsx``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Video.js wrapper for recorded event playback (MP4 or HLS), with alarm-frame
+markers on the timeline (``markers`` / ``onMarkerClick``) alongside the usual
+``src``, ``type``, ``poster``, ``autoplay``, ``onReady``, and ``onError``.
+
+Passing ``eventId`` enables Picture-in-Picture that survives navigation.
+``contexts/PipContext.tsx`` provides ``PipProvider`` (wrapping the app in
+``App.tsx``, rendering a hidden portal ``div`` beside the router) and the
+``usePip()`` hook: ``adoptForPip(player, videoEl, eventId)`` moves the video
+element into that portal so it outlives the component that created it,
+``reclaimFromPip()`` pulls it back for inline resume, ``closePip()`` ends it,
+and ``activePipEventId`` says which event is floating. ``LiveMonitorPlayer``
+does not use PiP.
+
+**Used by:** the EventDetail page.
+
+ZoomControls (``components/ui/zoom-controls.tsx``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Zoom and pan overlay for an element controlled by ``useZoomPan``.
 Click-and-hold repeats the action on every button.
-
-Accepts either the object returned by ``useZoomPan`` directly, or the nine
-explicit handler/state props for callers that only need a subset of it:
 
 .. code:: tsx
 
@@ -1703,41 +1554,19 @@ explicit handler/state props for callers that only need a subset of it:
      <ZoomControls zoomPan={zoomPan} className="bottom-2 left-2" />
    </div>
 
-   // Explicit-props form still works for callers that don't hold the
-   // full useZoomPan object (or wrap only some of its handlers):
-   <ZoomControls
-     onZoomIn={zoomPan.zoomIn}
-     onZoomOut={zoomPan.zoomOut}
-     onReset={zoomPan.reset}
-     onPanLeft={zoomPan.panLeft}
-     onPanRight={zoomPan.panRight}
-     onPanUp={zoomPan.panUp}
-     onPanDown={zoomPan.panDown}
-     isZoomed={zoomPan.isZoomed}
-     scale={zoomPan.scale}
-   />
+It takes the whole ``ZoomPanControls`` object rather than nine separate handler
+props, so adding a control does not touch three call sites.
 
-**Used By:** MonitorDetail, ZmsEventPlayer (via the ``zoomPan`` form);
-EventDetail's MP4 player still uses the explicit-props form.
+**Used by:** MonitorDetail, EventDetail, ZmsEventPlayer.
 
---------------
+PullToRefreshIndicator (``components/ui/pull-to-refresh-indicator.tsx``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-PullToRefresh (``ui/pull-to-refresh-indicator.tsx``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Visual indicator for pull-to-refresh gesture.
-
-**Features:**
-
-- Platform-aware (mobile only)
-- Animated spinner
-- Progress indication
-
-**Usage:**
+The spinner that appears when a user drags a list down past its top. The
+gesture lives in ``hooks/usePullToRefresh.ts``, which wraps
+``@use-gesture/react``'s ``useDrag``.
 
 .. code:: tsx
-
-   import { usePullToRefresh } from '../hooks/usePullToRefresh';
 
    const { containerRef, bind, isRefreshing, isPulling, pullDistance } =
      usePullToRefresh({ onRefresh: () => refetch() });
@@ -1748,272 +1577,32 @@ Visual indicator for pull-to-refresh gesture.
        isRefreshing={isRefreshing}
        pullDistance={pullDistance}
      />
-     {/* Content */}
    </div>
 
-The hook takes a destructured options object (``onRefresh``, optional
-``threshold``, optional ``enabled``) and gesture detection is wired through
-``@use-gesture/react``'s ``useDrag``. Spread the returned ``bind()`` props
-onto the scroll container and attach ``containerRef`` so the hook can read
-``scrollTop`` to gate activation.
+Spread ``bind()`` onto the scroll container and attach ``containerRef``: the
+hook reads ``scrollTop`` from it to tell a pull-to-refresh from an ordinary
+scroll. It takes ``onRefresh`` plus optional ``threshold`` and ``enabled``.
 
-**Used By:** Events page, Monitors page, Montage page
+**Used by:** the Events page.
 
---------------
+QuickDateRangeButtons (``components/ui/quick-date-range-buttons.tsx``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-QuickDateRangeButtons (``ui/quick-date-range-buttons.tsx``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Nine preset range chips with abbreviated labels and tooltips; the text hides on
+narrow screens. The presets are today (``hours: 0``), then 4, 8, 12, 24, and 48
+hours, then 168 (a week), 336 (two weeks), and 720 (thirty days).
+``onRangeSelect`` receives ``{ start, end, hours }``; callers persist ``hours``
+as the active quick range so the chip stays highlighted after a reload.
 
-Quick date range selector buttons.
+**Used by:** the Events filter, the Timeline filter, dashboard widgets.
 
-**Features:**
+Filter popovers (``components/filters/``, ``components/events/``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-- Predefined ranges (24h, 48h, 1wk, 2wk, 1mo)
-- Abbreviated labels with tooltips
-- Responsive (hides text on mobile)
-
-**Usage:**
-
-.. code:: tsx
-
-   <QuickDateRangeButtons
-     onRangeSelect={({ start, end }) => {
-       setStartDate(start);
-       setEndDate(end);
-     }}
-   />
-
-**Used By:** Events filter, Timeline filter, Dashboard widgets
-
---------------
-
-Select (``ui/select.tsx``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Dropdown select component.
-
-**Sub-components:** Select, SelectTrigger, SelectValue, SelectContent,
-SelectItem
-
-**Usage:**
-
-.. code:: tsx
-
-   <Select value={value} onValueChange={setValue}>
-     <SelectTrigger>
-       <SelectValue placeholder="Select option" />
-     </SelectTrigger>
-     <SelectContent>
-       <SelectItem value="option1">Option 1</SelectItem>
-       <SelectItem value="option2">Option 2</SelectItem>
-     </SelectContent>
-   </Select>
-
-**Used By:** Settings pages, filters, dashboard widget config
-
---------------
-
-Switch (``ui/switch.tsx``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Toggle switch component.
-
-**Usage:**
-
-.. code:: tsx
-
-   <Switch
-     checked={enabled}
-     onCheckedChange={setEnabled}
-   />
-
-**Used By:** Settings pages, filters (favorites toggle)
-
---------------
-
-Badge (``ui/badge.tsx``)
-~~~~~~~~~~~~~~~~~~~~~~~~
-
-Small status indicator.
-
-**Variants:** default, secondary, destructive, outline
-
-**Usage:**
-
-.. code:: tsx
-
-   <Badge variant="destructive">Offline</Badge>
-   <Badge>5 events</Badge>
-
-**Used By:** MonitorCard (status), EventCard (alarm frames), navigation
-(counts)
-
---------------
-
-Progress (``ui/progress.tsx``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Progress bar component.
-
-**Usage:**
-
-.. code:: tsx
-
-   <Progress value={percentage} max={100} />
-
-**Used By:** Background task drawer (download progress)
-
---------------
-
-Shared Hooks (hooks/)
----------------------
-
-useEventFilters (``hooks/useEventFilters.ts``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Manages event filter state with auto-save persistence. Filter
-selections are saved to the settings store immediately via wrapped
-setters, no "Apply" button needed for persistence.
-
-**Key concepts:**
-
-- Local state (``selectedMonitorIds``, ``selectedTagIds``, etc.)
-  drives the UI and the ``filters`` object for API queries
-- Wrapped setters (e.g. ``setSelectedTagIds``) update local state
-  AND call ``saveFilterField()`` to write to the settings store
-- Restore effect reads from settings on mount/profile change using
-  raw ``_set*`` functions (bypasses save wrappers to avoid loops)
-- ``ALL_TAGS_FILTER_ID`` sentinel (``'__all_tags__'``) means
-  "show events with any tag", mutually exclusive with individual
-  tag selections
-- ``onlyDetectedObjects`` flag adds ``notesRegexp: 'detected:'``
-  to the API filter (server-side Notes REGEXP filter)
-- The "Filter" button syncs state to URL params for deep linking
-- ``clearFilters()`` resets every filter (used by the popover "Clear"
-  button). ``clearDateRange()`` resets only the date range and active
-  quick range, leaving the monitor/tag/favorite scope intact. The "x"
-  beside the quick-range chips uses ``clearDateRange()`` so removing a
-  time window does not widen the list back to all monitors.
-- ``applyFilters()`` accepts an optional date-range override. Callers
-  that set the date state and call ``applyFilters()`` in the same handler
-  (the quick-range chips) must pass the new range, because the callback
-  still closes over the pre-update state. Without the override it would
-  write the previous range to the URL, and the URL-readback effect would
-  reflect that stale range back into state.
-
-**Used By:** Events page, EventsFilterPopover
-
-useScrollRestoration (``hooks/useScrollRestoration.ts``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Restores a scroll container's position across unmount/remount cycles. Takes
-``key`` (pass ``useLocation().key``) and ``ready`` (true once the scrollable
-content has rendered), and returns a callback ref for the container.
-
-Sibling routes such as ``/events`` and ``/events/:id`` unmount each other, so the
-list's scroll container is destroyed when opening an event and recreated empty on
-the way back. Positions are stored in a module-level map keyed by the history
-entry's ``location.key``: browser back reuses the same key and restores the prior
-offset, while fresh navigation (a new key) starts at the top. Restore is deferred
-until ``ready`` so the container is tall enough to accept the saved offset, and
-runs once per entry so a later scroll is not clobbered.
-
-Because restoration is keyed by the history entry, every "back" affordance must
-**pop** history rather than push a path. Esc (``KeyboardShortcuts``) and the
-Android back button (``useAndroidBackButton``) call ``navigate(-1)``. The event
-detail back arrow routes through ``resolveBackNavigation``
-(``lib/back-navigation.ts``), which returns ``pop`` whenever a prior entry exists
-and only pushes (to the referrer or ``/events``) on a cold deep-link with no
-history. A ``navigate(referrer)`` push would mint a new key and lose the position
-(refs #197).
-
-**Used By:** Events page
-
-useAndroidBackButton (``hooks/useAndroidBackButton.ts``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Registers one global Android hardware-back handler (native only, disabled while
-the kiosk lock is engaged). The pure ``decideBackAction`` picks the response:
-close an open dialog/popover, else navigate back on a detail route, else on a
-root (menu) route show "press back again to exit" and exit on a second press
-within ``ANDROID_BACK.exitConfirmWindowMs`` (2s). ``isRootRoute`` lists the
-top-level menu paths. Called once from ``AppRoutes``.
-
-**Used By:** AppRoutes
-
-KeyboardShortcuts (``components/KeyboardShortcuts.tsx``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Global keyboard shortcuts, mounted once under the router. Single letters jump to
-each menu section (``d`` Dashboard, ``m`` Montage, ``e`` Events, ``v`` Monitors,
-``t`` Timeline, ``n`` Notifications, ``l`` Logs, ``g`` Settings, ``p`` Profiles,
-``r`` Server). Digits buffer a monitor number shown in an overlay and, on Enter or
-after ``KEYBOARD_SHORTCUTS.monitorJumpCommitMs`` (1s), open the monitor whose
-ZoneMinder ID matches (``monitorIdFromBuffer``), not its list position (refs
-#200). ``Esc`` goes back (closing an open layer first via
-``hasOpenOverlay``), ``?`` toggles a help dialog. Inactive while typing
-(``isTypingTarget``), when a modifier is held, when the kiosk is locked, or in TV
-mode. The shortcut table and pure helpers live in ``lib/keyboard-shortcuts.ts``.
-
-**Used By:** App (mounted in ``HashRouter``)
-
-Command Palette
-~~~~~~~~~~~~~~~
-
-``src/components/CommandPalette.tsx`` is a global palette (refs #207) opened by
-the ``/`` key (via ``KeyboardShortcuts``), a sidebar button, or the mobile-header
-icon, all through ``useCommandPaletteStore``. It lists pages, monitors (by name
-and ID), and groups, filtered by the pure ``filterCommandItems`` helper in
-``src/lib/command-palette.ts``. Selecting a page navigates to it, a monitor opens
-its live view, and a group sets the group filter and opens Montage.
-
-Event Notes Display
-~~~~~~~~~~~~~~~~~~~
-
-ZoneMinder stores object detection results in the ``Notes`` field
-(e.g. ``detected:car| Motion: All``), not in ``Cause``. The Notes
-field is displayed in EventCard, EventMontageView, EventDetail, and
-the dashboard EventsWidget. Everything after ``|`` is stripped in
-the display (redundant with Cause) but preserved in the ``title``
-attribute for hover.
-
-Sidebar Navigation Reorder
-~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Users can reorder sidebar menu items via an edit mode (pencil icon
-in the sidebar). Order is saved per profile in
-``ProfileSettings.sidebarNavOrder`` (array of route paths). The
-``SidebarContent`` component (``components/layout/SidebarContent.tsx``)
-sorts ``navItems`` by saved order using a ``useMemo``. Reorder uses
-pointer events for drag-and-drop with live swap on midpoint crossing.
-
-``AppLayout.tsx`` is a thin shell: a desktop sidebar and a mobile header
-both render ``SidebarContent`` (navigation, reorder, user controls), where
-the bulk of sidebar logic lives. The mobile menu button sits on the left so
-it matches the side the drawer opens from. ``LanguageSwitcher`` is a
-self-contained language dropdown shown in the ``SidebarContent`` footer
-next to the theme and lock controls (a set-once control), not in the header.
-
---------------
-
-Reusable Domain Components
---------------------------
-
-Located in ``src/components/``, organized by domain.
-
-MonitorFilterPopover (``filters/MonitorFilterPopover.tsx``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Monitor selection filter with “All Monitors” toggle.
-
-**Features:**
-
-- Select individual monitors
-- “All Monitors” checkbox
-- Search/filter monitors
-- Used in multiple contexts (Events, Timeline, Dashboard)
-
-**Usage:**
+``MonitorFilterPopover.tsx`` exports ``MonitorFilterPopoverContent``: monitor
+selection with an "All Monitors" toggle and a search box. It is the content,
+not the popover, so a caller can host it in a popover, a sheet, or a dialog.
+Pass ``idPrefix`` to keep checkbox ids unique when two instances coexist.
 
 .. code:: tsx
 
@@ -2021,502 +1610,134 @@ Monitor selection filter with “All Monitors” toggle.
      monitors={monitors}
      selectedMonitorIds={selectedMonitorIds}
      onSelectionChange={setSelectedMonitorIds}
-     idPrefix="events" // for unique checkbox IDs
+     idPrefix="events"
    />
 
-**Used By:** Events page, Timeline page, Dashboard widget config
+``EventsFilterPopover.tsx`` composes that with a favorites-only toggle, date
+range inputs, the quick range chips, and Apply/Clear. It is presentational; all
+its state comes from ``useEventFilters``.
 
---------------
+**Used by:** the Events page, the Timeline page, the dashboard widget config.
 
-EventsFilterPopover (``events/EventsFilterPopover.tsx``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+BackgroundTaskDrawer (``components/BackgroundTaskDrawer.tsx``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Event filtering UI (extracted from Events page).
+Shows downloads in flight, with progress bars and a cancel button. It renders
+in the app layout and is driven entirely by the background task store, so a
+download started from an event card keeps reporting progress after the user
+navigates away.
 
-**Features:**
+.. code:: typescript
 
-- Monitor selection via MonitorFilterPopover
-- Favorites-only toggle
-- Date range inputs
-- Quick date range buttons
-- Apply/Clear actions
-
-**Usage:**
-
-.. code:: tsx
-
-   <EventsFilterPopover
-     monitors={monitors}
-     selectedMonitorIds={selectedMonitorIds}
-     onMonitorSelectionChange={setSelectedMonitorIds}
-     favoritesOnly={favoritesOnly}
-     onFavoritesOnlyChange={setFavoritesOnly}
-     startDateInput={startDate}
-     onStartDateChange={setStartDate}
-     endDateInput={endDate}
-     onEndDateChange={setEndDate}
-     onQuickRangeSelect={({ start, end }) => {
-       setStartDate(formatLocalDateTime(start));
-       setEndDate(formatLocalDateTime(end));
-     }}
-     onApplyFilters={applyFilters}
-     onClearFilters={clearFilters}
-   />
-
-**Used By:** Events page
-
---------------
-
-BackgroundTaskDrawer (``BackgroundTaskDrawer.tsx``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Drawer UI for background tasks (downloads, uploads, syncs).
-
-**Features:**
-
-- Task progress bars
-- Cancellation support
-- Auto-expand/collapse states
-- Completion badge
-
-**States:**
-
-- Hidden: No tasks
-- Expanded: Shows progress bars
-- Collapsed: Thin bar at bottom
-- Badge: Floating count badge
-
-**Usage:**
-
-.. code:: tsx
-
-   // Automatically rendered in App.tsx layout
-   // Controlled by background task store
-
-   // Adding a task
    const taskStore = useBackgroundTasks.getState();
+
    const taskId = taskStore.addTask({
      type: 'download',
-     metadata: { title: 'Video.mp4', description: 'Event 123' },
+     metadata: { title: 'Video.mp4', description: 'Event 12345' },
      cancelFn: () => abortController.abort(),
    });
 
-   // Update progress
    taskStore.updateProgress(taskId, percentage, bytesProcessed);
-
-   // Complete
    taskStore.completeTask(taskId);
 
-**Used By:** Download functions, upload functions (future)
-
---------------
-
-ZoneOverlay (``monitors/ZoneOverlay.tsx``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-SVG overlay that renders detection zones as semi-transparent polygons on top of a video player or image. Read-only visualization.
-
-Each zone polygon is colored by zone type via ``getZoneColor(zone.Type)``. The ``AlarmRGB`` field stored by ZoneMinder is not used for overlay color. Hovering a polygon shows a tooltip with the zone name and translated zone type (i18n key: ``monitor_detail.zone_type.{type}``). Zones are filtered to the current monitor by ``MonitorId``, and coordinates are transformed to match any active monitor rotation.
-
-**Props:**
-
-.. code:: ts
-
-   interface ZoneOverlayProps {
-     zones: Zone[];
-     monitorWidth: number;   // original, before rotation
-     monitorHeight: number;  // original, before rotation
-     rotation: MonitorRotation;
-     monitorId: string;
-     visible: boolean;
-   }
-
-**Used By:** MonitorDetail
-
---------------
-
-ZoneLegend (``monitors/ZoneLegend.tsx``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Color key for the zone overlay. Lists only the zone types present on the current monitor, in ``ZONE_TYPE_ORDER``, each with a color swatch and translated label. Absolutely positioned at the bottom-left of the player container, ``pointer-events-none``, and rendered only while the overlay is visible.
-
-**Props:**
-
-.. code:: ts
-
-   interface ZoneLegendProps {
-     zones: Zone[];
-     monitorId: string;
-     visible: boolean;
-   }
-
-**Used By:** MonitorDetail
-
---------------
-
-Usage Matrix
-------------
-
-This table shows which components/pages use which shared services:
-
-+---------------------------------------------+------------------------+
-| Service/Utility                             | Used By                |
-+=============================================+========================+
-| **logger**                                  | All components,        |
-|                                             | stores, API functions  |
-+---------------------------------------------+------------------------+
-| **http**                                    | All API functions,     |
-|                                             | download utilities     |
-+---------------------------------------------+------------------------+
-| **download**                                | MonitorCard,           |
-|                                             | EventDetail,           |
-|                                             | EventCard,             |
-|                                             | MontageMonitor         |
-+---------------------------------------------+------------------------+
-| **proxy-utils**                             | API functions          |
-|                                             | (monitors, events),    |
-|                                             | download, http         |
-+---------------------------------------------+------------------------+
-| **url-builder**                             | API functions          |
-|                                             | (events, monitors),    |
-|                                             | useStreamLifecycle     |
-+---------------------------------------------+------------------------+
-| **time**                                    | API functions, Events  |
-|                                             | page, Timeline,        |
-|                                             | Dashboard widgets      |
-+---------------------------------------------+------------------------+
-| **crypto**                                  | ProfileService, secure |
-|                                             | storage (web)          |
-+---------------------------------------------+------------------------+
-| **secureStorage**                           | ProfileService         |
-+---------------------------------------------+------------------------+
-| **platform**                                | HTTP client, download, |
-|                                             | proxy utilities        |
-+---------------------------------------------+------------------------+
-| **api-validator**                           | All API functions      |
-+---------------------------------------------+------------------------+
-| **grid-utils**                              | Montage, EventMontage, |
-|                                             | Dashboard              |
-+---------------------------------------------+------------------------+
-| **zone-utils**                              | ZoneOverlay,           |
-|                                             | ZoneLegend             |
-+---------------------------------------------+------------------------+
-
---------------
-
-+-----------------------------------------+----------------------------+
-| UI Component                            | Used By                    |
-+=========================================+============================+
-| **Button**                              | All pages and components   |
-+-----------------------------------------+----------------------------+
-| **Card**                                | MonitorCard, EventCard,    |
-|                                         | Dashboard widgets,         |
-|                                         | Settings                   |
-+-----------------------------------------+----------------------------+
-| **Dialog**                              | Event deletion, Profile    |
-|                                         | deletion, Widget editing,  |
-|                                         | PTZ presets                |
-+-----------------------------------------+----------------------------+
-| **Popover**                             | Filters (Events, Monitors, |
-|                                         | Timeline), date selectors  |
-+-----------------------------------------+----------------------------+
-| **SecureImage**                         | (Rare - authenticated      |
-|                                         | images)                    |
-+-----------------------------------------+----------------------------+
-| **LiveMonitorPlayer**                   | MonitorDetail, MonitorCard,|
-|                                         | MontageMonitor,            |
-|                                         | MonitorWidget              |
-+-----------------------------------------+----------------------------+
-| **Mp4EventPlayer**                      | EventDetail                |
-+-----------------------------------------+----------------------------+
-| **PasswordInput**                       | ProfileForm                |
-+-----------------------------------------+----------------------------+
-| **EmptyState**                          | Events, Monitors,          |
-|                                         | Dashboard                  |
-+-----------------------------------------+----------------------------+
-| **PullToRefresh**                       | Events, Monitors, Montage  |
-+-----------------------------------------+----------------------------+
-| **QuickDateRangeButtons**               | Events filter, Timeline,   |
-|                                         | Dashboard widgets          |
-+-----------------------------------------+----------------------------+
-| **Select**                              | Settings pages, filters,   |
-|                                         | widget config              |
-+-----------------------------------------+----------------------------+
-| **Switch**                              | Settings pages, favorites  |
-|                                         | toggle                     |
-+-----------------------------------------+----------------------------+
-| **Badge**                               | MonitorCard, EventCard,    |
-|                                         | navigation                 |
-+-----------------------------------------+----------------------------+
-| **Progress**                            | BackgroundTaskDrawer       |
-+-----------------------------------------+----------------------------+
-
---------------
-
-+----------------------------------------------+-----------------------+
-| Domain Component                             | Used By               |
-+==============================================+=======================+
-| **MonitorFilterPopover**                     | Events page, Timeline |
-|                                              | page, Dashboard       |
-|                                              | widget config         |
-+----------------------------------------------+-----------------------+
-| **EventsFilterPopover**                      | Events page           |
-+----------------------------------------------+-----------------------+
-| **BackgroundTaskDrawer**                     | App layout            |
-|                                              | (auto-rendered)       |
-+----------------------------------------------+-----------------------+
-| **ZoneOverlay**                              | MonitorDetail         |
-+----------------------------------------------+-----------------------+
-| **ZoneLegend**                               | MonitorDetail         |
-+----------------------------------------------+-----------------------+
-
---------------
-
-Adding New Shared Services
---------------------------
-
-When creating a new shared utility, follow these guidelines:
-
-1. Choose the Right Location
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-- ``lib/`` - Pure utilities (no React, no stores)
-- ``hooks/`` - React-specific logic
-- ``services/`` - Platform-specific bridges (Capacitor plugins)
-- ``components/ui/`` - Primitive UI components
-- ``components/domain/`` - Domain-specific reusable components
-
-2. Document Usage
-~~~~~~~~~~~~~~~~~
-
-Update this file with:
-
-- Description of the utility
-- Code examples
-- Platform considerations
-- List of consumers
-
-3. Follow Patterns
-~~~~~~~~~~~~~~~~~~
-
-Look at existing utilities for patterns:
-
-- Consistent error handling
-- Logging via component-specific loggers
-- Platform detection where needed
-- TypeScript types exported
-
-4. Test
-~~~~~~~
-
-All shared utilities should have unit tests in ``__tests__/``
-subdirectory.
-
---------------
-
-Navigation Service (``lib/navigation.ts``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Bridges non-React code (services, push notification handlers) with React
-Router. Services cannot call ``useNavigate()`` directly, so they emit
-navigation events through this singleton and ``NotificationHandler``
-listens and forwards them to the router.
-
-**API:**
-
-.. code:: typescript
-
-   import { navigationService } from '../lib/navigation';
-
-   // Navigate to an event (e.g., from push notification tap)
-   navigationService.navigateToEvent(eventId, {
-     from: '/monitors',        // back-button destination
-     fromNotification: true,   // skip lastRoute persistence
-   });
-
-   // Generic navigation
-   navigationService.navigate('/monitors/5');
-
-   // Listen in a React component
-   useEffect(() => {
-     const unsubscribe = navigationService.addListener((event) => {
-       navigate(event.path, { replace: event.replace, state: event.state });
-     });
-     return unsubscribe;
-   }, [navigate]);
-
-**NavigationState properties:**
-
-- ``from``: explicit back-button destination (read by EventDetail/MonitorDetail
-  via ``location.state?.from``)
-- ``fromNotification``: when ``true``, AppLayout skips saving the route as
-  ``lastRoute`` so the app does not reopen to a transient event playback screen
-
-**Used By:** pushNotifications.ts, NotificationHandler.tsx
-
---------------
-
-Notification Services (services/)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-The notification system spans three services that handle different delivery
-mechanisms:
-
-``services/notifications.ts``: WebSocket connection to ZoneMinder Event
-Server (ES mode). Handles real-time alarm events via ``zmeventnotification.pl``.
-
-- Singleton via ``getNotificationService()``
-- Exponential backoff reconnection with jitter (2s base, 2min cap)
-- ``intentionalDisconnect`` flag prevents reconnect after user-initiated
-  disconnect; network failures always retry
-- ``checkAlive(timeoutMs)`` liveness probe used on app resume and tab
-  visibility change
-- ``reconnectNow()`` for immediate reconnect on network restore
-- Keepalive ping at the profile's bandwidth ``wsKeepaliveInterval``
-  (60s normal, 120s low)
-- ``reconnectAttempts`` resets only after successful authentication
-- No store imports: ``stores/notifications.ts`` injects store-derived values
-  (fresh access token, event image URL builder via ``lib/zm/url-builder``,
-  keepalive interval) as ``ZMNotificationProviders`` at connect time
-
-``services/pushNotifications.ts``: FCM push notification handling for
-iOS and Android.
-
-- Singleton via ``getPushService()``
-- Requests permission, obtains FCM token, registers with ZM server
-- In ES mode: registers token via WebSocket; in Direct mode: via REST API
-- Foreground notifications are processed and added to the notification store
-  (but ignored if WebSocket is already connected, to avoid duplicates)
-- Handles notification tap to navigate to event detail
-- No store imports: took ``useNotificationStore``/``useProfileStore``/
-  ``useAuthStore`` directly until ``stores/notifications.ts`` dynamically
-  importing this file (native token registration) closed a static cycle back
-  through this file's static imports of those same stores. Now takes a
-  ``PushServiceStoreGates`` via ``setPushServiceStoreGates``, the same
-  DI-gate shape as ``api/store-gates.ts`` (:doc:`07-api-and-data-fetching`);
-  ``stores/notifications.ts`` assembles the real gate and registers it at
-  module load. Refs #217.
-
-``services/eventPoller.ts``: Polls ZM events API for new events in
-Direct notification mode on desktop/web.
-
-- Singleton via ``getEventPoller()``
-- Started through ``startEventPoller(profileId)`` in ``stores/notifications.ts``
-  when ``notificationMode === 'direct'`` and ``Platform.isDesktopOrWeb``
-  (not used on mobile, FCM handles delivery). The wiring function injects
-  ``EventPollerDeps`` (event sink, token provider, poll interval, portal URL,
-  multi-port lookup); the poller has no store imports
-- Uses recursive ``setTimeout`` so interval changes take effect on next tick
-- Poll interval comes from the profile's bandwidth ``eventPollerInterval``
-  (30s normal, 60s low)
-- Optional ``Notes REGEXP:detected:`` filter for object-detection-only events
-- Maintains a seen-event set (capped at 500) to avoid duplicate notifications
-
-``components/NotificationHandler.tsx``: Headless component that
-orchestrates the notification lifecycle:
-
-- Auto-connects WebSocket (ES mode) or starts poller (Direct mode on desktop)
-- Listens for ``window.online`` and ``@capacitor/network`` to trigger
-  reconnect on network restore
-- Desktop: ``visibilitychange`` listener checks WebSocket liveness on tab
-  resume
-- Mobile: ``appStateChange`` listener checks WebSocket liveness on app resume
-- Displays toast notifications for new events
-- Clears native badges on app resume (iOS/Android)
-- Listens to ``navigationService`` events and forwards them to React Router
-  (with state for back-button and lastRoute control)
-
---------------
-
-Kiosk PIN Utility (``lib/kioskPin.ts``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Handles hashing, storage, and verification of the kiosk mode PIN.
-The PIN is never stored in plain text, it is hashed with SHA-256 and
-a random 128-bit salt before being written to secure storage.
-
-**Storage:** Uses ``secureStorage.ts`` (Keychain on iOS, Keystore on
-Android, encrypted localStorage on web). Keys: ``kiosk_pin_hash`` and
-``kiosk_pin_salt``.
-
-**Functions:**
-
-- ``hashPin(pin, salt): Promise<string>``: returns hex-encoded SHA-256
-  of ``salt + pin``. Exported for testing; not normally called directly.
-- ``storePin(pin): Promise<void>``: generates a random salt, hashes the
-  PIN, and stores both hash and salt in secure storage.
-- ``verifyPin(pin): Promise<boolean>``: retrieves the stored hash and
-  salt, hashes the candidate PIN, and compares.
-- ``hasPinStored(): Promise<boolean>``: returns ``true`` if a PIN hash
-  is present in secure storage.
-- ``clearPin(): Promise<void>``: removes the hash and salt from secure
-  storage (used when the user disables kiosk mode via settings).
-
-**Usage:**
-
-.. code:: typescript
-
-   import { storePin, verifyPin, hasPinStored, clearPin } from '../lib/kioskPin';
-
-   // First-time setup
-   if (!(await hasPinStored())) {
-     await storePin('1234');
-   }
-
-   // Unlock attempt
-   const ok = await verifyPin(enteredPin);
-
-   // Remove PIN
-   await clearPin();
-
-**Used By:** ``hooks/useKioskLock.ts`` (setup flow),
-``components/kiosk/KioskOverlay.tsx`` (unlock verification),
-``pages/Settings.tsx`` (PIN set/change/clear in Advanced section)
-
---------------
-
-log-file (``lib/log-file/``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Mirrors entries from ``useLogStore`` to a persistent file on disk.
-
-**Capabilities and file locations by platform:**
-
-- Capacitor (iOS / Android): NDJSON file at ``Directory.Data/zmninja-ng.log`` (sandboxed app data). Resolved at runtime to a ``file://`` URI on iOS and ``content://`` URI on Android. Share via the system share sheet, recipient receives the file as an attachment.
-- Electron (desktop): NDJSON file in the Electron user data directory. Concrete paths:
-
-  - macOS: ``~/Library/Logs/com.zoneminder.zmNinjaNG/zmninja-ng.log``
-  - Windows: ``%LOCALAPPDATA%\com.zoneminder.zmNinjaNG\logs\zmninja-ng.log``
-  - Linux: ``~/.local/share/com.zoneminder.zmNinjaNG/logs/zmninja-ng.log``
-
-  The "Open" button in the Logs page asks the Electron main process to reveal the file in Finder, Explorer, or the system file manager.
-
-- Web: no-op fallback; Share reverts to today's blob download. ``getDisplayPath`` returns ``null`` and the status line is hidden.
-
-**Format:** NDJSON, one ``LogEntry`` per line. ``Logger.formatMessage`` constructs the entry once and passes it to both ``useLogStore.addLog`` and ``LogFileStore.append``.
-
-**Cap:** 10,000 entries. On overflow, the file is rewritten with the last 5,000 entries.
-
-**Hydration:** On app start, ``hydrateLogStoreFromFile()`` reads the file and replaces ``useLogStore.logs`` so prior-session entries are visible in the Logs page.
-
-**Used by:** ``lib/logger.ts``, ``pages/Logs.tsx``.
-
---------------
-
-Token freshness gate
---------------------
-
-``useFreshAccessToken`` (``hooks/useFreshAccessToken.ts``) returns ``{ token, isFresh }``
-where ``isFresh`` is true only when the access token has more than
-``ZM_INTEGRATION.accessTokenLeewayMs`` (30 minutes) of validity remaining. While not
-fresh, the hook returns ``token: null`` and asks the auth store to refresh in the
-background. Any callsite that builds a token-bearing URL the browser or native
-runtime loads directly (ZMS streams, event images and videos, push-notification
-image backfills) gates URL construction on ``isFresh``. While not fresh, the
-callsite emits an empty URL and the existing ``VideoOff`` placeholder shows
-through.
-
-For non-React async paths, call ``useAuthStore.getState().getFreshAccessToken()``
-directly. The action dedupes concurrent callers, falls through from refresh to
-credentials re-login on failure, and resolves with ``null`` if both fail.
-
+The drawer is hidden with no tasks, expands to show progress bars, collapses to
+a thin bar at the bottom, and leaves a floating count badge when collapsed.
+``cancelFn`` is what the cancel button calls, which is why every download must
+pass its ``AbortController``.
+
+**Used by:** the download service.
+
+ZoneOverlay and ZoneLegend (``components/monitors/``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``ZoneOverlay`` draws an SVG layer of semi-transparent polygons over the
+monitor's video, one per detection zone, read-only. It takes ``zones``,
+``monitorWidth`` and ``monitorHeight`` (original, before rotation),
+``rotation``, ``monitorId``, and ``visible``. Zones are filtered to the current
+monitor by ``MonitorId``, colored by ``getZoneColor(zone.Type)`` and not by
+ZoneMinder's ``AlarmRGB``, and their coordinates transformed to match any
+active monitor rotation. Hovering a polygon shows the zone name and the
+translated type (``monitor_detail.zone_type.{type}``).
+
+``ZoneLegend`` (``zones``, ``monitorId``, ``visible``) is its color key. It
+lists only the zone types present on the current monitor, in
+``ZONE_TYPE_ORDER``, each with a swatch and translated label. It sits at the
+bottom-left of the player container and is ``pointer-events-none``, so it
+cannot intercept a click meant for the video. It renders only while the overlay
+is visible.
+
+**Used by:** MonitorDetail.
+
+Global chrome
+~~~~~~~~~~~~~
+
+Four components mount once, under the router, and serve every page.
+
+``components/KeyboardShortcuts.tsx``: single letters jump to each menu section
+(``d`` Dashboard, ``m`` Montage, ``e`` Events, ``v`` Monitors, ``t`` Timeline,
+``n`` Notifications, ``l`` Logs, ``g`` Settings, ``p`` Profiles, ``r`` Server).
+Digits buffer a monitor number shown in an overlay and, on Enter or after
+``KEYBOARD_SHORTCUTS.monitorJumpCommitMs`` (1000 ms), open the monitor whose
+ZoneMinder ID matches (``monitorIdFromBuffer``), not the one at that list
+position (refs #200). ``Esc`` goes back, closing an open layer first via
+``hasOpenOverlay``; ``?`` toggles a help dialog. All of it is inactive while
+the user is typing (``isTypingTarget``), when a modifier is held, when the
+kiosk is locked, or in TV mode. The shortcut table and the pure helpers live in
+``lib/keyboard-shortcuts.ts``, so they are testable without a DOM.
+
+``components/CommandPalette.tsx``: a global palette (refs #207) opened by
+``/``, a sidebar button, or the mobile-header icon, all through
+``useCommandPaletteStore``. It lists pages, monitors (by name and by ID), and
+groups, filtered by the pure ``filterCommandItems`` helper in
+``lib/command-palette.ts``. Selecting a page navigates to it, a monitor opens
+its live view, and a group sets the group filter and opens Montage.
+
+``components/layout/AppLayout.tsx`` is a thin shell: a desktop sidebar and a
+mobile header both render ``components/layout/SidebarContent.tsx``, where the
+navigation, reorder mode, and user controls live. The mobile menu button sits
+on the left so it matches the side the drawer opens from. ``LanguageSwitcher``
+is a self-contained dropdown in the ``SidebarContent`` footer, next to the
+theme and lock controls, because language is a set-once control that does not
+belong in the header.
+
+Sidebar order is per profile. An edit mode (the pencil icon) lets a user drag
+menu items; the order is saved to ``ProfileSettings.sidebarNavOrder`` as an
+array of route paths, and ``SidebarContent`` sorts ``navItems`` by it in a
+``useMemo``. Dragging uses pointer events with a live swap when the pointer
+crosses an item's midpoint.
+
+Event notes display
+~~~~~~~~~~~~~~~~~~~
+
+ZoneMinder stores object-detection results in an event's ``Notes`` field, not
+in ``Cause``: a detected car reads ``detected:car| Motion: All``. EventCard,
+EventMontageView, the dashboard EventsWidget, and NotificationHistory display
+``Notes``, stripping everything after the ``|`` (which repeats ``Cause``) but
+keeping the full string in the ``title`` attribute so a hover shows it.
+
+EventDetail is the exception. It shows ``Cause`` in its own badge, and reads
+``Notes`` only to decide whether the event carries a ``detected:`` prefix. When
+it does, the class list before the ``|`` picks the icon for an extra
+detected-objects row (``detectedClassInfo``); the notes text itself is never
+rendered there.
+
+Adding a New Shared Service
+---------------------------
+
+Pick the directory by what the code depends on, not by what it is about.
+``lib/<domain>/`` is for pure utilities with no React and no store imports;
+``hooks/`` for anything that calls a React hook; ``services/`` for platform
+bridges and long-lived singletons; ``components/ui/`` for primitives,
+``components/common/`` for shared app-level components, and
+``components/<domain>/`` for domain components. A service must never statically
+import a store: invert it with the gate pattern (``api/store-gates.ts``) and
+keep ``npx madge --circular`` at zero.
+
+The repo's ``AGENTS.md`` is the source for the rest, and this guide does not
+restate it. Rules 25 (constants), 29 (query keys), 33 (``lib/`` placement), 9
+(logging), 10 (HTTP), and 23 (dates) all constrain a new shared module. Write
+the test first, next to the source in ``__tests__/`` (:doc:`06-testing-strategy`).
+
+Then document it here connected to behavior: say what a user can do because
+this code exists, and give one example taken from a real call site. If the new
+module sits on a path that :doc:`call-flows` traces, update the trace too.
