@@ -28,7 +28,12 @@ let trustSelfSigned = false;
 ipcMain.handle('http:request', async (_event, req) => {
   const { url, method, headers, body, responseType, timeoutMs } = req;
   const controller = new AbortController();
-  const timer = timeoutMs ? setTimeout(() => controller.abort(), timeoutMs) : null;
+  // A per-request timeout aborts the underlying net.fetch so the socket is freed
+  // (the renderer's own timeout signal can't reach across IPC to cancel it).
+  let timedOut = false;
+  const timer = timeoutMs
+    ? setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs)
+    : null;
   try {
     const response = await net.fetch(url, {
       method,
@@ -48,11 +53,28 @@ ipcMain.handle('http:request', async (_event, req) => {
       bodyText = await response.text();
     }
     return {
+      ok: true,
       status: response.status,
       statusText: response.statusText,
       headers: responseHeaders,
       bodyText,
       bodyBase64,
+    };
+  } catch (err) {
+    // A timeout abort is expected control flow, and a transport failure (DNS,
+    // connection refused, TLS) is a normal HTTP outcome, not a handler bug.
+    // Return both as a structured failure so Electron does not log them as
+    // unhandled ipcMain.handle rejections. adapter-electron.ts rebuilds the
+    // thrown Error from this envelope, preserving the name.
+    const isAbort = timedOut || (err && err.name === 'AbortError');
+    return {
+      ok: false,
+      error: {
+        name: isAbort ? 'AbortError' : (err && err.name) || 'Error',
+        message: isAbort && timedOut
+          ? `Request timed out after ${timeoutMs}ms`
+          : (err && err.message) || String(err),
+      },
     };
   } finally {
     if (timer) clearTimeout(timer);

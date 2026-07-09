@@ -194,12 +194,49 @@ describe('http:request handler', () => {
     vi.useRealTimers();
   });
 
-  it('propagates a fetch rejection to the caller', async () => {
-    mockNetFetch.mockRejectedValueOnce(new Error('ECONNREFUSED'));
+  it('returns a transport failure as a structured error envelope, not a rejection', async () => {
+    // The handler must not reject: a rejecting ipcMain.handle logs
+    // "Error occurred in handler for 'http:request'". A refused connection is a
+    // normal HTTP outcome, returned as { ok: false } for the renderer adapter to
+    // rethrow (adapter-electron.ts).
+    const err = Object.assign(new Error('ECONNREFUSED'), { name: 'TypeError' });
+    mockNetFetch.mockRejectedValueOnce(err);
 
-    await expect(
-      ipcHandlers['http:request'](null, { url: 'https://zm.example.com/down', method: 'GET' })
-    ).rejects.toThrow('ECONNREFUSED');
+    const result = await ipcHandlers['http:request'](null, {
+      url: 'https://zm.example.com/down',
+      method: 'GET',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: { name: 'TypeError', message: 'ECONNREFUSED' },
+    });
+  });
+
+  it('returns a timeout as a structured AbortError envelope', async () => {
+    vi.useFakeTimers();
+    mockNetFetch.mockImplementationOnce(
+      (_url: string, opts: { signal: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          opts.signal.addEventListener('abort', () =>
+            reject(new DOMException('The operation was aborted.', 'AbortError'))
+          );
+        })
+    );
+
+    const promise = ipcHandlers['http:request'](null, {
+      url: 'https://zm.example.com/slow',
+      method: 'GET',
+      timeoutMs: 5000,
+    });
+    await vi.advanceTimersByTimeAsync(5000);
+    const result = await promise;
+
+    expect(result).toEqual({
+      ok: false,
+      error: { name: 'AbortError', message: 'Request timed out after 5000ms' },
+    });
+    vi.useRealTimers();
   });
 });
 

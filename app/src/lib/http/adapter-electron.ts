@@ -8,14 +8,27 @@
 import type { AdapterRequest, HttpResponse } from './types';
 import { serializeRequestBody, base64ToBytes } from './encoding';
 
-// Result shape returned by the Electron main-process HTTP bridge (preload.cjs).
-interface ElectronHttpResult {
+// Envelope returned by the Electron main-process HTTP bridge (main.cjs). The
+// bridge never rejects for HTTP-level failures: a timeout or transport error
+// comes back as `{ ok: false, error }` so Electron does not log it as an
+// unhandled ipcMain.handle rejection. This adapter turns `ok: false` back into
+// a thrown Error, preserving the name so isAbortError() and other name-based
+// checks upstream keep working.
+interface ElectronHttpSuccess {
+  ok: true;
   status: number;
   statusText: string;
   headers: Record<string, string>;
   bodyText?: string;
   bodyBase64?: string;
 }
+
+interface ElectronHttpFailure {
+  ok: false;
+  error: { name: string; message: string };
+}
+
+type ElectronHttpResult = ElectronHttpSuccess | ElectronHttpFailure;
 
 declare global {
   interface Window {
@@ -53,9 +66,9 @@ export async function electronHttpRequest<T>(req: AdapterRequest): Promise<HttpR
     timeoutMs,
   });
 
-  let result: ElectronHttpResult;
+  let envelope: ElectronHttpResult;
   if (signal) {
-    result = await Promise.race([
+    envelope = await Promise.race([
       invocation,
       new Promise<never>((_resolve, reject) => {
         const abort = () => reject(new DOMException('The operation was aborted.', 'AbortError'));
@@ -64,8 +77,21 @@ export async function electronHttpRequest<T>(req: AdapterRequest): Promise<HttpR
       }),
     ]);
   } else {
-    result = await invocation;
+    envelope = await invocation;
   }
+
+  // A timeout or transport error is reported as a structured failure (see the
+  // envelope comment above). Rebuild it as a thrown Error with the original name
+  // so upstream error handling behaves exactly as it did when the bridge threw.
+  if (!envelope.ok) {
+    const error =
+      envelope.error.name === 'AbortError'
+        ? new DOMException(envelope.error.message, 'AbortError')
+        : Object.assign(new Error(envelope.error.message), { name: envelope.error.name });
+    throw error;
+  }
+
+  const result = envelope;
 
   let data: T;
   if (responseType === 'blob' || responseType === 'arraybuffer' || responseType === 'base64') {
