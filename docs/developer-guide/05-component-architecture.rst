@@ -628,9 +628,10 @@ four seconds so you can find your place again. Three pieces implement it.
 
 ``useReturnHighlightStore`` is a Zustand store holding
 ``lastViewedEventId: string | null``, with ``markViewed(eventId)`` and ``clear()``
-actions. It is session-only and not persisted. ``CompactEventRow`` and
-``EventCard`` both call ``markViewed(event.Id)`` in their open handler, before
-``navigate``, on both click and Enter/Space activation.
+actions. It is session-only and not persisted. ``CompactEventRow``, ``EventCard``
+and the grid view's ``EventMontageTile`` all call ``markViewed(event.Id)`` in
+their open handler, before ``navigate``. The first two also do it on Enter/Space
+activation.
 
 ``useReturnFlash(eventId: string): boolean`` subscribes reactively to
 ``lastViewedEventId``. When that id becomes ``eventId``, the hook flips its
@@ -644,14 +645,22 @@ return. The timer is cancelled only on unmount: the row that set the id then
 navigates away, and dropping its pending timer without consuming keeps the id
 available for the row that flashes on return.
 
-``ReturnFlashArrow`` renders a decorative ``ChevronRight`` icon (``aria-hidden``,
-test id ``return-flash-indicator``), absolutely positioned at the row's left
-edge. The blink is ``motion-safe:animate-blink``: the ``motion-safe:`` gate gives
-users with ``prefers-reduced-motion`` a static arrow instead of a blinking one,
-so it must not be removed. Because the arrow is absolutely positioned, its
-parent needs ``relative``: ``CompactEventRow``'s row ``div`` and ``EventCard``'s
-``Card`` both carry ``relative`` for this reason, and both render
+``ReturnFlashArrow`` renders a decorative ``Triangle`` icon (``aria-hidden``,
+test id ``return-flash-indicator``), absolutely positioned at ``-top-1.5`` and
+centered, so it sits just above its anchor and points down at it. The blink is
+``motion-safe:animate-blink``: the ``motion-safe:`` gate gives users with
+``prefers-reduced-motion`` a static arrow instead of a blinking one, so it must
+not be removed. Because the arrow is absolutely positioned, its parent needs
+``relative``: in ``CompactEventRow`` and ``EventCard`` that is the ``relative``
+wrapper around the thumbnail, which does not clip. ``EventMontageTile``'s ``Card``
+does clip (``overflow-hidden``), so it passes ``className="top-1"`` to pull the
+arrow inside the tile, over the top of the thumbnail. All three render
 ``<ReturnFlashArrow />`` when their local ``flash`` boolean is ``true``.
+
+Hooks cannot be called from inside a ``.map()`` callback, so a grid or list that
+needs a per-row ``useReturnFlash`` must give each row its own component.
+``EventMontageView`` extracts ``EventMontageTile`` for this reason, the same way
+``EventListView`` extracts ``EventItem``.
 
 Bulk event delete
 ~~~~~~~~~~~~~~~~~

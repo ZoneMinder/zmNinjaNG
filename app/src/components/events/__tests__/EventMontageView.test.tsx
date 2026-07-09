@@ -1,10 +1,13 @@
-import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { EventMontageView } from '../EventMontageView';
+import { useReturnHighlightStore } from '../../../stores/returnHighlight';
+import { RETURN_FLASH_MS } from '../../../lib/zmninja-ng-constants';
 import type { EventData } from '../../../api/types';
 
-vi.mock('react-router-dom', () => ({ useNavigate: () => vi.fn() }));
+const navigate = vi.fn();
+vi.mock('react-router-dom', () => ({ useNavigate: () => navigate }));
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }),
@@ -69,19 +72,35 @@ function toZmDate(d: Date): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
-function renderMontage(startDateTime: string) {
+function eventWithId(id: string): EventData {
+  return { Event: { ...baseEventFields, Id: id } } as unknown as EventData;
+}
+
+function renderEvents(events: EventData[]) {
   return render(
     <EventMontageView
-      events={[{ Event: { ...baseEventFields, StartDateTime: startDateTime } } as unknown as EventData]}
+      events={events}
       monitors={[]}
       gridCols={3}
       thumbnailFit="contain"
       portalUrl="https://zm.example.test"
       batchSize={20}
       onLoadMore={vi.fn()}
+      eventFilters={{ monitorId: '1' } as never}
     />
   );
 }
+
+function renderMontage(startDateTime: string) {
+  return renderEvents([{ Event: { ...baseEventFields, StartDateTime: startDateTime } } as unknown as EventData]);
+}
+
+// Reset before, not after: Testing Library unmounts between tests, so by the
+// time this runs no tile is mounted to re-render outside act().
+beforeEach(() => {
+  navigate.mockClear();
+  useReturnHighlightStore.setState({ lastViewedEventId: null });
+});
 
 describe('EventMontageView relative time (grid view)', () => {
   it('shows a relative-time label for a recent event', () => {
@@ -92,5 +111,48 @@ describe('EventMontageView relative time (grid view)', () => {
   it('hides the relative-time label for an event older than the window', () => {
     renderMontage(toZmDate(new Date(Date.now() - 30 * 24 * 60 * 60_000)));
     expect(screen.queryByTestId('event-montage-relative-time')).not.toBeInTheDocument();
+  });
+});
+
+describe('EventMontageView return highlight (grid view)', () => {
+  it('records the opened event and navigates when a tile is clicked', () => {
+    renderEvents([eventWithId('101')]);
+
+    fireEvent.click(screen.getByTestId('event-montage-tile'));
+
+    expect(useReturnHighlightStore.getState().lastViewedEventId).toBe('101');
+    expect(navigate).toHaveBeenCalledWith('/events/101', {
+      state: { from: '/events', eventFilters: { monitorId: '1' } },
+    });
+  });
+
+  it('flashes the arrow only on the tile the user returned from', () => {
+    useReturnHighlightStore.setState({ lastViewedEventId: '102' });
+
+    renderEvents([eventWithId('101'), eventWithId('102'), eventWithId('103')]);
+
+    const arrows = screen.getAllByTestId('return-flash-indicator');
+    expect(arrows).toHaveLength(1);
+    // The arrow must sit inside the returned-from tile, not a sibling.
+    const tiles = screen.getAllByTestId('event-montage-tile');
+    expect(tiles[1]).toContainElement(arrows[0]);
+  });
+
+  it('clears the arrow after RETURN_FLASH_MS', () => {
+    vi.useFakeTimers();
+    try {
+      useReturnHighlightStore.setState({ lastViewedEventId: '101' });
+      renderEvents([eventWithId('101')]);
+      expect(screen.getByTestId('return-flash-indicator')).toBeInTheDocument();
+
+      act(() => {
+        vi.advanceTimersByTime(RETURN_FLASH_MS + 1);
+      });
+
+      expect(screen.queryByTestId('return-flash-indicator')).not.toBeInTheDocument();
+      expect(useReturnHighlightStore.getState().lastViewedEventId).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

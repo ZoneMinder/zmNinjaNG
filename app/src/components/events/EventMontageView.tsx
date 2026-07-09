@@ -8,6 +8,7 @@
  * - Touch-optimized download buttons
  */
 
+import { memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Download, Loader2 } from 'lucide-react';
@@ -27,9 +28,198 @@ import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { EventThumbnailHoverPreview } from './EventThumbnailHoverPreview';
 import { calculateThumbnailDimensions, getMonitorDimensions } from '../../lib/event/event-utils';
 import { ZM_INTEGRATION, RELATIVE_TIME_LIST_WINDOW_DAYS } from '../../lib/zmninja-ng-constants';
-import type { EventData, Monitor, Tag } from '../../api/types';
+import type { Event, EventData, Monitor, Tag } from '../../api/types';
+import type { ThumbnailFallbackEntry } from '../../stores/settings';
 import { Platform } from '../../lib/platform';
 import { TagChipList } from './TagChip';
+import { ReturnFlashArrow } from './ReturnFlashArrow';
+import { useReturnFlash } from '../../hooks/useReturnFlash';
+import { useReturnHighlightStore } from '../../stores/returnHighlight';
+import { cn } from '../../lib/utils';
+
+// Haptic feedback helper
+const triggerHaptic = async () => {
+  if (Platform.isNative) {
+    try {
+      const { Haptics, ImpactStyle } = await import('@capacitor/haptics');
+      await Haptics.impact({ style: ImpactStyle.Light });
+    } catch {
+      // Haptics not available, silently ignore
+    }
+  }
+};
+
+interface EventMontageTileProps {
+  event: Event;
+  monitors: Array<{ Monitor: Monitor }>;
+  thumbnailFit: 'contain' | 'cover' | 'none' | 'scale-down';
+  thumbnailChain: ThumbnailFallbackEntry[];
+  showHover: boolean;
+  portalUrl: string;
+  accessToken?: string;
+  tags?: Tag[];
+  eventFilters?: EventFilters;
+  minStreamingPort?: number;
+}
+
+/**
+ * One grid tile. Extracted from the parent's `.map()` so it can call
+ * `useReturnFlash` per event: hooks cannot run inside a map callback.
+ */
+const EventMontageTile = memo(function EventMontageTile({
+  event,
+  monitors,
+  thumbnailFit,
+  thumbnailChain,
+  showHover,
+  portalUrl,
+  accessToken,
+  tags,
+  eventFilters,
+  minStreamingPort,
+}: EventMontageTileProps) {
+  const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
+  const { fmtDateTimeShort } = useDateTimeFormat();
+  const markViewed = useReturnHighlightStore((s) => s.markViewed);
+  const flash = useReturnFlash(event.Id);
+
+  const monitorData = monitors.find((m) => m.Monitor.Id === event.MonitorId)?.Monitor;
+  const monitorName = monitorData?.Name || `Camera ${event.MonitorId}`;
+  const startTime = new Date(event.StartDateTime.replace(' ', 'T'));
+
+  const { width: monitorWidth, height: monitorHeight } = getMonitorDimensions(monitorData, event.Width, event.Height);
+
+  const { width: thumbnailWidth, height: thumbnailHeight } = calculateThumbnailDimensions(
+    monitorWidth,
+    monitorHeight,
+    monitorData?.Orientation ?? event.Orientation,
+    ZM_INTEGRATION.eventMontageImageWidth
+  );
+
+  const eventPortalUrl = getPortalUrlForEvent(event.MonitorId, monitors, portalUrl);
+  const thumbnailUrls = buildThumbnailChain(eventPortalUrl, event.Id, thumbnailChain, {
+    token: accessToken,
+    width: thumbnailWidth,
+    height: thumbnailHeight,
+    minStreamingPort,
+    monitorId: event.MonitorId,
+  });
+
+  const hasVideo = event.Videoed === '1';
+  const aspectRatio = thumbnailWidth / thumbnailHeight;
+
+  const openEvent = () => {
+    markViewed(event.Id);
+    navigate(`/events/${event.Id}`, { state: { from: '/events', eventFilters } });
+  };
+
+  return (
+    <Card
+      data-testid="event-montage-tile"
+      data-event-id={event.Id}
+      className={cn(
+        'overflow-hidden cursor-pointer hover:ring-2 hover:ring-primary transition-all',
+        flash && 'ring-2 ring-primary/60'
+      )}
+      onClick={openEvent}
+    >
+      <div className="relative bg-card" style={{ aspectRatio: aspectRatio.toString() }}>
+        {/* Nudged inside the tile: the Card clips overflow, so the arrow's
+            default position above its anchor would be cut off here. */}
+        {flash && <ReturnFlashArrow className="top-1" />}
+        {showHover ? (
+          <EventThumbnailHoverPreview event={event} aspectRatio={aspectRatio}>
+            <EventThumbnail
+              urls={thumbnailUrls}
+              cacheKey={event.Id}
+              alt={event.Name}
+              className="w-full h-full"
+              objectFit={thumbnailFit}
+              loading="lazy"
+            />
+          </EventThumbnailHoverPreview>
+        ) : (
+          <EventThumbnail
+            urls={thumbnailUrls}
+            cacheKey={event.Id}
+            alt={event.Name}
+            className="w-full h-full"
+            objectFit={thumbnailFit}
+            loading="lazy"
+          />
+        )}
+        <div className="absolute top-2 right-2 flex items-center gap-2">
+          <Badge variant="secondary" className="text-xs">
+            {event.Length}s
+          </Badge>
+          {hasVideo && (
+            <Button
+              variant="secondary"
+              size="icon"
+              className="h-8 w-8"
+              onClick={async (e) => {
+                e.stopPropagation();
+                await triggerHaptic();
+                downloadEventVideo(eventPortalUrl, event.Id, event.Name, accessToken, minStreamingPort, event.MonitorId);
+                // Background task drawer will show download progress
+              }}
+              title={t('eventMontage.download_video')}
+              aria-label={t('eventMontage.download_video')}
+              data-testid="event-download-button"
+            >
+              <Download className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+      </div>
+      <div className="p-3 space-y-1">
+        <div className="font-medium text-sm truncate" title={event.Name}>
+          {event.Name}
+        </div>
+        <div className="text-xs text-muted-foreground truncate">{monitorName}</div>
+        <div className="text-xs text-muted-foreground truncate">
+          {fmtDateTimeShort(startTime)}
+          {isWithinDays(startTime, RELATIVE_TIME_LIST_WINDOW_DAYS) && (
+            <span data-testid="event-montage-relative-time">
+              {` · ${formatEventRelative(startTime, i18n.language, t)}`}
+            </span>
+          )}
+        </div>
+        {event.Cause && (() => {
+          const CauseIcon = getEventCauseIcon(event.Cause);
+          return (
+            <Badge variant="outline" className="text-xs gap-1">
+              <CauseIcon className="h-3 w-3" />
+              {event.Cause}
+            </Badge>
+          );
+        })()}
+        {event.Notes && (() => {
+          const noteText = event.Notes.split('|')[0].trim();
+          const isDetection = noteText.startsWith('detected:');
+          const classList = isDetection ? noteText.slice('detected:'.length) : '';
+          const NoteIcon = isDetection && classList ? getObjectClassIconFromList(classList) : null;
+          return (
+            <p className="flex items-center gap-1 text-[10px] text-muted-foreground truncate" title={event.Notes}>
+              {NoteIcon && <NoteIcon className="h-3 w-3 shrink-0" />}
+              <span className="truncate">{noteText}</span>
+            </p>
+          );
+        })()}
+        {/* Tags */}
+        {tags && tags.length > 0 && (
+          <TagChipList
+            tags={tags}
+            maxVisible={3}
+            size="sm"
+            overflowText={(count) => t('events.tags.moreCount', { count })}
+          />
+        )}
+      </div>
+    </Card>
+  );
+});
 
 interface EventMontageViewProps {
   events: EventData[];
@@ -62,24 +252,10 @@ export const EventMontageView = ({
   eventFilters,
   minStreamingPort,
 }: EventMontageViewProps) => {
-  const navigate = useNavigate();
-  const { t, i18n } = useTranslation();
-  const { fmtDateTimeShort } = useDateTimeFormat();
+  const { t } = useTranslation();
   const { settings } = useCurrentProfile();
   const thumbnailChain = settings.thumbnailFallbackChain;
   const showHover = settings.hoverPreview.eventsGrid;
-
-  // Haptic feedback helper
-  const triggerHaptic = async () => {
-    if (Platform.isNative) {
-      try {
-        const { Haptics, ImpactStyle } = await import('@capacitor/haptics');
-        await Haptics.impact({ style: ImpactStyle.Light });
-      } catch {
-        // Haptics not available, silently ignore
-      }
-    }
-  };
 
   const isLoadingData = isFetching;
   const hasMore = totalCount !== undefined ? events.length < totalCount : false;
@@ -96,133 +272,21 @@ export const EventMontageView = ({
       </div>
 
       <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}>
-        {events.map((eventData) => {
-          const event = eventData.Event;
-          const monitorData = monitors.find((m) => m.Monitor.Id === event.MonitorId)?.Monitor;
-          const monitorName = monitorData?.Name || `Camera ${event.MonitorId}`;
-          const startTime = new Date(event.StartDateTime.replace(' ', 'T'));
-
-          const { width: monitorWidth, height: monitorHeight } = getMonitorDimensions(monitorData, event.Width, event.Height);
-
-          const { width: thumbnailWidth, height: thumbnailHeight } = calculateThumbnailDimensions(
-            monitorWidth,
-            monitorHeight,
-            monitorData?.Orientation ?? event.Orientation,
-            ZM_INTEGRATION.eventMontageImageWidth
-          );
-
-          const eventPortalUrl = getPortalUrlForEvent(event.MonitorId, monitors, portalUrl);
-          const thumbnailUrls = buildThumbnailChain(eventPortalUrl, event.Id, thumbnailChain, {
-            token: accessToken,
-            width: thumbnailWidth,
-            height: thumbnailHeight,
-            minStreamingPort,
-            monitorId: event.MonitorId,
-          });
-
-          const hasVideo = event.Videoed === '1';
-          const aspectRatio = thumbnailWidth / thumbnailHeight;
-
-          return (
-            <Card
-              key={event.Id}
-              data-testid="event-montage-tile"
-              className="overflow-hidden cursor-pointer hover:ring-2 hover:ring-primary transition-all"
-              onClick={() => navigate(`/events/${event.Id}`, { state: { from: '/events', eventFilters } })}
-            >
-              <div className="relative bg-card" style={{ aspectRatio: aspectRatio.toString() }}>
-                {showHover ? (
-                  <EventThumbnailHoverPreview event={event} aspectRatio={aspectRatio}>
-                    <EventThumbnail
-                      urls={thumbnailUrls}
-                      cacheKey={event.Id}
-                      alt={event.Name}
-                      className="w-full h-full"
-                      objectFit={thumbnailFit}
-                      loading="lazy"
-                    />
-                  </EventThumbnailHoverPreview>
-                ) : (
-                  <EventThumbnail
-                    urls={thumbnailUrls}
-                    cacheKey={event.Id}
-                    alt={event.Name}
-                    className="w-full h-full"
-                    objectFit={thumbnailFit}
-                    loading="lazy"
-                  />
-                )}
-                <div className="absolute top-2 right-2 flex items-center gap-2">
-                  <Badge variant="secondary" className="text-xs">
-                    {event.Length}s
-                  </Badge>
-                  {hasVideo && (
-                    <Button
-                      variant="secondary"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        await triggerHaptic();
-                        downloadEventVideo(eventPortalUrl, event.Id, event.Name, accessToken, minStreamingPort, event.MonitorId);
-                        // Background task drawer will show download progress
-                      }}
-                      title={t('eventMontage.download_video')}
-                      aria-label={t('eventMontage.download_video')}
-                      data-testid="event-download-button"
-                    >
-                      <Download className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-              </div>
-              <div className="p-3 space-y-1">
-                <div className="font-medium text-sm truncate" title={event.Name}>
-                  {event.Name}
-                </div>
-                <div className="text-xs text-muted-foreground truncate">{monitorName}</div>
-                <div className="text-xs text-muted-foreground truncate">
-                  {fmtDateTimeShort(startTime)}
-                  {isWithinDays(startTime, RELATIVE_TIME_LIST_WINDOW_DAYS) && (
-                    <span data-testid="event-montage-relative-time">
-                      {` · ${formatEventRelative(startTime, i18n.language, t)}`}
-                    </span>
-                  )}
-                </div>
-                {event.Cause && (() => {
-                  const CauseIcon = getEventCauseIcon(event.Cause);
-                  return (
-                    <Badge variant="outline" className="text-xs gap-1">
-                      <CauseIcon className="h-3 w-3" />
-                      {event.Cause}
-                    </Badge>
-                  );
-                })()}
-                {event.Notes && (() => {
-                  const noteText = event.Notes.split('|')[0].trim();
-                  const isDetection = noteText.startsWith('detected:');
-                  const classList = isDetection ? noteText.slice('detected:'.length) : '';
-                  const NoteIcon = isDetection && classList ? getObjectClassIconFromList(classList) : null;
-                  return (
-                    <p className="flex items-center gap-1 text-[10px] text-muted-foreground truncate" title={event.Notes}>
-                      {NoteIcon && <NoteIcon className="h-3 w-3 shrink-0" />}
-                      <span className="truncate">{noteText}</span>
-                    </p>
-                  );
-                })()}
-                {/* Tags */}
-                {eventTagMap && eventTagMap.get(event.Id) && (
-                  <TagChipList
-                    tags={eventTagMap.get(event.Id) || []}
-                    maxVisible={3}
-                    size="sm"
-                    overflowText={(count) => t('events.tags.moreCount', { count })}
-                  />
-                )}
-              </div>
-            </Card>
-          );
-        })}
+        {events.map((eventData) => (
+          <EventMontageTile
+            key={eventData.Event.Id}
+            event={eventData.Event}
+            monitors={monitors}
+            thumbnailFit={thumbnailFit}
+            thumbnailChain={thumbnailChain}
+            showHover={showHover}
+            portalUrl={portalUrl}
+            accessToken={accessToken}
+            tags={eventTagMap?.get(eventData.Event.Id)}
+            eventFilters={eventFilters}
+            minStreamingPort={minStreamingPort}
+          />
+        ))}
       </div>
 
       {/* Load More button */}
