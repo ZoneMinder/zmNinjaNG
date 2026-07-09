@@ -78,7 +78,6 @@ function renderMontage(startDateTime: string) {
       thumbnailFit="contain"
       portalUrl="https://zm.example.test"
       batchSize={20}
-      isLoadingMore={false}
       onLoadMore={vi.fn()}
     />
   );

@@ -44,7 +44,6 @@ export const useEventPagination = ({ defaultLimit, persistKey }: UseEventPaginat
   return {
     eventLimit,
     batchSize: defaultLimit, // The number of events loaded per batch
-    isLoadingMore: false,
     loadNextPage,
   };
 };

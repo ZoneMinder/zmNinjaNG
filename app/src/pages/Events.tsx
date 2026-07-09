@@ -198,7 +198,7 @@ export default function Events() {
     ),
     [currentProfile?.id, filters, effectiveMonitorId, isGroupFilterActive, eventIdFilter, tagIdFilter]
   );
-  const { eventLimit, batchSize, isLoadingMore, loadNextPage } = useEventPagination({
+  const { eventLimit, batchSize, loadNextPage } = useEventPagination({
     defaultLimit: settings.defaultEventLimit || 100,
     persistKey: paginationKey,
   });
@@ -567,7 +567,6 @@ export default function Events() {
             accessToken={isAccessTokenFresh ? accessToken ?? undefined : undefined}
             batchSize={batchSize}
             totalCount={eventsData?.pagination?.totalCount}
-            isLoadingMore={isLoadingMore}
             isFetching={isFetching}
             onLoadMore={loadNextPage}
             eventTagMap={eventTagMap}
@@ -583,7 +582,6 @@ export default function Events() {
             accessToken={isAccessTokenFresh ? accessToken ?? undefined : undefined}
             batchSize={batchSize}
             totalCount={eventsData?.pagination?.totalCount}
-            isLoadingMore={isLoadingMore}
             isFetching={isFetching}
             onLoadMore={loadNextPage}
             eventTagMap={eventTagMap}

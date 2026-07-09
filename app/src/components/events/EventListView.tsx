@@ -25,7 +25,6 @@ interface EventListViewProps {
   accessToken?: string;
   batchSize: number;
   totalCount?: number;
-  isLoadingMore: boolean;
   isFetching?: boolean;
   onLoadMore: () => void;
   eventTagMap?: Map<string, Tag[]>;
@@ -118,7 +117,6 @@ export const EventListView = ({
   accessToken,
   batchSize,
   totalCount,
-  isLoadingMore,
   isFetching = false,
   onLoadMore,
   eventTagMap,
@@ -146,7 +144,7 @@ export const EventListView = ({
     [monitors, serverMapVersion]
   );
 
-  const isLoadingData = isLoadingMore || isFetching;
+  const isLoadingData = isFetching;
   const hasMore = totalCount !== undefined ? events.length < totalCount : false;
   const remaining = totalCount !== undefined ? Math.min(batchSize, totalCount - events.length) : batchSize;
 
