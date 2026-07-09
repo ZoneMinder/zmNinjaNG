@@ -86,20 +86,20 @@ Every test verifies what a human tester would: outcomes (data changed, navigatio
 **Run**: `npm run test:e2e -- <feature>.feature`
 
 ### Cross-Platform E2E Tests
-Tests run on 4 platform profiles using two drivers. Playwright drives Chromium-based platforms (web, Android) via CDP. WebDriverIO + Appium drives WebKit-based iOS platforms via XCUITest. iOS phone and tablet e2e are manual-invoke-only; only the web suite (`npm run test:e2e`) runs in the automated CI workflow.
+Only the web profile runs the Gherkin feature suite: `playwright.config.ts` defines a single chromium project, and `npm run test:e2e` is what CI runs. The three device profiles run a WebDriverIO + Appium screenshot suite (`wdio.config.device-screenshots.ts`), not the feature files, and are manual-invoke-only.
 
-| Profile | Device | Driver | Connection |
+| Profile | Device | Driver | Runs |
 |---|---|---|---|
-| `web-chromium` | Desktop browser | Playwright | Direct launch |
-| `android-phone` | Pixel 7 Emulator | Playwright | ADB port-forward to CDP |
-| `ios-phone` | iPhone 15 Simulator | WebDriverIO + Appium XCUITest | WebView context switch |
-| `ios-tablet` | iPad Air Simulator | WebDriverIO + Appium XCUITest | WebView context switch |
+| `web-chromium` | Desktop browser | Playwright | Gherkin feature suite (CI) |
+| `android-phone` | Pixel 7 Emulator | WebDriverIO + Appium UiAutomator2 | Device screenshot suite (manual) |
+| `ios-phone` | iPhone 15 Simulator | WebDriverIO + Appium XCUITest | Device screenshot suite (manual) |
+| `ios-tablet` | iPad Air Simulator | WebDriverIO + Appium XCUITest | Device screenshot suite (manual) |
 
 ### Platform Tags
 - `@all`: every platform | `@android`: Android only | `@ios`: iPhone + iPad
 - `@ios-phone` / `@ios-tablet`: specific iOS form factor
 - `@web`: browser only
-- `@visual`: comparison screenshots | `@native`: requires Appium
+- `@visual`: reserved for visual comparison; the comparison step is a placeholder today (issue #233)
 
 ### Test Commands
 ```bash
@@ -118,12 +118,10 @@ npm run test:e2e:ios-phone              # iPhone simulator
 npm run test:e2e:ios-tablet             # iPad simulator
 npm run test:e2e:all-platforms          # All platforms sequentially
 
-# Visual regression
-npm run test:e2e:visual-update          # Regenerate all baselines
-npm run test:e2e:android -- --update-snapshots  # Platform-specific
-
-# Native-only (Appium): PiP, biometrics, push, downloads
-npm run test:native
+# Device screenshot capture (Appium; manual-only)
+npm run test:screenshots:android
+npm run test:screenshots:ios-phone
+npm run test:screenshots:ios-tablet
 
 # Setup verification
 npm run test:platform:setup             # Check tools, simulators, ports
@@ -140,7 +138,7 @@ ZM_PASSWORD_1=password
 ```
 
 ### Visual Regression
-Scenarios tagged `@visual` capture screenshots and compare against per-platform baselines in `app/tests/screenshots/<platform>/`. Threshold: 0.2% pixel diff. First run on a new platform: use `--update-snapshots` to generate baselines.
+Not implemented. The `@visual` step in `app/tests/steps/platform.steps.ts` is a placeholder (no `toHaveScreenshot`, no baselines); `npm run test:e2e:visual-update` therefore updates nothing. Issue #233 tracks the build-it-or-drop-it decision. Do not write scenarios that rely on visual comparison until it lands.
 
 ### Writing Good E2E Tests
 
@@ -148,7 +146,7 @@ Ask: "If I were a human QA tester with this feature on 5 devices, what would I c
 
 **Good** (tests a user goal with interaction + outcome verification):
 ```gherkin
-@all @visual
+@all
 Scenario: Create and verify a new widget
   Given I am logged into zmNinjaNg
   When I navigate to the "Dashboard" page
@@ -160,13 +158,11 @@ Scenario: Create and verify a new widget
   And the widget should display real data
   When I refresh the page
   Then the widget "Test Widget" should still be present
-  And the page should match the visual baseline
 ```
 
 - One scenario per user goal, not per element
 - Add `@ios-phone @android` for phone layout, `@ios-tablet` for tablet
 - Step definitions in `app/tests/steps/<screen>.steps.ts` using Playwright's `page` fixture
-- Run `--update-snapshots` on each platform for visual baselines
 
 ### Conditional Testing Pattern
 For features that depend on server data or device capability, gate on the capability from an INDEPENDENT source (API, fixture), never on visibility of the UI under test. A guard derived from the element under test converts that element's regression into a green pass (rule 34).
@@ -191,7 +187,7 @@ Then('I should see the PTZ control panel', async ({ page }) => {
 When an earlier step legitimately performed no action (zero events on a test server), downstream `Then` steps may skip, but the skip condition must be data (`eventCount === 0`), not a swallowed locator failure.
 
 ### Native-Only Tests (Appium)
-For flows requiring native OS interaction (PiP, biometric auth, push, native file downloads, share sheet, app lifecycle): `app/tests/native/specs/<feature>.spec.ts`
+For flows requiring native OS interaction (PiP, biometric auth, push, native file downloads, share sheet, app lifecycle): `app/tests/native/specs/<feature>.spec.ts`. No npm script runs these specs today (issue #233); they are invoked ad hoc with wdio.
 
 ---
 
@@ -207,7 +203,7 @@ For every code change, execute in order:
 
 State which tests were run: "Tests verified: npm test ✓, tsc -b ✓, build ✓, test:e2e -- dashboard.feature ✓"
 
-**UI changes also require**: `data-testid` on new elements, e2e tests in `.feature` file with platform tags, visual baselines updated, all language files updated.
+**UI changes also require**: `data-testid` on new elements, e2e tests in `.feature` file with platform tags, all language files updated.
 
 **Native plugin changes also require**: Appium test in `app/tests/native/specs/`.
 
