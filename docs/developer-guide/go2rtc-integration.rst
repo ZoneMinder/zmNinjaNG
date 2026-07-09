@@ -1,130 +1,187 @@
-Go2RTC WebRTC Streaming Integration
-===================================
+Go2RTC WebRTC Streaming
+=======================
 
-Overview
---------
+ZoneMinder can publish a `go2rtc <https://github.com/AlexxIT/go2rtc>`__ endpoint
+alongside its own MJPEG streamer (ZMS). When it does, zmNinjaNg plays live video
+through go2rtc as an H.264/H.265 stream over MSE or WebRTC instead of a
+JPEG-per-frame MJPEG stream. The user gets live video that runs closer to real
+time, and montage tiles that decode in hardware instead of repainting a full
+JPEG per frame.
 
-zmNinjaNg integrates `Go2RTC <https://github.com/AlexxIT/go2rtc>`__ for
-WebRTC video streaming as an alternative to MJPEG (ZMS).
+MJPEG is never abandoned. It is the fallback for every way go2rtc can fail, and
+it is the picture on screen while go2rtc is still connecting. The whole feature
+hangs off one per-profile toggle (Settings, Live Streaming, "Enable
+WebRTC/HLS/MSE"); everything below is what happens once that toggle is on.
 
-- **Latency**: sub-second vs 3-10 seconds for MJPEG
-- **Bandwidth**: H.264/H.265 compression
-- **Fallback ladder**: WebRTC → MSE → HLS → MJPEG
-- **Opt-in**: MJPEG remains the default; WebRTC is enabled per profile
-- **Settings**: profile-scoped
+The end-to-end trace of a tile starting a go2rtc stream is Flow 8 in
+:doc:`call-flows`. This chapter is the reference behind that trace.
 
-Architecture
-------------
+Choosing go2rtc or MJPEG
+------------------------
 
-Component Hierarchy
-~~~~~~~~~~~~~~~~~~~
-
-::
-
-   LiveMonitorPlayer (Smart Component)
-   ├── useGo2RTCStream (WebRTC Hook)
-   │   └── VideoRTC (Vendored Library)
-   │       └── WebSocket Signaling
-   └── useMonitorStream (MJPEG Hook - existing)
-       └── ZMS CGI
-
-Key Files
-~~~~~~~~~
-
-New Files
-^^^^^^^^^
-
-- ``/app/src/lib/vendor/go2rtc/video-rtc.js`` - Vendored Go2RTC WebRTC
-  library (~500 lines)
-- ``/app/src/hooks/useGo2RTCStream.ts`` - React hook for WebRTC
-  lifecycle management
-- ``/app/src/components/monitors/LiveMonitorPlayer.tsx`` - Smart player
-  component with auto-selection
-
-Modified Files
-^^^^^^^^^^^^^^
-
-- ``/app/src/lib/zm/url-builder.ts`` - Added ``getGo2RTCWebSocketUrl()``
-  and ``getGo2RTCStreamUrl()``
-- ``/app/src/services/discovery.ts`` - Added Go2RTC endpoint detection (port
-  1984)
-- ``/app/src/api/types.ts`` - Added Go2RTC fields to Monitor and Profile
-  types
-- ``/app/src/stores/settings.ts`` - Added ``streamingMethod`` and
-  ``webrtcFallbackEnabled``
-- ``/app/src/pages/MonitorDetail.tsx`` - Uses LiveMonitorPlayer instead
-  of ``<img>``
-- ``/app/src/components/monitors/MontageMonitor.tsx`` - Uses
-  LiveMonitorPlayer instead of ``<img>``
-
-Stream Selection Logic
-----------------------
-
-Decision Tree
-~~~~~~~~~~~~~
-
-The ``LiveMonitorPlayer`` component automatically selects the streaming method
-based on:
+``LiveMonitorPlayer`` is the only component that makes this decision. Montage
+tiles, the monitor detail page, the dashboard monitor widget, and ``MonitorCard``
+all render it rather than an ``<img>`` of their own, so the choice is made once.
 
 .. code:: typescript
 
-   function determineStreamingMethod() {
-     const userPreference = settings.streamingMethod; // 'auto' | 'webrtc' | 'mjpeg'
-     const go2rtcAvailable = !!profile.go2rtcUrl;       // Server published a Go2RTC URL
-     const monitorSupportsGo2RTC = monitor.Go2RTCEnabled; // Monitor configured for Go2RTC
+   // components/monitors/LiveMonitorPlayer.tsx
+   const canUseWebRTC =
+     userStreamingPreference !== 'mjpeg' &&
+     monitor.Go2RTCEnabled === true &&
+     !!profile?.go2rtcUrl;
 
-     // User forces MJPEG?
-     if (userPreference === 'mjpeg') return 'mjpeg';
+   const method = canUseWebRTC ? 'webrtc' : 'mjpeg';
 
-     // User wants WebRTC only?
-     if (userPreference === 'webrtc') {
-       if (go2rtcAvailable && monitorSupportsGo2RTC) {
-         return 'webrtc';
-       } else {
-         log.warn('WebRTC requested but not available');
-         return 'mjpeg'; // Fallback
-       }
-     }
+Three things must all hold. The profile setting (or a per-monitor override) must
+not force MJPEG, the monitor must have ``Go2RTCEnabled`` set in ZoneMinder, and
+the profile must carry a ``go2rtcUrl``. There is no separate availability
+boolean: the truthiness of ``go2rtcUrl`` is the check.
 
-     // Auto mode (default)
-     if (userPreference === 'auto') {
-       if (go2rtcAvailable && monitorSupportsGo2RTC) {
-         return 'webrtc';
-       } else {
-         return 'mjpeg';
-       }
-     }
+This runs inside ``useMemo``, a React hook that recomputes a value only when its
+listed inputs change, so switching a monitor's override recomputes the method but
+an unrelated re-render does not. The decision is logged once per
+monitor-and-method pair (``log.videoPlayer('Streaming: WebRTC' | 'Streaming: MJPEG')``),
+which is the first line to grep for when a monitor plays the wrong way.
 
-     return 'mjpeg'; // Default fallback
-   }
+The component name in the codebase carries no special meaning. It is an ordinary
+component that owns the streaming decision and its watchdogs; see
+:doc:`05-component-architecture` for how it sits among the other monitor
+components.
 
-The ``Profile`` type stores the discovered Go2RTC endpoint as
-``go2rtcUrl?: string`` (set during server discovery from
-``ZM_GO2RTC_PATH``). There is no separate ``go2rtcAvailable`` boolean,
-truthiness of ``go2rtcUrl`` is the availability check.
+Where ``go2rtcUrl`` comes from
+------------------------------
 
-Settings
-~~~~~~~~
+Nothing probes the network for go2rtc. There is no port scan and no
+``services/discovery.ts`` involvement. The URL is read from ZoneMinder's own
+config during profile bootstrap.
 
-Profile-scoped settings in ``ProfileSettings``:
+``bootstrapGo2RTCPath`` runs as part of ``performBootstrap`` when a profile is
+switched to or rehydrated from storage. It calls ``fetchGo2RTCPath()``, which
+reads the ``ZM_GO2RTC_PATH`` config value from the API:
 
 .. code:: typescript
 
-   interface ProfileSettings {
-     streamingMethod: 'auto' | 'webrtc' | 'mjpeg'; // Default: 'auto'
-     webrtcFallbackEnabled: boolean; // Default: true
-     webrtcUseStun: boolean; // Default: false
-     // ... other settings
+   // api/auth.ts
+   const response = await client.get<Go2RTCPathResponse>(
+     '/configs/viewByName/ZM_GO2RTC_PATH.json'
+   );
+   const validated = Go2RTCPathResponseSchema.parse(response.data);
+   const go2rtcPath = validated.config.Value;
+
+An empty or missing value means go2rtc is not configured, and
+``bootstrapGo2RTCPath`` clears ``profile.go2rtcUrl`` if it was set previously. A
+present value is written to the profile, and every player picks it up from there.
+Because the value comes from the server, an admin who turns go2rtc on in
+ZoneMinder does not need the user to type a URL, and one who turns it off
+demotes every tile to MJPEG on the next profile bootstrap. See
+:doc:`07-api-and-data-fetching` for the config-fetch layer and
+:doc:`11-application-lifecycle` for when bootstrap runs.
+
+The WebSocket URL and the stream name
+-------------------------------------
+
+``getGo2RTCWebSocketUrl`` in ``lib/zm/url-builder.ts`` turns the configured path
+into a signaling URL. It takes the path, the monitor id, and a channel:
+
+.. code:: typescript
+
+   getGo2RTCWebSocketUrl(
+     go2rtcPath: string,                  // ZM_GO2RTC_PATH, e.g. 'http://zm.example.com:1984'
+     monitorId: string,
+     channel: string | number = 0,        // 0 = primary, 1 = secondary
+     options: { token?: string; expectedHost?: string } = {}
+   ): string
+
+   getGo2RTCWebSocketUrl('http://zm.example.com:1984', '1', 0)
+   // 'ws://zm.example.com:1984/ws?src=1_0'
+
+   getGo2RTCWebSocketUrl('http://zm.example.com:1984/go2rtc', '5', 1)
+   // 'ws://zm.example.com:1984/go2rtc/ws?src=5_1'
+
+Three details matter. ``http`` becomes ``ws`` and ``https`` becomes ``wss``.
+``/ws`` is appended to whatever pathname ``ZM_GO2RTC_PATH`` already has, so a
+reverse-proxied go2rtc at ``/go2rtc`` keeps its prefix. And the stream name is
+always ``{monitorId}_{channel}``, matching ZoneMinder's own go2rtc naming.
+
+The channel comes straight from the monitor:
+
+.. code:: typescript
+
+   // components/monitors/LiveMonitorPlayer.tsx
+   channel: monitor.StreamChannel || 0,
+
+``StreamChannel`` is a nullable string on ``MonitorSchema``. It picks which of a
+camera's streams go2rtc should serve (primary versus a lower-resolution
+substream). Monitors without one fall back to channel ``0``. Nothing reads
+``RTSPStreamName``; that field exists on the schema because ZoneMinder returns
+it, and the stream name is derived from the id and channel alone.
+
+``getGo2RTCStreamUrl`` builds the HTTP equivalent
+(``.../stream.mse?src=1_0``, and the same for ``hls``, ``mp4``, ``mjpeg``). It is
+exported and unit-tested, but no player calls it today: streaming happens entirely
+over the WebSocket.
+
+Protocol negotiation runs in parallel
+-------------------------------------
+
+There is no ladder. Nothing tries WebRTC, waits for it to fail, then tries MSE.
+
+``useGo2RTCStream`` joins the configured protocols into a single comma-separated
+string and hands it to the vendored ``video-rtc`` custom element once:
+
+.. code:: typescript
+
+   // hooks/useGo2RTCStream.ts
+   const modeString = protocols.join(',');   // default: 'webrtc,mse,hls'
+   // ...
+   videoRtc.mode = modeString;
+   videoRtc.media = 'video,audio';
+   videoRtc.background = true;
+
+When the WebSocket opens, ``video-rtc``'s ``onopen()`` starts every compatible
+protocol at once over that one socket. Reading the vendored source
+(``lib/vendor/go2rtc/video-rtc.js``), the rules are:
+
+- At most one of MSE, HLS, or MP4 is started, in that priority order. MSE
+  requires ``MediaSource`` or ``ManagedMediaSource``; HLS requires the ``<video>``
+  to report it can play ``application/vnd.apple.mpegurl``; the MP4 branch has no
+  capability check at all. If no branch matches, none of the three starts. HLS is
+  a fallback for browsers without MSE, not a step after WebRTC fails.
+- WebRTC is started as well, alongside it, whenever ``webrtc`` is in the mode
+  string and ``RTCPeerConnection`` exists.
+- MJPEG is started only when nothing else started. If something else did start,
+  ``mjpeg`` in the mode string instead registers a handler that starts MJPEG when
+  the server reports an error for the first started mode. Either way it does not
+  apply here: the app never puts ``mjpeg`` in the mode string. MJPEG fallback is
+  ``LiveMonitorPlayer``'s job, not the element's.
+
+Both then race to produce video. If the peer connection delivers a video track,
+``onpcvideo()`` scores WebRTC against MSE (video plus audio beats video alone,
+H.265 beats H.264, and a tie goes to WebRTC). The winner keeps playing and the
+loser is closed. When WebRTC wins, the WebSocket itself is closed because media
+now flows over the peer connection, a fact that makes teardown harder than
+closing a socket (see below). If WebRTC never produces a track, MSE simply keeps
+playing.
+
+The protocol the UI reports is not necessarily the winner:
+
+.. code:: typescript
+
+   // hooks/useGo2RTCStream.ts, inside the wrapped onopen
+   const modes = originalOnopen();
+   setState('connected');
+   if (modes && modes.length > 0) {
+     setActiveProtocol(modes[0] as StreamingProtocol);
    }
 
-**Modes:**
-
-- **auto**: WebRTC when available, MJPEG otherwise. Default.
-- **webrtc**: Use WebRTC; falls back to MJPEG if unavailable.
-- **mjpeg**: Force MJPEG.
+``modes[0]`` is whichever of MSE/HLS/MP4 started, because ``video-rtc`` pushes it
+before WebRTC. So the badge on a tile usually reads ``MSE`` even on a stream that
+WebRTC went on to win. It reports what was attempted first, not what carried the
+frames. The badge is rendered only when the ``showProtocolLabel`` setting is on.
 
 STUN servers
-~~~~~~~~~~~~
+------------
 
 ``video-rtc.js`` hardcodes ``stun.cloudflare.com`` and ``stun.l.google.com``
 into the browser ``RTCPeerConnection``. ``useGo2RTCStream`` overrides
@@ -132,196 +189,154 @@ into the browser ``RTCPeerConnection``. ``useGo2RTCStream`` overrides
 starts (the vendored file is left unchanged). ``onwebrtc()`` reads ``pcConfig``
 lazily when it builds the peer connection, so the override wins.
 
-``webrtcUseStun`` selects the list: off (default) applies ``[]``; on applies
-``GO2RTC_STUN_SERVERS``. It is off by default because LAN and portal/VPN reach
-go2rtc on host candidates, so STUN is never on the path. An empty list also
+.. code:: typescript
+
+   videoRtc.pcConfig = {
+     ...videoRtc.pcConfig,
+     iceServers: useStun ? GO2RTC_STUN_SERVERS : [],
+   };
+
+The per-profile ``webrtcUseStun`` setting selects the list: off (the default)
+applies ``[]``; on applies ``GO2RTC_STUN_SERVERS`` from
+``lib/zmninja-ng-constants.ts``. It is off by default because LAN and portal/VPN
+reach go2rtc on host candidates, so STUN is never on the path. An empty list also
 stops Chromium from starting a STUN hostname lookup that it cancels when
 video-rtc tears the peer connection down (the WebRTC/MSE race, or a montage tile
 rotating), which otherwise logs ``Failed to resolve address for stun...
 errorcode: -105`` even though DNS resolves. Turn it on only to reach go2rtc
-directly over the public internet without a portal/VPN, where NAT traversal
-needs a server-reflexive candidate.
+directly over the public internet without a portal/VPN, where NAT traversal needs
+a server-reflexive candidate.
 
-Fallback Ladder
----------------
+Starting and stopping the connection
+------------------------------------
 
-The ``useGo2RTCStream`` hook implements the fallback ladder:
+``useGo2RTCStream`` owns the element's lifetime. Two React mechanisms carry the
+weight here.
 
-::
-
-   1. WebRTC (peer-to-peer, lowest latency)
-      ↓ (on failure)
-   2. MSE (Media Source Extensions, browser-supported)
-      ↓ (on failure)
-   3. HLS (HTTP Live Streaming, widely supported)
-      ↓ (on failure)
-   4. MJPEG (traditional ZMS streaming, universal fallback)
-
-How Fallback Works
-~~~~~~~~~~~~~~~~~~
+A **ref** is a mutable box React hands back on every render, and writing to it
+does not re-render anything. The hook uses ``containerRef`` to reach the real
+``<div>`` in the DOM (``video-rtc`` is a custom element, appended by hand rather
+than rendered as JSX), ``videoRtcRef`` to hold the element across renders, and
+``mountedRef`` to know whether the component is still alive. An **effect** is a
+function React runs after render and again whenever its dependencies change,
+returning a cleanup function it runs before the next pass and on unmount. Both are
+covered in :doc:`02-react-fundamentals`.
 
 .. code:: typescript
 
-   try {
-     if (protocol === 'webrtc' || protocol === 'mse' || protocol === 'hls') {
-       const wsUrl = getGo2RTCWebSocketUrl(go2rtcUrl, streamName, { token });
-       const videoRtc = new VideoRTC();
-       videoRtc.mode = protocol; // 'webrtc', 'mse', or 'hls'
-       videoRtc.src = wsUrl;
-       await videoRtc.play();
-       setState('connected');
-     } else if (protocol === 'mjpeg') {
-       const mjpegUrl = getGo2RTCStreamUrl(go2rtcUrl, streamName, 'mjpeg', { token });
-       videoRef.current.src = mjpegUrl;
-       await videoRef.current.play();
-       setState('connected');
-     }
-   } catch (err) {
-     // Try next protocol if fallback enabled
-     if (enableFallback && protocolIndex < protocols.length - 1) {
-       protocolIndex += 1;
-       const nextProtocol = protocols[protocolIndex];
-       setTimeout(() => connect(nextProtocol), 1000); // Wait 1s before retrying
-     } else {
-       setState('error');
-       setError(err.message);
-     }
-   }
+   // hooks/useGo2RTCStream.ts, connect effect (simplified: logging removed)
+   useEffect(() => {
+     mountedRef.current = true;
+     if (!enabled) { stop(); return; }
+     if (!go2rtcUrl || !monitorId || !containerRef.current) return;
 
-Implementation Details
-----------------------
+     connectTimeoutRef.current = setTimeout(() => {
+       connectTimeoutRef.current = null;
+       if (mountedRef.current) connect();
+     }, GO2RTC_CONNECT_DELAY_MS);
 
-VideoRTC Library (Vendored)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     return () => {
+       mountedRef.current = false;
+       cleanup();
+     };
+   }, [enabled, go2rtcUrl, monitorId, token, protocolsKey]);
 
-The ``VideoRTC`` custom HTML element handles WebRTC signaling and media
-playback. Vendored from `AlexxIT/go2rtc
-<https://github.com/AlexxIT/go2rtc>`__ to avoid an extra runtime
-dependency.
+``GO2RTC_CONNECT_DELAY_MS`` is 100 ms. The delay exists because React's Strict
+Mode, in development only, mounts every component, unmounts it, and mounts it
+again to surface effects that are not cleanup-safe. Without the delay each tile
+would open a WebSocket, immediately tear it down, and open another. With it, the
+first mount's timer is cleared by its own cleanup before it ever fires. Montage
+tiles are not staggered beyond this one shared delay; they all connect together.
 
-**Key callbacks:**
+``protocolsKey`` is ``protocols.join(',')`` rather than the array itself, because
+an array in a dependency list is compared by identity. ``LiveMonitorPlayer``
+passes ``rawSettings?.webrtcProtocols``, and when a profile has never set it the
+hook's own default parameter (``protocols = ['webrtc', 'mse', 'hls']``) mints a
+fresh array on every render. Keying on the string stops a harmless re-render from
+tearing the stream down and rebuilding it.
 
-.. code:: typescript
+Falling back to MJPEG
+---------------------
 
-   videoRtc.oninit = () => { /* VideoRTC initialized, apply initial muted state */ };
-   videoRtc.onopen = () => { /* WebSocket connected */ };
-   videoRtc.ondisconnect = () => { /* Connection lost */ };
-   videoRtc.onclose = () => { /* Cleanup */ };
-   videoRtc.onpcvideo = (video) => { /* Video track received, apply muted state */ };
+Everything in this section lives in ``LiveMonitorPlayer``, not in the hook. The
+hook reports state; the component decides when go2rtc has lost.
 
-**Muting Strategy:** Muting is applied at 3 precise points to avoid race
-conditions: 1. ``oninit`` - When video element is created 2.
-``onpcvideo`` - When WebRTC video track arrives (key moment) 3. React
-effect - When ``muted`` prop changes
-
-**Picture-in-Picture:** PiP is disabled
-(``disablePictureInPicture = true``) on all video elements because iOS
-shows an empty window for streaming sources (both WebRTC and MSE).
-
-URL Building
-~~~~~~~~~~~~
-
-Two new URL builder functions in ``lib/zm/url-builder.ts``:
+**MJPEG shows first.** While go2rtc is selected but has produced no decoded
+frames yet, the component renders the MJPEG ``<img>`` as the visible picture with
+a blinking ellipsis badge over it (``data-testid="mse-connecting-badge"``):
 
 .. code:: typescript
 
-   // WebSocket signaling URL for WebRTC/MSE/HLS
-   getGo2RTCWebSocketUrl(
-     go2rtcUrl: string,      // e.g., 'http://localhost:1984'
-     streamName: string,     // e.g., 'front_door'
-     options?: { token?: string }
-   ): string
-   // Returns: 'ws://localhost:1984/api/ws?src=front_door&token=...'
+   const showMjpegPlaceholder = effectiveStreamingMethod === 'webrtc' && !hasVideoFrames;
 
-   // HTTP stream URL for MSE/HLS/MJPEG
-   getGo2RTCStreamUrl(
-     go2rtcUrl: string,
-     streamName: string,
-     format: 'mse' | 'hls' | 'mjpeg',
-     options?: { token?: string }
-   ): string
-   // Returns: 'http://localhost:1984/api/stream.mjpeg?src=front_door&token=...'
+The tile is never blank. When decoded frames appear (``videoWidth > 0``) the
+component swaps to the ``<video>`` and drops the badge. A poll every
+``GO2RTC_FRAME_POLL_MS`` (250 ms) makes that swap happen the instant frames
+arrive rather than at the timeout deadline. ``derivePlayerViewState()`` folds
+these signals into one named state (``connecting``, ``mjpeg-placeholder``,
+``mse-playing``, ``mjpeg``, ``no-video``) that the render branches read.
 
-Discovery
-~~~~~~~~~
+**Three ways go2rtc loses.** Each latches ``go2rtcFailed``, which flips
+``effectiveStreamingMethod`` to ``mjpeg`` for this player:
 
-Extended ``services/discovery.ts`` to probe for Go2RTC at port 1984:
+1. **The hook reported an error.** Any ``state === 'error'`` demotes on the next
+   effect run. Usually the WebSocket never opened: ``video-rtc``'s ``onclose``
+   fires while ``wsConnectedRef`` is still false. The hook also sets that state
+   when the container ref is missing at connect time, and when building the
+   element or its WebSocket URL throws.
+2. **Connected, but no frames.** After the hook reports ``connected``, a timer
+   of ``GO2RTC_VIDEO_TIMEOUT_S`` (15 seconds) checks the ``<video>`` for real
+   dimensions. No dimensions means demote. Dimensions but a paused element means
+   autoplay was blocked, so it calls ``play()`` and treats the stream as good.
+3. **It froze after playing.** The first two checks stop running once frames
+   arrive, so a stream that stalls later (source hiccup, MSE buffer underrun,
+   missing keyframe, silent WebSocket stall) would sit frozen forever. A liveness
+   check every ``GO2RTC_LIVENESS_CHECK_MS`` (3000 ms) watches ``currentTime``
+   advance and ``readyState``. ``GO2RTC_FREEZE_THRESHOLD_S`` (7 seconds) without
+   advance counts as a freeze: the hook retries, up to
+   ``GO2RTC_MAX_FREEZE_RETRIES`` (2) times, and then demotes to MJPEG. Playing
+   healthily for ``GO2RTC_FREEZE_RESET_S`` (60 seconds) after a freeze resets the
+   counter, so one hiccup an hour does not permanently cost a monitor its
+   hardware-decoded stream.
 
-.. code:: typescript
+**The failure cache.** A monitor that fails go2rtc is recorded in a module-level
+``Map`` and skipped for ``GO2RTC_RETRY_INTERVAL_MIN`` (5 minutes, declared at the
+top of ``LiveMonitorPlayer.tsx``). Being module-level, it is shared by every
+``LiveMonitorPlayer`` instance and survives in-app navigation. An entry goes away
+when ``isGo2rtcCachedFailure`` next reads it past its five-minute TTL and deletes
+it, when the recovery paths below delete it, or on a full reload. This is what
+stops a montage of twenty monitors from re-attempting a broken stream on every
+tile, every time you open the page.
 
-   // Probe Go2RTC endpoint (non-blocking)
-   try {
-     const go2rtcUrl = `http://${host}:1984`;
-     const response = await fetch(`${go2rtcUrl}/api/config`, { signal: abortSignal });
-     if (response.ok) {
-       result.go2rtcUrl = go2rtcUrl;
-     }
-   } catch {
-     // leave go2rtcUrl unset
-   }
+The single-monitor detail view passes ``bypassGo2rtcFailureCache`` so it neither
+reads nor writes this cache. Montage opens many connections at once and some fail
+under that load, marking those monitors failed. Without the bypass the detail view
+inherited that and skipped go2rtc, showing the loading placeholder until a reload.
+With the bypass the detail view always attempts go2rtc (a single connection
+succeeds), and a failure there falls back to MJPEG locally without poisoning the
+montage cache.
 
-StreamChannel
--------------
+**Recovery.** Two things clear a latched failure. Toggling a monitor back to
+go2rtc deletes its cache entry and retries at once. And ``useVisibilityResume``,
+when the page returns from the background, resets the freeze counters, clears the
+latch, and nudges a retry: the browser suspends video in a backgrounded tab, and
+the freeze watchdog would otherwise have spent its retry budget on a stream that
+was never actually broken.
 
-Go2RTC stream names use the format ``{monitorId}_{StreamChannel}``
-(e.g., ``4_CameraDirectPrimary``). The ``StreamChannel`` field is part
-of the ``MonitorSchema`` and identifies which camera stream to use.
+Tearing the stream down
+-----------------------
 
-Previously the stream name was hardcoded as ``{monitorId}_0``, which
-failed for monitors with non-default channels. The ``useGo2RTCStream``
-hook now reads the monitor's ``StreamChannel`` field to build the
-stream name.
+Leaving a live view (montage or single monitor) must stop the stream.
+``connect()`` sets ``videoRtc.background = true`` so a tile keeps streaming when
+the page is hidden: the flag makes ``oninit`` skip the ``visibilitychange``
+listener that would otherwise disconnect a backgrounded tab. But the same flag
+short-circuits the element's own ``disconnectedCallback``, so teardown is the
+hook's job. (Scroll-out pausing is a separate flag, ``visibilityThreshold``, which
+defaults to ``0`` and the app never sets, so tiles keep streaming off-screen too.) WebRTC needs extra care:
+once it wins negotiation, media flows over the ``RTCPeerConnection`` and the
+WebSocket is already closed, so closing the socket alone does nothing.
 
-.. code:: typescript
-
-   // Stream name construction
-   const streamName = `${monitorId}_${monitor.StreamChannel || '0'}`;
-
-Fallback Chain
---------------
-
-The full fallback sequence:
-
-1. Go2RTC connects via WebSocket signaling
-2. Negotiates WebRTC, MSE, or HLS (in that order)
-3. **15-second video frame timeout**: after reaching "connected" state,
-   checks ``videoWidth``/``videoHeight``: falls back to MJPEG if no
-   frames arrived. The value is ``GO2RTC_VIDEO_TIMEOUT_S`` in
-   ``lib/zmninja-ng-constants.ts``.
-4. MJPEG fallback as last resort
-
-**MJPEG-first placeholder:** while the go2rtc stream is still establishing
-(selected, no decoded frames yet, not failed), ``LiveMonitorPlayer`` shows
-the MJPEG stream immediately as the visible image with a blinking "…" badge
-(``data-testid="mse-connecting-badge"``). When MSE produces frames
-(``videoWidth > 0``) it swaps to the ``<video>`` and removes the badge. If
-MSE times out, MJPEG stays as the real stream and the badge is removed.
-
-**Connect timing:** in montage every tile mounts and connects at once. There
-is a single base delay (``GO2RTC_CONNECT_DELAY_MS``) before connecting, to
-survive React Strict Mode's double-invoke; tiles are not staggered.
-
-**Failure cache:** Monitors that fail Go2RTC are cached and skipped for
-5 minutes. This prevents repeated connection attempts in montage views
-with many monitors. The cache is module-level and shared by every
-``LiveMonitorPlayer``, and it survives in-app navigation (only a full reload
-clears it).
-
-The single-monitor detail view passes ``bypassGo2rtcFailureCache`` so it
-neither reads nor writes this cache. Montage opens many connections at once and
-some fail under that load, marking those monitors failed. Without the bypass the
-detail view inherited that and skipped Go2RTC, showing the loading placeholder
-until a reload. With the bypass the detail view always attempts Go2RTC (a single
-connection succeeds), and a failure there falls back to MJPEG locally without
-poisoning the montage cache.
-
-**Stream teardown:** leaving a live view (montage or single monitor) must stop
-the stream. ``connect()`` sets ``videoRtc.background = true`` so a tile keeps
-streaming when scrolled out of view, but that flag also disables the VideoRTC
-element's own ``disconnectedCallback``, so teardown is the hook's job. WebRTC
-needs extra care: once it wins negotiation, media flows over the
-``RTCPeerConnection`` and the WebSocket is closed, so closing the ws alone does
-nothing. ``cleanup()`` calls ``destroyVideoRtc()``, which:
+``cleanup()`` calls ``destroyVideoRtc()``, which:
 
 - flips ``background`` back to false so DOM removal also triggers native teardown;
 - cancels the element's ``reconnectTID``/``disconnectTID`` timers so no scheduled
@@ -330,340 +345,211 @@ nothing. ``cleanup()`` calls ``destroyVideoRtc()``, which:
   the video's ``MediaStream`` tracks defensively;
 - removes the element from the DOM.
 
-``cleanup()`` also sweeps any stray VideoRTC left in the container, and
+``cleanup()`` also sweeps any stray ``VideoRTC`` left in the container, and
 ``connect()`` bails when the hook is no longer mounted, so a late ``retry()``
 from the visibility resume or freeze watchdog cannot open a socket that nothing
 owns. Without this, tiles unmounted in bulk (navigating away from montage) leak
 their connections and keep pulling video in the background.
 
-**Per-monitor override:** The ``monitorStreamingOverrides`` map in the
-settings store allows forcing a specific streaming method per monitor,
-independent of the global setting.
+Settings that affect go2rtc
+---------------------------
 
-Controls
+All of these are profile-scoped in ``ProfileSettings`` (``stores/settings.ts``)
+and read through the settings store. See
+:doc:`03-state-management-zustand` for how the store is subscribed to.
+
+``streamingMethod: StreamingMethod``
+  ``'auto' | 'mjpeg'``, default ``'auto'``. There is no ``'webrtc'`` value: the
+  Live Streaming settings switch writes ``'auto'`` when on and ``'mjpeg'`` when
+  off, and ``'auto'`` means "use go2rtc where the monitor and server support it".
+
+``monitorStreamingOverrides: Record<string, StreamingMethod>``
+  Per-monitor override, written by ``MonitorSettingsDialog`` and read by
+  ``LiveMonitorPlayer`` ahead of the profile-level setting. Turning go2rtc off for
+  one monitor stores ``'mjpeg'`` against its id; turning it back on deletes the
+  entry so the monitor inherits the profile setting again.
+
+``webrtcProtocols: WebRTCProtocol[]``
+  ``('webrtc' | 'mse' | 'hls')[]``, default all three. This is the list joined
+  into ``videoRtc.mode``. The settings UI exposes it as three checkboxes and
+  refuses to save an empty list. Unchecking ``webrtc`` leaves MSE to carry the
+  stream on its own.
+
+``webrtcUseStun: boolean``
+  Default false. Covered under `STUN servers`_ above.
+
+``showProtocolLabel: boolean``
+  Default true. Gates the protocol badge everywhere it renders: the monitor detail
+  page, montage tiles, ``MonitorCard``, and the dashboard monitor widget. On an
+  MJPEG player it reads ``MJPEG``. On a go2rtc player it reads the started
+  protocol upper-cased (``MSE``, ``WEBRTC``, ``HLS``), or ``Go2RTC`` while no
+  protocol has been reported yet.
+
+``bypassGo2rtcFailureCache`` is not a setting. It is a prop, and only
+``MonitorDetail`` passes it.
+
+The video element
+-----------------
+
+The hook wraps ``video-rtc``'s ``oninit`` to configure the ``<video>`` the moment
+the element creates it, and wraps ``onpcvideo`` to re-apply muting after the
+element has picked its winning protocol. When WebRTC wins, ``onpcvideo`` calls
+``play()``, whose autoplay-rejection handler sets ``this.video.muted = true`` and
+retries; an unmuted player would come back muted. Muting is applied at three
+points for that reason: on ``oninit``, on ``onpcvideo``, and in an effect when the
+``muted`` prop changes.
+
+Native controls are enabled only where ``showControls`` is passed, which today is
+only ``MonitorDetail``:
+
+.. code:: typescript
+
+   // hooks/useGo2RTCStream.ts, inside the wrapped oninit
+   videoRtc.video.controls = controls;
+   videoRtc.video.disablePictureInPicture = true;
+   videoRtc.video.playsInline = true;
+   if (controls) {
+     videoRtc.video.setAttribute('controlsList', 'nodownload noplaybackrate');
+     videoRtc.video.addEventListener('click', (e: Event) => e.stopPropagation());
+   }
+
+Picture-in-Picture is disabled on the go2rtc ``<video>``, on every platform. The
+vendored ``video-rtc.js`` already does this in its own ``oninit``; the hook sets
+it again after taking the element over. No comment or commit message in the source
+records why, so treat the reason as unknown rather than inferring one. It is not a
+blanket app policy: the recorded-event player (``Mp4EventPlayer``) disables PiP
+only on Android and drives it through ``PipContext`` everywhere else. The click
+handler stops propagation so that using the controls in montage does not also
+navigate to monitor detail.
+
+Snapshots come from the same element. ``LiveMonitorPlayer`` publishes it through
+``externalMediaRef``, and ``downloadSnapshotFromElement`` draws an
+``HTMLVideoElement`` onto a canvas and exports a JPEG. The canvas is not
+cross-origin tainted here: the ``<video>`` is fed by a ``MediaStream`` or an MSE
+buffer, not by a remote URL. A black snapshot means no decoded frames, not CORS.
+(``wrapWithImageProxyIfNeeded`` in ``lib/zm/proxy-utils.ts`` applies to
+URL-based downloads, and only when ``Platform.shouldUseProxy`` is true, which is
+dev-mode web.) See :doc:`12-shared-services-and-components` for the download
+service.
+
+Type definitions
+----------------
+
+On ``Monitor`` (``api/types.ts``, validated by ``MonitorSchema``):
+
+.. code:: typescript
+
+   RTSPStreamName: z.string().nullable(),
+   StreamChannel: z.string().nullable().optional(),
+   Go2RTCEnabled: z.coerce.boolean().optional().default(false),
+   RTSP2WebEnabled: z.coerce.boolean().optional().default(false),
+   JanusEnabled: z.coerce.boolean().optional().default(false),
+
+Only ``Go2RTCEnabled`` and ``StreamChannel`` are read by the app.
+``RTSPStreamName``, ``RTSP2WebEnabled``, and ``JanusEnabled`` are parsed because
+ZoneMinder returns them; there is no RTSP2Web or Janus support and none is
+planned.
+
+On ``Profile``:
+
+.. code:: typescript
+
+   go2rtcUrl?: string; // ZM_GO2RTC_PATH from server config (full URL)
+
+Security
 --------
 
-Native video controls are enabled only on MonitorDetail (via the
-``showControls`` prop on ``LiveMonitorPlayer``):
+**Authentication.** ``getGo2RTCWebSocketUrl`` and ``getGo2RTCStreamUrl`` accept a
+``token`` option and append it as a query parameter, but ``LiveMonitorPlayer``
+does not pass one. ZoneMinder authenticates the go2rtc WebSocket through
+credentials embedded in ``ZM_GO2RTC_PATH`` itself (``https://user:pass@host/...``),
+which the URL builder deliberately preserves rather than stripping. Stripping them
+breaks WebRTC streaming on setups that rely on them.
 
-- ``controlsList='nodownload noplaybackrate'``: hides download and
-  playback rate options
-- ``disablePictureInPicture=true``: disabled because iOS shows an empty
-  window for streaming sources
-- Click on the video element calls ``stopPropagation()`` to prevent
-  navigation to monitor detail (relevant in montage)
+**Host guard.** ``hardenGo2RTCUrl`` logs a warning via ``log.http`` when a token
+*is* attached and the go2rtc hostname differs from the configured portal
+hostname, so a token cannot quietly be sent to a third-party host.
+``LiveMonitorPlayer`` passes ``expectedHost`` (the portal's hostname) for exactly
+this check. With no token in play today, the warning does not fire; the guard is
+there for when one is.
 
-Type Definitions
-----------------
+**Secure context.** WebRTC requires HTTPS or localhost. A page served over HTTPS
+cannot open a plaintext ``ws://`` socket, so an ``https`` portal needs an
+``https`` ``ZM_GO2RTC_PATH``: the URL builder maps the scheme through, and mixed
+content is blocked by the browser, not by the app.
 
-Monitor Fields
-~~~~~~~~~~~~~~
+Testing
+-------
 
-Added to ``Monitor`` type in ``api/types.ts``:
+Unit tests, run with ``npm test`` from ``app/``:
 
-.. code:: typescript
+- ``app/src/hooks/__tests__/useGo2RTCStream.test.ts``: connection lifecycle
+  (idle, connecting, connected), the connect delay with no per-tile stagger,
+  ``pcConfig.iceServers`` being emptied by default and populated when
+  ``useStun`` is on, custom protocol order, WebSocket failure producing the error
+  state, and teardown (element removed from the DOM, media tracks stopped,
+  reconnect timers cancelled).
+- ``app/src/lib/zm/__tests__/url-builder.test.ts``: ``getGo2RTCWebSocketUrl`` and
+  ``getGo2RTCStreamUrl``, including scheme mapping, path prefixes, trailing
+  slashes, embedded credentials, and the cross-host token warning.
+- ``app/src/components/monitors/__tests__/LiveMonitorPlayer.test.tsx``: MJPEG
+  error recovery, and failure-cache scoping (the detail view does not inherit a
+  montage-recorded failure; montage tiles do share the cache).
+- ``app/src/components/monitors/__tests__/derivePlayerViewState.test.ts``: the
+  view-state table.
 
-   interface Monitor {
-     // ... existing fields
-     Go2RTCEnabled?: boolean;      // Monitor supports Go2RTC
-     RTSP2WebEnabled?: boolean;    // Alternative: RTSP2Web support
-     JanusEnabled?: boolean;       // Alternative: Janus Gateway support
-     RTSPStreamName?: string;      // RTSP stream identifier for Go2RTC
-     StreamChannel?: string;       // Go2RTC stream channel (e.g., 'CameraDirectPrimary')
-   }
-
-Profile Fields
-~~~~~~~~~~~~~~
-
-Added to ``Profile`` type:
-
-.. code:: typescript
-
-   interface Profile {
-     // ... existing fields
-     go2rtcUrl?: string;           // Go2RTC server URL, e.g. 'http://localhost:1984'.
-                                   // Truthiness doubles as the availability check.
-   }
-
-Testing Strategy
-----------------
-
-Unit Tests
-~~~~~~~~~~
-
-Located in:
-
-- ``/app/src/hooks/__tests__/useGo2RTCStream.test.ts`` - Hook lifecycle
-  tests (15 tests)
-- ``/app/src/lib/__tests__/url-builder.test.ts`` - URL builder tests
-- ``/app/src/services/__tests__/discovery.test.ts`` - Discovery tests
-
-**Key test areas:**
-
-- Connection lifecycle (idle → connecting → connected)
-- Fallback ladder (WebRTC → MSE → HLS → MJPEG)
-- Error handling and retry logic
-- Cleanup on unmount
-- State transitions
-
-**Note:** Some useGo2RTCStream tests have async timing issues but the
-hook implementation is correct.
-
-E2E Tests
-~~~~~~~~~
-
-No dedicated go2rtc/WebRTC e2e feature file exists today. Montage and
-monitor-detail e2e coverage (``app/tests/features/montage.feature``,
-``monitor-detail.feature``) exercises ``LiveMonitorPlayer`` but does not
-assert on the WebRTC/MJPEG protocol path specifically. Manual testing
-(below) is the only current coverage for the fallback ladder.
-
-Manual Testing Checklist
-~~~~~~~~~~~~~~~~~~~~~~~~
-
-- ☐ Test on Chrome Desktop
-- ☐ Test on Firefox Desktop
-- ☐ Test on Safari Desktop
-- ☐ Test on iOS Safari (mobile)
-- ☐ Test on Android Chrome (mobile)
-- ☐ Test with Go2RTC available
-- ☐ Test with Go2RTC unavailable
-- ☐ Test with monitor Go2RTCEnabled=true
-- ☐ Test with monitor Go2RTCEnabled=false
-- ☐ Test all 3 streaming methods (auto, webrtc, mjpeg)
-- ☐ Test fallback scenarios (disconnect Go2RTC mid-stream)
-- ☐ Test reconnection after error
-- ☐ Test in montage grid (multiple monitors)
-- ☐ Verify no console errors
-
-Edge Cases Handled
-------------------
-
-1. Go2RTC Unavailable
-~~~~~~~~~~~~~~~~~~~~~
-
-**Scenario:** Server doesn't have Go2RTC installed/running.
-**Handling:** Discovery leaves ``profile.go2rtcUrl`` unset;
-LiveMonitorPlayer falls back to MJPEG.
-
-2. Monitor Not Configured for Go2RTC
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-**Scenario:** Monitor exists but ``Go2RTCEnabled`` is false or missing
-**Handling:** LiveMonitorPlayer checks flag, falls back to MJPEG even if
-Go2RTC available
-
-3. WebRTC Connection Failure
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-**Scenario:** WebRTC fails due to network/firewall/NAT issues
-**Handling:** Fallback ladder tries MSE → HLS → MJPEG automatically
-
-4. Missing RTSPStreamName
-~~~~~~~~~~~~~~~~~~~~~~~~~
-
-**Scenario:** Monitor doesn’t have ``RTSPStreamName`` configured
-**Handling:** Fallback chain:
-``RTSPStreamName || monitor.Name || "monitor-${Id}"``
-
-5. Null Profile
-~~~~~~~~~~~~~~~
-
-**Scenario:** Component renders before profile is loaded **Handling:**
-Optional chaining throughout: ``profile?.go2rtcUrl || ''``
-
-6. Missing Video Ref
-~~~~~~~~~~~~~~~~~~~~
-
-**Scenario:** Video element not mounted yet **Handling:** Guard in
-useGo2RTCStream: ``if (!videoRef.current) return;``
-
-7. WebSocket Signaling Failure
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-**Scenario:** WebSocket connection fails during offer/answer
-**Handling:** VideoRTC error callbacks trigger state transition to
-‘error’, fallback engages
-
-8. Network Interruption
-~~~~~~~~~~~~~~~~~~~~~~~
-
-**Scenario:** User loses internet mid-stream **Handling:**
-``videoRtc.ondisconnect()`` transitions to ‘disconnected’, retry button
-available
+There is no go2rtc e2e feature file. ``app/tests/features/montage.feature`` and
+``monitor-detail.feature`` exercise ``LiveMonitorPlayer`` but assert nothing about
+which protocol carried the video, so protocol negotiation and the fallback paths
+are covered by unit tests and manual checks only. See :doc:`06-testing-strategy`.
 
 Troubleshooting
 ---------------
 
-Issue: LiveMonitorPlayer shows “Connection failed”
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Every step below is visible in the logs. ``log.videoPlayer`` carries the whole
+decision path.
 
-**Check:** 1. Is Go2RTC running?
-``curl http://localhost:1984/api/config`` 2. Is monitor configured in
-Go2RTC? Check ``streams`` in config 3. Does monitor have
-``Go2RTCEnabled`` set? Check ZoneMinder settings 4. Check browser
-console for WebRTC errors 5. Try forcing MJPEG mode to isolate issue
+**A monitor plays MJPEG when it should not.** Look for
+``Streaming: MJPEG`` and its context object. It logs
+``monitorGo2RTCEnabled``, so a false value there is a ZoneMinder setting, not an
+app bug. If that flag is true, check ``profile.go2rtcUrl``: an empty
+``ZM_GO2RTC_PATH`` on the server leaves it unset. Then check the profile's
+``streamingMethod`` and any per-monitor override.
 
-Issue: WebRTC connects but no video
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+**It plays MJPEG only in montage.** That is the failure cache. Open the monitor's
+detail page (which bypasses the cache) to confirm go2rtc works there, and look
+for the log line that recorded the failure: ``Go2RTC error, falling back to
+MJPEG``, or ``Go2RTC connected but no video frames, falling back to MJPEG``, or
+``Go2RTC stream frozen, max retries reached, falling back to MJPEG``. The cache
+entry expires after 5 minutes, or on a full reload.
 
-**Check:** 1. Does ``RTSPStreamName`` match Go2RTC stream name? 2. Is
-RTSP stream active? Check Go2RTC streams page 3. Browser WebRTC support?
-Check ``chrome://webrtc-internals`` 4. Firewall blocking STUN/TURN?
+**The badge reads MSE but I expected WebRTC.** Expected. The badge reports the
+first protocol ``video-rtc`` started, and MSE is started before WebRTC. See
+`Protocol negotiation runs in parallel`_.
 
-Issue: Fallback to MJPEG always happens
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+**"Go2RTC WebSocket connection failed".** The socket closed before it opened.
+Confirm go2rtc is reachable at ``ZM_GO2RTC_PATH`` from the device (not just from
+the server), and that a reverse proxy in front of it forwards WebSocket upgrade
+headers on the ``/ws`` path.
 
-**Check:** 1. ``profile.go2rtcUrl``: did discovery populate it? 2.
-``monitor.Go2RTCEnabled``: is the monitor flagged? 3. User preference,
-is ``streamingMethod`` set to ``mjpeg``? 4. Check logs,
-``log.videoPlayer()`` shows the decision path.
+**Connected, then falls back after 15 seconds.** The socket opened but no frames
+decoded. The stream ``{monitorId}_{channel}`` must exist in go2rtc's config; a
+monitor whose ``StreamChannel`` points at a substream the camera does not publish
+produces exactly this.
 
-Issue: Snapshot download produces black image
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+**The stream freezes and recovers, repeatedly.** The liveness watchdog is doing
+its job. ``Go2RTC stream frozen, retrying connection`` logs the reason
+(``no-advance``, ``readyState``, ``ended``, or ``disconnected``) and how long the
+video had been stalled.
 
-**Check:** 1. Is video element actually playing? Check
-``videoRef.current.videoWidth`` 2. Is CORS blocking canvas capture?
-Check browser console 3. Try waiting for ‘connected’ state before
-capturing
-
-Issue: Picture-in-Picture not working
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-**Expected behavior:** PiP is intentionally disabled for all video
-players (Go2RTC and Video.js). iOS Safari shows an empty window for
-streaming sources, so PiP is disabled to avoid broken UX.
-
-Performance Considerations
---------------------------
-
-WebRTC Benefits
-~~~~~~~~~~~~~~~
-
-- **Latency**: Sub-second vs 3-10 seconds for MJPEG
-- **Bandwidth**: ~50-70% reduction vs MJPEG (H.264/H.265 compression)
-- **CPU**: Hardware-accelerated decoding (lower CPU usage)
-- **Battery**: More efficient than MJPEG polling (better for mobile)
-
-Potential Issues
-~~~~~~~~~~~~~~~~
-
-- **Initial Connection**: 1-3 seconds for WebSocket + ICE negotiation
-- **Memory**: Video codec state requires more memory than MJPEG
-- **Fallback Overhead**: Testing multiple protocols adds delay on
-  failure
-
-Optimization Tips
-~~~~~~~~~~~~~~~~~
-
-- Use ‘auto’ mode - fallback only happens on error, not every load
-- Reduce number of simultaneous WebRTC streams (browser limit ~6-10)
-- Consider MJPEG for montage grids with many monitors
-
-Configuration Examples
-----------------------
-
-ZoneMinder Monitor Configuration
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-For WebRTC streaming to work, monitors must be configured in ZoneMinder:
-
-.. code:: bash
-
-   # In ZoneMinder Settings → Monitors → [Monitor] → Source
-   Source Type: RTSP
-   Source Path: rtsp://camera-ip:554/stream
-   # Enable Go2RTC (custom field)
-   Go2RTCEnabled: Yes
-   RTSPStreamName: front_door  # Must match Go2RTC config
-
-Go2RTC Configuration
-~~~~~~~~~~~~~~~~~~~~
-
-Example ``/etc/go2rtc.yaml``:
-
-.. code:: yaml
-
-   streams:
-     front_door:
-       - rtsp://camera-ip:554/stream
-     back_door:
-       - rtsp://camera-ip:554/stream2
-
-   api:
-     listen: ":1984"
-
-   webrtc:
-     candidates:
-       - stun:8555  # Or public STUN server
-
-zmNinjaNg Profile Settings
-~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Users can configure streaming method in Settings → Profiles:
-
-.. code:: typescript
-
-   {
-     "streamingMethod": "auto",        // 'auto' | 'webrtc' | 'mjpeg'
-     "webrtcFallbackEnabled": true,    // Enable fallback ladder
-     // ... other settings
-   }
-
-Security Considerations
------------------------
-
-Authentication
-~~~~~~~~~~~~~~
-
-- Go2RTC supports token-based authentication via query parameter
-- zmNinjaNg passes ``accessToken`` from profile to Go2RTC URLs
-- WebSocket connections include token:
-  ``ws://server:1984/api/ws?src=stream&token=xyz``
-
-CORS
-~~~~
-
-- Go2RTC must allow zmNinjaNg origin for WebSocket connections
-- Canvas-based snapshot capture may be blocked by CORS
-- Use ``wrapWithImageProxyIfNeeded()`` for cross-origin snapshots
-
-HTTPS
-~~~~~
-
-- WebRTC requires secure context (HTTPS) or localhost
-- Production deployments should use HTTPS for both zmNinjaNg and Go2RTC
-- Mixed content (HTTPS → HTTP) will fail for WebRTC
+**A downloaded snapshot is black.** The ``<video>`` had no decoded frames when the
+canvas was drawn. Check ``videoWidth`` on the element. This is not a CORS problem.
 
 References
 ----------
 
-- `Go2RTC GitHub <https://github.com/AlexxIT/go2rtc>`__
-- `VideoRTC
-  Source <https://github.com/AlexxIT/go2rtc/blob/master/www/video-rtc.js>`__
-- `WebRTC
-  API <https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API>`__
-- `Media Source
-  Extensions <https://developer.mozilla.org/en-US/docs/Web/API/Media_Source_Extensions_API>`__
-- `HLS Specification <https://datatracker.ietf.org/doc/html/rfc8216>`__
-
-Future Enhancements
--------------------
-
-Potential Improvements
-~~~~~~~~~~~~~~~~~~~~~~
-
-1. **Connection Reuse**: Reuse WebSocket connections across multiple
-   monitors
-2. **Audio Support**: Enable audio tracks (currently muted)
-3. **Bitrate Control**: Expose Go2RTC quality settings in UI
-4. **Connection Stats**: Display latency/bandwidth metrics
-5. **ICE Server Config**: Allow custom STUN/TURN servers
-6. **PTZ Control**: Integrate PTZ controls with WebRTC streams
-
-Not Planned
-~~~~~~~~~~~
-
-- RTSP2Web integration (Go2RTC supersedes this)
-- Janus Gateway support (Go2RTC is more feature-complete)
-- Custom WebRTC implementation (VideoRTC library is battle-tested)
+- `go2rtc <https://github.com/AlexxIT/go2rtc>`__
+- `video-rtc.js source <https://github.com/AlexxIT/go2rtc/blob/master/www/video-rtc.js>`__
+  (vendored at ``app/src/lib/vendor/go2rtc/video-rtc.js``)
+- `WebRTC API <https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API>`__
+- `Media Source Extensions <https://developer.mozilla.org/en-US/docs/Web/API/Media_Source_Extensions_API>`__
