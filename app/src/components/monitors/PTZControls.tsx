@@ -163,7 +163,7 @@ export function PTZControls({ onCommand, className, disabled, control }: PTZCont
   const zoomModeKey = canZoomCon ? 'ptz.mode_continuous' : (canZoomRel ? 'ptz.mode_relative' : (canZoomAbs ? 'ptz.mode_absolute' : null));
 
   return (
-    <div className={cn("flex flex-col items-center gap-4 p-4 bg-card/50 rounded-xl border shadow-sm backdrop-blur-sm", className)}>
+    <div className={cn("flex flex-col items-center gap-4 p-4 bg-card/50 rounded-xl border shadow-sm backdrop-blur-sm", className)} data-testid="ptz-controls">
       {(canMove || canZoom) && (moveModeKey || zoomModeKey) && (
         <div className="-mb-2 flex flex-col items-center gap-0.5 text-[10px] text-muted-foreground/70" data-testid="ptz-mode-indicator">
           <div className="flex gap-2">

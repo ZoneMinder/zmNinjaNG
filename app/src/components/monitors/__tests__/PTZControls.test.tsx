@@ -34,6 +34,20 @@ const relativeControl = {
 
 const POINTER = { pointerId: 1 };
 
+describe('PTZControls panel', () => {
+  // tests/steps/ptz.steps.ts asserts this testid. It went missing once and the
+  // e2e guard (Controllable === 0 on the test server) hid the breakage.
+  it('marks the panel root with the ptz-controls testid', () => {
+    render(<PTZControls onCommand={vi.fn()} control={continuousControl} />);
+    expect(screen.getByTestId('ptz-controls')).toBeInTheDocument();
+  });
+
+  it('renders nothing when the monitor has no control definition', () => {
+    const { container } = render(<PTZControls onCommand={vi.fn()} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+});
+
 describe('PTZControls hold button', () => {
   it('sends the stop command when unmounted while a button is held', () => {
     const onCommand = vi.fn();

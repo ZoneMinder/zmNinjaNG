@@ -474,6 +474,7 @@ export default function MonitorDetail() {
               size="sm"
               onClick={() => setShowPTZ(!showPTZ)}
               className="mb-4 text-muted-foreground hover:text-foreground"
+              data-testid="ptz-toggle"
             >
               {showPTZ ? t('ptz.hide_controls') : t('ptz.show_controls')}
               {showPTZ ? <ChevronUp className="ml-2 h-4 w-4" /> : <ChevronDown className="ml-2 h-4 w-4" />}
