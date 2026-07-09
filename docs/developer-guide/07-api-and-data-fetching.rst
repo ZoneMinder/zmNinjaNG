@@ -905,7 +905,8 @@ Property                         Normal  Low    Where used
 Two rows are indirect: ``snapshotRefreshInterval`` seeds the per-profile
 setting ``useMonitorStream`` actually reads, and ``eventPollerInterval`` is
 injected into the poller by ``stores/notifications.ts`` rather than read
-inside it.
+inside it, where it acts as the Low-mode floor under the user's own
+``pollingInterval`` choice.
 
 **What does not use bandwidth settings:**
 
@@ -1573,11 +1574,15 @@ wiring function builds ``EventPollerDeps`` (event sink, token provider,
 ``getPollIntervalMs``, portal URL, multi-port lookup); the poller itself has no
 store imports.
 
-- Poll interval comes from the profile's bandwidth ``eventPollerInterval``
-  (30 s Normal, 60 s Low).
+- Poll interval comes from ``resolvePollIntervalMs`` in
+  ``stores/notifications.ts``: the profile's own ``pollingInterval`` (the
+  Notification settings dropdown) wins, and Low bandwidth mode floors it at
+  ``eventPollerInterval`` so the mode can never be made faster than itself.
+  A missing or nonsensical stored value falls back to the bandwidth default.
 - Scheduling is a recursive ``setTimeout``, not ``setInterval``, so an interval
-  change (the user switching to Low mode) takes effect on the next tick rather
-  than being frozen at the value captured when the timer was created.
+  change (the user picking a new cadence, or switching to Low mode) takes effect
+  on the next tick rather than being frozen at the value captured when the timer
+  was created.
 - A ``seenEventIds`` set, trimmed once it exceeds 500 entries, suppresses
   duplicate notifications across polls.
 - When ``onlyDetectedEvents`` is enabled in notification settings, the poller

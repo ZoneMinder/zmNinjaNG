@@ -22,7 +22,7 @@ import { useProfileStore } from './profile';
 import { useAuthStore } from './auth';
 import { useSettingsStore } from './settings';
 import { setPushServiceStoreGates } from '../services/pushNotifications';
-import { getBandwidthSettings, NOTIFICATIONS_SERVICE, STORAGE_KEYS } from '../lib/zmninja-ng-constants';
+import { getBandwidthSettings, NOTIFICATIONS_SERVICE, STORAGE_KEYS, type BandwidthMode } from '../lib/zmninja-ng-constants';
 
 export interface NotificationSettings {
   enabled: boolean;
@@ -687,6 +687,23 @@ function _buildServiceProviders(profileId: string, portalUrl: string): ZMNotific
 }
 
 /**
+ * Poll cadence for direct mode. The user's per-profile `pollingInterval`
+ * (Notification settings) is their explicit choice and wins, but low-bandwidth
+ * mode floors it so the mode can never be made faster than its own interval
+ * (rule 8). A missing or nonsensical stored value falls back to the bandwidth
+ * default rather than polling in a tight loop.
+ */
+export function resolvePollIntervalMs(
+  bandwidthMode: BandwidthMode,
+  pollingIntervalSeconds: number | undefined
+): number {
+  const bandwidthMs = getBandwidthSettings(bandwidthMode).eventPollerInterval;
+  const userMs = (pollingIntervalSeconds ?? 0) * 1000;
+  if (!Number.isFinite(userMs) || userMs <= 0) return bandwidthMs;
+  return bandwidthMode === 'low' ? Math.max(userMs, bandwidthMs) : userMs;
+}
+
+/**
  * Start the direct-mode event poller for a profile, wiring its
  * store-derived dependencies. Stop/isRunning stay on getEventPoller().
  */
@@ -697,8 +714,9 @@ export function startEventPoller(profileId: string): Promise<void> {
       useNotificationStore.getState().getProfileSettings(profileId).onlyDetectedEvents,
     getFreshAccessToken: () => useAuthStore.getState().getFreshAccessToken(),
     getPollIntervalMs: () => {
-      const profileSettings = useSettingsStore.getState().getProfileSettings(profileId);
-      return getBandwidthSettings(profileSettings.bandwidthMode).eventPollerInterval;
+      const { bandwidthMode } = useSettingsStore.getState().getProfileSettings(profileId);
+      const { pollingInterval } = useNotificationStore.getState().getProfileSettings(profileId);
+      return resolvePollIntervalMs(bandwidthMode, pollingInterval);
     },
     getPortalUrl: () => {
       const { profiles, currentProfileId } = useProfileStore.getState();

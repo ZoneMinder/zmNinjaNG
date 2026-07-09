@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useNotificationStore, startEventPoller } from '../notifications';
+import { useNotificationStore, startEventPoller, resolvePollIntervalMs } from '../notifications';
+import { getBandwidthSettings } from '../../lib/zmninja-ng-constants';
 import type { ZMAlarmEvent } from '../../types/notifications';
 
 const mockService = {
@@ -330,5 +331,30 @@ describe('Notification Store', () => {
     const events = useNotificationStore.getState().getEvents(profileId);
     expect(events).toHaveLength(1);
     expect(events[0].source).toBe('poll');
+  });
+});
+
+describe('resolvePollIntervalMs', () => {
+  const normalDefault = getBandwidthSettings('normal').eventPollerInterval;
+  const lowDefault = getBandwidthSettings('low').eventPollerInterval;
+
+  it('honours the user interval in normal bandwidth mode', () => {
+    expect(resolvePollIntervalMs('normal', 10)).toBe(10000);
+    expect(resolvePollIntervalMs('normal', 120)).toBe(120000);
+  });
+
+  it('floors the user interval at the low-bandwidth cadence', () => {
+    expect(resolvePollIntervalMs('low', 10)).toBe(lowDefault);
+  });
+
+  it('lets the user poll slower than the low-bandwidth cadence', () => {
+    expect(resolvePollIntervalMs('low', 120)).toBe(120000);
+  });
+
+  it('falls back to the bandwidth default when the stored value is unusable', () => {
+    expect(resolvePollIntervalMs('normal', undefined)).toBe(normalDefault);
+    expect(resolvePollIntervalMs('normal', 0)).toBe(normalDefault);
+    expect(resolvePollIntervalMs('normal', NaN)).toBe(normalDefault);
+    expect(resolvePollIntervalMs('low', -5)).toBe(lowDefault);
   });
 });
