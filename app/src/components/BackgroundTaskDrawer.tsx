@@ -6,6 +6,7 @@
  */
 
 import * as React from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, ChevronUp, X, Download, Upload, RefreshCw, FileDown, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useBackgroundTasks, type BackgroundTask, type TaskType } from '../stores/backgroundTasks';
@@ -27,7 +28,10 @@ interface TaskItemProps {
 
 function TaskItem({ task }: TaskItemProps) {
   const { t } = useTranslation();
-  const { cancelTask, removeTask } = useBackgroundTasks();
+  // The row renders from its `task` prop, so only the two actions are needed here.
+  const { cancelTask, removeTask } = useBackgroundTasks(
+    useShallow((state) => ({ cancelTask: state.cancelTask, removeTask: state.removeTask }))
+  );
   const Icon = TASK_ICONS[task.type] || Download;
 
   const formatBytes = (bytes: number) => {
@@ -142,7 +146,15 @@ function TaskItem({ task }: TaskItemProps) {
 
 export function BackgroundTaskDrawer() {
   const { t } = useTranslation();
-  const { tasks, drawerState, setDrawerState, clearCompleted, activeTasks, completedTasks } = useBackgroundTasks();
+  // tasks and drawerState are the store's only state fields; activeTasks/completedTasks
+  // are getters that re-read tasks through get() on each render.
+  const { tasks, drawerState } = useBackgroundTasks(
+    useShallow((state) => ({ tasks: state.tasks, drawerState: state.drawerState }))
+  );
+  const setDrawerState = useBackgroundTasks((state) => state.setDrawerState);
+  const clearCompleted = useBackgroundTasks((state) => state.clearCompleted);
+  const activeTasks = useBackgroundTasks((state) => state.activeTasks);
+  const completedTasks = useBackgroundTasks((state) => state.completedTasks);
 
   const active = activeTasks();
   const completed = completedTasks();

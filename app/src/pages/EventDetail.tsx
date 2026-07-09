@@ -90,7 +90,15 @@ export default function EventDetail() {
   const { portalPath } = useServerUrls(monitorData?.Monitor?.ServerId);
   const resolvedPortalUrl = portalPath ? portalPath.replace(/\/index\.php$/, '') : currentProfile?.portalUrl || '';
 
-  const { isFavorited, toggleFavorite } = useEventFavoritesStore();
+  const toggleFavorite = useEventFavoritesStore((state) => state.toggleFavorite);
+
+  // Subscribe to the derived boolean rather than to isFavorited itself: the getter's
+  // identity never changes, so selecting it would compare equal on every store update
+  // and the star would never flip.
+  const isFav = useEventFavoritesStore((state) =>
+    currentProfile && event ? state.isFavorited(currentProfile.id, event.Event.Id) : false
+  );
+
   const {
     goToPrevEvent,
     goToNextEvent,
@@ -100,8 +108,6 @@ export default function EventDetail() {
     currentEventId: id,
     currentStartDateTime: event?.Event.StartDateTime,
   });
-
-  const isFav = currentProfile && event ? isFavorited(currentProfile.id, event.Event.Id) : false;
 
   // Fetch tags for this event
   const { getTagsForEvent } = useEventTagMapping({

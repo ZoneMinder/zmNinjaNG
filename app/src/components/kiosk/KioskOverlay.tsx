@@ -7,6 +7,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useTranslation } from 'react-i18next';
 import { LockOpen } from 'lucide-react';
 import { useKioskStore } from '../../stores/kioskStore';
@@ -26,7 +27,20 @@ interface KioskOverlayProps {
 export function KioskOverlay({ onUnlock }: KioskOverlayProps) {
   const { t } = useTranslation();
   const { toast } = useToast();
-  const { isLocked, unlock, recordFailedAttempt, isCoolingDown, cooldownUntil, unlockRequested, clearUnlockRequest } = useKioskStore();
+  // All three state fields drive renders: isLocked mounts the overlay, cooldownUntil
+  // restarts the countdown effect, unlockRequested answers the sidebar's unlock request.
+  const { isLocked, cooldownUntil, unlockRequested } = useKioskStore(
+    useShallow((state) => ({
+      isLocked: state.isLocked,
+      cooldownUntil: state.cooldownUntil,
+      unlockRequested: state.unlockRequested,
+    }))
+  );
+  // isCoolingDown is a getter, not state: it reads cooldownUntil through get() when called.
+  const isCoolingDown = useKioskStore((state) => state.isCoolingDown);
+  const unlock = useKioskStore((state) => state.unlock);
+  const recordFailedAttempt = useKioskStore((state) => state.recordFailedAttempt);
+  const clearUnlockRequest = useKioskStore((state) => state.clearUnlockRequest);
   const [showPinPad, setShowPinPad] = useState(false);
   const [pinError, setPinError] = useState<string | null>(null);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);

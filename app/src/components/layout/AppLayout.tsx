@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { useCommandPaletteStore } from '../../stores/commandPalette';
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from '../ui/sheet';
 import { useTranslation } from 'react-i18next';
 import { BackgroundTaskDrawer } from '../BackgroundTaskDrawer';
@@ -103,7 +104,12 @@ export default function AppLayout() {
   // Apply global insomnia setting
   useInsomnia({ enabled: settings.insomnia });
 
-  const { isLocked, previousInsomniaState } = useKioskStore();
+  const { isLocked, previousInsomniaState } = useKioskStore(
+    useShallow((state) => ({
+      isLocked: state.isLocked,
+      previousInsomniaState: state.previousInsomniaState,
+    }))
+  );
 
   useEffect(() => {
     if (isLocked && !isCollapsed) {
