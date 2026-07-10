@@ -12,7 +12,6 @@
 
 import dotenv from 'dotenv';
 import path from 'path';
-import type { Options } from '@wdio/types';
 import { platformConfig } from './tests/platforms.config';
 import { getAppiumCapabilities } from './tests/helpers/ios-launcher';
 
@@ -57,7 +56,7 @@ function getCapabilities(dev: DeviceProfile): WebdriverIO.Capabilities {
   }
 }
 
-export const config: Options.Testrunner = {
+export const config: WebdriverIO.Config = {
   runner: 'local',
   port: device === 'android' ? 4724 : platformConfig.ios.appiumPort,
   specs: ['tests/device-screenshots/specs/**/*.spec.ts'],
