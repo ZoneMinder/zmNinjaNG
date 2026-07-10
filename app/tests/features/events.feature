@@ -98,10 +98,12 @@ Feature: Event Browsing and Management
     And I open the events filter panel
     And I enable favorites only filter
     And I apply event filters
+    And I close the events filter panel
     Then I should see the favorited event in the filtered list if action was taken
     When I open the events filter panel
     And I disable favorites only filter
     And I apply event filters
+    And I close the events filter panel
     And I unfavorite the first event if it was favorited
 
   @all

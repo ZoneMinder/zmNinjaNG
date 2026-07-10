@@ -1,12 +1,27 @@
 import { createBdd } from 'playwright-bdd';
 import { expect } from '@playwright/test';
 import { testConfig } from '../helpers/config';
+import { getEventCount } from '../helpers/zm-api';
 import { log } from '../../src/lib/logger';
 
 const { When, Then } = createBdd();
 
+// Whether the server has any events at all. Asked of the ZM API, not inferred
+// from the rendered cards: a flag set by one step and read by another is scoped
+// to the worker, not the scenario, so under parallel workers a scenario that
+// never ran the setter silently skipped its own assertions, and one that
+// inherited a stale `true` raced the page load. Cached per worker: one API call
+// per run (rule 34, refs #237).
+let serverEventCount: number | null = null;
+async function serverHasEvents(): Promise<boolean> {
+  if (serverEventCount === null) {
+    serverEventCount = await getEventCount();
+    log.info('E2E server event count', { component: 'e2e', count: serverEventCount });
+  }
+  return serverEventCount > 0;
+}
+
 // Shared state for event steps
-let hasEvents = false;
 let favoriteToggled = false;
 let favoritedEventId: string | null = null;
 let tagFilterApplied = false;
@@ -36,9 +51,6 @@ Then('I should see events list or empty state', async ({ page }) => {
 
   if (eventCount > 0) {
     log.info('E2E events found', { component: 'e2e', action: 'events_count', count: eventCount });
-    hasEvents = true;
-  } else {
-    hasEvents = false;
   }
 
   preFilterEventIds = await eventCards.evaluateAll((els) => els.map((el) => el.getAttribute('data-event-id')));
@@ -183,7 +195,7 @@ Then('I should see the events montage grid', async ({ page }) => {
 });
 
 When('I click into the first event if events exist', async ({ page }) => {
-  if (hasEvents) {
+  if (await serverHasEvents()) {
     const firstEvent = page.getByTestId('event-card').first();
     await firstEvent.click();
     await page.waitForURL(/.*events\/\d+/, { timeout: testConfig.timeouts.transition });
@@ -192,7 +204,7 @@ When('I click into the first event if events exist', async ({ page }) => {
 });
 
 When('I hover the first event thumbnail if events exist', async ({ page }) => {
-  if (hasEvents) {
+  if (await serverHasEvents()) {
     const firstThumb = page.getByTestId('event-thumbnail').first();
     await firstThumb.hover();
     hoverPerformed = true;
@@ -208,7 +220,7 @@ Then('I should see the enlarged event thumbnail preview if hover was performed',
 });
 
 When('I navigate back if I clicked into an event', async ({ page }) => {
-  if (hasEvents) {
+  if (await serverHasEvents()) {
     await page.goBack();
     await page.waitForTimeout(500);
   }
@@ -253,6 +265,17 @@ When('I set the events date range', async ({ page }) => {
 
 When('I apply event filters', async ({ page }) => {
   await page.getByTestId('events-apply-filters').click();
+});
+
+// Applying does not close the popover (the Popover in Events.tsx is
+// uncontrolled), and the open panel sits over the top of the event list. Any
+// step that then clicks a card is clicking through it and never lands, so the
+// popover must be dismissed first (refs #237).
+When('I close the events filter panel', async ({ page }) => {
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('events-filter-panel')).toBeHidden({
+    timeout: testConfig.timeouts.transition,
+  });
 });
 
 When('I clear event filters', async ({ page }) => {
@@ -310,12 +333,12 @@ When('I select a monitor filter if available', async ({ page }) => {
 // Event Favorite Steps
 When('I favorite the first event if events exist', async ({ page }) => {
   favoriteToggled = false;
-  if (!hasEvents) {
+  if (!(await serverHasEvents())) {
     log.info('E2E: Skipping favorite - no events exist', { component: 'e2e' });
     return;
   }
 
-  // The card is already known to exist (hasEvents), and the favorite button is
+  // The server has events, so a card must be rendered, and the favorite button is
   // part of every event card, so a failure here is a real regression, not
   // absent content - let it propagate instead of masking it as "skipped".
   const firstEventCard = page.getByTestId('event-card').first();
@@ -373,7 +396,7 @@ Then('I should see the favorited event in the filtered list if action was taken'
 });
 
 Then('I should see the event not marked as favorited if action was taken', async ({ page }) => {
-  if (!hasEvents) {
+  if (!(await serverHasEvents())) {
     log.info('E2E: Skipping not favorited check - no events exist', { component: 'e2e' });
     return;
   }
@@ -389,7 +412,7 @@ Then('I should see the event not marked as favorited if action was taken', async
 // Event Archive Steps
 When('I archive the first event if events exist', async ({ page }) => {
   archiveToggled = false;
-  if (!hasEvents) {
+  if (!(await serverHasEvents())) {
     log.info('E2E: Skipping archive - no events exist', { component: 'e2e' });
     return;
   }
@@ -436,7 +459,7 @@ Then('I should see the event marked as archived if action was taken', async ({ p
 });
 
 Then('I should see the event not marked as archived if action was taken', async ({ page }) => {
-  if (!hasEvents) {
+  if (!(await serverHasEvents())) {
     log.info('E2E: Skipping not-archived check - no events exist', { component: 'e2e' });
     return;
   }
@@ -449,13 +472,13 @@ Then('I should see the event not marked as archived if action was taken', async 
 });
 
 When('I archive the event from detail page if on detail page', async ({ page }) => {
-  if (!hasEvents) {
+  if (!(await serverHasEvents())) {
     log.info('E2E: Skipping archive from detail - no events exist', { component: 'e2e' });
     return;
   }
 
-  // hasEvents true means the earlier "I click into the first event if events
-  // exist" step already navigated here and waited for the /events/:id URL, so
+  // The server has events, so the earlier "I click into the first event if
+  // events exist" step navigated here and waited for the /events/:id URL, so
   // we are genuinely on the detail page and its archive button must exist.
   // Swallowing a missing button behind isVisible().catch() masked a real
   // rendering regression as "nothing to do here" - assert it hard instead.
@@ -625,13 +648,13 @@ Then('any relative time labels in the montage read as a duration', async ({ page
 });
 
 When('I favorite the event from detail page if on detail page', async ({ page }) => {
-  if (!hasEvents) {
+  if (!(await serverHasEvents())) {
     log.info('E2E: Skipping favorite from detail - no events exist', { component: 'e2e' });
     return;
   }
 
-  // hasEvents true means the earlier "I click into the first event if events
-  // exist" step already navigated here and waited for the /events/:id URL, so
+  // The server has events, so the earlier "I click into the first event if
+  // events exist" step navigated here and waited for the /events/:id URL, so
   // we are genuinely on the detail page and its favorite button must exist.
   // Same reasoning as the sibling detail-archive step: swallowing a missing
   // button behind isVisible().catch() masked a real rendering regression as
@@ -659,7 +682,7 @@ Then('I should see the detail favorite button inactive if action was taken', asy
 
 // Event Detail Steps
 Then('I should see event detail elements if on detail page', async ({ page }) => {
-  if (!hasEvents) {
+  if (!(await serverHasEvents())) {
     log.info('E2E: Skipping event detail check - no events exist', { component: 'e2e' });
     return;
   }

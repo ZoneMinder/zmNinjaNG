@@ -93,3 +93,25 @@ export async function getMonitorCount(): Promise<number> {
   const data = (await res.json()) as { monitors?: unknown[] };
   return data.monitors?.length ?? 0;
 }
+
+/**
+ * How many events the server has recorded.
+ *
+ * The events steps gate on "does this server have any events" before asserting
+ * anything about event cards. Deriving that from the rendered cards makes a
+ * broken list look like an empty server and passes every downstream step
+ * (refs #237). Asks the API instead. Reads only the pagination count, so it
+ * does not depend on the default page size.
+ */
+export async function getEventCount(): Promise<number> {
+  const token = await getAccessToken();
+  const { host } = testConfig.server;
+
+  const res = await fetch(`${host}/api/events.json?token=${encodeURIComponent(token)}`);
+  if (!res.ok) {
+    throw new Error(`ZM API event list fetch failed: ${res.status} ${res.statusText}`);
+  }
+
+  const data = (await res.json()) as { pagination?: { count?: number }; events?: unknown[] };
+  return data.pagination?.count ?? data.events?.length ?? 0;
+}
