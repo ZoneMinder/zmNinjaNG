@@ -37,6 +37,15 @@ describe('useMonitorSeenStore', () => {
     expect(useMonitorSeenStore.getState().getWatermark(P1, '1')).toBe('2026-07-01 00:00:00');
   });
 
+  it('does not re-seed a monitor whose watermark is null', () => {
+    // null means "seeded while this monitor had no events". Re-seeding it with
+    // a real timestamp would mark its whole history as already seen.
+    useMonitorSeenStore.getState().seed(P1, '1', null);
+    useMonitorSeenStore.getState().seed(P1, '1', '2026-07-09 14:26:47');
+    expect(useMonitorSeenStore.getState().getWatermark(P1, '1')).toBeNull();
+    expect(useMonitorSeenStore.getState().hasWatermark(P1, '1')).toBe(true);
+  });
+
   it('markSeen advances the watermark', () => {
     useMonitorSeenStore.getState().seed(P1, '1', '2026-07-01 00:00:00');
     useMonitorSeenStore.getState().markSeen(P1, '1', '2026-07-09 14:26:47');
