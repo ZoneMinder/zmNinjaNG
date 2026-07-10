@@ -1457,6 +1457,318 @@ states at all.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/client.ts#L289>`__
    · → :doc:`07-api-and-data-fetching`
 
+Flow 16: Editing and deleting a server profile
+-----------------------------------------------
+
+Flow 4 added a profile. Editing and deleting one look like they should be the
+same code with a different verb, and they are not. Adding routes to a whole
+screen; editing and deleting are two dialogs on the profile list. Two things
+here run against what Flow 4 taught. Opening the edit dialog decrypts the saved
+password and puts the plaintext into a form field, the exact inverse of "the
+password goes to secure storage, never to Zustand". And neither ``updateProfile``
+nor ``deleteProfile`` logs out, clears the query cache, or quits a running
+stream, all of which ``switchProfile`` does. The clean state comes from a
+``window.location.reload()`` in the page, not from the store.
+
+.. mermaid::
+
+   sequenceDiagram
+       autonumber
+       participant User as User
+       participant Page as Profiles page
+       participant Store as Profile store
+       participant Sec as Secure storage
+       participant Client as API client
+
+       User->>Page: tap Edit
+       Page->>Store: getDecryptedPassword(id)
+       Store->>Sec: getSecureValue("password_<id>")
+       Sec-->>Page: plaintext, straight into a form field
+       User->>Page: Save
+       Page->>Store: updateProfile(id, updates)
+       Store->>Sec: savePassword, state keeps the "stored-securely" sentinel
+       Store->>Client: rebuild, but only if this is the current profile
+       Note over Page,Client: No logout, no cache clear, no stream teardown here.
+       Page->>Page: window.location.reload() if the edited profile was current
+       User->>Page: tap Delete
+       Page->>Store: deleteProfile(id)
+       Store->>Sec: removeSecureValue, then auto-select profiles[0]
+       Page->>Page: reload, or navigate to /profiles/new if none are left
+
+#. **Both verbs live on the list page.** ``pages/Profiles.tsx`` renders the saved
+   profiles and owns an edit dialog and a delete confirmation dialog. Adding is
+   the odd one out: the Add button navigates to ``/profiles/new`` and hands off to
+   ``ProfileForm``, which is why Flow 4 traces a different file. Discovery, the
+   trust-on-first-use dialog and the confirming login all belong to that other
+   screen, so an edit never re-probes the server the way an add does.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Profiles.tsx#L331>`__
+   · → :doc:`04-pages-and-views`
+
+#. **Opening the edit dialog decrypts the password.** ``handleOpenEditDialog``
+   sees the persisted ``profile.password`` holding the sentinel string
+   ``'stored-securely'``, reaches for ``getDecryptedPassword`` and awaits the real
+   secret, then drops the plaintext into ``formData.password``. For as long as the
+   dialog is open, the password lives in ordinary React component state. It has to:
+   the field has to show a value the user can edit, and the store cannot supply one.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Profiles.tsx#L79>`__
+   · → :doc:`04-pages-and-views`
+
+#. **The store is read, not subscribed to.** That handler calls
+   ``useProfileStore.getState().getDecryptedPassword`` rather than pulling the
+   function out of the hook at the top of the component. ``getState()`` reads
+   Zustand once with no subscription, so the dialog does not re-render every time
+   any other field of the profile store changes. Using the hook here would buy a
+   reactive binding for a function that never changes.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/profile.ts#L423>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **Where the secret actually was.** ``getDecryptedPassword`` delegates to
+   ``ProfileService.getPassword``, which reads ``getSecureValue('password_<id>')``.
+   On iOS and Android that resolves to the Keychain or Keystore. On web and
+   Electron it is AES-GCM ciphertext in local storage, with the key material
+   sitting in local storage beside it, which ``lib/security/crypto.ts`` states
+   plainly is obfuscation and not confidentiality against anyone who can read the
+   store.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/profile.ts#L23>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **The self-signed toggle is not part of the profile.** The dialog seeds it
+   from ``useSettingsStore.getState().getProfileSettings(profile.id)``, because SSL
+   trust is a profile-scoped setting, not a field on the ``Profile`` object. Saving
+   writes it back through ``updateProfileSettings``. Anything you add to this
+   dialog has to pick one of these two homes on purpose.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Profiles.tsx#L111>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **Saving applies trust before it probes.** ``handleUpdateProfile`` validates
+   that username and password are both present or both absent, awaits
+   ``applySSLTrustSetting(formData.allowSelfSignedCerts)``, and only then runs
+   ``discoverUrls`` for any API or CGI URL the user blanked out. If trust were
+   applied after discovery, a self-signed host would fail the handshake and the
+   probe would report the server as unreachable. This is the same ordering
+   constraint as step 3 of Flow 4.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Profiles.tsx#L135>`__
+   · → :doc:`13-network-endpoints`
+
+#. **The store swaps the secret back out.** ``updateProfile`` writes any supplied
+   password to secure storage with ``ProfileService.savePassword``, then replaces
+   it with the ``'stored-securely'`` sentinel before the ``set()`` call. Zustand
+   persists the whole profile state to local storage with no ``partialize``, so
+   the sentinel is the only thing keeping the plaintext out of the persisted blob.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/profile.ts#L157>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **The client is rebuilt narrowly, and nothing else is torn down.** Still in
+   ``updateProfile``, the client is re-created only when both conditions hold: the
+   edited profile is the current one, and ``updates.apiUrl`` is present. No
+   ``logout()``, no ``clearQueryCache()``, no ``quitAllActiveStreams()``, none of
+   the six-step sequence ``switchProfile`` runs. Change a username here and the
+   auth store still holds a token minted with the old one.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/profile.ts#L180>`__
+   · → :doc:`11-application-lifecycle`
+
+#. **The reload is what re-authenticates.** Back in the page,
+   ``handleUpdateProfile`` closes the dialog and, if the edited profile was the
+   current one, calls ``window.location.reload()`` behind a 500ms timeout so the
+   success toast is visible first. The reload restarts the app, which re-runs
+   ``onRehydrateStorage`` and the whole of Flow 1, and that bootstrap is where the
+   new credentials produce a new token. Editing a profile that is not current
+   skips the reload entirely and touches nothing but the stored record.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Profiles.tsx#L191>`__
+   · → :doc:`11-application-lifecycle`
+
+#. **Deleting captures the answer before it destroys the question.**
+   ``handleDeleteProfile`` records ``isDeletingCurrent`` before awaiting
+   ``deleteProfile``, because afterwards ``currentProfileId`` already points at a
+   different profile. It then re-reads ``useProfileStore.getState().profiles``
+   rather than trusting the ``profiles`` value captured by its closure: that value
+   was frozen when the render that created this handler ran, and it still contains
+   the profile just deleted.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Profiles.tsx#L208>`__
+   · → :doc:`02-react-fundamentals`
+
+#. **The store does three things and stops.** ``deleteProfile`` removes the
+   password from secure storage, filters the profile out of the array, and, if the
+   deleted profile was current, auto-selects ``profiles[0]`` and points the API
+   client at its ``apiUrl``. The session belonging to the deleted server is still
+   live in the auth store and its monitor list is still in the query cache.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/profile.ts#L193>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **Which is why the page reloads, or leaves.** ``handleDeleteProfile`` ends in
+   one of three ways. No profiles remain: navigate to ``/profiles/new``. The
+   current profile was deleted and others remain: ``window.location.reload()``,
+   which is the only thing that discards the dead session and cache for the
+   auto-selected replacement. Some other profile was deleted: nothing happens
+   beyond the list re-rendering, and nothing needs to.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Profiles.tsx#L234>`__
+   · → :doc:`04-pages-and-views`
+
+#. **Delete-all is the exception that calls the reset.**
+   ``deleteAllProfiles`` loops ``deletePassword`` over every profile, empties the
+   state, and is the only one of the three writes to call ``resetApiClient()``,
+   which nulls the client and runs the registered reset hooks so the auth
+   single-flight gates are cleared. Its caller navigates to ``/profiles/new``
+   without a reload, since there is no server left to talk to.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/profile.ts#L223>`__
+   · → :doc:`07-api-and-data-fetching`
+
+Switching between two profiles that both exist is the third verb, and the only
+one that does the teardown properly. Flow 1 ends by pointing at it.
+
+Flow 17: Aiming a PTZ camera
+----------------------------
+
+Tapping a monitor opens ``/monitors/:id``, a live stream with a pan-tilt-zoom pad
+under it. Two things make this more than a button wired to an endpoint. The
+capabilities of the camera are not on the monitor record, they come from a second
+query against a different endpoint that is gated on the first one's answer. And
+the pad has two implementations of press-and-hold, chosen by what the camera's
+ZoneMinder driver can do: continuous drivers get one start command and one stop
+command, while relative and absolute drivers get the same step command re-fired
+on a 400ms timer for as long as the button is held. The command that stops the
+camera is the one that matters. Nothing else stops it, including the component
+being destroyed.
+
+.. mermaid::
+
+   sequenceDiagram
+       autonumber
+       participant User as User
+       participant Page as MonitorDetail
+       participant Pad as PTZControls
+       participant URL as url-builder
+       participant ZM as ZoneMinder
+
+       Page->>ZM: GET /monitors/{id}.json
+       ZM-->>Page: Monitor record, Controllable and ControlId
+       Page->>ZM: GET /controls/{controlId}.json (only if both are set)
+       ZM-->>Pad: driver capabilities: CanMoveCon, HasPresets, NumPresets
+       User->>Pad: pointerdown on an arrow
+       Note over Pad,ZM: The camera is moving now. Only moveStop ends it.
+       Pad->>URL: onCommand("moveConUp")
+       URL->>ZM: GET /index.php?request=control&control=moveConUp&xge=0&yge=0
+       User->>Pad: pointerup, or the component unmounts
+       Pad->>ZM: moveStop
+
+#. **The route is lazy and guarded.** ``App.tsx`` declares ``/monitors/:id``
+   pointing at a ``lazy()`` import of ``pages/MonitorDetail``, wrapped in a
+   ``RouteErrorBoundary``. The id arrives through ``useParams``, which means the
+   page has a monitor id and nothing else: every fact about the monitor has to be
+   fetched.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/App.tsx#L239>`__
+   · → :doc:`04-pages-and-views`
+
+#. **The monitor record comes first, and it decides everything after it.** A
+   ``useQuery`` on ``queryKeys.monitor(profileId, id)`` fetches
+   ``/monitors/{id}.json`` through ``getMonitor``, validated against
+   ``MonitorDataSchema``. The two fields that drive this flow are ``Controllable``,
+   a string ``'1'`` or ``'0'``, and ``ControlId``, a pointer into a table the
+   monitor record does not contain.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/MonitorDetail.tsx#L82>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **Capabilities are a second query, gated on the first.** ``getControl`` hits
+   ``/controls/{controlId}.json``, a different table with its own record. Its
+   ``enabled`` gate is ``!!monitor?.Monitor.ControlId && monitor.Monitor.Controllable === '1'``.
+   A React Query with ``enabled: false`` does not run and stays in a pending state,
+   which is exactly what is wanted on the first render: ``ControlId`` is
+   ``undefined`` until the monitor lands, and firing ``/controls/undefined.json``
+   would be a guaranteed 404 for every non-PTZ camera in the system.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/MonitorDetail.tsx#L89>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **What the control record says.** ``ZMControlSchema`` coerces every field to a
+   string, so a capability is the character ``'1'``, never a boolean. The ones the
+   pad reads are ``CanMoveCon``, ``CanMoveRel``, ``CanMoveAbs``, ``CanMoveDiag``,
+   ``CanZoomCon`` and ``CanZoomRel``, ``CanReset``, and ``HasPresets`` with
+   ``NumPresets``. There is no field that says "this camera can pan", only fields
+   that say how.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/monitors.ts#L82>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **The stream ignores your snapshot setting.** ``LiveMonitorPlayer`` renders
+   with ``forceViewMode="streaming"``, so the global Snapshot bandwidth mode that
+   throttles the montage does not apply on this page: you opened one camera and you
+   get a live feed. Its ``key={monitor.Monitor.Id}`` forces a full remount when the
+   id changes, rather than letting a stream from the previous monitor limp along
+   inside a reused component.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/MonitorDetail.tsx#L364>`__
+   · → :doc:`05-component-architecture`
+
+#. **The pad mounts on the monitor's word, then waits for the control record.**
+   ``PTZControls`` renders when ``!isFullscreen && monitor.Monitor.Controllable === '1'``,
+   and receives ``control={controlData?.control.Control}``, which is ``undefined``
+   while the query from step 3 is still in flight. The component returns ``null``
+   for that undefined case, so the panel appears one render after the monitor does.
+   Fullscreen is CSS, not the browser Fullscreen API, and it hides the pad because
+   there is nowhere to put it.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/MonitorDetail.tsx#L480>`__
+   · → :doc:`05-component-architecture`
+
+#. **The driver picks the verb.** ``PTZControls`` computes
+   ``movePrefix = canMoveCon ? 'moveCon' : (canMoveRel ? 'moveRel' : 'moveCon')``
+   and appends a direction, producing ``moveConUp`` or ``moveRelUp``. Diagonal
+   buttons are rendered but ``invisible`` without ``CanMoveDiag``, which keeps the
+   3x3 grid from collapsing. Zoom does the same with ``zoomCon`` and ``zoomRel``.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/PTZControls.tsx#L149>`__
+   · → :doc:`05-component-architecture`
+
+#. **Press and hold has two implementations.** ``moveRepeatMs`` is ``undefined``
+   for a continuous driver and ``UI_INTERACTIONS.ptzHoldRepeatMs`` (400ms) for
+   anything else. ``HoldButton`` fires the command once on ``pointerdown``, and if
+   it was given a repeat interval it starts a ``setInterval`` re-firing that same
+   command. ZoneMinder's protocol has no continuous verb on relative and absolute
+   drivers, so a stream of discrete steps is the only way to get hold-to-move on
+   them. On release, both paths send ``moveStop``: the continuous camera needs it,
+   the stepping camera ignores it.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/PTZControls.tsx#L155>`__
+   · → :doc:`05-component-architecture`
+
+#. **Unmounting while held is the interesting failure.** ``pointerup`` never
+   arrives if the panel collapses, the monitor changes, or the user leaves the
+   page. A continuous camera would keep panning into its physical limit and the
+   repeat timer would keep issuing requests from a dead component. ``HoldButton``
+   therefore has an unmount cleanup effect that clears the timer and sends the stop
+   command. It reads the handlers from a ``cleanupParamsRef`` refreshed on every
+   render, because a cleanup function closes over the values from the render that
+   created it, and a guard on ``activePointerRef`` makes the whole thing a no-op on
+   the throwaway mount React StrictMode performs in development.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/PTZControls.tsx#L98>`__
+   · → :doc:`02-react-fundamentals`
+
+#. **One handler, one API call, no state.** Every button calls the ``onCommand``
+   prop, which is ``handlePTZCommand`` from the ``usePTZControl`` hook. It calls
+   ``controlMonitor`` and, on failure, shows a toast. There is no mutation, no
+   optimistic update, no query invalidation and no read-back: the app never asks
+   the camera where it ended up pointing, because the live stream already shows it.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/hooks/usePTZControl.ts#L33>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **The control endpoint is the classic web UI, not the API.**
+   ``controlMonitor`` builds a URL against ``/index.php`` rather than
+   ``/api/...``, runs it through ``wrapWithImageProxy``, and sends it with a
+   ``Skip-Auth`` header. Skipping the auth gate is correct here precisely because
+   the access token is already baked into the query string by the URL builder, the
+   same way the streaming URLs in Flow 2 carry theirs.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/monitors.ts#L328>`__
+   · → :doc:`13-network-endpoints`
+
+#. **Two server quirks live in the URL builder.** ``getMonitorControlUrl`` matches
+   ``presetGoto<N>`` and splits it into ``control=presetGoto`` plus ``preset=<N>``,
+   the structured form ZoneMinder's Perl drivers read, so the client does not depend
+   on a translation regex in the server's PHP surviving a refactor. It then attaches
+   ``xge=0&yge=0`` only to commands matching an axis, mode and direction, such as
+   ``moveConUp``. The server uses the presence of those two parameters to decide it
+   is parsing a movement command; send them with ``moveStop`` or ``presetHome`` and
+   it logs "Invalid control parameter" and does nothing.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/zm/url-builder.ts#L174>`__
+   · → :doc:`13-network-endpoints`
+
+This page is the only place in the app that sends a control command. The PTZ badge
+on ``MonitorCard`` reads the same ``Controllable`` field but only to tell you the
+camera has a pad waiting for you here. The stream underneath the pad is Flow 2.
+
 #. **A failed write is never retried.** ``App.tsx`` passes ``retry:
    shouldRetryQuery`` under ``defaultOptions.queries`` and gives ``mutations`` no
    entry at all, so mutations fall back to React Query's default of zero retries.
