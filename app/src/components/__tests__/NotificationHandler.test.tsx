@@ -10,6 +10,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { act, render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { NotificationHandler } from '../NotificationHandler';
 import { useNotificationStore } from '../../stores/notifications';
@@ -69,10 +70,13 @@ function makeEvent(eventId: number): ZMAlarmEvent {
 }
 
 function renderHandler() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <MemoryRouter>
-      <NotificationHandler />
-    </MemoryRouter>,
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter>
+        <NotificationHandler />
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 

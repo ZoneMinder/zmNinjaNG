@@ -114,6 +114,10 @@ export const queryKeys = {
   /** All monitor-events-since queries. Domain prefix for invalidation. */
   monitorEventsSinceAll: (profileId: MaybeProfileId) =>
     ['monitor-events-since', profileId] as const,
+  /** One monitor's events-since query, across any watermark. Prefix for
+   *  invalidating a single monitor's count when a notification arrives. */
+  monitorEventsSinceMonitor: (profileId: MaybeProfileId, monitorId: string) =>
+    ['monitor-events-since', profileId, monitorId] as const,
   /** All `timeline-events`-domain queries. Domain prefix for invalidation. */
   timelineEvents: (profileId: MaybeProfileId) => ['timeline-events', profileId] as const,
   /** Events for the timeline page (optionally fanned out per monitor). */
