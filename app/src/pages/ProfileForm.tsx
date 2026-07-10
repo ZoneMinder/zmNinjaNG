@@ -176,7 +176,7 @@ export default function ProfileForm() {
 
         if (portalHasProtocol && apiHasProtocol && portalProtocol !== apiProtocol) {
           throw new Error(
-            t('profile.protocol_mismatch', {
+            t('setup.protocol_mismatch', {
               portalProtocol,
               apiProtocol,
             })
