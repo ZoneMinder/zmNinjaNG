@@ -704,7 +704,7 @@ The query key comes from the ``queryKeys`` factory, never an inline array, so
 an invalidation elsewhere cannot drift out of sync with it.
 
 Fields include ``monitorStatusInterval``, ``alarmStatusInterval``,
-``consoleEventsInterval``, ``eventsWidgetInterval``,
+``monitorNewEventsInterval``, ``eventsWidgetInterval``,
 ``timelineHeatmapInterval``, ``daemonCheckInterval``,
 ``snapshotRefreshInterval``, ``zmsStatusInterval`` (3000 ms normal, 5000 ms
 low; ``ZmsEventPlayer`` polls ``ZMS_COMMANDS.cmdQuery`` at this rate to track
@@ -884,6 +884,39 @@ monitors, when a filter is active but ``filteredMonitorIds`` is empty.
 **Used by:** ``useMontageGroupState`` (montage pages and the grid hook), the
 Montage and Monitors render gates, the event montage column control, and the
 persist layer of ``useSettingsStore``.
+
+Monitor Seen Watermarks (``stores/monitorSeen.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This store holds the "you have seen up to here" mark that the monitor card's
+new-event badge counts from. Per profile, per monitor, it stores the
+``StartDateTime`` of the newest event the user had seen the last time they
+opened that monitor. It persists under ``zmng-monitor-seen`` in local storage,
+so watermarks are per device and do not sync across installs.
+
+.. code:: typescript
+
+   // stores/monitorSeen.ts
+   profileWatermarks: Record<string, Record<string, string | null>>;
+
+An absent key and a stored ``null`` mean different things, and the difference
+drives the badge. An **absent** entry means the monitor has never been seeded:
+``seed`` writes its newest event on the first response and the card shows no
+badge, so a fresh install does not open on a week of backlog. A stored **null**
+means the monitor had no events at all when it was seeded, so every event since
+counts and the count query runs unfiltered. ``seed`` is idempotent (it returns
+early if a watermark already exists), and ``markSeen(p, m, null)`` is a no-op, so
+opening a monitor that has never recorded an event cannot overwrite a real
+watermark with nothing.
+
+The value is always a server ``StartDateTime``, never a local ``Date.now()``:
+clock skew between the app and the ZoneMinder server would hide or duplicate
+events. :doc:`call-flows` Flow 18 walks the absent-versus-null decision through
+the seeding effect that makes it.
+
+**Used by:** ``useMonitorNewEvents`` (the count queries and the seeding effect),
+``MonitorCard`` (stamps on opening the events), and ``MonitorRecentEvents`` (stamps
+when the recent-events list is on screen).
 
 Zone Utilities (``lib/monitor/zone-utils.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

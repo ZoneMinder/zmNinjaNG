@@ -24,43 +24,43 @@ Every endpoint zmNinjaNg calls, and the module that owns the call. Reach for
 this when you need to know whether an operation already has a wrapper before
 writing a new one.
 
-======  =======================================================  ========================================================================  ====================
-Method  Endpoint                                                 Description                                                               Module
-======  =======================================================  ========================================================================  ====================
-POST    ``/host/login.json``                                     Authenticate and receive tokens                                           ``auth.ts``
-GET     ``/host/getVersion.json``                                Server version info                                                       ``auth.ts``
-GET     ``/monitors.json``                                       List all monitors with status                                             ``monitors.ts``
-GET     ``/monitors/<id>.json``                                  Single monitor details                                                    ``monitors.ts``
-POST    ``/monitors/<id>.json``                                  Update monitor settings                                                   ``monitors.ts``
-GET     ``/controls/<controlId>.json``                           PTZ control definition                                                    ``monitors.ts``
-GET     ``/monitors/alarm/id:<id>/command:<cmd>.json``           Trigger/cancel/query alarm (cmd: on, off, status)                         ``monitors.ts``
-GET     ``/monitors/daemonStatus/id:<id>/daemon:<daemon>.json``  Check daemon status for a monitor                                         ``monitors.ts``
-GET     ``/events/index.json``                                   List events (with query params)                                           ``events.ts``
-GET     ``/events/index/<filterPath>.json``                      List events with URL-based filters                                        ``events.ts``
-GET     ``/events/<id>.json``                                    Single event details                                                      ``events.ts``
-PUT     ``/events/<id>.json``                                    Update event metadata                                                     ``events.ts``
-DELETE  ``/events/<id>.json``                                    Delete an event                                                           ``events.ts``
-GET     ``/events/consoleEvents/<interval>.json``                Event counts per monitor for a time interval                              ``events.ts``
-GET     ``/servers.json``                                        List ZoneMinder servers                                                   ``server.ts``
-GET     ``/host/daemonCheck.json``                               Check if ZoneMinder daemon is running                                     ``server.ts``
-GET     ``/host/getLoad.json``                                   Server CPU load                                                           ``server.ts``
-GET     ``/host/getDiskPercent.json``                            Disk usage percentage                                                     ``server.ts``
-GET     ``/host/getTimeZone.json``                               Server timezone                                                           ``time.ts``
-GET     ``/configs.json``                                        All ZoneMinder config entries                                             ``server.ts``
-GET     ``/configs/viewByName/<key>.json``                       Single config value (ZM_PATH_ZMS, ZM_GO2RTC_PATH, ZM_MIN_STREAMING_PORT)  ``auth.ts``, ``server.ts``
-GET     ``/groups.json``                                         List monitor groups                                                       ``groups.ts``
-GET     ``/states.json``                                         List run states                                                           ``states.ts``
-POST    ``/states/change/<stateName>.json``                      Switch to a run state                                                     ``states.ts``
-GET     ``/notifications.json``                                  List push notification registrations                                      ``notifications.ts``
-POST    ``/notifications.json``                                  Register for push notifications                                           ``notifications.ts``
-PUT     ``/notifications/<id>.json``                             Update a notification registration                                        ``notifications.ts``
-DELETE  ``/notifications/<id>.json``                             Remove a notification registration                                        ``notifications.ts``
-GET     ``/tags.json``                                           List all tags                                                             ``tags.ts``
-GET     ``/tags/index/Events.Id:<ids>.json``                     Tags for specific events                                                  ``tags.ts``
-GET     ``/zones.json?MonitorId=<id>``                           Zones for a monitor                                                       ``zones.ts``
-GET     ``/logs.json``                                           List server logs                                                          ``logs.ts``
-GET     ``/logs/index/<filterPath>.json``                        Filtered server logs                                                      ``logs.ts``
-======  =======================================================  ========================================================================  ====================
+======  ==========================================================  ========================================================================  ====================
+Method  Endpoint                                                    Description                                                               Module
+======  ==========================================================  ========================================================================  ====================
+POST    ``/host/login.json``                                        Authenticate and receive tokens                                           ``auth.ts``
+GET     ``/host/getVersion.json``                                   Server version info                                                       ``auth.ts``
+GET     ``/monitors.json``                                          List all monitors with status                                             ``monitors.ts``
+GET     ``/monitors/<id>.json``                                     Single monitor details                                                    ``monitors.ts``
+POST    ``/monitors/<id>.json``                                     Update monitor settings                                                   ``monitors.ts``
+GET     ``/controls/<controlId>.json``                              PTZ control definition                                                    ``monitors.ts``
+GET     ``/monitors/alarm/id:<id>/command:<cmd>.json``              Trigger/cancel/query alarm (cmd: on, off, status)                         ``monitors.ts``
+GET     ``/monitors/daemonStatus/id:<id>/daemon:<daemon>.json``     Check daemon status for a monitor                                         ``monitors.ts``
+GET     ``/events/index.json``                                      List events (with query params)                                           ``events.ts``
+GET     ``/events/index/<filterPath>.json``                         List events with URL-based filters                                        ``events.ts``
+GET     ``/events/<id>.json``                                       Single event details                                                      ``events.ts``
+PUT     ``/events/<id>.json``                                       Update event metadata                                                     ``events.ts``
+DELETE  ``/events/<id>.json``                                       Delete an event                                                           ``events.ts``
+GET     ``/events/index/MonitorId:<id>/StartDateTime >:<ts>.json``  Count a monitor's events newer than a timestamp                          ``events.ts``
+GET     ``/servers.json``                                           List ZoneMinder servers                                                   ``server.ts``
+GET     ``/host/daemonCheck.json``                                  Check if ZoneMinder daemon is running                                     ``server.ts``
+GET     ``/host/getLoad.json``                                      Server CPU load                                                           ``server.ts``
+GET     ``/host/getDiskPercent.json``                               Disk usage percentage                                                     ``server.ts``
+GET     ``/host/getTimeZone.json``                                  Server timezone                                                           ``time.ts``
+GET     ``/configs.json``                                           All ZoneMinder config entries                                             ``server.ts``
+GET     ``/configs/viewByName/<key>.json``                          Single config value (ZM_PATH_ZMS, ZM_GO2RTC_PATH, ZM_MIN_STREAMING_PORT)  ``auth.ts``, ``server.ts``
+GET     ``/groups.json``                                            List monitor groups                                                       ``groups.ts``
+GET     ``/states.json``                                            List run states                                                           ``states.ts``
+POST    ``/states/change/<stateName>.json``                         Switch to a run state                                                     ``states.ts``
+GET     ``/notifications.json``                                     List push notification registrations                                      ``notifications.ts``
+POST    ``/notifications.json``                                     Register for push notifications                                           ``notifications.ts``
+PUT     ``/notifications/<id>.json``                                Update a notification registration                                        ``notifications.ts``
+DELETE  ``/notifications/<id>.json``                                Remove a notification registration                                        ``notifications.ts``
+GET     ``/tags.json``                                              List all tags                                                             ``tags.ts``
+GET     ``/tags/index/Events.Id:<ids>.json``                        Tags for specific events                                                  ``tags.ts``
+GET     ``/zones.json?MonitorId=<id>``                              Zones for a monitor                                                       ``zones.ts``
+GET     ``/logs.json``                                              List server logs                                                          ``logs.ts``
+GET     ``/logs/index/<filterPath>.json``                           Filtered server logs                                                      ``logs.ts``
+======  ==========================================================  ========================================================================  ====================
 
 Authentication
 ~~~~~~~~~~~~~~
@@ -684,7 +684,7 @@ invalidates every domain the change touches:
    // components/settings/HiddenMonitorsSection.tsx
    queryClient.invalidateQueries({ queryKey: queryKeys.monitors(currentProfile?.id) });
    queryClient.invalidateQueries({ queryKey: queryKeys.events(currentProfile?.id) });
-   queryClient.invalidateQueries({ queryKey: queryKeys.consoleEvents(currentProfile?.id) });
+   queryClient.invalidateQueries({ queryKey: queryKeys.monitorEventsSinceAll(currentProfile?.id) });
    queryClient.invalidateQueries({ queryKey: queryKeys.timelineEvents(currentProfile?.id) });
    queryClient.invalidateQueries({ queryKey: queryKeys.eventMontage(currentProfile?.id) });
 
@@ -770,16 +770,24 @@ so flipping it cannot re-run the effect that owns it.
 Screen-specific timers
 ~~~~~~~~~~~~~~~~~~~~~~
 
-**Monitors** (``pages/Monitors.tsx``), event counts for the last week refresh
-at ``consoleEventsInterval``:
+**Monitors** (``pages/Monitors.tsx``), the count of events recorded since the
+user last looked at each monitor refreshes at ``monitorNewEventsInterval``
+(60000 ms normal, 120000 ms low). ``useMonitorNewEvents`` runs one query per
+monitor and sets that interval on each:
 
 .. code:: tsx
 
-   const { data: eventCounts } = useQuery({
-     queryKey: queryKeys.consoleEventsList(currentProfile?.id, '1 week'),
-     queryFn: () => getConsoleEvents('1 week'),
-     enabled: !!currentProfile && isAuthenticated,
-     refetchInterval: bandwidth.consoleEventsInterval,
+   // hooks/useMonitorNewEvents.ts
+   const results = useQueries({
+     queries: monitorIds.map((monitorId) => {
+       const since = watermarks[monitorId] ?? null;
+       return {
+         queryKey: queryKeys.monitorEventsSince(profileId, monitorId, since),
+         queryFn: () => getMonitorEventsSince(monitorId, since),
+         enabled: !!profileId && isAuthenticated,
+         refetchInterval: bandwidth.monitorNewEventsInterval,
+       };
+     }),
    });
 
 **Monitor Detail** (``pages/MonitorDetail.tsx`` via
@@ -887,7 +895,7 @@ Property                         Normal  Low    Where used
 ===============================  ======  =====  =========================================================
 ``monitorStatusInterval``        20 s    40 s   ``pages/Monitors.tsx``, ``hooks/useMonitors.ts``, Montage
 ``alarmStatusInterval``          5 s     10 s   ``pages/hooks/useAlarmControl.ts``
-``consoleEventsInterval``        60 s    60 s   ``pages/Monitors.tsx`` event badges
+``monitorNewEventsInterval``     60 s    120 s  ``hooks/useMonitorNewEvents.ts`` new-event badges
 ``eventsWidgetInterval``         30 s    60 s   ``components/dashboard/widgets/EventsWidget.tsx``
 ``timelineHeatmapInterval``      60 s    120 s  ``TimelineWidget.tsx``, ``HeatmapWidget.tsx``
 ``daemonCheckInterval``          30 s    60 s   ``pages/Server.tsx``
@@ -1370,6 +1378,32 @@ reflected in the ``archived=true`` URL search parameter, and counted in the
 active-filter badge. Archiving or unarchiving an event is a separate action
 (``setEventArchived`` in ``src/api/events.ts``) available in the event detail
 screen.
+
+Counting new events per monitor (``getMonitorEventsSince``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``getMonitorEventsSince(monitorId, since)`` backs the new-event badge on each
+monitor card: it answers how many events a monitor recorded after the user last
+looked at it. It requests ``limit=1``, ``sort=StartDateTime``, ``direction=desc``
+and returns ``{ count, newest }``, reading ``count`` from ``pagination.count``
+and ``newest`` from ``events[0].Event.StartDateTime``. One response carries both
+the badge number and the timestamp the card stamps as the next watermark, so
+clearing the badge needs no extra request.
+
+.. code:: typescript
+
+   // src/api/events.ts
+   export async function getMonitorEventsSince(
+     monitorId: string,
+     since: string | null
+   ): Promise<{ count: number; newest: string | null }>
+
+The filter segment is ``StartDateTime >:<since>``, a strict ``>``. ``>=`` was
+checked against ZoneMinder 1.39.1 and matches the watermark event itself, which
+would leave a caught-up monitor showing a permanent "1 new" for an event the
+user had already seen. A ``since`` of ``null`` means no watermark yet, so the
+``StartDateTime`` segment is dropped and every event counts. :doc:`call-flows`
+Flow 18 traces the badge from this call to the store that clears it.
 
 Monitor Groups API (``api/groups.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

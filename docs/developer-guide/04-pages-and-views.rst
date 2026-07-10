@@ -491,8 +491,8 @@ Monitors
 **Location**: ``src/pages/Monitors.tsx``
 
 The user sees every enabled monitor for the current profile, as a vertical
-list of wide cards or as a column grid, each card showing a live feed and the
-event count for the last week. The toolbar carries a group filter, a
+list of wide cards or as a column grid, each card showing a live feed and a
+badge counting events recorded since the user last looked at that monitor. The toolbar carries a group filter, a
 list/grid toggle, a column-count control (grid mode only), a Fit/Crop
 selector, and refresh. Tapping a card opens ``MonitorDetail``.
 
@@ -506,12 +506,13 @@ selector, and refresh. Tapping a card opens ``MonitorDetail``.
      refetchInterval: bandwidth.monitorStatusInterval,
    });
 
-   const { data: eventCounts } = useQuery({
-     queryKey: queryKeys.consoleEventsList(currentProfile?.id, '1 week'),
-     queryFn: () => getConsoleEvents('1 week'),
-     enabled: !!currentProfile && isAuthenticated,
-     refetchInterval: bandwidth.consoleEventsInterval,
-   });
+   const monitorIds = useMemo(() => allMonitors.map(({ Monitor }) => Monitor.Id), [allMonitors]);
+   const { counts: newEventCounts, newest: newestEventAt } = useMonitorNewEvents(monitorIds);
+
+``useMonitorNewEvents`` runs one count query per monitor and seeds an unseen
+monitor from its first response so a fresh install shows no backlog. The badge
+and the timestamp it stamps on open both come from the one response.
+:doc:`call-flows` Flow 18 traces the whole path.
 
 Query keys always come from the ``queryKeys`` factory in
 ``src/lib/query/query-keys.ts``, never as an inline array. An inline key

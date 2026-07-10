@@ -104,6 +104,17 @@ click target that navigates to ``/monitors/<id>``, and the download button sits
 inside it. Without stopping the event, downloading a snapshot would also open
 the monitor.
 
+The Events button carries a ``monitor-new-events-badge`` counting events the
+monitor recorded since the user last opened it. The count arrives as the
+``newEventCount`` prop from ``useMonitorNewEvents`` on the Monitors page, and the
+badge renders only when ``newEventCount !== undefined && newEventCount > 0``,
+formatted by ``formatEventCount``. The ``undefined`` guard is not the same as a
+count of 0: ``undefined`` is "the count query has not resolved yet", 0 is
+"nothing new", and only the second should keep the badge off. Tapping the button
+runs ``openEvents``, which stamps the watermark with ``markSeen`` from the cached
+newest timestamp and then navigates, so the badge clears without a fresh request.
+:doc:`call-flows` Flow 18 traces the count from the API to this render.
+
 The whole component is wrapped in ``memo``:
 
 .. code:: tsx
@@ -930,7 +941,7 @@ invalidating the monitors domain reaches this query too, while a fetch of this
 query cannot clobber the domain-level cache entry.
 
 Toggling a row updates ``excludedMonitorIds``, then invalidates
-``queryKeys.monitors``, ``queryKeys.events``, ``queryKeys.consoleEvents``,
+``queryKeys.monitors``, ``queryKeys.events``, ``queryKeys.monitorEventsSinceAll``,
 ``queryKeys.timelineEvents``, and ``queryKeys.eventMontage`` for the current
 profile, so every dependent view refetches with the new exclusion applied.
 

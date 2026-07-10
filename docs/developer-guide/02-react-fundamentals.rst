@@ -919,7 +919,7 @@ monitor, five different query domains hold data that is now wrong:
    // app/src/components/settings/HiddenMonitorsSection.tsx
    queryClient.invalidateQueries({ queryKey: queryKeys.monitors(currentProfile?.id) });
    queryClient.invalidateQueries({ queryKey: queryKeys.events(currentProfile?.id) });
-   queryClient.invalidateQueries({ queryKey: queryKeys.consoleEvents(currentProfile?.id) });
+   queryClient.invalidateQueries({ queryKey: queryKeys.monitorEventsSinceAll(currentProfile?.id) });
    queryClient.invalidateQueries({ queryKey: queryKeys.timelineEvents(currentProfile?.id) });
    queryClient.invalidateQueries({ queryKey: queryKeys.eventMontage(currentProfile?.id) });
 
