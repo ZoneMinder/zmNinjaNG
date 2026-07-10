@@ -40,7 +40,7 @@ GET     ``/events/index/<filterPath>.json``                         List events 
 GET     ``/events/<id>.json``                                       Single event details                                                      ``events.ts``
 PUT     ``/events/<id>.json``                                       Update event metadata                                                     ``events.ts``
 DELETE  ``/events/<id>.json``                                       Delete an event                                                           ``events.ts``
-GET     ``/events/index/MonitorId:<id>/StartDateTime >:<ts>.json``  Count a monitor's events newer than a timestamp                          ``events.ts``
+GET     ``/events/index/MonitorId:<id>/StartDateTime >:<ts>.json``  Count a monitor's events newer than a timestamp                           ``events.ts``
 GET     ``/servers.json``                                           List ZoneMinder servers                                                   ``server.ts``
 GET     ``/host/daemonCheck.json``                                  Check if ZoneMinder daemon is running                                     ``server.ts``
 GET     ``/host/getLoad.json``                                      Server CPU load                                                           ``server.ts``
