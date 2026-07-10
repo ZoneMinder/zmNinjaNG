@@ -1105,8 +1105,12 @@ git commit -m "chore: remove the completed events-since-last-visit plan
 refs #239"
 ```
 
-- [ ] **Step 4: Push and report**
+- [ ] **Step 4: Open a PR**
 
-Push to `main` directly with no intermediate scratch branch, so GitHub links the commits to #239 (rule 36). Then check the issue timeline; post a linking comment only if the reference is missing (rule 26).
+All work lands on `feature/events-since-last-visit`. Open a PR referencing #239 so GitHub links the commits (rule 36):
 
-Do not close #239. Report to the user and let them confirm the fix works first (rule 19).
+```bash
+gh pr create --title "feat: monitor badge counts events since you last looked" --body "...refs #239..."
+```
+
+Do not merge without the user's approval (rule 18). Do not close #239; let the user confirm the fix works first (rule 19).
