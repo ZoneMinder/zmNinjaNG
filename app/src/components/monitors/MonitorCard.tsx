@@ -25,8 +25,7 @@ import { useTranslation } from 'react-i18next';
 import { getMonitorAspectRatio } from '../../lib/monitor/monitor-rotation';
 import { getMonitorRunState, monitorDotColor } from '../../lib/monitor/monitor-status';
 import { useAuthStore } from '../../stores/auth';
-import { useMonitorSeenStore } from '../../stores/monitorSeen';
-import { nextSecondAfter } from '../../lib/event/watermark';
+import { useOpenMonitorEvents } from '../../hooks/useOpenMonitorEvents';
 
 interface MonitorCardComponentProps extends MonitorCardProps {
   /** Callback to open the settings dialog for this monitor */
@@ -56,7 +55,7 @@ function MonitorCardComponent({
   const { t } = useTranslation();
   const { currentProfile, settings } = useCurrentProfile();
   const zmVersion = useAuthStore((s) => s.version);
-  const markSeen = useMonitorSeenStore((s) => s.markSeen);
+  const openMonitorEvents = useOpenMonitorEvents();
   const resolvedFit = (objectFit === 'flex' ? 'cover' : (objectFit ?? 'cover')) as 'contain' | 'cover' | 'fill' | 'none' | 'scale-down';
   const [protocol, setProtocol] = useState('MJPEG');
   const [isMuted, setIsMuted] = useState(true);
@@ -102,26 +101,12 @@ function MonitorCardComponent({
     onShowSettings(monitor);
   };
 
-  const openEvents = () => {
-    // Read the watermark BEFORE markSeen overwrites it: the date filter must
-    // match what the badge counted, not what "seen" becomes after this click.
-    const oldWatermark = currentProfile
-      ? useMonitorSeenStore.getState().getWatermark(currentProfile.id, monitor.Id)
-      : null;
-
-    if (currentProfile) {
-      markSeen(currentProfile.id, monitor.Id, newestEventAt ?? null);
-    }
-
-    const params = new URLSearchParams({ monitorId: monitor.Id });
-    // No date param when there is nothing new to show (quiet camera) or when
-    // the watermark is null (the monitor was seeded with zero events, so the
-    // whole history IS the new set).
-    if (newEventCount !== undefined && newEventCount > 0 && oldWatermark !== null) {
-      params.set('startDateTime', nextSecondAfter(oldWatermark));
-    }
-    navigate(`/events?${params.toString()}`, { state: { from: '/monitors' } });
-  };
+  const openEvents = () => openMonitorEvents({
+    monitorId: monitor.Id,
+    newEventCount,
+    newestEventAt,
+    from: '/monitors',
+  });
 
   if (compact) {
     return (
