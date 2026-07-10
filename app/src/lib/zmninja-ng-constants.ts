@@ -373,6 +373,7 @@ export const STORAGE_KEYS = {
   settingsStore: 'zmng-settings',
   notificationsStore: 'zmng-notifications',
   eventFavoritesStore: 'zmng-event-favorites',
+  monitorSeenStore: 'zmng-monitor-seen',
   dashboardStore: 'dashboard-storage',
   monitorStore: 'zm-monitor-store',
 
