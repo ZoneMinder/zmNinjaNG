@@ -473,6 +473,27 @@ invalidation silently stops matching: the domain-level invalidator no longer
 shares a prefix with the leaf key, the leaf never refetches, and the list keeps
 showing a deleted event until the next poll.
 
+The new-events badge uses three keys off the same domain at three prefix widths,
+so a caller can invalidate at exactly the scope it needs:
+
+.. code:: tsx
+
+   // lib/query/query-keys.ts
+   monitorEventsSince: (p, monitorId, since) =>
+     ['monitor-events-since', p, monitorId, since] as const,   // one monitor, one watermark
+   monitorEventsSinceMonitor: (p, monitorId) =>
+     ['monitor-events-since', p, monitorId] as const,          // one monitor, any watermark
+   monitorEventsSinceAll: (p) =>
+     ['monitor-events-since', p] as const,                     // every monitor
+
+``monitorEventsSince`` is the leaf each count query runs under, keyed by the
+watermark so stamping a new one refetches that monitor alone. Hiding a monitor
+invalidates ``monitorEventsSinceAll`` to drop every count at once. When a
+notification arrives, ``useNotificationBadgeNudge`` invalidates
+``monitorEventsSinceMonitor``, the 3-element prefix, because it does not know that
+monitor's current watermark and the prefix matches the leaf whatever the watermark
+is.
+
 Profile ids are the branded type ``ProfileId`` (``api/types.ts``), minted
 through ``asProfileId()``. The branding means a key can only be scoped with a
 string that came from a real profile. The primary cross-profile safety net is

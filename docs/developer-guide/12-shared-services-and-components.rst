@@ -915,8 +915,21 @@ events. :doc:`call-flows` Flow 18 walks the absent-versus-null decision through
 the seeding effect that makes it.
 
 **Used by:** ``useMonitorNewEvents`` (the count queries and the seeding effect),
-``MonitorCard`` (stamps on opening the events), and ``MonitorRecentEvents`` (stamps
-when the recent-events list is on screen).
+``useOpenMonitorEvents`` (stamps on opening the events, shared by ``MonitorCard``
+and ``MontageMonitor``), and ``MonitorRecentEvents`` (stamps when the
+recent-events list is on screen).
+
+Watermark date math (``lib/event/watermark.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``nextSecondAfter(zmDateTime)`` turns a watermark into the lower bound for the
+events list a badge click opens. The badge counts events with a strict ``>`` the
+watermark, but the events list filters with ``>=`` its ``startDateTime``. Passing
+the watermark straight through would put the already-seen boundary event back at
+the top of the filtered list. Adding one second to the watermark makes the two
+operators agree on the same set. Input and output are ZM second-granularity
+local-time strings; a value that does not match the ``YYYY-MM-DD HH:mm:ss`` shape
+is returned unchanged. ``useOpenMonitorEvents`` is the only caller.
 
 Zone Utilities (``lib/monitor/zone-utils.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1153,8 +1166,15 @@ with no Apply button in the persistence path.
   which ZoneMinder evaluates server-side as a Notes REGEXP.
 - ``clearFilters()`` resets everything (the popover's Clear button).
   ``clearDateRange()`` resets only the date range and active quick range. The
-  "x" beside a quick-range chip uses ``clearDateRange()``, so removing a time
-  window does not silently widen the list back to every monitor.
+  "x" beside the date range (``events-clear-quick-range``) renders for any active
+  start or end date, including a URL-driven range from a monitor card's Events
+  link, and calls ``clearDateRange()``, so removing a time window does not silently
+  widen the list back to every monitor.
+- ``formatInputDate()`` formats a stored value as ``YYYY-MM-DDTHH:mm:ss``, and the
+  two ``datetime-local`` inputs in ``EventsFilterPopover`` carry ``step="1"``, so
+  the date filter keeps seconds. A monitor card's Events link sets a
+  second-precise ``startDateTime``, and without seconds it would round to the
+  minute and miss or double the events the badge counted.
 - ``applyFilters()`` takes an optional date-range override. A handler that
   sets the date state and calls ``applyFilters()`` in the same pass (the
   quick-range chips) must pass the new range: the callback still closes over

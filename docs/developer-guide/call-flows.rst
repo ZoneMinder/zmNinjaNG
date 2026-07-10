@@ -1831,28 +1831,32 @@ the mutation ever reports a failure.
 Flow 18: Seeing what happened while you were away
 -------------------------------------------------
 
-Each card on the Monitors page carries a badge counting the events a monitor
-recorded since the user last opened it. The count comes from one request per
-monitor, and that request answers two questions at once: how many events are
-newer than the last-seen watermark, and what the newest event's timestamp is.
-The first number fills the badge. The second is stamped as the new watermark
-the moment the user opens that monitor's events, read from the cached response,
-so the card never has to ask the server what it already knows. Stamping does
-change the query key, so React Query refetches that one monitor's count once on
-the way out, and it comes back zero. The watermark is a server
-``StartDateTime`` stored per profile per monitor on this device only. It does
-not sync across devices.
+Each card on the Monitors page, and each tile on the Montage page, carries a
+badge counting the events a monitor recorded since the user last opened it. The
+count comes from one request per monitor, and that request answers two questions
+at once: how many events are newer than the last-seen watermark, and what the
+newest event's timestamp is. The first number fills the badge. The second is
+stamped as the new watermark the moment the user opens that monitor's events,
+read from the cached response, so the card never has to ask the server what it
+already knows for the stamp. Stamping does change the query key, so React Query
+refetches that one monitor's count once on the way out, and it comes back zero.
+Tapping the badge opens the events list filtered to the new window, not the full
+history. The watermark is a server ``StartDateTime`` stored per profile per
+monitor on this device only. It does not sync across devices. A notification for
+a monitor refreshes that monitor's badge within a second instead of waiting for
+the next poll.
 
 .. mermaid::
 
    sequenceDiagram
        autonumber
        participant User as User
-       participant Grid as Monitors page
+       participant Grid as Monitors / Montage page
        participant Hook as useMonitorNewEvents
        participant Store as monitorSeen store
        participant API as getMonitorEventsSince
        participant ZM as ZoneMinder
+       participant Notif as NotificationHandler
 
        Grid->>Hook: monitor ids from the monitors query
        Hook->>Store: read the watermark for each monitor
@@ -1861,9 +1865,10 @@ not sync across devices.
        ZM-->>API: pagination.count and events[0] StartDateTime
        Note over Hook,Store: an unseeded monitor's first response seeds the store and reports 0
        Hook-->>Grid: counts and newest timestamps
-       Grid->>User: badge on the Events button
-       User->>Grid: taps Events
-       Grid->>Store: markSeen with the cached newest, then navigate
+       Grid->>User: blue badge on the Events button
+       User->>Grid: taps Events (useOpenMonitorEvents)
+       Grid->>Store: markSeen with the cached newest, then navigate to a date-filtered list
+       Notif->>Hook: a notification invalidates that monitor's count, refetching before the 60s poll
 
 #. **The monitors query supplies the ids, nothing more.** ``pages/Monitors.tsx``
    turns the fetched monitor list into a plain ``monitorIds`` array with a
@@ -1932,14 +1937,32 @@ not sync across devices.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/MonitorCard.tsx#L214>`__
    · → :doc:`05-component-architecture`
 
-#. **Opening the events stamps the watermark from cache.** ``MonitorCard``'s
-   ``openEvents`` calls ``markSeen(profileId, monitorId, newestEventAt)`` and then
-   navigates to ``/events``. ``newestEventAt`` is the ``newest`` value the hook
-   already returned, so the stamp needs no fresh request: the badge clears from the
-   number the last poll had in hand. ``markSeen`` with a ``null`` newest is a no-op,
-   so opening a monitor that has never recorded an event does not overwrite a real
-   watermark with nothing.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/MonitorCard.tsx#L104>`__
+#. **Opening the events stamps the watermark and filters the list to the new window.**
+   Both cards call the shared ``useOpenMonitorEvents`` hook. It reads the watermark
+   that was in effect before this click, calls
+   ``markSeen(profileId, monitorId, newestEventAt)``, then navigates to
+   ``/events?monitorId=<id>``. When the badge counted something (``newEventCount > 0``
+   and the old watermark is non-null) it adds a ``startDateTime`` param set to
+   ``nextSecondAfter(watermark)``, so the list opens on exactly the events the badge
+   promised; a quiet or never-seeded monitor navigates with no date param.
+   ``nextSecondAfter`` adds one second because the list filters with ``>=`` while the
+   badge counted with ``>``, so without it the already-seen boundary event would
+   reappear. Reading ``newestEventAt`` needs no request (it is the ``newest`` value
+   the hook already returned), but stamping the new watermark changes the query key
+   and does cost exactly one refetch of that monitor's count, the next step.
+   ``markSeen`` with a ``null`` newest is a no-op, so opening a monitor that has never
+   recorded an event does not overwrite a real watermark with nothing.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useOpenMonitorEvents.ts#L34>`__
+   · → :doc:`05-component-architecture`
+
+#. **The montage tiles carry the same badge and the same click.** ``pages/Montage.tsx``
+   calls ``useMonitorNewEvents`` once at page level and passes ``newEventCount`` and
+   ``newestEventAt`` to each ``MontageMonitor``, exactly as ``pages/Monitors.tsx`` does.
+   The tile renders the same blue ``montage-new-events-badge`` and its Events button
+   runs the same ``useOpenMonitorEvents`` hook with ``from: '/montage'``. The tile's
+   red alarm pulse is a separate signal, driven by the notification store, and is
+   unchanged. Only the counted number is now shared with ``MonitorCard``.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/MontageMonitor.tsx#L213>`__
    · → :doc:`05-component-architecture`
 
 #. **The detail page clears the badge only when the list was actually shown.**
@@ -1962,8 +1985,22 @@ not sync across devices.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/query/query-keys.ts#L109>`__
    · → :doc:`07-api-and-data-fetching`
 
+#. **A notification refreshes one monitor's badge before the next poll.**
+   ``useNotificationBadgeNudge``, called from ``NotificationHandler``, watches the
+   notification store. When a new ``events[0].EventId`` arrives it invalidates
+   ``queryKeys.monitorEventsSinceMonitor(profileId, String(events[0].MonitorId))``,
+   the 3-element prefix of the 4-element ``monitorEventsSince`` key, so that monitor's
+   count refetches whatever its watermark, within a second instead of at the 60000 ms
+   poll. It seeds its last-seen id on first run and re-seeds on profile change, so
+   mounting with a backlog does not fire a burst of invalidations. It moves the badge
+   only while the Monitors or Montage page holds the query; otherwise the next mount
+   refetches anyway.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useNotificationBadgeNudge.ts#L25>`__
+   · → :doc:`07-api-and-data-fetching`
+
 The badge decorates the Events button, and tapping that button lands the user in
-Flow 5. The polling cadence that keeps the count current is Flow 11.
+Flow 5 filtered to the new window. The polling cadence that keeps the count
+current is Flow 11.
 
 These flows touch most of the moving parts of the app. When you need to change
 something, find the nearest scene, open its ``source`` link to land on the exact
