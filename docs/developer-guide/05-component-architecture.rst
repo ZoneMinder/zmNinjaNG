@@ -745,10 +745,10 @@ MonitorRecentEvents
 **Location**: ``src/components/monitors/MonitorRecentEvents.tsx``,
 ``src/hooks/useMonitorRecentEvents.ts``
 
-Under the live view on a monitor's page sits a collapsible list of that
-monitor's newest events. The header (title, refresh button, collapse toggle,
-"All events" link) always renders; the body collapses, and the collapsed state
-is remembered per monitor.
+Below the live view on a monitor's page, and below the PTZ controls when the
+camera has them, sits a collapsible list of that monitor's newest events. The
+header (title, refresh button, collapse toggle, "All events" link) always
+renders; the body collapses, and the collapsed state is remembered per monitor.
 
 Collapsing does more than hide the rows. The body unmounts and the query behind
 it is disabled, so a collapsed list issues no requests and no background

@@ -461,11 +461,6 @@ export default function MonitorDetail() {
         </div>
         )}
 
-        {/* Recent events - Hidden in fullscreen */}
-        {!isFullscreen && (
-          <MonitorRecentEvents monitor={monitor.Monitor} />
-        )}
-
         {/* PTZ Controls - Hidden in fullscreen */}
         {!isFullscreen && monitor.Monitor.Controllable === '1' && (
           <div className="mt-8 w-full max-w-md flex flex-col items-center">
@@ -490,6 +485,12 @@ export default function MonitorDetail() {
               </div>
             )}
           </div>
+        )}
+
+        {/* Recent events - Hidden in fullscreen. Sits below PTZ so the
+            controls stay reachable without scrolling past the event list. */}
+        {!isFullscreen && (
+          <MonitorRecentEvents monitor={monitor.Monitor} />
         )}
 
         {/* Monitor Controls Card - Hidden in fullscreen */}
