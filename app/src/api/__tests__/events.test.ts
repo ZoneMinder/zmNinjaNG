@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   deleteEvent,
-  getConsoleEvents,
   getEvent,
   getEvents,
   getMonitorEventsSince,
@@ -156,17 +155,6 @@ describe('Events API', () => {
     expect(response.events.every((e) => e.Event.MonitorId !== '2')).toBe(true);
   });
 
-  it('drops console event counts for excluded monitors', async () => {
-    vi.mocked(getExcludedMonitorIds).mockReturnValue(['2']);
-    mockGet.mockResolvedValue({
-      data: { results: { '1': 3, '2': 5, '3': 1 } },
-    });
-
-    const results = await getConsoleEvents('1 hour');
-
-    expect(results).toEqual({ '1': 3, '3': 1 });
-  });
-
   it('applies filters to the events endpoint', async () => {
     mockGet.mockResolvedValue({
       data: {
@@ -241,17 +229,6 @@ describe('Events API', () => {
     await deleteEvent('7');
 
     expect(mockDelete).toHaveBeenCalledWith('/events/7.json');
-  });
-
-  it('gets console events', async () => {
-    mockGet.mockResolvedValue({
-      data: { results: { '1': 3, '2': 5 } },
-    });
-
-    const results = await getConsoleEvents('1 hour');
-
-    expect(mockGet).toHaveBeenCalledWith('/events/consoleEvents/1%20hour.json');
-    expect(results).toEqual({ '1': 3, '2': 5 });
   });
 
   it('applies notesRegexp filter to events endpoint', async () => {

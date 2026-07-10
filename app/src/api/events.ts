@@ -7,7 +7,7 @@
 
 import { getApiClient } from './client';
 import type { EventsResponse, EventData } from './types';
-import { EventsResponseSchema, EventResponseSchema, ConsoleEventsResponseSchema } from './types';
+import { EventsResponseSchema, EventResponseSchema } from './types';
 import { log, LogLevel } from '../lib/logger';
 import { validateApiResponse } from '../lib/zm/api-validator';
 import {
@@ -442,49 +442,6 @@ export async function setEventArchived(eventId: string, archived: boolean): Prom
   const body = new URLSearchParams();
   body.set('Event[Archived]', archived ? '1' : '0');
   await client.putForm(`/events/${eventId}.json`, body);
-}
-
-/**
- * Get event count for console (recent events per monitor).
- *
- * Returns event counts per monitor within the specified interval.
- *
- * @param interval - Time interval string (e.g. '1 hour', '1 day')
- * @returns Promise resolving to object mapping monitor IDs to event counts
- */
-export async function getConsoleEvents(interval: string = '1 hour'): Promise<Record<string, number>> {
-  const client = getApiClient();
-  const response = await client.get(`/events/consoleEvents/${encodeURIComponent(interval)}.json`);
-
-  // Validate response with Zod
-  const validated = validateApiResponse(ConsoleEventsResponseSchema, response.data, {
-    endpoint: `/events/consoleEvents/${encodeURIComponent(interval)}.json`,
-    method: 'GET',
-  });
-
-  // The response should be an object where keys are monitor IDs and values are event counts
-  // Example: { results: { "1": 5, "2": 3, "3": 0 } }
-  // According to ZoneMinder source, this should always be an object/record.
-  // However, some ZM versions may return an empty array instead of empty object.
-  if (Array.isArray(validated.results)) {
-    log.api(
-      'consoleEvents returned array instead of object (likely ZM version difference or no results)',
-      LogLevel.WARN,
-      { interval, resultsType: 'array', resultsLength: validated.results.length }
-    );
-    return {};
-  }
-
-  const results = validated.results || {};
-
-  // Drop counts for per-profile excluded monitors
-  const excludedIds = getExcludedMonitorIdSet();
-  if (excludedIds.size === 0) {
-    return results;
-  }
-  return Object.fromEntries(
-    Object.entries(results).filter(([monitorId]) => !excludedIds.has(monitorId))
-  );
 }
 
 /**
