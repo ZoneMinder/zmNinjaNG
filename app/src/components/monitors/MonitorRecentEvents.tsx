@@ -3,6 +3,7 @@
  * Always-visible header (title, refresh, collapse, "All events"). The body is
  * collapsible per monitor; while collapsed the query is disabled (refs #213).
  */
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronRight, RefreshCw, AlertCircle } from 'lucide-react';
@@ -11,6 +12,7 @@ import { cn } from '../../lib/utils';
 import { CompactEventRow } from '../events/CompactEventRow';
 import { useMonitorRecentEvents } from '../../hooks/useMonitorRecentEvents';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
+import { useMonitorSeenStore } from '../../stores/monitorSeen';
 import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
 import { resolveMinStreamingPort } from '../../lib/monitor/multiport';
 import { getPortalUrlForEvent } from '../../lib/zm/server-resolver';
@@ -34,6 +36,15 @@ export function MonitorRecentEvents({ monitor }: MonitorRecentEventsProps) {
   const monitorId = monitor.Id;
   const { events, isLoading, isError, isFetching, hidden, count, toggleHidden, refetch } =
     useMonitorRecentEvents(monitorId);
+  const markSeen = useMonitorSeenStore((s) => s.markSeen);
+
+  // The list is on screen, so its events have been seen. Collapsed (`hidden`)
+  // means the user opened this page for the live stream and never saw them.
+  useEffect(() => {
+    if (hidden || isLoading || events.length === 0) return;
+    if (!currentProfile) return;
+    markSeen(currentProfile.id, monitorId, events[0].Event.StartDateTime);
+  }, [hidden, isLoading, events, currentProfile, monitorId, markSeen]);
 
   const portalUrl = currentProfile?.portalUrl || '';
   const thumbnailChain = settings.thumbnailFallbackChain;

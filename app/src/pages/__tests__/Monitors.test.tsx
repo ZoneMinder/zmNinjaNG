@@ -8,6 +8,10 @@ vi.mock('@tanstack/react-query', () => ({
   useQuery: (options: { queryKey: (string | undefined)[] }) => useQueryMock(options),
 }));
 
+vi.mock('../../hooks/useMonitorNewEvents', () => ({
+  useMonitorNewEvents: () => ({ counts: {}, newest: {} }),
+}));
+
 vi.mock('../../components/monitors/MonitorCard', () => ({
   MonitorCard: ({ monitor }: { monitor: { Id: string; Name: string } }) => (
     <div data-testid={`monitor-card-${monitor.Id}`}>{monitor.Name}</div>
@@ -78,9 +82,6 @@ describe('Monitors Page', () => {
           error: null,
           refetch: vi.fn(),
         };
-      }
-      if (queryKey[0] === 'consoleEvents') {
-        return { data: { '1': 2, '2': 1 }, isLoading: false, error: null, refetch: vi.fn() };
       }
       return { data: {}, isLoading: false, error: null, refetch: vi.fn() };
     });

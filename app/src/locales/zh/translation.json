@@ -101,6 +101,8 @@
     "title": "监控",
     "count_one": "{{count}} 个监控",
     "count_other": "{{count}} 个监控",
+    "new_events_count_one": "{{count}} 个新事件",
+    "new_events_count_other": "{{count}} 个新事件",
     "no_cameras": "未找到监视器。",
     "failed_to_load": "加载监视器失败: {{error}}",
     "properties_title": "{{name}}",

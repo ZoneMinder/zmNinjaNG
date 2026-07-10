@@ -558,7 +558,10 @@ export interface StreamOptions {
 export interface MonitorCardProps {
   monitor: Monitor;
   status: MonitorStatus | undefined;
-  eventCount?: number;
+  /** Events recorded since the user last looked at this monitor (refs #239) */
+  newEventCount?: number;
+  /** StartDateTime of this monitor's newest event, stamped when the badge clears */
+  newestEventAt?: string | null;
   objectFit?: React.CSSProperties['objectFit'] | 'flex';
   compact?: boolean;
 }

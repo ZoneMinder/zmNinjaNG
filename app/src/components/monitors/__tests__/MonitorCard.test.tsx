@@ -80,7 +80,7 @@ describe('MonitorCard', () => {
       <MonitorCard
         monitor={monitor}
         status={status}
-        eventCount={3}
+        newEventCount={3}
         onShowSettings={onShowSettings}
       />
     );
