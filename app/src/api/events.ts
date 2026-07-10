@@ -286,6 +286,50 @@ export async function getEvents(filters: EventFilters = {}): Promise<EventsRespo
 }
 
 /**
+ * Count a monitor's events recorded after `since`, and report the newest one.
+ *
+ * One request answers both questions: sorting descending and taking a single
+ * row gives the newest event, while ZoneMinder reports the full match size in
+ * `pagination.count`. That is what lets the monitor card stamp its watermark
+ * from cache when the user opens the events, instead of issuing a second
+ * request (refs #239).
+ *
+ * The operator is strict `>`, verified against ZM 1.39.1: `>=` matches the
+ * watermark event itself, so the badge would show a permanent "1 new" for an
+ * event the user had already seen.
+ *
+ * `since` of null means no watermark yet, so every event counts.
+ */
+export async function getMonitorEventsSince(
+  monitorId: string,
+  since: string | null
+): Promise<{ count: number; newest: string | null }> {
+  const client = getApiClient();
+
+  const segments = [`MonitorId:${monitorId}`];
+  if (since !== null) {
+    segments.push(`StartDateTime >:${since}`);
+  }
+  const url = `/events/index${segments.map((s) => `/${encodeURIComponent(s)}`).join('')}.json`;
+
+  const response = await client.get<EventsResponse>(url, {
+    params: { limit: 1, sort: 'StartDateTime', direction: 'desc' },
+    intent: `Count events for monitor ${monitorId} since ${since ?? 'the beginning'}`,
+  });
+
+  // No validateApiResponse here: this reads two scalars and already degrades
+  // to {count: 0, newest: null} when pagination or events is missing, so a
+  // Zod schema would add a failure mode without adding a guarantee. getEvents
+  // above validates because callers render its events.
+  const count = response.data.pagination?.count ?? 0;
+  const newest = response.data.events?.[0]?.Event?.StartDateTime ?? null;
+
+  log.api('Counted new events for monitor', LogLevel.DEBUG, { monitorId, since, count });
+
+  return { count, newest };
+}
+
+/**
  * Fetch the next or previous event relative to a given timestamp.
  * Uses the same filters as the events list to maintain consistency.
  *

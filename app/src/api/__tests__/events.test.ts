@@ -4,6 +4,7 @@ import {
   getConsoleEvents,
   getEvent,
   getEvents,
+  getMonitorEventsSince,
   setEventArchived,
 } from '../events';
 import { getApiClient } from '../client';
@@ -484,6 +485,65 @@ describe('Events API', () => {
       const call = mockGet.mock.calls[0][0] as string;
       expect(call).not.toContain('Tags.Id');
       expect(call).toBe('/events/index.json');
+    });
+  });
+
+  describe('getMonitorEventsSince', () => {
+    it('uses the strict > operator and returns count plus newest', async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          events: [{ Event: { Id: '900', StartDateTime: '2026-07-09 14:26:47' } }],
+          pagination: { pageCount: 31, page: 1, current: 1, count: 31, prevPage: false, nextPage: true },
+        },
+      });
+
+      const result = await getMonitorEventsSince('1', '2026-07-01 00:00:00');
+
+      expect(mockGet).toHaveBeenCalledWith(
+        `/events/index/MonitorId%3A1/${encodeURIComponent('StartDateTime >:2026-07-01 00:00:00')}.json`,
+        expect.objectContaining({
+          params: { limit: 1, sort: 'StartDateTime', direction: 'desc' },
+        })
+      );
+      expect(result).toEqual({ count: 31, newest: '2026-07-09 14:26:47' });
+    });
+
+    it('omits the date filter when there is no watermark', async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          events: [{ Event: { Id: '900', StartDateTime: '2026-07-09 14:26:47' } }],
+          pagination: { pageCount: 1, page: 1, current: 1, count: 61, prevPage: false, nextPage: false },
+        },
+      });
+
+      const result = await getMonitorEventsSince('1', null);
+
+      expect(mockGet).toHaveBeenCalledWith(
+        '/events/index/MonitorId%3A1.json',
+        expect.objectContaining({ params: { limit: 1, sort: 'StartDateTime', direction: 'desc' } })
+      );
+      expect(result).toEqual({ count: 61, newest: '2026-07-09 14:26:47' });
+    });
+
+    it('returns a null newest when nothing matches', async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          events: [],
+          pagination: { pageCount: 0, page: 1, current: 1, count: 0, prevPage: false, nextPage: false },
+        },
+      });
+
+      const result = await getMonitorEventsSince('1', '2099-01-01 00:00:00');
+
+      expect(result).toEqual({ count: 0, newest: null });
+    });
+
+    it('treats a missing pagination block as zero', async () => {
+      mockGet.mockResolvedValue({ data: { events: [] } });
+
+      const result = await getMonitorEventsSince('1', null);
+
+      expect(result).toEqual({ count: 0, newest: null });
     });
   });
 

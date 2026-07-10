@@ -109,6 +109,13 @@ export const queryKeys = {
   /** Per-monitor event counts for the monitors console. */
   consoleEventsList: (profileId: MaybeProfileId, range: string) =>
     ['consoleEvents', profileId, range] as const,
+  /** Count of a monitor's events newer than a watermark. Keyed by the
+   *  watermark so clearing the badge invalidates exactly one monitor. */
+  monitorEventsSince: (
+    profileId: MaybeProfileId,
+    monitorId: string,
+    since: string | null
+  ) => ['monitor-events-since', profileId, monitorId, since] as const,
   /** All `timeline-events`-domain queries. Domain prefix for invalidation. */
   timelineEvents: (profileId: MaybeProfileId) => ['timeline-events', profileId] as const,
   /** Events for the timeline page (optionally fanned out per monitor). */
