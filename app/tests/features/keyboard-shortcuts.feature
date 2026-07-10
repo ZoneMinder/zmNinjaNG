@@ -27,3 +27,10 @@ Feature: Global Keyboard Shortcuts
     When I navigate to the "Monitors" page
     And I jump to monitor number "1"
     Then I should be on a monitor detail page
+
+  @web
+  Scenario: Shortcuts still work on desktop when TV mode is on
+    When I enable TV mode in settings
+    And I navigate to the "Dashboard" page
+    And I press the "e" navigation key
+    Then I should be on the "events" section
