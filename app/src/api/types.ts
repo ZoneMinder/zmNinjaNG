@@ -370,17 +370,6 @@ export const EventResponseSchema = z.object({
 
 export type EventResponse = z.infer<typeof EventResponseSchema>;
 
-// Console events response (for getConsoleEvents endpoint)
-// API can return either an object (record) or an array, so we handle both
-export const ConsoleEventsResponseSchema = z.object({
-  results: z.union([
-    z.record(z.string(), z.coerce.number()),
-    z.array(z.unknown()),
-  ]).optional(),
-});
-
-export type ConsoleEventsResponse = z.infer<typeof ConsoleEventsResponseSchema>;
-
 // Config types
 export const ConfigSchema = z.object({
   Id: z.coerce.string(),
@@ -558,7 +547,10 @@ export interface StreamOptions {
 export interface MonitorCardProps {
   monitor: Monitor;
   status: MonitorStatus | undefined;
-  eventCount?: number;
+  /** Events recorded since the user last looked at this monitor (refs #239) */
+  newEventCount?: number;
+  /** StartDateTime of this monitor's newest event, stamped when the badge clears */
+  newestEventAt?: string | null;
   objectFit?: React.CSSProperties['objectFit'] | 'flex';
   compact?: boolean;
 }

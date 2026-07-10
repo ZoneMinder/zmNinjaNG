@@ -37,6 +37,8 @@ import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { useNotificationStore } from '../../stores/notifications';
 import type { NotificationEvent } from '../../stores/notifications';
+import { formatEventCount } from '../../lib/utils';
+import { useOpenMonitorEvents } from '../../hooks/useOpenMonitorEvents';
 
 // Stable empty-array reference so the selector doesn't force a re-render
 // every time it returns "no events" for this monitor.
@@ -54,6 +56,9 @@ interface MontageMonitorProps {
   onPinToggle?: () => void;
   objectFit?: 'contain' | 'cover' | 'fill' | 'none' | 'scale-down';
   showOverlay?: boolean;
+  /** Events recorded since the user last looked at this monitor (refs #239). */
+  newEventCount?: number;
+  newestEventAt?: string | null;
 }
 
 function MontageMonitorComponent({
@@ -68,6 +73,8 @@ function MontageMonitorComponent({
   onPinToggle,
   objectFit,
   showOverlay = false,
+  newEventCount,
+  newestEventAt,
 }: MontageMonitorProps) {
   const { t } = useTranslation();
   const zmVersion = useAuthStore((s) => s.version);
@@ -80,6 +87,7 @@ function MontageMonitorComponent({
   const mediaRef = useRef<HTMLImageElement | HTMLVideoElement>(null);
   const resolvedFit = objectFit ?? 'cover';
   const isRTC = monitor.Go2RTCEnabled === true && !!currentProfile?.go2rtcUrl;
+  const openMonitorEvents = useOpenMonitorEvents();
 
   // Alarm pulse: select only this monitor's events out of the notifications
   // store, so mutations to other monitors/profiles/settings in that store
@@ -87,7 +95,6 @@ function MontageMonitorComponent({
   // stable across renders when the underlying events for this monitor haven't
   // actually changed.
   const [isAlarming, setIsAlarming] = useState(false);
-  const [monitorEventCount, setMonitorEventCount] = useState(0);
   const alarmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSeenRef = useRef(0);
   const seedKeyRef = useRef<string | null>(null);
@@ -107,8 +114,6 @@ function MontageMonitorComponent({
     const seedKey = `${profileId ?? ''}:${monitorId}`;
     const isNewKey = seedKeyRef.current !== seedKey;
     seedKeyRef.current = seedKey;
-
-    setMonitorEventCount(monitorEvents.length);
 
     const latest = monitorEvents[0];
     if (!latest) return;
@@ -205,17 +210,22 @@ function MontageMonitorComponent({
             )}
             onClick={(e) => {
               e.stopPropagation();
-              navigate(`/events?monitorId=${monitor.Id}`);
+              openMonitorEvents({ monitorId: monitor.Id, newEventCount, newestEventAt, from: '/montage' });
             }}
             title={t('common.events')}
             aria-label={t('monitors.view_events')}
             data-testid="montage-events-btn"
           >
             <Clock className="h-3 w-3" />
-            {monitorEventCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] rounded-full bg-destructive text-destructive-foreground opacity-50 text-[8px] font-medium flex items-center justify-center px-0.5 leading-none">
-                {monitorEventCount > 99 ? '99+' : monitorEventCount}
-              </span>
+            {newEventCount !== undefined && newEventCount > 0 && (
+              <Badge
+                variant="info"
+                className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] rounded-full px-0.5 text-[8px] font-medium leading-none"
+                data-testid="montage-new-events-badge"
+                aria-label={t('monitors.new_events_count', { count: newEventCount })}
+              >
+                {formatEventCount(newEventCount)}
+              </Badge>
             )}
           </Button>
           {isRTC && (

@@ -45,12 +45,15 @@ describe('queryKeys', () => {
     // monitors domain (list + all-including-excluded)
     expect(isPrefixOf(queryKeys.monitors(PID), queryKeys.monitorsAllIncludingExcluded(PID))).toBe(true);
 
-    // consoleEvents / event-montage / timeline-events domains
-    expect(isPrefixOf(queryKeys.consoleEvents(PID), queryKeys.consoleEventsList(PID, '1 week'))).toBe(true);
+    // event-montage / timeline-events / monitor-events-since domains
     expect(isPrefixOf(queryKeys.eventMontage(PID), queryKeys.eventMontageList(PID, { m: 1 }))).toBe(true);
     expect(isPrefixOf(
       queryKeys.timelineEvents(PID),
       queryKeys.timelineEventsList(PID, 's', 'e', '3', false, 'all'),
+    )).toBe(true);
+    expect(isPrefixOf(
+      queryKeys.monitorEventsSinceAll(PID),
+      queryKeys.monitorEventsSince(PID, '7', '2026-01-01 00:00:00'),
     )).toBe(true);
   });
 

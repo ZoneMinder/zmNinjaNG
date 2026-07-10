@@ -704,7 +704,7 @@ The query key comes from the ``queryKeys`` factory, never an inline array, so
 an invalidation elsewhere cannot drift out of sync with it.
 
 Fields include ``monitorStatusInterval``, ``alarmStatusInterval``,
-``consoleEventsInterval``, ``eventsWidgetInterval``,
+``monitorNewEventsInterval``, ``eventsWidgetInterval``,
 ``timelineHeatmapInterval``, ``daemonCheckInterval``,
 ``snapshotRefreshInterval``, ``zmsStatusInterval`` (3000 ms normal, 5000 ms
 low; ``ZmsEventPlayer`` polls ``ZMS_COMMANDS.cmdQuery`` at this rate to track
@@ -884,6 +884,52 @@ monitors, when a filter is active but ``filteredMonitorIds`` is empty.
 **Used by:** ``useMontageGroupState`` (montage pages and the grid hook), the
 Montage and Monitors render gates, the event montage column control, and the
 persist layer of ``useSettingsStore``.
+
+Monitor Seen Watermarks (``stores/monitorSeen.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This store holds the "you have seen up to here" mark that the monitor card's
+new-event badge counts from. Per profile, per monitor, it stores the
+``StartDateTime`` of the newest event the user had seen the last time they
+opened that monitor. It persists under ``zmng-monitor-seen`` in local storage,
+so watermarks are per device and do not sync across installs.
+
+.. code:: typescript
+
+   // stores/monitorSeen.ts
+   profileWatermarks: Record<string, Record<string, string | null>>;
+
+An absent key and a stored ``null`` mean different things, and the difference
+drives the badge. An **absent** entry means the monitor has never been seeded:
+``seed`` writes its newest event on the first response and the card shows no
+badge, so a fresh install does not open on a week of backlog. A stored **null**
+means the monitor had no events at all when it was seeded, so every event since
+counts and the count query runs unfiltered. ``seed`` is idempotent (it returns
+early if a watermark already exists), and ``markSeen(p, m, null)`` is a no-op, so
+opening a monitor that has never recorded an event cannot overwrite a real
+watermark with nothing.
+
+The value is always a server ``StartDateTime``, never a local ``Date.now()``:
+clock skew between the app and the ZoneMinder server would hide or duplicate
+events. :doc:`call-flows` Flow 18 walks the absent-versus-null decision through
+the seeding effect that makes it.
+
+**Used by:** ``useMonitorNewEvents`` (the count queries and the seeding effect),
+``useOpenMonitorEvents`` (stamps on opening the events, shared by ``MonitorCard``
+and ``MontageMonitor``), and ``MonitorRecentEvents`` (stamps when the
+recent-events list is on screen).
+
+Watermark date math (``lib/event/watermark.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``nextSecondAfter(zmDateTime)`` turns a watermark into the lower bound for the
+events list a badge click opens. The badge counts events with a strict ``>`` the
+watermark, but the events list filters with ``>=`` its ``startDateTime``. Passing
+the watermark straight through would put the already-seen boundary event back at
+the top of the filtered list. Adding one second to the watermark makes the two
+operators agree on the same set. Input and output are ZM second-granularity
+local-time strings; a value that does not match the ``YYYY-MM-DD HH:mm:ss`` shape
+is returned unchanged. ``useOpenMonitorEvents`` is the only caller.
 
 Zone Utilities (``lib/monitor/zone-utils.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1120,8 +1166,15 @@ with no Apply button in the persistence path.
   which ZoneMinder evaluates server-side as a Notes REGEXP.
 - ``clearFilters()`` resets everything (the popover's Clear button).
   ``clearDateRange()`` resets only the date range and active quick range. The
-  "x" beside a quick-range chip uses ``clearDateRange()``, so removing a time
-  window does not silently widen the list back to every monitor.
+  "x" beside the date range (``events-clear-quick-range``) renders for any active
+  start or end date, including a URL-driven range from a monitor card's Events
+  link, and calls ``clearDateRange()``, so removing a time window does not silently
+  widen the list back to every monitor.
+- ``formatInputDate()`` formats a stored value as ``YYYY-MM-DDTHH:mm:ss``, and the
+  two ``datetime-local`` inputs in ``EventsFilterPopover`` carry ``step="1"``, so
+  the date filter keeps seconds. A monitor card's Events link sets a
+  second-precise ``startDateTime``, and without seconds it would round to the
+  minute and miss or double the events the badge counted.
 - ``applyFilters()`` takes an optional date-range override. A handler that
   sets the date state and calls ``applyFilters()`` in the same pass (the
   quick-range chips) must pass the new range: the callback still closes over

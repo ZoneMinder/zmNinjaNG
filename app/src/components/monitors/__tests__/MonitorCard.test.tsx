@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MonitorCard } from '../MonitorCard';
+import { useMonitorSeenStore } from '../../../stores/monitorSeen';
 import type { Monitor, MonitorStatus } from '../../../api/types';
 
 vi.mock('../LiveMonitorPlayer', () => ({
@@ -21,8 +22,9 @@ vi.mock('../../../hooks/useCurrentProfile', () => ({
   }),
 }));
 
+const mockNavigate = vi.fn();
 vi.mock('react-router-dom', () => ({
-  useNavigate: () => vi.fn(),
+  useNavigate: () => mockNavigate,
 }));
 
 vi.mock('react-i18next', () => ({
@@ -57,6 +59,11 @@ vi.mock('../../../stores/auth', () => ({
 }));
 
 describe('MonitorCard', () => {
+  beforeEach(() => {
+    mockNavigate.mockClear();
+    useMonitorSeenStore.setState({ profileWatermarks: {} });
+  });
+
   it('calls settings callback when settings button is clicked', async () => {
     const user = userEvent.setup();
     const onShowSettings = vi.fn();
@@ -80,7 +87,7 @@ describe('MonitorCard', () => {
       <MonitorCard
         monitor={monitor}
         status={status}
-        eventCount={3}
+        newEventCount={3}
         onShowSettings={onShowSettings}
       />
     );
@@ -90,5 +97,81 @@ describe('MonitorCard', () => {
     expect(onShowSettings).toHaveBeenCalledWith(
       expect.objectContaining({ Id: '1', Name: 'Front Door' })
     );
+  });
+
+  const monitor = {
+    Id: '1',
+    Name: 'Front Door',
+    Type: 'Local',
+    Function: 'Monitor',
+    Enabled: '1',
+    Controllable: '0',
+    Width: '640',
+    Height: '480',
+  } as Monitor;
+  const status = {
+    MonitorId: '1',
+    Status: 'Connected',
+    CaptureFPS: '10',
+  } as MonitorStatus;
+
+  it('navigates with the watermark-derived startDateTime when there are new events', async () => {
+    const user = userEvent.setup();
+    useMonitorSeenStore.getState().seed('test', '1', '2026-07-10 08:49:37');
+
+    render(
+      <MonitorCard
+        monitor={monitor}
+        status={status}
+        newEventCount={2}
+        newestEventAt="2026-07-10 09:15:00"
+        onShowSettings={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByTestId('monitor-events-button'));
+
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
+    const [url] = mockNavigate.mock.calls[0];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.get('monitorId')).toBe('1');
+    expect(params.get('startDateTime')).toBe('2026-07-10T08:49:38');
+  });
+
+  it('navigates without a date filter when there are no new events', async () => {
+    const user = userEvent.setup();
+    useMonitorSeenStore.getState().seed('test', '1', '2026-07-10 08:49:37');
+
+    render(
+      <MonitorCard
+        monitor={monitor}
+        status={status}
+        newEventCount={undefined}
+        onShowSettings={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByTestId('monitor-events-button'));
+
+    expect(mockNavigate).toHaveBeenCalledWith('/events?monitorId=1', { state: { from: '/monitors' } });
+  });
+
+  it('navigates without a date filter when the monitor was seeded with zero events', async () => {
+    const user = userEvent.setup();
+    useMonitorSeenStore.getState().seed('test', '1', null);
+
+    render(
+      <MonitorCard
+        monitor={monitor}
+        status={status}
+        newEventCount={5}
+        newestEventAt="2026-07-10 09:15:00"
+        onShowSettings={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByTestId('monitor-events-button'));
+
+    expect(mockNavigate).toHaveBeenCalledWith('/events?monitorId=1', { state: { from: '/monitors' } });
   });
 });

@@ -101,6 +101,8 @@
     "title": "Cámaras",
     "count_one": "{{count}} cámara",
     "count_other": "{{count}} cámaras",
+    "new_events_count_one": "{{count}} evento nuevo",
+    "new_events_count_other": "{{count}} eventos nuevos",
     "no_cameras": "No se encontraron monitores.",
     "failed_to_load": "Error al cargar monitores: {{error}}",
     "properties_title": "{{name}}",

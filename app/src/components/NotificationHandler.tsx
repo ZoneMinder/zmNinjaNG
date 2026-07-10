@@ -34,6 +34,7 @@ import {
 import { useNotificationAutoConnect } from '../hooks/useNotificationAutoConnect';
 import { useNotificationPushSetup } from '../hooks/useNotificationPushSetup';
 import { useNotificationDelivered } from '../hooks/useNotificationDelivered';
+import { useNotificationBadgeNudge } from '../hooks/useNotificationBadgeNudge';
 
 /**
  * NotificationHandler component.
@@ -144,6 +145,10 @@ export function NotificationHandler() {
   useNotificationDelivered({
     currentProfile,
   });
+
+  // Refreshes the monitor/montage "new events" badge as soon as a
+  // notification arrives, independent of the toast setting below.
+  useNotificationBadgeNudge(currentProfile?.id, events);
 
   // Listen to navigation events from services (e.g., push notifications)
   useEffect(() => {

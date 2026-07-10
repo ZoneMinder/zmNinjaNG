@@ -4,6 +4,22 @@ import { testConfig } from '../helpers/config';
 
 const { When, Then } = createBdd();
 
+When('I enable TV mode in settings', async ({ page }) => {
+  await page.getByTestId('nav-item-settings').first().click();
+  await page.waitForURL(/#\/settings$/, { timeout: testConfig.timeouts.transition });
+
+  const toggle = page.getByTestId('settings-tv-mode');
+  await toggle.scrollIntoViewIfNeeded();
+  await expect(toggle).toBeVisible({ timeout: testConfig.timeouts.element });
+  if ((await toggle.getAttribute('aria-checked')) !== 'true') {
+    await toggle.click();
+  }
+  // Outcome, not just the click: the setting persisted to the store.
+  await expect(toggle).toHaveAttribute('aria-checked', 'true', {
+    timeout: testConfig.timeouts.transition,
+  });
+});
+
 When('I press the {string} navigation key', async ({ page }, key: string) => {
   // Move focus off any nav link first so the global handler is the only consumer.
   await page.locator('body').press(key);

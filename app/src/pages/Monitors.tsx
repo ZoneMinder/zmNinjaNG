@@ -10,9 +10,9 @@ import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '../lib/query/query-keys';
 import { useTranslation } from 'react-i18next';
 import { getMonitors, updateMonitor } from '../api/monitors';
-import { getConsoleEvents } from '../api/events';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useBandwidthSettings } from '../hooks/useBandwidthSettings';
+import { useMonitorNewEvents } from '../hooks/useMonitorNewEvents';
 import { useAuthStore } from '../stores/auth';
 import { useSettingsStore } from '../stores/settings';
 import { Button } from '../components/ui/button';
@@ -73,15 +73,6 @@ export default function Monitors() {
     refetchInterval: bandwidth.monitorStatusInterval,
   });
 
-
-  // Fetch event counts for the last week
-  const { data: eventCounts } = useQuery({
-    queryKey: queryKeys.consoleEventsList(currentProfile?.id, '1 week'),
-    queryFn: () => getConsoleEvents('1 week'),
-    enabled: !!currentProfile && isAuthenticated,
-    refetchInterval: bandwidth.consoleEventsInterval,
-  });
-
   // Memoize filtered monitors (all monitors, regardless of status)
   const enabledMonitors = useMemo(() => {
     return data?.monitors ? filterEnabledMonitors(data.monitors) : [];
@@ -95,6 +86,9 @@ export default function Monitors() {
     if (filteredMonitorIds.length === 0) return [];
     return filterMonitorsByGroup(enabledMonitors, filteredMonitorIds);
   }, [enabledMonitors, isFilterActive, filteredMonitorIds]);
+
+  const monitorIds = useMemo(() => allMonitors.map(({ Monitor }) => Monitor.Id), [allMonitors]);
+  const { counts: newEventCounts, newest: newestEventAt } = useMonitorNewEvents(monitorIds);
 
   // Stable identity: MonitorCard is memo()'d, and this is its only
   // reference-unstable prop. A fresh function per render would re-render every
@@ -247,7 +241,8 @@ export default function Monitors() {
                   key={Monitor.Id}
                   monitor={Monitor}
                   status={Monitor_Status}
-                  eventCount={eventCounts?.[Monitor.Id]}
+                  newEventCount={newEventCounts[Monitor.Id]}
+                  newestEventAt={newestEventAt[Monitor.Id]}
                   onShowSettings={handleShowSettings}
                   objectFit={settings.monitorsFeedFit}
                   compact
@@ -261,7 +256,8 @@ export default function Monitors() {
                   key={Monitor.Id}
                   monitor={Monitor}
                   status={Monitor_Status}
-                  eventCount={eventCounts?.[Monitor.Id]}
+                  newEventCount={newEventCounts[Monitor.Id]}
+                  newestEventAt={newestEventAt[Monitor.Id]}
                   onShowSettings={handleShowSettings}
                   objectFit={settings.monitorsFeedFit}
                 />

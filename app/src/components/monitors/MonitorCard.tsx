@@ -25,6 +25,7 @@ import { useTranslation } from 'react-i18next';
 import { getMonitorAspectRatio } from '../../lib/monitor/monitor-rotation';
 import { getMonitorRunState, monitorDotColor } from '../../lib/monitor/monitor-status';
 import { useAuthStore } from '../../stores/auth';
+import { useOpenMonitorEvents } from '../../hooks/useOpenMonitorEvents';
 
 interface MonitorCardComponentProps extends MonitorCardProps {
   /** Callback to open the settings dialog for this monitor */
@@ -38,13 +39,14 @@ interface MonitorCardComponentProps extends MonitorCardProps {
  * @param props - Component properties
  * @param props.monitor - The monitor data object
  * @param props.status - The current status of the monitor (Connected/Disconnected, FPS, etc.)
- * @param props.eventCount - Number of events for this monitor
+ * @param props.newEventCount - Events recorded since the user last looked at this monitor
  * @param props.onShowSettings - Callback when settings button is clicked
  */
 function MonitorCardComponent({
   monitor,
   status,
-  eventCount,
+  newEventCount,
+  newestEventAt,
   onShowSettings,
   objectFit,
   compact,
@@ -53,6 +55,7 @@ function MonitorCardComponent({
   const { t } = useTranslation();
   const { currentProfile, settings } = useCurrentProfile();
   const zmVersion = useAuthStore((s) => s.version);
+  const openMonitorEvents = useOpenMonitorEvents();
   const resolvedFit = (objectFit === 'flex' ? 'cover' : (objectFit ?? 'cover')) as 'contain' | 'cover' | 'fill' | 'none' | 'scale-down';
   const [protocol, setProtocol] = useState('MJPEG');
   const [isMuted, setIsMuted] = useState(true);
@@ -98,11 +101,19 @@ function MonitorCardComponent({
     onShowSettings(monitor);
   };
 
+  const openEvents = () => openMonitorEvents({
+    monitorId: monitor.Id,
+    newEventCount,
+    newestEventAt,
+    from: '/monitors',
+  });
+
   if (compact) {
     return (
       <Card
         className="group overflow-hidden border-0 shadow-md hover:shadow-xl transition-all duration-300 bg-card ring-1 ring-border/50 hover:ring-primary/50"
         data-testid="monitor-card"
+        data-monitor-id={monitor.Id}
       >
         <div
           className="relative bg-card cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary"
@@ -191,14 +202,19 @@ function MonitorCardComponent({
               variant="outline"
               size="sm"
               className="text-[10px] h-6 px-2 relative flex-1 min-w-0"
-              onClick={() => navigate(`/events?monitorId=${monitor.Id}`, { state: { from: '/monitors' } })}
+              onClick={openEvents}
               data-testid="monitor-events-button"
             >
               <Clock className="h-2.5 w-2.5 mr-0.5 shrink-0" />
               <span className="truncate">{t('sidebar.events')}</span>
-              {eventCount !== undefined && eventCount > 0 && (
-                <Badge variant="info" className="ml-0.5 px-0.5 py-0 text-[8px] h-3 min-w-3 shrink-0">
-                  {formatEventCount(eventCount)}
+              {newEventCount !== undefined && newEventCount > 0 && (
+                <Badge
+                  variant="info"
+                  className="ml-0.5 px-0.5 py-0 text-[8px] h-3 min-w-3 shrink-0"
+                  data-testid="monitor-new-events-badge"
+                  aria-label={t('monitors.new_events_count', { count: newEventCount })}
+                >
+                  {formatEventCount(newEventCount)}
                 </Badge>
               )}
             </Button>
@@ -229,7 +245,11 @@ function MonitorCardComponent({
   }
 
   return (
-    <Card className="group overflow-hidden border-0 shadow-md hover:shadow-xl transition-all duration-300 bg-card ring-1 ring-border/50 hover:ring-primary/50" data-testid="monitor-card">
+    <Card
+      className="group overflow-hidden border-0 shadow-md hover:shadow-xl transition-all duration-300 bg-card ring-1 ring-border/50 hover:ring-primary/50"
+      data-testid="monitor-card"
+      data-monitor-id={monitor.Id}
+    >
       <div className="flex flex-row gap-4 p-4">
         {/* Thumbnail Preview - Clickable */}
         <div
@@ -336,17 +356,19 @@ function MonitorCardComponent({
               variant="outline"
               size="sm"
               className="text-xs h-8 relative min-w-0 max-w-[45%]"
-              onClick={() => navigate(`/events?monitorId=${monitor.Id}`, { state: { from: '/monitors' } })}
+              onClick={openEvents}
               data-testid="monitor-events-button"
             >
               <Clock className="h-3 w-3 mr-1 shrink-0" />
               <span className="truncate">{t('sidebar.events')}</span>
-              {eventCount !== undefined && eventCount > 0 && (
+              {newEventCount !== undefined && newEventCount > 0 && (
                 <Badge
                   variant="info"
                   className="ml-1 px-1 py-0 text-[10px] h-4 min-w-4 shrink-0"
+                  data-testid="monitor-new-events-badge"
+                  aria-label={t('monitors.new_events_count', { count: newEventCount })}
                 >
-                  {formatEventCount(eventCount)}
+                  {formatEventCount(newEventCount)}
                 </Badge>
               )}
             </Button>

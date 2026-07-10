@@ -104,6 +104,29 @@ click target that navigates to ``/monitors/<id>``, and the download button sits
 inside it. Without stopping the event, downloading a snapshot would also open
 the monitor.
 
+The Events button carries a ``monitor-new-events-badge`` counting events the
+monitor recorded since the user last opened it. The count arrives as the
+``newEventCount`` prop from ``useMonitorNewEvents`` on the Monitors page, and the
+badge renders only when ``newEventCount !== undefined && newEventCount > 0``,
+formatted by ``formatEventCount``. The ``undefined`` guard is not the same as a
+count of 0: ``undefined`` is "the count query has not resolved yet", 0 is
+"nothing new", and only the second should keep the badge off. Tapping the button
+runs ``openEvents``, a thin wrapper over the shared ``useOpenMonitorEvents`` hook:
+it stamps the watermark with ``markSeen`` from the cached newest timestamp, then
+navigates to the events list filtered to the events the badge counted (a
+``startDateTime`` one second past the old watermark). ``MontageMonitor`` renders
+the same badge (``montage-new-events-badge``) and calls the same hook with
+``from: '/montage'``, so both surfaces share one click behavior.
+:doc:`call-flows` Flow 18 traces the count from the API to this render.
+
+``useOpenMonitorEvents`` (``hooks/useOpenMonitorEvents.ts``) is the extracted
+click handler both surfaces share. It takes ``{ monitorId, newEventCount,
+newestEventAt, from }`` and returns nothing: it reads the old watermark before
+``markSeen`` overwrites it, so the date filter it writes matches what the badge
+counted rather than what "seen" becomes after the click. It drops the date param
+entirely for a quiet monitor (``newEventCount`` is 0 or undefined) or a
+never-seeded one (the watermark is ``null``, so the whole history is the new set).
+
 The whole component is wrapped in ``memo``:
 
 .. code:: tsx
@@ -930,7 +953,7 @@ invalidating the monitors domain reaches this query too, while a fetch of this
 query cannot clobber the domain-level cache entry.
 
 Toggling a row updates ``excludedMonitorIds``, then invalidates
-``queryKeys.monitors``, ``queryKeys.events``, ``queryKeys.consoleEvents``,
+``queryKeys.monitors``, ``queryKeys.events``, ``queryKeys.monitorEventsSinceAll``,
 ``queryKeys.timelineEvents``, and ``queryKeys.eventMontage`` for the current
 profile, so every dependent view refetches with the new exclusion applied.
 
@@ -1159,8 +1182,8 @@ pushes directly, and desktop and web fall back to polling ``/api/events.json``.
 - REST client: ``src/api/notifications.ts`` (Direct mode token registration)
 - Store: ``src/stores/notifications.ts``
 - Orchestrator: ``src/components/NotificationHandler.tsx``, which delegates to
-  ``useNotificationAutoConnect``, ``useNotificationPushSetup``, and
-  ``useNotificationDelivered``
+  ``useNotificationAutoConnect``, ``useNotificationPushSetup``,
+  ``useNotificationDelivered``, and ``useNotificationBadgeNudge``
 - Settings UI: ``src/pages/NotificationSettings.tsx``, composing
   ``NotificationModeSection``, ``ServerConfigSection``, and
   ``MonitorFilterSection`` from ``components/notifications/``
@@ -1202,6 +1225,15 @@ new one:
 Events are stored per profile, and the list is capped at the newest 100
 (``NOTIFICATIONS_SERVICE.maxEvents``). ``MontageMonitor``'s alarm pulse, above,
 reads this same store.
+
+``useNotificationBadgeNudge`` bridges this store to the new-events badge. It
+watches ``events[0].EventId`` and, when a new one appears, invalidates
+``queryKeys.monitorEventsSinceMonitor`` for that monitor, so its badge count
+refetches within a second instead of at the 60000 ms poll. It runs independent of
+the toast effect above (which is gated on ``settings.showToasts``) so the badge
+moves with the bell whatever the toast setting, and it seeds its own last-seen id
+on first run so a backlog present at mount does not fire a burst of invalidations.
+:doc:`call-flows` Flow 18 places it in the badge's refetch path.
 
 :doc:`call-flows` traces both halves: "A push notification, from registration to
 tap" and "Live notifications over the Event Server websocket".

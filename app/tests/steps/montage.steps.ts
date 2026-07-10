@@ -2,11 +2,20 @@ import { createBdd } from 'playwright-bdd';
 import { expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { testConfig } from '../helpers/config';
-import { getMonitorCount } from '../helpers/zm-api';
+import { getMonitorCount, getMonitorEventCountSince } from '../helpers/zm-api';
 
 const { When, Then } = createBdd();
 
 let capturedMonitorTestId: string | null = null;
+
+// A fixed old watermark: any monitor with events after this date shows a
+// badge. Mirrors monitors.steps.ts "I seed old watermarks for monitors with
+// events" (refs #239): the montage tile's badge is the same "events since
+// you last looked" mechanism as the monitors card, just wired through
+// Montage.tsx instead of Monitors.tsx.
+const OLD_WATERMARK = '2020-01-01 00:00:00';
+let seededMontageMonitorIds: string[] = [];
+let badgedMontageMonitorId: string | null = null;
 
 // Presets 1-5 are buttons; higher counts use the custom dialog. The tested
 // values (2, 5) are both presets.
@@ -136,4 +145,94 @@ Then('the captured monitor tile should be present in the montage grid', async ({
   await expect(page.getByTestId(capturedMonitorTestId)).toBeVisible({
     timeout: testConfig.timeouts.transition,
   });
+});
+
+// New-events badge steps (refs #239). A fresh Playwright context has empty
+// localStorage, so every monitor is unseeded: the first "events since"
+// response seeds it and reports zero, meaning no badge ever renders on a
+// virgin page load (asserted below by the "vacuity" pass with the guard
+// disabled). To exercise the badge, write an old watermark for monitors the
+// API (not the UI) confirms have events after it, then reload so the
+// persisted zustand store rehydrates from that seeded localStorage.
+When('I seed old watermarks for montage monitors with events', async ({ page }) => {
+  const profileId = await page.evaluate(() => {
+    const raw = localStorage.getItem('zmng-profiles');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { state?: { currentProfileId?: string | null } };
+    return parsed.state?.currentProfileId ?? null;
+  });
+  expect(profileId, 'expected a current profile id in zmng-profiles after login').toBeTruthy();
+
+  const tiles = page.locator('[data-testid^="montage-monitor-"]');
+  await expect(tiles.first()).toBeVisible({ timeout: testConfig.timeouts.pageLoad });
+  const testIds = (await tiles.evaluateAll((els) =>
+    els.map((el) => el.getAttribute('data-testid'))
+  )).filter((id): id is string => !!id);
+  const ids = testIds.map((id) => id.replace('montage-monitor-', ''));
+  expect(ids.length, 'expected at least one rendered montage tile').toBeGreaterThan(0);
+
+  // Ground truth from the ZM API: only monitors with events after the
+  // watermark are expected to badge (rule 34).
+  const withEvents: string[] = [];
+  for (const id of ids) {
+    const count = await getMonitorEventCountSince(id, OLD_WATERMARK);
+    if (count > 0) withEvents.push(id);
+  }
+  expect(
+    withEvents.length,
+    'need at least 1 monitor with events since 2020-01-01 on the test server to exercise the montage new-events badge'
+  ).toBeGreaterThanOrEqual(1);
+  seededMontageMonitorIds = withEvents;
+
+  await page.evaluate(
+    ({ key, profileId, monitorIds, since }) => {
+      const watermarks: Record<string, string> = {};
+      for (const id of monitorIds) watermarks[id] = since;
+      const payload = {
+        state: { profileWatermarks: { [profileId]: watermarks } },
+        version: 0,
+      };
+      localStorage.setItem(key, JSON.stringify(payload));
+    },
+    { key: 'zmng-monitor-seen', profileId: profileId as string, monitorIds: withEvents, since: OLD_WATERMARK }
+  );
+});
+
+Then('a montage tile should show the new-events badge', async ({ page }) => {
+  const badges = page.locator('[data-testid="montage-new-events-badge"]');
+  await expect
+    .poll(() => badges.count(), { timeout: testConfig.timeouts.pageLoad })
+    .toBeGreaterThanOrEqual(1);
+
+  badgedMontageMonitorId = null;
+  for (const id of seededMontageMonitorIds) {
+    const tile = page.getByTestId(`montage-monitor-${id}`);
+    if (await tile.getByTestId('montage-new-events-badge').count()) {
+      badgedMontageMonitorId = id;
+      break;
+    }
+  }
+  expect(
+    badgedMontageMonitorId,
+    `expected a badge on at least one of the ${seededMontageMonitorIds.length} monitor(s) the API confirmed have events since the seeded watermark`
+  ).not.toBeNull();
+});
+
+When('I click the events button on a badged montage tile', async ({ page }) => {
+  if (!badgedMontageMonitorId) throw new Error('No badged montage tile recorded');
+  const tile = page.getByTestId(`montage-monitor-${badgedMontageMonitorId}`);
+  await tile.getByTestId('montage-events-btn').click();
+});
+
+Then('the events page should open filtered to that monitor since the watermark', async ({ page }) => {
+  if (!badgedMontageMonitorId) throw new Error('No badged montage tile recorded');
+  await page.waitForURL(/\/events\?monitorId=\d+&startDateTime=/, {
+    timeout: testConfig.timeouts.transition,
+  });
+  // HashRouter: the route and its query string live after the `#`, so
+  // `new URL(...).searchParams` (which only parses before `#`) reads nothing.
+  const hash = new URL(page.url()).hash.replace(/^#/, '');
+  const params = new URLSearchParams(hash.split('?')[1] ?? '');
+  expect(params.get('monitorId')).toBe(badgedMontageMonitorId);
+  expect(params.get('startDateTime')).toBeTruthy();
 });

@@ -3,8 +3,9 @@
  *
  * Mounted once under the router. Provides single-key navigation, a numeric
  * monitor jump, Escape-to-back, and a help overlay. Inactive while typing, when
- * a modifier is held, when the kiosk is locked, or in TV mode (which has its own
- * key handling).
+ * a modifier is held, when the kiosk is locked, or in TV mode on an actual TV
+ * device (where the d-pad handler and WebView spatial nav own the keys). On
+ * desktop, TV mode is cosmetic and the shortcuts stay live (refs #241).
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -15,6 +16,7 @@ import { toast } from 'sonner';
 import { getMonitors } from '../api/monitors';
 import { queryKeys } from '../lib/query/query-keys';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
+import { Platform } from '../lib/platform';
 import { useAuthStore } from '../stores/auth';
 import { useKioskStore } from '../stores/kioskStore';
 import { useTvMode } from '../hooks/useTvMode';
@@ -93,7 +95,10 @@ export function KeyboardShortcuts() {
     (e: KeyboardEvent) => {
       if (e.defaultPrevented) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
-      if (!currentProfile || isLocked || isTvMode) return;
+      // TV mode hands the keys to the d-pad handler and WebView spatial nav, but
+      // only on an actual TV. On desktop (browser, Electron, keyboard tablet) TV
+      // mode is cosmetic, so the shortcuts stay live (refs #241).
+      if (!currentProfile || isLocked || (isTvMode && Platform.isTVDevice)) return;
       if (isTypingTarget(e.target)) return;
 
       // Numeric monitor jump: buffer digits, commit on Enter or after a pause.

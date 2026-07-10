@@ -62,7 +62,7 @@ export function HiddenMonitorsSection({
     // match all queries that start with them (e.g. ['monitors', profileId]).
     queryClient.invalidateQueries({ queryKey: queryKeys.monitors(currentProfile?.id) });
     queryClient.invalidateQueries({ queryKey: queryKeys.events(currentProfile?.id) });
-    queryClient.invalidateQueries({ queryKey: queryKeys.consoleEvents(currentProfile?.id) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.monitorEventsSinceAll(currentProfile?.id) });
     queryClient.invalidateQueries({ queryKey: queryKeys.timelineEvents(currentProfile?.id) });
     queryClient.invalidateQueries({ queryKey: queryKeys.eventMontage(currentProfile?.id) });
   };

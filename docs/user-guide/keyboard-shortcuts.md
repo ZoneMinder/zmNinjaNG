@@ -4,7 +4,9 @@ On desktop and the web you can move around with the keyboard. Press `?` at any
 time to see this list in the app.
 
 Shortcuts are ignored while you are typing in a text field, when a modifier key
-(Ctrl, Cmd, Alt) is held, when the kiosk lock is on, or in TV mode.
+(Ctrl, Cmd, Alt) is held, or when the kiosk lock is on. TV mode turns them off
+only on an actual TV or set-top box, where the remote's d-pad drives navigation
+instead. On a desktop or laptop the shortcuts keep working even with TV mode on.
 
 ## Navigation
 

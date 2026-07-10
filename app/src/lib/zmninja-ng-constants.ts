@@ -373,6 +373,7 @@ export const STORAGE_KEYS = {
   settingsStore: 'zmng-settings',
   notificationsStore: 'zmng-notifications',
   eventFavoritesStore: 'zmng-event-favorites',
+  monitorSeenStore: 'zmng-monitor-seen',
   dashboardStore: 'dashboard-storage',
   monitorStore: 'zm-monitor-store',
 
@@ -657,8 +658,8 @@ export interface BandwidthSettings {
   eventsWidgetInterval: number;
   /** Timeline/Heatmap widget polling interval (ms) */
   timelineHeatmapInterval: number;
-  /** Console events polling interval (ms) */
-  consoleEventsInterval: number;
+  /** Monitor new events polling interval (ms) */
+  monitorNewEventsInterval: number;
   /** Daemon check polling interval (ms) */
   daemonCheckInterval: number;
   /** Image scale percentage (1-100) */
@@ -692,7 +693,7 @@ export const BANDWIDTH_SETTINGS: Record<BandwidthMode, BandwidthSettings> = {
     snapshotRefreshInterval: 3, // 3 sec (stored in seconds for settings compatibility)
     eventsWidgetInterval: 30000, // 30 sec
     timelineHeatmapInterval: 60000, // 60 sec
-    consoleEventsInterval: 60000, // 60 sec
+    monitorNewEventsInterval: 60000, // 60 sec
     daemonCheckInterval: 30000, // 30 sec
     imageScale: 100, // 100%
     imageQuality: 100, // 100%
@@ -709,7 +710,7 @@ export const BANDWIDTH_SETTINGS: Record<BandwidthMode, BandwidthSettings> = {
     snapshotRefreshInterval: 10, // 10 sec
     eventsWidgetInterval: 60000, // 60 sec
     timelineHeatmapInterval: 120000, // 120 sec
-    consoleEventsInterval: 60000, // 60 sec
+    monitorNewEventsInterval: 120000, // 120 sec
     daemonCheckInterval: 60000, // 60 sec
     imageScale: 50, // 50%
     imageQuality: 50, // 50%

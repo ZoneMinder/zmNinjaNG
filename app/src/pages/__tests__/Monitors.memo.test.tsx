@@ -13,12 +13,18 @@ import Monitors from '../Monitors';
 const mockState = vi.hoisted(() => ({
   renderCount: new Map<string, number>(),
   settingsProps: [] as Array<(monitor: unknown) => void>,
+  newEventCounts: { '1': 2, '2': 1 } as Record<string, number>,
+  newestEventAt: { '1': '2026-07-10 09:00:00', '2': '2026-07-10 08:00:00' } as Record<string, string | null>,
 }));
 
 const useQueryMock = vi.fn();
 
 vi.mock('@tanstack/react-query', () => ({
   useQuery: (options: { queryKey: (string | undefined)[] }) => useQueryMock(options),
+}));
+
+vi.mock('../../hooks/useMonitorNewEvents', () => ({
+  useMonitorNewEvents: () => ({ counts: mockState.newEventCounts, newest: mockState.newestEventAt }),
 }));
 
 // Stand-in for the real memo()'d MonitorCard (MonitorCard.tsx:382). It is
@@ -70,7 +76,6 @@ const MONITORS = {
     { Monitor: { Id: '2', Name: 'Back Door', Deleted: false }, Monitor_Status: { Status: 'Connected' } },
   ],
 };
-const EVENT_COUNTS = { '1': 2, '2': 1 };
 
 describe('Monitors page memo stability', () => {
   beforeEach(() => {
@@ -82,9 +87,6 @@ describe('Monitors page memo stability', () => {
       const refetch = vi.fn();
       if (queryKey[0] === 'monitors') {
         return { data: MONITORS, isLoading: false, error: null, refetch };
-      }
-      if (queryKey[0] === 'consoleEvents') {
-        return { data: EVENT_COUNTS, isLoading: false, error: null, refetch };
       }
       return { data: {}, isLoading: false, error: null, refetch };
     });

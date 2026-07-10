@@ -104,11 +104,20 @@ export const queryKeys = {
   /** Events for the event montage page. */
   eventMontageList: (profileId: MaybeProfileId, filterParams: unknown) =>
     ['event-montage', profileId, filterParams] as const,
-  /** All `consoleEvents`-domain queries. Domain prefix for invalidation. */
-  consoleEvents: (profileId: MaybeProfileId) => ['consoleEvents', profileId] as const,
-  /** Per-monitor event counts for the monitors console. */
-  consoleEventsList: (profileId: MaybeProfileId, range: string) =>
-    ['consoleEvents', profileId, range] as const,
+  /** Count of a monitor's events newer than a watermark. Keyed by the
+   *  watermark so clearing the badge invalidates exactly one monitor. */
+  monitorEventsSince: (
+    profileId: MaybeProfileId,
+    monitorId: string,
+    since: string | null
+  ) => ['monitor-events-since', profileId, monitorId, since] as const,
+  /** All monitor-events-since queries. Domain prefix for invalidation. */
+  monitorEventsSinceAll: (profileId: MaybeProfileId) =>
+    ['monitor-events-since', profileId] as const,
+  /** One monitor's events-since query, across any watermark. Prefix for
+   *  invalidating a single monitor's count when a notification arrives. */
+  monitorEventsSinceMonitor: (profileId: MaybeProfileId, monitorId: string) =>
+    ['monitor-events-since', profileId, monitorId] as const,
   /** All `timeline-events`-domain queries. Domain prefix for invalidation. */
   timelineEvents: (profileId: MaybeProfileId) => ['timeline-events', profileId] as const,
   /** Events for the timeline page (optionally fanned out per monitor). */

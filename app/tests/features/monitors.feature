@@ -50,3 +50,13 @@ Feature: Monitor List and Navigation
     When I switch the monitors view to grid
     Then I should see at least 1 monitor cards
     And the monitor grid should lay out cards in more than one column
+
+  @all
+  Scenario: Opening a monitor's events clears only that monitor's new-event badge
+    When I seed old watermarks for monitors with events
+    And I refresh the page
+    And I record which monitors show a new-event badge
+    And I open the events of the first badged monitor
+    And I navigate to the "Monitors" page
+    Then that monitor should have no new-event badge
+    And the other badged monitors should keep theirs
