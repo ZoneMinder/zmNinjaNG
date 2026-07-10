@@ -1836,8 +1836,10 @@ recorded since the user last opened it. The count comes from one request per
 monitor, and that request answers two questions at once: how many events are
 newer than the last-seen watermark, and what the newest event's timestamp is.
 The first number fills the badge. The second is stamped as the new watermark
-the moment the user opens that monitor's events, from the cached response,
-which is why clearing the badge costs no request. The watermark is a server
+the moment the user opens that monitor's events, read from the cached response,
+so the card never has to ask the server what it already knows. Stamping does
+change the query key, so React Query refetches that one monitor's count once on
+the way out, and it comes back zero. The watermark is a server
 ``StartDateTime`` stored per profile per monitor on this device only. It does
 not sync across devices.
 

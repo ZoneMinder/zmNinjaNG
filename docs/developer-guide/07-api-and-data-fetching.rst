@@ -1387,8 +1387,10 @@ monitor card: it answers how many events a monitor recorded after the user last
 looked at it. It requests ``limit=1``, ``sort=StartDateTime``, ``direction=desc``
 and returns ``{ count, newest }``, reading ``count`` from ``pagination.count``
 and ``newest`` from ``events[0].Event.StartDateTime``. One response carries both
-the badge number and the timestamp the card stamps as the next watermark, so
-clearing the badge needs no extra request.
+the badge number and the timestamp the card stamps as the next watermark, so the
+card never issues a request to discover a timestamp it already holds. Stamping
+does move the watermark, which is part of the query key, so that monitor's count
+query refetches once and returns zero.
 
 .. code:: typescript
 
