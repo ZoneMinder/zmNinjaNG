@@ -13,7 +13,7 @@ Four rules define it:
 3. **First sight seeds, it does not alarm.** A monitor with no stored watermark records the current newest event and shows no badge. A fresh install does not greet the user with a week of backlog. This matches `eventPoller`'s `isFirstPoll` seeding and `MontageMonitor`'s `lastSeenRef`.
 4. **The watermark is a server `StartDateTime`, never a local `Date.now()`.** Clock skew between the app and the ZoneMinder server would otherwise hide or duplicate events.
 
-Display caps at `99+`, matching `MontageMonitor`. The underlying count stays exact.
+Display goes through `formatEventCount` (`lib/utils.ts`), the formatter the current badge already uses: exact up to 999, then `1k+`, then `1M+`. The underlying count stays exact.
 
 ## Data model
 
