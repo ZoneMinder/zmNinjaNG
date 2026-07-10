@@ -97,7 +97,9 @@ function renderCapturingFilters() {
 describe('useEventFilters first-render hydration (refs #197)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockSearchParams.forEach((_, key) => mockSearchParams.delete(key));
+    // Collect keys before deleting: forEach walks by live index, so deleting
+    // during iteration skips every other key once 2+ are set.
+    Array.from(mockSearchParams.keys()).forEach((key) => mockSearchParams.delete(key));
     setupMocks();
   });
 
@@ -128,13 +130,31 @@ describe('useEventFilters first-render hydration (refs #197)', () => {
     const { monitorIdPerRender } = renderCapturingFilters();
     expect(monitorIdPerRender[0]).toBeUndefined();
   });
+
+  // A monitor card's Events button deep-links to ?monitorId=<id>&startDateTime=<watermark>
+  // (refs #239). That URL sets startDateInput but leaves activeQuickRange null, since
+  // resolveInitialFilters only ever sets activeQuickRange from the persisted settings
+  // path, never from the URL. The Events page's clear-date button must key off
+  // startDateInput/endDateInput too, not just activeQuickRange, or this state is
+  // unclearable without also losing the monitor filter.
+  it('hydrates startDateInput from a deep-linked date but leaves activeQuickRange null', () => {
+    mockSearchParams.set('monitorId', '1');
+    mockSearchParams.set('startDateTime', '2026-07-10T08:49:38');
+    setupMocks();
+
+    const { result } = renderCapturingFilters();
+
+    expect(result.current.startDateInput).not.toBe('');
+    expect(result.current.activeQuickRange).toBeNull();
+  });
 });
 
 describe('useEventFilters', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Reset search params
-    mockSearchParams.forEach((_, key) => mockSearchParams.delete(key));
+    // Reset search params. Collect keys first: forEach walks by live index, so
+    // deleting during iteration skips every other key once 2+ are set.
+    Array.from(mockSearchParams.keys()).forEach((key) => mockSearchParams.delete(key));
     setupMocks();
   });
 

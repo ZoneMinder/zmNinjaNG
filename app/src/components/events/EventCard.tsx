@@ -122,6 +122,7 @@ function EventCardComponent({ event, monitorName, thumbnailUrls, largeThumbnailU
       aria-label={`${t('common.view')}: ${event.Name}`}
       data-testid="event-card"
       data-event-id={event.Id}
+      data-monitor-id={event.MonitorId}
     >
       <div className="flex gap-2 sm:gap-3 p-2 sm:p-3">
         {/* Thumbnail - Fixed width container for consistent text alignment */}

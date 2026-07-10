@@ -316,6 +316,50 @@ Then('the quick time filter clear button should be gone', async ({ page }) => {
   });
 });
 
+// A monitor card's Events button deep-links to ?monitorId=<id>&startDateTime=<watermark>
+// (refs #239). This URL sets a date range without ever going through the quick-range
+// chips, so the clear button must show up for that source too, not only after "I select
+// the past week quick time filter" above.
+Then('the quick time filter clear button should be visible', async ({ page }) => {
+  await expect(page.getByTestId('events-clear-quick-range')).toBeVisible({
+    timeout: testConfig.timeouts.transition,
+  });
+});
+
+/** Query params from a HashRouter URL, e.g. ".../#/events?monitorId=5" -> {monitorId: "5"}. */
+function hashSearchParams(url: string): URLSearchParams {
+  const afterHash = url.split('#')[1] ?? '';
+  const queryString = afterHash.split('?')[1] ?? '';
+  return new URLSearchParams(queryString);
+}
+
+Then('the date filter should be gone from the URL but the monitor filter should remain', async ({ page }) => {
+  await expect.poll(() => hashSearchParams(page.url()).has('startDateTime'), {
+    timeout: testConfig.timeouts.transition,
+  }).toBe(false);
+
+  const params = hashSearchParams(page.url());
+  expect(params.has('endDateTime')).toBe(false);
+  expect(params.get('monitorId'), 'expected monitorId to survive clearing the date range (refs #194)').toBeTruthy();
+});
+
+Then('the events list should only show events for that monitor', async ({ page }) => {
+  const monitorId = hashSearchParams(page.url()).get('monitorId');
+  expect(monitorId, 'expected a monitorId in the URL to compare event cards against').toBeTruthy();
+
+  const cards = page.getByTestId('event-card');
+  await expect(cards.first()).toBeVisible({ timeout: testConfig.timeouts.pageLoad });
+
+  const cardMonitorIds = await cards.evaluateAll((els) => els.map((el) => el.getAttribute('data-monitor-id')));
+  // Ground truth for "this monitor has events" was already established via the ZM API
+  // in "I seed old watermarks for monitors with events" (getMonitorEventCountSince),
+  // so a hard assert here is not vacuous even though the date filter was just removed.
+  expect(cardMonitorIds.length).toBeGreaterThan(0);
+  for (const id of cardMonitorIds) {
+    expect(id).toBe(monitorId);
+  }
+});
+
 When('I select a monitor filter if available', async ({ page }) => {
   const panel = page.getByTestId('events-filter-panel');
   // Look for a monitor select/checkbox in the filter panel

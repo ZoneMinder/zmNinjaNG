@@ -511,7 +511,11 @@ export default function Events() {
                 applyFilters({ startDateTime: startInput, endDateTime: endInput });
               }}
             />
-            {activeQuickRange !== null && (
+            {/* Shows for any active date range, not only a quick-range chip, so a date
+                range that arrived via URL (e.g. a monitor card's Events link) can also
+                be cleared without losing the rest of the filter set (refs #239). The
+                testid stays events-clear-quick-range: existing e2e steps depend on it. */}
+            {(activeQuickRange !== null || startDateInput || endDateInput) && (
               <Button
                 variant="ghost"
                 size="icon"

@@ -51,6 +51,18 @@ Feature: Event Browsing and Management
     And I should see events list or empty state
 
   @all
+  Scenario: Clearing a URL-driven date range keeps the monitor filter (refs #239)
+    When I navigate to the "Monitors" page
+    And I seed old watermarks for monitors with events
+    And I refresh the page
+    And I record which monitors show a new-event badge
+    And I open the events of the first badged monitor
+    Then the quick time filter clear button should be visible
+    When I clear the quick time filter
+    Then the date filter should be gone from the URL but the monitor filter should remain
+    And the events list should only show events for that monitor
+
+  @all
   Scenario: Filter events by monitor
     When I open the events filter panel
     And I select a monitor filter if available
