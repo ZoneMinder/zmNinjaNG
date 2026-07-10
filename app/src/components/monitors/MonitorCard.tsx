@@ -113,6 +113,7 @@ function MonitorCardComponent({
       <Card
         className="group overflow-hidden border-0 shadow-md hover:shadow-xl transition-all duration-300 bg-card ring-1 ring-border/50 hover:ring-primary/50"
         data-testid="monitor-card"
+        data-monitor-id={monitor.Id}
       >
         <div
           className="relative bg-card cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary"
@@ -244,7 +245,11 @@ function MonitorCardComponent({
   }
 
   return (
-    <Card className="group overflow-hidden border-0 shadow-md hover:shadow-xl transition-all duration-300 bg-card ring-1 ring-border/50 hover:ring-primary/50" data-testid="monitor-card">
+    <Card
+      className="group overflow-hidden border-0 shadow-md hover:shadow-xl transition-all duration-300 bg-card ring-1 ring-border/50 hover:ring-primary/50"
+      data-testid="monitor-card"
+      data-monitor-id={monitor.Id}
+    >
       <div className="flex flex-row gap-4 p-4">
         {/* Thumbnail Preview - Clickable */}
         <div

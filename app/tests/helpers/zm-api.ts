@@ -95,6 +95,30 @@ export async function getMonitorCount(): Promise<number> {
 }
 
 /**
+ * How many events a monitor has recorded strictly after `since`.
+ *
+ * Used to seed a reliable "this monitor has new events" precondition in e2e
+ * tests (see monitors.steps.ts "I seed old watermarks for monitors with
+ * events"): only monitors the API confirms have events after the watermark
+ * are expected to render a badge, so the scenario's later assertions can be
+ * hard instead of skipping when the badge fails to render (refs #239).
+ */
+export async function getMonitorEventCountSince(monitorId: string, since: string): Promise<number> {
+  const token = await getAccessToken();
+  const { host } = testConfig.server;
+
+  const segments = [`MonitorId:${monitorId}`, `StartDateTime >:${since}`];
+  const path = segments.map((s) => `/${encodeURIComponent(s)}`).join('');
+  const res = await fetch(`${host}/api/events/index${path}.json?limit=1&token=${encodeURIComponent(token)}`);
+  if (!res.ok) {
+    throw new Error(`ZM API event count fetch failed for monitor ${monitorId}: ${res.status} ${res.statusText}`);
+  }
+
+  const data = (await res.json()) as { pagination?: { count?: number } };
+  return data.pagination?.count ?? 0;
+}
+
+/**
  * How many events the server has recorded.
  *
  * The events steps gate on "does this server have any events" before asserting

@@ -2,10 +2,15 @@ import { createBdd } from 'playwright-bdd';
 import { expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { testConfig } from '../helpers/config';
-import { getMonitorCount } from '../helpers/zm-api';
+import { getMonitorCount, getMonitorEventCountSince } from '../helpers/zm-api';
 import { log } from '../../src/lib/logger';
 
 const { When, Then } = createBdd();
+
+// A fixed old watermark: any monitor with events after this date shows a
+// badge. 2020-01-01 predates every event on the test server, so any monitor
+// the API reports events for since then is expected to badge.
+const OLD_WATERMARK = '2020-01-01 00:00:00';
 
 /** Number of column tracks the CSS grid actually resolved to, or 0 if the container is not a grid. */
 async function gridColumnTracks(page: Page): Promise<number> {
@@ -161,4 +166,119 @@ When('I click the snapshot button on the first montage monitor', async ({ page }
   await moreBtn.click();
   // The menu content renders in a portal outside the cell.
   await page.getByTestId('montage-download-btn').click();
+});
+
+// New-events badge steps (refs #239)
+//
+// A fresh Playwright context has empty localStorage, so every monitor is
+// unseeded: the first "events since" response seeds it and reports zero,
+// meaning no badge ever renders on a virgin page load. To exercise "opening
+// a monitor's events clears only that monitor's badge" the test has to
+// create its own precondition: write an old watermark for monitors the API
+// (not the UI) confirms have events after it, then reload so the persisted
+// zustand store rehydrates from that seeded localStorage. The API check
+// keeps this guard independent of the badge's own rendering (rule 34): if
+// rendering regresses, the assertions below fail instead of quietly
+// skipping.
+let seededMonitorIds: string[] = [];
+let badgedMonitorIds: string[] = [];
+let clearedMonitorId: string | null = null;
+
+When('I seed old watermarks for monitors with events', async ({ page }) => {
+  // The profile id the login step created; watermarks are stored per profile.
+  const profileId = await page.evaluate(() => {
+    const raw = localStorage.getItem('zmng-profiles');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { state?: { currentProfileId?: string | null } };
+    return parsed.state?.currentProfileId ?? null;
+  });
+  expect(profileId, 'expected a current profile id in zmng-profiles after login').toBeTruthy();
+
+  // Real monitor ids from the rendered cards, not hardcoded.
+  const cards = page.locator('[data-testid="monitor-card"]');
+  await expect(cards.first()).toBeVisible({ timeout: testConfig.timeouts.pageLoad });
+  const ids = (await cards.evaluateAll((els) =>
+    els.map((el) => el.getAttribute('data-monitor-id'))
+  )).filter((id): id is string => !!id);
+  expect(ids.length, 'expected at least one rendered monitor card').toBeGreaterThan(0);
+
+  // Ground truth from the ZM API: only monitors with events after the
+  // watermark are expected to badge. Querying every candidate up front means
+  // the later assertions can be hard requirements, not skips.
+  const withEvents: string[] = [];
+  for (const id of ids) {
+    const count = await getMonitorEventCountSince(id, OLD_WATERMARK);
+    if (count > 0) withEvents.push(id);
+  }
+  expect(
+    withEvents.length,
+    'need at least 2 monitors with events since 2020-01-01 on the test server to prove badge-clearing is scoped to one monitor'
+  ).toBeGreaterThanOrEqual(2);
+  seededMonitorIds = withEvents;
+
+  await page.evaluate(
+    ({ key, profileId, monitorIds, since }) => {
+      const watermarks: Record<string, string> = {};
+      for (const id of monitorIds) watermarks[id] = since;
+      const payload = {
+        state: { profileWatermarks: { [profileId]: watermarks } },
+        version: 0,
+      };
+      localStorage.setItem(key, JSON.stringify(payload));
+    },
+    { key: 'zmng-monitor-seen', profileId: profileId as string, monitorIds: withEvents, since: OLD_WATERMARK }
+  );
+
+  log.info('E2E seeded old watermarks', { component: 'e2e', count: withEvents.length });
+});
+
+When('I record which monitors show a new-event badge', async ({ page }) => {
+  const cards = page.locator('[data-testid="monitor-card"]');
+  await expect(cards.first()).toBeVisible({ timeout: testConfig.timeouts.pageLoad });
+
+  // Each seeded monitor's "events since" query resolves independently; wait
+  // for all of them before reading, not just the first badge to appear.
+  const badges = page.locator('[data-testid="monitor-new-events-badge"]');
+  await expect
+    .poll(() => badges.count(), { timeout: testConfig.timeouts.pageLoad })
+    .toBeGreaterThanOrEqual(seededMonitorIds.length);
+
+  badgedMonitorIds = [];
+  for (const card of await cards.all()) {
+    const badge = card.getByTestId('monitor-new-events-badge');
+    if (await badge.count()) {
+      const id = await card.getAttribute('data-monitor-id');
+      if (id) badgedMonitorIds.push(id);
+    }
+  }
+  // The API already confirmed seededMonitorIds.length monitors have events
+  // since the watermark; a hard requirement here, not a skip, is what makes
+  // this scenario fail on a rendering regression instead of passing vacuously.
+  expect(
+    badgedMonitorIds.length,
+    `expected badges for the ${seededMonitorIds.length} monitor(s) the API confirmed have events since the seeded watermark`
+  ).toBeGreaterThanOrEqual(2);
+  log.info('E2E badged monitors', { component: 'e2e', count: badgedMonitorIds.length });
+});
+
+When('I open the events of the first badged monitor', async ({ page }) => {
+  clearedMonitorId = badgedMonitorIds[0];
+  const card = page.locator(`[data-monitor-id="${clearedMonitorId}"]`);
+  await card.getByTestId('monitor-events-button').click();
+  await page.waitForURL(/\/events\?monitorId=\d+/, { timeout: testConfig.timeouts.transition });
+});
+
+Then('that monitor should have no new-event badge', async ({ page }) => {
+  const card = page.locator(`[data-monitor-id="${clearedMonitorId}"]`);
+  await expect(card).toBeVisible({ timeout: testConfig.timeouts.pageLoad });
+  await expect(card.getByTestId('monitor-new-events-badge')).toHaveCount(0);
+});
+
+Then('the other badged monitors should keep theirs', async ({ page }) => {
+  const remaining = badgedMonitorIds.slice(1);
+  expect(remaining.length, 'need a second badged monitor to prove the clear is scoped to one monitor').toBeGreaterThan(0);
+  for (const id of remaining) {
+    const card = page.locator(`[data-monitor-id="${id}"]`);
+    await expect(card.getByTestId('monitor-new-events-badge')).toHaveCount(1);
+  }
 });
