@@ -31,25 +31,34 @@ describe('useMonitorNewEvents', () => {
     mockCount.mockReset();
   });
 
-  it('seeds an unseen monitor and reports zero new events', async () => {
-    // getMonitorEventsSince's `since` filter is strict `>` (see api/events.ts):
-    // once `since` reaches the newest known event, no events qualify. The seed
-    // effect changes the query key from since=null to since=<newest> the render
-    // after the first response lands, so the mock must honor `since` the way
-    // the real endpoint does; a flat mockResolvedValue would report the whole
-    // backlog again on that second, watermark-filtered call.
+  it('seeds an unseen monitor and never emits its backlog as new', async () => {
+    // A fresh install must never greet the user with "61 new". The response
+    // that seeds a monitor is the same one that would otherwise report its
+    // whole history. Observe every render, not just the settled one.
     mockCount.mockImplementation(async (_monitorId: string, since: string | null) =>
-      since === null ? { count: 61, newest: '2026-07-09 14:26:47' } : { count: 0, newest: null }
+      since === null
+        ? { count: 61, newest: '2026-07-09 14:26:47' }
+        : { count: 0, newest: '2026-07-09 14:26:47' }
     );
 
-    const { result } = renderHook(() => useMonitorNewEvents(['1']), { wrapper });
+    const observed: (number | undefined)[] = [];
+    renderHook(
+      () => {
+        const result = useMonitorNewEvents(['1']);
+        observed.push(result.counts['1']);
+        return result;
+      },
+      { wrapper }
+    );
 
     await waitFor(() => {
       expect(useMonitorSeenStore.getState().hasWatermark('p1', '1')).toBe(true);
     });
-    // A fresh install must not report 61 events as new.
-    expect(result.current.counts['1'] ?? 0).toBe(0);
+
     expect(useMonitorSeenStore.getState().getWatermark('p1', '1')).toBe('2026-07-09 14:26:47');
+    // The suppression in the hook is the only thing standing between the user
+    // and a badge reading 61 on first launch.
+    expect(observed).not.toContain(61);
   });
 
   it('reports the count for a monitor that already has a watermark', async () => {
