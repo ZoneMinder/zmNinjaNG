@@ -133,9 +133,12 @@ describe('EventMontageView return highlight (grid view)', () => {
 
     const arrows = screen.getAllByTestId('return-flash-indicator');
     expect(arrows).toHaveLength(1);
-    // The arrow must sit inside the returned-from tile, not a sibling.
-    const tiles = screen.getAllByTestId('event-montage-tile');
-    expect(tiles[1]).toContainElement(arrows[0]);
+    // The arrow is a sibling of the Card, not a child: the Card clips its
+    // overflow, and the arrow has to straddle the tile's top edge. It must
+    // still belong to the returned-from tile's wrapper.
+    const wrapper = arrows[0].parentElement;
+    expect(wrapper?.querySelector('[data-event-id="102"]')).not.toBeNull();
+    expect(wrapper?.querySelector('[data-event-id="101"]')).toBeNull();
   });
 
   it('clears the arrow after RETURN_FLASH_MS', () => {

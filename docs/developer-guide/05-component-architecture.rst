@@ -652,10 +652,11 @@ centered, so it sits just above its anchor and points down at it. The blink is
 ``prefers-reduced-motion`` a static arrow instead of a blinking one, so it must
 not be removed. Because the arrow is absolutely positioned, its parent needs
 ``relative``: in ``CompactEventRow`` and ``EventCard`` that is the ``relative``
-wrapper around the thumbnail, which does not clip. ``EventMontageTile``'s ``Card``
-does clip (``overflow-hidden``), so it passes ``className="top-1"`` to pull the
-arrow inside the tile, over the top of the thumbnail. All three render
-``<ReturnFlashArrow />`` when their local ``flash`` boolean is ``true``.
+wrapper around the thumbnail, which does not clip. ``EventMontageTile``'s
+``Card`` does clip (``overflow-hidden``), so the arrow is rendered as a sibling
+of the ``Card`` inside a ``relative`` wrapper. Putting it inside would clip the
+half that overhangs the top edge. All three render ``<ReturnFlashArrow />``
+when their local ``flash`` boolean is ``true``, half above the thumbnail.
 
 Hooks cannot be called from inside a ``.map()`` callback, so a grid or list that
 needs a per-row ``useReturnFlash`` must give each row its own component.

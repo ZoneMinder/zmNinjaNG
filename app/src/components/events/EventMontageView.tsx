@@ -115,20 +115,22 @@ const EventMontageTile = memo(function EventMontageTile({
   };
 
   return (
-    <Card
-      data-testid="event-montage-tile"
-      data-event-id={event.Id}
-      className={cn(
-        'overflow-hidden cursor-pointer hover:ring-2 hover:ring-primary transition-all',
-        flash && 'ring-2 ring-primary/60'
-      )}
-      onClick={openEvent}
-    >
-      <div className="relative bg-card" style={{ aspectRatio: aspectRatio.toString() }}>
-        {/* Nudged inside the tile: the Card clips overflow, so the arrow's
-            default position above its anchor would be cut off here. */}
-        {flash && <ReturnFlashArrow className="top-1" />}
-        {showHover ? (
+    // The arrow straddles the tile's top edge, as it does on a list row. It has
+    // to sit outside the Card, which clips its overflow to keep the thumbnail
+    // inside the rounded corners.
+    <div className="relative">
+      {flash && <ReturnFlashArrow />}
+      <Card
+        data-testid="event-montage-tile"
+        data-event-id={event.Id}
+        className={cn(
+          'overflow-hidden cursor-pointer hover:ring-2 hover:ring-primary transition-all',
+          flash && 'ring-2 ring-primary/60'
+        )}
+        onClick={openEvent}
+      >
+        <div className="relative bg-card" style={{ aspectRatio: aspectRatio.toString() }}>
+          {showHover ? (
           <EventThumbnailHoverPreview event={event} aspectRatio={aspectRatio}>
             <EventThumbnail
               urls={thumbnailUrls}
@@ -216,8 +218,9 @@ const EventMontageTile = memo(function EventMontageTile({
             overflowText={(count) => t('events.tags.moreCount', { count })}
           />
         )}
-      </div>
-    </Card>
+        </div>
+      </Card>
+    </div>
   );
 });
 
