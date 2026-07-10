@@ -11,6 +11,7 @@ import { getMonitors } from '../api/monitors';
 import { GRID_LAYOUT } from '../lib/zmninja-ng-constants';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useBandwidthSettings } from '../hooks/useBandwidthSettings';
+import { useMonitorNewEvents } from '../hooks/useMonitorNewEvents';
 import { useAuthStore } from '../stores/auth';
 import { useSettingsStore } from '../stores/settings';
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -109,6 +110,9 @@ export default function Montage() {
     if (hiddenSet.size > 0) list = list.filter((m) => !hiddenSet.has(m.Monitor.Id));
     return list;
   }, [enabledMonitors, isFilterActive, filteredMonitorIds, hiddenSet]);
+
+  const monitorIds = useMemo(() => monitors.map(({ Monitor }) => Monitor.Id), [monitors]);
+  const { counts: newEventCounts, newest: newestEventAt } = useMonitorNewEvents(monitorIds);
 
   // Edit mode state lifted to page level
   const [isEditMode, setIsEditMode] = useState(false);
@@ -487,6 +491,8 @@ export default function Montage() {
                       onPinToggle={() => togglePinMonitor(Monitor.Id)}
                       objectFit={settings.montageFeedFit}
                       showOverlay={showMonitorLabels}
+                      newEventCount={newEventCounts[Monitor.Id]}
+                      newestEventAt={newestEventAt[Monitor.Id]}
                     />
                   </MontageTileErrorBoundary>
                 </div>

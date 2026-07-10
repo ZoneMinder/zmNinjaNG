@@ -81,3 +81,13 @@ Feature: Montage Live Grid
     When I reload the current page
     And I re-select montage group A
     Then the montage layout should show 2 columns for group A
+
+  @web
+  Scenario: Montage tile shows the new-events badge and opens filtered events
+    Then I should see at least 1 monitor in montage grid
+    When I seed old watermarks for montage monitors with events
+    And I reload the current page
+    Then I should see at least 1 monitor in montage grid
+    And a montage tile should show the new-events badge
+    When I click the events button on a badged montage tile
+    Then the events page should open filtered to that monitor since the watermark

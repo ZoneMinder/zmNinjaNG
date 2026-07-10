@@ -6,11 +6,13 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MontageMonitor } from '../MontageMonitor';
 import type { Monitor, MonitorStatus, Profile } from '../../../api/types';
 import { asProfileId } from '../../../api/types';
 import { useMonitorStore } from '../../../stores/monitors';
 import { useSettingsStore, DEFAULT_SETTINGS } from '../../../stores/settings';
+import { useMonitorSeenStore } from '../../../stores/monitorSeen';
 
 // Mock dependencies
 vi.mock('react-i18next', () => ({
@@ -20,8 +22,18 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
+const mockRouterNavigate = vi.fn();
 vi.mock('react-router-dom', () => ({
-  useNavigate: () => vi.fn(),
+  useNavigate: () => mockRouterNavigate,
+}));
+
+// useOpenMonitorEvents (used by the Events button) reads the profile through
+// this hook independently of the `currentProfile` prop MontageMonitor takes.
+vi.mock('../../../hooks/useCurrentProfile', () => ({
+  useCurrentProfile: () => ({
+    currentProfile: { id: 'profile-1', portalUrl: 'https://test', cgiUrl: 'https://test/cgi', apiUrl: 'https://test/api' },
+    settings: {},
+  }),
 }));
 
 vi.mock('sonner', () => ({
@@ -140,6 +152,9 @@ describe('MontageMonitor', () => {
       },
     });
 
+    useMonitorSeenStore.setState({ profileWatermarks: {} });
+    mockRouterNavigate.mockClear();
+
     vi.clearAllMocks();
   });
 
@@ -196,5 +211,86 @@ describe('MontageMonitor', () => {
       const badge = document.querySelector('.bg-red-500');
       expect(badge).toBeInTheDocument();
     });
+  });
+
+  // New-events badge (refs #239): the montage tile shows the same
+  // "events since you last looked" badge as MonitorCard, not the red
+  // session-notification bubble.
+  it('shows the new-events badge with the count when newEventCount is positive', async () => {
+    render(
+      <MontageMonitor
+        monitor={mockMonitor}
+        status={mockStatus}
+        currentProfile={mockProfile}
+        accessToken="test-token"
+        navigate={mockNavigate}
+        newEventCount={2}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('montage-new-events-badge')).toHaveTextContent('2');
+    });
+  });
+
+  it('does not show the new-events badge when newEventCount is zero', async () => {
+    render(
+      <MontageMonitor
+        monitor={mockMonitor}
+        status={mockStatus}
+        currentProfile={mockProfile}
+        accessToken="test-token"
+        navigate={mockNavigate}
+        newEventCount={0}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Front Door')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('montage-new-events-badge')).not.toBeInTheDocument();
+  });
+
+  it('does not show the new-events badge when newEventCount is undefined', async () => {
+    render(
+      <MontageMonitor
+        monitor={mockMonitor}
+        status={mockStatus}
+        currentProfile={mockProfile}
+        accessToken="test-token"
+        navigate={mockNavigate}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Front Door')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('montage-new-events-badge')).not.toBeInTheDocument();
+  });
+
+  it('opens the filtered events for this monitor when the Events button is clicked', async () => {
+    const user = userEvent.setup();
+    useMonitorSeenStore.getState().seed('profile-1', '1', '2026-07-10 08:49:37');
+
+    render(
+      <MontageMonitor
+        monitor={mockMonitor}
+        status={mockStatus}
+        currentProfile={mockProfile}
+        accessToken="test-token"
+        navigate={mockNavigate}
+        newEventCount={2}
+        newestEventAt="2026-07-10 09:15:00"
+      />
+    );
+
+    await user.click(screen.getByTestId('montage-events-btn'));
+
+    expect(mockRouterNavigate).toHaveBeenCalledTimes(1);
+    const [url, options] = mockRouterNavigate.mock.calls[0];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.get('monitorId')).toBe('1');
+    expect(params.get('startDateTime')).toBe('2026-07-10T08:49:38');
+    expect(options).toEqual({ state: { from: '/montage' } });
   });
 });
