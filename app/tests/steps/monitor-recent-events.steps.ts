@@ -109,7 +109,7 @@ function readMainScrollTop(page: import('@playwright/test').Page): Promise<numbe
   });
 }
 
-When('I scroll the main container down and record its scroll position', async ({ page }) => {
+When('I scroll the main container down', async ({ page }) => {
   // Let the recent-events list finish loading so the page has enough content to overflow.
   await expect(page.getByTestId('monitor-recent-events-body')).toBeVisible({
     timeout: testConfig.timeouts.transition,
@@ -118,14 +118,24 @@ When('I scroll the main container down and record its scroll position', async ({
     const el = document.querySelector('[data-tv-region="main"]') as HTMLElement | null;
     if (el) el.scrollTop = el.scrollHeight;
   });
-  mainScrollBefore = await readMainScrollTop(page);
-  log.info('E2E: main container scrolled before opening event', { component: 'e2e', mainScrollBefore });
-  expect(mainScrollBefore).toBeGreaterThan(0);
+  expect(await readMainScrollTop(page)).toBeGreaterThan(0);
 });
 
 When('I click the first recent event row', async ({ page }) => {
   const firstRow = page.locator('[data-testid="compact-event-row"]').first();
   await expect(firstRow).toBeVisible({ timeout: testConfig.timeouts.transition });
+
+  // Scrolled to the bottom, the list's first row sits above the viewport, so
+  // click() would scroll it into view first. Do that explicitly and record the
+  // position afterwards: the offset the app has to restore is the one at the
+  // moment of navigation, not the one before the row came into view. Recording
+  // before the scroll made this assert a delta the app never had a chance to
+  // produce (refs #237).
+  await firstRow.scrollIntoViewIfNeeded();
+  mainScrollBefore = await readMainScrollTop(page);
+  log.info('E2E: main container scrolled before opening event', { component: 'e2e', mainScrollBefore });
+  expect(mainScrollBefore).toBeGreaterThan(0);
+
   await firstRow.click();
   await page.waitForURL(/\/events\/\d+/, { timeout: testConfig.timeouts.transition });
 });

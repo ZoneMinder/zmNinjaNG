@@ -122,7 +122,7 @@ Feature: Monitor Detail Page
     Given I am logged into zmNinjaNg
     When I open the first monitor's detail view
     Then the recent events list should be visible
-    When I scroll the main container down and record its scroll position
+    When I scroll the main container down
     And I click the first recent event row
     And I go back
     Then the recent events list should be visible
