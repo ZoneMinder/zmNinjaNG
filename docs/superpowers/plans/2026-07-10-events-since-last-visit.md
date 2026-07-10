@@ -13,7 +13,7 @@ Spec: `docs/superpowers/specs/2026-07-10-events-since-last-visit-design.md`. Iss
 ## Global Constraints
 
 - All `npm` commands run from `app/`. Never run two `npm run test:e2e` at once in this checkout (rule 39).
-- Before every commit: `npx vitest run`, `./node_modules/.bin/tsc -b`, `npm run build`. Run them directly, not through a summarizing wrapper (rule 40).
+- Before every commit: `node node_modules/vitest/vitest.mjs run`, `./node_modules/.bin/tsc -b`, `npm run build`. Invoke the binaries directly; a summarizing wrapper has printed "No errors found" over a real TS2554 (rule 40).
 - Every commit for this work references the issue: `refs #239`. Never `fixes` until the user confirms (rule 19).
 - One logical change per commit (rule 19). Do not batch unrelated changes (rule 20).
 - Query keys come from `lib/query/query-keys.ts` only. Never inline a key array (rule 29).
@@ -981,7 +981,15 @@ Expected: only the definitions, the two tests, the query keys, the bandwidth fie
 
 - [ ] **Step 2: Repoint the invalidation**
 
-In `HiddenMonitorsSection.tsx`, replace:
+First add a domain-prefix factory to `lib/query/query-keys.ts`, next to `monitorEventsSince`. Rule 29 forbids inline key arrays, so the invalidation must go through the factory:
+
+```ts
+  /** All monitor-events-since queries. Domain prefix for invalidation. */
+  monitorEventsSinceAll: (profileId: MaybeProfileId) =>
+    ['monitor-events-since', profileId] as const,
+```
+
+Then in `HiddenMonitorsSection.tsx`, replace:
 
 ```ts
     queryClient.invalidateQueries({ queryKey: queryKeys.consoleEvents(currentProfile?.id) });
@@ -990,18 +998,10 @@ In `HiddenMonitorsSection.tsx`, replace:
 with:
 
 ```ts
-    queryClient.invalidateQueries({ queryKey: ['monitor-events-since', currentProfile?.id] });
+    queryClient.invalidateQueries({ queryKey: queryKeys.monitorEventsSinceAll(currentProfile?.id) });
 ```
 
-Rule 29 forbids inline keys, so instead add a domain-prefix factory to `query-keys.ts` next to `monitorEventsSince` and use it:
-
-```ts
-  /** All monitor-events-since queries. Domain prefix for invalidation. */
-  monitorEventsSinceAll: (profileId: MaybeProfileId) =>
-    ['monitor-events-since', profileId] as const,
-```
-
-and call `queryKeys.monitorEventsSinceAll(currentProfile?.id)`.
+Prefix matching works because `monitorEventsSince` returns `['monitor-events-since', profileId, monitorId, since]`, which starts with the domain prefix.
 
 - [ ] **Step 3: Delete the rest**
 
