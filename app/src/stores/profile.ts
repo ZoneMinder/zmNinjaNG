@@ -25,6 +25,7 @@ import { setProfileSettingsGate } from '../lib/profile/profile-settings';
 import { STORAGE_KEYS } from '../lib/zmninja-ng-constants';
 import { useAuthStore } from './auth';
 import { useSettingsStore } from './settings';
+import { useMonitorSeenStore } from './monitorSeen';
 import { performBootstrap } from '../services/profile-bootstrap';
 import { handleProfileRehydration } from '../services/profile-initialization';
 
@@ -194,6 +195,9 @@ export const useProfileStore = create<ProfileState>()(
           // Remove password from secure storage
           await ProfileService.deletePassword(id);
 
+          // Drop this profile's per-monitor seen-watermarks (refs #239)
+          useMonitorSeenStore.getState().clearProfile(id);
+
           set((state) => {
             const profiles = state.profiles.filter((p) => p.id !== id);
             const currentProfileId =
@@ -223,9 +227,11 @@ export const useProfileStore = create<ProfileState>()(
         deleteAllProfiles: async () => {
           const { profiles } = get();
 
-          // Remove all passwords from secure storage
+          // Remove all passwords from secure storage, and each profile's
+          // per-monitor seen-watermarks (refs #239)
           for (const profile of profiles) {
             await ProfileService.deletePassword(profile.id);
+            useMonitorSeenStore.getState().clearProfile(profile.id);
           }
 
           // Clear all profiles and reset state

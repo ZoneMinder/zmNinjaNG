@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useProfileStore } from '../profile';
+import { useMonitorSeenStore } from '../monitorSeen';
 import { setApiClient } from '../../api/client';
 import { createStoreApiClient } from '../../api/store-gates';
 import { getServerTimeZone } from '../../api/time';
@@ -48,6 +49,7 @@ describe('Profile Store', () => {
       currentProfileId: null,
       isInitialized: true,
     });
+    useMonitorSeenStore.setState({ profileWatermarks: {} });
     vi.clearAllMocks();
     vi.stubGlobal('crypto', { randomUUID: () => 'profile-1' });
   });
@@ -171,5 +173,31 @@ describe('Profile Store', () => {
 
     expect(removeSecureValue).toHaveBeenCalledWith('password_p1');
     expect(useProfileStore.getState().profiles).toHaveLength(0);
+  });
+
+  it('drops the deleted profile\'s monitor watermarks but keeps other profiles\'', async () => {
+    useProfileStore.setState({
+      profiles: [
+        {
+          id: asProfileId('p1'),
+          name: 'Home',
+          apiUrl: 'http://a',
+          portalUrl: 'http://a',
+          cgiUrl: 'http://a/cgi-bin',
+          isDefault: true,
+          createdAt: 1,
+        },
+      ],
+      currentProfileId: asProfileId('p1'),
+    });
+
+    useMonitorSeenStore.getState().seed('p1', 'monitor-1', '2026-07-01 00:00:00');
+    useMonitorSeenStore.getState().seed('p2', 'monitor-1', '2026-07-02 00:00:00');
+
+    await useProfileStore.getState().deleteProfile('p1');
+
+    expect(useMonitorSeenStore.getState().hasWatermark('p1', 'monitor-1')).toBe(false);
+    expect(useMonitorSeenStore.getState().hasWatermark('p2', 'monitor-1')).toBe(true);
+    expect(useMonitorSeenStore.getState().getWatermark('p2', 'monitor-1')).toBe('2026-07-02 00:00:00');
   });
 });
