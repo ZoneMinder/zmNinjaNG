@@ -64,6 +64,8 @@ export default function NotificationHistory() {
   const unreadCount = useMemo(() => events.filter((e) => !e.read).length, [events]);
 
   const handleViewEvent = (eventId: number) => {
+    // Id 0 is a notification with no ZM event: nothing to open (issue #242).
+    if (eventId <= 0) return;
     if (currentProfile) {
       markEventRead(currentProfile.id, eventId);
     }
@@ -204,18 +206,21 @@ export default function NotificationHistory() {
                 {section.events.map((event) => {
                   const causeDisplay = event.Cause.split('|')[0].trim();
                   const CauseIcon = getEventCauseIcon(causeDisplay);
+                  // EventId 0 means the push had no ZM event (issue #242): nothing
+                  // to open and no image to fetch, so the row is not clickable.
+                  const canView = event.EventId > 0;
                   return (
                     <div
                       key={`${event.EventId}-${event.receivedAt}`}
-                      className={`flex items-center gap-3 p-2 sm:p-3 hover:bg-muted/50 cursor-pointer transition-colors ${event.read ? 'opacity-50' : ''}`}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => handleViewEvent(event.EventId)}
-                      onKeyDown={activateOnEnterOrSpace(() => handleViewEvent(event.EventId))}
+                      className={`flex items-center gap-3 p-2 sm:p-3 transition-colors ${canView ? 'hover:bg-muted/50 cursor-pointer' : ''} ${event.read ? 'opacity-50' : ''}`}
+                      role={canView ? 'button' : undefined}
+                      tabIndex={canView ? 0 : undefined}
+                      onClick={canView ? () => handleViewEvent(event.EventId) : undefined}
+                      onKeyDown={canView ? activateOnEnterOrSpace(() => handleViewEvent(event.EventId)) : undefined}
                       data-testid="notification-history-item"
                     >
                       {/* Thumbnail */}
-                      {event.EventId ? (
+                      {canView ? (
                         <div className="h-14 w-20 rounded border overflow-hidden bg-muted/30 flex-shrink-0">
                           {settings.hoverPreview.notifications ? (
                             <HoverPreview
@@ -250,8 +255,15 @@ export default function NotificationHistory() {
                           )}
                         </div>
                       ) : (
-                        <div className="h-14 w-20 rounded border bg-muted/30 flex items-center justify-center flex-shrink-0">
-                          <Bell className="h-4 w-4 text-muted-foreground" />
+                        <div className="h-14 w-20 rounded border overflow-hidden bg-muted/30 flex-shrink-0">
+                          {/* No ZM event: show the shared no-image placeholder, never fetch (issue #242) */}
+                          <EventThumbnail
+                            urls={[]}
+                            cacheKey={`notif-noevent-${event.receivedAt}`}
+                            alt={event.MonitorName}
+                            className="h-full w-full"
+                            objectFit="cover"
+                          />
                         </div>
                       )}
 
@@ -281,11 +293,13 @@ export default function NotificationHistory() {
                           <SourceIcon source={event.source} />
                           <span>{formatDistanceToNow(event.receivedAt, { addSuffix: true })}</span>
                         </div>
-                        <div className="flex items-center gap-1.5 text-[9px] text-muted-foreground/50 mt-0.5">
-                          <span>{t('notification_history.event_id', { id: event.EventId })}</span>
-                          <span>·</span>
-                          <span>{t('notification_history.monitor_id', { id: event.MonitorId })}</span>
-                        </div>
+                        {canView && (
+                          <div className="flex items-center gap-1.5 text-[9px] text-muted-foreground/50 mt-0.5">
+                            <span>{t('notification_history.event_id', { id: event.EventId })}</span>
+                            <span>·</span>
+                            <span>{t('notification_history.monitor_id', { id: event.MonitorId })}</span>
+                          </div>
+                        )}
                       </div>
 
                       {/* Actions */}

@@ -410,7 +410,12 @@ a token on startup, and reacting when a push arrives.
 #. **Reconcile pushes you missed.** ``useNotificationDelivered`` covers pushes
    that arrived while the app was killed or backgrounded: on cold start and on
    ``appStateChange`` it reads ``getDeliveredNotifications()``, ingests them into
-   history, clears them, and syncs the badge.
+   history, clears them, and syncs the badge. A tray item read back this way can
+   arrive without its FCM ``data`` payload, so it has no event id. It is stored
+   with ``EventId`` 0 and rendered with the shared no-image thumbnail. The code
+   never invents an id from ``Date.now()``: a fabricated id would drive a
+   ``view=image&eid=<timestamp>`` request ZoneMinder logs as "Event not found"
+   (issue #242). The same rule holds for the two live handlers above.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useNotificationDelivered.ts#L62>`__
    · → :doc:`11-application-lifecycle`
 

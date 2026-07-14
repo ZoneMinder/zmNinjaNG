@@ -536,6 +536,22 @@ describe('foreground notification handling', () => {
 
     expect(gates.notifications.addEvent).not.toHaveBeenCalled();
   });
+
+  it('records a push with no event id as EventId 0 and no image url (issue #242)', async () => {
+    // A push delivered without an eid must not fabricate a Date.now() id, which
+    // would later drive a bogus /index.php?view=image&eid=<timestamp> request.
+    gates.notifications.isConnected = vi.fn().mockReturnValue(false);
+    mockResolveProfileForNotification.mockReturnValue({ targetProfileId: 'profile-1', isCrossProfile: false });
+    const { listener } = await initAndGetListener('notificationReceived');
+
+    listener({ notification: { title: 'Front Door Alarm', body: 'Motion', data: {} } });
+
+    expect(gates.notifications.addEvent).toHaveBeenCalledWith(
+      'profile-1',
+      expect.objectContaining({ EventId: 0, ImageUrl: undefined }),
+      'push'
+    );
+  });
 });
 
 describe('notification tap handling', () => {
@@ -581,6 +597,16 @@ describe('notification tap handling', () => {
 
     expect(mockNavigateToEvent).not.toHaveBeenCalled();
     expect(mockRequestProfileSwitch).not.toHaveBeenCalled();
+  });
+
+  it('stores an id-less tap as EventId 0 and does not mark a fabricated id read (issue #242)', async () => {
+    mockResolveProfileForNotification.mockReturnValue({ targetProfileId: 'profile-1', isCrossProfile: false });
+    const { listener } = await initAndGetListener();
+
+    listener({ notification: { title: 'Alarm', body: 'Motion', data: {} } });
+
+    expect(gates.notifications.addEvent).toHaveBeenCalledWith('profile-1', expect.objectContaining({ EventId: 0 }), 'push');
+    expect(gates.notifications.markEventRead).not.toHaveBeenCalled();
   });
 });
 

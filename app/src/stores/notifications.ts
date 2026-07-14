@@ -362,9 +362,13 @@ export const useNotificationStore = create<NotificationState>()(
 
         set((state) =>
           _updateProfileEvents(state, profileId, (current) => {
-            // Remove any existing event with the same ID to avoid duplicates
-            // This prevents duplicate entries when receiving the same event from both WebSocket and FCM
-            const otherEvents = current.filter((e) => e.EventId !== event.EventId);
+            // Remove any existing event with the same ID to avoid duplicates.
+            // This prevents duplicate entries when receiving the same event from both WebSocket and FCM.
+            // EventId 0 means "no ZM event" (issue #242): those are distinct
+            // notifications, not duplicates, so never collapse them together.
+            const otherEvents = event.EventId > 0
+              ? current.filter((e) => e.EventId !== event.EventId)
+              : current;
             return [notificationEvent, ...otherEvents].slice(0, NOTIFICATIONS_SERVICE.maxEvents);
           })
         );

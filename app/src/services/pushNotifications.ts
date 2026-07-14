@@ -527,7 +527,10 @@ export class MobilePushService {
     gates.notifications.addEvent(targetProfileId, {
       MonitorId: mid ? parseInt(String(mid), 10) : 0,
       MonitorName: monitorName,
-      EventId: eid ? parseInt(String(eid), 10) : Date.now(),
+      // 0 means "no ZM event". A push can arrive without an eid (e.g. delivered
+      // while backgrounded, then read from the tray with its data stripped).
+      // Never fabricate an id: it would drive a bogus image request (issue #242).
+      EventId: eid ? parseInt(String(eid), 10) : 0,
       Cause: cause,
       Name: monitorName,
       ImageUrl: imageUrl,
@@ -577,7 +580,8 @@ export class MobilePushService {
 
       const monitorName = data?.monitorName || data?.MonitorName || notification.title?.replace(/\s*Alarm.*$/, '') || 'Unknown';
       const cause = data?.cause || data?.Cause || notification.body || 'Motion detected';
-      const eventId = eid ? parseInt(String(eid), 10) : Date.now();
+      // 0 means "no ZM event"; never fabricate an id (issue #242).
+      const eventId = eid ? parseInt(String(eid), 10) : 0;
 
       // Always store event under the correct profile's history
       gates.notifications.addEvent(profileIdForEvent, {
@@ -589,7 +593,10 @@ export class MobilePushService {
         ImageUrl: imageUrl,
       }, 'push');
 
-      gates.notifications.markEventRead(profileIdForEvent, eventId);
+      // Only a real event can be marked read; id 0 is not a ZM event.
+      if (eventId > 0) {
+        gates.notifications.markEventRead(profileIdForEvent, eventId);
+      }
 
       log.push('Added notification to history from tap action', LogLevel.INFO, {
         eventId: eid,

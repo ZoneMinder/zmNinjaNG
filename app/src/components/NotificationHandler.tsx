@@ -224,9 +224,11 @@ export function NotificationHandler() {
                 </div>
               );
             })()}
-            <div className="text-xs text-muted-foreground mt-1">
-              {t('events.event_id')}: {latestEvent.EventId}
-            </div>
+            {latestEvent.EventId > 0 && (
+              <div className="text-xs text-muted-foreground mt-1">
+                {t('events.event_id')}: {latestEvent.EventId}
+              </div>
+            )}
           </div>
         </div>,
         {

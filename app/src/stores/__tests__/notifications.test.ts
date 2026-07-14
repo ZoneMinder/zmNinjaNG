@@ -195,6 +195,20 @@ describe('Notification Store', () => {
     expect(events[0].MonitorName).toBe('Back Door');
   });
 
+  it('keeps every event with no real id (EventId 0) instead of collapsing them', () => {
+    // Notifications delivered while backgrounded lose their FCM data payload,
+    // so they arrive without an event id (EventId 0). They are distinct events
+    // and must not dedup into one. See issue #242.
+    const store = useNotificationStore.getState();
+
+    store.addEvent(profileId, { ...baseEvent, EventId: 0, MonitorName: 'A' });
+    store.addEvent(profileId, { ...baseEvent, EventId: 0, MonitorName: 'B' });
+
+    const events = store.getEvents(profileId);
+    expect(events).toHaveLength(2);
+    expect(events.map((e) => e.MonitorName)).toEqual(['B', 'A']);
+  });
+
   it('updates source when duplicate event replaces existing', () => {
     const store = useNotificationStore.getState();
 

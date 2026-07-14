@@ -52,7 +52,10 @@ function ingestDeliveredNotification(
   store.addEvent(eventProfileId, {
     MonitorId: mid ? parseInt(String(mid), 10) : 0,
     MonitorName: monitorName,
-    EventId: eid ? parseInt(String(eid), 10) : Date.now(),
+    // 0 means "no ZM event". Tray-read delivered notifications lose their FCM
+    // data payload, so eid is absent here; fabricating one would drive a bogus
+    // image request (issue #242).
+    EventId: eid ? parseInt(String(eid), 10) : 0,
     Cause: cause,
     Name: monitorName,
     ImageUrl: imageUrl,
