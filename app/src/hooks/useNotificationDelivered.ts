@@ -15,6 +15,7 @@ import { useNotificationStore } from '../stores/notifications';
 import { useProfileStore } from '../stores/profile';
 import { resolveProfileForNotification } from '../lib/profile/notification-profile';
 import { getEventImageUrl } from '../lib/zm/url-builder';
+import { parseEidFromPushTag } from '../lib/event/push-tag';
 import { useCapacitorListener } from './useCapacitorListener';
 import type { Profile } from '../api/types';
 
@@ -26,14 +27,16 @@ interface DeliveredParams {
  * Parse a single delivered notification and add it to the notification store.
  */
 function ingestDeliveredNotification(
-  notif: { data?: unknown; title?: string | null; body?: string | null },
+  notif: { data?: unknown; title?: string | null; body?: string | null; tag?: string | null },
   profileId: string,
   store: ReturnType<typeof useNotificationStore.getState>,
   profiles: Profile[],
 ): void {
   const data = notif.data as Record<string, string> | undefined;
   const mid = data?.mid || data?.MonitorId;
-  const eid = data?.eid || data?.EventId;
+  // On Android getDeliveredNotifications drops the FCM data payload, so fall back
+  // to the eid the ES encodes in the notification tag (issue #242). iOS keeps data.
+  const eid = data?.eid || data?.EventId || parseEidFromPushTag(notif.tag) || undefined;
 
   // Resolve which profile this notification belongs to
   const resolved = resolveProfileForNotification(data?.profile, profileId);
