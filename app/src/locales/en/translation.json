@@ -55,14 +55,14 @@
     "offline_banner": "Offline. Showing cached data."
   },
   "app_init": {
-    "toast_title": "Finishing setup",
-    "toast_description": "Preparing your profile and server connection.",
-    "blocking_title": "Finishing setup",
-    "step_start": "Preparing your profile and server connection.",
+    "toast_title": "Connecting to server",
+    "toast_description": "Connecting to your ZoneMinder server.",
+    "blocking_title": "Connecting to server",
+    "step_start": "Connecting to your server.",
     "step_auth": "Authenticating with your server.",
     "step_timezone": "Fetching server timezone.",
-    "step_zms": "Discovering ZMS path.",
-    "step_finalize": "Finalizing startup.",
+    "step_zms": "Discovering streaming path.",
+    "step_finalize": "Almost ready.",
     "cancel_hint_single": "Cancel to choose a different profile"
   },
   "dashboard": {

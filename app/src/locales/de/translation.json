@@ -55,14 +55,14 @@
     "offline_banner": "Offline. Zeigt zwischengespeicherte Daten."
   },
   "app_init": {
-    "toast_title": "Einrichtung wird abgeschlossen",
-    "toast_description": "Profil und Serververbindung werden vorbereitet.",
-    "blocking_title": "Einrichtung wird abgeschlossen",
-    "step_start": "Profil und Serververbindung werden vorbereitet.",
+    "toast_title": "Verbindung zum Server",
+    "toast_description": "Verbindung zu deinem ZoneMinder-Server wird hergestellt.",
+    "blocking_title": "Verbindung zum Server",
+    "step_start": "Verbindung zu deinem Server wird hergestellt.",
     "step_auth": "Anmeldung am Server wird ausgeführt.",
     "step_timezone": "Serverzeitzone wird abgerufen.",
-    "step_zms": "ZMS-Pfad wird ermittelt.",
-    "step_finalize": "Start wird abgeschlossen.",
+    "step_zms": "Streaming-Pfad wird ermittelt.",
+    "step_finalize": "Fast fertig.",
     "cancel_hint_single": "Abbrechen, um ein anderes Profil zu wählen"
   },
   "dashboard": {

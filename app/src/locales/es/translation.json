@@ -55,14 +55,14 @@
     "offline_banner": "Sin conexión. Mostrando datos en caché."
   },
   "app_init": {
-    "toast_title": "Finalizando la configuración",
-    "toast_description": "Preparando tu perfil y la conexión al servidor.",
-    "blocking_title": "Finalizando la configuración",
-    "step_start": "Preparando tu perfil y la conexión al servidor.",
+    "toast_title": "Conectando al servidor",
+    "toast_description": "Conectando a tu servidor ZoneMinder.",
+    "blocking_title": "Conectando al servidor",
+    "step_start": "Conectando a tu servidor.",
     "step_auth": "Autenticando con tu servidor.",
     "step_timezone": "Obteniendo la zona horaria del servidor.",
-    "step_zms": "Descubriendo la ruta ZMS.",
-    "step_finalize": "Finalizando el inicio.",
+    "step_zms": "Descubriendo la ruta de streaming.",
+    "step_finalize": "Casi listo.",
     "cancel_hint_single": "Cancelar para elegir otro perfil"
   },
   "dashboard": {
