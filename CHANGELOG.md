@@ -1,5 +1,48 @@
 # Changelog
 
+## [zmNinjaNg-1.4.0](https://github.com/ZoneMinder/zmNinjaNg/tree/zmNinjaNg-1.4.0) (2026-07-15)
+
+[Full Changelog](https://github.com/ZoneMinder/zmNinjaNg/compare/zmNinjaNg-1.3.0...zmNinjaNg-1.4.0)
+
+**Implemented enhancements:**
+
+- feat: monitor card badge should count events since you last looked, not the last 7 days [\#239](https://github.com/ZoneMinder/zmNinjaNg/issues/239)
+- docs: two missing call-flow traces \(Profiles edit/delete, PTZ\) [\#229](https://github.com/ZoneMinder/zmNinjaNg/issues/229)
+- docs: call-flows drift fixes and a mutation write-path flow [\#227](https://github.com/ZoneMinder/zmNinjaNg/issues/227)
+- docs: restructure catalog chapters and dissolve 08-common-pitfalls [\#226](https://github.com/ZoneMinder/zmNinjaNg/issues/226)
+- docs: teach the React and React Query concepts the guide assumes [\#225](https://github.com/ZoneMinder/zmNinjaNg/issues/225)
+- docs: encode the developer-guide teaching philosophy in AGENTS.md [\#224](https://github.com/ZoneMinder/zmNinjaNg/issues/224)
+- Ability to see Relative time in Events view [\#210](https://github.com/ZoneMinder/zmNinjaNg/issues/210)
+
+**Fixed bugs:**
+
+- fix: rename misleading "Finishing setup" bootstrap dialog [\#243](https://github.com/ZoneMinder/zmNinjaNg/issues/243)
+- App sends JavaScript timestamp instead of event ID in image requests [\#242](https://github.com/ZoneMinder/zmNinjaNg/issues/242)
+- fix: TV mode disables keyboard shortcuts even on desktop [\#241](https://github.com/ZoneMinder/zmNinjaNg/issues/241)
+- test: PTZ e2e never sees the control request \(proxy URL-encodes the match string\) [\#238](https://github.com/ZoneMinder/zmNinjaNg/issues/238)
+- test: two e2e scenarios are flaky under parallel workers [\#237](https://github.com/ZoneMinder/zmNinjaNg/issues/237)
+- chore: tsc -b never typechecks app/tests or scripts [\#236](https://github.com/ZoneMinder/zmNinjaNg/issues/236)
+- test: ptz.steps.ts asserts data-testid ptz-controls which no component renders [\#234](https://github.com/ZoneMinder/zmNinjaNg/issues/234)
+- docs: AGENTS.md testing section describes e2e infrastructure that does not exist [\#233](https://github.com/ZoneMinder/zmNinjaNg/issues/233)
+- docs: fix fabricated and stale code examples in the developer guide [\#223](https://github.com/ZoneMinder/zmNinjaNg/issues/223)
+- fix: montage renders wrong column count for non-divisors of 12 \(5 shows 6, 9 shows 12\) [\#220](https://github.com/ZoneMinder/zmNinjaNg/issues/220)
+- fix\(ios\): SSLTrustPlugin fails to compile, SecCertificateCopyValues is macOS-only [\#219](https://github.com/ZoneMinder/zmNinjaNg/issues/219)
+- Viewing an event, then using a back gesture or back button at top of view resets to very top of events [\#197](https://github.com/ZoneMinder/zmNinjaNg/issues/197)
+
+**Refactoring:**
+
+- chore: small code findings from the docs audit [\#232](https://github.com/ZoneMinder/zmNinjaNg/issues/232)
+- chore: pages/States.tsx and pages/EventMontage.tsx are unrouted dead code [\#231](https://github.com/ZoneMinder/zmNinjaNg/issues/231)
+- refactor: migrate three remaining whole-store Zustand subscriptions to selectors [\#230](https://github.com/ZoneMinder/zmNinjaNg/issues/230)
+- chore: remove dead go2rtc code \(webrtcFallbackEnabled, getGo2RTCStreamUrl\) [\#228](https://github.com/ZoneMinder/zmNinjaNg/issues/228)
+
+**Closed issues:**
+
+- chore: auto-moderate first-time-contributor comments with download links [\#222](https://github.com/ZoneMinder/zmNinjaNg/issues/222)
+- feat: per-profile toggle for WebRTC STUN servers \(go2rtc\) [\#221](https://github.com/ZoneMinder/zmNinjaNg/issues/221)
+- Codebase review from Fable 5 \(10-pillar assessment\) [\#217](https://github.com/ZoneMinder/zmNinjaNg/issues/217)
+- chore: suggest release version bump from closed issues, reusing the dev-notice Claude call [\#214](https://github.com/ZoneMinder/zmNinjaNg/issues/214)
+
 ## [zmNinjaNg-1.3.0](https://github.com/ZoneMinder/zmNinjaNg/tree/zmNinjaNg-1.3.0) (2026-07-03)
 
 [Full Changelog](https://github.com/ZoneMinder/zmNinjaNg/compare/zmNinjaNg-1.2.0...zmNinjaNg-1.3.0)
@@ -21,7 +64,6 @@
 
 - feat: dev-only preview of developer notices \(local file + skip version gate\) [\#212](https://github.com/ZoneMinder/zmNinjaNg/issues/212)
 - feat: auto-draft a developer notice for minor/major releases in make\_release.sh [\#211](https://github.com/ZoneMinder/zmNinjaNg/issues/211)
-- Ability to see Relative time in Events view [\#210](https://github.com/ZoneMinder/zmNinjaNg/issues/210)
 - All zones on a monitor are shown the same, even inactive ones [\#208](https://github.com/ZoneMinder/zmNinjaNg/issues/208)
 - feat: Global command palette for quick navigation \(/, sidebar, mobile\) [\#207](https://github.com/ZoneMinder/zmNinjaNg/issues/207)
 - Support for keyboard controls to navigate through screens [\#200](https://github.com/ZoneMinder/zmNinjaNg/issues/200)
@@ -32,7 +74,6 @@
 
 - Filtering for Favorites in Events view doesn't show any events past the "Load More" line [\#205](https://github.com/ZoneMinder/zmNinjaNg/issues/205)
 - Changing monitor while viewing live stream does not always change to the new stream [\#201](https://github.com/ZoneMinder/zmNinjaNg/issues/201)
-- Viewing an event, then using a back gesture or back button at top of view resets to very top of events [\#197](https://github.com/ZoneMinder/zmNinjaNg/issues/197)
 - Clearing event time filtering clears filter for monitor being viewed, not just time filtering [\#194](https://github.com/ZoneMinder/zmNinjaNg/issues/194)
 - Event filtering does't work or is inconsistent [\#193](https://github.com/ZoneMinder/zmNinjaNg/issues/193)
 - Back gesture on Android just goes to previous screen, never exits [\#192](https://github.com/ZoneMinder/zmNinjaNg/issues/192)
