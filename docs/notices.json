@@ -1,5 +1,14 @@
 [
   {
+    "id": "release-1.4.0",
+    "title": "zmNinjaNg 1.4.0: new views, settings, and fixes",
+    "body": "- The monitor card badge now counts events since you last looked instead of always the last 7 days.\n- The Events view can now show relative times such as \"5 minutes ago\".\n- Added a per-profile setting to turn on STUN servers for WebRTC streaming.\n- The startup dialog is now labeled \"Connecting to server\" instead of \"Finishing setup\".\n- Fixed event images that could fail to load because the wrong event ID was sent in image requests.\n- Keyboard shortcuts now work on desktop even when TV mode is on.\n- Fixed the montage showing the wrong number of columns for some layouts, such as 5 or 9 columns.\n- Fixed connecting to servers with self-signed certificates on iOS.\n- Returning from an event no longer scrolls the events list back to the top.\n\n[Full changelog](https://github.com/ZoneMinder/zmNinjaNg/releases/tag/zmNinjaNg-1.4.0)",
+    "publishedAt": "2026-07-15T10:36:24.581Z",
+    "severity": "info",
+    "link": "https://github.com/ZoneMinder/zmNinjaNg/releases/tag/zmNinjaNg-1.4.0",
+    "minAppVersion": "1.4.0"
+  },
+  {
     "id": "release-1.3.0",
     "title": "Recent events, notice management, smoother scrubbing",
     "body": "- Added a list of recent events to the monitor detail view\n- Developer notices can now be deleted one at a time, cleared all at once, or restored\n- Fixed inconsistent scrubbing when playing back an event\n\n[Full changelog](https://github.com/ZoneMinder/zmNinjaNg/releases/tag/zmNinjaNg-1.3.0)",
