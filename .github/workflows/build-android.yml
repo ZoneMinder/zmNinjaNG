@@ -17,10 +17,6 @@ permissions:
 jobs:
   build-android:
     runs-on: ubuntu-latest
-    env:
-      # NDK version AGP uses to strip native libs and extract debug symbols for
-      # the AAB (issue #244). Must be installed on the runner (step below).
-      ANDROID_NDK_VERSION: '27.2.12479018'
 
     steps:
       - name: Checkout repository
@@ -40,11 +36,6 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '21'
-
-      - name: Install Android NDK
-        # Required so debugSymbolLevel FULL can strip native .so and emit debug
-        # symbols into the AAB; without it Play warns about missing symbols (#244).
-        run: yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "ndk;${ANDROID_NDK_VERSION}"
 
       - name: Install dependencies
         working-directory: ./app
@@ -72,7 +63,6 @@ jobs:
           ZMNINJA_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ZMNINJA_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ZMNINJA_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          ZMNINJA_NDK_VERSION: ${{ env.ANDROID_NDK_VERSION }}
         run: ./gradlew assembleRelease
 
       - name: Build Android App Bundle (AAB, release, signed)
@@ -82,7 +72,6 @@ jobs:
           ZMNINJA_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ZMNINJA_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ZMNINJA_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          ZMNINJA_NDK_VERSION: ${{ env.ANDROID_NDK_VERSION }}
         run: ./gradlew bundleRelease
 
       - name: Clean up keystore
@@ -97,22 +86,6 @@ jobs:
           cp app/android/app/build/outputs/apk/release/*.apk dist/android/zmNinjaNg-${VERSION}-android.apk
           cp app/android/app/build/outputs/bundle/release/*.aab dist/android/zmNinjaNg-${VERSION}-android.aab
           cp app/android/app/build/outputs/mapping/release/mapping.txt dist/android/zmNinjaNg-${VERSION}-android-mapping.txt
-          # Native debug symbols for Play native-crash symbolication (#244). AGP does
-          # not embed them in the AAB and the output path varies, so locate them.
-          echo "=== native symbol outputs under app build ==="
-          find app/android/app/build \( -name "native-debug-symbols*.zip" -o -name "*.so.dbg" -o -name "*.so.sym" -o -path "*native_debug*" -o -path "*native_symbol*" \) 2>/dev/null | head -60 || true
-          symzip=$(find app/android/app/build -name "native-debug-symbols*.zip" -type f 2>/dev/null | head -1)
-          if [ -n "$symzip" ]; then
-            echo "Found symbols zip: $symzip"
-            cp "$symzip" dist/android/zmNinjaNg-${VERSION}-android-native-debug-symbols.zip
-          elif find app/android/app/build -name "*.so.dbg" -o -name "*.so.sym" 2>/dev/null | grep -q .; then
-            dbgroot=$(find app/android/app/build -path "*native_debug_metadata*" -o -path "*native_symbol_tables*" 2>/dev/null | grep -E "/out$" | head -1)
-            echo "Packaging per-ABI symbols from: $dbgroot"
-            ( cd "$dbgroot" && zip -qr - . ) > dist/android/zmNinjaNg-${VERSION}-android-native-debug-symbols.zip
-            unzip -l dist/android/*-native-debug-symbols.zip | tail -8
-          else
-            echo "No native debug symbols were produced (dependency .so ship stripped)."
-          fi
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -135,14 +108,6 @@ jobs:
           path: dist/android/*-mapping.txt
           retention-days: 90
 
-      - name: Upload native debug symbols artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: zmNinjaNg-android-native-debug-symbols-${{ github.event.inputs.version || github.ref_name }}
-          path: dist/android/*-native-debug-symbols.zip
-          retention-days: 90
-          if-no-files-found: ignore
-
       - name: Upload to Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/zmNinjaNg-')
@@ -150,6 +115,5 @@ jobs:
           files: |
             dist/android/*.apk
             dist/android/*.aab
-            dist/android/*-native-debug-symbols.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
