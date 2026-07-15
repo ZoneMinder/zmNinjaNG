@@ -17,6 +17,10 @@ permissions:
 jobs:
   build-android:
     runs-on: ubuntu-latest
+    env:
+      # NDK version AGP uses to strip native libs and extract debug symbols for
+      # the AAB (issue #244). Must be installed on the runner (step below).
+      ANDROID_NDK_VERSION: '27.2.12479018'
 
     steps:
       - name: Checkout repository
@@ -36,6 +40,11 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '21'
+
+      - name: Install Android NDK
+        # Required so debugSymbolLevel FULL can strip native .so and emit debug
+        # symbols into the AAB; without it Play warns about missing symbols (#244).
+        run: yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "ndk;${ANDROID_NDK_VERSION}"
 
       - name: Install dependencies
         working-directory: ./app
@@ -63,6 +72,7 @@ jobs:
           ZMNINJA_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ZMNINJA_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ZMNINJA_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ZMNINJA_NDK_VERSION: ${{ env.ANDROID_NDK_VERSION }}
         run: ./gradlew assembleRelease
 
       - name: Build Android App Bundle (AAB, release, signed)
@@ -72,6 +82,7 @@ jobs:
           ZMNINJA_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ZMNINJA_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ZMNINJA_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ZMNINJA_NDK_VERSION: ${{ env.ANDROID_NDK_VERSION }}
         run: ./gradlew bundleRelease
 
       - name: Clean up keystore

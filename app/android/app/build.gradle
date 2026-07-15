@@ -4,6 +4,16 @@ android {
     namespace "com.zoneminder.zmNinjaNG"
     compileSdk rootProject.ext.compileSdkVersion
 
+    // Pin the NDK when CI provides it (ZMNINJA_NDK_VERSION), so release builds
+    // can strip native .so libs and extract their debug symbols for the AAB
+    // (debugSymbolLevel FULL below needs the NDK's objcopy). Left unset for local
+    // builds, which fall back to AGP's default NDK and only warn if it is absent
+    // rather than failing. See issue #244.
+    def ndkVer = System.getenv("ZMNINJA_NDK_VERSION")
+    if (ndkVer?.trim()) {
+        ndkVersion ndkVer
+    }
+
     signingConfigs {
         release {
             // Only configure the keystore when it is provided (release builds via
