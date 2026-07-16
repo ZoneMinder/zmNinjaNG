@@ -38,8 +38,9 @@ import {
 import { sharedMockProvider } from '../../lib/assistant/providers/mock';
 import { buildSystemPrompt } from '../../lib/assistant/system-prompt';
 import { getToolByName } from '../../lib/assistant/tools';
-import type { AssistantMessage, AssistantTurn, ToolActivity, ToolContext } from '../../lib/assistant/types';
+import type { AssistantMessage, AssistantTurn, ProviderConfig, ToolActivity, ToolContext } from '../../lib/assistant/types';
 import { log, LogLevel } from '../../lib/logger';
+import { getSecureValue } from '../../lib/security/secureStorage';
 import { Markdown } from '../../lib/markdown';
 import { queryKeys } from '../../lib/query/query-keys';
 import { resolveQueryError } from '../../lib/query/query-error';
@@ -224,7 +225,19 @@ export function AskPanel() {
     abortControllerRef.current = controller;
 
     try {
-      const provider = getAssistantProvider(settings.assistantModelId);
+      // The optional Bearer key for the Ollama/OpenAI-compatible backend
+      // never lives in profile settings (rule 7 settings are plaintext), so
+      // it's read from secureStorage here, right before building the
+      // provider (see AssistantOllamaSection.tsx for where it's saved).
+      const apiKey = await getSecureValue(`${ASSISTANT.apiKeyStoragePrefix}${profileId}`);
+      const providerConfig: ProviderConfig = {
+        backend: settings.assistantBackend,
+        modelId: settings.assistantModelId,
+        ollamaBaseUrl: settings.assistantOllamaBaseUrl,
+        ollamaModel: settings.assistantOllamaModel,
+        apiKey: apiKey ?? undefined,
+      };
+      const provider = getAssistantProvider(providerConfig);
 
       if (isAssistantTestMode() && window.__assistantMockScript) {
         sharedMockProvider.setScript(window.__assistantMockScript);

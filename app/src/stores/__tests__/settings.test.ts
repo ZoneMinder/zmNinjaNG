@@ -79,10 +79,17 @@ describe('Settings Store', () => {
 });
 
 describe('assistant settings defaults', () => {
-  it('defaults the assistant off with the default model', () => {
+  it('defaults the assistant off with the on-device backend and default model', () => {
     const s = useSettingsStore.getState().getProfileSettings('new-profile');
     expect(s.assistantEnabled).toBe(false);
+    expect(s.assistantBackend).toBe('on-device');
     expect(s.assistantModelId).toBe(ASSISTANT.defaultModelId);
+  });
+
+  it('defaults the ollama backend fields to the local Ollama address and no model', () => {
+    const s = useSettingsStore.getState().getProfileSettings('new-profile');
+    expect(s.assistantOllamaBaseUrl).toBe(ASSISTANT.defaultOllamaBaseUrl);
+    expect(s.assistantOllamaModel).toBe('');
   });
 });
 

@@ -1,16 +1,19 @@
 /**
  * Assistant Section (refs #246)
  *
- * Master toggle plus model picker for the on-device assistant (Ask). The
- * model runs entirely in-browser via WebGPU (`@mlc-ai/web-llm`), so the
- * toggle is disabled with an explanation once the real `useWebGpuAvailable`
- * probe (`navigator.gpu.requestAdapter()`, not just `navigator.gpu`
- * presence) reports no usable adapter. Download/Delete wire directly into
- * `lib/assistant/model-download.ts`: `downloadModel` creates a
- * `backgroundTasks` task itself (the existing background-tasks drawer shows
- * the progress bar and a cancel button), so this component only tracks
- * whether the selected model is downloaded and whether a download/delete is
- * in flight, to enable/disable the two buttons.
+ * Master toggle, backend picker, and per-backend config for the in-app
+ * assistant (Ask). Two backends: the on-device WebLLM model
+ * (`@mlc-ai/web-llm`, requires WebGPU) or a remote OpenAI-compatible server
+ * such as Ollama (`AssistantOllamaSection.tsx`, no WebGPU needed, works on
+ * iOS/low-end devices). The master toggle is NOT gated on WebGPU: Ollama
+ * works without it, so only the on-device sub-section below disables itself
+ * (and explains why) when `useWebGpuAvailable`'s real
+ * `navigator.gpu.requestAdapter()` probe reports no usable adapter.
+ * Download/Delete wire directly into `lib/assistant/model-download.ts`:
+ * `downloadModel` creates a `backgroundTasks` task itself (the existing
+ * background-tasks drawer shows the progress bar and a cancel button), so
+ * this component only tracks whether the selected model is downloaded and
+ * whether a download/delete is in flight, to enable/disable the two buttons.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -18,6 +21,7 @@ import { useTranslation } from 'react-i18next';
 import { Switch } from '../ui/switch';
 import { Button } from '../ui/button';
 import { SectionHeader, SettingsCard, SettingsRow, RowLabel } from './SettingsLayout';
+import { AssistantOllamaSection } from './AssistantOllamaSection';
 import { ASSISTANT } from '../../lib/zmninja-ng-constants';
 import { useWebGpuAvailable } from '../../hooks/useWebGpuAvailable';
 import { useToast } from '../../hooks/use-toast';
@@ -26,6 +30,7 @@ import { getModelStorageInfo, formatStorageBytes, type ModelStorageInfo } from '
 import { useBackgroundTasks, type BackgroundTask } from '../../stores/backgroundTasks';
 import { log, LogLevel } from '../../lib/logger';
 import type { Profile } from '../../api/types';
+import type { AssistantBackend } from '../../lib/assistant/types';
 import type { ProfileSettings } from '../../stores/settings';
 
 /** 'checking': the `isModelDownloaded` probe for the currently selected model
@@ -227,106 +232,130 @@ export function AssistantSection({
       <SectionHeader label={t('settings.assistant.title')} />
       <SettingsCard>
         <SettingsRow>
-          <RowLabel
-            label={t('settings.assistant.enable')}
-            desc={webGpuUnavailable ? t('settings.assistant.no_webgpu') : t('settings.assistant.subtitle')}
-          />
+          <RowLabel label={t('settings.assistant.enable')} desc={t('settings.assistant.subtitle')} />
           <Switch
             id="assistant-enabled"
             checked={settings.assistantEnabled}
-            disabled={hasWebGPU !== true}
             onCheckedChange={(checked) => update('assistantEnabled', checked)}
             data-testid="assistant-enabled-toggle"
           />
         </SettingsRow>
 
-        {settings.assistantEnabled && hasWebGPU === true && (
+        {settings.assistantEnabled && (
           <>
             <div className="px-4 py-3 space-y-2">
-              <RowLabel label={t('settings.assistant.model')} />
+              <RowLabel label={t('settings.assistant.backend')} />
               <select
                 className="text-sm bg-background border rounded px-2 py-1.5 w-full sm:w-64"
-                value={settings.assistantModelId}
-                onChange={(e) =>
-                  currentProfile && updateSettings(currentProfile.id, { assistantModelId: e.target.value })
-                }
-                disabled={downloading || deleting}
-                data-testid="assistant-model-select"
+                value={settings.assistantBackend}
+                onChange={(e) => update('assistantBackend', e.target.value as AssistantBackend)}
+                data-testid="assistant-backend-select"
               >
-                {ASSISTANT.webllmModels.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.label}
-                  </option>
-                ))}
+                <option value="on-device">{t('settings.assistant.backend_on_device')}</option>
+                <option value="ollama">{t('settings.assistant.backend_ollama')}</option>
               </select>
             </div>
 
-            <div className="px-4 py-3 space-y-2">
-              <div className="flex flex-wrap items-center gap-3">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={downloadStatus !== 'not-downloaded' || downloading || deleting}
-                  onClick={handleDownload}
-                  data-testid="assistant-model-download"
-                >
-                  {downloading ? t('settings.assistant.downloading') : t('settings.assistant.download')}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={downloadStatus !== 'downloaded' || downloading || deleting}
-                  onClick={handleDelete}
-                  data-testid="assistant-model-delete"
-                >
-                  {t('settings.assistant.delete')}
-                </Button>
-                <span className="text-xs text-muted-foreground">
-                  {t('settings.assistant.download_size', { size: selectedModel.approxSizeMb })}
-                </span>
-                {downloadStatus === 'downloaded' && (
-                  <span
-                    className="text-xs text-muted-foreground"
-                    data-testid="assistant-model-downloaded-status"
-                  >
-                    {t('settings.assistant.downloaded')}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {downloadStatus === 'downloaded' && storageInfo && (
-              <div
-                className="px-4 py-3 space-y-1 min-w-0"
-                data-testid="assistant-model-storage"
-              >
-                <p
-                  className="text-xs text-muted-foreground truncate min-w-0"
-                  title={storageInfo.osPath}
-                >
-                  {storageInfo.osPath
-                    ? t('settings.assistant.storage_path', { path: storageInfo.osPath })
-                    : t(`settings.assistant.storage_browser_${storageInfo.backend}`)}
-                </p>
-                {storageInfo.usageBytes !== undefined && (
-                  <p className="text-xs text-muted-foreground">
-                    {t('settings.assistant.storage_used', { size: formatStorageBytes(storageInfo.usageBytes) })}
-                  </p>
-                )}
-                {storageInfo.persisted !== undefined && (
-                  <p className="text-xs text-muted-foreground">
-                    {storageInfo.persisted
-                      ? t('settings.assistant.storage_persistent_yes')
-                      : t('settings.assistant.storage_persistent_no')}
-                  </p>
-                )}
-                <p className="text-xs text-muted-foreground">{t('settings.assistant.storage_note')}</p>
-              </div>
+            {settings.assistantBackend === 'ollama' ? (
+              <AssistantOllamaSection settings={settings} update={update} currentProfile={currentProfile} />
+            ) : (
+              webGpuUnavailable && (
+                <div className="px-4 py-3 space-y-1" data-testid="assistant-no-webgpu">
+                  <p className="text-xs text-muted-foreground">{t('settings.assistant.no_webgpu')}</p>
+                  <p className="text-xs text-muted-foreground">{t('settings.assistant.no_webgpu_hint')}</p>
+                </div>
+              )
             )}
 
-            <div className="px-4 py-3">
-              <p className="text-xs text-muted-foreground">{t('settings.assistant.privacy')}</p>
-            </div>
+            {settings.assistantBackend === 'on-device' && hasWebGPU === true && (
+              <>
+                <div className="px-4 py-3 space-y-2">
+                  <RowLabel label={t('settings.assistant.model')} />
+                  <select
+                    className="text-sm bg-background border rounded px-2 py-1.5 w-full sm:w-64"
+                    value={settings.assistantModelId}
+                    onChange={(e) =>
+                      currentProfile && updateSettings(currentProfile.id, { assistantModelId: e.target.value })
+                    }
+                    disabled={downloading || deleting}
+                    data-testid="assistant-model-select"
+                  >
+                    {ASSISTANT.webllmModels.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="px-4 py-3 space-y-2">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={downloadStatus !== 'not-downloaded' || downloading || deleting}
+                      onClick={handleDownload}
+                      data-testid="assistant-model-download"
+                    >
+                      {downloading ? t('settings.assistant.downloading') : t('settings.assistant.download')}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={downloadStatus !== 'downloaded' || downloading || deleting}
+                      onClick={handleDelete}
+                      data-testid="assistant-model-delete"
+                    >
+                      {t('settings.assistant.delete')}
+                    </Button>
+                    <span className="text-xs text-muted-foreground">
+                      {t('settings.assistant.download_size', { size: selectedModel.approxSizeMb })}
+                    </span>
+                    {downloadStatus === 'downloaded' && (
+                      <span
+                        className="text-xs text-muted-foreground"
+                        data-testid="assistant-model-downloaded-status"
+                      >
+                        {t('settings.assistant.downloaded')}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {downloadStatus === 'downloaded' && storageInfo && (
+                  <div
+                    className="px-4 py-3 space-y-1 min-w-0"
+                    data-testid="assistant-model-storage"
+                  >
+                    <p
+                      className="text-xs text-muted-foreground truncate min-w-0"
+                      title={storageInfo.osPath}
+                    >
+                      {storageInfo.osPath
+                        ? t('settings.assistant.storage_path', { path: storageInfo.osPath })
+                        : t(`settings.assistant.storage_browser_${storageInfo.backend}`)}
+                    </p>
+                    {storageInfo.usageBytes !== undefined && (
+                      <p className="text-xs text-muted-foreground">
+                        {t('settings.assistant.storage_used', { size: formatStorageBytes(storageInfo.usageBytes) })}
+                      </p>
+                    )}
+                    {storageInfo.persisted !== undefined && (
+                      <p className="text-xs text-muted-foreground">
+                        {storageInfo.persisted
+                          ? t('settings.assistant.storage_persistent_yes')
+                          : t('settings.assistant.storage_persistent_no')}
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground">{t('settings.assistant.storage_note')}</p>
+                  </div>
+                )}
+
+                <div className="px-4 py-3">
+                  <p className="text-xs text-muted-foreground">{t('settings.assistant.privacy')}</p>
+                </div>
+              </>
+            )}
           </>
         )}
       </SettingsCard>

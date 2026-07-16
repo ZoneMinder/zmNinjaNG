@@ -34,6 +34,10 @@ const SENSITIVE_KEYS = [
     'refresh_token',
     'apiKey',
     'api_key',
+    // Covers the 'x-api-key' header (refs #246, OpenAI-compatible/Ollama
+    // adapter): 'authorization' below already matches the 'Authorization'
+    // header, but that key's hyphen means it doesn't match 'apikey'/'api_key'.
+    'api-key',
     'authorization',
     'auth',
 ];

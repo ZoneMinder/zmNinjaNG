@@ -143,6 +143,28 @@ export interface AssistantProvider {
   ): Promise<AssistantTurn>;
 }
 
+/** Which chat backend drives the assistant (refs #246): the on-device WebLLM
+ *  model (providers/webllm.ts) or a remote OpenAI-compatible server such as
+ *  Ollama (providers/openai.ts). */
+export type AssistantBackend = 'on-device' | 'ollama';
+
+/** Assembled by the caller (AskPanel) from profile settings plus the
+ *  optional secure-stored API key, and handed to `getAssistantProvider`
+ *  (providers/provider.ts) to pick and construct the right adapter. The
+ *  fields for the backend NOT selected are simply unused by the resulting
+ *  provider, so callers can always populate all of them from settings. */
+export interface ProviderConfig {
+  backend: AssistantBackend;
+  /** On-device model id (providers/webllm.ts), e.g. `Qwen2.5-3B-Instruct-q4f16_1-MLC`. */
+  modelId: string;
+  /** OpenAI-compatible base URL, e.g. `http://localhost:11434/v1`. */
+  ollamaBaseUrl: string;
+  /** Model name as known to the Ollama server, e.g. `qwen2.5:3b`. */
+  ollamaModel: string;
+  /** Optional Bearer key for the remote server. Ollama itself needs none. */
+  apiKey?: string;
+}
+
 export interface SystemPromptContext {
   now: Date;
   timezone: string;

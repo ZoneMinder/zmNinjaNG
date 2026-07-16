@@ -2,9 +2,25 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { isAssistantTestMode, getAssistantProvider } from '../provider';
 import { sharedMockProvider } from '../mock';
 import { WebLlmProvider } from '../webllm';
+import { OpenAiProvider } from '../openai';
 import { STORAGE_KEYS } from '../../../zmninja-ng-constants';
+import type { ProviderConfig } from '../../types';
 
 const MODEL_ID = 'Qwen3-1.7B-q4f16_1-MLC';
+
+const onDeviceConfig: ProviderConfig = {
+  backend: 'on-device',
+  modelId: MODEL_ID,
+  ollamaBaseUrl: 'http://localhost:11434/v1',
+  ollamaModel: '',
+};
+
+const ollamaConfig: ProviderConfig = {
+  backend: 'ollama',
+  modelId: MODEL_ID,
+  ollamaBaseUrl: 'http://localhost:11434/v1',
+  ollamaModel: 'qwen2.5:3b',
+};
 
 describe('isAssistantTestMode', () => {
   afterEach(() => {
@@ -51,23 +67,30 @@ describe('getAssistantProvider', () => {
     localStorage.clear();
   });
 
-  it('returns the shared mock provider in test mode, ignoring modelId', () => {
+  it('returns the shared mock provider in test mode, ignoring the backend', () => {
     vi.stubEnv('PROD', false);
     localStorage.setItem(STORAGE_KEYS.assistantTestMode, '1');
 
-    expect(getAssistantProvider(MODEL_ID)).toBe(sharedMockProvider);
+    expect(getAssistantProvider(onDeviceConfig)).toBe(sharedMockProvider);
+    expect(getAssistantProvider(ollamaConfig)).toBe(sharedMockProvider);
   });
 
-  it('returns a WebLlmProvider for modelId when not in test mode', () => {
+  it('returns a WebLlmProvider for backend "on-device" when not in test mode', () => {
     vi.stubEnv('PROD', false);
 
-    expect(getAssistantProvider(MODEL_ID)).toBeInstanceOf(WebLlmProvider);
+    expect(getAssistantProvider(onDeviceConfig)).toBeInstanceOf(WebLlmProvider);
+  });
+
+  it('returns an OpenAiProvider for backend "ollama" when not in test mode', () => {
+    vi.stubEnv('PROD', false);
+
+    expect(getAssistantProvider(ollamaConfig)).toBeInstanceOf(OpenAiProvider);
   });
 
   it('returns a WebLlmProvider in production even if the localStorage flag is set', () => {
     vi.stubEnv('PROD', true);
     localStorage.setItem(STORAGE_KEYS.assistantTestMode, '1');
 
-    expect(getAssistantProvider(MODEL_ID)).toBeInstanceOf(WebLlmProvider);
+    expect(getAssistantProvider(onDeviceConfig)).toBeInstanceOf(WebLlmProvider);
   });
 });

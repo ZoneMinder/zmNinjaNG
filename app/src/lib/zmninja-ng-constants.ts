@@ -577,6 +577,15 @@ export const ASSISTANT = {
     { id: 'Qwen3-1.7B-q4f16_1-MLC', label: 'Qwen3 1.7B', approxSizeMb: 1100 },
     { id: 'Llama-3.2-1B-Instruct-q4f16_1-MLC', label: 'Llama 3.2 1B', approxSizeMb: 700 },
   ],
+  // Ollama's default local HTTP address, OpenAI-compatible endpoint (refs #246).
+  // On a phone this must be replaced with the Ollama server's LAN address:
+  // "localhost" from the app's own process never reaches a server on another
+  // host, and (on native) not even the desktop this profile was created on.
+  defaultOllamaBaseUrl: 'http://localhost:11434/v1',
+  // Prefix for the secure-storage key holding the optional Ollama/OpenAI
+  // Bearer API key, suffixed with the profile id (lib/security/secureStorage.ts).
+  // Never held in profile settings (rule 7 settings are plaintext-persisted).
+  apiKeyStoragePrefix: 'assistant-api-key-',
 } as const;
 
 /**

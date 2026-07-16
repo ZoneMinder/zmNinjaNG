@@ -4,6 +4,7 @@ import type { Layout, Layouts } from 'react-grid-layout';
 import { LogLevel } from '../lib/log-level';
 import type { BandwidthMode } from '../lib/zmninja-ng-constants';
 import { API_REQUEST, ASSISTANT, STORAGE_KEYS } from '../lib/zmninja-ng-constants';
+import type { AssistantBackend } from '../lib/assistant/types';
 
 export type ViewMode = 'snapshot' | 'streaming';
 export type DisplayMode = 'normal' | 'compact';
@@ -209,9 +210,15 @@ export interface ProfileSettings {
   // Playback speed for event hover/longpress preview (ZMS rate percentage).
   // Only affects EventZmsHoverPlayer; live monitor previews are real-time.
   hoverPreviewPlaybackRate: HoverPreviewPlaybackRate;
-  // In-app assistant (Ask): on/off and which on-device model to use
+  // In-app assistant (Ask): on/off, which backend, and per-backend config.
+  // The optional API key for the ollama/OpenAI-compatible backend is never
+  // stored here (rule 7 settings are plaintext-persisted); it lives in
+  // secureStorage under `${ASSISTANT.apiKeyStoragePrefix}${profileId}`.
   assistantEnabled: boolean;
+  assistantBackend: AssistantBackend;
   assistantModelId: string;
+  assistantOllamaBaseUrl: string;
+  assistantOllamaModel: string;
 }
 
 interface SettingsState {
@@ -338,7 +345,10 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   hoverPreview: DEFAULT_HOVER_PREVIEW,
   hoverPreviewPlaybackRate: DEFAULT_HOVER_PREVIEW_PLAYBACK_RATE,
   assistantEnabled: false,
+  assistantBackend: 'on-device',
   assistantModelId: ASSISTANT.defaultModelId,
+  assistantOllamaBaseUrl: ASSISTANT.defaultOllamaBaseUrl,
+  assistantOllamaModel: '',
 };
 
 /** Migrate persisted settings from v0 (flat montage fields) to v1 (group-keyed maps). */
