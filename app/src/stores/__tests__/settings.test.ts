@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useSettingsStore, ALL_GROUPS_KEY, migrateSettings } from '../settings';
 import type { ProfileSettings } from '../settings';
+import { ASSISTANT } from '../../lib/zmninja-ng-constants';
 
 describe('Settings Store', () => {
   beforeEach(() => {
@@ -74,6 +75,14 @@ describe('Settings Store', () => {
       const storedSettings = useSettingsStore.getState().profileSettings[profileId];
       expect(storedSettings.streamingMethod).toBe('mjpeg');
     });
+  });
+});
+
+describe('assistant settings defaults', () => {
+  it('defaults the assistant off with the default model', () => {
+    const s = useSettingsStore.getState().getProfileSettings('new-profile');
+    expect(s.assistantEnabled).toBe(false);
+    expect(s.assistantModelId).toBe(ASSISTANT.defaultModelId);
   });
 });
 

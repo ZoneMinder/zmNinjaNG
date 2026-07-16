@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 import type { Layout, Layouts } from 'react-grid-layout';
 import { LogLevel } from '../lib/log-level';
 import type { BandwidthMode } from '../lib/zmninja-ng-constants';
-import { API_REQUEST, STORAGE_KEYS } from '../lib/zmninja-ng-constants';
+import { API_REQUEST, ASSISTANT, STORAGE_KEYS } from '../lib/zmninja-ng-constants';
 
 export type ViewMode = 'snapshot' | 'streaming';
 export type DisplayMode = 'normal' | 'compact';
@@ -209,6 +209,9 @@ export interface ProfileSettings {
   // Playback speed for event hover/longpress preview (ZMS rate percentage).
   // Only affects EventZmsHoverPlayer; live monitor previews are real-time.
   hoverPreviewPlaybackRate: HoverPreviewPlaybackRate;
+  // In-app assistant (Ask): on/off and which on-device model to use
+  assistantEnabled: boolean;
+  assistantModelId: string;
 }
 
 interface SettingsState {
@@ -334,6 +337,8 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   thumbnailFallbackChain: DEFAULT_THUMBNAIL_FALLBACK_CHAIN,
   hoverPreview: DEFAULT_HOVER_PREVIEW,
   hoverPreviewPlaybackRate: DEFAULT_HOVER_PREVIEW_PLAYBACK_RATE,
+  assistantEnabled: false,
+  assistantModelId: ASSISTANT.defaultModelId,
 };
 
 /** Migrate persisted settings from v0 (flat montage fields) to v1 (group-keyed maps). */
