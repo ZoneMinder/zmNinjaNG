@@ -119,6 +119,23 @@ describe('parseWebLlmTurn', () => {
     const turn = parseWebLlmTurn('{"foo": "bar"}');
     expect(turn).toEqual({ text: '__i18n:assistant.parse_error', toolCalls: [] });
   });
+
+  it('recovers a {"answer"} object embedded in prose before it', () => {
+    const turn = parseWebLlmTurn('Sure: {"answer":"hi"}');
+    expect(turn).toEqual({ text: 'hi', toolCalls: [] });
+  });
+
+  it('recovers a {"tool","input"} object embedded in prose on both sides', () => {
+    const turn = parseWebLlmTurn('Here you go {"tool":"list_monitors","input":{}} thanks');
+    expect(turn.toolCalls).toHaveLength(1);
+    expect(turn.toolCalls[0].name).toBe('list_monitors');
+    expect(turn.toolCalls[0].input).toEqual({});
+  });
+
+  it('falls back gracefully when even the embedded-object recovery finds no valid JSON', () => {
+    const turn = parseWebLlmTurn('Sure, here you go: { this is not valid json');
+    expect(turn).toEqual({ text: '__i18n:assistant.parse_error', toolCalls: [] });
+  });
 });
 
 describe('WebLlmProvider.chat', () => {

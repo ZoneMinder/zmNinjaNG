@@ -13,7 +13,7 @@
  * subscribes), the same pattern `services/download.ts` already uses: a plain
  * function call into a leaf store, not a React/store dependency edge (rule 31).
  */
-import type { MLCEngine } from '@mlc-ai/web-llm';
+import type { MLCEngine, MLCEngineConfig } from '@mlc-ai/web-llm';
 import { useBackgroundTasks } from '../../stores/backgroundTasks';
 import { ASSISTANT } from '../zmninja-ng-constants';
 import { log, LogLevel } from '../logger';
@@ -34,13 +34,67 @@ export const MODEL_NOT_AVAILABLE_MESSAGE = 'On-device model backend is not avail
  *  first successful download or cache load. */
 let loadedEngine: LoadedEngine | undefined;
 
+/** In-flight `CreateMLCEngine` calls keyed by modelId. `downloadModel` (user
+ *  hits Download) and `getLoadedEngine` (a chat turn needs the model) can
+ *  both decide to load the same modelId around the same time; without this,
+ *  each would start its own `CreateMLCEngine` call and the app would end up
+ *  with two engines for the same model resident on the GPU. Callers await
+ *  the same promise instead of starting a second one. */
+const inFlightEngineLoads = new Map<string, Promise<MLCEngine>>();
+
+/** Cached promise for the one-time `import('@mlc-ai/web-llm')`. A real
+ *  browser's module loader already caches a dynamic import by resolved URL,
+ *  so repeat calls are free; caching it here too keeps every call site (this
+ *  module has four) resolving the exact same module object with no more than
+ *  one `import()` in flight at a time. That matters for tests: two calls
+ *  issued in the same tick each hit their own uncached `import()` before
+ *  either settles, which raced Vitest's mock registration for one of them. */
+let webllmModulePromise: Promise<typeof import('@mlc-ai/web-llm')> | undefined;
+
+function loadWebllm(): Promise<typeof import('@mlc-ai/web-llm')> {
+  if (!webllmModulePromise) {
+    webllmModulePromise = import('@mlc-ai/web-llm');
+  }
+  return webllmModulePromise;
+}
+
+/** Creates the engine for `modelId`, or returns the in-flight promise from a
+ *  concurrent caller already loading it. Only the first caller's `config`
+ *  (e.g. `downloadModel`'s `initProgressCallback`) takes effect; a caller
+ *  that joins an already-in-flight load does not get its own callbacks
+ *  attached to `CreateMLCEngine`, since web-llm only takes one config per
+ *  call. */
+async function createEngineOnce(modelId: string, config?: MLCEngineConfig): Promise<MLCEngine> {
+  const existing = inFlightEngineLoads.get(modelId);
+  if (existing) {
+    return existing;
+  }
+
+  // Reserve the map slot synchronously (before the first `await` below) so a
+  // second caller reaching this function in the same microtask flush -
+  // `getLoadedEngine` and `downloadModel` both await a dynamic import and a
+  // cache check before they get here - sees `existing` above and joins this
+  // promise instead of racing to also pass the "not found" check.
+  const promise = (async () => {
+    const webllm = await loadWebllm();
+    return config ? webllm.CreateMLCEngine(modelId, config) : webllm.CreateMLCEngine(modelId);
+  })();
+  inFlightEngineLoads.set(modelId, promise);
+
+  try {
+    return await promise;
+  } finally {
+    inFlightEngineLoads.delete(modelId);
+  }
+}
+
 function findModel(modelId: string) {
   return ASSISTANT.webllmModels.find((m) => m.id === modelId);
 }
 
 /** Whether `modelId`'s weights are already in the Cache API. */
 export async function isModelDownloaded(modelId: string): Promise<boolean> {
-  const webllm = await import('@mlc-ai/web-llm');
+  const webllm = await loadWebllm();
   return webllm.hasModelInCache(modelId);
 }
 
@@ -48,7 +102,7 @@ export async function isModelDownloaded(modelId: string): Promise<boolean> {
  *  it currently holds this model, so no code keeps a reference to freed GPU
  *  memory / evicted cache entries. */
 export async function deleteModel(modelId: string): Promise<void> {
-  const webllm = await import('@mlc-ai/web-llm');
+  const webllm = await loadWebllm();
 
   if (loadedEngine?.modelId === modelId) {
     await loadedEngine.engine.unload();
@@ -101,9 +155,15 @@ export async function downloadModel(modelId: string, opts: DownloadModelOpts = {
   signal?.addEventListener('abort', onAbort);
 
   try {
-    const webllm = await import('@mlc-ai/web-llm');
-    const engine = await webllm.CreateMLCEngine(modelId, {
+    const engine = await createEngineOnce(modelId, {
       initProgressCallback: (report) => {
+        // web-llm's `CreateMLCEngine` has no abort/cancel API: once cancelFn
+        // above sets `aborted`, the underlying fetch keeps running and would
+        // keep invoking this callback for the rest of the (possibly
+        // multi-hundred-MB) download. Drop those reports so a cancelled task
+        // doesn't get flipped back to 'in_progress' (updateProgress hard-sets
+        // that status) and re-animate the progress bar after cancel.
+        if (aborted) return;
         tasks.updateProgress(taskId, Math.round(report.progress * 100));
       },
     });
@@ -149,18 +209,20 @@ export async function getLoadedEngine(modelId: string): Promise<MLCEngine> {
     loadedEngine = undefined;
   }
 
-  const webllm = await import('@mlc-ai/web-llm');
+  const webllm = await loadWebllm();
   const cached = await webllm.hasModelInCache(modelId);
   if (!cached) {
     throw new Error(MODEL_NOT_AVAILABLE_MESSAGE);
   }
 
-  const engine = await webllm.CreateMLCEngine(modelId);
+  const engine = await createEngineOnce(modelId);
   loadedEngine = { modelId, engine };
   return engine;
 }
 
-/** Test-only: clears the module-level singleton between test cases. */
+/** Test-only: clears the module-level singleton and in-flight load map
+ *  between test cases. */
 export function __resetLoadedEngineForTests(): void {
   loadedEngine = undefined;
+  inFlightEngineLoads.clear();
 }

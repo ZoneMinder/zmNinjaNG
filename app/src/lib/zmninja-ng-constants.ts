@@ -552,7 +552,6 @@ export const ASSISTANT = {
     { id: 'Qwen3-1.7B-q4f16_1-MLC', label: 'Qwen3 1.7B', approxSizeMb: 1100 },
     { id: 'Llama-3.2-1B-Instruct-q4f16_1-MLC', label: 'Llama 3.2 1B', approxSizeMb: 700 },
   ],
-  modelCacheScopePrefix: 'webllm/',
 } as const;
 
 /**

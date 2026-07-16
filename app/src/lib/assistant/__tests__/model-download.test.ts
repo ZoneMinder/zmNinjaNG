@@ -144,6 +144,39 @@ describe('model-download', () => {
       expect(webllm.CreateMLCEngine).toHaveBeenCalled();
     });
 
+    it('ignores progress reports that arrive after cancellation instead of resurrecting the task to in_progress', async () => {
+      // web-llm's `CreateMLCEngine` has no abort: the mock never resolves,
+      // mimicking the underlying fetch continuing to run (and to invoke the
+      // progress callback) after the user cancels.
+      let progressCb: ((report: { progress: number; timeElapsed: number; text: string }) => void) | undefined;
+      vi.mocked(webllm.CreateMLCEngine).mockImplementation(async (_modelId, config) => {
+        progressCb = config?.initProgressCallback;
+        return new Promise<MLCEngine>(() => {});
+      });
+
+      const downloadPromise = downloadModel(MODEL_ID);
+      await vi.waitFor(() => expect(useBackgroundTasks.getState().tasks).toHaveLength(1));
+      const taskId = useBackgroundTasks.getState().tasks[0].id;
+
+      // A progress report before cancellation still updates the task normally.
+      progressCb?.({ progress: 0.3, timeElapsed: 1, text: '' });
+      expect(useBackgroundTasks.getState().tasks[0].status).toBe('in_progress');
+      expect(useBackgroundTasks.getState().tasks[0].progress).toBe(30);
+
+      useBackgroundTasks.getState().cancelTask(taskId);
+      expect(useBackgroundTasks.getState().tasks[0].status).toBe('cancelled');
+
+      const updateProgressSpy = vi.spyOn(useBackgroundTasks.getState(), 'updateProgress');
+      progressCb?.({ progress: 0.9, timeElapsed: 2, text: '' });
+
+      expect(updateProgressSpy).not.toHaveBeenCalled();
+      const task = useBackgroundTasks.getState().tasks.find((t) => t.id === taskId);
+      expect(task?.status).toBe('cancelled');
+      expect(task?.progress).toBe(30);
+
+      void downloadPromise; // deliberately never resolves in this test
+    });
+
     it('provides a working cancelFn on the task', async () => {
       let resolveCreate!: (value: MLCEngine) => void;
       vi.mocked(webllm.CreateMLCEngine).mockImplementation(
@@ -220,6 +253,25 @@ describe('model-download', () => {
 
       await expect(getLoadedEngine(MODEL_ID)).rejects.toThrow(MODEL_NOT_AVAILABLE_MESSAGE);
       expect(webllm.CreateMLCEngine).not.toHaveBeenCalled();
+    });
+
+    it('dedupes two concurrent getLoadedEngine calls for the same modelId into a single CreateMLCEngine call', async () => {
+      vi.mocked(webllm.hasModelInCache).mockResolvedValue(true);
+      const engine = makeEngine();
+      let resolveCreate!: (value: MLCEngine) => void;
+      vi.mocked(webllm.CreateMLCEngine).mockImplementation(
+        () => new Promise<MLCEngine>((resolve) => { resolveCreate = resolve; }),
+      );
+
+      const p1 = getLoadedEngine(MODEL_ID);
+      const p2 = getLoadedEngine(MODEL_ID);
+      await vi.waitFor(() => expect(webllm.CreateMLCEngine).toHaveBeenCalled());
+      resolveCreate(engine as never);
+      const [result1, result2] = await Promise.all([p1, p2]);
+
+      expect(result1).toBe(engine);
+      expect(result2).toBe(engine);
+      expect(webllm.CreateMLCEngine).toHaveBeenCalledTimes(1);
     });
 
     it('unloads the previous engine when switching to a different model', async () => {

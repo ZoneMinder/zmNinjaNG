@@ -85,6 +85,51 @@ function extractJsonPayload(content: string): string {
   return fenced ? fenced[1] : trimmed;
 }
 
+/** Extracts the first balanced `{...}` object substring from `content`, or
+ *  `undefined` if there is no `{`. Small on-device models sometimes wrap the
+ *  JSON reply in prose ("Sure, here you go: {...} let me know if that
+ *  helps") despite the system prompt's "ONLY a single JSON object"
+ *  instruction; this recovers the embedded object instead of failing the
+ *  whole turn over surrounding text. Brace-counts rather than regex-matching
+ *  to the last `}` so a `}` inside a JSON string value doesn't truncate the
+ *  match early. */
+function extractBalancedJsonObject(content: string): string | undefined {
+  const start = content.indexOf('{');
+  if (start === -1) return undefined;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < content.length; i++) {
+    const ch = content[i];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === '\\') {
+        escaped = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = true;
+    } else if (ch === '{') {
+      depth++;
+    } else if (ch === '}') {
+      depth--;
+      if (depth === 0) {
+        return content.slice(start, i + 1);
+      }
+    }
+  }
+
+  return undefined;
+}
+
 /** Parses one `chat.completions.create` response's message content into an
  *  `AssistantTurn`. Never throws: malformed or unrecognized JSON degrades to
  *  a fallback apology turn with no tool calls, so a single bad generation
@@ -95,7 +140,18 @@ export function parseWebLlmTurn(content: string): AssistantTurn {
   try {
     parsed = JSON.parse(extractJsonPayload(content));
   } catch {
-    return { text: PARSE_ERROR_TEXT, toolCalls: [] };
+    // The fence-stripped content still isn't valid JSON on its own; a small
+    // model may have replied with JSON embedded in prose instead. Try to
+    // recover the first balanced {...} object before giving up.
+    const embedded = extractBalancedJsonObject(content);
+    if (embedded === undefined) {
+      return { text: PARSE_ERROR_TEXT, toolCalls: [] };
+    }
+    try {
+      parsed = JSON.parse(embedded);
+    } catch {
+      return { text: PARSE_ERROR_TEXT, toolCalls: [] };
+    }
   }
 
   if (parsed !== null && typeof parsed === 'object') {
