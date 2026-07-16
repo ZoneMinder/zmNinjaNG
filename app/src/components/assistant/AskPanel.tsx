@@ -94,6 +94,16 @@ export function AskPanel() {
   const [error, setError] = useState<string | null>(null);
   const [notConfigured, setNotConfigured] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Focus the message input on mount so a keyboard user who just entered Ask
+  // mode (e.g. via the `?` key) can start typing immediately (refs #246). The
+  // palette no longer renders its own search input in ask mode, so this is
+  // the only input on screen; a plain `ref` + effect is used instead of the
+  // `autoFocus` JSX attribute, which jsx-a11y/no-autofocus (rule 35) blocks.
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
 
   // Abort any in-flight turn and decline any pending confirm on unmount, so a
   // closed panel never leaves the agent loop (or a stuck confirm Promise) alive.
@@ -238,6 +248,7 @@ export function AskPanel() {
 
       <div className="flex items-center gap-2 border-t p-2">
         <input
+          ref={inputRef}
           data-testid="assistant-input"
           value={input}
           onChange={(e) => setInput(e.target.value)}

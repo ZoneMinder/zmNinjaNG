@@ -21,7 +21,8 @@ Feature: In-app assistant
     And the assistant is enabled with the mock backend
     And the assistant will call trigger_alarm on monitor "1"
     When I press the "?" key
-    And I ask "trigger the alarm on monitor 1"
+    Then the assistant panel should open
+    When I ask "trigger the alarm on monitor 1"
     Then the assistant confirm card should be visible
     When I cancel the confirmation
     Then monitor "1" should not be in alarm

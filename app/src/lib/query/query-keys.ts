@@ -148,10 +148,6 @@ export const queryKeys = {
   timezone: (profileId: MaybeProfileId) => ['timezone', profileId] as const,
   storages: (profileId: MaybeProfileId) => ['storages', profileId] as const,
 
-  /** Per-monitor console event counts over an interval, for the in-app assistant. */
-  consoleEvents: (profileId: MaybeProfileId, interval: string) =>
-    ['console-events', profileId, interval] as const,
-
   // --- App-level (not profile-scoped) -------------------------------------
   /** In-app developer notices. App-level, identical across profiles. */
   developerNotices: () => ['developer-notices'] as const,

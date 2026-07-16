@@ -110,6 +110,9 @@ describe('CommandPalette', () => {
     expect(useCommandPaletteStore.getState().mode).toBe('ask');
     expect(screen.getByTestId('ask-panel-mock')).toBeInTheDocument();
     expect(screen.queryByTestId('command-palette-results')).not.toBeInTheDocument();
+    // Ask mode renders exactly one text input: the palette's own search
+    // input must be gone, not just inert (refs #246 whole-branch review).
+    expect(screen.queryByTestId('command-palette-input')).not.toBeInTheDocument();
   });
 
   it('does not switch to Ask mode when the input starts with "?" and the assistant is disabled', () => {
@@ -132,5 +135,8 @@ describe('CommandPalette', () => {
     expect(useCommandPaletteStore.getState().mode).toBe('ask');
     expect(screen.getByTestId('ask-panel-mock')).toBeInTheDocument();
     expect(screen.queryByTestId('command-palette-results')).not.toBeInTheDocument();
+    // The input that just received the '?' unmounts along with the rest of
+    // the command-mode chrome; AskPanel's own input takes over (refs #246).
+    expect(screen.queryByTestId('command-palette-input')).not.toBeInTheDocument();
   });
 });
