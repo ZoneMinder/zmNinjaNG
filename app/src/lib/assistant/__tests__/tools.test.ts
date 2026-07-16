@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { getToolByName, readOnlyTools, TOOLS } from '../tools';
 import type { ToolContext } from '../types';
 import { asProfileId } from '../../../api/types';
+import { ASSISTANT } from '../../zmninja-ng-constants';
+import { getEvents } from '../../../api/events';
 
 vi.mock('../../../api/monitors', () => ({
   getMonitors: vi.fn().mockResolvedValue({
@@ -97,6 +99,16 @@ describe('read-only tools', () => {
     const r = await tool.execute({ limit: 999 }, ctx());
     expect(r.isError).toBeFalsy();
     expect(r.output).toContain('42');
+  });
+
+  it('list_events clamps a non-numeric or negative limit into [1, maxListEventsLimit]', async () => {
+    const tool = getToolByName('list_events')!;
+    const negative = await tool.execute({ limit: -5 }, ctx());
+    expect(negative.isError).toBeFalsy();
+    const nonNumeric = await tool.execute({ limit: 'banana' }, ctx());
+    expect(nonNumeric.isError).toBeFalsy();
+    // Both fall back to the max clamp rather than producing NaN/negative EventFilters.limit.
+    expect(getEvents).toHaveBeenLastCalledWith(expect.objectContaining({ limit: ASSISTANT.maxListEventsLimit }));
   });
 
   it('get_monitor merges monitor detail with alarm status', async () => {
