@@ -23,7 +23,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
-import { Loader2, Send, Square } from 'lucide-react';
+import { Loader2, Send, Square, Trash2 } from 'lucide-react';
 import { getVersion } from '../../api/auth';
 import type { MonitorsResponse } from '../../api/types';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
@@ -318,19 +318,28 @@ export function AskPanel() {
 
   return (
     <div className="flex h-full flex-col" data-testid="ask-panel">
-      <div className="flex items-center justify-between border-b px-3 py-2">
-        <span className="text-sm font-medium">{t('assistant.title')}</span>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={handleClear}
-          disabled={running || thread.length === 0}
-          aria-label={t('assistant.clear')}
-          data-testid="assistant-clear"
-        >
-          {t('assistant.clear')}
-        </Button>
+      {/* `pr-10` (rather than the `px-3` used on the left) reserves room for
+          the Dialog's own close "X" (ui/dialog.tsx's `DialogPrimitive.Close`),
+          which is absolutely positioned at `right-4 top-4` on the shared
+          `DialogContent` this panel mounts inside (CommandPalette.tsx), not
+          in this flex row: without the extra padding the trash button's flex
+          position lands directly under it. */}
+      <div className="flex items-center gap-2 border-b py-2 pl-3 pr-10">
+        <span className="flex-1 min-w-0 truncate text-sm font-medium">{t('assistant.title')}</span>
+        <div className="flex items-center gap-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={handleClear}
+            disabled={running || thread.length === 0}
+            aria-label={t('assistant.clear')}
+            data-testid="assistant-clear"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       <div className="flex-1 space-y-2 overflow-y-auto p-3">

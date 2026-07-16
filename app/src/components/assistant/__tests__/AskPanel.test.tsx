@@ -218,6 +218,10 @@ describe('AskPanel', () => {
     expect(screen.getByTestId('assistant-message-user')).toBeInTheDocument();
     const clearButton = screen.getByTestId('assistant-clear');
     expect(clearButton).toBeEnabled();
+    // Icon-only button (refs #246): no visible "Clear" text, so the trash
+    // icon's accessible name must come from `aria-label`, not text content.
+    expect(clearButton).toHaveAccessibleName('assistant.clear');
+    expect(clearButton).not.toHaveTextContent('assistant.clear');
 
     const user = userEvent.setup();
     await user.click(clearButton);
