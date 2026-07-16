@@ -547,6 +547,9 @@ export const ASSISTANT = {
   maxListEventsLimit: 25,
   requestTimeoutMs: 120000,
   systemPromptMonitorCap: 50,
+  // Max characters of a tool call's JSON-stringified input shown inline next
+  // to an activity step in AskPanel (rule 11: truncate long text).
+  activityInputPreviewChars: 40,
   defaultModelId: 'Qwen3-1.7B-q4f16_1-MLC',
   webllmModels: [
     { id: 'Qwen3-1.7B-q4f16_1-MLC', label: 'Qwen3 1.7B', approxSizeMb: 1100 },

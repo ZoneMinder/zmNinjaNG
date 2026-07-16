@@ -41,7 +41,7 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
   for (let i = 0; i < ASSISTANT.maxToolIterations; i++) {
     if (signal.aborted) return history;
     const turn = await provider.chat(history, TOOLS, system, signal);
-    const assistantMsg: AssistantMessage = { role: 'assistant', text: turn.text, toolCalls: turn.toolCalls };
+    const assistantMsg: AssistantMessage = { role: 'assistant', text: turn.text, toolCalls: turn.toolCalls, raw: turn.raw };
     history.push(assistantMsg);
 
     if (turn.toolCalls.length === 0) return history;
@@ -69,7 +69,7 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
           const message = e instanceof Error ? e.message : 'Failed to prepare confirmation';
           log.assistant(`buildConfirm for "${call.name}" threw`, LogLevel.ERROR, { toolName: call.name, error: e });
           results.push({ callId: call.id, output: message, isError: true });
-          host.onActivity({ toolName: call.name, status: 'error' });
+          host.onActivity({ toolName: call.name, status: 'error', input: call.input });
           continue;
         }
         const ok = await host.confirm(req).catch(() => false);
@@ -80,19 +80,19 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
         }
       }
 
-      host.onActivity({ toolName: call.name, status: 'running' });
+      host.onActivity({ toolName: call.name, status: 'running', input: call.input });
       try {
         // `navigate`'s `closePanel: true` needs no separate handling here: the
         // real host's `navigate()` implementation closes the panel itself as a
         // side effect of the call this makes below (see Task 9's host hook).
         const r = await def.execute(call.input, ctx);
         results.push({ callId: call.id, output: r.output, isError: r.isError });
-        host.onActivity({ toolName: call.name, status: r.isError ? 'error' : 'done' });
+        host.onActivity({ toolName: call.name, status: r.isError ? 'error' : 'done', input: call.input });
       } catch (e) {
         const message = e instanceof Error ? e.message : 'Tool failed';
         log.assistant(`Tool "${call.name}" threw`, LogLevel.ERROR, { toolName: call.name, error: e });
         results.push({ callId: call.id, output: message, isError: true });
-        host.onActivity({ toolName: call.name, status: 'error' });
+        host.onActivity({ toolName: call.name, status: 'error', input: call.input });
       }
     }
     history.push({ role: 'tool', toolResults: results });

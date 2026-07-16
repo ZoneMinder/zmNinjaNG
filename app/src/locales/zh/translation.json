@@ -1236,6 +1236,7 @@
     },
     "iteration_cap_reached": "步骤过多已停止，请尝试更简单的请求。",
     "parse_error": "抱歉，无法生成回复，请换个说法再试。",
+    "show_raw_output": "查看模型输出",
     "error_generic": "助手错误：{{error}}",
     "not_configured_cta": "设备端助手尚未配置。请打开设置以启用。",
     "confirm": {

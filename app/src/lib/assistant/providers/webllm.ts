@@ -51,9 +51,25 @@ function buildToolContract(tools: ToolDefinition[]): string {
   ].join('\n');
 }
 
+/** Qwen3 is a reasoning model: by default it emits a `<think>...</think>`
+ *  chain-of-thought block before its final answer. Under this adapter's fixed
+ *  `ASSISTANT.maxTokens` budget, that reasoning can consume the whole budget
+ *  and the generation gets cut off before the JSON reply is ever produced,
+ *  which is the likely cause of `assistant.parse_error` on multi-step
+ *  questions ("which monitor was most active in the last 24 hours" needs a
+ *  tool call *and* a follow-up answer, both inside one budget). Qwen3's own
+ *  `/no_think` directive, appended to the system message per its documented
+ *  chat template, disables that reasoning mode for the turn. `stripThinkBlock`
+ *  below stays as a safety net regardless, in case a Qwen3 variant still
+ *  emits a `<think>` block under `/no_think`. */
+function isQwen3Model(modelId: string): boolean {
+  return /qwen3/i.test(modelId);
+}
+
 /** Maps the app's `AssistantMessage[]` (roles user/assistant/tool) onto the
  *  OpenAI-shaped messages web-llm expects, prefixed by a system message that
- *  folds in `system` plus the tool contract above. Past assistant turns are
+ *  folds in `system` plus the tool contract above (and, for a Qwen3 model,
+ *  the `/no_think` directive; see `isQwen3Model`). Past assistant turns are
  *  re-serialized into the same `{tool,input}` / `{answer}` JSON shape the
  *  model is instructed to produce, so its own history stays consistent with
  *  the contract instead of showing it free-form text it never generated. */
@@ -61,10 +77,10 @@ export function buildWebLlmMessages(
   system: string,
   history: AssistantMessage[],
   tools: ToolDefinition[],
+  modelId: string,
 ): ChatCompletionMessageParam[] {
-  const messages: ChatCompletionMessageParam[] = [
-    { role: 'system', content: `${system}\n\n${buildToolContract(tools)}` },
-  ];
+  const systemContent = `${system}\n\n${buildToolContract(tools)}${isQwen3Model(modelId) ? '\n\n/no_think' : ''}`;
+  const messages: ChatCompletionMessageParam[] = [{ role: 'system', content: systemContent }];
 
   for (const msg of history) {
     if (msg.role === 'user') {
@@ -188,12 +204,12 @@ export function parseWebLlmTurn(content: string): AssistantTurn {
     // recover the first balanced {...} object before giving up.
     const embedded = extractBalancedJsonObject(stripped);
     if (embedded === undefined) {
-      return { text: PARSE_ERROR_TEXT, toolCalls: [] };
+      return { text: PARSE_ERROR_TEXT, toolCalls: [], raw: content };
     }
     try {
       parsed = JSON.parse(embedded);
     } catch {
-      return { text: PARSE_ERROR_TEXT, toolCalls: [] };
+      return { text: PARSE_ERROR_TEXT, toolCalls: [], raw: content };
     }
   }
 
@@ -211,7 +227,7 @@ export function parseWebLlmTurn(content: string): AssistantTurn {
     }
   }
 
-  return { text: PARSE_ERROR_TEXT, toolCalls: [] };
+  return { text: PARSE_ERROR_TEXT, toolCalls: [], raw: content };
 }
 
 /** The on-device provider: one WebLLM engine (owned by model-download.ts),
@@ -233,7 +249,7 @@ export class WebLlmProvider implements AssistantProvider {
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
 
     const engine = await getLoadedEngine(this.modelId);
-    const chatMessages = buildWebLlmMessages(system, messages, tools);
+    const chatMessages = buildWebLlmMessages(system, messages, tools, this.modelId);
 
     log.assistant('Sending WebLLM chat completion request', LogLevel.DEBUG, {
       modelId: this.modelId,
@@ -246,6 +262,18 @@ export class WebLlmProvider implements AssistantProvider {
     });
 
     const content = response.choices[0]?.message?.content ?? '';
-    return parseWebLlmTurn(content);
+    log.assistant('WebLLM raw response', LogLevel.DEBUG, { modelId: this.modelId, content });
+
+    const turn = parseWebLlmTurn(content);
+    if (turn.text === PARSE_ERROR_TEXT) {
+      // Visible at WARN (not DEBUG) so a parse failure is easy to spot in the
+      // console without cranking the log level: see the raw text above the
+      // "Sorry, I had trouble..." fallback the user sees.
+      log.assistant('WebLLM response failed to parse into a tool call or answer', LogLevel.WARN, {
+        modelId: this.modelId,
+        content,
+      });
+    }
+    return turn;
   }
 }

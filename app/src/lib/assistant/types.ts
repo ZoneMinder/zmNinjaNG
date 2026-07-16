@@ -10,6 +10,12 @@ export interface AssistantMessage {
   text?: string;
   toolCalls?: ToolCall[];
   toolResults?: ToolResult[];
+  /** The raw, unparsed model output for a turn that fell back to
+   *  `assistant.parse_error` (see providers/webllm.ts's `parseWebLlmTurn`).
+   *  Only ever set on that fallback so the UI can offer "show model output"
+   *  for diagnosing why a turn failed; never set on a normal answer or tool
+   *  call. */
+  raw?: string;
 }
 
 export interface ToolCall {
@@ -28,6 +34,9 @@ export interface ToolResult {
 export interface AssistantTurn {
   text?: string;
   toolCalls: ToolCall[];
+  /** See `AssistantMessage.raw`: carried onto the pushed assistant message by
+   *  `runAssistantTurn` (agent.ts) when a turn is the parse-error fallback. */
+  raw?: string;
 }
 
 export interface ToolContext {
@@ -65,6 +74,9 @@ export interface ConfirmRequest {
 export interface ToolActivity {
   toolName: string;
   status: 'running' | 'done' | 'error';
+  /** The tool call's input, so the UI can show what it was called with (e.g.
+   *  `count_events {"interval":"24 hour"}`) instead of just the tool name. */
+  input: Record<string, unknown>;
 }
 
 export interface AssistantHost {

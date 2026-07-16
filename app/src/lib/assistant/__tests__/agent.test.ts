@@ -75,4 +75,38 @@ describe('runAssistantTurn', () => {
     // Assert the sentinel/key instead of the prose the brief's test checked for.
     expect(out[out.length - 1].text).toContain('assistant.iteration_cap_reached');
   });
+
+  it('carries a parse-error turn\'s `raw` onto the pushed assistant message', async () => {
+    const p = new MockProvider();
+    p.setScript([{ text: '__i18n:assistant.parse_error', toolCalls: [], raw: 'not json at all' }]);
+    const h = host();
+    const out = await runAssistantTurn(baseOpts(p, h, [{ role: 'user', text: 'hi' }]));
+    const assistantMsg = out.find((m) => m.role === 'assistant');
+    expect(assistantMsg?.raw).toBe('not json at all');
+  });
+
+  it('reports the tool call input on every onActivity call (refs #246)', async () => {
+    const p = new MockProvider();
+    p.setScript([
+      { toolCalls: [{ id: 'c1', name: 'count_events', input: { interval: '24 hour' } }] },
+      { text: 'Front Door was the most active.', toolCalls: [] },
+    ]);
+    const h = host();
+    vi.spyOn(await import('../tools'), 'getToolByName').mockReturnValue({
+      name: 'count_events', description: '', schema: {}, destructive: false,
+      execute: async () => ({ output: '{"Front Door": 5}' }),
+    } as never);
+    await runAssistantTurn(baseOpts(p, h, [{ role: 'user', text: 'which monitor was most active?' }]));
+
+    expect(h.onActivity).toHaveBeenCalledWith({
+      toolName: 'count_events',
+      status: 'running',
+      input: { interval: '24 hour' },
+    });
+    expect(h.onActivity).toHaveBeenCalledWith({
+      toolName: 'count_events',
+      status: 'done',
+      input: { interval: '24 hour' },
+    });
+  });
 });

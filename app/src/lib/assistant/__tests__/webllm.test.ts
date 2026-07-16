@@ -28,10 +28,14 @@ function fakeTool(overrides: Partial<ToolDefinition> = {}): ToolDefinition {
   };
 }
 
+// Non-Qwen model id used throughout, so these tests aren't coupled to the
+// `/no_think` behavior covered separately below.
+const GENERIC_MODEL_ID = 'Llama-3.2-1B-Instruct-q4f16_1-MLC';
+
 describe('buildWebLlmMessages', () => {
   it('opens with a system message combining `system` and the tool contract', () => {
     const tools = [fakeTool()];
-    const messages = buildWebLlmMessages('You are zmNinjaNg assistant.', [], tools);
+    const messages = buildWebLlmMessages('You are zmNinjaNg assistant.', [], tools, GENERIC_MODEL_ID);
 
     expect(messages[0].role).toBe('system');
     const content = messages[0].content as string;
@@ -43,13 +47,13 @@ describe('buildWebLlmMessages', () => {
   });
 
   it('tells the model it has no tools when the tool list is empty', () => {
-    const messages = buildWebLlmMessages('system text', [], []);
+    const messages = buildWebLlmMessages('system text', [], [], GENERIC_MODEL_ID);
     expect(messages[0].content).toContain('no tools available');
   });
 
   it('maps a user message to a user-role chat message', () => {
     const history: AssistantMessage[] = [{ role: 'user', text: 'Is the front door camera armed?' }];
-    const messages = buildWebLlmMessages('sys', history, []);
+    const messages = buildWebLlmMessages('sys', history, [], GENERIC_MODEL_ID);
 
     expect(messages[1]).toEqual({ role: 'user', content: 'Is the front door camera armed?' });
   });
@@ -58,7 +62,7 @@ describe('buildWebLlmMessages', () => {
     const history: AssistantMessage[] = [
       { role: 'assistant', toolCalls: [{ id: 'call-1', name: 'list_monitors', input: { limit: 5 } }] },
     ];
-    const messages = buildWebLlmMessages('sys', history, []);
+    const messages = buildWebLlmMessages('sys', history, [], GENERIC_MODEL_ID);
 
     expect(messages[1].role).toBe('assistant');
     expect(JSON.parse(messages[1].content as string)).toEqual({ tool: 'list_monitors', input: { limit: 5 } });
@@ -66,7 +70,7 @@ describe('buildWebLlmMessages', () => {
 
   it('re-serializes a past assistant text-only turn as {"answer"} JSON', () => {
     const history: AssistantMessage[] = [{ role: 'assistant', text: 'The front door camera is armed.', toolCalls: [] }];
-    const messages = buildWebLlmMessages('sys', history, []);
+    const messages = buildWebLlmMessages('sys', history, [], GENERIC_MODEL_ID);
 
     expect(JSON.parse(messages[1].content as string)).toEqual({ answer: 'The front door camera is armed.' });
   });
@@ -78,11 +82,26 @@ describe('buildWebLlmMessages', () => {
     const history: AssistantMessage[] = [
       { role: 'tool', toolResults: [{ callId: 'call-1', output: '3 events found' }] },
     ];
-    const messages = buildWebLlmMessages('sys', history, []);
+    const messages = buildWebLlmMessages('sys', history, [], GENERIC_MODEL_ID);
 
     expect(messages.some((m) => m.role === 'tool')).toBe(false);
     expect(messages[1].role).toBe('user');
     expect(messages[1].content).toContain('3 events found');
+  });
+
+  it('appends the /no_think directive to the system message for a Qwen3 model id', () => {
+    const messages = buildWebLlmMessages('sys', [], [], 'Qwen3-1.7B-q4f16_1-MLC');
+    expect(messages[0].content).toContain('/no_think');
+  });
+
+  it('matches "Qwen3" case-insensitively', () => {
+    const messages = buildWebLlmMessages('sys', [], [], 'qwen3-tiny-test');
+    expect(messages[0].content).toContain('/no_think');
+  });
+
+  it('does not append /no_think for a non-Qwen3 model id', () => {
+    const messages = buildWebLlmMessages('sys', [], [], GENERIC_MODEL_ID);
+    expect(messages[0].content).not.toContain('/no_think');
   });
 });
 
@@ -120,9 +139,19 @@ describe('parseWebLlmTurn', () => {
     expect(turn.text).toBe('__i18n:assistant.parse_error');
   });
 
+  it('sets `raw` to the original content on the parse-error path', () => {
+    const turn = parseWebLlmTurn('this is not json at all');
+    expect(turn.raw).toBe('this is not json at all');
+  });
+
+  it('does not set `raw` on a successful parse', () => {
+    const turn = parseWebLlmTurn('{"answer": "hi"}');
+    expect(turn.raw).toBeUndefined();
+  });
+
   it('falls back gracefully on well-formed JSON that matches neither shape', () => {
     const turn = parseWebLlmTurn('{"foo": "bar"}');
-    expect(turn).toEqual({ text: '__i18n:assistant.parse_error', toolCalls: [] });
+    expect(turn).toEqual({ text: '__i18n:assistant.parse_error', toolCalls: [], raw: '{"foo": "bar"}' });
   });
 
   it('recovers a {"answer"} object embedded in prose before it', () => {
@@ -139,7 +168,11 @@ describe('parseWebLlmTurn', () => {
 
   it('falls back gracefully when even the embedded-object recovery finds no valid JSON', () => {
     const turn = parseWebLlmTurn('Sure, here you go: { this is not valid json');
-    expect(turn).toEqual({ text: '__i18n:assistant.parse_error', toolCalls: [] });
+    expect(turn).toEqual({
+      text: '__i18n:assistant.parse_error',
+      toolCalls: [],
+      raw: 'Sure, here you go: { this is not valid json',
+    });
   });
 
   it('strips a closed <think> block before parsing a {"answer"} reply', () => {
@@ -156,7 +189,11 @@ describe('parseWebLlmTurn', () => {
 
   it('falls back gracefully on an unclosed <think> block with no JSON after it', () => {
     const turn = parseWebLlmTurn('<think>still reasoning and never finished');
-    expect(turn).toEqual({ text: '__i18n:assistant.parse_error', toolCalls: [] });
+    expect(turn).toEqual({
+      text: '__i18n:assistant.parse_error',
+      toolCalls: [],
+      raw: '<think>still reasoning and never finished',
+    });
   });
 
   it('parses a plain {"answer"} reply with no <think> block at all', () => {
@@ -210,5 +247,38 @@ describe('WebLlmProvider.chat', () => {
 
     expect(turn.toolCalls).toHaveLength(1);
     expect(turn.toolCalls[0].name).toBe('list_monitors');
+  });
+
+  it('logs the raw response at DEBUG so a parse failure is diagnosable', async () => {
+    const { log, LogLevel: Level } = await import('../../logger');
+    const spy = vi.spyOn(log, 'assistant');
+    const create = vi.fn().mockResolvedValue({ choices: [{ message: { content: '{"answer": "hi"}' } }] });
+    vi.mocked(getLoadedEngine).mockResolvedValue({ chat: { completions: { create } } } as never);
+
+    const provider = new WebLlmProvider(ASSISTANT.defaultModelId);
+    await provider.chat([], [], 'sys', new AbortController().signal);
+
+    expect(spy).toHaveBeenCalledWith(
+      'WebLLM raw response',
+      Level.DEBUG,
+      expect.objectContaining({ modelId: ASSISTANT.defaultModelId, content: '{"answer": "hi"}' }),
+    );
+  });
+
+  it('logs at WARN with the raw content when the response fails to parse', async () => {
+    const { log, LogLevel: Level } = await import('../../logger');
+    const spy = vi.spyOn(log, 'assistant');
+    const create = vi.fn().mockResolvedValue({ choices: [{ message: { content: 'not json at all' } }] });
+    vi.mocked(getLoadedEngine).mockResolvedValue({ chat: { completions: { create } } } as never);
+
+    const provider = new WebLlmProvider(ASSISTANT.defaultModelId);
+    const turn = await provider.chat([], [], 'sys', new AbortController().signal);
+
+    expect(turn.text).toBe('__i18n:assistant.parse_error');
+    expect(spy).toHaveBeenCalledWith(
+      expect.stringContaining('failed to parse'),
+      Level.WARN,
+      expect.objectContaining({ modelId: ASSISTANT.defaultModelId, content: 'not json at all' }),
+    );
   });
 });

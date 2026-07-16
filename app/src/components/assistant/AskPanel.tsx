@@ -42,6 +42,7 @@ import { Markdown } from '../../lib/markdown';
 import { queryKeys } from '../../lib/query/query-keys';
 import { resolveQueryError } from '../../lib/query/query-error';
 import { cn } from '../../lib/utils';
+import { ASSISTANT } from '../../lib/zmninja-ng-constants';
 import { useAssistantStore } from '../../stores/assistant';
 import { Button } from '../ui/button';
 import { ErrorBanner } from '../ui/query-state';
@@ -60,6 +61,10 @@ declare global {
  *  (see agent.ts's ITERATION_CAP_KEY) to hand the localization job to us. */
 const I18N_SENTINEL = '__i18n:';
 
+/** Matches `providers/webllm.ts`'s `PARSE_ERROR_TEXT` sentinel key (with the
+ *  `__i18n:` prefix already stripped): only this turn ever carries `raw`. */
+const PARSE_ERROR_KEY = 'assistant.parse_error';
+
 // Stable reference for the "no thread yet" case. Without it, the `thread`
 // selector below would return a fresh `[]` literal every render whenever
 // `threads[profileId]` is undefined (i.e. before the first message), which
@@ -67,12 +72,42 @@ const I18N_SENTINEL = '__i18n:';
 // the app with "Maximum update depth exceeded" the moment AskPanel mounts.
 const EMPTY_THREAD: AssistantMessage[] = [];
 
-function renderAssistantText(text: string | undefined, t: TFunction) {
+/** Renders one assistant turn's text, resolving the `__i18n:` sentinel. When
+ *  the turn is the parse-error fallback and carried the model's raw output
+ *  (see providers/webllm.ts's `parseWebLlmTurn` and agent.ts's `raw` copy),
+ *  a collapsed `<details>` offers it so the user (or the person debugging
+ *  their report) can see why the turn failed instead of just the apology. */
+function renderAssistantText(msg: AssistantMessage, t: TFunction) {
+  const { text, raw } = msg;
   if (!text) return null;
   if (text.startsWith(I18N_SENTINEL)) {
-    return <p className="text-sm">{t(text.slice(I18N_SENTINEL.length))}</p>;
+    const key = text.slice(I18N_SENTINEL.length);
+    return (
+      <>
+        <p className="text-sm">{t(key)}</p>
+        {key === PARSE_ERROR_KEY && raw && (
+          <details className="mt-1 text-xs text-muted-foreground" data-testid="assistant-raw-output">
+            <summary className="cursor-pointer select-none">{t('assistant.show_raw_output')}</summary>
+            <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded bg-background/50 p-2">
+              {raw}
+            </pre>
+          </details>
+        )}
+      </>
+    );
   }
   return <Markdown source={text} />;
+}
+
+/** Compact, truncated (rule 11) JSON preview of a tool call's input for the
+ *  activity step list, e.g. `{"interval":"24 hour"}`. `undefined` for a tool
+ *  called with no input, so the step shows just the tool name. */
+function formatActivityInput(input: Record<string, unknown>): string | undefined {
+  if (!input || Object.keys(input).length === 0) return undefined;
+  const json = JSON.stringify(input);
+  return json.length > ASSISTANT.activityInputPreviewChars
+    ? `${json.slice(0, ASSISTANT.activityInputPreviewChars)}…`
+    : json;
 }
 
 export function AskPanel() {
@@ -203,28 +238,43 @@ export function AskPanel() {
                 msg.role === 'user' ? 'ml-auto bg-primary text-primary-foreground' : 'bg-muted',
               )}
             >
-              {msg.role === 'user' ? <p>{msg.text}</p> : renderAssistantText(msg.text, t)}
+              {msg.role === 'user' ? <p>{msg.text}</p> : renderAssistantText(msg, t)}
             </div>
           );
         })}
 
+        {/* Step trace for the current (or, once it finishes, the last) turn: one
+            row per `host.onActivity` call from agent.ts, so a multi-step answer
+            ("which monitor was most active") shows what it actually did, not
+            just a final "thinking" spinner. Stays mounted after the turn ends
+            (`clearActivities` only runs at the start of the next `handleSend`),
+            so the steps remain visible once the reply lands. */}
         {activities.length > 0 && (
-          <div className="flex flex-wrap gap-1.5" data-testid="assistant-activities">
-            {activities.map((a, i) => (
-              <span
-                key={`${a.toolName}-${i}`}
-                title={getToolByName(a.toolName)?.description}
-                className={cn(
-                  'rounded-full border px-2 py-0.5 text-xs',
-                  a.status === 'error' ? 'border-destructive/40 text-destructive' : 'border-border text-muted-foreground',
-                )}
-              >
-                {a.status === 'running' && t('assistant.activity.running', { tool: a.toolName })}
-                {a.status === 'done' && t('assistant.activity.done', { tool: a.toolName })}
-                {a.status === 'error' && t('assistant.activity.error', { tool: a.toolName })}
-              </span>
-            ))}
-          </div>
+          <ol className="flex flex-col gap-1" data-testid="assistant-activities">
+            {activities.map((a, i) => {
+              const compactInput = formatActivityInput(a.input);
+              const statusText =
+                a.status === 'running'
+                  ? t('assistant.activity.running', { tool: a.toolName })
+                  : a.status === 'done'
+                    ? t('assistant.activity.done', { tool: a.toolName })
+                    : t('assistant.activity.error', { tool: a.toolName });
+              return (
+                <li
+                  key={`${a.toolName}-${i}`}
+                  data-testid="assistant-activity-step"
+                  title={`${getToolByName(a.toolName)?.description ?? a.toolName}${a.input && Object.keys(a.input).length > 0 ? ` ${JSON.stringify(a.input)}` : ''}`}
+                  className={cn(
+                    'flex min-w-0 items-center gap-1.5 truncate rounded border px-2 py-1 text-xs',
+                    a.status === 'error' ? 'border-destructive/40 text-destructive' : 'border-border text-muted-foreground',
+                  )}
+                >
+                  <span className="truncate">{statusText}</span>
+                  {compactInput && <span className="truncate opacity-70">{compactInput}</span>}
+                </li>
+              );
+            })}
+          </ol>
         )}
 
         {running && !pendingConfirm && (
