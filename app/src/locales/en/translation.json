@@ -1206,5 +1206,33 @@
     "show_help": "Show this help",
     "go_to_monitor": "Go to monitor: {{n}}",
     "no_such_monitor": "No monitor #{{n}}"
+  },
+  "assistant": {
+    "title": "Assistant",
+    "placeholder": "Ask about your cameras...",
+    "send": "Send",
+    "abort": "Stop",
+    "thinking": "Thinking...",
+    "activity": {
+      "running": "Running {{tool}}...",
+      "done": "{{tool}} done",
+      "error": "{{tool}} failed"
+    },
+    "iteration_cap_reached": "Stopped after too many steps. Try a simpler request.",
+    "error_generic": "Assistant error: {{error}}",
+    "not_configured_cta": "The on-device assistant isn't set up yet. Open Settings to enable it.",
+    "confirm": {
+      "set_monitor_enabled": "Set monitor {{id}} enabled to {{enabled}}?",
+      "trigger_alarm": "Trigger an alarm on monitor {{monitorId}}?",
+      "cancel_alarm": "Cancel the alarm on monitor {{monitorId}}?",
+      "change_monitor_function": "Change monitor {{id}} function to {{func}}?",
+      "change_run_state": "Switch the server run state to {{state}}?",
+      "delete_event": "Delete event {{eventId}} (monitor {{monitorId}}, {{start}})?",
+      "archive_event": "Set event {{eventId}} archived to {{archived}}?",
+      "generic": "Run this action?",
+      "cancel": "Cancel",
+      "accept": "Confirm",
+      "details": "Details"
+    }
   }
 }

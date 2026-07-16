@@ -1206,5 +1206,33 @@
     "show_help": "Diese Hilfe anzeigen",
     "go_to_monitor": "Zu Monitor: {{n}}",
     "no_such_monitor": "Kein Monitor #{{n}}"
+  },
+  "assistant": {
+    "title": "Assistent",
+    "placeholder": "Frage zu deinen Kameras...",
+    "send": "Senden",
+    "abort": "Stopp",
+    "thinking": "Denkt nach...",
+    "activity": {
+      "running": "{{tool}} läuft...",
+      "done": "{{tool}} fertig",
+      "error": "{{tool}} fehlgeschlagen"
+    },
+    "iteration_cap_reached": "Nach zu vielen Schritten gestoppt. Bitte einfacher formulieren.",
+    "error_generic": "Assistent-Fehler: {{error}}",
+    "not_configured_cta": "Der On-Device-Assistent ist noch nicht eingerichtet. Öffne die Einstellungen, um ihn zu aktivieren.",
+    "confirm": {
+      "set_monitor_enabled": "Monitor {{id}} aktiviert auf {{enabled}} setzen?",
+      "trigger_alarm": "Alarm auf Monitor {{monitorId}} auslösen?",
+      "cancel_alarm": "Alarm auf Monitor {{monitorId}} abbrechen?",
+      "change_monitor_function": "Funktion von Monitor {{id}} zu {{func}} ändern?",
+      "change_run_state": "Server-Betriebsstatus zu {{state}} wechseln?",
+      "delete_event": "Ereignis {{eventId}} löschen (Monitor {{monitorId}}, {{start}})?",
+      "archive_event": "Ereignis {{eventId}} archiviert auf {{archived}} setzen?",
+      "generic": "Aktion ausführen?",
+      "cancel": "Abbrechen",
+      "accept": "Bestätigen",
+      "details": "Details"
+    }
   }
 }

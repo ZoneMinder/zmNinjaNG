@@ -1206,5 +1206,33 @@
     "show_help": "Mostrar esta ayuda",
     "go_to_monitor": "Ir al monitor: {{n}}",
     "no_such_monitor": "No hay monitor #{{n}}"
+  },
+  "assistant": {
+    "title": "Asistente",
+    "placeholder": "Pregunta sobre tus cámaras...",
+    "send": "Enviar",
+    "abort": "Detener",
+    "thinking": "Pensando...",
+    "activity": {
+      "running": "Ejecutando {{tool}}...",
+      "done": "{{tool}} completado",
+      "error": "{{tool}} falló"
+    },
+    "iteration_cap_reached": "Detenido tras demasiados pasos. Prueba con una solicitud más simple.",
+    "error_generic": "Error del asistente: {{error}}",
+    "not_configured_cta": "El asistente en el dispositivo aún no está configurado. Abre Ajustes para activarlo.",
+    "confirm": {
+      "set_monitor_enabled": "¿Poner el monitor {{id}} activado en {{enabled}}?",
+      "trigger_alarm": "¿Activar alarma en el monitor {{monitorId}}?",
+      "cancel_alarm": "¿Cancelar la alarma en el monitor {{monitorId}}?",
+      "change_monitor_function": "¿Cambiar la función del monitor {{id}} a {{func}}?",
+      "change_run_state": "¿Cambiar el estado del servidor a {{state}}?",
+      "delete_event": "¿Eliminar el evento {{eventId}} (monitor {{monitorId}}, {{start}})?",
+      "archive_event": "¿Poner el evento {{eventId}} archivado en {{archived}}?",
+      "generic": "¿Ejecutar esta acción?",
+      "cancel": "Cancelar",
+      "accept": "Confirmar",
+      "details": "Detalles"
+    }
   }
 }

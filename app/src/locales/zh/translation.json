@@ -1206,5 +1206,33 @@
     "show_help": "显示此帮助",
     "go_to_monitor": "前往监视器：{{n}}",
     "no_such_monitor": "没有监视器 #{{n}}"
+  },
+  "assistant": {
+    "title": "助手",
+    "placeholder": "询问你的摄像头...",
+    "send": "发送",
+    "abort": "停止",
+    "thinking": "思考中...",
+    "activity": {
+      "running": "正在运行 {{tool}}...",
+      "done": "{{tool}} 已完成",
+      "error": "{{tool}} 失败"
+    },
+    "iteration_cap_reached": "步骤过多已停止，请尝试更简单的请求。",
+    "error_generic": "助手错误：{{error}}",
+    "not_configured_cta": "设备端助手尚未配置。请打开设置以启用。",
+    "confirm": {
+      "set_monitor_enabled": "将监视器 {{id}} 的启用状态设为 {{enabled}}？",
+      "trigger_alarm": "在监视器 {{monitorId}} 上触发报警？",
+      "cancel_alarm": "取消监视器 {{monitorId}} 上的报警？",
+      "change_monitor_function": "将监视器 {{id}} 的功能改为 {{func}}？",
+      "change_run_state": "将服务器运行状态切换为 {{state}}？",
+      "delete_event": "删除事件 {{eventId}}（监视器 {{monitorId}}，{{start}}）？",
+      "archive_event": "将事件 {{eventId}} 的归档状态设为 {{archived}}？",
+      "generic": "执行此操作？",
+      "cancel": "取消",
+      "accept": "确认",
+      "details": "详情"
+    }
   }
 }
