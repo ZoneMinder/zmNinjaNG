@@ -153,7 +153,7 @@ export async function downloadModel(modelId: string, opts: DownloadModelOpts = {
   let aborted = signal?.aborted ?? false;
   const taskId = tasks.addTask({
     type: 'download',
-    metadata: { title: model?.label ?? modelId, description: modelId, fileSize: model?.approxSizeMb },
+    metadata: { title: model?.label ?? modelId, description: modelId, fileSize: model?.approxSizeMb, modelId },
     cancelFn: () => {
       aborted = true;
     },

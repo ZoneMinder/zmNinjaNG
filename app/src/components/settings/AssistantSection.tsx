@@ -13,7 +13,7 @@
  * in flight, to enable/disable the two buttons.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Switch } from '../ui/switch';
 import { Button } from '../ui/button';
@@ -23,6 +23,7 @@ import { useWebGpuAvailable } from '../../hooks/useWebGpuAvailable';
 import { useToast } from '../../hooks/use-toast';
 import { deleteModel, downloadModel, isModelDownloaded } from '../../lib/assistant/model-download';
 import { getModelStorageInfo, formatStorageBytes, type ModelStorageInfo } from '../../lib/assistant/model-storage';
+import { useBackgroundTasks, type BackgroundTask } from '../../stores/backgroundTasks';
 import { log, LogLevel } from '../../lib/logger';
 import type { Profile } from '../../api/types';
 import type { ProfileSettings } from '../../stores/settings';
@@ -59,9 +60,29 @@ export function AssistantSection({
     ASSISTANT.webllmModels.find((m) => m.id === settings.assistantModelId) ?? ASSISTANT.webllmModels[0];
 
   const [downloadStatus, setDownloadStatus] = useState<DownloadStatus>('checking');
-  const [downloading, setDownloading] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [storageInfo, setStorageInfo] = useState<ModelStorageInfo | undefined>(undefined);
+
+  // The backgroundTasks store is the authoritative source for download
+  // progress: `downloadModel` reports into it directly, so deriving
+  // `downloading` from the store (instead of a local flag set/cleared around
+  // the `handleDownload` promise chain) means a stalled follow-up await in
+  // this component can never strand the button in "Downloading...". Selects
+  // the raw `tasks` array (rule 30 field selector) and derives the match
+  // locally rather than subscribing with an inline `.find()` selector, which
+  // would return a new reference every render and defeat memoization.
+  const tasks = useBackgroundTasks((s) => s.tasks);
+  const modelId = settings.assistantModelId;
+
+  const downloadTask = useMemo<BackgroundTask | undefined>(() => {
+    let match: BackgroundTask | undefined;
+    for (const task of tasks) {
+      if (task.type === 'download' && task.metadata?.modelId === modelId) match = task;
+    }
+    return match;
+  }, [tasks, modelId]);
+
+  const downloading = downloadTask?.status === 'pending' || downloadTask?.status === 'in_progress';
 
   // Latest selected model id, read *after* the awaits below resolve. The
   // select is disabled while downloading/deleting (primary guard), but a
@@ -97,6 +118,51 @@ export function AssistantSection({
     };
   }, [settings.assistantModelId]);
 
+  // Re-checks the cache the moment this model's download task reaches a
+  // terminal state, instead of waiting on `handleDownload`'s own promise
+  // chain to resolve (which is what used to strand the button in
+  // "Downloading..." if that chain stalled after the task had already
+  // completed). Keyed on the task's id+status rather than the task object
+  // itself so it only re-runs on an actual transition, not on every
+  // `updateProgress` tick (those keep `status` at 'in_progress').
+  useEffect(() => {
+    if (!downloadTask) return;
+    const taskModelId = downloadTask.metadata?.modelId;
+    if (!taskModelId) return;
+
+    if (downloadTask.status === 'completed') {
+      let cancelled = false;
+      isModelDownloaded(taskModelId)
+        .then((downloaded) => {
+          if (cancelled) return;
+          setDownloadStatus(downloaded ? 'downloaded' : 'not-downloaded');
+          if (!downloaded) {
+            toast({
+              title: t('common.error'),
+              description: t('settings.assistant.download_failed'),
+              variant: 'destructive',
+            });
+          }
+        })
+        .catch((error) => {
+          log.assistant('isModelDownloaded re-check failed', LogLevel.ERROR, { modelId: taskModelId, error });
+          if (!cancelled) setDownloadStatus('not-downloaded');
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (downloadTask.status === 'failed') {
+      setDownloadStatus('not-downloaded');
+      toast({
+        title: t('common.error'),
+        description: t('settings.assistant.download_failed'),
+        variant: 'destructive',
+      });
+    }
+  }, [downloadTask?.id, downloadTask?.status, downloadTask?.metadata?.modelId, t, toast]);
+
   // Storage info (backend/usage/persisted/OS path) is only meaningful once
   // there's something on disk to describe, and re-probed whenever a
   // download/delete flips `downloadStatus`, so a Download right after this
@@ -120,38 +186,19 @@ export function AssistantSection({
     };
   }, [downloadStatus, settings.assistantModelId]);
 
-  const handleDownload = useCallback(async () => {
+  // Only starts the download; `downloadModel` reports progress/completion/
+  // failure onto its background task itself (the effect above reacts to
+  // that), so this no longer owns a local "in flight" flag or gates button
+  // state on its own promise settling.
+  const handleDownload = useCallback(() => {
     const modelId = settings.assistantModelId;
-    setDownloading(true);
-    try {
-      // `downloadModel` reports failures onto its background task rather
-      // than rejecting (so the task drawer shows the error), so the real
-      // outcome has to be read back from the cache instead of a catch here.
-      await downloadModel(modelId);
-      const downloaded = await isModelDownloaded(modelId);
-      if (!mountedRef.current || selectedModelIdRef.current !== modelId) return;
-      setDownloadStatus(downloaded ? 'downloaded' : 'not-downloaded');
-      if (!downloaded) {
-        toast({
-          title: t('common.error'),
-          description: t('settings.assistant.download_failed'),
-          variant: 'destructive',
-        });
-      }
-    } catch (error) {
+    downloadModel(modelId).catch((error) => {
+      // `downloadModel` normally reports failures onto its background task
+      // rather than rejecting; this only catches an unexpected throw before
+      // that task bookkeeping runs.
       log.assistant('downloadModel threw', LogLevel.ERROR, { modelId, error });
-      if (mountedRef.current && selectedModelIdRef.current === modelId) {
-        setDownloadStatus('not-downloaded');
-        toast({
-          title: t('common.error'),
-          description: t('settings.assistant.download_failed'),
-          variant: 'destructive',
-        });
-      }
-    } finally {
-      if (mountedRef.current) setDownloading(false);
-    }
-  }, [settings.assistantModelId, t, toast]);
+    });
+  }, [settings.assistantModelId]);
 
   const handleDelete = useCallback(async () => {
     const modelId = settings.assistantModelId;

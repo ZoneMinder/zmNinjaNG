@@ -15,6 +15,12 @@ export interface BackgroundTask {
     description?: string;
     fileSize?: number;
     bytesProcessed?: number;
+    /** Assistant model download tasks (`lib/assistant/model-download.ts`) tag
+     *  their task with the model id so `AssistantSection` can match a task
+     *  back to the currently selected model without relying on `description`
+     *  (which is also the model id today, but isn't guaranteed to stay that
+     *  way). */
+    modelId?: string;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     [key: string]: any; // Allow type-specific metadata
   };
