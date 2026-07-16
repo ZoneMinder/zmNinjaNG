@@ -164,6 +164,7 @@ export function AskPanel() {
   const append = useAssistantStore((s) => s.append);
   const setRunning = useAssistantStore((s) => s.setRunning);
   const clearActivities = useAssistantStore((s) => s.clearActivities);
+  const reset = useAssistantStore((s) => s.reset);
 
   const [input, setInput] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -192,6 +193,19 @@ export function AskPanel() {
   const handleAbort = () => {
     resolveConfirm(false);
     abortControllerRef.current?.abort();
+  };
+
+  // Frees the model's context window (refs #246): a long thread otherwise
+  // keeps growing toward ASSISTANT's context-length cap. Disabled while a
+  // turn is running (see the button below) instead of aborting it, so this
+  // never has to race handleAbort's cleanup.
+  const handleClear = () => {
+    if (!profileId) return;
+    reset(profileId);
+    clearActivities();
+    setError(null);
+    setNotConfigured(false);
+    setInput('');
   };
 
   const handleSend = async () => {
@@ -304,7 +318,20 @@ export function AskPanel() {
 
   return (
     <div className="flex h-full flex-col" data-testid="ask-panel">
-      <div className="border-b px-3 py-2 text-sm font-medium">{t('assistant.title')}</div>
+      <div className="flex items-center justify-between border-b px-3 py-2">
+        <span className="text-sm font-medium">{t('assistant.title')}</span>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={handleClear}
+          disabled={running || thread.length === 0}
+          aria-label={t('assistant.clear')}
+          data-testid="assistant-clear"
+        >
+          {t('assistant.clear')}
+        </Button>
+      </div>
 
       <div className="flex-1 space-y-2 overflow-y-auto p-3">
         {thread.map((msg, i) => {

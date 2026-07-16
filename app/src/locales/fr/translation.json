@@ -1232,6 +1232,7 @@
   },
   "assistant": {
     "title": "Assistant",
+    "clear": "Effacer",
     "placeholder": "Posez une question sur vos caméras...",
     "send": "Envoyer",
     "abort": "Arrêter",

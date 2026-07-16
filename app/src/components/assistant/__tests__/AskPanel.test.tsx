@@ -204,4 +204,41 @@ describe('AskPanel', () => {
 
     expect(screen.queryByTestId('assistant-result-cards')).not.toBeInTheDocument();
   });
+
+  it('clears the profile thread when Clear is clicked', async () => {
+    useAssistantStore.getState().append('p1', { role: 'user', text: 'which monitor was busiest?' });
+    useAssistantStore.getState().append('p1', {
+      role: 'assistant',
+      text: 'The front door camera was busiest.',
+      toolCalls: [],
+    });
+
+    render(<AskPanel />);
+
+    expect(screen.getByTestId('assistant-message-user')).toBeInTheDocument();
+    const clearButton = screen.getByTestId('assistant-clear');
+    expect(clearButton).toBeEnabled();
+
+    const user = userEvent.setup();
+    await user.click(clearButton);
+
+    expect(screen.queryByTestId('assistant-message-user')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('assistant-message-assistant')).not.toBeInTheDocument();
+    expect(useAssistantStore.getState().getThread('p1')).toEqual([]);
+  });
+
+  it('disables Clear when the thread is empty', () => {
+    render(<AskPanel />);
+
+    expect(screen.getByTestId('assistant-clear')).toBeDisabled();
+  });
+
+  it('disables Clear while a turn is running, even with a non-empty thread', () => {
+    useAssistantStore.getState().append('p1', { role: 'user', text: 'is the front door armed?' });
+    useAssistantStore.setState({ running: true });
+
+    render(<AskPanel />);
+
+    expect(screen.getByTestId('assistant-clear')).toBeDisabled();
+  });
 });
