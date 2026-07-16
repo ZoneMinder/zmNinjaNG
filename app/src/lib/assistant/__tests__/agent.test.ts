@@ -39,6 +39,27 @@ describe('runAssistantTurn', () => {
     expect(h.confirm).toHaveBeenCalledOnce();
   });
 
+  it('reports an error result and never executes when buildConfirm rejects', async () => {
+    const p = new MockProvider();
+    p.setScript([
+      { toolCalls: [{ id: 'c1', name: 'delete_event', input: { eventId: '999' } }] },
+      { text: 'Sorry, I could not confirm that.', toolCalls: [] },
+    ]);
+    const h = host();
+    const execute = vi.fn().mockResolvedValue({ output: 'deleted' });
+    vi.spyOn(await import('../tools'), 'getToolByName').mockReturnValue({
+      name: 'delete_event', description: '', schema: {}, destructive: true,
+      buildConfirm: vi.fn().mockRejectedValue(new Error('event not found')),
+      execute,
+    } as never);
+    const out = await runAssistantTurn(baseOpts(p, h, [{ role: 'user', text: 'delete event 999' }]));
+    const toolMsg = out.find((m) => m.role === 'tool');
+    expect(toolMsg?.toolResults?.[0].isError).toBe(true);
+    expect(toolMsg?.toolResults?.[0].output).toContain('event not found');
+    expect(execute).not.toHaveBeenCalled();
+    expect(h.confirm).not.toHaveBeenCalled();
+  });
+
   it('stops at the iteration cap', async () => {
     const p = new MockProvider();
     p.setScript(Array.from({ length: 10 }, () => ({ toolCalls: [{ id: 'c', name: 'list_monitors', input: {} }] })));

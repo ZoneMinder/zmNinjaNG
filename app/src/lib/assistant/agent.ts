@@ -60,9 +60,18 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
       // confirm (including one interrupted by abort, via `.catch(() => false)`)
       // short-circuits to the fixed decline result and `continue`s past `execute`.
       if (def.destructive) {
-        const req = def.buildConfirm
-          ? await def.buildConfirm(call.input, ctx)
-          : { toolName: def.name, messageKey: 'assistant.confirm.generic', messageParams: {}, params: call.input };
+        let req;
+        try {
+          req = def.buildConfirm
+            ? await def.buildConfirm(call.input, ctx)
+            : { toolName: def.name, messageKey: 'assistant.confirm.generic', messageParams: {}, params: call.input };
+        } catch (e) {
+          const message = e instanceof Error ? e.message : 'Failed to prepare confirmation';
+          log.assistant(`buildConfirm for "${call.name}" threw`, LogLevel.ERROR, { toolName: call.name, error: e });
+          results.push({ callId: call.id, output: message, isError: true });
+          host.onActivity({ toolName: call.name, status: 'error' });
+          continue;
+        }
         const ok = await host.confirm(req).catch(() => false);
         if (!ok) {
           log.assistant(`Destructive tool "${call.name}" declined`, LogLevel.INFO, { toolName: call.name });
