@@ -14,6 +14,7 @@ montage
 events
 timeline
 settings
+assistant
 server
 notifications
 logs

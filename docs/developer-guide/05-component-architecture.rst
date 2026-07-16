@@ -18,7 +18,8 @@ How ``components/`` is organized
 ``src/components/`` splits three ways. Feature folders (``monitors/``,
 ``montage/``, ``events/``, ``dashboard/``, ``kiosk/``, ``timeline/``,
 ``settings/``, ``notifications/``, ``filters/``, ``layout/``,
-``monitor-detail/``) hold components that only make sense inside that feature.
+``monitor-detail/``, ``assistant/``) hold components that only make sense
+inside that feature.
 ``ui/`` holds unstyled primitives, mostly shadcn/ui wrappers over Radix, that
 know nothing about ZoneMinder. ``common/`` holds three app-aware but
 feature-agnostic components (``RefreshButton``, ``PageContainer``,
@@ -1237,6 +1238,69 @@ on first run so a backlog present at mount does not fire a burst of invalidation
 
 :doc:`call-flows` traces both halves: "A push notification, from registration to
 tap" and "Live notifications over the Event Server websocket".
+
+The in-app assistant (Ask)
+---------------------------
+
+Pressing ``?`` (or typing a leading ``?`` in the command palette, or its "Ask"
+item) swaps the command palette into a chat, ``AskPanel``
+(``components/assistant/AskPanel.tsx``), that answers questions about your
+ZoneMinder server and, when you ask for a change, asks you to confirm it
+first. :doc:`call-flows`'s "Asking the assistant a question" traces one send
+end to end through ``lib/assistant/``; this section covers the component
+pieces on the React side of that trace.
+
+**Entry point.** ``KeyboardShortcuts.tsx``'s global ``?`` handler and
+``CommandPalette.tsx``'s leading-``?`` input both call
+``useCommandPaletteStore``'s ``openAsk()``, which flips the palette's ``mode``
+to ``'ask'``; the palette then renders ``<AskPanel/>`` in place of its normal
+results list, inside the same dialog shell. Neither entry point does anything
+when the assistant is disabled in Settings (``settings.assistantEnabled``):
+the ``?`` key falls back to the keyboard-shortcuts help overlay instead.
+
+**Driving a turn.** ``AskPanel``'s ``handleSend`` appends the typed message to
+the per-profile thread in ``useAssistantStore``, builds a system prompt from
+the current profile's monitor list and ZM version (``buildSystemPrompt``),
+and calls ``runAssistantTurn`` with an ``AbortController`` it owns. That same
+controller's ``signal`` is what an abort or an unmount cancels, and unmounting
+also resolves any pending confirmation as declined so the agent loop never
+hangs waiting on a panel that is gone.
+
+**Rendering the model's answer.** ``agent.ts`` never renders user-facing text
+itself; the only text it emits outside a normal reply is the sentinel
+``__i18n:assistant.iteration_cap_reached`` when the tool-loop cap is hit.
+``AskPanel`` is the one place that resolves that contract:
+
+.. code:: tsx
+
+   function renderAssistantText(text: string | undefined, t: TFunction) {
+     if (!text) return null;
+     if (text.startsWith(I18N_SENTINEL)) {
+       return <p className="text-sm">{t(text.slice(I18N_SENTINEL.length))}</p>;
+     }
+     return <Markdown source={text} />;
+   }
+
+Every other assistant message renders as Markdown directly: the model writes
+in the user's language already (the system prompt tells it to), so there is
+no translation lookup for a normal reply, only for this one fixed sentinel
+(rule 5's "never hardcode user-facing strings" still holds, it just applies
+to the sentinel's key, not to arbitrary model output).
+
+**Confirming a destructive tool.** ``useAssistantHost``
+(``components/assistant/useAssistantHost.ts``) is the ``AssistantHost``
+implementation ``AskPanel`` hands to ``runAssistantTurn``: its ``confirm``
+parks the ``ConfirmRequest`` in local state and returns a Promise that only
+``resolveConfirm`` can settle. ``AskPanel`` renders ``AssistantConfirmCard``
+whenever that state is non-null, and wires its Accept/Cancel buttons straight
+to ``resolveConfirm(true)`` / ``resolveConfirm(false)``. ``navigate`` on the
+same host closes the palette (``setOpen(false)``) before routing, so a
+``navigate`` tool call collapses the panel as a side effect instead of
+leaving a chat window open behind the page it just navigated to.
+
+**Used by:** ``CommandPalette.tsx`` (the only mount point). ``useAssistantStore``
+holds the per-profile conversation thread and is not persisted, closing the
+app clears it.
 
 Test attributes
 ---------------

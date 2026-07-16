@@ -40,6 +40,10 @@ Hover preview enlarges a feed or event in place when you hover over it on deskto
 
 The **playback speed** control (0.5x, 1x, 1.5x, 2x, 4x) sets how fast an event preview plays. Live monitor previews open a fresh stream while the preview is on screen and close it when you move away.
 
+## Assistant
+
+Enable and configure the on-device chat assistant ("Ask"), which answers questions about your cameras and events and can change monitor or event state after you confirm each action. See {doc}`assistant` for the full guide, including how confirmation works and what stays on-device.
+
 ## Hidden Monitors
 
 Hide monitors you do not want to see in this profile. A hidden monitor is removed from the Monitors list, Montage, Dashboard, the Events list, and the Timeline, and its events are hidden too. The setting is per profile, so hiding a monitor in one profile does not affect another.

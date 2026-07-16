@@ -1080,6 +1080,77 @@ gate any URL that the browser or native runtime loads directly with a token
 embedded in it. :doc:`07-api-and-data-fetching` covers the leeway window and
 the refresh-then-relogin fallthrough.
 
+Assistant Agent and Providers (``lib/assistant/``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The store-free core behind the "Ask" panel: the component side is in
+:doc:`05-component-architecture`, and :doc:`call-flows`'s "Asking the
+assistant a question" traces one send end to end. Everything under
+``lib/assistant/`` is a plain function, no React import, no Zustand import:
+``agent.ts`` takes an ``AssistantHost`` interface instead, so the same loop
+runs against the real app and against tests without a DOM.
+
+``runAssistantTurn`` (``agent.ts``) is a bounded loop
+(``ASSISTANT.maxToolIterations``, 6) that calls
+``provider.chat(history, TOOLS, system, signal)``, resolves each returned
+``ToolCall`` via ``getToolByName`` (``tools.ts``), and executes it. ``TOOLS``
+is the registry: ``readOnlyTools`` (``tools-readonly.ts``, no confirmation
+needed, monitor/event lookups, server health, navigation) concatenated with
+``destructiveTools`` (``tools-destructive.ts``, arm/disarm a monitor, trigger
+or cancel an alarm, change a monitor's function, change the run state, delete
+or archive an event). The model picks which tool to call from that one list;
+the app, not the model, decides whether the call needs a human to confirm it
+first.
+
+Destructive tools are the one place the app hands the model write access to
+the ZoneMinder server, so ``agent.ts`` gates every one of them behind a single
+choke point:
+
+.. code:: typescript
+
+   if (def.destructive) {
+     req = def.buildConfirm
+       ? await def.buildConfirm(call.input, ctx)
+       : { toolName: def.name, messageKey: 'assistant.confirm.generic', messageParams: {}, params: call.input };
+     const ok = await host.confirm(req).catch(() => false);
+     if (!ok) {
+       results.push({ callId: call.id, output: 'User declined this action.' });
+       continue; // execute() never runs
+     }
+   }
+
+There is no second branch that reaches ``def.execute`` for a destructive
+tool: a thrown ``buildConfirm``, a declined confirm, or an aborted turn all
+short-circuit to a fixed "declined" or error result. ``buildConfirm`` itself
+only builds the request, for example ``deleteEventTool`` fetches the event
+first so the confirmation names the real monitor and start time instead of a
+bare id; it never calls ``confirm`` itself, that belongs to the loop above.
+
+``providers/provider.ts``'s ``getAssistantProvider`` decides which model
+answers:
+
+.. code:: typescript
+
+   export function getAssistantProvider(): AssistantProvider {
+     if (isAssistantTestMode()) return sharedMockProvider;
+     throw new Error(PROVIDER_NOT_AVAILABLE_MESSAGE);
+   }
+
+Phase 1 (this codebase today) wires only the deterministic ``MockProvider``
+(``providers/mock.ts``), reachable solely in non-production builds behind
+``isAssistantTestMode()``; every real build path throws, which is why the
+Settings assistant section shows the model picker but marks download "coming
+in the next update" (``components/settings/AssistantSection.tsx``). Phase 2
+replaces the ``throw`` with an on-device provider built on ``@mlc-ai/web-llm``
+(model ids and download sizes in ``ASSISTANT.webllmModels``,
+``lib/zmninja-ng-constants.ts``) that runs in the browser via WebGPU: no
+message or tool result in this loop is ever sent to a server other than the
+ZoneMinder server the tool call itself targets.
+
+**Used by:** ``components/assistant/AskPanel.tsx`` (drives one turn per
+send), ``components/assistant/useAssistantHost.ts`` (implements the
+``AssistantHost`` the loop calls into).
+
 Shared Hooks (hooks/)
 ---------------------
 

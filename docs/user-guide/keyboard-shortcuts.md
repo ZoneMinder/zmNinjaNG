@@ -1,7 +1,8 @@
 # Keyboard Shortcuts
 
 On desktop and the web you can move around with the keyboard. Press `?` at any
-time to see this list in the app.
+time to see this list in the app, or, if the Assistant is enabled (see
+{doc}`assistant`), to open it instead.
 
 Shortcuts are ignored while you are typing in a text field, when a modifier key
 (Ctrl, Cmd, Alt) is held, or when the kiosk lock is on. TV mode turns them off
@@ -51,4 +52,4 @@ or wait about a second and it goes on its own. Press `Esc` to cancel.
 |-----|--------|
 | `/` | Open the "Jump to" command palette |
 | `Esc` | Go back. Closes an open dialog first. |
-| `?` | Show the keyboard shortcuts |
+| `?` | Open the Assistant, if enabled (see {doc}`assistant`); otherwise show the keyboard shortcuts |

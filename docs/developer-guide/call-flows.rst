@@ -2007,6 +2007,172 @@ The badge decorates the Events button, and tapping that button lands the user in
 Flow 5 filtered to the new window. The polling cadence that keeps the count
 current is Flow 11.
 
+Flow 19: Asking the assistant a question
+-----------------------------------------
+
+Typing ``?`` opens a chat box that looks like it talks to a cloud service, but
+does not: the model meant to answer it runs entirely inside the browser via
+WebGPU, and the tool-use loop that decides which ZoneMinder API calls to make,
+plus the confirmation gate that guards the destructive ones, never send a
+message or a tool result anywhere except the user's own ZoneMinder server.
+Phase 1, this codebase, ships that whole loop and its confirmation gate
+already wired and tested; the only piece Phase 2 adds is the on-device model
+itself. ``getAssistantProvider`` throws on every real build today, so a
+deterministic test-mode script stands in for the model while everything
+downstream of it runs for real.
+
+.. mermaid::
+
+   sequenceDiagram
+       autonumber
+       participant Key as Ask entry point
+       participant Panel as AskPanel
+       participant Agent as runAssistantTurn
+       participant Prov as AssistantProvider
+       participant Tool as Tool executor
+       participant Host as Confirm host
+       participant ZM as ZoneMinder
+
+       Key->>Panel: openAsk(), palette renders AskPanel
+       Panel->>Agent: runAssistantTurn(history, system)
+       Agent->>Prov: provider.chat(history, TOOLS)
+       Prov-->>Agent: toolCalls
+       Agent->>Tool: getToolByName, buildConfirm if destructive
+       Agent->>Host: host.confirm(request)
+       Host-->>Agent: accepted or declined
+       Note over Agent,Host: the only path to execute() for a destructive tool
+       Agent->>Tool: execute(input), only if accepted
+       Tool->>ZM: api/* request
+       ZM-->>Tool: response
+       Agent-->>Panel: updated history
+       Panel->>Panel: render markdown / activities
+
+#. **The `?` key opens Ask mode.** ``components/KeyboardShortcuts.tsx``'s
+   ``onKeyDown`` treats ``?`` as dual-purpose: when the assistant is enabled
+   (``settings.assistantEnabled``) it calls ``useCommandPaletteStore``'s
+   ``openAsk()`` instead of showing the shortcuts help overlay. Typing a
+   leading ``?`` into the command palette's own input
+   (``components/CommandPalette.tsx``) is the second entry point, same store
+   call. This branch has to be checked first: everything after it assumes Ask
+   mode, not plain command-palette navigation.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/KeyboardShortcuts.tsx#L133>`__
+   · → :doc:`05-component-architecture`
+
+#. **The store flips into Ask mode, not just open.** ``stores/commandPalette.ts``'s
+   ``openAsk`` sets ``{ open: true, mode: 'ask' }`` in one update, and
+   ``setOpen(false)`` always resets ``mode`` back to ``'command'``, so reopening
+   the palette with ``/`` never lands back in a stale Ask session.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/commandPalette.ts#L30>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **The palette swaps its body for the chat.** ``CommandPalette.tsx`` renders
+   ``<AskPanel/>`` in place of the results list whenever ``mode === 'ask'``,
+   inside the same ``Dialog``; the top input keeps handling text, but arrow-key
+   and Enter handling is handed off, ``AskPanel`` owns its own keydown.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/CommandPalette.tsx#L178>`__
+   · → :doc:`05-component-architecture`
+
+#. **Sending a message starts one turn.** ``AskPanel``'s ``handleSend`` appends
+   the user's text to the per-profile thread in ``useAssistantStore``, builds a
+   system prompt from the current profile's monitor list and ZM version
+   (``buildSystemPrompt``), and creates the ``AbortController`` this turn runs
+   under.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/assistant/AskPanel.tsx#L112>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **The provider decides real model vs. test script.** ``getAssistantProvider``
+   (``lib/assistant/providers/provider.ts``) returns the deterministic
+   ``MockProvider`` only when ``isAssistantTestMode()`` is true (a
+   non-production build with a flag e2e sets); every other path throws
+   ``PROVIDER_NOT_AVAILABLE_MESSAGE``, which is why the Settings assistant
+   section marks model download "coming in the next update". Phase 2 replaces
+   this branch with an on-device WebLLM model, never a call to a third-party
+   server.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/providers/provider.ts#L23>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **The tool-use loop.** ``runAssistantTurn`` (``lib/assistant/agent.ts``)
+   calls ``provider.chat(history, TOOLS, system, signal)`` in a loop capped at
+   ``ASSISTANT.maxToolIterations`` (6 turns), so a model that keeps calling
+   tools cannot run forever; hitting the cap ends the loop with the
+   ``__i18n:assistant.iteration_cap_reached`` sentinel instead of a real reply.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/agent.ts#L37>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **Resolve each tool call by name.** For every ``ToolCall`` the model
+   returns, ``getToolByName`` (``lib/assistant/tools.ts``) looks it up in
+   ``TOOLS``, the concatenation of ``readOnlyTools`` and ``destructiveTools``;
+   an unresolved name becomes an error result instead of throwing, so one bad
+   call cannot crash the turn.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/tools.ts#L18>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **Build the confirmation before asking.** ``tools-destructive.ts``'s
+   ``buildConfirm`` never calls ``confirm`` itself, it only fetches whatever
+   detail the message needs; ``deleteEventTool`` calls ``getEvent`` first so
+   the confirmation names the real monitor and start time, not a bare id.
+   Building it here, next to the tool's ``execute``, keeps each destructive
+   tool's message logic with the tool instead of duplicated in the agent loop.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/tools-destructive.ts#L157>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **The confirm gate: the one path to `execute()`.** Back in ``agent.ts``,
+   ``runAssistantTurn`` awaits ``host.confirm(req)`` and only proceeds to
+   ``def.execute`` if it resolves ``true``; a thrown ``buildConfirm``, a
+   declined confirm, or an aborted turn all short-circuit to a fixed "declined"
+   or error result instead. The file's own header comment calls this out as the
+   single choke point: no other branch reaches ``execute`` for a destructive
+   tool.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/agent.ts#L75>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **The host bridges the store-free loop to React.** ``useAssistantHost``
+   (``components/assistant/useAssistantHost.ts``) is the ``AssistantHost``
+   ``AskPanel`` hands to the loop; its ``confirm`` parks the request in local
+   state and returns a Promise that only ``resolveConfirm`` (wired to the
+   confirm card's buttons, an abort, or an unmount) can settle. Nothing in
+   ``agent.ts`` imports React or a store directly; this hook is the only place
+   that closes that gap for the real app.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/assistant/useAssistantHost.ts#L35>`__
+   · → :doc:`05-component-architecture`
+
+#. **The card renders and waits.** ``AssistantConfirmCard`` shows the
+   localized ``messageKey``/``messageParams`` and a collapsible raw-params
+   block, then calls ``onAccept`` or ``onCancel``, which resolve the host's
+   Promise. Cancel is the default-focused button, so a stray Enter keypress on
+   a destructive confirmation declines it rather than running it.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/assistant/AssistantConfirmCard.tsx#L23>`__
+   · → :doc:`05-component-architecture`
+
+#. **Only acceptance reaches the ZoneMinder server.** Resolving ``true`` lets
+   ``runAssistantTurn`` call ``def.execute``, which for ``delete_event`` calls
+   ``deleteEvent`` (``api/events.ts``), the same authenticated request every
+   other delete in the app sends. There is no separate "assistant" API path.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/events.ts#L451>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **Results feed back into history.** Each tool's output becomes a
+   ``ToolResult``, pushed as one ``role: 'tool'`` message; the loop then calls
+   ``provider.chat`` again with the extended history, so the model sees what
+   its own tool call returned before deciding whether to call another tool or
+   answer in text.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/agent.ts#L98>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **Render the reply.** Once a turn returns with no more tool calls,
+   ``AskPanel`` appends only the new tail of messages to the store and renders
+   assistant text as Markdown, except the one sentinel ``agent.ts`` ever emits
+   itself (``__i18n:assistant.iteration_cap_reached``), which
+   ``renderAssistantText`` localizes with ``t()`` instead of treating as
+   literal text.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/assistant/AskPanel.tsx#L70>`__
+   · → :doc:`05-component-architecture`
+
+Typing text without a leading ``?`` skips all of this and returns to plain
+command-palette navigation: a direct ``navigate()`` call with no model, no
+tools, and no confirmation gate, documented alongside this entry point in
+:doc:`05-component-architecture`.
+
 These flows touch most of the moving parts of the app. When you need to change
 something, find the nearest scene, open its ``source`` link to land on the exact
 code, and follow the ``→`` link for the chapter that explains that layer.
