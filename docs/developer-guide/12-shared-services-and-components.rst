@@ -1104,7 +1104,8 @@ first.
 
 Destructive tools are the one place the app hands the model write access to
 the ZoneMinder server, so ``agent.ts`` gates every one of them behind a single
-choke point:
+choke point (simplified from ``agent.ts``: the real loop wraps this in a
+try/catch that turns a thrown error into a failed tool result):
 
 .. code:: typescript
 
