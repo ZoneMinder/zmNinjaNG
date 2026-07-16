@@ -420,6 +420,29 @@ export async function getEvent(eventId: string): Promise<EventData> {
   return validated.event;
 }
 
+export interface ConsoleEventCount {
+  monitorId: string;
+  count: number;
+}
+
+/**
+ * Per-monitor event counts over an interval (e.g. "1 hour", "1 day"). Hidden
+ * monitors are dropped by the caller against the monitor list.
+ *
+ * Previously unused endpoint (refs #246). The interval token format ("1
+ * hour", "1 day", ...) needs verifying against a live ZM server at device
+ * time; it is not exercised by any e2e test.
+ */
+export async function getConsoleEvents(interval: string): Promise<ConsoleEventCount[]> {
+  const client = getApiClient();
+  const url = `/events/consoleEvents/${encodeURIComponent(interval)}.json`;
+  const response = await client.get<{ results?: Record<string, number> }>(url, {
+    intent: `Fetch console event counts (${interval})`,
+  });
+  const results = response.data.results ?? {};
+  return Object.entries(results).map(([monitorId, count]) => ({ monitorId, count: Number(count) }));
+}
+
 /**
  * Delete an event.
  * 
