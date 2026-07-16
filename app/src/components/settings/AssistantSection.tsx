@@ -13,7 +13,7 @@
  * in flight, to enable/disable the two buttons.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Switch } from '../ui/switch';
 import { Button } from '../ui/button';
@@ -61,6 +61,24 @@ export function AssistantSection({
   const [downloading, setDownloading] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  // Latest selected model id, read *after* the awaits below resolve. The
+  // select is disabled while downloading/deleting (primary guard), but a
+  // parent could still push a different `assistantModelId` mid-operation
+  // (e.g. profile switch), so a stale download/delete resolving must not
+  // clobber the status of whatever model is displayed by then.
+  const selectedModelIdRef = useRef(settings.assistantModelId);
+  useEffect(() => {
+    selectedModelIdRef.current = settings.assistantModelId;
+  }, [settings.assistantModelId]);
+
+  // Guards post-await setState from running after unmount.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     setDownloadStatus('checking');
@@ -86,6 +104,7 @@ export function AssistantSection({
       // outcome has to be read back from the cache instead of a catch here.
       await downloadModel(modelId);
       const downloaded = await isModelDownloaded(modelId);
+      if (!mountedRef.current || selectedModelIdRef.current !== modelId) return;
       setDownloadStatus(downloaded ? 'downloaded' : 'not-downloaded');
       if (!downloaded) {
         toast({
@@ -96,14 +115,16 @@ export function AssistantSection({
       }
     } catch (error) {
       log.assistant('downloadModel threw', LogLevel.ERROR, { modelId, error });
-      setDownloadStatus('not-downloaded');
-      toast({
-        title: t('common.error'),
-        description: t('settings.assistant.download_failed'),
-        variant: 'destructive',
-      });
+      if (mountedRef.current && selectedModelIdRef.current === modelId) {
+        setDownloadStatus('not-downloaded');
+        toast({
+          title: t('common.error'),
+          description: t('settings.assistant.download_failed'),
+          variant: 'destructive',
+        });
+      }
     } finally {
-      setDownloading(false);
+      if (mountedRef.current) setDownloading(false);
     }
   }, [settings.assistantModelId, t, toast]);
 
@@ -112,16 +133,20 @@ export function AssistantSection({
     setDeleting(true);
     try {
       await deleteModel(modelId);
-      setDownloadStatus('not-downloaded');
+      if (mountedRef.current && selectedModelIdRef.current === modelId) {
+        setDownloadStatus('not-downloaded');
+      }
     } catch (error) {
       log.assistant('deleteModel failed', LogLevel.ERROR, { modelId, error });
-      toast({
-        title: t('common.error'),
-        description: t('settings.assistant.delete_failed'),
-        variant: 'destructive',
-      });
+      if (mountedRef.current && selectedModelIdRef.current === modelId) {
+        toast({
+          title: t('common.error'),
+          description: t('settings.assistant.delete_failed'),
+          variant: 'destructive',
+        });
+      }
     } finally {
-      setDeleting(false);
+      if (mountedRef.current) setDeleting(false);
     }
   }, [settings.assistantModelId, t, toast]);
 
@@ -153,6 +178,7 @@ export function AssistantSection({
                 onChange={(e) =>
                   currentProfile && updateSettings(currentProfile.id, { assistantModelId: e.target.value })
                 }
+                disabled={downloading || deleting}
                 data-testid="assistant-model-select"
               >
                 {ASSISTANT.webllmModels.map((m) => (

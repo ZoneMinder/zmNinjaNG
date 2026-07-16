@@ -9,6 +9,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { AssistantSection } from '../AssistantSection';
 import { DEFAULT_SETTINGS } from '../../../stores/settings';
+import { ASSISTANT } from '../../../lib/zmninja-ng-constants';
+
+const MODEL_A = ASSISTANT.webllmModels[0].id;
+const MODEL_B = ASSISTANT.webllmModels[1].id;
 
 const isModelDownloadedMock = vi.fn();
 const downloadModelMock = vi.fn();
@@ -158,5 +162,103 @@ describe('AssistantSection download/delete', () => {
     await waitFor(() => expect(toastMock).toHaveBeenCalled());
     expect(toastMock.mock.calls[0][0]).toMatchObject({ variant: 'destructive' });
     await waitFor(() => expect(downloadButton).not.toBeDisabled());
+  });
+
+  it('disables the model select while a download is in flight', async () => {
+    isModelDownloadedMock.mockResolvedValue(false);
+    let resolveDownload: () => void = () => {};
+    downloadModelMock.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveDownload = resolve;
+        })
+    );
+
+    render(
+      <AssistantSection
+        settings={enabledSettings}
+        update={vi.fn()}
+        currentProfile={profile}
+        updateSettings={vi.fn()}
+      />
+    );
+
+    const downloadButton = await screen.findByTestId('assistant-model-download');
+    await waitFor(() => expect(downloadButton).not.toBeDisabled());
+    expect(screen.getByTestId('assistant-model-select')).not.toBeDisabled();
+
+    fireEvent.click(downloadButton);
+    await waitFor(() => expect(screen.getByTestId('assistant-model-select')).toBeDisabled());
+
+    await act(async () => {
+      resolveDownload();
+    });
+
+    await waitFor(() => expect(screen.getByTestId('assistant-model-select')).not.toBeDisabled());
+  });
+
+  it('does not let a download resolving for model A overwrite the status displayed after switching to model B', async () => {
+    // Call 1: mount check for model A -> not downloaded.
+    // Call 2: switch to model B -> B is already downloaded.
+    // Call 3: A's downloadModel finally resolves, so handleDownload's
+    // post-await re-check for A runs, but by then B is selected; the
+    // component must not let it overwrite B's "downloaded" status.
+    isModelDownloadedMock
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(true);
+
+    let resolveDownload: () => void = () => {};
+    downloadModelMock.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveDownload = resolve;
+        })
+    );
+
+    const { rerender } = render(
+      <AssistantSection
+        settings={enabledSettings}
+        update={vi.fn()}
+        currentProfile={profile}
+        updateSettings={vi.fn()}
+      />
+    );
+
+    const downloadButton = await screen.findByTestId('assistant-model-download');
+    await waitFor(() => expect(downloadButton).not.toBeDisabled());
+
+    // Start the download for model A (the default selected model).
+    fireEvent.click(downloadButton);
+    expect(downloadModelMock).toHaveBeenCalledWith(MODEL_A);
+
+    // User switches the selected model to B while A's download is still
+    // in flight (e.g. a profile-level settings push landing mid-download).
+    rerender(
+      <AssistantSection
+        settings={{ ...enabledSettings, assistantModelId: MODEL_B }}
+        update={vi.fn()}
+        currentProfile={profile}
+        updateSettings={vi.fn()}
+      />
+    );
+
+    // B is already downloaded. Both buttons stay disabled while A's download
+    // is still in flight (the global downloading flag), but the "Downloaded"
+    // status label is driven only by `downloadStatus`, so it already reflects
+    // B's real state here.
+    await waitFor(() => expect(screen.getByTestId('assistant-model-downloaded-status')).toBeInTheDocument());
+
+    // Now let A's stale download resolve.
+    await act(async () => {
+      resolveDownload();
+    });
+
+    // B's displayed status must be unaffected by A's stale resolution: still
+    // downloaded, Delete enabled, Download disabled, no error toast.
+    await waitFor(() => expect(screen.getByTestId('assistant-model-delete')).not.toBeDisabled());
+    expect(screen.getByTestId('assistant-model-download')).toBeDisabled();
+    expect(screen.getByTestId('assistant-model-downloaded-status')).toBeInTheDocument();
+    expect(toastMock).not.toHaveBeenCalled();
   });
 });
