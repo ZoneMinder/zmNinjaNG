@@ -1232,6 +1232,7 @@
       "error": "{{tool}} falló"
     },
     "iteration_cap_reached": "Detenido tras demasiados pasos. Prueba con una solicitud más simple.",
+    "parse_error": "No se pudo generar una respuesta. Prueba a reformular la pregunta.",
     "error_generic": "Error del asistente: {{error}}",
     "not_configured_cta": "El asistente en el dispositivo aún no está configurado. Abre Ajustes para activarlo.",
     "confirm": {

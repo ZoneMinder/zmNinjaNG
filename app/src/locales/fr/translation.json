@@ -1232,6 +1232,7 @@
       "error": "{{tool}} a échoué"
     },
     "iteration_cap_reached": "Arrêté après trop d'étapes. Essayez une demande plus simple.",
+    "parse_error": "Impossible de générer une réponse. Essayez de reformuler.",
     "error_generic": "Erreur de l'assistant : {{error}}",
     "not_configured_cta": "L'assistant embarqué n'est pas encore configuré. Ouvrez les Paramètres pour l'activer.",
     "confirm": {

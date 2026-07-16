@@ -1232,6 +1232,7 @@
       "error": "{{tool}} fehlgeschlagen"
     },
     "iteration_cap_reached": "Nach zu vielen Schritten gestoppt. Bitte einfacher formulieren.",
+    "parse_error": "Die Antwort konnte nicht verarbeitet werden. Bitte anders formulieren.",
     "error_generic": "Assistent-Fehler: {{error}}",
     "not_configured_cta": "Der On-Device-Assistent ist noch nicht eingerichtet. Öffne die Einstellungen, um ihn zu aktivieren.",
     "confirm": {

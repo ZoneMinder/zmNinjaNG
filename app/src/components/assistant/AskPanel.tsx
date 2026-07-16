@@ -78,7 +78,7 @@ function renderAssistantText(text: string | undefined, t: TFunction) {
 export function AskPanel() {
   const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
-  const { currentProfile } = useCurrentProfile();
+  const { currentProfile, settings } = useCurrentProfile();
   const profileId = currentProfile?.id;
 
   const { host, pendingConfirm, resolveConfirm } = useAssistantHost();
@@ -134,7 +134,7 @@ export function AskPanel() {
     abortControllerRef.current = controller;
 
     try {
-      const provider = getAssistantProvider();
+      const provider = getAssistantProvider(settings.assistantModelId);
 
       if (isAssistantTestMode() && window.__assistantMockScript) {
         sharedMockProvider.setScript(window.__assistantMockScript);

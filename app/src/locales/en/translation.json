@@ -1232,6 +1232,7 @@
       "error": "{{tool}} failed"
     },
     "iteration_cap_reached": "Stopped after too many steps. Try a simpler request.",
+    "parse_error": "Sorry, I had trouble putting together a response. Could you try rephrasing?",
     "error_generic": "Assistant error: {{error}}",
     "not_configured_cta": "The on-device assistant isn't set up yet. Open Settings to enable it.",
     "confirm": {
