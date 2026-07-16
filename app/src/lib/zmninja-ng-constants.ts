@@ -547,6 +547,9 @@ export const ASSISTANT = {
   maxListEventsLimit: 25,
   requestTimeoutMs: 120000,
   systemPromptMonitorCap: 50,
+  // Max characters of an event's Notes field kept in a list_events row (rule
+  // 11: truncate long text); get_event still returns the full Notes.
+  notesPreviewChars: 200,
   // Max characters of a tool call's JSON-stringified input shown inline next
   // to an activity step in AskPanel (rule 11: truncate long text).
   activityInputPreviewChars: 40,

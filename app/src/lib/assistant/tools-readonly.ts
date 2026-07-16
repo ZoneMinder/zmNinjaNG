@@ -9,41 +9,85 @@
 import { getMonitors, getMonitor, getAlarmStatus } from '../../api/monitors';
 import { getEvents, getEvent, getConsoleEvents } from '../../api/events';
 import type { EventFilters } from '../../api/events';
-import { getLoad, getDiskPercent, getDaemonCheck } from '../../api/server';
+import { getLoad, getDiskPercent, getDaemonCheck, getStorages, getServers } from '../../api/server';
+import type { Storage } from '../../api/server';
 import { getVersion } from '../../api/auth';
 import { getGroups } from '../../api/groups';
 import { getTags, getEventTags, extractUniqueTags } from '../../api/tags';
+import type { MonitorData } from '../../api/types';
 import { ASSISTANT } from '../zmninja-ng-constants';
 import { parseDetectedObjects } from '../event/event-detection';
 import type { ToolDefinition } from './types';
 import { safeExecute, NAVIGATE_ALLOWLIST } from './tool-helpers';
 
+/** Maps a raw MonitorData into the clean, model-friendly shape shared by
+ *  list_monitors and get_monitor (refs #246): '0'/'1' strings become
+ *  booleans, Monitor_Status merges in as flat fields, and the ZM 1.38+
+ *  Capturing/Analysing/Recording trio is included only when the server
+ *  actually sends it (older servers only carry Function). */
+function mapMonitor(m: MonitorData): Record<string, unknown> {
+  const status = m.Monitor_Status;
+  const out: Record<string, unknown> = {
+    id: m.Monitor.Id,
+    name: m.Monitor.Name,
+    type: m.Monitor.Type,
+    function: m.Monitor.Function,
+    enabled: m.Monitor.Enabled === '1',
+    controllable: m.Monitor.Controllable === '1',
+    controlId: m.Monitor.ControlId,
+    width: Number(m.Monitor.Width),
+    height: Number(m.Monitor.Height),
+  };
+  if (status?.Status != null) out.status = status.Status;
+  if (status?.CaptureFPS != null) out.captureFps = Number(status.CaptureFPS);
+  if (status?.AnalysisFPS != null) out.analysisFps = Number(status.AnalysisFPS);
+  if (m.Monitor.Capturing !== undefined) out.capturing = m.Monitor.Capturing;
+  if (m.Monitor.Analysing !== undefined) out.analysing = m.Monitor.Analysing;
+  if (m.Monitor.Recording !== undefined) out.recording = m.Monitor.Recording;
+  return out;
+}
+
+/** Trims a Notes field for the list_events row cap (rule 11: truncate long
+ *  text); get_event returns the untrimmed value since it is for one event. */
+function trimNotes(notes: string | null, max: number): string | null {
+  if (!notes) return notes;
+  return notes.length > max ? notes.slice(0, max) : notes;
+}
+
+/** Maps a Storage row to disk usage the model can reason about: a percentage
+ *  when both used/total are known, otherwise the raw usage figure ZM
+ *  reports. Older ZM builds may only send one of the two, or neither. */
+function mapStorage(s: Storage): { name: string; diskPercent?: number; usage?: number } {
+  if (s.DiskTotalSpace && s.DiskUsedSpace != null && s.DiskTotalSpace > 0) {
+    return { name: s.Name, diskPercent: Math.round((s.DiskUsedSpace / s.DiskTotalSpace) * 100) };
+  }
+  if (s.DiskSpace != null) {
+    return { name: s.Name, usage: s.DiskSpace };
+  }
+  return { name: s.Name };
+}
+
 const listMonitorsTool: ToolDefinition = {
   name: 'list_monitors',
   description:
-    'List all monitors visible in the current profile with their id, name, function, and enabled state. ' +
-    'Call this first when the user refers to a monitor by name, or to answer "what monitors are configured".',
+    'List all monitors visible in the current profile: id, name, type, function, enabled/controllable ' +
+    'flags, and live status (connection state, capture/analysis fps when available). Call this first when ' +
+    'the user refers to a monitor by name, or to answer "what monitors are configured".',
   schema: { type: 'object', properties: {}, additionalProperties: false },
   destructive: false,
   execute: (_input, _ctx) =>
     safeExecute('list_monitors', async () => {
       const { monitors } = await getMonitors();
-      return JSON.stringify(
-        monitors.map((m) => ({
-          id: m.Monitor.Id,
-          name: m.Monitor.Name,
-          func: m.Monitor.Function,
-          enabled: m.Monitor.Enabled === '1',
-        })),
-      );
+      return JSON.stringify(monitors.map(mapMonitor));
     }),
 };
 
 const getMonitorTool: ToolDefinition = {
   name: 'get_monitor',
   description:
-    'Get full detail plus live alarm status for one monitor. Call this after list_monitors has ' +
-    'resolved the name to an id, when the user asks about a specific monitor\'s current state.',
+    'Get full detail plus live alarm status for one monitor, including its control capability ' +
+    '(controllable, controlId). Call this after list_monitors has resolved the name to an id, when the ' +
+    'user asks about a specific monitor\'s current state.',
   schema: {
     type: 'object',
     properties: { monitorId: { type: 'string', description: 'The monitor id, from list_monitors.' } },
@@ -56,10 +100,7 @@ const getMonitorTool: ToolDefinition = {
       if (!monitorId) throw new Error('monitorId is required');
       const [monitor, alarm] = await Promise.all([getMonitor(monitorId), getAlarmStatus(monitorId)]);
       return JSON.stringify({
-        id: monitor.Monitor.Id,
-        name: monitor.Monitor.Name,
-        func: monitor.Monitor.Function,
-        enabled: monitor.Monitor.Enabled === '1',
+        ...mapMonitor(monitor),
         alarm: { status: alarm.status, output: alarm.output },
       });
     }),
@@ -69,8 +110,8 @@ const countEventsTool: ToolDefinition = {
   name: 'count_events',
   description:
     'Count events per monitor over a rolling interval such as "1 hour" or "1 day", covering ALL monitors ' +
-    'in one call (no monitorId needed). Use this for "how many events happened" or "summarize events" ' +
-    'questions instead of list_events, which returns individual rows.',
+    'in one call (no monitorId needed) and reporting the combined total. Use this for "how many events ' +
+    'happened" or "summarize events" questions instead of list_events, which returns individual rows.',
   schema: {
     type: 'object',
     properties: { interval: { type: 'string', description: 'e.g. "1 hour", "1 day".' } },
@@ -83,11 +124,11 @@ const countEventsTool: ToolDefinition = {
       if (!interval) throw new Error('interval is required');
       const [counts, { monitors }] = await Promise.all([getConsoleEvents(interval), getMonitors()]);
       const nameById = new Map(monitors.map((m) => [m.Monitor.Id, m.Monitor.Name]));
-      return JSON.stringify(
-        counts
-          .filter((c) => nameById.has(c.monitorId))
-          .map((c) => ({ monitor: nameById.get(c.monitorId), count: c.count })),
-      );
+      const rows = counts
+        .filter((c) => nameById.has(c.monitorId))
+        .map((c) => ({ monitor: nameById.get(c.monitorId), count: c.count }));
+      const total = rows.reduce((sum, r) => sum + r.count, 0);
+      return JSON.stringify({ interval, total, monitors: rows });
     }),
 };
 
@@ -105,8 +146,8 @@ const listEventsTool: ToolDefinition = {
   description:
     'List individual events, newest first, optionally filtered by monitor, time range, detected object ' +
     'type, a single tag, or an explicit set of event ids. Each row includes the monitor NAME (not just its ' +
-    'id) and the detected object types, so answer using those, not raw ids. A tag filter and event ids ' +
-    'cannot be combined (the server rejects it); pass one or the other.',
+    'id), the detected object types, score, duration, and a notes preview, so answer using those, not raw ' +
+    'ids. A tag filter and event ids cannot be combined (the server rejects it); pass one or the other.',
   schema: {
     type: 'object',
     properties: {
@@ -143,13 +184,20 @@ const listEventsTool: ToolDefinition = {
       const [res, { monitors }] = await Promise.all([getEvents(filters), getMonitors()]);
       const nameById = new Map(monitors.map((m) => [m.Monitor.Id, m.Monitor.Name]));
       return JSON.stringify(
-        res.events.map((e) => ({
-          id: e.Event.Id,
-          monitor: nameById.get(e.Event.MonitorId) ?? e.Event.MonitorId,
-          start: e.Event.StartDateTime,
-          score: e.Event.MaxScore,
-          cause: e.Event.Cause,
-          objects: parseDetectedObjects(e.Event.Notes),
+        res.events.map(({ Event: e }) => ({
+          id: e.Id,
+          monitor: nameById.get(e.MonitorId) ?? e.MonitorId,
+          cause: e.Cause,
+          start: e.StartDateTime,
+          end: e.EndDateTime,
+          durationSec: Number(e.Length),
+          frames: Number(e.Frames),
+          alarmFrames: Number(e.AlarmFrames),
+          maxScore: Number(e.MaxScore),
+          avgScore: Number(e.AvgScore),
+          objects: parseDetectedObjects(e.Notes),
+          archived: e.Archived === '1',
+          notes: trimNotes(e.Notes, ASSISTANT.notesPreviewChars),
         })),
       );
     });
@@ -159,8 +207,9 @@ const listEventsTool: ToolDefinition = {
 const getEventTool: ToolDefinition = {
   name: 'get_event',
   description:
-    'Get full detail for a single event: the monitor NAME, duration, frame count, score, detected object ' +
-    'types, raw notes, and tags. Call this after list_events or count_events has identified the event id.',
+    'Get full detail for a single event: the monitor NAME and id, duration, frame counts, scores, ' +
+    'detected object types, the full notes, tags, archived state, and whether a video is available. Call ' +
+    'this after list_events or count_events has identified the event id.',
   schema: {
     type: 'object',
     properties: { eventId: { type: 'string', description: 'The event id, from list_events.' } },
@@ -184,13 +233,21 @@ const getEventTool: ToolDefinition = {
       return JSON.stringify({
         id: e.Id,
         monitor: nameById.get(e.MonitorId) ?? e.MonitorId,
+        monitorId: e.MonitorId,
         cause: e.Cause,
-        duration: Number(e.Length),
+        start: e.StartDateTime,
+        end: e.EndDateTime,
+        durationSec: Number(e.Length),
         frames: Number(e.Frames),
-        score: Number(e.MaxScore),
-        notes: e.Notes,
+        alarmFrames: Number(e.AlarmFrames),
+        maxScore: Number(e.MaxScore),
+        avgScore: Number(e.AvgScore),
+        totScore: Number(e.TotScore),
         objects: parseDetectedObjects(e.Notes),
+        notes: e.Notes,
         tags,
+        archived: e.Archived === '1',
+        hasVideo: !!e.DefaultVideo,
       });
     }),
 };
@@ -199,7 +256,8 @@ const getServerHealthTool: ToolDefinition = {
   name: 'get_server_health',
   description:
     'Get overall server health: CPU load, disk usage percentage, whether the ZoneMinder daemon is ' +
-    'running, and the server version. Call this for "is the server ok" / "is zmninja / zoneminder up" questions.',
+    'running, the server version, per-storage disk usage, and the configured server count. Call this for ' +
+    '"is the server ok" / "is zmninja / zoneminder up" questions.',
   schema: { type: 'object', properties: {}, additionalProperties: false },
   destructive: false,
   execute: (_input, _ctx) =>
@@ -210,24 +268,53 @@ const getServerHealthTool: ToolDefinition = {
         getDaemonCheck(),
         getVersion(),
       ]);
-      return JSON.stringify({
+      const result: {
+        load: number | number[];
+        diskPercent?: number;
+        daemonRunning: boolean;
+        version: string;
+        storages?: Array<{ name: string; diskPercent?: number; usage?: number }>;
+        serverCount?: number;
+      } = {
         load: load.load,
         diskPercent: disk.percent ?? disk.usage,
         daemonRunning,
         version: version.version,
-      });
+      };
+      // storage.json and servers.json are unsupported/empty on some ZM builds;
+      // degrade gracefully instead of failing the whole tool (refs #246).
+      try {
+        result.storages = (await getStorages()).map(mapStorage);
+      } catch {
+        // omit storages
+      }
+      try {
+        result.serverCount = (await getServers()).length;
+      } catch {
+        // omit serverCount
+      }
+      return JSON.stringify(result);
     }),
 };
 
 const listGroupsTool: ToolDefinition = {
   name: 'list_groups',
-  description: 'List monitor groups (id and name). Call this when the user refers to a group of monitors by name.',
+  description:
+    'List monitor groups: id, name, and member monitor ids when the group carries them. Call this when ' +
+    'the user refers to a group of monitors by name.',
   schema: { type: 'object', properties: {}, additionalProperties: false },
   destructive: false,
   execute: (_input, _ctx) =>
     safeExecute('list_groups', async () => {
       const { groups } = await getGroups();
-      return JSON.stringify(groups.map((g) => ({ id: g.Group.Id, name: g.Group.Name })));
+      return JSON.stringify(
+        groups.map((g) => {
+          const monitorIds = g.Monitor?.map((m) => m.Id) ?? [];
+          return monitorIds.length > 0
+            ? { id: g.Group.Id, name: g.Group.Name, monitorIds }
+            : { id: g.Group.Id, name: g.Group.Name };
+        }),
+      );
     }),
 };
 

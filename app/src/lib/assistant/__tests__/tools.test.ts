@@ -6,13 +6,22 @@ import { ASSISTANT } from '../../zmninja-ng-constants';
 import { getEvents, deleteEvent, setEventArchived } from '../../../api/events';
 import { triggerAlarm, cancelAlarm, setMonitorEnabled, changeMonitorFunction } from '../../../api/monitors';
 import { changeState } from '../../../api/states';
+import { getStorages, getServers } from '../../../api/server';
+
+const { mockMonitor, mockMonitorStatus } = vi.hoisted(() => ({
+  mockMonitor: {
+    Id: '1', Name: 'Front Door', Type: 'Local', Function: 'Modect', Enabled: '1',
+    Controllable: '1', ControlId: '3', Width: '1920', Height: '1080',
+  },
+  mockMonitorStatus: { Status: 'Connected', CaptureFPS: '5.0', AnalysisFPS: '2.0' },
+}));
 
 vi.mock('../../../api/monitors', () => ({
   getMonitors: vi.fn().mockResolvedValue({
-    monitors: [{ Monitor: { Id: '1', Name: 'Front Door', Function: 'Modect', Enabled: '1' } }],
+    monitors: [{ Monitor: mockMonitor, Monitor_Status: mockMonitorStatus }],
   }),
   getMonitor: vi.fn().mockResolvedValue({
-    Monitor: { Id: '1', Name: 'Front Door', Function: 'Modect', Enabled: '1' },
+    Monitor: mockMonitor, Monitor_Status: mockMonitorStatus,
   }),
   getAlarmStatus: vi.fn().mockResolvedValue({ status: 0, output: 0 }),
   triggerAlarm: vi.fn().mockResolvedValue(undefined),
@@ -30,7 +39,9 @@ vi.mock('../../../api/events', () => ({
     events: [
       {
         Event: {
-          Id: '42', MonitorId: '1', Cause: 'Motion', StartDateTime: '2026-01-01 00:00:00', MaxScore: '10',
+          Id: '42', MonitorId: '1', Cause: 'Motion', StartDateTime: '2026-01-01 00:00:00',
+          EndDateTime: '2026-01-01 00:01:00', Length: '12.5', Frames: '30', AlarmFrames: '5',
+          MaxScore: '10', AvgScore: '4', TotScore: '120', Archived: '0',
           Notes: 'detected:person,car|Motion: All',
         },
       },
@@ -38,8 +49,10 @@ vi.mock('../../../api/events', () => ({
   }),
   getEvent: vi.fn().mockResolvedValue({
     Event: {
-      Id: '42', MonitorId: '1', Cause: 'Motion', Length: '12.5', Frames: '30',
-      MaxScore: '10', Notes: 'detected:person,car|Motion: All',
+      Id: '42', MonitorId: '1', Cause: 'Motion', StartDateTime: '2026-01-01 00:00:00',
+      EndDateTime: '2026-01-01 00:01:00', Length: '12.5', Frames: '30', AlarmFrames: '5',
+      MaxScore: '10', AvgScore: '4', TotScore: '120', Archived: '0', DefaultVideo: 'video.mp4',
+      Notes: 'detected:person,car|Motion: All',
     },
   }),
   getConsoleEvents: vi.fn().mockResolvedValue([{ monitorId: '1', count: 3 }]),
@@ -51,6 +64,10 @@ vi.mock('../../../api/server', () => ({
   getLoad: vi.fn().mockResolvedValue({ load: 0.5 }),
   getDiskPercent: vi.fn().mockResolvedValue({ percent: 42 }),
   getDaemonCheck: vi.fn().mockResolvedValue(true),
+  getStorages: vi.fn().mockResolvedValue([
+    { Id: '1', Name: 'Default', DiskUsedSpace: 50, DiskTotalSpace: 100, DiskSpace: null },
+  ]),
+  getServers: vi.fn().mockResolvedValue([{ Id: '1', Name: 'zm1' }]),
 }));
 
 vi.mock('../../../api/auth', () => ({
@@ -58,7 +75,12 @@ vi.mock('../../../api/auth', () => ({
 }));
 
 vi.mock('../../../api/groups', () => ({
-  getGroups: vi.fn().mockResolvedValue({ groups: [{ Group: { Id: '1', Name: 'Outside' }, Monitor: [] }] }),
+  getGroups: vi.fn().mockResolvedValue({
+    groups: [
+      { Group: { Id: '1', Name: 'Outside' }, Monitor: [{ Id: '1', Name: 'Front Door' }] },
+      { Group: { Id: '2', Name: 'Empty Group' }, Monitor: [] },
+    ],
+  }),
 }));
 
 vi.mock('../../../api/tags', async () => {
@@ -86,6 +108,17 @@ describe('read-only tools', () => {
     const r = await tool.execute({}, ctx());
     expect(r.isError).toBeFalsy();
     expect(r.output).toContain('Front Door');
+  });
+
+  it('list_monitors includes controllable, status, and live fps', async () => {
+    const tool = getToolByName('list_monitors')!;
+    const r = await tool.execute({}, ctx());
+    expect(r.isError).toBeFalsy();
+    const rows = JSON.parse(r.output as string);
+    expect(rows[0]).toMatchObject({
+      id: '1', name: 'Front Door', type: 'Local', enabled: true, controllable: true,
+      controlId: '3', width: 1920, height: 1080, status: 'Connected', captureFps: 5, analysisFps: 2,
+    });
   });
 
   it('navigate rejects a route outside the allowlist', async () => {
@@ -126,6 +159,17 @@ describe('read-only tools', () => {
     expect(rows[0]).toMatchObject({ id: '42', monitor: 'Front Door', objects: ['person', 'car'] });
   });
 
+  it('list_events rows include duration/scores/archived and a notes preview', async () => {
+    const tool = getToolByName('list_events')!;
+    const r = await tool.execute({}, ctx());
+    expect(r.isError).toBeFalsy();
+    const rows = JSON.parse(r.output as string);
+    expect(rows[0]).toMatchObject({
+      durationSec: 12.5, frames: 30, alarmFrames: 5, maxScore: 10, avgScore: 4, archived: false,
+      end: '2026-01-01 00:01:00', notes: 'detected:person,car|Motion: All',
+    });
+  });
+
   it('get_monitor merges monitor detail with alarm status', async () => {
     const tool = getToolByName('get_monitor')!;
     const r = await tool.execute({ monitorId: '1' }, ctx());
@@ -134,12 +178,33 @@ describe('read-only tools', () => {
     expect(r.output).toContain('alarm');
   });
 
+  it('get_monitor includes control capability alongside alarm status', async () => {
+    const tool = getToolByName('get_monitor')!;
+    const r = await tool.execute({ monitorId: '1' }, ctx());
+    expect(r.isError).toBeFalsy();
+    const detail = JSON.parse(r.output as string);
+    expect(detail).toMatchObject({
+      controllable: true, controlId: '3', status: 'Connected',
+      alarm: { status: 0, output: 0 },
+    });
+  });
+
   it('count_events maps monitor ids to names', async () => {
     const tool = getToolByName('count_events')!;
     const r = await tool.execute({ interval: '1 hour' }, ctx());
     expect(r.isError).toBeFalsy();
     expect(r.output).toContain('Front Door');
     expect(r.output).toContain('3');
+  });
+
+  it('count_events reports the summed total across monitors', async () => {
+    const tool = getToolByName('count_events')!;
+    const r = await tool.execute({ interval: '1 hour' }, ctx());
+    expect(r.isError).toBeFalsy();
+    const result = JSON.parse(r.output as string);
+    expect(result).toMatchObject({
+      interval: '1 hour', total: 3, monitors: [{ monitor: 'Front Door', count: 3 }],
+    });
   });
 
   it('get_event returns duration/frames/score/notes', async () => {
@@ -158,6 +223,17 @@ describe('read-only tools', () => {
     expect(detail).toMatchObject({ monitor: 'Front Door', objects: ['person', 'car'] });
   });
 
+  it('get_event includes durationSec, totScore, tags, archived, and hasVideo', async () => {
+    const tool = getToolByName('get_event')!;
+    const r = await tool.execute({ eventId: '42' }, ctx());
+    expect(r.isError).toBeFalsy();
+    const detail = JSON.parse(r.output as string);
+    expect(detail).toMatchObject({
+      monitorId: '1', durationSec: 12.5, alarmFrames: 5, totScore: 120, archived: false,
+      hasVideo: true, tags: [],
+    });
+  });
+
   it('get_server_health aggregates load/disk/daemon/version', async () => {
     const tool = getToolByName('get_server_health')!;
     const r = await tool.execute({}, ctx());
@@ -166,11 +242,52 @@ describe('read-only tools', () => {
     expect(r.output).toContain('42');
   });
 
+  it('get_server_health includes per-storage usage and server count when both succeed', async () => {
+    const tool = getToolByName('get_server_health')!;
+    const r = await tool.execute({}, ctx());
+    expect(r.isError).toBeFalsy();
+    const health = JSON.parse(r.output as string);
+    expect(health).toMatchObject({
+      storages: [{ name: 'Default', diskPercent: 50 }],
+      serverCount: 1,
+    });
+  });
+
+  it('get_server_health omits storages when getStorages rejects', async () => {
+    vi.mocked(getStorages).mockRejectedValueOnce(new Error('storage.json not found'));
+    const tool = getToolByName('get_server_health')!;
+    const r = await tool.execute({}, ctx());
+    expect(r.isError).toBeFalsy();
+    const health = JSON.parse(r.output as string);
+    expect(health.storages).toBeUndefined();
+    expect(health.daemonRunning).toBe(true);
+  });
+
+  it('get_server_health omits serverCount when getServers rejects', async () => {
+    vi.mocked(getServers).mockRejectedValueOnce(new Error('servers.json not found'));
+    const tool = getToolByName('get_server_health')!;
+    const r = await tool.execute({}, ctx());
+    expect(r.isError).toBeFalsy();
+    const health = JSON.parse(r.output as string);
+    expect(health.serverCount).toBeUndefined();
+    expect(health.storages).toMatchObject([{ name: 'Default', diskPercent: 50 }]);
+  });
+
   it('list_groups returns id/name', async () => {
     const tool = getToolByName('list_groups')!;
     const r = await tool.execute({}, ctx());
     expect(r.isError).toBeFalsy();
     expect(r.output).toContain('Outside');
+  });
+
+  it('list_groups includes member monitor ids when the group carries them', async () => {
+    const tool = getToolByName('list_groups')!;
+    const r = await tool.execute({}, ctx());
+    expect(r.isError).toBeFalsy();
+    const groups = JSON.parse(r.output as string);
+    expect(groups[0]).toMatchObject({ id: '1', name: 'Outside', monitorIds: ['1'] });
+    expect(groups[1]).toMatchObject({ id: '2', name: 'Empty Group' });
+    expect(groups[1].monitorIds).toBeUndefined();
   });
 
   it('list_tags degrades to an empty list when tags are unsupported', async () => {
