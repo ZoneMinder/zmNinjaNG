@@ -1246,6 +1246,9 @@
     "show_raw_output": "查看模型输出",
     "error_generic": "助手错误：{{error}}",
     "not_configured_cta": "设备端助手尚未配置。请打开设置以启用。",
+    "card": {
+      "open": "打开"
+    },
     "confirm": {
       "set_monitor_enabled_enable": "启用监视器 {{id}}？",
     "set_monitor_enabled_disable": "禁用监视器 {{id}}？",

@@ -7,6 +7,7 @@ import { getEvents, deleteEvent, setEventArchived } from '../../../api/events';
 import { triggerAlarm, cancelAlarm, setMonitorEnabled, changeMonitorFunction } from '../../../api/monitors';
 import { changeState } from '../../../api/states';
 import { getStorages, getServers } from '../../../api/server';
+import { DEFAULT_THUMBNAIL_FALLBACK_CHAIN } from '../../../stores/settings';
 
 const { mockMonitor, mockMonitorStatus } = vi.hoisted(() => ({
   mockMonitor: {
@@ -58,6 +59,11 @@ vi.mock('../../../api/events', () => ({
   getConsoleEvents: vi.fn().mockResolvedValue([{ monitorId: '1', count: 3 }]),
   deleteEvent: vi.fn().mockResolvedValue(undefined),
   setEventArchived: vi.fn().mockResolvedValue(undefined),
+  // Used by lib/event/thumbnail-chain.ts's buildThumbnailChain (refs #246) when
+  // a tool builds event display cards; the real impl just concatenates a URL.
+  getEventImageUrl: vi.fn(
+    (portalUrl: string, eventId: string, frame: string) => `${portalUrl}/index.php?view=image&eid=${eventId}&fid=${frame}`,
+  ),
 }));
 
 vi.mock('../../../api/server', () => ({
@@ -97,6 +103,20 @@ function ctx(): ToolContext {
     profileId: asProfileId('p1'),
     queryClient: { fetchQuery: (o: { queryFn: () => unknown }) => o.queryFn() } as never,
     host: { confirm: vi.fn(), navigate: vi.fn(), onActivity: vi.fn() },
+  };
+}
+
+// Adds the image-building inputs AskPanel.tsx supplies in production (refs #246),
+// so list_events/get_event/list_monitors/get_monitor can be asserted to build
+// `display` result cards the same way MonitorRecentEvents.tsx builds thumbnails.
+function ctxWithDisplay(): ToolContext {
+  return {
+    ...ctx(),
+    portalUrl: 'https://zm.example.com',
+    accessToken: 'tok123',
+    minStreamingPort: undefined,
+    thumbnailFallbackChain: DEFAULT_THUMBNAIL_FALLBACK_CHAIN,
+    dateTimeFormat: { dateFormat: 'MMM d, yyyy', timeFormat: '24h', customDateFormat: '', customTimeFormat: '' },
   };
 }
 
@@ -170,6 +190,39 @@ describe('read-only tools', () => {
     });
   });
 
+  it('list_events builds an event display card with imageUrls, capped to the same rows as output (refs #246)', async () => {
+    const tool = getToolByName('list_events')!;
+    const r = await tool.execute({}, ctxWithDisplay());
+    expect(r.isError).toBeFalsy();
+    const rows = JSON.parse(r.output as string);
+    expect(r.display).toHaveLength(rows.length);
+    expect(r.display![0]).toMatchObject({ kind: 'event', id: '42', navigatePath: '/events/42' });
+    expect(r.display![0].imageUrls!.length).toBeGreaterThan(0);
+    expect(r.display![0].imageUrls![0]).toContain('http');
+    // The model-facing output string must never carry image URLs (vision non-goal).
+    expect(r.output).not.toContain('http');
+  });
+
+  it('list_monitors builds a monitor display card with no imageUrls (refs #246)', async () => {
+    const tool = getToolByName('list_monitors')!;
+    const r = await tool.execute({}, ctxWithDisplay());
+    expect(r.isError).toBeFalsy();
+    expect(r.display).toHaveLength(1);
+    expect(r.display![0]).toMatchObject({ kind: 'monitor', id: '1', navigatePath: '/monitors/1' });
+    expect(r.display![0].imageUrls).toBeUndefined();
+    expect(r.output).not.toContain('http');
+  });
+
+  it('get_monitor builds a monitor display card with no imageUrls (refs #246)', async () => {
+    const tool = getToolByName('get_monitor')!;
+    const r = await tool.execute({ monitorId: '1' }, ctxWithDisplay());
+    expect(r.isError).toBeFalsy();
+    expect(r.display).toHaveLength(1);
+    expect(r.display![0]).toMatchObject({ kind: 'monitor', id: '1', navigatePath: '/monitors/1' });
+    expect(r.display![0].imageUrls).toBeUndefined();
+    expect(r.output).not.toContain('http');
+  });
+
   it('get_monitor merges monitor detail with alarm status', async () => {
     const tool = getToolByName('get_monitor')!;
     const r = await tool.execute({ monitorId: '1' }, ctx());
@@ -232,6 +285,17 @@ describe('read-only tools', () => {
       monitorId: '1', durationSec: 12.5, alarmFrames: 5, totScore: 120, archived: false,
       hasVideo: true, tags: [],
     });
+  });
+
+  it('get_event builds an event display card with imageUrls (refs #246)', async () => {
+    const tool = getToolByName('get_event')!;
+    const r = await tool.execute({ eventId: '42' }, ctxWithDisplay());
+    expect(r.isError).toBeFalsy();
+    expect(r.display).toHaveLength(1);
+    expect(r.display![0]).toMatchObject({ kind: 'event', id: '42', navigatePath: '/events/42' });
+    expect(r.display![0].imageUrls!.length).toBeGreaterThan(0);
+    // The model-facing output string must never carry image URLs (vision non-goal).
+    expect(r.output).not.toContain('http');
   });
 
   it('get_server_health aggregates load/disk/daemon/version', async () => {

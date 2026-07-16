@@ -1246,6 +1246,9 @@
     "show_raw_output": "Modellausgabe anzeigen",
     "error_generic": "Assistent-Fehler: {{error}}",
     "not_configured_cta": "Der On-Device-Assistent ist noch nicht eingerichtet. Öffne die Einstellungen, um ihn zu aktivieren.",
+    "card": {
+      "open": "Öffnen"
+    },
     "confirm": {
       "set_monitor_enabled_enable": "Monitor {{id}} aktivieren?",
     "set_monitor_enabled_disable": "Monitor {{id}} deaktivieren?",

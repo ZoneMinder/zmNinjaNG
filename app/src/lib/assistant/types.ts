@@ -1,7 +1,27 @@
 import type { QueryClient } from '@tanstack/react-query';
 import type { ProfileId } from '../../api/types';
+import type { ThumbnailFallbackEntry } from '../../stores/settings';
+import type { FormatSettings } from '../format-date-time';
 
 export type AssistantRole = 'user' | 'assistant' | 'tool';
+
+/** A monitor or event a tool found, rendered as a result card in AskPanel
+ *  instead of (or alongside) the text answer (refs #246). This is UI-only:
+ *  it rides next to a `ToolResult`'s `output` string but is never sent to the
+ *  model (the vision non-goal stands: images are for the user, not the LLM). */
+export interface DisplayEntity {
+  kind: 'event' | 'monitor';
+  id: string;
+  title: string;
+  subtitle?: string;
+  /** In-app path for the card's "Open" action, e.g. `/events/123`. */
+  navigatePath: string;
+  /** Candidate thumbnail URLs, most-preferred first, for `EventThumbnail`.
+   *  Omitted (or empty) for monitors, which have no snapshot card image. */
+  imageUrls?: string[];
+  /** `EventThumbnail`'s `cacheKey`; defaults to `id` when omitted. */
+  cacheKey?: string;
+}
 
 /** One entry in the conversation. Assistant turns carry text and/or toolCalls;
  *  tool turns carry the results of the immediately preceding assistant turn. */
@@ -16,6 +36,9 @@ export interface AssistantMessage {
    *  for diagnosing why a turn failed; never set on a normal answer or tool
    *  call. */
   raw?: string;
+  /** Result cards aggregated from this turn's tool calls (refs #246). Only
+   *  ever set on a `role: 'tool'` message; see agent.ts's `runAssistantTurn`. */
+  display?: DisplayEntity[];
 }
 
 export interface ToolCall {
@@ -28,6 +51,7 @@ export interface ToolResult {
   callId: string;
   output: string;
   isError?: boolean;
+  display?: DisplayEntity[];
 }
 
 /** One model turn. toolCalls empty means the model is done. */
@@ -43,6 +67,19 @@ export interface ToolContext {
   profileId: ProfileId;
   queryClient: QueryClient;
   host: AssistantHost;
+  /**
+   * Non-React inputs for building authenticated event thumbnail URLs and
+   * user-formatted titles on result cards (refs #246). AskPanel populates
+   * these from `useCurrentProfile`/`useFreshAccessToken` (mirroring how
+   * `MonitorRecentEvents` builds the same URLs) so tools never import stores
+   * directly (rule 31). All optional: a test `ctx` that omits them simply
+   * gets an empty `imageUrls` from `buildEventDisplayEntity`.
+   */
+  portalUrl?: string;
+  accessToken?: string | null;
+  minStreamingPort?: number;
+  thumbnailFallbackChain?: ThumbnailFallbackEntry[];
+  dateTimeFormat?: FormatSettings;
 }
 
 export interface ToolExecuteResult {
@@ -50,6 +87,10 @@ export interface ToolExecuteResult {
   isError?: boolean;
   /** navigate sets this so the agent closes the palette after the call. */
   closePanel?: boolean;
+  /** UI-only result cards for list_events/get_event/list_monitors/get_monitor
+   *  (refs #246). Never folded into `output`, which is the only thing the
+   *  model sees. */
+  display?: DisplayEntity[];
 }
 
 export interface ToolDefinition {

@@ -10,6 +10,7 @@
  * to avoid transitively loading stores/profile via log-sanitizer -> client.
  */
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { AskPanel } from '../AskPanel';
 import { useAssistantStore } from '../../../stores/assistant';
@@ -32,9 +33,13 @@ vi.mock('../../../hooks/useCurrentProfile', () => ({
     settings: { assistantModelId: 'test-model' },
   }),
 }));
+vi.mock('../../../hooks/useFreshAccessToken', () => ({
+  useFreshAccessToken: () => ({ token: null, isFresh: false }),
+}));
+const navigateMock = vi.fn();
 vi.mock('../useAssistantHost', () => ({
   useAssistantHost: () => ({
-    host: { confirm: vi.fn(), navigate: vi.fn(), onActivity: vi.fn() },
+    host: { confirm: vi.fn(), navigate: navigateMock, onActivity: vi.fn() },
     pendingConfirm: null,
     resolveConfirm: vi.fn(),
   }),
@@ -43,6 +48,12 @@ vi.mock('../../../lib/assistant/tools', () => ({
   getToolByName: (name: string) => ({ name, description: `${name} description` }),
 }));
 vi.mock('../../../api/auth', () => ({ getVersion: vi.fn() }));
+// Rendering the real EventThumbnail would need <img> load/error events jsdom
+// never fires; a stub keeps this test focused on the card, not the thumbnail
+// component (which has its own tests in EventThumbnail.test.tsx).
+vi.mock('../../events/EventThumbnail', () => ({
+  EventThumbnail: ({ alt }: { alt?: string }) => <div data-testid="assistant-card-thumbnail-stub">{alt}</div>,
+}));
 
 describe('AskPanel', () => {
   beforeEach(() => {
@@ -117,5 +128,61 @@ describe('AskPanel', () => {
     const step = screen.getByTestId('assistant-activity-step');
     expect(step).toHaveTextContent('assistant.activity.done:list_monitors');
     expect(step).not.toHaveTextContent('{}');
+  });
+
+  it('renders an event result card with a thumbnail and navigates on Open (refs #246)', async () => {
+    useAssistantStore.getState().append('p1', { role: 'user', text: 'find front door events' });
+    useAssistantStore.getState().append('p1', {
+      role: 'tool',
+      toolResults: [{ callId: 'c1', output: '[]' }],
+      display: [
+        {
+          kind: 'event',
+          id: '42',
+          title: 'Front Door · Jan 1, 2026',
+          subtitle: 'person, car',
+          navigatePath: '/events/42',
+          imageUrls: ['https://zm.example.com/index.php?view=image&eid=42&fid=alarm'],
+          cacheKey: '42',
+        },
+      ],
+    });
+
+    render(<AskPanel />);
+
+    expect(screen.getByTestId('assistant-card-thumbnail-stub')).toBeInTheDocument();
+    const card = screen.getByTestId('assistant-card-event');
+    expect(card).toHaveTextContent('Front Door · Jan 1, 2026');
+    expect(card).toHaveTextContent('person, car');
+
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId('assistant-card-open'));
+    expect(navigateMock).toHaveBeenCalledWith('/events/42');
+  });
+
+  it('renders a monitor result card with no thumbnail', () => {
+    useAssistantStore.getState().append('p1', {
+      role: 'tool',
+      toolResults: [{ callId: 'c1', output: '[]' }],
+      display: [
+        { kind: 'monitor', id: '1', title: 'Front Door', subtitle: 'Modect · Connected', navigatePath: '/monitors/1' },
+      ],
+    });
+
+    render(<AskPanel />);
+
+    expect(screen.queryByTestId('assistant-card-thumbnail-stub')).not.toBeInTheDocument();
+    expect(screen.getByTestId('assistant-card-monitor')).toHaveTextContent('Front Door');
+  });
+
+  it('does not render a result-card strip for a tool message with no display', () => {
+    useAssistantStore.getState().append('p1', {
+      role: 'tool',
+      toolResults: [{ callId: 'c1', output: '{}' }],
+    });
+
+    render(<AskPanel />);
+
+    expect(screen.queryByTestId('assistant-result-cards')).not.toBeInTheDocument();
   });
 });

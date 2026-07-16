@@ -17,6 +17,7 @@ import { getTags, getEventTags, extractUniqueTags } from '../../api/tags';
 import type { MonitorData } from '../../api/types';
 import { ASSISTANT } from '../zmninja-ng-constants';
 import { parseDetectedObjects } from '../event/event-detection';
+import { buildEventDisplayEntity, buildMonitorDisplayEntity } from './display';
 import type { ToolDefinition } from './types';
 import { safeExecute, NAVIGATE_ALLOWLIST } from './tool-helpers';
 
@@ -78,7 +79,7 @@ const listMonitorsTool: ToolDefinition = {
   execute: (_input, _ctx) =>
     safeExecute('list_monitors', async () => {
       const { monitors } = await getMonitors();
-      return JSON.stringify(monitors.map(mapMonitor));
+      return { output: JSON.stringify(monitors.map(mapMonitor)), display: monitors.map(buildMonitorDisplayEntity) };
     }),
 };
 
@@ -99,10 +100,13 @@ const getMonitorTool: ToolDefinition = {
       const monitorId = String(input.monitorId ?? '');
       if (!monitorId) throw new Error('monitorId is required');
       const [monitor, alarm] = await Promise.all([getMonitor(monitorId), getAlarmStatus(monitorId)]);
-      return JSON.stringify({
-        ...mapMonitor(monitor),
-        alarm: { status: alarm.status, output: alarm.output },
-      });
+      return {
+        output: JSON.stringify({
+          ...mapMonitor(monitor),
+          alarm: { status: alarm.status, output: alarm.output },
+        }),
+        display: [buildMonitorDisplayEntity(monitor)],
+      };
     }),
 };
 
@@ -162,7 +166,7 @@ const listEventsTool: ToolDefinition = {
     additionalProperties: false,
   },
   destructive: false,
-  execute: async (input, _ctx) => {
+  execute: async (input, ctx) => {
     const tag = input.tag as string | undefined;
     const eventIds = input.eventIds as string[] | undefined;
     if (tag && eventIds) {
@@ -183,7 +187,7 @@ const listEventsTool: ToolDefinition = {
       };
       const [res, { monitors }] = await Promise.all([getEvents(filters), getMonitors()]);
       const nameById = new Map(monitors.map((m) => [m.Monitor.Id, m.Monitor.Name]));
-      return JSON.stringify(
+      const output = JSON.stringify(
         res.events.map(({ Event: e }) => ({
           id: e.Id,
           monitor: nameById.get(e.MonitorId) ?? e.MonitorId,
@@ -200,6 +204,11 @@ const listEventsTool: ToolDefinition = {
           notes: trimNotes(e.Notes, ASSISTANT.notesPreviewChars),
         })),
       );
+      // Cards mirror the same (already limit-capped) rows as the text output above.
+      const display = res.events.map(({ Event: e }) =>
+        buildEventDisplayEntity(e, nameById.get(e.MonitorId) ?? e.MonitorId, monitors, ctx),
+      );
+      return { output, display };
     });
   },
 };
@@ -216,13 +225,14 @@ const getEventTool: ToolDefinition = {
     required: ['eventId'],
   },
   destructive: false,
-  execute: (input, _ctx) =>
+  execute: (input, ctx) =>
     safeExecute('get_event', async () => {
       const eventId = String(input.eventId ?? '');
       if (!eventId) throw new Error('eventId is required');
       const [event, { monitors }] = await Promise.all([getEvent(eventId), getMonitors()]);
       const e = event.Event;
       const nameById = new Map(monitors.map((m) => [m.Monitor.Id, m.Monitor.Name]));
+      const monitorName = nameById.get(e.MonitorId) ?? e.MonitorId;
       let tags: string[] = [];
       try {
         const tagMap = await getEventTags([eventId]);
@@ -230,9 +240,9 @@ const getEventTool: ToolDefinition = {
       } catch {
         // Tags are an optional ZM feature (refs api/tags.ts); absence is not an error here.
       }
-      return JSON.stringify({
+      const output = JSON.stringify({
         id: e.Id,
-        monitor: nameById.get(e.MonitorId) ?? e.MonitorId,
+        monitor: monitorName,
         monitorId: e.MonitorId,
         cause: e.Cause,
         start: e.StartDateTime,
@@ -249,6 +259,7 @@ const getEventTool: ToolDefinition = {
         archived: e.Archived === '1',
         hasVideo: !!e.DefaultVideo,
       });
+      return { output, display: [buildEventDisplayEntity(e, monitorName, monitors, ctx)] };
     }),
 };
 

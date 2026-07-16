@@ -1246,6 +1246,9 @@
     "show_raw_output": "Voir la sortie du modèle",
     "error_generic": "Erreur de l'assistant : {{error}}",
     "not_configured_cta": "L'assistant embarqué n'est pas encore configuré. Ouvrez les Paramètres pour l'activer.",
+    "card": {
+      "open": "Ouvrir"
+    },
     "confirm": {
       "set_monitor_enabled_enable": "Activer le moniteur {{id}} ?",
     "set_monitor_enabled_disable": "Désactiver le moniteur {{id}} ?",

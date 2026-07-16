@@ -27,6 +27,8 @@ import { Loader2, Send, Square } from 'lucide-react';
 import { getVersion } from '../../api/auth';
 import type { MonitorsResponse } from '../../api/types';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
+import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
+import { resolveMinStreamingPort } from '../../lib/monitor/multiport';
 import { runAssistantTurn } from '../../lib/assistant/agent';
 import {
   getAssistantProvider,
@@ -47,6 +49,7 @@ import { useAssistantStore } from '../../stores/assistant';
 import { Button } from '../ui/button';
 import { ErrorBanner } from '../ui/query-state';
 import { AssistantConfirmCard } from './AssistantConfirmCard';
+import { AssistantResultCards } from './AssistantResultCards';
 import { useAssistantHost } from './useAssistantHost';
 
 declare global {
@@ -115,6 +118,7 @@ export function AskPanel() {
   const queryClient = useQueryClient();
   const { currentProfile, settings } = useCurrentProfile();
   const profileId = currentProfile?.id;
+  const { token: accessToken, isFresh: accessTokenFresh } = useFreshAccessToken();
 
   const { host, pendingConfirm, resolveConfirm } = useAssistantHost();
 
@@ -198,7 +202,24 @@ export function AskPanel() {
         monitors,
       });
 
-      const ctx: ToolContext = { profileId, queryClient, host };
+      // Image-building inputs for event result cards (refs #246), mirroring
+      // MonitorRecentEvents.tsx's buildRow: only actually used when a tool
+      // returns event rows (list_events/get_event via lib/assistant/display.ts).
+      const ctx: ToolContext = {
+        profileId,
+        queryClient,
+        host,
+        portalUrl: currentProfile?.portalUrl,
+        accessToken: accessTokenFresh ? accessToken : null,
+        minStreamingPort: resolveMinStreamingPort(currentProfile?.minStreamingPort, settings.forceDisableMultiPort),
+        thumbnailFallbackChain: settings.thumbnailFallbackChain,
+        dateTimeFormat: {
+          dateFormat: settings.dateFormat,
+          timeFormat: settings.timeFormat,
+          customDateFormat: settings.customDateFormat,
+          customTimeFormat: settings.customTimeFormat,
+        },
+      };
       const history = useAssistantStore.getState().getThread(profileId);
       const result = await runAssistantTurn({ provider, host, ctx, history, system, signal: controller.signal });
 
@@ -228,7 +249,10 @@ export function AskPanel() {
 
       <div className="flex-1 space-y-2 overflow-y-auto p-3">
         {thread.map((msg, i) => {
-          if (msg.role === 'tool') return null;
+          if (msg.role === 'tool') {
+            if (!msg.display || msg.display.length === 0) return null;
+            return <AssistantResultCards key={i} entities={msg.display} host={host} />;
+          }
           return (
             <div
               key={i}

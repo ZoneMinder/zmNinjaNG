@@ -1246,6 +1246,9 @@
     "show_raw_output": "Show model output",
     "error_generic": "Assistant error: {{error}}",
     "not_configured_cta": "The on-device assistant isn't set up yet. Open Settings to enable it.",
+    "card": {
+      "open": "Open"
+    },
     "confirm": {
       "set_monitor_enabled_enable": "Enable monitor {{id}}?",
     "set_monitor_enabled_disable": "Disable monitor {{id}}?",

@@ -86,7 +86,7 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
         // real host's `navigate()` implementation closes the panel itself as a
         // side effect of the call this makes below (see Task 9's host hook).
         const r = await def.execute(call.input, ctx);
-        results.push({ callId: call.id, output: r.output, isError: r.isError });
+        results.push({ callId: call.id, output: r.output, isError: r.isError, display: r.display });
         host.onActivity({ toolName: call.name, status: r.isError ? 'error' : 'done', input: call.input });
       } catch (e) {
         const message = e instanceof Error ? e.message : 'Tool failed';
@@ -95,7 +95,10 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
         host.onActivity({ toolName: call.name, status: 'error', input: call.input });
       }
     }
-    history.push({ role: 'tool', toolResults: results });
+    // Aggregate this turn's result cards (refs #246) onto the tool message so
+    // AskPanel can render them; UI-only, never fed back to `provider.chat`.
+    const display = results.flatMap((r) => r.display ?? []);
+    history.push({ role: 'tool', toolResults: results, display: display.length > 0 ? display : undefined });
   }
 
   history.push({ role: 'assistant', text: `__i18n:${ITERATION_CAP_KEY}` });

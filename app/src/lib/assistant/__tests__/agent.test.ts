@@ -109,4 +109,39 @@ describe('runAssistantTurn', () => {
       input: { interval: '24 hour' },
     });
   });
+
+  it('aggregates a tool\'s display cards onto the pushed tool message (refs #246)', async () => {
+    const p = new MockProvider();
+    p.setScript([
+      { toolCalls: [{ id: 'c1', name: 'list_monitors', input: {} }] },
+      { text: 'Front Door is enabled.', toolCalls: [] },
+    ]);
+    const h = host();
+    const display = [
+      { kind: 'monitor' as const, id: '1', title: 'Front Door', navigatePath: '/monitors/1' },
+    ];
+    vi.spyOn(await import('../tools'), 'getToolByName').mockReturnValue({
+      name: 'list_monitors', description: '', schema: {}, destructive: false,
+      execute: async () => ({ output: '[]', display }),
+    } as never);
+    const out = await runAssistantTurn(baseOpts(p, h, [{ role: 'user', text: 'list monitors' }]));
+    const toolMsg = out.find((m) => m.role === 'tool');
+    expect(toolMsg?.display).toEqual(display);
+  });
+
+  it('leaves display undefined on the tool message when no tool call returned display', async () => {
+    const p = new MockProvider();
+    p.setScript([
+      { toolCalls: [{ id: 'c1', name: 'get_server_health', input: {} }] },
+      { text: 'All good.', toolCalls: [] },
+    ]);
+    const h = host();
+    vi.spyOn(await import('../tools'), 'getToolByName').mockReturnValue({
+      name: 'get_server_health', description: '', schema: {}, destructive: false,
+      execute: async () => ({ output: '{}' }),
+    } as never);
+    const out = await runAssistantTurn(baseOpts(p, h, [{ role: 'user', text: 'is the server ok?' }]));
+    const toolMsg = out.find((m) => m.role === 'tool');
+    expect(toolMsg?.display).toBeUndefined();
+  });
 });

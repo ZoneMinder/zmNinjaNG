@@ -1246,6 +1246,9 @@
     "show_raw_output": "Ver salida del modelo",
     "error_generic": "Error del asistente: {{error}}",
     "not_configured_cta": "El asistente en el dispositivo aún no está configurado. Abre Ajustes para activarlo.",
+    "card": {
+      "open": "Abrir"
+    },
     "confirm": {
       "set_monitor_enabled_enable": "¿Activar el monitor {{id}}?",
     "set_monitor_enabled_disable": "¿Desactivar el monitor {{id}}?",
