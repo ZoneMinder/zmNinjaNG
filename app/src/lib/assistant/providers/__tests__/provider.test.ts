@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { isAssistantTestMode, getAssistantProvider } from '../provider';
+import { isAssistantTestMode, getAssistantProvider, PROVIDER_NOT_AVAILABLE_MESSAGE } from '../provider';
 import { sharedMockProvider } from '../mock';
 import { STORAGE_KEYS } from '../../../zmninja-ng-constants';
 
@@ -58,13 +58,13 @@ describe('getAssistantProvider', () => {
   it('throws when not in test mode', () => {
     vi.stubEnv('PROD', false);
 
-    expect(() => getAssistantProvider()).toThrow('On-device model backend is not available yet.');
+    expect(() => getAssistantProvider()).toThrow(PROVIDER_NOT_AVAILABLE_MESSAGE);
   });
 
   it('throws in production even if the localStorage flag is set', () => {
     vi.stubEnv('PROD', true);
     localStorage.setItem(STORAGE_KEYS.assistantTestMode, '1');
 
-    expect(() => getAssistantProvider()).toThrow('On-device model backend is not available yet.');
+    expect(() => getAssistantProvider()).toThrow(PROVIDER_NOT_AVAILABLE_MESSAGE);
   });
 });

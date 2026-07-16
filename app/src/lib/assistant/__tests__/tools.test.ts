@@ -210,9 +210,17 @@ describe('destructive tools', () => {
   it('set_monitor_enabled is destructive and builds a concrete confirm', async () => {
     const tool = getToolByName('set_monitor_enabled')!;
     expect(tool.destructive).toBe(true);
-    const req = await tool.buildConfirm!({ monitorId: '4', enabled: false }, ctx());
-    expect(req.toolName).toBe('set_monitor_enabled');
-    expect(req.messageParams).toMatchObject({ id: '4', enabled: false });
+
+    const disableReq = await tool.buildConfirm!({ monitorId: '4', enabled: false }, ctx());
+    expect(disableReq.toolName).toBe('set_monitor_enabled');
+    expect(disableReq.messageKey).toBe('assistant.confirm.set_monitor_enabled_disable');
+    expect(disableReq.messageParams).toMatchObject({ id: '4' });
+    expect(disableReq.messageParams).not.toHaveProperty('enabled');
+
+    const enableReq = await tool.buildConfirm!({ monitorId: '4', enabled: true }, ctx());
+    expect(enableReq.messageKey).toBe('assistant.confirm.set_monitor_enabled_enable');
+    expect(enableReq.messageParams).toMatchObject({ id: '4' });
+
     const r = await tool.execute({ monitorId: '4', enabled: false }, ctx());
     expect(r.isError).toBeFalsy();
     expect(setMonitorEnabled).toHaveBeenCalledWith('4', false);
@@ -254,9 +262,16 @@ describe('destructive tools', () => {
   it('archive_event is destructive and builds a concrete confirm', async () => {
     const tool = getToolByName('archive_event')!;
     expect(tool.destructive).toBe(true);
-    const req = await tool.buildConfirm!({ eventId: '99', archived: true }, ctx());
-    expect(req.messageKey).toBe('assistant.confirm.archive_event');
-    expect(req.messageParams).toMatchObject({ eventId: '99', archived: true });
+
+    const archiveReq = await tool.buildConfirm!({ eventId: '99', archived: true }, ctx());
+    expect(archiveReq.messageKey).toBe('assistant.confirm.archive_event_archive');
+    expect(archiveReq.messageParams).toMatchObject({ eventId: '99' });
+    expect(archiveReq.messageParams).not.toHaveProperty('archived');
+
+    const unarchiveReq = await tool.buildConfirm!({ eventId: '99', archived: false }, ctx());
+    expect(unarchiveReq.messageKey).toBe('assistant.confirm.archive_event_unarchive');
+    expect(unarchiveReq.messageParams).toMatchObject({ eventId: '99' });
+
     const r = await tool.execute({ eventId: '99', archived: true }, ctx());
     expect(r.isError).toBeFalsy();
     expect(setEventArchived).toHaveBeenCalledWith('99', true);

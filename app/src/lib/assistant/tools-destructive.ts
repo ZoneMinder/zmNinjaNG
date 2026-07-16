@@ -73,8 +73,13 @@ const setMonitorEnabledTool: ToolDefinition = {
   async buildConfirm(input) {
     return {
       toolName: 'set_monitor_enabled',
-      messageKey: 'assistant.confirm.set_monitor_enabled',
-      messageParams: { id: input.monitorId, enabled: input.enabled },
+      // A distinct key per boolean value, rather than interpolating `enabled`
+      // as a param: i18n string interpolation renders a raw boolean as the
+      // literal "true"/"false" in every locale (refs #246 review).
+      messageKey: input.enabled
+        ? 'assistant.confirm.set_monitor_enabled_enable'
+        : 'assistant.confirm.set_monitor_enabled_disable',
+      messageParams: { id: input.monitorId },
       params: input,
     };
   },
@@ -178,8 +183,11 @@ const archiveEventTool: ToolDefinition = {
   async buildConfirm(input) {
     return {
       toolName: 'archive_event',
-      messageKey: 'assistant.confirm.archive_event',
-      messageParams: { eventId: input.eventId, archived: input.archived },
+      // Same rationale as set_monitor_enabled above: a key per boolean value.
+      messageKey: input.archived
+        ? 'assistant.confirm.archive_event_archive'
+        : 'assistant.confirm.archive_event_unarchive',
+      messageParams: { eventId: input.eventId },
       params: input,
     };
   },

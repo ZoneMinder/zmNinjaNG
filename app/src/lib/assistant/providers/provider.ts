@@ -2,6 +2,11 @@ import type { AssistantProvider } from '../types';
 import { STORAGE_KEYS } from '../../zmninja-ng-constants';
 import { sharedMockProvider } from './mock';
 
+/** Thrown by `getAssistantProvider` on the real (non-test-mode) path. Shared
+ *  so callers (e.g. AskPanel) can compare against it instead of duplicating
+ *  the literal string. */
+export const PROVIDER_NOT_AVAILABLE_MESSAGE = 'On-device model backend is not available yet.';
+
 /** True only in non-production builds when the test flag is set. Keeps the
  *  mock backend unreachable in a shipped release. */
 export function isAssistantTestMode(): boolean {
@@ -17,5 +22,5 @@ export function isAssistantTestMode(): boolean {
  *  Phase 1 throws for the real path; Phase 2 wires WebLLM here. */
 export function getAssistantProvider(): AssistantProvider {
   if (isAssistantTestMode()) return sharedMockProvider;
-  throw new Error('On-device model backend is not available yet.');
+  throw new Error(PROVIDER_NOT_AVAILABLE_MESSAGE);
 }

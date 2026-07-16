@@ -8,6 +8,7 @@
  * resolves the Promise `useAssistantHost`'s `confirm()` handed back to the
  * agent loop.
  */
+import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle } from 'lucide-react';
 import type { ConfirmRequest } from '../../lib/assistant/types';
@@ -21,6 +22,13 @@ export interface AssistantConfirmCardProps {
 
 export function AssistantConfirmCard({ request, onAccept, onCancel }: AssistantConfirmCardProps) {
   const { t } = useTranslation();
+  // Cancel is the default-focused control for a destructive confirmation.
+  // `autoFocus` is blocked by jsx-a11y/no-autofocus (rule 35), so focus is
+  // set imperatively on mount instead.
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    cancelRef.current?.focus();
+  }, []);
   return (
     <div
       data-testid="assistant-confirm"
@@ -38,6 +46,7 @@ export function AssistantConfirmCard({ request, onAccept, onCancel }: AssistantC
       </details>
       <div className="flex justify-end gap-2">
         <Button
+          ref={cancelRef}
           type="button"
           variant="outline"
           size="sm"

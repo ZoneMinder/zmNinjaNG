@@ -22,7 +22,7 @@ import { getVersion } from '../../api/auth';
 import type { MonitorsResponse } from '../../api/types';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { runAssistantTurn } from '../../lib/assistant/agent';
-import { getAssistantProvider } from '../../lib/assistant/providers/provider';
+import { getAssistantProvider, PROVIDER_NOT_AVAILABLE_MESSAGE } from '../../lib/assistant/providers/provider';
 import { buildSystemPrompt } from '../../lib/assistant/system-prompt';
 import { getToolByName } from '../../lib/assistant/tools';
 import type { ToolContext } from '../../lib/assistant/types';
@@ -40,9 +40,6 @@ import { useAssistantHost } from './useAssistantHost';
 /** The agent loop never renders text itself; it only ever emits this prefix
  *  (see agent.ts's ITERATION_CAP_KEY) to hand the localization job to us. */
 const I18N_SENTINEL = '__i18n:';
-
-/** Thrown verbatim by providers/provider.ts's real (non-test-mode) path. */
-const PROVIDER_NOT_AVAILABLE_MESSAGE = 'On-device model backend is not available yet.';
 
 function renderAssistantText(text: string | undefined, t: TFunction) {
   if (!text) return null;
