@@ -550,8 +550,10 @@ export const ASSISTANT = {
   // Max characters of a tool call's JSON-stringified input shown inline next
   // to an activity step in AskPanel (rule 11: truncate long text).
   activityInputPreviewChars: 40,
-  defaultModelId: 'Qwen3-1.7B-q4f16_1-MLC',
+  defaultModelId: 'Qwen2.5-3B-Instruct-q4f16_1-MLC',
   webllmModels: [
+    { id: 'Qwen2.5-3B-Instruct-q4f16_1-MLC', label: 'Qwen2.5 3B', approxSizeMb: 1900 },
+    { id: 'Llama-3.2-3B-Instruct-q4f16_1-MLC', label: 'Llama 3.2 3B', approxSizeMb: 1900 },
     { id: 'Qwen3-1.7B-q4f16_1-MLC', label: 'Qwen3 1.7B', approxSizeMb: 1100 },
     { id: 'Llama-3.2-1B-Instruct-q4f16_1-MLC', label: 'Llama 3.2 1B', approxSizeMb: 700 },
   ],

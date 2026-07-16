@@ -17,6 +17,12 @@ describe('buildSystemPrompt', () => {
     expect(p.toLowerCase()).toContain('de');
   });
 
+  it('instructs the model never to ask for a monitor id', () => {
+    const p = buildSystemPrompt(base);
+    expect(p).toContain('never ask for a monitor id');
+    expect(p).toContain('WITHOUT a monitorId');
+  });
+
   it('caps the monitor table at the configured limit', () => {
     const many = Array.from({ length: 80 }, (_, i) => ({
       id: String(i),

@@ -67,8 +67,9 @@ const getMonitorTool: ToolDefinition = {
 const countEventsTool: ToolDefinition = {
   name: 'count_events',
   description:
-    'Count events per monitor over a rolling interval such as "1 hour" or "1 day". Use this for ' +
-    '"how many events happened" questions instead of list_events, which returns individual rows.',
+    'Count events per monitor over a rolling interval such as "1 hour" or "1 day", covering ALL monitors ' +
+    'in one call (no monitorId needed). Use this for "how many events happened" or "summarize events" ' +
+    'questions instead of list_events, which returns individual rows.',
   schema: {
     type: 'object',
     properties: { interval: { type: 'string', description: 'e.g. "1 hour", "1 day".' } },
