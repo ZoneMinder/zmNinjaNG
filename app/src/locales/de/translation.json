@@ -316,10 +316,13 @@
       "no_webgpu": "Erfordert WebGPU, auf diesem Gerät nicht verfügbar.",
       "model": "Modell",
       "download": "Herunterladen",
+      "downloading": "Wird geladen…",
+      "downloaded": "Heruntergeladen",
+      "download_failed": "Modell-Download fehlgeschlagen.",
       "download_size": "{{size}} MB",
-      "coming_soon": "Der Modell-Download folgt im nächsten Update.",
       "privacy": "Läuft lokal auf dem Gerät. Es wird nichts gesendet außer an den eigenen ZoneMinder-Server.",
-      "delete": "Löschen"
+      "delete": "Löschen",
+      "delete_failed": "Modell konnte nicht gelöscht werden."
     },
     "language": "Sprache",
     "select_language": "Sprache auswählen",

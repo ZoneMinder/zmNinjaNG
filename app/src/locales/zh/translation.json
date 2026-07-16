@@ -316,10 +316,13 @@
       "no_webgpu": "需要 WebGPU，此设备不支持。",
       "model": "模型",
       "download": "下载",
+      "downloading": "下载中…",
+      "downloaded": "已下载",
+      "download_failed": "模型下载失败。",
       "download_size": "{{size}} MB",
-      "coming_soon": "模型下载将在下次更新中提供。",
       "privacy": "在设备本地运行。除您自己的 ZoneMinder 服务器外，不向任何地方发送数据。",
-      "delete": "删除"
+      "delete": "删除",
+      "delete_failed": "删除模型失败。"
     },
     "language": "语言",
     "select_language": "选择语言",

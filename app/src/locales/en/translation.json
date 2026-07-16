@@ -316,10 +316,13 @@
       "no_webgpu": "Requires WebGPU, not available on this device.",
       "model": "Model",
       "download": "Download",
+      "downloading": "Downloading…",
+      "downloaded": "Downloaded",
+      "download_failed": "Model download failed.",
       "download_size": "{{size}} MB",
-      "coming_soon": "Downloading models is coming in the next update.",
       "privacy": "Runs on-device. Nothing is sent anywhere except your own ZoneMinder server.",
-      "delete": "Delete"
+      "delete": "Delete",
+      "delete_failed": "Failed to delete model."
     },
     "language": "Language",
     "select_language": "Select Language",

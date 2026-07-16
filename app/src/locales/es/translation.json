@@ -316,10 +316,13 @@
       "no_webgpu": "Requiere WebGPU, no disponible en este dispositivo.",
       "model": "Modelo",
       "download": "Descargar",
+      "downloading": "Descargando…",
+      "downloaded": "Descargado",
+      "download_failed": "Error al descargar el modelo.",
       "download_size": "{{size}} MB",
-      "coming_soon": "La descarga de modelos llega en la próxima actualización.",
       "privacy": "Funciona en el dispositivo. No se envía nada salvo a tu propio servidor ZoneMinder.",
-      "delete": "Eliminar"
+      "delete": "Eliminar",
+      "delete_failed": "Error al eliminar el modelo."
     },
     "language": "Idioma",
     "select_language": "Seleccionar Idioma",

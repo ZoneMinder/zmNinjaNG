@@ -2,23 +2,35 @@
  * Assistant Section (refs #246)
  *
  * Master toggle plus model picker for the on-device assistant (Ask). The
- * model runs entirely in-browser via WebGPU (`@mlc-ai/web-llm`, wired in
- * Phase 2), so the toggle is disabled with an explanation once the real
- * `useWebGpuAvailable` probe (`navigator.gpu.requestAdapter()`, not just
- * `navigator.gpu` presence) reports no usable adapter. Download/Delete are
- * rendered here as the Phase 1 placeholder the design spec calls for
- * (docs/superpowers/specs/2026-07-16-assistant-design.md): Phase 2 wires the
- * real WebLLM download/cache/delete manager.
+ * model runs entirely in-browser via WebGPU (`@mlc-ai/web-llm`), so the
+ * toggle is disabled with an explanation once the real `useWebGpuAvailable`
+ * probe (`navigator.gpu.requestAdapter()`, not just `navigator.gpu`
+ * presence) reports no usable adapter. Download/Delete wire directly into
+ * `lib/assistant/model-download.ts`: `downloadModel` creates a
+ * `backgroundTasks` task itself (the existing background-tasks drawer shows
+ * the progress bar and a cancel button), so this component only tracks
+ * whether the selected model is downloaded and whether a download/delete is
+ * in flight, to enable/disable the two buttons.
  */
 
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Switch } from '../ui/switch';
 import { Button } from '../ui/button';
 import { SectionHeader, SettingsCard, SettingsRow, RowLabel } from './SettingsLayout';
 import { ASSISTANT } from '../../lib/zmninja-ng-constants';
 import { useWebGpuAvailable } from '../../hooks/useWebGpuAvailable';
+import { useToast } from '../../hooks/use-toast';
+import { deleteModel, downloadModel, isModelDownloaded } from '../../lib/assistant/model-download';
+import { log, LogLevel } from '../../lib/logger';
 import type { Profile } from '../../api/types';
 import type { ProfileSettings } from '../../stores/settings';
+
+/** 'checking': the `isModelDownloaded` probe for the currently selected model
+ *  is in flight (e.g. right after mount or after switching models). Both
+ *  buttons stay disabled in this state so neither can fire against a model
+ *  whose real cache state isn't known yet. */
+type DownloadStatus = 'checking' | 'not-downloaded' | 'downloaded';
 
 export interface AssistantSectionProps {
   settings: ProfileSettings;
@@ -34,6 +46,7 @@ export function AssistantSection({
   updateSettings,
 }: AssistantSectionProps) {
   const { t } = useTranslation();
+  const { toast } = useToast();
 
   // undefined while the requestAdapter() probe is in flight, then the real
   // result. Until it resolves the toggle stays disabled (same as "no
@@ -43,6 +56,74 @@ export function AssistantSection({
 
   const selectedModel =
     ASSISTANT.webllmModels.find((m) => m.id === settings.assistantModelId) ?? ASSISTANT.webllmModels[0];
+
+  const [downloadStatus, setDownloadStatus] = useState<DownloadStatus>('checking');
+  const [downloading, setDownloading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setDownloadStatus('checking');
+    isModelDownloaded(settings.assistantModelId)
+      .then((downloaded) => {
+        if (!cancelled) setDownloadStatus(downloaded ? 'downloaded' : 'not-downloaded');
+      })
+      .catch((error) => {
+        log.assistant('isModelDownloaded check failed', LogLevel.ERROR, { modelId: settings.assistantModelId, error });
+        if (!cancelled) setDownloadStatus('not-downloaded');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [settings.assistantModelId]);
+
+  const handleDownload = useCallback(async () => {
+    const modelId = settings.assistantModelId;
+    setDownloading(true);
+    try {
+      // `downloadModel` reports failures onto its background task rather
+      // than rejecting (so the task drawer shows the error), so the real
+      // outcome has to be read back from the cache instead of a catch here.
+      await downloadModel(modelId);
+      const downloaded = await isModelDownloaded(modelId);
+      setDownloadStatus(downloaded ? 'downloaded' : 'not-downloaded');
+      if (!downloaded) {
+        toast({
+          title: t('common.error'),
+          description: t('settings.assistant.download_failed'),
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      log.assistant('downloadModel threw', LogLevel.ERROR, { modelId, error });
+      setDownloadStatus('not-downloaded');
+      toast({
+        title: t('common.error'),
+        description: t('settings.assistant.download_failed'),
+        variant: 'destructive',
+      });
+    } finally {
+      setDownloading(false);
+    }
+  }, [settings.assistantModelId, t, toast]);
+
+  const handleDelete = useCallback(async () => {
+    const modelId = settings.assistantModelId;
+    setDeleting(true);
+    try {
+      await deleteModel(modelId);
+      setDownloadStatus('not-downloaded');
+    } catch (error) {
+      log.assistant('deleteModel failed', LogLevel.ERROR, { modelId, error });
+      toast({
+        title: t('common.error'),
+        description: t('settings.assistant.delete_failed'),
+        variant: 'destructive',
+      });
+    } finally {
+      setDeleting(false);
+    }
+  }, [settings.assistantModelId, t, toast]);
 
   return (
     <section>
@@ -84,17 +165,36 @@ export function AssistantSection({
 
             <div className="px-4 py-3 space-y-2">
               <div className="flex flex-wrap items-center gap-3">
-                <Button variant="outline" size="sm" disabled data-testid="assistant-model-download">
-                  {t('settings.assistant.download')}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={downloadStatus !== 'not-downloaded' || downloading || deleting}
+                  onClick={handleDownload}
+                  data-testid="assistant-model-download"
+                >
+                  {downloading ? t('settings.assistant.downloading') : t('settings.assistant.download')}
                 </Button>
-                <Button variant="outline" size="sm" disabled data-testid="assistant-model-delete">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={downloadStatus !== 'downloaded' || downloading || deleting}
+                  onClick={handleDelete}
+                  data-testid="assistant-model-delete"
+                >
                   {t('settings.assistant.delete')}
                 </Button>
                 <span className="text-xs text-muted-foreground">
                   {t('settings.assistant.download_size', { size: selectedModel.approxSizeMb })}
                 </span>
+                {downloadStatus === 'downloaded' && (
+                  <span
+                    className="text-xs text-muted-foreground"
+                    data-testid="assistant-model-downloaded-status"
+                  >
+                    {t('settings.assistant.downloaded')}
+                  </span>
+                )}
               </div>
-              <p className="text-xs text-muted-foreground">{t('settings.assistant.coming_soon')}</p>
             </div>
 
             <div className="px-4 py-3">
