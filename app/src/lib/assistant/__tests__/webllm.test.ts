@@ -136,6 +136,28 @@ describe('parseWebLlmTurn', () => {
     const turn = parseWebLlmTurn('Sure, here you go: { this is not valid json');
     expect(turn).toEqual({ text: '__i18n:assistant.parse_error', toolCalls: [] });
   });
+
+  it('strips a closed <think> block before parsing a {"answer"} reply', () => {
+    const turn = parseWebLlmTurn('<think>reasoning here</think>{"answer":"hi"}');
+    expect(turn).toEqual({ text: 'hi', toolCalls: [] });
+  });
+
+  it('strips a closed <think> block containing brace-y text so the real tool call after it is parsed, not the one inside', () => {
+    const turn = parseWebLlmTurn('<think>plan {"tool":"x"}</think>\n{"tool":"list_monitors","input":{}}');
+    expect(turn.toolCalls).toHaveLength(1);
+    expect(turn.toolCalls[0].name).toBe('list_monitors');
+    expect(turn.toolCalls[0].input).toEqual({});
+  });
+
+  it('falls back gracefully on an unclosed <think> block with no JSON after it', () => {
+    const turn = parseWebLlmTurn('<think>still reasoning and never finished');
+    expect(turn).toEqual({ text: '__i18n:assistant.parse_error', toolCalls: [] });
+  });
+
+  it('parses a plain {"answer"} reply with no <think> block at all', () => {
+    const turn = parseWebLlmTurn('{"answer":"hi"}');
+    expect(turn).toEqual({ text: 'hi', toolCalls: [] });
+  });
 });
 
 describe('WebLlmProvider.chat', () => {
@@ -161,12 +183,15 @@ describe('WebLlmProvider.chat', () => {
 
     expect(turn).toEqual({ text: 'It is armed.', toolCalls: [] });
     expect(getLoadedEngine).toHaveBeenCalledWith(ASSISTANT.defaultModelId);
-    expect(create).toHaveBeenCalledWith(
+    const call = create.mock.calls[0][0];
+    expect(call).toEqual(
       expect.objectContaining({
-        response_format: { type: 'json_object' },
         max_tokens: ASSISTANT.maxTokens,
       }),
     );
+    // response_format crashes web-llm 0.2.84's XGrammar JSON-schema compiler
+    // with a BindingError when no schema string is supplied; must never be sent.
+    expect(call).not.toHaveProperty('response_format');
   });
 
   it('returns a ToolCall turn for a canned {"tool","input"} completion', async () => {

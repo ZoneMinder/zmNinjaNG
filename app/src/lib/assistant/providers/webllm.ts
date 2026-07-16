@@ -3,14 +3,22 @@
  *
  * Small on-device models are unreliable at WebLLM's native function-calling
  * protocol, so this adapter never uses `ChatCompletionRequest.tools`. Instead
- * every turn is constrained with `response_format: { type: 'json_object' }`
- * and a system-prompt instruction to reply with exactly one of two JSON
- * shapes: `{"tool": "<name>", "input": {...}}` for one tool call, or
- * `{"answer": "<text>"}` to answer directly. `response_format.schema` (a JSON
- * Schema STRING) exists in this web-llm version, but encoding a `{tool,input}
- * | {answer}` union as a single JSON-Schema string added more complexity than
- * the prompt-instruction approach for a two-shape contract, so it is left
- * unused here; the request-builder/parser pair below is the constraint.
+ * every turn is constrained with a system-prompt instruction to reply with
+ * exactly one of two JSON shapes: `{"tool": "<name>", "input": {...}}` for
+ * one tool call, or `{"answer": "<text>"}` to answer directly.
+ *
+ * `response_format: { type: 'json_object' }` is deliberately NOT sent: in
+ * `@mlc-ai/web-llm@0.2.84`, `json_object` mode routes into the XGrammar
+ * JSON-schema compiler (`GrammarCompiler.CompileJSONSchema`), which expects a
+ * schema STRING. With no `response_format.schema` supplied it throws a WASM
+ * `BindingError: Cannot pass non-string to std::string`, crashing every chat
+ * turn. So the constraint here is prompt + parser only, not `response_format`.
+ *
+ * The default model, Qwen3-1.7B, is a reasoning model that emits a
+ * `<think>...</think>` chain-of-thought block before its final answer;
+ * `parseWebLlmTurn` strips that block before extracting JSON so the model's
+ * scratch-work (which may itself contain brace-y text) is never mistaken for
+ * the real reply.
  *
  * `buildWebLlmMessages` and `parseWebLlmTurn` are pure and exported so they
  * unit-test without WebGPU; only `WebLlmProvider.chat` touches the engine.
@@ -77,6 +85,26 @@ export function buildWebLlmMessages(
   return messages;
 }
 
+/** Strips a reasoning model's `<think>...</think>` chain-of-thought block
+ *  (e.g. Qwen3's) from the front of `content` before JSON extraction runs.
+ *  If a closing `</think>` is present, everything up to and including it is
+ *  removed, leaving only the final answer. If `<think>` opens but never
+ *  closes (generation was cut short by `max_tokens`), the whole tail from
+ *  `<think>` onward is dropped instead of being handed to the JSON
+ *  extractor, since it is scratch-work, not a reply. */
+function stripThinkBlock(content: string): string {
+  const openIndex = content.indexOf('<think>');
+  if (openIndex === -1) return content;
+
+  const closeTag = '</think>';
+  const closeIndex = content.indexOf(closeTag, openIndex);
+  if (closeIndex === -1) {
+    return content.slice(0, openIndex);
+  }
+
+  return content.slice(0, openIndex) + content.slice(closeIndex + closeTag.length);
+}
+
 function extractJsonPayload(content: string): string {
   // Some models wrap JSON in a markdown fence despite being told not to;
   // strip it before parsing rather than failing the whole turn over it.
@@ -134,16 +162,20 @@ function extractBalancedJsonObject(content: string): string | undefined {
  *  `AssistantTurn`. Never throws: malformed or unrecognized JSON degrades to
  *  a fallback apology turn with no tool calls, so a single bad generation
  *  doesn't crash the agent loop (agent.ts pushes this turn as-is and stops,
- *  same as any other answer-only turn). */
+ *  same as any other answer-only turn). A reasoning model's `<think>` block
+ *  is stripped first (see `stripThinkBlock`) so its scratch-work never gets
+ *  mistaken for the final JSON reply. */
 export function parseWebLlmTurn(content: string): AssistantTurn {
+  const stripped = stripThinkBlock(content);
+
   let parsed: unknown;
   try {
-    parsed = JSON.parse(extractJsonPayload(content));
+    parsed = JSON.parse(extractJsonPayload(stripped));
   } catch {
     // The fence-stripped content still isn't valid JSON on its own; a small
     // model may have replied with JSON embedded in prose instead. Try to
     // recover the first balanced {...} object before giving up.
-    const embedded = extractBalancedJsonObject(content);
+    const embedded = extractBalancedJsonObject(stripped);
     if (embedded === undefined) {
       return { text: PARSE_ERROR_TEXT, toolCalls: [] };
     }
@@ -199,7 +231,6 @@ export class WebLlmProvider implements AssistantProvider {
 
     const response = await engine.chat.completions.create({
       messages: chatMessages,
-      response_format: { type: 'json_object' },
       max_tokens: ASSISTANT.maxTokens,
     });
 
