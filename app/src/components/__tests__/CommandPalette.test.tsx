@@ -112,7 +112,20 @@ describe('CommandPalette', () => {
     expect(screen.queryByTestId('command-palette-results')).not.toBeInTheDocument();
   });
 
-  it('switches to Ask mode when the input starts with "?"', () => {
+  it('does not switch to Ask mode when the input starts with "?" and the assistant is disabled', () => {
+    render(<CommandPalette />);
+    const input = screen.getByTestId('command-palette-input');
+    fireEvent.change(input, { target: { value: '?' } });
+    expect(useCommandPaletteStore.getState().mode).toBe('command');
+    expect(screen.queryByTestId('ask-panel-mock')).not.toBeInTheDocument();
+    expect(screen.getByTestId('command-palette-results')).toBeInTheDocument();
+  });
+
+  it('switches to Ask mode when the input starts with "?" and the assistant is enabled', () => {
+    useCurrentProfileMock.mockReturnValue({
+      currentProfile: { id: 'p1' },
+      settings: { assistantEnabled: true },
+    });
     render(<CommandPalette />);
     const input = screen.getByTestId('command-palette-input');
     fireEvent.change(input, { target: { value: '?' } });

@@ -156,8 +156,10 @@ export function CommandPalette() {
               const value = e.target.value;
               setQuery(value);
               // Typing a leading '?' is a second entry point into Ask mode,
-              // mirroring the global '?' key (KeyboardShortcuts.tsx).
-              if (value.startsWith('?')) setMode('ask');
+              // mirroring the global '?' key (KeyboardShortcuts.tsx). Gated on
+              // assistantEnabled so a disabled assistant leaves '?' as a plain
+              // query character (refs #246).
+              if (value.startsWith('?') && settings.assistantEnabled) setMode('ask');
             }}
             onKeyDown={onInputKeyDown}
             placeholder={t('command_palette.placeholder')}
