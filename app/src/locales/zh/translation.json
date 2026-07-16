@@ -1233,6 +1233,8 @@
   "assistant": {
     "title": "助手",
     "clear": "清除",
+    "minimize": "最小化",
+    "reopen": "重新打开助手",
     "placeholder": "询问你的摄像头...",
     "send": "发送",
     "abort": "停止",

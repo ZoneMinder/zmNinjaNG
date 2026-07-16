@@ -23,7 +23,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
-import { Loader2, Send, Square, Trash2 } from 'lucide-react';
+import { Loader2, Send, Square } from 'lucide-react';
 import { getVersion } from '../../api/auth';
 import type { MonitorsResponse } from '../../api/types';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
@@ -164,19 +164,18 @@ export function AskPanel() {
   const append = useAssistantStore((s) => s.append);
   const setRunning = useAssistantStore((s) => s.setRunning);
   const clearActivities = useAssistantStore((s) => s.clearActivities);
-  const reset = useAssistantStore((s) => s.reset);
 
   const [input, setInput] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [notConfigured, setNotConfigured] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const prevThreadLengthRef = useRef(thread.length);
 
-  // Focus the message input on mount so a keyboard user who just entered Ask
-  // mode (e.g. via the `?` key) can start typing immediately (refs #246). The
-  // palette no longer renders its own search input in ask mode, so this is
-  // the only input on screen; a plain `ref` + effect is used instead of the
-  // `autoFocus` JSX attribute, which jsx-a11y/no-autofocus (rule 35) blocks.
+  // Focus the message input on mount so a keyboard user who just opened the
+  // assistant (e.g. via the `?` key) can start typing immediately (refs #246).
+  // A plain `ref` + effect is used instead of the `autoFocus` JSX attribute,
+  // which jsx-a11y/no-autofocus (rule 35) blocks.
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
@@ -190,22 +189,24 @@ export function AskPanel() {
     };
   }, [resolveConfirm]);
 
+  // The Clear button now lives in AssistantWidget.tsx, which resets the
+  // shared store (`reset(profileId)` + `clearActivities()`). This component
+  // still owns ephemeral, non-persisted UI state (a stale error banner, the
+  // "not configured" CTA, unsent input text) that a Clear should also wipe.
+  // Detecting the store's thread going from non-empty to empty is simpler
+  // than plumbing an imperative ref between the two components (refs #246).
+  useEffect(() => {
+    if (thread.length === 0 && prevThreadLengthRef.current > 0) {
+      setError(null);
+      setNotConfigured(false);
+      setInput('');
+    }
+    prevThreadLengthRef.current = thread.length;
+  }, [thread.length]);
+
   const handleAbort = () => {
     resolveConfirm(false);
     abortControllerRef.current?.abort();
-  };
-
-  // Frees the model's context window (refs #246): a long thread otherwise
-  // keeps growing toward ASSISTANT's context-length cap. Disabled while a
-  // turn is running (see the button below) instead of aborting it, so this
-  // never has to race handleAbort's cleanup.
-  const handleClear = () => {
-    if (!profileId) return;
-    reset(profileId);
-    clearActivities();
-    setError(null);
-    setNotConfigured(false);
-    setInput('');
   };
 
   const handleSend = async () => {
@@ -318,30 +319,6 @@ export function AskPanel() {
 
   return (
     <div className="flex h-full flex-col" data-testid="ask-panel">
-      {/* `pr-10` (rather than the `px-3` used on the left) reserves room for
-          the Dialog's own close "X" (ui/dialog.tsx's `DialogPrimitive.Close`),
-          which is absolutely positioned at `right-4 top-4` on the shared
-          `DialogContent` this panel mounts inside (CommandPalette.tsx), not
-          in this flex row: without the extra padding the trash button's flex
-          position lands directly under it. */}
-      <div className="flex items-center gap-2 border-b py-2 pl-3 pr-10">
-        <span className="flex-1 min-w-0 truncate text-sm font-medium">{t('assistant.title')}</span>
-        <div className="flex items-center gap-1">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={handleClear}
-            disabled={running || thread.length === 0}
-            aria-label={t('assistant.clear')}
-            data-testid="assistant-clear"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-
       <div className="flex-1 space-y-2 overflow-y-auto p-3">
         {thread.map((msg, i) => {
           if (msg.role === 'tool') {

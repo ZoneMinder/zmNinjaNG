@@ -1,12 +1,13 @@
 /**
- * Coverage for the `?` key branch (refs #246): it must open the assistant's
- * Ask mode when the assistant is enabled, and fall back to the help overlay
- * when it is not. This is the acceptance-criterion line for issue #246 finding 2.
+ * Coverage for the `?` key branch (refs #246): it must open the floating
+ * assistant window when the assistant is enabled, and fall back to the help
+ * overlay when it is not. This is the acceptance-criterion line for issue
+ * #246 finding 2.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import { KeyboardShortcuts } from '../KeyboardShortcuts';
-import { useCommandPaletteStore } from '../../stores/commandPalette';
+import { useAssistantPanelStore } from '../../stores/assistantPanel';
 
 // The Dialog's open state is a React state update, so the dispatched keydown
 // must be wrapped in act() to flush it before asserting on the DOM.
@@ -47,25 +48,18 @@ describe('KeyboardShortcuts "?" key', () => {
       currentProfile: { id: 'p1' },
       settings: { assistantEnabled: false, tvMode: false },
     });
-    useCommandPaletteStore.setState({
-      open: false,
-      mode: 'command',
-      setOpen: vi.fn(),
-      toggle: vi.fn(),
-      setMode: vi.fn(),
-      openAsk: vi.fn(),
-    });
+    useAssistantPanelStore.setState({ state: 'closed', size: { width: 400, height: 560 } });
   });
 
-  it('opens the help overlay and does not call openAsk when the assistant is disabled', () => {
+  it('opens the help overlay and does not open the assistant panel when the assistant is disabled', () => {
     render(<KeyboardShortcuts />);
     pressQuestionMark();
 
-    expect(useCommandPaletteStore.getState().openAsk).not.toHaveBeenCalled();
+    expect(useAssistantPanelStore.getState().state).toBe('closed');
     expect(screen.getByTestId('keyboard-shortcuts-help')).toBeInTheDocument();
   });
 
-  it('calls openAsk and does not open the help overlay when the assistant is enabled', () => {
+  it('opens the assistant panel and does not open the help overlay when the assistant is enabled', () => {
     useCurrentProfileMock.mockReturnValue({
       currentProfile: { id: 'p1' },
       settings: { assistantEnabled: true, tvMode: false },
@@ -73,7 +67,7 @@ describe('KeyboardShortcuts "?" key', () => {
     render(<KeyboardShortcuts />);
     pressQuestionMark();
 
-    expect(useCommandPaletteStore.getState().openAsk).toHaveBeenCalledTimes(1);
+    expect(useAssistantPanelStore.getState().state).toBe('open');
     expect(screen.queryByTestId('keyboard-shortcuts-help')).not.toBeInTheDocument();
   });
 });

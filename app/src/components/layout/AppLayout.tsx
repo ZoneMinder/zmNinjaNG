@@ -40,6 +40,7 @@ import { DeveloperNoticeBanner } from './DeveloperNoticeBanner';
 import { OfflineBanner } from './OfflineBanner';
 import { CertTrustBanner } from '../CertTrustBanner';
 import { DeleteBatchBar } from '../events/DeleteBatchBar';
+import { AssistantWidget } from '../assistant/AssistantWidget';
 
 
 /**
@@ -285,6 +286,11 @@ export default function AppLayout() {
       />
 
       <KioskOverlay onUnlock={handleKioskUnlock} />
+
+      {/* Rendered once at the app root, not per-route, so navigating (e.g. an
+          assistant "Open" card, or its own `navigate` tool call) never
+          unmounts the conversation underneath it (refs #246). */}
+      <AssistantWidget />
     </div>
   );
 }

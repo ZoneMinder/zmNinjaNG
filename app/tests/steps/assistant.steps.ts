@@ -80,14 +80,12 @@ When('I press the {string} key', async ({ page }, key: string) => {
 });
 
 Then('the assistant panel should open', async ({ page }) => {
+  // The floating assistant panel (components/assistant/AssistantWidget.tsx),
+  // not the command palette: refs #246 moved the assistant out of the
+  // palette into its own persistent window. AskPanel's message input must
+  // hold focus so a keyboard user can start typing without an extra click.
+  await expect(page.getByTestId('assistant-panel')).toBeVisible({ timeout: testConfig.timeouts.transition });
   await expect(page.getByTestId('ask-panel')).toBeVisible({ timeout: testConfig.timeouts.transition });
-
-  // Ask mode renders exactly one text input (refs #246): the palette's own
-  // command-search input must not be present, and AskPanel's message input
-  // must hold focus so a keyboard user can start typing without an extra
-  // click. Regression coverage for the "typed into the dead top input"
-  // finding from the whole-branch review.
-  await expect(page.getByTestId('command-palette-input')).toHaveCount(0);
   await expect(page.getByTestId('assistant-input')).toBeFocused({ timeout: testConfig.timeouts.transition });
 });
 

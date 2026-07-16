@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { CommandPalette } from '../CommandPalette';
 import { useCommandPaletteStore } from '../../stores/commandPalette';
+import { useAssistantPanelStore } from '../../stores/assistantPanel';
 
 const navigateMock = vi.fn();
 vi.mock('react-router-dom', () => ({
@@ -31,9 +32,6 @@ const useCurrentProfileMock = vi.fn(() => ({
 vi.mock('../../hooks/useCurrentProfile', () => ({
   useCurrentProfile: () => useCurrentProfileMock(),
 }));
-vi.mock('../assistant/AskPanel', () => ({
-  AskPanel: () => <div data-testid="ask-panel-mock" />,
-}));
 vi.mock('../../stores/auth', () => ({
   useAuthStore: (sel: (s: { isAuthenticated: boolean }) => unknown) => sel({ isAuthenticated: true }),
 }));
@@ -48,7 +46,8 @@ describe('CommandPalette', () => {
     navigateMock.mockClear();
     setSelectedGroup.mockClear();
     scrollIntoViewMock.mockClear();
-    useCommandPaletteStore.setState({ open: true, mode: 'command' });
+    useCommandPaletteStore.setState({ open: true });
+    useAssistantPanelStore.setState({ state: 'closed', size: { width: 400, height: 560 } });
     useCurrentProfileMock.mockReturnValue({
       currentProfile: { id: 'p1' },
       settings: { assistantEnabled: false },
@@ -100,43 +99,16 @@ describe('CommandPalette', () => {
     expect(screen.queryByTestId('command-item-ask')).not.toBeInTheDocument();
   });
 
-  it('shows the Ask item when the assistant is enabled and opens Ask mode on click', () => {
+  it('shows the Ask item when the assistant is enabled and opens the floating assistant window on click', () => {
     useCurrentProfileMock.mockReturnValue({
       currentProfile: { id: 'p1' },
       settings: { assistantEnabled: true },
     });
     render(<CommandPalette />);
     fireEvent.click(screen.getByTestId('command-item-ask'));
-    expect(useCommandPaletteStore.getState().mode).toBe('ask');
-    expect(screen.getByTestId('ask-panel-mock')).toBeInTheDocument();
-    expect(screen.queryByTestId('command-palette-results')).not.toBeInTheDocument();
-    // Ask mode renders exactly one text input: the palette's own search
-    // input must be gone, not just inert (refs #246 whole-branch review).
-    expect(screen.queryByTestId('command-palette-input')).not.toBeInTheDocument();
-  });
-
-  it('does not switch to Ask mode when the input starts with "?" and the assistant is disabled', () => {
-    render(<CommandPalette />);
-    const input = screen.getByTestId('command-palette-input');
-    fireEvent.change(input, { target: { value: '?' } });
-    expect(useCommandPaletteStore.getState().mode).toBe('command');
-    expect(screen.queryByTestId('ask-panel-mock')).not.toBeInTheDocument();
-    expect(screen.getByTestId('command-palette-results')).toBeInTheDocument();
-  });
-
-  it('switches to Ask mode when the input starts with "?" and the assistant is enabled', () => {
-    useCurrentProfileMock.mockReturnValue({
-      currentProfile: { id: 'p1' },
-      settings: { assistantEnabled: true },
-    });
-    render(<CommandPalette />);
-    const input = screen.getByTestId('command-palette-input');
-    fireEvent.change(input, { target: { value: '?' } });
-    expect(useCommandPaletteStore.getState().mode).toBe('ask');
-    expect(screen.getByTestId('ask-panel-mock')).toBeInTheDocument();
-    expect(screen.queryByTestId('command-palette-results')).not.toBeInTheDocument();
-    // The input that just received the '?' unmounts along with the rest of
-    // the command-mode chrome; AskPanel's own input takes over (refs #246).
-    expect(screen.queryByTestId('command-palette-input')).not.toBeInTheDocument();
+    // Clicking Ask closes the palette and opens the standalone assistant
+    // panel; the assistant no longer renders inside this component (refs #246).
+    expect(useCommandPaletteStore.getState().open).toBe(false);
+    expect(useAssistantPanelStore.getState().state).toBe('open');
   });
 });

@@ -1233,6 +1233,8 @@
   "assistant": {
     "title": "Assistant",
     "clear": "Clear",
+    "minimize": "Minimize",
+    "reopen": "Reopen assistant",
     "placeholder": "Ask about your cameras...",
     "send": "Send",
     "abort": "Stop",

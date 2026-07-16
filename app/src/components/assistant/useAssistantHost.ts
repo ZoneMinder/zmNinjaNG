@@ -8,19 +8,21 @@
  * `confirm` parks a `ConfirmRequest` in local state and hands the agent loop
  * back a Promise that only `resolveConfirm` (called by AskPanel, wired to the
  * confirm card's buttons, an abort, or an unmount) can settle. `navigate`
- * closes the command palette before routing so the agent's `navigate` tool
- * call collapses the panel as a side effect, exactly as the forward contract
- * from the agent loop (agent.ts's `navigate`/`closePanel` comment) expects.
+ * minimizes the floating assistant window (`stores/assistantPanel.ts`) before
+ * routing, so the agent's `navigate` tool call (or an "Open" result-card
+ * click) collapses it to the FAB instead of closing it, exactly as the
+ * forward contract from the agent loop (agent.ts's `navigate`/`closePanel`
+ * comment) expects: the conversation underneath survives the navigation.
  */
 import { useCallback, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { AssistantHost, ConfirmRequest } from '../../lib/assistant/types';
 import { useAssistantStore } from '../../stores/assistant';
-import { useCommandPaletteStore } from '../../stores/commandPalette';
+import { useAssistantPanelStore } from '../../stores/assistantPanel';
 
 export function useAssistantHost() {
   const navigate = useNavigate();
-  const setOpen = useCommandPaletteStore((s) => s.setOpen);
+  const minimizePanel = useAssistantPanelStore((s) => s.minimize);
   const pushActivity = useAssistantStore((s) => s.pushActivity);
   const [pendingConfirm, setPendingConfirm] = useState<ConfirmRequest | null>(null);
   const resolverRef = useRef<((ok: boolean) => void) | null>(null);
@@ -38,7 +40,7 @@ export function useAssistantHost() {
         setPendingConfirm(request);
       }),
     navigate: (path) => {
-      setOpen(false);
+      minimizePanel();
       navigate(path);
     },
     onActivity: (a) => pushActivity(a),

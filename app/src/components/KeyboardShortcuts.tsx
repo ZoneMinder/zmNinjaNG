@@ -7,8 +7,8 @@
  * device (where the d-pad handler and WebView spatial nav own the keys). On
  * desktop, TV mode is cosmetic and the shortcuts stay live (refs #241).
  *
- * The `?` key is dual-purpose: it opens the command palette's Ask mode
- * (`useCommandPaletteStore.openAsk()`) when the on-device assistant is enabled
+ * The `?` key is dual-purpose: it opens the floating assistant window
+ * (`useAssistantPanelStore.open()`) when the on-device assistant is enabled
  * (`settings.assistantEnabled`), otherwise it falls back to the help overlay
  * below.
  */
@@ -35,6 +35,7 @@ import {
   monitorIdFromBuffer,
 } from '../lib/keyboard-shortcuts';
 import { useCommandPaletteStore } from '../stores/commandPalette';
+import { useAssistantPanelStore } from '../stores/assistantPanel';
 import {
   Dialog,
   DialogContent,
@@ -53,7 +54,7 @@ export function KeyboardShortcuts() {
   const { isTvMode } = useTvMode();
 
   const openPalette = useCommandPaletteStore((s) => s.setOpen);
-  const openAsk = useCommandPaletteStore((s) => s.openAsk);
+  const openAssistant = useAssistantPanelStore((s) => s.open);
 
   const [buffer, setBuffer] = useState('');
   const [helpOpen, setHelpOpen] = useState(false);
@@ -132,7 +133,7 @@ export function KeyboardShortcuts() {
 
       if (e.key === '?') {
         e.preventDefault();
-        if (settings.assistantEnabled) openAsk();
+        if (settings.assistantEnabled) openAssistant();
         else setHelpOpen((open) => !open);
         return;
       }
@@ -164,7 +165,7 @@ export function KeyboardShortcuts() {
         navigate(route);
       }
     },
-    [currentProfile, isLocked, isTvMode, helpOpen, navigate, commitBuffer, clearBuffer, openPalette, settings.assistantEnabled, openAsk]
+    [currentProfile, isLocked, isTvMode, helpOpen, navigate, commitBuffer, clearBuffer, openPalette, settings.assistantEnabled, openAssistant]
   );
 
   useEffect(() => {

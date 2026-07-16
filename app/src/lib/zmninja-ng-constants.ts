@@ -383,6 +383,10 @@ export const STORAGE_KEYS = {
   // In-app assistant: dev-only flag to force a deterministic stub provider
   // instead of loading WebLLM (issue #246)
   assistantTestMode: 'zmng-assistant-test-mode',
+
+  // Floating assistant window: persisted zustand store key (only the
+  // resizable panel's width/height are persisted, see stores/assistantPanel.ts)
+  assistantPanelStore: 'zmng-assistant-panel',
 } as const;
 
 /**
@@ -573,6 +577,31 @@ export const ASSISTANT = {
     { id: 'Qwen3-1.7B-q4f16_1-MLC', label: 'Qwen3 1.7B', approxSizeMb: 1100 },
     { id: 'Llama-3.2-1B-Instruct-q4f16_1-MLC', label: 'Llama 3.2 1B', approxSizeMb: 700 },
   ],
+} as const;
+
+/**
+ * Floating assistant window (refs #246).
+ *
+ * Desktop is a resizable floating panel anchored bottom-right; native CSS
+ * `resize` (no hand-rolled drag math) lets the user drag the corner, and an
+ * attached ResizeObserver debounces the observed size into
+ * `stores/assistantPanel.ts`. Mobile ignores all of this and renders a
+ * full-screen sheet instead (components/assistant/AssistantWidget.tsx).
+ */
+export const ASSISTANT_PANEL = {
+  defaultWidth: 400,
+  defaultHeight: 560,
+  minWidth: 320,
+  minHeight: 400,
+  maxWidth: 720,
+  maxHeight: 960,
+  // Debounce window before a CSS-resize drag is written to the persisted
+  // store; ResizeObserver fires on every intermediate frame while dragging.
+  resizeDebounceMs: 300,
+  // Must match Tailwind's default `sm` breakpoint (tailwind.config.js does not
+  // override it): the ResizeObserver callback uses this to ignore viewport
+  // resizes on the mobile full-screen sheet, which never persists a size.
+  mobileBreakpointPx: 640,
 } as const;
 
 /**

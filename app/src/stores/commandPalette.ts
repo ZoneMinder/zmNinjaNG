@@ -1,31 +1,25 @@
 /**
- * Command palette open-state (refs #207, #246).
+ * Command palette open-state (refs #207).
  *
  * Ephemeral UI state in its own store so any entry point (the global key
  * handler, the sidebar button, the mobile header) can open the palette without
- * threading callbacks through the layout. `mode` distinguishes the normal
- * command list from the on-device assistant's Ask panel (refs #246):
- * `openAsk()` is the entry point for the `?` key and the palette's "Ask" item,
- * and `setOpen(false)` always resets `mode` back to 'command' so reopening the
- * palette (via `/` or the sidebar button) never lands back in Ask mode.
+ * threading callbacks through the layout. The on-device assistant used to be
+ * hosted inside this palette as an "Ask mode" (refs #246); it is now its own
+ * always-mounted floating window (`stores/assistantPanel.ts`,
+ * `components/assistant/AssistantWidget.tsx`), so this store only ever tracks
+ * the palette's own open/closed state.
  */
 
 import { create } from 'zustand';
 
 interface CommandPaletteState {
   open: boolean;
-  mode: 'command' | 'ask';
   setOpen: (open: boolean) => void;
   toggle: () => void;
-  setMode: (mode: 'command' | 'ask') => void;
-  openAsk: () => void;
 }
 
-export const useCommandPaletteStore = create<CommandPaletteState>()((set, get) => ({
+export const useCommandPaletteStore = create<CommandPaletteState>()((set) => ({
   open: false,
-  mode: 'command',
-  setOpen: (open) => set({ open, mode: open ? get().mode : 'command' }),
+  setOpen: (open) => set({ open }),
   toggle: () => set((state) => ({ open: !state.open })),
-  setMode: (mode) => set({ mode }),
-  openAsk: () => set({ open: true, mode: 'ask' }),
 }));
