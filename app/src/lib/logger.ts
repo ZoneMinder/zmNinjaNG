@@ -357,6 +357,7 @@ class Logger {
   // Each method signature is explicitly defined for TypeScript autocomplete
   api = this.makeComponentLogger('API', LogLevel.DEBUG);
   app = this.makeComponentLogger('App');
+  assistant = this.makeComponentLogger('Assistant');
   auth = this.makeComponentLogger('Auth', LogLevel.INFO);
   crypto = this.makeComponentLogger('Crypto');
   dashboard = this.makeComponentLogger('Dashboard');
@@ -413,7 +414,7 @@ export { LogLevel } from './log-level';
 
 // Create component logger wrappers dynamically
 const componentLoggers = [
-  'api', 'app', 'auth', 'crypto', 'dashboard', 'discovery', 'download', 'errorBoundary',
+  'api', 'app', 'assistant', 'auth', 'crypto', 'dashboard', 'discovery', 'download', 'errorBoundary',
   'eventCard', 'eventDetail', 'http', 'imageError', 'kiosk', 'monitor', 'monitorCard',
   'monitorDetail', 'montageMonitor', 'navigation', 'notificationHandler', 'notifications',
   'notificationSettings', 'profile', 'profileForm', 'profileService', 'profileSwitcher',

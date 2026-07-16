@@ -379,6 +379,10 @@ export const STORAGE_KEYS = {
 
   // Secure-storage key for the auth refresh token (Capacitor SecureStorage / web fallback)
   authRefreshToken: 'auth_refresh_token',
+
+  // In-app assistant: dev-only flag to force a deterministic stub provider
+  // instead of loading WebLLM (issue #246)
+  assistantTestMode: 'zmng-assistant-test-mode',
 } as const;
 
 /**
@@ -530,6 +534,25 @@ export const KEYBOARD_SHORTCUTS = {
   monitorJumpCommitMs: 1000,
   // Cap on digits buffered for the monitor jump.
   maxMonitorDigits: 4,
+} as const;
+
+/**
+ * In-app assistant (Ask). Model runs on-device via WebGPU. Issue #246.
+ * webllmModels ids are the exact WebLLM prebuilt registry ids, fixed in Phase 2.
+ */
+export const ASSISTANT = {
+  maxToolIterations: 6,
+  maxHistoryMessages: 40,
+  maxTokens: 1024,
+  maxListEventsLimit: 25,
+  requestTimeoutMs: 120000,
+  systemPromptMonitorCap: 50,
+  defaultModelId: 'Qwen3-1.7B-q4f16_1-MLC',
+  webllmModels: [
+    { id: 'Qwen3-1.7B-q4f16_1-MLC', label: 'Qwen3 1.7B', approxSizeMb: 1100 },
+    { id: 'Llama-3.2-1B-Instruct-q4f16_1-MLC', label: 'Llama 3.2 1B', approxSizeMb: 700 },
+  ],
+  modelCacheScopePrefix: 'webllm/',
 } as const;
 
 /**
