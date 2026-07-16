@@ -13,7 +13,7 @@
  * subscribes), the same pattern `services/download.ts` already uses: a plain
  * function call into a leaf store, not a React/store dependency edge (rule 31).
  */
-import type { AppConfig, MLCEngine, MLCEngineConfig } from '@mlc-ai/web-llm';
+import type { AppConfig, ChatOptions, MLCEngine, MLCEngineConfig } from '@mlc-ai/web-llm';
 import { useBackgroundTasks } from '../../stores/backgroundTasks';
 import { ASSISTANT } from '../zmninja-ng-constants';
 import { log, LogLevel } from '../logger';
@@ -58,6 +58,22 @@ function loadWebllm(): Promise<typeof import('@mlc-ai/web-llm')> {
   return webllmModulePromise;
 }
 
+/** `CreateMLCEngine`'s third argument (`chatOpts: ChatOptions`, a
+ *  `Partial<ChatConfig>`). web-llm's `reloadInternal` merges this over the
+ *  fetched `mlc-chat-config.json` AFTER `ModelRecord.overrides`
+ *  (`Object.assign({}, mlcChatConfig, modelRecord.overrides, chatOpts)`), so
+ *  this is what actually wins over the prebuilt registry's 4096 cap.
+ *
+ *  Not setting `sliding_window_size` here: web-llm throws
+ *  `WindowSizeConfigurationError` only when both `context_window_size` and
+ *  `sliding_window_size` resolve to a value other than -1, and none of
+ *  `ASSISTANT.webllmModels`' prebuilt entries override `sliding_window_size`
+ *  (only `context_window_size: 4096`), so it already resolves to -1 (full
+ *  KV-cache mode, no sliding window) for all four shipped models. Verified
+ *  against `node_modules/@mlc-ai/web-llm/lib/index.js`'s `prebuiltAppConfig`
+ *  and `LLMChatPipeline`'s window-size checks (v0.2.84). */
+const CHAT_OPTS: ChatOptions = { context_window_size: ASSISTANT.contextWindowSize };
+
 /** Creates the engine for `modelId`, or returns the in-flight promise from a
  *  concurrent caller already loading it. Only the first caller's `config`
  *  (e.g. `downloadModel`'s `initProgressCallback`) takes effect; a caller
@@ -78,7 +94,7 @@ async function createEngineOnce(modelId: string, config?: MLCEngineConfig): Prom
   const promise = (async () => {
     const webllm = await loadWebllm();
     const engineConfig: MLCEngineConfig = { ...(config ?? {}), appConfig: buildAppConfig(webllm) };
-    return webllm.CreateMLCEngine(modelId, engineConfig);
+    return webllm.CreateMLCEngine(modelId, engineConfig, CHAT_OPTS);
   })();
   inFlightEngineLoads.set(modelId, promise);
 

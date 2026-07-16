@@ -245,7 +245,7 @@ describe('model-download', () => {
       const result = await getLoadedEngine(MODEL_ID);
 
       expect(result).toBe(engine);
-      expect(webllm.CreateMLCEngine).toHaveBeenCalledWith(MODEL_ID, expect.any(Object));
+      expect(webllm.CreateMLCEngine).toHaveBeenCalledWith(MODEL_ID, expect.any(Object), expect.any(Object));
     });
 
     it('throws MODEL_NOT_AVAILABLE_MESSAGE when not cached (never downloaded or evicted)', async () => {
@@ -341,6 +341,32 @@ describe('model-download', () => {
       await getLoadedEngine(MODEL_ID);
 
       expect(webllm.hasModelInCache).toHaveBeenCalledWith(MODEL_ID, expect.objectContaining({ cacheBackend: 'indexeddb' }));
+    });
+  });
+
+  describe('chatOpts (context window override, refs #246)', () => {
+    it('passes the context window override as the third CreateMLCEngine argument, and appConfig on the second', async () => {
+      const engine = makeEngine();
+      vi.mocked(webllm.CreateMLCEngine).mockResolvedValue(engine as never);
+
+      await downloadModel(MODEL_ID);
+
+      const [, engineConfig, chatOpts] = vi.mocked(webllm.CreateMLCEngine).mock.calls[0];
+      expect(chatOpts).toEqual({ context_window_size: ASSISTANT.contextWindowSize });
+      expect((engineConfig as { appConfig?: AppConfig } | undefined)?.appConfig).toEqual(
+        expect.objectContaining({ cacheBackend: expect.any(String) }),
+      );
+    });
+
+    it('getLoadedEngine also passes the context window override as the third argument', async () => {
+      vi.mocked(webllm.hasModelInCache).mockResolvedValue(true);
+      const engine = makeEngine();
+      vi.mocked(webllm.CreateMLCEngine).mockResolvedValue(engine as never);
+
+      await getLoadedEngine(MODEL_ID);
+
+      const [, , chatOpts] = vi.mocked(webllm.CreateMLCEngine).mock.calls[0];
+      expect(chatOpts).toEqual({ context_window_size: ASSISTANT.contextWindowSize });
     });
   });
 });

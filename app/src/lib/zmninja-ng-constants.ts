@@ -544,6 +544,19 @@ export const ASSISTANT = {
   maxToolIterations: 6,
   maxHistoryMessages: 40,
   maxTokens: 1024,
+  // web-llm's prebuilt registry entries for these models cap context_window_size
+  // at 4096 (ModelRecord.overrides in @mlc-ai/web-llm's prebuiltAppConfig), well
+  // under what the models support natively (Qwen2.5/Qwen3: 32K, Llama-3.2: 128K).
+  // Our prompt (system rules + few-shot + tool schemas + monitor table + history
+  // + tool results) plus the generated output can exceed 4096, throwing
+  // ContextWindowSizeExceededError. Passed as a ChatOptions override to
+  // CreateMLCEngine's third argument (see model-download.ts createEngineOnce),
+  // which is merged in AFTER the prebuilt 4096 cap. 8192 is a VRAM/compute
+  // tradeoff: the KV cache grows with context_window_size, so this raises
+  // resident memory and prefill/decode cost per model load, but stays well
+  // under any of the four models' native limits.
+  contextWindowSize: 8192,
+
   maxListEventsLimit: 25,
   requestTimeoutMs: 120000,
   systemPromptMonitorCap: 50,
