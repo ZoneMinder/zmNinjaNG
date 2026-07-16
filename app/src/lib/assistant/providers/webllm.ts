@@ -76,8 +76,19 @@ export function buildWebLlmMessages(
         : JSON.stringify({ answer: msg.text ?? '' });
       messages.push({ role: 'assistant', content });
     } else {
-      for (const result of msg.toolResults ?? []) {
-        messages.push({ role: 'tool', content: result.output, tool_call_id: result.callId });
+      // This adapter drives tool-calling through the prompt contract, not
+      // web-llm's native `tools`/`tool_calls`, so the prior assistant message
+      // is plain JSON with no `tool_calls` field. Feeding the result back as a
+      // `role: 'tool'` message would be an orphan tool response (no matching
+      // native call) and web-llm's chat template rejects it. Fold the results
+      // into a user message that restates the JSON contract instead.
+      const results = msg.toolResults ?? [];
+      if (results.length > 0) {
+        const body = results.map((r) => r.output).join('\n');
+        messages.push({
+          role: 'user',
+          content: `Tool result:\n${body}\n\nRespond with ONLY a single JSON object: {"tool": "<name>", "input": {...}} to call another tool, or {"answer": "<text>"} to answer the user.`,
+        });
       }
     }
   }

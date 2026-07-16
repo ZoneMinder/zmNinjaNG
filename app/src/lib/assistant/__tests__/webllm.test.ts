@@ -71,13 +71,18 @@ describe('buildWebLlmMessages', () => {
     expect(JSON.parse(messages[1].content as string)).toEqual({ answer: 'The front door camera is armed.' });
   });
 
-  it('maps tool results to tool-role messages carrying tool_call_id', () => {
+  it('folds tool results into a user message instead of an orphan tool-role message', () => {
+    // web-llm's chat template rejects a `role: 'tool'` message with no
+    // matching native `tool_calls` entry (this adapter drives tool-calling
+    // through the prompt contract, never web-llm's native tools/tool_calls).
     const history: AssistantMessage[] = [
       { role: 'tool', toolResults: [{ callId: 'call-1', output: '3 events found' }] },
     ];
     const messages = buildWebLlmMessages('sys', history, []);
 
-    expect(messages[1]).toEqual({ role: 'tool', content: '3 events found', tool_call_id: 'call-1' });
+    expect(messages.some((m) => m.role === 'tool')).toBe(false);
+    expect(messages[1].role).toBe('user');
+    expect(messages[1].content).toContain('3 events found');
   });
 });
 

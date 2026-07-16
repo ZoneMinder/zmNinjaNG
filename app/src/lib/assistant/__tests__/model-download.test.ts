@@ -5,9 +5,9 @@
  * here override `CreateMLCEngine` / `hasModelInCache` / `deleteModelAllInfoInCache`
  * to exercise specific lifecycle paths without WebGPU.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as webllm from '@mlc-ai/web-llm';
-import type { MLCEngine } from '@mlc-ai/web-llm';
+import type { AppConfig, MLCEngine } from '@mlc-ai/web-llm';
 import {
   isModelDownloaded,
   downloadModel,
@@ -45,7 +45,7 @@ describe('model-download', () => {
     it('returns true when hasModelInCache resolves true', async () => {
       vi.mocked(webllm.hasModelInCache).mockResolvedValue(true);
       await expect(isModelDownloaded(MODEL_ID)).resolves.toBe(true);
-      expect(webllm.hasModelInCache).toHaveBeenCalledWith(MODEL_ID);
+      expect(webllm.hasModelInCache).toHaveBeenCalledWith(MODEL_ID, expect.any(Object));
     });
 
     it('returns false when hasModelInCache resolves false', async () => {
@@ -198,7 +198,7 @@ describe('model-download', () => {
   describe('deleteModel', () => {
     it('calls deleteModelAllInfoInCache for modelId', async () => {
       await deleteModel(MODEL_ID);
-      expect(webllm.deleteModelAllInfoInCache).toHaveBeenCalledWith(MODEL_ID);
+      expect(webllm.deleteModelAllInfoInCache).toHaveBeenCalledWith(MODEL_ID, expect.any(Object));
     });
 
     it('unloads the shared engine first when it holds the deleted model', async () => {
@@ -209,7 +209,7 @@ describe('model-download', () => {
       await deleteModel(MODEL_ID);
 
       expect(engine.unload).toHaveBeenCalled();
-      expect(webllm.deleteModelAllInfoInCache).toHaveBeenCalledWith(MODEL_ID);
+      expect(webllm.deleteModelAllInfoInCache).toHaveBeenCalledWith(MODEL_ID, expect.any(Object));
     });
 
     it('does not unload an engine loaded for a different model', async () => {
@@ -245,7 +245,7 @@ describe('model-download', () => {
       const result = await getLoadedEngine(MODEL_ID);
 
       expect(result).toBe(engine);
-      expect(webllm.CreateMLCEngine).toHaveBeenCalledWith(MODEL_ID);
+      expect(webllm.CreateMLCEngine).toHaveBeenCalledWith(MODEL_ID, expect.any(Object));
     });
 
     it('throws MODEL_NOT_AVAILABLE_MESSAGE when not cached (never downloaded or evicted)', async () => {
@@ -288,6 +288,59 @@ describe('model-download', () => {
 
       expect(firstEngine.unload).toHaveBeenCalled();
       expect(result).toBe(secondEngine);
+    });
+  });
+
+  describe('buildAppConfig cache backend fallback', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('isModelDownloaded passes cacheBackend "indexeddb" when the Cache API is unavailable (e.g. file://)', async () => {
+      vi.stubGlobal('caches', undefined);
+      vi.mocked(webllm.hasModelInCache).mockResolvedValue(true);
+
+      await isModelDownloaded(MODEL_ID);
+
+      expect(webllm.hasModelInCache).toHaveBeenCalledWith(MODEL_ID, expect.objectContaining({ cacheBackend: 'indexeddb' }));
+    });
+
+    it('isModelDownloaded passes cacheBackend "cache" when the Cache API is available', async () => {
+      vi.stubGlobal('caches', {});
+      vi.mocked(webllm.hasModelInCache).mockResolvedValue(true);
+
+      await isModelDownloaded(MODEL_ID);
+
+      expect(webllm.hasModelInCache).toHaveBeenCalledWith(MODEL_ID, expect.objectContaining({ cacheBackend: 'cache' }));
+    });
+
+    it('downloadModel passes the same appConfig into CreateMLCEngine', async () => {
+      vi.stubGlobal('caches', undefined);
+      const engine = makeEngine();
+      vi.mocked(webllm.CreateMLCEngine).mockResolvedValue(engine as never);
+
+      await downloadModel(MODEL_ID);
+
+      const [, config] = vi.mocked(webllm.CreateMLCEngine).mock.calls[0];
+      expect((config as { appConfig?: AppConfig } | undefined)?.appConfig).toEqual(
+        expect.objectContaining({ cacheBackend: 'indexeddb' }),
+      );
+    });
+
+    it('getLoadedEngine checks the cache with the same indexeddb-fallback appConfig used by CreateMLCEngine', async () => {
+      // Regression guard: getLoadedEngine used to call hasModelInCache(modelId)
+      // with no appConfig at all, which defaults to web-llm's prebuiltAppConfig
+      // (cacheBackend: "cache"). Under file:// that silently disagrees with the
+      // indexeddb fallback CreateMLCEngine uses, so a model downloaded under
+      // the indexeddb backend would look "not cached" on the next chat turn.
+      vi.stubGlobal('caches', undefined);
+      vi.mocked(webllm.hasModelInCache).mockResolvedValue(true);
+      const engine = makeEngine();
+      vi.mocked(webllm.CreateMLCEngine).mockResolvedValue(engine as never);
+
+      await getLoadedEngine(MODEL_ID);
+
+      expect(webllm.hasModelInCache).toHaveBeenCalledWith(MODEL_ID, expect.objectContaining({ cacheBackend: 'indexeddb' }));
     });
   });
 });

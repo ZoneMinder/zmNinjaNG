@@ -13,7 +13,7 @@
  * subscribes), the same pattern `services/download.ts` already uses: a plain
  * function call into a leaf store, not a React/store dependency edge (rule 31).
  */
-import type { MLCEngine, MLCEngineConfig } from '@mlc-ai/web-llm';
+import type { AppConfig, MLCEngine, MLCEngineConfig } from '@mlc-ai/web-llm';
 import { useBackgroundTasks } from '../../stores/backgroundTasks';
 import { ASSISTANT } from '../zmninja-ng-constants';
 import { log, LogLevel } from '../logger';
@@ -77,7 +77,8 @@ async function createEngineOnce(modelId: string, config?: MLCEngineConfig): Prom
   // promise instead of racing to also pass the "not found" check.
   const promise = (async () => {
     const webllm = await loadWebllm();
-    return config ? webllm.CreateMLCEngine(modelId, config) : webllm.CreateMLCEngine(modelId);
+    const engineConfig: MLCEngineConfig = { ...(config ?? {}), appConfig: buildAppConfig(webllm) };
+    return webllm.CreateMLCEngine(modelId, engineConfig);
   })();
   inFlightEngineLoads.set(modelId, promise);
 
@@ -92,10 +93,24 @@ function findModel(modelId: string) {
   return ASSISTANT.webllmModels.find((m) => m.id === modelId);
 }
 
+/** web-llm stores model weights in the Cache API by default. `caches` is
+ *  undefined in non-secure contexts, notably Electron/Tauri loading the app
+ *  over `file://` (a packaged desktop build), and some webviews expose it
+ *  only intermittently even when `isSecureContext` is true. IndexedDB is
+ *  available in those contexts, and web-llm can use it via `useIndexedDBCache`.
+ *  Feature-detect the Cache API and fall back to IndexedDB so the download
+ *  works wherever the app runs. The SAME config must be passed to
+ *  `hasModelInCache` / `CreateMLCEngine` / `deleteModelAllInfoInCache` so they
+ *  all read and write the same backend. */
+function buildAppConfig(webllm: typeof import('@mlc-ai/web-llm')): AppConfig {
+  const cacheBackend: 'cache' | 'indexeddb' = typeof caches === 'undefined' ? 'indexeddb' : 'cache';
+  return { ...webllm.prebuiltAppConfig, cacheBackend };
+}
+
 /** Whether `modelId`'s weights are already in the Cache API. */
 export async function isModelDownloaded(modelId: string): Promise<boolean> {
   const webllm = await loadWebllm();
-  return webllm.hasModelInCache(modelId);
+  return webllm.hasModelInCache(modelId, buildAppConfig(webllm));
 }
 
 /** Removes cached weights for `modelId`. Unloads the shared engine first if
@@ -109,7 +124,7 @@ export async function deleteModel(modelId: string): Promise<void> {
     loadedEngine = undefined;
   }
 
-  await webllm.deleteModelAllInfoInCache(modelId);
+  await webllm.deleteModelAllInfoInCache(modelId, buildAppConfig(webllm));
   log.assistant(`Deleted cached model "${modelId}"`, LogLevel.INFO, { modelId });
 }
 
@@ -210,7 +225,7 @@ export async function getLoadedEngine(modelId: string): Promise<MLCEngine> {
   }
 
   const webllm = await loadWebllm();
-  const cached = await webllm.hasModelInCache(modelId);
+  const cached = await webllm.hasModelInCache(modelId, buildAppConfig(webllm));
   if (!cached) {
     throw new Error(MODEL_NOT_AVAILABLE_MESSAGE);
   }
