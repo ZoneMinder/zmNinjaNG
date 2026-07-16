@@ -51,6 +51,53 @@ function buildToolContract(tools: ToolDefinition[]): string {
   ].join('\n');
 }
 
+/** Few-shot anchors prepended to every WebLLM conversation, right after the
+ *  system message and before the real `history` (see `buildWebLlmMessages`).
+ *  Small on-device models were observed asking the user for a monitor name
+ *  instead of calling `count_events` with no `monitorId` for an "all
+ *  monitors" summary question, so example 1 demonstrates exactly that call.
+ *  Example 2 covers a no-argument tool plus a direct, non-tool answer.
+ *
+ *  These are model-facing only (never rendered in the UI), so they are
+ *  exempt from i18n (rule 5). They must use tool names that are real in the
+ *  registry (`readOnlyTools` in tools-readonly.ts: `count_events`,
+ *  `get_server_health`, `list_events`, `list_monitors`) and must mirror the
+ *  exact serialization `buildWebLlmMessages` produces below: an assistant
+ *  turn is the bare JSON string `{"tool":...}` / `{"answer":...}`, and a
+ *  tool result is a `user` message starting with `Tool result:\n` followed
+ *  by the same reminder sentence used for real tool results. Keep this list
+ *  short (2 examples): every token here is spent on every single turn. */
+function buildFewShotExamples(): ChatCompletionMessageParam[] {
+  return [
+    { role: 'user', content: 'How many events were recorded today?' },
+    { role: 'assistant', content: '{"tool": "count_events", "input": {"interval": "1 day"}}' },
+    {
+      role: 'user',
+      content:
+        'Tool result:\n[{"monitor":"Front Door","count":12},{"monitor":"Garage","count":3}]\n\n' +
+        'Respond with ONLY a single JSON object: {"tool": "<name>", "input": {...}} to call another tool, ' +
+        'or {"answer": "<text>"} to answer the user.',
+    },
+    {
+      role: 'assistant',
+      content: '{"answer": "There were 15 events today: 12 on Front Door and 3 on Garage."}',
+    },
+    { role: 'user', content: 'Is the server healthy?' },
+    { role: 'assistant', content: '{"tool": "get_server_health", "input": {}}' },
+    {
+      role: 'user',
+      content:
+        'Tool result:\n{"load":0.4,"diskPercent":45,"daemonRunning":true,"version":"1.37.0"}\n\n' +
+        'Respond with ONLY a single JSON object: {"tool": "<name>", "input": {...}} to call another tool, ' +
+        'or {"answer": "<text>"} to answer the user.',
+    },
+    {
+      role: 'assistant',
+      content: '{"answer": "Yes. Load is 0.4, disk is 45% used, and the capture daemon is running."}',
+    },
+  ];
+}
+
 /** Qwen3 is a reasoning model: by default it emits a `<think>...</think>`
  *  chain-of-thought block before its final answer. Under this adapter's fixed
  *  `ASSISTANT.maxTokens` budget, that reasoning can consume the whole budget
@@ -72,7 +119,10 @@ function isQwen3Model(modelId: string): boolean {
  *  the `/no_think` directive; see `isQwen3Model`). Past assistant turns are
  *  re-serialized into the same `{tool,input}` / `{answer}` JSON shape the
  *  model is instructed to produce, so its own history stays consistent with
- *  the contract instead of showing it free-form text it never generated. */
+ *  the contract instead of showing it free-form text it never generated.
+ *  A fixed block of `buildFewShotExamples()` turns follows the system
+ *  message, demonstrating that exact shape before the real conversation
+ *  starts (see its doc comment for why). */
 export function buildWebLlmMessages(
   system: string,
   history: AssistantMessage[],
@@ -80,7 +130,10 @@ export function buildWebLlmMessages(
   modelId: string,
 ): ChatCompletionMessageParam[] {
   const systemContent = `${system}\n\n${buildToolContract(tools)}${isQwen3Model(modelId) ? '\n\n/no_think' : ''}`;
-  const messages: ChatCompletionMessageParam[] = [{ role: 'system', content: systemContent }];
+  const messages: ChatCompletionMessageParam[] = [
+    { role: 'system', content: systemContent },
+    ...buildFewShotExamples(),
+  ];
 
   for (const msg of history) {
     if (msg.role === 'user') {

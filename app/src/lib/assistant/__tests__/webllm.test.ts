@@ -10,6 +10,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { buildWebLlmMessages, parseWebLlmTurn, WebLlmProvider } from '../providers/webllm';
 import type { AssistantMessage, ToolDefinition } from '../types';
 import { ASSISTANT } from '../../zmninja-ng-constants';
+import { readOnlyTools } from '../tools-readonly';
 
 vi.mock('../model-download', () => ({
   getLoadedEngine: vi.fn(),
@@ -31,6 +32,12 @@ function fakeTool(overrides: Partial<ToolDefinition> = {}): ToolDefinition {
 // Non-Qwen model id used throughout, so these tests aren't coupled to the
 // `/no_think` behavior covered separately below.
 const GENERIC_MODEL_ID = 'Llama-3.2-1B-Instruct-q4f16_1-MLC';
+
+// buildWebLlmMessages inserts a fixed block of few-shot example turns right
+// after the system message (see buildFewShotExamples in providers/webllm.ts).
+// Tests below that inspect the real conversation must skip past that block;
+// FEW_SHOT_COUNT is the number of messages it contributes.
+const FEW_SHOT_COUNT = 8;
 
 describe('buildWebLlmMessages', () => {
   it('opens with a system message combining `system` and the tool contract', () => {
@@ -55,7 +62,7 @@ describe('buildWebLlmMessages', () => {
     const history: AssistantMessage[] = [{ role: 'user', text: 'Is the front door camera armed?' }];
     const messages = buildWebLlmMessages('sys', history, [], GENERIC_MODEL_ID);
 
-    expect(messages[1]).toEqual({ role: 'user', content: 'Is the front door camera armed?' });
+    expect(messages[1 + FEW_SHOT_COUNT]).toEqual({ role: 'user', content: 'Is the front door camera armed?' });
   });
 
   it('re-serializes a past assistant tool call as {"tool","input"} JSON', () => {
@@ -64,15 +71,18 @@ describe('buildWebLlmMessages', () => {
     ];
     const messages = buildWebLlmMessages('sys', history, [], GENERIC_MODEL_ID);
 
-    expect(messages[1].role).toBe('assistant');
-    expect(JSON.parse(messages[1].content as string)).toEqual({ tool: 'list_monitors', input: { limit: 5 } });
+    const msg = messages[1 + FEW_SHOT_COUNT];
+    expect(msg.role).toBe('assistant');
+    expect(JSON.parse(msg.content as string)).toEqual({ tool: 'list_monitors', input: { limit: 5 } });
   });
 
   it('re-serializes a past assistant text-only turn as {"answer"} JSON', () => {
     const history: AssistantMessage[] = [{ role: 'assistant', text: 'The front door camera is armed.', toolCalls: [] }];
     const messages = buildWebLlmMessages('sys', history, [], GENERIC_MODEL_ID);
 
-    expect(JSON.parse(messages[1].content as string)).toEqual({ answer: 'The front door camera is armed.' });
+    expect(JSON.parse(messages[1 + FEW_SHOT_COUNT].content as string)).toEqual({
+      answer: 'The front door camera is armed.',
+    });
   });
 
   it('folds tool results into a user message instead of an orphan tool-role message', () => {
@@ -85,8 +95,8 @@ describe('buildWebLlmMessages', () => {
     const messages = buildWebLlmMessages('sys', history, [], GENERIC_MODEL_ID);
 
     expect(messages.some((m) => m.role === 'tool')).toBe(false);
-    expect(messages[1].role).toBe('user');
-    expect(messages[1].content).toContain('3 events found');
+    expect(messages[1 + FEW_SHOT_COUNT].role).toBe('user');
+    expect(messages[1 + FEW_SHOT_COUNT].content).toContain('3 events found');
   });
 
   it('appends the /no_think directive to the system message for a Qwen3 model id', () => {
@@ -102,6 +112,84 @@ describe('buildWebLlmMessages', () => {
   it('does not append /no_think for a non-Qwen3 model id', () => {
     const messages = buildWebLlmMessages('sys', [], [], GENERIC_MODEL_ID);
     expect(messages[0].content).not.toContain('/no_think');
+  });
+
+  describe('few-shot examples', () => {
+    it('inserts the few-shot block immediately after the system message and before real history', () => {
+      const history: AssistantMessage[] = [{ role: 'user', text: 'real question' }];
+      const messages = buildWebLlmMessages('sys', history, [], GENERIC_MODEL_ID);
+
+      expect(messages).toHaveLength(1 + FEW_SHOT_COUNT + 1);
+      expect(messages[0].role).toBe('system');
+      // The example assistant tool call must appear before the real user turn.
+      const realUserIndex = messages.findIndex((m) => m.content === 'real question');
+      const exampleToolCallIndex = messages.findIndex(
+        (m) => m.role === 'assistant' && m.content === '{"tool": "count_events", "input": {"interval": "1 day"}}',
+      );
+      expect(exampleToolCallIndex).toBeGreaterThan(0);
+      expect(exampleToolCallIndex).toBeLessThan(realUserIndex);
+    });
+
+    it('demonstrates count_events with no monitorId for an all-monitors summary question', () => {
+      const messages = buildWebLlmMessages('sys', [], [], GENERIC_MODEL_ID);
+      expect(messages).toContainEqual({
+        role: 'assistant',
+        content: '{"tool": "count_events", "input": {"interval": "1 day"}}',
+      });
+    });
+
+    it('demonstrates a no-argument tool call (get_server_health) followed by a direct answer', () => {
+      const messages = buildWebLlmMessages('sys', [], [], GENERIC_MODEL_ID);
+      expect(messages).toContainEqual({ role: 'assistant', content: '{"tool": "get_server_health", "input": {}}' });
+      expect(messages).toContainEqual({
+        role: 'assistant',
+        content: '{"answer": "Yes. Load is 0.4, disk is 45% used, and the capture daemon is running."}',
+      });
+    });
+
+    it('uses only tool names present in the read-only tools registry', () => {
+      const toolNames = readOnlyTools.map((t) => t.name);
+      const messages = buildWebLlmMessages('sys', [], [], GENERIC_MODEL_ID);
+
+      const exampleToolNames = messages
+        .filter((m) => m.role === 'assistant')
+        .map((m) => {
+          try {
+            return JSON.parse(m.content as string).tool as string | undefined;
+          } catch {
+            return undefined;
+          }
+        })
+        .filter((name): name is string => Boolean(name));
+
+      expect(exampleToolNames).toContain('count_events');
+      expect(exampleToolNames).toContain('get_server_health');
+      for (const name of exampleToolNames) {
+        expect(toolNames).toContain(name);
+      }
+    });
+
+    it('folds the example tool result into a user message starting "Tool result:" with the reminder sentence', () => {
+      const messages = buildWebLlmMessages('sys', [], [], GENERIC_MODEL_ID);
+      const resultMsg = messages.find(
+        (m) => m.role === 'user' && typeof m.content === 'string' && m.content.startsWith('Tool result:\n[{"monitor"'),
+      );
+      expect(resultMsg).toBeDefined();
+      expect(resultMsg?.content).toContain(
+        'Respond with ONLY a single JSON object: {"tool": "<name>", "input": {...}} to call another tool, ' +
+          'or {"answer": "<text>"} to answer the user.',
+      );
+    });
+
+    it('still places the real conversation after the fixed few-shot block regardless of tool list', () => {
+      const history: AssistantMessage[] = [{ role: 'user', text: 'How many events on Garage today?' }];
+      const messages = buildWebLlmMessages('sys', history, [fakeTool()], GENERIC_MODEL_ID);
+
+      expect(messages[messages.length - 1]).toEqual({
+        role: 'user',
+        content: 'How many events on Garage today?',
+      });
+    });
   });
 });
 
