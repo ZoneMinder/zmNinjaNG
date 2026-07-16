@@ -273,11 +273,27 @@ vi.mock('@aparajita/capacitor-biometric-auth', () => ({
   },
 }));
 
-// Mock @mlc-ai/web-llm (on-device assistant backend, refs #246). Phase 1 unit
-// tests never load the real WebGPU model; this stub keeps any test that
-// imports the Phase-2 WebLLM provider from failing on the real package.
+// Mock @mlc-ai/web-llm (on-device assistant backend, refs #246). Unit tests
+// never load a real WebGPU model; this stub keeps model-download.ts and
+// providers/webllm.ts testable without WebGPU. Individual test files
+// override these implementations (via `vi.mocked(...).mockImplementation`)
+// to exercise specific lifecycle/progress/error paths; this is only the
+// shared default.
 vi.mock('@mlc-ai/web-llm', () => ({
-  CreateMLCEngine: vi.fn().mockResolvedValue({
-    chat: { completions: { create: vi.fn().mockResolvedValue({ choices: [{ message: { content: '{"answer":"ok"}' } }] }) } },
-  }),
+  CreateMLCEngine: vi.fn().mockImplementation(
+    async (_modelId: string, config?: { initProgressCallback?: (report: { progress: number; timeElapsed: number; text: string }) => void }) => {
+      config?.initProgressCallback?.({ progress: 1, timeElapsed: 0, text: 'done' });
+      return {
+        chat: {
+          completions: {
+            create: vi.fn().mockResolvedValue({ choices: [{ message: { content: '{"answer":"ok"}' } }] }),
+          },
+        },
+        unload: vi.fn().mockResolvedValue(undefined),
+      };
+    },
+  ),
+  hasModelInCache: vi.fn().mockResolvedValue(false),
+  deleteModelAllInfoInCache: vi.fn().mockResolvedValue(undefined),
+  prebuiltAppConfig: { model_list: [] },
 }));
