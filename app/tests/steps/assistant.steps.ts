@@ -14,15 +14,25 @@ const { Given, When, Then } = createBdd();
 /**
  * Enables the assistant and arms deterministic test mode.
  *
- * `navigator.gpu` is undefined in Playwright's bundled Chromium, which would
- * otherwise leave `assistant-enabled-toggle` disabled (AssistantSection.tsx's
- * `hasWebGPU` gate). Stubbing it here is e2e-only: the app's WebGPU probe is
- * unmodified, so a real "no WebGPU" device still sees the disabled toggle.
+ * Playwright's bundled Chromium exposes a real (getter-only) `navigator.gpu`
+ * whose `requestAdapter()` resolves `null` in the headless/CI environment
+ * (no real GPU), which is exactly the "no usable adapter" case
+ * `useWebGpuAvailable` (backed by `lib/assistant/webgpu.ts`) is meant to
+ * catch, so `assistant-enabled-toggle` would stay disabled without this
+ * stub. `navigator.gpu` has no setter, so a plain assignment silently
+ * no-ops; `Object.defineProperty` is required to actually replace it. This
+ * is e2e-only: the app's WebGPU probe is unmodified, so a real "no WebGPU"
+ * device (or one whose `requestAdapter()` genuinely resolves `null`) still
+ * sees the disabled toggle.
  */
 Given('the assistant is enabled with the mock backend', async ({ page }) => {
   await page.evaluate((key) => {
     window.localStorage.setItem(key, '1');
-    (navigator as unknown as { gpu?: unknown }).gpu = {};
+    Object.defineProperty(navigator, 'gpu', {
+      value: { requestAdapter: () => Promise.resolve({}) },
+      configurable: true,
+      writable: true,
+    });
   }, STORAGE_KEYS.assistantTestMode);
 
   await page.getByTestId('nav-item-settings').first().click();
