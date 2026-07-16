@@ -46,6 +46,7 @@ import { queryKeys } from '../../lib/query/query-keys';
 import { resolveQueryError } from '../../lib/query/query-error';
 import { cn } from '../../lib/utils';
 import { ASSISTANT } from '../../lib/zmninja-ng-constants';
+import { AssistantIntro } from './AssistantIntro';
 import { useAssistantStore } from '../../stores/assistant';
 import { Button } from '../ui/button';
 import { ErrorBanner } from '../ui/query-state';
@@ -210,6 +211,14 @@ export function AskPanel() {
     abortControllerRef.current?.abort();
   };
 
+  // An intro example chip fills the input instead of sending immediately
+  // (refs #246), so the user can edit it before it becomes a real turn; the
+  // focus() lets them hit Enter right away if they don't want to edit it.
+  const handleExampleClick = (text: string) => {
+    setInput(text);
+    inputRef.current?.focus();
+  };
+
   const handleSend = async () => {
     const text = input.trim();
     if (!text || !profileId || running) return;
@@ -333,6 +342,12 @@ export function AskPanel() {
   return (
     <div className="flex h-full flex-col" data-testid="ask-panel">
       <div className="flex-1 space-y-2 overflow-y-auto p-3">
+        {/* Empty-thread self-introduction (refs #246): a UI-only empty state,
+            never part of the thread sent to the model. Swaps out for the real
+            thread the moment the first message lands (handleSend's `append`
+            below), and reappears after Clear resets the store. */}
+        {thread.length === 0 && <AssistantIntro onExampleClick={handleExampleClick} />}
+
         {thread.map((msg, i) => {
           if (msg.role === 'tool') {
             if (!msg.display || msg.display.length === 0) return null;

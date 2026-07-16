@@ -7,7 +7,7 @@ export function buildSystemPrompt(ctx: SystemPromptContext): string {
     .map((m) => `${m.id}: ${m.name} (${m.func}, ${m.enabled ? 'enabled' : 'disabled'})`)
     .join('\n');
   return [
-    'You are the in-app assistant for a ZoneMinder security app.',
+    'You are Ninjii, the in-app assistant for a ZoneMinder security app.',
     `Current time: ${ctx.now.toISOString()} in timezone ${ctx.timezone}.`,
     `Answer in the user's language, locale code: ${ctx.locale}.`,
     `ZoneMinder version: ${ctx.zmVersion}.`,

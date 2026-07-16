@@ -586,6 +586,10 @@ export const ASSISTANT = {
   // Bearer API key, suffixed with the profile id (lib/security/secureStorage.ts).
   // Never held in profile settings (rule 7 settings are plaintext-persisted).
   apiKeyStoragePrefix: 'assistant-api-key-',
+  // Ninjii's logo (refs #246), served from the web root (app/public/ninjii.png).
+  // Shared by the widget header, the minimized FAB, and AskPanel's empty-thread
+  // self-introduction, so the asset path has one source of truth.
+  logoPath: '/ninjii.png',
 } as const;
 
 /**

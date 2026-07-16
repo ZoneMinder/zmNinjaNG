@@ -310,9 +310,9 @@
       "select": "选择监视器"
     },
     "assistant": {
-      "title": "助手",
+      "title": "Ninjii",
       "subtitle": "回答问题并执行操作，可在本地或通过服务器运行。",
-      "enable": "启用助手",
+      "enable": "启用 Ninjii",
       "backend": "后端",
       "backend_on_device": "设备端",
       "backend_ollama": "Ollama（远程）",
@@ -1247,10 +1247,10 @@
     "no_such_monitor": "没有监视器 #{{n}}"
   },
   "assistant": {
-    "title": "助手",
+    "title": "Ninjii",
     "clear": "清除",
     "minimize": "最小化",
-    "reopen": "重新打开助手",
+    "reopen": "打开 Ninjii",
     "placeholder": "询问你的摄像头...",
     "send": "发送",
     "abort": "停止",
@@ -1263,8 +1263,13 @@
     "iteration_cap_reached": "步骤过多已停止，请尝试更简单的请求。",
     "parse_error": "抱歉，无法生成回复，请换个说法再试。",
     "show_raw_output": "查看模型输出",
-    "error_generic": "助手错误：{{error}}",
+    "error_generic": "Ninjii 错误：{{error}}",
     "not_configured_cta": "设备端助手尚未配置。请打开设置以启用。",
+    "intro_greeting": "你好，我是 Ninjii，你的 ZoneMinder 助手。",
+    "intro_help": "向我询问你的摄像头、监视器和事件。",
+    "intro_example_1": "总结今天的事件",
+    "intro_example_2": "服务器是否正常？",
+    "intro_example_3": "哪个监视器最活跃？",
     "card": {
       "open": "打开"
     },

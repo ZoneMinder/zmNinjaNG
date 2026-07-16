@@ -60,6 +60,37 @@ describe('AskPanel', () => {
     useAssistantStore.setState({ threads: {}, running: false, activities: [] });
   });
 
+  it('renders Ninjii\'s self-introduction when the thread is empty (refs #246)', () => {
+    render(<AskPanel />);
+
+    const intro = screen.getByTestId('assistant-intro');
+    expect(intro).toBeInTheDocument();
+    expect(screen.getByAltText('assistant.title')).toHaveAttribute('src', '/ninjii.png');
+    expect(intro).toHaveTextContent('assistant.intro_greeting');
+    expect(intro).toHaveTextContent('assistant.intro_help');
+    expect(screen.getAllByTestId('assistant-example-prompt')).toHaveLength(3);
+  });
+
+  it('fills the input (does not send) when an example prompt chip is clicked', async () => {
+    render(<AskPanel />);
+
+    const user = userEvent.setup();
+    await user.click(screen.getAllByTestId('assistant-example-prompt')[0]);
+
+    const input = screen.getByTestId('assistant-input') as HTMLInputElement;
+    expect(input.value).toBe('assistant.intro_example_1');
+    // No turn was sent: the thread is still empty and the intro still shows.
+    expect(screen.getByTestId('assistant-intro')).toBeInTheDocument();
+  });
+
+  it('does not render the self-introduction once the thread has messages', () => {
+    useAssistantStore.getState().append('p1', { role: 'user', text: 'is the front door armed?' });
+
+    render(<AskPanel />);
+
+    expect(screen.queryByTestId('assistant-intro')).not.toBeInTheDocument();
+  });
+
   it('offers a collapsible raw-output section for a parse-error turn that carried raw text', () => {
     useAssistantStore.getState().append('p1', { role: 'user', text: 'which monitor was most active?' });
     useAssistantStore.getState().append('p1', {

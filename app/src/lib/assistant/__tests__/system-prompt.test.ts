@@ -17,6 +17,11 @@ describe('buildSystemPrompt', () => {
     expect(p.toLowerCase()).toContain('de');
   });
 
+  it('opens by naming itself Ninjii (refs #246)', () => {
+    const p = buildSystemPrompt(base);
+    expect(p.startsWith('You are Ninjii,')).toBe(true);
+  });
+
   it('instructs the model never to ask for a monitor id', () => {
     const p = buildSystemPrompt(base);
     expect(p).toContain('never ask for a monitor id');

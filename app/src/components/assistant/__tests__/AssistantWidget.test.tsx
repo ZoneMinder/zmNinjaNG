@@ -43,6 +43,9 @@ describe('AssistantWidget', () => {
     const fab = screen.getByTestId('assistant-fab');
     expect(fab).toBeInTheDocument();
     expect(fab).toHaveAccessibleName('assistant.reopen');
+    // Ninjii's logo replaces the lucide icon in the FAB (refs #246); it's
+    // decorative since the button's own aria-label already names Ninjii.
+    expect(fab.querySelector('img')).toHaveAttribute('src', '/ninjii.png');
 
     const user = userEvent.setup();
     await user.click(fab);
@@ -59,6 +62,8 @@ describe('AssistantWidget', () => {
     expect(screen.getByTestId('assistant-clear')).toBeInTheDocument();
     expect(screen.getByTestId('assistant-minimize')).toBeInTheDocument();
     expect(screen.getByTestId('assistant-close')).toBeInTheDocument();
+    // Ninjii's logo in the header, to the left of the title (refs #246).
+    expect(screen.getByAltText('assistant.title')).toHaveAttribute('src', '/ninjii.png');
   });
 
   it('minimize button minimizes the panel without unmounting AskPanel', async () => {

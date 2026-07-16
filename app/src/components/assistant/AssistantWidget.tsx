@@ -24,11 +24,11 @@
 import { useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Bot, Minus, Trash2, X } from 'lucide-react';
+import { Minus, Trash2, X } from 'lucide-react';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useAssistantStore } from '../../stores/assistant';
 import { useAssistantPanelStore } from '../../stores/assistantPanel';
-import { ASSISTANT_PANEL } from '../../lib/zmninja-ng-constants';
+import { ASSISTANT, ASSISTANT_PANEL } from '../../lib/zmninja-ng-constants';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
 import { AskPanel } from './AskPanel';
@@ -100,7 +100,8 @@ export function AssistantWidget() {
           // so the two floating triggers never overlap.
           className="fixed bottom-20 right-4 z-50 h-12 w-12 rounded-full shadow-lg"
         >
-          <Bot className="h-6 w-6" />
+          {/* decorative: the button's own aria-label already names Ninjii */}
+          <img src={ASSISTANT.logoPath} alt="" className="h-7 w-7 rounded-full" />
         </Button>
       )}
 
@@ -126,6 +127,7 @@ export function AssistantWidget() {
         )}
       >
         <div className="flex items-center gap-2 border-b py-2 pl-3 pr-2">
+          <img src={ASSISTANT.logoPath} alt={t('assistant.title')} className="h-5 w-5 rounded" />
           <span className="flex-1 min-w-0 truncate text-sm font-medium">{t('assistant.title')}</span>
           <div className="flex items-center gap-1">
             <Button

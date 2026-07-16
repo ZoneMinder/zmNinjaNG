@@ -310,9 +310,9 @@
       "select": "Choisir moniteurs"
     },
     "assistant": {
-      "title": "Assistant",
+      "title": "Ninjii",
       "subtitle": "Répond aux questions et exécute des actions, en local ou via un serveur.",
-      "enable": "Activer l'assistant",
+      "enable": "Activer Ninjii",
       "backend": "Moteur",
       "backend_on_device": "Sur l'appareil",
       "backend_ollama": "Ollama (distant)",
@@ -1247,10 +1247,10 @@
     "no_such_monitor": "Aucun moniteur n°{{n}}"
   },
   "assistant": {
-    "title": "Assistant",
+    "title": "Ninjii",
     "clear": "Effacer",
     "minimize": "Réduire",
-    "reopen": "Rouvrir l'assistant",
+    "reopen": "Ouvrir Ninjii",
     "placeholder": "Posez une question sur vos caméras...",
     "send": "Envoyer",
     "abort": "Arrêter",
@@ -1263,8 +1263,13 @@
     "iteration_cap_reached": "Arrêté après trop d'étapes. Essayez une demande plus simple.",
     "parse_error": "Impossible de générer une réponse. Essayez de reformuler.",
     "show_raw_output": "Voir la sortie du modèle",
-    "error_generic": "Erreur de l'assistant : {{error}}",
+    "error_generic": "Erreur Ninjii : {{error}}",
     "not_configured_cta": "L'assistant embarqué n'est pas encore configuré. Ouvrez les Paramètres pour l'activer.",
+    "intro_greeting": "Bonjour, je suis Ninjii, votre assistant ZoneMinder.",
+    "intro_help": "Posez-moi des questions sur vos caméras, moniteurs et événements.",
+    "intro_example_1": "Résumer les événements du jour",
+    "intro_example_2": "Le serveur est-il en bon état ?",
+    "intro_example_3": "Quel moniteur a été le plus actif ?",
     "card": {
       "open": "Ouvrir"
     },
