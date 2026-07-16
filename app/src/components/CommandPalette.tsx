@@ -1,9 +1,15 @@
 /**
- * Global command palette (refs #207).
+ * Global command palette (refs #207, #246).
  *
  * Opened by the `/` key, the sidebar button, or the mobile-header icon (all via
  * useCommandPaletteStore). Filters pages, monitors (name/ID), and groups, and
  * navigates on Enter or tap. Coexists with the letter/digit shortcuts.
+ *
+ * Also doubles as the entry point for the on-device assistant's Ask mode
+ * (refs #246): typing a leading `?` in the input, clicking the "Ask" command
+ * item, or the global `?` key (KeyboardShortcuts.tsx) all flip
+ * useCommandPaletteStore's `mode` to 'ask', which swaps the results list for
+ * `<AskPanel />` inside the same Dialog/input shell.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -21,6 +27,7 @@ import { getExcludedMonitorIdSet } from '../lib/profile/profile-settings';
 import { NAV_SHORTCUTS } from '../lib/keyboard-shortcuts';
 import { filterCommandItems, type CommandItem } from '../lib/command-palette';
 import { useCommandPaletteStore } from '../stores/commandPalette';
+import { AskPanel } from './assistant/AskPanel';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from './ui/dialog';
 import { cn } from '../lib/utils';
 
@@ -41,7 +48,10 @@ export function CommandPalette() {
   const location = useLocation();
   const open = useCommandPaletteStore((s) => s.open);
   const setOpen = useCommandPaletteStore((s) => s.setOpen);
-  const { currentProfile } = useCurrentProfile();
+  const mode = useCommandPaletteStore((s) => s.mode);
+  const setMode = useCommandPaletteStore((s) => s.setMode);
+  const openAsk = useCommandPaletteStore((s) => s.openAsk);
+  const { currentProfile, settings } = useCurrentProfile();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const { setSelectedGroup } = useGroupFilter();
   const { groups } = useGroups();
@@ -111,6 +121,7 @@ export function CommandPalette() {
   };
 
   const onInputKeyDown = (e: React.KeyboardEvent) => {
+    if (mode === 'ask') return; // AskPanel owns its own input/keydown handling.
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       setActiveIndex((i) => Math.min(i + 1, results.length - 1));
@@ -141,7 +152,13 @@ export function CommandPalette() {
           <input
             ref={inputRef}
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              const value = e.target.value;
+              setQuery(value);
+              // Typing a leading '?' is a second entry point into Ask mode,
+              // mirroring the global '?' key (KeyboardShortcuts.tsx).
+              if (value.startsWith('?')) setMode('ask');
+            }}
             onKeyDown={onInputKeyDown}
             placeholder={t('command_palette.placeholder')}
             className="w-full bg-transparent outline-none text-sm py-1"
@@ -156,49 +173,66 @@ export function CommandPalette() {
             aria-activedescendant={results.length > 0 ? optionId(activeIndex) : undefined}
           />
         </div>
-        <div className="max-h-[50vh] overflow-y-auto py-1" data-testid="command-palette-results" role="listbox" id={LISTBOX_ID}>
-          {results.length === 0 && (
-            <p className="px-3 py-6 text-center text-sm text-muted-foreground">
-              {t('command_palette.empty')}
-            </p>
-          )}
-          {results.map((item) => {
-            flatIndex += 1;
-            const index = flatIndex;
-            const header = item.kind !== lastKind ? t(GROUP_LABEL_KEY[item.kind]) : null;
-            lastKind = item.kind;
-            return (
-              <div key={item.id}>
-                {header && (
-                  <p className="px-3 pt-2 pb-1 text-xs font-medium text-muted-foreground">{header}</p>
-                )}
-                <button
-                  type="button"
-                  role="option"
-                  id={optionId(index)}
-                  aria-selected={index === activeIndex}
-                  onClick={() => commit(item)}
-                  onMouseEnter={() => setActiveIndex(index)}
-                  className={cn(
-                    'flex w-full items-center justify-between gap-3 px-3 py-2 text-sm text-left',
-                    index === activeIndex ? 'bg-accent text-accent-foreground' : 'hover:bg-muted'
+        {mode === 'ask' ? (
+          <div className="h-[50vh]">
+            <AskPanel />
+          </div>
+        ) : (
+          <div className="max-h-[50vh] overflow-y-auto py-1" data-testid="command-palette-results" role="listbox" id={LISTBOX_ID}>
+            {settings.assistantEnabled && (
+              <button
+                type="button"
+                onClick={() => openAsk()}
+                className="flex w-full items-center gap-3 px-3 py-2 text-sm text-left hover:bg-muted"
+                data-testid="command-item-ask"
+              >
+                <span className="truncate min-w-0">{t('command_palette.ask')}</span>
+                <kbd className="shrink-0 rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-xs">?</kbd>
+              </button>
+            )}
+            {results.length === 0 && (
+              <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+                {t('command_palette.empty')}
+              </p>
+            )}
+            {results.map((item) => {
+              flatIndex += 1;
+              const index = flatIndex;
+              const header = item.kind !== lastKind ? t(GROUP_LABEL_KEY[item.kind]) : null;
+              lastKind = item.kind;
+              return (
+                <div key={item.id}>
+                  {header && (
+                    <p className="px-3 pt-2 pb-1 text-xs font-medium text-muted-foreground">{header}</p>
                   )}
-                  data-testid={`command-item-${item.kind}-${item.kind === 'page' ? item.route : item.kind === 'monitor' ? item.monitorId : item.groupId}`}
-                >
-                  <span className="truncate min-w-0">{item.label}</span>
-                  {item.kind === 'page' && item.hintKey && (
-                    <kbd className="shrink-0 rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-xs">
-                      {item.hintKey}
-                    </kbd>
-                  )}
-                  {item.kind === 'monitor' && (
-                    <span className="shrink-0 text-xs text-muted-foreground">{t('command_palette.monitor_id_label')} {item.monitorId}</span>
-                  )}
-                </button>
-              </div>
-            );
-          })}
-        </div>
+                  <button
+                    type="button"
+                    role="option"
+                    id={optionId(index)}
+                    aria-selected={index === activeIndex}
+                    onClick={() => commit(item)}
+                    onMouseEnter={() => setActiveIndex(index)}
+                    className={cn(
+                      'flex w-full items-center justify-between gap-3 px-3 py-2 text-sm text-left',
+                      index === activeIndex ? 'bg-accent text-accent-foreground' : 'hover:bg-muted'
+                    )}
+                    data-testid={`command-item-${item.kind}-${item.kind === 'page' ? item.route : item.kind === 'monitor' ? item.monitorId : item.groupId}`}
+                  >
+                    <span className="truncate min-w-0">{item.label}</span>
+                    {item.kind === 'page' && item.hintKey && (
+                      <kbd className="shrink-0 rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-xs">
+                        {item.hintKey}
+                      </kbd>
+                    )}
+                    {item.kind === 'monitor' && (
+                      <span className="shrink-0 text-xs text-muted-foreground">{t('command_palette.monitor_id_label')} {item.monitorId}</span>
+                    )}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

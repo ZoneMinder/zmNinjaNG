@@ -309,6 +309,18 @@
       "error": "无法加载监视器。",
       "select": "选择监视器"
     },
+    "assistant": {
+      "title": "助手",
+      "subtitle": "在设备本地回答问题并执行操作。",
+      "enable": "启用助手",
+      "no_webgpu": "需要 WebGPU，此设备不支持。",
+      "model": "模型",
+      "download": "下载",
+      "download_size": "{{size}} MB",
+      "coming_soon": "模型下载将在下次更新中提供。",
+      "privacy": "在设备本地运行。除您自己的 ZoneMinder 服务器外，不向任何地方发送数据。",
+      "delete": "删除"
+    },
     "language": "语言",
     "select_language": "选择语言",
     "theme": "主题",
@@ -1196,7 +1208,8 @@
     "group_monitors": "监视器",
     "empty": "无匹配项",
     "jump_to": "跳转至",
-    "monitor_id_label": "ID"
+    "monitor_id_label": "ID",
+    "ask": "提问"
   },
   "shortcuts": {
     "title": "键盘快捷键",

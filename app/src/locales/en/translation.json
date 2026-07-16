@@ -309,6 +309,18 @@
       "error": "Could not load monitors.",
       "select": "Select monitors"
     },
+    "assistant": {
+      "title": "Assistant",
+      "subtitle": "Answer questions and run actions on-device.",
+      "enable": "Enable Assistant",
+      "no_webgpu": "Requires WebGPU, not available on this device.",
+      "model": "Model",
+      "download": "Download",
+      "download_size": "{{size}} MB",
+      "coming_soon": "Downloading models is coming in the next update.",
+      "privacy": "Runs on-device. Nothing is sent anywhere except your own ZoneMinder server.",
+      "delete": "Delete"
+    },
     "language": "Language",
     "select_language": "Select Language",
     "theme": "Theme",
@@ -1196,7 +1208,8 @@
     "group_monitors": "Monitors",
     "empty": "No matches",
     "jump_to": "Jump to",
-    "monitor_id_label": "id"
+    "monitor_id_label": "id",
+    "ask": "Ask"
   },
   "shortcuts": {
     "title": "Keyboard shortcuts",

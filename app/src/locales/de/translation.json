@@ -309,6 +309,18 @@
       "error": "Monitore konnten nicht geladen werden.",
       "select": "Monitore wählen"
     },
+    "assistant": {
+      "title": "Assistent",
+      "subtitle": "Beantwortet Fragen und führt Aktionen lokal auf dem Gerät aus.",
+      "enable": "Assistent aktivieren",
+      "no_webgpu": "Erfordert WebGPU, auf diesem Gerät nicht verfügbar.",
+      "model": "Modell",
+      "download": "Herunterladen",
+      "download_size": "{{size}} MB",
+      "coming_soon": "Der Modell-Download folgt im nächsten Update.",
+      "privacy": "Läuft lokal auf dem Gerät. Es wird nichts gesendet außer an den eigenen ZoneMinder-Server.",
+      "delete": "Löschen"
+    },
     "language": "Sprache",
     "select_language": "Sprache auswählen",
     "theme": "Thema",
@@ -1196,7 +1208,8 @@
     "group_monitors": "Monitore",
     "empty": "Keine Treffer",
     "jump_to": "Springe zu",
-    "monitor_id_label": "ID"
+    "monitor_id_label": "ID",
+    "ask": "Fragen"
   },
   "shortcuts": {
     "title": "Tastenkürzel",

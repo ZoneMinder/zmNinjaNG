@@ -24,8 +24,15 @@ const setSelectedGroup = vi.fn();
 vi.mock('../../hooks/useGroupFilter', () => ({
   useGroupFilter: () => ({ setSelectedGroup }),
 }));
+const useCurrentProfileMock = vi.fn(() => ({
+  currentProfile: { id: 'p1' },
+  settings: { assistantEnabled: false },
+}));
 vi.mock('../../hooks/useCurrentProfile', () => ({
-  useCurrentProfile: () => ({ currentProfile: { id: 'p1' } }),
+  useCurrentProfile: () => useCurrentProfileMock(),
+}));
+vi.mock('../assistant/AskPanel', () => ({
+  AskPanel: () => <div data-testid="ask-panel-mock" />,
 }));
 vi.mock('../../stores/auth', () => ({
   useAuthStore: (sel: (s: { isAuthenticated: boolean }) => unknown) => sel({ isAuthenticated: true }),
@@ -41,7 +48,11 @@ describe('CommandPalette', () => {
     navigateMock.mockClear();
     setSelectedGroup.mockClear();
     scrollIntoViewMock.mockClear();
-    useCommandPaletteStore.setState({ open: true });
+    useCommandPaletteStore.setState({ open: true, mode: 'command' });
+    useCurrentProfileMock.mockReturnValue({
+      currentProfile: { id: 'p1' },
+      settings: { assistantEnabled: false },
+    });
   });
 
   it('filters monitors by name and navigates on Enter', () => {
@@ -82,5 +93,31 @@ describe('CommandPalette', () => {
     expect(secondActive).toBeTruthy();
     expect(secondActive).not.toBe(firstActive);
     expect(scrollIntoViewMock).toHaveBeenCalled();
+  });
+
+  it('does not show the Ask item when the assistant is disabled', () => {
+    render(<CommandPalette />);
+    expect(screen.queryByTestId('command-item-ask')).not.toBeInTheDocument();
+  });
+
+  it('shows the Ask item when the assistant is enabled and opens Ask mode on click', () => {
+    useCurrentProfileMock.mockReturnValue({
+      currentProfile: { id: 'p1' },
+      settings: { assistantEnabled: true },
+    });
+    render(<CommandPalette />);
+    fireEvent.click(screen.getByTestId('command-item-ask'));
+    expect(useCommandPaletteStore.getState().mode).toBe('ask');
+    expect(screen.getByTestId('ask-panel-mock')).toBeInTheDocument();
+    expect(screen.queryByTestId('command-palette-results')).not.toBeInTheDocument();
+  });
+
+  it('switches to Ask mode when the input starts with "?"', () => {
+    render(<CommandPalette />);
+    const input = screen.getByTestId('command-palette-input');
+    fireEvent.change(input, { target: { value: '?' } });
+    expect(useCommandPaletteStore.getState().mode).toBe('ask');
+    expect(screen.getByTestId('ask-panel-mock')).toBeInTheDocument();
+    expect(screen.queryByTestId('command-palette-results')).not.toBeInTheDocument();
   });
 });

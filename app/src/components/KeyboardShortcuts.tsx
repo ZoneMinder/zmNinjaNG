@@ -1,11 +1,16 @@
 /**
- * Global keyboard shortcuts (refs #200).
+ * Global keyboard shortcuts (refs #200, #246).
  *
  * Mounted once under the router. Provides single-key navigation, a numeric
  * monitor jump, Escape-to-back, and a help overlay. Inactive while typing, when
  * a modifier is held, when the kiosk is locked, or in TV mode on an actual TV
  * device (where the d-pad handler and WebView spatial nav own the keys). On
  * desktop, TV mode is cosmetic and the shortcuts stay live (refs #241).
+ *
+ * The `?` key is dual-purpose: it opens the command palette's Ask mode
+ * (`useCommandPaletteStore.openAsk()`) when the on-device assistant is enabled
+ * (`settings.assistantEnabled`), otherwise it falls back to the help overlay
+ * below.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -42,12 +47,13 @@ export function KeyboardShortcuts() {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useTranslation();
-  const { currentProfile } = useCurrentProfile();
+  const { currentProfile, settings } = useCurrentProfile();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const isLocked = useKioskStore((state) => state.isLocked);
   const { isTvMode } = useTvMode();
 
   const openPalette = useCommandPaletteStore((s) => s.setOpen);
+  const openAsk = useCommandPaletteStore((s) => s.openAsk);
 
   const [buffer, setBuffer] = useState('');
   const [helpOpen, setHelpOpen] = useState(false);
@@ -126,7 +132,8 @@ export function KeyboardShortcuts() {
 
       if (e.key === '?') {
         e.preventDefault();
-        setHelpOpen((open) => !open);
+        if (settings.assistantEnabled) openAsk();
+        else setHelpOpen((open) => !open);
         return;
       }
 
@@ -157,7 +164,7 @@ export function KeyboardShortcuts() {
         navigate(route);
       }
     },
-    [currentProfile, isLocked, isTvMode, helpOpen, navigate, commitBuffer, clearBuffer, openPalette]
+    [currentProfile, isLocked, isTvMode, helpOpen, navigate, commitBuffer, clearBuffer, openPalette, settings.assistantEnabled, openAsk]
   );
 
   useEffect(() => {

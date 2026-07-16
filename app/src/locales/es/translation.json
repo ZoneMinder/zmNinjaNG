@@ -309,6 +309,18 @@
       "error": "No se pudieron cargar los monitores.",
       "select": "Elegir monitores"
     },
+    "assistant": {
+      "title": "Asistente",
+      "subtitle": "Responde preguntas y ejecuta acciones en el dispositivo.",
+      "enable": "Activar asistente",
+      "no_webgpu": "Requiere WebGPU, no disponible en este dispositivo.",
+      "model": "Modelo",
+      "download": "Descargar",
+      "download_size": "{{size}} MB",
+      "coming_soon": "La descarga de modelos llega en la próxima actualización.",
+      "privacy": "Funciona en el dispositivo. No se envía nada salvo a tu propio servidor ZoneMinder.",
+      "delete": "Eliminar"
+    },
     "language": "Idioma",
     "select_language": "Seleccionar Idioma",
     "theme": "Tema",
@@ -1196,7 +1208,8 @@
     "group_monitors": "Monitores",
     "empty": "Sin resultados",
     "jump_to": "Ir a",
-    "monitor_id_label": "id"
+    "monitor_id_label": "id",
+    "ask": "Preguntar"
   },
   "shortcuts": {
     "title": "Atajos de teclado",

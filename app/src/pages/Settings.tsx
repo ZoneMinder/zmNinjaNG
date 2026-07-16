@@ -13,6 +13,7 @@ import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { AppearanceSection } from '../components/settings/AppearanceSection';
 import { LiveStreamingSection } from '../components/settings/LiveStreamingSection';
 import { PlaybackSection } from '../components/settings/PlaybackSection';
+import { AssistantSection } from '../components/settings/AssistantSection';
 import { AdvancedSection } from '../components/settings/AdvancedSection';
 import { HiddenMonitorsSection } from '../components/settings/HiddenMonitorsSection';
 import type { ProfileSettings } from '../stores/settings';
@@ -59,6 +60,12 @@ export default function Settings() {
       />
       <HiddenMonitorsSection
         settings={settings}
+        currentProfile={currentProfile}
+        updateSettings={updateSettings}
+      />
+      <AssistantSection
+        settings={settings}
+        update={update}
         currentProfile={currentProfile}
         updateSettings={updateSettings}
       />
