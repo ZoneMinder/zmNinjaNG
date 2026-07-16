@@ -28,13 +28,18 @@ vi.mock('../../../api/states', () => ({
 vi.mock('../../../api/events', () => ({
   getEvents: vi.fn().mockResolvedValue({
     events: [
-      { Event: { Id: '42', MonitorId: '1', Cause: 'Motion', StartDateTime: '2026-01-01 00:00:00', MaxScore: '10' } },
+      {
+        Event: {
+          Id: '42', MonitorId: '1', Cause: 'Motion', StartDateTime: '2026-01-01 00:00:00', MaxScore: '10',
+          Notes: 'detected:person,car|Motion: All',
+        },
+      },
     ],
   }),
   getEvent: vi.fn().mockResolvedValue({
     Event: {
       Id: '42', MonitorId: '1', Cause: 'Motion', Length: '12.5', Frames: '30',
-      MaxScore: '10', Notes: 'detected: person',
+      MaxScore: '10', Notes: 'detected:person,car|Motion: All',
     },
   }),
   getConsoleEvents: vi.fn().mockResolvedValue([{ monitorId: '1', count: 3 }]),
@@ -113,6 +118,14 @@ describe('read-only tools', () => {
     expect(r.output).toContain('42');
   });
 
+  it('list_events rows carry the monitor NAME and detected objects, not a bare id', async () => {
+    const tool = getToolByName('list_events')!;
+    const r = await tool.execute({}, ctx());
+    expect(r.isError).toBeFalsy();
+    const rows = JSON.parse(r.output as string);
+    expect(rows[0]).toMatchObject({ id: '42', monitor: 'Front Door', objects: ['person', 'car'] });
+  });
+
   it('get_monitor merges monitor detail with alarm status', async () => {
     const tool = getToolByName('get_monitor')!;
     const r = await tool.execute({ monitorId: '1' }, ctx());
@@ -134,7 +147,15 @@ describe('read-only tools', () => {
     const r = await tool.execute({ eventId: '42' }, ctx());
     expect(r.isError).toBeFalsy();
     expect(r.output).toContain('12.5');
-    expect(r.output).toContain('detected: person');
+    expect(r.output).toContain('detected:person');
+  });
+
+  it('get_event includes the monitor NAME and detected objects', async () => {
+    const tool = getToolByName('get_event')!;
+    const r = await tool.execute({ eventId: '42' }, ctx());
+    expect(r.isError).toBeFalsy();
+    const detail = JSON.parse(r.output as string);
+    expect(detail).toMatchObject({ monitor: 'Front Door', objects: ['person', 'car'] });
   });
 
   it('get_server_health aggregates load/disk/daemon/version', async () => {

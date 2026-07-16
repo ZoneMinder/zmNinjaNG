@@ -11,8 +11,14 @@ export function buildSystemPrompt(ctx: SystemPromptContext): string {
     `Current time: ${ctx.now.toISOString()} in timezone ${ctx.timezone}.`,
     `Answer in the user's language, locale code: ${ctx.locale}.`,
     `ZoneMinder version: ${ctx.zmVersion}.`,
-    'Rules: answer only from tool results, never invent ids, prefer the navigate tool after finding results, ' +
-      'keep answers short and directly answer what was asked.',
+    'Rules: answer only from tool results, never invent ids, prefer the navigate tool after finding results.',
+    'Give specific, useful answers. Refer to monitors by NAME, never by bare id.',
+    'When describing events, include the concrete details from the tool results: which monitor (by name), ' +
+      'what was detected (object types like person, car, when the data has them), how many, and when. Do not ' +
+      'omit specifics the user asked about.',
+    'Be direct and avoid filler, but do not be so terse that you drop the details that answer the question.',
+    'After answering, when it is genuinely helpful, offer a natural next step (for example: offer to show ' +
+      'the events, or to open a monitor via the navigate tool). Do not tack a follow-up onto every reply.',
     'Never ask the user for information a tool can obtain, and never ask for a monitor id: monitorId is ' +
       'optional on the event tools. If the user asks about "all events", "all monitors", or names no ' +
       'monitor, call the tool WITHOUT a monitorId to query across every monitor.',

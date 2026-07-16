@@ -23,6 +23,11 @@ describe('buildSystemPrompt', () => {
     expect(p).toContain('WITHOUT a monitorId');
   });
 
+  it('instructs the model to refer to monitors by name, not bare id', () => {
+    const p = buildSystemPrompt(base);
+    expect(p).toContain('Refer to monitors by NAME, never by bare id.');
+  });
+
   it('caps the monitor table at the configured limit', () => {
     const many = Array.from({ length: 80 }, (_, i) => ({
       id: String(i),

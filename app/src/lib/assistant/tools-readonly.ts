@@ -14,6 +14,7 @@ import { getVersion } from '../../api/auth';
 import { getGroups } from '../../api/groups';
 import { getTags, getEventTags, extractUniqueTags } from '../../api/tags';
 import { ASSISTANT } from '../zmninja-ng-constants';
+import { parseDetectedObjects } from '../event/event-detection';
 import type { ToolDefinition } from './types';
 import { safeExecute, NAVIGATE_ALLOWLIST } from './tool-helpers';
 
@@ -103,8 +104,9 @@ const listEventsTool: ToolDefinition = {
   name: 'list_events',
   description:
     'List individual events, newest first, optionally filtered by monitor, time range, detected object ' +
-    'type, a single tag, or an explicit set of event ids. A tag filter and event ids cannot be combined ' +
-    '(the server rejects it); pass one or the other.',
+    'type, a single tag, or an explicit set of event ids. Each row includes the monitor NAME (not just its ' +
+    'id) and the detected object types, so answer using those, not raw ids. A tag filter and event ids ' +
+    'cannot be combined (the server rejects it); pass one or the other.',
   schema: {
     type: 'object',
     properties: {
@@ -138,14 +140,16 @@ const listEventsTool: ToolDefinition = {
         sort: 'StartDateTime',
         direction: 'desc',
       };
-      const res = await getEvents(filters);
+      const [res, { monitors }] = await Promise.all([getEvents(filters), getMonitors()]);
+      const nameById = new Map(monitors.map((m) => [m.Monitor.Id, m.Monitor.Name]));
       return JSON.stringify(
         res.events.map((e) => ({
           id: e.Event.Id,
-          monitor: e.Event.MonitorId,
-          cause: e.Event.Cause,
+          monitor: nameById.get(e.Event.MonitorId) ?? e.Event.MonitorId,
           start: e.Event.StartDateTime,
           score: e.Event.MaxScore,
+          cause: e.Event.Cause,
+          objects: parseDetectedObjects(e.Event.Notes),
         })),
       );
     });
@@ -155,8 +159,8 @@ const listEventsTool: ToolDefinition = {
 const getEventTool: ToolDefinition = {
   name: 'get_event',
   description:
-    'Get full detail for a single event: duration, frame count, score, notes (object-detection results), ' +
-    'and tags. Call this after list_events or count_events has identified the event id.',
+    'Get full detail for a single event: the monitor NAME, duration, frame count, score, detected object ' +
+    'types, raw notes, and tags. Call this after list_events or count_events has identified the event id.',
   schema: {
     type: 'object',
     properties: { eventId: { type: 'string', description: 'The event id, from list_events.' } },
@@ -167,8 +171,9 @@ const getEventTool: ToolDefinition = {
     safeExecute('get_event', async () => {
       const eventId = String(input.eventId ?? '');
       if (!eventId) throw new Error('eventId is required');
-      const event = await getEvent(eventId);
+      const [event, { monitors }] = await Promise.all([getEvent(eventId), getMonitors()]);
       const e = event.Event;
+      const nameById = new Map(monitors.map((m) => [m.Monitor.Id, m.Monitor.Name]));
       let tags: string[] = [];
       try {
         const tagMap = await getEventTags([eventId]);
@@ -178,12 +183,13 @@ const getEventTool: ToolDefinition = {
       }
       return JSON.stringify({
         id: e.Id,
-        monitor: e.MonitorId,
+        monitor: nameById.get(e.MonitorId) ?? e.MonitorId,
         cause: e.Cause,
         duration: Number(e.Length),
         frames: Number(e.Frames),
         score: Number(e.MaxScore),
         notes: e.Notes,
+        objects: parseDetectedObjects(e.Notes),
         tags,
       });
     }),
