@@ -39,6 +39,14 @@ export interface AssistantMessage {
   /** Result cards aggregated from this turn's tool calls (refs #246). Only
    *  ever set on a `role: 'tool'` message; see agent.ts's `runAssistantTurn`. */
   display?: DisplayEntity[];
+  /** The tool-activity steps ("Running count_events…" / "count_events done")
+   *  that occurred while this turn's answer was generated (refs #246).
+   *  AskPanel's `handleSend` snapshots `useAssistantStore`'s `activities` once
+   *  `runAssistantTurn` resolves and attaches them here, onto the assistant
+   *  message carrying the final text, so the step trace renders above that
+   *  answer and stays there in history instead of only living in the
+   *  transient `activities` array for the in-flight turn. */
+  steps?: ToolActivity[];
 }
 
 export interface ToolCall {

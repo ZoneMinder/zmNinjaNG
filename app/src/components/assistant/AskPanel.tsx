@@ -38,7 +38,7 @@ import {
 import { sharedMockProvider } from '../../lib/assistant/providers/mock';
 import { buildSystemPrompt } from '../../lib/assistant/system-prompt';
 import { getToolByName } from '../../lib/assistant/tools';
-import type { AssistantMessage, AssistantTurn, ToolContext } from '../../lib/assistant/types';
+import type { AssistantMessage, AssistantTurn, ToolActivity, ToolContext } from '../../lib/assistant/types';
 import { log, LogLevel } from '../../lib/logger';
 import { Markdown } from '../../lib/markdown';
 import { queryKeys } from '../../lib/query/query-keys';
@@ -111,6 +111,42 @@ function formatActivityInput(input: Record<string, unknown>): string | undefined
   return json.length > ASSISTANT.activityInputPreviewChars
     ? `${json.slice(0, ASSISTANT.activityInputPreviewChars)}…`
     : json;
+}
+
+/** Renders one turn's tool-activity step trace ("Running count_events… /
+ *  count_events done"). Shared by two call sites: a completed message's
+ *  attached `steps` (rendered above that message's answer, refs #246) and the
+ *  live `activities` array for the turn still in flight (rendered above the
+ *  "thinking" indicator, where its answer will land once the turn resolves). */
+function ActivitySteps({ steps }: { steps: ToolActivity[] }) {
+  const { t } = useTranslation();
+  return (
+    <ol className="flex flex-col gap-1" data-testid="assistant-activities">
+      {steps.map((a, i) => {
+        const compactInput = formatActivityInput(a.input);
+        const statusText =
+          a.status === 'running'
+            ? t('assistant.activity.running', { tool: a.toolName })
+            : a.status === 'done'
+              ? t('assistant.activity.done', { tool: a.toolName })
+              : t('assistant.activity.error', { tool: a.toolName });
+        return (
+          <li
+            key={`${a.toolName}-${i}`}
+            data-testid="assistant-activity-step"
+            title={`${getToolByName(a.toolName)?.description ?? a.toolName}${a.input && Object.keys(a.input).length > 0 ? ` ${JSON.stringify(a.input)}` : ''}`}
+            className={cn(
+              'flex min-w-0 items-center gap-1.5 truncate rounded border px-2 py-1 text-xs',
+              a.status === 'error' ? 'border-destructive/40 text-destructive' : 'border-border text-muted-foreground',
+            )}
+          >
+            <span className="truncate">{statusText}</span>
+            {compactInput && <span className="truncate opacity-70">{compactInput}</span>}
+          </li>
+        );
+      })}
+    </ol>
+  );
 }
 
 export function AskPanel() {
@@ -227,7 +263,30 @@ export function AskPanel() {
       // thread already in the store, so re-appending the whole returned array
       // would duplicate everything runAssistantTurn didn't drop.
       const newMessages = result.slice(history.length);
+
+      // Attach this turn's tool-activity steps to the assistant message
+      // carrying the final answer (the last `role: 'assistant'` message: every
+      // earlier one in a multi-iteration turn only carries `toolCalls`), so
+      // the step trace renders above that answer and survives in history
+      // (refs #246). `useAssistantStore`'s `activities` accumulated across the
+      // whole turn (every iteration's `host.onActivity` call), not just the
+      // last one, since `clearActivities` below only runs once the turn ends.
+      const turnActivities = useAssistantStore.getState().activities;
+      if (turnActivities.length > 0) {
+        for (let i = newMessages.length - 1; i >= 0; i--) {
+          if (newMessages[i].role === 'assistant') {
+            newMessages[i] = { ...newMessages[i], steps: turnActivities };
+            break;
+          }
+        }
+      }
+
       newMessages.forEach((m) => append(profileId, m));
+      // Clear the live activity trace now that it has been captured onto the
+      // message above: without this, it would still render below the thread
+      // (see the `activities.length > 0` block below) duplicating the steps
+      // now attached to the message that just landed.
+      clearActivities();
     } catch (e) {
       if (e instanceof DOMException && e.name === 'AbortError') {
         // User-initiated abort: not an error to surface.
@@ -254,52 +313,33 @@ export function AskPanel() {
             return <AssistantResultCards key={i} entities={msg.display} host={host} />;
           }
           return (
-            <div
-              key={i}
-              data-testid={`assistant-message-${msg.role}`}
-              className={cn(
-                'max-w-[85%] rounded-lg px-3 py-2 text-sm',
-                msg.role === 'user' ? 'ml-auto bg-primary text-primary-foreground' : 'bg-muted',
-              )}
-            >
-              {msg.role === 'user' ? <p>{msg.text}</p> : renderAssistantText(msg, t)}
+            <div key={i} className="space-y-1">
+              {/* This turn's tool steps, above its answer (refs #246): user
+                  question -> "Running count_events…" / "count_events done" ->
+                  answer, in that order both live and in history. */}
+              {msg.role === 'assistant' && msg.steps && msg.steps.length > 0 && <ActivitySteps steps={msg.steps} />}
+              <div
+                data-testid={`assistant-message-${msg.role}`}
+                className={cn(
+                  'max-w-[85%] rounded-lg px-3 py-2 text-sm',
+                  msg.role === 'user' ? 'ml-auto bg-primary text-primary-foreground' : 'bg-muted',
+                )}
+              >
+                {msg.role === 'user' ? <p>{msg.text}</p> : renderAssistantText(msg, t)}
+              </div>
             </div>
           );
         })}
 
-        {/* Step trace for the current (or, once it finishes, the last) turn: one
-            row per `host.onActivity` call from agent.ts, so a multi-step answer
-            ("which monitor was most active") shows what it actually did, not
-            just a final "thinking" spinner. Stays mounted after the turn ends
-            (`clearActivities` only runs at the start of the next `handleSend`),
-            so the steps remain visible once the reply lands. */}
-        {activities.length > 0 && (
-          <ol className="flex flex-col gap-1" data-testid="assistant-activities">
-            {activities.map((a, i) => {
-              const compactInput = formatActivityInput(a.input);
-              const statusText =
-                a.status === 'running'
-                  ? t('assistant.activity.running', { tool: a.toolName })
-                  : a.status === 'done'
-                    ? t('assistant.activity.done', { tool: a.toolName })
-                    : t('assistant.activity.error', { tool: a.toolName });
-              return (
-                <li
-                  key={`${a.toolName}-${i}`}
-                  data-testid="assistant-activity-step"
-                  title={`${getToolByName(a.toolName)?.description ?? a.toolName}${a.input && Object.keys(a.input).length > 0 ? ` ${JSON.stringify(a.input)}` : ''}`}
-                  className={cn(
-                    'flex min-w-0 items-center gap-1.5 truncate rounded border px-2 py-1 text-xs',
-                    a.status === 'error' ? 'border-destructive/40 text-destructive' : 'border-border text-muted-foreground',
-                  )}
-                >
-                  <span className="truncate">{statusText}</span>
-                  {compactInput && <span className="truncate opacity-70">{compactInput}</span>}
-                </li>
-              );
-            })}
-          </ol>
-        )}
+        {/* Step trace for the turn still in flight: one row per
+            `host.onActivity` call from agent.ts, so a multi-step answer
+            ("which monitor was most active") shows what it's doing before the
+            answer exists yet. Rendered above the "thinking" indicator, i.e.
+            where the answer will land once the turn resolves; `handleSend`
+            then moves this same list onto that answer's message (`steps`,
+            above) and clears it, so it never lingers here to duplicate what
+            now renders inside the thread. */}
+        {activities.length > 0 && <ActivitySteps steps={activities} />}
 
         {running && !pendingConfirm && (
           <p className="flex items-center gap-1 text-xs text-muted-foreground">

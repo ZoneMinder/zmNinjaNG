@@ -175,6 +175,25 @@ describe('AskPanel', () => {
     expect(screen.getByTestId('assistant-card-monitor')).toHaveTextContent('Front Door');
   });
 
+  it('renders a turn\'s step trace above its answer, in chronological order (refs #246)', () => {
+    useAssistantStore.getState().append('p1', { role: 'user', text: 'which monitor was busiest?' });
+    useAssistantStore.getState().append('p1', {
+      role: 'assistant',
+      text: 'The front door camera was busiest.',
+      toolCalls: [],
+      steps: [{ toolName: 'count_events', status: 'done', input: { interval: '24 hour' } }],
+    });
+
+    render(<AskPanel />);
+
+    const step = screen.getByTestId('assistant-activity-step');
+    const answer = screen.getByTestId('assistant-message-assistant');
+    expect(step).toHaveTextContent('assistant.activity.done:count_events');
+    // DOCUMENT_POSITION_FOLLOWING: `answer` comes after `step` in DOM order,
+    // i.e. the step chip renders above the answer, not below it.
+    expect(step.compareDocumentPosition(answer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('does not render a result-card strip for a tool message with no display', () => {
     useAssistantStore.getState().append('p1', {
       role: 'tool',
