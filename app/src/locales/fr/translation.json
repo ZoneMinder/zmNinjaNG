@@ -322,7 +322,14 @@
       "download_size": "{{size}} Mo",
       "privacy": "Fonctionne sur l'appareil. Rien n'est envoyé, sauf à votre propre serveur ZoneMinder.",
       "delete": "Supprimer",
-      "delete_failed": "Échec de la suppression du modèle."
+      "delete_failed": "Échec de la suppression du modèle.",
+      "storage_path": "Stocké dans : {{path}}",
+      "storage_browser_cache": "Stocké dans : cache du navigateur",
+      "storage_browser_indexeddb": "Stocké dans : base de données du navigateur",
+      "storage_used": "Espace utilisé : {{size}}",
+      "storage_persistent_yes": "Persistant : oui",
+      "storage_persistent_no": "Persistant : non",
+      "storage_note": "Stocké dans le stockage local de l'appli. Supprimé par Supprimer."
     },
     "language": "Langue",
     "select_language": "Sélectionner la langue",

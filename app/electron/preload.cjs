@@ -18,3 +18,10 @@ contextBridge.exposeInMainWorld('electronSecure', {
   encrypt: (plaintext) => ipcRenderer.invoke('secure:encrypt', plaintext),
   decrypt: (base64) => ipcRenderer.invoke('secure:decrypt', base64),
 });
+
+// Read-only path lookup so the renderer can tell the user where on-device
+// assistant model weights live (Chromium's Cache API/IndexedDB storage sits
+// under this dir), see src/lib/assistant/model-storage.ts.
+contextBridge.exposeInMainWorld('electronPaths', {
+  getUserDataPath: () => ipcRenderer.invoke('app:user-data-path'),
+});

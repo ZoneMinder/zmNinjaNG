@@ -322,7 +322,14 @@
       "download_size": "{{size}} MB",
       "privacy": "Funciona en el dispositivo. No se envía nada salvo a tu propio servidor ZoneMinder.",
       "delete": "Eliminar",
-      "delete_failed": "Error al eliminar el modelo."
+      "delete_failed": "Error al eliminar el modelo.",
+      "storage_path": "Guardado en: {{path}}",
+      "storage_browser_cache": "Guardado en: caché del navegador",
+      "storage_browser_indexeddb": "Guardado en: base de datos del navegador",
+      "storage_used": "Espacio usado: {{size}}",
+      "storage_persistent_yes": "Persistente: sí",
+      "storage_persistent_no": "Persistente: no",
+      "storage_note": "Guardado en el almacenamiento local de la app. Se borra con Eliminar."
     },
     "language": "Idioma",
     "select_language": "Seleccionar Idioma",

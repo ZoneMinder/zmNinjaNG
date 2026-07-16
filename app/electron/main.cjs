@@ -116,6 +116,12 @@ ipcMain.handle('secure:decrypt', (_event, base64) => {
   }
 });
 
+// Read-only, no args: the base app-data directory (Chromium's Cache API and
+// IndexedDB storage for this app live under it). Bridged to the renderer via
+// electron/preload.cjs's `electronPaths.getUserDataPath` for the on-device
+// assistant's storage-info display (src/lib/assistant/model-storage.ts).
+ipcMain.handle('app:user-data-path', () => app.getPath('userData'));
+
 // App icon so the desktop shell shows the zmNinjaNg logo instead of the
 // default Electron logo (window, taskbar, and macOS dock).
 const ICON_PATH = path.join(__dirname, 'icons', 'icon.png');

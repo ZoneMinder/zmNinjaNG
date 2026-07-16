@@ -22,6 +22,7 @@ import { ASSISTANT } from '../../lib/zmninja-ng-constants';
 import { useWebGpuAvailable } from '../../hooks/useWebGpuAvailable';
 import { useToast } from '../../hooks/use-toast';
 import { deleteModel, downloadModel, isModelDownloaded } from '../../lib/assistant/model-download';
+import { getModelStorageInfo, formatStorageBytes, type ModelStorageInfo } from '../../lib/assistant/model-storage';
 import { log, LogLevel } from '../../lib/logger';
 import type { Profile } from '../../api/types';
 import type { ProfileSettings } from '../../stores/settings';
@@ -60,6 +61,7 @@ export function AssistantSection({
   const [downloadStatus, setDownloadStatus] = useState<DownloadStatus>('checking');
   const [downloading, setDownloading] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [storageInfo, setStorageInfo] = useState<ModelStorageInfo | undefined>(undefined);
 
   // Latest selected model id, read *after* the awaits below resolve. The
   // select is disabled while downloading/deleting (primary guard), but a
@@ -94,6 +96,29 @@ export function AssistantSection({
       cancelled = true;
     };
   }, [settings.assistantModelId]);
+
+  // Storage info (backend/usage/persisted/OS path) is only meaningful once
+  // there's something on disk to describe, and re-probed whenever a
+  // download/delete flips `downloadStatus`, so a Download right after this
+  // panel first renders picks up fresh numbers instead of stale "not
+  // downloaded" state.
+  useEffect(() => {
+    if (downloadStatus !== 'downloaded') {
+      setStorageInfo(undefined);
+      return;
+    }
+    let cancelled = false;
+    getModelStorageInfo()
+      .then((info) => {
+        if (!cancelled) setStorageInfo(info);
+      })
+      .catch((error) => {
+        log.assistant('getModelStorageInfo failed', LogLevel.ERROR, { error });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [downloadStatus, settings.assistantModelId]);
 
   const handleDownload = useCallback(async () => {
     const modelId = settings.assistantModelId;
@@ -222,6 +247,35 @@ export function AssistantSection({
                 )}
               </div>
             </div>
+
+            {downloadStatus === 'downloaded' && storageInfo && (
+              <div
+                className="px-4 py-3 space-y-1 min-w-0"
+                data-testid="assistant-model-storage"
+              >
+                <p
+                  className="text-xs text-muted-foreground truncate min-w-0"
+                  title={storageInfo.osPath}
+                >
+                  {storageInfo.osPath
+                    ? t('settings.assistant.storage_path', { path: storageInfo.osPath })
+                    : t(`settings.assistant.storage_browser_${storageInfo.backend}`)}
+                </p>
+                {storageInfo.usageBytes !== undefined && (
+                  <p className="text-xs text-muted-foreground">
+                    {t('settings.assistant.storage_used', { size: formatStorageBytes(storageInfo.usageBytes) })}
+                  </p>
+                )}
+                {storageInfo.persisted !== undefined && (
+                  <p className="text-xs text-muted-foreground">
+                    {storageInfo.persisted
+                      ? t('settings.assistant.storage_persistent_yes')
+                      : t('settings.assistant.storage_persistent_no')}
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground">{t('settings.assistant.storage_note')}</p>
+              </div>
+            )}
 
             <div className="px-4 py-3">
               <p className="text-xs text-muted-foreground">{t('settings.assistant.privacy')}</p>

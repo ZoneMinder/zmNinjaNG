@@ -322,7 +322,14 @@
       "download_size": "{{size}} MB",
       "privacy": "Läuft lokal auf dem Gerät. Es wird nichts gesendet außer an den eigenen ZoneMinder-Server.",
       "delete": "Löschen",
-      "delete_failed": "Modell konnte nicht gelöscht werden."
+      "delete_failed": "Modell konnte nicht gelöscht werden.",
+      "storage_path": "Speicherort: {{path}}",
+      "storage_browser_cache": "Speicherort: Browser-Cache",
+      "storage_browser_indexeddb": "Speicherort: Browser-Datenbank",
+      "storage_used": "Speicherbedarf: {{size}}",
+      "storage_persistent_yes": "Dauerhaft: ja",
+      "storage_persistent_no": "Dauerhaft: nein",
+      "storage_note": "Liegt im lokalen Speicher der App. Wird mit Löschen entfernt."
     },
     "language": "Sprache",
     "select_language": "Sprache auswählen",

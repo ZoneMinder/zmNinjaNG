@@ -322,7 +322,14 @@
       "download_size": "{{size}} MB",
       "privacy": "在设备本地运行。除您自己的 ZoneMinder 服务器外，不向任何地方发送数据。",
       "delete": "删除",
-      "delete_failed": "删除模型失败。"
+      "delete_failed": "删除模型失败。",
+      "storage_path": "存储位置：{{path}}",
+      "storage_browser_cache": "存储位置：浏览器缓存",
+      "storage_browser_indexeddb": "存储位置：浏览器数据库",
+      "storage_used": "已用空间：{{size}}",
+      "storage_persistent_yes": "持久化：是",
+      "storage_persistent_no": "持久化：否",
+      "storage_note": "存储在应用本地存储中，删除后一并移除。"
     },
     "language": "语言",
     "select_language": "选择语言",
