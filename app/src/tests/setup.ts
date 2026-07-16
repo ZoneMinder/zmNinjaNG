@@ -272,3 +272,12 @@ vi.mock('@aparajita/capacitor-biometric-auth', () => ({
     irisAuthentication: 5,
   },
 }));
+
+// Mock @mlc-ai/web-llm (on-device assistant backend, refs #246). Phase 1 unit
+// tests never load the real WebGPU model; this stub keeps any test that
+// imports the Phase-2 WebLLM provider from failing on the real package.
+vi.mock('@mlc-ai/web-llm', () => ({
+  CreateMLCEngine: vi.fn().mockResolvedValue({
+    chat: { completions: { create: vi.fn().mockResolvedValue({ choices: [{ message: { content: '{"answer":"ok"}' } }] }) } },
+  }),
+}));

@@ -139,3 +139,50 @@ export async function getEventCount(): Promise<number> {
   const data = (await res.json()) as { pagination?: { count?: number }; events?: unknown[] };
   return data.pagination?.count ?? data.events?.length ?? 0;
 }
+
+/**
+ * Whether a monitor is currently in an armed (forced) alarm state.
+ *
+ * Ground truth for the assistant e2e destructive-action scenario (rule 34):
+ * the UI's confirm/cancel flow triggers or cancels the alarm, but this reads
+ * the server directly so a rendering regression in the confirm card can't
+ * make the test believe the alarm state changed when it didn't. Mirrors the
+ * numeric/string parsing in src/pages/hooks/useAlarmControl.ts.
+ */
+export async function getAlarmStatus(monitorId: string): Promise<boolean> {
+  const token = await getAccessToken();
+  const { host } = testConfig.server;
+
+  const res = await fetch(
+    `${host}/api/monitors/alarm/id:${monitorId}/command:status.json?token=${encodeURIComponent(token)}`,
+  );
+  if (!res.ok) {
+    throw new Error(`ZM API alarm status fetch failed for monitor ${monitorId}: ${res.status} ${res.statusText}`);
+  }
+
+  const data = (await res.json()) as { status?: string | number; output?: string | number };
+  const raw = data.status ?? data.output;
+  const value = raw?.toString().toLowerCase();
+  const parsed = raw !== undefined && raw !== null ? Number(raw) : Number.NaN;
+  return Number.isFinite(parsed) ? parsed !== 0 : value === 'on' || value === '1' || value === 'armed' || value === 'true';
+}
+
+/**
+ * Cancel a monitor's forced alarm state directly against the API.
+ *
+ * Cleanup for the assistant e2e destructive-action scenario: after the
+ * scripted `trigger_alarm` confirm path proves the app can arm a monitor,
+ * this leaves the monitor as it found it instead of relying on a second UI
+ * round-trip through the assistant to disarm it.
+ */
+export async function cancelAlarmDirect(monitorId: string): Promise<void> {
+  const token = await getAccessToken();
+  const { host } = testConfig.server;
+
+  const res = await fetch(
+    `${host}/api/monitors/alarm/id:${monitorId}/command:off.json?token=${encodeURIComponent(token)}`,
+  );
+  if (!res.ok) {
+    throw new Error(`ZM API alarm cancel failed for monitor ${monitorId}: ${res.status} ${res.statusText}`);
+  }
+}

@@ -12,6 +12,12 @@
  * - Aborting (or unmounting mid-turn) must resolve any pending confirm as
  *   `false` and abort the in-flight `AbortController`, so the loop's
  *   `signal.aborted` checks unwind it instead of leaving it hung.
+ *
+ * Test seam: in test mode (`isAssistantTestMode()`), before running a turn
+ * this reads `window.__assistantMockScript` (seeded by e2e steps) and loads
+ * it into `sharedMockProvider`. This is the only production-visible test
+ * seam the assistant adds; `isAssistantTestMode()` is false in production
+ * builds, so the branch never runs there.
  */
 import { useEffect, useRef, useState } from 'react';
 import type { TFunction } from 'i18next';
@@ -22,10 +28,15 @@ import { getVersion } from '../../api/auth';
 import type { MonitorsResponse } from '../../api/types';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { runAssistantTurn } from '../../lib/assistant/agent';
-import { getAssistantProvider, PROVIDER_NOT_AVAILABLE_MESSAGE } from '../../lib/assistant/providers/provider';
+import {
+  getAssistantProvider,
+  isAssistantTestMode,
+  PROVIDER_NOT_AVAILABLE_MESSAGE,
+} from '../../lib/assistant/providers/provider';
+import { sharedMockProvider } from '../../lib/assistant/providers/mock';
 import { buildSystemPrompt } from '../../lib/assistant/system-prompt';
 import { getToolByName } from '../../lib/assistant/tools';
-import type { ToolContext } from '../../lib/assistant/types';
+import type { AssistantMessage, AssistantTurn, ToolContext } from '../../lib/assistant/types';
 import { log, LogLevel } from '../../lib/logger';
 import { Markdown } from '../../lib/markdown';
 import { queryKeys } from '../../lib/query/query-keys';
@@ -37,9 +48,24 @@ import { ErrorBanner } from '../ui/query-state';
 import { AssistantConfirmCard } from './AssistantConfirmCard';
 import { useAssistantHost } from './useAssistantHost';
 
+declare global {
+  interface Window {
+    /** e2e-only: a script for `sharedMockProvider`, read once per turn when
+     *  `isAssistantTestMode()` is true. Never set outside tests/steps. */
+    __assistantMockScript?: AssistantTurn[];
+  }
+}
+
 /** The agent loop never renders text itself; it only ever emits this prefix
  *  (see agent.ts's ITERATION_CAP_KEY) to hand the localization job to us. */
 const I18N_SENTINEL = '__i18n:';
+
+// Stable reference for the "no thread yet" case. Without it, the `thread`
+// selector below would return a fresh `[]` literal every render whenever
+// `threads[profileId]` is undefined (i.e. before the first message), which
+// makes useSyncExternalStore see a new snapshot on every call and crashes
+// the app with "Maximum update depth exceeded" the moment AskPanel mounts.
+const EMPTY_THREAD: AssistantMessage[] = [];
 
 function renderAssistantText(text: string | undefined, t: TFunction) {
   if (!text) return null;
@@ -57,7 +83,7 @@ export function AskPanel() {
 
   const { host, pendingConfirm, resolveConfirm } = useAssistantHost();
 
-  const thread = useAssistantStore((s) => (profileId ? (s.threads[profileId] ?? []) : []));
+  const thread = useAssistantStore((s) => (profileId ? (s.threads[profileId] ?? EMPTY_THREAD) : EMPTY_THREAD));
   const running = useAssistantStore((s) => s.running);
   const activities = useAssistantStore((s) => s.activities);
   const append = useAssistantStore((s) => s.append);
@@ -99,6 +125,10 @@ export function AskPanel() {
 
     try {
       const provider = getAssistantProvider();
+
+      if (isAssistantTestMode() && window.__assistantMockScript) {
+        sharedMockProvider.setScript(window.__assistantMockScript);
+      }
 
       let zmVersion = '';
       try {
