@@ -2107,6 +2107,22 @@ downstream of it runs for real.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/tools.ts#L18>`__
    · → :doc:`12-shared-services-and-components`
 
+#. **Validate the arguments, because the schema did not.** A tool's ``schema``
+   is prose in the system prompt, not a contract anything enforces: the model
+   can send whatever it likes. ``list_events`` therefore checks ``range``
+   against ``isEventRange`` (``event-range.ts``) and resolves ``monitorId``
+   through ``resolveMonitorRef`` (``monitor-ref.ts``) BEFORE it queries, and
+   turns either failure into an error result naming the valid values so the
+   next iteration can retry. This ordering is the whole point. A small model
+   passes the monitor NAME it saw in an earlier row ("FrontDoor"), and
+   ZoneMinder answers ``MonitorId:FrontDoor`` with ``total: 0``, which is
+   indistinguishable from a real negative by the time it reaches the answer:
+   the model reported "no one came to your front door" about a camera it had
+   never queried. An unresolvable argument must fail loudly; an empty result
+   set reads like an answer.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/monitor-ref.ts#L38>`__
+   · → :doc:`12-shared-services-and-components`
+
 #. **Build the confirmation before asking.** ``tools-destructive.ts``'s
    ``buildConfirm`` never calls ``confirm`` itself, it only fetches whatever
    detail the message needs; ``deleteEventTool`` calls ``getEvent`` first so
@@ -2160,13 +2176,45 @@ downstream of it runs for real.
    · → :doc:`12-shared-services-and-components`
 
 #. **Render the reply.** Once a turn returns with no more tool calls,
-   ``AskPanel`` appends only the new tail of messages to the store and renders
-   assistant text as Markdown, except the one sentinel ``agent.ts`` ever emits
-   itself (``__i18n:assistant.iteration_cap_reached``), which
-   ``renderAssistantText`` localizes with ``t()`` instead of treating as
-   literal text.
+   ``runAssistantTurn`` resolves with only the messages that turn produced, and
+   ``AskPanel`` appends them to the store. The loop deliberately does not return
+   the history it was given: what it sends the model is a trimmed view of the
+   panel's thread (see the next step), so a returned "history" would be a
+   different length than the panel's own and any arithmetic against it would
+   drop messages. ``AskPanel`` renders assistant text as Markdown, except the
+   sentinels ``agent.ts`` and the panel emit themselves
+   (``__i18n:assistant.iteration_cap_reached``,
+   ``__i18n:assistant.context_cleared``), which ``renderAssistantText``
+   localizes with ``t()`` instead of treating as literal text.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/assistant/AskPanel.tsx#L70>`__
    · → :doc:`05-component-architecture`
+
+#. **Clear the context before it overflows.** A conversation grows the prompt
+   every turn (history plus tool results), and a model's context window is
+   finite, so ``AskPanel`` checks ``isContextNearlyFull(provider.contextWindow,
+   usage)`` against the ``promptTokens`` the backend reported for the turn that
+   just finished. Past ``ASSISTANT.contextClearThreshold`` (0.75) it appends an
+   ``assistant.context_cleared`` notice carrying ``contextBoundary: true``.
+   The check runs on the finished turn rather than before the next one because
+   ``promptTokens`` is a measurement, not an estimate: the app never counts
+   tokens itself. The threshold sits below 1.0 by more than ``maxTokens`` so the
+   next turn still has room to answer; clearing only once the window is full
+   would mean the turn that discovers the problem is the turn that fails on it.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/agent.ts#L45>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **A boundary hides history from the model, not from the user.** On the next
+   send, ``sliceAfterContextBoundary`` (``agent.ts``) drops everything up to and
+   including the last ``contextBoundary`` message before the message-count cap
+   applies, so ``provider.chat`` sees only what came after it. The thread in
+   ``stores/assistant.ts`` still holds every message, so the transcript above
+   the notice stays on screen. This is the whole reason the boundary is a marker
+   rather than a call to the store's ``reset``: the user keeps their scrollback,
+   the model gets its window back. ``contextWindow`` is undefined on the Ollama
+   provider (the window is the server's ``num_ctx``, which the
+   OpenAI-compatible API never reports), so this never fires there.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/agent.ts#L50>`__
+   · → :doc:`12-shared-services-and-components`
 
 Typing text without a leading ``?`` skips all of this and returns to plain
 command-palette navigation: a direct ``navigate()`` call with no model, no

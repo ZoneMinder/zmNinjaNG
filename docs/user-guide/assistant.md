@@ -1,12 +1,19 @@
 # Assistant
 
-The Assistant ("Ask") answers questions about your cameras and events, and can make changes to your ZoneMinder server on request, monitors, alarms, run state, events, after you confirm each one. The model that answers is designed to run entirely on your device, not on a server operated by zmNinjaNg or anyone else.
+Ninjii answers questions about your cameras and events, and can make changes to your ZoneMinder server on request, monitors, alarms, run state, events, after you confirm each one. The model that answers runs either on your device or on a server you run yourself. Nothing goes to a server operated by zmNinjaNg or any AI company.
 
 ## Enabling the Assistant
 
-Go to **Settings > Assistant** and turn on **Enable Assistant**.
+Go to **Settings > Ninjii** and turn on **Enable Ninjii**.
 
-The toggle is disabled, with an explanation shown in its place, on a device or browser that does not support WebGPU. WebGPU is what lets the model run inside the app instead of on a remote server; without it there is nothing to enable yet.
+Underneath, **Backend** picks where the model runs:
+
+- **On-device**: the model runs inside the app on your device's GPU, using WebGPU. Nothing leaves your device.
+- **Ollama**: the model runs on an [Ollama](https://ollama.com) server (or anything else speaking the OpenAI-compatible chat API) that you point the app at.
+
+The toggle stays available even where WebGPU is missing, because the Ollama backend does not need it. When your device has no WebGPU, the on-device section explains that and points you at Ollama instead.
+
+The chat window's header always names the model that is answering and where it runs, for example "Qwen3 1.7B · On-device" or "qwen2.5:3b · Ollama", so you never have to open Settings to check which one you are talking to.
 
 ## Asking a Question
 
@@ -36,18 +43,44 @@ There is no action the assistant can take on the server without this confirmatio
 
 ## The on-device model
 
-The model runs inside the app using your device's GPU (WebGPU), the same way a game or video effect uses the GPU, rather than sending your conversation to a company's servers over the internet. **Settings > Assistant > Model** lets you pick which model to use once this is available.
+The model runs inside the app using your device's GPU (WebGPU), the same way a game or video effect uses the GPU, rather than sending your conversation to a company's servers over the internet.
 
-:::{note}
-Downloading and running the on-device model is coming in a future update. Today the toggle, model picker, and confirmation flow are all in place and functional, so you can see how the feature will work, but the Download button is disabled until the on-device model backend ships.
+**Settings > Ninjii > Model** picks which one, then **Download** fetches it. The download runs as a background task you can watch or cancel, and the model is stored on your device until you tap **Delete**. Four models are available, smallest first:
+
+| Model | Download | Notes |
+|---|---|---|
+| Llama 3.2 1B | ~879 MB | The lightest option. Best choice on a phone. |
+| Gemma 2 2B | ~1895 MB | Needs a GPU feature (`shader-f16`) that some devices lack. |
+| Qwen3 1.7B | ~2037 MB | The default. |
+| Llama 3.2 3B | ~2264 MB | The most capable, and the heaviest. |
+
+The download sizes are a floor, not the total: running a model needs additional memory on top of its weights, and how much depends on how long the conversation gets.
+
+:::{warning}
+Local models run in your device's memory. If the app crashes or the model never finishes loading, the device does not have enough memory for that model. Pick a smaller one, or switch to the Ollama backend to run it on a server instead. This is the same note shown next to the model picker in Settings.
 :::
+
+## Running the model on your own server (Ollama)
+
+Set **Backend** to **Ollama** and give the app the address of your server. The default, `http://localhost:11434/v1`, works when the server runs on the same machine as the app. On a phone, `localhost` means the phone itself, so you need the server's address on your network instead, for example `http://192.168.1.50:11434/v1`.
+
+**Test** checks the server answers. The model list fills in automatically from the server, and you can also type a model name by hand. The **API key** field is optional, for a server that requires one; it is stored in your device's secure storage, not alongside the rest of your settings.
+
+## Long conversations
+
+Every model can only hold so much of a conversation at once. When a conversation approaches that limit, Ninjii posts a note saying it has started a fresh one, and stops sending the earlier messages to the model. The messages above that note stay on screen for you to read; the model simply no longer sees them. This happens on the on-device backend, where the app knows the model's limit. On Ollama the limit belongs to your server's configuration and the app cannot read it, so nothing is cleared automatically.
+
+**Clear** in the chat header wipes the conversation entirely at any time.
 
 ## Privacy
 
-The Assistant's own description of this, shown in Settings, is the short version: **runs on-device, nothing is sent anywhere except your own ZoneMinder server.**
+No third-party AI service ever sees your cameras, events, or questions. Which machines do see them depends on the backend:
 
-Concretely: your questions, the assistant's answers, and any data it looks up (monitor names, event details, server health) stay on your device for the length of the conversation. The conversation is not saved once you close the app, closing zmNinjaNg clears it. The only network requests the assistant makes are the same kind of requests every other screen in the app makes, to the ZoneMinder server for the profile you are currently using. No third-party AI service ever sees your cameras, events, or questions.
+- **On-device**: your questions, the answers, and anything the assistant looks up stay on your device. The only network requests are to your own ZoneMinder server, the same requests every other screen in the app makes.
+- **Ollama**: the same data, plus your questions and the assistant's answers, also go to the Ollama server you configured. That server is yours; the app never sends the conversation anywhere else.
+
+Either way the conversation is not saved. Closing zmNinjaNg clears it.
 
 ## Platform support
 
-The Assistant requires a browser or WebView with WebGPU support. Where WebGPU is unavailable, the Enable toggle in Settings stays off and explains why. Support varies by device and OS version, if the toggle is greyed out, your platform does not currently support it.
+The on-device backend requires a browser or WebView with WebGPU support, and support varies by device and OS version. Where WebGPU is unavailable, the on-device section says so and suggests the Ollama backend, which has no such requirement and works anywhere the app runs.

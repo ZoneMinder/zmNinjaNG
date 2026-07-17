@@ -1093,7 +1093,26 @@ runs against the real app and against tests without a DOM.
 ``runAssistantTurn`` (``agent.ts``) is a bounded loop
 (``ASSISTANT.maxToolIterations``, 6) that calls
 ``provider.chat(history, TOOLS, system, signal)``, resolves each returned
-``ToolCall`` via ``getToolByName`` (``tools.ts``), and executes it. ``TOOLS``
+``ToolCall`` via ``getToolByName`` (``tools.ts``), and executes it. It resolves
+with only the messages that turn produced, never the history it was handed:
+what it sends the model is a trimmed view of the caller's thread (the boundary
+slice below, then ``ASSISTANT.maxHistoryMessages``), so returning a "history"
+would hand the caller an array of a different length than its own and invite
+off-by-N arithmetic against it.
+
+Two mechanisms keep a long conversation inside a finite context window.
+``sliceAfterContextBoundary`` drops everything up to and including the last
+message flagged ``contextBoundary`` before the loop runs, so an auto-clear
+(decided in ``AskPanel``, see :doc:`call-flows`'s "Asking the assistant a
+question") hides history from the model while the thread in
+``stores/assistant.ts`` keeps rendering it for the user. ``isContextNearlyFull``
+is the decision itself: it compares the ``promptTokens`` a backend reported
+against that backend's ``contextWindow``, and returns false whenever either is
+unknown. Both are measured rather than estimated: the app never counts tokens
+itself, it reads ``usage`` off the response (``providers/usage.ts`` maps the
+OpenAI-shaped block both backends answer with), and ``contextWindow`` is set
+only by the on-device provider, which knows it because ``model-download.ts``
+passed it to ``CreateMLCEngine``. ``TOOLS``
 is the registry: ``readOnlyTools`` (``tools-readonly.ts``, no confirmation
 needed, monitor/event lookups, server health, navigation) concatenated with
 ``destructiveTools`` (``tools-destructive.ts``, arm/disarm a monitor, trigger
@@ -1143,10 +1162,46 @@ Phase 1 (this codebase today) wires only the deterministic ``MockProvider``
 Settings assistant section shows the model picker but marks download "coming
 in the next update" (``components/settings/AssistantSection.tsx``). Phase 2
 replaces the ``throw`` with an on-device provider built on ``@mlc-ai/web-llm``
-(model ids and download sizes in ``ASSISTANT.webllmModels``,
-``lib/zmninja-ng-constants.ts``) that runs in the browser via WebGPU: no
-message or tool result in this loop is ever sent to a server other than the
-ZoneMinder server the tool call itself targets.
+that runs in the browser via WebGPU: no message or tool result in this loop is
+ever sent to a server other than the ZoneMinder server the tool call itself
+targets.
+
+Each entry in ``ASSISTANT.webllmModels`` (``lib/zmninja-ng-constants.ts``)
+carries its id, its approximate download size, and its own
+``contextWindowSize``, which ``chatOptsFor`` (``model-download.ts``) passes to
+``CreateMLCEngine``. The window is per model rather than one global value for
+two reasons. web-llm's prebuilt registry caps every model it ships at 4096,
+below what any of them were trained for, and our prompt (system rules, tool
+schemas, monitor table, history, tool results) overflows that, so each entry
+has to raise it. But raising it is not free and not uniform: the KV cache is
+allocated up front and grows linearly with the window, on top of the weights,
+so Llama 3.2's native 128K would need gigabytes by itself. Each value is
+therefore ``min(the model's native window, ASSISTANT.contextWindowCap)``, which
+is why Gemma 2 sits at 8192 (its native ceiling, not our cap) while the rest sit
+at the cap. A model id absent from the list gets no override at all rather than
+a guessed window.
+
+``chatOptsFor`` always sends ``sliding_window_size: -1`` alongside the window,
+and that pairing is load-bearing. web-llm throws
+``WindowSizeConfigurationError`` when both windows resolve positive, and
+``sliding_window_size`` does not come from the bundled registry at all: it comes
+from each model's ``mlc-chat-config.json``, fetched from HuggingFace, which the
+registry's overrides merge over. Of the shipped models only Gemma 3 1B carries a
+positive value there (512); the rest already ship -1, so the pin is a no-op for
+them and a guard against the next sliding-window model. Pinning -1 selects full
+KV-cache mode, matching what the registry's own Mistral entries do. Reading the
+bundled registry alone will not show you any of this (rule 41 in ``AGENTS.md``).
+
+That same merge is why ``gemma3-1b-it-q4f16_1-MLC`` is not in the list. Its
+stock registry entry cannot load on web-llm 0.2.84 at all: the override sets
+``context_window_size: 4096`` while its fetched config supplies
+``sliding_window_size: 512``, so both resolve positive and the load throws
+before a token is generated. The ``-1`` pin loads it, but then forces full-KV
+attention on a wasm compiled for sliding-window attention, and it answers with
+corrupted output (empty at 16384, token soup at 8192). Its native 512-token
+window is the only untried mode and is smaller than this app's system prompt, so
+the model would never see the tool contract. ``ASSISTANT.retiredModelIds`` maps
+saved copies of that id onto Llama 3.2 1B.
 
 **Used by:** ``components/assistant/AskPanel.tsx`` (drives one turn per
 send), ``components/assistant/useAssistantHost.ts`` (implements the
