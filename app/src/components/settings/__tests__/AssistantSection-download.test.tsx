@@ -18,8 +18,12 @@ import { DEFAULT_SETTINGS } from '../../../stores/settings';
 import { ASSISTANT } from '../../../lib/zmninja-ng-constants';
 import { useBackgroundTasks } from '../../../stores/backgroundTasks';
 
-const MODEL_A = ASSISTANT.webllmModels[0].id;
-const MODEL_B = ASSISTANT.webllmModels[1].id;
+// MODEL_A must be the model the section starts on (DEFAULT_SETTINGS'
+// assistantModelId), not webllmModels[0]: the default is not required to be
+// first in the picker, and tying these to list order silently retargeted every
+// assertion at an unselected model when the list was reordered.
+const MODEL_A = ASSISTANT.defaultModelId;
+const MODEL_B = ASSISTANT.webllmModels.find((m) => m.id !== MODEL_A)!.id;
 
 const isModelDownloadedMock = vi.fn();
 const downloadModelMock = vi.fn();

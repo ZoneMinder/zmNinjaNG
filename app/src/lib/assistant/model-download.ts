@@ -64,15 +64,38 @@ function loadWebllm(): Promise<typeof import('@mlc-ai/web-llm')> {
  *  (`Object.assign({}, mlcChatConfig, modelRecord.overrides, chatOpts)`), so
  *  this is what actually wins over the prebuilt registry's 4096 cap.
  *
- *  Not setting `sliding_window_size` here: web-llm throws
- *  `WindowSizeConfigurationError` only when both `context_window_size` and
- *  `sliding_window_size` resolve to a value other than -1, and none of
- *  `ASSISTANT.webllmModels`' prebuilt entries override `sliding_window_size`
- *  (only `context_window_size: 4096`), so it already resolves to -1 (full
- *  KV-cache mode, no sliding window) for all four shipped models. Verified
- *  against `node_modules/@mlc-ai/web-llm/lib/index.js`'s `prebuiltAppConfig`
- *  and `LLMChatPipeline`'s window-size checks (v0.2.84). */
-const CHAT_OPTS: ChatOptions = { context_window_size: ASSISTANT.contextWindowSize };
+ *  Per model, not global: the models differ in what they were trained for
+ *  (Gemma 2 tops out at 8192 natively, the rest are 32K+), and asking for a
+ *  window a model wasn't trained for costs VRAM without buying quality. An id
+ *  outside `webllmModels` (a saved value predating a list change) falls back
+ *  to the registry default by passing no override at all, rather than guessing
+ *  a window for a model we know nothing about.
+ *
+ *  `sliding_window_size: -1` travels with the context window and is not
+ *  optional. web-llm throws `WindowSizeConfigurationError` when
+ *  `context_window_size` and `sliding_window_size` both resolve positive
+ *  (`LLMChatPipeline`, index.js circa L9939), and `sliding_window_size` does
+ *  NOT come from the prebuilt registry: it comes from each model's
+ *  `mlc-chat-config.json`, fetched from HuggingFace, which the registry
+ *  overrides then merge OVER (`Object.assign({}, fetchedConfig,
+ *  modelRecord.overrides, chatOpts)`, index.js circa L12477). Of the shipped
+ *  models only Gemma 3 1B ships a positive value there (512); the rest already
+ *  ship -1, so for them this pin is a no-op that keeps the next
+ *  sliding-window model from reintroducing the crash. Pinning -1 selects full
+ *  KV-cache mode, as the registry's own Mistral entries do
+ *  (`overrides: { context_window_size: 4096, sliding_window_size: -1 }`), and
+ *  keeps `attention_sink_size` out of the picture, since that is only required
+ *  on the sliding-window branch of the same check.
+ *
+ *  A previous version of this comment claimed the absence of a registry
+ *  override meant `sliding_window_size` resolved to -1 already, and said so as
+ *  "Verified". It does not: absence means the fetched config's value stands.
+ *  That reasoning held only by luck, because the models shipped at the time
+ *  (Qwen, Llama) are not sliding-window models. See rule 41 in AGENTS.md. */
+export function chatOptsFor(modelId: string): ChatOptions {
+  const model = ASSISTANT.webllmModels.find((m) => m.id === modelId);
+  return model ? { context_window_size: model.contextWindowSize, sliding_window_size: -1 } : {};
+}
 
 /** Creates the engine for `modelId`, or returns the in-flight promise from a
  *  concurrent caller already loading it. Only the first caller's `config`
@@ -94,7 +117,7 @@ async function createEngineOnce(modelId: string, config?: MLCEngineConfig): Prom
   const promise = (async () => {
     const webllm = await loadWebllm();
     const engineConfig: MLCEngineConfig = { ...(config ?? {}), appConfig: buildAppConfig(webllm) };
-    return webllm.CreateMLCEngine(modelId, engineConfig, CHAT_OPTS);
+    return webllm.CreateMLCEngine(modelId, engineConfig, chatOptsFor(modelId));
   })();
   inFlightEngineLoads.set(modelId, promise);
 

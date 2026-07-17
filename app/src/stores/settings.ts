@@ -351,9 +351,48 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   assistantOllamaModel: '',
 };
 
-/** Migrate persisted settings from v0 (flat montage fields) to v1 (group-keyed maps). */
+/**
+ * Persisted shape version. BUMP THIS whenever `ASSISTANT.retiredModelIds`
+ * gains an entry: zustand only calls `migrate` when the stored version is below
+ * this number, so a retirement added without a bump never reaches anyone who
+ * already ran the app.
+ */
+export const SETTINGS_VERSION = 3;
+
+/**
+ * Migrate persisted settings:
+ *  - v0 -> v1: flat montage fields to group-keyed maps.
+ *  - any -> current: retired `assistantModelId` values to their replacements.
+ *
+ * The steps run in sequence, not exclusively: a v0 blob gets both, which is
+ * why v0->v1 no longer returns early. The model-id rewrite is idempotent and
+ * runs for every version below `SETTINGS_VERSION`, so each new retirement
+ * reaches stores that already migrated for an earlier one.
+ */
 export function migrateSettings(persistedState: unknown, version: number): unknown {
-  if (version >= 1) return persistedState;
+  const state = version >= 1 ? persistedState : migrateV0ToV1(persistedState);
+  return normalizeRetiredModelIds(state);
+}
+
+/** Rewrites `assistantModelId` values dropped from `ASSISTANT.webllmModels`.
+ *  A retired id is still a valid web-llm registry id, so leaving it would not
+ *  throw: it would load an unlisted model while the settings picker, bound to
+ *  the same value, matched no option and rendered blank. */
+function normalizeRetiredModelIds(persistedState: unknown): unknown {
+  const state = (persistedState ?? {}) as { profileSettings?: Record<string, unknown> };
+  if (!state.profileSettings) return persistedState;
+
+  const migrated: Record<string, unknown> = {};
+  for (const [profileId, raw] of Object.entries(state.profileSettings)) {
+    const s = (raw ?? {}) as Record<string, unknown>;
+    const replacement =
+      typeof s.assistantModelId === 'string' ? ASSISTANT.retiredModelIds[s.assistantModelId] : undefined;
+    migrated[profileId] = replacement ? { ...s, assistantModelId: replacement } : s;
+  }
+  return { ...state, profileSettings: migrated };
+}
+
+function migrateV0ToV1(persistedState: unknown): unknown {
   const state = (persistedState ?? {}) as { profileSettings?: Record<string, unknown> };
   const profileSettings = state.profileSettings ?? {};
   const migrated: Record<string, unknown> = {};
@@ -461,7 +500,7 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: STORAGE_KEYS.settingsStore,
-      version: 1,
+      version: SETTINGS_VERSION,
       migrate: migrateSettings,
     }
   )

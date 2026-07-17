@@ -548,18 +548,30 @@ export const ASSISTANT = {
   maxToolIterations: 6,
   maxHistoryMessages: 40,
   maxTokens: 1024,
-  // web-llm's prebuilt registry entries for these models cap context_window_size
-  // at 4096 (ModelRecord.overrides in @mlc-ai/web-llm's prebuiltAppConfig), well
-  // under what the models support natively (Qwen2.5/Qwen3: 32K, Llama-3.2: 128K).
-  // Our prompt (system rules + few-shot + tool schemas + monitor table + history
-  // + tool results) plus the generated output can exceed 4096, throwing
-  // ContextWindowSizeExceededError. Passed as a ChatOptions override to
-  // CreateMLCEngine's third argument (see model-download.ts createEngineOnce),
-  // which is merged in AFTER the prebuilt 4096 cap. 8192 is a VRAM/compute
-  // tradeoff: the KV cache grows with context_window_size, so this raises
-  // resident memory and prefill/decode cost per model load, but stays well
-  // under any of the four models' native limits.
-  contextWindowSize: 8192,
+  // web-llm's prebuilt registry entries cap context_window_size at 4096 for
+  // every model (ModelRecord.overrides in @mlc-ai/web-llm's prebuiltAppConfig;
+  // all 165 entries are 4096 or lower), well under what the models support
+  // natively. Our prompt (system rules + few-shot + tool schemas + monitor
+  // table + history + tool results) plus the generated output can exceed 4096,
+  // throwing ContextWindowSizeExceededError, so each model below carries its
+  // own `contextWindowSize`, passed as a ChatOptions override to
+  // CreateMLCEngine's third argument (see model-download.ts createEngineOnce)
+  // and merged in AFTER the prebuilt cap.
+  //
+  // Each value is min(the model's native window, contextWindowCap). NOT the
+  // native window: the KV cache is allocated up front and grows linearly with
+  // this number, on top of the weights, so Llama 3.2's native 128K would need
+  // GBs of VRAM by itself and OOM on any phone. The cap is the ceiling that
+  // keeps that bounded; a model whose native window is lower (Gemma 2: 8192)
+  // gets its native value instead, since asking for more than a model was
+  // trained for degrades output rather than helping.
+  contextWindowCap: 16384,
+  // Fraction of a turn's context window that, once the prompt exceeds it,
+  // triggers the auto-clear notice in AskPanel. Below 1.0 by enough to fit the
+  // NEXT turn's answer (maxTokens) plus its tool results: clearing only once
+  // the window is already full means the turn that discovers it has already
+  // failed.
+  contextClearThreshold: 0.75,
 
   maxListEventsLimit: 25,
   requestTimeoutMs: 120000,
@@ -577,13 +589,50 @@ export const ASSISTANT = {
   // Max characters of a tool call's JSON-stringified input shown inline next
   // to an activity step in AskPanel (rule 11: truncate long text).
   activityInputPreviewChars: 40,
-  defaultModelId: 'Qwen2.5-3B-Instruct-q4f16_1-MLC',
+  defaultModelId: 'Qwen3-1.7B-q4f16_1-MLC',
+  // Ordered smallest first: the top of the picker is the safest thing to load
+  // on a phone, and `approxSizeMb` is web-llm's own `vram_required_MB` for the
+  // record (measured at ITS 4096 window, so the real figure at the
+  // `contextWindowSize` below is higher; treat it as a floor, not a budget).
+  // `Qwen2.5-3B-Instruct-q4f16_1-MLC` was dropped here in favour of Qwen3;
+  // migrateSettings (stores/settings.ts) rewrites saved copies of that id.
+  // Each `contextWindowSize` is min(the model's native window, contextWindowCap),
+  // where "native" is the model's real trained limit, NOT the value in its
+  // mlc-chat-config.json (MLC ships conservative defaults there: Llama 3.2's
+  // config says 131072, Gemma 2's says 4096). Values cross-checked against the
+  // configs at huggingface.co/mlc-ai/<id>/resolve/main/mlc-chat-config.json,
+  // which is also the only place `sliding_window_size` appears (rule 41).
+  // `gemma3-1b-it-q4f16_1-MLC` is deliberately absent: it does not work on
+  // web-llm 0.2.84 in any configuration, verified on device. Its config ships
+  // `sliding_window_size: 512` (the only model here that does), which makes the
+  // stock registry entry unloadable at all (registry ctx 4096 + config slide
+  // 512 => both positive => WindowSizeConfigurationError). Pinning
+  // `sliding_window_size: -1` loads it, but forces full-KV attention on a wasm
+  // compiled for sliding-window attention: it then answered empty at ctx 16384
+  // and emitted token soup ("//\n$$ }}!!\n'''\nperlport's...") at ctx 8192.
+  // Its own 512-token window is the only untried mode and is far smaller than
+  // this app's system prompt, so the model would never see the tool contract.
+  // Do not re-add without checking a newer web-llm first.
   webllmModels: [
-    { id: 'Qwen2.5-3B-Instruct-q4f16_1-MLC', label: 'Qwen2.5 3B', approxSizeMb: 1900 },
-    { id: 'Llama-3.2-3B-Instruct-q4f16_1-MLC', label: 'Llama 3.2 3B', approxSizeMb: 1900 },
-    { id: 'Qwen3-1.7B-q4f16_1-MLC', label: 'Qwen3 1.7B', approxSizeMb: 1100 },
-    { id: 'Llama-3.2-1B-Instruct-q4f16_1-MLC', label: 'Llama 3.2 1B', approxSizeMb: 700 },
+    { id: 'Llama-3.2-1B-Instruct-q4f16_1-MLC', label: 'Llama 3.2 1B', approxSizeMb: 879, contextWindowSize: 16384 },
+    // 8192 is Gemma 2's real native window; its config's 4096 is an MLC
+    // default, and 4096 is not enough for this app's prompt. Also the only
+    // model here declaring `required_features: ['shader-f16']`, so it can fail
+    // to load on a device where the others work.
+    { id: 'gemma-2-2b-it-q4f16_1-MLC', label: 'Gemma 2 2B', approxSizeMb: 1895, contextWindowSize: 8192 },
+    { id: 'Qwen3-1.7B-q4f16_1-MLC', label: 'Qwen3 1.7B', approxSizeMb: 2037, contextWindowSize: 16384 },
+    { id: 'Llama-3.2-3B-Instruct-q4f16_1-MLC', label: 'Llama 3.2 3B', approxSizeMb: 2264, contextWindowSize: 16384 },
   ],
+  /** Saved `assistantModelId` values no longer in `webllmModels`, mapped to
+   *  their replacement. Consumed by migrateSettings (stores/settings.ts).
+   *  Adding an entry here means bumping the settings store's persist `version`,
+   *  or the rewrite never runs for anyone already on the current version. */
+  retiredModelIds: {
+    'Qwen2.5-3B-Instruct-q4f16_1-MLC': 'Qwen3-1.7B-q4f16_1-MLC',
+    // Broken on web-llm 0.2.84 (see the note above webllmModels). Llama 3.2 1B
+    // is the nearest replacement: the smallest model that works.
+    'gemma3-1b-it-q4f16_1-MLC': 'Llama-3.2-1B-Instruct-q4f16_1-MLC',
+  } as Record<string, string>,
   // Ollama's default local HTTP address, OpenAI-compatible endpoint (refs #246).
   // On a phone this must be replaced with the Ollama server's LAN address:
   // "localhost" from the app's own process never reaches a server on another

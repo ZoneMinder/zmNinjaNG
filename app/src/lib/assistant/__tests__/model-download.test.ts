@@ -14,6 +14,7 @@ import {
   deleteModel,
   getLoadedEngine,
   MODEL_NOT_AVAILABLE_MESSAGE,
+  chatOptsFor,
   __resetLoadedEngineForTests,
 } from '../model-download';
 import { useBackgroundTasks } from '../../../stores/backgroundTasks';
@@ -352,7 +353,10 @@ describe('model-download', () => {
       await downloadModel(MODEL_ID);
 
       const [, engineConfig, chatOpts] = vi.mocked(webllm.CreateMLCEngine).mock.calls[0];
-      expect(chatOpts).toEqual({ context_window_size: ASSISTANT.contextWindowSize });
+      expect(chatOpts).toEqual({
+        context_window_size: ASSISTANT.webllmModels[0].contextWindowSize,
+        sliding_window_size: -1,
+      });
       expect((engineConfig as { appConfig?: AppConfig } | undefined)?.appConfig).toEqual(
         expect.objectContaining({ cacheBackend: expect.any(String) }),
       );
@@ -366,7 +370,46 @@ describe('model-download', () => {
       await getLoadedEngine(MODEL_ID);
 
       const [, , chatOpts] = vi.mocked(webllm.CreateMLCEngine).mock.calls[0];
-      expect(chatOpts).toEqual({ context_window_size: ASSISTANT.contextWindowSize });
+      expect(chatOpts).toEqual({
+        context_window_size: ASSISTANT.webllmModels[0].contextWindowSize,
+        sliding_window_size: -1,
+      });
+    });
+
+    // Gemma is a sliding-window-attention model: its mlc-chat-config.json (
+    // fetched from HuggingFace, NOT the prebuilt registry) carries a positive
+    // sliding_window_size, and web-llm throws WindowSizeConfigurationError if
+    // both windows resolve positive. Pairing -1 with our context_window_size is
+    // exactly what the registry's own Mistral entries do.
+    it('pins sliding_window_size to -1 whenever it sets a context window', () => {
+      for (const model of ASSISTANT.webllmModels) {
+        expect(chatOptsFor(model.id)).toEqual({
+          context_window_size: model.contextWindowSize,
+          sliding_window_size: -1,
+        });
+      }
+    });
+
+    it('gives each model its own window rather than one global value', () => {
+      for (const model of ASSISTANT.webllmModels) {
+        expect(chatOptsFor(model.id).context_window_size).toBe(model.contextWindowSize);
+      }
+      // Gemma 2's native window is 8192, so the list must not be uniform: a
+      // single global value is what this replaced.
+      const windows = new Set(ASSISTANT.webllmModels.map((m) => m.contextWindowSize));
+      expect(windows.size).toBeGreaterThan(1);
+    });
+
+    it('sends no override for a model outside the list, leaving web-llm its own default', () => {
+      // A saved id from an older build. Guessing a window for a model we never
+      // characterised is worse than letting the registry's 4096 stand.
+      expect(chatOptsFor('some-unlisted-model-MLC')).toEqual({});
+    });
+
+    it('never exceeds the cap that keeps the KV cache bounded', () => {
+      for (const model of ASSISTANT.webllmModels) {
+        expect(model.contextWindowSize).toBeLessThanOrEqual(ASSISTANT.contextWindowCap);
+      }
     });
   });
 });

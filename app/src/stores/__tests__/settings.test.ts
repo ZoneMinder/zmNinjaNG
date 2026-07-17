@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { useSettingsStore, ALL_GROUPS_KEY, migrateSettings } from '../settings';
+import { useSettingsStore, ALL_GROUPS_KEY, migrateSettings, SETTINGS_VERSION } from '../settings';
 import type { ProfileSettings } from '../settings';
 import { ASSISTANT } from '../../lib/zmninja-ng-constants';
 
@@ -179,5 +179,95 @@ describe('settings migration v0 -> v1', () => {
     expect(p.montageByGroup[ALL_GROUPS_KEY].gridCols).toBe(2);
     expect(p.montageByGroup[ALL_GROUPS_KEY].workingLayout).toEqual([]);
     expect(p.eventMontageByGroup[ALL_GROUPS_KEY].gridCols).toBe(2);
+  });
+
+  // v1 -> v2: `Qwen2.5-3B-Instruct-q4f16_1-MLC` left webllmModels (refs #246).
+  // A saved copy is still a real registry id, so it would not throw; it would
+  // silently load an unlisted model while the picker, bound to the same value,
+  // matched no <option> and rendered blank. Rewriting it is what keeps the
+  // stored value and the picker agreeing.
+  describe('v2 retired assistant model ids', () => {
+    it('rewrites a retired model id to its replacement', () => {
+      const persisted = {
+        profileSettings: {
+          'profile-a': { assistantModelId: 'Qwen2.5-3B-Instruct-q4f16_1-MLC', theme: 'dark' },
+        },
+      };
+      const migrated = migrateSettings(persisted, 1) as {
+        profileSettings: Record<string, ProfileSettings>;
+      };
+      expect(migrated.profileSettings['profile-a'].assistantModelId).toBe('Qwen3-1.7B-q4f16_1-MLC');
+      expect(migrated.profileSettings['profile-a'].theme).toBe('dark');
+    });
+
+    it('leaves a still-listed model id alone', () => {
+      const persisted = {
+        profileSettings: {
+          'profile-a': { assistantModelId: 'Llama-3.2-1B-Instruct-q4f16_1-MLC' },
+        },
+      };
+      const migrated = migrateSettings(persisted, 1) as {
+        profileSettings: Record<string, ProfileSettings>;
+      };
+      expect(migrated.profileSettings['profile-a'].assistantModelId).toBe(
+        'Llama-3.2-1B-Instruct-q4f16_1-MLC',
+      );
+    });
+
+    it('rewrites a retired id carried up through the v0 migration', () => {
+      const legacy = {
+        profileSettings: {
+          'profile-a': { assistantModelId: 'Qwen2.5-3B-Instruct-q4f16_1-MLC', montageGridCols: 3 },
+        },
+      };
+      const migrated = migrateSettings(legacy, 0) as {
+        profileSettings: Record<string, ProfileSettings>;
+      };
+      // Both steps ran: the v0 reshape AND the v2 id rewrite.
+      expect(migrated.profileSettings['profile-a'].assistantModelId).toBe('Qwen3-1.7B-q4f16_1-MLC');
+      expect(migrated.profileSettings['profile-a'].montageByGroup[ALL_GROUPS_KEY].gridCols).toBe(3);
+    });
+
+    it('leaves settings without an assistantModelId untouched', () => {
+      const persisted = { profileSettings: { 'profile-a': { theme: 'dark' } } };
+      const migrated = migrateSettings(persisted, 1) as {
+        profileSettings: Record<string, Record<string, unknown>>;
+      };
+      expect('assistantModelId' in migrated.profileSettings['profile-a']).toBe(false);
+    });
+
+    // A store already at v2 (anyone who ran the app after the Qwen2.5 rewrite
+    // shipped) must still get later retirements: zustand only calls migrate
+    // when the stored version is BELOW the current one, so a retirement added
+    // without bumping the version silently never runs.
+    it('rewrites an id retired after v2, for a store already at v2', () => {
+      const persisted = {
+        profileSettings: { 'profile-a': { assistantModelId: 'gemma3-1b-it-q4f16_1-MLC' } },
+      };
+      const migrated = migrateSettings(persisted, 2) as {
+        profileSettings: Record<string, ProfileSettings>;
+      };
+      expect(migrated.profileSettings['profile-a'].assistantModelId).toBe(
+        'Llama-3.2-1B-Instruct-q4f16_1-MLC',
+      );
+    });
+
+    // The rewrite only reaches an existing install if the persist version is
+    // above the one that install last stored, so the version has to move with
+    // the retirement list. This is the coupling that makes the migration real
+    // rather than dead code.
+    it('the persist version is at least the number of retirements plus the v1 reshape', () => {
+      expect(SETTINGS_VERSION).toBeGreaterThanOrEqual(
+        Object.keys(ASSISTANT.retiredModelIds).length + 1,
+      );
+    });
+
+    it('every retired id maps to a model that is actually in the list', () => {
+      const listed = new Set<string>(ASSISTANT.webllmModels.map((m) => m.id));
+      for (const [retired, replacement] of Object.entries(ASSISTANT.retiredModelIds)) {
+        expect(listed.has(replacement), `${retired} -> ${replacement}`).toBe(true);
+        expect(listed.has(retired), `${retired} is retired, so must not be listed`).toBe(false);
+      }
+    });
   });
 });
