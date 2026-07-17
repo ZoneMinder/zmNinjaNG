@@ -328,6 +328,8 @@
       "ollama_test": "Verbindung testen",
       "ollama_testing": "Testet…",
       "ollama_test_ok": "Verbunden",
+      "ollama_test_ok_models_one": "Verbunden, {{count}} Modell gefunden",
+      "ollama_test_ok_models_other": "Verbunden, {{count}} Modelle gefunden",
       "load_models": "Modelle aktualisieren",
       "select_model": "Modell",
       "model_manual": "Manuelles Modell",

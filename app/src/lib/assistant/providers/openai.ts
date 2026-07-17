@@ -144,19 +144,28 @@ interface OpenAiModelsResponse {
 }
 
 /** Lists the models an OpenAI-compatible server (Ollama's `/v1/models`)
- *  currently serves, for the model picker in `AssistantOllamaSection.tsx`.
+ *  currently serves, for the model picker in `AssistantOllamaSection.tsx` and
+ *  the Test-connection reachability probe (`handleTestConnection`, refs #246).
  *  A reachable server with no models registered yet is not an error: it
  *  returns `[]` so the caller falls back to manual entry. A network or HTTP
  *  failure (unreachable server, wrong URL, 401) rejects instead, so the
- *  caller can distinguish "empty" from "broken" and surface the real error. */
-export async function listOpenAiModels(baseUrl: string, apiKey?: string): Promise<string[]> {
+ *  caller can distinguish "empty" from "broken" and surface the real error.
+ *  `timeoutMs` defaults to the full `ASSISTANT.requestTimeoutMs` (120s, sized
+ *  for the model-picker's own use); the Test-connection button passes the
+ *  much shorter `ASSISTANT.testConnectionTimeoutMs` (8s) instead, since a
+ *  reachability check has no reason to wait as long as an actual chat turn. */
+export async function listOpenAiModels(
+  baseUrl: string,
+  apiKey?: string,
+  timeoutMs: number = ASSISTANT.requestTimeoutMs,
+): Promise<string[]> {
   const url = `${baseUrl.replace(/\/+$/, '')}/models`;
   const headers: Record<string, string> = {};
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
 
   const response = await httpGet<OpenAiModelsResponse>(url, {
     headers,
-    timeoutMs: ASSISTANT.requestTimeoutMs,
+    timeoutMs,
     intent: 'Assistant Ollama list models',
   });
 

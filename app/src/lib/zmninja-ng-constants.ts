@@ -563,6 +563,13 @@ export const ASSISTANT = {
 
   maxListEventsLimit: 25,
   requestTimeoutMs: 120000,
+  // A "Test connection" click only needs to know the server answers, not run a
+  // full chat turn: `requestTimeoutMs` (120s) covers the WORST case (a slow
+  // local model actually generating), so reusing it here left the button
+  // reading "Testing…" for up to two minutes against an unreachable host. This
+  // is a plain reachability probe (AssistantOllamaSection.tsx's
+  // handleTestConnection), so it gets its own short budget.
+  testConnectionTimeoutMs: 8000,
   systemPromptMonitorCap: 50,
   // Max characters of an event's Notes field kept in a list_events row (rule
   // 11: truncate long text); get_event still returns the full Notes.

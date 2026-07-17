@@ -13,15 +13,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { AssistantOllamaSection } from '../AssistantOllamaSection';
 import { DEFAULT_SETTINGS } from '../../../stores/settings';
-
-const httpGetMock = vi.fn();
-vi.mock('../../../lib/http', () => ({
-  httpGet: (url: string, options: unknown) => httpGetMock(url, options),
-}));
+import { ASSISTANT } from '../../../lib/zmninja-ng-constants';
 
 const listOpenAiModelsMock = vi.fn();
 vi.mock('../../../lib/assistant/providers/openai', () => ({
-  listOpenAiModels: (baseUrl: string, apiKey?: string) => listOpenAiModelsMock(baseUrl, apiKey),
+  listOpenAiModels: (baseUrl: string, apiKey?: string, timeoutMs?: number) =>
+    listOpenAiModelsMock(baseUrl, apiKey, timeoutMs),
 }));
 
 vi.mock('../../../lib/security/secureStorage', () => ({
@@ -45,14 +42,12 @@ describe('AssistantOllamaSection', () => {
   const settings = { ...DEFAULT_SETTINGS, assistantBackend: 'ollama' as const };
 
   beforeEach(() => {
-    httpGetMock.mockReset();
     listOpenAiModelsMock.mockReset().mockResolvedValue([]);
     toastMock.mockReset();
   });
 
   describe('Test connection button', () => {
     it('returns to the idle label after a resolved test', async () => {
-      httpGetMock.mockResolvedValue({ data: { data: [] } });
       render(<AssistantOllamaSection settings={settings} update={vi.fn()} currentProfile={profile} />);
 
       const button = screen.getByTestId('assistant-ollama-test');
@@ -64,7 +59,7 @@ describe('AssistantOllamaSection', () => {
     });
 
     it('returns to the idle label after a rejected test', async () => {
-      httpGetMock.mockRejectedValue(new Error('Connection refused'));
+      listOpenAiModelsMock.mockRejectedValue(new Error('Connection refused'));
       render(<AssistantOllamaSection settings={settings} update={vi.fn()} currentProfile={profile} />);
 
       const button = screen.getByTestId('assistant-ollama-test');
@@ -75,13 +70,41 @@ describe('AssistantOllamaSection', () => {
       expect(button).not.toBeDisabled();
       await waitFor(() => expect(toastMock).toHaveBeenCalled());
     });
+
+    it('uses the short reachability timeout, not the full chat request timeout (refs #246)', async () => {
+      render(<AssistantOllamaSection settings={settings} update={vi.fn()} currentProfile={profile} />);
+
+      const button = screen.getByTestId('assistant-ollama-test');
+      fireEvent.click(button);
+      await waitFor(() => expect(button).toHaveTextContent('settings.assistant.ollama_test'));
+
+      expect(listOpenAiModelsMock).toHaveBeenLastCalledWith(
+        settings.assistantOllamaBaseUrl,
+        undefined,
+        ASSISTANT.testConnectionTimeoutMs,
+      );
+      expect(ASSISTANT.testConnectionTimeoutMs).toBeLessThan(ASSISTANT.requestTimeoutMs);
+    });
+
+    it('reports how many models were found on a successful test', async () => {
+      listOpenAiModelsMock.mockResolvedValue(['gemma2', 'qwen2.5:3b']);
+      render(<AssistantOllamaSection settings={settings} update={vi.fn()} currentProfile={profile} />);
+
+      const button = screen.getByTestId('assistant-ollama-test');
+      fireEvent.click(button);
+      await waitFor(() => expect(button).toHaveTextContent('settings.assistant.ollama_test'));
+
+      expect(toastMock).toHaveBeenCalledWith({ title: 'settings.assistant.ollama_test_ok_models' });
+    });
   });
 
   describe('model picker', () => {
     it('auto-fetches models on mount and shows the manual input while empty', async () => {
       render(<AssistantOllamaSection settings={settings} update={vi.fn()} currentProfile={profile} />);
 
-      await waitFor(() => expect(listOpenAiModelsMock).toHaveBeenCalledWith(settings.assistantOllamaBaseUrl, undefined));
+      await waitFor(() =>
+        expect(listOpenAiModelsMock).toHaveBeenCalledWith(settings.assistantOllamaBaseUrl, undefined, undefined),
+      );
       expect(screen.getByTestId('assistant-ollama-model')).toBeInTheDocument();
       expect(screen.queryByTestId('assistant-ollama-model-select')).not.toBeInTheDocument();
     });

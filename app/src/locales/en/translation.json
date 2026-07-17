@@ -328,6 +328,8 @@
       "ollama_test": "Test connection",
       "ollama_testing": "Testing…",
       "ollama_test_ok": "Connected",
+      "ollama_test_ok_models_one": "Connected, found {{count}} model",
+      "ollama_test_ok_models_other": "Connected, found {{count}} models",
       "load_models": "Refresh models",
       "select_model": "Model",
       "model_manual": "Manual model",

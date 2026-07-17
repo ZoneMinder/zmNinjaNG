@@ -219,6 +219,16 @@ describe('listOpenAiModels', () => {
     expect(options.timeoutMs).toBe(ASSISTANT.requestTimeoutMs);
   });
 
+  it('defaults to the full request timeout, but honors a shorter caller-supplied timeout (refs #246)', async () => {
+    httpGetMock.mockResolvedValue({ data: { data: [] } });
+
+    await listOpenAiModels('http://localhost:11434/v1', undefined, ASSISTANT.testConnectionTimeoutMs);
+
+    const [, options] = httpGetMock.mock.calls[0] as [string, { timeoutMs: number }];
+    expect(options.timeoutMs).toBe(ASSISTANT.testConnectionTimeoutMs);
+    expect(ASSISTANT.testConnectionTimeoutMs).toBeLessThan(ASSISTANT.requestTimeoutMs);
+  });
+
   it('adds a Bearer Authorization header when apiKey is set', async () => {
     httpGetMock.mockResolvedValue({ data: { data: [] } });
 

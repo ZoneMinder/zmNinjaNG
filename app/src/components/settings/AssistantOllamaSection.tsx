@@ -17,7 +17,6 @@ import { PasswordInput } from '../ui/password-input';
 import { RefreshButton } from '../common/RefreshButton';
 import { RowLabel } from './SettingsLayout';
 import { ASSISTANT } from '../../lib/zmninja-ng-constants';
-import { httpGet } from '../../lib/http';
 import { listOpenAiModels } from '../../lib/assistant/providers/openai';
 import { getSecureValue, setSecureValue, removeSecureValue, hasSecureValue } from '../../lib/security/secureStorage';
 import { resolveQueryError } from '../../lib/query/query-error';
@@ -112,13 +111,18 @@ export function AssistantOllamaSection({ settings, update, currentProfile }: Ass
     try {
       const key = await getEffectiveApiKey();
       const baseUrl = settings.assistantOllamaBaseUrl.replace(/\/+$/, '');
-      await httpGet(`${baseUrl}/models`, {
-        headers: key ? { Authorization: `Bearer ${key}` } : undefined,
-        timeoutMs: ASSISTANT.requestTimeoutMs,
-        intent: 'Assistant Ollama test connection',
-      });
+      // A plain reachability probe (GET /models), not a chat turn (refs #246):
+      // `testConnectionTimeoutMs` (8s) instead of the 120s `requestTimeoutMs`
+      // that a real generation needs, so an unreachable host fails fast
+      // instead of leaving the button reading "Testing…" for two minutes.
+      const list = await listOpenAiModels(baseUrl, key, ASSISTANT.testConnectionTimeoutMs);
       if (mountedRef.current) {
-        toast({ title: t('settings.assistant.ollama_test_ok') });
+        toast({
+          title:
+            list.length > 0
+              ? t('settings.assistant.ollama_test_ok_models', { count: list.length })
+              : t('settings.assistant.ollama_test_ok'),
+        });
       }
     } catch (error) {
       log.assistant('Ollama test connection failed', LogLevel.WARN, { error });

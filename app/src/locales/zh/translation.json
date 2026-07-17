@@ -328,6 +328,8 @@
       "ollama_test": "测试连接",
       "ollama_testing": "测试中…",
       "ollama_test_ok": "已连接",
+      "ollama_test_ok_models_one": "已连接，找到 {{count}} 个模型",
+      "ollama_test_ok_models_other": "已连接，找到 {{count}} 个模型",
       "load_models": "刷新模型",
       "select_model": "模型",
       "model_manual": "手动模型",
