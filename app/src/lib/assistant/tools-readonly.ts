@@ -18,6 +18,7 @@ import type { MonitorData } from '../../api/types';
 import { ASSISTANT } from '../zmninja-ng-constants';
 import { parseDetectedObjects } from '../event/event-detection';
 import { buildEventDisplayEntity, buildMonitorDisplayEntity } from './display';
+import { EVENT_RANGES, resolveEventRange, type EventRange } from './event-range';
 import type { ToolDefinition } from './types';
 import { safeExecute, NAVIGATE_ALLOWLIST } from './tool-helpers';
 
@@ -113,12 +114,15 @@ const getMonitorTool: ToolDefinition = {
 const countEventsTool: ToolDefinition = {
   name: 'count_events',
   description:
-    'Count events per monitor over a rolling interval such as "1 hour" or "1 day", covering ALL monitors ' +
-    'in one call (no monitorId needed) and reporting the combined total. Use this for "how many events ' +
-    'happened" or "summarize events" questions instead of list_events, which returns individual rows.',
+    'Count events per monitor over a ROLLING interval ending now, such as "1 hour" or "1 day" (that means ' +
+    'the last 24 hours, NOT since local midnight), covering ALL monitors in one call (no monitorId needed) ' +
+    'and reporting the combined total. Use this for "how many events in the last N hours/days" or ' +
+    '"summarize recent events" questions instead of list_events, which returns individual rows. This tool ' +
+    'CANNOT express a calendar day: for "today" (since local midnight) or "yesterday", call list_events ' +
+    'with range instead.',
   schema: {
     type: 'object',
-    properties: { interval: { type: 'string', description: 'e.g. "1 hour", "1 day".' } },
+    properties: { interval: { type: 'string', description: 'A rolling window ending now, e.g. "1 hour", "1 day".' } },
     required: ['interval'],
   },
   destructive: false,
@@ -149,15 +153,28 @@ const listEventsTool: ToolDefinition = {
   name: 'list_events',
   description:
     'List individual events, newest first, optionally filtered by monitor, time range, detected object ' +
-    'type, a single tag, or an explicit set of event ids. Each row includes the monitor NAME (not just its ' +
-    'id), the detected object types, score, duration, and a notes preview, so answer using those, not raw ' +
-    'ids. A tag filter and event ids cannot be combined (the server rejects it); pass one or the other.',
+    'type, a single tag, or an explicit set of event ids. For "today", "yesterday", or a rolling window like ' +
+    '"last hour"/"last 24 hours"/"last 7 days"/"last 30 days", pass range instead of computing startTime/' +
+    'endTime yourself; the app resolves it against the profile\'s own timezone. Combine range with objectType ' +
+    'for "how many people/cars today" style questions: the rows this returns for that filter are exactly what ' +
+    'you must describe, since the app shows their thumbnails below your answer. Each row includes the monitor ' +
+    'NAME (not just its id), the detected object types, score, duration, and a notes preview, so answer using ' +
+    'those, not raw ids. A tag filter and event ids cannot be combined (the server rejects it); pass one or ' +
+    'the other. An explicit startTime/endTime overrides range if both are given.',
   schema: {
     type: 'object',
     properties: {
       monitorId: { type: 'string' },
-      startTime: { type: 'string', description: 'ISO or "YYYY-MM-DD HH:MM:SS".' },
-      endTime: { type: 'string', description: 'ISO or "YYYY-MM-DD HH:MM:SS".' },
+      range: {
+        type: 'string',
+        enum: [...EVENT_RANGES],
+        description:
+          'A relative date/time window resolved against the profile timezone: "today" and "yesterday" are ' +
+          'calendar days (local midnight to local midnight); "last_hour", "last_24h", "last_7d", "last_30d" ' +
+          'are rolling windows ending now. Prefer this over startTime/endTime for anything relative.',
+      },
+      startTime: { type: 'string', description: 'ISO or "YYYY-MM-DD HH:MM:SS". Overrides range if set.' },
+      endTime: { type: 'string', description: 'ISO or "YYYY-MM-DD HH:MM:SS". Overrides range if set.' },
       objectType: { type: 'string', description: 'e.g. "person", "car".' },
       tag: { type: 'string', description: 'A single tag id. Mutually exclusive with eventIds.' },
       eventIds: { type: 'array', items: { type: 'string' }, description: 'Mutually exclusive with tag.' },
@@ -174,10 +191,19 @@ const listEventsTool: ToolDefinition = {
     }
     const limit = clampListEventsLimit(input.limit);
     return safeExecute('list_events', async () => {
+      const range = input.range as EventRange | undefined;
+      const explicitStart = input.startTime as string | undefined;
+      const explicitEnd = input.endTime as string | undefined;
+      // Explicit startTime/endTime win over range (per the tool description);
+      // range only fills in whichever of the two the model left unset.
+      const resolved =
+        range && (!explicitStart || !explicitEnd)
+          ? resolveEventRange(range, new Date(), ctx.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone)
+          : undefined;
       const filters: EventFilters = {
         monitorId: input.monitorId as string | undefined,
-        startDateTime: input.startTime as string | undefined,
-        endDateTime: input.endTime as string | undefined,
+        startDateTime: explicitStart ?? resolved?.startDateTime,
+        endDateTime: explicitEnd ?? resolved?.endDateTime,
         notesRegexp: input.objectType ? `detected:.*${input.objectType}` : undefined,
         tagIds: tag ? [tag] : undefined,
         eventIds,
@@ -187,23 +213,25 @@ const listEventsTool: ToolDefinition = {
       };
       const [res, { monitors }] = await Promise.all([getEvents(filters), getMonitors()]);
       const nameById = new Map(monitors.map((m) => [m.Monitor.Id, m.Monitor.Name]));
-      const output = JSON.stringify(
-        res.events.map(({ Event: e }) => ({
-          id: e.Id,
-          monitor: nameById.get(e.MonitorId) ?? e.MonitorId,
-          cause: e.Cause,
-          start: e.StartDateTime,
-          end: e.EndDateTime,
-          durationSec: Number(e.Length),
-          frames: Number(e.Frames),
-          alarmFrames: Number(e.AlarmFrames),
-          maxScore: Number(e.MaxScore),
-          avgScore: Number(e.AvgScore),
-          objects: parseDetectedObjects(e.Notes),
-          archived: e.Archived === '1',
-          notes: trimNotes(e.Notes, ASSISTANT.notesPreviewChars),
-        })),
-      );
+      const rows = res.events.map(({ Event: e }) => ({
+        id: e.Id,
+        monitor: nameById.get(e.MonitorId) ?? e.MonitorId,
+        cause: e.Cause,
+        start: e.StartDateTime,
+        end: e.EndDateTime,
+        durationSec: Number(e.Length),
+        frames: Number(e.Frames),
+        alarmFrames: Number(e.AlarmFrames),
+        maxScore: Number(e.MaxScore),
+        avgScore: Number(e.AvgScore),
+        objects: parseDetectedObjects(e.Notes),
+        archived: e.Archived === '1',
+        notes: trimNotes(e.Notes, ASSISTANT.notesPreviewChars),
+      }));
+      // res.pagination.nextPage means more matches exist beyond this
+      // (already limit-capped) page: flag it so the model says "at least N"
+      // instead of implying `rows.length` is the true total (refs #246).
+      const output = JSON.stringify(res.pagination.nextPage ? { truncated: true, events: rows } : { events: rows });
       // Cards mirror the same (already limit-capped) rows as the text output above.
       const display = res.events.map(({ Event: e }) =>
         buildEventDisplayEntity(e, nameById.get(e.MonitorId) ?? e.MonitorId, monitors, ctx),

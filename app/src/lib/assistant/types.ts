@@ -36,8 +36,11 @@ export interface AssistantMessage {
    *  for diagnosing why a turn failed; never set on a normal answer or tool
    *  call. */
   raw?: string;
-  /** Result cards aggregated from this turn's tool calls (refs #246). Only
-   *  ever set on a `role: 'tool'` message; see agent.ts's `runAssistantTurn`. */
+  /** Result cards aggregated from this turn's tool calls (refs #246), de-duped
+   *  by `kind`+`id`. Attached to the FINAL `role: 'assistant'` answer message
+   *  of the turn (never an intermediate tool-call-only assistant message or a
+   *  `role: 'tool'` message), so AskPanel renders question -> steps -> answer
+   *  text -> cards, in that order; see agent.ts's `runAssistantTurn`. */
   display?: DisplayEntity[];
   /** The tool-activity steps ("Running count_events…" / "count_events done")
    *  that occurred while this turn's answer was generated (refs #246).
@@ -88,6 +91,17 @@ export interface ToolContext {
   minStreamingPort?: number;
   thumbnailFallbackChain?: ThumbnailFallbackEntry[];
   dateTimeFormat?: FormatSettings;
+  /**
+   * IANA timezone the profile is configured for (falls back to the browser's
+   * own zone in AskPanel.tsx, mirroring `buildSystemPrompt`'s `timezone`).
+   * `list_events`' `range` input resolves relative dates ("today",
+   * "yesterday") against this instead of asking the model to compute an ISO
+   * timestamp itself (refs #246; see `event-range.ts`'s `resolveEventRange`).
+   * Optional so existing tests that build a minimal `ToolContext` for tools
+   * that never touch `range` keep compiling; `list_events`'s executor falls
+   * back to `Intl.DateTimeFormat().resolvedOptions().timeZone` when unset.
+   */
+  timezone?: string;
 }
 
 export interface ToolExecuteResult {

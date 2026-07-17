@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getToolByName, readOnlyTools, destructiveTools, TOOLS } from '../tools';
 import type { ToolContext } from '../types';
 import { asProfileId } from '../../../api/types';
@@ -47,6 +47,9 @@ vi.mock('../../../api/events', () => ({
         },
       },
     ],
+    // pagination.nextPage = false: exactly one match, nothing beyond this
+    // page, so list_events' `truncated` flag stays unset by default (refs #246).
+    pagination: { page: 1, pageCount: 1, current: 1, count: 1, prevPage: false, nextPage: false, limit: 25, totalCount: 1 },
   }),
   getEvent: vi.fn().mockResolvedValue({
     Event: {
@@ -175,7 +178,7 @@ describe('read-only tools', () => {
     const tool = getToolByName('list_events')!;
     const r = await tool.execute({}, ctx());
     expect(r.isError).toBeFalsy();
-    const rows = JSON.parse(r.output as string);
+    const { events: rows } = JSON.parse(r.output as string);
     expect(rows[0]).toMatchObject({ id: '42', monitor: 'Front Door', objects: ['person', 'car'] });
   });
 
@@ -183,7 +186,7 @@ describe('read-only tools', () => {
     const tool = getToolByName('list_events')!;
     const r = await tool.execute({}, ctx());
     expect(r.isError).toBeFalsy();
-    const rows = JSON.parse(r.output as string);
+    const { events: rows } = JSON.parse(r.output as string);
     expect(rows[0]).toMatchObject({
       durationSec: 12.5, frames: 30, alarmFrames: 5, maxScore: 10, avgScore: 4, archived: false,
       end: '2026-01-01 00:01:00', notes: 'detected:person,car|Motion: All',
@@ -194,7 +197,7 @@ describe('read-only tools', () => {
     const tool = getToolByName('list_events')!;
     const r = await tool.execute({}, ctxWithDisplay());
     expect(r.isError).toBeFalsy();
-    const rows = JSON.parse(r.output as string);
+    const { events: rows } = JSON.parse(r.output as string);
     expect(r.display).toHaveLength(rows.length);
     expect(r.display![0]).toMatchObject({ kind: 'event', id: '42', navigatePath: '/events/42' });
     expect(r.display![0].imageUrls!.length).toBeGreaterThan(0);
@@ -381,6 +384,89 @@ describe('read-only tools', () => {
     expect(nonNumeric.isError).toBeFalsy();
     // Both fall back to the max clamp rather than producing NaN/negative EventFilters.limit.
     expect(getEvents).toHaveBeenLastCalledWith(expect.objectContaining({ limit: ASSISTANT.maxListEventsLimit }));
+  });
+});
+
+describe('list_events range resolution (refs #246)', () => {
+  // Fixes the clock so `resolveEventRange`'s `new Date()` call inside the
+  // executor is deterministic; matches event-range.test.ts's own NOW so the
+  // expected wall-clock strings line up with that file's documented math.
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-16T14:30:00Z'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('resolves range against ctx.timezone into startDateTime/endDateTime filters', async () => {
+    const tool = getToolByName('list_events')!;
+    await tool.execute({ range: 'today' }, { ...ctx(), timezone: 'America/New_York' });
+    expect(getEvents).toHaveBeenCalledWith(
+      expect.objectContaining({ startDateTime: '2026-07-16 00:00:00', endDateTime: '2026-07-16 10:30:00' }),
+    );
+  });
+
+  it('falls back to the browser timezone when ctx.timezone is unset', async () => {
+    const tool = getToolByName('list_events')!;
+    const r = await tool.execute({ range: 'last_hour' }, ctx());
+    expect(r.isError).toBeFalsy();
+    expect(getEvents).toHaveBeenCalledWith(
+      expect.objectContaining({ startDateTime: expect.any(String), endDateTime: expect.any(String) }),
+    );
+  });
+
+  it('an explicit startTime/endTime overrides range', async () => {
+    const tool = getToolByName('list_events')!;
+    await tool.execute(
+      { range: 'today', startTime: '2020-01-01 00:00:00', endTime: '2020-01-02 00:00:00' },
+      { ...ctx(), timezone: 'America/New_York' },
+    );
+    expect(getEvents).toHaveBeenCalledWith(
+      expect.objectContaining({ startDateTime: '2020-01-01 00:00:00', endDateTime: '2020-01-02 00:00:00' }),
+    );
+  });
+
+  it('combines range with objectType into a notesRegexp filter, for "how many people today" style questions', async () => {
+    const tool = getToolByName('list_events')!;
+    await tool.execute({ range: 'today', objectType: 'person' }, { ...ctx(), timezone: 'America/New_York' });
+    expect(getEvents).toHaveBeenCalledWith(
+      expect.objectContaining({ startDateTime: '2026-07-16 00:00:00', notesRegexp: 'detected:.*person' }),
+    );
+  });
+
+  it('flags truncated when more matches exist beyond the capped page', async () => {
+    vi.mocked(getEvents).mockResolvedValueOnce({
+      events: [
+        {
+          Event: {
+            Id: '42', MonitorId: '1', StorageId: null, SecondaryStorageId: null, Name: 'Event 42',
+            Cause: 'Motion', StartDateTime: '2026-01-01 00:00:00', EndDateTime: '2026-01-01 00:01:00',
+            Width: '1920', Height: '1080', Length: '12.5', Frames: '30', AlarmFrames: '5',
+            DefaultVideo: null, SaveJPEGs: null, MaxScore: '10', AvgScore: '4', TotScore: '120',
+            Archived: '0', Videoed: '0', Uploaded: '0', Emailed: '0', Messaged: '0', Executed: '0',
+            Notes: 'detected:person,car|Motion: All', StateId: null, Orientation: null,
+            DiskSpace: null, Scheme: null,
+          },
+        },
+      ],
+      pagination: { page: 1, pageCount: 2, current: 1, count: 1, prevPage: false, nextPage: true, limit: 1, totalCount: 2 },
+    });
+    const tool = getToolByName('list_events')!;
+    const r = await tool.execute({}, ctx());
+    expect(r.isError).toBeFalsy();
+    const parsed = JSON.parse(r.output as string);
+    expect(parsed.truncated).toBe(true);
+    expect(parsed.events).toHaveLength(1);
+  });
+
+  it('leaves truncated unset when every match fits on the page', async () => {
+    const tool = getToolByName('list_events')!;
+    const r = await tool.execute({}, ctx());
+    const parsed = JSON.parse(r.output as string);
+    expect(parsed.truncated).toBeUndefined();
   });
 });
 

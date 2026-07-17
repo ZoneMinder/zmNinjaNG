@@ -152,3 +152,14 @@ export type ZmMonitorFunction = typeof ZM_MONITOR_FUNCTIONS[keyof typeof ZM_MONI
 
 /** Maximum number of event IDs per batch when fetching event tags to avoid URL length limits */
 export const TAGS_BATCH_SIZE = 100;
+
+/**
+ * Events API Datetime Format
+ *
+ * The `date-fns` `format()` pattern the ZM events-index API expects for
+ * `StartDateTime`/`EndDateTime` filter segments: 'YYYY-MM-DD HH:mm:ss' (space,
+ * not 'T'), in whatever timezone the caller resolved the instant to (ZM has
+ * no timezone-aware filter syntax; see `format-date-time.ts`'s
+ * `formatForServer` and `lib/assistant/event-range.ts`'s `resolveEventRange`).
+ */
+export const ZM_API_DATETIME_FORMAT = 'yyyy-MM-dd HH:mm:ss';

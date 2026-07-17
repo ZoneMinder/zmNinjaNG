@@ -292,6 +292,10 @@ export function AskPanel() {
           customDateFormat: settings.customDateFormat,
           customTimeFormat: settings.customTimeFormat,
         },
+        // Same expression as `system`'s `timezone` above (refs #246): list_events'
+        // `range` input must resolve "today"/"yesterday" against the identical
+        // zone the system prompt already told the model "today" means.
+        timezone: currentProfile?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
       };
       const history = useAssistantStore.getState().getThread(profileId);
       const result = await runAssistantTurn({ provider, host, ctx, history, system, signal: controller.signal });
