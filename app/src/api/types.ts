@@ -1,9 +1,11 @@
 import { z } from 'zod';
 import { log, LogLevel } from '../lib/logger';
+import { tolerantArray, withFieldCatch } from '../lib/zm/schema-tolerance';
 import type { EventFilters } from './events';
 
 // Authentication types
-export const LoginResponseSchema = z.object({
+export const LoginResponseSchema = z.object(
+  withFieldCatch({
   access_token: z.string().optional(),
   access_token_expires: z.coerce.number().optional(),
   refresh_token: z.string().optional(),
@@ -12,15 +14,18 @@ export const LoginResponseSchema = z.object({
   append_password: z.coerce.number().optional(),
   version: z.string().optional(),
   apiversion: z.string().optional(),
-});
+  }, []),
+);
 
 export type LoginResponse = z.infer<typeof LoginResponseSchema>;
 
 // Version types
-export const VersionResponseSchema = z.object({
+export const VersionResponseSchema = z.object(
+  withFieldCatch({
   version: z.string(),
   apiversion: z.string(),
-});
+  }, []),
+);
 
 export type VersionResponse = z.infer<typeof VersionResponseSchema>;
 
@@ -67,15 +72,46 @@ export const HostTimeZoneResponseSchema = z.object({
 export type HostTimeZoneResponse = z.infer<typeof HostTimeZoneResponseSchema>;
 
 // Monitor types
-export const MonitorStatusSchema = z.object({
+export const MonitorStatusSchema = z.object(
+  withFieldCatch({
   MonitorId: z.coerce.string().nullable(),
   Status: z.coerce.string().nullable(),
   CaptureFPS: z.coerce.string().nullable().optional(),
   AnalysisFPS: z.coerce.string().nullable().optional(),
   CaptureBandwidth: z.coerce.string().nullable().optional(),
-});
+  }, []),
+);
 
-export const MonitorSchema = z.object({
+/**
+ * A ZoneMinder monitor row (refs #247, rule 43).
+ *
+ * `withFieldCatch` puts a type-matching fallback on every field except the
+ * identity pair, so a field whose type drifts falls back instead of failing the
+ * whole response. ZoneMinder changes what it sends between releases, and this
+ * schema is the only thing between that and a blank screen. In 1.38.3
+ * `V4LMultiBuffer` started arriving as boolean `false` (and `null`) where the
+ * schema said string, and every camera vanished from the app over a field it
+ * never reads.
+ *
+ * Two distinct hazards, only one of which is about NEW fields:
+ *
+ * 1. A field ZoneMinder adds that we do not declare is already harmless: Zod
+ *    strips unknown keys. This is guaranteed by tests in `__tests__/types.test.ts`,
+ *    not by luck, so a stray `.strict()` cannot quietly revoke it.
+ * 2. A field we DO declare whose type drifts, or that stops being sent, used to
+ *    throw. `withFieldCatch` is what fixes that: the field falls back, the rest
+ *    of the monitor survives, and the user keeps their cameras.
+ *
+ * `Id` and `Name` are the identity pair and stay strict: a fallback there would
+ * render a phantom camera, so a monitor missing them is dropped by
+ * `MonitorsResponseSchema` instead.
+ *
+ * The mode fields are `z.string()`, not `z.enum()`. A ZoneMinder release that
+ * adds a `Function` value must not blank the screen, and defaulting an unknown
+ * mode would be worse than failing: it would report a recording camera as off.
+ */
+export const MonitorSchema = z.object(
+  withFieldCatch({
   Id: z.coerce.string(),
   Name: z.string(),
   Notes: z.string().nullable().optional(),
@@ -83,23 +119,24 @@ export const MonitorSchema = z.object({
   ServerId: z.coerce.string().nullable(),
   StorageId: z.coerce.string().nullable(),
   Type: z.string(),
-  Function: z.enum(['None', 'Monitor', 'Modect', 'Record', 'Mocord', 'Nodect']),
+  Function: z.string(),
   // ZM 1.38+ fields (replace Function with independent controls)
-  Capturing: z.enum(['None', 'Ondemand', 'Always']).optional(),
-  Analysing: z.enum(['None', 'Always']).optional(),
-  Recording: z.enum(['None', 'OnMotion', 'Always']).optional(),
+  Capturing: z.string().optional(),
+  Analysing: z.string().optional(),
+  Recording: z.string().optional(),
   Enabled: z.coerce.string(),
   LinkedMonitors: z.string().nullable(),
   Triggers: z.string().nullable(),
   Device: z.string().nullable(),
   Channel: z.coerce.string().nullable(),
   Format: z.coerce.string().nullable(),
-  V4LMultiBuffer: z.string().nullable(),
+  // ZM 1.38.3 sends boolean false or null here, never the DB's integer (#247).
+  V4LMultiBuffer: z.coerce.string().nullable(),
   V4LCapturesPerFrame: z.coerce.string().nullable(),
   Protocol: z.string().nullable(),
   Method: z.string().nullable(),
   Host: z.string().nullable(),
-  Port: z.string().nullable(),
+  Port: z.coerce.string().nullable(),
   SubPath: z.string().nullable(),
   Path: z.string().nullable(),
   Options: z.string().nullable(),
@@ -139,10 +176,10 @@ export const MonitorSchema = z.object({
   MinSectionLength: z.coerce.string(),
   FrameSkip: z.coerce.string(),
   MotionFrameSkip: z.coerce.string(),
-  AnalysisFPSLimit: z.string().nullable(),
+  AnalysisFPSLimit: z.coerce.string().nullable(),
   AnalysisUpdateDelay: z.coerce.string(),
-  MaxFPS: z.string().nullable(),
-  AlarmMaxFPS: z.string().nullable(),
+  MaxFPS: z.coerce.string().nullable(),
+  AlarmMaxFPS: z.coerce.string().nullable(),
   FPSReportInterval: z.coerce.string(),
   RefBlendPerc: z.coerce.string(),
   AlarmRefBlendPerc: z.coerce.string(),
@@ -150,21 +187,21 @@ export const MonitorSchema = z.object({
   ControlId: z.coerce.string().nullable(),
   ControlDevice: z.string().nullable(),
   ControlAddress: z.string().nullable(),
-  AutoStopTimeout: z.string().nullable(),
+  AutoStopTimeout: z.coerce.string().nullable(),
   TrackMotion: z.coerce.string().nullable(),
   TrackDelay: z.coerce.string().nullable(),
   ReturnLocation: z.coerce.string().nullable(),
   ReturnDelay: z.coerce.string().nullable(),
   ModectDuringPTZ: z.coerce.string().nullable(),
   DefaultRate: z.coerce.string(),
-  DefaultScale: z.union([z.string(), z.number()]).transform(String),
+  DefaultScale: z.coerce.string(),
   SignalCheckPoints: z.coerce.string().nullable(),
   SignalCheckColour: z.string(),
   WebColour: z.string(),
   Exif: z.coerce.string().nullable(),
   Sequence: z.coerce.string().nullable(),
   ZoneCount: z.coerce.number(),
-  Refresh: z.string().nullable(),
+  Refresh: z.coerce.string().nullable(),
   DefaultCodec: z.string().nullable(),
   GroupIds: z.coerce.string().nullable().optional(),
   Latitude: z.coerce.number().nullable(),
@@ -176,36 +213,27 @@ export const MonitorSchema = z.object({
   StreamChannel: z.string().nullable().optional(),
   // Go2RTC fields (ZoneMinder 1.37+)
   Go2RTCEnabled: z.coerce.boolean().optional().default(false),
-  Go2RTCType: z.preprocess(
-    (val) => {
-      // Transform any falsy value (including '', 0, false, null, undefined) to null
-      // Also handle whitespace-only strings
-      if (!val || (typeof val === 'string' && !val.trim())) return null;
-      return val;
-    },
-    z.enum(['WebRTC', 'MSE', 'HLS']).nullable().optional()
-  ),
+  Go2RTCType: z.string().nullable().optional(),
   RTSP2WebEnabled: z.coerce.boolean().optional().default(false),
-  RTSP2WebType: z.preprocess(
-    (val) => {
-      // Transform any falsy value (including '', 0, false, null, undefined) to null
-      // Also handle whitespace-only strings
-      if (!val || (typeof val === 'string' && !val.trim())) return null;
-      return val;
-    },
-    z.enum(['HLS', 'MSE', 'WebRTC']).nullable().optional()
-  ),
+  RTSP2WebType: z.string().nullable().optional(),
   JanusEnabled: z.coerce.boolean().optional().default(false),
   DefaultPlayer: z.string().nullable().optional(),
-});
+  }, ['Id', 'Name']),
+);
 
 export const MonitorDataSchema = z.object({
   Monitor: MonitorSchema,
   Monitor_Status: MonitorStatusSchema.optional(),
 });
 
+/**
+ * One unusable monitor must not cost the user every other camera (refs #247).
+ * `withFieldCatch` on MonitorSchema absorbs type drift, so a row only fails on a
+ * missing `Id`/`Name`, which no fallback can invent; `tolerantArray` drops that
+ * row and renders the rest instead of failing the whole list.
+ */
 export const MonitorsResponseSchema = z.object({
-  monitors: z.array(MonitorDataSchema),
+  monitors: tolerantArray(MonitorDataSchema, 'monitor'),
 });
 
 export type Monitor = z.infer<typeof MonitorSchema>;
@@ -218,26 +246,31 @@ export type MonitorsResponse = z.infer<typeof MonitorsResponseSchema>;
 // - Success with 'status' command: { status: number, output: number }
 // - Success with 'on'/'off' commands: { status: string, output: string }
 // - Error: { status: 'false', code: number, error: string }
-export const AlarmStatusResponseSchema = z.object({
+export const AlarmStatusResponseSchema = z.object(
+  withFieldCatch({
   status: z.union([z.string(), z.coerce.number()]),
   output: z.union([z.string(), z.coerce.number()]).optional(),
   // Error response fields
   code: z.coerce.number().optional(),
   error: z.string().optional(),
-});
+  }, []),
+);
 
 export type AlarmStatusResponse = z.infer<typeof AlarmStatusResponseSchema>;
 
 // Monitor daemon status response (for getDaemonStatus endpoint)
 // ZM daemonControl() returns: { status: 'ok', statustext: string }
-export const DaemonStatusResponseSchema = z.object({
+export const DaemonStatusResponseSchema = z.object(
+  withFieldCatch({
   status: z.string(),
   statustext: z.string().optional(), // The actual status message
-});
+  }, []),
+);
 
 export type DaemonStatusResponse = z.infer<typeof DaemonStatusResponseSchema>;
 
-export const ZMControlSchema = z.object({
+export const ZMControlSchema = z.object(
+  withFieldCatch({
   Id: z.coerce.string(),
   Name: z.string(),
   Type: z.string(),
@@ -294,7 +327,8 @@ export const ZMControlSchema = z.object({
   HasTurboTilt: z.coerce.string().optional(),
   CanAutoScan: z.coerce.string().optional(),
   NumScanPaths: z.coerce.string().optional(),
-});
+  }, ['Id', 'Name']),
+);
 
 export const ControlDataSchema = z.object({
   control: z.object({
@@ -307,7 +341,8 @@ export type ControlData = z.infer<typeof ControlDataSchema>;
 
 // Event types
 // Force re-bundle
-export const EventSchema = z.object({
+export const EventSchema = z.object(
+  withFieldCatch({
   Id: z.coerce.string(),
   MonitorId: z.coerce.string(),
   StorageId: z.coerce.string().nullable(),
@@ -339,24 +374,27 @@ export const EventSchema = z.object({
   Orientation: z.string().nullable(),
   DiskSpace: z.coerce.string().nullable(),
   Scheme: z.string().nullable(),
-});
+  }, ['Id', 'Name']),
+);
 
 export const EventDataSchema = z.object({
   Event: EventSchema,
 });
 
 export const EventsResponseSchema = z.object({
-  events: z.array(EventDataSchema),
-  pagination: z.object({
-    pageCount: z.coerce.number(),
-    page: z.coerce.number(),
-    current: z.coerce.number(),
-    count: z.coerce.number(),
-    prevPage: z.boolean(),
-    nextPage: z.boolean(),
-    limit: z.coerce.number(),
-    totalCount: z.coerce.number().optional(), // Total events matching filters (from server)
-  }),
+  events: tolerantArray(EventDataSchema, 'event'),
+  pagination: z.object(
+    withFieldCatch({
+      pageCount: z.coerce.number(),
+      page: z.coerce.number(),
+      current: z.coerce.number(),
+      count: z.coerce.number(),
+      prevPage: z.boolean(),
+      nextPage: z.boolean(),
+      limit: z.coerce.number(),
+      totalCount: z.coerce.number().optional(), // Total events matching filters (from server)
+    }),
+  ),
 });
 
 export type Event = z.infer<typeof EventSchema>;
@@ -371,7 +409,8 @@ export const EventResponseSchema = z.object({
 export type EventResponse = z.infer<typeof EventResponseSchema>;
 
 // Config types
-export const ConfigSchema = z.object({
+export const ConfigSchema = z.object(
+  withFieldCatch({
   Id: z.coerce.string(),
   Name: z.string(),
   Value: z.string(),
@@ -385,14 +424,15 @@ export const ConfigSchema = z.object({
   Category: z.string(),
   Readonly: z.coerce.string().nullable().optional(),
   Requires: z.string().nullable().optional(),
-});
+  }, ['Id', 'Name']),
+);
 
 export const ConfigDataSchema = z.object({
   Config: ConfigSchema,
 });
 
 export const ConfigsResponseSchema = z.object({
-  configs: z.array(ConfigDataSchema),
+  configs: tolerantArray(ConfigDataSchema, 'config'),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -402,7 +442,8 @@ export type ConfigsResponse = z.infer<typeof ConfigsResponseSchema>;
 // ZMS Path response schema for fetching ZM_PATH_ZMS config
 export const ZmsPathResponseSchema = z.object({
   config: z.object({
-    Value: z.string(),
+    // Tolerant per rule 43: a drifted Value must not fail the config read.
+    Value: z.coerce.string().catch(''),
   }),
 });
 
@@ -411,7 +452,7 @@ export type ZmsPathResponse = z.infer<typeof ZmsPathResponseSchema>;
 // Min Streaming Port response schema for fetching ZM_MIN_STREAMING_PORT config
 export const MinStreamingPortResponseSchema = z.object({
   config: z.object({
-    Value: z.string(),
+    Value: z.coerce.string().catch(''),
   }),
 });
 
@@ -420,14 +461,15 @@ export type MinStreamingPortResponse = z.infer<typeof MinStreamingPortResponseSc
 // Go2RTC Path response schema for fetching ZM_GO2RTC_PATH config
 export const Go2RTCPathResponseSchema = z.object({
   config: z.object({
-    Value: z.string(),
+    Value: z.coerce.string().catch(''),
   }),
 });
 
 export type Go2RTCPathResponse = z.infer<typeof Go2RTCPathResponseSchema>;
 
 // ZoneMinder server log types
-export const ZMLogSchema = z.object({
+export const ZMLogSchema = z.object(
+  withFieldCatch({
   Id: z.coerce.number(),
   TimeKey: z.string(),
   Component: z.string(),
@@ -438,29 +480,32 @@ export const ZMLogSchema = z.object({
   Message: z.string(),
   File: z.string().nullable(),
   Line: z.coerce.number().nullable(),
-});
+  }, ['Id']),
+);
 
 export const ZMLogDataSchema = z.object({
   Log: ZMLogSchema,
 });
 
 export const ZMLogsResponseSchema = z.object({
-  logs: z.array(ZMLogDataSchema),
-  pagination: z.object({
-    page: z.coerce.number(),
-    current: z.coerce.number(),
-    count: z.coerce.number(),
-    prevPage: z.boolean(),
-    nextPage: z.boolean(),
-    pageCount: z.coerce.number(),
-    order: z.record(z.string(), z.string()).optional(),
-    limit: z.coerce.number(),
-    options: z.object({
-      conditions: z.array(z.unknown()),
-    }).optional(),
-    paramType: z.string().optional(),
-    queryScope: z.unknown().nullable().optional(),
-  }),
+  logs: tolerantArray(ZMLogDataSchema, 'log'),
+  pagination: z.object(
+    withFieldCatch({
+      page: z.coerce.number(),
+      current: z.coerce.number(),
+      count: z.coerce.number(),
+      prevPage: z.boolean(),
+      nextPage: z.boolean(),
+      pageCount: z.coerce.number(),
+      order: z.record(z.string(), z.string()).optional(),
+      limit: z.coerce.number(),
+      options: z.object({
+        conditions: z.array(z.unknown()),
+      }).optional(),
+      paramType: z.string().optional(),
+      queryScope: z.unknown().nullable().optional(),
+    }),
+  ),
 });
 
 export type ZMLog = z.infer<typeof ZMLogSchema>;
@@ -468,24 +513,28 @@ export type ZMLogData = z.infer<typeof ZMLogDataSchema>;
 export type ZMLogsResponse = z.infer<typeof ZMLogsResponseSchema>;
 
 // State types
-export const StateSchema = z.object({
+export const StateSchema = z.object(
+  withFieldCatch({
   Id: z.coerce.string(),
   Name: z.string(),
   Definition: z.string(),
   IsActive: z.coerce.string(),
-});
+  }, ['Id', 'Name']),
+);
 
 export const StateDataSchema = z.object({
-  State: z.object({
-    Id: z.coerce.number(),
-    Name: z.string(),
-    Definition: z.string(),
-    IsActive: z.coerce.number(),
-  }),
+  State: z.object(
+    withFieldCatch({
+      Id: z.coerce.number(),
+      Name: z.string(),
+      Definition: z.string(),
+      IsActive: z.coerce.number(),
+    }, ['Id', 'Name']),
+  ),
 });
 
 export const StatesResponseSchema = z.object({
-  states: z.array(StateDataSchema).optional(),
+  states: tolerantArray(StateDataSchema, 'state').optional(),
 });
 
 export type State = z.infer<typeof StateSchema>;
@@ -567,14 +616,16 @@ export interface EventCardProps {
   eventFilters?: EventFilters;
 }
 
-// Zone types
-export const ZoneTypeEnum = z.enum(['Active', 'Inclusive', 'Exclusive', 'Preclusive', 'Inactive', 'Privacy']);
+// Zone types. `Zone.Type` is z.string(), not an enum: a ZoneMinder release that
+// adds a zone type must not fail the zones response (rule 43). The known values
+// live in `lib/monitor/zone-utils.ts` (ZONE_TYPE_ORDER) for the legend and picker.
 
-export const ZoneSchema = z.object({
+export const ZoneSchema = z.object(
+  withFieldCatch({
   Id: z.coerce.number(),
   MonitorId: z.coerce.number(),
   Name: z.string(),
-  Type: ZoneTypeEnum,
+  Type: z.string(),
   Units: z.string().optional(),
   NumCoords: z.coerce.number(),
   Coords: z.string(),
@@ -595,41 +646,46 @@ export const ZoneSchema = z.object({
   MaxBlobs: z.coerce.number().nullable().optional(),
   OverloadFrames: z.coerce.number().nullable().optional(),
   ExtendAlarmFrames: z.coerce.number().nullable().optional(),
-});
+  }, ['Id', 'Name']),
+);
 
 export const ZoneDataSchema = z.object({
   Zone: ZoneSchema,
 });
 
 export const ZonesResponseSchema = z.object({
-  zones: z.array(ZoneDataSchema),
+  zones: tolerantArray(ZoneDataSchema, 'zone'),
 });
 
 export type Zone = z.infer<typeof ZoneSchema>;
-export type ZoneType = z.infer<typeof ZoneTypeEnum>;
+export type ZoneType = string;
 export type ZoneData = z.infer<typeof ZoneDataSchema>;
 export type ZonesResponse = z.infer<typeof ZonesResponseSchema>;
 
 // Group types
-export const GroupSchema = z.object({
+export const GroupSchema = z.object(
+  withFieldCatch({
   Id: z.coerce.string(),
   Name: z.string(),
   ParentId: z.coerce.string().nullable(),
-});
+  }, ['Id', 'Name']),
+);
 
 // Monitor reference within a group (subset of full Monitor)
-export const GroupMonitorRefSchema = z.object({
+export const GroupMonitorRefSchema = z.object(
+  withFieldCatch({
   Id: z.coerce.string(),
   Name: z.string().optional(),
-});
+  }, ['Id']),
+);
 
 export const GroupDataSchema = z.object({
   Group: GroupSchema,
-  Monitor: z.array(GroupMonitorRefSchema).optional().default([]),
+  Monitor: tolerantArray(GroupMonitorRefSchema, 'group monitor').optional().default([]),
 });
 
 export const GroupsResponseSchema = z.object({
-  groups: z.array(GroupDataSchema),
+  groups: tolerantArray(GroupDataSchema, 'group'),
 });
 
 export type Group = z.infer<typeof GroupSchema>;
@@ -649,13 +705,15 @@ export interface MontageLayout {
 import type * as ReactGridLayout from 'react-grid-layout';
 
 // Tag types
-export const TagSchema = z.object({
+export const TagSchema = z.object(
+  withFieldCatch({
   Id: z.coerce.string(),
   Name: z.string(),
   CreateDate: z.string().nullable().optional(),
   CreatedBy: z.coerce.string().nullable().optional(),
   LastAssignedDate: z.string().nullable().optional(),
-});
+  }, ['Id', 'Name']),
+);
 
 // Schema for tag data without event association (used for available tags list)
 export const TagDataSchema = z.object({
@@ -675,13 +733,13 @@ export const TagEventMappingSchema = z.object({
 // Response schema for GET /api/tags.json
 // This returns all tags with their event associations
 export const TagsResponseSchema = z.object({
-  tags: z.array(TagEventMappingSchema),
+  tags: tolerantArray(TagEventMappingSchema, 'tag'),
 });
 
 // Response schema for GET /api/tags/index/Events.Id:1,2,3.json
 // Same format as TagsResponseSchema
 export const EventTagsResponseSchema = z.object({
-  tags: z.array(TagEventMappingSchema),
+  tags: tolerantArray(TagEventMappingSchema, 'tag'),
 });
 
 export type Tag = z.infer<typeof TagSchema>;

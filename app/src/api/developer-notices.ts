@@ -11,6 +11,7 @@ import { z } from 'zod';
 import { httpGet } from '../lib/http';
 import { DEVELOPER_NOTICES } from '../lib/zmninja-ng-constants';
 import { validateApiResponse } from '../lib/zm/api-validator';
+import { tolerantArray } from '../lib/zm/schema-tolerance';
 
 export const DeveloperNoticeSeveritySchema = z.enum(['info', 'warning', 'critical']);
 export type DeveloperNoticeSeverity = z.infer<typeof DeveloperNoticeSeveritySchema>;
@@ -28,7 +29,10 @@ export const DeveloperNoticeSchema = z.object({
 
 export type DeveloperNotice = z.infer<typeof DeveloperNoticeSchema>;
 
-export const DeveloperNoticeFeedSchema = z.array(DeveloperNoticeSchema);
+// A single malformed notice must not blank the whole feed (rule 43). The notice
+// fields stay strict on purpose: this is our own feed, and a notice missing an
+// id or title is useless, so dropping just that one is the right outcome.
+export const DeveloperNoticeFeedSchema = tolerantArray(DeveloperNoticeSchema, 'developer notice');
 
 /**
  * Fetch the notice feed. Uses httpGet directly (not the api client) so the

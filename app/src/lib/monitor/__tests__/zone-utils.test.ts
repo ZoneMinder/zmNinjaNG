@@ -76,7 +76,9 @@ describe('getZoneColor palette', () => {
   });
 
   it('falls back to gray for an unknown type', () => {
-    // @ts-expect-error intentional invalid type
+    // ZoneType is `string` (refs #247): a ZoneMinder release that adds a zone
+    // type must not fail the zones response, so this is now a plain value, not
+    // a type error. The gray fallback is what keeps such a zone visible.
     expect(getZoneColor('Nope')).toBe('#6b7280');
   });
 });
