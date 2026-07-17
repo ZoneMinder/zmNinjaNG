@@ -8,7 +8,7 @@
  * destructive call either resolves confirm `true` first, or is short-circuited
  * to the fixed "declined" result and never runs.
  */
-import type { AssistantMessage, AssistantProvider, AssistantHost, DisplayEntity, ToolContext, ToolResult } from './types';
+import type { AssistantMessage, AssistantProvider, AssistantHost, DisplayEntity, TokenUsage, ToolContext, ToolResult } from './types';
 import { getToolByName, TOOLS } from './tools';
 import { ASSISTANT } from '../zmninja-ng-constants';
 import { log, LogLevel } from '../logger';
@@ -42,6 +42,43 @@ export function truncateHistory(history: AssistantMessage[], max: number): Assis
   return tail;
 }
 
+/** Everything after the LAST `contextBoundary` message, which is what an
+ *  auto-clear (AskPanel) leaves behind. The boundary message itself is dropped
+ *  too: it is a UI notice, not something the model should answer.
+ *
+ *  This is where an auto-clear becomes real. The thread in the store keeps
+ *  every message so the transcript still renders, and only this slice decides
+ *  what reaches `provider.chat`, so clearing frees context without deleting
+ *  what the user can see. */
+export function sliceAfterContextBoundary(history: AssistantMessage[]): AssistantMessage[] {
+  for (let i = history.length - 1; i >= 0; i--) {
+    if (history[i].contextBoundary) return history.slice(i + 1);
+  }
+  return history;
+}
+
+/**
+ * Whether the next turn should start from a cleared context.
+ *
+ * Judged on `promptTokens` from the turn that just finished: that is the real
+ * measured size of everything sent in (system prompt + tool schemas + history
+ * + tool results), and the next turn's prompt can only be bigger, since it
+ * adds this turn's answer and the next question on top.
+ *
+ * False whenever either input is unknown. `contextWindow` is undefined for
+ * Ollama (the window is the server's `num_ctx` and the OpenAI-compatible API
+ * never reports it) and usage is undefined for a backend that omits it, and a
+ * guess in either case would either clear a conversation that was fine or
+ * promise a safety that isn't there.
+ */
+export function isContextNearlyFull(
+  contextWindow: number | undefined,
+  usage: TokenUsage | undefined,
+): boolean {
+  if (!contextWindow || !usage) return false;
+  return usage.promptTokens >= contextWindow * ASSISTANT.contextClearThreshold;
+}
+
 export interface RunOpts {
   provider: AssistantProvider;
   host: AssistantHost;
@@ -51,30 +88,59 @@ export interface RunOpts {
   signal: AbortSignal;
 }
 
+/**
+ * Runs one turn and resolves with ONLY the messages this turn produced, in
+ * order, for the caller to append to the thread it already holds.
+ *
+ * Not the full history: what gets sent to the model is a trimmed view of the
+ * caller's thread (boundary slice, then the message cap), so a returned
+ * "history" would be a different length than the caller's own and any
+ * arithmetic against it would be wrong. Returning just the new messages leaves
+ * the caller nothing to compute.
+ */
 export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[]> {
   const { provider, host, ctx, system, signal } = opts;
-  const history = truncateHistory(opts.history, ASSISTANT.maxHistoryMessages);
+  // Boundary slice BEFORE the message-count truncation: the cap counts what
+  // the model will actually be sent, so a pre-boundary message must never
+  // occupy one of those slots.
+  const history = truncateHistory(sliceAfterContextBoundary(opts.history), ASSISTANT.maxHistoryMessages);
+  // Everything appended below goes onto BOTH: `history` is the model's view
+  // for the next iteration, `produced` is what the caller gets back.
+  const produced: AssistantMessage[] = [];
+  const push = (msg: AssistantMessage) => {
+    history.push(msg);
+    produced.push(msg);
+  };
   // Cards accumulate across every tool-calling iteration of this turn and land
   // on the FINAL assistant answer message only (never an intermediate
   // tool-call-only assistant message or a `role: 'tool'` message), so AskPanel
   // renders question -> steps -> answer text -> cards (refs #246).
   const turnDisplay: DisplayEntity[] = [];
+  /** Usage from the most recent `provider.chat` that reported any, so the
+   *  iteration-cap message below can still tell AskPanel how full the window
+   *  got: a turn that burns every iteration is exactly the kind that fills it. */
+  let lastUsage: TokenUsage | undefined;
 
   for (let i = 0; i < ASSISTANT.maxToolIterations; i++) {
-    if (signal.aborted) return history;
+    if (signal.aborted) return produced;
     const turn = await provider.chat(history, TOOLS, system, signal);
     const assistantMsg: AssistantMessage = { role: 'assistant', text: turn.text, toolCalls: turn.toolCalls, raw: turn.raw };
 
     if (turn.toolCalls.length === 0) {
       assistantMsg.display = dedupeDisplay(turnDisplay);
-      history.push(assistantMsg);
-      return history;
+      // The last iteration's usage, not the first: each tool round-trip
+      // re-sends the history plus the new tool results, so the final call has
+      // the biggest prompt and is the one that says how full the window is.
+      assistantMsg.usage = turn.usage;
+      push(assistantMsg);
+      return produced;
     }
-    history.push(assistantMsg);
+    lastUsage = turn.usage ?? lastUsage;
+    push(assistantMsg);
 
     const results: ToolResult[] = [];
     for (const call of turn.toolCalls) {
-      if (signal.aborted) return history;
+      if (signal.aborted) return produced;
       const def = getToolByName(call.name);
       if (!def) {
         results.push({ callId: call.id, output: `Unknown tool: ${call.name}`, isError: true });
@@ -125,9 +191,14 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
     // NOT attached here (UI-only, never fed back to `provider.chat`). Only the
     // final assistant message below gets them, once the turn actually ends.
     turnDisplay.push(...results.flatMap((r) => r.display ?? []));
-    history.push({ role: 'tool', toolResults: results });
+    push({ role: 'tool', toolResults: results });
   }
 
-  history.push({ role: 'assistant', text: `__i18n:${ITERATION_CAP_KEY}`, display: dedupeDisplay(turnDisplay) });
-  return history;
+  push({
+    role: 'assistant',
+    text: `__i18n:${ITERATION_CAP_KEY}`,
+    display: dedupeDisplay(turnDisplay),
+    usage: lastUsage,
+  });
+  return produced;
 }

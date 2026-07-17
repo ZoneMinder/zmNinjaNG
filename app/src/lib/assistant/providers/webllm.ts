@@ -28,6 +28,7 @@ import type { AssistantProvider, AssistantMessage, AssistantTurn, ToolCall, Tool
 import { ASSISTANT } from '../../zmninja-ng-constants';
 import { log, LogLevel } from '../../logger';
 import { getLoadedEngine } from '../model-download';
+import { toTokenUsage } from './usage';
 
 /** i18n-free (rule 5): AskPanel resolves this sentinel via `t()`, same as
  *  agent.ts's iteration-cap message. */
@@ -288,9 +289,17 @@ export function parseWebLlmTurn(content: string): AssistantTurn {
  *  function calling. */
 export class WebLlmProvider implements AssistantProvider {
   private readonly modelId: string;
+  /** Exactly the window `model-download.ts` passes to `CreateMLCEngine` for
+   *  this model, so the fullness check in AskPanel measures against what the
+   *  engine was actually built with rather than a guess. Undefined for a model
+   *  outside `webllmModels`, which is also the case where `chatOptsFor` sends
+   *  no override and the registry default (4096) applies: we don't claim to
+   *  know a window we didn't set. */
+  readonly contextWindow?: number;
 
   constructor(modelId: string) {
     this.modelId = modelId;
+    this.contextWindow = ASSISTANT.webllmModels.find((m) => m.id === modelId)?.contextWindowSize;
   }
 
   async chat(
@@ -318,6 +327,7 @@ export class WebLlmProvider implements AssistantProvider {
     log.assistant('WebLLM raw response', LogLevel.DEBUG, { modelId: this.modelId, content });
 
     const turn = parseWebLlmTurn(content);
+    turn.usage = toTokenUsage(response.usage);
     if (turn.text === PARSE_ERROR_TEXT) {
       // Visible at WARN (not DEBUG) so a parse failure is easy to spot in the
       // console without cranking the log level: see the raw text above the

@@ -16,6 +16,31 @@ Feature: In-app assistant
     Then the assistant reply should contain "You have 3 events"
     And an activity chip for "count_events" should have appeared
 
+  Scenario: A conversation that fills the context window is cleared automatically
+    Given I am logged into zmNinjaNg
+    And the assistant is enabled with the mock backend
+    And the assistant backend has a context window of "1000" tokens
+    And the assistant will answer "First answer" using "900" prompt tokens
+    When I press the "?" key
+    Then the assistant panel should open
+    When I ask "how many events today"
+    Then the assistant reply should contain "First answer"
+    And the context-cleared notice should be visible
+    # The notice hides history from the model, not from the user: the answer
+    # they just waited for has to stay readable above it.
+    And the assistant reply should contain "First answer"
+
+  Scenario: A conversation well inside the context window is left alone
+    Given I am logged into zmNinjaNg
+    And the assistant is enabled with the mock backend
+    And the assistant backend has a context window of "1000" tokens
+    And the assistant will answer "Short answer" using "100" prompt tokens
+    When I press the "?" key
+    Then the assistant panel should open
+    When I ask "how many events today"
+    Then the assistant reply should contain "Short answer"
+    And the context-cleared notice should not be visible
+
   Scenario: Destructive action requires confirmation
     Given I am logged into zmNinjaNg
     And the assistant is enabled with the mock backend

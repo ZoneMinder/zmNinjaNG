@@ -29,7 +29,7 @@ import type { MonitorsResponse } from '../../api/types';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
 import { resolveMinStreamingPort } from '../../lib/monitor/multiport';
-import { runAssistantTurn } from '../../lib/assistant/agent';
+import { runAssistantTurn, isContextNearlyFull } from '../../lib/assistant/agent';
 import {
   getAssistantProvider,
   isAssistantTestMode,
@@ -59,6 +59,10 @@ declare global {
     /** e2e-only: a script for `sharedMockProvider`, read once per turn when
      *  `isAssistantTestMode()` is true. Never set outside tests/steps. */
     __assistantMockScript?: AssistantTurn[];
+    /** e2e-only: the context window `sharedMockProvider` should claim, so a
+     *  test can drive the auto-clear threshold without a real model. Read
+     *  under the same `isAssistantTestMode()` gate as the script above. */
+    __assistantMockContextWindow?: number;
   }
 }
 
@@ -69,6 +73,11 @@ const I18N_SENTINEL = '__i18n:';
 /** Matches `providers/webllm.ts`'s `PARSE_ERROR_TEXT` sentinel key (with the
  *  `__i18n:` prefix already stripped): only this turn ever carries `raw`. */
 const PARSE_ERROR_KEY = 'assistant.parse_error';
+
+/** Text of the auto-clear notice this panel appends once a turn's prompt
+ *  crosses `ASSISTANT.contextClearThreshold`; the message carrying it is the
+ *  `contextBoundary` the next turn's history is sliced at. */
+const CONTEXT_CLEARED_KEY = 'assistant.context_cleared';
 
 // Stable reference for the "no thread yet" case. Without it, the `thread`
 // selector below would return a fresh `[]` literal every render whenever
@@ -250,6 +259,7 @@ export function AskPanel() {
 
       if (isAssistantTestMode() && window.__assistantMockScript) {
         sharedMockProvider.setScript(window.__assistantMockScript);
+        sharedMockProvider.contextWindow = window.__assistantMockContextWindow;
       }
 
       let zmVersion = '';
@@ -298,12 +308,9 @@ export function AskPanel() {
         timezone: currentProfile?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
       };
       const history = useAssistantStore.getState().getThread(profileId);
-      const result = await runAssistantTurn({ provider, host, ctx, history, system, signal: controller.signal });
-
-      // Only the turn's new messages: `history` above is the full, untruncated
-      // thread already in the store, so re-appending the whole returned array
-      // would duplicate everything runAssistantTurn didn't drop.
-      const newMessages = result.slice(history.length);
+      // Already only this turn's new messages (see runAssistantTurn): the
+      // thread in the store keeps everything else.
+      const newMessages = await runAssistantTurn({ provider, host, ctx, history, system, signal: controller.signal });
 
       // Attach this turn's tool-activity steps to the assistant message
       // carrying the final answer (the last `role: 'assistant'` message: every
@@ -328,6 +335,18 @@ export function AskPanel() {
       // (see the `activities.length > 0` block below) duplicating the steps
       // now attached to the message that just landed.
       clearActivities();
+
+      // Appended AFTER this turn's answer, never before: the notice explains
+      // what happens to the NEXT turn, and the answer the user just waited for
+      // stays on screen above it (the boundary only hides history from the
+      // model, see sliceAfterContextBoundary).
+      if (isContextNearlyFull(provider.contextWindow, newMessages[newMessages.length - 1]?.usage)) {
+        append(profileId, {
+          role: 'assistant',
+          text: `__i18n:${CONTEXT_CLEARED_KEY}`,
+          contextBoundary: true,
+        });
+      }
     } catch (e) {
       if (e instanceof DOMException && e.name === 'AbortError') {
         // User-initiated abort: not an error to surface.
@@ -357,6 +376,21 @@ export function AskPanel() {
           // (agent.ts attaches cards to the final `role: 'assistant'` message
           // instead, refs #246), so there is nothing here to render.
           if (msg.role === 'tool') return null;
+          // The auto-clear notice is a divider, not a turn: it's the app
+          // talking, not the model, and everything above it is out of the
+          // model's view from here on (see agent.ts's sliceAfterContextBoundary).
+          // Styling it as an assistant bubble would claim the model said it.
+          if (msg.contextBoundary) {
+            return (
+              <div
+                key={i}
+                className="border-t pt-2 text-center text-xs text-muted-foreground"
+                data-testid="assistant-context-cleared"
+              >
+                {renderAssistantText(msg, t)}
+              </div>
+            );
+          }
           return (
             <div key={i} className="space-y-1">
               {/* This turn's tool steps, above its answer (refs #246): user

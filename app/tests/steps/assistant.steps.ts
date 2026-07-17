@@ -75,6 +75,43 @@ Given('the assistant will call trigger_alarm on monitor {string}', async ({ page
   await seedScript(page, [{ toolCalls: [{ id: '1', name: 'trigger_alarm', input: { monitorId } }] }]);
 });
 
+/** The window `sharedMockProvider` claims, standing in for an on-device model's
+ *  known context size. AskPanel reads it under the same `isAssistantTestMode()`
+ *  gate as the script (see the seam's declaration in AskPanel.tsx). */
+Given('the assistant backend has a context window of {string} tokens', async ({ page }, tokens: string) => {
+  await page.evaluate((n) => {
+    (window as unknown as { __assistantMockContextWindow?: number }).__assistantMockContextWindow = n;
+  }, Number(tokens));
+});
+
+/** A single-turn answer reporting `promptTokens`, which is what the auto-clear
+ *  threshold is measured against. */
+Given(
+  'the assistant will answer {string} using {string} prompt tokens',
+  async ({ page }, answer: string, promptTokens: string) => {
+    await seedScript(page, [
+      {
+        text: answer,
+        toolCalls: [],
+        usage: { promptTokens: Number(promptTokens), completionTokens: 10, totalTokens: Number(promptTokens) + 10 },
+      },
+    ]);
+  },
+);
+
+Then('the context-cleared notice should be visible', async ({ page }) => {
+  await expect(page.getByTestId('assistant-context-cleared')).toBeVisible({
+    timeout: testConfig.timeouts.element,
+  });
+});
+
+Then('the context-cleared notice should not be visible', async ({ page }) => {
+  // The reply is already asserted before this step, so the turn has finished:
+  // a notice that were coming would already be in the DOM, making this a real
+  // assertion rather than a race with an unfinished turn.
+  await expect(page.getByTestId('assistant-context-cleared')).toHaveCount(0);
+});
+
 When('I press the {string} key', async ({ page }, key: string) => {
   await page.locator('body').press(key === '?' ? 'Shift+Slash' : key);
 });

@@ -50,6 +50,26 @@ export interface AssistantMessage {
    *  answer and stays there in history instead of only living in the
    *  transient `activities` array for the in-flight turn. */
   steps?: ToolActivity[];
+  /** Token usage reported by the backend for the turn that produced this
+   *  message, attached by `runAssistantTurn` to the FINAL assistant message
+   *  only. AskPanel reads `promptTokens` off the last message to decide
+   *  whether the next turn would overrun the context window. */
+  usage?: TokenUsage;
+  /** Marks this message as the start of a fresh context: `runAssistantTurn`
+   *  sends only the messages AFTER the last one carrying this flag. The
+   *  message itself still renders, so the transcript above it survives on
+   *  screen even though the model no longer sees it (refs #246). */
+  contextBoundary?: boolean;
+}
+
+/** What a backend reports it actually spent on a turn. `promptTokens` is the
+ *  one that matters for the context window: it counts everything fed IN
+ *  (system prompt + tool schemas + history + tool results), which is what
+ *  grows without bound as a conversation goes on. */
+export interface TokenUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
 }
 
 export interface ToolCall {
@@ -72,6 +92,10 @@ export interface AssistantTurn {
   /** See `AssistantMessage.raw`: carried onto the pushed assistant message by
    *  `runAssistantTurn` (agent.ts) when a turn is the parse-error fallback. */
   raw?: string;
+  /** Undefined when the backend did not report usage: absent counts, not zero
+   *  counts, so a backend that stays quiet can't read as "0 tokens used" and
+   *  suppress the context-window warning forever. */
+  usage?: TokenUsage;
 }
 
 export interface ToolContext {
@@ -155,6 +179,12 @@ export interface AssistantProvider {
     system: string,
     signal: AbortSignal,
   ): Promise<AssistantTurn>;
+  /** The context window this backend is running with, when it is knowable.
+   *  Set for on-device models (we pass the window to CreateMLCEngine, so we
+   *  know it exactly); undefined for Ollama, where the window is the server's
+   *  `num_ctx` and nothing in the OpenAI-compatible API reports it. Undefined
+   *  means AskPanel cannot judge "close to full" and so never auto-clears. */
+  readonly contextWindow?: number;
 }
 
 /** Which chat backend drives the assistant (refs #246): the on-device WebLLM

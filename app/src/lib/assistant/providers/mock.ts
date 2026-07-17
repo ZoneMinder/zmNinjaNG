@@ -5,6 +5,10 @@ import type { AssistantProvider, AssistantTurn, AssistantMessage, ToolDefinition
 export class MockProvider implements AssistantProvider {
   private script: AssistantTurn[] = [];
   private cursor = 0;
+  /** Mutable, unlike the real providers' readonly field: a test needs to stand
+   *  in for both an on-device model (a known window) and Ollama (undefined)
+   *  without constructing a different provider. */
+  contextWindow?: number;
 
   setScript(turns: AssistantTurn[]): void {
     this.script = turns;

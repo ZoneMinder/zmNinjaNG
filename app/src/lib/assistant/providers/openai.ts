@@ -23,6 +23,7 @@ import type { AssistantProvider, AssistantMessage, AssistantTurn, ToolCall, Tool
 import { httpGet, httpPost } from '../../http';
 import { ASSISTANT } from '../../zmninja-ng-constants';
 import { log, LogLevel } from '../../logger';
+import { toTokenUsage, type OpenAiUsage } from './usage';
 
 /** i18n-free (rule 5): AskPanel resolves this sentinel via `t()`, same
  *  sentinel `providers/webllm.ts` uses for its own parse failures. */
@@ -57,6 +58,7 @@ interface OpenAiResponseMessage {
 
 interface OpenAiChatResponse {
   choices?: Array<{ message?: OpenAiResponseMessage }>;
+  usage?: OpenAiUsage;
 }
 
 /** Maps the app's `AssistantMessage[]` (roles user/assistant/tool) onto the
@@ -226,6 +228,7 @@ export class OpenAiProvider implements AssistantProvider {
     log.assistant('Ollama raw response', LogLevel.DEBUG, { baseUrl, model, message });
 
     const turn = parseOpenAiTurn(message);
+    turn.usage = toTokenUsage(response.data?.usage);
     if (turn.text === PARSE_ERROR_TEXT) {
       log.assistant('Ollama response failed to parse into a tool call or answer', LogLevel.WARN, {
         baseUrl,

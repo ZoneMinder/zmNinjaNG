@@ -1,8 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
-import { runAssistantTurn, truncateHistory } from '../agent';
+import { runAssistantTurn, truncateHistory, sliceAfterContextBoundary, isContextNearlyFull } from '../agent';
 import { MockProvider } from '../providers/mock';
 import type { AssistantHost, AssistantMessage } from '../types';
 import { asProfileId } from '../../../api/types';
+import { ASSISTANT } from '../../zmninja-ng-constants';
 
 function host(confirmResult = true): AssistantHost {
   return { confirm: vi.fn().mockResolvedValue(confirmResult), navigate: vi.fn(), onActivity: vi.fn() };
@@ -25,7 +26,170 @@ describe('truncateHistory', () => {
   });
 });
 
+describe('sliceAfterContextBoundary', () => {
+  it('returns everything when no message is a boundary', () => {
+    const h: AssistantMessage[] = [
+      { role: 'user', text: 'a' },
+      { role: 'assistant', text: 'b' },
+    ];
+    expect(sliceAfterContextBoundary(h)).toEqual(h);
+  });
+
+  it('drops the boundary message and everything before it', () => {
+    const h: AssistantMessage[] = [
+      { role: 'user', text: 'old question' },
+      { role: 'assistant', text: 'old answer' },
+      { role: 'assistant', text: '__i18n:assistant.context_cleared', contextBoundary: true },
+      { role: 'user', text: 'new question' },
+    ];
+    expect(sliceAfterContextBoundary(h)).toEqual([{ role: 'user', text: 'new question' }]);
+  });
+
+  it('honours the LAST boundary when a thread has been cleared more than once', () => {
+    const h: AssistantMessage[] = [
+      { role: 'user', text: 'first' },
+      { role: 'assistant', text: 'cleared once', contextBoundary: true },
+      { role: 'user', text: 'second' },
+      { role: 'assistant', text: 'cleared twice', contextBoundary: true },
+      { role: 'user', text: 'third' },
+    ];
+    expect(sliceAfterContextBoundary(h)).toEqual([{ role: 'user', text: 'third' }]);
+  });
+
+  it('returns empty when the boundary is the last message', () => {
+    const h: AssistantMessage[] = [
+      { role: 'user', text: 'q' },
+      { role: 'assistant', text: 'cleared', contextBoundary: true },
+    ];
+    expect(sliceAfterContextBoundary(h)).toEqual([]);
+  });
+});
+
+describe('isContextNearlyFull', () => {
+  const window = 8192;
+  const at = (promptTokens: number) => ({ promptTokens, completionTokens: 0, totalTokens: promptTokens });
+
+  it('is false well below the threshold', () => {
+    expect(isContextNearlyFull(window, at(1000))).toBe(false);
+  });
+
+  it('is true at or past the threshold', () => {
+    const threshold = window * ASSISTANT.contextClearThreshold;
+    expect(isContextNearlyFull(window, at(threshold))).toBe(true);
+    expect(isContextNearlyFull(window, at(threshold + 1))).toBe(true);
+  });
+
+  it('is false just under the threshold', () => {
+    expect(isContextNearlyFull(window, at(window * ASSISTANT.contextClearThreshold - 1))).toBe(false);
+  });
+
+  // Ollama: the window is the server's num_ctx and nothing reports it, so
+  // there is no fraction to compute. Guessing one would clear conversations
+  // that were never close to full.
+  it('is false when the backend does not report a context window', () => {
+    expect(isContextNearlyFull(undefined, at(999999))).toBe(false);
+  });
+
+  it('is false when the backend reported no usage', () => {
+    expect(isContextNearlyFull(window, undefined)).toBe(false);
+  });
+
+  it('leaves room for the next turn to answer, not just to fit', () => {
+    // The threshold has to clear the reply the NEXT turn still has to
+    // generate, otherwise the turn that discovers the overflow is the turn
+    // that fails on it.
+    const headroom = window - window * ASSISTANT.contextClearThreshold;
+    expect(headroom).toBeGreaterThan(ASSISTANT.maxTokens);
+  });
+});
+
 describe('runAssistantTurn', () => {
+  it('sends only the messages after a context boundary to the provider', async () => {
+    const p = new MockProvider();
+    p.setScript([{ text: 'answer', toolCalls: [] }]);
+    // Snapshot at call time: runAssistantTurn pushes each turn onto the same
+    // array it hands to `chat`, so the spy's captured reference would have
+    // grown by the time we assert on it.
+    let sent: AssistantMessage[] = [];
+    vi.spyOn(p, 'chat').mockImplementation(async (messages) => {
+      sent = structuredClone(messages);
+      return { text: 'answer', toolCalls: [] };
+    });
+    await runAssistantTurn(
+      baseOpts(p, host(), [
+        { role: 'user', text: 'ancient history' },
+        { role: 'assistant', text: 'cleared', contextBoundary: true },
+        { role: 'user', text: 'fresh question' },
+      ]),
+    );
+    // The pre-boundary messages are gone from what the model sees: that IS the
+    // clear. Leaving them would make the auto-clear cosmetic.
+    expect(sent).toEqual([{ role: 'user', text: 'fresh question' }]);
+    vi.restoreAllMocks();
+  });
+
+  // AskPanel appends whatever comes back onto the thread it already holds, so
+  // the return value must be ONLY what this turn produced. Returning the input
+  // history too made the caller compensate with `result.slice(history.length)`,
+  // which silently dropped the answer whenever the agent had trimmed the
+  // history it was given: the returned array was then SHORTER than the thread,
+  // so the slice came back empty. Truncation at maxHistoryMessages (40) and an
+  // auto-clear boundary both trim, so both lost the answer.
+  it('returns only this turn\'s new messages, even when the input history was trimmed', async () => {
+    const p = new MockProvider();
+    p.setScript([{ text: 'answer', toolCalls: [] }]);
+    const long: AssistantMessage[] = Array.from({ length: ASSISTANT.maxHistoryMessages + 5 }, (_, i) => ({
+      role: 'user' as const,
+      text: `msg ${i}`,
+    }));
+    const out = await runAssistantTurn(baseOpts(p, host(), long));
+    expect(out).toEqual([{ role: 'assistant', text: 'answer', toolCalls: [], raw: undefined, display: undefined, usage: undefined }]);
+  });
+
+  it('returns only this turn\'s new messages after a context boundary', async () => {
+    const p = new MockProvider();
+    p.setScript([{ text: 'answer', toolCalls: [] }]);
+    const out = await runAssistantTurn(
+      baseOpts(p, host(), [
+        { role: 'user', text: 'old' },
+        { role: 'assistant', text: 'cleared', contextBoundary: true },
+        { role: 'user', text: 'new' },
+      ]),
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0].text).toBe('answer');
+  });
+
+  it('attaches the provider-reported usage to the final assistant message', async () => {
+    const p = new MockProvider();
+    p.setScript([
+      { text: 'answer', toolCalls: [], usage: { promptTokens: 1200, completionTokens: 30, totalTokens: 1230 } },
+    ]);
+    const out = await runAssistantTurn(baseOpts(p, host(), [{ role: 'user', text: 'q' }]));
+    expect(out[out.length - 1].usage).toEqual({ promptTokens: 1200, completionTokens: 30, totalTokens: 1230 });
+  });
+
+  it('carries the LAST iteration usage, so a tool-calling turn reports its real prompt size', async () => {
+    const p = new MockProvider();
+    p.setScript([
+      {
+        toolCalls: [{ id: 'c1', name: 'list_monitors', input: {} }],
+        usage: { promptTokens: 900, completionTokens: 10, totalTokens: 910 },
+      },
+      // The second call re-sends the history PLUS the tool result, so its
+      // prompt is the larger one; reporting the first would understate how
+      // full the window is.
+      { text: 'done', toolCalls: [], usage: { promptTokens: 1500, completionTokens: 20, totalTokens: 1520 } },
+    ]);
+    vi.spyOn(await import('../tools'), 'getToolByName').mockReturnValue({
+      name: 'list_monitors', description: '', schema: {}, destructive: false,
+      execute: async () => ({ output: '[]' }),
+    } as never);
+    const out = await runAssistantTurn(baseOpts(p, host(), [{ role: 'user', text: 'q' }]));
+    expect(out[out.length - 1].usage?.promptTokens).toBe(1500);
+    vi.restoreAllMocks();
+  });
+
   it('does not execute a destructive tool when confirm resolves false', async () => {
     const p = new MockProvider();
     p.setScript([
