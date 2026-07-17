@@ -16,7 +16,9 @@ export const NAVIGATE_ALLOWLIST = [
 
 /** A tool's `run` callback may return a bare output string, or (refs #246)
  *  an output plus UI-only result cards for the ones that look up events or
- *  monitors. */
+ *  monitors. Deliberately no `isError`: throwing is the only way to produce an
+ *  error result (see `safeExecute`), so a `run` that wants the model to see a
+ *  failure must throw rather than return. */
 export interface SafeExecuteOutput {
   output: string;
   display?: DisplayEntity[];

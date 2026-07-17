@@ -18,7 +18,8 @@ import type { MonitorData } from '../../api/types';
 import { ASSISTANT } from '../zmninja-ng-constants';
 import { parseDetectedObjects } from '../event/event-detection';
 import { buildEventDisplayEntity, buildMonitorDisplayEntity } from './display';
-import { EVENT_RANGES, resolveEventRange, type EventRange } from './event-range';
+import { EVENT_RANGES, resolveEventRange, isEventRange, type EventRange } from './event-range';
+import { resolveMonitorRef } from './monitor-ref';
 import type { ToolDefinition } from './types';
 import { safeExecute, NAVIGATE_ALLOWLIST } from './tool-helpers';
 
@@ -47,6 +48,25 @@ function mapMonitor(m: MonitorData): Record<string, unknown> {
   if (m.Monitor.Analysing !== undefined) out.analysing = m.Monitor.Analysing;
   if (m.Monitor.Recording !== undefined) out.recording = m.Monitor.Recording;
   return out;
+}
+
+/**
+ * Turns a model-supplied `monitorId` (which is often a NAME, see
+ * monitor-ref.ts) into a real id, throwing a message the model can retry from.
+ *
+ * A bare number is passed through without listing monitors first: it is already
+ * the right shape, and a wrong one fails loudly at the API rather than becoming
+ * an empty result set. `list_events` cannot take that shortcut, since a wrong
+ * id there returns zero events and reads exactly like "nothing happened".
+ */
+async function resolveMonitorArg(raw: unknown): Promise<string> {
+  const ref = String(raw ?? '').trim();
+  if (!ref) throw new Error('monitorId is required');
+  if (/^\d+$/.test(ref)) return ref;
+  const { monitors } = await getMonitors();
+  const resolution = resolveMonitorRef(ref, monitors);
+  if ('error' in resolution) throw new Error(resolution.error);
+  return resolution.id;
 }
 
 /** Trims a Notes field for the list_events row cap (rule 11: truncate long
@@ -92,14 +112,18 @@ const getMonitorTool: ToolDefinition = {
     'user asks about a specific monitor\'s current state.',
   schema: {
     type: 'object',
-    properties: { monitorId: { type: 'string', description: 'The monitor id, from list_monitors.' } },
+    properties: {
+      monitorId: {
+        type: 'string',
+        description: 'A monitor id from list_monitors. A monitor name ("Front Door") also works.',
+      },
+    },
     required: ['monitorId'],
   },
   destructive: false,
   execute: (input, _ctx) =>
     safeExecute('get_monitor', async () => {
-      const monitorId = String(input.monitorId ?? '');
-      if (!monitorId) throw new Error('monitorId is required');
+      const monitorId = await resolveMonitorArg(input.monitorId);
       const [monitor, alarm] = await Promise.all([getMonitor(monitorId), getAlarmStatus(monitorId)]);
       return {
         output: JSON.stringify({
@@ -164,7 +188,12 @@ const listEventsTool: ToolDefinition = {
   schema: {
     type: 'object',
     properties: {
-      monitorId: { type: 'string' },
+      monitorId: {
+        type: 'string',
+        description:
+          'A monitor id from list_monitors. A monitor name ("Front Door") also works and is resolved to its ' +
+          'id. Omit to search every monitor.',
+      },
       range: {
         type: 'string',
         enum: [...EVENT_RANGES],
@@ -190,6 +219,15 @@ const listEventsTool: ToolDefinition = {
       return { output: 'Cannot filter by tag and event ids together.', isError: true };
     }
     const limit = clampListEventsLimit(input.limit);
+    // Rejected before any query runs. An out-of-enum range used to fall
+    // through resolveEventRange and leave the window off the query entirely,
+    // so "last week" silently asked about all of time (refs #246).
+    if (input.range !== undefined && !isEventRange(input.range)) {
+      return {
+        output: `Unknown range "${String(input.range)}". Valid ranges: ${EVENT_RANGES.join(', ')}.`,
+        isError: true,
+      };
+    }
     return safeExecute('list_events', async () => {
       const range = input.range as EventRange | undefined;
       const explicitStart = input.startTime as string | undefined;
@@ -200,8 +238,24 @@ const listEventsTool: ToolDefinition = {
         range && (!explicitStart || !explicitEnd)
           ? resolveEventRange(range, new Date(), ctx.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone)
           : undefined;
+
+      // Monitors first, and awaited rather than raced with getEvents: the
+      // events query cannot be built until the model's `monitorId` (often a
+      // NAME) resolves to a real id. The extra round trip buys the difference
+      // between "no events" and "no such query" (see monitor-ref.ts).
+      const { monitors } = await getMonitors();
+      let monitorId: string | undefined;
+      if (input.monitorId !== undefined && String(input.monitorId).trim() !== '') {
+        const resolution = resolveMonitorRef(String(input.monitorId), monitors);
+        // Thrown, not returned: safeExecute keeps `isError` only on the throw
+        // path (it rebuilds a returned object from `output`/`display` alone),
+        // and this must reach the model as an error it can act on.
+        if ('error' in resolution) throw new Error(resolution.error);
+        monitorId = resolution.id;
+      }
+
       const filters: EventFilters = {
-        monitorId: input.monitorId as string | undefined,
+        monitorId,
         startDateTime: explicitStart ?? resolved?.startDateTime,
         endDateTime: explicitEnd ?? resolved?.endDateTime,
         notesRegexp: input.objectType ? `detected:.*${input.objectType}` : undefined,
@@ -211,7 +265,7 @@ const listEventsTool: ToolDefinition = {
         sort: 'StartDateTime',
         direction: 'desc',
       };
-      const [res, { monitors }] = await Promise.all([getEvents(filters), getMonitors()]);
+      const res = await getEvents(filters);
       const nameById = new Map(monitors.map((m) => [m.Monitor.Id, m.Monitor.Name]));
       const rows = res.events.map(({ Event: e }) => ({
         id: e.Id,

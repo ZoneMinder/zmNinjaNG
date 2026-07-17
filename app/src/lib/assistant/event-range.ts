@@ -21,6 +21,21 @@ import { ZM_API_DATETIME_FORMAT } from '../zm/zm-constants';
 export const EVENT_RANGES = ['today', 'yesterday', 'last_hour', 'last_24h', 'last_7d', 'last_30d'] as const;
 export type EventRange = (typeof EVENT_RANGES)[number];
 
+/**
+ * Whether `value` is a range `resolveEventRange` can actually resolve.
+ *
+ * Needed because `resolveEventRange`'s switch is exhaustive over `EventRange`
+ * and therefore has no default branch: that exhaustiveness is a compile-time
+ * proof about OUR callers, and says nothing about a model that answers with
+ * "last week". Such a value fell through the switch, returned undefined, and
+ * silently dropped the date filter, leaving an unscoped query answering a
+ * question about a specific window. Anything crossing the model boundary must
+ * pass through here first.
+ */
+export function isEventRange(value: unknown): value is EventRange {
+  return typeof value === 'string' && (EVENT_RANGES as readonly string[]).includes(value);
+}
+
 export interface ResolvedEventRange {
   startDateTime: string;
   endDateTime: string;

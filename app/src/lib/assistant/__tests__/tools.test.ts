@@ -4,7 +4,7 @@ import type { ToolContext } from '../types';
 import { asProfileId } from '../../../api/types';
 import { ASSISTANT } from '../../zmninja-ng-constants';
 import { getEvents, deleteEvent, setEventArchived } from '../../../api/events';
-import { triggerAlarm, cancelAlarm, setMonitorEnabled, changeMonitorFunction } from '../../../api/monitors';
+import { getMonitor, getMonitors, triggerAlarm, cancelAlarm, setMonitorEnabled, changeMonitorFunction } from '../../../api/monitors';
 import { changeState } from '../../../api/states';
 import { getStorages, getServers } from '../../../api/server';
 import { DEFAULT_THUMBNAIL_FALLBACK_CHAIN } from '../../../stores/settings';
@@ -159,6 +159,126 @@ describe('read-only tools', () => {
     expect(r.isError).toBeFalsy();
     expect(r.closePanel).toBe(true);
     expect(c.host.navigate).toHaveBeenCalledWith('/events/42');
+  });
+
+  // Same model habit as list_events, less dangerous outcome: getMonitor("Front
+  // Door") fails at the API rather than returning an empty set, so it never
+  // became a false "no". It still fails a question it could have answered.
+  describe('get_monitor monitor resolution', () => {
+    it('resolves a monitor NAME to its id', async () => {
+      const tool = getToolByName('get_monitor')!;
+      const r = await tool.execute({ monitorId: 'Front Door' }, ctx());
+      expect(r.isError).toBeFalsy();
+      expect(vi.mocked(getMonitor)).toHaveBeenCalledWith('1');
+    });
+
+    it('passes a numeric id straight through without listing monitors first', async () => {
+      const tool = getToolByName('get_monitor')!;
+      const r = await tool.execute({ monitorId: '1' }, ctx());
+      expect(r.isError).toBeFalsy();
+      expect(vi.mocked(getMonitor)).toHaveBeenCalledWith('1');
+      // A bare id needs no lookup: a wrong one fails loudly at the API, which
+      // is why this path can stay one request instead of two.
+      expect(vi.mocked(getMonitors)).not.toHaveBeenCalled();
+    });
+
+    it('errors with the real monitor names for an unknown name', async () => {
+      const tool = getToolByName('get_monitor')!;
+      const r = await tool.execute({ monitorId: 'Nonexistent Cam' }, ctx());
+      expect(r.isError).toBe(true);
+      expect(r.output).toContain('Front Door');
+      expect(vi.mocked(getMonitor)).not.toHaveBeenCalled();
+    });
+  });
+
+  // A small model reliably passes the monitor NAME it saw in a previous
+  // list_events/list_monitors row, not the numeric id. ZoneMinder's
+  // `MonitorId:FrontDoor` filter matches nothing, so the query came back with
+  // total: 0 and the model answered "no one came to your front door" about a
+  // camera it had never actually queried. A false negative is the worst
+  // possible failure for this app, so a name must resolve, and anything
+  // unresolvable must be an error the model can see and retry, never an empty
+  // result set that reads like an answer.
+  describe('list_events monitor resolution', () => {
+    it('resolves a monitor NAME to its id', async () => {
+      const tool = getToolByName('list_events')!;
+      const r = await tool.execute({ monitorId: 'Front Door' }, ctx());
+      expect(r.isError).toBeFalsy();
+      expect(vi.mocked(getEvents)).toHaveBeenCalledWith(expect.objectContaining({ monitorId: '1' }));
+    });
+
+    it('resolves a name ignoring case and surrounding space', async () => {
+      const tool = getToolByName('list_events')!;
+      const r = await tool.execute({ monitorId: '  front door ' }, ctx());
+      expect(r.isError).toBeFalsy();
+      expect(vi.mocked(getEvents)).toHaveBeenCalledWith(expect.objectContaining({ monitorId: '1' }));
+    });
+
+    // "FrontDoor" is exactly what the model sent in the real failure.
+    it('resolves a name with the spaces stripped out', async () => {
+      const tool = getToolByName('list_events')!;
+      const r = await tool.execute({ monitorId: 'FrontDoor' }, ctx());
+      expect(r.isError).toBeFalsy();
+      expect(vi.mocked(getEvents)).toHaveBeenCalledWith(expect.objectContaining({ monitorId: '1' }));
+    });
+
+    it('passes a valid numeric id straight through', async () => {
+      const tool = getToolByName('list_events')!;
+      const r = await tool.execute({ monitorId: '1' }, ctx());
+      expect(r.isError).toBeFalsy();
+      expect(vi.mocked(getEvents)).toHaveBeenCalledWith(expect.objectContaining({ monitorId: '1' }));
+    });
+
+    it('errors, and never queries, for a monitor that does not exist', async () => {
+      const tool = getToolByName('list_events')!;
+      const r = await tool.execute({ monitorId: 'Back Garden' }, ctx());
+      expect(r.isError).toBe(true);
+      // Naming the real monitors gives the model what it needs to retry.
+      expect(r.output).toContain('Front Door');
+      expect(vi.mocked(getEvents)).not.toHaveBeenCalled();
+    });
+
+    it('errors for an id that looks numeric but matches no monitor', async () => {
+      const tool = getToolByName('list_events')!;
+      const r = await tool.execute({ monitorId: '999' }, ctx());
+      expect(r.isError).toBe(true);
+      expect(vi.mocked(getEvents)).not.toHaveBeenCalled();
+    });
+
+    it('queries every monitor when none is given', async () => {
+      const tool = getToolByName('list_events')!;
+      const r = await tool.execute({}, ctx());
+      expect(r.isError).toBeFalsy();
+      expect(vi.mocked(getEvents)).toHaveBeenCalledWith(expect.objectContaining({ monitorId: undefined }));
+    });
+  });
+
+  // `resolveEventRange` switches over the EventRange union with no default:
+  // TypeScript proves that exhaustive, but the model is not a typechecker. It
+  // sent "last week", the switch fell through returning undefined, and the
+  // date filter silently vanished, so an unscoped query answered a question
+  // about last week.
+  describe('list_events range validation', () => {
+    it('errors on a range outside the enum instead of dropping the date filter', async () => {
+      const tool = getToolByName('list_events')!;
+      const r = await tool.execute({ range: 'last week' }, ctx());
+      expect(r.isError).toBe(true);
+      // The valid values, so the model can retry with one.
+      expect(r.output).toContain('last_7d');
+      expect(vi.mocked(getEvents)).not.toHaveBeenCalled();
+    });
+
+    it('applies a date filter for a valid range', async () => {
+      const tool = getToolByName('list_events')!;
+      const r = await tool.execute({ range: 'yesterday' }, ctx());
+      expect(r.isError).toBeFalsy();
+      expect(vi.mocked(getEvents)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          startDateTime: expect.any(String),
+          endDateTime: expect.any(String),
+        }),
+      );
+    });
   });
 
   it('list_events never combines tag and event-id filters', async () => {
