@@ -353,15 +353,16 @@ export function AskPanel() {
         {thread.length === 0 && <AssistantIntro onExampleClick={handleExampleClick} />}
 
         {thread.map((msg, i) => {
-          if (msg.role === 'tool') {
-            if (!msg.display || msg.display.length === 0) return null;
-            return <AssistantResultCards key={i} entities={msg.display} host={host} />;
-          }
+          // `role: 'tool'` messages carry only `toolResults`, never `display`
+          // (agent.ts attaches cards to the final `role: 'assistant'` message
+          // instead, refs #246), so there is nothing here to render.
+          if (msg.role === 'tool') return null;
           return (
             <div key={i} className="space-y-1">
               {/* This turn's tool steps, above its answer (refs #246): user
                   question -> "Running count_events…" / "count_events done" ->
-                  answer, in that order both live and in history. */}
+                  answer -> supporting cards, in that order both live and in
+                  history. */}
               {msg.role === 'assistant' && msg.steps && msg.steps.length > 0 && <ActivitySteps steps={msg.steps} />}
               <div
                 data-testid={`assistant-message-${msg.role}`}
@@ -372,6 +373,9 @@ export function AskPanel() {
               >
                 {msg.role === 'user' ? <p>{msg.text}</p> : renderAssistantText(msg, t)}
               </div>
+              {msg.role === 'assistant' && msg.display && msg.display.length > 0 && (
+                <AssistantResultCards entities={msg.display} host={host} />
+              )}
             </div>
           );
         })}

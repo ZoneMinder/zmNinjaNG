@@ -164,8 +164,9 @@ describe('AskPanel', () => {
   it('renders an event result card with a thumbnail and navigates on Open (refs #246)', async () => {
     useAssistantStore.getState().append('p1', { role: 'user', text: 'find front door events' });
     useAssistantStore.getState().append('p1', {
-      role: 'tool',
-      toolResults: [{ callId: 'c1', output: '[]' }],
+      role: 'assistant',
+      text: 'Here is what I found at Front Door.',
+      toolCalls: [],
       display: [
         {
           kind: 'event',
@@ -193,8 +194,9 @@ describe('AskPanel', () => {
 
   it('renders a monitor result card with no thumbnail', () => {
     useAssistantStore.getState().append('p1', {
-      role: 'tool',
-      toolResults: [{ callId: 'c1', output: '[]' }],
+      role: 'assistant',
+      text: 'Front Door is enabled.',
+      toolCalls: [],
       display: [
         { kind: 'monitor', id: '1', title: 'Front Door', subtitle: 'Modect · Connected', navigatePath: '/monitors/1' },
       ],
@@ -204,6 +206,28 @@ describe('AskPanel', () => {
 
     expect(screen.queryByTestId('assistant-card-thumbnail-stub')).not.toBeInTheDocument();
     expect(screen.getByTestId('assistant-card-monitor')).toHaveTextContent('Front Door');
+  });
+
+  it('renders a message\'s cards below its answer text, not above it (refs #246)', () => {
+    useAssistantStore.getState().append('p1', { role: 'user', text: 'how many people came today?' });
+    useAssistantStore.getState().append('p1', {
+      role: 'assistant',
+      text: 'Three people were detected today.',
+      toolCalls: [],
+      steps: [{ toolName: 'list_events', status: 'done', input: { range: 'today', objectType: 'person' } }],
+      display: [
+        { kind: 'event', id: '42', title: 'Front Door · today', navigatePath: '/events/42' },
+      ],
+    });
+
+    render(<AskPanel />);
+
+    const step = screen.getByTestId('assistant-activity-step');
+    const answer = screen.getByTestId('assistant-message-assistant');
+    const card = screen.getByTestId('assistant-card-event');
+    // Net DOM order: steps -> answer text -> cards.
+    expect(step.compareDocumentPosition(answer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(answer.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('renders a turn\'s step trace above its answer, in chronological order (refs #246)', () => {
@@ -225,10 +249,20 @@ describe('AskPanel', () => {
     expect(step.compareDocumentPosition(answer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('does not render a result-card strip for a tool message with no display', () => {
+  it('does not render a result-card strip for a tool message (cards never attach there)', () => {
     useAssistantStore.getState().append('p1', {
       role: 'tool',
       toolResults: [{ callId: 'c1', output: '{}' }],
+    });
+
+    render(<AskPanel />);
+
+    expect(screen.queryByTestId('assistant-result-cards')).not.toBeInTheDocument();
+  });
+
+  it('does not render a result-card strip for an assistant message with no display', () => {
+    useAssistantStore.getState().append('p1', {
+      role: 'assistant', text: 'All good.', toolCalls: [],
     });
 
     render(<AskPanel />);

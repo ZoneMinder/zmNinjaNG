@@ -110,7 +110,7 @@ describe('runAssistantTurn', () => {
     });
   });
 
-  it('aggregates a tool\'s display cards onto the pushed tool message (refs #246)', async () => {
+  it('aggregates a tool\'s display cards onto the FINAL assistant message, not the tool message (refs #246)', async () => {
     const p = new MockProvider();
     p.setScript([
       { toolCalls: [{ id: 'c1', name: 'list_monitors', input: {} }] },
@@ -126,10 +126,14 @@ describe('runAssistantTurn', () => {
     } as never);
     const out = await runAssistantTurn(baseOpts(p, h, [{ role: 'user', text: 'list monitors' }]));
     const toolMsg = out.find((m) => m.role === 'tool');
-    expect(toolMsg?.display).toEqual(display);
+    expect(toolMsg?.display).toBeUndefined();
+    const finalMsg = out[out.length - 1];
+    expect(finalMsg.role).toBe('assistant');
+    expect(finalMsg.text).toBe('Front Door is enabled.');
+    expect(finalMsg.display).toEqual(display);
   });
 
-  it('leaves display undefined on the tool message when no tool call returned display', async () => {
+  it('leaves display undefined on the final message when no tool call returned display', async () => {
     const p = new MockProvider();
     p.setScript([
       { toolCalls: [{ id: 'c1', name: 'get_server_health', input: {} }] },
@@ -141,7 +145,25 @@ describe('runAssistantTurn', () => {
       execute: async () => ({ output: '{}' }),
     } as never);
     const out = await runAssistantTurn(baseOpts(p, h, [{ role: 'user', text: 'is the server ok?' }]));
-    const toolMsg = out.find((m) => m.role === 'tool');
-    expect(toolMsg?.display).toBeUndefined();
+    const finalMsg = out[out.length - 1];
+    expect(finalMsg.display).toBeUndefined();
+  });
+
+  it('de-dupes display cards across iterations by kind+id and drops intermediate duplicates', async () => {
+    const p = new MockProvider();
+    p.setScript([
+      { toolCalls: [{ id: 'c1', name: 'list_events', input: {} }] },
+      { toolCalls: [{ id: 'c2', name: 'get_event', input: { eventId: '42' } }] },
+      { text: 'Here is that event.', toolCalls: [] },
+    ]);
+    const h = host();
+    const card = { kind: 'event' as const, id: '42', title: 'Front Door · today', navigatePath: '/events/42' };
+    vi.spyOn(await import('../tools'), 'getToolByName').mockImplementation((name: string) => ({
+      name, description: '', schema: {}, destructive: false,
+      execute: async () => ({ output: '{}', display: [card] }),
+    } as never));
+    const out = await runAssistantTurn(baseOpts(p, h, [{ role: 'user', text: 'tell me about event 42' }]));
+    const finalMsg = out[out.length - 1];
+    expect(finalMsg.display).toEqual([card]);
   });
 });

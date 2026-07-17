@@ -8,7 +8,7 @@
  * destructive call either resolves confirm `true` first, or is short-circuited
  * to the fixed "declined" result and never runs.
  */
-import type { AssistantMessage, AssistantProvider, AssistantHost, ToolContext, ToolResult } from './types';
+import type { AssistantMessage, AssistantProvider, AssistantHost, DisplayEntity, ToolContext, ToolResult } from './types';
 import { getToolByName, TOOLS } from './tools';
 import { ASSISTANT } from '../zmninja-ng-constants';
 import { log, LogLevel } from '../logger';
@@ -16,6 +16,23 @@ import { log, LogLevel } from '../logger';
 /** Localized by the panel at render (Task 8): agent.ts never renders user-facing
  *  text itself, it only ever emits this key behind the `__i18n:` sentinel. */
 const ITERATION_CAP_KEY = 'assistant.iteration_cap_reached';
+
+/** De-dupes by `kind`+`id` (the same event/monitor can surface from more than
+ *  one tool call in a turn, e.g. list_events then get_event on one of its
+ *  rows) and returns `undefined` for an empty turn so `AssistantMessage.display`
+ *  stays unset rather than `[]` (refs #246). */
+function dedupeDisplay(entities: DisplayEntity[]): DisplayEntity[] | undefined {
+  if (entities.length === 0) return undefined;
+  const seen = new Set<string>();
+  const deduped: DisplayEntity[] = [];
+  for (const entity of entities) {
+    const key = `${entity.kind}:${entity.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(entity);
+  }
+  return deduped;
+}
 
 /** Keep whole turns only. Walk from the end; if the first kept message is a
  *  tool result, drop it so history never opens on an orphan. */
@@ -37,14 +54,23 @@ export interface RunOpts {
 export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[]> {
   const { provider, host, ctx, system, signal } = opts;
   const history = truncateHistory(opts.history, ASSISTANT.maxHistoryMessages);
+  // Cards accumulate across every tool-calling iteration of this turn and land
+  // on the FINAL assistant answer message only (never an intermediate
+  // tool-call-only assistant message or a `role: 'tool'` message), so AskPanel
+  // renders question -> steps -> answer text -> cards (refs #246).
+  const turnDisplay: DisplayEntity[] = [];
 
   for (let i = 0; i < ASSISTANT.maxToolIterations; i++) {
     if (signal.aborted) return history;
     const turn = await provider.chat(history, TOOLS, system, signal);
     const assistantMsg: AssistantMessage = { role: 'assistant', text: turn.text, toolCalls: turn.toolCalls, raw: turn.raw };
-    history.push(assistantMsg);
 
-    if (turn.toolCalls.length === 0) return history;
+    if (turn.toolCalls.length === 0) {
+      assistantMsg.display = dedupeDisplay(turnDisplay);
+      history.push(assistantMsg);
+      return history;
+    }
+    history.push(assistantMsg);
 
     const results: ToolResult[] = [];
     for (const call of turn.toolCalls) {
@@ -95,12 +121,13 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
         host.onActivity({ toolName: call.name, status: 'error', input: call.input });
       }
     }
-    // Aggregate this turn's result cards (refs #246) onto the tool message so
-    // AskPanel can render them; UI-only, never fed back to `provider.chat`.
-    const display = results.flatMap((r) => r.display ?? []);
-    history.push({ role: 'tool', toolResults: results, display: display.length > 0 ? display : undefined });
+    // Collect this iteration's result cards into the turn-wide pool; they are
+    // NOT attached here (UI-only, never fed back to `provider.chat`). Only the
+    // final assistant message below gets them, once the turn actually ends.
+    turnDisplay.push(...results.flatMap((r) => r.display ?? []));
+    history.push({ role: 'tool', toolResults: results });
   }
 
-  history.push({ role: 'assistant', text: `__i18n:${ITERATION_CAP_KEY}` });
+  history.push({ role: 'assistant', text: `__i18n:${ITERATION_CAP_KEY}`, display: dedupeDisplay(turnDisplay) });
   return history;
 }
