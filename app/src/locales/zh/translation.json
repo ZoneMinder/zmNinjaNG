@@ -310,8 +310,8 @@
       "select": "选择监视器"
     },
     "assistant": {
-      "title": "Ninjii",
-      "subtitle": "回答问题并执行操作，可在本地或通过服务器运行。",
+      "title": "Ninjii - AI 聊天机器人",
+      "subtitle": "回答问题并执行操作，可在本地设备或通过你自己的本地服务器运行",
       "enable": "启用 Ninjii",
       "backend": "后端",
       "backend_on_device": "设备端",
@@ -351,7 +351,8 @@
       "storage_used": "已用空间：{{size}}",
       "storage_persistent_yes": "持久化：是",
       "storage_persistent_no": "持久化：否",
-      "storage_note": "存储在应用本地存储中，删除后一并移除。"
+      "storage_note": "存储在应用本地存储中，删除后一并移除。",
+      "oom_note": "本地模型在设备内存中运行。如果应用崩溃或模型加载失败，说明设备内存不足：请选择更小的模型，或切换到 Ollama 后端在服务器上运行。"
     },
     "language": "语言",
     "select_language": "选择语言",
@@ -1257,6 +1258,8 @@
     "clear": "清除",
     "minimize": "最小化",
     "reopen": "打开 Ninjii",
+    "backend_on_device": "设备端",
+    "backend_ollama": "Ollama",
     "placeholder": "询问你的摄像头...",
     "send": "发送",
     "abort": "停止",
@@ -1267,6 +1270,7 @@
       "error": "{{tool}} 失败"
     },
     "iteration_cap_reached": "步骤过多已停止，请尝试更简单的请求。",
+    "context_cleared": "本次对话已填满模型的上下文，因此我已开始新的对话。上面的消息你仍可查看，但我已看不到它们了。",
     "parse_error": "抱歉，无法生成回复，请换个说法再试。",
     "show_raw_output": "查看模型输出",
     "error_generic": "Ninjii 错误：{{error}}",

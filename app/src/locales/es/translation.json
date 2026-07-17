@@ -310,8 +310,8 @@
       "select": "Elegir monitores"
     },
     "assistant": {
-      "title": "Ninjii",
-      "subtitle": "Responde preguntas y ejecuta acciones, local o mediante un servidor.",
+      "title": "Ninjii - chatbot IA",
+      "subtitle": "Responde preguntas y ejecuta acciones, local o mediante tu propio servidor local",
       "enable": "Activar Ninjii",
       "backend": "Backend",
       "backend_on_device": "En el dispositivo",
@@ -351,7 +351,8 @@
       "storage_used": "Espacio usado: {{size}}",
       "storage_persistent_yes": "Persistente: sí",
       "storage_persistent_no": "Persistente: no",
-      "storage_note": "Guardado en el almacenamiento local de la app. Se borra con Eliminar."
+      "storage_note": "Guardado en el almacenamiento local de la app. Se borra con Eliminar.",
+      "oom_note": "Los modelos locales se ejecutan en la memoria de tu dispositivo. Si la app se cierra o el modelo no carga, el dispositivo se ha quedado sin memoria: elige un modelo más pequeño, o cambia al backend Ollama para ejecutarlo en un servidor."
     },
     "language": "Idioma",
     "select_language": "Seleccionar Idioma",
@@ -1257,6 +1258,8 @@
     "clear": "Borrar",
     "minimize": "Minimizar",
     "reopen": "Abrir Ninjii",
+    "backend_on_device": "En el dispositivo",
+    "backend_ollama": "Ollama",
     "placeholder": "Pregunta sobre tus cámaras...",
     "send": "Enviar",
     "abort": "Detener",
@@ -1267,6 +1270,7 @@
       "error": "{{tool}} falló"
     },
     "iteration_cap_reached": "Detenido tras demasiados pasos. Prueba con una solicitud más simple.",
+    "context_cleared": "Esta conversación llenó el contexto del modelo, así que he empezado una nueva. Los mensajes de arriba siguen ahí para que los leas, pero yo ya no puedo verlos.",
     "parse_error": "No se pudo generar una respuesta. Prueba a reformular la pregunta.",
     "show_raw_output": "Ver salida del modelo",
     "error_generic": "Error de Ninjii: {{error}}",

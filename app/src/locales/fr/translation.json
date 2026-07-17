@@ -310,8 +310,8 @@
       "select": "Choisir moniteurs"
     },
     "assistant": {
-      "title": "Ninjii",
-      "subtitle": "Répond aux questions et exécute des actions, en local ou via un serveur.",
+      "title": "Ninjii - chatbot IA",
+      "subtitle": "Répond aux questions et exécute des actions, en local ou via votre propre serveur local",
       "enable": "Activer Ninjii",
       "backend": "Moteur",
       "backend_on_device": "Sur l'appareil",
@@ -351,7 +351,8 @@
       "storage_used": "Espace utilisé : {{size}}",
       "storage_persistent_yes": "Persistant : oui",
       "storage_persistent_no": "Persistant : non",
-      "storage_note": "Stocké dans le stockage local de l'appli. Supprimé par Supprimer."
+      "storage_note": "Stocké dans le stockage local de l'appli. Supprimé par Supprimer.",
+      "oom_note": "Les modèles locaux s'exécutent dans la mémoire de votre appareil. Si l'appli plante ou que le modèle ne se charge pas, l'appareil manque de mémoire : choisissez un modèle plus petit, ou passez au backend Ollama pour l'exécuter sur un serveur."
     },
     "language": "Langue",
     "select_language": "Sélectionner la langue",
@@ -1257,6 +1258,8 @@
     "clear": "Effacer",
     "minimize": "Réduire",
     "reopen": "Ouvrir Ninjii",
+    "backend_on_device": "Sur l’appareil",
+    "backend_ollama": "Ollama",
     "placeholder": "Posez une question sur vos caméras...",
     "send": "Envoyer",
     "abort": "Arrêter",
@@ -1267,6 +1270,7 @@
       "error": "{{tool}} a échoué"
     },
     "iteration_cap_reached": "Arrêté après trop d'étapes. Essayez une demande plus simple.",
+    "context_cleared": "Cette conversation a saturé le contexte du modèle, j'en ai donc démarré une nouvelle. Les messages ci-dessus restent lisibles pour vous, mais je ne les vois plus.",
     "parse_error": "Impossible de générer une réponse. Essayez de reformuler.",
     "show_raw_output": "Voir la sortie du modèle",
     "error_generic": "Erreur Ninjii : {{error}}",

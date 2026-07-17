@@ -310,8 +310,8 @@
       "select": "Monitore wählen"
     },
     "assistant": {
-      "title": "Ninjii",
-      "subtitle": "Beantwortet Fragen und führt Aktionen aus, lokal oder über einen Server.",
+      "title": "Ninjii - KI-Chatbot",
+      "subtitle": "Beantwortet Fragen und führt Aktionen aus, lokal oder über deinen eigenen lokalen Server",
       "enable": "Ninjii aktivieren",
       "backend": "Backend",
       "backend_on_device": "Auf dem Gerät",
@@ -351,7 +351,8 @@
       "storage_used": "Speicherbedarf: {{size}}",
       "storage_persistent_yes": "Dauerhaft: ja",
       "storage_persistent_no": "Dauerhaft: nein",
-      "storage_note": "Liegt im lokalen Speicher der App. Wird mit Löschen entfernt."
+      "storage_note": "Liegt im lokalen Speicher der App. Wird mit Löschen entfernt.",
+      "oom_note": "Lokale Modelle laufen im Speicher deines Geräts. Stürzt die App ab oder lädt das Modell nicht, ist der Speicher des Geräts erschöpft: Wähle ein kleineres Modell, oder wechsle zum Ollama-Backend, um es auf einem Server auszuführen."
     },
     "language": "Sprache",
     "select_language": "Sprache auswählen",
@@ -1257,6 +1258,8 @@
     "clear": "Leeren",
     "minimize": "Minimieren",
     "reopen": "Ninjii öffnen",
+    "backend_on_device": "Auf dem Gerät",
+    "backend_ollama": "Ollama",
     "placeholder": "Frage zu deinen Kameras...",
     "send": "Senden",
     "abort": "Stopp",
@@ -1267,6 +1270,7 @@
       "error": "{{tool}} fehlgeschlagen"
     },
     "iteration_cap_reached": "Nach zu vielen Schritten gestoppt. Bitte einfacher formulieren.",
+    "context_cleared": "Dieses Gespräch hat den Kontext des Modells gefüllt, daher habe ich ein neues begonnen. Die Nachrichten oben bleiben für dich lesbar, ich sehe sie aber nicht mehr.",
     "parse_error": "Die Antwort konnte nicht verarbeitet werden. Bitte anders formulieren.",
     "show_raw_output": "Modellausgabe anzeigen",
     "error_generic": "Ninjii-Fehler: {{error}}",

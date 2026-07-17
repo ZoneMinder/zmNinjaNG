@@ -99,9 +99,12 @@ export function AssistantSection({
     selectedModelIdRef.current = settings.assistantModelId;
   }, [settings.assistantModelId]);
 
-  // Guards post-await setState from running after unmount.
+  // Guards post-await setState from running after unmount. Re-set on every
+  // mount: StrictMode's mount/unmount/remount would otherwise leave it false
+  // for the remounted component's whole life, dropping every guarded update.
   const mountedRef = useRef(true);
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
     };
@@ -233,6 +236,10 @@ export function AssistantSection({
       <SettingsCard>
         <SettingsRow>
           <RowLabel label={t('settings.assistant.enable')} desc={t('settings.assistant.subtitle')} />
+          {/* Decorative: the label in this row already names Ninjii. Sized to
+              the two-line row it sits in, which is what gives it room to read
+              at a glance. */}
+          <img src={ASSISTANT.logoPath} alt="" className="h-10 w-10 shrink-0 rounded" />
           <Switch
             id="assistant-enabled"
             checked={settings.assistantEnabled}
@@ -320,6 +327,17 @@ export function AssistantSection({
                       </span>
                     )}
                   </div>
+                </div>
+
+                {/* An on-device model that loads at all is usually fine; the
+                    failure mode is the model's weights plus its KV cache not
+                    fitting in VRAM, which surfaces as a crash or a failed load
+                    rather than a clean error we can catch and explain in place
+                    (refs #246). Naming it here, next to the picker where the
+                    size tradeoff is made, is what turns an unexplained crash
+                    into a next step. */}
+                <div className="px-4 py-3" data-testid="assistant-model-memory-note">
+                  <p className="text-xs text-muted-foreground">{t('settings.assistant.oom_note')}</p>
                 </div>
 
                 {downloadStatus === 'downloaded' && storageInfo && (

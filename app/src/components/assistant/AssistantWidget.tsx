@@ -21,7 +21,7 @@
  * simply do not apply below that breakpoint, leaving the mobile sheet's
  * `inset-0` classes to size it to the full viewport instead.
  */
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Minus, Trash2, X } from 'lucide-react';
@@ -35,7 +35,7 @@ import { AskPanel } from './AskPanel';
 
 export function AssistantWidget() {
   const { t } = useTranslation();
-  const { currentProfile } = useCurrentProfile();
+  const { currentProfile, settings } = useCurrentProfile();
   const profileId = currentProfile?.id;
 
   const panelState = useAssistantPanelStore((s) => s.state);
@@ -47,6 +47,25 @@ export function AssistantWidget() {
 
   const running = useAssistantStore((s) => s.running);
   const threadLength = useAssistantStore((s) => (profileId ? (s.threads[profileId]?.length ?? 0) : 0));
+
+  // Which model is answering, and whether it runs here or on a server. The two
+  // backends keep their model in different settings fields, and the on-device
+  // one stores a registry id ("Qwen3-1.7B-q4f16_1-MLC") that is not worth
+  // showing a human when the picker already has a label for it. An Ollama model
+  // is whatever the user typed, so it has no label to look up. Empty when
+  // nothing is configured yet, rather than a bare mode with no model.
+  const backendLabel = useMemo(() => {
+    const mode =
+      settings.assistantBackend === 'ollama'
+        ? t('assistant.backend_ollama')
+        : t('assistant.backend_on_device');
+    const model =
+      settings.assistantBackend === 'ollama'
+        ? settings.assistantOllamaModel
+        : (ASSISTANT.webllmModels.find((m) => m.id === settings.assistantModelId)?.label ??
+          settings.assistantModelId);
+    return model ? `${model} · ${mode}` : mode;
+  }, [settings.assistantBackend, settings.assistantModelId, settings.assistantOllamaModel, t]);
   const reset = useAssistantStore((s) => s.reset);
   const clearActivities = useAssistantStore((s) => s.clearActivities);
 
@@ -127,8 +146,19 @@ export function AssistantWidget() {
         )}
       >
         <div className="flex items-center gap-2 border-b py-2 pl-3 pr-2">
-          <img src={ASSISTANT.logoPath} alt={t('assistant.title')} className="h-5 w-5 rounded" />
-          <span className="flex-1 min-w-0 truncate text-sm font-medium">{t('assistant.title')}</span>
+          <img src={ASSISTANT.logoPath} alt={t('assistant.title')} className="h-5 w-5 shrink-0 rounded" />
+          <div className="flex-1 min-w-0">
+            <div className="truncate text-sm font-medium leading-tight">{t('assistant.title')}</div>
+            {/* `title` gives the full string back on hover: an Ollama model is
+                free text and can be far longer than this header (rule 11). */}
+            <div
+              className="truncate text-[11px] leading-tight text-muted-foreground"
+              title={backendLabel}
+              data-testid="assistant-backend-label"
+            >
+              {backendLabel}
+            </div>
+          </div>
           <div className="flex items-center gap-1">
             <Button
               type="button"

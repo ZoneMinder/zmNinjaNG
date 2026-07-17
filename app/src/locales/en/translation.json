@@ -310,8 +310,8 @@
       "select": "Select monitors"
     },
     "assistant": {
-      "title": "Ninjii",
-      "subtitle": "Answer questions and run actions, on-device or via a server.",
+      "title": "Ninjii - AI chatbot",
+      "subtitle": "Answer questions and run actions, on-device or via your own local server",
       "enable": "Enable Ninjii",
       "backend": "Backend",
       "backend_on_device": "On-device",
@@ -351,7 +351,8 @@
       "storage_used": "Storage used: {{size}}",
       "storage_persistent_yes": "Persistent: yes",
       "storage_persistent_no": "Persistent: no",
-      "storage_note": "Stored in the app's local storage. Removed by Delete."
+      "storage_note": "Stored in the app's local storage. Removed by Delete.",
+      "oom_note": "Local models run in your device's memory. If the app crashes or the model fails to load, the device is out of memory: pick a smaller model, or switch to the Ollama backend to run it on a server."
     },
     "language": "Language",
     "select_language": "Select Language",
@@ -1257,6 +1258,8 @@
     "clear": "Clear",
     "minimize": "Minimize",
     "reopen": "Open Ninjii",
+    "backend_on_device": "On-device",
+    "backend_ollama": "Ollama",
     "placeholder": "Ask about your cameras...",
     "send": "Send",
     "abort": "Stop",
@@ -1267,6 +1270,7 @@
       "error": "{{tool}} failed"
     },
     "iteration_cap_reached": "Stopped after too many steps. Try a simpler request.",
+    "context_cleared": "This conversation filled up the model's context, so I've started a fresh one. The messages above are still here for you to read, but I can't see them any more.",
     "parse_error": "Sorry, I had trouble putting together a response. Could you try rephrasing?",
     "show_raw_output": "Show model output",
     "error_generic": "Ninjii error: {{error}}",

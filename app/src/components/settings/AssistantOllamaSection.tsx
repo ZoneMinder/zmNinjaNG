@@ -47,8 +47,13 @@ export function AssistantOllamaSection({ settings, update, currentProfile }: Ass
   const [models, setModels] = useState<string[] | null>(null);
   const [loadingModels, setLoadingModels] = useState(false);
 
+  // Set on every mount, not just at ref creation: StrictMode mounts, unmounts
+  // and remounts, and a ref that is only ever cleared by the cleanup stays
+  // false for the remounted component's whole life, silently dropping every
+  // state update guarded by it.
   const mountedRef = useRef(true);
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
     };

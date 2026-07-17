@@ -12,6 +12,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { AssistantSection } from '../AssistantSection';
 import { DEFAULT_SETTINGS } from '../../../stores/settings';
+import { ASSISTANT } from '../../../lib/zmninja-ng-constants';
 
 const isModelDownloadedMock = vi.fn().mockResolvedValue(false);
 
@@ -109,6 +110,29 @@ describe('AssistantSection backend picker and gating', () => {
     // 2) settle inside `act` instead of leaking a state update past the end
     // of the test.
     await waitFor(() => expect(screen.getByTestId('assistant-ollama-model')).toBeInTheDocument());
+  });
+
+  it('shows Ninjii\'s logo in the enable row, before the toggle (refs #246)', () => {
+    const { container } = render(
+      <AssistantSection
+        settings={enabledSettings}
+        update={vi.fn()}
+        currentProfile={profile}
+        updateSettings={vi.fn()}
+      />
+    );
+
+    const logo = container.querySelector(`img[src="${ASSISTANT.logoPath}"]`);
+    expect(logo).toBeInTheDocument();
+    // Decorative: the row's label already names Ninjii, so an alt text here
+    // would make a screen reader announce the name twice.
+    expect(logo).toHaveAttribute('alt', '');
+
+    // Ordered label, logo, toggle within the row: the logo reads as trailing
+    // the text rather than leading it.
+    const toggle = screen.getByTestId('assistant-enabled-toggle');
+    const position = logo!.compareDocumentPosition(toggle);
+    expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('keeps the enable toggle on and clickable when WebGPU is unavailable', async () => {

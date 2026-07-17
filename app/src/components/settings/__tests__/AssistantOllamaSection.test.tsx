@@ -9,6 +9,7 @@
  * returned model still selectable and a failed fetch leaving the manual text
  * input usable.
  */
+import { StrictMode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { AssistantOllamaSection } from '../AssistantOllamaSection';
@@ -84,6 +85,26 @@ describe('AssistantOllamaSection', () => {
         ASSISTANT.testConnectionTimeoutMs,
       );
       expect(ASSISTANT.testConnectionTimeoutMs).toBeLessThan(ASSISTANT.requestTimeoutMs);
+    });
+
+    // `main.tsx` renders the app inside <StrictMode>, which mounts, unmounts
+    // and remounts every component once. A mounted-flag ref whose effect only
+    // clears the flag on cleanup stays false forever after that remount, so
+    // every state update guarded by it is dropped and the button strands in
+    // "Testing...". Plain `render` never double-invokes, so this is the only
+    // shape of test that catches it.
+    it('returns to the idle label under StrictMode double-mounting', async () => {
+      render(
+        <StrictMode>
+          <AssistantOllamaSection settings={settings} update={vi.fn()} currentProfile={profile} />
+        </StrictMode>
+      );
+
+      const button = screen.getByTestId('assistant-ollama-test');
+      fireEvent.click(button);
+
+      await waitFor(() => expect(button).toHaveTextContent('settings.assistant.ollama_test'));
+      expect(button).not.toBeDisabled();
     });
 
     it('reports how many models were found on a successful test', async () => {
