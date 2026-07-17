@@ -34,7 +34,11 @@ vi.mock('../../../lib/security/secureStorage', () => ({
 }));
 
 vi.mock('../../../lib/http', () => ({
-  httpGet: vi.fn(),
+  // Resolved (not a bare vi.fn()): AssistantOllamaSection auto-fetches the
+  // model list on mount (refs #246 Fix 2), so an unresolved mock here would
+  // reject inside that effect and log a spurious act() warning in tests that
+  // never assert on the model picker.
+  httpGet: vi.fn().mockResolvedValue({ data: { data: [] } }),
   httpPost: vi.fn(),
 }));
 
@@ -100,6 +104,11 @@ describe('AssistantSection backend picker and gating', () => {
     expect(screen.getByTestId('assistant-ollama-key')).toBeInTheDocument();
     expect(screen.getByTestId('assistant-ollama-test')).toBeInTheDocument();
     expect(screen.queryByTestId('assistant-model-select')).not.toBeInTheDocument();
+
+    // Lets AssistantOllamaSection's mount-effect model fetch (refs #246 Fix
+    // 2) settle inside `act` instead of leaking a state update past the end
+    // of the test.
+    await waitFor(() => expect(screen.getByTestId('assistant-ollama-model')).toBeInTheDocument());
   });
 
   it('keeps the enable toggle on and clickable when WebGPU is unavailable', async () => {

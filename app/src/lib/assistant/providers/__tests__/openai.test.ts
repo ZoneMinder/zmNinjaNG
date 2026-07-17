@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { buildOpenAiMessages, toOpenAiTools, parseOpenAiTurn, OpenAiProvider } from '../openai';
+import { buildOpenAiMessages, toOpenAiTools, parseOpenAiTurn, OpenAiProvider, listOpenAiModels } from '../openai';
 import type { AssistantMessage, ToolDefinition } from '../../types';
 import { ASSISTANT } from '../../../zmninja-ng-constants';
 
 const httpPostMock = vi.fn();
+const httpGetMock = vi.fn();
 vi.mock('../../../http', () => ({
   httpPost: (url: string, body: unknown, options: unknown) => httpPostMock(url, body, options),
+  httpGet: (url: string, options: unknown) => httpGetMock(url, options),
 }));
 
 const TOOL: ToolDefinition = {
@@ -188,4 +190,53 @@ describe('OpenAiProvider.chat', () => {
   function toolsToExpect() {
     return [{ type: 'function', function: { name: TOOL.name, description: TOOL.description, parameters: TOOL.schema } }];
   }
+});
+
+describe('listOpenAiModels', () => {
+  beforeEach(() => {
+    httpGetMock.mockReset();
+  });
+
+  it('parses {data:[{id}]} into a sorted, de-duplicated id list', async () => {
+    httpGetMock.mockResolvedValue({
+      data: { data: [{ id: 'qwen2.5:3b' }, { id: 'gemma2' }, { id: 'gemma2' }] },
+    });
+
+    const models = await listOpenAiModels('http://localhost:11434/v1');
+
+    expect(models).toEqual(['gemma2', 'qwen2.5:3b']);
+  });
+
+  it('calls GET <baseUrl>/models with no Authorization header when apiKey is unset', async () => {
+    httpGetMock.mockResolvedValue({ data: { data: [] } });
+
+    await listOpenAiModels('http://localhost:11434/v1');
+
+    expect(httpGetMock).toHaveBeenCalledTimes(1);
+    const [url, options] = httpGetMock.mock.calls[0] as [string, { headers: Record<string, string>; timeoutMs: number }];
+    expect(url).toBe('http://localhost:11434/v1/models');
+    expect(options.headers.Authorization).toBeUndefined();
+    expect(options.timeoutMs).toBe(ASSISTANT.requestTimeoutMs);
+  });
+
+  it('adds a Bearer Authorization header when apiKey is set', async () => {
+    httpGetMock.mockResolvedValue({ data: { data: [] } });
+
+    await listOpenAiModels('http://localhost:11434/v1', 'secret-key');
+
+    const [, options] = httpGetMock.mock.calls[0] as [string, { headers: Record<string, string> }];
+    expect(options.headers.Authorization).toBe('Bearer secret-key');
+  });
+
+  it('returns [] when data is missing, without throwing', async () => {
+    httpGetMock.mockResolvedValue({ data: {} });
+
+    await expect(listOpenAiModels('http://localhost:11434/v1')).resolves.toEqual([]);
+  });
+
+  it('lets a rejected httpGet propagate to the caller', async () => {
+    httpGetMock.mockRejectedValue(new Error('Network error'));
+
+    await expect(listOpenAiModels('http://localhost:11434/v1')).rejects.toThrow('Network error');
+  });
 });

@@ -20,7 +20,7 @@
  * unusable from a native build talking to a LAN Ollama instance.
  */
 import type { AssistantProvider, AssistantMessage, AssistantTurn, ToolCall, ToolDefinition } from '../types';
-import { httpPost } from '../../http';
+import { httpGet, httpPost } from '../../http';
 import { ASSISTANT } from '../../zmninja-ng-constants';
 import { log, LogLevel } from '../../logger';
 
@@ -137,6 +137,36 @@ export function parseOpenAiTurn(message: OpenAiResponseMessage | undefined): Ass
   }
 
   return { text: message.content ?? '', toolCalls: [] };
+}
+
+interface OpenAiModelsResponse {
+  data?: Array<{ id?: string }>;
+}
+
+/** Lists the models an OpenAI-compatible server (Ollama's `/v1/models`)
+ *  currently serves, for the model picker in `AssistantOllamaSection.tsx`.
+ *  A reachable server with no models registered yet is not an error: it
+ *  returns `[]` so the caller falls back to manual entry. A network or HTTP
+ *  failure (unreachable server, wrong URL, 401) rejects instead, so the
+ *  caller can distinguish "empty" from "broken" and surface the real error. */
+export async function listOpenAiModels(baseUrl: string, apiKey?: string): Promise<string[]> {
+  const url = `${baseUrl.replace(/\/+$/, '')}/models`;
+  const headers: Record<string, string> = {};
+  if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+
+  const response = await httpGet<OpenAiModelsResponse>(url, {
+    headers,
+    timeoutMs: ASSISTANT.requestTimeoutMs,
+    intent: 'Assistant Ollama list models',
+  });
+
+  const entries = response.data?.data;
+  if (!Array.isArray(entries)) return [];
+
+  const ids = entries
+    .map((entry) => entry.id)
+    .filter((id): id is string => typeof id === 'string' && id.length > 0);
+  return Array.from(new Set(ids)).sort();
 }
 
 /** The Ollama / OpenAI-compatible remote provider: no WebGPU, no local
