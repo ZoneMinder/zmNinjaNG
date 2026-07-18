@@ -130,6 +130,12 @@ describe('ZmsEventPlayer', () => {
     httpGetMock.mockResolvedValue({ data: {} });
   });
 
+  it('stops at the event end instead of requesting a ZMS replay loop', () => {
+    renderPlayer();
+
+    expect(new URL(getStreamImg().src).searchParams.get('replay')).toBe('none');
+  });
+
   it('seeks against the ZMS-reported duration, not the DB event length', async () => {
     vi.useFakeTimers();
     // eventLength prop is 10, but the running stream reports a 20s duration.

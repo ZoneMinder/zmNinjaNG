@@ -8,12 +8,29 @@
  */
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import EventDetail from '../EventDetail';
 import { useEventFavoritesStore } from '../../stores/eventFavorites';
+import { useSettingsStore } from '../../stores/settings';
 
 const useQueryMock = vi.fn();
 const toastSuccess = vi.fn();
+const toastInfo = vi.fn();
+
+// Mutable knobs read by the mocks below so individual tests can vary the
+// continuous-play setting and the next-event result (#250).
+const h = vi.hoisted(() => ({
+  settings: {
+    thumbnailFallbackChain: 'snapshot',
+    forceDisableMultiPort: false,
+    eventVideoAutoplay: false,
+    eventContinuousPlay: false,
+    eventPlaybackRate: 1,
+  } as Record<string, unknown>,
+  goToNextEvent: vi.fn(),
+  locationState: {} as Record<string, unknown>,
+  translate: vi.fn((key: string) => key),
+}));
 
 vi.mock('@tanstack/react-query', () => ({
   useQuery: (options: { queryKey: readonly unknown[] }) => useQueryMock(options),
@@ -24,18 +41,18 @@ vi.mock('sonner', () => ({
   toast: {
     success: (message: string) => toastSuccess(message),
     error: vi.fn(),
-    info: vi.fn(),
+    info: (message: string) => toastInfo(message),
   },
 }));
 
 vi.mock('react-router-dom', () => ({
   useParams: () => ({ id: '101' }),
   useNavigate: () => vi.fn(),
-  useLocation: () => ({ state: {} }),
+  useLocation: () => ({ state: h.locationState }),
 }));
 
 vi.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }),
+  useTranslation: () => ({ t: h.translate, i18n: { language: 'en' } }),
 }));
 
 // EventDetail pulls in modules that each use their own log.* helper; a Proxy answers
@@ -63,11 +80,7 @@ vi.mock('../../services/download', () => ({ downloadEventVideo: vi.fn() }));
 vi.mock('../../hooks/useCurrentProfile', () => ({
   useCurrentProfile: () => ({
     currentProfile: { id: 'profile-1', portalUrl: 'https://portal.test', apiUrl: 'https://api.test' },
-    settings: {
-      thumbnailFallbackChain: 'snapshot',
-      forceDisableMultiPort: false,
-      eventVideoAutoplay: false,
-    },
+    settings: h.settings,
     hasProfile: true,
   }),
 }));
@@ -84,6 +97,7 @@ vi.mock('../../hooks/useDateTimeFormat', () => ({
   useDateTimeFormat: () => ({
     fmtDate: () => '2024-01-01',
     fmtTime: () => '10:00:00',
+    fmtDateTime: () => '2024-01-01 10:00:00',
   }),
 }));
 
@@ -92,7 +106,7 @@ vi.mock('../../hooks/useTvMode', () => ({ useTvMode: () => ({ isTvMode: false })
 vi.mock('../../hooks/useEventNavigation', () => ({
   useEventNavigation: () => ({
     goToPrevEvent: vi.fn(),
-    goToNextEvent: vi.fn(),
+    goToNextEvent: h.goToNextEvent,
     isLoadingPrev: false,
     isLoadingNext: false,
   }),
@@ -123,11 +137,19 @@ vi.mock('../../components/ui/zoom-controls', () => ({
 }));
 
 vi.mock('../../components/events/Mp4EventPlayer', () => ({
-  Mp4EventPlayer: () => <div data-testid="mp4-player" />,
+  Mp4EventPlayer: ({ onEnded }: { onEnded?: () => void }) => (
+    <div data-testid="mp4-player">
+      <button data-testid="mp4-fire-ended" onClick={() => onEnded?.()} />
+    </div>
+  ),
 }));
 
 vi.mock('../../components/events/ZmsEventPlayer', () => ({
-  ZmsEventPlayer: () => <div data-testid="zms-player" />,
+  ZmsEventPlayer: ({ onEnded }: { onEnded?: () => void }) => (
+    <div data-testid="zms-player">
+      <button data-testid="zms-fire-ended" onClick={() => onEnded?.()} />
+    </div>
+  ),
 }));
 
 const event = {
@@ -218,5 +240,72 @@ describe('EventDetail favorite toggle', () => {
     act(() => useEventFavoritesStore.getState().addFavorite('profile-1', '101'));
 
     expect(star()).toHaveClass('fill-current');
+  });
+});
+
+describe('EventDetail continuous playback (#250)', () => {
+  beforeEach(() => {
+    toastInfo.mockClear();
+    h.settings.eventContinuousPlay = false;
+    h.goToNextEvent.mockReset();
+    h.locationState = {};
+    h.translate.mockClear();
+    useSettingsStore.setState({ profileSettings: {} });
+    useQueryMock.mockReset();
+    useQueryMock.mockImplementation(({ queryKey }: { queryKey: readonly unknown[] }) => {
+      if (queryKey[0] === 'event') return { data: event, isLoading: false, error: null };
+      if (queryKey[0] === 'monitor') return { data: monitorData, isLoading: false, error: null };
+      return { data: null, isLoading: false, error: null };
+    });
+  });
+
+  it('toggling continuous play persists the setting for the profile', () => {
+    render(<EventDetail />);
+    fireEvent.click(screen.getByTestId('event-detail-continuous-play'));
+    expect(
+      useSettingsStore.getState().getProfileSettings('profile-1').eventContinuousPlay
+    ).toBe(true);
+  });
+
+  it('advances to the next event when a video ends and continuous play is on', async () => {
+    h.settings.eventContinuousPlay = true;
+    h.goToNextEvent.mockResolvedValue(true);
+    render(<EventDetail />);
+
+    fireEvent.click(screen.getByTestId('zms-fire-ended'));
+
+    await waitFor(() => expect(h.goToNextEvent).toHaveBeenCalledTimes(1));
+    expect(toastInfo).not.toHaveBeenCalled();
+  });
+
+  it('announces the monitor and time after an automatic advance', async () => {
+    h.locationState = { continuousPlayback: true };
+    render(<EventDetail />);
+
+    await waitFor(() => expect(h.translate).toHaveBeenCalledWith(
+      'event_detail.continuous_playing',
+      { monitor: 'Front Door', id: '1' },
+    ));
+    render(toastInfo.mock.calls[0][0]);
+    expect(screen.getByText('2024-01-01 10:00:00')).toHaveClass('text-xs', 'text-muted-foreground');
+  });
+
+  it('shows "no more videos" and stops when there is no next event', async () => {
+    h.settings.eventContinuousPlay = true;
+    h.goToNextEvent.mockResolvedValue(false);
+    render(<EventDetail />);
+
+    fireEvent.click(screen.getByTestId('zms-fire-ended'));
+
+    await waitFor(() => expect(toastInfo).toHaveBeenCalledWith('event_detail.no_more_videos'));
+  });
+
+  it('does not advance when continuous play is off', () => {
+    h.settings.eventContinuousPlay = false;
+    render(<EventDetail />);
+
+    fireEvent.click(screen.getByTestId('zms-fire-ended'));
+
+    expect(h.goToNextEvent).not.toHaveBeenCalled();
   });
 });

@@ -22,7 +22,7 @@ import { Badge } from '../components/ui/badge';
 import { Mp4EventPlayer } from '../components/events/Mp4EventPlayer';
 import { ZmsEventPlayer } from '../components/events/ZmsEventPlayer';
 import { TagChip } from '../components/events/TagChip';
-import { ArrowLeft, Calendar, Clock, HardDrive, AlertTriangle, Download, Archive, Video, Star, Timer, Tag, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { ArrowLeft, Calendar, Clock, HardDrive, AlertTriangle, Download, Archive, Video, Star, Timer, Tag, ChevronLeft, ChevronRight, Loader2, ListVideo } from 'lucide-react';
 import { getEventCauseIcon } from '../lib/event/event-icons';
 import { getObjectClassIconFromList } from '../lib/event/object-class-icons';
 import { useDateTimeFormat } from '../hooks/useDateTimeFormat';
@@ -31,7 +31,8 @@ import { Platform } from '../lib/platform';
 import { downloadEventVideo } from '../services/download';
 import { getOrientedResolution } from '../lib/monitor/monitor-rotation';
 import { toast } from 'sonner';
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useSettingsStore } from '../stores/settings';
 import { useTranslation } from 'react-i18next';
 import { log, LogLevel } from '../lib/logger';
 import { generateEventMarkers, type VideoMarker } from '../lib/event/video-markers';
@@ -43,13 +44,14 @@ import { useEventNavigation } from '../hooks/useEventNavigation';
 import { useServerUrls } from '../hooks/useServerUrls';
 import { cn } from '../lib/utils';
 import { formatEventRelative } from '../lib/relative-time';
+import { CONTINUOUS_PLAYBACK_TOAST_DURATION_MS } from '../lib/zmninja-ng-constants';
 
 export default function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
   const { t, i18n } = useTranslation();
-  const { fmtDate, fmtTime } = useDateTimeFormat();
+  const { fmtDate, fmtTime, fmtDateTime } = useDateTimeFormat();
   const { isTvMode } = useTvMode();
 
   // Check if user came from another page (navigation state tracking)
@@ -108,6 +110,54 @@ export default function EventDetail() {
     currentEventId: id,
     currentStartDateTime: event?.Event.StartDateTime,
   });
+
+  // Continuous playback (#250): when on, an event ending auto-advances to the
+  // next event (honoring filters via goToNextEvent). Toggle and speed persist
+  // per profile.
+  const updateSettings = useSettingsStore((state) => state.updateProfileSettings);
+  const continuousPlay = settings.eventContinuousPlay;
+  const toggleContinuousPlay = useCallback(() => {
+    if (!currentProfile) return;
+    updateSettings(currentProfile.id, { eventContinuousPlay: !continuousPlay });
+  }, [currentProfile, continuousPlay, updateSettings]);
+
+  const handleRateChange = useCallback((rate: number) => {
+    if (!currentProfile) return;
+    updateSettings(currentProfile.id, { eventPlaybackRate: rate });
+  }, [currentProfile, updateSettings]);
+
+  // Guards against a stray second 'ended' (video.js can emit it during teardown)
+  // triggering a double advance. Re-armed for each event by the id-change effect.
+  const advancingRef = useRef(false);
+  useEffect(() => { advancingRef.current = false; }, [id]);
+  const handleVideoEnded = useCallback(async () => {
+    if (!continuousPlay || advancingRef.current) return;
+    advancingRef.current = true;
+    const advanced = await goToNextEvent({ continuousPlayback: true });
+    if (!advanced) {
+      advancingRef.current = false;
+      toast.info(t('event_detail.no_more_videos'));
+    }
+  }, [continuousPlay, goToNextEvent, t]);
+
+  const announcedContinuousEventRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!location.state?.continuousPlayback || !event || !monitorData?.Monitor) return;
+    if (announcedContinuousEventRef.current === event.Event.Id) return;
+    announcedContinuousEventRef.current = event.Event.Id;
+    toast.info(
+      <div>
+        <div>{t('event_detail.continuous_playing', {
+          monitor: monitorData.Monitor.Name,
+          id: event.Event.MonitorId,
+        })}</div>
+        <div className="text-xs text-muted-foreground">
+          {fmtDateTime(new Date(event.Event.StartDateTime.replace(' ', 'T')))}
+        </div>
+      </div>,
+      { duration: CONTINUOUS_PLAYBACK_TOAST_DURATION_MS },
+    );
+  }, [event, fmtDateTime, location.state, monitorData, t]);
 
   // Fetch tags for this event
   const { getTagsForEvent } = useEventTagMapping({
@@ -330,7 +380,7 @@ export default function EventDetail() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={goToNextEvent}
+            onClick={() => { void goToNextEvent(); }}
             disabled={isLoadingNext}
             aria-label={t('common.next')}
             className="h-7 w-7"
@@ -362,6 +412,18 @@ export default function EventDetail() {
           <Button variant="outline" size="sm" className="gap-2 h-8 sm:h-9" onClick={() => navigate(`/events?monitorId=${event.Event.MonitorId}`)} title={t('event_detail.all_events')} data-testid="event-detail-all-events">
             <Clock className="h-4 w-4" />
             <span className="hidden sm:inline">{t('event_detail.all_events')}</span>
+          </Button>
+          <Button
+            variant={continuousPlay ? "default" : "outline"}
+            size="sm"
+            className="gap-2 h-8 sm:h-9"
+            onClick={toggleContinuousPlay}
+            title={t('event_detail.continuous_play')}
+            aria-pressed={continuousPlay}
+            data-testid="event-detail-continuous-play"
+          >
+            <ListVideo className="h-4 w-4" />
+            <span className="hidden sm:inline">{t('event_detail.continuous_play')}</span>
           </Button>
           <Button
             variant={isArchived ? "default" : "outline"}
@@ -430,6 +492,9 @@ export default function EventDetail() {
                   eventLength={parseFloat(event.Event.Length)}
                   minStreamingPort={effectiveMinStreamingPort}
                   monitorId={event.Event.MonitorId}
+                  onEnded={handleVideoEnded}
+                  playbackRate={settings.eventPlaybackRate}
+                  onRateChange={handleRateChange}
                   className="space-y-4"
                 />
               )
@@ -447,11 +512,14 @@ export default function EventDetail() {
                         type={videoMimeType}
                         className="w-full h-full"
                         poster={posterUrl}
-                        autoplay={settings.eventVideoAutoplay}
+                        autoplay={settings.eventVideoAutoplay || continuousPlay}
                         markers={videoMarkers}
                         onMarkerClick={handleMarkerClick}
                         eventId={event.Event.Id}
                         onError={handleVideoError}
+                        onEnded={handleVideoEnded}
+                        playbackRate={settings.eventPlaybackRate}
+                        onRateChange={handleRateChange}
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-muted-foreground/70">
@@ -478,6 +546,9 @@ export default function EventDetail() {
                 eventLength={parseFloat(event.Event.Length)}
                 minStreamingPort={effectiveMinStreamingPort}
                 monitorId={event.Event.MonitorId}
+                onEnded={handleVideoEnded}
+                playbackRate={settings.eventPlaybackRate}
+                onRateChange={handleRateChange}
                 className="space-y-4"
               />
             )

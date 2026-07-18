@@ -541,6 +541,16 @@ export const KEYBOARD_SHORTCUTS = {
 } as const;
 
 /**
+ * Event playback speed multipliers offered in the event player speed menus
+ * (MP4 video.js menu and ZMS/JPEG presets). The persisted eventPlaybackRate
+ * setting stores one of these. ZMS converts to its percentage convention
+ * (multiplier * 100). Issue #250.
+ */
+export const EVENT_PLAYBACK_RATES = [0.25, 0.5, 1, 2, 4] as const;
+export const DEFAULT_EVENT_PLAYBACK_RATE = 1;
+export const CONTINUOUS_PLAYBACK_TOAST_DURATION_MS = 4000;
+
+/**
  * In-app assistant (Ask). Model runs on-device via WebGPU. Issue #246.
  * webllmModels ids are the exact WebLLM prebuilt registry ids, fixed in Phase 2.
  */

@@ -17,8 +17,11 @@ interface UseEventNavigationOptions {
 }
 
 interface UseEventNavigationReturn {
-  goToPrevEvent: () => void;
-  goToNextEvent: () => void;
+  /** Resolves true if it navigated to a previous event, false if none exists. */
+  goToPrevEvent: () => Promise<boolean>;
+  /** Resolves true if it navigated to a next event, false if none exists.
+   * Continuous playback (#250) uses the result to decide whether to stop. */
+  goToNextEvent: (options?: { continuousPlayback?: boolean }) => Promise<boolean>;
   isLoadingPrev: boolean;
   isLoadingNext: boolean;
   slideDirection: 'left' | 'right' | null;
@@ -42,13 +45,14 @@ export function useEventNavigation({
   const originalFrom = (location.state?.from as string) || '/events';
 
   const navigateToEvent = useCallback(
-    (eventId: string, direction: 'left' | 'right') => {
+    (eventId: string, direction: 'left' | 'right', continuousPlayback = false) => {
       setSlideDirection(direction);
       navigate(`/events/${eventId}`, {
         state: {
           from: originalFrom,
           eventFilters,
           slideDirection: direction,
+          ...(continuousPlayback && { continuousPlayback: true }),
         },
         replace: true,
       });
@@ -56,31 +60,37 @@ export function useEventNavigation({
     [navigate, eventFilters, originalFrom]
   );
 
-  const goToPrevEvent = useCallback(async () => {
-    if (!currentStartDateTime || isLoadingPrev) return;
+  const goToPrevEvent = useCallback(async (): Promise<boolean> => {
+    if (!currentStartDateTime || isLoadingPrev) return false;
     setIsLoadingPrev(true);
     try {
       const prev = await getAdjacentEvent('prev', currentStartDateTime, eventFilters);
       if (prev) {
         navigateToEvent(prev.Event.Id, 'right');
+        return true;
       }
+      return false;
     } catch (err) {
       log.eventDetail('Failed to fetch previous event', LogLevel.ERROR, { error: err });
+      return false;
     } finally {
       setIsLoadingPrev(false);
     }
   }, [currentStartDateTime, eventFilters, isLoadingPrev, navigateToEvent]);
 
-  const goToNextEvent = useCallback(async () => {
-    if (!currentStartDateTime || isLoadingNext) return;
+  const goToNextEvent = useCallback(async ({ continuousPlayback = false } = {}): Promise<boolean> => {
+    if (!currentStartDateTime || isLoadingNext) return false;
     setIsLoadingNext(true);
     try {
       const next = await getAdjacentEvent('next', currentStartDateTime, eventFilters);
       if (next) {
-        navigateToEvent(next.Event.Id, 'left');
+        navigateToEvent(next.Event.Id, 'left', continuousPlayback);
+        return true;
       }
+      return false;
     } catch (err) {
       log.eventDetail('Failed to fetch next event', LogLevel.ERROR, { error: err });
+      return false;
     } finally {
       setIsLoadingNext(false);
     }

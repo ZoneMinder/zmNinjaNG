@@ -1572,6 +1572,19 @@ Fetching one adjacent event per press, rather than paging the list, is what
 lets prev/next work from a deep-linked event whose neighbours were never in any
 list the app loaded.
 
+Continuous playback (#250) reuses this same path. The event player calls
+``onEnded`` when a video finishes (video.js ``ended`` for MP4/HLS, or the
+``progress / duration >= 0.99`` end signal already tracked by the ZMS player).
+``EventDetail`` responds by calling ``goToNextEvent`` when the
+``eventContinuousPlay`` profile setting is on. That is why ``goToNextEvent`` now
+resolves ``Promise<boolean>``: the auto-advance needs to know whether a next
+event existed. On ``false`` (the filtered list is exhausted) it stops and shows
+a "no more videos" toast rather than looping. Advancing goes through the same
+``navigateToEvent(id, 'left')`` call as the next button, so the new event slides
+in from the right with no extra animation code. Speed carries across the run via
+the ``eventPlaybackRate`` setting, applied to both players (video.js
+``playbackRate`` for MP4, ``CMD_VARPLAY`` rate for ZMS).
+
 Notifications API (``api/notifications.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
