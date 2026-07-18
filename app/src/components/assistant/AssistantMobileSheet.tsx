@@ -28,6 +28,7 @@ import { ASSISTANT_PANEL } from '../../lib/zmninja-ng-constants';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
 import { AskPanel } from './AskPanel';
+import { OllamaStatusDot } from './OllamaStatusDot';
 import { useAssistantChrome } from './useAssistantChrome';
 
 export function AssistantMobileSheet() {
@@ -168,12 +169,15 @@ export function AssistantMobileSheet() {
 
       {/* Backend label as a slim strip, so the user knows which model answers
           even without the full desktop header. */}
-      <div
-        className="shrink-0 truncate px-3 pb-1 text-[11px] leading-tight text-muted-foreground"
-        title={backendLabel}
-        data-testid="assistant-mobile-backend-label"
-      >
-        {backendLabel}
+      <div className="flex shrink-0 items-center gap-1.5 px-3 pb-1">
+        <OllamaStatusDot />
+        <div
+          className="truncate text-[11px] leading-tight text-muted-foreground"
+          title={backendLabel}
+          data-testid="assistant-mobile-backend-label"
+        >
+          {backendLabel}
+        </div>
       </div>
 
       <div className="min-h-0 flex-1">

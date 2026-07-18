@@ -20,6 +20,7 @@ export function AssistantIntro({ onExampleClick }: AssistantIntroProps) {
     t('assistant.intro_example_1'),
     t('assistant.intro_example_2'),
     t('assistant.intro_example_3'),
+    t('assistant.intro_example_4'),
   ];
 
   return (

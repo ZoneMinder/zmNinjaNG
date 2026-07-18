@@ -6,6 +6,15 @@ Feature: In-app assistant
     When I press the "?" key
     Then I should see the keyboard shortcuts help
 
+  Scenario: The intro suggests a "Summarize my day" example prompt
+    Given I am logged into zmNinjaNg
+    And the assistant is enabled with the mock backend
+    When I press the "?" key
+    Then the assistant panel should open
+    And I should see the example prompt "Summarize my day"
+    When I click the example prompt "Summarize my day"
+    Then the assistant input should contain "Summarize my day"
+
   Scenario: Ask a question that counts events
     Given I am logged into zmNinjaNg
     And the assistant is enabled with the mock backend
