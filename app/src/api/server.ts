@@ -7,40 +7,45 @@
 
 import { getApiClient } from './client';
 import { validateApiResponse } from '../lib/zm/api-validator';
+import { tolerantArray, withFieldCatch } from '../lib/zm/schema-tolerance';
 import { z } from 'zod';
 import { log, LogLevel } from '../lib/logger';
 import type { HttpError } from '../lib/http';
 
 // ========== Schemas ==========
 
-const ServerSchema = z.object({
-  Id: z.coerce.string(),
-  Name: z.string(),
-  Hostname: z.string().optional(),
-  State_Id: z.coerce.number().optional(),
-  Status: z.string().optional(),
-  CpuLoad: z.coerce.number().optional(),
-  TotalMem: z.coerce.number().optional(),
-  FreeMem: z.coerce.number().optional(),
-  Protocol: z.string().optional(),
-  Port: z.coerce.number().optional(),
-  PathToIndex: z.string().optional(),
-  PathToZMS: z.string().optional(),
-  PathToApi: z.string().optional(),
-  CpuUserPercent: z.coerce.number().optional(),
-  CpuSystemPercent: z.coerce.number().optional(),
-  CpuIdlePercent: z.coerce.number().optional(),
-  CpuUsagePercent: z.coerce.number().optional(),
-  TotalSwap: z.coerce.number().optional(),
-  FreeSwap: z.coerce.number().optional(),
-  zmstats: z.boolean().optional(),
-  zmaudit: z.boolean().optional(),
-  zmtrigger: z.boolean().optional(),
-  zmeventnotification: z.boolean().optional(),
-});
+// withFieldCatch + tolerantArray: a drifted field falls back and one bad row
+// drops itself, so a ZoneMinder change never blanks the whole response (rule 43).
+const ServerSchema = z.object(
+  withFieldCatch({
+    Id: z.coerce.string(),
+    Name: z.string(),
+    Hostname: z.string().optional(),
+    State_Id: z.coerce.number().optional(),
+    Status: z.string().optional(),
+    CpuLoad: z.coerce.number().optional(),
+    TotalMem: z.coerce.number().optional(),
+    FreeMem: z.coerce.number().optional(),
+    Protocol: z.string().optional(),
+    Port: z.coerce.number().optional(),
+    PathToIndex: z.string().optional(),
+    PathToZMS: z.string().optional(),
+    PathToApi: z.string().optional(),
+    CpuUserPercent: z.coerce.number().optional(),
+    CpuSystemPercent: z.coerce.number().optional(),
+    CpuIdlePercent: z.coerce.number().optional(),
+    CpuUsagePercent: z.coerce.number().optional(),
+    TotalSwap: z.coerce.number().optional(),
+    FreeSwap: z.coerce.number().optional(),
+    zmstats: z.boolean().optional(),
+    zmaudit: z.boolean().optional(),
+    zmtrigger: z.boolean().optional(),
+    zmeventnotification: z.boolean().optional(),
+  }, ['Id', 'Name']),
+);
 
 const ServersResponseSchema = z.object({
-  servers: z.array(z.object({ Server: ServerSchema })),
+  servers: tolerantArray(z.object({ Server: ServerSchema }), 'server'),
 });
 
 const LoadSchema = z.object({
@@ -75,23 +80,25 @@ const DaemonCheckSchema = z.object({
   result: z.coerce.number(),
 });
 
-const StorageSchema = z.object({
-  Id: z.coerce.string(),
-  Path: z.string().nullable(),
-  Name: z.string(),
-  Type: z.string(),
-  Url: z.string().nullable(),
-  DiskSpace: z.coerce.number().nullable(),
-  Scheme: z.string().nullable(),
-  ServerId: z.coerce.string().nullable(),
-  DoDelete: z.coerce.boolean().optional(),
-  Enabled: z.coerce.boolean().optional(),
-  DiskTotalSpace: z.coerce.number().nullable(),
-  DiskUsedSpace: z.coerce.number().nullable(),
-});
+const StorageSchema = z.object(
+  withFieldCatch({
+    Id: z.coerce.string(),
+    Path: z.string().nullable(),
+    Name: z.string(),
+    Type: z.string(),
+    Url: z.string().nullable(),
+    DiskSpace: z.coerce.number().nullable(),
+    Scheme: z.string().nullable(),
+    ServerId: z.coerce.string().nullable(),
+    DoDelete: z.coerce.boolean().optional(),
+    Enabled: z.coerce.boolean().optional(),
+    DiskTotalSpace: z.coerce.number().nullable(),
+    DiskUsedSpace: z.coerce.number().nullable(),
+  }, ['Id', 'Name']),
+);
 
 const StoragesResponseSchema = z.object({
-  storage: z.array(z.object({ Storage: StorageSchema })),
+  storage: tolerantArray(z.object({ Storage: StorageSchema }), 'storage'),
 });
 
 

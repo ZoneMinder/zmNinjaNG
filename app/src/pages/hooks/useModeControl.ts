@@ -10,7 +10,26 @@ import { useTranslation } from 'react-i18next';
 import { changeMonitorFunction } from '../../api/monitors';
 import { log, LogLevel } from '../../lib/logger';
 
-export type MonitorFunction = 'None' | 'Monitor' | 'Modect' | 'Record' | 'Mocord' | 'Nodect';
+/**
+ * Tolerant when reading, strict when writing (refs #247).
+ *
+ * `MonitorFunction` is `string` because it holds whatever ZoneMinder reports,
+ * and a release that adds a value must not blank the monitors list (see
+ * MonitorSchema's note). `WritableMonitorFunction` is the narrow set we are
+ * willing to SEND: we choose those, so there is no reason to give up the
+ * compile-time check on the way out.
+ */
+export const KNOWN_MONITOR_FUNCTIONS = ['None', 'Monitor', 'Modect', 'Record', 'Mocord', 'Nodect'] as const;
+export type MonitorFunction = string;
+export type WritableMonitorFunction = (typeof KNOWN_MONITOR_FUNCTIONS)[number];
+
+/** Narrows a read value to one we are allowed to write back. A real guard, not
+ *  a cast: the mode picker is built from the same list, so this only fires if
+ *  those two ever drift apart, and then it says so instead of sending garbage
+ *  to ZoneMinder. */
+export function isWritableMonitorFunction(value: string): value is WritableMonitorFunction {
+  return (KNOWN_MONITOR_FUNCTIONS as readonly string[]).includes(value);
+}
 
 interface UseModeControlOptions {
   monitorId: string | undefined;
@@ -35,6 +54,13 @@ export function useModeControl({
     async (nextMode: MonitorFunction) => {
       if (!monitorId) return;
       if (currentFunction === nextMode) return;
+      if (!isWritableMonitorFunction(nextMode)) {
+        log.monitorDetail('Refusing to set an unrecognized monitor function', LogLevel.ERROR, {
+          monitorId,
+          nextMode,
+        });
+        return;
+      }
 
       setIsModeUpdating(true);
       try {

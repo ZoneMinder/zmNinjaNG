@@ -1193,6 +1193,43 @@ means the server build predates tags rather than a real error:
    // api/tags.ts
    const response = await client.get<EventTagsResponse>(url, { expectedStatuses: [404] });
 
+Schema drift tolerance
+----------------------
+
+ZoneMinder changes what it sends between releases, and the Zod schemas in
+``api/types.ts`` are the only thing between that and a blank screen. The policy,
+enforced by tests in ``api/__tests__/types.test.ts`` and by rule 43 in
+``AGENTS.md``: a response must never fail because of a field.
+
+There are two distinct hazards, and only one is about *new* fields.
+
+A field ZoneMinder adds that we do not declare is already harmless, because Zod
+strips unknown keys. The danger is the reverse: a field we *do* declare whose
+type drifts. In ZM 1.38.3 ``V4LMultiBuffer`` began arriving as boolean ``false``
+where ``MonitorSchema`` said ``z.string()``, and one field the app never reads
+took every camera off the screen (#247).
+
+Two helpers in ``lib/zm/schema-tolerance.ts`` handle it, and every schema in
+``api/`` uses them rather than re-deriving the behavior:
+
+- ``withFieldCatch(shape, identity)`` wraps every field except the named
+  identity fields in ``.catch(fallback)``, where the fallback is read off the
+  field's own Zod definition so it matches the declared type (nullable falls to
+  null, a required string to ``''``, and so on). A drifted field falls back and
+  the rest of the row survives. Identity fields (``Id``, ``Name``) stay strict:
+  a fallback there would render a phantom entity.
+- ``tolerantArray(itemSchema, label)`` drops the rows that fail instead of
+  failing the whole array, so a monitor missing its ``Id`` costs only itself,
+  not the list. It logs the dropped count so a real data problem stays visible.
+
+A value whose vocabulary ZoneMinder controls, such as ``Monitor.Function`` or
+``Zone.Type``, is ``z.string()``, never ``z.enum()``. An enum would fail the
+response on a value a future release adds, and defaulting an unknown mode would
+be worse than failing: it would report a recording camera as switched off. The
+known values are kept as plain arrays (``KNOWN_MONITOR_FUNCTIONS``) for pickers,
+not as the parse contract. Reads are tolerant; writes stay strict, since we
+choose the values we send.
+
 API Modules
 -----------
 
