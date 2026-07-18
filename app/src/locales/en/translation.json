@@ -352,7 +352,9 @@
       "storage_persistent_yes": "Persistent: yes",
       "storage_persistent_no": "Persistent: no",
       "storage_note": "Stored in the app's local storage. Removed by Delete.",
-      "oom_note": "Local models run in your device's memory. If the app crashes or the model fails to load, the device is out of memory: pick a smaller model, or switch to the Ollama backend to run it on a server."
+      "oom_note": "Local models run in your device's memory. If the app crashes or the model fails to load, the device is out of memory: pick a smaller model, or switch to the Ollama backend to run it on a server.",
+      "mobile_unsupported": "On-device models aren't supported on phones or tablets.",
+      "mobile_unsupported_hint": "A phone or tablet caps how much memory the app may use, and every model needs more than that to load, so it would run out of memory and crash the app. Use the Ollama backend to run the model on your own server instead."
     },
     "language": "Language",
     "select_language": "Select Language",
@@ -1258,6 +1260,7 @@
     "clear": "Clear",
     "minimize": "Minimize",
     "reopen": "Open Ninjii",
+    "resize": "Resize",
     "backend_on_device": "On-device",
     "backend_ollama": "Ollama",
     "placeholder": "Ask about your cameras...",
@@ -1285,18 +1288,19 @@
     },
     "confirm": {
       "set_monitor_enabled_enable": "Enable monitor {{id}}?",
-    "set_monitor_enabled_disable": "Disable monitor {{id}}?",
+      "set_monitor_enabled_disable": "Disable monitor {{id}}?",
       "trigger_alarm": "Trigger an alarm on monitor {{monitorId}}?",
       "cancel_alarm": "Cancel the alarm on monitor {{monitorId}}?",
       "change_monitor_function": "Change monitor {{id}} function to {{func}}?",
       "change_run_state": "Switch the server run state to {{state}}?",
       "delete_event": "Delete event {{eventId}} (monitor {{monitorId}}, {{start}})?",
       "archive_event_archive": "Archive event {{eventId}}?",
-    "archive_event_unarchive": "Unarchive event {{eventId}}?",
+      "archive_event_unarchive": "Unarchive event {{eventId}}?",
       "generic": "Run this action?",
       "cancel": "Cancel",
       "accept": "Confirm",
       "details": "Details"
-    }
+    },
+    "mobile_on_device_blocked": "On-device models can't run on phones or tablets due to memory limits. Switch to the Ollama backend in Settings to use the assistant here."
   }
 }

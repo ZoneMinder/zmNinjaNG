@@ -53,6 +53,7 @@ import { ErrorBanner } from '../ui/query-state';
 import { AssistantConfirmCard } from './AssistantConfirmCard';
 import { AssistantResultCards } from './AssistantResultCards';
 import { useAssistantHost } from './useAssistantHost';
+import { Platform } from '../../lib/platform';
 
 declare global {
   interface Window {
@@ -231,6 +232,16 @@ export function AskPanel() {
   const handleSend = async () => {
     const text = input.trim();
     if (!text || !profileId || running) return;
+
+    // Mobile safety net (refs #246): loading any WebLLM model exceeds a mobile
+    // WebView's memory and crashes the app (iOS jetsam at 2 GB, Android renderer
+    // kill). Settings hides on-device on phones/tablets, but a value synced from
+    // a desktop profile can still arrive here, so block the load and point at
+    // Ollama rather than letting it crash.
+    if ((Platform.isIOS || Platform.isAndroid) && settings.assistantBackend === 'on-device') {
+      setError(t('assistant.mobile_on_device_blocked'));
+      return;
+    }
 
     setInput('');
     setError(null);

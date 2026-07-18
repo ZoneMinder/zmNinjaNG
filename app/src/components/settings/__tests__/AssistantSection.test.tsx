@@ -27,6 +27,21 @@ vi.mock('../../../hooks/useWebGpuAvailable', () => ({
   useWebGpuAvailable: () => webGpuAvailable,
 }));
 
+// Mutable so a test can stand in for a mobile platform. The real Platform reads
+// Capacitor, which reports 'web' in jsdom, so without this every test is desktop.
+let isIOS = false;
+let isAndroid = false;
+vi.mock('../../../lib/platform', () => ({
+  Platform: {
+    get isIOS() {
+      return isIOS;
+    },
+    get isAndroid() {
+      return isAndroid;
+    },
+  },
+}));
+
 vi.mock('../../../lib/security/secureStorage', () => ({
   setSecureValue: vi.fn().mockResolvedValue(undefined),
   getSecureValue: vi.fn().mockResolvedValue(null),
@@ -58,6 +73,100 @@ describe('AssistantSection backend picker and gating', () => {
   beforeEach(() => {
     isModelDownloadedMock.mockReset().mockResolvedValue(false);
     webGpuAvailable = true;
+    isIOS = false;
+    isAndroid = false;
+  });
+
+  // On-device is gated off on BOTH mobile platforms for memory: iOS jetsams a
+  // WKWebView at 2 GB, Android kills the renderer under low memory. Both have
+  // WebGPU, so this is a distinct path from the no-WebGPU one (refs #246).
+  describe('mobile gating', () => {
+    it('disables the on-device option and shows the steer-to-Ollama notice on Android', async () => {
+      isAndroid = true;
+      render(
+        <AssistantSection
+          settings={enabledSettings}
+          update={vi.fn()}
+          currentProfile={profile}
+          updateSettings={vi.fn()}
+        />
+      );
+      const onDeviceOption = screen
+        .getByTestId('assistant-backend-select')
+        .querySelector('option[value="on-device"]');
+      expect(onDeviceOption).toBeDisabled();
+      expect(screen.getByTestId('assistant-mobile-unsupported')).toBeInTheDocument();
+    });
+
+    it('disables the on-device option and shows the steer-to-Ollama notice', async () => {
+      isIOS = true;
+      render(
+        <AssistantSection
+          settings={enabledSettings}
+          update={vi.fn()}
+          currentProfile={profile}
+          updateSettings={vi.fn()}
+        />
+      );
+
+      const onDeviceOption = screen
+        .getByTestId('assistant-backend-select')
+        .querySelector('option[value="on-device"]');
+      expect(onDeviceOption).toBeDisabled();
+      // The iOS memory notice, not the no-WebGPU one: iOS has WebGPU.
+      expect(screen.getByTestId('assistant-mobile-unsupported')).toBeInTheDocument();
+      expect(screen.queryByTestId('assistant-no-webgpu')).not.toBeInTheDocument();
+    });
+
+    it('never shows the model download UI on iOS, even with WebGPU present', () => {
+      isIOS = true;
+      webGpuAvailable = true;
+      render(
+        <AssistantSection
+          settings={enabledSettings}
+          update={vi.fn()}
+          currentProfile={profile}
+          updateSettings={vi.fn()}
+        />
+      );
+      expect(screen.queryByTestId('assistant-model-select')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('assistant-model-download')).not.toBeInTheDocument();
+    });
+
+    it('keeps the iOS notice visible even after switching to Ollama', () => {
+      isIOS = true;
+      render(
+        <AssistantSection
+          settings={{ ...enabledSettings, assistantBackend: 'ollama' }}
+          update={vi.fn()}
+          currentProfile={profile}
+          updateSettings={vi.fn()}
+        />
+      );
+      // The greyed on-device option needs an explanation whichever backend is
+      // active, so the note stays put next to the picker.
+      expect(screen.getByTestId('assistant-mobile-unsupported')).toBeInTheDocument();
+      expect(screen.getByTestId('assistant-ollama-url')).toBeInTheDocument();
+    });
+
+    it('leaves on-device selectable on desktop (neither mobile platform)', async () => {
+      isIOS = false;
+      isAndroid = false;
+      render(
+        <AssistantSection
+          settings={enabledSettings}
+          update={vi.fn()}
+          currentProfile={profile}
+          updateSettings={vi.fn()}
+        />
+      );
+      await waitFor(() => expect(isModelDownloadedMock).toHaveBeenCalled());
+      const onDeviceOption = screen
+        .getByTestId('assistant-backend-select')
+        .querySelector('option[value="on-device"]');
+      expect(onDeviceOption).not.toBeDisabled();
+      expect(screen.queryByTestId('assistant-mobile-unsupported')).not.toBeInTheDocument();
+    });
   });
 
   it('shows the on-device model picker by default and hides the Ollama fields', async () => {

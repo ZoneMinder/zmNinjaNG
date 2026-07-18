@@ -279,21 +279,41 @@ vi.mock('@aparajita/capacitor-biometric-auth', () => ({
 // override these implementations (via `vi.mocked(...).mockImplementation`)
 // to exercise specific lifecycle/progress/error paths; this is only the
 // shared default.
-vi.mock('@mlc-ai/web-llm', () => ({
-  CreateMLCEngine: vi.fn().mockImplementation(
-    async (_modelId: string, config?: { initProgressCallback?: (report: { progress: number; timeElapsed: number; text: string }) => void }) => {
-      config?.initProgressCallback?.({ progress: 1, timeElapsed: 0, text: 'done' });
-      return {
-        chat: {
-          completions: {
-            create: vi.fn().mockResolvedValue({ choices: [{ message: { content: '{"answer":"ok"}' } }] }),
-          },
-        },
-        unload: vi.fn().mockResolvedValue(undefined),
-      };
+// The engine is created in a Web Worker (CreateWebWorkerMLCEngine). The mock
+// returns the same engine shape; the worker's first argument is ignored.
+const mockEngine = (config?: {
+  initProgressCallback?: (report: { progress: number; timeElapsed: number; text: string }) => void;
+}) => {
+  config?.initProgressCallback?.({ progress: 1, timeElapsed: 0, text: 'done' });
+  return {
+    chat: {
+      completions: {
+        create: vi.fn().mockResolvedValue({ choices: [{ message: { content: '{"answer":"ok"}' } }] }),
+      },
     },
+    unload: vi.fn().mockResolvedValue(undefined),
+  };
+};
+
+vi.mock('@mlc-ai/web-llm', () => ({
+  CreateMLCEngine: vi.fn().mockImplementation(async (_modelId: string, config?: Parameters<typeof mockEngine>[0]) => mockEngine(config)),
+  CreateWebWorkerMLCEngine: vi.fn().mockImplementation(
+    async (_worker: unknown, _modelId: string, config?: Parameters<typeof mockEngine>[0]) => mockEngine(config),
   ),
+  WebWorkerMLCEngineHandler: class {},
   hasModelInCache: vi.fn().mockResolvedValue(false),
   deleteModelAllInfoInCache: vi.fn().mockResolvedValue(undefined),
   prebuiltAppConfig: { model_list: [] },
 }));
+
+// jsdom has no Worker; the engine spawns one (its module URL is never fetched
+// because CreateWebWorkerMLCEngine is mocked). A stub keeps `new Worker(...)`
+// from throwing in tests.
+class WorkerStub {
+  onmessage: ((e: MessageEvent) => void) | null = null;
+  postMessage() {}
+  terminate() {}
+  addEventListener() {}
+  removeEventListener() {}
+}
+global.Worker = WorkerStub as unknown as typeof Worker;

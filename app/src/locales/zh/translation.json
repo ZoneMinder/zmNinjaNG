@@ -352,7 +352,9 @@
       "storage_persistent_yes": "持久化：是",
       "storage_persistent_no": "持久化：否",
       "storage_note": "存储在应用本地存储中，删除后一并移除。",
-      "oom_note": "本地模型在设备内存中运行。如果应用崩溃或模型加载失败，说明设备内存不足：请选择更小的模型，或切换到 Ollama 后端在服务器上运行。"
+      "oom_note": "本地模型在设备内存中运行。如果应用崩溃或模型加载失败，说明设备内存不足：请选择更小的模型，或切换到 Ollama 后端在服务器上运行。",
+      "mobile_unsupported": "手机和平板不支持设备端模型。",
+      "mobile_unsupported_hint": "手机或平板会限制应用可用的内存，而每个模型加载所需的内存都超过此上限，会导致内存耗尽并使应用崩溃。请改用 Ollama 后端在你自己的服务器上运行模型。"
     },
     "language": "语言",
     "select_language": "选择语言",
@@ -1258,6 +1260,7 @@
     "clear": "清除",
     "minimize": "最小化",
     "reopen": "打开 Ninjii",
+    "resize": "调整大小",
     "backend_on_device": "设备端",
     "backend_ollama": "Ollama",
     "placeholder": "询问你的摄像头...",
@@ -1285,18 +1288,19 @@
     },
     "confirm": {
       "set_monitor_enabled_enable": "启用监视器 {{id}}？",
-    "set_monitor_enabled_disable": "禁用监视器 {{id}}？",
+      "set_monitor_enabled_disable": "禁用监视器 {{id}}？",
       "trigger_alarm": "在监视器 {{monitorId}} 上触发报警？",
       "cancel_alarm": "取消监视器 {{monitorId}} 上的报警？",
       "change_monitor_function": "将监视器 {{id}} 的功能改为 {{func}}？",
       "change_run_state": "将服务器运行状态切换为 {{state}}？",
       "delete_event": "删除事件 {{eventId}}（监视器 {{monitorId}}，{{start}}）？",
       "archive_event_archive": "归档事件 {{eventId}}？",
-    "archive_event_unarchive": "取消归档事件 {{eventId}}？",
+      "archive_event_unarchive": "取消归档事件 {{eventId}}？",
       "generic": "执行此操作？",
       "cancel": "取消",
       "accept": "确认",
       "details": "详情"
-    }
+    },
+    "mobile_on_device_blocked": "由于内存限制，设备端模型无法在手机或平板上运行。请在设置中切换到 Ollama 后端以在此使用助手。"
   }
 }

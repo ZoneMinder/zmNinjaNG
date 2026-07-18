@@ -21,7 +21,7 @@ import { buildEventDisplayEntity, buildMonitorDisplayEntity } from './display';
 import { EVENT_RANGES, resolveEventRange, isEventRange, type EventRange } from './event-range';
 import { resolveMonitorRef } from './monitor-ref';
 import type { ToolDefinition } from './types';
-import { safeExecute, NAVIGATE_ALLOWLIST } from './tool-helpers';
+import { safeExecute, isOmittedArg, NAVIGATE_ALLOWLIST } from './tool-helpers';
 
 /** Maps a raw MonitorData into the clean, model-friendly shape shared by
  *  list_monitors and get_monitor (refs #246): '0'/'1' strings become
@@ -60,8 +60,11 @@ function mapMonitor(m: MonitorData): Record<string, unknown> {
  * id there returns zero events and reads exactly like "nothing happened".
  */
 async function resolveMonitorArg(raw: unknown): Promise<string> {
-  const ref = String(raw ?? '').trim();
-  if (!ref) throw new Error('monitorId is required');
+  // A placeholder ("null"/"none") on a REQUIRED monitor arg is a missing value,
+  // not a monitor to look up: fail with the clear "required" message rather
+  // than "no monitor named null".
+  if (isOmittedArg(raw)) throw new Error('monitorId is required');
+  const ref = String(raw).trim();
   if (/^\d+$/.test(ref)) return ref;
   const { monitors } = await getMonitors();
   const resolution = resolveMonitorRef(ref, monitors);
@@ -245,7 +248,10 @@ const listEventsTool: ToolDefinition = {
       // between "no events" and "no such query" (see monitor-ref.ts).
       const { monitors } = await getMonitors();
       let monitorId: string | undefined;
-      if (input.monitorId !== undefined && String(input.monitorId).trim() !== '') {
+      // isOmittedArg, not just an empty check: the model sends the string
+      // "null"/"all" to mean "every monitor", which must not be resolved as a
+      // monitor name (refs #246).
+      if (!isOmittedArg(input.monitorId)) {
         const resolution = resolveMonitorRef(String(input.monitorId), monitors);
         // Thrown, not returned: safeExecute keeps `isError` only on the throw
         // path (it rebuilds a returned object from `output`/`display` alone),
@@ -254,11 +260,15 @@ const listEventsTool: ToolDefinition = {
         monitorId = resolution.id;
       }
 
+      // Same placeholder guard: an objectType of "null" would build the regexp
+      // `detected:.*null` and silently match no events.
+      const objectType = isOmittedArg(input.objectType) ? undefined : String(input.objectType);
+
       const filters: EventFilters = {
         monitorId,
         startDateTime: explicitStart ?? resolved?.startDateTime,
         endDateTime: explicitEnd ?? resolved?.endDateTime,
-        notesRegexp: input.objectType ? `detected:.*${input.objectType}` : undefined,
+        notesRegexp: objectType ? `detected:.*${objectType}` : undefined,
         tagIds: tag ? [tag] : undefined,
         eventIds,
         limit,

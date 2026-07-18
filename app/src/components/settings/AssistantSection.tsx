@@ -24,6 +24,7 @@ import { SectionHeader, SettingsCard, SettingsRow, RowLabel } from './SettingsLa
 import { AssistantOllamaSection } from './AssistantOllamaSection';
 import { ASSISTANT } from '../../lib/zmninja-ng-constants';
 import { useWebGpuAvailable } from '../../hooks/useWebGpuAvailable';
+import { Platform } from '../../lib/platform';
 import { useToast } from '../../hooks/use-toast';
 import { deleteModel, downloadModel, isModelDownloaded } from '../../lib/assistant/model-download';
 import { getModelStorageInfo, formatStorageBytes, type ModelStorageInfo } from '../../lib/assistant/model-storage';
@@ -60,6 +61,15 @@ export function AssistantSection({
   // WebGPU") but without claiming the device lacks WebGPU.
   const hasWebGPU = useWebGpuAvailable();
   const webGpuUnavailable = hasWebGPU === false;
+  // Not offered on any phone/tablet: this is memory, not WebGPU (mobile has
+  // WebGPU). A WebView renderer is memory-capped and every WebLLM model plus
+  // the app heap and KV cache exceeds it, crashing the app mid-load. On iOS the
+  // WKWebView content process hits a hard 2 GB jetsam ceiling; on Android the
+  // renderer is killed and the OS fires a device-wide low-memory event (both
+  // verified on device, refs #246). The Ollama backend runs the model on a
+  // server and has no such limit. Desktop (web/Electron) is not native, so it
+  // keeps on-device.
+  const onDeviceUnsupported = Platform.isIOS || Platform.isAndroid;
 
   const selectedModel =
     ASSISTANT.webllmModels.find((m) => m.id === settings.assistantModelId) ?? ASSISTANT.webllmModels[0];
@@ -239,7 +249,7 @@ export function AssistantSection({
           {/* Decorative: the label in this row already names Ninjii. Sized to
               the two-line row it sits in, which is what gives it room to read
               at a glance. */}
-          <img src={ASSISTANT.logoPath} alt="" className="h-10 w-10 shrink-0 rounded" />
+          <img src={ASSISTANT.logoPath} alt="" className="h-10 w-10 shrink-0 rounded object-contain" />
           <Switch
             id="assistant-enabled"
             checked={settings.assistantEnabled}
@@ -258,14 +268,29 @@ export function AssistantSection({
                 onChange={(e) => update('assistantBackend', e.target.value as AssistantBackend)}
                 data-testid="assistant-backend-select"
               >
-                <option value="on-device">{t('settings.assistant.backend_on_device')}</option>
+                {/* Disabled, not hidden, on iOS: the user still sees the option
+                    exists and reads why it is unavailable, rather than it
+                    silently vanishing (it works on their desktop). */}
+                <option value="on-device" disabled={onDeviceUnsupported}>
+                  {t('settings.assistant.backend_on_device')}
+                </option>
                 <option value="ollama">{t('settings.assistant.backend_ollama')}</option>
               </select>
+              {/* Shown on iOS whichever backend is selected, so the greyed-out
+                  on-device option is always explained, not only while it is the
+                  active one. */}
+              {onDeviceUnsupported && (
+                <div className="space-y-1 pt-1" data-testid="assistant-mobile-unsupported">
+                  <p className="text-xs text-muted-foreground">{t('settings.assistant.mobile_unsupported')}</p>
+                  <p className="text-xs text-muted-foreground">{t('settings.assistant.mobile_unsupported_hint')}</p>
+                </div>
+              )}
             </div>
 
             {settings.assistantBackend === 'ollama' ? (
               <AssistantOllamaSection settings={settings} update={update} currentProfile={currentProfile} />
             ) : (
+              !onDeviceUnsupported &&
               webGpuUnavailable && (
                 <div className="px-4 py-3 space-y-1" data-testid="assistant-no-webgpu">
                   <p className="text-xs text-muted-foreground">{t('settings.assistant.no_webgpu')}</p>
@@ -274,7 +299,7 @@ export function AssistantSection({
               )
             )}
 
-            {settings.assistantBackend === 'on-device' && hasWebGPU === true && (
+            {settings.assistantBackend === 'on-device' && hasWebGPU === true && !onDeviceUnsupported && (
               <>
                 <div className="px-4 py-3 space-y-2">
                   <RowLabel label={t('settings.assistant.model')} />

@@ -548,6 +548,12 @@ export const ASSISTANT = {
   maxToolIterations: 6,
   maxHistoryMessages: 40,
   maxTokens: 1024,
+  // Attempts a WebLLM turn gets to produce parseable output before the panel
+  // shows the parse-error apology. Small models occasionally emit degenerate
+  // output (an empty ```code fence```, a blank, or non-JSON prose); sampling is
+  // non-deterministic (temperature > 0), so a fresh attempt usually recovers,
+  // and a degenerate reply is only a few tokens so retrying it is cheap.
+  webllmMaxAttempts: 3,
   // web-llm's prebuilt registry entries cap context_window_size at 4096 for
   // every model (ModelRecord.overrides in @mlc-ai/web-llm's prebuiltAppConfig;
   // all 165 entries are 4096 or lower), well under what the models support
@@ -589,7 +595,10 @@ export const ASSISTANT = {
   // Max characters of a tool call's JSON-stringified input shown inline next
   // to an activity step in AskPanel (rule 11: truncate long text).
   activityInputPreviewChars: 40,
-  defaultModelId: 'Qwen3-1.7B-q4f16_1-MLC',
+  // On-device only runs on desktop (web/Electron); mobile is gated off for
+  // memory (see AssistantSection). So the default targets a desktop, where
+  // Gemma 2B loads comfortably.
+  defaultModelId: 'gemma-2-2b-it-q4f16_1-MLC',
   // Ordered smallest first: the top of the picker is the safest thing to load
   // on a phone, and `approxSizeMb` is web-llm's own `vram_required_MB` for the
   // record (measured at ITS 4096 window, so the real figure at the
@@ -615,6 +624,12 @@ export const ASSISTANT = {
   // Do not re-add without checking a newer web-llm first.
   webllmModels: [
     { id: 'Llama-3.2-1B-Instruct-q4f16_1-MLC', label: 'Llama 3.2 1B', approxSizeMb: 879, contextWindowSize: 16384 },
+    // Smallest with tool calling; the safest option on a memory-tight phone.
+    // Native window 32K, capped. sliding_window -1 (no Gemma trap).
+    { id: 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC', label: 'Qwen2.5 0.5B', approxSizeMb: 945, contextWindowSize: 16384 },
+    // The best small option for this app: native tool calling plus dual-mode
+    // thinking (chain-of-thought). Native window ~40K, capped; sliding_window -1.
+    { id: 'Qwen3-0.6B-q4f16_1-MLC', label: 'Qwen3 0.6B', approxSizeMb: 1403, contextWindowSize: 16384 },
     // 8192 is Gemma 2's real native window; its config's 4096 is an MLC
     // default, and 4096 is not enough for this app's prompt. Also the only
     // model here declaring `required_features: ['shader-f16']`, so it can fail
@@ -651,11 +666,10 @@ export const ASSISTANT = {
 /**
  * Floating assistant window (refs #246).
  *
- * Desktop is a resizable floating panel anchored bottom-right; native CSS
- * `resize` (no hand-rolled drag math) lets the user drag the corner, and an
- * attached ResizeObserver debounces the observed size into
- * `stores/assistantPanel.ts`. Mobile ignores all of this and renders a
- * full-screen sheet instead (components/assistant/AssistantWidget.tsx).
+ * Desktop is a resizable card anchored bottom-right (AssistantDesktopPanel): a
+ * top-left drag handle sets its width/height, persisted to
+ * `stores/assistantPanel.ts` on release. Mobile is a share-the-screen bottom
+ * sheet (AssistantMobileSheet). The `mobile*` fields below drive the sheet.
  */
 export const ASSISTANT_PANEL = {
   defaultWidth: 400,
@@ -664,13 +678,22 @@ export const ASSISTANT_PANEL = {
   minHeight: 400,
   maxWidth: 720,
   maxHeight: 960,
-  // Debounce window before a CSS-resize drag is written to the persisted
-  // store; ResizeObserver fires on every intermediate frame while dragging.
-  resizeDebounceMs: 300,
-  // Must match Tailwind's default `sm` breakpoint (tailwind.config.js does not
-  // override it): the ResizeObserver callback uses this to ignore viewport
-  // resizes on the mobile full-screen sheet, which never persists a size.
+  // Tailwind's default `sm` breakpoint (not overridden in tailwind.config.js):
+  // `useIsMobile` matches below this to pick the sheet over the card.
   mobileBreakpointPx: 640,
+  // Mobile bottom-sheet (refs #246). The sheet shares the screen with the app
+  // instead of covering it. Its height is a fraction of the visible viewport
+  // (rotation-proof: 0.6 stays 0.6 after a rotate, where a pixel height would
+  // clip or overflow), clamped between a bar minimum and a full maximum.
+  mobileSheetBarMinPx: 112, // slim peek bar: drag grip + input row + safe area
+  mobileSheetMaxFraction: 0.92, // "full", leaving a sliver of app visible on top
+  // A drag released this far BELOW the bar minimum collapses the sheet to the
+  // floating button (a flick-to-dismiss without a snap-point system).
+  mobileSheetDismissPx: 40,
+  // Fraction the sheet grows to when the input is focused from the bar, so the
+  // conversation is visible above the keyboard (the visible viewport is already
+  // keyboard-reduced by then, so this fills most of what remains).
+  mobileSheetFocusFraction: 0.9,
 } as const;
 
 /**

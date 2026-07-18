@@ -313,28 +313,39 @@ export class WebLlmProvider implements AssistantProvider {
     const engine = await getLoadedEngine(this.modelId);
     const chatMessages = buildWebLlmMessages(system, messages, tools, this.modelId);
 
-    log.assistant('Sending WebLLM chat completion request', LogLevel.DEBUG, {
-      modelId: this.modelId,
-      messageCount: chatMessages.length,
-    });
+    // Retry a degenerate/unparseable reply rather than apologizing on the first
+    // one: small models sometimes emit an empty code fence or non-JSON, and
+    // because sampling is non-deterministic (temperature > 0) a fresh attempt
+    // usually recovers. The last attempt's turn (with its `raw` content) is
+    // what surfaces if none parse (refs #246).
+    let turn: AssistantTurn = { text: PARSE_ERROR_TEXT, toolCalls: [] };
+    for (let attempt = 1; attempt <= ASSISTANT.webllmMaxAttempts; attempt++) {
+      if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+      log.assistant('Sending WebLLM chat completion request', LogLevel.DEBUG, {
+        modelId: this.modelId,
+        messageCount: chatMessages.length,
+        attempt,
+      });
 
-    const response = await engine.chat.completions.create({
-      messages: chatMessages,
-      max_tokens: ASSISTANT.maxTokens,
-    });
+      const response = await engine.chat.completions.create({
+        messages: chatMessages,
+        max_tokens: ASSISTANT.maxTokens,
+      });
 
-    const content = response.choices[0]?.message?.content ?? '';
-    log.assistant('WebLLM raw response', LogLevel.DEBUG, { modelId: this.modelId, content });
+      const content = response.choices[0]?.message?.content ?? '';
+      log.assistant('WebLLM raw response', LogLevel.DEBUG, { modelId: this.modelId, content, attempt });
 
-    const turn = parseWebLlmTurn(content);
-    turn.usage = toTokenUsage(response.usage);
-    if (turn.text === PARSE_ERROR_TEXT) {
-      // Visible at WARN (not DEBUG) so a parse failure is easy to spot in the
-      // console without cranking the log level: see the raw text above the
-      // "Sorry, I had trouble..." fallback the user sees.
-      log.assistant('WebLLM response failed to parse into a tool call or answer', LogLevel.WARN, {
+      turn = parseWebLlmTurn(content);
+      turn.usage = toTokenUsage(response.usage);
+      if (turn.text !== PARSE_ERROR_TEXT) return turn;
+
+      // WARN (not DEBUG) so a parse failure is easy to spot without cranking the
+      // log level: the raw text sits right above the retry decision.
+      log.assistant('WebLLM response failed to parse; retrying if attempts remain', LogLevel.WARN, {
         modelId: this.modelId,
         content,
+        attempt,
+        maxAttempts: ASSISTANT.webllmMaxAttempts,
       });
     }
     return turn;

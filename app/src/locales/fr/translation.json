@@ -352,7 +352,9 @@
       "storage_persistent_yes": "Persistant : oui",
       "storage_persistent_no": "Persistant : non",
       "storage_note": "Stocké dans le stockage local de l'appli. Supprimé par Supprimer.",
-      "oom_note": "Les modèles locaux s'exécutent dans la mémoire de votre appareil. Si l'appli plante ou que le modèle ne se charge pas, l'appareil manque de mémoire : choisissez un modèle plus petit, ou passez au backend Ollama pour l'exécuter sur un serveur."
+      "oom_note": "Les modèles locaux s'exécutent dans la mémoire de votre appareil. Si l'appli plante ou que le modèle ne se charge pas, l'appareil manque de mémoire : choisissez un modèle plus petit, ou passez au backend Ollama pour l'exécuter sur un serveur.",
+      "mobile_unsupported": "Les modèles sur l’appareil ne sont pas pris en charge sur les téléphones et tablettes.",
+      "mobile_unsupported_hint": "Un téléphone ou une tablette limite la mémoire que l’appli peut utiliser, et chaque modèle en demande plus pour se charger : l’appli manquerait de mémoire et planterait. Utilisez le backend Ollama pour exécuter le modèle sur votre propre serveur."
     },
     "language": "Langue",
     "select_language": "Sélectionner la langue",
@@ -1258,6 +1260,7 @@
     "clear": "Effacer",
     "minimize": "Réduire",
     "reopen": "Ouvrir Ninjii",
+    "resize": "Redimensionner",
     "backend_on_device": "Sur l’appareil",
     "backend_ollama": "Ollama",
     "placeholder": "Posez une question sur vos caméras...",
@@ -1285,18 +1288,19 @@
     },
     "confirm": {
       "set_monitor_enabled_enable": "Activer le moniteur {{id}} ?",
-    "set_monitor_enabled_disable": "Désactiver le moniteur {{id}} ?",
+      "set_monitor_enabled_disable": "Désactiver le moniteur {{id}} ?",
       "trigger_alarm": "Déclencher une alarme sur le moniteur {{monitorId}} ?",
       "cancel_alarm": "Annuler l'alarme sur le moniteur {{monitorId}} ?",
       "change_monitor_function": "Changer la fonction du moniteur {{id}} en {{func}} ?",
       "change_run_state": "Changer l'état d'exécution du serveur en {{state}} ?",
       "delete_event": "Supprimer l'événement {{eventId}} (moniteur {{monitorId}}, {{start}}) ?",
       "archive_event_archive": "Archiver l'événement {{eventId}} ?",
-    "archive_event_unarchive": "Désarchiver l'événement {{eventId}} ?",
+      "archive_event_unarchive": "Désarchiver l'événement {{eventId}} ?",
       "generic": "Exécuter cette action ?",
       "cancel": "Annuler",
       "accept": "Confirmer",
       "details": "Détails"
-    }
+    },
+    "mobile_on_device_blocked": "Les modèles sur l’appareil ne peuvent pas fonctionner sur les téléphones et tablettes en raison des limites de mémoire. Passez au backend Ollama dans les Réglages pour utiliser l’assistant ici."
   }
 }

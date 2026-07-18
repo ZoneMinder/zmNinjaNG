@@ -2,12 +2,12 @@
  * model-download.ts tests (refs #246)
  *
  * `@mlc-ai/web-llm` is mocked globally in tests/setup.ts; individual tests
- * here override `CreateMLCEngine` / `hasModelInCache` / `deleteModelAllInfoInCache`
+ * here override `CreateWebWorkerMLCEngine` / `hasModelInCache` / `deleteModelAllInfoInCache`
  * to exercise specific lifecycle paths without WebGPU.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as webllm from '@mlc-ai/web-llm';
-import type { AppConfig, MLCEngine } from '@mlc-ai/web-llm';
+import type { AppConfig } from '@mlc-ai/web-llm';
 import {
   isModelDownloaded,
   downloadModel,
@@ -35,7 +35,7 @@ describe('model-download', () => {
     __resetLoadedEngineForTests();
     vi.mocked(webllm.hasModelInCache).mockReset().mockResolvedValue(false);
     vi.mocked(webllm.deleteModelAllInfoInCache).mockReset().mockResolvedValue(undefined);
-    vi.mocked(webllm.CreateMLCEngine).mockReset();
+    vi.mocked(webllm.CreateWebWorkerMLCEngine).mockReset();
     Object.defineProperty(navigator, 'storage', {
       value: { persist: vi.fn().mockResolvedValue(true) },
       configurable: true,
@@ -58,7 +58,7 @@ describe('model-download', () => {
   describe('downloadModel', () => {
     it('requests persistent storage before downloading (best-effort)', async () => {
       const engine = makeEngine();
-      vi.mocked(webllm.CreateMLCEngine).mockResolvedValue(engine as never);
+      vi.mocked(webllm.CreateWebWorkerMLCEngine).mockResolvedValue(engine as never);
 
       await downloadModel(MODEL_ID);
 
@@ -71,7 +71,7 @@ describe('model-download', () => {
         configurable: true,
       });
       const engine = makeEngine();
-      vi.mocked(webllm.CreateMLCEngine).mockResolvedValue(engine as never);
+      vi.mocked(webllm.CreateWebWorkerMLCEngine).mockResolvedValue(engine as never);
 
       await downloadModel(MODEL_ID);
 
@@ -81,7 +81,7 @@ describe('model-download', () => {
 
     it('creates a backgroundTasks download task and completes it on success', async () => {
       const engine = makeEngine();
-      vi.mocked(webllm.CreateMLCEngine).mockResolvedValue(engine as never);
+      vi.mocked(webllm.CreateWebWorkerMLCEngine).mockResolvedValue(engine as never);
 
       await downloadModel(MODEL_ID);
 
@@ -94,7 +94,7 @@ describe('model-download', () => {
     });
 
     it('reports progress from initProgressCallback', async () => {
-      vi.mocked(webllm.CreateMLCEngine).mockImplementation(async (_modelId, config) => {
+      vi.mocked(webllm.CreateWebWorkerMLCEngine).mockImplementation(async (_worker, _modelId, config) => {
         config?.initProgressCallback?.({ progress: 0.25, timeElapsed: 1, text: '' });
         config?.initProgressCallback?.({ progress: 0.75, timeElapsed: 2, text: '' });
         return makeEngine() as never;
@@ -113,8 +113,8 @@ describe('model-download', () => {
       expect(progressUpdates).toContain(75);
     });
 
-    it('fails the backgroundTasks task when CreateMLCEngine throws', async () => {
-      vi.mocked(webllm.CreateMLCEngine).mockRejectedValue(new Error('network error'));
+    it('fails the backgroundTasks task when CreateWebWorkerMLCEngine throws', async () => {
+      vi.mocked(webllm.CreateWebWorkerMLCEngine).mockRejectedValue(new Error('network error'));
 
       await downloadModel(MODEL_ID);
 
@@ -126,7 +126,7 @@ describe('model-download', () => {
     it('does not keep a partial engine and cancels the task when aborted', async () => {
       const engine = makeEngine();
       const controller = new AbortController();
-      vi.mocked(webllm.CreateMLCEngine).mockImplementation(async () => {
+      vi.mocked(webllm.CreateWebWorkerMLCEngine).mockImplementation(async () => {
         controller.abort();
         return engine as never;
       });
@@ -138,21 +138,21 @@ describe('model-download', () => {
       expect(tasks[0].status).toBe('cancelled');
 
       // The aborted download must not become the shared engine: a fresh,
-      // cached load should still hit CreateMLCEngine again.
+      // cached load should still hit CreateWebWorkerMLCEngine again.
       vi.mocked(webllm.hasModelInCache).mockResolvedValue(true);
-      vi.mocked(webllm.CreateMLCEngine).mockReset().mockResolvedValue(makeEngine() as never);
+      vi.mocked(webllm.CreateWebWorkerMLCEngine).mockReset().mockResolvedValue(makeEngine() as never);
       await getLoadedEngine(MODEL_ID);
-      expect(webllm.CreateMLCEngine).toHaveBeenCalled();
+      expect(webllm.CreateWebWorkerMLCEngine).toHaveBeenCalled();
     });
 
     it('ignores progress reports that arrive after cancellation instead of resurrecting the task to in_progress', async () => {
-      // web-llm's `CreateMLCEngine` has no abort: the mock never resolves,
+      // web-llm's `CreateWebWorkerMLCEngine` has no abort: the mock never resolves,
       // mimicking the underlying fetch continuing to run (and to invoke the
       // progress callback) after the user cancels.
       let progressCb: ((report: { progress: number; timeElapsed: number; text: string }) => void) | undefined;
-      vi.mocked(webllm.CreateMLCEngine).mockImplementation(async (_modelId, config) => {
+      vi.mocked(webllm.CreateWebWorkerMLCEngine).mockImplementation(async (_worker, _modelId, config) => {
         progressCb = config?.initProgressCallback;
-        return new Promise<MLCEngine>(() => {});
+        return new Promise<never>(() => {});
       });
 
       const downloadPromise = downloadModel(MODEL_ID);
@@ -179,9 +179,9 @@ describe('model-download', () => {
     });
 
     it('provides a working cancelFn on the task', async () => {
-      let resolveCreate!: (value: MLCEngine) => void;
-      vi.mocked(webllm.CreateMLCEngine).mockImplementation(
-        () => new Promise<MLCEngine>((resolve) => { resolveCreate = resolve; }),
+      let resolveCreate!: (value: never) => void;
+      vi.mocked(webllm.CreateWebWorkerMLCEngine).mockImplementation(
+        () => new Promise<never>((resolve) => { resolveCreate = resolve; }),
       );
 
       const downloadPromise = downloadModel(MODEL_ID);
@@ -204,7 +204,7 @@ describe('model-download', () => {
 
     it('unloads the shared engine first when it holds the deleted model', async () => {
       const engine = makeEngine();
-      vi.mocked(webllm.CreateMLCEngine).mockResolvedValue(engine as never);
+      vi.mocked(webllm.CreateWebWorkerMLCEngine).mockResolvedValue(engine as never);
       await downloadModel(MODEL_ID);
 
       await deleteModel(MODEL_ID);
@@ -216,7 +216,7 @@ describe('model-download', () => {
     it('does not unload an engine loaded for a different model', async () => {
       const otherModelId = ASSISTANT.webllmModels[1].id;
       const engine = makeEngine();
-      vi.mocked(webllm.CreateMLCEngine).mockResolvedValue(engine as never);
+      vi.mocked(webllm.CreateWebWorkerMLCEngine).mockResolvedValue(engine as never);
       await downloadModel(otherModelId);
 
       await deleteModel(MODEL_ID);
@@ -228,62 +228,62 @@ describe('model-download', () => {
   describe('getLoadedEngine', () => {
     it('returns the already-loaded engine for the same modelId without recreating it', async () => {
       const engine = makeEngine();
-      vi.mocked(webllm.CreateMLCEngine).mockResolvedValue(engine as never);
+      vi.mocked(webllm.CreateWebWorkerMLCEngine).mockResolvedValue(engine as never);
       await downloadModel(MODEL_ID);
-      vi.mocked(webllm.CreateMLCEngine).mockClear();
+      vi.mocked(webllm.CreateWebWorkerMLCEngine).mockClear();
 
       const result = await getLoadedEngine(MODEL_ID);
 
       expect(result).toBe(engine);
-      expect(webllm.CreateMLCEngine).not.toHaveBeenCalled();
+      expect(webllm.CreateWebWorkerMLCEngine).not.toHaveBeenCalled();
     });
 
     it('loads from cache when cached but not currently resident', async () => {
       vi.mocked(webllm.hasModelInCache).mockResolvedValue(true);
       const engine = makeEngine();
-      vi.mocked(webllm.CreateMLCEngine).mockResolvedValue(engine as never);
+      vi.mocked(webllm.CreateWebWorkerMLCEngine).mockResolvedValue(engine as never);
 
       const result = await getLoadedEngine(MODEL_ID);
 
       expect(result).toBe(engine);
-      expect(webllm.CreateMLCEngine).toHaveBeenCalledWith(MODEL_ID, expect.any(Object), expect.any(Object));
+      expect(webllm.CreateWebWorkerMLCEngine).toHaveBeenCalledWith(expect.anything(), MODEL_ID, expect.any(Object), expect.any(Object));
     });
 
     it('throws MODEL_NOT_AVAILABLE_MESSAGE when not cached (never downloaded or evicted)', async () => {
       vi.mocked(webllm.hasModelInCache).mockResolvedValue(false);
 
       await expect(getLoadedEngine(MODEL_ID)).rejects.toThrow(MODEL_NOT_AVAILABLE_MESSAGE);
-      expect(webllm.CreateMLCEngine).not.toHaveBeenCalled();
+      expect(webllm.CreateWebWorkerMLCEngine).not.toHaveBeenCalled();
     });
 
-    it('dedupes two concurrent getLoadedEngine calls for the same modelId into a single CreateMLCEngine call', async () => {
+    it('dedupes two concurrent getLoadedEngine calls for the same modelId into a single CreateWebWorkerMLCEngine call', async () => {
       vi.mocked(webllm.hasModelInCache).mockResolvedValue(true);
       const engine = makeEngine();
-      let resolveCreate!: (value: MLCEngine) => void;
-      vi.mocked(webllm.CreateMLCEngine).mockImplementation(
-        () => new Promise<MLCEngine>((resolve) => { resolveCreate = resolve; }),
+      let resolveCreate!: (value: never) => void;
+      vi.mocked(webllm.CreateWebWorkerMLCEngine).mockImplementation(
+        () => new Promise<never>((resolve) => { resolveCreate = resolve; }),
       );
 
       const p1 = getLoadedEngine(MODEL_ID);
       const p2 = getLoadedEngine(MODEL_ID);
-      await vi.waitFor(() => expect(webllm.CreateMLCEngine).toHaveBeenCalled());
+      await vi.waitFor(() => expect(webllm.CreateWebWorkerMLCEngine).toHaveBeenCalled());
       resolveCreate(engine as never);
       const [result1, result2] = await Promise.all([p1, p2]);
 
       expect(result1).toBe(engine);
       expect(result2).toBe(engine);
-      expect(webllm.CreateMLCEngine).toHaveBeenCalledTimes(1);
+      expect(webllm.CreateWebWorkerMLCEngine).toHaveBeenCalledTimes(1);
     });
 
     it('unloads the previous engine when switching to a different model', async () => {
       const firstEngine = makeEngine();
-      vi.mocked(webllm.CreateMLCEngine).mockResolvedValue(firstEngine as never);
+      vi.mocked(webllm.CreateWebWorkerMLCEngine).mockResolvedValue(firstEngine as never);
       await downloadModel(MODEL_ID);
 
       const otherModelId = ASSISTANT.webllmModels[1].id;
       vi.mocked(webllm.hasModelInCache).mockResolvedValue(true);
       const secondEngine = makeEngine();
-      vi.mocked(webllm.CreateMLCEngine).mockResolvedValue(secondEngine as never);
+      vi.mocked(webllm.CreateWebWorkerMLCEngine).mockResolvedValue(secondEngine as never);
 
       const result = await getLoadedEngine(otherModelId);
 
@@ -315,29 +315,29 @@ describe('model-download', () => {
       expect(webllm.hasModelInCache).toHaveBeenCalledWith(MODEL_ID, expect.objectContaining({ cacheBackend: 'cache' }));
     });
 
-    it('downloadModel passes the same appConfig into CreateMLCEngine', async () => {
+    it('downloadModel passes the same appConfig into CreateWebWorkerMLCEngine', async () => {
       vi.stubGlobal('caches', undefined);
       const engine = makeEngine();
-      vi.mocked(webllm.CreateMLCEngine).mockResolvedValue(engine as never);
+      vi.mocked(webllm.CreateWebWorkerMLCEngine).mockResolvedValue(engine as never);
 
       await downloadModel(MODEL_ID);
 
-      const [, config] = vi.mocked(webllm.CreateMLCEngine).mock.calls[0];
+      const [, , config] = vi.mocked(webllm.CreateWebWorkerMLCEngine).mock.calls[0];
       expect((config as { appConfig?: AppConfig } | undefined)?.appConfig).toEqual(
         expect.objectContaining({ cacheBackend: 'indexeddb' }),
       );
     });
 
-    it('getLoadedEngine checks the cache with the same indexeddb-fallback appConfig used by CreateMLCEngine', async () => {
+    it('getLoadedEngine checks the cache with the same indexeddb-fallback appConfig used by CreateWebWorkerMLCEngine', async () => {
       // Regression guard: getLoadedEngine used to call hasModelInCache(modelId)
       // with no appConfig at all, which defaults to web-llm's prebuiltAppConfig
       // (cacheBackend: "cache"). Under file:// that silently disagrees with the
-      // indexeddb fallback CreateMLCEngine uses, so a model downloaded under
+      // indexeddb fallback CreateWebWorkerMLCEngine uses, so a model downloaded under
       // the indexeddb backend would look "not cached" on the next chat turn.
       vi.stubGlobal('caches', undefined);
       vi.mocked(webllm.hasModelInCache).mockResolvedValue(true);
       const engine = makeEngine();
-      vi.mocked(webllm.CreateMLCEngine).mockResolvedValue(engine as never);
+      vi.mocked(webllm.CreateWebWorkerMLCEngine).mockResolvedValue(engine as never);
 
       await getLoadedEngine(MODEL_ID);
 
@@ -346,13 +346,13 @@ describe('model-download', () => {
   });
 
   describe('chatOpts (context window override, refs #246)', () => {
-    it('passes the context window override as the third CreateMLCEngine argument, and appConfig on the second', async () => {
+    it('passes the context window override as the third CreateWebWorkerMLCEngine argument, and appConfig on the second', async () => {
       const engine = makeEngine();
-      vi.mocked(webllm.CreateMLCEngine).mockResolvedValue(engine as never);
+      vi.mocked(webllm.CreateWebWorkerMLCEngine).mockResolvedValue(engine as never);
 
       await downloadModel(MODEL_ID);
 
-      const [, engineConfig, chatOpts] = vi.mocked(webllm.CreateMLCEngine).mock.calls[0];
+      const [, , engineConfig, chatOpts] = vi.mocked(webllm.CreateWebWorkerMLCEngine).mock.calls[0];
       expect(chatOpts).toEqual({
         context_window_size: ASSISTANT.webllmModels[0].contextWindowSize,
         sliding_window_size: -1,
@@ -365,11 +365,11 @@ describe('model-download', () => {
     it('getLoadedEngine also passes the context window override as the third argument', async () => {
       vi.mocked(webllm.hasModelInCache).mockResolvedValue(true);
       const engine = makeEngine();
-      vi.mocked(webllm.CreateMLCEngine).mockResolvedValue(engine as never);
+      vi.mocked(webllm.CreateWebWorkerMLCEngine).mockResolvedValue(engine as never);
 
       await getLoadedEngine(MODEL_ID);
 
-      const [, , chatOpts] = vi.mocked(webllm.CreateMLCEngine).mock.calls[0];
+      const [, , , chatOpts] = vi.mocked(webllm.CreateWebWorkerMLCEngine).mock.calls[0];
       expect(chatOpts).toEqual({
         context_window_size: ASSISTANT.webllmModels[0].contextWindowSize,
         sliding_window_size: -1,

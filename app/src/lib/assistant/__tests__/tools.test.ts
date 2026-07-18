@@ -251,6 +251,27 @@ describe('read-only tools', () => {
       expect(r.isError).toBeFalsy();
       expect(vi.mocked(getEvents)).toHaveBeenCalledWith(expect.objectContaining({ monitorId: undefined }));
     });
+
+    // Small models emit the literal string "null" (or "undefined"/"none"/"all")
+    // for an optional arg they mean to omit. Treating that as a monitor NAME
+    // threw "no monitor named null" and the model then hallucinated an answer
+    // from the error. These mean "no filter", not a real monitor.
+    it.each(['null', 'undefined', 'none', 'None', 'all', 'NULL', ''])(
+      'treats %o as "all monitors", not a failed lookup',
+      async (placeholder) => {
+        const tool = getToolByName('list_events')!;
+        const r = await tool.execute({ monitorId: placeholder, range: 'today' }, ctx());
+        expect(r.isError).toBeFalsy();
+        expect(vi.mocked(getEvents)).toHaveBeenCalledWith(expect.objectContaining({ monitorId: undefined }));
+      },
+    );
+
+    it('ignores a placeholder objectType instead of matching nothing', async () => {
+      const tool = getToolByName('list_events')!;
+      const r = await tool.execute({ objectType: 'null' }, ctx());
+      expect(r.isError).toBeFalsy();
+      expect(vi.mocked(getEvents)).toHaveBeenCalledWith(expect.objectContaining({ notesRegexp: undefined }));
+    });
   });
 
   // `resolveEventRange` switches over the EventRange union with no default:

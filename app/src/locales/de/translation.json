@@ -352,7 +352,9 @@
       "storage_persistent_yes": "Dauerhaft: ja",
       "storage_persistent_no": "Dauerhaft: nein",
       "storage_note": "Liegt im lokalen Speicher der App. Wird mit Löschen entfernt.",
-      "oom_note": "Lokale Modelle laufen im Speicher deines Geräts. Stürzt die App ab oder lädt das Modell nicht, ist der Speicher des Geräts erschöpft: Wähle ein kleineres Modell, oder wechsle zum Ollama-Backend, um es auf einem Server auszuführen."
+      "oom_note": "Lokale Modelle laufen im Speicher deines Geräts. Stürzt die App ab oder lädt das Modell nicht, ist der Speicher des Geräts erschöpft: Wähle ein kleineres Modell, oder wechsle zum Ollama-Backend, um es auf einem Server auszuführen.",
+      "mobile_unsupported": "Modelle auf dem Gerät werden auf Smartphones und Tablets nicht unterstützt.",
+      "mobile_unsupported_hint": "Ein Smartphone oder Tablet begrenzt den Speicher, den die App nutzen darf, und jedes Modell braucht zum Laden mehr, sodass der Speicher voll wäre und die App abstürzt. Nutze stattdessen das Ollama-Backend, um das Modell auf deinem eigenen Server auszuführen."
     },
     "language": "Sprache",
     "select_language": "Sprache auswählen",
@@ -1258,6 +1260,7 @@
     "clear": "Leeren",
     "minimize": "Minimieren",
     "reopen": "Ninjii öffnen",
+    "resize": "Größe ändern",
     "backend_on_device": "Auf dem Gerät",
     "backend_ollama": "Ollama",
     "placeholder": "Frage zu deinen Kameras...",
@@ -1285,18 +1288,19 @@
     },
     "confirm": {
       "set_monitor_enabled_enable": "Monitor {{id}} aktivieren?",
-    "set_monitor_enabled_disable": "Monitor {{id}} deaktivieren?",
+      "set_monitor_enabled_disable": "Monitor {{id}} deaktivieren?",
       "trigger_alarm": "Alarm auf Monitor {{monitorId}} auslösen?",
       "cancel_alarm": "Alarm auf Monitor {{monitorId}} abbrechen?",
       "change_monitor_function": "Funktion von Monitor {{id}} zu {{func}} ändern?",
       "change_run_state": "Server-Betriebsstatus zu {{state}} wechseln?",
       "delete_event": "Ereignis {{eventId}} löschen (Monitor {{monitorId}}, {{start}})?",
       "archive_event_archive": "Ereignis {{eventId}} archivieren?",
-    "archive_event_unarchive": "Archivierung von Ereignis {{eventId}} aufheben?",
+      "archive_event_unarchive": "Archivierung von Ereignis {{eventId}} aufheben?",
       "generic": "Aktion ausführen?",
       "cancel": "Abbrechen",
       "accept": "Bestätigen",
       "details": "Details"
-    }
+    },
+    "mobile_on_device_blocked": "Modelle auf dem Gerät können auf Smartphones und Tablets wegen Speicherbegrenzungen nicht laufen. Wechsle in den Einstellungen zum Ollama-Backend, um den Assistenten hier zu nutzen."
   }
 }

@@ -7,6 +7,20 @@
 import { log, LogLevel } from '../logger';
 import type { DisplayEntity, ToolExecuteResult } from './types';
 
+/** Literal strings a model emits for an OPTIONAL argument it means to leave
+ *  out. Small models routinely send `"null"` (or `"undefined"`, `"none"`,
+ *  `"all"`, `"any"`, `""`) instead of omitting the key, so a tool must read
+ *  these as "no value" rather than a real one, or it queries for a monitor
+ *  named "null" and fails (refs #246). */
+const OMITTED_ARG_VALUES = new Set(['', 'null', 'undefined', 'none', 'n/a', 'na', 'all', 'any']);
+
+/** Whether a model-supplied optional argument should be treated as absent.
+ *  True for undefined/null and for the placeholder strings above. */
+export function isOmittedArg(value: unknown): boolean {
+  if (value === undefined || value === null) return true;
+  return OMITTED_ARG_VALUES.has(String(value).trim().toLowerCase());
+}
+
 /** Routes the assistant may send the user to. Anything else is rejected
  *  before `ctx.host.navigate` is ever called. */
 export const NAVIGATE_ALLOWLIST = [

@@ -324,6 +324,42 @@ describe('WebLlmProvider.chat', () => {
     expect(call).not.toHaveProperty('response_format');
   });
 
+  // The model produced just "```" (a bare code fence, nothing inside) on a real
+  // Gemma 2B turn. Sampling is non-deterministic, so a retry recovers (refs #246).
+  it('retries a degenerate reply and returns the recovered answer', async () => {
+    const create = vi
+      .fn()
+      .mockResolvedValueOnce({ choices: [{ message: { content: '```' } }] })
+      .mockResolvedValueOnce({ choices: [{ message: { content: '{"answer": "Two people came."}' } }] });
+    vi.mocked(getLoadedEngine).mockResolvedValue({ chat: { completions: { create } } } as never);
+
+    const provider = new WebLlmProvider(ASSISTANT.defaultModelId);
+    const turn = await provider.chat([{ role: 'user', text: 'hi' }], [], 'sys', new AbortController().signal);
+
+    expect(turn.text).toBe('Two people came.');
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+
+  it('gives up with the parse-error apology, carrying raw, after every attempt degenerates', async () => {
+    const create = vi.fn().mockResolvedValue({ choices: [{ message: { content: '```' } }] });
+    vi.mocked(getLoadedEngine).mockResolvedValue({ chat: { completions: { create } } } as never);
+
+    const provider = new WebLlmProvider(ASSISTANT.defaultModelId);
+    const turn = await provider.chat([{ role: 'user', text: 'hi' }], [], 'sys', new AbortController().signal);
+
+    expect(turn.text).toBe('__i18n:assistant.parse_error');
+    expect(turn.raw).toBe('```');
+    expect(create).toHaveBeenCalledTimes(ASSISTANT.webllmMaxAttempts);
+  });
+
+  it('does not retry a valid answer', async () => {
+    const create = vi.fn().mockResolvedValue({ choices: [{ message: { content: '{"answer": "ok"}' } }] });
+    vi.mocked(getLoadedEngine).mockResolvedValue({ chat: { completions: { create } } } as never);
+    const provider = new WebLlmProvider(ASSISTANT.defaultModelId);
+    await provider.chat([{ role: 'user', text: 'hi' }], [], 'sys', new AbortController().signal);
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
   it('returns a ToolCall turn for a canned {"tool","input"} completion', async () => {
     const create = vi.fn().mockResolvedValue({
       choices: [{ message: { content: '{"tool": "list_monitors", "input": {}}' } }],

@@ -13,14 +13,14 @@
  * subscribes), the same pattern `services/download.ts` already uses: a plain
  * function call into a leaf store, not a React/store dependency edge (rule 31).
  */
-import type { AppConfig, ChatOptions, MLCEngine, MLCEngineConfig } from '@mlc-ai/web-llm';
+import type { AppConfig, ChatOptions, MLCEngineConfig, MLCEngineInterface } from '@mlc-ai/web-llm';
 import { useBackgroundTasks } from '../../stores/backgroundTasks';
 import { ASSISTANT } from '../zmninja-ng-constants';
 import { log, LogLevel } from '../logger';
 
 interface LoadedEngine {
   modelId: string;
-  engine: MLCEngine;
+  engine: MLCEngineInterface;
 }
 
 /** Thrown by `getLoadedEngine` when `modelId` has no cached weights (never
@@ -40,7 +40,7 @@ let loadedEngine: LoadedEngine | undefined;
  *  each would start its own `CreateMLCEngine` call and the app would end up
  *  with two engines for the same model resident on the GPU. Callers await
  *  the same promise instead of starting a second one. */
-const inFlightEngineLoads = new Map<string, Promise<MLCEngine>>();
+const inFlightEngineLoads = new Map<string, Promise<MLCEngineInterface>>();
 
 /** Cached promise for the one-time `import('@mlc-ai/web-llm')`. A real
  *  browser's module loader already caches a dynamic import by resolved URL,
@@ -103,7 +103,7 @@ export function chatOptsFor(modelId: string): ChatOptions {
  *  that joins an already-in-flight load does not get its own callbacks
  *  attached to `CreateMLCEngine`, since web-llm only takes one config per
  *  call. */
-async function createEngineOnce(modelId: string, config?: MLCEngineConfig): Promise<MLCEngine> {
+async function createEngineOnce(modelId: string, config?: MLCEngineConfig): Promise<MLCEngineInterface> {
   const existing = inFlightEngineLoads.get(modelId);
   if (existing) {
     return existing;
@@ -117,7 +117,11 @@ async function createEngineOnce(modelId: string, config?: MLCEngineConfig): Prom
   const promise = (async () => {
     const webllm = await loadWebllm();
     const engineConfig: MLCEngineConfig = { ...(config ?? {}), appConfig: buildAppConfig(webllm) };
-    return webllm.CreateMLCEngine(modelId, engineConfig, chatOptsFor(modelId));
+    // Off the main thread (refs #246): the worker runs prefill/decode so a slow
+    // mobile generation never freezes the UI. `WebWorkerMLCEngine` exposes the
+    // same interface as the main-thread engine, so callers are unchanged.
+    const worker = new Worker(new URL('./web-llm-worker.ts', import.meta.url), { type: 'module' });
+    return webllm.CreateWebWorkerMLCEngine(worker, modelId, engineConfig, chatOptsFor(modelId));
   })();
   inFlightEngineLoads.set(modelId, promise);
 
@@ -251,7 +255,7 @@ export async function downloadModel(modelId: string, opts: DownloadModelOpts = {
  *  evicted it since, `hasModelInCache` says the same thing (false), and both
  *  cases should surface as an error so the UI can prompt the user to
  *  (re-)download rather than stall a chat request on an unrequested fetch. */
-export async function getLoadedEngine(modelId: string): Promise<MLCEngine> {
+export async function getLoadedEngine(modelId: string): Promise<MLCEngineInterface> {
   if (loadedEngine?.modelId === modelId) {
     return loadedEngine.engine;
   }
