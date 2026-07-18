@@ -46,6 +46,7 @@ Read this file before work. Read each listed playbook before work in that area.
 33. Only one `npm run test:e2e` per working tree.
 34. Verification runs direct commands, not output-summarizing wrappers.
 35. `AGENTS.md` owns process rules. Developer docs link rule numbers rather than copying them.
+36. When asked for a test build, use a matching existing GitHub workflow. Do not add a workflow unless none fits.
 
 ## Working directory
 
@@ -61,4 +62,3 @@ npm run test:e2e -- <feature>.feature
 ```
 
 Last command applies to UI, navigation, and workflow changes. State completed checks in handoff.
-
