@@ -17,6 +17,20 @@ describe('Settings Store', () => {
     expect(settings.snapshotRefreshInterval).toBe(3);
     expect(settings.monitorDetailCycleSeconds).toBe(0);
     expect(settings.eventsThumbnailFit).toBe('contain');
+    // Continuous event playback (#250): off by default, 1x speed.
+    expect(settings.eventContinuousPlay).toBe(false);
+    expect(settings.eventPlaybackRate).toBe(1);
+  });
+
+  it('persists continuous playback toggle and speed (#250)', () => {
+    const profileId = 'profile-cp';
+    useSettingsStore.getState().updateProfileSettings(profileId, {
+      eventContinuousPlay: true,
+      eventPlaybackRate: 2,
+    });
+    const settings = useSettingsStore.getState().getProfileSettings(profileId);
+    expect(settings.eventContinuousPlay).toBe(true);
+    expect(settings.eventPlaybackRate).toBe(2);
   });
 
   it('updates profile settings with partial values', () => {

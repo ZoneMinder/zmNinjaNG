@@ -26,7 +26,7 @@ import { httpGet } from '../../lib/http';
 import { log, LogLevel } from '../../lib/logger';
 import { getEventZmsUrl, getZmsControlUrl } from '../../lib/zm/url-builder';
 import { ZMS_COMMANDS, zmsCommandName } from '../../lib/zm/zm-constants';
-import { EVENT_SEEK_FLUSH_DELAY_MS } from '../../lib/zmninja-ng-constants';
+import { EVENT_SEEK_FLUSH_DELAY_MS, EVENT_PLAYBACK_RATES } from '../../lib/zmninja-ng-constants';
 import { sendDelayedCmdQuit, cancelPendingQuit } from '../../lib/zm/zms-quit';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useZoomPan } from '../../hooks/useZoomPan';
@@ -47,6 +47,14 @@ interface ZmsEventPlayerProps {
   minStreamingPort?: number;
   monitorId?: string;
   className?: string;
+  /** Fired once when playback reaches the end of the event. Continuous
+   * playback (#250) uses this to auto-advance to the next event. */
+  onEnded?: () => void;
+  /** Persisted playback speed multiplier (one of EVENT_PLAYBACK_RATES). The
+   * initial stream and speed presets start here so speed carries across events. */
+  playbackRate?: number;
+  /** Called when the user picks a speed preset, so it can be persisted. */
+  onRateChange?: (rate: number) => void;
 }
 
 export function ZmsEventPlayer({
@@ -62,6 +70,9 @@ export function ZmsEventPlayer({
   minStreamingPort,
   monitorId,
   className,
+  onEnded,
+  playbackRate,
+  onRateChange,
 }: ZmsEventPlayerProps) {
   const { t } = useTranslation();
   const bandwidth = useBandwidthSettings();
@@ -69,7 +80,30 @@ export function ZmsEventPlayer({
   const { settings } = useCurrentProfile();
   const [currentFrame, setCurrentFrame] = useState(1);
   const [isPlaying, setIsPlaying] = useState(true);
-  const [playbackSpeed, setPlaybackSpeed] = useState(100); // 100 = 1x speed
+  // ZMS speed is a percentage (100 = 1x). Seed from the persisted multiplier so
+  // the stream and presets open at the saved speed and carry it across events.
+  const [playbackSpeed, setPlaybackSpeed] = useState(() => Math.round((playbackRate ?? 1) * 100));
+
+  // Latest values in refs: the poll effect and the stream-URL memo read these
+  // without taking them as deps (which would restart the stream on every change).
+  const playbackSpeedRef = useRef(playbackSpeed);
+  const onEndedRef = useRef(onEnded);
+  const onRateChangeRef = useRef(onRateChange);
+  const endedFiredRef = useRef(false);
+  useEffect(() => {
+    playbackSpeedRef.current = playbackSpeed;
+    onEndedRef.current = onEnded;
+    onRateChangeRef.current = onRateChange;
+  }, [playbackSpeed, onEnded, onRateChange]);
+
+  // New event: resume playing from the first frame and re-arm the end signal.
+  // Without this, an event that ended leaves isPlaying=false, so continuous
+  // playback would load the next event paused.
+  useEffect(() => {
+    setIsPlaying(true);
+    setCurrentFrame(1);
+    endedFiredRef.current = false;
+  }, [eventId]);
 
   // Duration in seconds as reported by the running ZMS stream. The DB event
   // Length and the stream's own duration can disagree (variable capture rate,
@@ -122,15 +156,16 @@ export function ZmsEventPlayer({
     return positions;
   }, [alarmFrameId, maxScoreFrameId, totalFrames]);
 
-  // Build ZMS stream URL. Starts at 1x (rate 100); speed changes go through
-  // CMD_VARPLAY so the img src never changes after mount.
+  // Build ZMS stream URL. Starts at the persisted speed (read from a ref so a
+  // mid-event speed change does not recompute the URL); later speed changes go
+  // through CMD_VARPLAY so the img src never changes after mount.
   const zmsUrl = useMemo(() => {
     if (!isAccessTokenFresh) return '';
     return getEventZmsUrl(portalUrl, eventId, {
       token,
       apiUrl,
       frame: 1,
-      rate: 100,
+      rate: playbackSpeedRef.current,
       maxfps: 30,
       replay: 'single',
       connkey: connKey,
@@ -241,6 +276,11 @@ export function ZmsEventPlayer({
             sendCommand(ZMS_COMMANDS.cmdPause);
             setIsPlaying(false);
             setCurrentFrame(totalFrames);
+            // Fire the end signal once per event (the eventId effect re-arms it).
+            if (!endedFiredRef.current) {
+              endedFiredRef.current = true;
+              onEndedRef.current?.();
+            }
           }
         }
       } catch (err) {
@@ -283,6 +323,8 @@ export function ZmsEventPlayer({
     setPlaybackSpeed(rate);
     sendCommand(ZMS_COMMANDS.cmdVarPlay, { rate });
     setIsPlaying(true);
+    // Persist as a multiplier so it carries to the next event and the MP4 player.
+    onRateChangeRef.current?.(rate / 100);
   }, [sendCommand]);
 
   // Handle frame navigation
@@ -384,13 +426,12 @@ export function ZmsEventPlayer({
   // Pinch-to-zoom and pan for ZMS image
   const zoomPan = useZoomPan({ maxScale: 4 });
 
-  const speedPresets = [
-    { label: '0.25x', value: 25 },
-    { label: '0.5x', value: 50 },
-    { label: '1x', value: 100 },
-    { label: '2x', value: 200 },
-    { label: '4x', value: 400 },
-  ];
+  // Shared with the MP4 speed menu (EVENT_PLAYBACK_RATES). ZMS uses percentages,
+  // so each multiplier maps to rate * 100.
+  const speedPresets = EVENT_PLAYBACK_RATES.map((rate) => ({
+    label: `${rate}x`,
+    value: rate * 100,
+  }));
 
   return (
     <div className={className}>

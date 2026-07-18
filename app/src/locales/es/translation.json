@@ -267,6 +267,8 @@
     "video_playback_failed": "Video no reproducible nativamente",
     "load_error": "Error al cargar evento",
     "all_events": "Todos",
+    "continuous_play": "Continuo",
+    "no_more_videos": "No hay más videos",
     "seconds": "segundos",
     "timing": "Tiempo",
     "event_playback": "Reproducción de Evento",

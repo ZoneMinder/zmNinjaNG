@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 import type { Layout, Layouts } from 'react-grid-layout';
 import { LogLevel } from '../lib/log-level';
 import type { BandwidthMode } from '../lib/zmninja-ng-constants';
-import { API_REQUEST, ASSISTANT, STORAGE_KEYS } from '../lib/zmninja-ng-constants';
+import { API_REQUEST, ASSISTANT, DEFAULT_EVENT_PLAYBACK_RATE, STORAGE_KEYS } from '../lib/zmninja-ng-constants';
 import type { AssistantBackend } from '../lib/assistant/types';
 
 export type ViewMode = 'snapshot' | 'streaming';
@@ -182,6 +182,13 @@ export interface ProfileSettings {
   customTimeFormat: string; // used when timeFormat === 'custom'
   // Auto-play video when opening event detail
   eventVideoAutoplay: boolean;
+  // Continuous event playback (#250): when true, reaching the end of an event
+  // video auto-advances to the next event (newer StartDateTime, honoring the
+  // active filters). Persists per profile.
+  eventContinuousPlay: boolean;
+  // Event playback speed multiplier (one of EVENT_PLAYBACK_RATES). Honored by
+  // both the MP4 and ZMS players and reused across a continuous run.
+  eventPlaybackRate: number;
   // Desktop sidebar width in pixels (60–320, persisted across sessions)
   sidebarWidth: number;
   // TV mode: enables D-pad navigation and larger UI
@@ -333,6 +340,8 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   customDateFormat: 'EEE, MMM d yyyy',
   customTimeFormat: 'h:mm:ss a',
   eventVideoAutoplay: true,
+  eventContinuousPlay: false,
+  eventPlaybackRate: DEFAULT_EVENT_PLAYBACK_RATE,
   sidebarWidth: 256,
   tvMode: false,
   showProtocolLabel: true,

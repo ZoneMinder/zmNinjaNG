@@ -267,6 +267,8 @@
     "video_playback_failed": "Video not natively playable",
     "load_error": "Error loading event",
     "all_events": "All Events",
+    "continuous_play": "Continuous Play",
+    "no_more_videos": "No more videos to play",
     "seconds": "seconds",
     "timing": "Timing",
     "event_playback": "Event Playback",

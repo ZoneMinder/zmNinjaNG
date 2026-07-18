@@ -14,6 +14,7 @@ type Player = ReturnType<typeof videojs>;
 import { cn } from '../../lib/utils';
 import { log, LogLevel } from '../../lib/logger';
 import { Platform } from '../../lib/platform';
+import { EVENT_PLAYBACK_RATES } from '../../lib/zmninja-ng-constants';
 import { applyVideoJsMarkers, type VideoMarker, type VideoJsMarkersHost } from '../../lib/event/video-markers';
 import type { MarkerConfig } from '../../types/videojs-markers';
 import { usePip } from '../../contexts/PipContext';
@@ -45,6 +46,15 @@ interface Mp4EventPlayerProps {
   onReady?: (player: Player) => void;
   /** Callback on error */
   onError?: (error: unknown) => void;
+  /** Callback when playback reaches the end of the video (video.js 'ended').
+   * Continuous playback (#250) uses this to auto-advance to the next event. */
+  onEnded?: () => void;
+  /** Playback speed multiplier (one of EVENT_PLAYBACK_RATES). Applied on load
+   * and reapplied on source change so it carries across a continuous run. */
+  playbackRate?: number;
+  /** Called when the user changes speed via the video.js rate menu, so the
+   * chosen rate can be persisted. Not called for programmatic reapplies. */
+  onRateChange?: (rate: number) => void;
   /** Event ID for PiP persistence: when provided, enables PiP survival across navigation */
   eventId?: string;
 }
@@ -62,6 +72,9 @@ export function Mp4EventPlayer({
   onMarkerClick,
   onReady,
   onError,
+  onEnded,
+  playbackRate,
+  onRateChange,
   eventId
 }: Mp4EventPlayerProps) {
   const videoRef = useRef<HTMLDivElement>(null);
@@ -76,14 +89,25 @@ export function Mp4EventPlayer({
   // player on every parent render.
   const onReadyRef = useRef(onReady);
   const onErrorRef = useRef(onError);
+  const onEndedRef = useRef(onEnded);
+  const onRateChangeRef = useRef(onRateChange);
   const markersRef = useRef(markers);
   const onMarkerClickRef = useRef(onMarkerClick);
   useEffect(() => {
     onReadyRef.current = onReady;
     onErrorRef.current = onError;
+    onEndedRef.current = onEnded;
+    onRateChangeRef.current = onRateChange;
     markersRef.current = markers;
     onMarkerClickRef.current = onMarkerClick;
-  }, [onReady, onError, markers, onMarkerClick]);
+  }, [onReady, onError, onEnded, onRateChange, markers, onMarkerClick]);
+
+  // Desired playback rate held in a ref so the mount-only 'ratechange' listener
+  // can tell a genuine user menu change (rate differs from desired) from our own
+  // programmatic reapply (rate equals desired). Setting defaultPlaybackRate on
+  // apply keeps the rate across source changes, so no reset-to-1 fires here.
+  const desiredRateRef = useRef(playbackRate);
+  useEffect(() => { desiredRateRef.current = playbackRate; }, [playbackRate]);
 
   // True once the player has fired its ready callback. The markers plugin reads
   // the player DOM, so marker updates are gated on this. lastMarkerSig skips
@@ -216,6 +240,7 @@ export function Mp4EventPlayer({
       aspectRatio,
       poster,
       disablePictureInPicture: isAndroid,
+      playbackRates: [...EVENT_PLAYBACK_RATES],
       controlBar: {
         pictureInPictureToggle: !isAndroid,
       },
@@ -237,6 +262,15 @@ export function Mp4EventPlayer({
         log.videoPlayer('Video markers initialized', LogLevel.INFO, { count: initialMarkers.length });
       }
 
+      // Apply the persisted speed on first load. defaultPlaybackRate makes the
+      // rate survive later source swaps (continuous playback), so the update
+      // effect does not have to re-fight a reset-to-1 on every new event.
+      const rate = desiredRateRef.current;
+      if (rate && rate !== player.playbackRate()) {
+        player.defaultPlaybackRate(rate);
+        player.playbackRate(rate);
+      }
+
       onReadyRef.current?.(player);
     });
 
@@ -245,6 +279,21 @@ export function Mp4EventPlayer({
       log.videoPlayer('VideoJS playback error', LogLevel.ERROR, err);
       setError(err?.message || 'An unknown error occurred');
       onErrorRef.current?.(err);
+    });
+
+    player.on('ended', () => {
+      onEndedRef.current?.();
+    });
+
+    // Persist only user-initiated speed changes. A programmatic reapply lands on
+    // desiredRateRef, so comparing against it filters our own writes out.
+    player.on('ratechange', () => {
+      const r = player.playbackRate();
+      if (r && r !== desiredRateRef.current) {
+        desiredRateRef.current = r;
+        player.defaultPlaybackRate(r);
+        onRateChangeRef.current?.(r);
+      }
     });
   }, []);
 
@@ -272,7 +321,15 @@ export function Mp4EventPlayer({
     if (autoplay !== player.autoplay()) {
       player.autoplay(autoplay);
     }
-  }, [src, type, poster, autoplay]);
+
+    // Reapply the desired rate when it changes externally (e.g. a rate set on a
+    // previous event carried over) or after a source swap. defaultPlaybackRate
+    // set alongside keeps a freshly loaded source at this rate.
+    if (playbackRate && playbackRate !== player.playbackRate()) {
+      player.defaultPlaybackRate(playbackRate);
+      player.playbackRate(playbackRate);
+    }
+  }, [src, type, poster, autoplay, playbackRate]);
 
   // Update markers when they change, but only once the player is ready (the
   // markers plugin reads the player DOM). The ready callback applies the initial
