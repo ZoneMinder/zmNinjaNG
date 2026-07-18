@@ -20,6 +20,11 @@ Then('the continuous-play toggle is visible if on an event detail page', async (
   await expect(toggle(page)).toBeVisible();
 });
 
+Then('the continuous-play toggle reads {string} if on an event detail page', async ({ page }, label: string) => {
+  if (!onEventDetail(page)) return;
+  await expect(toggle(page)).toHaveText(label);
+});
+
 When('I enable continuous play if on an event detail page', async ({ page }) => {
   if (!onEventDetail(page)) return;
   const btn = toggle(page);

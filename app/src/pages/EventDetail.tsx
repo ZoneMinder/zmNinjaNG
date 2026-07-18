@@ -44,13 +44,14 @@ import { useEventNavigation } from '../hooks/useEventNavigation';
 import { useServerUrls } from '../hooks/useServerUrls';
 import { cn } from '../lib/utils';
 import { formatEventRelative } from '../lib/relative-time';
+import { CONTINUOUS_PLAYBACK_TOAST_DURATION_MS } from '../lib/zmninja-ng-constants';
 
 export default function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
   const { t, i18n } = useTranslation();
-  const { fmtDate, fmtTime } = useDateTimeFormat();
+  const { fmtDate, fmtTime, fmtDateTime } = useDateTimeFormat();
   const { isTvMode } = useTvMode();
 
   // Check if user came from another page (navigation state tracking)
@@ -132,12 +133,31 @@ export default function EventDetail() {
   const handleVideoEnded = useCallback(async () => {
     if (!continuousPlay || advancingRef.current) return;
     advancingRef.current = true;
-    const advanced = await goToNextEvent();
+    const advanced = await goToNextEvent({ continuousPlayback: true });
     if (!advanced) {
       advancingRef.current = false;
       toast.info(t('event_detail.no_more_videos'));
     }
   }, [continuousPlay, goToNextEvent, t]);
+
+  const announcedContinuousEventRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!location.state?.continuousPlayback || !event || !monitorData?.Monitor) return;
+    if (announcedContinuousEventRef.current === event.Event.Id) return;
+    announcedContinuousEventRef.current = event.Event.Id;
+    toast.info(
+      <div>
+        <div>{t('event_detail.continuous_playing', {
+          monitor: monitorData.Monitor.Name,
+          id: event.Event.MonitorId,
+        })}</div>
+        <div className="text-xs text-muted-foreground">
+          {fmtDateTime(new Date(event.Event.StartDateTime.replace(' ', 'T')))}
+        </div>
+      </div>,
+      { duration: CONTINUOUS_PLAYBACK_TOAST_DURATION_MS },
+    );
+  }, [event, fmtDateTime, location.state, monitorData, t]);
 
   // Fetch tags for this event
   const { getTagsForEvent } = useEventTagMapping({
@@ -360,7 +380,7 @@ export default function EventDetail() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={goToNextEvent}
+            onClick={() => { void goToNextEvent(); }}
             disabled={isLoadingNext}
             aria-label={t('common.next')}
             className="h-7 w-7"

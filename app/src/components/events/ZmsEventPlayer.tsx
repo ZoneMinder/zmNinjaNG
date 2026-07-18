@@ -167,7 +167,7 @@ export function ZmsEventPlayer({
       frame: 1,
       rate: playbackSpeedRef.current,
       maxfps: 30,
-      replay: 'single',
+      replay: 'none',
       connkey: connKey,
       minStreamingPort,
       monitorId,

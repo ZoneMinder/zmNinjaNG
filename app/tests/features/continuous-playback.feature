@@ -17,6 +17,7 @@ Feature: Continuous event playback
     When I navigate to the "Events" page
     And I click into the first event if events exist
     Then the continuous-play toggle is visible if on an event detail page
+    And the continuous-play toggle reads "Continue" if on an event detail page
     When I enable continuous play if on an event detail page
     And I refresh the page
     Then continuous play is still enabled if on an event detail page

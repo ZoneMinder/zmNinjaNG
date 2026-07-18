@@ -85,9 +85,9 @@ Details about the event:
 
 - **Previous/Next** buttons to move between events without going back to the list
 
-### Continuous Play
+### Continue
 
-The continuous-play button (list-video icon, next to All Events) plays events back-to-back for hands-free review. When it is on, an event finishing advances to the next event automatically, following the same filters as the Previous/Next buttons. When there are no more matching events, a "No more videos to play" message appears and playback stops.
+The Continue button (list-video icon, next to All Events) plays events back-to-back for hands-free review. When it is on, an event finishing advances to the next event automatically, following the same filters as the Previous/Next buttons. A four-second message names the new monitor, its ID, and event time. When there are no more matching events, a "No more videos to play" message appears and playback stops.
 
 The toggle is remembered per profile: once turned on it stays on for future events. The playback speed you pick is also remembered and reused for each event in a run, on both the MP4 and ZMS players.
 

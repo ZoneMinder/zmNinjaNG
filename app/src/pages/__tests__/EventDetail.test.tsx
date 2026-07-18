@@ -28,6 +28,8 @@ const h = vi.hoisted(() => ({
     eventPlaybackRate: 1,
   } as Record<string, unknown>,
   goToNextEvent: vi.fn(),
+  locationState: {} as Record<string, unknown>,
+  translate: vi.fn((key: string) => key),
 }));
 
 vi.mock('@tanstack/react-query', () => ({
@@ -46,11 +48,11 @@ vi.mock('sonner', () => ({
 vi.mock('react-router-dom', () => ({
   useParams: () => ({ id: '101' }),
   useNavigate: () => vi.fn(),
-  useLocation: () => ({ state: {} }),
+  useLocation: () => ({ state: h.locationState }),
 }));
 
 vi.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }),
+  useTranslation: () => ({ t: h.translate, i18n: { language: 'en' } }),
 }));
 
 // EventDetail pulls in modules that each use their own log.* helper; a Proxy answers
@@ -95,6 +97,7 @@ vi.mock('../../hooks/useDateTimeFormat', () => ({
   useDateTimeFormat: () => ({
     fmtDate: () => '2024-01-01',
     fmtTime: () => '10:00:00',
+    fmtDateTime: () => '2024-01-01 10:00:00',
   }),
 }));
 
@@ -245,6 +248,8 @@ describe('EventDetail continuous playback (#250)', () => {
     toastInfo.mockClear();
     h.settings.eventContinuousPlay = false;
     h.goToNextEvent.mockReset();
+    h.locationState = {};
+    h.translate.mockClear();
     useSettingsStore.setState({ profileSettings: {} });
     useQueryMock.mockReset();
     useQueryMock.mockImplementation(({ queryKey }: { queryKey: readonly unknown[] }) => {
@@ -271,6 +276,18 @@ describe('EventDetail continuous playback (#250)', () => {
 
     await waitFor(() => expect(h.goToNextEvent).toHaveBeenCalledTimes(1));
     expect(toastInfo).not.toHaveBeenCalled();
+  });
+
+  it('announces the monitor and time after an automatic advance', async () => {
+    h.locationState = { continuousPlayback: true };
+    render(<EventDetail />);
+
+    await waitFor(() => expect(h.translate).toHaveBeenCalledWith(
+      'event_detail.continuous_playing',
+      { monitor: 'Front Door', id: '1' },
+    ));
+    render(toastInfo.mock.calls[0][0]);
+    expect(screen.getByText('2024-01-01 10:00:00')).toHaveClass('text-xs', 'text-muted-foreground');
   });
 
   it('shows "no more videos" and stops when there is no next event', async () => {
