@@ -157,6 +157,17 @@ describe('AssistantWidget', () => {
     expect(screen.getByAltText('assistant.title')).toHaveAttribute('src', '/ninjii.png');
   });
 
+  it('renders Ninjii in a visually distinct desktop workspace', () => {
+    useAssistantPanelStore.setState({ state: 'open' });
+    render(<AssistantWidget />);
+
+    expect(screen.getByTestId('assistant-panel')).toHaveClass(
+      'border-primary/30',
+      'shadow-primary/10',
+      'rounded-xl',
+    );
+  });
+
   it('puts the resize handle at the top-left, the corner away from the bottom-right anchor', () => {
     useAssistantPanelStore.setState({ state: 'open' });
     render(<AssistantWidget />);

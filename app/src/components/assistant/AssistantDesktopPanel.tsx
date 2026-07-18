@@ -75,7 +75,7 @@ export function AssistantDesktopPanel() {
       data-testid="assistant-panel"
       style={{ '--assistant-w': `${size.width}px`, '--assistant-h': `${size.height}px` } as CSSProperties}
       className={cn(
-        'fixed bottom-4 right-4 z-50 flex flex-col overflow-hidden rounded-lg border bg-card shadow-xl',
+        'fixed bottom-4 right-4 z-50 flex flex-col overflow-hidden rounded-xl border border-primary/30 bg-card/95 shadow-2xl shadow-primary/10 backdrop-blur-sm',
         'w-[var(--assistant-w)] h-[var(--assistant-h)]',
         // Literal px values must match ASSISTANT_PANEL's min/max* (Tailwind's
         // JIT needs a static string); setSize() clamps to the same bounds.
@@ -93,7 +93,7 @@ export function AssistantDesktopPanel() {
         <div className="ml-1 mt-1 h-2.5 w-2.5 rounded-tl-sm border-l-2 border-t-2 border-muted-foreground/40" />
       </div>
 
-      <div className="flex items-center gap-2 border-b py-2 pl-3 pr-2">
+      <div className="flex items-center gap-2 border-b border-primary/20 bg-primary/5 py-2 pl-3 pr-2">
         <img src={ASSISTANT.logoPath} alt={t('assistant.title')} className="h-5 w-5 shrink-0 rounded object-contain" />
         <div className="flex-1 min-w-0">
           <div className="truncate text-sm font-medium leading-tight">{t('assistant.title')}</div>

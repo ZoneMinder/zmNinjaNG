@@ -262,7 +262,7 @@ export function AssistantSection({
           <>
             <div className="px-4 py-3 space-y-2">
               <RowLabel label={t('settings.assistant.backend')} />
-              <select
+          <select
                 className="text-sm bg-background border rounded px-2 py-1.5 w-full sm:w-64"
                 value={settings.assistantBackend}
                 onChange={(e) => update('assistantBackend', e.target.value as AssistantBackend)}
@@ -316,9 +316,12 @@ export function AssistantSection({
                       <option key={m.id} value={m.id}>
                         {m.label}
                       </option>
-                    ))}
-                  </select>
-                </div>
+            ))}
+          </select>
+          <p className="text-xs text-muted-foreground">
+            {t('settings.assistant.on_device_ollama_hint')}
+          </p>
+        </div>
 
                 <div className="px-4 py-3 space-y-2">
                   <div className="flex flex-wrap items-center gap-3">

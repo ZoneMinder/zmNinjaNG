@@ -48,6 +48,15 @@ describe('AssistantMobileSheet', () => {
     expect(screen.getByTestId('assistant-mobile-clear')).toBeInTheDocument();
   });
 
+  it('renders Ninjii in a visually distinct workspace', () => {
+    render(<AssistantMobileSheet />);
+
+    expect(screen.getByTestId('assistant-mobile-sheet')).toHaveClass(
+      'border-primary/30',
+      'shadow-primary/10',
+    );
+  });
+
   it('rests at the bar minimum height when the fraction is 0', () => {
     render(<AssistantMobileSheet />);
     const sheet = screen.getByTestId('assistant-mobile-sheet');

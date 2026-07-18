@@ -194,7 +194,10 @@ export function AssistantOllamaSection({ settings, update, currentProfile }: Ass
   return (
     <>
       <div className="px-4 py-3 space-y-2">
-        <RowLabel label={t('settings.assistant.ollama_url')} />
+          <RowLabel
+            label={t('settings.assistant.ollama_url')}
+            desc={t('settings.assistant.ollama_url_hint')}
+          />
         <Input
           value={settings.assistantOllamaBaseUrl}
           onChange={(e) => update('assistantOllamaBaseUrl', e.target.value)}
@@ -258,8 +261,8 @@ export function AssistantOllamaSection({ settings, update, currentProfile }: Ass
           </>
         )}
 
-        {selectableModels.length > 0 && (
-          <div className="space-y-1 pt-1">
+          {selectableModels.length > 0 && (
+            <div className="space-y-1 pt-1">
             <RowLabel label={t('settings.assistant.model_manual')} />
             <Input
               value={settings.assistantOllamaModel}
@@ -268,9 +271,12 @@ export function AssistantOllamaSection({ settings, update, currentProfile }: Ass
               className="w-full sm:w-64"
               data-testid="assistant-ollama-model"
             />
-          </div>
-        )}
-      </div>
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground">
+            {t('settings.assistant.ollama_model_hint')}
+          </p>
+        </div>
 
       <div className="px-4 py-3 space-y-2">
         <RowLabel

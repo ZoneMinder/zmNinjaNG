@@ -183,6 +183,7 @@ describe('AssistantSection backend picker and gating', () => {
     expect(screen.getByTestId('assistant-backend-select')).toHaveValue('on-device');
     expect(screen.getByTestId('assistant-model-select')).toBeInTheDocument();
     expect(screen.queryByTestId('assistant-ollama-url')).not.toBeInTheDocument();
+    expect(screen.getByText('settings.assistant.on_device_ollama_hint')).toBeInTheDocument();
   });
 
   it('switches to the Ollama sub-section and hides the on-device picker when the backend changes', async () => {

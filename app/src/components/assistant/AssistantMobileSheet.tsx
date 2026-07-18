@@ -110,12 +110,12 @@ export function AssistantMobileSheet() {
       onFocusCapture={handleFocusCapture}
       style={{ height: `${restingPx}px`, bottom: `${keyboardInset}px` } as CSSProperties}
       className={cn(
-        'fixed inset-x-0 z-50 flex flex-col overflow-hidden rounded-t-2xl border-t bg-card shadow-xl',
+        'fixed inset-x-0 z-50 flex flex-col overflow-hidden rounded-t-2xl border border-b-0 border-primary/30 bg-card/95 shadow-2xl shadow-primary/10 backdrop-blur-sm',
         'pb-[var(--sai-bottom,env(safe-area-inset-bottom))]',
         'pl-[var(--sai-left,env(safe-area-inset-left))] pr-[var(--sai-right,env(safe-area-inset-right))]',
       )}
     >
-      <div className="relative flex h-7 shrink-0 items-center justify-center">
+      <div className="relative flex h-7 shrink-0 items-center justify-center border-b border-primary/20 bg-primary/5">
         {/* Full-width drag surface behind the buttons; the grip pill is its
             visible affordance. Buttons sit on top (z-10) so a tap on one never
             starts a drag. */}

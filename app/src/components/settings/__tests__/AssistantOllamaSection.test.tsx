@@ -47,6 +47,13 @@ describe('AssistantOllamaSection', () => {
     toastMock.mockReset();
   });
 
+  it('shows the GPU and Gemma 4 guidance', () => {
+    render(<AssistantOllamaSection settings={settings} update={vi.fn()} currentProfile={profile} />);
+
+    expect(screen.getByText('settings.assistant.ollama_url_hint')).toBeInTheDocument();
+    expect(screen.getByText('settings.assistant.ollama_model_hint')).toBeInTheDocument();
+  });
+
   describe('Test connection button', () => {
     it('returns to the idle label after a resolved test', async () => {
       render(<AssistantOllamaSection settings={settings} update={vi.fn()} currentProfile={profile} />);

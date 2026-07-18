@@ -29,9 +29,9 @@ Type your question and press Enter (or tap Send). While the assistant is working
 
 ### On a phone
 
-The assistant is a bottom sheet that shares the screen instead of covering it, so the app stays visible above it. It rests as a slim bar at the bottom. Drag the grip at the top of the sheet up to any height to see more of the conversation, or down to shrink it. Tapping the input grows the sheet above the keyboard so you can read replies as you type. The chevron collapses the sheet to a floating button (tap the button to bring it back), and the X closes it. The sheet keeps its proportion when you rotate the phone.
+The assistant is a bottom sheet that shares the screen instead of covering it, so the app stays visible above it. Its tinted header, accent outline, and shadow separate the Ninjii workspace from the app. It rests as a slim bar at the bottom. Drag the grip at the top of the sheet up to any height to see more of the conversation, or down to shrink it. Tapping the input grows the sheet above the keyboard so you can read replies as you type. The chevron collapses the sheet to a floating button (tap the button to bring it back), and the X closes it. The sheet keeps its proportion when you rotate the phone.
 
-On a tablet or desktop the assistant is a floating, resizable card in the bottom-right corner instead.
+On a tablet or desktop the assistant is a floating, resizable card in the bottom-right corner instead, with the same tinted header, accent outline, and shadow.
 
 Examples of what you can ask:
 
@@ -74,7 +74,7 @@ Local models run in your computer's memory. If the app crashes or the model neve
 
 Set **Backend** to **Ollama** and give the app the address of your server. The default, `http://localhost:11434/v1`, works when the server runs on the same machine as the app. On a phone, `localhost` means the phone itself, so you need the server's address on your network instead, for example `http://192.168.1.50:11434/v1`.
 
-**Test** checks the server answers. The model list fills in automatically from the server, and you can also type a model name by hand. The **API key** field is optional, for a server that requires one; it is stored in your device's secure storage, not alongside the rest of your settings.
+**Test** checks the server answers. The model list fills in automatically from the server, and you can also type a model name by hand. A GPU-backed Ollama server is recommended. Gemma 4 is the recommended model and may work better than an on-device model. The **API key** field is optional, for a server that requires one; it is stored in your device's secure storage, not alongside the rest of your settings.
 
 ## Long conversations
 
