@@ -852,6 +852,8 @@ export interface BandwidthSettings {
   timelineNowRefreshInterval: number;
   /** Monitor-detail recent-events list polling interval (ms) */
   monitorRecentEventsInterval: number;
+  /** Assistant Ollama reachability probe interval (ms), while the panel is open */
+  assistantHealthInterval: number;
 }
 
 /**
@@ -877,6 +879,7 @@ export const BANDWIDTH_SETTINGS: Record<BandwidthMode, BandwidthSettings> = {
     wsKeepaliveInterval: 60000, // 60 sec
     timelineNowRefreshInterval: 30000, // 30 sec
     monitorRecentEventsInterval: 30000, // 30 sec
+    assistantHealthInterval: 30000, // 30 sec
   },
   low: {
     monitorStatusInterval: 40000, // 40 sec
@@ -894,6 +897,7 @@ export const BANDWIDTH_SETTINGS: Record<BandwidthMode, BandwidthSettings> = {
     wsKeepaliveInterval: 120000, // 120 sec (2x slower)
     timelineNowRefreshInterval: 60000, // 60 sec (2x slower)
     monitorRecentEventsInterval: 60000, // 60 sec
+    assistantHealthInterval: 60000, // 60 sec (2x slower)
   },
 } as const;
 

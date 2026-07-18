@@ -18,6 +18,12 @@ vi.mock('../../../hooks/useCurrentProfile', () => ({
     settings: { assistantBackend: 'on-device', assistantModelId: 'x', assistantOllamaModel: '' },
   }),
 }));
+// The header dot owns a useQuery probe covered by useOllamaHealth's own test;
+// stub it here (on-device backend, so the dot is hidden) to avoid needing a
+// QueryClientProvider in this layout-focused test.
+vi.mock('../../../hooks/useOllamaHealth', () => ({
+  useOllamaHealth: () => ({ enabled: false, status: 'checking' }),
+}));
 // Stub AskPanel with a real input so focus-to-expand can be exercised.
 vi.mock('../AskPanel', () => ({
   AskPanel: () => (

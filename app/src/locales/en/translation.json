@@ -1286,6 +1286,10 @@
     "intro_example_1": "Summarize events today",
     "intro_example_2": "Is the server healthy?",
     "intro_example_3": "Which monitor was most active?",
+    "intro_example_4": "Summarize my day",
+    "ollama_status_connected": "Ollama connected",
+    "ollama_status_disconnected": "Ollama not reachable",
+    "ollama_status_checking": "Checking Ollama…",
     "card": {
       "open": "Open"
     },

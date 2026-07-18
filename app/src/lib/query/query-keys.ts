@@ -148,6 +148,12 @@ export const queryKeys = {
   timezone: (profileId: MaybeProfileId) => ['timezone', profileId] as const,
   storages: (profileId: MaybeProfileId) => ['storages', profileId] as const,
 
+  // --- Assistant ----------------------------------------------------------
+  /** Ollama backend reachability probe, keyed by base URL so a URL change
+   *  refetches instead of showing another server's status. */
+  assistantOllamaHealth: (profileId: MaybeProfileId, baseUrl: string) =>
+    ['assistant-ollama-health', profileId, baseUrl] as const,
+
   // --- App-level (not profile-scoped) -------------------------------------
   /** In-app developer notices. App-level, identical across profiles. */
   developerNotices: () => ['developer-notices'] as const,

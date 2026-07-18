@@ -1286,6 +1286,10 @@
     "intro_example_1": "Resumir eventos de hoy",
     "intro_example_2": "¿Está el servidor bien?",
     "intro_example_3": "¿Qué monitor fue el más activo?",
+    "intro_example_4": "Resume mi día",
+    "ollama_status_connected": "Ollama conectado",
+    "ollama_status_disconnected": "Ollama no accesible",
+    "ollama_status_checking": "Comprobando Ollama…",
     "card": {
       "open": "Abrir"
     },

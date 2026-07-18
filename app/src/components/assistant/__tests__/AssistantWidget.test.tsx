@@ -24,6 +24,12 @@ vi.mock('../../../hooks/useCurrentProfile', () => ({
 vi.mock('../AskPanel', () => ({
   AskPanel: () => <div data-testid="ask-panel-stub" />,
 }));
+// The header dot owns a useQuery probe covered by useOllamaHealth's own test;
+// stub it here so these chrome tests need no QueryClientProvider. Reflect the
+// selected backend so the dot still renders (or hides) as it would live.
+vi.mock('../../../hooks/useOllamaHealth', () => ({
+  useOllamaHealth: () => ({ enabled: mockSettings.assistantBackend === 'ollama', status: 'connected' }),
+}));
 // Mutable so a test can pick which shell the widget renders. jsdom has no
 // matchMedia, so the real hook returns false (desktop) anyway; this makes the
 // choice explicit and lets one test assert the mobile branch.

@@ -68,7 +68,7 @@ describe('AskPanel', () => {
     expect(screen.getByAltText('assistant.title')).toHaveAttribute('src', '/ninjii.png');
     expect(intro).toHaveTextContent('assistant.intro_greeting');
     expect(intro).toHaveTextContent('assistant.intro_help');
-    expect(screen.getAllByTestId('assistant-example-prompt')).toHaveLength(3);
+    expect(screen.getAllByTestId('assistant-example-prompt')).toHaveLength(4);
   });
 
   it('fills the input (does not send) when an example prompt chip is clicked', async () => {

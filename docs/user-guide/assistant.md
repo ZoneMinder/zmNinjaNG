@@ -13,7 +13,7 @@ Underneath, **Backend** picks where the model runs:
 
 On-device is not offered on phones or tablets: the models need more memory than a mobile app is allowed to use, so they crash it. On a phone or tablet the on-device option is greyed out with a note, and Ollama is the way to use the assistant there. On a desktop or in a browser, on-device is available whenever your GPU supports WebGPU.
 
-The chat window's header always names the model that is answering and where it runs, for example "Gemma 2 2B · On-device" or "qwen2.5:3b · Ollama", so you never have to open Settings to check which one you are talking to.
+The chat window's header always names the model that is answering and where it runs, for example "Gemma 2 2B · On-device" or "qwen2.5:3b · Ollama", so you never have to open Settings to check which one you are talking to. On the Ollama backend a coloured dot next to that label shows whether the server is reachable: green means connected, red means it cannot be reached (check the address, or that the server is running), and a pulsing amber dot means the app is still checking. The dot rechecks periodically while the window is open. On-device has no server to reach, so no dot appears.
 
 ## Asking a Question
 
@@ -22,6 +22,8 @@ Once enabled, there are three ways to start a conversation:
 - Press `?` on a keyboard (desktop, web).
 - Open the command palette (`/`, the sidebar button, or the mobile header icon) and tap **Ask**.
 - Type a leading `?` directly into the command palette's search field.
+
+Before you have typed anything, Ninjii shows a few example prompts as tappable chips (one of them "Summarize my day"). Tapping a chip drops its text into the input so you can send it as-is or edit it first.
 
 Type your question and press Enter (or tap Send). While the assistant is working, a spinner and the name of whatever it is doing (for example, looking up an event or checking a monitor) show above the input. Tap the stop button to cancel a request in progress.
 

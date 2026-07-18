@@ -1274,6 +1274,20 @@ share ``useAssistantChrome`` for the clear/minimize/close controls, so they
 differ only in layout. The shell stays mounted (hidden) while minimized, so a
 running turn survives collapsing to the button.
 
+**Empty state and connection dot.** With an empty thread ``AskPanel`` renders
+``AssistantIntro``: Ninjii's greeting plus a row of clickable example prompts
+(``assistant.intro_example_1..4``, one of them "Summarize my day") that teach
+the kind of question the assistant answers. A chip click fills the input rather
+than sending, so the user can edit before the turn starts. Next to the backend
+label in both shells sits ``OllamaStatusDot``, which renders nothing unless the
+Ollama backend is selected. When it is, ``useOllamaHealth`` runs the same
+``GET /models`` reachability probe as the Settings Test-connection button on the
+bandwidth-scoped ``assistantHealthInterval`` (30s normal, 60s low) and the dot
+shows green (reachable), red (unreachable), or a pulsing amber for the first
+probe. The query is mounted only with the header, so it stops polling when the
+panel closes; on-device WebLLM has no connection to report, so no dot appears
+for it.
+
 **Driving a turn.** ``AskPanel``'s ``handleSend`` appends the typed message to
 the per-profile thread in ``useAssistantStore``, builds a system prompt from
 the current profile's monitor list and ZM version (``buildSystemPrompt``),

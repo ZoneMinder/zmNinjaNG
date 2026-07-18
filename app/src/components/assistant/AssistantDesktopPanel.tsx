@@ -17,6 +17,7 @@ import { ASSISTANT, ASSISTANT_PANEL } from '../../lib/zmninja-ng-constants';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
 import { AskPanel } from './AskPanel';
+import { OllamaStatusDot } from './OllamaStatusDot';
 import { useAssistantChrome } from './useAssistantChrome';
 
 export function AssistantDesktopPanel() {
@@ -96,12 +97,15 @@ export function AssistantDesktopPanel() {
         <img src={ASSISTANT.logoPath} alt={t('assistant.title')} className="h-5 w-5 shrink-0 rounded object-contain" />
         <div className="flex-1 min-w-0">
           <div className="truncate text-sm font-medium leading-tight">{t('assistant.title')}</div>
-          <div
-            className="truncate text-[11px] leading-tight text-muted-foreground"
-            title={backendLabel}
-            data-testid="assistant-backend-label"
-          >
-            {backendLabel}
+          <div className="flex items-center gap-1.5">
+            <OllamaStatusDot />
+            <div
+              className="truncate text-[11px] leading-tight text-muted-foreground"
+              title={backendLabel}
+              data-testid="assistant-backend-label"
+            >
+              {backendLabel}
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-1">

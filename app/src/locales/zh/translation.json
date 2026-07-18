@@ -1286,6 +1286,10 @@
     "intro_example_1": "总结今天的事件",
     "intro_example_2": "服务器是否正常？",
     "intro_example_3": "哪个监视器最活跃？",
+    "intro_example_4": "总结我的一天",
+    "ollama_status_connected": "Ollama 已连接",
+    "ollama_status_disconnected": "无法连接 Ollama",
+    "ollama_status_checking": "正在检查 Ollama…",
     "card": {
       "open": "打开"
     },

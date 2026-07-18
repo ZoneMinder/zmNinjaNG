@@ -126,6 +126,25 @@ Then('the assistant panel should open', async ({ page }) => {
   await expect(page.getByTestId('assistant-input')).toBeFocused({ timeout: testConfig.timeouts.transition });
 });
 
+Then('I should see the example prompt {string}', async ({ page }, text: string) => {
+  await expect(page.getByTestId('assistant-example-prompt').filter({ hasText: text })).toBeVisible({
+    timeout: testConfig.timeouts.element,
+  });
+});
+
+When('I click the example prompt {string}', async ({ page }, text: string) => {
+  await page.getByTestId('assistant-example-prompt').filter({ hasText: text }).click();
+});
+
+// Clicking a chip fills the input rather than sending (AssistantIntro), so the
+// user can edit before the turn starts. Assert the value landed, not that a
+// reply appeared.
+Then('the assistant input should contain {string}', async ({ page }, text: string) => {
+  await expect(page.getByTestId('assistant-input')).toHaveValue(text, {
+    timeout: testConfig.timeouts.transition,
+  });
+});
+
 When('I ask {string}', async ({ page }, text: string) => {
   await page.getByTestId('assistant-input').fill(text);
   await page.getByTestId('assistant-send').click();
