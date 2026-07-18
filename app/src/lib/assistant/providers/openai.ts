@@ -24,10 +24,14 @@ import { httpGet, httpPost } from '../../http';
 import { ASSISTANT } from '../../zmninja-ng-constants';
 import { log, LogLevel } from '../../logger';
 import { toTokenUsage, type OpenAiUsage } from './usage';
+import { parseWebLlmTurn } from './webllm';
 
 /** i18n-free (rule 5): AskPanel resolves this sentinel via `t()`, same
  *  sentinel `providers/webllm.ts` uses for its own parse failures. */
 const PARSE_ERROR_TEXT = '__i18n:assistant.parse_error';
+const PORTABLE_TOOL_FALLBACK =
+  'If you cannot emit a native tool call, respond with exactly one JSON object: ' +
+  '{"tool":"<tool name>","input":{...}} or {"answer":"<text>"}.';
 
 export interface OpenAiProviderConfig {
   /** e.g. `http://localhost:11434/v1` (no trailing `/chat/completions`). */
@@ -71,7 +75,7 @@ interface OpenAiChatResponse {
  *  tool result becomes its own `role: 'tool'` message keyed by `tool_call_id`
  *  so the server can pair it back to the call that produced it. */
 export function buildOpenAiMessages(system: string, history: AssistantMessage[]): OpenAiMessageWire[] {
-  const messages: OpenAiMessageWire[] = [{ role: 'system', content: system }];
+  const messages: OpenAiMessageWire[] = [{ role: 'system', content: `${system}\n${PORTABLE_TOOL_FALLBACK}` }];
 
   for (const msg of history) {
     if (msg.role === 'user') {
@@ -138,7 +142,10 @@ export function parseOpenAiTurn(message: OpenAiResponseMessage | undefined): Ass
     return { toolCalls };
   }
 
-  return { text: message.content ?? '', toolCalls: [] };
+  const content = message.content ?? '';
+  const portableTurn = parseWebLlmTurn(content);
+  if (portableTurn.text !== PARSE_ERROR_TEXT) return portableTurn;
+  return { text: content, toolCalls: [] };
 }
 
 interface OpenAiModelsResponse {

@@ -2010,16 +2010,12 @@ current is Flow 11.
 Flow 19: Asking the assistant a question
 -----------------------------------------
 
-Typing ``?`` opens a chat box that looks like it talks to a cloud service, but
-does not: the model meant to answer it runs entirely inside the browser via
-WebGPU, and the tool-use loop that decides which ZoneMinder API calls to make,
-plus the confirmation gate that guards the destructive ones, never send a
-message or a tool result anywhere except the user's own ZoneMinder server.
-Phase 1, this codebase, ships that whole loop and its confirmation gate
-already wired and tested; the only piece Phase 2 adds is the on-device model
-itself. ``getAssistantProvider`` throws on every real build today, so a
-deterministic test-mode script stands in for the model while everything
-downstream of it runs for real.
+Typing ``?`` opens a chat box backed either by an on-device WebLLM model or
+an OpenAI-compatible server such as Ollama. The tool-use loop decides which
+ZoneMinder API calls to make and confirmation guards destructive calls. The
+counterintuitive part is that local and remote models use different tool
+protocols, but both adapt to the same ``AssistantTurn`` before the agent loop
+sees them.
 
 .. mermaid::
 
@@ -2074,20 +2070,20 @@ downstream of it runs for real.
 
 #. **Sending a message starts one turn.** ``AskPanel``'s ``handleSend`` appends
    the user's text to the per-profile thread in ``useAssistantStore``, builds a
-   system prompt from the current profile's monitor list and ZM version
-   (``buildSystemPrompt``), and creates the ``AbortController`` this turn runs
-   under.
+   compact system prompt from timezone and ZM version (``buildSystemPrompt``),
+   and creates the ``AbortController`` this turn runs under. The monitor list
+   is not copied into every prompt because ``list_monitors`` resolves names
+   when needed.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/assistant/AskPanel.tsx#L112>`__
    · → :doc:`12-shared-services-and-components`
 
-#. **The provider decides real model vs. test script.** ``getAssistantProvider``
+#. **The provider selects its backend contract.** ``getAssistantProvider``
    (``lib/assistant/providers/provider.ts``) returns the deterministic
-   ``MockProvider`` only when ``isAssistantTestMode()`` is true (a
-   non-production build with a flag e2e sets); every other path throws
-   ``PROVIDER_NOT_AVAILABLE_MESSAGE``, which is why the Settings assistant
-   section marks model download "coming in the next update". Phase 2 replaces
-   this branch with an on-device WebLLM model, never a call to a third-party
-   server.
+   ``MockProvider`` only for non-production e2e mode. Otherwise it creates
+   ``WebLlmProvider`` for the downloaded local model or ``OpenAiProvider``
+   for the configured server. WebLLM uses its portable JSON tool contract; the
+   remote adapter prefers native calls and accepts that JSON shape as a
+   fallback before the shared agent safeguards run.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/providers/provider.ts#L23>`__
    · → :doc:`12-shared-services-and-components`
 

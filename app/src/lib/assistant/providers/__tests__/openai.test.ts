@@ -19,9 +19,10 @@ const TOOL: ToolDefinition = {
 };
 
 describe('buildOpenAiMessages', () => {
-  it('sends the system message as-is, with no appended tool contract', () => {
+  it('adds a portable JSON fallback to the native tool contract', () => {
     const messages = buildOpenAiMessages('You are the assistant.', []);
-    expect(messages).toEqual([{ role: 'system', content: 'You are the assistant.' }]);
+    expect(messages[0]).toMatchObject({ role: 'system', content: expect.stringContaining('You are the assistant.') });
+    expect(messages[0].content).toContain('If you cannot emit a native tool call');
   });
 
   it('maps a user message', () => {
@@ -103,6 +104,11 @@ describe('parseOpenAiTurn', () => {
   it('maps content to text when there are no tool_calls', () => {
     const turn = parseOpenAiTurn({ content: 'There were 12 events.' });
     expect(turn).toEqual({ text: 'There were 12 events.', toolCalls: [] });
+  });
+
+  it('accepts the portable JSON tool fallback from a server without native tools', () => {
+    const turn = parseOpenAiTurn({ content: '{"tool":"count_events","input":{"interval":"1 day"}}' });
+    expect(turn).toMatchObject({ toolCalls: [{ name: 'count_events', input: { interval: '1 day' } }] });
   });
 
   it('degrades bad tool-call arguments to an empty input instead of throwing', () => {

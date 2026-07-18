@@ -5,6 +5,7 @@
  * both use them without pulling each other in.
  */
 import { log, LogLevel } from '../logger';
+import { ASSISTANT } from '../zmninja-ng-constants';
 import type { DisplayEntity, ToolExecuteResult } from './types';
 
 /** Literal strings a model emits for an OPTIONAL argument it means to leave
@@ -46,7 +47,18 @@ export async function safeExecute(
 ): Promise<ToolExecuteResult> {
   try {
     const result = await run();
-    return typeof result === 'string' ? { output: result } : { output: result.output, display: result.display };
+    const output = typeof result === 'string' ? result : result.output;
+    const boundedOutput =
+      output.length <= ASSISTANT.maxToolResultCharacters
+        ? output
+        : JSON.stringify({
+            truncated: true,
+            message: 'Tool output exceeded the context budget. Use a narrower filter or fetch one item.',
+            preview: output.slice(0, ASSISTANT.maxToolResultCharacters - 200),
+          });
+    return typeof result === 'string'
+      ? { output: boundedOutput }
+      : { output: boundedOutput, display: result.display };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     log.assistant(`Tool "${name}" failed`, LogLevel.ERROR, { error: err });

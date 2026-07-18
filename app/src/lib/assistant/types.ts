@@ -214,5 +214,4 @@ export interface SystemPromptContext {
   timezone: string;
   locale: string;
   zmVersion: string;
-  monitors: Array<{ id: string; name: string; func: string; enabled: boolean }>;
 }

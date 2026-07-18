@@ -56,6 +56,19 @@ describe('model-download', () => {
   });
 
   describe('downloadModel', () => {
+    it('unloads the resident model before loading a different model', async () => {
+      const firstEngine = makeEngine();
+      const secondEngine = makeEngine();
+      vi.mocked(webllm.CreateWebWorkerMLCEngine)
+        .mockResolvedValueOnce(firstEngine as never)
+        .mockResolvedValueOnce(secondEngine as never);
+
+      await downloadModel(MODEL_ID);
+      await downloadModel(ASSISTANT.webllmModels[1].id);
+
+      expect(firstEngine.unload).toHaveBeenCalledOnce();
+    });
+
     it('requests persistent storage before downloading (best-effort)', async () => {
       const engine = makeEngine();
       vi.mocked(webllm.CreateWebWorkerMLCEngine).mockResolvedValue(engine as never);

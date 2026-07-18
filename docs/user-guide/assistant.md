@@ -66,6 +66,8 @@ On a desktop or in a browser, the model runs inside the app using your GPU (WebG
 
 The download sizes are a floor, not the total: running a model needs additional memory on top of its weights, and how much depends on how long the conversation gets.
 
+Loading a different on-device model unloads the current one first. This keeps two model engines from occupying GPU memory at once.
+
 :::{warning}
 Local models run in your computer's memory. If the app crashes or the model never finishes loading, the machine does not have enough memory for that model. Pick a smaller one, or switch to the Ollama backend to run it on a server instead. This is the same note shown next to the model picker in Settings.
 :::
@@ -78,7 +80,7 @@ Set **Backend** to **Ollama** and give the app the address of your server. The d
 
 ## Long conversations
 
-Every model can only hold so much of a conversation at once. When a conversation approaches that limit, Ninjii posts a note saying it has started a fresh one, and stops sending the earlier messages to the model. The messages above that note stay on screen for you to read; the model simply no longer sees them. This happens on the on-device backend, where the app knows the model's limit. On Ollama the limit belongs to your server's configuration and the app cannot read it, so nothing is cleared automatically.
+Every model can only hold so much of a conversation at once. Ninjii limits the amount of recent history and each tool result it sends to a model. When an on-device conversation approaches its known limit, Ninjii posts a note saying it has started a fresh one, and stops sending earlier messages to the model. The messages above that note stay on screen for you to read; the model simply no longer sees them. On Ollama the limit belongs to your server's configuration and the app cannot read it, so it cannot know when to clear automatically.
 
 **Clear** in the chat header wipes the conversation entirely at any time.
 

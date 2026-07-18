@@ -24,6 +24,18 @@ describe('truncateHistory', () => {
     const out = truncateHistory(h, 2);
     expect(out[0].role).not.toBe('tool');
   });
+
+  it('keeps recent messages within the character budget', () => {
+    const out = truncateHistory(
+      [
+        { role: 'user', text: 'old '.repeat(100) },
+        { role: 'assistant', text: 'recent' },
+      ],
+      40,
+      100,
+    );
+    expect(out).toEqual([{ role: 'assistant', text: 'recent' }]);
+  });
 });
 
 describe('sliceAfterContextBoundary', () => {

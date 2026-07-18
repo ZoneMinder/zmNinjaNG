@@ -557,6 +557,8 @@ export const CONTINUOUS_PLAYBACK_TOAST_DURATION_MS = 4000;
 export const ASSISTANT = {
   maxToolIterations: 6,
   maxHistoryMessages: 40,
+  maxHistoryCharacters: 6000,
+  maxToolResultCharacters: 6000,
   maxTokens: 1024,
   // Attempts a WebLLM turn gets to produce parseable output before the panel
   // shows the parse-error apology. Small models occasionally emit degenerate
@@ -567,8 +569,8 @@ export const ASSISTANT = {
   // web-llm's prebuilt registry entries cap context_window_size at 4096 for
   // every model (ModelRecord.overrides in @mlc-ai/web-llm's prebuiltAppConfig;
   // all 165 entries are 4096 or lower), well under what the models support
-  // natively. Our prompt (system rules + few-shot + tool schemas + monitor
-  // table + history + tool results) plus the generated output can exceed 4096,
+  // natively. Our prompt (system rules + few-shot + tool schemas + history +
+  // tool results) plus the generated output can exceed 4096,
   // throwing ContextWindowSizeExceededError, so each model below carries its
   // own `contextWindowSize`, passed as a ChatOptions override to
   // CreateMLCEngine's third argument (see model-download.ts createEngineOnce)
@@ -598,7 +600,6 @@ export const ASSISTANT = {
   // is a plain reachability probe (AssistantOllamaSection.tsx's
   // handleTestConnection), so it gets its own short budget.
   testConnectionTimeoutMs: 8000,
-  systemPromptMonitorCap: 50,
   // Max characters of an event's Notes field kept in a list_events row (rule
   // 11: truncate long text); get_event still returns the full Notes.
   notesPreviewChars: 200,

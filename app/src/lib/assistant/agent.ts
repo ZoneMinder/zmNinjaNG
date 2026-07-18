@@ -36,8 +36,21 @@ function dedupeDisplay(entities: DisplayEntity[]): DisplayEntity[] | undefined {
 
 /** Keep whole turns only. Walk from the end; if the first kept message is a
  *  tool result, drop it so history never opens on an orphan. */
-export function truncateHistory(history: AssistantMessage[], max: number): AssistantMessage[] {
-  const tail = history.slice(-max);
+function messageCharacters(message: AssistantMessage): number {
+  return (message.text?.length ?? 0) + (message.toolCalls ? JSON.stringify(message.toolCalls).length : 0) +
+    (message.toolResults ? JSON.stringify(message.toolResults).length : 0);
+}
+
+export function truncateHistory(history: AssistantMessage[], max: number, maxCharacters = Number.POSITIVE_INFINITY): AssistantMessage[] {
+  const tail: AssistantMessage[] = [];
+  let characters = 0;
+  for (let i = history.length - 1; i >= 0 && tail.length < max; i--) {
+    const message = history[i];
+    const size = messageCharacters(message);
+    if (tail.length > 0 && characters + size > maxCharacters) break;
+    tail.unshift(message);
+    characters += size;
+  }
   while (tail.length && tail[0].role === 'tool') tail.shift();
   return tail;
 }
@@ -103,7 +116,11 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
   // Boundary slice BEFORE the message-count truncation: the cap counts what
   // the model will actually be sent, so a pre-boundary message must never
   // occupy one of those slots.
-  const history = truncateHistory(sliceAfterContextBoundary(opts.history), ASSISTANT.maxHistoryMessages);
+  const history = truncateHistory(
+    sliceAfterContextBoundary(opts.history),
+    ASSISTANT.maxHistoryMessages,
+    ASSISTANT.maxHistoryCharacters,
+  );
   // Everything appended below goes onto BOTH: `history` is the model's view
   // for the next iteration, `produced` is what the caller gets back.
   const produced: AssistantMessage[] = [];

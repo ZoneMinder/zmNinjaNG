@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getToolByName, readOnlyTools, destructiveTools, TOOLS } from '../tools';
+import { safeExecute } from '../tool-helpers';
 import type { ToolContext } from '../types';
 import { asProfileId } from '../../../api/types';
 import { ASSISTANT } from '../../zmninja-ng-constants';
@@ -611,8 +612,33 @@ describe('list_events range resolution (refs #246)', () => {
   });
 });
 
+describe('tool output budget', () => {
+  it('returns valid, explicitly truncated JSON for oversized output', async () => {
+    const result = await safeExecute('large', async () => 'x'.repeat(ASSISTANT.maxToolResultCharacters + 1));
+    expect(JSON.parse(result.output)).toMatchObject({ truncated: true });
+  });
+});
+
 describe('destructive tools', () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it('rejects malformed model arguments before confirmation or execution', async () => {
+    const enabled = getToolByName('set_monitor_enabled')!;
+    const functionTool = getToolByName('change_monitor_function')!;
+    const archived = getToolByName('archive_event')!;
+
+    await expect(enabled.buildConfirm!({ monitorId: '4', enabled: 'false' }, ctx())).rejects.toThrow('enabled must be a boolean');
+    await expect(functionTool.buildConfirm!({ monitorId: '2', func: 'DeleteEverything' }, ctx())).rejects.toThrow(
+      'func must be one of',
+    );
+    await expect(archived.buildConfirm!({ eventId: '99', archived: 'true' }, ctx())).rejects.toThrow(
+      'archived must be a boolean',
+    );
+
+    expect(setMonitorEnabled).not.toHaveBeenCalled();
+    expect(changeMonitorFunction).not.toHaveBeenCalled();
+    expect(setEventArchived).not.toHaveBeenCalled();
+  });
 
   it('trigger_alarm is destructive and builds a confirm request', async () => {
     const tool = getToolByName('trigger_alarm')!;

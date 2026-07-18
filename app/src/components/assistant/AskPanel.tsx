@@ -25,7 +25,6 @@ import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import { Loader2, Send, Square } from 'lucide-react';
 import { getVersion } from '../../api/auth';
-import type { MonitorsResponse } from '../../api/types';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
 import { resolveMinStreamingPort } from '../../lib/monitor/multiport';
@@ -42,7 +41,6 @@ import type { AssistantMessage, AssistantTurn, ProviderConfig, ToolActivity, Too
 import { log, LogLevel } from '../../lib/logger';
 import { getSecureValue } from '../../lib/security/secureStorage';
 import { Markdown } from '../../lib/markdown';
-import { queryKeys } from '../../lib/query/query-keys';
 import { resolveQueryError } from '../../lib/query/query-error';
 import { cn } from '../../lib/utils';
 import { ASSISTANT } from '../../lib/zmninja-ng-constants';
@@ -280,20 +278,11 @@ export function AskPanel() {
         log.assistant('Failed to fetch ZM version for the assistant system prompt', LogLevel.WARN, { error: e });
       }
 
-      const monitorsData = queryClient.getQueryData<MonitorsResponse>(queryKeys.monitors(profileId));
-      const monitors = (monitorsData?.monitors ?? []).map((m) => ({
-        id: m.Monitor.Id,
-        name: m.Monitor.Name,
-        func: m.Monitor.Function,
-        enabled: m.Monitor.Enabled === '1',
-      }));
-
       const system = buildSystemPrompt({
         now: new Date(),
         timezone: currentProfile?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
         locale: i18n.language,
         zmVersion,
-        monitors,
       });
 
       // Image-building inputs for event result cards (refs #246), mirroring

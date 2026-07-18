@@ -37,7 +37,7 @@ const GENERIC_MODEL_ID = 'Llama-3.2-1B-Instruct-q4f16_1-MLC';
 // after the system message (see buildFewShotExamples in providers/webllm.ts).
 // Tests below that inspect the real conversation must skip past that block;
 // FEW_SHOT_COUNT is the number of messages it contributes.
-const FEW_SHOT_COUNT = 8;
+const FEW_SHOT_COUNT = 4;
 
 describe('buildWebLlmMessages', () => {
   it('opens with a system message combining `system` and the tool contract', () => {
@@ -138,15 +138,6 @@ describe('buildWebLlmMessages', () => {
       });
     });
 
-    it('demonstrates a no-argument tool call (get_server_health) followed by a direct answer', () => {
-      const messages = buildWebLlmMessages('sys', [], [], GENERIC_MODEL_ID);
-      expect(messages).toContainEqual({ role: 'assistant', content: '{"tool": "get_server_health", "input": {}}' });
-      expect(messages).toContainEqual({
-        role: 'assistant',
-        content: '{"answer": "Yes. Load is 0.4, disk is 45% used, and the capture daemon is running."}',
-      });
-    });
-
     it('uses only tool names present in the read-only tools registry', () => {
       const toolNames = readOnlyTools.map((t) => t.name);
       const messages = buildWebLlmMessages('sys', [], [], GENERIC_MODEL_ID);
@@ -163,7 +154,6 @@ describe('buildWebLlmMessages', () => {
         .filter((name): name is string => Boolean(name));
 
       expect(exampleToolNames).toContain('count_events');
-      expect(exampleToolNames).toContain('get_server_health');
       for (const name of exampleToolNames) {
         expect(toolNames).toContain(name);
       }

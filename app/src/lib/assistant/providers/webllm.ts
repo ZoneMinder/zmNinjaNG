@@ -67,7 +67,7 @@ function buildToolContract(tools: ToolDefinition[]): string {
  *  turn is the bare JSON string `{"tool":...}` / `{"answer":...}`, and a
  *  tool result is a `user` message starting with `Tool result:\n` followed
  *  by the same reminder sentence used for real tool results. Keep this list
- *  short (2 examples): every token here is spent on every single turn. */
+ *  short: every token here is spent on every single turn. */
 function buildFewShotExamples(): ChatCompletionMessageParam[] {
   return [
     { role: 'user', content: 'How many events were recorded today?' },
@@ -82,19 +82,6 @@ function buildFewShotExamples(): ChatCompletionMessageParam[] {
     {
       role: 'assistant',
       content: '{"answer": "There were 15 events today: 12 on Front Door and 3 on Garage."}',
-    },
-    { role: 'user', content: 'Is the server healthy?' },
-    { role: 'assistant', content: '{"tool": "get_server_health", "input": {}}' },
-    {
-      role: 'user',
-      content:
-        'Tool result:\n{"load":0.4,"diskPercent":45,"daemonRunning":true,"version":"1.37.0"}\n\n' +
-        'Respond with ONLY a single JSON object: {"tool": "<name>", "input": {...}} to call another tool, ' +
-        'or {"answer": "<text>"} to answer the user.',
-    },
-    {
-      role: 'assistant',
-      content: '{"answer": "Yes. Load is 0.4, disk is 45% used, and the capture daemon is running."}',
     },
   ];
 }
