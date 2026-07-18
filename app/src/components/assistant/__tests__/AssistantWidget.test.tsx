@@ -24,6 +24,13 @@ vi.mock('../../../hooks/useCurrentProfile', () => ({
 vi.mock('../AskPanel', () => ({
   AskPanel: () => <div data-testid="ask-panel-stub" />,
 }));
+// Mutable so a test can pick which shell the widget renders. jsdom has no
+// matchMedia, so the real hook returns false (desktop) anyway; this makes the
+// choice explicit and lets one test assert the mobile branch.
+let mockIsMobile = false;
+vi.mock('../../../hooks/useIsMobile', () => ({
+  useIsMobile: () => mockIsMobile,
+}));
 
 describe('AssistantWidget', () => {
   beforeEach(() => {
@@ -33,6 +40,25 @@ describe('AssistantWidget', () => {
     });
     useAssistantStore.setState({ threads: {}, running: false, activities: [] });
     mockSettings = {};
+    mockIsMobile = false;
+  });
+
+  describe('mobile vs desktop shell', () => {
+    it('renders the desktop card, not the mobile sheet, when not mobile', () => {
+      mockIsMobile = false;
+      useAssistantPanelStore.setState({ state: 'open' });
+      render(<AssistantWidget />);
+      expect(screen.getByTestId('assistant-panel')).toBeInTheDocument();
+      expect(screen.queryByTestId('assistant-mobile-sheet')).not.toBeInTheDocument();
+    });
+
+    it('renders the mobile sheet, not the desktop card, when mobile', () => {
+      mockIsMobile = true;
+      useAssistantPanelStore.setState({ state: 'open' });
+      render(<AssistantWidget />);
+      expect(screen.getByTestId('assistant-mobile-sheet')).toBeInTheDocument();
+      expect(screen.queryByTestId('assistant-panel')).not.toBeInTheDocument();
+    });
   });
 
   // The header answers "who am I talking to, and is it running on my device or
@@ -123,6 +149,20 @@ describe('AssistantWidget', () => {
     expect(screen.getByTestId('assistant-close')).toBeInTheDocument();
     // Ninjii's logo in the header, to the left of the title (refs #246).
     expect(screen.getByAltText('assistant.title')).toHaveAttribute('src', '/ninjii.png');
+  });
+
+  it('puts the resize handle at the top-left, the corner away from the bottom-right anchor', () => {
+    useAssistantPanelStore.setState({ state: 'open' });
+    render(<AssistantWidget />);
+
+    const handle = screen.getByTestId('assistant-panel-resize');
+    // Top-left, not bottom-right: the panel is pinned bottom-right, so this is
+    // the free corner (refs #246). A regression that moved it back to the
+    // anchored corner would drop `left-0 top-0`.
+    expect(handle.className).toContain('left-0');
+    expect(handle.className).toContain('top-0');
+    expect(handle.className).toContain('cursor-nwse-resize');
+    expect(handle).toHaveAttribute('aria-label', 'assistant.resize');
   });
 
   it('minimize button minimizes the panel without unmounting AskPanel', async () => {

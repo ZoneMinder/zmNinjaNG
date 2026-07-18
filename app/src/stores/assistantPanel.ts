@@ -25,10 +25,16 @@ export interface AssistantPanelSize {
 interface AssistantPanelStoreState {
   state: AssistantPanelViewState;
   size: AssistantPanelSize;
+  /** Mobile bottom-sheet height, as a fraction (0..1) of the visible viewport.
+   *  0 rests at the slim bar (the sheet clamps it up to the bar minimum); the
+   *  actual pixels are derived at render from the current viewport, so a rotate
+   *  keeps the same proportion. Persisted like `size` so a reload restores it. */
+  sheetHeightFraction: number;
   open: () => void;
   minimize: () => void;
   close: () => void;
   setSize: (width: number, height: number) => void;
+  setSheetHeightFraction: (fraction: number) => void;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -40,6 +46,7 @@ export const useAssistantPanelStore = create<AssistantPanelStoreState>()(
     (set) => ({
       state: 'closed',
       size: { width: ASSISTANT_PANEL.defaultWidth, height: ASSISTANT_PANEL.defaultHeight },
+      sheetHeightFraction: 0,
       open: () => set({ state: 'open' }),
       minimize: () => set({ state: 'minimized' }),
       close: () => set({ state: 'closed' }),
@@ -50,10 +57,11 @@ export const useAssistantPanelStore = create<AssistantPanelStoreState>()(
             height: clamp(height, ASSISTANT_PANEL.minHeight, ASSISTANT_PANEL.maxHeight),
           },
         }),
+      setSheetHeightFraction: (fraction) => set({ sheetHeightFraction: clamp(fraction, 0, 1) }),
     }),
     {
       name: STORAGE_KEYS.assistantPanelStore,
-      partialize: (state) => ({ size: state.size }),
+      partialize: (state) => ({ size: state.size, sheetHeightFraction: state.sheetHeightFraction }),
     }
   )
 );

@@ -24,7 +24,7 @@ export function AssistantIntro({ onExampleClick }: AssistantIntroProps) {
 
   return (
     <div className="flex flex-col items-center gap-3 px-4 py-8 text-center" data-testid="assistant-intro">
-      <img src={ASSISTANT.logoPath} alt={t('assistant.title')} className="h-16 w-16 rounded-full" />
+      <img src={ASSISTANT.logoPath} alt={t('assistant.title')} className="h-16 w-16 rounded-full object-contain" />
       <p className="text-sm font-medium">{t('assistant.intro_greeting')}</p>
       <p className="text-xs text-muted-foreground">{t('assistant.intro_help')}</p>
       <div className="flex flex-wrap justify-center gap-2 pt-1">

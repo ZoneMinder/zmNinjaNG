@@ -1258,6 +1258,22 @@ results list, inside the same dialog shell. Neither entry point does anything
 when the assistant is disabled in Settings (``settings.assistantEnabled``):
 the ``?`` key falls back to the keyboard-shortcuts help overlay instead.
 
+**Two shells around one body.** ``AskPanel`` is only the conversation body
+(messages, input, cards). The window around it is one of two shells chosen at
+runtime by viewport, because they need genuinely different JavaScript, not just
+different CSS. ``AssistantWidget.tsx`` is a thin switch over
+``useAssistantPanelStore``'s ``closed | minimized | open`` state: nothing,
+a floating button, or a shell. ``useIsMobile`` (a ``matchMedia`` hook at the
+``sm`` breakpoint) picks ``AssistantDesktopPanel`` (a resizable card pinned
+bottom-right) or ``AssistantMobileSheet`` (a bottom sheet that shares the screen
+with the app). The mobile sheet stores its height as a fraction of the visible
+viewport so a rotation keeps its proportion, and uses ``useKeyboardViewport``
+(a ``window.visualViewport`` wrapper, no Capacitor plugin) to hold the input
+above the on-screen keyboard. Both shells embed the same ``<AskPanel/>`` and
+share ``useAssistantChrome`` for the clear/minimize/close controls, so they
+differ only in layout. The shell stays mounted (hidden) while minimized, so a
+running turn survives collapsing to the button.
+
 **Driving a turn.** ``AskPanel``'s ``handleSend`` appends the typed message to
 the per-profile thread in ``useAssistantStore``, builds a system prompt from
 the current profile's monitor list and ZM version (``buildSystemPrompt``),

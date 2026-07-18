@@ -70,4 +70,21 @@ describe('useAssistantPanelStore', () => {
     expect(parsed.state.size).toEqual({ width: 444, height: 555 });
     expect(parsed.state.state).toBeUndefined();
   });
+
+  describe('mobile sheet height fraction (refs #246)', () => {
+    it('clamps the fraction to 0..1', () => {
+      useAssistantPanelStore.getState().setSheetHeightFraction(0.6);
+      expect(useAssistantPanelStore.getState().sheetHeightFraction).toBe(0.6);
+      useAssistantPanelStore.getState().setSheetHeightFraction(1.5);
+      expect(useAssistantPanelStore.getState().sheetHeightFraction).toBe(1);
+      useAssistantPanelStore.getState().setSheetHeightFraction(-0.2);
+      expect(useAssistantPanelStore.getState().sheetHeightFraction).toBe(0);
+    });
+
+    it('persists the fraction so a reload restores the sheet height', () => {
+      useAssistantPanelStore.getState().setSheetHeightFraction(0.7);
+      const parsed = JSON.parse(localStorage.getItem(STORAGE_KEYS.assistantPanelStore) as string);
+      expect(parsed.state.sheetHeightFraction).toBe(0.7);
+    });
+  });
 });
