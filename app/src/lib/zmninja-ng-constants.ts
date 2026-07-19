@@ -560,6 +560,21 @@ export const ASSISTANT = {
   maxHistoryCharacters: 6000,
   maxToolResultCharacters: 6000,
   maxTokens: 1024,
+  // Native MNN runs a reasoning-distilled model with thinking left ON (see
+  // providers/native-mnn.ts), so this budget has to cover the `<think>` block
+  // AND the JSON reply after it. At `maxTokens` (1024) the chain of thought
+  // routinely consumed the whole budget, generation was cut off before the
+  // closing `</think>`, and `stripThinkBlock` then discarded the entire tail
+  // as scratch-work, leaving nothing to parse. That is the parse-error path
+  // this budget exists to avoid; it is not a general context-size knob.
+  //
+  // Bounded by the model's declared context window, NOT chosen freely: the
+  // system prompt plus tool catalog plus few-shot block measures around 1900
+  // tokens before any history, so a 3072 budget promised more room than the
+  // 4096 window has. `assistant/__tests__/agent.test.ts` asserts that prompt
+  // floor plus this budget still fits, so raising one without checking the
+  // other fails a test instead of silently truncating generation on-device.
+  nativeMnnMaxTokens: 2048,
   // Attempts a WebLLM turn gets to produce parseable output before the panel
   // shows the parse-error apology. Small models occasionally emit degenerate
   // output (an empty ```code fence```, a blank, or non-JSON prose); sampling is
@@ -592,6 +607,11 @@ export const ASSISTANT = {
   contextClearThreshold: 0.75,
 
   maxListEventsLimit: 25,
+  // How many distinct detected-object labels list_events names back when an
+  // objectType filter matched nothing. Enough to cover a normal install's
+  // vocabulary (person, car, dog, truck, ...) without pasting a long tail of
+  // rare labels into a context window this assistant is already tight on.
+  objectLabelHintLimit: 12,
   requestTimeoutMs: 120000,
   // A "Test connection" click only needs to know the server answers, not run a
   // full chat turn: `requestTimeoutMs` (120s) covers the WORST case (a slow

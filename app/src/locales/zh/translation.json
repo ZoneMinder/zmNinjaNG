@@ -347,7 +347,9 @@
       "downloading": "下载中…",
       "downloaded": "已下载",
       "download_failed": "模型下载失败。",
-      "download_size": "{{size}} MB",
+      "download_size": "总下载量：{{size}} MB",
+      "native_download_current": "正在下载 {{fileName}}，第 {{current}} 个，共 {{total}} 个：{{progress}}%（{{downloaded}} / {{size}}）",
+      "native_download_summary": "已完成 {{completed}} 个文件。待下载 {{pending}} 个。",
       "privacy": "在设备本地运行。除您自己的 ZoneMinder 服务器外，不向任何地方发送数据。",
       "delete": "删除",
       "delete_failed": "删除模型失败。",
@@ -1279,6 +1281,7 @@
       "error": "{{tool}} 失败"
     },
     "iteration_cap_reached": "步骤过多已停止，请尝试更简单的请求。",
+    "live_data_required": "无法加载当前 ZoneMinder 数据，因此无法提供可靠的回答。",
     "context_cleared": "本次对话已填满模型的上下文，因此我已开始新的对话。上面的消息你仍可查看，但我已看不到它们了。",
     "parse_error": "抱歉，无法生成回复，请换个说法再试。",
     "show_raw_output": "查看模型输出",
@@ -1296,21 +1299,9 @@
     "card": {
       "open": "打开"
     },
-    "confirm": {
-      "set_monitor_enabled_enable": "启用监视器 {{id}}？",
-      "set_monitor_enabled_disable": "禁用监视器 {{id}}？",
-      "trigger_alarm": "在监视器 {{monitorId}} 上触发报警？",
-      "cancel_alarm": "取消监视器 {{monitorId}} 上的报警？",
-      "change_monitor_function": "将监视器 {{id}} 的功能改为 {{func}}？",
-      "change_run_state": "将服务器运行状态切换为 {{state}}？",
-      "delete_event": "删除事件 {{eventId}}（监视器 {{monitorId}}，{{start}}）？",
-      "archive_event_archive": "归档事件 {{eventId}}？",
-      "archive_event_unarchive": "取消归档事件 {{eventId}}？",
-      "generic": "执行此操作？",
-      "cancel": "取消",
-      "accept": "确认",
-      "details": "详情"
-    },
-    "mobile_on_device_blocked": "由于内存限制，设备端模型无法在手机或平板上运行。请在设置中切换到 Ollama 后端以在此使用助手。"
+    "context_cleared_manual": "对话已清除。设备端模型已卸载以释放内存，下次提问时会重新加载。",
+    "loading_model": "正在加载设备端模型...",
+    "model_unavailable_native": "此模型无法在你的设备上运行。请在设置中选择设备端模型。",
+    "english_only_notice": "设备端模型在英语下效果最好。使用其他语言时，回答可能出现更多错误。"
   }
 }

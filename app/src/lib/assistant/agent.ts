@@ -1,21 +1,75 @@
 /**
  * Agent tool-use loop (refs #246).
  *
- * The single choke point for destructive tool execution: `host.confirm` is
- * the only call on the path from a model-issued `ToolCall` to `def.execute`
- * for a destructive tool. There is no other branch that reaches `execute`
- * for such a tool (see the `if (def.destructive)` block below): every
- * destructive call either resolves confirm `true` first, or is short-circuited
- * to the fixed "declined" result and never runs.
+ * Every tool this loop can reach is read-only. That is a property of the
+ * registry and the type, not of anything decided here at runtime: `TOOLS`
+ * contains only read-only tools, `ToolDefinition` cannot express an action
+ * that changes state, and no tool the assistant owns imports a mutating API.
+ * So there is no confirmation gate in this file and nothing for a model to
+ * talk its way past (see tools.ts for why the actions were removed).
  */
 import type { AssistantMessage, AssistantProvider, AssistantHost, DisplayEntity, TokenUsage, ToolContext, ToolResult } from './types';
-import { getToolByName, TOOLS } from './tools';
+import { getToolByName, isWithheldToolName, TOOLS } from './tools';
 import { ASSISTANT } from '../zmninja-ng-constants';
 import { log, LogLevel } from '../logger';
 
 /** Localized by the panel at render (Task 8): agent.ts never renders user-facing
  *  text itself, it only ever emits this key behind the `__i18n:` sentinel. */
 const ITERATION_CAP_KEY = 'assistant.iteration_cap_reached';
+const LIVE_DATA_REQUIRED_KEY = 'assistant.live_data_required';
+
+/** Returned to the model when it calls one of the actions the assistant no
+ *  longer implements (see `WITHHELD_TOOL_NAMES` in tools.ts). Model-facing, so
+ *  it is plain English the model rewrites for the user, not an `__i18n:` key. */
+const WITHHELD_TOOL_REFUSAL =
+  'That action is not something this assistant can do. It has no tool for it at all. ' +
+  'Actions that change or delete things (arming and disarming monitors, changing the run state or a ' +
+  'monitor function, triggering or cancelling alarms, deleting or archiving events) are not available, ' +
+  'because a language model can misread a request and act on something the user did not ask for, and ' +
+  'some of those actions cannot be undone. Tell the user this action must be done by hand in the app, ' +
+  'and say where: monitors and arming on the Monitors screen, run state on the Server screen, event ' +
+  'deletion and archiving on that event. Do not retry any tool for this request.';
+
+interface ReadToolRequirement {
+  names: readonly string[];
+  reminder: string;
+}
+
+/**
+ * Matches English only, deliberately.
+ *
+ * The obvious "fix" is keyword lists per language, and it is worse than
+ * nothing: the terms are guesses at how someone phrases a question rather than
+ * translated UI strings, no word list ever covers a language (a German user
+ * can ask about events without using any noun on the list), and the collisions
+ * are silent (French "hier" = yesterday, German "hier" = here, so a German
+ * greeting would trip an events guard).
+ *
+ * The on-device model is an English-first 2B reasoning distill emitting a
+ * strict JSON contract, so English is the path we actually support. The app
+ * tells the user that outright when it is running on-device in another
+ * language (see AskPanel's language notice) rather than implying, through a
+ * half-working guard, that every language is equally supported.
+ */
+function requiredReadTool(history: AssistantMessage[]): ReadToolRequirement | undefined {
+  const request = [...history].reverse().find((message) => message.role === 'user')?.text ?? '';
+  if (/\b(?:summar(?:y|i[sz]e)|recap|overview)\b.{0,80}\b(?:day|today|events?|activity)\b|\b(?:day|today)\b.{0,80}\b(?:summar(?:y|i[sz]e)|recap|overview)\b/i.test(request)) {
+    return {
+      names: ['list_events'],
+      reminder: 'Daily-summary requirement: call list_events with {"range":"today"} now. Do not answer until its result is available.',
+    };
+  }
+  if (/\b(?:server|health)\b/i.test(request)) {
+    return { names: ['get_server_health'], reminder: 'Live-data requirement: call get_server_health now. Do not answer until its result is available.' };
+  }
+  if (/\b(?:event|events?|detection|detections?|activity|activities|today|yesterday)\b/i.test(request)) {
+    return { names: ['list_events', 'count_events'], reminder: 'Live-data requirement: call list_events or count_events now. Do not answer until its result is available.' };
+  }
+  if (/\b(?:camera|cameras|monitor|monitors?|status|armed|disarmed|fps)\b/i.test(request)) {
+    return { names: ['list_monitors', 'get_monitor'], reminder: 'Live-data requirement: call list_monitors or get_monitor now. Do not answer until its result is available.' };
+  }
+  return undefined;
+}
 
 /** De-dupes by `kind`+`id` (the same event/monitor can surface from more than
  *  one tool call in a turn, e.g. list_events then get_event on one of its
@@ -137,6 +191,12 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
    *  iteration-cap message below can still tell AskPanel how full the window
    *  got: a turn that burns every iteration is exactly the kind that fills it. */
   let lastUsage: TokenUsage | undefined;
+  const readToolRequirement = requiredReadTool(history);
+  let requiredReadToolComplete = false;
+  let requiredReadToolReminderSent = false;
+  /** `name:JSON(input)` for every tool call attempted this turn, so an
+   *  identical repeat can be refused rather than re-run (see the loop below). */
+  const calledSignatures = new Set<string>();
 
   for (let i = 0; i < ASSISTANT.maxToolIterations; i++) {
     if (signal.aborted) return produced;
@@ -144,6 +204,16 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
     const assistantMsg: AssistantMessage = { role: 'assistant', text: turn.text, toolCalls: turn.toolCalls, raw: turn.raw };
 
     if (turn.toolCalls.length === 0) {
+      if (readToolRequirement && !requiredReadToolComplete) {
+        lastUsage = turn.usage ?? lastUsage;
+        if (!requiredReadToolReminderSent) {
+          requiredReadToolReminderSent = true;
+          history.push({ role: 'user', text: readToolRequirement.reminder });
+          continue;
+        }
+        push({ role: 'assistant', text: `__i18n:${LIVE_DATA_REQUIRED_KEY}`, usage: lastUsage });
+        return produced;
+      }
       assistantMsg.display = dedupeDisplay(turnDisplay);
       // The last iteration's usage, not the first: each tool round-trip
       // re-sends the history plus the new tool results, so the final call has
@@ -160,35 +230,42 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
       if (signal.aborted) return produced;
       const def = getToolByName(call.name);
       if (!def) {
-        results.push({ callId: call.id, output: `Unknown tool: ${call.name}`, isError: true });
+        // A withheld action is not the same as a typo: told "unknown tool", a
+        // model retries variations of the name. Told why, it explains to the
+        // user instead.
+        results.push({
+          callId: call.id,
+          output: isWithheldToolName(call.name) ? WITHHELD_TOOL_REFUSAL : `Unknown tool: ${call.name}`,
+          isError: true,
+        });
         continue;
       }
 
-      // The confirm gate: the ONLY path to `def.execute` for a destructive tool
-      // is through `host.confirm` resolving `true`. A thrown or false-resolving
-      // confirm (including one interrupted by abort, via `.catch(() => false)`)
-      // short-circuits to the fixed decline result and `continue`s past `execute`.
-      if (def.destructive) {
-        let req;
-        try {
-          req = def.buildConfirm
-            ? await def.buildConfirm(call.input, ctx)
-            : { toolName: def.name, messageKey: 'assistant.confirm.generic', messageParams: {}, params: call.input };
-        } catch (e) {
-          const message = e instanceof Error ? e.message : 'Failed to prepare confirmation';
-          log.assistant(`buildConfirm for "${call.name}" threw`, LogLevel.ERROR, { toolName: call.name, error: e });
-          results.push({ callId: call.id, output: message, isError: true });
-          host.onActivity({ toolName: call.name, status: 'error', input: call.input });
-          continue;
-        }
-        const ok = await host.confirm(req).catch(() => false);
-        if (!ok) {
-          log.assistant(`Destructive tool "${call.name}" declined`, LogLevel.INFO, { toolName: call.name });
-          results.push({ callId: call.id, output: 'User declined this action.' });
-          continue;
-        }
+      // A tool called twice with identical arguments in one turn cannot return
+      // anything new, so re-running it only burns iterations until the cap.
+      // Observed: asked "how many people came home today", the model called
+      // count_events {"interval":"1 day"} three times (that tool reports counts
+      // only, never object types) and then answered from data that could not
+      // contain the answer. Refusing the repeat tells it to change course
+      // instead of spending the turn discovering the same result (refs #246).
+      const signature = `${call.name}:${JSON.stringify(call.input)}`;
+      if (calledSignatures.has(signature)) {
+        results.push({
+          callId: call.id,
+          output:
+            `You already called ${call.name} with these exact arguments in this turn and its result is above. ` +
+            'Repeating it returns the same data. Either call a DIFFERENT tool, or call this one with ' +
+            'different arguments, or answer using the results you already have.',
+          isError: true,
+        });
+        continue;
       }
+      calledSignatures.add(signature);
 
+      // No confirmation gate here, and none needed: every tool in TOOLS is
+      // read-only, and the type cannot express one that is not (see
+      // ToolDefinition in types.ts). Nothing reachable from this loop mutates
+      // anything, so there is no runtime decision about whether to run.
       host.onActivity({ toolName: call.name, status: 'running', input: call.input });
       try {
         // `navigate`'s `closePanel: true` needs no separate handling here: the
@@ -196,6 +273,7 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
         // side effect of the call this makes below (see Task 9's host hook).
         const r = await def.execute(call.input, ctx);
         results.push({ callId: call.id, output: r.output, isError: r.isError, display: r.display });
+        if (readToolRequirement?.names.includes(call.name) && !r.isError) requiredReadToolComplete = true;
         host.onActivity({ toolName: call.name, status: r.isError ? 'error' : 'done', input: call.input });
       } catch (e) {
         const message = e instanceof Error ? e.message : 'Tool failed';
@@ -213,7 +291,7 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
 
   push({
     role: 'assistant',
-    text: `__i18n:${ITERATION_CAP_KEY}`,
+    text: `__i18n:${readToolRequirement && !requiredReadToolComplete ? LIVE_DATA_REQUIRED_KEY : ITERATION_CAP_KEY}`,
     display: dedupeDisplay(turnDisplay),
     usage: lastUsage,
   });

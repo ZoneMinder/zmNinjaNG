@@ -1,17 +1,16 @@
 /**
  * AskPanel: the in-app assistant conversation UI (refs #246).
  *
- * Renders the per-profile thread from `stores/assistant.ts`, drives one
- * `runAssistantTurn` per send, and shows the `AssistantConfirmCard` whenever
- * `useAssistantHost`'s `confirm()` is pending. Two forward contracts from the
- * agent loop (lib/assistant/agent.ts) land here:
+ * Renders the per-profile thread from `stores/assistant.ts` and drives one
+ * `runAssistantTurn` per send. Two forward contracts from the agent loop
+ * (lib/assistant/agent.ts) land here:
  *
  * - A leading `__i18n:<key>` on an assistant message's `text` is a sentinel
  *   (currently only the iteration-cap message) that must be localized with
  *   `t(key)` instead of rendered as literal/markdown text.
- * - Aborting (or unmounting mid-turn) must resolve any pending confirm as
- *   `false` and abort the in-flight `AbortController`, so the loop's
- *   `signal.aborted` checks unwind it instead of leaving it hung.
+ * - Aborting (or unmounting mid-turn) must abort the in-flight
+ *   `AbortController`, so the loop's `signal.aborted` checks unwind it
+ *   instead of leaving it hung.
  *
  * Test seam: in test mode (`isAssistantTestMode()`), before running a turn
  * this reads `window.__assistantMockScript` (seeded by e2e steps) and loads
@@ -45,13 +44,13 @@ import { resolveQueryError } from '../../lib/query/query-error';
 import { cn } from '../../lib/utils';
 import { ASSISTANT } from '../../lib/zmninja-ng-constants';
 import { AssistantIntro } from './AssistantIntro';
+import { isNativeMnnModelLoaded, loadNativeMnnModel } from '../../lib/assistant/native-mnn';
+import { Platform } from '../../lib/platform';
 import { useAssistantStore } from '../../stores/assistant';
 import { Button } from '../ui/button';
 import { ErrorBanner } from '../ui/query-state';
-import { AssistantConfirmCard } from './AssistantConfirmCard';
 import { AssistantResultCards } from './AssistantResultCards';
 import { useAssistantHost } from './useAssistantHost';
-import { Platform } from '../../lib/platform';
 
 declare global {
   interface Window {
@@ -166,7 +165,7 @@ export function AskPanel() {
   const profileId = currentProfile?.id;
   const { token: accessToken, isFresh: accessTokenFresh } = useFreshAccessToken();
 
-  const { host, pendingConfirm, resolveConfirm } = useAssistantHost();
+  const { host } = useAssistantHost();
 
   const thread = useAssistantStore((s) => (profileId ? (s.threads[profileId] ?? EMPTY_THREAD) : EMPTY_THREAD));
   const running = useAssistantStore((s) => s.running);
@@ -175,7 +174,15 @@ export function AskPanel() {
   const setRunning = useAssistantStore((s) => s.setRunning);
   const clearActivities = useAssistantStore((s) => s.clearActivities);
 
+  // `startsWith`, not equality: i18next reports regional variants like "en-GB".
+  const onDeviceInNonEnglish =
+    settings.assistantBackend !== 'ollama' && !i18n.language.toLowerCase().startsWith('en');
+
   const [input, setInput] = useState('');
+  /** True while the on-device model is being loaded into memory for this turn.
+   *  A 2B model takes several seconds to load and the "thinking" spinner alone
+   *  made that look like a hang, with no hint that the wait was one-off. */
+  const [loadingModel, setLoadingModel] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notConfigured, setNotConfigured] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -194,10 +201,9 @@ export function AskPanel() {
   // closed panel never leaves the agent loop (or a stuck confirm Promise) alive.
   useEffect(() => {
     return () => {
-      resolveConfirm(false);
       abortControllerRef.current?.abort();
     };
-  }, [resolveConfirm]);
+  }, []);
 
   // The Clear button now lives in AssistantWidget.tsx, which resets the
   // shared store (`reset(profileId)` + `clearActivities()`). This component
@@ -215,7 +221,6 @@ export function AskPanel() {
   }, [thread.length]);
 
   const handleAbort = () => {
-    resolveConfirm(false);
     abortControllerRef.current?.abort();
   };
 
@@ -230,16 +235,6 @@ export function AskPanel() {
   const handleSend = async () => {
     const text = input.trim();
     if (!text || !profileId || running) return;
-
-    // Mobile safety net (refs #246): loading any WebLLM model exceeds a mobile
-    // WebView's memory and crashes the app (iOS jetsam at 2 GB, Android renderer
-    // kill). Settings hides on-device on phones/tablets, but a value synced from
-    // a desktop profile can still arrive here, so block the load and point at
-    // Ollama rather than letting it crash.
-    if ((Platform.isIOS || Platform.isAndroid) && settings.assistantBackend === 'on-device') {
-      setError(t('assistant.mobile_on_device_blocked'));
-      return;
-    }
 
     setInput('');
     setError(null);
@@ -265,6 +260,18 @@ export function AskPanel() {
         apiKey: apiKey ?? undefined,
       };
       const provider = getAssistantProvider(providerConfig);
+
+      // Load the on-device model up front rather than letting the first chat
+      // call block on it, so the wait can be labelled. Only the FIRST turn
+      // after app start, or after a Clear unloaded it, pays this.
+      if (Platform.isNative && settings.assistantBackend !== 'ollama' && !isNativeMnnModelLoaded()) {
+        setLoadingModel(true);
+        try {
+          await loadNativeMnnModel(settings.assistantModelId);
+        } finally {
+          setLoadingModel(false);
+        }
+      }
 
       if (isAssistantTestMode() && window.__assistantMockScript) {
         sharedMockProvider.setScript(window.__assistantMockScript);
@@ -352,6 +359,11 @@ export function AskPanel() {
         // User-initiated abort: not an error to surface.
       } else if (e instanceof Error && e.message === PROVIDER_NOT_AVAILABLE_MESSAGE) {
         setNotConfigured(true);
+      } else if (e instanceof Error && e.message.startsWith(I18N_SENTINEL)) {
+        // A thrown `__i18n:` sentinel (e.g. the native provider rejecting an
+        // unsupported model) is a localized message, not a raw error string.
+        log.assistant('Assistant turn failed', LogLevel.ERROR, { error: e });
+        setError(t(e.message.slice(I18N_SENTINEL.length)));
       } else {
         log.assistant('Assistant turn failed', LogLevel.ERROR, { error: e });
         setError(resolveQueryError(e, t, { fallbackKey: 'assistant.error_generic' }));
@@ -368,8 +380,22 @@ export function AskPanel() {
         {/* Empty-thread self-introduction (refs #246): a UI-only empty state,
             never part of the thread sent to the model. Swaps out for the real
             thread the moment the first message lands (handleSend's `append`
-            below), and reappears after Clear resets the store. */}
-        {thread.length === 0 && <AssistantIntro onExampleClick={handleExampleClick} />}
+            below), and reappears after Clear resets the store. `every` rather
+            than a length check: Clear leaves a context-boundary notice behind,
+            and a lone notice is still an empty conversation. */}
+        {thread.every((m) => m.contextBoundary) && <AssistantIntro onExampleClick={handleExampleClick} />}
+
+        {/* The on-device model is a small English-first model, and its job here
+            (reason, then emit a strict reply format) is where a small model
+            degrades most in other languages. Saying so is honest; the
+            alternative was pretending every language works equally well.
+            Ollama runs whatever model the user chose, so this does not apply
+            there. */}
+        {onDeviceInNonEnglish && (
+          <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground" data-testid="assistant-english-notice">
+            {t('assistant.english_only_notice')}
+          </p>
+        )}
 
         {thread.map((msg, i) => {
           // `role: 'tool'` messages carry only `toolResults`, never `display`
@@ -424,23 +450,16 @@ export function AskPanel() {
             now renders inside the thread. */}
         {activities.length > 0 && <ActivitySteps steps={activities} />}
 
-        {running && !pendingConfirm && (
-          <p className="flex items-center gap-1 text-xs text-muted-foreground">
+        {running && (
+          <p className="flex items-center gap-1 text-xs text-muted-foreground" data-testid="assistant-status">
             <Loader2 className="h-3 w-3 animate-spin" />
-            {t('assistant.thinking')}
+            {loadingModel ? t('assistant.loading_model') : t('assistant.thinking')}
           </p>
         )}
 
         {notConfigured && <ErrorBanner message={t('assistant.not_configured_cta')} />}
         {error && !notConfigured && <ErrorBanner message={error} />}
 
-        {pendingConfirm && (
-          <AssistantConfirmCard
-            request={pendingConfirm}
-            onAccept={() => resolveConfirm(true)}
-            onCancel={() => resolveConfirm(false)}
-          />
-        )}
       </div>
 
       <div className="flex items-center gap-2 border-t p-2">

@@ -1,6 +1,6 @@
 # Assistant
 
-Ninjii answers questions about your cameras and events, and can make changes to your ZoneMinder server on request, monitors, alarms, run state, events, after you confirm each one. The model that answers runs either on your device or on a server you run yourself. Nothing goes to a server operated by zmNinjaNg or any AI company.
+Ninjii answers questions about your cameras and events, and can take you to a screen in the app. It is read-only: it cannot change or delete anything on your ZoneMinder server. The model that answers runs either on your device or on a server you run yourself. Nothing goes to a server operated by zmNinjaNg or any AI company.
 
 ## Enabling the Assistant
 
@@ -43,11 +43,13 @@ Examples of what you can ask:
 
 The assistant only knows what its tools can look up: your monitors, events, groups, tags, and server health. It cannot answer questions unrelated to this ZoneMinder server.
 
-## Confirming an action
+## The assistant cannot change anything
 
-Any request that changes something on the server, arming or disarming a monitor, triggering or cancelling an alarm, changing a monitor's function, changing the run state, or deleting or archiving an event, always stops and shows a confirmation card describing exactly what it is about to do, with the raw details available under **Details**. Nothing runs until you tap **Confirm**. Tapping **Cancel**, closing the Assistant panel, or navigating away all decline the action instead.
+The assistant is read-only. It can look things up and take you to a screen, and that is all. It cannot arm or disarm a monitor, trigger or cancel an alarm, change a monitor's function, change the run state, or delete or archive an event.
 
-There is no action the assistant can take on the server without this confirmation step. Questions that only look something up (listing monitors, checking event counts, reading server health) never show a confirmation, they cannot change anything.
+This is deliberate. The assistant works by having a language model choose which action matches your words, and a model can misread a request: "clear out today's events" is one phrasing away from deleting them, and "I'm home" is one phrasing away from changing your run state. Earlier versions asked you to confirm each action first, but that put the entire safeguard on a single tap, in a dialog that looks the same whether the model understood you or not. Deleting an event cannot be undone, and a monitor left disarmed records nothing.
+
+Ask for one of these and the assistant will say it cannot do it and point you to the screen where you can: monitors and arming on **Monitors**, run state on **Server**, deleting and archiving on the event itself. Doing it there means you picked the target yourself.
 
 ## The on-device model (desktop and web)
 
@@ -72,6 +74,14 @@ Loading a different on-device model unloads the current one first. This keeps tw
 Local models run in your computer's memory. If the app crashes or the model never finishes loading, the machine does not have enough memory for that model. Pick a smaller one, or switch to the Ollama backend to run it on a server instead. This is the same note shown next to the model picker in Settings.
 :::
 
+## The on-device model (iPhone and Android)
+
+On iPhone and Android, **Settings > Ninjii > Model** uses the native MNN runtime instead of WebGPU. The only available model is **Qwen3.5 2B Reasoning**. Its eight-file download is about 1383 MB and needs additional runtime memory. Download it over Wi-Fi with ample free storage, then test a short question before relying on it.
+
+:::{warning}
+Qwen3.5 2B Reasoning is a local model. If download, loading, or a question fails, switch to Ollama. Tool calls remain validated by the app, but a local model can still choose an unsupported tool input.
+:::
+
 ## Running the model on your own server (Ollama)
 
 Set **Backend** to **Ollama** and give the app the address of your server. The default, `http://localhost:11434/v1`, works when the server runs on the same machine as the app. On a phone, `localhost` means the phone itself, so you need the server's address on your network instead, for example `http://192.168.1.50:11434/v1`.
@@ -82,7 +92,15 @@ Set **Backend** to **Ollama** and give the app the address of your server. The d
 
 Every model can only hold so much of a conversation at once. Ninjii limits the amount of recent history and each tool result it sends to a model. When an on-device conversation approaches its known limit, Ninjii posts a note saying it has started a fresh one, and stops sending earlier messages to the model. The messages above that note stay on screen for you to read; the model simply no longer sees them. On Ollama the limit belongs to your server's configuration and the app cannot read it, so it cannot know when to clear automatically.
 
-**Clear** in the chat header wipes the conversation entirely at any time.
+**Clear** in the chat header wipes the conversation entirely at any time. On a phone or tablet it also unloads the on-device model, freeing the memory it was holding, and leaves a note saying so. The model loads again on your next question, which is why that question takes longer than the ones after it.
+
+The app unloads the model when you leave it as well, so a backgrounded app is not sitting on a gigabyte of memory your phone would rather use elsewhere.
+
+While the model is loading, the chat says so instead of showing the usual "Thinking" line, so a long first wait is explained rather than looking like a hang.
+
+## Language
+
+The on-device model works best in English. It is small, and most of its work here is reasoning about your question and then producing a strictly formatted reply, which is where a small model struggles most in other languages. The app's own screens are translated as usual, and answers may come back in your language, but expect more mistakes than in English. A server-backed model through Ollama does not have this limitation.
 
 ## Privacy
 

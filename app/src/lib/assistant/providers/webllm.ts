@@ -24,7 +24,7 @@
  * unit-test without WebGPU; only `WebLlmProvider.chat` touches the engine.
  */
 import type { ChatCompletionMessageParam } from '@mlc-ai/web-llm';
-import type { AssistantProvider, AssistantMessage, AssistantTurn, ToolCall, ToolDefinition } from '../types';
+import type { AssistantProvider, AssistantMessage, AssistantTurn, ToolDefinition } from '../types';
 import { ASSISTANT } from '../../zmninja-ng-constants';
 import { log, LogLevel } from '../../logger';
 import { getLoadedEngine } from '../model-download';
@@ -34,22 +34,49 @@ import { toTokenUsage } from './usage';
  *  agent.ts's iteration-cap message. */
 const PARSE_ERROR_TEXT = '__i18n:assistant.parse_error';
 
+/** One compact signature line per tool instead of a raw `JSON.stringify` of
+ *  its JSON Schema. A 2B on-device model does not reliably parse nested
+ *  schema objects, and the full dump for all 16 registry tools costs on the
+ *  order of a thousand tokens of a 4096 window on EVERY turn. The argument
+ *  names, their types (or enum values, which carry real meaning for inputs
+ *  like `range`), and the required/optional distinction are the only parts
+ *  the model actually needs; the prose description carries the rest. */
 function describeTool(tool: ToolDefinition): string {
-  return `- ${tool.name}: ${tool.description} Input schema: ${JSON.stringify(tool.schema)}`;
+  const schema = tool.schema as {
+    properties?: Record<string, { type?: string; enum?: readonly unknown[]; items?: { type?: string } }>;
+    required?: string[];
+  };
+  const required = new Set(schema.required ?? []);
+  const args = Object.entries(schema.properties ?? {}).map(([name, spec]) => {
+    const type = Array.isArray(spec?.enum)
+      ? spec.enum.map(String).join('|')
+      : spec?.type === 'array'
+        // "array" alone leaves the model guessing what goes in it; eventIds is
+        // the one that matters, and "string[]" is the whole answer.
+        ? `${spec.items?.type ?? 'string'}[]`
+        : (spec?.type ?? 'string');
+    return `${name}${required.has(name) ? '' : '?'}: ${type}`;
+  });
+  return `- ${tool.name}(${args.join(', ')}): ${tool.description}`;
 }
 
-function buildToolContract(tools: ToolDefinition[]): string {
-  if (tools.length === 0) {
-    return 'You have no tools available. Respond with ONLY {"answer": "<text>"}.';
-  }
-  return [
-    'You may call ONE tool per turn, or answer the user directly. Available tools:',
-    tools.map(describeTool).join('\n'),
-    '',
-    'Respond with ONLY a single JSON object and nothing else: no markdown fences, no commentary.',
-    'To call a tool: {"tool": "<tool name>", "input": { ... matching its input schema ... }}',
-    'To answer the user directly: {"answer": "<your reply>"}',
-  ].join('\n');
+/** The output-format rule. Deliberately NOT part of the system message: small
+ *  models weight recent tokens far more heavily, and after the system rules,
+ *  the tool catalog, the few-shot block and the whole history, a format rule
+ *  stated at the very top is thousands of tokens away from the point where
+ *  generation starts. `buildWebLlmMessages` appends this to the LAST user
+ *  message instead, so it is the final thing the model reads. */
+const OUTPUT_CONTRACT = [
+  'Respond with ONLY a single JSON object and nothing else: no markdown fences, no commentary.',
+  'To call a tool: {"tool": "<tool name>", "input": { ... }}',
+  'To answer the user: {"answer": "<your reply>"}',
+].join('\n');
+
+/** The tool catalog for the system message. Format rules live in
+ *  `OUTPUT_CONTRACT`, appended at the generation point instead. */
+function buildToolCatalog(tools: ToolDefinition[]): string {
+  if (tools.length === 0) return 'You have no tools available. You must answer directly.';
+  return ['You may call ONE tool per turn, or answer the user directly. Available tools:', tools.map(describeTool).join('\n')].join('\n');
 }
 
 /** Few-shot anchors prepended to every WebLLM conversation, right after the
@@ -65,19 +92,15 @@ function buildToolContract(tools: ToolDefinition[]): string {
  *  `get_server_health`, `list_events`, `list_monitors`) and must mirror the
  *  exact serialization `buildWebLlmMessages` produces below: an assistant
  *  turn is the bare JSON string `{"tool":...}` / `{"answer":...}`, and a
- *  tool result is a `user` message starting with `Tool result:\n` followed
- *  by the same reminder sentence used for real tool results. Keep this list
- *  short: every token here is spent on every single turn. */
+ *  tool result is a `user` message starting with `Tool result:\n`. Keep this
+ *  list short: every token here is spent on every single turn. */
 function buildFewShotExamples(): ChatCompletionMessageParam[] {
   return [
     { role: 'user', content: 'How many events were recorded today?' },
     { role: 'assistant', content: '{"tool": "count_events", "input": {"interval": "1 day"}}' },
     {
       role: 'user',
-      content:
-        'Tool result:\n[{"monitor":"Front Door","count":12},{"monitor":"Garage","count":3}]\n\n' +
-        'Respond with ONLY a single JSON object: {"tool": "<name>", "input": {...}} to call another tool, ' +
-        'or {"answer": "<text>"} to answer the user.',
+      content: 'Tool result:\n[{"monitor":"Front Door","count":12},{"monitor":"Garage","count":3}]',
     },
     {
       role: 'assistant',
@@ -103,24 +126,30 @@ function isQwen3Model(modelId: string): boolean {
 
 /** Maps the app's `AssistantMessage[]` (roles user/assistant/tool) onto the
  *  OpenAI-shaped messages web-llm expects, prefixed by a system message that
- *  folds in `system` plus the tool contract above (and, for a Qwen3 model,
+ *  folds in `system` plus the tool catalog above (and, for a Qwen3 model,
  *  the `/no_think` directive; see `isQwen3Model`). Past assistant turns are
  *  re-serialized into the same `{tool,input}` / `{answer}` JSON shape the
  *  model is instructed to produce, so its own history stays consistent with
  *  the contract instead of showing it free-form text it never generated.
  *  A fixed block of `buildFewShotExamples()` turns follows the system
  *  message, demonstrating that exact shape before the real conversation
- *  starts (see its doc comment for why). */
+ *  starts (see its doc comment for why).
+ *
+ *  `OUTPUT_CONTRACT` is appended to the LAST user message rather than stated
+ *  once in the system message, so the format rule is the final thing the
+ *  model reads before it generates (see that constant's doc comment). */
 export function buildWebLlmMessages(
   system: string,
   history: AssistantMessage[],
   tools: ToolDefinition[],
   modelId: string,
+  includeFewShot = true,
+  disableThinking = true,
 ): ChatCompletionMessageParam[] {
-  const systemContent = `${system}\n\n${buildToolContract(tools)}${isQwen3Model(modelId) ? '\n\n/no_think' : ''}`;
+  const systemContent = `${system}\n\n${buildToolCatalog(tools)}${disableThinking && isQwen3Model(modelId) ? '\n\n/no_think' : ''}`;
   const messages: ChatCompletionMessageParam[] = [
     { role: 'system', content: systemContent },
-    ...buildFewShotExamples(),
+    ...(includeFewShot ? buildFewShotExamples() : []),
   ];
 
   for (const msg of history) {
@@ -142,35 +171,48 @@ export function buildWebLlmMessages(
       const results = msg.toolResults ?? [];
       if (results.length > 0) {
         const body = results.map((r) => r.output).join('\n');
-        messages.push({
-          role: 'user',
-          content: `Tool result:\n${body}\n\nRespond with ONLY a single JSON object: {"tool": "<name>", "input": {...}} to call another tool, or {"answer": "<text>"} to answer the user.`,
-        });
+        messages.push({ role: 'user', content: `Tool result:\n${body}` });
       }
     }
+  }
+
+  // The format rule goes on the last user message only: repeating it on every
+  // intermediate tool result spent tokens restating something the model had
+  // already followed, and the copy that matters is the one nearest generation.
+  const last = messages[messages.length - 1];
+  if (last?.role === 'user') {
+    last.content = `${String(last.content ?? '')}\n\n${OUTPUT_CONTRACT}`;
+  } else {
+    messages.push({ role: 'user', content: OUTPUT_CONTRACT });
   }
 
   return messages;
 }
 
-/** Strips a reasoning model's `<think>...</think>` chain-of-thought block
- *  (e.g. Qwen3's) from the front of `content` before JSON extraction runs.
- *  If a closing `</think>` is present, everything up to and including it is
- *  removed, leaving only the final answer. If `<think>` opens but never
- *  closes (generation was cut short by `max_tokens`), the whole tail from
- *  `<think>` onward is dropped instead of being handed to the JSON
- *  extractor, since it is scratch-work, not a reply. */
+/** Strips a reasoning model's chain-of-thought from `content` before JSON
+ *  extraction runs.
+ *
+ *  Keyed on the CLOSING `</think>`, not the opening tag: Qwen3.5 under MNN
+ *  emits an unbalanced block, because its chat template puts the opening
+ *  `<think>` into the generation prompt itself when thinking is enabled. The
+ *  model therefore starts generating mid-thought and the only tag in its
+ *  output is the closer. Keying on `<think>` meant nothing was stripped at
+ *  all for that model, and the reasoning prose then reached the JSON
+ *  extractor, which happily matched a brace pair inside it (the model likes
+ *  to write out `call list_events with {"range":"today"}` while planning).
+ *
+ *  If `<think>` opens but never closes (generation cut short by max tokens),
+ *  the tail from `<think>` onward is dropped: it is scratch-work, not a reply. */
 function stripThinkBlock(content: string): string {
-  const openIndex = content.indexOf('<think>');
-  if (openIndex === -1) return content;
-
   const closeTag = '</think>';
-  const closeIndex = content.indexOf(closeTag, openIndex);
-  if (closeIndex === -1) {
-    return content.slice(0, openIndex);
-  }
+  const closeIndex = content.indexOf(closeTag);
+  const openIndex = content.indexOf('<think>');
 
-  return content.slice(0, openIndex) + content.slice(closeIndex + closeTag.length);
+  if (closeIndex !== -1) {
+    const head = openIndex !== -1 && openIndex < closeIndex ? content.slice(0, openIndex) : '';
+    return head + content.slice(closeIndex + closeTag.length);
+  }
+  return openIndex === -1 ? content : content.slice(0, openIndex);
 }
 
 function extractJsonPayload(content: string): string {
@@ -181,49 +223,100 @@ function extractJsonPayload(content: string): string {
   return fenced ? fenced[1] : trimmed;
 }
 
-/** Extracts the first balanced `{...}` object substring from `content`, or
- *  `undefined` if there is no `{`. Small on-device models sometimes wrap the
- *  JSON reply in prose ("Sure, here you go: {...} let me know if that
- *  helps") despite the system prompt's "ONLY a single JSON object"
- *  instruction; this recovers the embedded object instead of failing the
- *  whole turn over surrounding text. Brace-counts rather than regex-matching
- *  to the last `}` so a `}` inside a JSON string value doesn't truncate the
- *  match early. */
-function extractBalancedJsonObject(content: string): string | undefined {
-  const start = content.indexOf('{');
-  if (start === -1) return undefined;
+/** Qwen3 MNN occasionally appends one extra quote before a final object
+ *  brace (`{"answer":"...""}`). Recover that exact, otherwise complete,
+ *  response without accepting arbitrary malformed JSON. */
+function parseJson(content: string): unknown {
+  try {
+    return JSON.parse(content);
+  } catch (error) {
+    const repaired = content.replace(/""(\s*})$/, '"$1');
+    if (repaired === content) throw error;
+    return JSON.parse(repaired);
+  }
+}
 
+/** Every balanced top-level `{...}` object substring in `content`, in order.
+ *  Small on-device models wrap the JSON reply in prose ("Sure, here you go:
+ *  {...} let me know if that helps") despite the "ONLY a single JSON object"
+ *  instruction, so the embedded object has to be recovered rather than
+ *  failing the whole turn over the surrounding text.
+ *
+ *  ALL of them, not just the first: a reasoning model writes brace-y text
+ *  while planning ("call list_events with {"range":"today"}"), so the first
+ *  balanced object in a reply is regularly a fragment quoted mid-thought and
+ *  the real reply is further along. `parseWebLlmTurn` picks the first
+ *  candidate that actually matches the contract instead of committing to
+ *  whichever one came first.
+ *
+ *  Brace-counts rather than regex-matching to the last `}` so a `}` inside a
+ *  JSON string value doesn't truncate a match early. */
+function extractBalancedJsonObjects(content: string): string[] {
+  const objects: string[] = [];
+  let start = -1;
   let depth = 0;
   let inString = false;
   let escaped = false;
 
-  for (let i = start; i < content.length; i++) {
+  for (let i = 0; i < content.length; i++) {
     const ch = content[i];
 
     if (inString) {
-      if (escaped) {
-        escaped = false;
-      } else if (ch === '\\') {
-        escaped = true;
-      } else if (ch === '"') {
-        inString = false;
-      }
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
       continue;
     }
 
     if (ch === '"') {
-      inString = true;
+      if (depth > 0) inString = true;
     } else if (ch === '{') {
+      if (depth === 0) start = i;
       depth++;
-    } else if (ch === '}') {
+    } else if (ch === '}' && depth > 0) {
       depth--;
-      if (depth === 0) {
-        return content.slice(start, i + 1);
-      }
+      if (depth === 0) objects.push(content.slice(start, i + 1));
     }
   }
 
+  return objects;
+}
+
+/** The parsed value as an `AssistantTurn`, or `undefined` if it matches
+ *  neither contract shape. Used to sift the candidates above. */
+function toTurn(parsed: unknown): AssistantTurn | undefined {
+  if (parsed === null || typeof parsed !== 'object') return undefined;
+  const obj = parsed as Record<string, unknown>;
+
+  if (typeof obj.tool === 'string') {
+    const input = obj.input !== null && typeof obj.input === 'object' ? (obj.input as Record<string, unknown>) : {};
+    return { toolCalls: [{ id: crypto.randomUUID(), name: obj.tool, input }] };
+  }
+  if (typeof obj.answer === 'string') return { text: obj.answer, toolCalls: [] };
   return undefined;
+}
+
+/**
+ * Whether `text` is a plain-language reply the model meant as its answer,
+ * rather than a failed attempt at the JSON envelope.
+ *
+ * The rule is the absence of any `{`. A model that wrote a brace was trying to
+ * follow the contract and got it wrong, so that is worth re-rolling; a model
+ * that wrote none decided this question needed no tool and no structure, and
+ * re-rolling only pressures it into inventing one.
+ *
+ * That pressure was real: asked "Hello", the model correctly answered "Hello!
+ * How can I help you today?", which the parser rejected for lacking the
+ * envelope. The retry then "complied" by calling list_monitors, so a greeting
+ * fetched every camera and filled the panel with thumbnails. Taking the first
+ * answer at face value avoids the retry, the spurious tool call, and roughly
+ * 20 seconds of on-device generation spent failing the same way three times.
+ *
+ * `openai.ts` already did exactly this with the same parser output; this makes
+ * the on-device path agree with it rather than hard-failing where Ollama did not.
+ */
+function looksLikePlainAnswer(text: string): boolean {
+  return text.length > 0 && !text.includes('{') && /\p{L}/u.test(text);
 }
 
 /** Parses one `chat.completions.create` response's message content into an
@@ -232,41 +325,30 @@ function extractBalancedJsonObject(content: string): string | undefined {
  *  doesn't crash the agent loop (agent.ts pushes this turn as-is and stops,
  *  same as any other answer-only turn). A reasoning model's `<think>` block
  *  is stripped first (see `stripThinkBlock`) so its scratch-work never gets
- *  mistaken for the final JSON reply. */
+ *  mistaken for the final JSON reply.
+ *
+ *  A reply that never attempted the JSON envelope is taken at face value as
+ *  the answer; see `looksLikePlainAnswer`. */
 export function parseWebLlmTurn(content: string): AssistantTurn {
   const stripped = stripThinkBlock(content);
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(extractJsonPayload(stripped));
-  } catch {
-    // The fence-stripped content still isn't valid JSON on its own; a small
-    // model may have replied with JSON embedded in prose instead. Try to
-    // recover the first balanced {...} object before giving up.
-    const embedded = extractBalancedJsonObject(stripped);
-    if (embedded === undefined) {
-      return { text: PARSE_ERROR_TEXT, toolCalls: [], raw: content };
-    }
+  // The whole (fence-stripped) reply first, since a well-behaved model sends
+  // exactly that; then each embedded object, for a reply wrapped in prose.
+  // The first candidate that matches the contract wins, so a brace pair the
+  // model wrote mid-sentence is skipped rather than accepted as the answer.
+  for (const candidate of [extractJsonPayload(stripped), ...extractBalancedJsonObjects(stripped)]) {
+    let parsed: unknown;
     try {
-      parsed = JSON.parse(embedded);
+      parsed = parseJson(candidate);
     } catch {
-      return { text: PARSE_ERROR_TEXT, toolCalls: [], raw: content };
+      continue;
     }
+    const turn = toTurn(parsed);
+    if (turn) return turn;
   }
 
-  if (parsed !== null && typeof parsed === 'object') {
-    const obj = parsed as Record<string, unknown>;
-
-    if (typeof obj.tool === 'string') {
-      const input = obj.input !== null && typeof obj.input === 'object' ? (obj.input as Record<string, unknown>) : {};
-      const toolCall: ToolCall = { id: crypto.randomUUID(), name: obj.tool, input };
-      return { toolCalls: [toolCall] };
-    }
-
-    if (typeof obj.answer === 'string') {
-      return { text: obj.answer, toolCalls: [] };
-    }
-  }
+  const plain = extractJsonPayload(stripped).trim();
+  if (looksLikePlainAnswer(plain)) return { text: plain, toolCalls: [] };
 
   return { text: PARSE_ERROR_TEXT, toolCalls: [], raw: content };
 }

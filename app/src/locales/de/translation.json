@@ -347,7 +347,9 @@
       "downloading": "Wird geladen…",
       "downloaded": "Heruntergeladen",
       "download_failed": "Modell-Download fehlgeschlagen.",
-      "download_size": "{{size}} MB",
+      "download_size": "Gesamtdownload: {{size}} MB",
+      "native_download_current": "Lädt {{fileName}}, Datei {{current}} von {{total}}: {{progress}} % ({{downloaded}} von {{size}})",
+      "native_download_summary": "{{completed}} Dateien abgeschlossen. {{pending}} ausstehend.",
       "privacy": "Läuft lokal auf dem Gerät. Es wird nichts gesendet außer an den eigenen ZoneMinder-Server.",
       "delete": "Löschen",
       "delete_failed": "Modell konnte nicht gelöscht werden.",
@@ -1279,6 +1281,7 @@
       "error": "{{tool}} fehlgeschlagen"
     },
     "iteration_cap_reached": "Nach zu vielen Schritten gestoppt. Bitte einfacher formulieren.",
+    "live_data_required": "Aktuelle ZoneMinder-Daten konnten nicht geladen werden. Deshalb kann ich keine verlässliche Antwort geben.",
     "context_cleared": "Dieses Gespräch hat den Kontext des Modells gefüllt, daher habe ich ein neues begonnen. Die Nachrichten oben bleiben für dich lesbar, ich sehe sie aber nicht mehr.",
     "parse_error": "Die Antwort konnte nicht verarbeitet werden. Bitte anders formulieren.",
     "show_raw_output": "Modellausgabe anzeigen",
@@ -1296,21 +1299,9 @@
     "card": {
       "open": "Öffnen"
     },
-    "confirm": {
-      "set_monitor_enabled_enable": "Monitor {{id}} aktivieren?",
-      "set_monitor_enabled_disable": "Monitor {{id}} deaktivieren?",
-      "trigger_alarm": "Alarm auf Monitor {{monitorId}} auslösen?",
-      "cancel_alarm": "Alarm auf Monitor {{monitorId}} abbrechen?",
-      "change_monitor_function": "Funktion von Monitor {{id}} zu {{func}} ändern?",
-      "change_run_state": "Server-Betriebsstatus zu {{state}} wechseln?",
-      "delete_event": "Ereignis {{eventId}} löschen (Monitor {{monitorId}}, {{start}})?",
-      "archive_event_archive": "Ereignis {{eventId}} archivieren?",
-      "archive_event_unarchive": "Archivierung von Ereignis {{eventId}} aufheben?",
-      "generic": "Aktion ausführen?",
-      "cancel": "Abbrechen",
-      "accept": "Bestätigen",
-      "details": "Details"
-    },
-    "mobile_on_device_blocked": "Modelle auf dem Gerät können auf Smartphones und Tablets wegen Speicherbegrenzungen nicht laufen. Wechsle in den Einstellungen zum Ollama-Backend, um den Assistenten hier zu nutzen."
+    "context_cleared_manual": "Unterhaltung gelöscht. Das Modell auf dem Gerät wurde entladen, um Speicher freizugeben; es wird bei deiner nächsten Frage neu geladen.",
+    "loading_model": "Modell auf dem Gerät wird geladen...",
+    "model_unavailable_native": "Dieses Modell läuft nicht auf deinem Gerät. Wähle in den Einstellungen ein Modell für das Gerät.",
+    "english_only_notice": "Das Modell auf dem Gerät funktioniert am besten auf Englisch. Antworten in anderen Sprachen können mehr Fehler enthalten."
   }
 }

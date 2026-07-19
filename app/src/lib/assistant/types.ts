@@ -139,23 +139,18 @@ export interface ToolExecuteResult {
   display?: DisplayEntity[];
 }
 
+/**
+ * A tool the assistant can run. There is no `destructive` flag and no
+ * `buildConfirm`: the assistant is read-only, and the type deliberately cannot
+ * express an action that changes anything, so "is this safe to run" is not a
+ * question the agent loop has to answer at runtime (see TOOLS in tools.ts).
+ */
 export interface ToolDefinition {
   name: string;
   description: string;
   /** JSON schema for the tool input, passed to the model. */
   schema: Record<string, unknown>;
-  destructive: boolean;
   execute: (input: Record<string, unknown>, ctx: ToolContext) => Promise<ToolExecuteResult>;
-  /** Destructive tools may fetch detail and build a concrete confirm request. */
-  buildConfirm?: (input: Record<string, unknown>, ctx: ToolContext) => Promise<ConfirmRequest>;
-}
-
-/** i18n-free: the host localizes messageKey + messageParams (rule 5). */
-export interface ConfirmRequest {
-  toolName: string;
-  messageKey: string;
-  messageParams: Record<string, unknown>;
-  params: Record<string, unknown>;
 }
 
 export interface ToolActivity {
@@ -167,7 +162,6 @@ export interface ToolActivity {
 }
 
 export interface AssistantHost {
-  confirm(request: ConfirmRequest): Promise<boolean>;
   navigate(path: string): void;
   onActivity(activity: ToolActivity): void;
 }

@@ -19,6 +19,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(PipPlugin.class);
         registerPlugin(TvDetectorPlugin.class);
         registerPlugin(WindowThemePlugin.class);
+        registerPlugin(NativeMnnPlugin.class);
         super.onCreate(savedInstanceState);
 
         if (isTVDevice()) {

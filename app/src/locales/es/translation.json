@@ -347,7 +347,9 @@
       "downloading": "Descargando…",
       "downloaded": "Descargado",
       "download_failed": "Error al descargar el modelo.",
-      "download_size": "{{size}} MB",
+      "download_size": "Descarga total: {{size}} MB",
+      "native_download_current": "Descargando {{fileName}}, archivo {{current}} de {{total}}: {{progress}} % ({{downloaded}} de {{size}})",
+      "native_download_summary": "{{completed}} archivos completados. {{pending}} pendientes.",
       "privacy": "Funciona en el dispositivo. No se envía nada salvo a tu propio servidor ZoneMinder.",
       "delete": "Eliminar",
       "delete_failed": "Error al eliminar el modelo.",
@@ -1279,6 +1281,7 @@
       "error": "{{tool}} falló"
     },
     "iteration_cap_reached": "Detenido tras demasiados pasos. Prueba con una solicitud más simple.",
+    "live_data_required": "No pude cargar datos actuales de ZoneMinder, así que no puedo dar una respuesta fiable.",
     "context_cleared": "Esta conversación llenó el contexto del modelo, así que he empezado una nueva. Los mensajes de arriba siguen ahí para que los leas, pero yo ya no puedo verlos.",
     "parse_error": "No se pudo generar una respuesta. Prueba a reformular la pregunta.",
     "show_raw_output": "Ver salida del modelo",
@@ -1296,21 +1299,9 @@
     "card": {
       "open": "Abrir"
     },
-    "confirm": {
-      "set_monitor_enabled_enable": "¿Activar el monitor {{id}}?",
-      "set_monitor_enabled_disable": "¿Desactivar el monitor {{id}}?",
-      "trigger_alarm": "¿Activar alarma en el monitor {{monitorId}}?",
-      "cancel_alarm": "¿Cancelar la alarma en el monitor {{monitorId}}?",
-      "change_monitor_function": "¿Cambiar la función del monitor {{id}} a {{func}}?",
-      "change_run_state": "¿Cambiar el estado del servidor a {{state}}?",
-      "delete_event": "¿Eliminar el evento {{eventId}} (monitor {{monitorId}}, {{start}})?",
-      "archive_event_archive": "¿Archivar el evento {{eventId}}?",
-      "archive_event_unarchive": "¿Desarchivar el evento {{eventId}}?",
-      "generic": "¿Ejecutar esta acción?",
-      "cancel": "Cancelar",
-      "accept": "Confirmar",
-      "details": "Detalles"
-    },
-    "mobile_on_device_blocked": "Los modelos en el dispositivo no pueden ejecutarse en teléfonos ni tablets por límites de memoria. Cambia al backend de Ollama en Ajustes para usar el asistente aquí."
+    "context_cleared_manual": "Conversación borrada. El modelo del dispositivo se descargó para liberar memoria; se cargará de nuevo con tu próxima pregunta.",
+    "loading_model": "Cargando el modelo del dispositivo...",
+    "model_unavailable_native": "Este modelo no funciona en tu dispositivo. Elige un modelo del dispositivo en Ajustes.",
+    "english_only_notice": "El modelo del dispositivo funciona mejor en inglés. Las respuestas en otros idiomas pueden tener más errores."
   }
 }

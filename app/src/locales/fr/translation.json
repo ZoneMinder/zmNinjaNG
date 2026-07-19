@@ -347,7 +347,9 @@
       "downloading": "Téléchargement…",
       "downloaded": "Téléchargé",
       "download_failed": "Échec du téléchargement du modèle.",
-      "download_size": "{{size}} Mo",
+      "download_size": "Téléchargement total : {{size}} Mo",
+      "native_download_current": "Téléchargement de {{fileName}}, fichier {{current}} sur {{total}} : {{progress}} % ({{downloaded}} sur {{size}})",
+      "native_download_summary": "{{completed}} fichiers terminés. {{pending}} en attente.",
       "privacy": "Fonctionne sur l'appareil. Rien n'est envoyé, sauf à votre propre serveur ZoneMinder.",
       "delete": "Supprimer",
       "delete_failed": "Échec de la suppression du modèle.",
@@ -1279,6 +1281,7 @@
       "error": "{{tool}} a échoué"
     },
     "iteration_cap_reached": "Arrêté après trop d'étapes. Essayez une demande plus simple.",
+    "live_data_required": "Je n’ai pas pu charger les données ZoneMinder actuelles, donc je ne peux pas fournir une réponse fiable.",
     "context_cleared": "Cette conversation a saturé le contexte du modèle, j'en ai donc démarré une nouvelle. Les messages ci-dessus restent lisibles pour vous, mais je ne les vois plus.",
     "parse_error": "Impossible de générer une réponse. Essayez de reformuler.",
     "show_raw_output": "Voir la sortie du modèle",
@@ -1296,21 +1299,9 @@
     "card": {
       "open": "Ouvrir"
     },
-    "confirm": {
-      "set_monitor_enabled_enable": "Activer le moniteur {{id}} ?",
-      "set_monitor_enabled_disable": "Désactiver le moniteur {{id}} ?",
-      "trigger_alarm": "Déclencher une alarme sur le moniteur {{monitorId}} ?",
-      "cancel_alarm": "Annuler l'alarme sur le moniteur {{monitorId}} ?",
-      "change_monitor_function": "Changer la fonction du moniteur {{id}} en {{func}} ?",
-      "change_run_state": "Changer l'état d'exécution du serveur en {{state}} ?",
-      "delete_event": "Supprimer l'événement {{eventId}} (moniteur {{monitorId}}, {{start}}) ?",
-      "archive_event_archive": "Archiver l'événement {{eventId}} ?",
-      "archive_event_unarchive": "Désarchiver l'événement {{eventId}} ?",
-      "generic": "Exécuter cette action ?",
-      "cancel": "Annuler",
-      "accept": "Confirmer",
-      "details": "Détails"
-    },
-    "mobile_on_device_blocked": "Les modèles sur l’appareil ne peuvent pas fonctionner sur les téléphones et tablettes en raison des limites de mémoire. Passez au backend Ollama dans les Réglages pour utiliser l’assistant ici."
+    "context_cleared_manual": "Conversation effacée. Le modèle sur l'appareil a été déchargé pour libérer de la mémoire ; il se rechargera à votre prochaine question.",
+    "loading_model": "Chargement du modèle sur l'appareil...",
+    "model_unavailable_native": "Ce modèle ne fonctionne pas sur votre appareil. Choisissez un modèle sur l'appareil dans les Réglages.",
+    "english_only_notice": "Le modèle sur l'appareil fonctionne mieux en anglais. Les réponses dans d'autres langues peuvent contenir plus d'erreurs."
   }
 }

@@ -14,7 +14,6 @@ const TOOL: ToolDefinition = {
   name: 'count_events',
   description: 'Counts events',
   schema: { type: 'object', properties: { interval: { type: 'string' } } },
-  destructive: false,
   execute: vi.fn(),
 };
 

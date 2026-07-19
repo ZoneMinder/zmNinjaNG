@@ -23,7 +23,6 @@ function fakeTool(overrides: Partial<ToolDefinition> = {}): ToolDefinition {
     name: 'list_events',
     description: 'List recent events for a monitor.',
     schema: { type: 'object', properties: { monitorId: { type: 'string' } } },
-    destructive: false,
     execute: vi.fn(),
     ...overrides,
   };
@@ -40,7 +39,7 @@ const GENERIC_MODEL_ID = 'Llama-3.2-1B-Instruct-q4f16_1-MLC';
 const FEW_SHOT_COUNT = 4;
 
 describe('buildWebLlmMessages', () => {
-  it('opens with a system message combining `system` and the tool contract', () => {
+  it('opens with a system message combining `system` and the tool catalog', () => {
     const tools = [fakeTool()];
     const messages = buildWebLlmMessages('You are zmNinjaNg assistant.', [], tools, GENERIC_MODEL_ID);
 
@@ -49,8 +48,38 @@ describe('buildWebLlmMessages', () => {
     expect(content).toContain('You are zmNinjaNg assistant.');
     expect(content).toContain('list_events');
     expect(content).toContain('List recent events for a monitor.');
-    expect(content).toContain('"tool"');
-    expect(content).toContain('"answer"');
+  });
+
+  // The output contract sits at the generation point, not the system message:
+  // a small model weights the last tokens it read far more heavily, and the
+  // system message is thousands of tokens away by then.
+  it('puts the output contract on the last message, not the system message', () => {
+    const history: AssistantMessage[] = [{ role: 'user', text: 'How many events?' }];
+    const messages = buildWebLlmMessages('sys', history, [fakeTool()], GENERIC_MODEL_ID);
+
+    expect(messages[0].content).not.toContain('"answer": "<your reply>"');
+    const last = messages[messages.length - 1];
+    expect(last.role).toBe('user');
+    expect(last.content).toContain('How many events?');
+    expect(last.content).toContain('"tool"');
+    expect(last.content).toContain('"answer"');
+  });
+
+  // A compact signature line, not `JSON.stringify(tool.schema)`: the raw schema
+  // dump for the whole registry cost roughly a thousand tokens per turn.
+  it('renders each tool as a compact signature instead of a raw JSON schema dump', () => {
+    const tool = fakeTool({
+      schema: {
+        type: 'object',
+        properties: { monitorId: { type: 'string' }, range: { enum: ['today', 'yesterday'] } },
+        required: ['monitorId'],
+      },
+    });
+    const content = buildWebLlmMessages('sys', [], [tool], GENERIC_MODEL_ID)[0].content as string;
+
+    expect(content).toContain('list_events(monitorId: string, range?: today|yesterday)');
+    expect(content).not.toContain('additionalProperties');
+    expect(content).not.toContain('"type":"object"');
   });
 
   it('tells the model it has no tools when the tool list is empty', () => {
@@ -62,7 +91,8 @@ describe('buildWebLlmMessages', () => {
     const history: AssistantMessage[] = [{ role: 'user', text: 'Is the front door camera armed?' }];
     const messages = buildWebLlmMessages('sys', history, [], GENERIC_MODEL_ID);
 
-    expect(messages[1 + FEW_SHOT_COUNT]).toEqual({ role: 'user', content: 'Is the front door camera armed?' });
+    expect(messages[1 + FEW_SHOT_COUNT].role).toBe('user');
+    expect(messages[1 + FEW_SHOT_COUNT].content).toContain('Is the front door camera armed?');
   });
 
   it('re-serializes a past assistant tool call as {"tool","input"} JSON', () => {
@@ -122,7 +152,7 @@ describe('buildWebLlmMessages', () => {
       expect(messages).toHaveLength(1 + FEW_SHOT_COUNT + 1);
       expect(messages[0].role).toBe('system');
       // The example assistant tool call must appear before the real user turn.
-      const realUserIndex = messages.findIndex((m) => m.content === 'real question');
+      const realUserIndex = messages.findIndex((m) => typeof m.content === 'string' && m.content.startsWith('real question'));
       const exampleToolCallIndex = messages.findIndex(
         (m) => m.role === 'assistant' && m.content === '{"tool": "count_events", "input": {"interval": "1 day"}}',
       );
@@ -159,26 +189,36 @@ describe('buildWebLlmMessages', () => {
       }
     });
 
-    it('folds the example tool result into a user message starting "Tool result:" with the reminder sentence', () => {
+    it('folds the example tool result into a user message starting "Tool result:"', () => {
       const messages = buildWebLlmMessages('sys', [], [], GENERIC_MODEL_ID);
       const resultMsg = messages.find(
         (m) => m.role === 'user' && typeof m.content === 'string' && m.content.startsWith('Tool result:\n[{"monitor"'),
       );
       expect(resultMsg).toBeDefined();
-      expect(resultMsg?.content).toContain(
-        'Respond with ONLY a single JSON object: {"tool": "<name>", "input": {...}} to call another tool, ' +
-          'or {"answer": "<text>"} to answer the user.',
-      );
+    });
+
+    // Only the final message carries the contract; restating it on every
+    // intermediate tool result spent tokens on a rule the model had followed.
+    it('does not repeat the output contract on intermediate tool results', () => {
+      const history: AssistantMessage[] = [
+        { role: 'tool', toolResults: [{ callId: 'c1', output: '3 events found' }] },
+        { role: 'assistant', toolCalls: [{ id: 'c2', name: 'get_event', input: {} }] },
+        { role: 'tool', toolResults: [{ callId: 'c2', output: 'event detail' }] },
+      ];
+      const messages = buildWebLlmMessages('sys', history, [], GENERIC_MODEL_ID);
+
+      const firstResult = messages.find((m) => typeof m.content === 'string' && m.content.includes('3 events found'));
+      expect(firstResult?.content).not.toContain('"answer": "<your reply>"');
+      expect(messages[messages.length - 1].content).toContain('"answer": "<your reply>"');
     });
 
     it('still places the real conversation after the fixed few-shot block regardless of tool list', () => {
       const history: AssistantMessage[] = [{ role: 'user', text: 'How many events on Garage today?' }];
       const messages = buildWebLlmMessages('sys', history, [fakeTool()], GENERIC_MODEL_ID);
 
-      expect(messages[messages.length - 1]).toEqual({
-        role: 'user',
-        content: 'How many events on Garage today?',
-      });
+      const last = messages[messages.length - 1];
+      expect(last.role).toBe('user');
+      expect(last.content).toContain('How many events on Garage today?');
     });
   });
 });
@@ -210,16 +250,37 @@ describe('parseWebLlmTurn', () => {
     expect(turn).toEqual({ text: 'ok', toolCalls: [] });
   });
 
-  it('falls back gracefully on malformed JSON instead of throwing', () => {
-    expect(() => parseWebLlmTurn('this is not json at all')).not.toThrow();
-    const turn = parseWebLlmTurn('this is not json at all');
+  // A reply with no brace anywhere never attempted the envelope: the model
+  // judged that this question needed no tool and no structure. Rejecting it
+  // pressured the retry into inventing a tool call (a greeting once fetched
+  // every camera), so it is taken at face value instead.
+  it('takes a brace-free reply as the answer rather than failing', () => {
+    const turn = parseWebLlmTurn('Hello! How can I help you today?');
+    expect(turn).toEqual({ text: 'Hello! How can I help you today?', toolCalls: [] });
+  });
+
+  it('takes a brace-free reply that followed a think block as the answer', () => {
+    const turn = parseWebLlmTurn('The user greeted me, no tool needed.\n</think>\n\nHello! How can I help you today?\n');
+    expect(turn).toEqual({ text: 'Hello! How can I help you today?', toolCalls: [] });
+  });
+
+  // A brace means the model was reaching for the contract and got it wrong,
+  // which IS worth re-rolling.
+  it('still fails on a botched envelope, so the retry can re-roll it', () => {
+    expect(() => parseWebLlmTurn('{"unclosed": ')).not.toThrow();
+    const turn = parseWebLlmTurn('{"unclosed": ');
     expect(turn.toolCalls).toEqual([]);
     expect(turn.text).toBe('__i18n:assistant.parse_error');
   });
 
   it('sets `raw` to the original content on the parse-error path', () => {
-    const turn = parseWebLlmTurn('this is not json at all');
-    expect(turn.raw).toBe('this is not json at all');
+    const turn = parseWebLlmTurn('{"unclosed": ');
+    expect(turn.raw).toBe('{"unclosed": ');
+  });
+
+  it('fails on output with no letters at all, so a degenerate reply is re-rolled', () => {
+    expect(parseWebLlmTurn('```').text).toBe('__i18n:assistant.parse_error');
+    expect(parseWebLlmTurn('   ').text).toBe('__i18n:assistant.parse_error');
   });
 
   it('does not set `raw` on a successful parse', () => {
@@ -277,6 +338,42 @@ describe('parseWebLlmTurn', () => {
   it('parses a plain {"answer"} reply with no <think> block at all', () => {
     const turn = parseWebLlmTurn('{"answer":"hi"}');
     expect(turn).toEqual({ text: 'hi', toolCalls: [] });
+  });
+
+  // Qwen3.5 under MNN emits an UNBALANCED think block: its chat template puts
+  // the opening <think> into the generation prompt, so the model's output
+  // starts mid-thought and carries only the closing tag. Verbatim from a real
+  // on-device turn (refs #246).
+  it('strips a closing </think> that has no opening tag, and ignores brace-y text before it', () => {
+    const turn = parseWebLlmTurn(
+      'The user wants me to summarize their day. According to the instructions, for a daily summary, ' +
+        'I should first call list_events with {"range":"today"} to get the events for today.\n</think>\n\n' +
+        '{"tool": "list_events", "input": {"range": "today"}}\n',
+    );
+
+    expect(turn.toolCalls).toHaveLength(1);
+    expect(turn.toolCalls[0].name).toBe('list_events');
+    expect(turn.toolCalls[0].input).toEqual({ range: 'today' });
+  });
+
+  // Even with the think block gone, the first balanced object in a reply can
+  // be a fragment the model quoted while planning. Take the first candidate
+  // that matches the contract, not the first that merely parses.
+  it('skips a leading brace pair that matches neither contract shape', () => {
+    const turn = parseWebLlmTurn('I should call list_events with {"range":"today"}: {"tool":"list_events","input":{}}');
+
+    expect(turn.toolCalls).toHaveLength(1);
+    expect(turn.toolCalls[0].name).toBe('list_events');
+  });
+
+  it('still fails when no candidate object matches the contract', () => {
+    const turn = parseWebLlmTurn('reasoning about {"range":"today"} and {"foo":"bar"}');
+    expect(turn.text).toBe('__i18n:assistant.parse_error');
+  });
+
+  it('recovers Qwen MNN\'s duplicate quote before the final brace', () => {
+    const turn = parseWebLlmTurn('{"answer":"Hello.""}');
+    expect(turn).toEqual({ text: 'Hello.', toolCalls: [] });
   });
 });
 
@@ -382,7 +479,7 @@ describe('WebLlmProvider.chat', () => {
   it('logs at WARN with the raw content when the response fails to parse', async () => {
     const { log, LogLevel: Level } = await import('../../logger');
     const spy = vi.spyOn(log, 'assistant');
-    const create = vi.fn().mockResolvedValue({ choices: [{ message: { content: 'not json at all' } }] });
+    const create = vi.fn().mockResolvedValue({ choices: [{ message: { content: '{"unclosed": ' } }] });
     vi.mocked(getLoadedEngine).mockResolvedValue({ chat: { completions: { create } } } as never);
 
     const provider = new WebLlmProvider(ASSISTANT.defaultModelId);
@@ -392,7 +489,7 @@ describe('WebLlmProvider.chat', () => {
     expect(spy).toHaveBeenCalledWith(
       expect.stringContaining('failed to parse'),
       Level.WARN,
-      expect.objectContaining({ modelId: ASSISTANT.defaultModelId, content: 'not json at all' }),
+      expect.objectContaining({ modelId: ASSISTANT.defaultModelId, content: '{"unclosed": ' }),
     );
   });
 });

@@ -99,7 +99,6 @@ const listMonitorsTool: ToolDefinition = {
     'flags, and live status (connection state, capture/analysis fps when available). Call this first when ' +
     'the user refers to a monitor by name, or to answer "what monitors are configured".',
   schema: { type: 'object', properties: {}, additionalProperties: false },
-  destructive: false,
   execute: (_input, _ctx) =>
     safeExecute('list_monitors', async () => {
       const { monitors } = await getMonitors();
@@ -123,7 +122,6 @@ const getMonitorTool: ToolDefinition = {
     },
     required: ['monitorId'],
   },
-  destructive: false,
   execute: (input, _ctx) =>
     safeExecute('get_monitor', async () => {
       const monitorId = await resolveMonitorArg(input.monitorId);
@@ -144,15 +142,17 @@ const countEventsTool: ToolDefinition = {
     'Count events per monitor over a ROLLING interval ending now, such as "1 hour" or "1 day" (that means ' +
     'the last 24 hours, NOT since local midnight), covering ALL monitors in one call (no monitorId needed) ' +
     'and reporting the combined total. Use this for "how many events in the last N hours/days" or ' +
-    '"summarize recent events" questions instead of list_events, which returns individual rows. This tool ' +
-    'CANNOT express a calendar day: for "today" (since local midnight) or "yesterday", call list_events ' +
-    'with range instead.',
+    '"summarize recent events" questions instead of list_events, which returns individual rows. ' +
+    'It has TWO hard limits. It CANNOT express a calendar day: for "today" (since local midnight) or ' +
+    '"yesterday", call list_events with range instead. It CANNOT filter or report detected object types: ' +
+    'it returns event COUNTS ONLY and says nothing about what was detected, so for "how many ' +
+    'people/cars/animals" questions call list_events with objectType instead. Calling this tool for an ' +
+    'object-type question returns numbers that cannot answer it.',
   schema: {
     type: 'object',
     properties: { interval: { type: 'string', description: 'A rolling window ending now, e.g. "1 hour", "1 day".' } },
     required: ['interval'],
   },
-  destructive: false,
   execute: (input, _ctx) =>
     safeExecute('count_events', async () => {
       const interval = String(input.interval ?? '');
@@ -207,14 +207,19 @@ const listEventsTool: ToolDefinition = {
       },
       startTime: { type: 'string', description: 'ISO or "YYYY-MM-DD HH:MM:SS". Overrides range if set.' },
       endTime: { type: 'string', description: 'ISO or "YYYY-MM-DD HH:MM:SS". Overrides range if set.' },
-      objectType: { type: 'string', description: 'e.g. "person", "car".' },
+      objectType: {
+        type: 'string',
+        description:
+          'The exact detected object label as written by this install\'s detector, e.g. "person", "car". ' +
+          'The vocabulary is install-specific, so if nothing matches, this tool replies with the labels ' +
+          'actually recorded in that window; retry with one of those rather than reporting no detections.',
+      },
       tag: { type: 'string', description: 'A single tag id. Mutually exclusive with eventIds.' },
       eventIds: { type: 'array', items: { type: 'string' }, description: 'Mutually exclusive with tag.' },
       limit: { type: 'number', description: `Capped at ${ASSISTANT.maxListEventsLimit}.` },
     },
     additionalProperties: false,
   },
-  destructive: false,
   execute: async (input, ctx) => {
     const tag = input.tag as string | undefined;
     const eventIds = input.eventIds as string[] | undefined;
@@ -276,6 +281,31 @@ const listEventsTool: ToolDefinition = {
         direction: 'desc',
       };
       const res = await getEvents(filters);
+
+      // A zero-row objectType query is ambiguous, and answering it as "nothing
+      // happened" is the dangerous reading: the label may simply not be the one
+      // this install's detector writes. The vocabulary is install-specific
+      // (whatever wrote `detected:...` into Notes), so it cannot be an enum on
+      // the schema. Instead, re-run the same window WITHOUT the object filter
+      // and report the labels actually present, which the model can retry with.
+      // Observed: asked "how many people came today", the model sent
+      // objectType "people" against events labelled "person", got nothing, and
+      // told the user nobody had come (refs #246).
+      if (objectType && res.events.length === 0) {
+        const probe = await getEvents({ ...filters, notesRegexp: undefined });
+        // Sampled from one page of the window, not the whole window: enough to
+        // name the labels in use, and it costs one request only on this path.
+        const available = [...new Set(probe.events.flatMap(({ Event: e }) => parseDetectedObjects(e.Notes)))];
+        if (available.length > 0) {
+          throw new Error(
+            `No events matched objectType "${objectType}". Detected object labels recorded in this window: ` +
+              `${available.slice(0, ASSISTANT.objectLabelHintLimit).join(', ')}. ` +
+              'Retry list_events with one of those exact labels, or without objectType. ' +
+              'Do not tell the user nothing was detected until you have retried.',
+          );
+        }
+      }
+
       const nameById = new Map(monitors.map((m) => [m.Monitor.Id, m.Monitor.Name]));
       const rows = res.events.map(({ Event: e }) => ({
         id: e.Id,
@@ -316,7 +346,6 @@ const getEventTool: ToolDefinition = {
     properties: { eventId: { type: 'string', description: 'The event id, from list_events.' } },
     required: ['eventId'],
   },
-  destructive: false,
   execute: (input, ctx) =>
     safeExecute('get_event', async () => {
       const eventId = String(input.eventId ?? '');
@@ -362,7 +391,6 @@ const getServerHealthTool: ToolDefinition = {
     'running, the server version, per-storage disk usage, and the configured server count. Call this for ' +
     '"is the server ok" / "is zmninja / zoneminder up" questions.',
   schema: { type: 'object', properties: {}, additionalProperties: false },
-  destructive: false,
   execute: (_input, _ctx) =>
     safeExecute('get_server_health', async () => {
       const [load, disk, daemonRunning, version] = await Promise.all([
@@ -406,7 +434,6 @@ const listGroupsTool: ToolDefinition = {
     'List monitor groups: id, name, and member monitor ids when the group carries them. Call this when ' +
     'the user refers to a group of monitors by name.',
   schema: { type: 'object', properties: {}, additionalProperties: false },
-  destructive: false,
   execute: (_input, _ctx) =>
     safeExecute('list_groups', async () => {
       const { groups } = await getGroups();
@@ -427,7 +454,6 @@ const listTagsTool: ToolDefinition = {
     'List available event tags (id and name). Returns an empty list on ZoneMinder servers older than 1.37, ' +
     'which do not support tags.',
   schema: { type: 'object', properties: {}, additionalProperties: false },
-  destructive: false,
   execute: (_input, _ctx) =>
     safeExecute('list_tags', async () => {
       const res = await getTags();
@@ -447,7 +473,6 @@ const navigateTool: ToolDefinition = {
     properties: { path: { type: 'string', description: 'An in-app path, e.g. "/events/42".' } },
     required: ['path'],
   },
-  destructive: false,
   execute: async (input, ctx) => {
     const path = String(input.path ?? '');
     const allowed = NAVIGATE_ALLOWLIST.some((re) => re.test(path));

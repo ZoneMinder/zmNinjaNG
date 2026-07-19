@@ -16,6 +16,15 @@ describe('buildSystemPrompt', () => {
     expect(p).toContain('list_monitors');
   });
 
+  // An on-device turn introduced itself as "Ninjiing": the doubled "i" is not
+  // a clean token boundary for a small model, so the exact spelling is stated
+  // as a rule rather than left to be copied (refs #246).
+  it('pins the exact spelling of its name so a small model cannot inflect it', () => {
+    const p = buildSystemPrompt(base);
+    expect(p).toContain('spelled exactly "Ninjii" and never changes');
+    expect(p).toContain('never add letters or endings');
+  });
+
   it('opens by naming itself Ninjii (refs #246)', () => {
     const p = buildSystemPrompt(base);
     expect(p.startsWith('You are Ninjii,')).toBe(true);
@@ -44,7 +53,7 @@ describe('buildSystemPrompt', () => {
   it('instructs the model to call list_events with range/objectType for day- or object-type-specific questions', () => {
     const p = buildSystemPrompt(base);
     expect(p).toContain('call list_events with range and/or objectType');
-    expect(p).toContain('Describe only rows that query returned');
+    expect(p).toContain('Describe only rows the query returned');
   });
 
   it('instructs the model to answer directly and never paste image links/ids, since the app shows thumbnails', () => {

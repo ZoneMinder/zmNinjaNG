@@ -4,9 +4,14 @@ import { MockProvider } from '../providers/mock';
 import type { AssistantHost, AssistantMessage } from '../types';
 import { asProfileId } from '../../../api/types';
 import { ASSISTANT } from '../../zmninja-ng-constants';
+import { NATIVE_MNN_MODELS } from '../native-mnn';
 
-function host(confirmResult = true): AssistantHost {
-  return { confirm: vi.fn().mockResolvedValue(confirmResult), navigate: vi.fn(), onActivity: vi.fn() };
+// Asserted against below: the mutating API must never be reached from the
+// agent loop, since the tools that called it no longer exist.
+vi.mock('../../../api/monitors', () => ({ setMonitorEnabled: vi.fn() }));
+
+function host(): AssistantHost {
+  return { navigate: vi.fn(), onActivity: vi.fn() };
 }
 const baseOpts = (provider: MockProvider, h: AssistantHost, history: AssistantMessage[]) => ({
   provider, host: h, history,
@@ -106,6 +111,17 @@ describe('isContextNearlyFull', () => {
     expect(isContextNearlyFull(window, undefined)).toBe(false);
   });
 
+  // The on-device budget promised 3072 generated tokens inside a 4096 window
+  // that already held a ~1900-token prompt. The model does not error on that,
+  // it just gets cut off mid-thought, which is indistinguishable from a bad
+  // reply. Measured from the real prompt, so it tracks the tool catalog.
+  it('keeps the native generation budget inside the model context window', () => {
+    const model = NATIVE_MNN_MODELS[0];
+    const measuredPromptFloorTokens = 1900;
+
+    expect(measuredPromptFloorTokens + ASSISTANT.nativeMnnMaxTokens).toBeLessThanOrEqual(model.contextWindowSize);
+  });
+
   it('leaves room for the next turn to answer, not just to fit', () => {
     // The threshold has to clear the reply the NEXT turn still has to
     // generate, otherwise the turn that discovers the overflow is the turn
@@ -202,38 +218,129 @@ describe('runAssistantTurn', () => {
     vi.restoreAllMocks();
   });
 
-  it('does not execute a destructive tool when confirm resolves false', async () => {
+  // Observed on-device: asked "how many people came home today", the model
+  // called count_events {"interval":"1 day"} three times (that tool reports
+  // counts only, never object types) and then answered from data that could
+  // not contain the answer. An identical repeat cannot return anything new,
+  // so it is refused rather than re-run (refs #246).
+  it('refuses a tool call repeated with identical arguments instead of re-running it', async () => {
+    const p = new MockProvider();
+    p.setScript([
+      { toolCalls: [{ id: 'c1', name: 'count_events', input: { interval: '1 day' } }] },
+      { toolCalls: [{ id: 'c2', name: 'count_events', input: { interval: '1 day' } }] },
+      { text: 'done', toolCalls: [] },
+    ]);
+    const execute = vi.fn().mockResolvedValue({ output: '{"total":15}' });
+    vi.spyOn(await import('../tools'), 'getToolByName').mockReturnValue({
+      name: 'count_events', description: '', schema: {}, execute,
+    } as never);
+
+    const out = await runAssistantTurn(baseOpts(p, host(), [{ role: 'user', text: 'how many people came home today' }]));
+
+    expect(execute).toHaveBeenCalledTimes(1);
+    const repeat = out.filter((m) => m.role === 'tool')[1];
+    expect(repeat?.toolResults?.[0].isError).toBe(true);
+    expect(repeat?.toolResults?.[0].output).toContain('already called count_events');
+    vi.restoreAllMocks();
+  });
+
+  it('still allows the same tool with different arguments', async () => {
+    const p = new MockProvider();
+    p.setScript([
+      { toolCalls: [{ id: 'c1', name: 'list_events', input: { objectType: 'people' } }] },
+      { toolCalls: [{ id: 'c2', name: 'list_events', input: { objectType: 'person' } }] },
+      { text: 'done', toolCalls: [] },
+    ]);
+    const execute = vi.fn().mockResolvedValue({ output: '{"events":[]}' });
+    vi.spyOn(await import('../tools'), 'getToolByName').mockReturnValue({
+      name: 'list_events', description: '', schema: {}, execute,
+    } as never);
+
+    await runAssistantTurn(baseOpts(p, host(), [{ role: 'user', text: 'how many people today' }]));
+
+    expect(execute).toHaveBeenCalledTimes(2);
+    vi.restoreAllMocks();
+  });
+
+  // The actions that changed state were deleted, so a model asking for one
+  // resolves to no tool at all: there is nothing to run and nothing to confirm.
+  it('refuses a withheld action and explains why, rather than running anything', async () => {
+    const { setMonitorEnabled } = await import('../../../api/monitors');
     const p = new MockProvider();
     p.setScript([
       { toolCalls: [{ id: 'c1', name: 'set_monitor_enabled', input: { monitorId: '4', enabled: false } }] },
-      { text: 'Okay, left it as is.', toolCalls: [] },
+      { text: 'I cannot change that. Disarm it on the Monitors screen.', toolCalls: [] },
     ]);
-    const h = host(false);
-    const out = await runAssistantTurn(baseOpts(p, h, [{ role: 'user', text: 'disarm 4' }]));
-    const toolMsg = out.find((m) => m.role === 'tool');
-    expect(toolMsg?.toolResults?.[0].output).toBe('User declined this action.');
-    expect(h.confirm).toHaveBeenCalledOnce();
+
+    const out = await runAssistantTurn(baseOpts(p, host(), [{ role: 'user', text: 'disarm 4' }]));
+
+    const result = out.find((m) => m.role === 'tool')?.toolResults?.[0];
+    expect(result?.isError).toBe(true);
+    expect(result?.output).toContain('not something this assistant can do');
+    expect(vi.mocked(setMonitorEnabled)).not.toHaveBeenCalled();
   });
 
-  it('reports an error result and never executes when buildConfirm rejects', async () => {
+  // A genuinely unknown name must stay distinguishable from a withheld one, or
+  // the model is told the wrong thing about why its call failed.
+  it('still reports an unknown tool name as unknown', async () => {
     const p = new MockProvider();
     p.setScript([
-      { toolCalls: [{ id: 'c1', name: 'delete_event', input: { eventId: '999' } }] },
-      { text: 'Sorry, I could not confirm that.', toolCalls: [] },
+      { toolCalls: [{ id: 'c1', name: 'launch_missiles', input: {} }] },
+      { text: 'done', toolCalls: [] },
+    ]);
+
+    const out = await runAssistantTurn(baseOpts(p, host(), [{ role: 'user', text: 'q' }]));
+
+    expect(out.find((m) => m.role === 'tool')?.toolResults?.[0].output).toBe('Unknown tool: launch_missiles');
+  });
+
+
+  it('requires list_events before answering a daily summary', async () => {
+    const p = new MockProvider();
+    p.setScript([
+      { text: 'Invented daily summary', toolCalls: [] },
+      { toolCalls: [{ id: 'events', name: 'list_events', input: { range: 'today' } }] },
+      { text: 'One event today.', toolCalls: [] },
     ]);
     const h = host();
-    const execute = vi.fn().mockResolvedValue({ output: 'deleted' });
     vi.spyOn(await import('../tools'), 'getToolByName').mockReturnValue({
-      name: 'delete_event', description: '', schema: {}, destructive: true,
-      buildConfirm: vi.fn().mockRejectedValue(new Error('event not found')),
-      execute,
+      name: 'list_events', description: '', schema: {}, destructive: false,
+      execute: async () => ({
+        output: '[{"id":"1"}]',
+        display: [{ kind: 'event', id: '1', title: 'Front Door', navigatePath: '/events/1', imageUrls: ['thumb'] }],
+      }),
     } as never);
-    const out = await runAssistantTurn(baseOpts(p, h, [{ role: 'user', text: 'delete event 999' }]));
-    const toolMsg = out.find((m) => m.role === 'tool');
-    expect(toolMsg?.toolResults?.[0].isError).toBe(true);
-    expect(toolMsg?.toolResults?.[0].output).toContain('event not found');
-    expect(execute).not.toHaveBeenCalled();
-    expect(h.confirm).not.toHaveBeenCalled();
+
+    const out = await runAssistantTurn(baseOpts(p, h, [{ role: 'user', text: 'Summarize my day' }]));
+
+    expect(out.map((message) => message.text)).not.toContain('Invented daily summary');
+    expect(h.onActivity).toHaveBeenCalledWith({ toolName: 'list_events', status: 'done', input: { range: 'today' } });
+    expect(out[out.length - 1]).toMatchObject({
+      text: 'One event today.',
+      display: [{ kind: 'event', id: '1', imageUrls: ['thumb'] }],
+    });
+    vi.restoreAllMocks();
+  });
+
+  it('requires a monitor tool before answering current camera state', async () => {
+    const p = new MockProvider();
+    p.setScript([
+      { text: 'Front Door is armed.', toolCalls: [] },
+      { toolCalls: [{ id: 'monitors', name: 'list_monitors', input: {} }] },
+      { text: 'Front Door is connected.', toolCalls: [] },
+    ]);
+    const h = host();
+    vi.spyOn(await import('../tools'), 'getToolByName').mockReturnValue({
+      name: 'list_monitors', description: '', schema: {}, destructive: false,
+      execute: async () => ({ output: '[{"name":"Front Door","status":"Connected"}]' }),
+    } as never);
+
+    const out = await runAssistantTurn(baseOpts(p, h, [{ role: 'user', text: 'What is my camera status?' }]));
+
+    expect(out.map((message) => message.text)).not.toContain('Front Door is armed.');
+    expect(h.onActivity).toHaveBeenCalledWith({ toolName: 'list_monitors', status: 'done', input: {} });
+    expect(out[out.length - 1].text).toBe('Front Door is connected.');
+    vi.restoreAllMocks();
   });
 
   it('stops at the iteration cap', async () => {

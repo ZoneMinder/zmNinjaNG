@@ -347,7 +347,9 @@
       "downloading": "Downloading…",
       "downloaded": "Downloaded",
       "download_failed": "Model download failed.",
-      "download_size": "{{size}} MB",
+      "download_size": "Total download: {{size}} MB",
+      "native_download_current": "Downloading {{fileName}}, file {{current}} of {{total}}: {{progress}}% ({{downloaded}} of {{size}})",
+      "native_download_summary": "Completed {{completed}} files. {{pending}} pending.",
       "privacy": "Runs on-device. Nothing is sent anywhere except your own ZoneMinder server.",
       "delete": "Delete",
       "delete_failed": "Failed to delete model.",
@@ -1279,6 +1281,7 @@
       "error": "{{tool}} failed"
     },
     "iteration_cap_reached": "Stopped after too many steps. Try a simpler request.",
+    "live_data_required": "I could not load current ZoneMinder data, so I can’t provide a reliable answer.",
     "context_cleared": "This conversation filled up the model's context, so I've started a fresh one. The messages above are still here for you to read, but I can't see them any more.",
     "parse_error": "Sorry, I had trouble putting together a response. Could you try rephrasing?",
     "show_raw_output": "Show model output",
@@ -1296,21 +1299,9 @@
     "card": {
       "open": "Open"
     },
-    "confirm": {
-      "set_monitor_enabled_enable": "Enable monitor {{id}}?",
-      "set_monitor_enabled_disable": "Disable monitor {{id}}?",
-      "trigger_alarm": "Trigger an alarm on monitor {{monitorId}}?",
-      "cancel_alarm": "Cancel the alarm on monitor {{monitorId}}?",
-      "change_monitor_function": "Change monitor {{id}} function to {{func}}?",
-      "change_run_state": "Switch the server run state to {{state}}?",
-      "delete_event": "Delete event {{eventId}} (monitor {{monitorId}}, {{start}})?",
-      "archive_event_archive": "Archive event {{eventId}}?",
-      "archive_event_unarchive": "Unarchive event {{eventId}}?",
-      "generic": "Run this action?",
-      "cancel": "Cancel",
-      "accept": "Confirm",
-      "details": "Details"
-    },
-    "mobile_on_device_blocked": "On-device models can't run on phones or tablets due to memory limits. Switch to the Ollama backend in Settings to use the assistant here."
+    "context_cleared_manual": "Conversation cleared. The on-device model was unloaded to free memory; it will load again on your next question.",
+    "loading_model": "Loading the on-device model...",
+    "model_unavailable_native": "This model cannot run on your device. Choose an on-device model in Settings.",
+    "english_only_notice": "The on-device model works best in English. Answers in other languages may contain more mistakes."
   }
 }

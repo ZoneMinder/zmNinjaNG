@@ -3,7 +3,9 @@ import { STORAGE_KEYS } from '../../zmninja-ng-constants';
 import { sharedMockProvider } from './mock';
 import { WebLlmProvider } from './webllm';
 import { OpenAiProvider } from './openai';
+import { NativeMnnProvider } from './native-mnn';
 import { MODEL_NOT_AVAILABLE_MESSAGE } from '../model-download';
+import { Platform } from '../../platform';
 
 /** `getAssistantProvider` itself never throws this outside test mode (it
  *  always returns a `WebLlmProvider`); the message is thrown instead by
@@ -34,5 +36,5 @@ export function getAssistantProvider(config: ProviderConfig): AssistantProvider 
   if (config.backend === 'ollama') {
     return new OpenAiProvider({ baseUrl: config.ollamaBaseUrl, model: config.ollamaModel, apiKey: config.apiKey });
   }
-  return new WebLlmProvider(config.modelId);
+  return Platform.isNative ? new NativeMnnProvider(config.modelId) : new WebLlmProvider(config.modelId);
 }

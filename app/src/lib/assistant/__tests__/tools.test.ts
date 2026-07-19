@@ -1,12 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { getToolByName, readOnlyTools, destructiveTools, TOOLS } from '../tools';
+import { getToolByName, isWithheldToolName, readOnlyTools, WITHHELD_TOOL_NAMES, TOOLS } from '../tools';
 import { safeExecute } from '../tool-helpers';
 import type { ToolContext } from '../types';
 import { asProfileId } from '../../../api/types';
 import { ASSISTANT } from '../../zmninja-ng-constants';
-import { getEvents, deleteEvent, setEventArchived } from '../../../api/events';
-import { getMonitor, getMonitors, triggerAlarm, cancelAlarm, setMonitorEnabled, changeMonitorFunction } from '../../../api/monitors';
-import { changeState } from '../../../api/states';
+import { getEvents } from '../../../api/events';
+import { getMonitor, getMonitors } from '../../../api/monitors';
 import { getStorages, getServers } from '../../../api/server';
 import { DEFAULT_THUMBNAIL_FALLBACK_CHAIN } from '../../../stores/settings';
 
@@ -106,7 +105,7 @@ function ctx(): ToolContext {
   return {
     profileId: asProfileId('p1'),
     queryClient: { fetchQuery: (o: { queryFn: () => unknown }) => o.queryFn() } as never,
-    host: { confirm: vi.fn(), navigate: vi.fn(), onActivity: vi.fn() },
+    host: { navigate: vi.fn(), onActivity: vi.fn() },
   };
 }
 
@@ -510,12 +509,22 @@ describe('read-only tools', () => {
     expect(getToolByName('does_not_exist')).toBeUndefined();
   });
 
-  it('TOOLS includes readOnlyTools plus the destructive tools', () => {
-    expect(TOOLS).toEqual([...readOnlyTools, ...destructiveTools]);
+  // The assistant is read-only by construction: the tools that changed state
+  // were deleted outright, so nothing here can reach a mutating API.
+  it('TOOLS exposes exactly the read-only tools', () => {
+    expect(TOOLS).toEqual([...readOnlyTools]);
   });
 
-  it('every read-only tool is non-destructive', () => {
-    expect(readOnlyTools.every((t) => t.destructive === false)).toBe(true);
+  it('does not resolve any withheld action by name, so the agent loop cannot run one', () => {
+    for (const name of WITHHELD_TOOL_NAMES) {
+      expect(getToolByName(name)).toBeUndefined();
+      expect(isWithheldToolName(name)).toBe(true);
+    }
+  });
+
+  it('does not report an unrelated unknown name as a withheld action', () => {
+    expect(isWithheldToolName('list_monitors')).toBe(false);
+    expect(isWithheldToolName('launch_missiles')).toBe(false);
   });
 
   it('list_events clamps a non-numeric or negative limit into [1, maxListEventsLimit]', async () => {
@@ -579,6 +588,51 @@ describe('list_events range resolution (refs #246)', () => {
     );
   });
 
+  // A zero-row objectType query used to be indistinguishable from "nothing
+  // happened", and the model said so: asked "how many people came to my house
+  // today" it sent objectType "people" against events labelled "person" and
+  // told the user nobody had come. The label vocabulary is install-specific,
+  // so the tool reports the labels actually present instead (refs #246).
+  describe('list_events objectType vocabulary', () => {
+    const emptyPage = {
+      events: [],
+      pagination: { page: 1, pageCount: 1, current: 1, count: 0, prevPage: false, nextPage: false, limit: 25, totalCount: 0 },
+    };
+
+    it('reports the labels actually recorded when an objectType matches nothing', async () => {
+      vi.mocked(getEvents).mockResolvedValueOnce(emptyPage as never);
+      const tool = getToolByName('list_events')!;
+
+      const r = await tool.execute({ range: 'today', objectType: 'people' }, ctx());
+
+      expect(r.isError).toBe(true);
+      expect(r.output).toContain('No events matched objectType "people"');
+      expect(r.output).toContain('person');
+      expect(r.output).toContain('car');
+      // The probe re-runs the same window with the object filter dropped.
+      expect(getEvents).toHaveBeenLastCalledWith(expect.objectContaining({ notesRegexp: undefined }));
+    });
+
+    it('returns a normal empty result when the window genuinely has no events', async () => {
+      vi.mocked(getEvents).mockResolvedValueOnce(emptyPage as never).mockResolvedValueOnce(emptyPage as never);
+      const tool = getToolByName('list_events')!;
+
+      const r = await tool.execute({ range: 'today', objectType: 'person' }, ctx());
+
+      expect(r.isError).toBeFalsy();
+      expect(JSON.parse(r.output)).toEqual({ events: [] });
+    });
+
+    it('does not probe when the objectType query returned rows', async () => {
+      const tool = getToolByName('list_events')!;
+
+      const r = await tool.execute({ range: 'today', objectType: 'person' }, ctx());
+
+      expect(r.isError).toBeFalsy();
+      expect(getEvents).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('flags truncated when more matches exist beyond the capped page', async () => {
     vi.mocked(getEvents).mockResolvedValueOnce({
       events: [
@@ -616,119 +670,5 @@ describe('tool output budget', () => {
   it('returns valid, explicitly truncated JSON for oversized output', async () => {
     const result = await safeExecute('large', async () => 'x'.repeat(ASSISTANT.maxToolResultCharacters + 1));
     expect(JSON.parse(result.output)).toMatchObject({ truncated: true });
-  });
-});
-
-describe('destructive tools', () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it('rejects malformed model arguments before confirmation or execution', async () => {
-    const enabled = getToolByName('set_monitor_enabled')!;
-    const functionTool = getToolByName('change_monitor_function')!;
-    const archived = getToolByName('archive_event')!;
-
-    await expect(enabled.buildConfirm!({ monitorId: '4', enabled: 'false' }, ctx())).rejects.toThrow('enabled must be a boolean');
-    await expect(functionTool.buildConfirm!({ monitorId: '2', func: 'DeleteEverything' }, ctx())).rejects.toThrow(
-      'func must be one of',
-    );
-    await expect(archived.buildConfirm!({ eventId: '99', archived: 'true' }, ctx())).rejects.toThrow(
-      'archived must be a boolean',
-    );
-
-    expect(setMonitorEnabled).not.toHaveBeenCalled();
-    expect(changeMonitorFunction).not.toHaveBeenCalled();
-    expect(setEventArchived).not.toHaveBeenCalled();
-  });
-
-  it('trigger_alarm is destructive and builds a confirm request', async () => {
-    const tool = getToolByName('trigger_alarm')!;
-    expect(tool.destructive).toBe(true);
-    const req = await tool.buildConfirm!({ monitorId: '1' }, ctx());
-    expect(req.toolName).toBe('trigger_alarm');
-    expect(req.messageKey).toBe('assistant.confirm.trigger_alarm');
-    expect(req.messageParams).toMatchObject({ monitorId: '1' });
-    const r = await tool.execute({ monitorId: '1' }, ctx());
-    expect(r.isError).toBeFalsy();
-    expect(triggerAlarm).toHaveBeenCalledWith('1');
-  });
-
-  it('cancel_alarm is destructive and builds a confirm request', async () => {
-    const tool = getToolByName('cancel_alarm')!;
-    expect(tool.destructive).toBe(true);
-    const req = await tool.buildConfirm!({ monitorId: '1' }, ctx());
-    expect(req.messageKey).toBe('assistant.confirm.cancel_alarm');
-    const r = await tool.execute({ monitorId: '1' }, ctx());
-    expect(r.isError).toBeFalsy();
-    expect(cancelAlarm).toHaveBeenCalledWith('1');
-  });
-
-  it('set_monitor_enabled is destructive and builds a concrete confirm', async () => {
-    const tool = getToolByName('set_monitor_enabled')!;
-    expect(tool.destructive).toBe(true);
-
-    const disableReq = await tool.buildConfirm!({ monitorId: '4', enabled: false }, ctx());
-    expect(disableReq.toolName).toBe('set_monitor_enabled');
-    expect(disableReq.messageKey).toBe('assistant.confirm.set_monitor_enabled_disable');
-    expect(disableReq.messageParams).toMatchObject({ id: '4' });
-    expect(disableReq.messageParams).not.toHaveProperty('enabled');
-
-    const enableReq = await tool.buildConfirm!({ monitorId: '4', enabled: true }, ctx());
-    expect(enableReq.messageKey).toBe('assistant.confirm.set_monitor_enabled_enable');
-    expect(enableReq.messageParams).toMatchObject({ id: '4' });
-
-    const r = await tool.execute({ monitorId: '4', enabled: false }, ctx());
-    expect(r.isError).toBeFalsy();
-    expect(setMonitorEnabled).toHaveBeenCalledWith('4', false);
-  });
-
-  it('change_monitor_function is destructive and builds a concrete confirm', async () => {
-    const tool = getToolByName('change_monitor_function')!;
-    expect(tool.destructive).toBe(true);
-    const req = await tool.buildConfirm!({ monitorId: '2', func: 'Record' }, ctx());
-    expect(req.messageParams).toMatchObject({ id: '2', func: 'Record' });
-    const r = await tool.execute({ monitorId: '2', func: 'Record' }, ctx());
-    expect(r.isError).toBeFalsy();
-    expect(changeMonitorFunction).toHaveBeenCalledWith('2', 'Record');
-  });
-
-  it('change_run_state is destructive and builds a concrete confirm', async () => {
-    const tool = getToolByName('change_run_state')!;
-    expect(tool.destructive).toBe(true);
-    const req = await tool.buildConfirm!({ state: 'Away' }, ctx());
-    expect(req.messageKey).toBe('assistant.confirm.change_run_state');
-    expect(req.messageParams).toMatchObject({ state: 'Away' });
-    const r = await tool.execute({ state: 'Away' }, ctx());
-    expect(r.isError).toBeFalsy();
-    expect(changeState).toHaveBeenCalledWith('Away');
-  });
-
-  it('delete_event confirm fetches event detail for the card', async () => {
-    const tool = getToolByName('delete_event')!;
-    expect(tool.destructive).toBe(true);
-    const req = await tool.buildConfirm!({ eventId: '99' }, ctx());
-    expect(req.messageKey).toBe('assistant.confirm.delete_event');
-    expect(req.messageParams).toMatchObject({ eventId: '99', monitorId: '1' });
-    expect(req.params).toMatchObject({ eventId: '99' });
-    const r = await tool.execute({ eventId: '99' }, ctx());
-    expect(r.isError).toBeFalsy();
-    expect(deleteEvent).toHaveBeenCalledWith('99');
-  });
-
-  it('archive_event is destructive and builds a concrete confirm', async () => {
-    const tool = getToolByName('archive_event')!;
-    expect(tool.destructive).toBe(true);
-
-    const archiveReq = await tool.buildConfirm!({ eventId: '99', archived: true }, ctx());
-    expect(archiveReq.messageKey).toBe('assistant.confirm.archive_event_archive');
-    expect(archiveReq.messageParams).toMatchObject({ eventId: '99' });
-    expect(archiveReq.messageParams).not.toHaveProperty('archived');
-
-    const unarchiveReq = await tool.buildConfirm!({ eventId: '99', archived: false }, ctx());
-    expect(unarchiveReq.messageKey).toBe('assistant.confirm.archive_event_unarchive');
-    expect(unarchiveReq.messageParams).toMatchObject({ eventId: '99' });
-
-    const r = await tool.execute({ eventId: '99', archived: true }, ctx());
-    expect(r.isError).toBeFalsy();
-    expect(setEventArchived).toHaveBeenCalledWith('99', true);
   });
 });

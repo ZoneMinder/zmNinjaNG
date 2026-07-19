@@ -15,22 +15,24 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { AskPanel } from '../AskPanel';
 import { useAssistantStore } from '../../../stores/assistant';
 
+const mockLanguage = { current: 'en' };
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string, opts?: Record<string, unknown>) => {
       if (opts && 'tool' in opts) return `${key}:${opts.tool}`;
       return key;
     },
-    i18n: { language: 'en' },
+    i18n: { get language() { return mockLanguage.current; } },
   }),
 }));
 vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({ getQueryData: () => undefined }),
 }));
+const mockBackend = { current: 'on-device' };
 vi.mock('../../../hooks/useCurrentProfile', () => ({
   useCurrentProfile: () => ({
     currentProfile: { id: 'p1', timezone: 'UTC' },
-    settings: { assistantModelId: 'test-model' },
+    settings: { assistantModelId: 'test-model', get assistantBackend() { return mockBackend.current; } },
   }),
 }));
 vi.mock('../../../hooks/useFreshAccessToken', () => ({
@@ -38,11 +40,7 @@ vi.mock('../../../hooks/useFreshAccessToken', () => ({
 }));
 const navigateMock = vi.fn();
 vi.mock('../useAssistantHost', () => ({
-  useAssistantHost: () => ({
-    host: { confirm: vi.fn(), navigate: navigateMock, onActivity: vi.fn() },
-    pendingConfirm: null,
-    resolveConfirm: vi.fn(),
-  }),
+  useAssistantHost: () => ({ host: { navigate: navigateMock, onActivity: vi.fn() } }),
 }));
 vi.mock('../../../lib/assistant/tools', () => ({
   getToolByName: (name: string) => ({ name, description: `${name} description` }),
@@ -268,5 +266,31 @@ describe('AskPanel', () => {
     render(<AskPanel />);
 
     expect(screen.queryByTestId('assistant-result-cards')).not.toBeInTheDocument();
+  });
+
+  // The on-device model is small and English-first; the app says so rather
+  // than letting a non-English user discover it through worse answers.
+  describe('on-device language notice', () => {
+    it('warns when the app language is not English and the model runs on-device', () => {
+      mockLanguage.current = 'de';
+      mockBackend.current = 'on-device';
+      render(<AskPanel />);
+      expect(screen.getByTestId('assistant-english-notice')).toBeInTheDocument();
+    });
+
+    it('stays hidden in English', () => {
+      mockLanguage.current = 'en-GB';
+      mockBackend.current = 'on-device';
+      render(<AskPanel />);
+      expect(screen.queryByTestId('assistant-english-notice')).not.toBeInTheDocument();
+    });
+
+    // Ollama runs whatever model the user configured, so the limitation is not ours to claim.
+    it('stays hidden on Ollama regardless of language', () => {
+      mockLanguage.current = 'zh';
+      mockBackend.current = 'ollama';
+      render(<AskPanel />);
+      expect(screen.queryByTestId('assistant-english-notice')).not.toBeInTheDocument();
+    });
   });
 });

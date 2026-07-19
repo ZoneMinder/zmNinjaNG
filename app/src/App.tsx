@@ -25,6 +25,7 @@ import { Button } from './components/ui/button';
 import { X } from 'lucide-react';
 import { log, LogLevel, logger } from './lib/logger';
 import { initializeLogFile, hydrateLogStoreFromFile, getLogFile } from './lib/log-file';
+import { unloadNativeMnn } from './lib/assistant/native-mnn';
 import { useCapacitorListener } from './hooks/useCapacitorListener';
 import { useAndroidBackButton } from './hooks/useAndroidBackButton';
 import { PipProvider } from './contexts/PipContext';
@@ -116,10 +117,21 @@ function AppRoutes() {
 
   // Native: also flush when the app is backgrounded. Errors are swallowed;
   // @capacitor/app may not be present in some test envs.
+  //
+  // The on-device assistant model is released here too. It is roughly 1.4GB
+  // resident, and a backgrounded app holding that is the first thing iOS kills
+  // under memory pressure, so it is reloaded on the next question instead (the
+  // assistant panel says so while it loads). Nothing else freed the model:
+  // closing the panel did not, and neither did leaving the app.
   useCapacitorListener(
     () => import('@capacitor/app').then((m) => m.App),
     'pause',
-    () => { void getLogFile().flush(); },
+    () => {
+      void getLogFile().flush();
+      void unloadNativeMnn().catch((error) =>
+        log.assistant('Failed to unload the on-device model on pause', LogLevel.WARN, { error }),
+      );
+    },
   );
 
   // Android hardware back: close overlays, go back on detail views, exit at root.
