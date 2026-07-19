@@ -16,7 +16,7 @@
  * whether a download/delete is in flight, to enable/disable the two buttons.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Switch } from '../ui/switch';
 import { Button } from '../ui/button';
@@ -31,14 +31,13 @@ import {
   cancelNativeMnnDownload,
   deleteNativeMnnModel,
   downloadNativeMnnModel,
-  getNativeMnnListenerSource,
+  getNativeMnnDownload,
   getNativeMnnModelSize,
   isNativeMnnModelDownloaded,
   NATIVE_MNN_MODELS,
-  type NativeMnnDownloadProgress,
+  subscribeNativeMnnDownload,
   supportsNativeMnnModel,
 } from '../../lib/assistant/native-mnn';
-import { useCapacitorListener } from '../../hooks/useCapacitorListener';
 import { getModelStorageInfo, formatStorageBytes, type ModelStorageInfo } from '../../lib/assistant/model-storage';
 import { useBackgroundTasks, type BackgroundTask } from '../../stores/backgroundTasks';
 import { log, LogLevel } from '../../lib/logger';
@@ -93,8 +92,6 @@ export function AssistantSection({
 
   const [downloadStatus, setDownloadStatus] = useState<DownloadStatus>('checking');
   const [deleting, setDeleting] = useState(false);
-  const [nativeDownloading, setNativeDownloading] = useState(false);
-  const [nativeDownloadProgress, setNativeDownloadProgress] = useState<NativeMnnDownloadProgress>();
   const [storageInfo, setStorageInfo] = useState<ModelStorageInfo | undefined>(undefined);
   // Native models live on the filesystem, not in a browser storage partition,
   // so `getModelStorageInfo` cannot see them; the plugin reports the directory
@@ -122,16 +119,15 @@ export function AssistantSection({
     return match;
   }, [tasks, modelId]);
 
+  // Read from the module, not local state: the native download outlives this
+  // screen, so leaving and returning must pick the progress back up rather than
+  // showing nothing while it is still running (refs #246).
+  const activeNativeDownload = useSyncExternalStore(subscribeNativeMnnDownload, getNativeMnnDownload, getNativeMnnDownload);
+  const nativeDownloading = nativeMnn && activeNativeDownload?.modelId === modelId;
+  const nativeDownloadProgress = activeNativeDownload?.progress;
+
   const downloading = nativeDownloading || downloadTask?.status === 'pending' || downloadTask?.status === 'in_progress';
 
-  useCapacitorListener(
-    getNativeMnnListenerSource,
-    'downloadProgress',
-    (progress: NativeMnnDownloadProgress) => {
-      if (progress.modelId === modelId) setNativeDownloadProgress(progress);
-    },
-    { enabled: nativeMnn && nativeDownloading },
-  );
 
   // Latest selected model id, read *after* the awaits below resolve. The
   // select is disabled while downloading/deleting (primary guard), but a
@@ -257,8 +253,6 @@ export function AssistantSection({
   // state on its own promise settling.
   const handleDownload = useCallback(() => {
     if (nativeMnn) {
-      setNativeDownloadProgress(undefined);
-      setNativeDownloading(true);
       nativeCancelledRef.current = false;
       downloadNativeMnnModel(modelId)
         .then(() => {
@@ -275,9 +269,6 @@ export function AssistantSection({
           if (mountedRef.current && selectedModelIdRef.current === modelId) {
             toast({ title: t('common.error'), description: t('settings.assistant.download_failed'), variant: 'destructive' });
           }
-        })
-        .finally(() => {
-          if (mountedRef.current) setNativeDownloading(false);
         });
       return;
     }
@@ -372,6 +363,19 @@ export function AssistantSection({
 
             {settings.assistantBackend === 'on-device' && (nativeMnn || hasWebGPU === true) && (
               <>
+                {/* Measured, not guessed: on a Pixel 8 the model holds ~1.8GB of
+                    native heap and a single reply took over three minutes with
+                    the device swapping. Inference is CPU-only (Android compiles
+                    no GPU backend; MNN's backend_type defaults to "cpu"), so
+                    this warns about RAM and chip speed rather than the GPU,
+                    which does not participate. */}
+                {nativeMnn && (
+                  <div className="px-4 py-3 space-y-1" data-testid="assistant-on-device-warning">
+                    <p className="text-xs text-muted-foreground">{t('settings.assistant.on_device_performance')}</p>
+                    <p className="text-xs text-muted-foreground">{t('settings.assistant.on_device_requirements')}</p>
+                    <p className="text-xs text-muted-foreground">{t('settings.assistant.on_device_alternative')}</p>
+                  </div>
+                )}
                 <div className="px-4 py-3 space-y-2">
                   <RowLabel label={t('settings.assistant.model')} />
                   <select

@@ -72,13 +72,6 @@ async function resolveMonitorArg(raw: unknown): Promise<string> {
   return resolution.id;
 }
 
-/** Trims a Notes field for the list_events row cap (rule 11: truncate long
- *  text); get_event returns the untrimmed value since it is for one event. */
-function trimNotes(notes: string | null, max: number): string | null {
-  if (!notes) return notes;
-  return notes.length > max ? notes.slice(0, max) : notes;
-}
-
 /** Maps a Storage row to disk usage the model can reason about: a percentage
  *  when both used/total are known, otherwise the raw usage figure ZM
  *  reports. Older ZM builds may only send one of the two, or neither. */
@@ -307,27 +300,44 @@ const listEventsTool: ToolDefinition = {
       }
 
       const nameById = new Map(monitors.map((m) => [m.Monitor.Id, m.Monitor.Name]));
+      // Only the fields an answer is built from. The full row (frame counts,
+      // scores, end time, archived flag, and a notes preview that just repeats
+      // `objects`) came to ~300 characters each, so a full 25-row result was
+      // 7430 characters against a 6000 budget and `safeExecute` replaced the
+      // WHOLE payload with a truncation notice. The model read that as "no
+      // events" and said so, while the result cards below its answer showed the
+      // events it was denying. Use get_event for detail on one row.
       const rows = res.events.map(({ Event: e }) => ({
         id: e.Id,
         monitor: nameById.get(e.MonitorId) ?? e.MonitorId,
-        cause: e.Cause,
         start: e.StartDateTime,
-        end: e.EndDateTime,
         durationSec: Number(e.Length),
-        frames: Number(e.Frames),
-        alarmFrames: Number(e.AlarmFrames),
-        maxScore: Number(e.MaxScore),
-        avgScore: Number(e.AvgScore),
         objects: parseDetectedObjects(e.Notes),
-        archived: e.Archived === '1',
-        notes: trimNotes(e.Notes, ASSISTANT.notesPreviewChars),
       }));
-      // res.pagination.nextPage means more matches exist beyond this
-      // (already limit-capped) page: flag it so the model says "at least N"
-      // instead of implying `rows.length` is the true total (refs #246).
-      const output = JSON.stringify(res.pagination.nextPage ? { truncated: true, events: rows } : { events: rows });
-      // Cards mirror the same (already limit-capped) rows as the text output above.
-      const display = res.events.map(({ Event: e }) =>
+
+      // Drop whole rows rather than characters, so what survives is always
+      // valid JSON the model can read, and say how many were dropped: a bare
+      // "truncated" reads to a small model as "nothing found".
+      const budget = ASSISTANT.maxToolResultCharacters - ASSISTANT.toolResultBudgetHeadroom;
+      let shown = rows;
+      while (shown.length > 1 && JSON.stringify({ events: shown }).length > budget) {
+        shown = shown.slice(0, -1);
+      }
+      // State the window that was actually queried. Asked "how many people came
+      // to my house", the model queried no time range at all and then answered
+      // "no people in the last 24 hours": a period it never asked about. It
+      // cannot invent one it is told.
+      const from = explicitStart ?? resolved?.startDateTime;
+      const to = explicitEnd ?? resolved?.endDateTime;
+      const window = from || to ? { from: from ?? null, to: to ?? null } : 'all recorded events, no time filter applied';
+
+      const more = shown.length < rows.length || res.pagination.nextPage;
+      const output = JSON.stringify(
+        more ? { window, events: shown, shownEvents: shown.length, moreMatchesExist: true } : { window, events: shown },
+      );
+      // Cards mirror EXACTLY the rows the model was given. Building them from
+      // the full set is what let the UI contradict the answer.
+      const display = res.events.slice(0, shown.length).map(({ Event: e }) =>
         buildEventDisplayEntity(e, nameById.get(e.MonitorId) ?? e.MonitorId, monitors, ctx),
       );
       return { output, display };

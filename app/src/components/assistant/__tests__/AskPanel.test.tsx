@@ -20,6 +20,7 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string, opts?: Record<string, unknown>) => {
       if (opts && 'tool' in opts) return `${key}:${opts.tool}`;
+      if (opts && 'tools' in opts) return `${key}:${opts.tools}`;
       return key;
     },
     i18n: { get language() { return mockLanguage.current; } },
@@ -130,7 +131,9 @@ describe('AskPanel', () => {
     expect(screen.queryByTestId('assistant-raw-output')).not.toBeInTheDocument();
   });
 
-  it('renders one step per tool activity, with its compact input and status', () => {
+  // One line that each step replaces, not a row per step: a turn can make
+  // several round trips, and stacking them pushed the answer off screen.
+  it('shows only the latest activity, replacing the previous one', () => {
     useAssistantStore.setState({
       activities: [
         { toolName: 'count_events', status: 'running', input: { interval: '24 hour' } },
@@ -141,9 +144,29 @@ describe('AskPanel', () => {
     render(<AskPanel />);
 
     const steps = screen.getAllByTestId('assistant-activity-step');
+    expect(steps).toHaveLength(1);
+    expect(steps[0]).toHaveTextContent('assistant.activity.done:count_events');
+  });
+
+  // The model's own turns were invisible in the app while the logs were full
+  // of them; the panel could only say "Thinking". They get their own line
+  // because sharing one with the tool step meant the tool call overwrote the
+  // reasoning that chose it, milliseconds later.
+  it('shows the model\'s reasoning alongside the tool step, on its own line', () => {
+    useAssistantStore.setState({
+      activities: [
+        { toolName: 'count_events', status: 'done', input: {} },
+        { kind: 'model', detail: 'Counts alone cannot answer this,\nI need list_events.', toolName: 'list_events', status: 'running', input: {} },
+      ],
+    });
+
+    render(<AskPanel />);
+
+    const steps = screen.getAllByTestId('assistant-activity-step');
     expect(steps).toHaveLength(2);
-    expect(steps[0]).toHaveTextContent('assistant.activity.running:count_events');
-    expect(steps[0]).toHaveTextContent('"interval":"24 hour"');
+    // Newlines flattened so a long chain of thought cannot reflow the panel.
+    expect(steps[0]).toHaveTextContent('Counts alone cannot answer this, I need list_events.');
+    // The tool step survives on its own line rather than replacing the thought.
     expect(steps[1]).toHaveTextContent('assistant.activity.done:count_events');
   });
 
@@ -241,7 +264,8 @@ describe('AskPanel', () => {
 
     const step = screen.getByTestId('assistant-activity-step');
     const answer = screen.getByTestId('assistant-message-assistant');
-    expect(step).toHaveTextContent('assistant.activity.done:count_events');
+    // Finished turns name the tools used rather than the last step alone.
+    expect(step).toHaveTextContent('assistant.activity.used:count_events');
     // DOCUMENT_POSITION_FOLLOWING: `answer` comes after `step` in DOM order,
     // i.e. the step chip renders above the answer, not below it.
     expect(step.compareDocumentPosition(answer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

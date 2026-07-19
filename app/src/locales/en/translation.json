@@ -362,7 +362,10 @@
       "storage_note": "Stored in the app's local storage. Removed by Delete.",
       "oom_note": "Local models run in your device's memory. If the app crashes or the model fails to load, the device is out of memory: pick a smaller model, or switch to the Ollama backend to run it on a server.",
       "mobile_unsupported": "On-device models aren't supported on phones or tablets.",
-      "mobile_unsupported_hint": "A phone or tablet caps how much memory the app may use, and every model needs more than that to load, so it would run out of memory and crash the app. Use the Ollama backend to run the model on your own server instead."
+      "mobile_unsupported_hint": "A phone or tablet caps how much memory the app may use, and every model needs more than that to load, so it would run out of memory and crash the app. Use the Ollama backend to run the model on your own server instead.",
+      "on_device_performance": "The model runs entirely on this device, on the CPU. Expect a reply to take from about half a minute to several minutes, and expect the app to be slow while it works. Under memory pressure the system may close the app mid-answer.",
+      "on_device_requirements": "It downloads about 1.4 GB and holds close to 2 GB of memory while loaded. A device with at least 8 GB of RAM and a recent chip is recommended: an iPhone 15 Pro or newer, or a flagship Android from the last two or three years. On less memory it may not run at all. The GPU is used when the device supports it, and the chat says which backend is actually running.",
+      "on_device_alternative": "For faster answers, run a model on your own machine and connect to it with the Ollama backend instead."
     },
     "language": "Language",
     "select_language": "Select Language",
@@ -1278,7 +1281,8 @@
     "activity": {
       "running": "Running {{tool}}...",
       "done": "{{tool}} done",
-      "error": "{{tool}} failed"
+      "error": "{{tool}} failed",
+      "used": "Used {{tools}}"
     },
     "iteration_cap_reached": "Stopped after too many steps. Try a simpler request.",
     "live_data_required": "I could not load current ZoneMinder data, so I can’t provide a reliable answer.",
@@ -1302,6 +1306,8 @@
     "context_cleared_manual": "Conversation cleared. The on-device model was unloaded to free memory; it will load again on your next question.",
     "loading_model": "Loading the on-device model...",
     "model_unavailable_native": "This model cannot run on your device. Choose an on-device model in Settings.",
-    "english_only_notice": "The on-device model works best in English. Answers in other languages may contain more mistakes."
+    "english_only_notice": "The on-device model works best in English. Answers in other languages may contain more mistakes.",
+    "backend_gpu": "Running on the {{backend}} GPU backend.",
+    "backend_cpu": "Running on the CPU. No usable GPU backend was found on this device, so replies will be slower."
   }
 }

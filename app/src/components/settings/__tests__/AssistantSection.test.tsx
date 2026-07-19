@@ -29,16 +29,34 @@ vi.mock('../../../lib/assistant/model-download', () => ({
 
 vi.mock('../../../lib/assistant/native-mnn', () => ({
   isNativeMnnModelDownloaded: (modelId: string) => isNativeMnnModelDownloadedMock(modelId),
-  downloadNativeMnnModel: (modelId: string) => downloadNativeMnnModelMock(modelId),
+  downloadNativeMnnModel: (modelId: string) => {
+    setNativeDownload({ modelId });
+    // Mirrors the real module, which clears the active download in a `finally`
+    // whether it resolved, failed, or was cancelled.
+    return Promise.resolve(downloadNativeMnnModelMock(modelId)).finally(() => setNativeDownload(undefined));
+  },
   cancelNativeMnnDownload: () => cancelNativeMnnDownloadMock(),
   getNativeMnnModelSize: (modelId: string) => getNativeMnnModelSizeMock(modelId),
   deleteNativeMnnModel: vi.fn(),
-  getNativeMnnListenerSource: vi.fn(),
+  subscribeNativeMnnDownload: (listener: () => void) => {
+    nativeDownloadListeners.add(listener);
+    return () => nativeDownloadListeners.delete(listener);
+  },
+  getNativeMnnDownload: () => nativeDownloadState,
   NATIVE_MNN_MODELS: [{ id: 'Qwen3.5-2B-Claude-4.6-Opus-Reasoning-Distilled-MNN', label: 'Qwen3.5 2B Reasoning', approxSizeMb: 1383, contextWindowSize: 4096 }],
   supportsNativeMnnModel: (modelId: string) => modelId === 'Qwen3.5-2B-Claude-4.6-Opus-Reasoning-Distilled-MNN',
 }));
 
 vi.mock('../../../hooks/useCapacitorListener', () => ({ useCapacitorListener: useCapacitorListenerMock }));
+
+/** Stand-in for the module-level native download store, which now survives the
+ * settings screen unmounting (refs #246). */
+let nativeDownloadState: { modelId: string; progress?: Record<string, unknown> } | undefined;
+const nativeDownloadListeners = new Set<() => void>();
+function setNativeDownload(next: { modelId: string; progress?: Record<string, unknown> } | undefined) {
+  nativeDownloadState = next;
+  for (const listener of nativeDownloadListeners) listener();
+}
 
 let webGpuAvailable: boolean | undefined = true;
 vi.mock('../../../hooks/useWebGpuAvailable', () => ({
@@ -106,6 +124,7 @@ describe('AssistantSection backend picker and gating', () => {
   const enabledSettings = { ...DEFAULT_SETTINGS, assistantEnabled: true };
 
   beforeEach(() => {
+    setNativeDownload(undefined);
     isModelDownloadedMock.mockReset().mockResolvedValue(false);
     isNativeMnnModelDownloadedMock.mockReset().mockResolvedValue(false);
     downloadNativeMnnModelMock.mockReset().mockResolvedValue(undefined);
@@ -244,6 +263,36 @@ describe('AssistantSection backend picker and gating', () => {
       expect(storage).toHaveTextContent('1.4 GB');
     });
 
+    // The native download is a detached task that keeps running when this
+    // screen unmounts. With the state held in the component, navigating away
+    // and back lost the "downloading" flag, which disabled the progress
+    // listener, so a download still in flight showed nothing (refs #246).
+    it('picks progress back up after the screen is unmounted and reopened', async () => {
+      isIOS = true;
+      isNative = true;
+      downloadNativeMnnModelMock.mockReturnValue(new Promise(() => {}));
+      const first = render(
+        <AssistantSection settings={enabledSettings} update={vi.fn()} currentProfile={profile} updateSettings={vi.fn()} />
+      );
+      await waitFor(() => expect(screen.getByTestId('assistant-model-download')).toBeEnabled());
+      fireEvent.click(screen.getByTestId('assistant-model-download'));
+
+      // Leave the screen; the download carries on natively.
+      first.unmount();
+      act(() => setNativeDownload({
+        modelId: 'Qwen3.5-2B-Claude-4.6-Opus-Reasoning-Distilled-MNN',
+        progress: {
+          modelId: 'Qwen3.5-2B-Claude-4.6-Opus-Reasoning-Distilled-MNN', fileName: 'llm.mnn.weight', fileIndex: 3, fileCount: 8,
+          fileProgress: 40, fileBytesWritten: 400 * 1024 * 1024, fileBytesTotal: 1024 * 1024 * 1024,
+        },
+      }));
+
+      render(<AssistantSection settings={enabledSettings} update={vi.fn()} currentProfile={profile} updateSettings={vi.fn()} />);
+
+      expect(await screen.findByTestId('assistant-native-download-details')).toHaveTextContent('llm.mnn.weight');
+      expect(screen.getByTestId('assistant-native-download-cancel')).toBeInTheDocument();
+    });
+
     it('shows active native file progress with completed and pending counts', async () => {
       isIOS = true;
       isNative = true;
@@ -258,13 +307,12 @@ describe('AssistantSection backend picker and gating', () => {
       await waitFor(() => expect(screen.getByTestId('assistant-model-download')).toBeEnabled());
       fireEvent.click(screen.getByTestId('assistant-model-download'));
 
-      const listener = useCapacitorListenerMock.mock.calls.find((call) => call[1] === 'downloadProgress')?.[2] as
-        | ((progress: Record<string, unknown>) => void)
-        | undefined;
-      expect(listener).toBeDefined();
-      act(() => listener?.({
-        modelId: 'Qwen3.5-2B-Claude-4.6-Opus-Reasoning-Distilled-MNN', fileName: 'llm.mnn.weight', fileIndex: 2, fileCount: 8,
-        fileProgress: 25, fileBytesWritten: 256 * 1024 * 1024, fileBytesTotal: 1024 * 1024 * 1024,
+      act(() => setNativeDownload({
+        modelId: 'Qwen3.5-2B-Claude-4.6-Opus-Reasoning-Distilled-MNN',
+        progress: {
+          modelId: 'Qwen3.5-2B-Claude-4.6-Opus-Reasoning-Distilled-MNN', fileName: 'llm.mnn.weight', fileIndex: 2, fileCount: 8,
+          fileProgress: 25, fileBytesWritten: 256 * 1024 * 1024, fileBytesTotal: 1024 * 1024 * 1024,
+        },
       }));
 
       expect(screen.getByTestId('assistant-native-download-details')).toHaveTextContent('llm.mnn.weight');

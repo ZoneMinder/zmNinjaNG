@@ -558,7 +558,18 @@ export const ASSISTANT = {
   maxToolIterations: 6,
   maxHistoryMessages: 40,
   maxHistoryCharacters: 6000,
+  // Ceiling on ONE tool result. The value is inherited (it arrived paired with
+  // maxHistoryCharacters, with no derivation) and is not a measured fit: a full
+  // 25-row list_events came to 7430 characters and blew straight past it, and
+  // safeExecute then swapped the whole payload for a truncation notice that the
+  // model read as "no events". Tools that can produce many rows must now fit
+  // themselves inside this budget by dropping ROWS and saying so, rather than
+  // letting their output be cut mid-JSON (see list_events).
   maxToolResultCharacters: 6000,
+  // Room left for the wrapper a self-bounding tool adds around its rows
+  // (shownEvents/moreMatchesExist), so fitting the rows cannot overflow once
+  // those fields are serialized.
+  toolResultBudgetHeadroom: 200,
   maxTokens: 1024,
   // Native MNN runs a reasoning-distilled model with thinking left ON (see
   // providers/native-mnn.ts), so this budget has to cover the `<think>` block

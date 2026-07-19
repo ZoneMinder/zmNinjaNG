@@ -52,6 +52,9 @@ export function buildSystemPrompt(ctx: SystemPromptContext): string {
     'Writing the answer text:',
     `Write it in the user's language, locale code: ${ctx.locale}.`,
     'Describe only rows the query returned. Never state server health, monitor state, event counts, detections, FPS, times, or recommendations unless a tool returned that fact in this turn.',
+    // It answered "no people in the last 24 hours" after querying no time range
+    // at all. list_events reports the window it used in its `window` field.
+    'Never name a time period you did not query. Use the window the tool reports: if it says no time filter was applied, your answer covers all recorded events, not today or the last 24 hours.',
     'State monitor names, concrete detections, counts, and times when available. If a result is truncated, say it is a partial result.',
     'Be direct. Never show image links, URLs, or raw ids. Offer a next step only when helpful. Ask a question only when tools cannot resolve ambiguity.',
   ].join('\n');

@@ -362,7 +362,10 @@
       "storage_note": "Liegt im lokalen Speicher der App. Wird mit Löschen entfernt.",
       "oom_note": "Lokale Modelle laufen im Speicher deines Geräts. Stürzt die App ab oder lädt das Modell nicht, ist der Speicher des Geräts erschöpft: Wähle ein kleineres Modell, oder wechsle zum Ollama-Backend, um es auf einem Server auszuführen.",
       "mobile_unsupported": "Modelle auf dem Gerät werden auf Smartphones und Tablets nicht unterstützt.",
-      "mobile_unsupported_hint": "Ein Smartphone oder Tablet begrenzt den Speicher, den die App nutzen darf, und jedes Modell braucht zum Laden mehr, sodass der Speicher voll wäre und die App abstürzt. Nutze stattdessen das Ollama-Backend, um das Modell auf deinem eigenen Server auszuführen."
+      "mobile_unsupported_hint": "Ein Smartphone oder Tablet begrenzt den Speicher, den die App nutzen darf, und jedes Modell braucht zum Laden mehr, sodass der Speicher voll wäre und die App abstürzt. Nutze stattdessen das Ollama-Backend, um das Modell auf deinem eigenen Server auszuführen.",
+      "on_device_performance": "Das Modell läuft vollständig auf diesem Gerät, auf der CPU. Eine Antwort dauert etwa eine halbe bis mehrere Minuten, und die App ist währenddessen langsam. Bei knappem Speicher kann das System die App mitten in der Antwort beenden.",
+      "on_device_requirements": "Der Download umfasst etwa 1,4 GB, und im geladenen Zustand belegt das Modell fast 2 GB Arbeitsspeicher. Empfohlen wird ein Gerät mit mindestens 8 GB RAM und einem aktuellen Chip: ein iPhone 15 Pro oder neuer oder ein Android-Flaggschiff der letzten zwei bis drei Jahre. Mit weniger Speicher läuft es möglicherweise gar nicht. Die GPU wird genutzt, sofern das Gerät sie unterstützt; im Chat steht, welches Backend tatsächlich läuft.",
+      "on_device_alternative": "Für schnellere Antworten kannst du ein Modell auf deinem eigenen Rechner betreiben und dich stattdessen über das Ollama-Backend verbinden."
     },
     "language": "Sprache",
     "select_language": "Sprache auswählen",
@@ -1278,7 +1281,8 @@
     "activity": {
       "running": "{{tool}} läuft...",
       "done": "{{tool}} fertig",
-      "error": "{{tool}} fehlgeschlagen"
+      "error": "{{tool}} fehlgeschlagen",
+      "used": "Verwendet: {{tools}}"
     },
     "iteration_cap_reached": "Nach zu vielen Schritten gestoppt. Bitte einfacher formulieren.",
     "live_data_required": "Aktuelle ZoneMinder-Daten konnten nicht geladen werden. Deshalb kann ich keine verlässliche Antwort geben.",
@@ -1302,6 +1306,8 @@
     "context_cleared_manual": "Unterhaltung gelöscht. Das Modell auf dem Gerät wurde entladen, um Speicher freizugeben; es wird bei deiner nächsten Frage neu geladen.",
     "loading_model": "Modell auf dem Gerät wird geladen...",
     "model_unavailable_native": "Dieses Modell läuft nicht auf deinem Gerät. Wähle in den Einstellungen ein Modell für das Gerät.",
-    "english_only_notice": "Das Modell auf dem Gerät funktioniert am besten auf Englisch. Antworten in anderen Sprachen können mehr Fehler enthalten."
+    "english_only_notice": "Das Modell auf dem Gerät funktioniert am besten auf Englisch. Antworten in anderen Sprachen können mehr Fehler enthalten.",
+    "backend_gpu": "Läuft über das GPU-Backend {{backend}}.",
+    "backend_cpu": "Läuft auf der CPU. Auf diesem Gerät wurde kein nutzbares GPU-Backend gefunden, daher dauern Antworten länger."
   }
 }

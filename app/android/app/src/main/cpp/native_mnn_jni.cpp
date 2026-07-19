@@ -10,11 +10,20 @@ namespace {
 std::mutex mutex;
 MNN::Transformer::Llm* model = nullptr;
 std::string loadedPath;
+/** Backend the loaded model actually resolved to, reported to the UI. */
+std::string loadedBackend = "cpu";
+
+/** Android compiles OpenCL (MNN_OPENCL in CMakeLists.txt); there is no Metal
+ *  here. MNN degrades to CPU by itself when the device has no usable OpenCL
+ *  driver, which many Android GPUs do not, so this is an attempt rather than a
+ *  requirement. */
+constexpr MNNForwardType kPreferredBackend = MNN_FORWARD_OPENCL;
 
 void unload() {
     if (model != nullptr) MNN::Transformer::Llm::destroy(model);
     model = nullptr;
     loadedPath.clear();
+    loadedBackend = "cpu";
 }
 
 /** Loads `config` unless it is already the loaded model. Caller holds `mutex`. */
@@ -23,7 +32,11 @@ bool ensureLoaded(const std::string& config) {
     unload();
     model = MNN::Transformer::Llm::createLLM(config);
     if (model == nullptr) return false;
-    model->set_config(ZMNINJA_MNN_RUNTIME_CONFIG);
+    // Resolve BEFORE loading: naming a backend the device cannot provide would
+    // otherwise leave the app claiming GPU while running on the CPU.
+    const MNNForwardType backend = zmninjaMnnResolveBackend(kPreferredBackend);
+    loadedBackend = zmninjaMnnBackendName(backend);
+    model->set_config(zmninjaMnnConfig(loadedBackend.c_str(), zmninjaMnnModelDirectory(config)));
     if (!model->load()) {
         unload();
         return false;
@@ -57,10 +70,13 @@ void dropTruncatedUtf8Tail(std::string& text) {
 }
 }
 
-extern "C" JNIEXPORT jboolean JNICALL
+/** Returns the backend actually in use ("opencl"/"cpu"), or an empty string if
+ *  the model could not be loaded. */
+extern "C" JNIEXPORT jstring JNICALL
 Java_com_zoneminder_zmNinjaNG_NativeMnnPlugin_loadNative(JNIEnv* env, jclass, jstring configPath) {
     std::lock_guard<std::mutex> lock(mutex);
-    return ensureLoaded(value(env, configPath)) ? JNI_TRUE : JNI_FALSE;
+    if (!ensureLoaded(value(env, configPath))) return env->NewStringUTF("");
+    return env->NewStringUTF(loadedBackend.c_str());
 }
 
 /** Returns {content, promptTokens, completionTokens}, or an empty array if the

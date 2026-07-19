@@ -362,7 +362,10 @@
       "storage_note": "存储在应用本地存储中，删除后一并移除。",
       "oom_note": "本地模型在设备内存中运行。如果应用崩溃或模型加载失败，说明设备内存不足：请选择更小的模型，或切换到 Ollama 后端在服务器上运行。",
       "mobile_unsupported": "手机和平板不支持设备端模型。",
-      "mobile_unsupported_hint": "手机或平板会限制应用可用的内存，而每个模型加载所需的内存都超过此上限，会导致内存耗尽并使应用崩溃。请改用 Ollama 后端在你自己的服务器上运行模型。"
+      "mobile_unsupported_hint": "手机或平板会限制应用可用的内存，而每个模型加载所需的内存都超过此上限，会导致内存耗尽并使应用崩溃。请改用 Ollama 后端在你自己的服务器上运行模型。",
+      "on_device_performance": "模型完全在本机运行，使用 CPU。一次回答大约需要半分钟到几分钟，期间应用会变慢。内存紧张时，系统可能在回答过程中关闭应用。",
+      "on_device_requirements": "需下载约 1.4 GB，加载后占用接近 2 GB 内存。建议使用至少 8 GB 内存且芯片较新的设备：iPhone 15 Pro 或更新机型，或近两三年的安卓旗舰。内存更小可能完全无法运行。设备支持时会使用 GPU，聊天中会显示实际使用的后端。",
+      "on_device_alternative": "若需更快的回答，可在自己的电脑上运行模型，改用 Ollama 后端连接。"
     },
     "language": "语言",
     "select_language": "选择语言",
@@ -1278,7 +1281,8 @@
     "activity": {
       "running": "正在运行 {{tool}}...",
       "done": "{{tool}} 已完成",
-      "error": "{{tool}} 失败"
+      "error": "{{tool}} 失败",
+      "used": "已使用 {{tools}}"
     },
     "iteration_cap_reached": "步骤过多已停止，请尝试更简单的请求。",
     "live_data_required": "无法加载当前 ZoneMinder 数据，因此无法提供可靠的回答。",
@@ -1302,6 +1306,8 @@
     "context_cleared_manual": "对话已清除。设备端模型已卸载以释放内存，下次提问时会重新加载。",
     "loading_model": "正在加载设备端模型...",
     "model_unavailable_native": "此模型无法在你的设备上运行。请在设置中选择设备端模型。",
-    "english_only_notice": "设备端模型在英语下效果最好。使用其他语言时，回答可能出现更多错误。"
+    "english_only_notice": "设备端模型在英语下效果最好。使用其他语言时，回答可能出现更多错误。",
+    "backend_gpu": "正在使用 {{backend}} GPU 后端运行。",
+    "backend_cpu": "正在使用 CPU 运行。此设备上未找到可用的 GPU 后端，回答会更慢。"
   }
 }

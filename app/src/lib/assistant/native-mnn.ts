@@ -13,7 +13,14 @@ export const NATIVE_MNN_MODELS = [{
   id: 'Qwen3.5-2B-Claude-4.6-Opus-Reasoning-Distilled-MNN',
   label: 'Qwen3.5 2B Reasoning',
   approxSizeMb: 1383,
-  contextWindowSize: 4096,
+  // Not a model limit: llm_config.json declares no sequence length and MNN
+  // enforces none, so this is our own memory-driven ceiling. The previous 4096
+  // was invented, and small enough that an ordinary turn (system prompt + tool
+  // catalog + one tool result) measured 4353 and looked like an overflow that
+  // was not real. The model's own config sets max_new_tokens to 8192, so it is
+  // built for at least this much working space; the real cost of raising it is
+  // KV cache memory, which is why it is not raised further.
+  contextWindowSize: 8192,
 }] as const;
 
 export type NativeMnnModelId = (typeof NATIVE_MNN_MODEL_IDS)[number];
@@ -24,6 +31,11 @@ export type NativeMnnModelId = (typeof NATIVE_MNN_MODEL_IDS)[number];
  *  bridge used to do) routes through `Llm::response(const std::string&)`, which
  *  wraps the WHOLE blob as one user turn: the system prompt loses system-role
  *  weight and prior assistant turns read as user text the model then copies. */
+/** Backends the native side can report. Kept in sync with
+ *  zmninjaMnnBackendName in native/mnn-runtime-config.h. */
+export const NATIVE_MNN_BACKENDS = ['metal', 'opencl', 'vulkan', 'cpu'] as const;
+export type NativeMnnBackend = (typeof NATIVE_MNN_BACKENDS)[number];
+
 export interface NativeMnnMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
@@ -35,7 +47,7 @@ interface NativeMnnPlugin {
   cancelDownload(): Promise<void>;
   deleteModel(options: { modelId: NativeMnnModelId }): Promise<void>;
   getModelSize(options: { modelId: NativeMnnModelId }): Promise<{ bytes: number }>;
-  load(options: { modelId: NativeMnnModelId }): Promise<void>;
+  load(options: { modelId: NativeMnnModelId }): Promise<{ backend: string }>;
   chat(options: { modelId: NativeMnnModelId; messages: NativeMnnMessage[]; maxTokens: number }): Promise<NativeMnnChatResult>;
   unload(): Promise<void>;
   addListener(
@@ -103,9 +115,72 @@ export async function isNativeMnnModelDownloaded(modelId: string): Promise<boole
   return withPlugin((nativeMnn) => nativeMnn.isDownloaded({ modelId }).then((result) => result.downloaded));
 }
 
+/**
+ * The download in flight, if any, held at module level rather than in React
+ * state.
+ *
+ * The native download is a detached task: it keeps running when the settings
+ * screen unmounts. When the state describing it lived in the component, leaving
+ * the screen and coming back lost the "downloading" flag, which in turn
+ * disabled the progress listener, so a download that was still running showed
+ * no progress at all until it finished (refs #246).
+ */
+export interface NativeMnnDownloadState {
+  modelId: NativeMnnModelId;
+  progress?: NativeMnnDownloadProgress;
+}
+
+let activeDownload: NativeMnnDownloadState | undefined;
+const downloadListeners = new Set<() => void>();
+let progressListenerAttached = false;
+
+function emitDownloadChange(): void {
+  for (const listener of downloadListeners) listener();
+}
+
+/** Subscribe/getSnapshot pair for `useSyncExternalStore`. The snapshot is a
+ *  stable reference between emits, as that hook requires. */
+export function subscribeNativeMnnDownload(listener: () => void): () => void {
+  downloadListeners.add(listener);
+  return () => downloadListeners.delete(listener);
+}
+
+export function getNativeMnnDownload(): NativeMnnDownloadState | undefined {
+  return activeDownload;
+}
+
+/** Attached once for the process, never removed: progress must keep being
+ *  recorded while no component is mounted to hear it. */
+async function attachProgressListener(): Promise<void> {
+  if (progressListenerAttached) return;
+  progressListenerAttached = true;
+  try {
+    await withPlugin(async (nativeMnn) => {
+      await nativeMnn.addListener('downloadProgress', (progress) => {
+        if (!activeDownload || progress.modelId !== activeDownload.modelId) return;
+        activeDownload = { ...activeDownload, progress };
+        emitDownloadChange();
+      });
+    });
+  } catch (error) {
+    progressListenerAttached = false;
+    throw error;
+  }
+}
+
 export async function downloadNativeMnnModel(modelId: string): Promise<void> {
   assertNativeModelId(modelId);
-  await withPlugin((nativeMnn) => nativeMnn.download({ modelId }));
+  await attachProgressListener();
+  activeDownload = { modelId };
+  emitDownloadChange();
+  try {
+    await withPlugin((nativeMnn) => nativeMnn.download({ modelId }));
+  } finally {
+    // Cleared even when the caller has unmounted and nobody is awaiting this,
+    // so a later visit to the screen does not see a stale download.
+    activeDownload = undefined;
+    emitDownloadChange();
+  }
 }
 
 /** Aborts an in-flight `downloadNativeMnnModel`, which then rejects and leaves
@@ -146,22 +221,35 @@ export async function nativeMnnChat(
  * by `unloadNativeMnn`.
  */
 let modelLoaded = false;
+let loadedBackend: NativeMnnBackend | undefined;
 
 export function isNativeMnnModelLoaded(): boolean {
   return modelLoaded;
 }
 
+/** The backend the last load actually resolved to, or undefined before any
+ *  load. Reported by the native side AFTER MNN's own fallback, so it reflects
+ *  what is really running rather than what was requested. */
+export function getNativeMnnBackend(): NativeMnnBackend | undefined {
+  return loadedBackend;
+}
+
 /** Loads the model without generating. Split from `chat` so the panel can say
  *  "loading the model" during the ~10s first load instead of leaving the user
  *  looking at a "thinking" spinner that never moves. */
-export async function loadNativeMnnModel(modelId: string): Promise<void> {
+export async function loadNativeMnnModel(modelId: string): Promise<NativeMnnBackend> {
   assertNativeModelId(modelId);
-  await withPlugin((nativeMnn) => nativeMnn.load({ modelId }));
+  const { backend } = await withPlugin((nativeMnn) => nativeMnn.load({ modelId }));
+  loadedBackend = NATIVE_MNN_BACKENDS.includes(backend as NativeMnnBackend)
+    ? (backend as NativeMnnBackend)
+    : 'cpu';
   modelLoaded = true;
+  return loadedBackend;
 }
 
 export async function unloadNativeMnn(): Promise<void> {
   modelLoaded = false;
+  loadedBackend = undefined;
   if (!Platform.isNative) return;
   await withPlugin((nativeMnn) => nativeMnn.unload());
 }

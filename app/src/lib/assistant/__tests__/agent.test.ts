@@ -111,6 +111,39 @@ describe('isContextNearlyFull', () => {
     expect(isContextNearlyFull(window, undefined)).toBe(false);
   });
 
+  // Tool results are appended DURING a turn, so a turn that was inside budget
+  // when it started could grow past it by the time it answered. The auto-clear
+  // check only acts between turns and cannot catch that.
+  it('re-bounds the history between tool iterations, not just at the turn start', async () => {
+    const p = new MockProvider();
+    p.setScript([
+      { toolCalls: [{ id: 'c1', name: 'list_events', input: { a: 1 } }] },
+      { toolCalls: [{ id: 'c2', name: 'list_events', input: { b: 2 } }] },
+      { text: 'done', toolCalls: [] },
+    ]);
+    // Each result is most of the character budget on its own.
+    const execute = vi.fn().mockResolvedValue({ output: 'x'.repeat(ASSISTANT.maxHistoryCharacters - 100) });
+    vi.spyOn(await import('../tools'), 'getToolByName').mockReturnValue({
+      name: 'list_events', description: '', schema: {}, execute,
+    } as never);
+    const sizes: number[] = [];
+    vi.spyOn(p, 'chat').mockImplementation(async (messages) => {
+      sizes.push(messages.reduce((n, m) => n + (m.text?.length ?? 0) + JSON.stringify(m.toolResults ?? '').length, 0));
+      const scripted = sizes.length === 1
+        ? { toolCalls: [{ id: 'c1', name: 'list_events', input: { a: 1 } }] }
+        : sizes.length === 2
+          ? { toolCalls: [{ id: 'c2', name: 'list_events', input: { b: 2 } }] }
+          : { text: 'done', toolCalls: [] };
+      return scripted as never;
+    });
+
+    await runAssistantTurn(baseOpts(p, host(), [{ role: 'user', text: 'q' }]));
+
+    // Two large results were appended, yet the prompt never carried both.
+    expect(Math.max(...sizes)).toBeLessThan(ASSISTANT.maxHistoryCharacters * 2);
+    vi.restoreAllMocks();
+  });
+
   // The on-device budget promised 3072 generated tokens inside a 4096 window
   // that already held a ~1900-token prompt. The model does not error on that,
   // it just gets cut off mid-thought, which is indistinguishable from a bad

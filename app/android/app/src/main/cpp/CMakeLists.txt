@@ -9,6 +9,16 @@ set(MNN_LOW_MEMORY ON CACHE BOOL "" FORCE)
 set(MNN_CPU_WEIGHT_DEQUANT_GEMM ON CACHE BOOL "" FORCE)
 set(MNN_SUPPORT_TRANSFORMER_FUSE ON CACHE BOOL "" FORCE)
 set(MNN_ARM82 ON CACHE BOOL "" FORCE)
+# GPU inference where the device supports it. MNN loads libOpenCL.so at runtime
+# and falls back to CPU on its own when the driver is missing or unusable, which
+# is common across Android GPUs, so this is an attempt rather than a guarantee.
+# There is no Metal here (iOS only) and Vulkan is not enabled: MNN only selects
+# it through MNN_FORWARD_AUTO, which would also outrank OpenCL, and it costs
+# binary size for a path we have not measured.
+set(MNN_OPENCL ON CACHE BOOL "" FORCE)
+# ~25 host test executables, none packaged into the APK; skipping them cuts
+# build time.
+set(MNN_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
 set(LLM_SUPPORT_HTTP_RESOURCE OFF CACHE BOOL "" FORCE)
 
 add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../../../../../native/MNN ${CMAKE_BINARY_DIR}/mnn)

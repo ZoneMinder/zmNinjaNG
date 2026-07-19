@@ -362,7 +362,10 @@
       "storage_note": "Stocké dans le stockage local de l'appli. Supprimé par Supprimer.",
       "oom_note": "Les modèles locaux s'exécutent dans la mémoire de votre appareil. Si l'appli plante ou que le modèle ne se charge pas, l'appareil manque de mémoire : choisissez un modèle plus petit, ou passez au backend Ollama pour l'exécuter sur un serveur.",
       "mobile_unsupported": "Les modèles sur l’appareil ne sont pas pris en charge sur les téléphones et tablettes.",
-      "mobile_unsupported_hint": "Un téléphone ou une tablette limite la mémoire que l’appli peut utiliser, et chaque modèle en demande plus pour se charger : l’appli manquerait de mémoire et planterait. Utilisez le backend Ollama pour exécuter le modèle sur votre propre serveur."
+      "mobile_unsupported_hint": "Un téléphone ou une tablette limite la mémoire que l’appli peut utiliser, et chaque modèle en demande plus pour se charger : l’appli manquerait de mémoire et planterait. Utilisez le backend Ollama pour exécuter le modèle sur votre propre serveur.",
+      "on_device_performance": "Le modèle fonctionne entièrement sur cet appareil, sur le processeur. Comptez d'une demi-minute à plusieurs minutes par réponse, et l'application sera lente pendant ce temps. Si la mémoire manque, le système peut fermer l'application en pleine réponse.",
+      "on_device_requirements": "Il télécharge environ 1,4 Go et occupe près de 2 Go de mémoire une fois chargé. Un appareil avec au moins 8 Go de RAM et une puce récente est recommandé : un iPhone 15 Pro ou plus récent, ou un Android haut de gamme des deux ou trois dernières années. Avec moins de mémoire, il risque de ne pas fonctionner du tout. Le GPU est utilisé lorsque l'appareil le permet, et le chat indique quel backend fonctionne réellement.",
+      "on_device_alternative": "Pour des réponses plus rapides, faites tourner un modèle sur votre propre machine et connectez-vous via le backend Ollama."
     },
     "language": "Langue",
     "select_language": "Sélectionner la langue",
@@ -1278,7 +1281,8 @@
     "activity": {
       "running": "Exécution de {{tool}}...",
       "done": "{{tool}} terminé",
-      "error": "{{tool}} a échoué"
+      "error": "{{tool}} a échoué",
+      "used": "A utilisé {{tools}}"
     },
     "iteration_cap_reached": "Arrêté après trop d'étapes. Essayez une demande plus simple.",
     "live_data_required": "Je n’ai pas pu charger les données ZoneMinder actuelles, donc je ne peux pas fournir une réponse fiable.",
@@ -1302,6 +1306,8 @@
     "context_cleared_manual": "Conversation effacée. Le modèle sur l'appareil a été déchargé pour libérer de la mémoire ; il se rechargera à votre prochaine question.",
     "loading_model": "Chargement du modèle sur l'appareil...",
     "model_unavailable_native": "Ce modèle ne fonctionne pas sur votre appareil. Choisissez un modèle sur l'appareil dans les Réglages.",
-    "english_only_notice": "Le modèle sur l'appareil fonctionne mieux en anglais. Les réponses dans d'autres langues peuvent contenir plus d'erreurs."
+    "english_only_notice": "Le modèle sur l'appareil fonctionne mieux en anglais. Les réponses dans d'autres langues peuvent contenir plus d'erreurs.",
+    "backend_gpu": "Fonctionne avec le backend GPU {{backend}}.",
+    "backend_cpu": "Fonctionne sur le processeur. Aucun backend GPU utilisable n'a été trouvé sur cet appareil, les réponses seront donc plus lentes."
   }
 }

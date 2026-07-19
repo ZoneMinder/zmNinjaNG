@@ -9,6 +9,13 @@ namespace {
 std::mutex m;
 MNN::Transformer::Llm *model = nullptr;
 std::string path;
+/** Backend the loaded model actually resolved to, reported to the UI. */
+std::string loadedBackend = "cpu";
+
+/** iOS builds MNN with -DMNN_METAL=ON (package_scripts/ios/buildiOS.sh), so
+ *  Metal is compiled in on every device; there is no OpenCL here. MNN degrades
+ *  to CPU by itself if the Metal runtime cannot be created. */
+constexpr MNNForwardType kPreferredBackend = MNN_FORWARD_METAL;
 
 /** Loads `wanted` unless it is already loaded. Caller holds `m`. */
 bool ensureLoaded(const std::string &wanted) {
@@ -16,7 +23,11 @@ bool ensureLoaded(const std::string &wanted) {
   if (model) MNN::Transformer::Llm::destroy(model);
   model = MNN::Transformer::Llm::createLLM(wanted);
   if (!model) return false;
-  model->set_config(ZMNINJA_MNN_RUNTIME_CONFIG);
+  // Resolve BEFORE loading: naming a backend the device cannot provide would
+  // otherwise leave the app claiming GPU while running on the CPU.
+  const MNNForwardType backend = zmninjaMnnResolveBackend(kPreferredBackend);
+  loadedBackend = zmninjaMnnBackendName(backend);
+  model->set_config(zmninjaMnnConfig(loadedBackend.c_str(), zmninjaMnnModelDirectory(wanted)));
   if (!model->load()) { model = nullptr; return false; }
   path = wanted;
   return true;
@@ -49,13 +60,13 @@ NSError *loadError(void) {
   if (model) MNN::Transformer::Llm::destroy(model);
   model = nullptr;
   path.clear();
+  loadedBackend = "cpu";
 }
 
-+ (BOOL)loadAtConfigPath:(NSString *)configPath error:(NSError **)error {
++ (NSString *)loadAtConfigPath:(NSString *)configPath error:(NSError **)error {
   std::lock_guard<std::mutex> lock(m);
-  if (ensureLoaded(std::string(configPath.UTF8String))) return YES;
-  if (error) *error = loadError();
-  return NO;
+  if (!ensureLoaded(std::string(configPath.UTF8String))) { if (error) *error = loadError(); return nil; }
+  return [NSString stringWithUTF8String:loadedBackend.c_str()];
 }
 
 + (NSDictionary *)chatAtConfigPath:(NSString *)configPath messages:(NSArray<NSDictionary<NSString *, NSString *> *> *)messages maxTokens:(NSInteger)maxTokens error:(NSError **)error {

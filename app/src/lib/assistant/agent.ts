@@ -200,7 +200,21 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
 
   for (let i = 0; i < ASSISTANT.maxToolIterations; i++) {
     if (signal.aborted) return produced;
+    // Re-bound every iteration, not just at the start of the turn. Tool results
+    // are appended as the turn runs, so a turn that calls several tools grew
+    // well past the budget it was inside when it began: the auto-clear check
+    // only acts BETWEEN turns and cannot help here.
+    const bounded = truncateHistory(history, ASSISTANT.maxHistoryMessages, ASSISTANT.maxHistoryCharacters);
+    if (bounded.length !== history.length) history.splice(0, history.length, ...bounded);
+
     const turn = await provider.chat(history, TOOLS, system, signal);
+    // Report the model's own step, not just the tool calls that follow it. A
+    // turn can spend several round trips reasoning and choosing tools, and
+    // without this the panel had nothing to show for any of them but
+    // "Thinking", while the logs carried the model's actual working.
+    if (turn.reasoning) {
+      host.onActivity({ kind: 'model', detail: turn.reasoning, toolName: turn.toolCalls[0]?.name ?? '', status: 'running', input: {} });
+    }
     const assistantMsg: AssistantMessage = { role: 'assistant', text: turn.text, toolCalls: turn.toolCalls, raw: turn.raw };
 
     if (turn.toolCalls.length === 0) {

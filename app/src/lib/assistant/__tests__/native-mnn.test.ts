@@ -54,4 +54,23 @@ describe('native MNN bridge', () => {
     await expect(getNativeMnnModelSize('nope')).rejects.toThrow('Unsupported native MNN model');
     expect(getModelSize).not.toHaveBeenCalled();
   });
+
+  // The backend is reported by native code AFTER MNN's own CPU fallback, so a
+  // device with no usable GPU driver must not leave the app claiming GPU.
+  it('records the backend the native side actually resolved to', async () => {
+    const load = vi.fn().mockResolvedValue({ backend: 'metal' });
+    registerPlugin.mockReturnValue({ load });
+    const { loadNativeMnnModel, getNativeMnnBackend } = await import('../native-mnn');
+
+    await expect(loadNativeMnnModel('Qwen3.5-2B-Claude-4.6-Opus-Reasoning-Distilled-MNN')).resolves.toBe('metal');
+    expect(getNativeMnnBackend()).toBe('metal');
+  });
+
+  it('falls back to cpu for a backend name it does not recognise', async () => {
+    const load = vi.fn().mockResolvedValue({ backend: 'something-new' });
+    registerPlugin.mockReturnValue({ load });
+    const { loadNativeMnnModel } = await import('../native-mnn');
+
+    await expect(loadNativeMnnModel('Qwen3.5-2B-Claude-4.6-Opus-Reasoning-Distilled-MNN')).resolves.toBe('cpu');
+  });
 });

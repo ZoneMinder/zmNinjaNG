@@ -261,7 +261,19 @@ describe('parseWebLlmTurn', () => {
 
   it('takes a brace-free reply that followed a think block as the answer', () => {
     const turn = parseWebLlmTurn('The user greeted me, no tool needed.\n</think>\n\nHello! How can I help you today?\n');
-    expect(turn).toEqual({ text: 'Hello! How can I help you today?', toolCalls: [] });
+    expect(turn).toMatchObject({ text: 'Hello! How can I help you today?', toolCalls: [] });
+  });
+
+  // The reasoning is stripped from the answer but kept, so the panel can show
+  // what the model was doing during a turn that makes several round trips.
+  it('keeps the reasoning separately from the answer', () => {
+    const turn = parseWebLlmTurn('The user greeted me, no tool needed.\n</think>\n\nHello!\n');
+    expect(turn.reasoning).toBe('The user greeted me, no tool needed.');
+    expect(turn.text).toBe('Hello!');
+  });
+
+  it('reports no reasoning for a reply that had no think block', () => {
+    expect(parseWebLlmTurn('{"answer":"hi"}').reasoning).toBeUndefined();
   });
 
   // A brace means the model was reaching for the contract and got it wrong,
@@ -316,7 +328,7 @@ describe('parseWebLlmTurn', () => {
 
   it('strips a closed <think> block before parsing a {"answer"} reply', () => {
     const turn = parseWebLlmTurn('<think>reasoning here</think>{"answer":"hi"}');
-    expect(turn).toEqual({ text: 'hi', toolCalls: [] });
+    expect(turn).toMatchObject({ text: 'hi', toolCalls: [] });
   });
 
   it('strips a closed <think> block containing brace-y text so the real tool call after it is parsed, not the one inside', () => {
@@ -328,7 +340,7 @@ describe('parseWebLlmTurn', () => {
 
   it('falls back gracefully on an unclosed <think> block with no JSON after it', () => {
     const turn = parseWebLlmTurn('<think>still reasoning and never finished');
-    expect(turn).toEqual({
+    expect(turn).toMatchObject({
       text: '__i18n:assistant.parse_error',
       toolCalls: [],
       raw: '<think>still reasoning and never finished',

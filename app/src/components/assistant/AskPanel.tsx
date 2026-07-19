@@ -35,7 +35,6 @@ import {
 } from '../../lib/assistant/providers/provider';
 import { sharedMockProvider } from '../../lib/assistant/providers/mock';
 import { buildSystemPrompt } from '../../lib/assistant/system-prompt';
-import { getToolByName } from '../../lib/assistant/tools';
 import type { AssistantMessage, AssistantTurn, ProviderConfig, ToolActivity, ToolContext } from '../../lib/assistant/types';
 import { log, LogLevel } from '../../lib/logger';
 import { getSecureValue } from '../../lib/security/secureStorage';
@@ -44,7 +43,7 @@ import { resolveQueryError } from '../../lib/query/query-error';
 import { cn } from '../../lib/utils';
 import { ASSISTANT } from '../../lib/zmninja-ng-constants';
 import { AssistantIntro } from './AssistantIntro';
-import { isNativeMnnModelLoaded, loadNativeMnnModel } from '../../lib/assistant/native-mnn';
+import { getNativeMnnBackend, isNativeMnnModelLoaded, loadNativeMnnModel, type NativeMnnBackend } from '../../lib/assistant/native-mnn';
 import { Platform } from '../../lib/platform';
 import { useAssistantStore } from '../../stores/assistant';
 import { Button } from '../ui/button';
@@ -122,39 +121,61 @@ function formatActivityInput(input: Record<string, unknown>): string | undefined
     : json;
 }
 
-/** Renders one turn's tool-activity step trace ("Running count_events… /
- *  count_events done"). Shared by two call sites: a completed message's
- *  attached `steps` (rendered above that message's answer, refs #246) and the
- *  live `activities` array for the turn still in flight (rendered above the
- *  "thinking" indicator, where its answer will land once the turn resolves). */
-function ActivitySteps({ steps }: { steps: ToolActivity[] }) {
+/** Renders the assistant's intermediate work as ONE muted line rather than a
+ *  growing list.
+ *
+ *  A turn can spend several round trips deciding and calling tools before it
+ *  answers, and showing each one stacked pushed the actual answer off screen and
+ *  read like a transcript of the model talking to itself. Live, the line is
+ *  replaced by whatever step is current; once the turn is done, it collapses to
+ *  the tools that ran. Either way it stays one line, subordinate to the answer.
+ *
+ *  `title` carries the full detail for anyone who wants it, so nothing is lost
+ *  by not rendering every step (rule 11: truncate, keep a title). */
+function ActivityLine({ steps, live }: { steps: ToolActivity[]; live?: boolean }) {
   const { t } = useTranslation();
+  if (steps.length === 0) return null;
+
+  if (!live && steps.every((a) => a.kind === 'model' || !a.toolName)) return null;
+
+  const latest = steps[steps.length - 1];
+  const failed = steps.some((a) => a.status === 'error');
+  const compactInput = latest.kind === 'model' ? undefined : formatActivityInput(latest.input);
+
+  // Live: say what is happening right now, including the model's own reasoning
+  // between tool calls (collapsed to one line, newlines flattened, so a long
+  // chain of thought cannot push the conversation around). Finished: name the
+  // distinct tools used, since the last step alone loses the earlier ones.
+  const label = live
+    ? latest.kind === 'model'
+      ? latest.detail!.replace(/\s+/g, ' ')
+      : latest.status === 'running'
+        ? t('assistant.activity.running', { tool: latest.toolName })
+        : latest.status === 'done'
+          ? t('assistant.activity.done', { tool: latest.toolName })
+          : t('assistant.activity.error', { tool: latest.toolName })
+    : t('assistant.activity.used', {
+        tools: [...new Set(steps.filter((a) => a.kind !== 'model' && a.toolName).map((a) => a.toolName))].join(', '),
+      });
+
   return (
-    <ol className="flex flex-col gap-1" data-testid="assistant-activities">
-      {steps.map((a, i) => {
-        const compactInput = formatActivityInput(a.input);
-        const statusText =
-          a.status === 'running'
-            ? t('assistant.activity.running', { tool: a.toolName })
-            : a.status === 'done'
-              ? t('assistant.activity.done', { tool: a.toolName })
-              : t('assistant.activity.error', { tool: a.toolName });
-        return (
-          <li
-            key={`${a.toolName}-${i}`}
-            data-testid="assistant-activity-step"
-            title={`${getToolByName(a.toolName)?.description ?? a.toolName}${a.input && Object.keys(a.input).length > 0 ? ` ${JSON.stringify(a.input)}` : ''}`}
-            className={cn(
-              'flex min-w-0 items-center gap-1.5 truncate rounded border px-2 py-1 text-xs',
-              a.status === 'error' ? 'border-destructive/40 text-destructive' : 'border-border text-muted-foreground',
-            )}
-          >
-            <span className="truncate">{statusText}</span>
-            {compactInput && <span className="truncate opacity-70">{compactInput}</span>}
-          </li>
-        );
-      })}
-    </ol>
+    <p
+      data-testid="assistant-activities"
+      title={steps
+        .map((a) =>
+          a.kind === 'model'
+            ? a.detail
+            : `${a.toolName}${a.input && Object.keys(a.input).length > 0 ? ` ${JSON.stringify(a.input)}` : ''}`,
+        )
+        .join('\n')}
+      className={cn(
+        'flex min-w-0 items-center gap-1.5 truncate text-xs',
+        failed ? 'text-destructive' : 'text-muted-foreground',
+      )}
+    >
+      <span className="truncate" data-testid="assistant-activity-step">{label}</span>
+      {live && compactInput && <span className="truncate opacity-70">{compactInput}</span>}
+    </p>
   );
 }
 
@@ -183,6 +204,10 @@ export function AskPanel() {
    *  A 2B model takes several seconds to load and the "thinking" spinner alone
    *  made that look like a hang, with no hint that the wait was one-off. */
   const [loadingModel, setLoadingModel] = useState(false);
+  /** Which backend the on-device model actually resolved to, so the panel can
+   *  say whether the GPU is really being used. Seeded from the module so a
+   *  reopened panel still shows it without reloading the model. */
+  const [backend, setBackend] = useState<NativeMnnBackend | undefined>(() => getNativeMnnBackend());
   const [error, setError] = useState<string | null>(null);
   const [notConfigured, setNotConfigured] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -267,7 +292,7 @@ export function AskPanel() {
       if (Platform.isNative && settings.assistantBackend !== 'ollama' && !isNativeMnnModelLoaded()) {
         setLoadingModel(true);
         try {
-          await loadNativeMnnModel(settings.assistantModelId);
+          setBackend(await loadNativeMnnModel(settings.assistantModelId));
         } finally {
           setLoadingModel(false);
         }
@@ -391,6 +416,18 @@ export function AskPanel() {
             alternative was pretending every language works equally well.
             Ollama runs whatever model the user chose, so this does not apply
             there. */}
+        {/* What is actually running, reported by MNN after its own fallback:
+            a device whose GPU driver it cannot use degrades to CPU silently,
+            and that is precisely when a reply takes minutes. Naming the
+            backend explains the wait instead of leaving it mysterious. */}
+        {backend && (
+          <p className="text-xs text-muted-foreground" data-testid="assistant-backend-notice">
+            {backend === 'cpu'
+              ? t('assistant.backend_cpu')
+              : t('assistant.backend_gpu', { backend: backend.toUpperCase() })}
+          </p>
+        )}
+
         {onDeviceInNonEnglish && (
           <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground" data-testid="assistant-english-notice">
             {t('assistant.english_only_notice')}
@@ -406,6 +443,13 @@ export function AskPanel() {
           // talking, not the model, and everything above it is out of the
           // model's view from here on (see agent.ts's sliceAfterContextBoundary).
           // Styling it as an assistant bubble would claim the model said it.
+          // An intermediate tool-calling turn carries only `toolCalls`, never
+          // text, and used to render as an empty grey bubble: one per round
+          // trip, so a multi-step answer arrived behind a stack of blank
+          // bubbles. The work those turns did is shown by the activity line
+          // instead, which is what the user actually wants to see.
+          if (msg.role === 'assistant' && !msg.text && !msg.steps?.length && !msg.display?.length) return null;
+
           if (msg.contextBoundary) {
             return (
               <div
@@ -419,11 +463,10 @@ export function AskPanel() {
           }
           return (
             <div key={i} className="space-y-1">
-              {/* This turn's tool steps, above its answer (refs #246): user
-                  question -> "Running count_events…" / "count_events done" ->
-                  answer -> supporting cards, in that order both live and in
-                  history. */}
-              {msg.role === 'assistant' && msg.steps && msg.steps.length > 0 && <ActivitySteps steps={msg.steps} />}
+              {/* This turn's tool work, collapsed to one muted line above its
+                  answer (refs #246): user question -> "Used count_events,
+                  list_events" -> answer -> supporting cards. */}
+              {msg.role === 'assistant' && msg.steps && msg.steps.length > 0 && <ActivityLine steps={msg.steps} />}
               <div
                 data-testid={`assistant-message-${msg.role}`}
                 className={cn(
@@ -440,15 +483,25 @@ export function AskPanel() {
           );
         })}
 
-        {/* Step trace for the turn still in flight: one row per
-            `host.onActivity` call from agent.ts, so a multi-step answer
-            ("which monitor was most active") shows what it's doing before the
-            answer exists yet. Rendered above the "thinking" indicator, i.e.
-            where the answer will land once the turn resolves; `handleSend`
-            then moves this same list onto that answer's message (`steps`,
-            above) and clears it, so it never lingers here to duplicate what
-            now renders inside the thread. */}
-        {activities.length > 0 && <ActivitySteps steps={activities} />}
+        {/* The turn still in flight, as ONE line each new step replaces, so a
+            multi-step answer ("which monitor was most active") shows what it is
+            doing without stacking a row per round trip. Rendered above the
+            "thinking" indicator, where the answer will land once the turn
+            resolves; `handleSend` then moves these steps onto that answer's
+            message (`steps`, above) and clears them, so this never lingers to
+            duplicate what now renders inside the thread. */}
+        {/* TWO lines, not one: the model's thought and the tool step are
+            different channels, and sharing a slot meant every reasoning line
+            was overwritten by the tool call it had just decided on, milliseconds
+            later. The long wait (the next model call, ~7s on device) then sat
+            on stale tool text. Each line now replaces only its own kind, so the
+            latest thought stays readable while the next step runs. */}
+        {activities.some((a) => a.kind === 'model') && (
+          <ActivityLine steps={activities.filter((a) => a.kind === 'model')} live />
+        )}
+        {activities.some((a) => a.kind !== 'model') && (
+          <ActivityLine steps={activities.filter((a) => a.kind !== 'model')} live />
+        )}
 
         {running && (
           <p className="flex items-center gap-1 text-xs text-muted-foreground" data-testid="assistant-status">

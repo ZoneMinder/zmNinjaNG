@@ -96,6 +96,10 @@ export interface AssistantTurn {
    *  counts, so a backend that stays quiet can't read as "0 tokens used" and
    *  suppress the context-window warning forever. */
   usage?: TokenUsage;
+  /** The model's own reasoning for this turn, stripped out of the answer but
+   *  kept so the panel can show what it was working on across a multi-step
+   *  turn. Undefined for a model that emits none. */
+  reasoning?: string;
 }
 
 export interface ToolContext {
@@ -154,6 +158,13 @@ export interface ToolDefinition {
 }
 
 export interface ToolActivity {
+  /** A model-side step (its reasoning, or the decision to call a tool) rather
+   *  than a tool execution. The panel shows `detail` for these, so a turn that
+   *  makes several round trips reports what the model is doing instead of
+   *  sitting on "Thinking" (refs #246). */
+  kind?: 'model';
+  /** Model-side text for `kind: 'model'`; ignored for tool steps. */
+  detail?: string;
   toolName: string;
   status: 'running' | 'done' | 'error';
   /** The tool call's input, so the UI can show what it was called with (e.g.

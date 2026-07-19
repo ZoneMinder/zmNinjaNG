@@ -19,7 +19,8 @@ import org.json.JSONObject;
 @CapacitorPlugin(name = "NativeMnn")
 public class NativeMnnPlugin extends Plugin {
     static { System.loadLibrary("zmninja_mnn"); }
-    private static native boolean loadNative(String configPath);
+    /** Returns the backend actually in use, or empty if the load failed. */
+    private static native String loadNative(String configPath);
     /** Returns {content, promptTokens, completionTokens}, empty if load failed. */
     private static native String[] chatNative(String configPath, String[] roles, String[] contents, int maxTokens);
     private static native void unloadNative();
@@ -112,8 +113,11 @@ public class NativeMnnPlugin extends Plugin {
         File dir = modelDirectory(call.getString("modelId", ""));
         if (dir == null || !new File(dir, ".complete").isFile()) { call.reject("Native MNN model is not downloaded."); return; }
         getBridge().execute(() -> {
-            if (!loadNative(new File(dir, "config.json").getAbsolutePath())) { call.reject("Native MNN could not load the model."); return; }
-            call.resolve();
+            String backend = loadNative(new File(dir, "config.json").getAbsolutePath());
+            if (backend.isEmpty()) { call.reject("Native MNN could not load the model."); return; }
+            JSObject result = new JSObject();
+            result.put("backend", backend);
+            call.resolve(result);
         });
     }
 

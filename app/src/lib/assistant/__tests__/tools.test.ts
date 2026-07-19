@@ -323,15 +323,41 @@ describe('read-only tools', () => {
     expect(rows[0]).toMatchObject({ id: '42', monitor: 'Front Door', objects: ['person', 'car'] });
   });
 
-  it('list_events rows include duration/scores/archived and a notes preview', async () => {
+  // Only what an answer is built from. The fuller row was ~300 characters, so
+  // 25 of them (7430) overflowed maxToolResultCharacters and the whole payload
+  // was replaced by a truncation notice the model read as "no events".
+  it('list_events rows carry only the fields an answer needs', async () => {
     const tool = getToolByName('list_events')!;
     const r = await tool.execute({}, ctx());
     expect(r.isError).toBeFalsy();
     const { events: rows } = JSON.parse(r.output as string);
-    expect(rows[0]).toMatchObject({
-      durationSec: 12.5, frames: 30, alarmFrames: 5, maxScore: 10, avgScore: 4, archived: false,
-      end: '2026-01-01 00:01:00', notes: 'detected:person,car|Motion: All',
+    expect(rows[0]).toEqual({
+      id: '42', monitor: 'Front Door', start: '2026-01-01 00:00:00', durationSec: 12.5, objects: ['person', 'car'],
     });
+  });
+
+  // The guarantee that matters: a full result must never exceed the budget,
+  // because safeExecute's fallback destroys the payload rather than trimming it.
+  it('keeps a full-size result inside the tool result budget', async () => {
+    const many = Array.from({ length: ASSISTANT.maxListEventsLimit }, (_, i) => ({
+      Event: {
+        Id: String(1000 + i), MonitorId: '1', Cause: 'Motion',
+        StartDateTime: '2026-01-01 00:00:00', EndDateTime: '2026-01-01 00:01:00',
+        Length: '12.5', Frames: '30', AlarmFrames: '5', MaxScore: '10', AvgScore: '4',
+        Archived: '0', Notes: 'detected:person,car|Motion: All',
+      },
+    }));
+    vi.mocked(getEvents).mockResolvedValueOnce({
+      events: many as never,
+      pagination: { page: 1, pageCount: 1, current: 1, count: many.length, prevPage: false, nextPage: false, limit: 25, totalCount: many.length },
+    } as never);
+    const tool = getToolByName('list_events')!;
+
+    const r = await tool.execute({}, ctx());
+
+    expect(r.output.length).toBeLessThanOrEqual(ASSISTANT.maxToolResultCharacters);
+    // Still real JSON with rows in it, not a truncation envelope.
+    expect(JSON.parse(r.output).events.length).toBeGreaterThan(0);
   });
 
   it('list_events builds an event display card with imageUrls, capped to the same rows as output (refs #246)', async () => {
@@ -620,7 +646,21 @@ describe('list_events range resolution (refs #246)', () => {
       const r = await tool.execute({ range: 'today', objectType: 'person' }, ctx());
 
       expect(r.isError).toBeFalsy();
-      expect(JSON.parse(r.output)).toEqual({ events: [] });
+      const parsed = JSON.parse(r.output);
+      expect(parsed.events).toEqual([]);
+      // The window is always reported, so the model cannot invent a period it
+      // never queried.
+      expect(parsed.window).toMatchObject({ from: expect.any(String), to: expect.any(String) });
+    });
+
+    // It answered "no people in the last 24 hours" having queried no range at
+    // all. An unfiltered query now says so in words the model can repeat.
+    it('says plainly when no time filter was applied', async () => {
+      const tool = getToolByName('list_events')!;
+
+      const r = await tool.execute({}, ctx());
+
+      expect(JSON.parse(r.output).window).toBe('all recorded events, no time filter applied');
     });
 
     it('does not probe when the objectType query returned rows', async () => {
@@ -654,15 +694,19 @@ describe('list_events range resolution (refs #246)', () => {
     const r = await tool.execute({}, ctx());
     expect(r.isError).toBeFalsy();
     const parsed = JSON.parse(r.output as string);
-    expect(parsed.truncated).toBe(true);
+    // Names the count it is showing, rather than a bare "truncated" that a
+    // small model reads as "nothing found".
+    expect(parsed.moreMatchesExist).toBe(true);
+    expect(parsed.shownEvents).toBe(1);
     expect(parsed.events).toHaveLength(1);
   });
 
-  it('leaves truncated unset when every match fits on the page', async () => {
+  it('leaves the more-matches flag unset when every match fits on the page', async () => {
     const tool = getToolByName('list_events')!;
     const r = await tool.execute({}, ctx());
     const parsed = JSON.parse(r.output as string);
-    expect(parsed.truncated).toBeUndefined();
+    expect(parsed.moreMatchesExist).toBeUndefined();
+    expect(parsed.shownEvents).toBeUndefined();
   });
 });
 

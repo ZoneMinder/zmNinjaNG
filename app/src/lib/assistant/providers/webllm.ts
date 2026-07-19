@@ -215,6 +215,23 @@ function stripThinkBlock(content: string): string {
   return openIndex === -1 ? content : content.slice(0, openIndex);
 }
 
+/** The reasoning a model emitted before its reply, or undefined if it emitted
+ *  none. Discarded from the answer by `stripThinkBlock`, but kept so the panel
+ *  can show what the model was doing during a turn that makes several round
+ *  trips: without it the UI has nothing to say but "Thinking" while the logs
+ *  are full of the model's actual working. */
+function extractReasoning(content: string): string | undefined {
+  const closeIndex = content.indexOf('</think>');
+  const openIndex = content.indexOf('<think>');
+  // Qwen under MNN emits only the closing tag: the template opens the block in
+  // the prompt, so reasoning runs from the start of the reply to `</think>`.
+  const start = openIndex !== -1 && (closeIndex === -1 || openIndex < closeIndex) ? openIndex + '<think>'.length : 0;
+  const end = closeIndex === -1 ? content.length : closeIndex;
+  if (closeIndex === -1 && openIndex === -1) return undefined;
+  const reasoning = content.slice(start, end).trim();
+  return reasoning.length > 0 ? reasoning : undefined;
+}
+
 function extractJsonPayload(content: string): string {
   // Some models wrap JSON in a markdown fence despite being told not to;
   // strip it before parsing rather than failing the whole turn over it.
@@ -331,6 +348,7 @@ function looksLikePlainAnswer(text: string): boolean {
  *  the answer; see `looksLikePlainAnswer`. */
 export function parseWebLlmTurn(content: string): AssistantTurn {
   const stripped = stripThinkBlock(content);
+  const reasoning = extractReasoning(content);
 
   // The whole (fence-stripped) reply first, since a well-behaved model sends
   // exactly that; then each embedded object, for a reply wrapped in prose.
@@ -344,13 +362,13 @@ export function parseWebLlmTurn(content: string): AssistantTurn {
       continue;
     }
     const turn = toTurn(parsed);
-    if (turn) return turn;
+    if (turn) return { ...turn, reasoning };
   }
 
   const plain = extractJsonPayload(stripped).trim();
-  if (looksLikePlainAnswer(plain)) return { text: plain, toolCalls: [] };
+  if (looksLikePlainAnswer(plain)) return { text: plain, toolCalls: [], reasoning };
 
-  return { text: PARSE_ERROR_TEXT, toolCalls: [], raw: content };
+  return { text: PARSE_ERROR_TEXT, toolCalls: [], raw: content, reasoning };
 }
 
 /** The on-device provider: one WebLLM engine (owned by model-download.ts),

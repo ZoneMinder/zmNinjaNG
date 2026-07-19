@@ -132,8 +132,8 @@ public class NativeMnnPlugin: CAPPlugin, CAPBridgedPlugin {
         let configPath = directory.appendingPathComponent("config.json").path
         DispatchQueue.global(qos: .userInitiated).async {
             do {
-                try NativeMnnBridge.load(atConfigPath: configPath)
-                call.resolve()
+                let backend = try NativeMnnBridge.load(atConfigPath: configPath)
+                call.resolve(["backend": backend])
             } catch { call.reject(error.localizedDescription) }
         }
     }
