@@ -1,0 +1,3 @@
+[submodule "app/native/MNN"]
+	path = app/native/MNN
+	url = https://github.com/alibaba/MNN.git
