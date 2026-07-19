@@ -73,4 +73,24 @@ describe('native MNN bridge', () => {
 
     await expect(loadNativeMnnModel('Qwen3.5-2B-Claude-4.6-Opus-Reasoning-Distilled-MNN')).resolves.toBe('cpu');
   });
+
+  // A GPU that segfaults cannot be caught in-process, only remembered: native
+  // marks the forced fall back with a trailing "!" after a crashed launch.
+  it('reports a forced CPU fall back after a GPU crash', async () => {
+    const load = vi.fn().mockResolvedValue({ backend: 'cpu!' });
+    registerPlugin.mockReturnValue({ load });
+    const { loadNativeMnnModel, didGpuCrash } = await import('../native-mnn');
+
+    await expect(loadNativeMnnModel('Qwen3.5-2B-Claude-4.6-Opus-Reasoning-Distilled-MNN')).resolves.toBe('cpu');
+    expect(didGpuCrash()).toBe(true);
+  });
+
+  it('does not claim a crash when CPU is simply the best this device offers', async () => {
+    const load = vi.fn().mockResolvedValue({ backend: 'cpu' });
+    registerPlugin.mockReturnValue({ load });
+    const { loadNativeMnnModel, didGpuCrash } = await import('../native-mnn');
+
+    await loadNativeMnnModel('Qwen3.5-2B-Claude-4.6-Opus-Reasoning-Distilled-MNN');
+    expect(didGpuCrash()).toBe(false);
+  });
 });

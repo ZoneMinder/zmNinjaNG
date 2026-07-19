@@ -43,7 +43,7 @@ import { resolveQueryError } from '../../lib/query/query-error';
 import { cn } from '../../lib/utils';
 import { ASSISTANT } from '../../lib/zmninja-ng-constants';
 import { AssistantIntro } from './AssistantIntro';
-import { getNativeMnnBackend, isNativeMnnModelLoaded, loadNativeMnnModel, type NativeMnnBackend } from '../../lib/assistant/native-mnn';
+import { didGpuCrash, getNativeMnnBackend, isNativeMnnModelLoaded, loadNativeMnnModel, type NativeMnnBackend } from '../../lib/assistant/native-mnn';
 import { Platform } from '../../lib/platform';
 import { useAssistantStore } from '../../stores/assistant';
 import { Button } from '../ui/button';
@@ -283,6 +283,7 @@ export function AskPanel() {
         ollamaBaseUrl: settings.assistantOllamaBaseUrl,
         ollamaModel: settings.assistantOllamaModel,
         apiKey: apiKey ?? undefined,
+        tryGpu: settings.assistantTryGpu,
       };
       const provider = getAssistantProvider(providerConfig);
 
@@ -292,7 +293,7 @@ export function AskPanel() {
       if (Platform.isNative && settings.assistantBackend !== 'ollama' && !isNativeMnnModelLoaded()) {
         setLoadingModel(true);
         try {
-          setBackend(await loadNativeMnnModel(settings.assistantModelId));
+          setBackend(await loadNativeMnnModel(settings.assistantModelId, settings.assistantTryGpu));
         } finally {
           setLoadingModel(false);
         }
@@ -422,9 +423,11 @@ export function AskPanel() {
             backend explains the wait instead of leaving it mysterious. */}
         {backend && (
           <p className="text-xs text-muted-foreground" data-testid="assistant-backend-notice">
-            {backend === 'cpu'
-              ? t('assistant.backend_cpu')
-              : t('assistant.backend_gpu', { backend: backend.toUpperCase() })}
+            {backend !== 'cpu'
+              ? t('assistant.backend_gpu', { backend: backend.toUpperCase() })
+              : didGpuCrash()
+                ? t('assistant.backend_gpu_crashed')
+                : t('assistant.backend_cpu')}
           </p>
         )}
 

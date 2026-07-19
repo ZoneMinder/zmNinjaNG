@@ -11,6 +11,8 @@ MNN::Transformer::Llm *model = nullptr;
 std::string path;
 /** Backend the loaded model actually resolved to, reported to the UI. */
 std::string loadedBackend = "cpu";
+/** True when the GPU crashed a previous launch and CPU was forced. */
+bool gpuCrashedBefore = false;
 
 /** iOS builds MNN with -DMNN_METAL=ON (package_scripts/ios/buildiOS.sh), so
  *  Metal is compiled in on every device; there is no OpenCL here. MNN degrades
@@ -18,17 +20,22 @@ std::string loadedBackend = "cpu";
 constexpr MNNForwardType kPreferredBackend = MNN_FORWARD_METAL;
 
 /** Loads `wanted` unless it is already loaded. Caller holds `m`. */
-bool ensureLoaded(const std::string &wanted) {
+bool ensureLoaded(const std::string &wanted, bool useGpu) {
   if (model && path == wanted) return true;
   if (model) MNN::Transformer::Llm::destroy(model);
   model = MNN::Transformer::Llm::createLLM(wanted);
   if (!model) return false;
-  // Resolve BEFORE loading: naming a backend the device cannot provide would
-  // otherwise leave the app claiming GPU while running on the CPU.
-  const MNNForwardType backend = zmninjaMnnResolveBackend(kPreferredBackend);
+  const std::string directory = zmninjaMnnModelDirectory(wanted);
+  // Skip the GPU entirely if a previous attempt never came back: a backend that
+  // takes the process down cannot be caught, only remembered.
+  gpuCrashedBefore = zmninjaMnnGpuCrashedBefore(directory);
+  const MNNForwardType backend = (useGpu && !gpuCrashedBefore) ? zmninjaMnnResolveBackend(kPreferredBackend) : MNN_FORWARD_CPU;
+  if (backend != MNN_FORWARD_CPU) zmninjaMnnMarkGpuAttempt(directory);
   loadedBackend = zmninjaMnnBackendName(backend);
-  model->set_config(zmninjaMnnConfig(loadedBackend.c_str(), zmninjaMnnModelDirectory(wanted)));
-  if (!model->load()) { model = nullptr; return false; }
+  model->set_config(zmninjaMnnConfig(loadedBackend.c_str(), directory));
+  const bool ok = model->load();
+  zmninjaMnnClearGpuAttempt(directory);
+  if (!ok) { model = nullptr; return false; }
   path = wanted;
   return true;
 }
@@ -63,15 +70,16 @@ NSError *loadError(void) {
   loadedBackend = "cpu";
 }
 
-+ (NSString *)loadAtConfigPath:(NSString *)configPath error:(NSError **)error {
++ (NSString *)loadAtConfigPath:(NSString *)configPath useGpu:(BOOL)useGpu error:(NSError **)error {
   std::lock_guard<std::mutex> lock(m);
-  if (!ensureLoaded(std::string(configPath.UTF8String))) { if (error) *error = loadError(); return nil; }
-  return [NSString stringWithUTF8String:loadedBackend.c_str()];
+  if (!ensureLoaded(std::string(configPath.UTF8String), useGpu)) { if (error) *error = loadError(); return nil; }
+  // "cpu!" marks a forced fall back after a GPU crash, so the app can say so.
+  return [NSString stringWithUTF8String:(loadedBackend + (gpuCrashedBefore ? "!" : "")).c_str()];
 }
 
-+ (NSDictionary *)chatAtConfigPath:(NSString *)configPath messages:(NSArray<NSDictionary<NSString *, NSString *> *> *)messages maxTokens:(NSInteger)maxTokens error:(NSError **)error {
++ (NSDictionary *)chatAtConfigPath:(NSString *)configPath messages:(NSArray<NSDictionary<NSString *, NSString *> *> *)messages maxTokens:(NSInteger)maxTokens useGpu:(BOOL)useGpu error:(NSError **)error {
   std::lock_guard<std::mutex> lock(m);
-  if (!ensureLoaded(std::string(configPath.UTF8String))) { if (error) *error = loadError(); return nil; }
+  if (!ensureLoaded(std::string(configPath.UTF8String), useGpu)) { if (error) *error = loadError(); return nil; }
 
   // ChatMessages, not a flattened string: the string overload wraps the whole
   // blob as ONE user turn (losing every role marker) and appends to the prior

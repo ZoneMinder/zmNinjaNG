@@ -47,8 +47,8 @@ interface NativeMnnPlugin {
   cancelDownload(): Promise<void>;
   deleteModel(options: { modelId: NativeMnnModelId }): Promise<void>;
   getModelSize(options: { modelId: NativeMnnModelId }): Promise<{ bytes: number }>;
-  load(options: { modelId: NativeMnnModelId }): Promise<{ backend: string }>;
-  chat(options: { modelId: NativeMnnModelId; messages: NativeMnnMessage[]; maxTokens: number }): Promise<NativeMnnChatResult>;
+  load(options: { modelId: NativeMnnModelId; useGpu: boolean }): Promise<{ backend: string }>;
+  chat(options: { modelId: NativeMnnModelId; messages: NativeMnnMessage[]; maxTokens: number; useGpu: boolean }): Promise<NativeMnnChatResult>;
   unload(): Promise<void>;
   addListener(
     eventName: 'downloadProgress',
@@ -204,9 +204,10 @@ export async function nativeMnnChat(
   modelId: string,
   messages: NativeMnnMessage[],
   maxTokens: number,
+  useGpu = false,
 ): Promise<NativeMnnChatResult> {
   assertNativeModelId(modelId);
-  const result = await withPlugin((nativeMnn) => nativeMnn.chat({ modelId, messages, maxTokens }));
+  const result = await withPlugin((nativeMnn) => nativeMnn.chat({ modelId, messages, maxTokens, useGpu }));
   modelLoaded = true;
   return result;
 }
@@ -222,6 +223,7 @@ export async function nativeMnnChat(
  */
 let modelLoaded = false;
 let loadedBackend: NativeMnnBackend | undefined;
+let gpuCrashed = false;
 
 export function isNativeMnnModelLoaded(): boolean {
   return modelLoaded;
@@ -237,19 +239,29 @@ export function getNativeMnnBackend(): NativeMnnBackend | undefined {
 /** Loads the model without generating. Split from `chat` so the panel can say
  *  "loading the model" during the ~10s first load instead of leaving the user
  *  looking at a "thinking" spinner that never moves. */
-export async function loadNativeMnnModel(modelId: string): Promise<NativeMnnBackend> {
+export async function loadNativeMnnModel(modelId: string, useGpu = false): Promise<NativeMnnBackend> {
   assertNativeModelId(modelId);
-  const { backend } = await withPlugin((nativeMnn) => nativeMnn.load({ modelId }));
-  loadedBackend = NATIVE_MNN_BACKENDS.includes(backend as NativeMnnBackend)
-    ? (backend as NativeMnnBackend)
-    : 'cpu';
+  const { backend } = await withPlugin((nativeMnn) => nativeMnn.load({ modelId, useGpu }));
+  // A trailing "!" means the GPU took the whole process down on a previous
+  // launch and CPU was forced for good. The native side can only report that
+  // after the fact: a backend that segfaults cannot be caught, only remembered.
+  gpuCrashed = backend.endsWith('!');
+  const name = gpuCrashed ? backend.slice(0, -1) : backend;
+  loadedBackend = NATIVE_MNN_BACKENDS.includes(name as NativeMnnBackend) ? (name as NativeMnnBackend) : 'cpu';
   modelLoaded = true;
   return loadedBackend;
+}
+
+/** Whether the current CPU backend is a permanent fall back after a GPU crash,
+ *  rather than simply the best this device offers. */
+export function didGpuCrash(): boolean {
+  return gpuCrashed;
 }
 
 export async function unloadNativeMnn(): Promise<void> {
   modelLoaded = false;
   loadedBackend = undefined;
+  gpuCrashed = false;
   if (!Platform.isNative) return;
   await withPlugin((nativeMnn) => nativeMnn.unload());
 }

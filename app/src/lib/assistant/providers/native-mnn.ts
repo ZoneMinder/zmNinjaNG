@@ -12,9 +12,11 @@ const PARSE_ERROR_TEXT = '__i18n:assistant.parse_error';
 export class NativeMnnProvider implements AssistantProvider {
   readonly contextWindow: number | undefined;
   private readonly modelId: string;
+  private readonly useGpu: boolean;
 
-  constructor(modelId: string) {
+  constructor(modelId: string, useGpu = false) {
     this.modelId = modelId;
+    this.useGpu = useGpu;
     this.contextWindow = NATIVE_MNN_MODELS.find((m) => m.id === modelId)?.contextWindowSize;
   }
 
@@ -58,6 +60,7 @@ export class NativeMnnProvider implements AssistantProvider {
         this.modelId,
         chatMessages,
         ASSISTANT.nativeMnnMaxTokens,
+        this.useGpu,
       );
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
       log.assistant('Native MNN raw response', LogLevel.DEBUG, { modelId: this.modelId, content, attempt });

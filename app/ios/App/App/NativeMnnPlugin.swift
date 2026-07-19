@@ -110,12 +110,13 @@ public class NativeMnnPlugin: CAPPlugin, CAPBridgedPlugin {
         }
         guard !messages.isEmpty else { call.reject("Native MNN chat requires at least one message."); return }
         let maxTokens = call.getInt("maxTokens", 1024)
+        let useGpu = call.getBool("useGpu", false)
         let configPath = directory.appendingPathComponent("config.json").path
         DispatchQueue.global(qos: .userInitiated).async {
             do {
                 // MNN's own token counts come back alongside the text, so the
                 // app measures real context usage rather than estimating it.
-                let response = try NativeMnnBridge.chat(atConfigPath: configPath, messages: messages, maxTokens: maxTokens)
+                let response = try NativeMnnBridge.chat(atConfigPath: configPath, messages: messages, maxTokens: maxTokens, useGpu: useGpu)
                 call.resolve([
                     "content": response["content"] as? String ?? "",
                     "promptTokens": response["promptTokens"] as? Int ?? 0,
@@ -130,9 +131,10 @@ public class NativeMnnPlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func load(_ call: CAPPluginCall) {
         guard let directory = modelDirectory(call), FileManager.default.fileExists(atPath: directory.appendingPathComponent(".complete").path) else { call.reject("Native MNN model is not downloaded."); return }
         let configPath = directory.appendingPathComponent("config.json").path
+        let useGpu = call.getBool("useGpu", false)
         DispatchQueue.global(qos: .userInitiated).async {
             do {
-                let backend = try NativeMnnBridge.load(atConfigPath: configPath)
+                let backend = try NativeMnnBridge.load(atConfigPath: configPath, useGpu: useGpu)
                 call.resolve(["backend": backend])
             } catch { call.reject(error.localizedDescription) }
         }

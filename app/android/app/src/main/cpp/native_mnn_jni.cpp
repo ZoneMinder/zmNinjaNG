@@ -12,12 +12,41 @@ MNN::Transformer::Llm* model = nullptr;
 std::string loadedPath;
 /** Backend the loaded model actually resolved to, reported to the UI. */
 std::string loadedBackend = "cpu";
+/** True when the GPU crashed a previous launch and CPU was forced. */
+bool gpuCrashedBefore = false;
 
-/** Android compiles OpenCL (MNN_OPENCL in CMakeLists.txt); there is no Metal
- *  here. MNN degrades to CPU by itself when the device has no usable OpenCL
- *  driver, which many Android GPUs do not, so this is an attempt rather than a
- *  requirement. */
-constexpr MNNForwardType kPreferredBackend = MNN_FORWARD_OPENCL;
+/** CPU on Android, from measurement rather than preference. Both GPU backends
+ *  MNN offers here were tried on a Pixel 8 (Mali G715) and both lost:
+ *
+ *  OpenCL  killed the process building the model (SIGSEGV, null KernelWrap in
+ *          OpenCLRuntime::getMaxWorkGroupSize from AttentionBufExecution::
+ *          prefillResize; its attention kernel does not compile on Mali).
+ *  Vulkan  ran without crashing but doubled memory, 1.9GB resident on CPU
+ *          against 3.7GB, which pushed an 8GB phone into heavy swapping
+ *          (70% iowait, 2.76GB swap) and left ONE thread at 78% where the CPU
+ *          backend keeps four near 120%. Slower, not faster. The cause is
+ *          visible in logcat as a flood of "Clone error for convolution/
+ *          deconvolution, will Increase memory": the Vulkan backend does not
+ *          implement onClone for convolution, so every such op keeps its own
+ *          execution instead of sharing weights.
+ *
+ *  Upstream agrees on the default without ruling the GPU out. Alibaba's own
+ *  Android LLM app compiles OpenCL (-DMNN_OPENCL=true) yet leaves the LLM
+ *  backend unset so the model config's "cpu" wins, exposing GPU only as a user
+ *  setting, and its README states plainly that "in GPU-based assessments,
+ *  MNN-LLM's performance slightly declines". Issue #3371 reports OpenCL LLM
+ *  decode at 2.5 tok/s against a documented 11 on a Snapdragon 8 Gen 3, the
+ *  Attention operator accounting for 21 seconds of it: the same operator that
+ *  crashes here, so this is not a Mali-only problem.
+ *
+ *  So Android has no GPU backend compiled at all (see CMakeLists.txt) and this
+ *  stays CPU: `useGpu` is accepted for a shared bridge signature but has nothing
+ *  to select here, and the Settings toggle is shown only on iOS, where Metal
+ *  does work. The marker-file guard above remains for that iOS path.
+ *
+ *  iOS uses Metal, which is a different backend on different hardware and is
+ *  unaffected by any of this (see NativeMnnBridge.mm). */
+constexpr MNNForwardType kPreferredBackend = MNN_FORWARD_CPU;
 
 void unload() {
     if (model != nullptr) MNN::Transformer::Llm::destroy(model);
@@ -27,17 +56,23 @@ void unload() {
 }
 
 /** Loads `config` unless it is already the loaded model. Caller holds `mutex`. */
-bool ensureLoaded(const std::string& config) {
+bool ensureLoaded(const std::string& config, bool useGpu) {
     if (model != nullptr && loadedPath == config) return true;
     unload();
     model = MNN::Transformer::Llm::createLLM(config);
     if (model == nullptr) return false;
-    // Resolve BEFORE loading: naming a backend the device cannot provide would
-    // otherwise leave the app claiming GPU while running on the CPU.
-    const MNNForwardType backend = zmninjaMnnResolveBackend(kPreferredBackend);
+    const std::string directory = zmninjaMnnModelDirectory(config);
+    // Skip the GPU entirely if a previous attempt never came back (see
+    // zmninjaMnnGpuCrashedBefore): that device gets CPU permanently.
+    gpuCrashedBefore = zmninjaMnnGpuCrashedBefore(directory);
+    MNNForwardType backend = (useGpu && !gpuCrashedBefore) ? zmninjaMnnResolveBackend(kPreferredBackend) : MNN_FORWARD_CPU;
+    if (backend != MNN_FORWARD_CPU) zmninjaMnnMarkGpuAttempt(directory);
     loadedBackend = zmninjaMnnBackendName(backend);
-    model->set_config(zmninjaMnnConfig(loadedBackend.c_str(), zmninjaMnnModelDirectory(config)));
-    if (!model->load()) {
+    model->set_config(zmninjaMnnConfig(loadedBackend.c_str(), directory));
+    const bool ok = model->load();
+    // Reached only if the GPU did not take the process down.
+    zmninjaMnnClearGpuAttempt(directory);
+    if (!ok) {
         unload();
         return false;
     }
@@ -73,10 +108,11 @@ void dropTruncatedUtf8Tail(std::string& text) {
 /** Returns the backend actually in use ("opencl"/"cpu"), or an empty string if
  *  the model could not be loaded. */
 extern "C" JNIEXPORT jstring JNICALL
-Java_com_zoneminder_zmNinjaNG_NativeMnnPlugin_loadNative(JNIEnv* env, jclass, jstring configPath) {
+Java_com_zoneminder_zmNinjaNG_NativeMnnPlugin_loadNative(JNIEnv* env, jclass, jstring configPath, jboolean useGpu) {
     std::lock_guard<std::mutex> lock(mutex);
-    if (!ensureLoaded(value(env, configPath))) return env->NewStringUTF("");
-    return env->NewStringUTF(loadedBackend.c_str());
+    if (!ensureLoaded(value(env, configPath), useGpu == JNI_TRUE)) return env->NewStringUTF("");
+    // "cpu!" marks a forced fall back after a GPU crash, so the app can say so.
+    return env->NewStringUTF((loadedBackend + (gpuCrashedBefore ? "!" : "")).c_str());
 }
 
 /** Returns {content, promptTokens, completionTokens}, or an empty array if the
@@ -84,10 +120,10 @@ Java_com_zoneminder_zmNinjaNG_NativeMnnPlugin_loadNative(JNIEnv* env, jclass, js
  *  the app measures real context usage instead of guessing from characters. */
 extern "C" JNIEXPORT jobjectArray JNICALL
 Java_com_zoneminder_zmNinjaNG_NativeMnnPlugin_chatNative(
-    JNIEnv* env, jclass, jstring configPath, jobjectArray roles, jobjectArray contents, jint maxTokens) {
+    JNIEnv* env, jclass, jstring configPath, jobjectArray roles, jobjectArray contents, jint maxTokens, jboolean useGpu) {
     std::lock_guard<std::mutex> lock(mutex);
     jclass stringClass = env->FindClass("java/lang/String");
-    if (!ensureLoaded(value(env, configPath))) return env->NewObjectArray(0, stringClass, nullptr);
+    if (!ensureLoaded(value(env, configPath), useGpu == JNI_TRUE)) return env->NewObjectArray(0, stringClass, nullptr);
 
     // ChatMessages, not a flattened string: this routes through the overload
     // that applies the model's own chat template, so every turn carries real

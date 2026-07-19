@@ -18,11 +18,38 @@ import org.json.JSONObject;
 /** Native MNN bridge. The accepted models are fixed here, not supplied by JS. */
 @CapacitorPlugin(name = "NativeMnn")
 public class NativeMnnPlugin extends Plugin {
-    static { System.loadLibrary("zmninja_mnn"); }
+    /** False when this device has no native library for its ABI. */
+    private static final boolean NATIVE_AVAILABLE;
+
+    static {
+        // GUARDED. This runs during registerPlugin() in MainActivity.onCreate,
+        // so an UnsatisfiedLinkError here becomes ExceptionInInitializerError
+        // and takes the WHOLE APP down at launch, not just the assistant. The
+        // native libraries are built for arm64-v8a only, so any other ABI (an
+        // x86_64 emulator, a 32-bit device) would have crashed on startup.
+        boolean available;
+        try {
+            System.loadLibrary("zmninja_mnn");
+            available = true;
+        } catch (UnsatisfiedLinkError noNative) {
+            available = false;
+            android.util.Log.w("NativeMnn", "On-device assistant unavailable for this ABI", noNative);
+        }
+        NATIVE_AVAILABLE = available;
+    }
+
+    /** Rejects the call when there is no native library on this device, so a
+     *  plugin method fails as a handled error rather than an UnsatisfiedLinkError
+     *  escaping into the bridge. */
+    private boolean rejectIfUnavailable(PluginCall call) {
+        if (NATIVE_AVAILABLE) return false;
+        call.reject("The on-device assistant is not supported on this device.");
+        return true;
+    }
     /** Returns the backend actually in use, or empty if the load failed. */
-    private static native String loadNative(String configPath);
+    private static native String loadNative(String configPath, boolean useGpu);
     /** Returns {content, promptTokens, completionTokens}, empty if load failed. */
-    private static native String[] chatNative(String configPath, String[] roles, String[] contents, int maxTokens);
+    private static native String[] chatNative(String configPath, String[] roles, String[] contents, int maxTokens, boolean useGpu);
     private static native void unloadNative();
 
     /** Set by cancelDownload(), read by the download read loop on the bridge
@@ -36,6 +63,7 @@ public class NativeMnnPlugin extends Plugin {
 
     @PluginMethod
     public void isDownloaded(PluginCall call) {
+        if (rejectIfUnavailable(call)) return;
         File dir = modelDirectory(call.getString("modelId", ""));
         JSObject result = new JSObject();
         result.put("downloaded", dir != null && new File(dir, ".complete").isFile());
@@ -44,6 +72,7 @@ public class NativeMnnPlugin extends Plugin {
 
     @PluginMethod
     public void deleteModel(PluginCall call) {
+        if (rejectIfUnavailable(call)) return;
         File dir = modelDirectory(call.getString("modelId", ""));
         if (dir == null) { call.reject("Unsupported native MNN model"); return; }
         unloadNative();
@@ -53,6 +82,7 @@ public class NativeMnnPlugin extends Plugin {
 
     @PluginMethod
     public void download(PluginCall call) {
+        if (rejectIfUnavailable(call)) return;
         String modelId = call.getString("modelId", "");
         File dir = modelDirectory(modelId);
         ModelSpec spec = ModelSpec.forId(modelId);
@@ -79,6 +109,7 @@ public class NativeMnnPlugin extends Plugin {
      *  generation takes seconds, and this used to block the UI thread. */
     @PluginMethod
     public void chat(PluginCall call) {
+        if (rejectIfUnavailable(call)) return;
         File dir = modelDirectory(call.getString("modelId", ""));
         if (dir == null || !new File(dir, ".complete").isFile()) { call.reject("Native MNN model is not downloaded."); return; }
         JSArray messages = call.getArray("messages");
@@ -93,8 +124,9 @@ public class NativeMnnPlugin extends Plugin {
             }
         } catch (JSONException error) { call.reject("Native MNN chat received a malformed message list.", error); return; }
         int maxTokens = call.getInt("maxTokens", 1024);
+        final boolean useGpu = Boolean.TRUE.equals(call.getBoolean("useGpu", false));
         getBridge().execute(() -> {
-            String[] response = chatNative(new File(dir, "config.json").getAbsolutePath(), roles, contents, maxTokens);
+            String[] response = chatNative(new File(dir, "config.json").getAbsolutePath(), roles, contents, maxTokens, useGpu);
             if (response.length < 3) { call.reject("Native MNN could not load the model."); return; }
             JSObject result = new JSObject();
             result.put("content", response[0]);
@@ -110,10 +142,12 @@ public class NativeMnnPlugin extends Plugin {
      *  first turn is slow. Folded into chat(), a 10s load looked like a hang. */
     @PluginMethod
     public void load(PluginCall call) {
+        if (rejectIfUnavailable(call)) return;
         File dir = modelDirectory(call.getString("modelId", ""));
         if (dir == null || !new File(dir, ".complete").isFile()) { call.reject("Native MNN model is not downloaded."); return; }
+        final boolean useGpu = Boolean.TRUE.equals(call.getBoolean("useGpu", false));
         getBridge().execute(() -> {
-            String backend = loadNative(new File(dir, "config.json").getAbsolutePath());
+            String backend = loadNative(new File(dir, "config.json").getAbsolutePath(), useGpu);
             if (backend.isEmpty()) { call.reject("Native MNN could not load the model."); return; }
             JSObject result = new JSObject();
             result.put("backend", backend);
@@ -123,10 +157,12 @@ public class NativeMnnPlugin extends Plugin {
 
     /** The in-flight download's catch block deletes the partial directory. */
     @PluginMethod
-    public void cancelDownload(PluginCall call) { downloadCancelled = true; call.resolve(); }
+    public void cancelDownload(PluginCall call) {
+        if (rejectIfUnavailable(call)) return; downloadCancelled = true; call.resolve(); }
 
     @PluginMethod
     public void getModelSize(PluginCall call) {
+        if (rejectIfUnavailable(call)) return;
         File dir = modelDirectory(call.getString("modelId", ""));
         if (dir == null) { call.reject("Unsupported native MNN model"); return; }
         JSObject result = new JSObject();
@@ -135,7 +171,11 @@ public class NativeMnnPlugin extends Plugin {
     }
 
     @PluginMethod
-    public void unload(PluginCall call) { unloadNative(); call.resolve(); }
+    public void unload(PluginCall call) {
+        if (rejectIfUnavailable(call)) return;
+        unloadNative();
+        call.resolve();
+    }
 
     private static long treeSize(File file) {
         File[] children = file.listFiles();

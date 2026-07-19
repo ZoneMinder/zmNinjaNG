@@ -32,7 +32,17 @@ describe('NativeMnnProvider', () => {
 
     await expect(provider.chat([{ role: 'user', text: 'How many events?' }], [], 'system', new AbortController().signal))
       .resolves.toMatchObject({ text: 'Three events.', toolCalls: [] });
-    expect(nativeMnnChatMock).toHaveBeenCalledWith(MODEL_ID, expect.any(Array), ASSISTANT.nativeMnnMaxTokens);
+    // GPU is opt-in and off unless the user turned it on in Settings.
+    expect(nativeMnnChatMock).toHaveBeenCalledWith(MODEL_ID, expect.any(Array), ASSISTANT.nativeMnnMaxTokens, false);
+  });
+
+  it('passes the GPU opt-in through to the native bridge', async () => {
+    nativeMnnChatMock.mockResolvedValue(reply('{"answer":"ok"}'));
+    const provider = new NativeMnnProvider(MODEL_ID, true);
+
+    await provider.chat([{ role: 'user', text: 'hi' }], [], 'system', new AbortController().signal);
+
+    expect(nativeMnnChatMock).toHaveBeenCalledWith(MODEL_ID, expect.any(Array), ASSISTANT.nativeMnnMaxTokens, true);
   });
 
   // Without this the auto-clear check in AskPanel silently never fired on

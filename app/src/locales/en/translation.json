@@ -365,7 +365,9 @@
       "mobile_unsupported_hint": "A phone or tablet caps how much memory the app may use, and every model needs more than that to load, so it would run out of memory and crash the app. Use the Ollama backend to run the model on your own server instead.",
       "on_device_performance": "The model runs entirely on this device, on the CPU. Expect a reply to take from about half a minute to several minutes, and expect the app to be slow while it works. Under memory pressure the system may close the app mid-answer.",
       "on_device_requirements": "It downloads about 1.4 GB and holds close to 2 GB of memory while loaded. A device with at least 8 GB of RAM and a recent chip is recommended: an iPhone 15 Pro or newer, or a flagship Android from the last two or three years. On less memory it may not run at all. The GPU is used when the device supports it, and the chat says which backend is actually running.",
-      "on_device_alternative": "For faster answers, run a model on your own machine and connect to it with the Ollama backend instead."
+      "on_device_alternative": "For faster answers, run a model on your own machine and connect to it with the Ollama backend instead.",
+      "try_gpu": "Try GPU acceleration",
+      "try_gpu_desc": "On by default. If answers seem slow or the app becomes unstable, turn this off to use the processor instead."
     },
     "language": "Language",
     "select_language": "Select Language",
@@ -1308,6 +1310,7 @@
     "model_unavailable_native": "This model cannot run on your device. Choose an on-device model in Settings.",
     "english_only_notice": "The on-device model works best in English. Answers in other languages may contain more mistakes.",
     "backend_gpu": "Running on the {{backend}} GPU backend.",
-    "backend_cpu": "Running on the CPU. No usable GPU backend was found on this device, so replies will be slower."
+    "backend_cpu": "Running on the CPU. No usable GPU backend was found on this device, so replies will be slower.",
+    "backend_gpu_crashed": "The GPU backend crashed on this device, so the model now runs on the CPU. Replies will be slower. This choice is remembered."
   }
 }

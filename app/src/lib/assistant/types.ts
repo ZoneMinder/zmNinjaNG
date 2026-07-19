@@ -203,6 +203,8 @@ export type AssistantBackend = 'on-device' | 'ollama';
  *  fields for the backend NOT selected are simply unused by the resulting
  *  provider, so callers can always populate all of them from settings. */
 export interface ProviderConfig {
+  /** Opt in to GPU inference for the on-device model (native only). */
+  tryGpu?: boolean;
   backend: AssistantBackend;
   /** On-device model id (providers/webllm.ts), e.g. `Qwen2.5-3B-Instruct-q4f16_1-MLC`. */
   modelId: string;

@@ -369,6 +369,29 @@ export function AssistantSection({
                     no GPU backend; MNN's backend_type defaults to "cpu"), so
                     this warns about RAM and chip speed rather than the GPU,
                     which does not participate. */}
+                {/* iOS only: Android compiles no GPU backend, because both
+                    OpenCL and Vulkan measured worse than its CPU (one crashing
+                    outright), so a toggle there would promise something that
+                    cannot happen. Metal on iOS does work, so this is on by
+                    default and the toggle exists to turn it OFF: MNN's docs
+                    report GPU trailing CPU for LLM in general, and this has not
+                    been timed against the CPU on Apple hardware. A device that
+                    crashes on the GPU falls back permanently and says so. */}
+                {nativeMnn && Platform.isIOS && (
+                  <SettingsRow>
+                    <RowLabel
+                      label={t('settings.assistant.try_gpu')}
+                      desc={t('settings.assistant.try_gpu_desc')}
+                    />
+                    <Switch
+                      id="assistant-try-gpu"
+                      checked={settings.assistantTryGpu}
+                      onCheckedChange={(checked) => update('assistantTryGpu', checked)}
+                      data-testid="assistant-try-gpu-toggle"
+                    />
+                  </SettingsRow>
+                )}
+
                 {nativeMnn && (
                   <div className="px-4 py-3 space-y-1" data-testid="assistant-on-device-warning">
                     <p className="text-xs text-muted-foreground">{t('settings.assistant.on_device_performance')}</p>

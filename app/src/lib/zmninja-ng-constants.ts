@@ -557,7 +557,13 @@ export const CONTINUOUS_PLAYBACK_TOAST_DURATION_MS = 4000;
 export const ASSISTANT = {
   maxToolIterations: 6,
   maxHistoryMessages: 40,
-  maxHistoryCharacters: 6000,
+  // Sized against the context window, which is 8192: the system prompt and
+  // tool catalog take ~1870 tokens and generation reserves 2048, leaving room
+  // for roughly 15000 characters of history. The previous 6000 was inherited
+  // from when the window was believed to be 4096, and with tool results now
+  // ~2750 characters each it fit barely two of them before it began discarding
+  // the conversation mid-turn.
+  maxHistoryCharacters: 12000,
   // Ceiling on ONE tool result. The value is inherited (it arrived paired with
   // maxHistoryCharacters, with no derivation) and is not a measured fit: a full
   // 25-row list_events came to 7430 characters and blew straight past it, and
@@ -579,13 +585,15 @@ export const ASSISTANT = {
   // as scratch-work, leaving nothing to parse. That is the parse-error path
   // this budget exists to avoid; it is not a general context-size knob.
   //
-  // Bounded by the model's declared context window, NOT chosen freely: the
-  // system prompt plus tool catalog plus few-shot block measures around 1900
-  // tokens before any history, so a 3072 budget promised more room than the
-  // 4096 window has. `assistant/__tests__/agent.test.ts` asserts that prompt
-  // floor plus this budget still fits, so raising one without checking the
-  // other fails a test instead of silently truncating generation on-device.
-  nativeMnnMaxTokens: 2048,
+  // Bounded by what the DEVICE can deliver, not by what the window allows. A
+  // Pixel 8 decodes this model at roughly 10-20 tokens/second on the CPU (both
+  // GPU backends measured worse, see native_mnn_jni.cpp), so 2048 tokens is
+  // two to three minutes of generation for a single answer, and a reasoning
+  // model will use every token it is given. At 1024 a turn lands closer to a
+  // minute. Nothing enforces this but the number itself: MNN checks its
+  // timeout after prefill only, never during decode, so an oversized budget is
+  // not interruptible, it is simply a long wait.
+  nativeMnnMaxTokens: 1024,
   // Attempts a WebLLM turn gets to produce parseable output before the panel
   // shows the parse-error apology. Small models occasionally emit degenerate
   // output (an empty ```code fence```, a blank, or non-JSON prose); sampling is

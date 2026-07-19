@@ -30,16 +30,62 @@ describe('truncateHistory', () => {
     expect(out[0].role).not.toBe('tool');
   });
 
-  it('keeps recent messages within the character budget', () => {
+  // Trimming drops the oldest messages, and in a multi-tool turn the oldest
+  // message is the user's question. "Summarize today" made two tool calls and
+  // left the model holding results with no idea what had been asked.
+  it('never drops the question being answered, however tight the budget', () => {
+    const bulky = 'x'.repeat(5000);
     const out = truncateHistory(
       [
-        { role: 'user', text: 'old '.repeat(100) },
+        { role: 'user', text: 'summarize today' },
+        { role: 'assistant', toolCalls: [{ id: 'c1', name: 'list_events', input: {} }] },
+        { role: 'tool', toolResults: [{ callId: 'c1', output: bulky }] },
+        { role: 'assistant', toolCalls: [{ id: 'c2', name: 'count_events', input: {} }] },
+        { role: 'tool', toolResults: [{ callId: 'c2', output: bulky }] },
+      ],
+      40,
+      6000,
+    );
+
+    expect(out.some((m) => m.text === 'summarize today')).toBe(true);
+  });
+
+  // A realistic daily summary: three tool calls, each returning a full-size
+  // list_events payload, must still fit whole.
+  it('holds a three-tool turn with full-size results inside the budget', () => {
+    const result = JSON.stringify({
+      events: Array.from({ length: ASSISTANT.maxListEventsLimit }, (_, i) => ({
+        id: String(i), monitor: 'Garage Outdoor', start: '2026-07-19 07:17:21', durationSec: 12.5, objects: ['person'],
+      })),
+    });
+    const history: AssistantMessage[] = [{ role: 'user', text: 'summarize today' }];
+    for (const name of ['list_events', 'count_events', 'get_server_health']) {
+      history.push({ role: 'assistant', toolCalls: [{ id: name, name, input: {} }] });
+      history.push({ role: 'tool', toolResults: [{ callId: name, output: result }] });
+    }
+
+    const out = truncateHistory(history, ASSISTANT.maxHistoryMessages, ASSISTANT.maxHistoryCharacters);
+
+    expect(out).toHaveLength(history.length);
+  });
+
+  it('keeps recent messages within the character budget, dropping older ones', () => {
+    const out = truncateHistory(
+      [
+        { role: 'user', text: 'the question' },
+        { role: 'assistant', text: 'old '.repeat(100) },
         { role: 'assistant', text: 'recent' },
       ],
       40,
       100,
     );
-    expect(out).toEqual([{ role: 'assistant', text: 'recent' }]);
+
+    // The bulky middle turn is dropped; the question is pinned regardless of
+    // budget (see the test above), so it stays alongside the recent message.
+    expect(out).toEqual([
+      { role: 'user', text: 'the question' },
+      { role: 'assistant', text: 'recent' },
+    ]);
   });
 });
 

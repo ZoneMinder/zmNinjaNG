@@ -365,7 +365,9 @@
       "mobile_unsupported_hint": "Un teléfono o tablet limita la memoria que la app puede usar, y cada modelo necesita más para cargarse, por lo que se quedaría sin memoria y la app se cerraría. Usa el backend de Ollama para ejecutar el modelo en tu propio servidor.",
       "on_device_performance": "El modelo se ejecuta por completo en este dispositivo, en la CPU. Una respuesta puede tardar desde medio minuto hasta varios minutos, y la aplicación irá lenta mientras trabaja. Si falta memoria, el sistema puede cerrar la aplicación a mitad de la respuesta.",
       "on_device_requirements": "Descarga unos 1,4 GB y ocupa casi 2 GB de memoria mientras está cargado. Se recomienda un dispositivo con al menos 8 GB de RAM y un chip reciente: un iPhone 15 Pro o posterior, o un Android de gama alta de los últimos dos o tres años. Con menos memoria puede que no funcione. Se usa la GPU si el dispositivo lo permite, y el chat indica qué backend se está usando realmente.",
-      "on_device_alternative": "Para respuestas más rápidas, ejecuta un modelo en tu propio equipo y conéctate mediante el backend de Ollama."
+      "on_device_alternative": "Para respuestas más rápidas, ejecuta un modelo en tu propio equipo y conéctate mediante el backend de Ollama.",
+      "try_gpu": "Probar aceleración por GPU",
+      "try_gpu_desc": "Activado por defecto. Si las respuestas parecen lentas o la aplicación se vuelve inestable, desactívalo para usar el procesador."
     },
     "language": "Idioma",
     "select_language": "Seleccionar Idioma",
@@ -1308,6 +1310,7 @@
     "model_unavailable_native": "Este modelo no funciona en tu dispositivo. Elige un modelo del dispositivo en Ajustes.",
     "english_only_notice": "El modelo del dispositivo funciona mejor en inglés. Las respuestas en otros idiomas pueden tener más errores.",
     "backend_gpu": "Ejecutándose en el backend de GPU {{backend}}.",
-    "backend_cpu": "Ejecutándose en la CPU. No se encontró un backend de GPU utilizable en este dispositivo, así que las respuestas serán más lentas."
+    "backend_cpu": "Ejecutándose en la CPU. No se encontró un backend de GPU utilizable en este dispositivo, así que las respuestas serán más lentas.",
+    "backend_gpu_crashed": "El backend de GPU falló en este dispositivo, así que el modelo se ejecuta ahora en la CPU. Las respuestas serán más lentas. Esta decisión se recuerda."
   }
 }

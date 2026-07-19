@@ -36,5 +36,5 @@ export function getAssistantProvider(config: ProviderConfig): AssistantProvider 
   if (config.backend === 'ollama') {
     return new OpenAiProvider({ baseUrl: config.ollamaBaseUrl, model: config.ollamaModel, apiKey: config.apiKey });
   }
-  return Platform.isNative ? new NativeMnnProvider(config.modelId) : new WebLlmProvider(config.modelId);
+  return Platform.isNative ? new NativeMnnProvider(config.modelId, config.tryGpu) : new WebLlmProvider(config.modelId);
 }

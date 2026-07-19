@@ -223,6 +223,16 @@ export interface ProfileSettings {
   // secureStorage under `${ASSISTANT.apiKeyStoragePrefix}${profileId}`.
   assistantEnabled: boolean;
   assistantBackend: AssistantBackend;
+  /** Use the GPU for on-device inference where one is available.
+   *
+   *  ON by default, which in practice means iOS/Metal: Android compiles no GPU
+   *  backend at all (both measured worse than its CPU, one crashing outright),
+   *  so this is inert there. Metal is the GPU path MNN supports best; it is the
+   *  only backend with flash-attention support, and it loaded and ran correctly
+   *  on device. Turning it off falls back to the CPU, and a device that crashes
+   *  on the GPU falls back permanently by itself (see the marker file in
+   *  native/mnn-runtime-config.h). */
+  assistantTryGpu: boolean;
   assistantModelId: string;
   assistantOllamaBaseUrl: string;
   assistantOllamaModel: string;
@@ -355,6 +365,7 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   hoverPreviewPlaybackRate: DEFAULT_HOVER_PREVIEW_PLAYBACK_RATE,
   assistantEnabled: false,
   assistantBackend: 'on-device',
+  assistantTryGpu: true,
   assistantModelId: ASSISTANT.defaultModelId,
   assistantOllamaBaseUrl: ASSISTANT.defaultOllamaBaseUrl,
   assistantOllamaModel: '',

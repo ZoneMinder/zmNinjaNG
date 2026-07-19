@@ -106,6 +106,15 @@ export function truncateHistory(history: AssistantMessage[], max: number, maxCha
     characters += size;
   }
   while (tail.length && tail[0].role === 'tool') tail.shift();
+
+  // The question being answered must survive its own turn. Trimming drops the
+  // OLDEST messages, and in a turn that calls more than one tool the oldest
+  // message is the user's question: "summarize today" made two calls and left
+  // the model holding tool results with no idea what had been asked. Pinning it
+  // costs one short message and is the difference between an answer and a guess.
+  const lastUser = [...history].reverse().find((message) => message.role === 'user');
+  if (lastUser && !tail.includes(lastUser)) tail.unshift(lastUser);
+
   return tail;
 }
 

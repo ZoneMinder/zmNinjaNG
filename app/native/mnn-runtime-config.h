@@ -21,8 +21,11 @@
 // of them. See ZMNINJA_MNN_GPU_BACKEND in each bridge.
 #pragma once
 
+#include <cstdio>
 #include <memory>
 #include <string>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include <MNN/Interpreter.hpp>
 #include <MNN/expr/Executor.hpp>
@@ -93,4 +96,35 @@ inline const char* zmninjaMnnBackendName(MNNForwardType type) {
         case MNN_FORWARD_VULKAN: return "vulkan";
         default: return "cpu";
     }
+}
+
+/**
+ * A GPU backend can take the whole process down rather than failing a call: on
+ * a Pixel 8 the OpenCL attention kernel did not compile and MNN dereferenced
+ * the resulting null KernelWrap inside model loading, so the app died with
+ * SIGSEGV. There is nothing to catch in-process, which means the only way to
+ * survive it is to notice, afterwards, that we never came back.
+ *
+ * So a marker file is written next to the model BEFORE a GPU load is attempted
+ * and removed once that load returns. If it is still there on the next attempt,
+ * the previous attempt never finished: the GPU killed us, and this device gets
+ * CPU from now on. The file persists across launches, so the decision sticks
+ * without shipping a per-device blocklist we could never keep accurate.
+ */
+inline std::string zmninjaMnnGpuMarkerPath(const std::string& modelDirectory) {
+    return modelDirectory + "/gpu-attempt.marker";
+}
+
+inline bool zmninjaMnnGpuCrashedBefore(const std::string& modelDirectory) {
+    struct stat info;
+    return stat(zmninjaMnnGpuMarkerPath(modelDirectory).c_str(), &info) == 0;
+}
+
+inline void zmninjaMnnMarkGpuAttempt(const std::string& modelDirectory) {
+    FILE* marker = fopen(zmninjaMnnGpuMarkerPath(modelDirectory).c_str(), "w");
+    if (marker != nullptr) fclose(marker);
+}
+
+inline void zmninjaMnnClearGpuAttempt(const std::string& modelDirectory) {
+    unlink(zmninjaMnnGpuMarkerPath(modelDirectory).c_str());
 }
