@@ -17,7 +17,7 @@
 import { useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useProfileStore } from '../stores/profile';
-import { useSettingsStore, DEFAULT_SETTINGS } from '../stores/settings';
+import { useSettingsStore, mergeProfileSettings } from '../stores/settings';
 import type { Profile } from '../api/types';
 import type { ProfileSettings } from '../stores/settings';
 
@@ -65,9 +65,12 @@ export function useCurrentProfile(): UseCurrentProfileReturn {
     useShallow((state) => state.profileSettings?.[currentProfileId ?? ''])
   );
 
-  // Merge with defaults in useMemo - only recreates when rawProfileSettings changes
+  // Merge with defaults in useMemo - only recreates when rawProfileSettings
+  // changes. Goes through mergeProfileSettings (not a raw spread) so native
+  // profiles get coerced off the on-device backend here too, since this is the
+  // reactive path the assistant chat and header actually read (refs #246).
   const settings = useMemo(
-    (): ProfileSettings => ({ ...DEFAULT_SETTINGS, ...rawProfileSettings }),
+    (): ProfileSettings => mergeProfileSettings(rawProfileSettings),
     [rawProfileSettings]
   );
 

@@ -322,4 +322,14 @@ describe('assistant backend migration for mobile', () => {
       assistantOllamaModel: 'llama3.2',
     });
   });
+
+  it('coerces a native profile that only inherits on-device from the default', () => {
+    // The migration rewrites profiles that already STORED 'on-device'. A newly
+    // created profile stores no backend and inherits the default, which the
+    // migration never sees, so the merge itself must coerce it (refs #246).
+    isNative = true;
+    const s = useSettingsStore.getState().getProfileSettings('brand-new');
+    expect(s.assistantBackend).toBe('ollama');
+    isNative = false;
+  });
 });

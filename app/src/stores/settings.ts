@@ -376,6 +376,27 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
 };
 
 /**
+ * Merge a profile's stored (partial) settings over the defaults. The single
+ * resolver for every consumer, reactive (`useCurrentProfile`) and imperative
+ * (`getProfileSettings`) alike, so the coercions below apply everywhere.
+ *
+ * On-device (WebGPU/WebLLM) has no runtime on phones/tablets, so a native
+ * profile must never sit on it: the chat would read 'on-device', find no
+ * runtime, and report "not configured" even though Settings only exposes Ollama
+ * there. moveNativeOffOnDevice() rewrites profiles that already stored
+ * 'on-device'; this also covers ones that only inherit it from the default
+ * merged in here. Platform.isNative is read at call time, not module load, to
+ * avoid a temporal-dead-zone on the mocked Platform in tests (refs #246).
+ */
+export function mergeProfileSettings(raw: Partial<ProfileSettings> | undefined): ProfileSettings {
+  const merged = { ...DEFAULT_SETTINGS, ...raw };
+  if (Platform.isNative && merged.assistantBackend === 'on-device') {
+    merged.assistantBackend = 'ollama';
+  }
+  return merged;
+}
+
+/**
  * Persisted shape version. BUMP THIS whenever `ASSISTANT.retiredModelIds`
  * gains an entry: zustand only calls `migrate` when the stored version is below
  * this number, so a retirement added without a bump never reaches anyone who
@@ -490,20 +511,7 @@ export const useSettingsStore = create<SettingsState>()(
     (set, get) => ({
       profileSettings: {},
 
-      getProfileSettings: (profileId) => {
-        const settings = get().profileSettings[profileId];
-        const merged = { ...DEFAULT_SETTINGS, ...settings };
-        // On-device (WebGPU/WebLLM) has no runtime on phones/tablets, so a
-        // native profile must never sit on it: the chat would read 'on-device',
-        // find no runtime, and report "not configured" even though Settings
-        // only exposes Ollama there. moveNativeOffOnDevice() rewrites profiles
-        // that already stored 'on-device'; this also covers ones created after
-        // migration and the default merged in above (refs #246).
-        if (Platform.isNative && merged.assistantBackend === 'on-device') {
-          merged.assistantBackend = 'ollama';
-        }
-        return merged;
-      },
+      getProfileSettings: (profileId) => mergeProfileSettings(get().profileSettings[profileId]),
 
       updateProfileSettings: (profileId, updates) => {
         set((state) => ({
