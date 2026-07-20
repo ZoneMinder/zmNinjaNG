@@ -1,7 +1,10 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSettingsStore, ALL_GROUPS_KEY, migrateSettings, SETTINGS_VERSION } from '../settings';
 import type { ProfileSettings } from '../settings';
 import { ASSISTANT } from '../../lib/zmninja-ng-constants';
+
+let isNative = false;
+vi.mock('../../lib/platform', () => ({ Platform: { get isNative() { return isNative; } } }));
 
 describe('Settings Store', () => {
   beforeEach(() => {
@@ -100,9 +103,12 @@ describe('assistant settings defaults', () => {
     expect(s.assistantModelId).toBe(ASSISTANT.defaultModelId);
   });
 
-  it('defaults the ollama backend fields to the local Ollama address and no model', () => {
+  it('leaves the ollama backend fields unset so the URL can fall back to the ZoneMinder host', () => {
     const s = useSettingsStore.getState().getProfileSettings('new-profile');
-    expect(s.assistantOllamaBaseUrl).toBe(ASSISTANT.defaultOllamaBaseUrl);
+    // Deliberately empty rather than localhost: an unset URL is resolved
+    // against the profile's own ZoneMinder host at use time, and localhost
+    // would mean the phone itself on mobile.
+    expect(s.assistantOllamaBaseUrl).toBe('');
     expect(s.assistantOllamaModel).toBe('');
   });
 });
@@ -210,21 +216,21 @@ describe('settings migration v0 -> v1', () => {
       const migrated = migrateSettings(persisted, 1) as {
         profileSettings: Record<string, ProfileSettings>;
       };
-      expect(migrated.profileSettings['profile-a'].assistantModelId).toBe('Qwen3-1.7B-q4f16_1-MLC');
+      expect(migrated.profileSettings['profile-a'].assistantModelId).toBe('Llama-3.2-3B-Instruct-q4f16_1-MLC');
       expect(migrated.profileSettings['profile-a'].theme).toBe('dark');
     });
 
     it('leaves a still-listed model id alone', () => {
       const persisted = {
         profileSettings: {
-          'profile-a': { assistantModelId: 'Llama-3.2-1B-Instruct-q4f16_1-MLC' },
+          'profile-a': { assistantModelId: 'Llama-3.2-3B-Instruct-q4f16_1-MLC' },
         },
       };
       const migrated = migrateSettings(persisted, 1) as {
         profileSettings: Record<string, ProfileSettings>;
       };
       expect(migrated.profileSettings['profile-a'].assistantModelId).toBe(
-        'Llama-3.2-1B-Instruct-q4f16_1-MLC',
+        'Llama-3.2-3B-Instruct-q4f16_1-MLC',
       );
     });
 
@@ -238,7 +244,7 @@ describe('settings migration v0 -> v1', () => {
         profileSettings: Record<string, ProfileSettings>;
       };
       // Both steps ran: the v0 reshape AND the v2 id rewrite.
-      expect(migrated.profileSettings['profile-a'].assistantModelId).toBe('Qwen3-1.7B-q4f16_1-MLC');
+      expect(migrated.profileSettings['profile-a'].assistantModelId).toBe('Llama-3.2-3B-Instruct-q4f16_1-MLC');
       expect(migrated.profileSettings['profile-a'].montageByGroup[ALL_GROUPS_KEY].gridCols).toBe(3);
     });
 
@@ -262,7 +268,7 @@ describe('settings migration v0 -> v1', () => {
         profileSettings: Record<string, ProfileSettings>;
       };
       expect(migrated.profileSettings['profile-a'].assistantModelId).toBe(
-        'Llama-3.2-1B-Instruct-q4f16_1-MLC',
+        'Llama-3.2-3B-Instruct-q4f16_1-MLC',
       );
     });
 
@@ -282,6 +288,38 @@ describe('settings migration v0 -> v1', () => {
         expect(listed.has(replacement), `${retired} -> ${replacement}`).toBe(true);
         expect(listed.has(retired), `${retired} is retired, so must not be listed`).toBe(false);
       }
+    });
+  });
+});
+
+// On-device now means WebGPU, which phones do not have: the native runtime
+// that used to back it was removed. Hiding the option in Settings does nothing
+// for a profile that already stored it, so the value itself is corrected.
+describe('assistant backend migration for mobile', () => {
+  it('moves a phone profile off on-device', () => {
+    isNative = true;
+    const persisted = { profileSettings: { 'profile-a': { assistantBackend: 'on-device' } } };
+
+    const migrated = migrateSettings(persisted, 1) as { profileSettings: Record<string, ProfileSettings> };
+    expect(migrated.profileSettings['profile-a'].assistantBackend).toBe('ollama');
+  });
+
+  it('leaves desktop alone, where on-device still works', () => {
+    isNative = false;
+    const persisted = { profileSettings: { 'profile-a': { assistantBackend: 'on-device' } } };
+
+    const migrated = migrateSettings(persisted, 1) as { profileSettings: Record<string, ProfileSettings> };
+    expect(migrated.profileSettings['profile-a'].assistantBackend).toBe('on-device');
+  });
+
+  it('leaves an Ollama profile untouched on a phone', () => {
+    isNative = true;
+    const persisted = { profileSettings: { 'profile-a': { assistantBackend: 'ollama', assistantOllamaModel: 'llama3.2' } } };
+
+    const migrated = migrateSettings(persisted, 1) as { profileSettings: Record<string, ProfileSettings> };
+    expect(migrated.profileSettings['profile-a']).toMatchObject({
+      assistantBackend: 'ollama',
+      assistantOllamaModel: 'llama3.2',
     });
   });
 });

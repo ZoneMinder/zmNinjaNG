@@ -42,7 +42,7 @@ The **playback speed** control (0.5x, 1x, 1.5x, 2x, 4x) sets how fast an event p
 
 ## Assistant
 
-Enable and configure the on-device chat assistant ("Ask"), which answers questions about your cameras and events and can change monitor or event state after you confirm each action. See {doc}`assistant` for the full guide, including how confirmation works and what stays on-device.
+Enable and configure Ninjii, the chat assistant that answers questions about your cameras and events. It is read-only: it can look things up and take you to a screen, and cannot arm a monitor, change the run state, or delete an event. The model runs either on your device or on an Ollama server you run yourself. See {doc}`assistant` for the full guide, including the backend choice, the advanced dials, and what stays on your device.
 
 ## Hidden Monitors
 

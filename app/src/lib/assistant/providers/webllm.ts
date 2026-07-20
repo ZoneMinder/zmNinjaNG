@@ -24,11 +24,12 @@
  * unit-test without WebGPU; only `WebLlmProvider.chat` touches the engine.
  */
 import type { ChatCompletionMessageParam } from '@mlc-ai/web-llm';
-import type { AssistantProvider, AssistantMessage, AssistantTurn, ToolDefinition } from '../types';
+import type { AssistantProvider, AssistantMessage, AssistantTurn, CompletionResult, ToolDefinition } from '../types';
 import { ASSISTANT } from '../../zmninja-ng-constants';
 import { log, LogLevel } from '../../logger';
 import { getLoadedEngine } from '../model-download';
 import { toTokenUsage } from './usage';
+import { captureExchange } from '../exchange';
 
 /** i18n-free (rule 5): AskPanel resolves this sentinel via `t()`, same as
  *  agent.ts's iteration-cap message. */
@@ -36,27 +37,30 @@ const PARSE_ERROR_TEXT = '__i18n:assistant.parse_error';
 
 /** One compact signature line per tool instead of a raw `JSON.stringify` of
  *  its JSON Schema. A 2B on-device model does not reliably parse nested
- *  schema objects, and the full dump for all 16 registry tools costs on the
- *  order of a thousand tokens of a 4096 window on EVERY turn. The argument
+ *  schema objects, and the full dump for every registry tool costs hundreds
+ *  of tokens of a 4096 window on EVERY turn. The argument
  *  names, their types (or enum values, which carry real meaning for inputs
  *  like `range`), and the required/optional distinction are the only parts
  *  the model actually needs; the prose description carries the rest. */
 function describeTool(tool: ToolDefinition): string {
   const schema = tool.schema as {
-    properties?: Record<string, { type?: string; enum?: readonly unknown[]; items?: { type?: string } }>;
+    properties?: Record<string, { type?: string | string[]; enum?: readonly unknown[]; items?: { type?: string } }>;
     required?: string[];
   };
   const required = new Set(schema.required ?? []);
-  const args = Object.entries(schema.properties ?? {}).map(([name, spec]) => {
-    const type = Array.isArray(spec?.enum)
-      ? spec.enum.map(String).join('|')
-      : spec?.type === 'array'
-        // "array" alone leaves the model guessing what goes in it; eventIds is
-        // the one that matters, and "string[]" is the whole answer.
-        ? `${spec.items?.type ?? 'string'}[]`
-        : (spec?.type ?? 'string');
-    return `${name}${required.has(name) ? '' : '?'}: ${type}`;
-  });
+  const describeType = (spec: { type?: string | string[]; enum?: readonly unknown[]; items?: { type?: string } }): string => {
+    if (Array.isArray(spec?.enum)) return spec.enum.map(String).join('|');
+    // "array" alone leaves the model guessing what goes in it; eventIds is the
+    // one that matters, and "string[]" is the whole answer. A property
+    // accepting several types (objectType) shows all of them, or the envelope
+    // paths are told "string" while the prompt asks for a list.
+    const one = (t: string) => (t === 'array' ? `${spec.items?.type ?? 'string'}[]` : t);
+    if (Array.isArray(spec?.type)) return spec.type.map(one).join('|');
+    return one(spec?.type ?? 'string');
+  };
+  const args = Object.entries(schema.properties ?? {}).map(
+    ([name, spec]) => `${name}${required.has(name) ? '' : '?'}: ${describeType(spec)}`,
+  );
   return `- ${tool.name}(${args.join(', ')}): ${tool.description}`;
 }
 
@@ -86,6 +90,16 @@ function buildToolCatalog(tools: ToolDefinition[]): string {
  *  monitors" summary question, so example 1 demonstrates exactly that call.
  *  Example 2 covers a no-argument tool plus a direct, non-tool answer.
  *
+ *  The example's DATA must never look like it could be real. This block used
+ *  plausible monitor names ("Front Door", "Garage") with plausible counts, and
+ *  llama3.2 answered "summarize today" with "There were 12 events on Front
+ *  Door, and 3 events on Garage today": the example's own numbers, presented
+ *  as this installation's data, without calling a tool at all. Hence the
+ *  shouty placeholder names, counts too small to look like a real day, and the
+ *  disclaimer turn that follows: a name the user could actually own must never
+ *  appear here, both because the model repeats it and because seeing an
+ *  invented camera named like one of theirs is indistinguishable from a bug.
+ *
  *  These are model-facing only (never rendered in the UI), so they are
  *  exempt from i18n (rule 5). They must use tool names that are real in the
  *  registry (`readOnlyTools` in tools-readonly.ts: `count_events`,
@@ -100,12 +114,21 @@ function buildFewShotExamples(): ChatCompletionMessageParam[] {
     { role: 'assistant', content: '{"tool": "count_events", "input": {"interval": "1 day"}}' },
     {
       role: 'user',
-      content: 'Tool result:\n[{"monitor":"Front Door","count":12},{"monitor":"Garage","count":3}]',
+      content: 'Tool result:\n[{"monitor":"EXAMPLE_MONITOR_A","count":2},{"monitor":"EXAMPLE_MONITOR_B","count":1}]',
     },
     {
       role: 'assistant',
-      content: '{"answer": "There were 15 events today: 12 on Front Door and 3 on Garage."}',
+      content: '{"answer": "There were 3 events today: 2 on EXAMPLE_MONITOR_A and 1 on EXAMPLE_MONITOR_B."}',
     },
+    {
+      role: 'user',
+      content:
+        'The exchange above is a FORMAT EXAMPLE. EXAMPLE_MONITOR_A and EXAMPLE_MONITOR_B are not real ' +
+        'monitors and those counts are not real data. Never repeat any name or number from it. This ' +
+        'installation\'s real monitors come only from list_monitors, and real counts only from a tool result ' +
+        'in this conversation.',
+    },
+    { role: 'assistant', content: '{"answer": "Understood. I will use only real tool results."}' },
   ];
 }
 
@@ -192,7 +215,7 @@ export function buildWebLlmMessages(
 /** Strips a reasoning model's chain-of-thought from `content` before JSON
  *  extraction runs.
  *
- *  Keyed on the CLOSING `</think>`, not the opening tag: Qwen3.5 under MNN
+ *  Keyed on the CLOSING `</think>`, not the opening tag: some reasoning models
  *  emits an unbalanced block, because its chat template puts the opening
  *  `<think>` into the generation prompt itself when thinking is enabled. The
  *  model therefore starts generating mid-thought and the only tag in its
@@ -223,7 +246,7 @@ function stripThinkBlock(content: string): string {
 function extractReasoning(content: string): string | undefined {
   const closeIndex = content.indexOf('</think>');
   const openIndex = content.indexOf('<think>');
-  // Qwen under MNN emits only the closing tag: the template opens the block in
+  // Some reasoning models emit only the closing tag: the template opens it in
   // the prompt, so reasoning runs from the start of the reply to `</think>`.
   const start = openIndex !== -1 && (closeIndex === -1 || openIndex < closeIndex) ? openIndex + '<think>'.length : 0;
   const end = closeIndex === -1 ? content.length : closeIndex;
@@ -240,7 +263,7 @@ function extractJsonPayload(content: string): string {
   return fenced ? fenced[1] : trimmed;
 }
 
-/** Qwen3 MNN occasionally appends one extra quote before a final object
+/** A small model occasionally appends one extra quote before a final object
  *  brace (`{"answer":"...""}`). Recover that exact, otherwise complete,
  *  response without accepting arbitrary malformed JSON. */
 function parseJson(content: string): unknown {
@@ -299,6 +322,62 @@ function extractBalancedJsonObjects(content: string): string[] {
   return objects;
 }
 
+/** Every `{"tool": ...}` object embedded anywhere in `content`, balanced from
+ *  its own opening brace instead of from the top level.
+ *
+ *  Once a tool result lands in the history, gemma-2-2b re-emits the call it
+ *  already made wrapped in the answer shape:
+ *  `{"answer": "{"tool": "list_events", "input": {...}}"}`, sometimes with the
+ *  inner object inside a code fence as well. Those inner quotes are not
+ *  escaped, so the reply is invalid JSON at every level: neither
+ *  `extractJsonPayload` nor `extractBalancedJsonObjects` yields anything
+ *  parseable and all three attempts burn on the same shape before the turn
+ *  dies with a parse error. The inner object alone IS valid JSON, so
+ *  recovering it turns a dead turn into the call the model meant, which the
+ *  duplicate-call guard in `agent.ts` then answers out of the results already
+ *  in hand.
+ *
+ *  Searched only after the well-formed candidates, so a genuine answer that
+ *  quotes an envelope (`{"answer": "call {\"tool\": ...} to list them"}`)
+ *  parses as the answer it is and never reaches here. */
+function extractToolEnvelopes(content: string): string[] {
+  const envelopes: string[] = [];
+  for (const match of content.matchAll(/\{\s*"tool"\s*:/g)) {
+    const object = balancedObjectAt(content, match.index);
+    if (object) envelopes.push(object);
+  }
+  return envelopes;
+}
+
+/** The balanced `{...}` substring starting at `start`, or `undefined` if the
+ *  braces never close. String-aware for the same reason
+ *  `extractBalancedJsonObjects` is: a `}` inside a value must not end it. */
+function balancedObjectAt(content: string, start: number): string | undefined {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < content.length; i++) {
+    const ch = content[i];
+
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+
+    if (ch === '"') inString = true;
+    else if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) return content.slice(start, i + 1);
+    }
+  }
+
+  return undefined;
+}
+
 /** The parsed value as an `AssistantTurn`, or `undefined` if it matches
  *  neither contract shape. Used to sift the candidates above. */
 function toTurn(parsed: unknown): AssistantTurn | undefined {
@@ -309,8 +388,24 @@ function toTurn(parsed: unknown): AssistantTurn | undefined {
     const input = obj.input !== null && typeof obj.input === 'object' ? (obj.input as Record<string, unknown>) : {};
     return { toolCalls: [{ id: crypto.randomUUID(), name: obj.tool, input }] };
   }
-  if (typeof obj.answer === 'string') return { text: obj.answer, toolCalls: [] };
+  if (typeof obj.answer === 'string') {
+    // The same confusion as `extractToolEnvelopes` describes, but with the
+    // inner quotes escaped, so the reply parses and the tool call would
+    // otherwise be shown to the user as raw JSON prose.
+    const nested = tryParseTurn(obj.answer);
+    if (nested?.toolCalls.length) return nested;
+    return { text: obj.answer, toolCalls: [] };
+  }
   return undefined;
+}
+
+/** `toTurn(JSON.parse(text))` without the throw, for the nested case above. */
+function tryParseTurn(text: string): AssistantTurn | undefined {
+  try {
+    return toTurn(parseJson(extractJsonPayload(text)));
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -354,7 +449,11 @@ export function parseWebLlmTurn(content: string): AssistantTurn {
   // exactly that; then each embedded object, for a reply wrapped in prose.
   // The first candidate that matches the contract wins, so a brace pair the
   // model wrote mid-sentence is skipped rather than accepted as the answer.
-  for (const candidate of [extractJsonPayload(stripped), ...extractBalancedJsonObjects(stripped)]) {
+  for (const candidate of [
+    extractJsonPayload(stripped),
+    ...extractBalancedJsonObjects(stripped),
+    ...extractToolEnvelopes(stripped),
+  ]) {
     let parsed: unknown;
     try {
       parsed = parseJson(candidate);
@@ -384,9 +483,37 @@ export class WebLlmProvider implements AssistantProvider {
    *  know a window we didn't set. */
   readonly contextWindow?: number;
 
-  constructor(modelId: string) {
+  private readonly temperature: number;
+
+  constructor(modelId: string, temperature?: number) {
     this.modelId = modelId;
+    this.temperature = temperature ?? ASSISTANT.assistantTemperature;
     this.contextWindow = ASSISTANT.webllmModels.find((m) => m.id === modelId)?.contextWindowSize;
+  }
+
+  /** Bare system + user, deliberately bypassing `buildWebLlmMessages`: no tool
+   *  catalog, no few-shot, no OUTPUT_CONTRACT. See `AssistantProvider`. */
+  async complete(system: string, text: string, signal: AbortSignal): Promise<CompletionResult> {
+    if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+    const engine = await getLoadedEngine(this.modelId);
+    const messages: ChatCompletionMessageParam[] = [
+      { role: 'system', content: system },
+      { role: 'user', content: text },
+    ];
+    const startedAt = Date.now();
+    const response = await engine.chat.completions.create({
+      messages,
+      max_tokens: ASSISTANT.maxTokens,
+      temperature: this.temperature,
+    });
+    // `stripThinkBlock` via parseWebLlmTurn is not used here: the caller wants
+    // the raw words, and a reasoning model's block is handled by the caller's
+    // own keyword matching.
+    const content = response.choices[0]?.message?.content ?? '';
+    return {
+      text: content,
+      exchange: captureExchange({ backend: 'webllm', model: this.modelId, sent: messages, received: content, startedAt }),
+    };
   }
 
   async chat(
@@ -401,12 +528,14 @@ export class WebLlmProvider implements AssistantProvider {
     const chatMessages = buildWebLlmMessages(system, messages, tools, this.modelId);
 
     // Retry a degenerate/unparseable reply rather than apologizing on the first
-    // one: small models sometimes emit an empty code fence or non-JSON, and
-    // because sampling is non-deterministic (temperature > 0) a fresh attempt
-    // usually recovers. The last attempt's turn (with its `raw` content) is
-    // what surfaces if none parse (refs #246).
+    // one: small models sometimes emit an empty code fence or non-JSON. The
+    // first attempt is greedy (temperature 0) because that measured best for
+    // answer accuracy, so the retry has to raise the temperature itself: at 0
+    // the sampler would return the identical unparseable text and the attempts
+    // would be spent for nothing. The last attempt's turn (with its `raw`
+    // content) is what surfaces if none parse (refs #246).
     let turn: AssistantTurn = { text: PARSE_ERROR_TEXT, toolCalls: [] };
-    for (let attempt = 1; attempt <= ASSISTANT.webllmMaxAttempts; attempt++) {
+    for (let attempt = 1; attempt <= ASSISTANT.maxParseAttempts; attempt++) {
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
       log.assistant('Sending WebLLM chat completion request', LogLevel.DEBUG, {
         modelId: this.modelId,
@@ -414,16 +543,45 @@ export class WebLlmProvider implements AssistantProvider {
         attempt,
       });
 
+      const startedAt = Date.now();
       const response = await engine.chat.completions.create({
         messages: chatMessages,
         max_tokens: ASSISTANT.maxTokens,
+        // Raises whatever was configured rather than replacing it, so a user
+        // who chose a higher temperature does not get a LOWER one on retry.
+        temperature:
+          attempt === 1
+            ? this.temperature
+            : Math.max(this.temperature, ASSISTANT.assistantRetryTemperature),
       });
 
       const content = response.choices[0]?.message?.content ?? '';
       log.assistant('WebLLM raw response', LogLevel.DEBUG, { modelId: this.modelId, content, attempt });
 
+      // Named here or it is invisible: nothing downstream can tell a complete
+      // reply from one that stopped mid-sentence, and a cut-off JSON envelope
+      // simply fails to parse, which reads as the model being incapable rather
+      // than out of budget. The Ollama path already reported this.
+      if (response.choices[0]?.finish_reason === 'length') {
+        log.assistant('WebLLM reply hit the token cap and was truncated', LogLevel.WARN, {
+          modelId: this.modelId,
+          maxTokens: ASSISTANT.maxTokens,
+          attempt,
+        });
+      }
+
       turn = parseWebLlmTurn(content);
       turn.usage = toTokenUsage(response.usage);
+      // Captured on every attempt, including the ones that fail to parse: a
+      // retried turn is exactly when the transcript matters, and the last
+      // attempt's capture is the one that survives on `turn`.
+      turn.exchange = captureExchange({
+        backend: 'webllm',
+        model: this.modelId,
+        sent: chatMessages,
+        received: content,
+        startedAt,
+      });
       if (turn.text !== PARSE_ERROR_TEXT) return turn;
 
       // WARN (not DEBUG) so a parse failure is easy to spot without cranking the
@@ -432,7 +590,7 @@ export class WebLlmProvider implements AssistantProvider {
         modelId: this.modelId,
         content,
         attempt,
-        maxAttempts: ASSISTANT.webllmMaxAttempts,
+        maxAttempts: ASSISTANT.maxParseAttempts,
       });
     }
     return turn;

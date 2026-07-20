@@ -17,9 +17,16 @@ import { DEFAULT_SETTINGS } from '../../../stores/settings';
 import { ASSISTANT } from '../../../lib/zmninja-ng-constants';
 
 const listOpenAiModelsMock = vi.fn();
+const probeToolSupportMock = vi.fn().mockResolvedValue('supported');
 vi.mock('../../../lib/assistant/providers/openai', () => ({
   listOpenAiModels: (baseUrl: string, apiKey?: string, timeoutMs?: number) =>
     listOpenAiModelsMock(baseUrl, apiKey, timeoutMs),
+  probeToolSupport: (baseUrl: string, model: string, apiKey?: string) =>
+    probeToolSupportMock(baseUrl, model, apiKey),
+  // Not mocked away: the section uses it to derive the URL placeholder and the
+  // fallback base URL from the profile, and stubbing it would hide that.
+  suggestOllamaBaseUrl: (url: string | undefined) =>
+    url ? `http://${new URL(url).hostname}:11434/v1` : undefined,
 }));
 
 vi.mock('../../../lib/security/secureStorage', () => ({
@@ -39,11 +46,19 @@ vi.mock('../../../hooks/use-toast', () => ({
 }));
 
 describe('AssistantOllamaSection', () => {
-  const profile = { id: 'p1' } as never;
-  const settings = { ...DEFAULT_SETTINGS, assistantBackend: 'ollama' as const };
+  const profile = { id: 'p1', apiUrl: 'http://192.168.1.50/zm/api' } as never;
+  // With no URL saved, the section falls back to the profile's ZoneMinder host.
+  const OLLAMA_URL = 'http://192.168.1.50:11434/v1';
+  const settings = {
+    ...DEFAULT_SETTINGS,
+    assistantBackend: 'ollama' as const,
+    // The test button targets a model, so it stays disabled until one is set.
+    assistantOllamaModel: 'llama3.2',
+  };
 
   beforeEach(() => {
     listOpenAiModelsMock.mockReset().mockResolvedValue([]);
+    probeToolSupportMock.mockReset().mockResolvedValue('supported');
     toastMock.mockReset();
   });
 
@@ -87,7 +102,7 @@ describe('AssistantOllamaSection', () => {
       await waitFor(() => expect(button).toHaveTextContent('settings.assistant.ollama_test'));
 
       expect(listOpenAiModelsMock).toHaveBeenLastCalledWith(
-        settings.assistantOllamaBaseUrl,
+        OLLAMA_URL,
         undefined,
         ASSISTANT.testConnectionTimeoutMs,
       );
@@ -122,16 +137,69 @@ describe('AssistantOllamaSection', () => {
       fireEvent.click(button);
       await waitFor(() => expect(button).toHaveTextContent('settings.assistant.ollama_test'));
 
-      expect(toastMock).toHaveBeenCalledWith({ title: 'settings.assistant.ollama_test_ok_models' });
+      expect(toastMock).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'settings.assistant.ollama_test_ok' }),
+      );
+    });
+  });
+
+  describe('test stages', () => {
+    it('names the stage being waited on instead of a bare Testing label', async () => {
+      let release: (v: string[]) => void = () => {};
+      listOpenAiModelsMock.mockReturnValue(new Promise((r) => (release = r)));
+      // The probe never settles, so the second stage stays on screen long
+      // enough to assert on: that is the stage a real cold model sits in.
+      probeToolSupportMock.mockReturnValue(new Promise(() => {}));
+      render(<AssistantOllamaSection settings={settings} update={vi.fn()} currentProfile={profile} />);
+
+      fireEvent.click(screen.getByTestId('assistant-ollama-test'));
+      expect(screen.getByTestId('assistant-ollama-test-status')).toHaveTextContent(
+        'settings.assistant.ollama_test_connecting',
+      );
+
+      release([]);
+      await waitFor(() =>
+        expect(screen.getByTestId('assistant-ollama-test-status')).toHaveTextContent(
+          'settings.assistant.ollama_test_probing',
+        ),
+      );
+    });
+
+    it('blames the clock, not the model, when the probe times out', async () => {
+      probeToolSupportMock.mockResolvedValue('timeout');
+      render(<AssistantOllamaSection settings={settings} update={vi.fn()} currentProfile={profile} />);
+
+      fireEvent.click(screen.getByTestId('assistant-ollama-test'));
+      await waitFor(() => expect(toastMock).toHaveBeenCalled());
+      expect(toastMock).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'settings.assistant.ollama_model_timeout_title' }),
+      );
+    });
+
+    it('clears the stage line once the test finishes', async () => {
+      render(<AssistantOllamaSection settings={settings} update={vi.fn()} currentProfile={profile} />);
+
+      fireEvent.click(screen.getByTestId('assistant-ollama-test'));
+      await waitFor(() =>
+        expect(screen.queryByTestId('assistant-ollama-test-status')).not.toBeInTheDocument(),
+      );
     });
   });
 
   describe('model picker', () => {
     it('auto-fetches models on mount and shows the manual input while empty', async () => {
-      render(<AssistantOllamaSection settings={settings} update={vi.fn()} currentProfile={profile} />);
+      // No saved model either: a saved one is always offered in the dropdown,
+      // which would give the picker an entry and hide the manual input.
+      render(
+        <AssistantOllamaSection
+          settings={{ ...settings, assistantOllamaModel: '' }}
+          update={vi.fn()}
+          currentProfile={profile}
+        />,
+      );
 
       await waitFor(() =>
-        expect(listOpenAiModelsMock).toHaveBeenCalledWith(settings.assistantOllamaBaseUrl, undefined, undefined),
+        expect(listOpenAiModelsMock).toHaveBeenCalledWith(OLLAMA_URL, undefined, undefined),
       );
       expect(screen.getByTestId('assistant-ollama-model')).toBeInTheDocument();
       expect(screen.queryByTestId('assistant-ollama-model-select')).not.toBeInTheDocument();
@@ -147,7 +215,8 @@ describe('AssistantOllamaSection', () => {
 
       const select = await screen.findByTestId('assistant-ollama-model-select');
       const options = Array.from(select.querySelectorAll('option')).map((o) => o.value);
-      expect(options).toEqual(['gemma2', 'qwen2.5:3b']);
+      // The saved model is always offered, even when the server did not list it.
+      expect(options).toEqual(['gemma2', 'qwen2.5:3b', 'llama3.2']);
 
       fireEvent.change(select, { target: { value: 'gemma2' } });
       expect(update).toHaveBeenCalledWith('assistantOllamaModel', 'gemma2');

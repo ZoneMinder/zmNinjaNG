@@ -15,9 +15,6 @@
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		A88DB358838FDF0A668FC00E /* CapApp-SPM in Frameworks */ = {isa = PBXBuildFile; productRef = C711DAF4018D41AEA77227D3 /* CapApp-SPM */; };
-		E24600010000000000000001 /* MNN.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E24600010000000000000002 /* MNN.framework */; };
-		E24600010000000000000003 /* NativeMnnPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = E24600010000000000000004 /* NativeMnnPlugin.swift */; };
-		E24600010000000000000005 /* NativeMnnBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = E24600010000000000000006 /* NativeMnnBridge.mm */; };
 		DC10E70100000000000F0001 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC10E70100000000000F0003 /* NotificationService.swift */; };
 		DC10E70100000000000F0002 /* ImageNotification.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = DC10E70100000000000F0005 /* ImageNotification.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		DC31AE442F5DAA5700F5EABD /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = DC31AE432F5DAA5700F5EABD /* PrivacyInfo.xcprivacy */; };
@@ -73,10 +70,6 @@
 		DC55AA0100000000000F0006 /* X509CertInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = X509CertInfo.swift; sourceTree = "<group>"; };
 		DCEC04202EE7528400FEFD4D /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
 		F334D5C61ABB10E6E182918F /* debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = debug.xcconfig; path = ../debug.xcconfig; sourceTree = "<group>"; };
-		E24600010000000000000002 /* MNN.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = MNN.framework; sourceTree = SOURCE_ROOT; };
-		E24600010000000000000004 /* NativeMnnPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeMnnPlugin.swift; sourceTree = "<group>"; };
-		E24600010000000000000006 /* NativeMnnBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = NativeMnnBridge.mm; sourceTree = "<group>"; };
-		E24600010000000000000007 /* NativeMnnBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = NativeMnnBridge.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -85,7 +78,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				A88DB358838FDF0A668FC00E /* CapApp-SPM in Frameworks */,
-				E24600010000000000000001 /* MNN.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -136,10 +128,6 @@
 				DC4FCM0130000000000F0002 /* GoogleService-Info.plist */,
 				2FAD9762203C412B000D30F8 /* config.xml */,
 				50B271D01FEDC1A000F3C39B /* public */,
-				E24600010000000000000002 /* MNN.framework */,
-				E24600010000000000000004 /* NativeMnnPlugin.swift */,
-				E24600010000000000000006 /* NativeMnnBridge.mm */,
-				E24600010000000000000007 /* NativeMnnBridge.h */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -272,8 +260,6 @@
 				DC55AA0100000000000F0001 /* SSLTrustPlugin.swift in Sources */,
 				DC55AA0100000000000F0003 /* SafeAreaPlugin.swift in Sources */,
 				DC55AA0100000000000F0005 /* X509CertInfo.swift in Sources */,
-				E24600010000000000000003 /* NativeMnnPlugin.swift in Sources */,
-				E24600010000000000000005 /* NativeMnnBridge.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -438,7 +424,6 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				FRAMEWORK_SEARCH_PATHS = "$(inherited) $(PROJECT_DIR)";
-				SWIFT_OBJC_BRIDGING_HEADER = "App/NativeMnnBridge.h";
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				MARKETING_VERSION = 1.4.0;
 				OTHER_SWIFT_FLAGS = "$(inherited) \"-D\" \"COCOAPODS\" \"-DDEBUG\"";
@@ -465,7 +450,6 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				FRAMEWORK_SEARCH_PATHS = "$(inherited) $(PROJECT_DIR)";
-				SWIFT_OBJC_BRIDGING_HEADER = "App/NativeMnnBridge.h";
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				MARKETING_VERSION = 1.4.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.zoneminder.zmNinjaNG;

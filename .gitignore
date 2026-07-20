@@ -38,7 +38,6 @@ android/local.properties
 android/.idea/
 android/app/src/main/assets/public/
 android/keystore.properties
-app/ios/App/MNN.framework/
 **/capacitor.build.gradle
 **/capacitor.settings.gradle
 *.jks

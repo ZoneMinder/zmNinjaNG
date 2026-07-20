@@ -12,7 +12,6 @@ const mockNative = { current: true };
 vi.mock('../../../lib/platform', () => ({
   Platform: { get isNative() { return mockNative.current; } },
 }));
-vi.mock('../../../lib/assistant/native-mnn', () => ({ unloadNativeMnn: vi.fn().mockResolvedValue(undefined) }));
 import { AssistantWidget } from '../AssistantWidget';
 import { useAssistantPanelStore } from '../../../stores/assistantPanel';
 import { useAssistantStore } from '../../../stores/assistant';
@@ -262,16 +261,4 @@ describe('AssistantWidget', () => {
     expect(screen.getByTestId('assistant-clear')).toBeDisabled();
   });
 
-  // Clear releases the ~1.4GB on-device model too: with the panel closed and
-  // the app idle, nothing else freed it.
-  it('unloads the on-device model on Clear', async () => {
-    const { unloadNativeMnn } = await import('../../../lib/assistant/native-mnn');
-    useAssistantPanelStore.setState({ state: 'open' });
-    useAssistantStore.getState().append('p1', { role: 'user', text: 'hi' });
-
-    render(<AssistantWidget />);
-    await userEvent.setup().click(screen.getByTestId('assistant-clear'));
-
-    expect(vi.mocked(unloadNativeMnn)).toHaveBeenCalled();
-  });
 });

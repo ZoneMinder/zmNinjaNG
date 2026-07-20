@@ -1,6 +1,7 @@
 import { format } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 import type { SystemPromptContext } from './types';
+import { buildObjectLabelLine } from './object-labels';
 
 /** Model-neutral: this string is handed to every backend as-is (see
  *  providers/openai.ts's `buildOpenAiMessages`, which uses it verbatim with
@@ -39,14 +40,36 @@ export function buildSystemPrompt(ctx: SystemPromptContext): string {
     'If the user asks for one of those, say plainly that you cannot do it, that this is because an assistant can misread a request and some of these actions cannot be undone, and tell them where to do it themselves in the app.',
     'For camera, monitor, event, detection, server, health, status, count, time, or current-state questions, call the matching read tool before answering.',
     'Use list_monitors to resolve a monitor name. Never ask the user for an id. Event tools search every monitor when monitorId is omitted.',
-    'For calendar days or detected objects, call list_events with range and/or objectType.',
-    'For a daily summary, first call list_events with {"range":"today"}.',
+    // The model reliably echoes the phrasing and reliably botches the
+    // arithmetic, so the tool takes the phrase (see resolveWhen).
+    // The examples used to be concrete ("yesterday from 4pm to 10pm") and the
+    // model sent one verbatim for a question that said only "yesterday",
+    // quietly narrowing the window to six hours. Examples that look like
+    // values get used as values.
+    'Never work out a date or timestamp yourself. COPY the user\'s own time words into list_events\' `when`, exactly as they wrote them and nothing more: if they say "yesterday", send "yesterday". Phrases naming part of a day are understood too, but only send one if the user actually said it.',
+    'For calendar days or detected objects, call list_events with when and/or objectType.',
+    // Asked to "summarize today", the model called list_events with
+    // objectType "people". Nothing in the question named an object: it matched
+    // "today" to the nearest worked example in the prompt, and the concrete
+    // ones below all carry an object filter. So the summary rule has to
+    // forbid the argument rather than merely not mention it.
+    'For a daily summary, or any "what happened"/"summarize" question that names no specific object, call list_events with {"when":"today"} and NO objectType. Filtering a summary hides everything else that happened.',
     'For rolling summaries such as "last 24 hours" or "most active", call count_events with the matching interval.',
     // "How many people came home today" reads as a counting question, so the
     // model reached for count_events, which reports counts and nothing about
     // what was detected. It then answered that there was no information about
     // people, from data that could never have contained it.
-    'A question naming a specific thing (people, cars, animals, packages) is an object-type question, not a counting question: use list_events with objectType, never count_events, which reports no object types at all.',
+    // objectType is also matched against the label the detector wrote, which
+    // is singular ("person"). Given only the plural wording of the question
+    // the model passed "people", matched nothing, and spent an extra round
+    // trip recovering through the tool's own label hint. Both rules are one
+    // sentence under the same condition: every separate mention of objectType
+    // is another example pulling unfiltered questions toward a filter.
+    'ONLY when the question itself names a specific thing (people, cars, animals, packages) is it an object-type question: use list_events with objectType, never count_events, which reports no object types at all.',
+    // The install's real vocabulary, read from its own events (see
+    // object-labels.ts). This replaced a hardcoded category map and English
+    // plural rules, which could only ever guess at someone else's detector.
+    ...(ctx.objectLabels?.length ? [buildObjectLabelLine(ctx.objectLabels)] : []),
     'Never call the same tool twice with the same arguments. If a result does not answer the question, the tool or the arguments were wrong; change one of them.',
     '',
     'Writing the answer text:',
@@ -56,6 +79,10 @@ export function buildSystemPrompt(ctx: SystemPromptContext): string {
     // at all. list_events reports the window it used in its `window` field.
     'Never name a time period you did not query. Use the window the tool reports: if it says no time filter was applied, your answer covers all recorded events, not today or the last 24 hours.',
     'State monitor names, concrete detections, counts, and times when available. If a result is truncated, say it is a partial result.',
+    // It counted ten rows as "8 on the Front Yard and 2 on the Garage Outdoor"
+    // when the split was four and six. The tool supplies the tally so this is
+    // reading, not arithmetic.
+    'Never count rows yourself. When a result carries a summary line, it is the counts already written out: START your answer with it, using its numbers and wording exactly. Add detail from the rows after it. When a result carries matchCount or countsByMonitor, those numbers ARE the counts: quote them exactly and never add up the rows to get your own.',
     'Be direct. Never show image links, URLs, or raw ids. Offer a next step only when helpful. Ask a question only when tools cannot resolve ambiguity.',
   ].join('\n');
 }

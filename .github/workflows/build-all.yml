@@ -22,9 +22,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0  # full history so git rev-list --count HEAD is the real build number
-          # app/native/MNN is a submodule and the on-device assistant's CMake
-          # build compiles from it. Without this the native build has no source.
-          submodules: recursive
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

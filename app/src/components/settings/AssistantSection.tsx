@@ -16,28 +16,18 @@
  * whether a download/delete is in flight, to enable/disable the two buttons.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Switch } from '../ui/switch';
 import { Button } from '../ui/button';
 import { SectionHeader, SettingsCard, SettingsRow, RowLabel } from './SettingsLayout';
 import { AssistantOllamaSection } from './AssistantOllamaSection';
+import { AssistantAdvancedSection } from './AssistantAdvancedSection';
 import { ASSISTANT } from '../../lib/zmninja-ng-constants';
-import { useWebGpuAvailable } from '../../hooks/useWebGpuAvailable';
 import { Platform } from '../../lib/platform';
+import { useWebGpuAvailable } from '../../hooks/useWebGpuAvailable';
 import { useToast } from '../../hooks/use-toast';
 import { deleteModel, downloadModel, isModelDownloaded } from '../../lib/assistant/model-download';
-import {
-  cancelNativeMnnDownload,
-  deleteNativeMnnModel,
-  downloadNativeMnnModel,
-  getNativeMnnDownload,
-  getNativeMnnModelSize,
-  isNativeMnnModelDownloaded,
-  NATIVE_MNN_MODELS,
-  subscribeNativeMnnDownload,
-  supportsNativeMnnModel,
-} from '../../lib/assistant/native-mnn';
 import { getModelStorageInfo, formatStorageBytes, type ModelStorageInfo } from '../../lib/assistant/model-storage';
 import { useBackgroundTasks, type BackgroundTask } from '../../stores/backgroundTasks';
 import { log, LogLevel } from '../../lib/logger';
@@ -72,23 +62,14 @@ export function AssistantSection({
   // WebGPU") but without claiming the device lacks WebGPU.
   const hasWebGPU = useWebGpuAvailable();
   const webGpuUnavailable = hasWebGPU === false;
-  const nativeMnn = Platform.isNative;
   const availableModels = useMemo(
-    () => (nativeMnn ? NATIVE_MNN_MODELS : ASSISTANT.webllmModels),
-    [nativeMnn],
+    () => ASSISTANT.webllmModels,
+    [],
   );
 
   const selectedModel =
     availableModels.find((m) => m.id === settings.assistantModelId) ?? availableModels[0];
   const modelId = selectedModel.id;
-
-  // A profile can move between desktop WebLLM and native MNN. Native MNN only
-  // ships Qwen3.5 2B Reasoning, so replace a desktop-only saved model before the
-  // picker/provider can act on an invalid value.
-  useEffect(() => {
-    if (!nativeMnn || supportsNativeMnnModel(settings.assistantModelId) || !currentProfile) return;
-    updateSettings(currentProfile.id, { assistantModelId: availableModels[0].id });
-  }, [availableModels, currentProfile, nativeMnn, settings.assistantModelId, updateSettings]);
 
   const [downloadStatus, setDownloadStatus] = useState<DownloadStatus>('checking');
   const [deleting, setDeleting] = useState(false);
@@ -96,10 +77,8 @@ export function AssistantSection({
   // Native models live on the filesystem, not in a browser storage partition,
   // so `getModelStorageInfo` cannot see them; the plugin reports the directory
   // size instead.
-  const [nativeModelBytes, setNativeModelBytes] = useState<number | undefined>(undefined);
   // Set by the Cancel button so the resulting download rejection is reported as
   // a user action rather than a failure toast.
-  const nativeCancelledRef = useRef(false);
 
   // The backgroundTasks store is the authoritative source for download
   // progress: `downloadModel` reports into it directly, so deriving
@@ -119,14 +98,7 @@ export function AssistantSection({
     return match;
   }, [tasks, modelId]);
 
-  // Read from the module, not local state: the native download outlives this
-  // screen, so leaving and returning must pick the progress back up rather than
-  // showing nothing while it is still running (refs #246).
-  const activeNativeDownload = useSyncExternalStore(subscribeNativeMnnDownload, getNativeMnnDownload, getNativeMnnDownload);
-  const nativeDownloading = nativeMnn && activeNativeDownload?.modelId === modelId;
-  const nativeDownloadProgress = activeNativeDownload?.progress;
-
-  const downloading = nativeDownloading || downloadTask?.status === 'pending' || downloadTask?.status === 'in_progress';
+  const downloading = downloadTask?.status === 'pending' || downloadTask?.status === 'in_progress';
 
 
   // Latest selected model id, read *after* the awaits below resolve. The
@@ -153,7 +125,7 @@ export function AssistantSection({
   useEffect(() => {
     let cancelled = false;
     setDownloadStatus('checking');
-    (nativeMnn ? isNativeMnnModelDownloaded(modelId) : isModelDownloaded(modelId))
+    isModelDownloaded(modelId)
       .then((downloaded) => {
         if (!cancelled) setDownloadStatus(downloaded ? 'downloaded' : 'not-downloaded');
       })
@@ -164,7 +136,7 @@ export function AssistantSection({
     return () => {
       cancelled = true;
     };
-  }, [modelId, nativeMnn]);
+  }, [modelId]);
 
   // Re-checks the cache the moment this model's download task reaches a
   // terminal state, instead of waiting on `handleDownload`'s own promise
@@ -219,22 +191,9 @@ export function AssistantSection({
   useEffect(() => {
     if (downloadStatus !== 'downloaded') {
       setStorageInfo(undefined);
-      setNativeModelBytes(undefined);
       return;
     }
     let cancelled = false;
-    if (nativeMnn) {
-      getNativeMnnModelSize(modelId)
-        .then((bytes) => {
-          if (!cancelled) setNativeModelBytes(bytes);
-        })
-        .catch((error) => {
-          log.assistant('getNativeMnnModelSize failed', LogLevel.ERROR, { modelId, error });
-        });
-      return () => {
-        cancelled = true;
-      };
-    }
     getModelStorageInfo()
       .then((info) => {
         if (!cancelled) setStorageInfo(info);
@@ -245,53 +204,25 @@ export function AssistantSection({
     return () => {
       cancelled = true;
     };
-  }, [downloadStatus, nativeMnn, modelId]);
+  }, [downloadStatus, modelId]);
 
   // Only starts the download; `downloadModel` reports progress/completion/
   // failure onto its background task itself (the effect above reacts to
   // that), so this no longer owns a local "in flight" flag or gates button
   // state on its own promise settling.
   const handleDownload = useCallback(() => {
-    if (nativeMnn) {
-      nativeCancelledRef.current = false;
-      downloadNativeMnnModel(modelId)
-        .then(() => {
-          if (mountedRef.current && selectedModelIdRef.current === modelId) setDownloadStatus('downloaded');
-        })
-        .catch((error) => {
-          // A cancel makes the native download reject; that is the user's own
-          // action, so it sets the status back without a failure toast.
-          if (nativeCancelledRef.current) {
-            if (mountedRef.current && selectedModelIdRef.current === modelId) setDownloadStatus('not-downloaded');
-            return;
-          }
-          log.assistant('downloadNativeMnnModel failed', LogLevel.ERROR, { modelId, error });
-          if (mountedRef.current && selectedModelIdRef.current === modelId) {
-            toast({ title: t('common.error'), description: t('settings.assistant.download_failed'), variant: 'destructive' });
-          }
-        });
-      return;
-    }
     downloadModel(modelId).catch((error) => {
       // `downloadModel` normally reports failures onto its background task
       // rather than rejecting; this only catches an unexpected throw before
       // that task bookkeeping runs.
       log.assistant('downloadModel threw', LogLevel.ERROR, { modelId, error });
     });
-  }, [modelId, nativeMnn, t, toast]);
-
-  const handleCancelDownload = useCallback(() => {
-    nativeCancelledRef.current = true;
-    cancelNativeMnnDownload().catch((error) => {
-      log.assistant('cancelNativeMnnDownload failed', LogLevel.ERROR, { modelId, error });
-    });
   }, [modelId]);
 
   const handleDelete = useCallback(async () => {
     setDeleting(true);
     try {
-      if (nativeMnn) await deleteNativeMnnModel(modelId);
-      else await deleteModel(modelId);
+      await deleteModel(modelId);
       if (mountedRef.current && selectedModelIdRef.current === modelId) {
         setDownloadStatus('not-downloaded');
       }
@@ -307,7 +238,7 @@ export function AssistantSection({
     } finally {
       if (mountedRef.current) setDeleting(false);
     }
-  }, [modelId, nativeMnn, t, toast]);
+  }, [modelId, t, toast]);
 
   return (
     <section>
@@ -329,31 +260,33 @@ export function AssistantSection({
 
         {settings.assistantEnabled && (
           <>
-            <div className="px-4 py-3 space-y-2">
-              <RowLabel label={t('settings.assistant.backend')} />
-          <select
-                className="text-sm bg-background border rounded px-2 py-1.5 w-full sm:w-64"
-                value={settings.assistantBackend}
-                onChange={(e) => {
-                  const backend = e.target.value as AssistantBackend;
-                  update('assistantBackend', backend);
-                  if (nativeMnn && backend === 'on-device' && currentProfile && !supportsNativeMnnModel(settings.assistantModelId)) {
-                    updateSettings(currentProfile.id, { assistantModelId: availableModels[0].id });
-                  }
-                }}
-                data-testid="assistant-backend-select"
-              >
-                <option value="on-device">
-                  {t('settings.assistant.backend_on_device')}
-                </option>
-                <option value="ollama">{t('settings.assistant.backend_ollama')}</option>
-              </select>
-            </div>
+            {/* No backend choice on a phone or tablet: on-device was removed
+                there, so the picker would offer one option and one dead end.
+                The note says why rather than leaving the absence unexplained,
+                which is what makes a missing feature read as a bug. */}
+            {Platform.isNative ? (
+              <div className="px-4 py-3 space-y-1" data-testid="assistant-on-device-unavailable">
+                <p className="text-xs text-muted-foreground">{t('settings.assistant.on_device_mobile_disabled')}</p>
+              </div>
+            ) : (
+              <div className="px-4 py-3 space-y-2">
+                <RowLabel label={t('settings.assistant.backend')} />
+                <select
+                  className="text-sm bg-background border rounded px-2 py-1.5 w-full sm:w-64"
+                  value={settings.assistantBackend}
+                  onChange={(e) => update('assistantBackend', e.target.value as AssistantBackend)}
+                  data-testid="assistant-backend-select"
+                >
+                  <option value="on-device">{t('settings.assistant.backend_on_device')}</option>
+                  <option value="ollama">{t('settings.assistant.backend_ollama')}</option>
+                </select>
+              </div>
+            )}
 
-            {settings.assistantBackend === 'ollama' ? (
+            {settings.assistantBackend === 'ollama' || Platform.isNative ? (
               <AssistantOllamaSection settings={settings} update={update} currentProfile={currentProfile} />
             ) : (
-              !nativeMnn && webGpuUnavailable && (
+              webGpuUnavailable && (
                 <div className="px-4 py-3 space-y-1" data-testid="assistant-no-webgpu">
                   <p className="text-xs text-muted-foreground">{t('settings.assistant.no_webgpu')}</p>
                   <p className="text-xs text-muted-foreground">{t('settings.assistant.no_webgpu_hint')}</p>
@@ -361,44 +294,8 @@ export function AssistantSection({
               )
             )}
 
-            {settings.assistantBackend === 'on-device' && (nativeMnn || hasWebGPU === true) && (
+            {!Platform.isNative && settings.assistantBackend === 'on-device' && hasWebGPU === true && (
               <>
-                {/* Measured, not guessed: on a Pixel 8 the model holds ~1.8GB of
-                    native heap and a single reply took over three minutes with
-                    the device swapping. Inference is CPU-only (Android compiles
-                    no GPU backend; MNN's backend_type defaults to "cpu"), so
-                    this warns about RAM and chip speed rather than the GPU,
-                    which does not participate. */}
-                {/* iOS only: Android compiles no GPU backend, because both
-                    OpenCL and Vulkan measured worse than its CPU (one crashing
-                    outright), so a toggle there would promise something that
-                    cannot happen. Metal on iOS does work, so this is on by
-                    default and the toggle exists to turn it OFF: MNN's docs
-                    report GPU trailing CPU for LLM in general, and this has not
-                    been timed against the CPU on Apple hardware. A device that
-                    crashes on the GPU falls back permanently and says so. */}
-                {nativeMnn && Platform.isIOS && (
-                  <SettingsRow>
-                    <RowLabel
-                      label={t('settings.assistant.try_gpu')}
-                      desc={t('settings.assistant.try_gpu_desc')}
-                    />
-                    <Switch
-                      id="assistant-try-gpu"
-                      checked={settings.assistantTryGpu}
-                      onCheckedChange={(checked) => update('assistantTryGpu', checked)}
-                      data-testid="assistant-try-gpu-toggle"
-                    />
-                  </SettingsRow>
-                )}
-
-                {nativeMnn && (
-                  <div className="px-4 py-3 space-y-1" data-testid="assistant-on-device-warning">
-                    <p className="text-xs text-muted-foreground">{t('settings.assistant.on_device_performance')}</p>
-                    <p className="text-xs text-muted-foreground">{t('settings.assistant.on_device_requirements')}</p>
-                    <p className="text-xs text-muted-foreground">{t('settings.assistant.on_device_alternative')}</p>
-                  </div>
-                )}
                 <div className="px-4 py-3 space-y-2">
                   <RowLabel label={t('settings.assistant.model')} />
                   <select
@@ -417,7 +314,9 @@ export function AssistantSection({
             ))}
           </select>
           <p className="text-xs text-muted-foreground">
-            {t('settings.assistant.on_device_ollama_hint')}
+            {t('settings.assistant.on_device_ollama_hint', {
+              model: ASSISTANT.recommendedOllamaModel,
+            })}
           </p>
         </div>
 
@@ -441,43 +340,9 @@ export function AssistantSection({
                     >
                       {t('settings.assistant.delete')}
                     </Button>
-                    {nativeDownloading && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleCancelDownload}
-                        data-testid="assistant-native-download-cancel"
-                      >
-                        {t('common.cancel')}
-                      </Button>
-                    )}
                     <span className="text-xs text-muted-foreground">
                       {t('settings.assistant.download_size', { size: selectedModel.approxSizeMb })}
                     </span>
-                    {nativeDownloading && nativeDownloadProgress && (
-                      <div className="text-xs text-muted-foreground space-y-1" data-testid="assistant-native-download-details" aria-live="polite">
-                        <p data-testid="assistant-native-download-progress">
-                          {t('settings.assistant.native_download_current', {
-                            fileName: nativeDownloadProgress.fileName,
-                            current: nativeDownloadProgress.fileIndex,
-                            total: nativeDownloadProgress.fileCount,
-                            progress: nativeDownloadProgress.fileProgress,
-                            downloaded: formatStorageBytes(nativeDownloadProgress.fileBytesWritten),
-                            size: formatStorageBytes(nativeDownloadProgress.fileBytesTotal),
-                          })}
-                        </p>
-                        <p>
-                          {t('settings.assistant.native_download_summary', {
-                            completed: nativeDownloadProgress.fileProgress === 100
-                              ? nativeDownloadProgress.fileIndex
-                              : nativeDownloadProgress.fileIndex - 1,
-                            pending: nativeDownloadProgress.fileCount - (nativeDownloadProgress.fileProgress === 100
-                              ? nativeDownloadProgress.fileIndex
-                              : nativeDownloadProgress.fileIndex - 1),
-                          })}
-                        </p>
-                      </div>
-                    )}
                     {downloadStatus === 'downloaded' && (
                       <span
                         className="text-xs text-muted-foreground"
@@ -499,15 +364,6 @@ export function AssistantSection({
                 <div className="px-4 py-3" data-testid="assistant-model-memory-note">
                   <p className="text-xs text-muted-foreground">{t('settings.assistant.oom_note')}</p>
                 </div>
-
-                {downloadStatus === 'downloaded' && nativeModelBytes !== undefined && (
-                  <div className="px-4 py-3 space-y-1 min-w-0" data-testid="assistant-model-storage">
-                    <p className="text-xs text-muted-foreground">
-                      {t('settings.assistant.storage_used', { size: formatStorageBytes(nativeModelBytes) })}
-                    </p>
-                    <p className="text-xs text-muted-foreground">{t('settings.assistant.storage_note')}</p>
-                  </div>
-                )}
 
                 {downloadStatus === 'downloaded' && storageInfo && (
                   <div
@@ -543,6 +399,10 @@ export function AssistantSection({
                 </div>
               </>
             )}
+
+            {/* Last, and collapsed: these apply to whichever backend is
+                selected, and none of them is part of normal setup. */}
+            <AssistantAdvancedSection settings={settings} update={update} />
           </>
         )}
       </SettingsCard>

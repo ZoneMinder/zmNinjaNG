@@ -9,16 +9,12 @@
  * pins that down explicitly since it's easy to regress).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { AssistantSection } from '../AssistantSection';
 import { DEFAULT_SETTINGS } from '../../../stores/settings';
 import { ASSISTANT } from '../../../lib/zmninja-ng-constants';
 
 const isModelDownloadedMock = vi.fn().mockResolvedValue(false);
-const isNativeMnnModelDownloadedMock = vi.fn().mockResolvedValue(false);
-const downloadNativeMnnModelMock = vi.fn().mockResolvedValue(undefined);
-const cancelNativeMnnDownloadMock = vi.fn().mockResolvedValue(undefined);
-const getNativeMnnModelSizeMock = vi.fn().mockResolvedValue(0);
 const { useCapacitorListenerMock } = vi.hoisted(() => ({ useCapacitorListenerMock: vi.fn() }));
 
 vi.mock('../../../lib/assistant/model-download', () => ({
@@ -27,36 +23,7 @@ vi.mock('../../../lib/assistant/model-download', () => ({
   deleteModel: vi.fn(),
 }));
 
-vi.mock('../../../lib/assistant/native-mnn', () => ({
-  isNativeMnnModelDownloaded: (modelId: string) => isNativeMnnModelDownloadedMock(modelId),
-  downloadNativeMnnModel: (modelId: string) => {
-    setNativeDownload({ modelId });
-    // Mirrors the real module, which clears the active download in a `finally`
-    // whether it resolved, failed, or was cancelled.
-    return Promise.resolve(downloadNativeMnnModelMock(modelId)).finally(() => setNativeDownload(undefined));
-  },
-  cancelNativeMnnDownload: () => cancelNativeMnnDownloadMock(),
-  getNativeMnnModelSize: (modelId: string) => getNativeMnnModelSizeMock(modelId),
-  deleteNativeMnnModel: vi.fn(),
-  subscribeNativeMnnDownload: (listener: () => void) => {
-    nativeDownloadListeners.add(listener);
-    return () => nativeDownloadListeners.delete(listener);
-  },
-  getNativeMnnDownload: () => nativeDownloadState,
-  NATIVE_MNN_MODELS: [{ id: 'Qwen3.5-2B-Claude-4.6-Opus-Reasoning-Distilled-MNN', label: 'Qwen3.5 2B Reasoning', approxSizeMb: 1383, contextWindowSize: 4096 }],
-  supportsNativeMnnModel: (modelId: string) => modelId === 'Qwen3.5-2B-Claude-4.6-Opus-Reasoning-Distilled-MNN',
-}));
-
 vi.mock('../../../hooks/useCapacitorListener', () => ({ useCapacitorListener: useCapacitorListenerMock }));
-
-/** Stand-in for the module-level native download store, which now survives the
- * settings screen unmounting (refs #246). */
-let nativeDownloadState: { modelId: string; progress?: Record<string, unknown> } | undefined;
-const nativeDownloadListeners = new Set<() => void>();
-function setNativeDownload(next: { modelId: string; progress?: Record<string, unknown> } | undefined) {
-  nativeDownloadState = next;
-  for (const listener of nativeDownloadListeners) listener();
-}
 
 let webGpuAvailable: boolean | undefined = true;
 vi.mock('../../../hooks/useWebGpuAvailable', () => ({
@@ -124,12 +91,7 @@ describe('AssistantSection backend picker and gating', () => {
   const enabledSettings = { ...DEFAULT_SETTINGS, assistantEnabled: true };
 
   beforeEach(() => {
-    setNativeDownload(undefined);
     isModelDownloadedMock.mockReset().mockResolvedValue(false);
-    isNativeMnnModelDownloadedMock.mockReset().mockResolvedValue(false);
-    downloadNativeMnnModelMock.mockReset().mockResolvedValue(undefined);
-    cancelNativeMnnDownloadMock.mockReset().mockResolvedValue(undefined);
-    getNativeMnnModelSizeMock.mockReset().mockResolvedValue(0);
     useCapacitorListenerMock.mockReset();
     webGpuAvailable = true;
     isIOS = false;
@@ -137,220 +99,35 @@ describe('AssistantSection backend picker and gating', () => {
     isNative = false;
   });
 
-  describe('native MNN', () => {
-    it('downloads fallback Qwen model when profile has a desktop-only model', async () => {
-      isIOS = true;
-      isNative = true;
-      const updateSettings = vi.fn();
-      render(
-        <AssistantSection
-          settings={{ ...enabledSettings, assistantModelId: 'Llama-3.2-1B-Instruct-q4f16_1-MLC' }}
-          update={vi.fn()}
-          currentProfile={profile}
-          updateSettings={updateSettings}
-        />
-      );
-
-      await waitFor(() => expect(isNativeMnnModelDownloadedMock).toHaveBeenCalledWith('Qwen3.5-2B-Claude-4.6-Opus-Reasoning-Distilled-MNN'));
-      expect(updateSettings).toHaveBeenCalledWith('p1', { assistantModelId: 'Qwen3.5-2B-Claude-4.6-Opus-Reasoning-Distilled-MNN' });
-      await waitFor(() => expect(screen.getByTestId('assistant-model-download')).toBeEnabled());
-
-      fireEvent.click(screen.getByTestId('assistant-model-download'));
-      expect(downloadNativeMnnModelMock).toHaveBeenCalledWith('Qwen3.5-2B-Claude-4.6-Opus-Reasoning-Distilled-MNN');
-    });
-
-    it('shows Android on-device picker with only native MNN models', async () => {
-      isAndroid = true;
+  // On-device was removed on phones and tablets. The picker must not offer a
+  // backend with no implementation, and the absence has to be explained or a
+  // missing feature reads as a bug.
+  describe('on a phone or tablet', () => {
+    it('replaces the backend picker with a note and shows the Ollama settings', async () => {
       isNative = true;
       render(
-        <AssistantSection
-          settings={enabledSettings}
-          update={vi.fn()}
-          currentProfile={profile}
-          updateSettings={vi.fn()}
-        />
-      );
-      const onDeviceOption = screen
-        .getByTestId('assistant-backend-select')
-        .querySelector('option[value="on-device"]');
-      expect(onDeviceOption).not.toBeDisabled();
-      expect(screen.getByTestId('assistant-model-select')).toHaveTextContent('Qwen3.5 2B Reasoning');
-      expect(screen.queryByTestId('assistant-no-webgpu')).not.toBeInTheDocument();
-    });
-
-    it('shows iOS on-device picker with native MNN models', async () => {
-      isIOS = true;
-      isNative = true;
-      render(
-        <AssistantSection
-          settings={enabledSettings}
-          update={vi.fn()}
-          currentProfile={profile}
-          updateSettings={vi.fn()}
-        />
+        <AssistantSection settings={enabledSettings} update={vi.fn()} currentProfile={profile} updateSettings={vi.fn()} />,
       );
 
-      const onDeviceOption = screen
-        .getByTestId('assistant-backend-select')
-        .querySelector('option[value="on-device"]');
-      expect(onDeviceOption).not.toBeDisabled();
-      expect(screen.getByTestId('assistant-model-select')).toHaveTextContent('Qwen3.5 2B Reasoning');
-      expect(screen.queryByTestId('assistant-no-webgpu')).not.toBeInTheDocument();
-    });
-
-    it('shows native MNN download UI on iOS, even with WebGPU present', () => {
-      isIOS = true;
-      isNative = true;
-      webGpuAvailable = true;
-      render(
-        <AssistantSection
-          settings={enabledSettings}
-          update={vi.fn()}
-          currentProfile={profile}
-          updateSettings={vi.fn()}
-        />
-      );
-      expect(screen.getByTestId('assistant-model-select')).toBeInTheDocument();
-      expect(screen.getByTestId('assistant-model-download')).toBeInTheDocument();
-    });
-
-    it('cancels an in-flight native download and clears the progress UI', async () => {
-      isIOS = true;
-      isNative = true;
-      // Never settles on its own, so the download stays in flight until cancel
-      // rejects it, matching what the plugin does.
-      let rejectDownload: (error: Error) => void = () => {};
-      downloadNativeMnnModelMock.mockReturnValue(new Promise((_, reject) => { rejectDownload = reject; }));
-      render(
-        <AssistantSection
-          settings={enabledSettings}
-          update={vi.fn()}
-          currentProfile={profile}
-          updateSettings={vi.fn()}
-        />
-      );
-      await waitFor(() => expect(screen.getByTestId('assistant-model-download')).toBeEnabled());
-      fireEvent.click(screen.getByTestId('assistant-model-download'));
-
-      const cancel = await screen.findByTestId('assistant-native-download-cancel');
-      fireEvent.click(cancel);
-      expect(cancelNativeMnnDownloadMock).toHaveBeenCalled();
-
-      await act(async () => {
-        rejectDownload(new Error('Native MNN download cancelled'));
-        await Promise.resolve();
-      });
-      await waitFor(() => expect(screen.queryByTestId('assistant-native-download-cancel')).not.toBeInTheDocument());
-      await waitFor(() => expect(screen.getByTestId('assistant-model-download')).toBeEnabled());
-    });
-
-    it('shows on-disk model size on native once downloaded', async () => {
-      isAndroid = true;
-      isNative = true;
-      isNativeMnnModelDownloadedMock.mockResolvedValue(true);
-      getNativeMnnModelSizeMock.mockResolvedValue(1_450_000_000);
-      render(
-        <AssistantSection
-          settings={enabledSettings}
-          update={vi.fn()}
-          currentProfile={profile}
-          updateSettings={vi.fn()}
-        />
-      );
-
-      const storage = await screen.findByTestId('assistant-model-storage');
-      expect(getNativeMnnModelSizeMock).toHaveBeenCalledWith('Qwen3.5-2B-Claude-4.6-Opus-Reasoning-Distilled-MNN');
-      expect(storage).toHaveTextContent('1.4 GB');
-    });
-
-    // The native download is a detached task that keeps running when this
-    // screen unmounts. With the state held in the component, navigating away
-    // and back lost the "downloading" flag, which disabled the progress
-    // listener, so a download still in flight showed nothing (refs #246).
-    it('picks progress back up after the screen is unmounted and reopened', async () => {
-      isIOS = true;
-      isNative = true;
-      downloadNativeMnnModelMock.mockReturnValue(new Promise(() => {}));
-      const first = render(
-        <AssistantSection settings={enabledSettings} update={vi.fn()} currentProfile={profile} updateSettings={vi.fn()} />
-      );
-      await waitFor(() => expect(screen.getByTestId('assistant-model-download')).toBeEnabled());
-      fireEvent.click(screen.getByTestId('assistant-model-download'));
-
-      // Leave the screen; the download carries on natively.
-      first.unmount();
-      act(() => setNativeDownload({
-        modelId: 'Qwen3.5-2B-Claude-4.6-Opus-Reasoning-Distilled-MNN',
-        progress: {
-          modelId: 'Qwen3.5-2B-Claude-4.6-Opus-Reasoning-Distilled-MNN', fileName: 'llm.mnn.weight', fileIndex: 3, fileCount: 8,
-          fileProgress: 40, fileBytesWritten: 400 * 1024 * 1024, fileBytesTotal: 1024 * 1024 * 1024,
-        },
-      }));
-
-      render(<AssistantSection settings={enabledSettings} update={vi.fn()} currentProfile={profile} updateSettings={vi.fn()} />);
-
-      expect(await screen.findByTestId('assistant-native-download-details')).toHaveTextContent('llm.mnn.weight');
-      expect(screen.getByTestId('assistant-native-download-cancel')).toBeInTheDocument();
-    });
-
-    it('shows active native file progress with completed and pending counts', async () => {
-      isIOS = true;
-      isNative = true;
-      render(
-        <AssistantSection
-          settings={enabledSettings}
-          update={vi.fn()}
-          currentProfile={profile}
-          updateSettings={vi.fn()}
-        />
-      );
-      await waitFor(() => expect(screen.getByTestId('assistant-model-download')).toBeEnabled());
-      fireEvent.click(screen.getByTestId('assistant-model-download'));
-
-      act(() => setNativeDownload({
-        modelId: 'Qwen3.5-2B-Claude-4.6-Opus-Reasoning-Distilled-MNN',
-        progress: {
-          modelId: 'Qwen3.5-2B-Claude-4.6-Opus-Reasoning-Distilled-MNN', fileName: 'llm.mnn.weight', fileIndex: 2, fileCount: 8,
-          fileProgress: 25, fileBytesWritten: 256 * 1024 * 1024, fileBytesTotal: 1024 * 1024 * 1024,
-        },
-      }));
-
-      expect(screen.getByTestId('assistant-native-download-details')).toHaveTextContent('llm.mnn.weight');
-      expect(screen.getByTestId('assistant-native-download-details')).toHaveTextContent('1:7');
-    });
-
-    it('switches iOS native MNN picker to Ollama', () => {
-      isIOS = true;
-      isNative = true;
-      render(
-        <AssistantSection
-          settings={{ ...enabledSettings, assistantBackend: 'ollama' }}
-          update={vi.fn()}
-          currentProfile={profile}
-          updateSettings={vi.fn()}
-        />
-      );
+      expect(await screen.findByTestId('assistant-on-device-unavailable')).toBeInTheDocument();
+      expect(screen.queryByTestId('assistant-backend-select')).not.toBeInTheDocument();
       expect(screen.getByTestId('assistant-ollama-url')).toBeInTheDocument();
-      expect(screen.queryByTestId('assistant-model-select')).not.toBeInTheDocument();
     });
 
-    it('leaves on-device selectable on desktop (neither mobile platform)', async () => {
-      isIOS = false;
-      isAndroid = false;
+    it('never shows the on-device model picker, even with the setting still on-device', async () => {
+      isNative = true;
       render(
         <AssistantSection
-          settings={enabledSettings}
+          settings={{ ...enabledSettings, assistantBackend: 'on-device' }}
           update={vi.fn()}
           currentProfile={profile}
           updateSettings={vi.fn()}
-        />
+        />,
       );
-      await waitFor(() => expect(isModelDownloadedMock).toHaveBeenCalled());
-      const onDeviceOption = screen
-        .getByTestId('assistant-backend-select')
-        .querySelector('option[value="on-device"]');
-      expect(onDeviceOption).not.toBeDisabled();
-      expect(screen.queryByTestId('assistant-no-webgpu')).not.toBeInTheDocument();
+
+      await screen.findByTestId('assistant-on-device-unavailable');
+      expect(screen.queryByTestId('assistant-model-select')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('assistant-model-download')).not.toBeInTheDocument();
     });
   });
 

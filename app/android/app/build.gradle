@@ -31,24 +31,6 @@ android {
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
-        externalNativeBuild {
-            cmake {
-                arguments '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'
-                // Build MNN for arm64 only. This is the CMake filter, not the
-                // packaging filter: it keeps the ~7MB of native libraries (and
-                // the long NDK build) to the one ABI the on-device assistant
-                // supports, without narrowing which devices may install the app.
-                abiFilters 'arm64-v8a'
-            }
-        }
-        // Deliberately NO ndk.abiFilters here. That is the PACKAGING filter, and
-        // setting it to arm64-v8a made Play refuse the whole app to every 32-bit
-        // ARM, x86 and x86_64 device, which previously could install it: adding
-        // an assistant would have cost those users zmNinjaNG entirely. Without
-        // it, dependency libraries still ship for all ABIs, the app installs as
-        // it always did, and only the on-device assistant is missing on a
-        // non-arm64 device (NativeMnnPlugin reports it as unsupported rather
-        // than crashing, see its static initializer).
     }
     buildTypes {
         release {
@@ -64,9 +46,6 @@ android {
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
-    }
-    externalNativeBuild {
-        cmake { path file('src/main/cpp/CMakeLists.txt'); version '3.22.1' }
     }
 }
 

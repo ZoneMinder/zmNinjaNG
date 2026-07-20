@@ -22,12 +22,12 @@ import { useEffect, useRef, useState } from 'react';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
-import { Loader2, Send, Square } from 'lucide-react';
+import { Check, Copy, Loader2, Send, Square } from 'lucide-react';
 import { getVersion } from '../../api/auth';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
 import { resolveMinStreamingPort } from '../../lib/monitor/multiport';
-import { runAssistantTurn, isContextNearlyFull } from '../../lib/assistant/agent';
+import { runAssistantTurn, isContextNearlyFull, requiresLiveData } from '../../lib/assistant/agent';
 import {
   getAssistantProvider,
   isAssistantTestMode,
@@ -35,7 +35,10 @@ import {
 } from '../../lib/assistant/providers/provider';
 import { sharedMockProvider } from '../../lib/assistant/providers/mock';
 import { buildSystemPrompt } from '../../lib/assistant/system-prompt';
-import type { AssistantMessage, AssistantTurn, ProviderConfig, ToolActivity, ToolContext } from '../../lib/assistant/types';
+import { getObjectLabels } from '../../lib/assistant/object-labels';
+import { suggestOllamaBaseUrl } from '../../lib/assistant/providers/openai';
+import { classifyRequest, buildNoToolPrompt, type RequestKind } from '../../lib/assistant/triage';
+import type { AssistantMessage, AssistantTurn, ProviderConfig, ToolActivity, ToolContext, TraceEntry } from '../../lib/assistant/types';
 import { log, LogLevel } from '../../lib/logger';
 import { getSecureValue } from '../../lib/security/secureStorage';
 import { Markdown } from '../../lib/markdown';
@@ -43,8 +46,6 @@ import { resolveQueryError } from '../../lib/query/query-error';
 import { cn } from '../../lib/utils';
 import { ASSISTANT } from '../../lib/zmninja-ng-constants';
 import { AssistantIntro } from './AssistantIntro';
-import { didGpuCrash, getNativeMnnBackend, isNativeMnnModelLoaded, loadNativeMnnModel, type NativeMnnBackend } from '../../lib/assistant/native-mnn';
-import { Platform } from '../../lib/platform';
 import { useAssistantStore } from '../../stores/assistant';
 import { Button } from '../ui/button';
 import { ErrorBanner } from '../ui/query-state';
@@ -82,6 +83,94 @@ const CONTEXT_CLEARED_KEY = 'assistant.context_cleared';
 // makes useSyncExternalStore see a new snapshot on every call and crashes
 // the app with "Maximum update depth exceeded" the moment AskPanel mounts.
 const EMPTY_THREAD: AssistantMessage[] = [];
+
+/** One plain-text transcript of a whole turn, headed by round.
+ *
+ *  Deliberately ONE `<pre>` and not a component per round: the point of this
+ *  is to be copied out of the app and pasted into a bug report, and a stack of
+ *  separate scroll boxes cannot be selected in one gesture. Headers separate
+ *  the rounds instead.
+ *
+ *  Tool steps carry the ZoneMinder requests they actually made, because the
+ *  gap between "what the model was told" and "what was asked of the server" is
+ *  where the real bugs have been: a `when: "today"` query that reported no time
+ *  filter, and a zero-row object query whose answer never mentioned the filter. */
+function formatTrace(trace: TraceEntry[]): string {
+  const blocks = trace.map((entry, index) => {
+    const n = index + 1;
+    if (entry.kind === 'question') {
+      return `=== QUESTION ===\n${entry.text}`;
+    }
+    if (entry.kind === 'exchange') {
+      const { backend, model, ms, sent, received } = entry.exchange;
+      return [
+        `=== ${n}. MODEL ROUND (${backend} · ${model} · ${ms} ms) ===`,
+        '--- sent ---',
+        sent,
+        '--- received ---',
+        received,
+      ].join('\n');
+    }
+    return [
+      `=== ${n}. TOOL ${entry.name}${entry.isError ? ' (error)' : ''} ===`,
+      '--- input ---',
+      JSON.stringify(entry.input, null, 2),
+      ...(entry.apiCalls?.length ? ['--- zoneminder requests ---', entry.apiCalls.join('\n')] : []),
+      '--- output ---',
+      entry.output,
+    ].join('\n');
+  });
+  return blocks.join('\n\n');
+}
+
+function ModelTranscript({ trace, t, live }: { trace: TraceEntry[]; t: TFunction; live?: boolean }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(formatTrace(trace));
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      // Clipboard access can be denied (permissions, insecure origin). The
+      // text is selectable in the block below either way, so this is a
+      // convenience that must never throw into the panel.
+      log.assistant('Could not copy the transcript', LogLevel.WARN, {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+
+  return (
+    <details
+      className="mt-1 text-xs text-muted-foreground"
+      data-testid={live ? 'assistant-live-transcript' : 'assistant-model-transcript'}
+    >
+      <summary className="cursor-pointer select-none">
+        {t('assistant.show_transcript', { count: trace.length })}
+      </summary>
+      <div className="mt-1 flex justify-end">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6"
+          onClick={() => void handleCopy()}
+          aria-label={t(copied ? 'assistant.transcript_copied' : 'assistant.copy_transcript')}
+          title={t(copied ? 'assistant.transcript_copied' : 'assistant.copy_transcript')}
+          data-testid="assistant-transcript-copy"
+        >
+          {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+        </Button>
+      </div>
+      <pre
+        className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded bg-background/50 p-2"
+        data-testid="assistant-transcript-text"
+      >
+        {formatTrace(trace)}
+      </pre>
+    </details>
+  );
+}
 
 /** Renders one assistant turn's text, resolving the `__i18n:` sentinel. When
  *  the turn is the parse-error fallback and carried the model's raw output
@@ -139,7 +228,6 @@ function ActivityLine({ steps, live }: { steps: ToolActivity[]; live?: boolean }
   if (!live && steps.every((a) => a.kind === 'model' || !a.toolName)) return null;
 
   const latest = steps[steps.length - 1];
-  const failed = steps.some((a) => a.status === 'error');
   const compactInput = latest.kind === 'model' ? undefined : formatActivityInput(latest.input);
 
   // Live: say what is happening right now, including the model's own reasoning
@@ -158,6 +246,12 @@ function ActivityLine({ steps, live }: { steps: ToolActivity[]; live?: boolean }
         tools: [...new Set(steps.filter((a) => a.kind !== 'model' && a.toolName).map((a) => a.toolName))].join(', '),
       });
 
+  // Never coloured as a failure, however many steps errored. A rejected tool
+  // call is a normal step of a working turn: the loop hands the model a
+  // correction (an object label this install does not record, a time phrase it
+  // invented, a repeat of a call it already made) and the next round fixes it.
+  // "Used count_events, list_events" in red reported a problem to the user
+  // about a turn that had already solved itself and answered correctly.
   return (
     <p
       data-testid="assistant-activities"
@@ -168,10 +262,7 @@ function ActivityLine({ steps, live }: { steps: ToolActivity[]; live?: boolean }
             : `${a.toolName}${a.input && Object.keys(a.input).length > 0 ? ` ${JSON.stringify(a.input)}` : ''}`,
         )
         .join('\n')}
-      className={cn(
-        'flex min-w-0 items-center gap-1.5 truncate text-xs',
-        failed ? 'text-destructive' : 'text-muted-foreground',
-      )}
+      className="flex min-w-0 items-center gap-1.5 truncate text-xs text-muted-foreground"
     >
       <span className="truncate" data-testid="assistant-activity-step">{label}</span>
       {live && compactInput && <span className="truncate opacity-70">{compactInput}</span>}
@@ -191,23 +282,21 @@ export function AskPanel() {
   const thread = useAssistantStore((s) => (profileId ? (s.threads[profileId] ?? EMPTY_THREAD) : EMPTY_THREAD));
   const running = useAssistantStore((s) => s.running);
   const activities = useAssistantStore((s) => s.activities);
+  const liveTrace = useAssistantStore((s) => s.liveTrace);
   const append = useAssistantStore((s) => s.append);
   const setRunning = useAssistantStore((s) => s.setRunning);
   const clearActivities = useAssistantStore((s) => s.clearActivities);
 
+  // Every backend, not just on-device. The on-device model's answer quality is
+  // the smaller half of this: `requiredReadTool` (agent.ts) matches English
+  // words to decide when live data is mandatory, the triage prompt is English,
+  // and `resolveWhen` parses English time phrases. Asked in another language
+  // those guards silently do not fire, which is just as true of a GPU-backed
+  // Ollama server as of a phone.
   // `startsWith`, not equality: i18next reports regional variants like "en-GB".
-  const onDeviceInNonEnglish =
-    settings.assistantBackend !== 'ollama' && !i18n.language.toLowerCase().startsWith('en');
+  const assistantInNonEnglish = !i18n.language.toLowerCase().startsWith('en');
 
   const [input, setInput] = useState('');
-  /** True while the on-device model is being loaded into memory for this turn.
-   *  A 2B model takes several seconds to load and the "thinking" spinner alone
-   *  made that look like a hang, with no hint that the wait was one-off. */
-  const [loadingModel, setLoadingModel] = useState(false);
-  /** Which backend the on-device model actually resolved to, so the panel can
-   *  say whether the GPU is really being used. Seeded from the module so a
-   *  reopened panel still shows it without reloading the model. */
-  const [backend, setBackend] = useState<NativeMnnBackend | undefined>(() => getNativeMnnBackend());
   const [error, setError] = useState<string | null>(null);
   const [notConfigured, setNotConfigured] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -280,24 +369,19 @@ export function AskPanel() {
       const providerConfig: ProviderConfig = {
         backend: settings.assistantBackend,
         modelId: settings.assistantModelId,
-        ollamaBaseUrl: settings.assistantOllamaBaseUrl,
+        // An unset URL resolves to the profile's own ZoneMinder host, which is
+        // a far better guess than localhost (on a phone, localhost is the
+        // phone). Settings shows the same value as the placeholder.
+        ollamaBaseUrl:
+          settings.assistantOllamaBaseUrl ||
+          suggestOllamaBaseUrl(currentProfile?.apiUrl) ||
+          ASSISTANT.defaultOllamaBaseUrl,
         ollamaModel: settings.assistantOllamaModel,
         apiKey: apiKey ?? undefined,
-        tryGpu: settings.assistantTryGpu,
+        temperature: settings.assistantTemperature,
+        timeoutMs: settings.assistantTimeoutSec * 1000,
       };
       const provider = getAssistantProvider(providerConfig);
-
-      // Load the on-device model up front rather than letting the first chat
-      // call block on it, so the wait can be labelled. Only the FIRST turn
-      // after app start, or after a Clear unloaded it, pays this.
-      if (Platform.isNative && settings.assistantBackend !== 'ollama' && !isNativeMnnModelLoaded()) {
-        setLoadingModel(true);
-        try {
-          setBackend(await loadNativeMnnModel(settings.assistantModelId, settings.assistantTryGpu));
-        } finally {
-          setLoadingModel(false);
-        }
-      }
 
       if (isAssistantTestMode() && window.__assistantMockScript) {
         sharedMockProvider.setScript(window.__assistantMockScript);
@@ -311,7 +395,13 @@ export function AskPanel() {
         log.assistant('Failed to fetch ZM version for the assistant system prompt', LogLevel.WARN, { error: e });
       }
 
+      // The install's own label vocabulary, so the model can map "vehicles"
+      // onto the labels this detector actually writes instead of the app
+      // guessing at a taxonomy. Cached per profile; never throws.
+      const objectLabels = await getObjectLabels(profileId);
+
       const system = buildSystemPrompt({
+        objectLabels,
         now: new Date(),
         timezone: currentProfile?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
         locale: i18n.language,
@@ -339,11 +429,64 @@ export function AskPanel() {
         // `range` input must resolve "today"/"yesterday" against the identical
         // zone the system prompt already told the model "today" means.
         timezone: currentProfile?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+        question: text,
+        objectLabels,
       };
       const history = useAssistantStore.getState().getThread(profileId);
+
+      // Classify BEFORE the tool loop sees the request (refs #246). A small
+      // model handed nine tools uses one whether or not the question calls for
+      // it: "hello" produced a navigate call and "arm the backyard camera" a
+      // get_monitor call, 3 runs out of 3 each. A request that is not a
+      // question about this installation runs with NO tools, which is the only
+      // reliable way to stop that.
+      // Skipped in test mode: `sharedMockProvider` replays a fixed script, so
+      // a classification call would consume the turn the scenario meant for
+      // the answer and shift every following one. e2e scenarios drive the loop
+      // directly and assert on it; triage is covered by its own unit tests.
+      // Seeded with the question so a pasted transcript opens with what was
+      // asked, then the triage round, then the loop's own entries.
+      const initialTrace: TraceEntry[] = [{ kind: 'question', text }];
+      const collectTrace = (entry: TraceEntry) => {
+        initialTrace.push(entry);
+        host.onTrace?.(entry);
+      };
+      // The deterministic check runs FIRST, and when it fires there is no
+      // triage call at all. Triage is one small model's opinion and it gets
+      // this wrong: it answered CHAT for both "summarize yesterday" and
+      // "summarize today", the second being near-identical to an example in
+      // its own prompt. Its verdict was then overruled anyway, so the round
+      // trip bought a wrong answer and ~400ms. Asking a model what this
+      // function already knows is the part worth removing, not just the part
+      // where we ignore the reply.
+      //
+      // Triage still decides everything the heuristic is silent on, which is
+      // what it is good at: greetings, small talk, and change-requests it
+      // routes to a tool-less refusal.
+      const needsLiveData = requiresLiveData(text);
+      const kind: RequestKind =
+        needsLiveData || isAssistantTestMode()
+          ? 'zoneminder'
+          : await classifyRequest(provider, text, controller.signal, collectTrace);
+      if (needsLiveData) {
+        log.assistant('Triage skipped: the question needs live data', LogLevel.DEBUG, {});
+      }
+      log.assistant('Request classified', LogLevel.DEBUG, { kind });
+
       // Already only this turn's new messages (see runAssistantTurn): the
       // thread in the store keeps everything else.
-      const newMessages = await runAssistantTurn({ provider, host, ctx, history, system, signal: controller.signal });
+      const newMessages = await runAssistantTurn({
+        provider,
+        host,
+        ctx,
+        history,
+        system: kind === 'zoneminder' ? system : buildNoToolPrompt(system, kind),
+        signal: controller.signal,
+        tools: kind === 'zoneminder' ? undefined : [],
+        objectLabels,
+        initialTrace,
+        historyTurns: settings.assistantHistoryTurns,
+      });
 
       // Attach this turn's tool-activity steps to the assistant message
       // carrying the final answer (the last `role: 'assistant'` message: every
@@ -417,21 +560,7 @@ export function AskPanel() {
             alternative was pretending every language works equally well.
             Ollama runs whatever model the user chose, so this does not apply
             there. */}
-        {/* What is actually running, reported by MNN after its own fallback:
-            a device whose GPU driver it cannot use degrades to CPU silently,
-            and that is precisely when a reply takes minutes. Naming the
-            backend explains the wait instead of leaving it mysterious. */}
-        {backend && (
-          <p className="text-xs text-muted-foreground" data-testid="assistant-backend-notice">
-            {backend !== 'cpu'
-              ? t('assistant.backend_gpu', { backend: backend.toUpperCase() })
-              : didGpuCrash()
-                ? t('assistant.backend_gpu_crashed')
-                : t('assistant.backend_cpu')}
-          </p>
-        )}
-
-        {onDeviceInNonEnglish && (
+        {assistantInNonEnglish && (
           <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground" data-testid="assistant-english-notice">
             {t('assistant.english_only_notice')}
           </p>
@@ -478,6 +607,9 @@ export function AskPanel() {
                 )}
               >
                 {msg.role === 'user' ? <p>{msg.text}</p> : renderAssistantText(msg, t)}
+                {msg.role === 'assistant' && msg.trace && msg.trace.length > 0 && (
+                  <ModelTranscript trace={msg.trace} t={t} />
+                )}
               </div>
               {msg.role === 'assistant' && msg.display && msg.display.length > 0 && (
                 <AssistantResultCards entities={msg.display} host={host} />
@@ -506,10 +638,16 @@ export function AskPanel() {
           <ActivityLine steps={activities.filter((a) => a.kind !== 'model')} live />
         )}
 
+        {/* The transcript DURING the turn, not only after it. A turn can spend
+            a minute across several round trips, and waiting until the answer
+            lands to reveal what was sent is exactly backwards for the case this
+            exists to serve: watching a turn go wrong. */}
+        {running && liveTrace.length > 0 && <ModelTranscript trace={liveTrace} t={t} live />}
+
         {running && (
           <p className="flex items-center gap-1 text-xs text-muted-foreground" data-testid="assistant-status">
             <Loader2 className="h-3 w-3 animate-spin" />
-            {loadingModel ? t('assistant.loading_model') : t('assistant.thinking')}
+            {t('assistant.thinking')}
           </p>
         )}
 

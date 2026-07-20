@@ -557,6 +557,13 @@ export const CONTINUOUS_PLAYBACK_TOAST_DURATION_MS = 4000;
 export const ASSISTANT = {
   maxToolIterations: 6,
   maxHistoryMessages: 40,
+  // Whole exchanges, counted alongside the message and character caps above.
+  // Those two bound SIZE, and a long thread of small turns slips under both:
+  // one transcript replayed six previous question/answer pairs, including two
+  // answers that were wrong at the time, and the model read its own past
+  // mistakes as precedent. Older turns are also the least likely to be
+  // relevant, since each new question usually re-queries what it needs.
+  maxHistoryTurns: 3,
   // Sized against the context window, which is 8192: the system prompt and
   // tool catalog take ~1870 tokens and generation reserves 2048, leaving room
   // for roughly 15000 characters of history. The previous 6000 was inherited
@@ -572,34 +579,92 @@ export const ASSISTANT = {
   // themselves inside this budget by dropping ROWS and saying so, rather than
   // letting their output be cut mid-JSON (see list_events).
   maxToolResultCharacters: 6000,
-  // Room left for the wrapper a self-bounding tool adds around its rows
-  // (shownEvents/moreMatchesExist), so fitting the rows cannot overflow once
-  // those fields are serialized.
-  toolResultBudgetHeadroom: 200,
+  // Per side (sent, received) of ONE captured exchange, and generous on
+  // purpose: the point of the transcript is to show what the model actually
+  // saw, and the WebLLM request carries the tool catalog and few-shot
+  // block inline, which is several thousand characters before any history.
+  // These strings live in the conversation for as long as the thread does, so
+  // they are bounded rather than unbounded, but truncating below a full
+  // request would defeat the feature.
+  maxExchangeCharacters: 20000,
+  // Per tool result inside the verification prompt. Smaller than
+  // `maxToolResultCharacters` on purpose: the check is about whether the
+  // answer matches the question and the shape of the data, and a verifier that
+  // re-reads every row costs as much as the turn it is checking.
+  maxVerifyDataCharacters: 2000,
+  // How many recent events are read to learn which object labels this install
+  // writes. One page: enough to cover the labels a site produces day to day,
+  // and the tool still reports the labels present when a filter matches
+  // nothing, so a miss here is recoverable rather than final.
+  objectLabelSampleSize: 100,
+  // Vocabulary changes when someone reconfigures a detector, which is rare, so
+  // this is cached for a whole session rather than per turn.
+  objectLabelCacheMs: 30 * 60 * 1000,
   maxTokens: 1024,
-  // Native MNN runs a reasoning-distilled model with thinking left ON (see
-  // providers/native-mnn.ts), so this budget has to cover the `<think>` block
-  // AND the JSON reply after it. At `maxTokens` (1024) the chain of thought
-  // routinely consumed the whole budget, generation was cut off before the
-  // closing `</think>`, and `stripThinkBlock` then discarded the entire tail
-  // as scratch-work, leaving nothing to parse. That is the parse-error path
-  // this budget exists to avoid; it is not a general context-size knob.
+  // The remote path needs its own budget for the same reason the native one
+  // above does, and neither of `maxTokens`'s constraints applies here: an
+  // Ollama server is not decoding at 10-20 tokens/second and is not boxed into
+  // web-llm's 4096-token window.
   //
-  // Bounded by what the DEVICE can deliver, not by what the window allows. A
-  // Pixel 8 decodes this model at roughly 10-20 tokens/second on the CPU (both
-  // GPU backends measured worse, see native_mnn_jni.cpp), so 2048 tokens is
-  // two to three minutes of generation for a single answer, and a reasoning
-  // model will use every token it is given. At 1024 a turn lands closer to a
-  // minute. Nothing enforces this but the number itself: MNN checks its
-  // timeout after prefill only, never during decode, so an oversized budget is
-  // not interruptible, it is simply a long wait.
-  nativeMnnMaxTokens: 1024,
-  // Attempts a WebLLM turn gets to produce parseable output before the panel
-  // shows the parse-error apology. Small models occasionally emit degenerate
-  // output (an empty ```code fence```, a blank, or non-JSON prose); sampling is
+  // A reasoning model spends this budget before it writes anything the user
+  // sees, and Ollama bills that against max_tokens even though it returns the
+  // chain of thought in a SEPARATE `reasoning` field rather than in `content`.
+  // Measured on qwen3:30b-a3b answering "summarize today" over six events:
+  // ~900 of 1024 tokens went to reasoning, so the reply was cut off mid-word
+  // at 179 characters, and the same turn with the model's `/no_think`
+  // directive produced an EMPTY answer (that toggle no longer applies to
+  // current Qwen3 builds, and `reasoning_effort` is ignored by Ollama's
+  // OpenAI-compatible endpoint). At 4096 the same turn finishes with
+  // `finish_reason: "stop"` and a complete answer.
+  //
+  // Not raised further: this is a cap, not an allocation, so a non-reasoning
+  // model still stops when it is done and pays nothing for the headroom.
+  ollamaMaxTokens: 4096,
+  // Sampling temperature, pinned rather than left to each runtime's default
+  // (Ollama's is 0.8). Measured against this app's own prompt and tools, 66
+  // graded cases per run: at the default the SAME prompt scored 57/66 and
+  // 66/66 on consecutive runs, and at 0 it scored 66/66 twice. Every failure
+  // that variance produced was a real one, including reading matchCount (5
+  // events) when asked how many people came (4).
+  //
+  // This assistant reports facts from tool results. There is nothing for
+  // sampling to be creative about, and a wrong sample is a wrong answer about
+  // someone's cameras. Two prompt rewrites measured within noise of each other
+  // at the default; this single number moved more than either.
+  //
+  // Measured per model (app/scripts/prompt-eval.mts):
+  //   llama3.2   default 57/66 and 61/66; at 0, 66/66 twice
+  //   gemma4     33/33 at both, so it loses nothing, and it is ~10x slower
+  //   WebLLM     18/24 vs 19/24, i.e. no effect: that path describes its tools
+  //              in prose instead of calling them natively, and its misses are
+  //              the model answering without a tool at all (the loop's
+  //              live-data requirement catches those), not bad sampling.
+  // No model measured worse at 0, so it is pinned for all of them.
+  assistantTemperature: 0,
+  // Used from the SECOND parse attempt onward, never the first. Both providers
+  // retry a reply they could not parse, and that retry only works if the
+  // sampler can take a different path: at temperature 0 it would return the
+  // identical unparseable text and burn the attempts for nothing. Small enough
+  // to stay grounded, large enough to escape a degenerate reply.
+  assistantRetryTemperature: 0.3,
+  // Bounds for the Settings dials (AssistantAdvancedSection). Wide enough to be
+  // useful, narrow enough that a typo cannot wedge the assistant: a 1-second
+  // timeout or a 200-turn history would look like a broken app, not a setting.
+  assistantTemperatureMax: 1,
+  assistantTimeoutSecMin: 10,
+  assistantTimeoutSecMax: 600,
+  assistantHistoryTurnsMax: 20,
+  // Attempts ANY backend gets to produce a usable reply before the panel shows
+  // the parse-error apology. Models occasionally emit degenerate output (an
+  // empty ```code fence```, a blank, or non-JSON prose); sampling is
   // non-deterministic (temperature > 0), so a fresh attempt usually recovers,
   // and a degenerate reply is only a few tokens so retrying it is cheap.
-  webllmMaxAttempts: 3,
+  //
+  // Was WebLLM-only, which left Ollama single-shot: one degenerate reply there
+  // surfaced the apology directly, the exact failure this retry exists to
+  // prevent. A remote retry costs a network round trip rather than local
+  // decode, but only on a reply that was going to be thrown away anyway.
+  maxParseAttempts: 3,
   // web-llm's prebuilt registry entries cap context_window_size at 4096 for
   // every model (ModelRecord.overrides in @mlc-ai/web-llm's prebuiltAppConfig;
   // all 165 entries are 4096 or lower), well under what the models support
@@ -639,6 +704,12 @@ export const ASSISTANT = {
   // is a plain reachability probe (AssistantOllamaSection.tsx's
   // handleTestConnection), so it gets its own short budget.
   testConnectionTimeoutMs: 8000,
+  // Testing a MODEL is not testing a connection. The first request against a
+  // model Ollama has not loaded yet pays the load cost before it generates a
+  // token, and a multi-gigabyte model can spend well over a minute there. The
+  // 8s reachability budget above turned that into "the server answered but the
+  // model did not", which blamed the model for what was really a stopwatch.
+  modelProbeTimeoutMs: 90000,
   // Max characters of an event's Notes field kept in a list_events row (rule
   // 11: truncate long text); get_event still returns the full Notes.
   notesPreviewChars: 200,
@@ -648,7 +719,7 @@ export const ASSISTANT = {
   // On-device only runs on desktop (web/Electron); mobile is gated off for
   // memory (see AssistantSection). So the default targets a desktop, where
   // Gemma 2B loads comfortably.
-  defaultModelId: 'gemma-2-2b-it-q4f16_1-MLC',
+  defaultModelId: 'Llama-3.2-3B-Instruct-q4f16_1-MLC',
   // Ordered smallest first: the top of the picker is the safest thing to load
   // on a phone, and `approxSizeMb` is web-llm's own `vram_required_MB` for the
   // record (measured at ITS 4096 window, so the real figure at the
@@ -672,20 +743,15 @@ export const ASSISTANT = {
   // Its own 512-token window is the only untried mode and is far smaller than
   // this app's system prompt, so the model would never see the tool contract.
   // Do not re-add without checking a newer web-llm first.
+  // One model, not a menu. Llama 3.2 is what the assistant is tuned against on
+  // every backend (see `recommendedOllamaModel` for the measurements and
+  // and a picker of six was six
+  // prompt-compatibility surfaces to keep working rather than one.
+  //
+  // The 3B because this list only ever serves desktop and web: the assistant's
+  // on-device backend is not offered on phones or tablets at all, so there is
+  // no memory-tight device to size down for here.
   webllmModels: [
-    { id: 'Llama-3.2-1B-Instruct-q4f16_1-MLC', label: 'Llama 3.2 1B', approxSizeMb: 879, contextWindowSize: 16384 },
-    // Smallest with tool calling; the safest option on a memory-tight phone.
-    // Native window 32K, capped. sliding_window -1 (no Gemma trap).
-    { id: 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC', label: 'Qwen2.5 0.5B', approxSizeMb: 945, contextWindowSize: 16384 },
-    // The best small option for this app: native tool calling plus dual-mode
-    // thinking (chain-of-thought). Native window ~40K, capped; sliding_window -1.
-    { id: 'Qwen3-0.6B-q4f16_1-MLC', label: 'Qwen3 0.6B', approxSizeMb: 1403, contextWindowSize: 16384 },
-    // 8192 is Gemma 2's real native window; its config's 4096 is an MLC
-    // default, and 4096 is not enough for this app's prompt. Also the only
-    // model here declaring `required_features: ['shader-f16']`, so it can fail
-    // to load on a device where the others work.
-    { id: 'gemma-2-2b-it-q4f16_1-MLC', label: 'Gemma 2 2B', approxSizeMb: 1895, contextWindowSize: 8192 },
-    { id: 'Qwen3-1.7B-q4f16_1-MLC', label: 'Qwen3 1.7B', approxSizeMb: 2037, contextWindowSize: 16384 },
     { id: 'Llama-3.2-3B-Instruct-q4f16_1-MLC', label: 'Llama 3.2 3B', approxSizeMb: 2264, contextWindowSize: 16384 },
   ],
   /** Saved `assistantModelId` values no longer in `webllmModels`, mapped to
@@ -693,16 +759,52 @@ export const ASSISTANT = {
    *  Adding an entry here means bumping the settings store's persist `version`,
    *  or the rewrite never runs for anyone already on the current version. */
   retiredModelIds: {
-    'Qwen2.5-3B-Instruct-q4f16_1-MLC': 'Qwen3-1.7B-q4f16_1-MLC',
-    // Broken on web-llm 0.2.84 (see the note above webllmModels). Llama 3.2 1B
-    // is the nearest replacement: the smallest model that works.
-    'gemma3-1b-it-q4f16_1-MLC': 'Llama-3.2-1B-Instruct-q4f16_1-MLC',
+    // Everything the picker used to offer now maps to the single supported
+    // model. A saved id that is no longer in `webllmModels` would otherwise
+    // leave the panel pointing at a model it cannot describe or re-download.
+    'Qwen2.5-3B-Instruct-q4f16_1-MLC': 'Llama-3.2-3B-Instruct-q4f16_1-MLC',
+    'gemma3-1b-it-q4f16_1-MLC': 'Llama-3.2-3B-Instruct-q4f16_1-MLC',
+    'Llama-3.2-1B-Instruct-q4f16_1-MLC': 'Llama-3.2-3B-Instruct-q4f16_1-MLC',
+    'Qwen2.5-0.5B-Instruct-q4f16_1-MLC': 'Llama-3.2-3B-Instruct-q4f16_1-MLC',
+    'Qwen3-0.6B-q4f16_1-MLC': 'Llama-3.2-3B-Instruct-q4f16_1-MLC',
+    'gemma-2-2b-it-q4f16_1-MLC': 'Llama-3.2-3B-Instruct-q4f16_1-MLC',
+    'Qwen3-1.7B-q4f16_1-MLC': 'Llama-3.2-3B-Instruct-q4f16_1-MLC',
   } as Record<string, string>,
   // Ollama's default local HTTP address, OpenAI-compatible endpoint (refs #246).
   // On a phone this must be replaced with the Ollama server's LAN address:
   // "localhost" from the app's own process never reaches a server on another
   // host, and (on native) not even the desktop this profile was created on.
   defaultOllamaBaseUrl: 'http://localhost:11434/v1',
+  // Measured against this app's own system prompt and tool schemas, four
+  // questions run twice each ("summarize today", "how many vehicles came
+  // yesterday", "is the server ok", "what cameras do I have"), scoring the
+  // tool chosen AND whether its arguments were usable as sent:
+  //
+  //   gemma4          8/8  clean arguments        ~4.6s/call
+  //   qwen3-coder:30b 8/8  clean arguments        ~2.1s/call
+  //   qwen3:30b-a3b   8/8  clean arguments        ~6.3s/call
+  //   gpt-oss:20b     7/8  fills unused args null ~5.0s/call
+  //   llama3.2        6/8  stringifies arrays     ~0.5s/call
+  //   qwen2.5-coder   0/8  never emits a tool call
+  //   gemma2:9b       0/8  server: "does not support tools"
+  //
+  // Treat that table as a spot check, not a verdict. It is eight data points
+  // per model, single-round, and it scored only the tool call. A later
+  // full-turn transcript contradicted two of its readings for gemma4: it null
+  // fills every unused argument, and its rounds ran 6-17s rather than 4.6s,
+  // putting a single question near 45s. It also emitted undecoded
+  // byte-fallback tokens into user-visible text (see sanitize.ts).
+  //
+  // So llama3.2: it is by far the fastest, its one measured weakness
+  // (stringifying an array argument) is handled in code by coerceLabelList in
+  // tool-helpers.ts, and a wrong argument SHAPE that the app repairs costs the
+  // user nothing, while 45s per question costs them the feature. Speed is what
+  // the table measured most reliably.
+  //
+  // Do not re-derive this from the table alone. A real re-measurement wants
+  // full turns, more questions, and output integrity and latency scored
+  // alongside tool choice.
+  recommendedOllamaModel: 'llama3.2',
   // Prefix for the secure-storage key holding the optional Ollama/OpenAI
   // Bearer API key, suffixed with the profile id (lib/security/secureStorage.ts).
   // Never held in profile settings (rule 7 settings are plaintext-persisted).

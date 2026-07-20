@@ -7,18 +7,23 @@
  */
 
 import { create } from 'zustand';
-import type { AssistantMessage, ToolActivity } from '../lib/assistant/types';
+import type { AssistantMessage, ToolActivity, TraceEntry } from '../lib/assistant/types';
 
 interface AssistantState {
   // Per-profile conversation threads, keyed by profileId.
   threads: Record<string, AssistantMessage[]>;
   running: boolean;
   activities: ToolActivity[];
+  /** The in-flight turn's transcript, so the panel can show it while the turn
+   *  is still running. Cleared alongside `activities`; the finished turn keeps
+   *  its own copy on the assistant message. */
+  liveTrace: TraceEntry[];
   getThread: (profileId: string) => AssistantMessage[];
   append: (profileId: string, msg: AssistantMessage) => void;
   reset: (profileId: string) => void;
   setRunning: (running: boolean) => void;
   pushActivity: (a: ToolActivity) => void;
+  pushTrace: (e: TraceEntry) => void;
   clearActivities: () => void;
 }
 
@@ -26,6 +31,7 @@ export const useAssistantStore = create<AssistantState>()((set, get) => ({
   threads: {},
   running: false,
   activities: [],
+  liveTrace: [],
   getThread: (profileId) => get().threads[profileId] ?? [],
   append: (profileId, msg) =>
     set((s) => ({
@@ -34,5 +40,6 @@ export const useAssistantStore = create<AssistantState>()((set, get) => ({
   reset: (profileId) => set((s) => ({ threads: { ...s.threads, [profileId]: [] } })),
   setRunning: (running) => set({ running }),
   pushActivity: (a) => set((s) => ({ activities: [...s.activities, a] })),
-  clearActivities: () => set({ activities: [] }),
+  pushTrace: (e) => set((s) => ({ liveTrace: [...s.liveTrace, e] })),
+  clearActivities: () => set({ activities: [], liveTrace: [] }),
 }));

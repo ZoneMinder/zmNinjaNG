@@ -50,10 +50,18 @@ describe('buildSystemPrompt', () => {
     expect(p).toContain("Today's date is Thursday, 2026-07-16 in timezone America/New_York");
   });
 
-  it('instructs the model to call list_events with range/objectType for day- or object-type-specific questions', () => {
+  it('instructs the model to call list_events with when/objectType for day- or object-type-specific questions', () => {
     const p = buildSystemPrompt(base);
-    expect(p).toContain('call list_events with range and/or objectType');
+    expect(p).toContain('call list_events with when and/or objectType');
     expect(p).toContain('Describe only rows the query returned');
+  });
+
+  // The model echoes the user's phrasing accurately and does date arithmetic
+  // badly, so the prompt has to send it to `when` rather than to a timestamp.
+  it('forbids working out a date, pointing at the when parameter instead', () => {
+    const p = buildSystemPrompt(base);
+    expect(p).toContain('Never work out a date or timestamp yourself');
+    expect(p).toContain('`when`');
   });
 
   it('instructs the model to answer directly and never paste image links/ids, since the app shows thumbnails', () => {

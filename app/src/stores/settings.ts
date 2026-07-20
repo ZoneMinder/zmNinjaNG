@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Layout, Layouts } from 'react-grid-layout';
 import { LogLevel } from '../lib/log-level';
+import { Platform } from '../lib/platform';
 import type { BandwidthMode } from '../lib/zmninja-ng-constants';
 import { API_REQUEST, ASSISTANT, DEFAULT_EVENT_PLAYBACK_RATE, STORAGE_KEYS } from '../lib/zmninja-ng-constants';
 import type { AssistantBackend } from '../lib/assistant/types';
@@ -223,19 +224,17 @@ export interface ProfileSettings {
   // secureStorage under `${ASSISTANT.apiKeyStoragePrefix}${profileId}`.
   assistantEnabled: boolean;
   assistantBackend: AssistantBackend;
-  /** Use the GPU for on-device inference where one is available.
-   *
-   *  ON by default, which in practice means iOS/Metal: Android compiles no GPU
-   *  backend at all (both measured worse than its CPU, one crashing outright),
-   *  so this is inert there. Metal is the GPU path MNN supports best; it is the
-   *  only backend with flash-attention support, and it loaded and ran correctly
-   *  on device. Turning it off falls back to the CPU, and a device that crashes
-   *  on the GPU falls back permanently by itself (see the marker file in
-   *  native/mnn-runtime-config.h). */
-  assistantTryGpu: boolean;
   assistantModelId: string;
   assistantOllamaBaseUrl: string;
   assistantOllamaModel: string;
+  /** Sampling temperature. 0 is greedy and measured best; see the note beside
+   *  the field in Settings and `ASSISTANT.assistantTemperature`. */
+  assistantTemperature: number;
+  /** How long to wait for one model reply, in seconds. Exposed because the
+   *  right value is a property of the user's hardware, not of this app. */
+  assistantTimeoutSec: number;
+  /** How many previous question/answer exchanges the model is shown. */
+  assistantHistoryTurns: number;
 }
 
 interface SettingsState {
@@ -365,10 +364,15 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   hoverPreviewPlaybackRate: DEFAULT_HOVER_PREVIEW_PLAYBACK_RATE,
   assistantEnabled: false,
   assistantBackend: 'on-device',
-  assistantTryGpu: true,
   assistantModelId: ASSISTANT.defaultModelId,
-  assistantOllamaBaseUrl: ASSISTANT.defaultOllamaBaseUrl,
+  // Empty, not localhost: an unset URL is resolved against the profile's own
+  // ZoneMinder host at use time (see `suggestOllamaBaseUrl`). localhost is the
+  // wrong guess on a phone, where it means the phone itself.
+  assistantOllamaBaseUrl: '',
   assistantOllamaModel: '',
+  assistantTemperature: ASSISTANT.assistantTemperature,
+  assistantTimeoutSec: Math.round(ASSISTANT.requestTimeoutMs / 1000),
+  assistantHistoryTurns: ASSISTANT.maxHistoryTurns,
 };
 
 /**
@@ -377,7 +381,7 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
  * this number, so a retirement added without a bump never reaches anyone who
  * already ran the app.
  */
-export const SETTINGS_VERSION = 3;
+export const SETTINGS_VERSION = 9;
 
 /**
  * Migrate persisted settings:
@@ -391,7 +395,31 @@ export const SETTINGS_VERSION = 3;
  */
 export function migrateSettings(persistedState: unknown, version: number): unknown {
   const state = version >= 1 ? persistedState : migrateV0ToV1(persistedState);
-  return normalizeRetiredModelIds(state);
+  return moveNativeOffOnDevice(normalizeRetiredModelIds(state));
+}
+
+/** Moves a phone or tablet off the on-device backend.
+ *
+ *  On-device now means WebGPU, which mobile does not have; the native runtime
+ *  that used to back it was removed. A profile still holding `'on-device'`
+ *  there would sit on a backend with no implementation and simply never
+ *  answer, and hiding the option in Settings does not fix a value already
+ *  stored. Desktop and web are untouched.
+ *
+ *  Per device, not per profile sync: settings are local, so this asks the
+ *  platform it is actually running on. */
+function moveNativeOffOnDevice(persistedState: unknown): unknown {
+  if (!Platform.isNative) return persistedState;
+  const state = (persistedState ?? {}) as { profileSettings?: Record<string, unknown> };
+  if (!state.profileSettings) return persistedState;
+
+  const migrated: Record<string, unknown> = {};
+  for (const [profileId, raw] of Object.entries(state.profileSettings)) {
+    const settings = (raw ?? {}) as Record<string, unknown>;
+    migrated[profileId] =
+      settings.assistantBackend === 'on-device' ? { ...settings, assistantBackend: 'ollama' } : settings;
+  }
+  return { ...state, profileSettings: migrated };
 }
 
 /** Rewrites `assistantModelId` values dropped from `ASSISTANT.webllmModels`.

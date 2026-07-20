@@ -16,12 +16,22 @@ import { getGroups } from '../../api/groups';
 import { getTags, getEventTags, extractUniqueTags } from '../../api/tags';
 import type { MonitorData } from '../../api/types';
 import { ASSISTANT } from '../zmninja-ng-constants';
+import { buildResultSummary, countObjects } from './result-summary';
 import { parseDetectedObjects } from '../event/event-detection';
 import { buildEventDisplayEntity, buildMonitorDisplayEntity } from './display';
-import { EVENT_RANGES, resolveEventRange, isEventRange, type EventRange } from './event-range';
+import {
+  EVENT_RANGES,
+  resolveEventRange,
+  isEventRange,
+  resolveWhen,
+  asBareTimeOfDay,
+  hasCalendarDate,
+  singleDayOfRange,
+  type EventRange,
+} from './event-range';
 import { resolveMonitorRef } from './monitor-ref';
 import type { ToolDefinition } from './types';
-import { safeExecute, isOmittedArg, NAVIGATE_ALLOWLIST } from './tool-helpers';
+import { safeExecute, isOmittedArg, objectTypePattern, coerceLabelList, ungroundedWhenWords, NAVIGATE_ALLOWLIST } from './tool-helpers';
 
 /** Maps a raw MonitorData into the clean, model-friendly shape shared by
  *  list_monitors and get_monitor (refs #246): '0'/'1' strings become
@@ -110,7 +120,7 @@ const getMonitorTool: ToolDefinition = {
     properties: {
       monitorId: {
         type: 'string',
-        description: 'A monitor id from list_monitors. A monitor name ("Front Door") also works.',
+        description: 'A monitor id from list_monitors. A monitor name exactly as list_monitors reported it also works.',
       },
     },
     required: ['monitorId'],
@@ -137,7 +147,7 @@ const countEventsTool: ToolDefinition = {
     'and reporting the combined total. Use this for "how many events in the last N hours/days" or ' +
     '"summarize recent events" questions instead of list_events, which returns individual rows. ' +
     'It has TWO hard limits. It CANNOT express a calendar day: for "today" (since local midnight) or ' +
-    '"yesterday", call list_events with range instead. It CANNOT filter or report detected object types: ' +
+    '"yesterday", call list_events with when instead. It CANNOT filter or report detected object types: ' +
     'it returns event COUNTS ONLY and says nothing about what was detected, so for "how many ' +
     'people/cars/animals" questions call list_events with objectType instead. Calling this tool for an ' +
     'object-type question returns numbers that cannot answer it.',
@@ -172,11 +182,14 @@ function clampListEventsLimit(rawLimit: unknown): number {
 const listEventsTool: ToolDefinition = {
   name: 'list_events',
   description:
-    'List individual events, newest first, optionally filtered by monitor, time range, detected object ' +
-    'type, a single tag, or an explicit set of event ids. For "today", "yesterday", or a rolling window like ' +
-    '"last hour"/"last 24 hours"/"last 7 days"/"last 30 days", pass range instead of computing startTime/' +
-    'endTime yourself; the app resolves it against the profile\'s own timezone. Combine range with objectType ' +
-    'for "how many people/cars today" style questions: the rows this returns for that filter are exactly what ' +
+    'List individual events, newest first, optionally filtered by monitor, time window, detected object ' +
+    'type, a single tag, or an explicit set of event ids. For ANY time window, COPY the user\'s own time ' +
+    'words into `when` and nothing more; the app converts the phrase against the profile\'s own timezone, ' +
+    'so never compute a date yourself. Whole days, rolling windows and parts of a day are all understood, ' +
+    'but send only what the user actually said. Combine when with objectType ' +
+    'ONLY for questions that name an object, passing the labels this installation records (the system ' +
+    'prompt lists them) and never the user\'s own word for them. Omit objectType for a summary. The ' +
+    'rows this returns for a filter are exactly what ' +
     'you must describe, since the app shows their thumbnails below your answer. Each row includes the monitor ' +
     'NAME (not just its id), the detected object types, score, duration, and a notes preview, so answer using ' +
     'those, not raw ids. A tag filter and event ids cannot be combined (the server rejects it); pass one or ' +
@@ -187,25 +200,30 @@ const listEventsTool: ToolDefinition = {
       monitorId: {
         type: 'string',
         description:
-          'A monitor id from list_monitors. A monitor name ("Front Door") also works and is resolved to its ' +
-          'id. Omit to search every monitor.',
+          'A monitor id from list_monitors. A monitor name exactly as list_monitors reported it also works and ' +
+          'is resolved to its id. Never invent a name; omit this to search every monitor.',
       },
-      range: {
+      when: {
         type: 'string',
-        enum: [...EVENT_RANGES],
         description:
-          'A relative date/time window resolved against the profile timezone: "today" and "yesterday" are ' +
-          'calendar days (local midnight to local midnight); "last_hour", "last_24h", "last_7d", "last_30d" ' +
-          'are rolling windows ending now. Prefer this over startTime/endTime for anything relative.',
+          'PREFERRED for any time window. COPY the user\'s own time words, exactly as they wrote them and ' +
+          'nothing more. Whole days, rolling windows ("last N hours/days") and parts of a day (from X to Y, ' +
+          'before X, after X) are all understood. The app converts the phrase to exact timestamps in the ' +
+          'profile\'s timezone, so never work out a date yourself and never pass a date here. Do not send a ' +
+          'time of day the user did not mention.',
       },
-      startTime: { type: 'string', description: 'ISO or "YYYY-MM-DD HH:MM:SS". Overrides range if set.' },
-      endTime: { type: 'string', description: 'ISO or "YYYY-MM-DD HH:MM:SS". Overrides range if set.' },
       objectType: {
-        type: 'string',
+        // Both shapes, declared honestly: the model is asked to send a list for
+        // a category word, and a schema saying "string" makes the pre-flight
+        // validator reject the very thing the prompt requested.
+        type: ['string', 'array'],
+        items: { type: 'string' },
         description:
-          'The exact detected object label as written by this install\'s detector, e.g. "person", "car". ' +
-          'The vocabulary is install-specific, so if nothing matches, this tool replies with the labels ' +
-          'actually recorded in that window; retry with one of those rather than reporting no detections.',
+          'One detected object label, or several as an array, exactly as this install writes them (the ' +
+          'system prompt lists the labels seen recently). For a category word pass every label that ' +
+          'belongs to it, e.g. ["car","truck"] for "vehicles". If nothing matches, this tool replies with ' +
+          'the labels actually recorded in that window; retry with one of those rather than reporting no ' +
+          'detections.',
       },
       tag: { type: 'string', description: 'A single tag id. Mutually exclusive with eventIds.' },
       eventIds: { type: 'array', items: { type: 'string' }, description: 'Mutually exclusive with tag.' },
@@ -230,15 +248,66 @@ const listEventsTool: ToolDefinition = {
       };
     }
     return safeExecute('list_events', async () => {
+      const timezone = ctx.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+      // `when` first: it is the argument the model is asked to fill, and it
+      // carries the user's own phrasing rather than arithmetic the model did.
+      // A phrase it cannot read is thrown back naming the unreadable part, so
+      // the model corrects instead of silently querying the wrong window.
+      const whenPhrase = isOmittedArg(input.when) ? undefined : String(input.when);
+      let resolvedWhen: { startDateTime: string; endDateTime: string } | undefined;
+      if (whenPhrase && ctx.question) {
+        // The contract is "the user's own words". A phrase carrying words the
+        // user never wrote is the prompt's example leaking into the argument,
+        // and it narrows the window without anyone noticing.
+        const invented = ungroundedWhenWords(whenPhrase, ctx.question);
+        if (invented.length > 0) {
+          throw new Error(
+            `when "${whenPhrase}" contains words the user did not write (${invented.join(', ')}). ` +
+              'Copy the time period from the question itself, exactly as the user phrased it, and nothing more. ' +
+              'The examples in the tool description are formats, not values to send.',
+          );
+        }
+      }
+      if (whenPhrase) {
+        const parsed = resolveWhen(whenPhrase, new Date(), timezone);
+        if ('error' in parsed) throw new Error(parsed.error);
+        resolvedWhen = parsed;
+      }
+
       const range = input.range as EventRange | undefined;
-      const explicitStart = input.startTime as string | undefined;
-      const explicitEnd = input.endTime as string | undefined;
-      // Explicit startTime/endTime win over range (per the tool description);
-      // range only fills in whichever of the two the model left unset.
-      const resolved =
-        range && (!explicitStart || !explicitEnd)
-          ? resolveEventRange(range, new Date(), ctx.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone)
-          : undefined;
+      const explicitStart = isOmittedArg(input.startTime) ? undefined : String(input.startTime);
+      const explicitEnd = isOmittedArg(input.endTime) ? undefined : String(input.endTime);
+      // Resolved whenever a range is given, not only when a bound is missing:
+      // a bare time of day needs the range's calendar day to anchor to, and
+      // the old condition skipped resolution in exactly the case that needs it
+      // most ("yesterday from 4pm to 10pm" sets range AND both bounds).
+      const resolved = range ? resolveEventRange(range, new Date(), timezone) : undefined;
+      const anchorDay = range && resolved ? singleDayOfRange(range, resolved) : undefined;
+
+      /** A model-supplied bound as a datetime the API can use. A bare time of
+       *  day is anchored to the range's day; anything carrying its own date
+       *  passes through; anything else is refused rather than sent as-is. */
+      const anchorBound = (value: string | undefined, field: 'startTime' | 'endTime'): string | undefined => {
+        if (value === undefined) return undefined;
+        const timeOfDay = asBareTimeOfDay(value);
+        if (timeOfDay) {
+          if (!anchorDay) {
+            throw new Error(
+              `${field} "${value}" is a time of day with no date, and this query has no single day to attach it to. ` +
+                'Either add range "today" or "yesterday" alongside it, or pass the full "YYYY-MM-DD HH:MM:SS".',
+            );
+          }
+          return `${anchorDay} ${timeOfDay}`;
+        }
+        if (!hasCalendarDate(value)) {
+          throw new Error(
+            `${field} "${value}" is not a date this app understands. Use "YYYY-MM-DD HH:MM:SS", ` +
+              'or a bare "HH:MM" together with range "today" or "yesterday".',
+          );
+        }
+        return value;
+      };
 
       // Monitors first, and awaited rather than raced with getEvents: the
       // events query cannot be built until the model's `monitorId` (often a
@@ -260,13 +329,57 @@ const listEventsTool: ToolDefinition = {
 
       // Same placeholder guard: an objectType of "null" would build the regexp
       // `detected:.*null` and silently match no events.
-      const objectType = isOmittedArg(input.objectType) ? undefined : String(input.objectType);
+      // A string or an array; `objectTypePattern` normalizes and sanitizes
+      // both. `objectType` is only for the messages the model reads back.
+      const objectTypeRaw = isOmittedArg(input.objectType) ? undefined : (input.objectType as string | string[]);
+      const objectType = objectTypeRaw
+        ? (Array.isArray(objectTypeRaw) ? objectTypeRaw.join(', ') : String(objectTypeRaw))
+        : undefined;
+      const objectPattern = objectTypeRaw ? objectTypePattern(objectTypeRaw) : undefined;
+
+      // Refused before the query, not discovered as zero rows afterwards.
+      // Asked about "vehicles" the model sent objectType "vehicle" despite the
+      // vocabulary being in its prompt; the query then matched nothing and the
+      // honest "none" was wrong, because cars were there and a car is a
+      // vehicle. A label this detector never writes cannot answer anything, so
+      // the model is sent back to the real list instead.
+      if (objectTypeRaw && ctx.objectLabels?.length) {
+        const known = new Set(ctx.objectLabels.map((label) => label.toLowerCase()));
+        const unknown = coerceLabelList(objectTypeRaw)
+          .map((v) => v.toLowerCase().trim())
+          .filter((v) => v.length > 0 && !known.has(v));
+        if (unknown.length > 0) {
+          throw new Error(
+            `objectType ${unknown.map((u) => `"${u}"`).join(', ')} is not a label this installation records. ` +
+              `The labels it does record are: ${ctx.objectLabels.join(', ')}. ` +
+              'Retry with every label from that list that matches what the user asked about, as an array, ' +
+              `for example objectType ["car","truck"] for a question about vehicles.`,
+          );
+        }
+      }
+
+      /** The window actually queried, in the shape the model is shown. Must
+       *  mirror `filters` below exactly, `when` included: it did not, and a
+       *  `when: "today"` query reported "no time filter applied" while being
+       *  filtered, inviting the model to describe today's rows as every event
+       *  ever recorded. A function because the zero-match branch needs it
+       *  before the rows exist. */
+      const windowOf = () => {
+        const from = anchorBound(explicitStart, 'startTime') ?? resolvedWhen?.startDateTime ?? resolved?.startDateTime;
+        const to = anchorBound(explicitEnd, 'endTime') ?? resolvedWhen?.endDateTime ?? resolved?.endDateTime;
+        return from || to ? { from: from ?? null, to: to ?? null } : 'all recorded events, no time filter applied';
+      };
 
       const filters: EventFilters = {
         monitorId,
-        startDateTime: explicitStart ?? resolved?.startDateTime,
-        endDateTime: explicitEnd ?? resolved?.endDateTime,
-        notesRegexp: objectType ? `detected:.*${objectType}` : undefined,
+        // Precedence: an explicit timestamp the model supplied, then the
+        // resolved `when` phrase, then the `range` keyword. `when` outranks
+        // `range` because it is the more specific statement of the same thing.
+        startDateTime: anchorBound(explicitStart, 'startTime') ?? resolvedWhen?.startDateTime ?? resolved?.startDateTime,
+        endDateTime: anchorBound(explicitEnd, 'endTime') ?? resolvedWhen?.endDateTime ?? resolved?.endDateTime,
+        // Expanded through the category map, so "vehicles" matches the car and
+        // truck rows a detector actually writes (see objectTypePattern).
+        notesRegexp: objectPattern ? `detected:.*${objectPattern}` : undefined,
         tagIds: tag ? [tag] : undefined,
         eventIds,
         limit,
@@ -290,12 +403,27 @@ const listEventsTool: ToolDefinition = {
         // name the labels in use, and it costs one request only on this path.
         const available = [...new Set(probe.events.flatMap(({ Event: e }) => parseDetectedObjects(e.Notes)))];
         if (available.length > 0) {
-          throw new Error(
-            `No events matched objectType "${objectType}". Detected object labels recorded in this window: ` +
-              `${available.slice(0, ASSISTANT.objectLabelHintLimit).join(', ')}. ` +
-              'Retry list_events with one of those exact labels, or without objectType. ' +
-              'Do not tell the user nothing was detected until you have retried.',
-          );
+          return {
+            output: JSON.stringify({
+              summary: buildResultSummary({
+                window: windowOf(),
+                matchCount: 0,
+                countsByMonitor: {},
+                objectCounts: {},
+                partial: false,
+              }),
+              window: windowOf(),
+              objectType,
+              events: [],
+              matchCount: 0,
+              note:
+                `No "${objectType}" was detected in this window. This is the answer: tell the user there ` +
+                `were none. Labels actually recorded in the same window: ` +
+                `${available.slice(0, ASSISTANT.objectLabelHintLimit).join(', ')}. Answer about those ONLY ` +
+                `if one of them is the same object the user asked about under a different name; otherwise ` +
+                `the answer is none.`,
+            }),
+          };
         }
       }
 
@@ -315,26 +443,60 @@ const listEventsTool: ToolDefinition = {
         objects: parseDetectedObjects(e.Notes),
       }));
 
-      // Drop whole rows rather than characters, so what survives is always
-      // valid JSON the model can read, and say how many were dropped: a bare
-      // "truncated" reads to a small model as "nothing found".
-      const budget = ASSISTANT.maxToolResultCharacters - ASSISTANT.toolResultBudgetHeadroom;
-      let shown = rows;
-      while (shown.length > 1 && JSON.stringify({ events: shown }).length > budget) {
-        shown = shown.slice(0, -1);
-      }
       // State the window that was actually queried. Asked "how many people came
       // to my house", the model queried no time range at all and then answered
       // "no people in the last 24 hours": a period it never asked about. It
       // cannot invent one it is told.
-      const from = explicitStart ?? resolved?.startDateTime;
-      const to = explicitEnd ?? resolved?.endDateTime;
-      const window = from || to ? { from: from ?? null, to: to ?? null } : 'all recorded events, no time filter applied';
+      const window = windowOf();
 
-      const more = shown.length < rows.length || res.pagination.nextPage;
-      const output = JSON.stringify(
-        more ? { window, events: shown, shownEvents: shown.length, moreMatchesExist: true } : { window, events: shown },
-      );
+      /** The exact object the model receives, for a given set of rows.
+       *
+       *  Built as one function so the size check below measures what is
+       *  actually sent. It used to measure `{events}` alone and rely on a fixed
+       *  200-character headroom to cover everything else; the summary and
+       *  object tallies are big enough, and variable enough, that a fixed
+       *  allowance is a guess. */
+      const buildOutput = (rowsToShow: typeof rows) => {
+        const truncated = rowsToShow.length < rows.length || res.pagination.nextPage;
+        // Counted here, not left to the model. Asked "how many vehicles came
+        // yesterday" against ten rows (four Front Yard, six Garage Outdoor), it
+        // answered "8 on the Front Yard and 2 on the Garage Outdoor": the total
+        // was right and the split was invented. Tallying rows is arithmetic, and
+        // a 3B model does arithmetic badly, so the tally is supplied as data.
+        // Covers the rows SHOWN, which are the rows the model may describe.
+        const countsByMonitor = rowsToShow.reduce<Record<string, number>>((acc, row) => {
+          const name = String((row as { monitor?: unknown }).monitor ?? 'unknown');
+          acc[name] = (acc[name] ?? 0) + 1;
+          return acc;
+        }, {});
+        const objectCounts = countObjects(rowsToShow as { monitor?: unknown; objects?: unknown }[]);
+        // The counts, already written out. Supplying the numbers was not enough:
+        // asked to summarize, the model enumerated all five rows and quoted
+        // neither matchCount nor countsByMonitor. `summary` leads the object so
+        // it is the first thing read.
+        const summary = buildResultSummary({
+          window,
+          matchCount: rowsToShow.length,
+          countsByMonitor,
+          objectCounts,
+          partial: Boolean(truncated),
+        });
+        const base = { summary, window, matchCount: rowsToShow.length, countsByMonitor, objectCounts, events: rowsToShow };
+        return JSON.stringify(
+          truncated ? { ...base, shownEvents: rowsToShow.length, moreMatchesExist: true } : base,
+        );
+      };
+
+      // Drop whole rows rather than characters, so what survives is always
+      // valid JSON the model can read, and say how many were dropped: a bare
+      // "truncated" reads to a small model as "nothing found".
+      let shown = rows;
+      let output = buildOutput(shown);
+      while (shown.length > 1 && output.length > ASSISTANT.maxToolResultCharacters) {
+        shown = shown.slice(0, -1);
+        output = buildOutput(shown);
+      }
+
       // Cards mirror EXACTLY the rows the model was given. Building them from
       // the full set is what let the UI contradict the answer.
       const display = res.events.slice(0, shown.length).map(({ Event: e }) =>

@@ -1,0 +1,401 @@
+/**
+ * Prompt evaluation harness.
+ *
+ * Imports the REAL system prompt and the REAL tool schemas, so a variant is
+ * scored under the conditions it will actually run in. Tool results are canned
+ * (taken verbatim from live transcripts) rather than fetched, so a run is
+ * reproducible and does not depend on what the cameras happen to have recorded.
+ *
+ * Two stages, because the prompt has two jobs and they fail differently:
+ *   1. TOOL   - given a question, is the right tool called with usable arguments?
+ *   2. ANSWER - given a tool result, is the answer grounded in it?
+ *
+ * Usage (from app/):
+ *   TEMP=0 npx tsx scripts/prompt-eval.mts baseline 6
+ *   MODEL=gemma4:latest OLLAMA=http://host:11434/v1 npx tsx scripts/prompt-eval.mts baseline 6
+ *
+ * Needs a reachable Ollama server, so it is NOT part of `npm test`: it is the
+ * thing to run when changing the system prompt, the tool schemas, or the
+ * recommended model, none of which unit tests can score.
+ *
+ * What it already settled: two prompt rewrites measured within noise of the
+ * current wording, while pinning the sampling temperature moved the score from
+ * 57/66 to 66/66. Measure before rewriting prose.
+ */
+import { buildSystemPrompt } from '../src/lib/assistant/system-prompt';
+import { TOOLS } from '../src/lib/assistant/tools';
+import { toOpenAiTools } from '../src/lib/assistant/providers/openai';
+import { coerceLabelList, stripOmittedArgs } from '../src/lib/assistant/tool-helpers';
+import { buildWebLlmMessages, parseWebLlmTurn } from '../src/lib/assistant/providers/webllm';
+
+const LONG = 'Never count rows yourself. When a result carries a summary line, it is the counts already written out: START your answer with it, using its numbers and wording exactly. Add detail from the rows after it. When a result carries matchCount or countsByMonitor, those numbers ARE the counts: quote them exactly and never add up the rows to get your own.';
+
+const BASE = process.env.OLLAMA ?? 'http://localhost:11434/v1';
+const MODEL = process.env.MODEL ?? 'llama3.2:latest';
+// Uncontrolled sampling made two runs of the SAME prompt differ by 7 points,
+// which is larger than any difference between prompts. Pin it.
+const TEMP = process.env.TEMP === undefined ? undefined : Number(process.env.TEMP);
+
+const OBJECT_LABELS = ['car', 'carrot', 'person', 'truck'];
+
+// Verbatim from a live transcript.
+const TODAY_RESULT =
+  '{"summary":"5 events between 2026-07-20 00:00:00 and 2026-07-20 09:31:51. By monitor: FrontDoor 2, Front Yard 2, Garage Outdoor 1. Detected: person 4, car 1.","window":{"from":"2026-07-20 00:00:00","to":"2026-07-20 09:31:51"},"matchCount":5,"countsByMonitor":{"FrontDoor":2,"Front Yard":2,"Garage Outdoor":1},"objectCounts":{"person":4,"car":1},"events":[{"id":"253363","monitor":"FrontDoor","start":"2026-07-20 08:36:33","durationSec":30.02,"objects":["person"]},{"id":"253362","monitor":"Front Yard","start":"2026-07-20 08:36:21","durationSec":30.06,"objects":["person"]},{"id":"253361","monitor":"Front Yard","start":"2026-07-20 08:35:45","durationSec":30.03,"objects":["person"]},{"id":"253360","monitor":"FrontDoor","start":"2026-07-20 08:35:19","durationSec":30,"objects":["person"]},{"id":"253359","monitor":"Garage Outdoor","start":"2026-07-20 08:20:59","durationSec":30,"objects":["car"]}]}';
+
+const EMPTY_RESULT =
+  '{"summary":"No events between 2026-07-20 00:00:00 and 2026-07-20 09:31:51.","window":{"from":"2026-07-20 00:00:00","to":"2026-07-20 09:31:51"},"matchCount":0,"countsByMonitor":{},"objectCounts":{},"events":[]}';
+
+interface ToolCase {
+  q: string;
+  /** Tool that answers it. `null` means no tool should be called at all. */
+  tool: string | null;
+  /** Argument check. Absent means any arguments pass. */
+  args?: (a: Record<string, unknown>) => boolean;
+  /** Handled by triage before the prompt sees it; reported, not scored. */
+  triaged?: boolean;
+}
+
+const TOOL_CASES: ToolCase[] = [
+  { q: 'summarize today', tool: 'list_events', args: (a) => a.when === 'today' && a.objectType === undefined },
+  { q: 'what happened yesterday', tool: 'list_events', args: (a) => a.when === 'yesterday' && a.objectType === undefined },
+  { q: 'how many people came today', tool: 'list_events', args: (a) => a.when === 'today' && String(a.objectType).includes('person') },
+  // Triage answers these with NO tools in production (see triage.ts), so the
+  // prompt is not what decides them. Kept visible, scored separately.
+  {
+    q: 'how many vehicles came yesterday',
+    tool: 'list_events',
+    args: (a) => {
+      const t = (a.objectType ?? []) as string[];
+      return a.when === 'yesterday' && t.includes('car') && t.includes('truck');
+    },
+  },
+  { q: 'is the server ok', tool: 'get_server_health' },
+  { q: 'what cameras do I have', tool: 'list_monitors' },
+  { q: 'how many events in the last 24 hours', tool: 'count_events', args: (a) => /day|24/.test(String(a.interval)) },
+  { q: 'what tags are available', tool: 'list_tags' },
+  { q: 'hello', tool: null, triaged: true },
+  { q: 'what is the capital of France', tool: null, triaged: true },
+];
+
+interface AnswerCase {
+  q: string;
+  result: string;
+  /** Every one must hold for the answer to score. */
+  checks: { name: string; ok: (a: string) => boolean }[];
+}
+
+const lower = (s: string) => s.toLowerCase();
+const deniesData = (a: string) =>
+  /\b(none|no events|nothing (was )?found|not found|no matches)\b/i.test(a);
+
+const ANSWER_CASES: AnswerCase[] = [
+  {
+    q: 'summarize today',
+    result: TODAY_RESULT,
+    checks: [
+      { name: 'total', ok: (a) => /\b5\b/.test(a) },
+      { name: 'per-monitor', ok: (a) => /\b2\b/.test(a) && /\b1\b/.test(a) },
+      { name: 'names-real', ok: (a) => !/EXAMPLE_|Backyard|Front Gate|Driveway/i.test(a) },
+      { name: 'no-denial', ok: (a) => !deniesData(a) },
+      { name: 'objects', ok: (a) => lower(a).includes('person') || lower(a).includes('people') },
+      { name: 'not-json', ok: (a) => !a.trim().startsWith('{') },
+    ],
+  },
+  {
+    q: 'how many people came today',
+    result: TODAY_RESULT,
+    checks: [
+      { name: 'person-count', ok: (a) => /\b4\b/.test(a) },
+      { name: 'no-denial', ok: (a) => !deniesData(a) },
+      { name: 'not-json', ok: (a) => !a.trim().startsWith('{') },
+    ],
+  },
+  {
+    q: 'summarize today',
+    result: EMPTY_RESULT,
+    checks: [
+      // The honest empty answer: it MUST say nothing was found.
+      { name: 'says-empty', ok: (a) => deniesData(a) },
+      { name: 'no-invented-rows', ok: (a) => !/FrontDoor|Garage|person|car\b/i.test(a) },
+    ],
+  },
+];
+
+async function chat(body: unknown): Promise<any> {
+  const res = await fetch(`${BASE}/chat/completions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+function systemPrompt(variant: string): string {
+  const base = buildSystemPrompt({
+    now: new Date('2026-07-20T13:31:48.799Z'),
+    timezone: 'America/New_York',
+    zmVersion: '1.39.1',
+    locale: 'en-US',
+    objectLabels: OBJECT_LABELS,
+  } as never);
+  if (variant === 'baseline') return base;
+  const override = VARIANTS[variant];
+  if (!override) throw new Error(`unknown variant: ${variant}`);
+  return override(base);
+}
+
+/** Variants are transformations of the real prompt, so they can never drift
+ *  from it structurally: each rewrites specific rule lines and leaves the rest. */
+const VARIANTS: Record<string, (base: string) => string> = {
+  // One 348-character, four-sentence rule broken into short single-idea lines,
+  // and moved to the FRONT of the answer section. Same content.
+  split: (base) => {
+    const short = [
+      'Copy the result\'s summary line as your first sentence, word for word. It is already correct.',
+      'Then add detail from the rows.',
+      'The numbers in the result are the counts. Read them; do not add up rows yourself.',
+    ].join('\n');
+    return base.replace(LONG, '').replace(
+      'Writing the answer text:',
+      `Writing the answer text:\n${short}`,
+    ).replace(/\n\n+/g, '\n\n');
+  },
+
+  // As `split`, plus the field that answers an object-type question named
+  // outright. The observed fabrication is reading matchCount (5 events) when
+  // asked how many people (objectCounts.person, 4).
+  fields: (base) => {
+    const short = [
+      'Copy the result\'s summary line as your first sentence, word for word. It is already correct.',
+      'Then add detail from the rows.',
+      'The numbers in the result are the counts. Read them; do not add up rows yourself.',
+      'matchCount is how many EVENTS matched. objectCounts is how many of each thing was detected. For "how many people/cars", read objectCounts, not matchCount.',
+    ].join('\n');
+    return base.replace(LONG, '').replace(
+      'Writing the answer text:',
+      `Writing the answer text:\n${short}`,
+    ).replace(/\n\n+/g, '\n\n');
+  },
+
+  // `fields`, with the remaining answer-section prohibitions restated as
+  // positive instructions. Tests whether negation density itself costs
+  // anything, holding content constant.
+  positive: (base) => {
+    let out = VARIANTS.fields(base);
+    out = out.replace(
+      'Describe only rows the query returned. Never state server health, monitor state, event counts, detections, FPS, times, or recommendations unless a tool returned that fact in this turn.',
+      'Every fact in your answer must come from a tool result in this turn: health, monitor state, counts, detections, FPS and times all included.',
+    );
+    out = out.replace(
+      'Never name a time period you did not query. Use the window the tool reports: if it says no time filter was applied, your answer covers all recorded events, not today or the last 24 hours.',
+      'Name the period the tool reports in its window field. If it says no time filter was applied, say your answer covers all recorded events.',
+    );
+    out = out.replace(
+      'Be direct. Never show image links, URLs, or raw ids.',
+      'Be direct. Write monitor names and times as words, leaving out image links, URLs and raw ids.',
+    );
+    return out;
+  },
+};
+
+const LONG_RULE_SENTINEL = 1;
+
+async function scoreTools(system: string, runs: number) {
+  const tools = toOpenAiTools(TOOLS);
+  let pass = 0;
+  let total = 0;
+  let triagedPass = 0;
+  let triagedTotal = 0;
+  const failures: string[] = [];
+  for (const c of TOOL_CASES) {
+    for (let i = 0; i < runs; i++) {
+      if (c.triaged) triagedTotal++;
+      else total++;
+      try {
+        const r = await chat({
+          model: MODEL,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: c.q },
+          ],
+          tools,
+          tool_choice: 'auto',
+          stream: false,
+          max_tokens: 4096,
+          ...(TEMP === undefined ? {} : { temperature: TEMP }),
+        });
+        const call = r.choices?.[0]?.message?.tool_calls?.[0];
+        if (c.tool === null) {
+          // Counted against the triaged tally, not the scored one: incrementing
+          // `pass` here made the score exceed its own total (30/24).
+          if (!call) {
+            if (c.triaged) triagedPass++;
+            else pass++;
+          } else {
+            failures.push(`[tool] "${c.q}" called ${call.function.name}, expected none`);
+          }
+          continue;
+        }
+        if (!call) {
+          failures.push(`[tool] "${c.q}" called nothing, expected ${c.tool}`);
+          continue;
+        }
+        if (call.function.name !== c.tool) {
+          failures.push(`[tool] "${c.q}" called ${call.function.name}, expected ${c.tool}`);
+          continue;
+        }
+        let args: Record<string, unknown> = {};
+        try {
+          args = JSON.parse(call.function.arguments || '{}');
+        } catch {
+          failures.push(`[tool] "${c.q}" arguments were not JSON`);
+          continue;
+        }
+        // The SAME repairs the app applies before a tool runs, so a fault it
+        // already fixes is not counted against the prompt. A stringified array
+        // argument is llama3.2's known habit and coerceLabelList handles it.
+        args = stripOmittedArgs(args);
+        if (args.objectType !== undefined) args.objectType = coerceLabelList(args.objectType);
+        if (c.args && !c.args(args)) {
+          failures.push(`[tool] "${c.q}" args ${JSON.stringify(args)}`);
+          continue;
+        }
+        if (c.triaged) triagedPass++; else pass++;
+      } catch (e) {
+        failures.push(`[tool] "${c.q}" error: ${(e as Error).message}`);
+      }
+    }
+  }
+  return { pass, total, triagedPass, triagedTotal, failures };
+}
+
+async function scoreAnswers(system: string, runs: number) {
+  const tools = toOpenAiTools(TOOLS);
+  let pass = 0;
+  let total = 0;
+  const failures: string[] = [];
+  for (const c of ANSWER_CASES) {
+    for (let i = 0; i < runs; i++) {
+      total++;
+      try {
+        const r = await chat({
+          model: MODEL,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: c.q },
+            {
+              role: 'assistant',
+              content: '',
+              tool_calls: [
+                { id: 'c1', type: 'function', function: { name: 'list_events', arguments: '{"when":"today"}' } },
+              ],
+            },
+            { role: 'tool', tool_call_id: 'c1', content: c.result },
+          ],
+          tools,
+          tool_choice: 'auto',
+          stream: false,
+          max_tokens: 4096,
+          ...(TEMP === undefined ? {} : { temperature: TEMP }),
+        });
+        const text = r.choices?.[0]?.message?.content ?? '';
+        if (!text) {
+          failures.push(`[answer] "${c.q}" produced no text`);
+          continue;
+        }
+        const failed = c.checks.filter((chk) => !chk.ok(text));
+        if (failed.length === 0) pass++;
+        else failures.push(`[answer] "${c.q}" failed ${failed.map((f) => f.name).join(',')}: ${text.slice(0, 90)}`);
+      } catch (e) {
+        failures.push(`[answer] "${c.q}" error: ${(e as Error).message}`);
+      }
+    }
+  }
+  return { pass, total, failures };
+}
+
+/**
+ * The WebLLM contract, scored through Ollama.
+ *
+ * WebLLM needs WebGPU and cannot run here, so this is a PROXY, not the real
+ * thing: it sends the messages `buildWebLlmMessages` really builds (tools
+ * described in prose, one JSON object back, no native tool calling) and parses
+ * them with the real `parseWebLlmTurn`. Same contract and same base model
+ * family; a different quantization and runtime. Good enough to tell whether the
+ * temperature finding carries to the prompt-only path, not a substitute for a
+ * manual browser run.
+ */
+async function scoreWebLlmContract(runs: number) {
+  const system = systemPrompt('baseline');
+  let pass = 0;
+  let total = 0;
+  const failures: string[] = [];
+  for (const c of TOOL_CASES) {
+    if (c.triaged) continue;
+    for (let i = 0; i < runs; i++) {
+      total++;
+      const messages = buildWebLlmMessages(
+        system,
+        [{ role: 'user', text: c.q }],
+        TOOLS,
+        'Llama-3.2-3B-Instruct-q4f16_1-MLC',
+      );
+      try {
+        const r = await chat({
+          model: MODEL,
+          messages,
+          stream: false,
+          max_tokens: 4096,
+          ...(TEMP === undefined ? {} : { temperature: TEMP }),
+        });
+        const turn = parseWebLlmTurn(r.choices?.[0]?.message?.content ?? '');
+        const call = turn.toolCalls[0];
+        if (!call) {
+          failures.push(`[webllm] "${c.q}" no tool call, expected ${c.tool}`);
+          continue;
+        }
+        if (call.name !== c.tool) {
+          failures.push(`[webllm] "${c.q}" called ${call.name}, expected ${c.tool}`);
+          continue;
+        }
+        let args = stripOmittedArgs(call.input as Record<string, unknown>);
+        if (args.objectType !== undefined) args.objectType = coerceLabelList(args.objectType);
+        if (c.args && !c.args(args)) {
+          failures.push(`[webllm] "${c.q}" args ${JSON.stringify(args)}`);
+          continue;
+        }
+        pass++;
+      } catch (e) {
+        failures.push(`[webllm] "${c.q}" error: ${(e as Error).message}`);
+      }
+    }
+  }
+  return { pass, total, failures };
+}
+
+const variant = process.argv[2] ?? 'baseline';
+const runs = Number(process.argv[3] ?? 2);
+const started = Date.now();
+if (variant === 'webllm') {
+  const w = await scoreWebLlmContract(runs);
+  console.log(`\n=== webllm contract via ${MODEL}, temp ${TEMP ?? 'default'} (PROXY: no WebGPU here) ===`);
+  console.log(`tool: ${w.pass}/${w.total}`);
+  for (const f of w.failures) console.log(`  ${f}`);
+  process.exit(0);
+}
+const system = systemPrompt(variant);
+const t = await scoreTools(system, runs);
+const a = await scoreAnswers(system, runs);
+const seconds = ((Date.now() - started) / 1000).toFixed(0);
+
+console.log(`\n=== ${variant} (${MODEL}, ${runs} runs/case) ===`);
+console.log(`prompt: ${system.length} chars, temp: ${TEMP ?? 'default'}`);
+console.log(`tool:   ${t.pass}/${t.total}`);
+console.log(`triage: ${t.triagedPass}/${t.triagedTotal} (not scored: triage handles these with no tools)`);
+console.log(`answer: ${a.pass}/${a.total}`);
+console.log(`TOTAL:  ${t.pass + a.pass}/${t.total + a.total}  (${seconds}s)`);
+if ([...t.failures, ...a.failures].length) {
+  console.log('\nfailures:');
+  for (const f of [...t.failures, ...a.failures]) console.log(`  ${f}`);
+}

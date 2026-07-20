@@ -13,8 +13,6 @@ import { useAssistantStore } from '../../stores/assistant';
 import { useAssistantPanelStore } from '../../stores/assistantPanel';
 import { ASSISTANT } from '../../lib/zmninja-ng-constants';
 import { Platform } from '../../lib/platform';
-import { unloadNativeMnn } from '../../lib/assistant/native-mnn';
-import { log, LogLevel } from '../../lib/logger';
 
 /** Marks the point the model can no longer see (agent.ts's
  *  sliceAfterContextBoundary), and is rendered as a divider by AskPanel. */
@@ -66,15 +64,6 @@ export function useAssistantChrome(): AssistantChrome {
       if (!profileId) return;
       reset(profileId);
       clearActivities();
-      // Clear means "start over", and on mobile the expensive part of the
-      // conversation is the ~1.4GB model still resident in native memory, so
-      // this releases it too. It reloads on the next question, and AskPanel
-      // says so while it does (see its loading notice).
-      if (Platform.isNative) {
-        unloadNativeMnn().catch((error) =>
-          log.assistant('Failed to unload the on-device model on clear', LogLevel.WARN, { error }),
-        );
-      }
       // A note rather than an empty panel: a conversation vanishing with no
       // explanation reads as a bug, and this is also the boundary the model
       // cannot see past (agent.ts slices the history here).

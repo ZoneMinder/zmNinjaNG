@@ -36,7 +36,7 @@ const GENERIC_MODEL_ID = 'Llama-3.2-1B-Instruct-q4f16_1-MLC';
 // after the system message (see buildFewShotExamples in providers/webllm.ts).
 // Tests below that inspect the real conversation must skip past that block;
 // FEW_SHOT_COUNT is the number of messages it contributes.
-const FEW_SHOT_COUNT = 4;
+const FEW_SHOT_COUNT = 6;
 
 describe('buildWebLlmMessages', () => {
   it('opens with a system message combining `system` and the tool catalog', () => {
@@ -160,6 +160,22 @@ describe('buildWebLlmMessages', () => {
       expect(exampleToolCallIndex).toBeLessThan(realUserIndex);
     });
 
+    // The example data used plausible names ("Front Door", "Garage") and
+    // llama3.2 answered a real question with those names and their counts,
+    // having called no tool at all. Example data must be unmistakably fake.
+    it('never puts a plausible monitor name or count in the example data', () => {
+      const messages = buildWebLlmMessages('sys', [], [], GENERIC_MODEL_ID);
+      const text = messages.map((m) => String(m.content ?? '')).join('\n');
+
+      for (const plausible of ['Front Door', 'Garage', 'Driveway', 'Back Yard', 'Backyard']) {
+        expect(text).not.toContain(plausible);
+      }
+      // And the block says outright that its own data is not real, so a model
+      // that does echo it has been told why not to.
+      expect(text).toContain('FORMAT EXAMPLE');
+      expect(text).toContain('not real');
+    });
+
     it('demonstrates count_events with no monitorId for an all-monitors summary question', () => {
       const messages = buildWebLlmMessages('sys', [], [], GENERIC_MODEL_ID);
       expect(messages).toContainEqual({
@@ -220,6 +236,18 @@ describe('buildWebLlmMessages', () => {
       expect(last.role).toBe('user');
       expect(last.content).toContain('How many events on Garage today?');
     });
+  });
+});
+
+describe('tool catalog signatures', () => {
+  // The envelope paths read this compressed catalog instead of the schemas, so
+  // a multi-type argument has to survive the compression: showing "string" for
+  // objectType would contradict the system prompt asking for a list.
+  it('shows every type a multi-type argument accepts', () => {
+    const messages = buildWebLlmMessages('sys', [], readOnlyTools, GENERIC_MODEL_ID);
+    const system = String(messages[0].content ?? '');
+    expect(system).toContain('objectType?: string|string[]');
+    expect(system).toContain('eventIds?: string[]');
   });
 });
 
@@ -352,7 +380,7 @@ describe('parseWebLlmTurn', () => {
     expect(turn).toEqual({ text: 'hi', toolCalls: [] });
   });
 
-  // Qwen3.5 under MNN emits an UNBALANCED think block: its chat template puts
+  // Some reasoning models emit an UNBALANCED think block: the chat template puts
   // the opening <think> into the generation prompt, so the model's output
   // starts mid-thought and carries only the closing tag. Verbatim from a real
   // on-device turn (refs #246).
@@ -383,9 +411,43 @@ describe('parseWebLlmTurn', () => {
     expect(turn.text).toBe('__i18n:assistant.parse_error');
   });
 
-  it('recovers Qwen MNN\'s duplicate quote before the final brace', () => {
+  it('recovers a duplicate quote before the final brace', () => {
     const turn = parseWebLlmTurn('{"answer":"Hello.""}');
     expect(turn).toEqual({ text: 'Hello.', toolCalls: [] });
+  });
+
+  // Observed on gemma-2-2b once a tool result was in the history: it wrapped
+  // the call it had already made in the answer shape without escaping the
+  // inner quotes, so nothing parsed and three attempts died the same way.
+  it('recovers a tool call nested in an answer with unescaped quotes', () => {
+    const turn = parseWebLlmTurn('{"answer": "{"tool": "list_events", "input": {"range": "today"}}"}');
+
+    expect(turn.toolCalls).toHaveLength(1);
+    expect(turn.toolCalls[0].name).toBe('list_events');
+    expect(turn.toolCalls[0].input).toEqual({ range: 'today' });
+  });
+
+  it('recovers a nested tool call inside a fenced answer', () => {
+    const turn = parseWebLlmTurn('{"answer": "```json\\n{"tool": "count_events", "input": {}}\\n```"}');
+
+    expect(turn.toolCalls).toHaveLength(1);
+    expect(turn.toolCalls[0].name).toBe('count_events');
+  });
+
+  it('recovers a nested tool call whose quotes were escaped correctly', () => {
+    const turn = parseWebLlmTurn(JSON.stringify({ answer: '{"tool":"list_monitors","input":{}}' }));
+
+    expect(turn.toolCalls).toHaveLength(1);
+    expect(turn.toolCalls[0].name).toBe('list_monitors');
+  });
+
+  // The unwrapping above must not swallow an answer that merely mentions the
+  // envelope, which parses as a well-formed answer before any of it runs.
+  it('keeps an answer that quotes an envelope as prose', () => {
+    const turn = parseWebLlmTurn(JSON.stringify({ answer: 'Call {"tool": "list_events"} to see them.' }));
+
+    expect(turn.toolCalls).toHaveLength(0);
+    expect(turn.text).toBe('Call {"tool": "list_events"} to see them.');
   });
 });
 
@@ -410,7 +472,7 @@ describe('WebLlmProvider.chat', () => {
     const provider = new WebLlmProvider(ASSISTANT.defaultModelId);
     const turn = await provider.chat([{ role: 'user', text: 'hi' }], [], 'sys', new AbortController().signal);
 
-    expect(turn).toEqual({ text: 'It is armed.', toolCalls: [] });
+    expect(turn).toMatchObject({ text: 'It is armed.', toolCalls: [] });
     expect(getLoadedEngine).toHaveBeenCalledWith(ASSISTANT.defaultModelId);
     const call = create.mock.calls[0][0];
     expect(call).toEqual(
@@ -448,7 +510,7 @@ describe('WebLlmProvider.chat', () => {
 
     expect(turn.text).toBe('__i18n:assistant.parse_error');
     expect(turn.raw).toBe('```');
-    expect(create).toHaveBeenCalledTimes(ASSISTANT.webllmMaxAttempts);
+    expect(create).toHaveBeenCalledTimes(ASSISTANT.maxParseAttempts);
   });
 
   it('does not retry a valid answer', async () => {

@@ -19,16 +19,20 @@
  * `Access-Control-Allow-Origin`, so a `fetch()`-based adapter would be
  * unusable from a native build talking to a LAN Ollama instance.
  */
-import type { AssistantProvider, AssistantMessage, AssistantTurn, ToolCall, ToolDefinition } from '../types';
+import type { AssistantProvider, AssistantMessage, AssistantTurn, CompletionResult, ToolCall, ToolDefinition } from '../types';
 import { httpGet, httpPost } from '../../http';
 import { ASSISTANT } from '../../zmninja-ng-constants';
+import { isAbortError } from '../../is-abort-error';
 import { log, LogLevel } from '../../logger';
 import { toTokenUsage, type OpenAiUsage } from './usage';
 import { parseWebLlmTurn } from './webllm';
+import { captureExchange } from '../exchange';
 
 /** i18n-free (rule 5): AskPanel resolves this sentinel via `t()`, same
  *  sentinel `providers/webllm.ts` uses for its own parse failures. */
 const PARSE_ERROR_TEXT = '__i18n:assistant.parse_error';
+/** Mirrors `buildToolCatalog`'s empty case in webllm.ts. */
+const NO_TOOLS_NOTICE = 'You have no tools available. You must answer directly, in plain text.';
 const PORTABLE_TOOL_FALLBACK =
   'If you cannot emit a native tool call, respond with exactly one JSON object: ' +
   '{"tool":"<tool name>","input":{...}} or {"answer":"<text>"}.';
@@ -40,6 +44,10 @@ export interface OpenAiProviderConfig {
   model: string;
   /** Optional Bearer key. Ollama itself needs none. */
   apiKey?: string;
+  /** Sampling temperature. Omitted falls back to the measured default. */
+  temperature?: number;
+  /** Timeout for one reply, in ms. Omitted falls back to the measured default. */
+  timeoutMs?: number;
 }
 
 interface OpenAiToolCallWire {
@@ -61,7 +69,7 @@ interface OpenAiResponseMessage {
 }
 
 interface OpenAiChatResponse {
-  choices?: Array<{ message?: OpenAiResponseMessage }>;
+  choices?: Array<{ message?: OpenAiResponseMessage; finish_reason?: string }>;
   usage?: OpenAiUsage;
 }
 
@@ -74,8 +82,20 @@ interface OpenAiChatResponse {
  *  (not re-serialized into JSON text like the WebLLM adapter does), and each
  *  tool result becomes its own `role: 'tool'` message keyed by `tool_call_id`
  *  so the server can pair it back to the call that produced it. */
-export function buildOpenAiMessages(system: string, history: AssistantMessage[]): OpenAiMessageWire[] {
-  const messages: OpenAiMessageWire[] = [{ role: 'system', content: `${system}\n${PORTABLE_TOOL_FALLBACK}` }];
+export function buildOpenAiMessages(
+  system: string,
+  history: AssistantMessage[],
+  /** Whether this turn has any tools at all. With none, the portable
+   *  tool-call instruction is not just useless but harmful: it teaches the
+   *  model to emit `{"tool":...}` when nothing can run it. Triage routes chat
+   *  and refusal turns here with no tools, and the model duly replied
+   *  `{"tool":"list_events",...}`, which the loop then had to refuse. The
+   *  on-device path has always said "You have no tools available" in this
+   *  case; this says the same thing. */
+  hasTools = true,
+): OpenAiMessageWire[] {
+  const contract = hasTools ? PORTABLE_TOOL_FALLBACK : NO_TOOLS_NOTICE;
+  const messages: OpenAiMessageWire[] = [{ role: 'system', content: `${system}\n${contract}` }];
 
   for (const msg of history) {
     if (msg.role === 'user') {
@@ -143,9 +163,162 @@ export function parseOpenAiTurn(message: OpenAiResponseMessage | undefined): Ass
   }
 
   const content = message.content ?? '';
+  // A reasoning model that spends the whole token budget thinking returns no
+  // content at all (the reasoning lands in its own field, which this adapter
+  // does not read). Rendering that as the answer gave the user a blank
+  // message, which reads as the app being broken rather than the reply being
+  // cut off, so fall back to the apology every other unusable reply gets.
+  if (content.trim() === '') return { text: PARSE_ERROR_TEXT, toolCalls: [] };
   const portableTurn = parseWebLlmTurn(content);
   if (portableTurn.text !== PARSE_ERROR_TEXT) return portableTurn;
   return { text: content, toolCalls: [] };
+}
+
+/**
+ * The Ollama base URL to suggest when the profile has none.
+ *
+ * `localhost` is the wrong guess almost everywhere it matters: on a phone or
+ * tablet it means the phone, which is never running Ollama. The ZoneMinder
+ * server's own host is a far better one, since a self-hosted Ollama usually
+ * lives on that machine or beside it on the same network.
+ *
+ * Port and path are Ollama's defaults; only the host is borrowed. Returns
+ * undefined for a profile whose URL cannot be parsed, so the caller keeps its
+ * own fallback.
+ */
+export function suggestOllamaBaseUrl(zoneminderUrl: string | undefined): string | undefined {
+  if (!zoneminderUrl) return undefined;
+  try {
+    const { protocol, hostname } = new URL(zoneminderUrl);
+    if (!hostname) return undefined;
+    // http, not the portal's scheme: Ollama serves plain HTTP by default, and
+    // suggesting https against a server without a certificate fails in a way
+    // that reads as "unreachable" rather than "wrong scheme".
+    return `${protocol === 'https:' ? 'https' : 'http'}://${hostname}:11434/v1`;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Whether an error is a request that ran out of time rather than one the
+ * server answered.
+ *
+ * The two HTTP paths report it differently: the web adapter aborts the signal
+ * (a `DOMException` named 'AbortError'), while the native one rejects with a
+ * plain `Error` reading "Native request timed out after Nms". Both mean the
+ * same thing to a caller deciding what to tell the user.
+ */
+export function isTimeoutError(error: unknown): boolean {
+  if (isAbortError(error)) return true;
+  const name = (error as { name?: unknown })?.name;
+  if (name === 'TimeoutError') return true;
+  return error instanceof Error && /timed out/i.test(error.message);
+}
+
+/** What a tool-support probe found. */
+export type ToolSupport = 'supported' | 'unsupported' | 'no-tool-call' | 'timeout';
+
+/**
+ * Whether a model can actually drive this assistant, asked of the server
+ * rather than guessed from the model's name.
+ *
+ * A name tells you nothing: `qwen3-coder` scores full marks here and
+ * `qwen2.5-coder` never emits a tool call at all. Two distinct failures show
+ * up, and only one of them announces itself:
+ *
+ * - 'unsupported': Ollama rejects the request outright, e.g.
+ *   `"registry.ollama.ai/library/gemma2:9b does not support tools"`. The model
+ *   has no tool template.
+ * - 'no-tool-call': the request succeeds and the model replies with prose (or
+ *   prints the call as text) instead of calling the tool. Nothing errors; the
+ *   assistant simply never fetches anything.
+ *
+ * Deliberately a probe and not an allowlist. New models appear constantly, and
+ * a hardcoded list of names would rot exactly as a hardcoded taxonomy did.
+ */
+export async function probeToolSupport(
+  baseUrl: string,
+  model: string,
+  apiKey?: string,
+  timeoutMs = ASSISTANT.modelProbeTimeoutMs,
+): Promise<ToolSupport> {
+  const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+
+  const body = {
+    model,
+    messages: [{ role: 'user', content: 'What is the weather in Paris? Use the tool.' }],
+    tools: [
+      {
+        type: 'function',
+        function: {
+          name: 'get_weather',
+          description: 'Get the current weather for a city.',
+          parameters: { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] },
+        },
+      },
+    ],
+    tool_choice: 'auto',
+    stream: false,
+    // The SAME budget a real turn gets. A tight probe-only cap looks like a
+    // safe optimisation and is not: gemma4 spends tokens before it emits the
+    // call, so a 64-token cap returned finish_reason 'length' with no
+    // `tool_calls`, which this function then reported as "never calls tools",
+    // condemning a model that works. Probe under the conditions being probed.
+    max_tokens: ASSISTANT.ollamaMaxTokens,
+    temperature: ASSISTANT.assistantTemperature,
+  };
+
+  try {
+    const response = await httpPost<OpenAiChatResponse>(url, body, {
+      headers,
+      timeoutMs,
+      intent: 'Assistant Ollama tool-support probe',
+    });
+    const choice = response.data?.choices?.[0];
+    if ((choice?.message?.tool_calls?.length ?? 0) > 0) return 'supported';
+    // Truncation is not a verdict about the model. Say so in the log rather
+    // than letting a cut-off answer masquerade as a refusal to call tools.
+    if (choice?.finish_reason === 'length') {
+      log.assistant('Ollama tool-support probe hit the token cap', LogLevel.WARN, {
+        model,
+        maxTokens: ASSISTANT.ollamaMaxTokens,
+      });
+    }
+    return 'no-tool-call';
+  } catch (error) {
+    const verdict = toolSupportFromError(error);
+    if (verdict) return verdict;
+    // A timeout is a verdict of its own, not a failure to report. The server
+    // answered the reachability probe moments ago, so "unreachable" would be
+    // wrong and "cannot use tools" would be a guess: the model simply did not
+    // finish loading in time, which has its own fix (load it, or wait).
+    if (isTimeoutError(error)) return 'timeout';
+    throw error;
+  }
+}
+
+/** 'unsupported' when a failure is the server saying this model has no tool
+ *  template, undefined when it is a real failure the caller must surface as
+ *  itself (an unreachable host is not a verdict about the model).
+ *
+ *  Pure and separate so the decision is testable without mocking the
+ *  transport: asserting on a rejected transport mock left vitest holding the
+ *  rejection and reporting it as an unhandled error, whatever assertion form
+ *  was used. The string is Ollama's own, e.g.
+ *  `"registry.ollama.ai/library/gemma2:9b does not support tools"`. */
+export function toolSupportFromError(error: unknown): ToolSupport | undefined {
+  // BOTH the message and the response body. `createHttpError` builds the
+  // message as "HTTP 400: Bad Request" and parks the server's own words in
+  // `data`, so matching the message alone found nothing and the caller
+  // surfaced a generic failure with no explanation, which is exactly what a
+  // model without tool support looked like in the UI.
+  const message = error instanceof Error ? error.message : String(error);
+  const data = (error as { data?: unknown })?.data;
+  const body = data === undefined ? '' : typeof data === 'string' ? data : JSON.stringify(data);
+  return /does not support tools/i.test(`${message} ${body}`) ? 'unsupported' : undefined;
 }
 
 interface OpenAiModelsResponse {
@@ -196,6 +369,48 @@ export class OpenAiProvider implements AssistantProvider {
     this.config = config;
   }
 
+  /** The configured value, or the measured default when Settings has none. */
+  private get temperature(): number {
+    return this.config.temperature ?? ASSISTANT.assistantTemperature;
+  }
+
+  private get timeoutMs(): number {
+    return this.config.timeoutMs ?? ASSISTANT.requestTimeoutMs;
+  }
+
+  /** Bare system + user, with no `tools` field at all; see
+   *  `AssistantProvider.complete`. This path never carried the envelope
+   *  scaffolding, but it did send tool schemas the classifier had no use for. */
+  async complete(system: string, text: string, signal: AbortSignal): Promise<CompletionResult> {
+    if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+    const { baseUrl, model, apiKey } = this.config;
+    const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+    const body = {
+      model,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: text },
+      ],
+      stream: false,
+      max_tokens: ASSISTANT.ollamaMaxTokens,
+      temperature: this.temperature,
+    };
+    const startedAt = Date.now();
+    const response = await httpPost<OpenAiChatResponse>(url, body, {
+      headers,
+      signal,
+      timeoutMs: this.timeoutMs,
+      intent: 'Assistant Ollama completion',
+    });
+    const content = response.data?.choices?.[0]?.message?.content ?? '';
+    return {
+      text: content,
+      exchange: captureExchange({ backend: 'ollama', model, sent: body, received: content, startedAt }),
+    };
+  }
+
   async chat(
     messages: AssistantMessage[],
     tools: ToolDefinition[],
@@ -209,37 +424,95 @@ export class OpenAiProvider implements AssistantProvider {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
 
+    // `tools`/`tool_choice` omitted entirely when there are none, rather than
+    // sent empty with `tool_choice: 'auto'`, which invites a server to look for
+    // a tool that is not there.
     const body = {
       model,
-      messages: buildOpenAiMessages(system, messages),
-      tools: toOpenAiTools(tools),
-      tool_choice: 'auto',
+      messages: buildOpenAiMessages(system, messages, tools.length > 0),
+      ...(tools.length > 0 ? { tools: toOpenAiTools(tools), tool_choice: 'auto' } : {}),
       stream: false,
-      max_tokens: ASSISTANT.maxTokens,
+      max_tokens: ASSISTANT.ollamaMaxTokens,
+      temperature: this.temperature,
     };
 
-    log.assistant('Sending Ollama chat completion request', LogLevel.DEBUG, {
-      baseUrl,
-      model,
-      messageCount: body.messages.length,
-    });
-
-    const response = await httpPost<OpenAiChatResponse>(url, body, {
-      headers,
-      signal,
-      timeoutMs: ASSISTANT.requestTimeoutMs,
-      intent: 'Assistant Ollama chat',
-    });
-
-    const message = response.data?.choices?.[0]?.message;
-    log.assistant('Ollama raw response', LogLevel.DEBUG, { baseUrl, model, message });
-
-    const turn = parseOpenAiTurn(message);
-    turn.usage = toTokenUsage(response.data?.usage);
-    if (turn.text === PARSE_ERROR_TEXT) {
-      log.assistant('Ollama response failed to parse into a tool call or answer', LogLevel.WARN, {
+    // Retried like the on-device path, not single-shot. A degenerate reply
+    // (empty content, prose that is neither a native tool call nor the portable
+    // JSON) used to surface the apology to the user directly here, while the
+    // WebLLM path quietly re-rolled and recovered. The first attempt is greedy
+    // (temperature 0) because that measured best for answer accuracy, so the
+    // retry raises the temperature itself: at 0 the server would return the
+    // identical unparseable reply and the attempts would be spent for nothing.
+    // The cost is one more network round trip on a reply that was going to be
+    // discarded anyway.
+    let turn: AssistantTurn = { text: PARSE_ERROR_TEXT, toolCalls: [] };
+    for (let attempt = 1; attempt <= ASSISTANT.maxParseAttempts; attempt++) {
+      if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+      log.assistant('Sending Ollama chat completion request', LogLevel.DEBUG, {
         baseUrl,
         model,
+        messageCount: body.messages.length,
+        attempt,
+      });
+
+      // Rebuilt per attempt: only the temperature changes (see above).
+      const attemptBody = {
+        ...body,
+        // The retry must be able to move even when the first attempt is greedy,
+        // so it raises whatever temperature was configured rather than
+        // replacing it.
+        temperature:
+          attempt === 1
+            ? this.temperature
+            : Math.max(this.temperature, ASSISTANT.assistantRetryTemperature),
+      };
+      const startedAt = Date.now();
+      const response = await httpPost<OpenAiChatResponse>(url, attemptBody, {
+        headers,
+        signal,
+        timeoutMs: this.timeoutMs,
+        intent: 'Assistant Ollama chat',
+      });
+
+      const message = response.data?.choices?.[0]?.message;
+      log.assistant('Ollama raw response', LogLevel.DEBUG, { baseUrl, model, message, attempt });
+
+      // Nothing downstream can tell a complete answer from one that stopped
+      // mid-sentence, so the truncation has to be named here or it is
+      // invisible. A reasoning model hitting this means `ollamaMaxTokens` is
+      // too low for it.
+      if (response.data?.choices?.[0]?.finish_reason === 'length') {
+        log.assistant('Ollama reply hit the token cap and was truncated', LogLevel.WARN, {
+          model,
+          maxTokens: ASSISTANT.ollamaMaxTokens,
+          completionTokens: response.data?.usage?.completion_tokens,
+        });
+      }
+
+      turn = parseOpenAiTurn(message);
+      // The panel offers "show model output" under the apology, but only when
+      // the turn carries what failed. The on-device path has always set this;
+      // here a parse failure gave the user an apology and nothing to inspect.
+      if (turn.text === PARSE_ERROR_TEXT) turn.raw = JSON.stringify(message ?? response.data);
+      turn.usage = toTokenUsage(response.data?.usage);
+      // `body`, not just its messages: on this backend the tool schemas ride in
+      // `tools` rather than in the prompt, so omitting them would hide half of
+      // what the model was actually given. Captured on every attempt, so a
+      // retried turn shows what it retried from.
+      turn.exchange = captureExchange({
+        backend: 'ollama',
+        model,
+        sent: attemptBody,
+        received: message ?? response.data,
+        startedAt,
+      });
+      if (turn.text !== PARSE_ERROR_TEXT) return turn;
+
+      log.assistant('Ollama response failed to parse into a tool call or answer; retrying if attempts remain', LogLevel.WARN, {
+        baseUrl,
+        model,
+        attempt,
+        maxAttempts: ASSISTANT.maxParseAttempts,
         response: response.data,
       });
     }

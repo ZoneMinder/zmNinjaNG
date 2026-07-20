@@ -294,7 +294,7 @@ describe('AskPanel', () => {
 
   // The on-device model is small and English-first; the app says so rather
   // than letting a non-English user discover it through worse answers.
-  describe('on-device language notice', () => {
+  describe('language notice', () => {
     it('warns when the app language is not English and the model runs on-device', () => {
       mockLanguage.current = 'de';
       mockBackend.current = 'on-device';
@@ -309,9 +309,20 @@ describe('AskPanel', () => {
       expect(screen.queryByTestId('assistant-english-notice')).not.toBeInTheDocument();
     });
 
-    // Ollama runs whatever model the user configured, so the limitation is not ours to claim.
-    it('stays hidden on Ollama regardless of language', () => {
+    // Shown on Ollama too. This used to be treated as an on-device model
+    // quality issue, which is the smaller half of it: requiredReadTool matches
+    // English words to decide when live data is mandatory, the triage prompt is
+    // English, and resolveWhen parses English time phrases. Those guards fail
+    // silently in another language whatever model is answering.
+    it('warns on Ollama too, since the English-only machinery is not the model', () => {
       mockLanguage.current = 'zh';
+      mockBackend.current = 'ollama';
+      render(<AskPanel />);
+      expect(screen.getByTestId('assistant-english-notice')).toBeInTheDocument();
+    });
+
+    it('stays hidden in English on Ollama', () => {
+      mockLanguage.current = 'en';
       mockBackend.current = 'ollama';
       render(<AskPanel />);
       expect(screen.queryByTestId('assistant-english-notice')).not.toBeInTheDocument();
