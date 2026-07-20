@@ -35,10 +35,8 @@ vi.mock('../../stores/auth', () => ({
     }),
 }));
 
-vi.mock('../../stores/settings', () => ({
-  ALL_GROUPS_KEY: '__all__',
-  DEFAULT_EVENT_MONTAGE_GROUP_LAYOUT: { gridCols: 3 },
-  DEFAULT_SETTINGS: {
+vi.mock('../../stores/settings', () => {
+  const DEFAULT_SETTINGS = {
     viewMode: 'snapshot',
     displayMode: 'normal',
     theme: 'light',
@@ -46,14 +44,20 @@ vi.mock('../../stores/settings', () => ({
     eventsViewMode: 'list',
     eventMontageByGroup: { '__all__': { gridCols: 3 } },
     excludedMonitorIds: [],
-  },
-  useSettingsStore: (selector: (state: { getProfileSettings: (id: string) => { defaultEventLimit: number; eventsViewMode: 'list'; eventMontageByGroup: Record<string, { gridCols: number }> }; updateProfileSettings: () => void; updateEventMontageGroupLayout: () => void }) => unknown) =>
-    selector({
-      getProfileSettings: () => ({ defaultEventLimit: 50, eventsViewMode: 'list', eventMontageByGroup: { '__all__': { gridCols: 3 } }, excludedMonitorIds: [] }),
-      updateProfileSettings: vi.fn(),
-      updateEventMontageGroupLayout: vi.fn(),
-    }),
-}));
+  };
+  return {
+    ALL_GROUPS_KEY: '__all__',
+    DEFAULT_EVENT_MONTAGE_GROUP_LAYOUT: { gridCols: 3 },
+    DEFAULT_SETTINGS,
+    mergeProfileSettings: (raw: Record<string, unknown> | undefined) => ({ ...DEFAULT_SETTINGS, ...raw }),
+    useSettingsStore: (selector: (state: { getProfileSettings: (id: string) => { defaultEventLimit: number; eventsViewMode: 'list'; eventMontageByGroup: Record<string, { gridCols: number }> }; updateProfileSettings: () => void; updateEventMontageGroupLayout: () => void }) => unknown) =>
+      selector({
+        getProfileSettings: () => ({ defaultEventLimit: 50, eventsViewMode: 'list', eventMontageByGroup: { '__all__': { gridCols: 3 } }, excludedMonitorIds: [] }),
+        updateProfileSettings: vi.fn(),
+        updateEventMontageGroupLayout: vi.fn(),
+      }),
+  };
+});
 
 const applyFilters = vi.fn();
 const clearFilters = vi.fn();

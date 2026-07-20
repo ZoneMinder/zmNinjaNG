@@ -1324,6 +1324,7 @@
       "open": "Öffnen"
     },
     "context_cleared_manual": "Unterhaltung gelöscht. Das Modell auf dem Gerät wurde entladen, um Speicher freizugeben; es wird bei deiner nächsten Frage neu geladen.",
+    "context_cleared_manual_remote": "Unterhaltung gelöscht.",
     "model_unavailable_native": "Dieses Modell läuft nicht auf deinem Gerät. Wähle in den Einstellungen ein Modell für das Gerät.",
     "english_only_notice": "Bitte auf Englisch fragen. In anderen Sprachen funktioniert der Assistent nicht zuverlässig: Fragen können falsch verstanden oder ohne Prüfung der Kameras beantwortet werden."
   }
