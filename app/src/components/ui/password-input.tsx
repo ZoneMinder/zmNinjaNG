@@ -19,6 +19,13 @@ export interface PasswordInputProps extends React.InputHTMLAttributes<HTMLInputE
    * @default true
    */
   showToggle?: boolean;
+  /**
+   * Classes for the inner `<input>` itself (height, text size, etc.). Width and
+   * layout classes belong on `className`, which sizes the positioned wrapper so
+   * the reveal toggle stays anchored to the field edge. Passing a width here
+   * would collapse the wrapper in a flex row and clip the value under the eye.
+   */
+  inputClassName?: string;
 }
 
 /**
@@ -26,18 +33,19 @@ export interface PasswordInputProps extends React.InputHTMLAttributes<HTMLInputE
  *
  * @param props - Component properties
  * @param props.showToggle - Whether to show the visibility toggle button
- * @param props.className - Additional CSS classes
+ * @param props.className - Wrapper classes (width/layout); sizes the field
+ * @param props.inputClassName - Inner input classes (height, text size)
  */
 const PasswordInput = React.forwardRef<HTMLInputElement, PasswordInputProps>(
-  ({ className, showToggle = true, ...props }, ref) => {
+  ({ className, inputClassName, showToggle = true, ...props }, ref) => {
     const [showPassword, setShowPassword] = React.useState(false);
     const { t } = useTranslation();
 
     return (
-      <div className="relative">
+      <div className={cn('relative', className)}>
         <Input
           type={showPassword ? 'text' : 'password'}
-          className={cn('pr-12', className)}
+          className={cn('w-full pr-12', inputClassName)}
           ref={ref}
           {...props}
         />

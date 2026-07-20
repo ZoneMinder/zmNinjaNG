@@ -427,7 +427,8 @@ export function MonitorSettingsDialog({
                     value={localPass}
                     onChange={(e) => setLocalPass(e.target.value)}
                     disabled={!editable || isSaving}
-                    className="w-40 h-8 text-xs"
+                    className="w-40"
+                    inputClassName="h-8 text-xs"
                     data-testid="settings-password-input"
                   />
                 </SettingsRow>
