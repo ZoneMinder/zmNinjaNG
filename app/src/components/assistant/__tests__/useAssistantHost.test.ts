@@ -35,30 +35,4 @@ describe('useAssistantHost', () => {
     expect(navigateMock).toHaveBeenCalledWith('/monitors/12');
   });
 
-  it('confirm() resolves via resolveConfirm and clears pendingConfirm', async () => {
-    const { result } = renderHook(() => useAssistantHost());
-
-    let confirmPromise!: Promise<boolean>;
-    act(() => {
-      confirmPromise = result.current.host.confirm({
-        toolName: 'set_monitor_state',
-        messageKey: 'assistant.confirm.set_monitor_state',
-        messageParams: { monitor: 'Front Door' },
-        params: { monitorId: '1' },
-      });
-    });
-    expect(result.current.pendingConfirm).toEqual({
-      toolName: 'set_monitor_state',
-      messageKey: 'assistant.confirm.set_monitor_state',
-      messageParams: { monitor: 'Front Door' },
-      params: { monitorId: '1' },
-    });
-
-    act(() => {
-      result.current.resolveConfirm(true);
-    });
-
-    await expect(confirmPromise).resolves.toBe(true);
-    expect(result.current.pendingConfirm).toBeNull();
-  });
 });

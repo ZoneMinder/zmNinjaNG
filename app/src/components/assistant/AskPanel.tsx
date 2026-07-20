@@ -1,17 +1,16 @@
 /**
  * AskPanel: the in-app assistant conversation UI (refs #246).
  *
- * Renders the per-profile thread from `stores/assistant.ts`, drives one
- * `runAssistantTurn` per send, and shows the `AssistantConfirmCard` whenever
- * `useAssistantHost`'s `confirm()` is pending. Two forward contracts from the
- * agent loop (lib/assistant/agent.ts) land here:
+ * Renders the per-profile thread from `stores/assistant.ts` and drives one
+ * `runAssistantTurn` per send. Two forward contracts from the agent loop
+ * (lib/assistant/agent.ts) land here:
  *
  * - A leading `__i18n:<key>` on an assistant message's `text` is a sentinel
  *   (currently only the iteration-cap message) that must be localized with
  *   `t(key)` instead of rendered as literal/markdown text.
- * - Aborting (or unmounting mid-turn) must resolve any pending confirm as
- *   `false` and abort the in-flight `AbortController`, so the loop's
- *   `signal.aborted` checks unwind it instead of leaving it hung.
+ * - Aborting (or unmounting mid-turn) must abort the in-flight
+ *   `AbortController`, so the loop's `signal.aborted` checks unwind it
+ *   instead of leaving it hung.
  *
  * Test seam: in test mode (`isAssistantTestMode()`), before running a turn
  * this reads `window.__assistantMockScript` (seeded by e2e steps) and loads
@@ -23,13 +22,12 @@ import { useEffect, useRef, useState } from 'react';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
-import { Loader2, Send, Square } from 'lucide-react';
+import { Check, Copy, Loader2, Send, Square } from 'lucide-react';
 import { getVersion } from '../../api/auth';
-import type { MonitorsResponse } from '../../api/types';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
 import { resolveMinStreamingPort } from '../../lib/monitor/multiport';
-import { runAssistantTurn, isContextNearlyFull } from '../../lib/assistant/agent';
+import { runAssistantTurn, isContextNearlyFull, requiresLiveData } from '../../lib/assistant/agent';
 import {
   getAssistantProvider,
   isAssistantTestMode,
@@ -37,12 +35,13 @@ import {
 } from '../../lib/assistant/providers/provider';
 import { sharedMockProvider } from '../../lib/assistant/providers/mock';
 import { buildSystemPrompt } from '../../lib/assistant/system-prompt';
-import { getToolByName } from '../../lib/assistant/tools';
-import type { AssistantMessage, AssistantTurn, ProviderConfig, ToolActivity, ToolContext } from '../../lib/assistant/types';
+import { getObjectLabels } from '../../lib/assistant/object-labels';
+import { suggestOllamaBaseUrl } from '../../lib/assistant/providers/openai';
+import { classifyRequest, buildNoToolPrompt, type RequestKind } from '../../lib/assistant/triage';
+import type { AssistantMessage, AssistantTurn, ProviderConfig, ToolActivity, ToolContext, TraceEntry } from '../../lib/assistant/types';
 import { log, LogLevel } from '../../lib/logger';
 import { getSecureValue } from '../../lib/security/secureStorage';
 import { Markdown } from '../../lib/markdown';
-import { queryKeys } from '../../lib/query/query-keys';
 import { resolveQueryError } from '../../lib/query/query-error';
 import { cn } from '../../lib/utils';
 import { ASSISTANT } from '../../lib/zmninja-ng-constants';
@@ -50,10 +49,8 @@ import { AssistantIntro } from './AssistantIntro';
 import { useAssistantStore } from '../../stores/assistant';
 import { Button } from '../ui/button';
 import { ErrorBanner } from '../ui/query-state';
-import { AssistantConfirmCard } from './AssistantConfirmCard';
 import { AssistantResultCards } from './AssistantResultCards';
 import { useAssistantHost } from './useAssistantHost';
-import { Platform } from '../../lib/platform';
 
 declare global {
   interface Window {
@@ -86,6 +83,94 @@ const CONTEXT_CLEARED_KEY = 'assistant.context_cleared';
 // makes useSyncExternalStore see a new snapshot on every call and crashes
 // the app with "Maximum update depth exceeded" the moment AskPanel mounts.
 const EMPTY_THREAD: AssistantMessage[] = [];
+
+/** One plain-text transcript of a whole turn, headed by round.
+ *
+ *  Deliberately ONE `<pre>` and not a component per round: the point of this
+ *  is to be copied out of the app and pasted into a bug report, and a stack of
+ *  separate scroll boxes cannot be selected in one gesture. Headers separate
+ *  the rounds instead.
+ *
+ *  Tool steps carry the ZoneMinder requests they actually made, because the
+ *  gap between "what the model was told" and "what was asked of the server" is
+ *  where the real bugs have been: a `when: "today"` query that reported no time
+ *  filter, and a zero-row object query whose answer never mentioned the filter. */
+function formatTrace(trace: TraceEntry[]): string {
+  const blocks = trace.map((entry, index) => {
+    const n = index + 1;
+    if (entry.kind === 'question') {
+      return `=== QUESTION ===\n${entry.text}`;
+    }
+    if (entry.kind === 'exchange') {
+      const { backend, model, ms, sent, received } = entry.exchange;
+      return [
+        `=== ${n}. MODEL ROUND (${backend} · ${model} · ${ms} ms) ===`,
+        '--- sent ---',
+        sent,
+        '--- received ---',
+        received,
+      ].join('\n');
+    }
+    return [
+      `=== ${n}. TOOL ${entry.name}${entry.isError ? ' (error)' : ''} ===`,
+      '--- input ---',
+      JSON.stringify(entry.input, null, 2),
+      ...(entry.apiCalls?.length ? ['--- zoneminder requests ---', entry.apiCalls.join('\n')] : []),
+      '--- output ---',
+      entry.output,
+    ].join('\n');
+  });
+  return blocks.join('\n\n');
+}
+
+function ModelTranscript({ trace, t, live }: { trace: TraceEntry[]; t: TFunction; live?: boolean }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(formatTrace(trace));
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      // Clipboard access can be denied (permissions, insecure origin). The
+      // text is selectable in the block below either way, so this is a
+      // convenience that must never throw into the panel.
+      log.assistant('Could not copy the transcript', LogLevel.WARN, {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+
+  return (
+    <details
+      className="mt-1 text-xs text-muted-foreground"
+      data-testid={live ? 'assistant-live-transcript' : 'assistant-model-transcript'}
+    >
+      <summary className="cursor-pointer select-none">
+        {t('assistant.show_transcript', { count: trace.length })}
+      </summary>
+      <div className="mt-1 flex justify-end">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6"
+          onClick={() => void handleCopy()}
+          aria-label={t(copied ? 'assistant.transcript_copied' : 'assistant.copy_transcript')}
+          title={t(copied ? 'assistant.transcript_copied' : 'assistant.copy_transcript')}
+          data-testid="assistant-transcript-copy"
+        >
+          {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+        </Button>
+      </div>
+      <pre
+        className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded bg-background/50 p-2"
+        data-testid="assistant-transcript-text"
+      >
+        {formatTrace(trace)}
+      </pre>
+    </details>
+  );
+}
 
 /** Renders one assistant turn's text, resolving the `__i18n:` sentinel. When
  *  the turn is the parse-error fallback and carried the model's raw output
@@ -125,39 +210,63 @@ function formatActivityInput(input: Record<string, unknown>): string | undefined
     : json;
 }
 
-/** Renders one turn's tool-activity step trace ("Running count_events… /
- *  count_events done"). Shared by two call sites: a completed message's
- *  attached `steps` (rendered above that message's answer, refs #246) and the
- *  live `activities` array for the turn still in flight (rendered above the
- *  "thinking" indicator, where its answer will land once the turn resolves). */
-function ActivitySteps({ steps }: { steps: ToolActivity[] }) {
+/** Renders the assistant's intermediate work as ONE muted line rather than a
+ *  growing list.
+ *
+ *  A turn can spend several round trips deciding and calling tools before it
+ *  answers, and showing each one stacked pushed the actual answer off screen and
+ *  read like a transcript of the model talking to itself. Live, the line is
+ *  replaced by whatever step is current; once the turn is done, it collapses to
+ *  the tools that ran. Either way it stays one line, subordinate to the answer.
+ *
+ *  `title` carries the full detail for anyone who wants it, so nothing is lost
+ *  by not rendering every step (rule 11: truncate, keep a title). */
+function ActivityLine({ steps, live }: { steps: ToolActivity[]; live?: boolean }) {
   const { t } = useTranslation();
+  if (steps.length === 0) return null;
+
+  if (!live && steps.every((a) => a.kind === 'model' || !a.toolName)) return null;
+
+  const latest = steps[steps.length - 1];
+  const compactInput = latest.kind === 'model' ? undefined : formatActivityInput(latest.input);
+
+  // Live: say what is happening right now, including the model's own reasoning
+  // between tool calls (collapsed to one line, newlines flattened, so a long
+  // chain of thought cannot push the conversation around). Finished: name the
+  // distinct tools used, since the last step alone loses the earlier ones.
+  const label = live
+    ? latest.kind === 'model'
+      ? latest.detail!.replace(/\s+/g, ' ')
+      : latest.status === 'running'
+        ? t('assistant.activity.running', { tool: latest.toolName })
+        : latest.status === 'done'
+          ? t('assistant.activity.done', { tool: latest.toolName })
+          : t('assistant.activity.error', { tool: latest.toolName })
+    : t('assistant.activity.used', {
+        tools: [...new Set(steps.filter((a) => a.kind !== 'model' && a.toolName).map((a) => a.toolName))].join(', '),
+      });
+
+  // Never coloured as a failure, however many steps errored. A rejected tool
+  // call is a normal step of a working turn: the loop hands the model a
+  // correction (an object label this install does not record, a time phrase it
+  // invented, a repeat of a call it already made) and the next round fixes it.
+  // "Used count_events, list_events" in red reported a problem to the user
+  // about a turn that had already solved itself and answered correctly.
   return (
-    <ol className="flex flex-col gap-1" data-testid="assistant-activities">
-      {steps.map((a, i) => {
-        const compactInput = formatActivityInput(a.input);
-        const statusText =
-          a.status === 'running'
-            ? t('assistant.activity.running', { tool: a.toolName })
-            : a.status === 'done'
-              ? t('assistant.activity.done', { tool: a.toolName })
-              : t('assistant.activity.error', { tool: a.toolName });
-        return (
-          <li
-            key={`${a.toolName}-${i}`}
-            data-testid="assistant-activity-step"
-            title={`${getToolByName(a.toolName)?.description ?? a.toolName}${a.input && Object.keys(a.input).length > 0 ? ` ${JSON.stringify(a.input)}` : ''}`}
-            className={cn(
-              'flex min-w-0 items-center gap-1.5 truncate rounded border px-2 py-1 text-xs',
-              a.status === 'error' ? 'border-destructive/40 text-destructive' : 'border-border text-muted-foreground',
-            )}
-          >
-            <span className="truncate">{statusText}</span>
-            {compactInput && <span className="truncate opacity-70">{compactInput}</span>}
-          </li>
-        );
-      })}
-    </ol>
+    <p
+      data-testid="assistant-activities"
+      title={steps
+        .map((a) =>
+          a.kind === 'model'
+            ? a.detail
+            : `${a.toolName}${a.input && Object.keys(a.input).length > 0 ? ` ${JSON.stringify(a.input)}` : ''}`,
+        )
+        .join('\n')}
+      className="flex min-w-0 items-center gap-1.5 truncate text-xs text-muted-foreground"
+    >
+      <span className="truncate" data-testid="assistant-activity-step">{label}</span>
+      {live && compactInput && <span className="truncate opacity-70">{compactInput}</span>}
+    </p>
   );
 }
 
@@ -168,14 +277,24 @@ export function AskPanel() {
   const profileId = currentProfile?.id;
   const { token: accessToken, isFresh: accessTokenFresh } = useFreshAccessToken();
 
-  const { host, pendingConfirm, resolveConfirm } = useAssistantHost();
+  const { host } = useAssistantHost();
 
   const thread = useAssistantStore((s) => (profileId ? (s.threads[profileId] ?? EMPTY_THREAD) : EMPTY_THREAD));
   const running = useAssistantStore((s) => s.running);
   const activities = useAssistantStore((s) => s.activities);
+  const liveTrace = useAssistantStore((s) => s.liveTrace);
   const append = useAssistantStore((s) => s.append);
   const setRunning = useAssistantStore((s) => s.setRunning);
   const clearActivities = useAssistantStore((s) => s.clearActivities);
+
+  // Every backend, not just on-device. The on-device model's answer quality is
+  // the smaller half of this: `requiredReadTool` (agent.ts) matches English
+  // words to decide when live data is mandatory, the triage prompt is English,
+  // and `resolveWhen` parses English time phrases. Asked in another language
+  // those guards silently do not fire, which is just as true of a GPU-backed
+  // Ollama server as of a phone.
+  // `startsWith`, not equality: i18next reports regional variants like "en-GB".
+  const assistantInNonEnglish = !i18n.language.toLowerCase().startsWith('en');
 
   const [input, setInput] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -196,10 +315,9 @@ export function AskPanel() {
   // closed panel never leaves the agent loop (or a stuck confirm Promise) alive.
   useEffect(() => {
     return () => {
-      resolveConfirm(false);
       abortControllerRef.current?.abort();
     };
-  }, [resolveConfirm]);
+  }, []);
 
   // The Clear button now lives in AssistantWidget.tsx, which resets the
   // shared store (`reset(profileId)` + `clearActivities()`). This component
@@ -217,7 +335,6 @@ export function AskPanel() {
   }, [thread.length]);
 
   const handleAbort = () => {
-    resolveConfirm(false);
     abortControllerRef.current?.abort();
   };
 
@@ -232,16 +349,6 @@ export function AskPanel() {
   const handleSend = async () => {
     const text = input.trim();
     if (!text || !profileId || running) return;
-
-    // Mobile safety net (refs #246): loading any WebLLM model exceeds a mobile
-    // WebView's memory and crashes the app (iOS jetsam at 2 GB, Android renderer
-    // kill). Settings hides on-device on phones/tablets, but a value synced from
-    // a desktop profile can still arrive here, so block the load and point at
-    // Ollama rather than letting it crash.
-    if ((Platform.isIOS || Platform.isAndroid) && settings.assistantBackend === 'on-device') {
-      setError(t('assistant.mobile_on_device_blocked'));
-      return;
-    }
 
     setInput('');
     setError(null);
@@ -262,9 +369,17 @@ export function AskPanel() {
       const providerConfig: ProviderConfig = {
         backend: settings.assistantBackend,
         modelId: settings.assistantModelId,
-        ollamaBaseUrl: settings.assistantOllamaBaseUrl,
+        // An unset URL resolves to the profile's own ZoneMinder host, which is
+        // a far better guess than localhost (on a phone, localhost is the
+        // phone). Settings shows the same value as the placeholder.
+        ollamaBaseUrl:
+          settings.assistantOllamaBaseUrl ||
+          suggestOllamaBaseUrl(currentProfile?.apiUrl) ||
+          ASSISTANT.defaultOllamaBaseUrl,
         ollamaModel: settings.assistantOllamaModel,
         apiKey: apiKey ?? undefined,
+        temperature: settings.assistantTemperature,
+        timeoutMs: settings.assistantTimeoutSec * 1000,
       };
       const provider = getAssistantProvider(providerConfig);
 
@@ -280,20 +395,17 @@ export function AskPanel() {
         log.assistant('Failed to fetch ZM version for the assistant system prompt', LogLevel.WARN, { error: e });
       }
 
-      const monitorsData = queryClient.getQueryData<MonitorsResponse>(queryKeys.monitors(profileId));
-      const monitors = (monitorsData?.monitors ?? []).map((m) => ({
-        id: m.Monitor.Id,
-        name: m.Monitor.Name,
-        func: m.Monitor.Function,
-        enabled: m.Monitor.Enabled === '1',
-      }));
+      // The install's own label vocabulary, so the model can map "vehicles"
+      // onto the labels this detector actually writes instead of the app
+      // guessing at a taxonomy. Cached per profile; never throws.
+      const objectLabels = await getObjectLabels(profileId);
 
       const system = buildSystemPrompt({
+        objectLabels,
         now: new Date(),
         timezone: currentProfile?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
         locale: i18n.language,
         zmVersion,
-        monitors,
       });
 
       // Image-building inputs for event result cards (refs #246), mirroring
@@ -317,11 +429,64 @@ export function AskPanel() {
         // `range` input must resolve "today"/"yesterday" against the identical
         // zone the system prompt already told the model "today" means.
         timezone: currentProfile?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+        question: text,
+        objectLabels,
       };
       const history = useAssistantStore.getState().getThread(profileId);
+
+      // Classify BEFORE the tool loop sees the request (refs #246). A small
+      // model handed nine tools uses one whether or not the question calls for
+      // it: "hello" produced a navigate call and "arm the backyard camera" a
+      // get_monitor call, 3 runs out of 3 each. A request that is not a
+      // question about this installation runs with NO tools, which is the only
+      // reliable way to stop that.
+      // Skipped in test mode: `sharedMockProvider` replays a fixed script, so
+      // a classification call would consume the turn the scenario meant for
+      // the answer and shift every following one. e2e scenarios drive the loop
+      // directly and assert on it; triage is covered by its own unit tests.
+      // Seeded with the question so a pasted transcript opens with what was
+      // asked, then the triage round, then the loop's own entries.
+      const initialTrace: TraceEntry[] = [{ kind: 'question', text }];
+      const collectTrace = (entry: TraceEntry) => {
+        initialTrace.push(entry);
+        host.onTrace?.(entry);
+      };
+      // The deterministic check runs FIRST, and when it fires there is no
+      // triage call at all. Triage is one small model's opinion and it gets
+      // this wrong: it answered CHAT for both "summarize yesterday" and
+      // "summarize today", the second being near-identical to an example in
+      // its own prompt. Its verdict was then overruled anyway, so the round
+      // trip bought a wrong answer and ~400ms. Asking a model what this
+      // function already knows is the part worth removing, not just the part
+      // where we ignore the reply.
+      //
+      // Triage still decides everything the heuristic is silent on, which is
+      // what it is good at: greetings, small talk, and change-requests it
+      // routes to a tool-less refusal.
+      const needsLiveData = requiresLiveData(text);
+      const kind: RequestKind =
+        needsLiveData || isAssistantTestMode()
+          ? 'zoneminder'
+          : await classifyRequest(provider, text, controller.signal, collectTrace);
+      if (needsLiveData) {
+        log.assistant('Triage skipped: the question needs live data', LogLevel.DEBUG, {});
+      }
+      log.assistant('Request classified', LogLevel.DEBUG, { kind });
+
       // Already only this turn's new messages (see runAssistantTurn): the
       // thread in the store keeps everything else.
-      const newMessages = await runAssistantTurn({ provider, host, ctx, history, system, signal: controller.signal });
+      const newMessages = await runAssistantTurn({
+        provider,
+        host,
+        ctx,
+        history,
+        system: kind === 'zoneminder' ? system : buildNoToolPrompt(system, kind),
+        signal: controller.signal,
+        tools: kind === 'zoneminder' ? undefined : [],
+        objectLabels,
+        initialTrace,
+        historyTurns: settings.assistantHistoryTurns,
+      });
 
       // Attach this turn's tool-activity steps to the assistant message
       // carrying the final answer (the last `role: 'assistant'` message: every
@@ -363,6 +528,11 @@ export function AskPanel() {
         // User-initiated abort: not an error to surface.
       } else if (e instanceof Error && e.message === PROVIDER_NOT_AVAILABLE_MESSAGE) {
         setNotConfigured(true);
+      } else if (e instanceof Error && e.message.startsWith(I18N_SENTINEL)) {
+        // A thrown `__i18n:` sentinel (e.g. the native provider rejecting an
+        // unsupported model) is a localized message, not a raw error string.
+        log.assistant('Assistant turn failed', LogLevel.ERROR, { error: e });
+        setError(t(e.message.slice(I18N_SENTINEL.length)));
       } else {
         log.assistant('Assistant turn failed', LogLevel.ERROR, { error: e });
         setError(resolveQueryError(e, t, { fallbackKey: 'assistant.error_generic' }));
@@ -379,8 +549,22 @@ export function AskPanel() {
         {/* Empty-thread self-introduction (refs #246): a UI-only empty state,
             never part of the thread sent to the model. Swaps out for the real
             thread the moment the first message lands (handleSend's `append`
-            below), and reappears after Clear resets the store. */}
-        {thread.length === 0 && <AssistantIntro onExampleClick={handleExampleClick} />}
+            below), and reappears after Clear resets the store. `every` rather
+            than a length check: Clear leaves a context-boundary notice behind,
+            and a lone notice is still an empty conversation. */}
+        {thread.every((m) => m.contextBoundary) && <AssistantIntro onExampleClick={handleExampleClick} />}
+
+        {/* The on-device model is a small English-first model, and its job here
+            (reason, then emit a strict reply format) is where a small model
+            degrades most in other languages. Saying so is honest; the
+            alternative was pretending every language works equally well.
+            Ollama runs whatever model the user chose, so this does not apply
+            there. */}
+        {assistantInNonEnglish && (
+          <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground" data-testid="assistant-english-notice">
+            {t('assistant.english_only_notice')}
+          </p>
+        )}
 
         {thread.map((msg, i) => {
           // `role: 'tool'` messages carry only `toolResults`, never `display`
@@ -391,6 +575,13 @@ export function AskPanel() {
           // talking, not the model, and everything above it is out of the
           // model's view from here on (see agent.ts's sliceAfterContextBoundary).
           // Styling it as an assistant bubble would claim the model said it.
+          // An intermediate tool-calling turn carries only `toolCalls`, never
+          // text, and used to render as an empty grey bubble: one per round
+          // trip, so a multi-step answer arrived behind a stack of blank
+          // bubbles. The work those turns did is shown by the activity line
+          // instead, which is what the user actually wants to see.
+          if (msg.role === 'assistant' && !msg.text && !msg.steps?.length && !msg.display?.length) return null;
+
           if (msg.contextBoundary) {
             return (
               <div
@@ -404,11 +595,10 @@ export function AskPanel() {
           }
           return (
             <div key={i} className="space-y-1">
-              {/* This turn's tool steps, above its answer (refs #246): user
-                  question -> "Running count_events…" / "count_events done" ->
-                  answer -> supporting cards, in that order both live and in
-                  history. */}
-              {msg.role === 'assistant' && msg.steps && msg.steps.length > 0 && <ActivitySteps steps={msg.steps} />}
+              {/* This turn's tool work, collapsed to one muted line above its
+                  answer (refs #246): user question -> "Used count_events,
+                  list_events" -> answer -> supporting cards. */}
+              {msg.role === 'assistant' && msg.steps && msg.steps.length > 0 && <ActivityLine steps={msg.steps} />}
               <div
                 data-testid={`assistant-message-${msg.role}`}
                 className={cn(
@@ -417,6 +607,9 @@ export function AskPanel() {
                 )}
               >
                 {msg.role === 'user' ? <p>{msg.text}</p> : renderAssistantText(msg, t)}
+                {msg.role === 'assistant' && msg.trace && msg.trace.length > 0 && (
+                  <ModelTranscript trace={msg.trace} t={t} />
+                )}
               </div>
               {msg.role === 'assistant' && msg.display && msg.display.length > 0 && (
                 <AssistantResultCards entities={msg.display} host={host} />
@@ -425,18 +618,34 @@ export function AskPanel() {
           );
         })}
 
-        {/* Step trace for the turn still in flight: one row per
-            `host.onActivity` call from agent.ts, so a multi-step answer
-            ("which monitor was most active") shows what it's doing before the
-            answer exists yet. Rendered above the "thinking" indicator, i.e.
-            where the answer will land once the turn resolves; `handleSend`
-            then moves this same list onto that answer's message (`steps`,
-            above) and clears it, so it never lingers here to duplicate what
-            now renders inside the thread. */}
-        {activities.length > 0 && <ActivitySteps steps={activities} />}
+        {/* The turn still in flight, as ONE line each new step replaces, so a
+            multi-step answer ("which monitor was most active") shows what it is
+            doing without stacking a row per round trip. Rendered above the
+            "thinking" indicator, where the answer will land once the turn
+            resolves; `handleSend` then moves these steps onto that answer's
+            message (`steps`, above) and clears them, so this never lingers to
+            duplicate what now renders inside the thread. */}
+        {/* TWO lines, not one: the model's thought and the tool step are
+            different channels, and sharing a slot meant every reasoning line
+            was overwritten by the tool call it had just decided on, milliseconds
+            later. The long wait (the next model call, ~7s on device) then sat
+            on stale tool text. Each line now replaces only its own kind, so the
+            latest thought stays readable while the next step runs. */}
+        {activities.some((a) => a.kind === 'model') && (
+          <ActivityLine steps={activities.filter((a) => a.kind === 'model')} live />
+        )}
+        {activities.some((a) => a.kind !== 'model') && (
+          <ActivityLine steps={activities.filter((a) => a.kind !== 'model')} live />
+        )}
 
-        {running && !pendingConfirm && (
-          <p className="flex items-center gap-1 text-xs text-muted-foreground">
+        {/* The transcript DURING the turn, not only after it. A turn can spend
+            a minute across several round trips, and waiting until the answer
+            lands to reveal what was sent is exactly backwards for the case this
+            exists to serve: watching a turn go wrong. */}
+        {running && liveTrace.length > 0 && <ModelTranscript trace={liveTrace} t={t} live />}
+
+        {running && (
+          <p className="flex items-center gap-1 text-xs text-muted-foreground" data-testid="assistant-status">
             <Loader2 className="h-3 w-3 animate-spin" />
             {t('assistant.thinking')}
           </p>
@@ -445,13 +654,6 @@ export function AskPanel() {
         {notConfigured && <ErrorBanner message={t('assistant.not_configured_cta')} />}
         {error && !notConfigured && <ErrorBanner message={error} />}
 
-        {pendingConfirm && (
-          <AssistantConfirmCard
-            request={pendingConfirm}
-            onAccept={() => resolveConfirm(true)}
-            onCancel={() => resolveConfirm(false)}
-          />
-        )}
       </div>
 
       <div className="flex items-center gap-2 border-t p-2">

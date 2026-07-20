@@ -192,7 +192,10 @@ export async function getEvents(filters: EventFilters = {}): Promise<EventsRespo
   // Favorites pass an explicit ID set; route through the server-side "Id IN:"
   // filter so pagination stays accurate (refs #205). An empty set matches
   // nothing and skips the request.
-  if (filters.eventIds !== undefined) {
+  // `!= null`, not `!== undefined`: a null here used to reach `.length` and
+  // throw. The assistant strips omitted arguments now, but this is a trust
+  // boundary and should not depend on its caller being careful.
+  if (filters.eventIds != null) {
     const desiredLimit = filters.limit || API_PAGINATION.eventsPerPage;
     if (filters.eventIds.length === 0) {
       return buildEventsResponse([], desiredLimit, 0);

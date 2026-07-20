@@ -28,6 +28,7 @@ import { nextRequestId, shortPath, loggableResponseBody, correlationPrefix } fro
 import { nativeHttpRequest } from './http/adapter-native';
 import { electronHttpRequest } from './http/adapter-electron';
 import { webHttpRequest } from './http/adapter-web';
+import { recordApiCall } from './assistant/api-capture';
 
 export type { HttpOptions, HttpResponse, HttpProgress, HttpError } from './http/types';
 
@@ -161,6 +162,9 @@ export async function httpRequest<T = unknown>(
     }
 
     const duration = Math.round(performance.now() - startTime);
+    // Recorded for the assistant's transcript when a tool is running; a no-op
+    // otherwise (see lib/assistant/api-capture.ts).
+    recordApiCall(method, path, response.status, duration);
 
     // Headline + collapsed details. The headline carries everything you
     // need at a glance; click to expand for the full sanitized request

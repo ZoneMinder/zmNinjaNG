@@ -213,6 +213,18 @@ export async function downloadModel(modelId: string, opts: DownloadModelOpts = {
   signal?.addEventListener('abort', onAbort);
 
   try {
+    // A download creates a GPU-resident engine. Free a different resident
+    // model first, before creating another engine.
+    if (loadedEngine?.modelId !== modelId && loadedEngine) {
+      await loadedEngine.engine.unload();
+      loadedEngine = undefined;
+    }
+
+    if (loadedEngine?.modelId === modelId) {
+      tasks.completeTask(taskId);
+      return;
+    }
+
     const engine = await createEngineOnce(modelId, {
       initProgressCallback: (report) => {
         // web-llm's `CreateMLCEngine` has no abort/cancel API: once cancelFn

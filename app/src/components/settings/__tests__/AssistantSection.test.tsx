@@ -15,12 +15,15 @@ import { DEFAULT_SETTINGS } from '../../../stores/settings';
 import { ASSISTANT } from '../../../lib/zmninja-ng-constants';
 
 const isModelDownloadedMock = vi.fn().mockResolvedValue(false);
+const { useCapacitorListenerMock } = vi.hoisted(() => ({ useCapacitorListenerMock: vi.fn() }));
 
 vi.mock('../../../lib/assistant/model-download', () => ({
   isModelDownloaded: (modelId: string) => isModelDownloadedMock(modelId),
   downloadModel: vi.fn(),
   deleteModel: vi.fn(),
 }));
+
+vi.mock('../../../hooks/useCapacitorListener', () => ({ useCapacitorListener: useCapacitorListenerMock }));
 
 let webGpuAvailable: boolean | undefined = true;
 vi.mock('../../../hooks/useWebGpuAvailable', () => ({
@@ -31,8 +34,12 @@ vi.mock('../../../hooks/useWebGpuAvailable', () => ({
 // Capacitor, which reports 'web' in jsdom, so without this every test is desktop.
 let isIOS = false;
 let isAndroid = false;
+let isNative = false;
 vi.mock('../../../lib/platform', () => ({
   Platform: {
+    get isNative() {
+      return isNative;
+    },
     get isIOS() {
       return isIOS;
     },
@@ -59,7 +66,20 @@ vi.mock('../../../lib/http', () => ({
 }));
 
 vi.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (k: string, d?: Record<string, unknown> | string) => (typeof d === 'string' ? d : k) }),
+  useTranslation: () => ({
+    t: (k: string, d?: Record<string, unknown> | string) => {
+      if (k === 'settings.assistant.native_download_current' && typeof d === 'object') {
+        return `${k}:${d.fileName}:${d.current}/${d.total}:${d.progress}%:${d.downloaded}/${d.size}`;
+      }
+      if (k === 'settings.assistant.storage_used' && typeof d === 'object') {
+        return `${k}:${d.size}`;
+      }
+      if (k === 'settings.assistant.native_download_summary' && typeof d === 'object') {
+        return `${k}:${d.completed}:${d.pending}`;
+      }
+      return typeof d === 'string' ? d : k;
+    },
+  }),
 }));
 
 vi.mock('../../../hooks/use-toast', () => ({
@@ -72,100 +92,42 @@ describe('AssistantSection backend picker and gating', () => {
 
   beforeEach(() => {
     isModelDownloadedMock.mockReset().mockResolvedValue(false);
+    useCapacitorListenerMock.mockReset();
     webGpuAvailable = true;
     isIOS = false;
     isAndroid = false;
+    isNative = false;
   });
 
-  // On-device is gated off on BOTH mobile platforms for memory: iOS jetsams a
-  // WKWebView at 2 GB, Android kills the renderer under low memory. Both have
-  // WebGPU, so this is a distinct path from the no-WebGPU one (refs #246).
-  describe('mobile gating', () => {
-    it('disables the on-device option and shows the steer-to-Ollama notice on Android', async () => {
-      isAndroid = true;
+  // On-device was removed on phones and tablets. The picker must not offer a
+  // backend with no implementation, and the absence has to be explained or a
+  // missing feature reads as a bug.
+  describe('on a phone or tablet', () => {
+    it('replaces the backend picker with a note and shows the Ollama settings', async () => {
+      isNative = true;
       render(
-        <AssistantSection
-          settings={enabledSettings}
-          update={vi.fn()}
-          currentProfile={profile}
-          updateSettings={vi.fn()}
-        />
-      );
-      const onDeviceOption = screen
-        .getByTestId('assistant-backend-select')
-        .querySelector('option[value="on-device"]');
-      expect(onDeviceOption).toBeDisabled();
-      expect(screen.getByTestId('assistant-mobile-unsupported')).toBeInTheDocument();
-    });
-
-    it('disables the on-device option and shows the steer-to-Ollama notice', async () => {
-      isIOS = true;
-      render(
-        <AssistantSection
-          settings={enabledSettings}
-          update={vi.fn()}
-          currentProfile={profile}
-          updateSettings={vi.fn()}
-        />
+        <AssistantSection settings={enabledSettings} update={vi.fn()} currentProfile={profile} updateSettings={vi.fn()} />,
       );
 
-      const onDeviceOption = screen
-        .getByTestId('assistant-backend-select')
-        .querySelector('option[value="on-device"]');
-      expect(onDeviceOption).toBeDisabled();
-      // The iOS memory notice, not the no-WebGPU one: iOS has WebGPU.
-      expect(screen.getByTestId('assistant-mobile-unsupported')).toBeInTheDocument();
-      expect(screen.queryByTestId('assistant-no-webgpu')).not.toBeInTheDocument();
-    });
-
-    it('never shows the model download UI on iOS, even with WebGPU present', () => {
-      isIOS = true;
-      webGpuAvailable = true;
-      render(
-        <AssistantSection
-          settings={enabledSettings}
-          update={vi.fn()}
-          currentProfile={profile}
-          updateSettings={vi.fn()}
-        />
-      );
-      expect(screen.queryByTestId('assistant-model-select')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('assistant-model-download')).not.toBeInTheDocument();
-    });
-
-    it('keeps the iOS notice visible even after switching to Ollama', () => {
-      isIOS = true;
-      render(
-        <AssistantSection
-          settings={{ ...enabledSettings, assistantBackend: 'ollama' }}
-          update={vi.fn()}
-          currentProfile={profile}
-          updateSettings={vi.fn()}
-        />
-      );
-      // The greyed on-device option needs an explanation whichever backend is
-      // active, so the note stays put next to the picker.
-      expect(screen.getByTestId('assistant-mobile-unsupported')).toBeInTheDocument();
+      expect(await screen.findByTestId('assistant-on-device-unavailable')).toBeInTheDocument();
+      expect(screen.queryByTestId('assistant-backend-select')).not.toBeInTheDocument();
       expect(screen.getByTestId('assistant-ollama-url')).toBeInTheDocument();
     });
 
-    it('leaves on-device selectable on desktop (neither mobile platform)', async () => {
-      isIOS = false;
-      isAndroid = false;
+    it('never shows the on-device model picker, even with the setting still on-device', async () => {
+      isNative = true;
       render(
         <AssistantSection
-          settings={enabledSettings}
+          settings={{ ...enabledSettings, assistantBackend: 'on-device' }}
           update={vi.fn()}
           currentProfile={profile}
           updateSettings={vi.fn()}
-        />
+        />,
       );
-      await waitFor(() => expect(isModelDownloadedMock).toHaveBeenCalled());
-      const onDeviceOption = screen
-        .getByTestId('assistant-backend-select')
-        .querySelector('option[value="on-device"]');
-      expect(onDeviceOption).not.toBeDisabled();
-      expect(screen.queryByTestId('assistant-mobile-unsupported')).not.toBeInTheDocument();
+
+      await screen.findByTestId('assistant-on-device-unavailable');
+      expect(screen.queryByTestId('assistant-model-select')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('assistant-model-download')).not.toBeInTheDocument();
     });
   });
 

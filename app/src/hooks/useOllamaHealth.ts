@@ -12,7 +12,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useCurrentProfile } from './useCurrentProfile';
 import { useBandwidthSettings } from './useBandwidthSettings';
 import { getSecureValue } from '../lib/security/secureStorage';
-import { listOpenAiModels } from '../lib/assistant/providers/openai';
+import { listOpenAiModels, suggestOllamaBaseUrl } from '../lib/assistant/providers/openai';
 import { queryKeys } from '../lib/query/query-keys';
 import { ASSISTANT } from '../lib/zmninja-ng-constants';
 
@@ -28,7 +28,14 @@ export interface OllamaHealth {
 export function useOllamaHealth(): OllamaHealth {
   const { currentProfile, settings } = useCurrentProfile();
   const bandwidth = useBandwidthSettings();
-  const baseUrl = (settings.assistantOllamaBaseUrl ?? '').replace(/\/+$/, '');
+  // Same resolution the panel and Settings use: an unset URL falls back to the
+  // profile's own ZoneMinder host, so the status dot reports on the server the
+  // assistant would actually talk to.
+  const baseUrl = (
+    settings.assistantOllamaBaseUrl ||
+    suggestOllamaBaseUrl(currentProfile?.apiUrl) ||
+    ''
+  ).replace(/\/+$/, '');
   const enabled = settings.assistantBackend === 'ollama' && !!currentProfile && baseUrl.length > 0;
 
   const query = useQuery({

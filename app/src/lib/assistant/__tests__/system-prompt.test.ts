@@ -6,15 +6,23 @@ const base = {
   timezone: 'America/New_York',
   locale: 'de',
   zmVersion: '1.37.0',
-  monitors: [{ id: '1', name: 'Front Door', func: 'Modect', enabled: true }],
 };
 
 describe('buildSystemPrompt', () => {
-  it('includes date, timezone, locale instruction, and the monitor table', () => {
+  it('includes date, timezone, locale instruction, and monitor-resolution guidance', () => {
     const p = buildSystemPrompt(base);
     expect(p).toContain('America/New_York');
-    expect(p).toContain('Front Door');
     expect(p.toLowerCase()).toContain('de');
+    expect(p).toContain('list_monitors');
+  });
+
+  // An on-device turn introduced itself as "Ninjiing": the doubled "i" is not
+  // a clean token boundary for a small model, so the exact spelling is stated
+  // as a rule rather than left to be copied (refs #246).
+  it('pins the exact spelling of its name so a small model cannot inflect it', () => {
+    const p = buildSystemPrompt(base);
+    expect(p).toContain('spelled exactly "Ninjii" and never changes');
+    expect(p).toContain('never add letters or endings');
   });
 
   it('opens by naming itself Ninjii (refs #246)', () => {
@@ -24,24 +32,13 @@ describe('buildSystemPrompt', () => {
 
   it('instructs the model never to ask for a monitor id', () => {
     const p = buildSystemPrompt(base);
-    expect(p).toContain('never ask for a monitor id');
-    expect(p).toContain('WITHOUT a monitorId');
+    expect(p).toContain('Never ask the user for an id');
+    expect(p).toContain('monitorId is omitted');
   });
 
   it('instructs the model to refer to monitors by name, not bare id', () => {
     const p = buildSystemPrompt(base);
-    expect(p).toContain('Refer to monitors by NAME, never by bare id.');
-  });
-
-  it('caps the monitor table at the configured limit', () => {
-    const many = Array.from({ length: 80 }, (_, i) => ({
-      id: String(i),
-      name: `M${i}`,
-      func: 'Monitor',
-      enabled: true,
-    }));
-    const p = buildSystemPrompt({ ...base, monitors: many });
-    expect(p).not.toContain('M60');
+    expect(p).toContain('State monitor names');
   });
 
   it('states today\'s calendar date as a plain wall-clock string in the profile timezone (refs #246)', () => {
@@ -53,20 +50,28 @@ describe('buildSystemPrompt', () => {
     expect(p).toContain("Today's date is Thursday, 2026-07-16 in timezone America/New_York");
   });
 
-  it('instructs the model to call list_events with range/objectType for day- or object-type-specific questions', () => {
+  it('instructs the model to call list_events with when/objectType for day- or object-type-specific questions', () => {
     const p = buildSystemPrompt(base);
-    expect(p).toContain('call list_events with the matching range and/or objectType filter');
-    expect(p).toContain('MUST be exactly the rows that call returned for that filter');
+    expect(p).toContain('call list_events with when and/or objectType');
+    expect(p).toContain('Describe only rows the query returned');
+  });
+
+  // The model echoes the user's phrasing accurately and does date arithmetic
+  // badly, so the prompt has to send it to `when` rather than to a timestamp.
+  it('forbids working out a date, pointing at the when parameter instead', () => {
+    const p = buildSystemPrompt(base);
+    expect(p).toContain('Never work out a date or timestamp yourself');
+    expect(p).toContain('`when`');
   });
 
   it('instructs the model to answer directly and never paste image links/ids, since the app shows thumbnails', () => {
     const p = buildSystemPrompt(base);
-    expect(p).toContain('never paste image links, URLs, or raw event ids');
+    expect(p).toContain('Never show image links, URLs, or raw ids');
   });
 
   it('redirects count_events to a rolling window only, not a calendar day', () => {
     const p = buildSystemPrompt(base);
-    expect(p).toContain('rolling window like "the last hour" or "the last 24 hours" (NOT a calendar day)');
+    expect(p).toContain('rolling summaries such as "last 24 hours"');
   });
 
   it('never mentions a JSON tool-call contract or WebLLM-specific directives (model-agnostic prompt)', () => {

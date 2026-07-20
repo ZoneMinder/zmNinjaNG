@@ -1,4 +1,4 @@
-import type { AssistantProvider, AssistantTurn, AssistantMessage, ToolDefinition } from '../types';
+import type { AssistantProvider, AssistantTurn, AssistantMessage, CompletionResult, ToolDefinition } from '../types';
 
 /** Deterministic provider for unit + e2e tests. Ignores message content and
  *  replays a preset script of turns. */
@@ -13,6 +13,12 @@ export class MockProvider implements AssistantProvider {
   setScript(turns: AssistantTurn[]): void {
     this.script = turns;
     this.cursor = 0;
+  }
+
+  /** Never exercised: AskPanel skips triage and verification in test mode so a
+   *  scripted turn is not consumed by them (see `isAssistantTestMode`). */
+  async complete(): Promise<CompletionResult> {
+    return { text: '' };
   }
 
   async chat(

@@ -116,10 +116,13 @@ function AppRoutes() {
 
   // Native: also flush when the app is backgrounded. Errors are swallowed;
   // @capacitor/app may not be present in some test envs.
+  //
   useCapacitorListener(
     () => import('@capacitor/app').then((m) => m.App),
     'pause',
-    () => { void getLogFile().flush(); },
+    () => {
+      void getLogFile().flush();
+    },
   );
 
   // Android hardware back: close overlays, go back on detail views, exit at root.

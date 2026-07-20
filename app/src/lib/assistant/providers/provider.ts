@@ -32,7 +32,13 @@ export function isAssistantTestMode(): boolean {
 export function getAssistantProvider(config: ProviderConfig): AssistantProvider {
   if (isAssistantTestMode()) return sharedMockProvider;
   if (config.backend === 'ollama') {
-    return new OpenAiProvider({ baseUrl: config.ollamaBaseUrl, model: config.ollamaModel, apiKey: config.apiKey });
+    return new OpenAiProvider({
+      baseUrl: config.ollamaBaseUrl,
+      model: config.ollamaModel,
+      apiKey: config.apiKey,
+      temperature: config.temperature,
+      timeoutMs: config.timeoutMs,
+    });
   }
-  return new WebLlmProvider(config.modelId);
+  return new WebLlmProvider(config.modelId, config.temperature);
 }

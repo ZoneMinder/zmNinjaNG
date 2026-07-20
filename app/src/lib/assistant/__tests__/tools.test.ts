@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { getToolByName, readOnlyTools, destructiveTools, TOOLS } from '../tools';
+import { getToolByName, isWithheldToolName, readOnlyTools, WITHHELD_TOOL_NAMES, TOOLS } from '../tools';
+import { safeExecute, validateToolInput, objectTypePattern, coerceLabelList, isOmittedArg, stripOmittedArgs, objectQuestionMismatch, ungroundedWhenWords, toolCallSignature } from '../tool-helpers';
 import type { ToolContext } from '../types';
 import { asProfileId } from '../../../api/types';
 import { ASSISTANT } from '../../zmninja-ng-constants';
-import { getEvents, deleteEvent, setEventArchived } from '../../../api/events';
-import { getMonitor, getMonitors, triggerAlarm, cancelAlarm, setMonitorEnabled, changeMonitorFunction } from '../../../api/monitors';
-import { changeState } from '../../../api/states';
+import { getEvents } from '../../../api/events';
+import { getMonitor, getMonitors } from '../../../api/monitors';
 import { getStorages, getServers } from '../../../api/server';
 import { DEFAULT_THUMBNAIL_FALLBACK_CHAIN } from '../../../stores/settings';
 
@@ -105,7 +105,7 @@ function ctx(): ToolContext {
   return {
     profileId: asProfileId('p1'),
     queryClient: { fetchQuery: (o: { queryFn: () => unknown }) => o.queryFn() } as never,
-    host: { confirm: vi.fn(), navigate: vi.fn(), onActivity: vi.fn() },
+    host: { navigate: vi.fn(), onActivity: vi.fn() },
   };
 }
 
@@ -323,15 +323,61 @@ describe('read-only tools', () => {
     expect(rows[0]).toMatchObject({ id: '42', monitor: 'Front Door', objects: ['person', 'car'] });
   });
 
-  it('list_events rows include duration/scores/archived and a notes preview', async () => {
+  // Only what an answer is built from. The fuller row was ~300 characters, so
+  // 25 of them (7430) overflowed maxToolResultCharacters and the whole payload
+  // was replaced by a truncation notice the model read as "no events".
+  it('list_events rows carry only the fields an answer needs', async () => {
     const tool = getToolByName('list_events')!;
     const r = await tool.execute({}, ctx());
     expect(r.isError).toBeFalsy();
     const { events: rows } = JSON.parse(r.output as string);
-    expect(rows[0]).toMatchObject({
-      durationSec: 12.5, frames: 30, alarmFrames: 5, maxScore: 10, avgScore: 4, archived: false,
-      end: '2026-01-01 00:01:00', notes: 'detected:person,car|Motion: All',
+    expect(rows[0]).toEqual({
+      id: '42', monitor: 'Front Door', start: '2026-01-01 00:00:00', durationSec: 12.5, objects: ['person', 'car'],
     });
+  });
+
+  // Supplying matchCount and countsByMonitor was not enough: asked to
+  // summarize, a 3B model enumerated every row and quoted neither. The counts
+  // are now written out as a sentence for it to copy.
+  it('leads the result with a counts sentence the model can quote verbatim', async () => {
+    const tool = getToolByName('list_events')!;
+    const r = await tool.execute({}, ctx());
+    const parsed = JSON.parse(r.output as string);
+    expect(parsed.summary).toContain('1 event');
+    expect(parsed.summary).toContain('By monitor: Front Door 1.');
+    expect(parsed.summary).toContain('Detected: person 1, car 1.');
+    // First key in the serialized object, so it is the first thing read.
+    expect(Object.keys(parsed)[0]).toBe('summary');
+  });
+
+  it('tallies detected objects alongside the per-monitor counts', async () => {
+    const tool = getToolByName('list_events')!;
+    const r = await tool.execute({}, ctx());
+    expect(JSON.parse(r.output as string).objectCounts).toEqual({ person: 1, car: 1 });
+  });
+
+  // The guarantee that matters: a full result must never exceed the budget,
+  // because safeExecute's fallback destroys the payload rather than trimming it.
+  it('keeps a full-size result inside the tool result budget', async () => {
+    const many = Array.from({ length: ASSISTANT.maxListEventsLimit }, (_, i) => ({
+      Event: {
+        Id: String(1000 + i), MonitorId: '1', Cause: 'Motion',
+        StartDateTime: '2026-01-01 00:00:00', EndDateTime: '2026-01-01 00:01:00',
+        Length: '12.5', Frames: '30', AlarmFrames: '5', MaxScore: '10', AvgScore: '4',
+        Archived: '0', Notes: 'detected:person,car|Motion: All',
+      },
+    }));
+    vi.mocked(getEvents).mockResolvedValueOnce({
+      events: many as never,
+      pagination: { page: 1, pageCount: 1, current: 1, count: many.length, prevPage: false, nextPage: false, limit: 25, totalCount: many.length },
+    } as never);
+    const tool = getToolByName('list_events')!;
+
+    const r = await tool.execute({}, ctx());
+
+    expect(r.output.length).toBeLessThanOrEqual(ASSISTANT.maxToolResultCharacters);
+    // Still real JSON with rows in it, not a truncation envelope.
+    expect(JSON.parse(r.output).events.length).toBeGreaterThan(0);
   });
 
   it('list_events builds an event display card with imageUrls, capped to the same rows as output (refs #246)', async () => {
@@ -509,12 +555,22 @@ describe('read-only tools', () => {
     expect(getToolByName('does_not_exist')).toBeUndefined();
   });
 
-  it('TOOLS includes readOnlyTools plus the destructive tools', () => {
-    expect(TOOLS).toEqual([...readOnlyTools, ...destructiveTools]);
+  // The assistant is read-only by construction: the tools that changed state
+  // were deleted outright, so nothing here can reach a mutating API.
+  it('TOOLS exposes exactly the read-only tools', () => {
+    expect(TOOLS).toEqual([...readOnlyTools]);
   });
 
-  it('every read-only tool is non-destructive', () => {
-    expect(readOnlyTools.every((t) => t.destructive === false)).toBe(true);
+  it('does not resolve any withheld action by name, so the agent loop cannot run one', () => {
+    for (const name of WITHHELD_TOOL_NAMES) {
+      expect(getToolByName(name)).toBeUndefined();
+      expect(isWithheldToolName(name)).toBe(true);
+    }
+  });
+
+  it('does not report an unrelated unknown name as a withheld action', () => {
+    expect(isWithheldToolName('list_monitors')).toBe(false);
+    expect(isWithheldToolName('launch_missiles')).toBe(false);
   });
 
   it('list_events clamps a non-numeric or negative limit into [1, maxListEventsLimit]', async () => {
@@ -525,6 +581,232 @@ describe('read-only tools', () => {
     expect(nonNumeric.isError).toBeFalsy();
     // Both fall back to the max clamp rather than producing NaN/negative EventFilters.limit.
     expect(getEvents).toHaveBeenLastCalledWith(expect.objectContaining({ limit: ASSISTANT.maxListEventsLimit }));
+  });
+});
+
+describe('ungroundedWhenWords', () => {
+  // The model sent when "yesterday from 4pm to 10pm" for a question that said
+  // only "yesterday": the example phrase from the prompt, not the user's words.
+  it('names the words the user never wrote', () => {
+    expect(ungroundedWhenWords('yesterday from 4pm to 10pm', 'how many vehicles came yesterday')).toEqual([
+      '4pm',
+      '10pm',
+    ]);
+  });
+
+  it('passes a phrase the user actually used', () => {
+    expect(ungroundedWhenWords('yesterday', 'how many vehicles came yesterday')).toEqual([]);
+    expect(
+      ungroundedWhenWords('yesterday from 4pm to 10pm', 'how many people came yesterday from 4pm to 10pm'),
+    ).toEqual([]);
+  });
+
+  it('ignores connective filler the user would not repeat', () => {
+    expect(ungroundedWhenWords('last 24 hours', 'what happened in the last 24 hours')).toEqual([]);
+  });
+});
+
+describe('toolCallSignature', () => {
+  // Ollama sent {"monitorId":"","when":"yesterday","objectType":""} and then
+  // {"when":"yesterday"}: the same query, two different strings, so the repeat
+  // guard did not fire and the identical query ran again.
+  it('treats omitted-argument spellings as the same call', () => {
+    const a = toolCallSignature('list_events', { monitorId: '', when: 'yesterday', objectType: '' });
+    const b = toolCallSignature('list_events', { when: 'yesterday' });
+    const c = toolCallSignature('list_events', { when: 'yesterday', objectType: null });
+    expect(a).toBe(b);
+    expect(b).toBe(c);
+  });
+
+  it('ignores key order', () => {
+    expect(toolCallSignature('list_events', { when: 'today', limit: 5 })).toBe(
+      toolCallSignature('list_events', { limit: 5, when: 'today' }),
+    );
+  });
+
+  it('still separates genuinely different calls', () => {
+    expect(toolCallSignature('list_events', { when: 'today' })).not.toBe(
+      toolCallSignature('list_events', { when: 'yesterday' }),
+    );
+    expect(toolCallSignature('list_events', { when: 'today' })).not.toBe(
+      toolCallSignature('count_events', { when: 'today' }),
+    );
+    expect(toolCallSignature('list_events', { when: 'today', objectType: 'car' })).not.toBe(
+      toolCallSignature('list_events', { when: 'today' }),
+    );
+  });
+});
+
+describe('objectQuestionMismatch', () => {
+  const labels = ['car', 'person', 'truck'];
+
+  // The reported failure: "how many vehicles came today vs yesterday" called
+  // count_events, which counts events of every kind, and the model reported
+  // all 14 as vehicles.
+  it('refuses count_events for a question naming a category', () => {
+    const message = objectQuestionMismatch('count_events', 'how many vehicles came today vs yesterday', labels);
+    expect(message).toContain('cannot answer this question');
+    expect(message).toContain('list_events');
+    expect(message).toContain('objectType');
+  });
+
+  it('refuses count_events for a question naming one of this install\'s labels', () => {
+    expect(objectQuestionMismatch('count_events', 'how many trucks yesterday', labels)).toBeTruthy();
+    // Plural or singular, either way.
+    expect(objectQuestionMismatch('count_events', 'was there a truck today', labels)).toBeTruthy();
+  });
+
+  it('allows count_events for a question about events in general', () => {
+    expect(objectQuestionMismatch('count_events', 'how many events in the last 24 hours', labels)).toBeUndefined();
+    expect(objectQuestionMismatch('count_events', 'which monitor was most active', labels)).toBeUndefined();
+  });
+
+  // A word must not match inside another: "carrot" is a label on this user's
+  // install, and "car" must not fire on it, nor the reverse.
+  it('matches whole words only', () => {
+    expect(objectQuestionMismatch('count_events', 'how many carrots today', ['car'])).toBeUndefined();
+  });
+
+  it('leaves every other tool alone', () => {
+    expect(objectQuestionMismatch('list_events', 'how many vehicles today', labels)).toBeUndefined();
+  });
+});
+
+describe('stripOmittedArgs', () => {
+  // The crash this prevents: llama3.2 filled every unused argument with null,
+  // `eventIds: null` reached the api layer whose guard reads `!== undefined`,
+  // and `null.length` threw "Cannot read properties of null". Each tool was
+  // normalizing its own arguments by hand, so any argument someone forgot
+  // became the next crash.
+  it('drops the null-filled arguments a model sends for "unused"', () => {
+    expect(
+      stripOmittedArgs({ eventIds: null, limit: 25, when: 'today', monitorId: null, objectType: null, tag: null }),
+    ).toEqual({ limit: 25, when: 'today' });
+  });
+
+  it('drops placeholder strings and empty arrays too', () => {
+    expect(stripOmittedArgs({ when: 'today', objectType: '{}', tag: '', eventIds: [] })).toEqual({ when: 'today' });
+  });
+
+  it('keeps every real value, including falsy ones that mean something', () => {
+    expect(stripOmittedArgs({ when: 'today', objectType: ['car'], limit: 0 })).toEqual({
+      when: 'today',
+      objectType: ['car'],
+      limit: 0,
+    });
+  });
+});
+
+describe('coerceLabelList', () => {
+  // Ollama serializes tool `arguments` as a JSON STRING, and llama3.2
+  // stringified the array inside it. Read as one label, `['car', 'truck']` was
+  // rejected as unknown and the turn looped on the rejection. The same model
+  // on the on-device path sends a real array: the malformation belongs to the
+  // wire format, not to the model.
+  it('reads a list the model stringified, in JSON or Python quoting', () => {
+    expect(coerceLabelList("['car', 'truck']")).toEqual(['car', 'truck']);
+    expect(coerceLabelList('["car","truck"]')).toEqual(['car', 'truck']);
+    expect(coerceLabelList('[car, truck]')).toEqual(['car', 'truck']);
+  });
+
+  it('passes a real array and a single label through', () => {
+    expect(coerceLabelList(['car', 'truck'])).toEqual(['car', 'truck']);
+    expect(coerceLabelList('car')).toEqual(['car']);
+    expect(coerceLabelList('')).toEqual([]);
+  });
+});
+
+describe('isOmittedArg', () => {
+  // "{}" is what llama3.2 puts in an argument it means to leave out. Treated
+  // as a real label it was rejected as an unknown object type, and the turn
+  // looped on the rejection.
+  it('treats empty JSON literals as omitted', () => {
+    expect(isOmittedArg('{}')).toBe(true);
+    expect(isOmittedArg('[]')).toBe(true);
+  });
+
+  it('still treats a real label as present', () => {
+    expect(isOmittedArg('car')).toBe(false);
+  });
+});
+
+describe('objectTypePattern', () => {
+  it('passes one label through', () => {
+    expect(objectTypePattern('car')).toBe('car');
+  });
+
+  // "vehicles" arrives as the labels the MODEL picked from this install's own
+  // vocabulary (see object-labels.ts), not from a hardcoded category map.
+  it('joins several labels into an alternation', () => {
+    expect(objectTypePattern(['car', 'truck'])).toBe('(car|truck)');
+  });
+
+  // The result is spliced into a `Notes REGEXP` the server runs.
+  it('strips regex metacharacters', () => {
+    expect(objectTypePattern('.*')).toBe('');
+    expect(objectTypePattern('ca(r|t)')).toBe('cart');
+    expect(objectTypePattern(['car', ''])).toBe('car');
+  });
+});
+
+describe('validateToolInput (the refine step, refs #246)', () => {
+  // Both of these are arguments llama3.2 actually produced. Each is decidable
+  // from the schema alone, so neither should reach a request.
+  // A synthetic schema: list_events no longer has an enum field (`when` takes
+  // a phrase instead), but the check still guards any tool that adds one.
+  it('rejects a value outside an enum, naming the values that would work', () => {
+    const schema = { type: 'object', properties: { mode: { type: 'string', enum: ['fast', 'slow'] } } };
+    const error = validateToolInput(schema, { mode: 'somewhat brisk' });
+    expect(error).toContain('mode must be one of: fast, slow');
+  });
+
+  // The failure this replaced: the model put the user's phrase in `range`,
+  // which was an enum. With `when` the only time field, the phrase has one
+  // place to go, and a stale `range` is now reported as an unknown argument
+  // that names `when` as a valid one.
+  it('steers a stale range argument to the field that replaced it', () => {
+    const tool = getToolByName('list_events')!;
+    const error = validateToolInput(tool.schema, { range: 'yesterday from 16:00 to 22:00' });
+    expect(error).toContain('range is not an argument of this tool');
+    expect(error).toContain('when');
+  });
+
+  it('rejects an argument the tool does not have', () => {
+    const tool = getToolByName('list_events')!;
+    expect(validateToolInput(tool.schema, { rnge: 'today' })).toContain('is not an argument of this tool');
+  });
+
+  it('reports a missing required argument', () => {
+    const tool = getToolByName('get_monitor')!;
+    expect(validateToolInput(tool.schema, {})).toContain('monitorId is required');
+  });
+
+  // The placeholder strings small models send for "no value" must not be
+  // type-checked as real values (see isOmittedArg), or every optional argument
+  // becomes an error.
+  it('lets a placeholder stand for an omitted optional argument', () => {
+    const tool = getToolByName('list_events')!;
+    expect(validateToolInput(tool.schema, { when: 'today', objectType: 'null', monitorId: 'none' })).toBeUndefined();
+  });
+
+  it('accepts a well-formed call', () => {
+    const tool = getToolByName('list_events')!;
+    expect(validateToolInput(tool.schema, { when: 'yesterday from 4pm to 10pm' })).toBeUndefined();
+  });
+
+  // objectType takes a label OR a list of them, and the prompt asks for a list
+  // whenever the user names a category. A schema declaring only "string" made
+  // this validator reject the exact call the prompt had just requested.
+  it('accepts either shape of a multi-type argument', () => {
+    const tool = getToolByName('list_events')!;
+    expect(validateToolInput(tool.schema, { objectType: 'car' })).toBeUndefined();
+    expect(validateToolInput(tool.schema, { objectType: ['car', 'truck'] })).toBeUndefined();
+    expect(validateToolInput(tool.schema, { objectType: { a: 1 } })).toContain('must be string or array');
+  });
+
+  it('still holds a single-type argument to its type', () => {
+    const tool = getToolByName('list_events')!;
+    expect(validateToolInput(tool.schema, { eventIds: 'not-an-array' })).toContain('must be array');
   });
 });
 
@@ -570,12 +852,305 @@ describe('list_events range resolution (refs #246)', () => {
     );
   });
 
+  // The whole point of `when`: the model copies the user's words and the app
+  // does the arithmetic. Previously the model had to produce the dates, and
+  // produced the 19th and the 20th for a question about the 15th.
+  it('resolves a `when` phrase into exact timestamps', async () => {
+    const tool = getToolByName('list_events')!;
+    const r = await tool.execute(
+      { when: 'yesterday from 4pm to 10pm', objectType: 'person' },
+      { ...ctx(), timezone: 'America/New_York' },
+    );
+    expect(r.isError).toBeFalsy();
+    expect(getEvents).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startDateTime: '2026-07-15 16:00:00',
+        endDateTime: '2026-07-15 22:00:00',
+        notesRegexp: 'detected:.*person',
+      }),
+    );
+  });
+
+  // The model reported ten rows as "8 Front Yard, 2 Garage Outdoor" when the
+  // real split was four and six. It should be reading a tally, not counting.
+  it('supplies the per-monitor tally so the model never counts rows', async () => {
+    vi.mocked(getEvents).mockResolvedValueOnce({
+      events: [
+        { Event: { Id: '1', MonitorId: '1', StartDateTime: '2026-07-15 10:00:00', Length: '30', Notes: 'detected:car' } },
+        { Event: { Id: '2', MonitorId: '1', StartDateTime: '2026-07-15 11:00:00', Length: '30', Notes: 'detected:car' } },
+        { Event: { Id: '3', MonitorId: '2', StartDateTime: '2026-07-15 12:00:00', Length: '30', Notes: 'detected:truck' } },
+      ],
+      pagination: { page: 1, pageCount: 1, current: 1, count: 3, prevPage: false, nextPage: false, limit: 25, totalCount: 3 },
+    } as never);
+
+    const tool = getToolByName('list_events')!;
+    const r = await tool.execute({ when: 'yesterday' }, { ...ctx(), timezone: 'America/New_York', question: 'what happened yesterday' });
+
+    const parsed = JSON.parse(r.output);
+    expect(parsed.matchCount).toBe(3);
+    // Keyed by whatever the row shows as its monitor: the resolved NAME, or
+    // the raw id when the monitor list has no name for it.
+    expect(parsed.countsByMonitor).toEqual({ 'Front Door': 2, '2': 1 });
+  });
+
+  it('refuses a when phrase carrying words the user never wrote', async () => {
+    const tool = getToolByName('list_events')!;
+    const r = await tool.execute(
+      { when: 'yesterday from 4pm to 10pm', objectType: 'car' },
+      { ...ctx(), timezone: 'America/New_York', question: 'how many vehicles came yesterday' },
+    );
+
+    expect(r.isError).toBe(true);
+    expect(r.output).toContain('words the user did not write');
+    expect(r.output).toContain('4pm');
+    expect(getEvents).not.toHaveBeenCalled();
+  });
+
+  // The whole point of giving the model the vocabulary: a label the detector
+  // never writes cannot answer anything, and a zero-row "none" for it is
+  // wrong when the real label was sitting right there.
+  it('refuses an objectType this install does not record, naming the ones it does', async () => {
+    const tool = getToolByName('list_events')!;
+    const r = await tool.execute(
+      { when: 'yesterday', objectType: 'vehicle' },
+      { ...ctx(), timezone: 'America/New_York', question: 'how many vehicles came yesterday', objectLabels: ['car', 'person', 'truck'] },
+    );
+
+    expect(r.isError).toBe(true);
+    expect(r.output).toContain('not a label this installation records');
+    expect(r.output).toContain('car, person, truck');
+    expect(getEvents).not.toHaveBeenCalled();
+  });
+
+  it('accepts a list the model stringified rather than rejecting it as one label', async () => {
+    const tool = getToolByName('list_events')!;
+    const r = await tool.execute(
+      { when: 'today', objectType: "['car', 'truck']" },
+      { ...ctx(), timezone: 'America/New_York', question: 'summarize today', objectLabels: ['car', 'person', 'truck'] },
+    );
+
+    expect(r.isError).toBeFalsy();
+    expect(getEvents).toHaveBeenCalledWith(expect.objectContaining({ notesRegexp: 'detected:.*(car|truck)' }));
+  });
+
+  it('treats an empty JSON literal as no filter at all', async () => {
+    const tool = getToolByName('list_events')!;
+    const r = await tool.execute(
+      { when: 'today', objectType: '{}' },
+      { ...ctx(), timezone: 'America/New_York', question: 'summarize today', objectLabels: ['car', 'person'] },
+    );
+
+    expect(r.isError).toBeFalsy();
+    expect(getEvents).toHaveBeenCalledWith(expect.objectContaining({ notesRegexp: undefined }));
+  });
+
+  it('accepts labels that are in the vocabulary', async () => {
+    const tool = getToolByName('list_events')!;
+    const r = await tool.execute(
+      { when: 'yesterday', objectType: ['car', 'truck'] },
+      { ...ctx(), timezone: 'America/New_York', question: 'how many vehicles came yesterday', objectLabels: ['car', 'person', 'truck'] },
+    );
+
+    expect(r.isError).toBeFalsy();
+    expect(getEvents).toHaveBeenCalledWith(expect.objectContaining({ notesRegexp: 'detected:.*(car|truck)' }));
+  });
+
+  it('hands back an unreadable `when` phrase instead of querying a guessed window', async () => {
+    const tool = getToolByName('list_events')!;
+    const r = await tool.execute({ when: 'sometime last spring' }, { ...ctx(), timezone: 'America/New_York' });
+    expect(r.isError).toBe(true);
+    expect(r.output).toContain('Could not read');
+    expect(getEvents).not.toHaveBeenCalled();
+  });
+
+  it('lets `when` outrank the coarser range keyword', async () => {
+    const tool = getToolByName('list_events')!;
+    await tool.execute({ when: 'today before noon', range: 'last_7d' }, { ...ctx(), timezone: 'America/New_York' });
+    expect(getEvents).toHaveBeenCalledWith(
+      expect.objectContaining({ startDateTime: '2026-07-16 00:00:00', endDateTime: '2026-07-16 12:00:00' }),
+    );
+  });
+
+  // Observed: "how many people came yesterday from 4pm to 10pm" produced
+  // `StartDateTime >=: 16:00` with no date at all, so the query was anchored
+  // to no day and answered anyway.
+  it('anchors a bare time of day to the day the range names', async () => {
+    const tool = getToolByName('list_events')!;
+    const r = await tool.execute(
+      { range: 'yesterday', startTime: '16:00', endTime: '22:00', objectType: 'person' },
+      { ...ctx(), timezone: 'America/New_York' },
+    );
+    expect(r.isError).toBeFalsy();
+    expect(getEvents).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startDateTime: '2026-07-15 16:00:00',
+        endDateTime: '2026-07-15 22:00:00',
+        notesRegexp: 'detected:.*person',
+      }),
+    );
+  });
+
+  it('refuses a bare time with no day to attach it to, instead of querying an undated window', async () => {
+    const tool = getToolByName('list_events')!;
+    const r = await tool.execute({ startTime: '16:00', endTime: '22:00' }, { ...ctx(), timezone: 'America/New_York' });
+    expect(r.isError).toBe(true);
+    expect(r.output).toContain('time of day with no date');
+    expect(getEvents).not.toHaveBeenCalled();
+  });
+
+  it('refuses a bare time paired with a rolling range, which names no single day', async () => {
+    const tool = getToolByName('list_events')!;
+    const r = await tool.execute(
+      { range: 'last_7d', startTime: '16:00' },
+      { ...ctx(), timezone: 'America/New_York' },
+    );
+    expect(r.isError).toBe(true);
+    expect(getEvents).not.toHaveBeenCalled();
+  });
+
+  it('refuses a datetime it cannot understand rather than passing it to the API', async () => {
+    const tool = getToolByName('list_events')!;
+    const r = await tool.execute({ startTime: 'yesterday 4pm' }, { ...ctx(), timezone: 'America/New_York' });
+    expect(r.isError).toBe(true);
+    expect(r.output).toContain('not a date this app understands');
+    expect(getEvents).not.toHaveBeenCalled();
+  });
+
   it('combines range with objectType into a notesRegexp filter, for "how many people today" style questions', async () => {
     const tool = getToolByName('list_events')!;
     await tool.execute({ range: 'today', objectType: 'person' }, { ...ctx(), timezone: 'America/New_York' });
     expect(getEvents).toHaveBeenCalledWith(
       expect.objectContaining({ startDateTime: '2026-07-16 00:00:00', notesRegexp: 'detected:.*person' }),
     );
+  });
+
+  // A zero-row objectType query used to be indistinguishable from "nothing
+  // happened", and the model said so: asked "how many people came to my house
+  // today" it sent objectType "people" against events labelled "person" and
+  // told the user nobody had come. The label vocabulary is install-specific,
+  // so the tool reports the labels actually present instead (refs #246).
+  describe('list_events objectType vocabulary', () => {
+    // These tests care about the difference between the FILTERED query and the
+    // label PROBE that follows it, so they set behaviour per call. Chained
+    // `mockResolvedValueOnce` made that order-dependent across the file: a
+    // queued value left by an earlier test shifted which response the probe
+    // saw, and the failure looked like a bug in the tool. Each test below
+    // states both responses explicitly, and this restores the file-wide
+    // default afterwards so nothing leaks out of the block.
+    const defaultPage = {
+      events: [
+        {
+          Event: {
+            Id: '42', MonitorId: '1', Cause: 'Motion', StartDateTime: '2026-01-01 00:00:00',
+            EndDateTime: '2026-01-01 00:01:00', Length: '12.5', Frames: '30', AlarmFrames: '5',
+            MaxScore: '10', AvgScore: '4', TotScore: '120', Archived: '0',
+            Notes: 'detected:person,car|Motion: All',
+          },
+        },
+      ],
+      pagination: { page: 1, pageCount: 1, current: 1, count: 1, prevPage: false, nextPage: false, limit: 25, totalCount: 1 },
+    };
+
+    /** `filtered` answers the objectType query, `probe` the unfiltered re-run. */
+    const respond = (filtered: unknown, probe: unknown) => {
+      vi.mocked(getEvents).mockReset();
+      vi.mocked(getEvents).mockImplementation(async (f) =>
+        ((f as { notesRegexp?: string }).notesRegexp ? filtered : probe) as never,
+      );
+    };
+
+    afterEach(() => {
+      vi.mocked(getEvents).mockReset();
+      vi.mocked(getEvents).mockResolvedValue(defaultPage as never);
+    });
+
+    const emptyPage = {
+      events: [],
+      pagination: { page: 1, pageCount: 1, current: 1, count: 0, prevPage: false, nextPage: false, limit: 25, totalCount: 0 },
+    };
+
+    // A category word now arrives as the labels the MODEL chose from this
+    // install's vocabulary, so the query covers them in one shot.
+    it('queries every label the model supplied for a category', async () => {
+      respond(defaultPage, defaultPage);
+      const tool = getToolByName('list_events')!;
+
+      await tool.execute(
+        { when: 'yesterday', objectType: ['car', 'truck'] },
+        { ...ctx(), timezone: 'America/New_York' },
+      );
+
+      expect((vi.mocked(getEvents).mock.calls[0][0] as { notesRegexp?: string }).notesRegexp).toBe(
+        'detected:.*(car|truck)',
+      );
+    });
+
+    // The bug this replaced: asked "how many cars came in today" on a day with
+    // only people, the tool said "retry with one of those exact labels", the
+    // model retried with `person`, and answered "There were 6 people recorded
+    // today" to a question about cars. "car" is a real label that simply did
+    // not occur, so none IS the answer.
+    it('answers none for a real label that did not occur, instead of steering to another object', async () => {
+      // The filtered query finds nothing; the probe finds a day of people only,
+      // which is exactly the situation that produced the wrong answer.
+      const peopleOnly = {
+        events: [
+          { Event: { Id: '252633', MonitorId: '1', Name: 'e', StartTime: '2026-07-16 09:00:00', Length: '30', Notes: 'detected:person' } },
+        ],
+        pagination: { page: 1, pageCount: 1, current: 1, count: 1, prevPage: false, nextPage: false, limit: 25, totalCount: 1 },
+      };
+      // Reset first, then default the PROBE to a people-only day and override
+      // just the first (filtered) call. Chained `mockResolvedValueOnce` alone
+      // is order-dependent: a leftover queued value from an earlier test in
+      // this describe silently shifts which response the probe sees.
+      respond(emptyPage, peopleOnly);
+      const tool = getToolByName('list_events')!;
+
+      const r = await tool.execute({ when: 'today', objectType: 'car' }, { ...ctx(), timezone: 'America/New_York' });
+
+      expect(r.isError).toBeFalsy();
+      const parsed = JSON.parse(r.output);
+      expect(parsed.events).toEqual([]);
+      expect(parsed.matchCount).toBe(0);
+      expect(parsed.note).toContain('No "car" was detected');
+      expect(parsed.note).toContain('tell the user there were none');
+      expect(parsed.note).toContain('otherwise the answer is none');
+      // And the window must state the day that was queried, not "no filter".
+      expect(parsed.window).toEqual({ from: '2026-07-16 00:00:00', to: '2026-07-16 10:30:00' });
+    });
+
+    it('returns a normal empty result when the window genuinely has no events', async () => {
+      respond(emptyPage, emptyPage);
+      const tool = getToolByName('list_events')!;
+
+      const r = await tool.execute({ range: 'today', objectType: 'person' }, ctx());
+
+      expect(r.isError).toBeFalsy();
+      const parsed = JSON.parse(r.output);
+      expect(parsed.events).toEqual([]);
+      // The window is always reported, so the model cannot invent a period it
+      // never queried.
+      expect(parsed.window).toMatchObject({ from: expect.any(String), to: expect.any(String) });
+    });
+
+    // It answered "no people in the last 24 hours" having queried no range at
+    // all. An unfiltered query now says so in words the model can repeat.
+    it('says plainly when no time filter was applied', async () => {
+      const tool = getToolByName('list_events')!;
+
+      const r = await tool.execute({}, ctx());
+
+      expect(JSON.parse(r.output).window).toBe('all recorded events, no time filter applied');
+    });
+
+    it('does not probe when the objectType query returned rows', async () => {
+      const tool = getToolByName('list_events')!;
+
+      const r = await tool.execute({ range: 'today', objectType: 'person' }, ctx());
+
+      expect(r.isError).toBeFalsy();
+      expect(getEvents).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('flags truncated when more matches exist beyond the capped page', async () => {
@@ -599,110 +1174,25 @@ describe('list_events range resolution (refs #246)', () => {
     const r = await tool.execute({}, ctx());
     expect(r.isError).toBeFalsy();
     const parsed = JSON.parse(r.output as string);
-    expect(parsed.truncated).toBe(true);
+    // Names the count it is showing, rather than a bare "truncated" that a
+    // small model reads as "nothing found".
+    expect(parsed.moreMatchesExist).toBe(true);
+    expect(parsed.shownEvents).toBe(1);
     expect(parsed.events).toHaveLength(1);
   });
 
-  it('leaves truncated unset when every match fits on the page', async () => {
+  it('leaves the more-matches flag unset when every match fits on the page', async () => {
     const tool = getToolByName('list_events')!;
     const r = await tool.execute({}, ctx());
     const parsed = JSON.parse(r.output as string);
-    expect(parsed.truncated).toBeUndefined();
+    expect(parsed.moreMatchesExist).toBeUndefined();
+    expect(parsed.shownEvents).toBeUndefined();
   });
 });
 
-describe('destructive tools', () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it('trigger_alarm is destructive and builds a confirm request', async () => {
-    const tool = getToolByName('trigger_alarm')!;
-    expect(tool.destructive).toBe(true);
-    const req = await tool.buildConfirm!({ monitorId: '1' }, ctx());
-    expect(req.toolName).toBe('trigger_alarm');
-    expect(req.messageKey).toBe('assistant.confirm.trigger_alarm');
-    expect(req.messageParams).toMatchObject({ monitorId: '1' });
-    const r = await tool.execute({ monitorId: '1' }, ctx());
-    expect(r.isError).toBeFalsy();
-    expect(triggerAlarm).toHaveBeenCalledWith('1');
-  });
-
-  it('cancel_alarm is destructive and builds a confirm request', async () => {
-    const tool = getToolByName('cancel_alarm')!;
-    expect(tool.destructive).toBe(true);
-    const req = await tool.buildConfirm!({ monitorId: '1' }, ctx());
-    expect(req.messageKey).toBe('assistant.confirm.cancel_alarm');
-    const r = await tool.execute({ monitorId: '1' }, ctx());
-    expect(r.isError).toBeFalsy();
-    expect(cancelAlarm).toHaveBeenCalledWith('1');
-  });
-
-  it('set_monitor_enabled is destructive and builds a concrete confirm', async () => {
-    const tool = getToolByName('set_monitor_enabled')!;
-    expect(tool.destructive).toBe(true);
-
-    const disableReq = await tool.buildConfirm!({ monitorId: '4', enabled: false }, ctx());
-    expect(disableReq.toolName).toBe('set_monitor_enabled');
-    expect(disableReq.messageKey).toBe('assistant.confirm.set_monitor_enabled_disable');
-    expect(disableReq.messageParams).toMatchObject({ id: '4' });
-    expect(disableReq.messageParams).not.toHaveProperty('enabled');
-
-    const enableReq = await tool.buildConfirm!({ monitorId: '4', enabled: true }, ctx());
-    expect(enableReq.messageKey).toBe('assistant.confirm.set_monitor_enabled_enable');
-    expect(enableReq.messageParams).toMatchObject({ id: '4' });
-
-    const r = await tool.execute({ monitorId: '4', enabled: false }, ctx());
-    expect(r.isError).toBeFalsy();
-    expect(setMonitorEnabled).toHaveBeenCalledWith('4', false);
-  });
-
-  it('change_monitor_function is destructive and builds a concrete confirm', async () => {
-    const tool = getToolByName('change_monitor_function')!;
-    expect(tool.destructive).toBe(true);
-    const req = await tool.buildConfirm!({ monitorId: '2', func: 'Record' }, ctx());
-    expect(req.messageParams).toMatchObject({ id: '2', func: 'Record' });
-    const r = await tool.execute({ monitorId: '2', func: 'Record' }, ctx());
-    expect(r.isError).toBeFalsy();
-    expect(changeMonitorFunction).toHaveBeenCalledWith('2', 'Record');
-  });
-
-  it('change_run_state is destructive and builds a concrete confirm', async () => {
-    const tool = getToolByName('change_run_state')!;
-    expect(tool.destructive).toBe(true);
-    const req = await tool.buildConfirm!({ state: 'Away' }, ctx());
-    expect(req.messageKey).toBe('assistant.confirm.change_run_state');
-    expect(req.messageParams).toMatchObject({ state: 'Away' });
-    const r = await tool.execute({ state: 'Away' }, ctx());
-    expect(r.isError).toBeFalsy();
-    expect(changeState).toHaveBeenCalledWith('Away');
-  });
-
-  it('delete_event confirm fetches event detail for the card', async () => {
-    const tool = getToolByName('delete_event')!;
-    expect(tool.destructive).toBe(true);
-    const req = await tool.buildConfirm!({ eventId: '99' }, ctx());
-    expect(req.messageKey).toBe('assistant.confirm.delete_event');
-    expect(req.messageParams).toMatchObject({ eventId: '99', monitorId: '1' });
-    expect(req.params).toMatchObject({ eventId: '99' });
-    const r = await tool.execute({ eventId: '99' }, ctx());
-    expect(r.isError).toBeFalsy();
-    expect(deleteEvent).toHaveBeenCalledWith('99');
-  });
-
-  it('archive_event is destructive and builds a concrete confirm', async () => {
-    const tool = getToolByName('archive_event')!;
-    expect(tool.destructive).toBe(true);
-
-    const archiveReq = await tool.buildConfirm!({ eventId: '99', archived: true }, ctx());
-    expect(archiveReq.messageKey).toBe('assistant.confirm.archive_event_archive');
-    expect(archiveReq.messageParams).toMatchObject({ eventId: '99' });
-    expect(archiveReq.messageParams).not.toHaveProperty('archived');
-
-    const unarchiveReq = await tool.buildConfirm!({ eventId: '99', archived: false }, ctx());
-    expect(unarchiveReq.messageKey).toBe('assistant.confirm.archive_event_unarchive');
-    expect(unarchiveReq.messageParams).toMatchObject({ eventId: '99' });
-
-    const r = await tool.execute({ eventId: '99', archived: true }, ctx());
-    expect(r.isError).toBeFalsy();
-    expect(setEventArchived).toHaveBeenCalledWith('99', true);
+describe('tool output budget', () => {
+  it('returns valid, explicitly truncated JSON for oversized output', async () => {
+    const result = await safeExecute('large', async () => 'x'.repeat(ASSISTANT.maxToolResultCharacters + 1));
+    expect(JSON.parse(result.output)).toMatchObject({ truncated: true });
   });
 });

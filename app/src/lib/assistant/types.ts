@@ -36,6 +36,12 @@ export interface AssistantMessage {
    *  for diagnosing why a turn failed; never set on a normal answer or tool
    *  call. */
   raw?: string;
+  /** Everything that happened while producing this turn, in the order it
+   *  happened: each model round trip and each tool call with the ZoneMinder
+   *  requests it made. Attached to the same final assistant message `display`
+   *  is, so the panel shows one transcript per answer rather than fragments
+   *  scattered over hidden intermediate messages. */
+  trace?: TraceEntry[];
   /** Result cards aggregated from this turn's tool calls (refs #246), de-duped
    *  by `kind`+`id`. Attached to the FINAL `role: 'assistant'` answer message
    *  of the turn (never an intermediate tool-call-only assistant message or a
@@ -79,6 +85,10 @@ export interface ToolCall {
 }
 
 export interface ToolResult {
+  /** The ZoneMinder requests this tool actually made ("GET /zm/api/... -> 200
+   *  (45ms)"), for the panel transcript. Diagnostic only: never sent to the
+   *  model, which has no use for a URL and would spend context on it. */
+  apiCalls?: string[];
   callId: string;
   output: string;
   isError?: boolean;
@@ -86,9 +96,61 @@ export interface ToolResult {
 }
 
 /** One model turn. toolCalls empty means the model is done. */
+/** One request/response pair with the model, captured verbatim so the panel
+ *  can show what was actually sent and what actually came back.
+ *
+ *  Every backend fills this in, and the three do not send the same thing: the
+ *  WebLLM path sends the tool catalog, few-shot block and JSON output contract
+ *  as prose inside `messages`, while Ollama sends the system prompt plus
+ *  native `tools` schemas. Reading a turn is the only way to see which one a
+ *  given answer came from. */
+export interface ModelExchange {
+  /** The backend that served this exchange ('webllm' | 'ollama'). */
+  backend: string;
+  model: string;
+  /** The request body as sent, pretty-printed. Truncated to
+   *  `ASSISTANT.maxExchangeCharacters`; see `captureExchange`. */
+  sent: string;
+  /** The model's reply before any parsing, so a turn that failed to parse
+   *  shows the text that failed rather than the fallback apology. */
+  received: string;
+  /** Wall-clock milliseconds for this single round trip. */
+  ms: number;
+}
+
+/** One step of a turn, for the panel's transcript. A single ordered list
+ *  rather than separate exchange/tool collections: the useful reading is
+ *  chronological (model asked for this, the tool ran that query, the model
+ *  then said this), and two lists have to be re-interleaved to get there. */
+export type TraceEntry =
+  /** The question the whole turn is answering. First entry, so a pasted
+   *  transcript opens with what was asked instead of a wall of system prompt. */
+  | { kind: 'question'; text: string }
+  | { kind: 'exchange'; exchange: ModelExchange }
+  | {
+      kind: 'tool';
+      name: string;
+      input: Record<string, unknown>;
+      output: string;
+      isError?: boolean;
+      /** The ZoneMinder requests this call actually made. */
+      apiCalls?: string[];
+    };
+
+/** What `AssistantProvider.complete` returns: the reply as text, plus the
+ *  round trip for the panel transcript. */
+export interface CompletionResult {
+  text: string;
+  exchange?: ModelExchange;
+}
+
 export interface AssistantTurn {
   text?: string;
   toolCalls: ToolCall[];
+  /** This turn's raw request/response pair. Collected across every iteration
+   *  of `runAssistantTurn` and attached to the turn's final assistant
+   *  message, so a multi-tool turn shows each round trip in order. */
+  exchange?: ModelExchange;
   /** See `AssistantMessage.raw`: carried onto the pushed assistant message by
    *  `runAssistantTurn` (agent.ts) when a turn is the parse-error fallback. */
   raw?: string;
@@ -96,10 +158,22 @@ export interface AssistantTurn {
    *  counts, so a backend that stays quiet can't read as "0 tokens used" and
    *  suppress the context-window warning forever. */
   usage?: TokenUsage;
+  /** The model's own reasoning for this turn, stripped out of the answer but
+   *  kept so the panel can show what it was working on across a multi-step
+   *  turn. Undefined for a model that emits none. */
+  reasoning?: string;
 }
 
 export interface ToolContext {
   profileId: ProfileId;
+  /** The question this turn is answering, so a tool can check that a
+   *  model-supplied phrase came from the user rather than from an example in
+   *  the prompt (see `list_events`' `when`). */
+  question?: string;
+  /** Detected-object labels this install writes (object-labels.ts). A tool
+   *  rejects an objectType outside this list rather than querying a label the
+   *  detector never emits. */
+  objectLabels?: string[];
   queryClient: QueryClient;
   host: AssistantHost;
   /**
@@ -139,26 +213,28 @@ export interface ToolExecuteResult {
   display?: DisplayEntity[];
 }
 
+/**
+ * A tool the assistant can run. There is no `destructive` flag and no
+ * `buildConfirm`: the assistant is read-only, and the type deliberately cannot
+ * express an action that changes anything, so "is this safe to run" is not a
+ * question the agent loop has to answer at runtime (see TOOLS in tools.ts).
+ */
 export interface ToolDefinition {
   name: string;
   description: string;
   /** JSON schema for the tool input, passed to the model. */
   schema: Record<string, unknown>;
-  destructive: boolean;
   execute: (input: Record<string, unknown>, ctx: ToolContext) => Promise<ToolExecuteResult>;
-  /** Destructive tools may fetch detail and build a concrete confirm request. */
-  buildConfirm?: (input: Record<string, unknown>, ctx: ToolContext) => Promise<ConfirmRequest>;
-}
-
-/** i18n-free: the host localizes messageKey + messageParams (rule 5). */
-export interface ConfirmRequest {
-  toolName: string;
-  messageKey: string;
-  messageParams: Record<string, unknown>;
-  params: Record<string, unknown>;
 }
 
 export interface ToolActivity {
+  /** A model-side step (its reasoning, or the decision to call a tool) rather
+   *  than a tool execution. The panel shows `detail` for these, so a turn that
+   *  makes several round trips reports what the model is doing instead of
+   *  sitting on "Thinking" (refs #246). */
+  kind?: 'model';
+  /** Model-side text for `kind: 'model'`; ignored for tool steps. */
+  detail?: string;
   toolName: string;
   status: 'running' | 'done' | 'error';
   /** The tool call's input, so the UI can show what it was called with (e.g.
@@ -167,12 +243,28 @@ export interface ToolActivity {
 }
 
 export interface AssistantHost {
-  confirm(request: ConfirmRequest): Promise<boolean>;
   navigate(path: string): void;
   onActivity(activity: ToolActivity): void;
+  /** Optional: receives each trace step as it happens, so the panel can show
+   *  the transcript DURING a turn instead of only once the answer lands. A
+   *  host that does not care simply omits it. */
+  onTrace?(entry: TraceEntry): void;
 }
 
 export interface AssistantProvider {
+  /**
+   * A plain completion: this system prompt, this one user message, nothing
+   * else. No tool catalog, no few-shot block, no JSON output contract.
+   *
+   * Triage and answer verification are not assistant turns, and running them
+   * through `chat` handed them the whole agent scaffolding. On the WebLLM path
+   * that meant the verifier was asked for a verdict while also being
+   * told "respond with {\"answer\": ...}" and shown the few-shot example: it
+   * replied `{"answer": "There were 10 vehicles detected yesterday."}` instead
+   * of OK or PROBLEM, so the check could only ever pass. It was a no-op on two
+   * of three backends.
+   */
+  complete(system: string, text: string, signal: AbortSignal): Promise<CompletionResult>;
   chat(
     messages: AssistantMessage[],
     tools: ToolDefinition[],
@@ -207,12 +299,19 @@ export interface ProviderConfig {
   ollamaModel: string;
   /** Optional Bearer key for the remote server. Ollama itself needs none. */
   apiKey?: string;
+  /** Sampling temperature. Omitted falls back to `ASSISTANT.assistantTemperature`. */
+  temperature?: number;
+  /** Timeout for one model reply, in ms. Omitted falls back to
+   *  `ASSISTANT.requestTimeoutMs`. */
+  timeoutMs?: number;
 }
 
 export interface SystemPromptContext {
+  /** Detected-object labels this install writes, sampled from recent events.
+   *  Empty or omitted simply drops the line (see `buildObjectLabelLine`). */
+  objectLabels?: string[];
   now: Date;
   timezone: string;
   locale: string;
   zmVersion: string;
-  monitors: Array<{ id: string; name: string; func: string; enabled: boolean }>;
 }

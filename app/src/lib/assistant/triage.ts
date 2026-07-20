@@ -1,0 +1,119 @@
+/**
+ * Decides what KIND of request this is before any tool is offered (refs #246).
+ *
+ * The agent loop hands the model every tool on every turn, so "hello" was
+ * answered with `navigate({"path":"/home"})` and "arm the backyard camera"
+ * with `get_monitor`: given a tool list and no reason to use it, a small model
+ * uses it anyway. Measured on llama3.2, those two cases failed 3/3 each, and
+ * no amount of prompt rules fixed them (removing or adding rules moved the
+ * score in the wrong direction).
+ *
+ * So the request is classified first, with NO tools in the prompt at all, and
+ * only a ZoneMinder question ever reaches the tool-calling loop. The other two
+ * kinds are answered as plain text, which is what they always needed.
+ *
+ * The cost is one extra round trip. It is kept small deliberately: no tool
+ * catalog, no few-shot block, no history, and a one-word reply, so the call is
+ * dominated by prefill rather than generation even on the native path.
+ */
+import type { AssistantMessage, AssistantProvider, TraceEntry } from './types';
+import { sanitizeModelText } from './sanitize';
+
+export type RequestKind = 'zoneminder' | 'chat' | 'action';
+
+/** Model-facing (rule 5 exempt): never rendered, only matched below. */
+const TRIAGE_PROMPT = [
+  'You are a classifier for a ZoneMinder security-camera app. Read the user message and reply with EXACTLY',
+  'one word, nothing else:',
+  '',
+  'ZONEMINDER - they are asking about cameras, monitors, events, detections, recordings, server health,',
+  '  or want to be taken to a screen in the app.',
+  'ACTION - they are asking to CHANGE something: arm or disarm a monitor, enable or disable a camera,',
+  '  trigger or cancel an alarm, change the run state or a monitor function, delete or archive an event.',
+  'CHAT - anything else: greetings, thanks, small talk, questions about you, or any topic unrelated to',
+  '  this app.',
+  '',
+  'Examples:',
+  '"how many people came by today" -> ZONEMINDER',
+  '"is the server ok" -> ZONEMINDER',
+  '"show me the front camera" -> ZONEMINDER',
+  '"arm the backyard camera" -> ACTION',
+  '"delete that event" -> ACTION',
+  '"hello" -> CHAT',
+  '"thanks!" -> CHAT',
+  '"what is the capital of France" -> CHAT',
+  '',
+  'Reply with one word: ZONEMINDER, ACTION, or CHAT.',
+].join('\n');
+
+/** Matched loosely on purpose: a small model asked for one word still says
+ *  "CHAT." or `{"answer":"CHAT"}` (the on-device paths wrap every reply in
+ *  that envelope), so the decision is which keyword appears, not whether the
+ *  reply is clean. ZONEMINDER wins ties: routing a real question to the chat
+ *  path would answer it with no data at all, which is the worse failure. */
+export function parseRequestKind(reply: string): RequestKind {
+  const text = reply.toUpperCase();
+  if (text.includes('ZONEMINDER')) return 'zoneminder';
+  if (text.includes('ACTION')) return 'action';
+  if (text.includes('CHAT')) return 'chat';
+  return 'zoneminder';
+}
+
+/**
+ * Classifies the latest user message. Falls back to 'zoneminder' on any
+ * failure, so a triage outage degrades to exactly the old behaviour (every
+ * request reaches the tool loop) rather than to an assistant that can no
+ * longer answer questions.
+ */
+export async function classifyRequest(
+  provider: AssistantProvider,
+  question: string,
+  signal: AbortSignal,
+  /** Receives this round for the panel transcript. Without it, triage and
+   *  verification were invisible: a turn showed its tool rounds but not the
+   *  two calls that decided whether it ran at all, or whether its answer was
+   *  accepted. */
+  onTrace?: (entry: TraceEntry) => void,
+): Promise<RequestKind> {
+  try {
+    // `complete`, not `chat`: a classifier handed the tool catalog, the
+    // few-shot block and the JSON output contract answers like an assistant
+    // instead of returning a verdict.
+    const result = await provider.complete(TRIAGE_PROMPT, question, signal);
+    if (result.exchange) {
+      onTrace?.({ kind: 'exchange', exchange: { ...result.exchange, backend: `${result.exchange.backend} (triage)` } });
+    }
+    return parseRequestKind(sanitizeModelText(result.text, 'triage'));
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') throw error;
+    return 'zoneminder';
+  }
+}
+
+/** The system prompt for a request that must be answered WITHOUT tools.
+ *
+ *  `base` still leads so the assistant keeps its identity and its read-only
+ *  framing; what changes is that there is nothing to call, and it is told so,
+ *  rather than being handed nine tools and asked to show restraint. */
+export function buildNoToolPrompt(base: string, kind: Exclude<RequestKind, 'zoneminder'>): string {
+  const instruction =
+    kind === 'action'
+      ? [
+          'The user has asked you to CHANGE something. You cannot: this assistant can only read data and',
+          'navigate. Say plainly that you cannot do it, that this is because an assistant can misread a',
+          'request and some of these actions cannot be undone, and tell them where to do it themselves:',
+          'monitors and arming on the Monitors screen, run state on the Server screen, deleting and',
+          'archiving on the event itself. Do not offer to do it another way.',
+        ].join('\n')
+      : [
+          'This message is not a question about this ZoneMinder installation. Answer it directly and briefly',
+          'as yourself. Do not mention tools, do not list what you can do unless asked, and do not invent any',
+          'camera, event, or server information.',
+        ].join('\n');
+
+  return `${base}\n\n${instruction}`;
+}
+
+export function buildTriageMessages(question: string): AssistantMessage[] {
+  return [{ role: 'user', text: question }];
+}

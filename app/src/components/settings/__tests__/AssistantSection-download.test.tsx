@@ -23,7 +23,12 @@ import { useBackgroundTasks } from '../../../stores/backgroundTasks';
 // first in the picker, and tying these to list order silently retargeted every
 // assertion at an unselected model when the list was reordered.
 const MODEL_A = ASSISTANT.defaultModelId;
-const MODEL_B = ASSISTANT.webllmModels.find((m) => m.id !== MODEL_A)!.id;
+// A second id that is deliberately NOT read from `webllmModels`, which now
+// lists one supported model. Both MODEL_B cases below are about state
+// belonging to some OTHER model (a stale background task, a settings push
+// carrying an id this build no longer lists) leaking into the selected
+// model's status, and a retired id is exactly what turns up there.
+const MODEL_B = 'Qwen3-1.7B-q4f16_1-MLC';
 
 const isModelDownloadedMock = vi.fn();
 const downloadModelMock = vi.fn();
@@ -294,41 +299,14 @@ describe('AssistantSection download/delete', () => {
     await waitFor(() => expect(screen.getByTestId('assistant-model-select')).not.toBeDisabled());
   });
 
-  it('does not let model A completing overwrite the status displayed after switching to model B', async () => {
-    // Mount check for A (not downloaded), then mount check for B after the
-    // switch (already downloaded).
-    isModelDownloadedMock.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+  // Replaces a test that switched between two listed models mid-download.
+  // `webllmModels` lists one supported model now, so that switch is not
+  // reachable; what IS reachable is a persisted profile still holding one of
+  // the retired ids, which is what this asserts the section survives.
+  it('falls back to the supported model when settings carry a retired model id', async () => {
+    isModelDownloadedMock.mockResolvedValue(true);
 
-    let taskIdA = '';
-    downloadModelMock.mockImplementation((modelId: string) => {
-      taskIdA = useBackgroundTasks.getState().addTask({
-        type: 'download',
-        metadata: { title: modelId, modelId },
-      });
-      useBackgroundTasks.getState().updateProgress(taskIdA, 10);
-      return Promise.resolve();
-    });
-
-    const { rerender } = render(
-      <AssistantSection
-        settings={enabledSettings}
-        update={vi.fn()}
-        currentProfile={profile}
-        updateSettings={vi.fn()}
-      />
-    );
-
-    const downloadButton = await screen.findByTestId('assistant-model-download');
-    await waitFor(() => expect(downloadButton).not.toBeDisabled());
-
-    // Start the download for model A (the default selected model).
-    fireEvent.click(downloadButton);
-    expect(downloadModelMock).toHaveBeenCalledWith(MODEL_A);
-    await waitFor(() => expect(downloadButton).toBeDisabled());
-
-    // User switches the selected model to B while A's task is still
-    // in_progress (e.g. a profile-level settings push landing mid-download).
-    rerender(
+    render(
       <AssistantSection
         settings={{ ...enabledSettings, assistantModelId: MODEL_B }}
         update={vi.fn()}
@@ -337,21 +315,10 @@ describe('AssistantSection download/delete', () => {
       />
     );
 
-    // B is already downloaded and has no task of its own, so it is
-    // unaffected by A's still-running download.
+    // The retired id resolves to the one supported model rather than leaving
+    // the picker blank or the status unknown (AssistantSection.tsx:82).
     await waitFor(() => expect(screen.getByTestId('assistant-model-downloaded-status')).toBeInTheDocument());
-    expect(screen.getByTestId('assistant-model-download')).toBeDisabled();
-
-    // Now let A's task complete in the background.
-    await act(async () => {
-      useBackgroundTasks.getState().completeTask(taskIdA);
-    });
-
-    // B's displayed status must be unaffected by A's completion: still
-    // downloaded, Delete enabled, Download disabled, no error toast.
-    expect(screen.getByTestId('assistant-model-delete')).not.toBeDisabled();
-    expect(screen.getByTestId('assistant-model-download')).toBeDisabled();
-    expect(screen.getByTestId('assistant-model-downloaded-status')).toBeInTheDocument();
-    expect(toastMock).not.toHaveBeenCalled();
+    expect(isModelDownloadedMock).toHaveBeenCalledWith(MODEL_A);
+    expect(screen.getByTestId('assistant-model-select')).toHaveValue(MODEL_A);
   });
 });

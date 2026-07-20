@@ -17,7 +17,11 @@ import { PasswordInput } from '../ui/password-input';
 import { RefreshButton } from '../common/RefreshButton';
 import { RowLabel } from './SettingsLayout';
 import { ASSISTANT } from '../../lib/zmninja-ng-constants';
-import { listOpenAiModels } from '../../lib/assistant/providers/openai';
+import {
+  listOpenAiModels,
+  probeToolSupport,
+  suggestOllamaBaseUrl,
+} from '../../lib/assistant/providers/openai';
 import { getSecureValue, setSecureValue, removeSecureValue, hasSecureValue } from '../../lib/security/secureStorage';
 import { resolveQueryError } from '../../lib/query/query-error';
 import { useToast } from '../../hooks/use-toast';
@@ -42,6 +46,11 @@ export function AssistantOllamaSection({ settings, update, currentProfile }: Ass
   const [apiKeyDraft, setApiKeyDraft] = useState('');
   const [hasKey, setHasKey] = useState(false);
   const [testing, setTesting] = useState(false);
+  // Which half of the test is running, shown beneath the model row. The probe
+  // stage can take a minute against a model Ollama has not loaded yet, so the
+  // user gets to see what is being waited on rather than a frozen button.
+  const [testStage, setTestStage] = useState<'connecting' | 'probing' | null>(null);
+  const [testSeconds, setTestSeconds] = useState(0);
   // null: never fetched yet (or the last fetch failed). []: fetched, server
   // has no models registered. Both fall back to the manual text input below.
   const [models, setModels] = useState<string[] | null>(null);
@@ -111,47 +120,111 @@ export function AssistantOllamaSection({ settings, update, currentProfile }: Ass
     return stored ?? undefined;
   }, [apiKeyDraft, currentProfile]);
 
-  const handleTestConnection = useCallback(async () => {
+  useEffect(() => {
+    if (!testStage) {
+      setTestSeconds(0);
+      return;
+    }
+    const started = Date.now();
+    const id = setInterval(() => setTestSeconds(Math.round((Date.now() - started) / 1000)), 1000);
+    return () => clearInterval(id);
+  }, [testStage]);
+
+  // An unset URL is not an error: it resolves to the profile's own ZoneMinder
+  // host, since a self-hosted Ollama usually lives on that machine. localhost
+  // would be the phone itself on mobile, which never runs Ollama.
+  const suggestedBaseUrl = useMemo(
+    () => suggestOllamaBaseUrl(currentProfile?.apiUrl) ?? ASSISTANT.defaultOllamaBaseUrl,
+    [currentProfile?.apiUrl],
+  );
+  const effectiveBaseUrl = settings.assistantOllamaBaseUrl || suggestedBaseUrl;
+
+  const handleTestModel = useCallback(async () => {
     setTesting(true);
+    setTestStage('connecting');
+    // Which half failed decides what the user is told. An unreachable server
+    // and a reachable server running a model that cannot call tools are
+    // different problems with different fixes, and one generic "test failed"
+    // toast pointed at neither.
+    let reachable = false;
     try {
       const key = await getEffectiveApiKey();
-      const baseUrl = settings.assistantOllamaBaseUrl.replace(/\/+$/, '');
+      const baseUrl = effectiveBaseUrl.replace(/\/+$/, '');
       // A plain reachability probe (GET /models), not a chat turn (refs #246):
       // `testConnectionTimeoutMs` (8s) instead of the 120s `requestTimeoutMs`
       // that a real generation needs, so an unreachable host fails fast
       // instead of leaving the button reading "Testing…" for two minutes.
-      const list = await listOpenAiModels(baseUrl, key, ASSISTANT.testConnectionTimeoutMs);
+      await listOpenAiModels(baseUrl, key, ASSISTANT.testConnectionTimeoutMs);
+      reachable = true;
+      // The stage matters to the user, not just to us: the next step can sit
+      // for a minute while Ollama loads the model, and a button stuck on
+      // "Testing…" for that long reads as a hang.
+      if (mountedRef.current) setTestStage('probing');
+
+      // Reachability is only half the question. A reachable server can still
+      // be useless here: gemma2 is rejected outright ("does not support
+      // tools") and qwen2.5-coder answers in prose and never calls anything,
+      // so the assistant silently never fetches. Neither is guessable from the
+      // model's name, and both are one request away from being known.
+      const model = settings.assistantOllamaModel;
+      const support = model ? await probeToolSupport(baseUrl, model, key) : undefined;
+
       if (mountedRef.current) {
-        toast({
-          title:
-            list.length > 0
-              ? t('settings.assistant.ollama_test_ok_models', { count: list.length })
-              : t('settings.assistant.ollama_test_ok'),
-        });
+        if (support === 'timeout') {
+          toast({
+            title: t('settings.assistant.ollama_model_timeout_title', { model }),
+            description: t('settings.assistant.ollama_model_timeout_desc', {
+              seconds: Math.round(ASSISTANT.modelProbeTimeoutMs / 1000),
+              command: `ollama run ${model}`,
+            }),
+            variant: 'destructive',
+          });
+        } else if (support === 'unsupported' || support === 'no-tool-call') {
+          toast({
+            title: t('settings.assistant.ollama_no_tools_title', { model }),
+            description: t('settings.assistant.ollama_no_tools_desc', {
+              model: ASSISTANT.recommendedOllamaModel,
+            }),
+            variant: 'destructive',
+          });
+        } else {
+          toast({
+            title: t('settings.assistant.ollama_test_ok'),
+            description: support === 'supported' ? t('settings.assistant.ollama_tools_ok', { model }) : undefined,
+          });
+        }
       }
     } catch (error) {
-      log.assistant('Ollama test connection failed', LogLevel.WARN, { error });
+      log.assistant('Ollama model test failed', LogLevel.WARN, {
+        reachable,
+        message: error instanceof Error ? error.message : String(error),
+      });
       if (mountedRef.current) {
         toast({
-          title: t('common.error'),
+          title: reachable
+            ? t('settings.assistant.ollama_model_failed')
+            : t('settings.assistant.ollama_unreachable'),
           description: resolveQueryError(error, t, { fallbackKey: 'assistant.error_generic' }),
           variant: 'destructive',
         });
       }
     } finally {
-      if (mountedRef.current) setTesting(false);
+      if (mountedRef.current) {
+        setTesting(false);
+        setTestStage(null);
+      }
     }
-  }, [getEffectiveApiKey, settings.assistantOllamaBaseUrl, t, toast]);
+  }, [getEffectiveApiKey, effectiveBaseUrl, settings.assistantOllamaModel, t, toast]);
 
   // Fetches the model list from the server for the picker below. A failure
   // here is non-fatal (rule 32 toast, not an error wall): the manual text
   // input keeps working, so this never blocks configuring the backend.
   const loadModels = useCallback(async () => {
-    if (!settings.assistantOllamaBaseUrl) return;
+    if (!effectiveBaseUrl) return;
     setLoadingModels(true);
     try {
       const key = await getEffectiveApiKey();
-      const baseUrl = settings.assistantOllamaBaseUrl.replace(/\/+$/, '');
+      const baseUrl = effectiveBaseUrl.replace(/\/+$/, '');
       const list = await listOpenAiModels(baseUrl, key);
       if (mountedRef.current) setModels(list);
     } catch (error) {
@@ -166,7 +239,7 @@ export function AssistantOllamaSection({ settings, update, currentProfile }: Ass
     } finally {
       if (mountedRef.current) setLoadingModels(false);
     }
-  }, [getEffectiveApiKey, settings.assistantOllamaBaseUrl, t, toast]);
+  }, [getEffectiveApiKey, effectiveBaseUrl, t, toast]);
 
   // Runs once on mount, i.e. when this sub-section first appears (either on
   // initial render with backend already 'ollama', or right after the parent
@@ -184,6 +257,14 @@ export function AssistantOllamaSection({ settings, update, currentProfile }: Ass
   // return it (e.g. it was unloaded, or the value was typed in manually
   // before ever fetching), so switching to the dropdown never silently
   // discards a working manual entry.
+  /** Whether the server already serves the recommended model. Ollama reports
+   *  ids with a tag (`llama3.2:latest`, `llama3.2:3b`), and any tag of it is
+   *  the same recommendation, so this matches the name before the colon. */
+  const hasRecommendedModel = useMemo(
+    () => (models ?? []).some((m) => m.split(':')[0] === ASSISTANT.recommendedOllamaModel),
+    [models],
+  );
+
   const selectableModels = useMemo(() => {
     if (!models) return [];
     const saved = settings.assistantOllamaModel;
@@ -202,7 +283,7 @@ export function AssistantOllamaSection({ settings, update, currentProfile }: Ass
           value={settings.assistantOllamaBaseUrl}
           onChange={(e) => update('assistantOllamaBaseUrl', e.target.value)}
           onBlur={() => void loadModels()}
-          placeholder={ASSISTANT.defaultOllamaBaseUrl}
+          placeholder={suggestedBaseUrl}
           className="w-full sm:w-80"
           data-testid="assistant-ollama-url"
         />
@@ -232,6 +313,19 @@ export function AssistantOllamaSection({ settings, update, currentProfile }: Ass
                 data-testid="assistant-ollama-refresh-models"
                 aria-label={t('settings.assistant.load_models')}
               />
+              {/* Beside the model control, not in a section of its own: it
+                  tests the chosen model, so it belongs where the model is
+                  chosen. */}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={testing || !settings.assistantOllamaModel}
+                onClick={() => void handleTestModel()}
+                data-testid="assistant-ollama-test"
+              >
+                {testing ? t('settings.assistant.ollama_testing') : t('settings.assistant.ollama_test')}
+              </Button>
             </div>
           </>
         ) : (
@@ -252,6 +346,19 @@ export function AssistantOllamaSection({ settings, update, currentProfile }: Ass
                 data-testid="assistant-ollama-refresh-models"
                 aria-label={t('settings.assistant.load_models')}
               />
+              {/* Beside the model control, not in a section of its own: it
+                  tests the chosen model, so it belongs where the model is
+                  chosen. */}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={testing || !settings.assistantOllamaModel}
+                onClick={() => void handleTestModel()}
+                data-testid="assistant-ollama-test"
+              >
+                {testing ? t('settings.assistant.ollama_testing') : t('settings.assistant.ollama_test')}
+              </Button>
             </div>
             {models !== null && models.length === 0 && (
               <p className="text-xs text-muted-foreground" data-testid="assistant-ollama-no-models">
@@ -273,9 +380,32 @@ export function AssistantOllamaSection({ settings, update, currentProfile }: Ass
             />
             </div>
           )}
+          {testStage && (
+            <p
+              className="text-xs text-muted-foreground"
+              role="status"
+              data-testid="assistant-ollama-test-status"
+            >
+              {testStage === 'connecting'
+                ? t('settings.assistant.ollama_test_connecting')
+                : t('settings.assistant.ollama_test_probing', {
+                    model: settings.assistantOllamaModel,
+                  })}{' '}
+              {t('settings.assistant.ollama_test_elapsed', { seconds: testSeconds })}
+            </p>
+          )}
           <p className="text-xs text-muted-foreground">
-            {t('settings.assistant.ollama_model_hint')}
+            {t('settings.assistant.ollama_model_hint', { model: ASSISTANT.recommendedOllamaModel })}
           </p>
+          {/* Only once the server has actually answered: before that `models`
+              is null and "not installed" would be a guess, not a fact. */}
+          {models !== null && !hasRecommendedModel && (
+            <p className="text-xs text-muted-foreground" data-testid="assistant-ollama-recommended-missing">
+              {t('settings.assistant.ollama_recommended_missing', {
+                command: `ollama pull ${ASSISTANT.recommendedOllamaModel}`,
+              })}
+            </p>
+          )}
         </div>
 
       <div className="px-4 py-3 space-y-2">
@@ -304,19 +434,6 @@ export function AssistantOllamaSection({ settings, update, currentProfile }: Ass
             </Button>
           )}
         </div>
-      </div>
-
-      <div className="px-4 py-3">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={testing || !settings.assistantOllamaBaseUrl}
-          onClick={() => void handleTestConnection()}
-          data-testid="assistant-ollama-test"
-        >
-          {testing ? t('settings.assistant.ollama_testing') : t('settings.assistant.ollama_test')}
-        </Button>
       </div>
 
       <div className="px-4 py-3 space-y-1">

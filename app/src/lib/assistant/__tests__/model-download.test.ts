@@ -21,6 +21,11 @@ import { useBackgroundTasks } from '../../../stores/backgroundTasks';
 import { ASSISTANT } from '../../zmninja-ng-constants';
 
 const MODEL_ID = ASSISTANT.webllmModels[0].id;
+/** A second id for the "engine loaded for a different model" cases. Not taken
+ *  from `webllmModels`, which now lists exactly one supported model: these
+ *  tests only need two ids that differ, and a retired id is still a real
+ *  web-llm registry id that a persisted setting could hold. */
+const OTHER_MODEL_ID = 'Qwen3-1.7B-q4f16_1-MLC';
 
 function makeEngine() {
   return {
@@ -56,6 +61,19 @@ describe('model-download', () => {
   });
 
   describe('downloadModel', () => {
+    it('unloads the resident model before loading a different model', async () => {
+      const firstEngine = makeEngine();
+      const secondEngine = makeEngine();
+      vi.mocked(webllm.CreateWebWorkerMLCEngine)
+        .mockResolvedValueOnce(firstEngine as never)
+        .mockResolvedValueOnce(secondEngine as never);
+
+      await downloadModel(MODEL_ID);
+      await downloadModel(OTHER_MODEL_ID);
+
+      expect(firstEngine.unload).toHaveBeenCalledOnce();
+    });
+
     it('requests persistent storage before downloading (best-effort)', async () => {
       const engine = makeEngine();
       vi.mocked(webllm.CreateWebWorkerMLCEngine).mockResolvedValue(engine as never);
@@ -214,7 +232,7 @@ describe('model-download', () => {
     });
 
     it('does not unload an engine loaded for a different model', async () => {
-      const otherModelId = ASSISTANT.webllmModels[1].id;
+      const otherModelId = OTHER_MODEL_ID;
       const engine = makeEngine();
       vi.mocked(webllm.CreateWebWorkerMLCEngine).mockResolvedValue(engine as never);
       await downloadModel(otherModelId);
@@ -280,7 +298,7 @@ describe('model-download', () => {
       vi.mocked(webllm.CreateWebWorkerMLCEngine).mockResolvedValue(firstEngine as never);
       await downloadModel(MODEL_ID);
 
-      const otherModelId = ASSISTANT.webllmModels[1].id;
+      const otherModelId = OTHER_MODEL_ID;
       vi.mocked(webllm.hasModelInCache).mockResolvedValue(true);
       const secondEngine = makeEngine();
       vi.mocked(webllm.CreateWebWorkerMLCEngine).mockResolvedValue(secondEngine as never);
@@ -390,14 +408,14 @@ describe('model-download', () => {
       }
     });
 
-    it('gives each model its own window rather than one global value', () => {
+    // The list is down to one supported model, so this no longer proves the
+    // windows differ between models (they cannot). It still pins the value to
+    // the registry entry rather than a constant written into chatOptsFor,
+    // which is what the override exists for.
+    it('takes each listed model window from its registry entry, not a global value', () => {
       for (const model of ASSISTANT.webllmModels) {
         expect(chatOptsFor(model.id).context_window_size).toBe(model.contextWindowSize);
       }
-      // Gemma 2's native window is 8192, so the list must not be uniform: a
-      // single global value is what this replaced.
-      const windows = new Set(ASSISTANT.webllmModels.map((m) => m.contextWindowSize));
-      expect(windows.size).toBeGreaterThan(1);
     });
 
     it('sends no override for a model outside the list, leaving web-llm its own default', () => {

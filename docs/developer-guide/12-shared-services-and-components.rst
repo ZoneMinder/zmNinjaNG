@@ -1177,18 +1177,18 @@ has to raise it. But raising it is not free and not uniform: the KV cache is
 allocated up front and grows linearly with the window, on top of the weights,
 so Llama 3.2's native 128K would need gigabytes by itself. Each value is
 therefore ``min(the model's native window, ASSISTANT.contextWindowCap)``, which
-is why Gemma 2 sits at 8192 (its native ceiling, not our cap) while the rest sit
-at the cap. A model id absent from the list gets no override at all rather than
-a guessed window.
+is why the Llama 3.2 3B entry sits at the cap rather than its native 128K. A
+model id absent from the list gets no override at all rather than a guessed
+window. The list holds one model now (see below), so the per-model shape is
+about the next entry rather than about choosing between current ones.
 
 ``chatOptsFor`` always sends ``sliding_window_size: -1`` alongside the window,
 and that pairing is load-bearing. web-llm throws
 ``WindowSizeConfigurationError`` when both windows resolve positive, and
 ``sliding_window_size`` does not come from the bundled registry at all: it comes
 from each model's ``mlc-chat-config.json``, fetched from HuggingFace, which the
-registry's overrides merge over. Of the shipped models only Gemma 3 1B carries a
-positive value there (512); the rest already ship -1, so the pin is a no-op for
-them and a guard against the next sliding-window model. Pinning -1 selects full
+registry's overrides merge over. Llama 3.2 already ships -1, so the pin is a
+no-op for it and a guard against the next sliding-window model. Pinning -1 selects full
 KV-cache mode, matching what the registry's own Mistral entries do. Reading the
 bundled registry alone will not show you any of this (rule 41 in ``AGENTS.md``).
 
@@ -1200,8 +1200,16 @@ before a token is generated. The ``-1`` pin loads it, but then forces full-KV
 attention on a wasm compiled for sliding-window attention, and it answers with
 corrupted output (empty at 16384, token soup at 8192). Its native 512-token
 window is the only untried mode and is smaller than this app's system prompt, so
-the model would never see the tool contract. ``ASSISTANT.retiredModelIds`` maps
-saved copies of that id onto Llama 3.2 1B.
+the model would never see the tool contract.
+
+``webllmModels`` lists exactly one model. The picker used to offer six, and the
+six differed in the one behaviour that matters: whether the model calls a tool
+at all rather than answering from nothing. Llama 3.2 is what the assistant is
+tuned against on every backend, so the WebGPU path pins
+``Llama-3.2-3B-Instruct-q4f16_1-MLC``. This list only ever serves desktop and
+web: the on-device backend is not offered on phones or tablets at all. ``ASSISTANT.retiredModelIds`` maps every id the list
+used to carry onto that model, and ``SETTINGS_VERSION`` moves with it so the
+rewrite reaches installs already persisted at the previous version.
 
 **Used by:** ``components/assistant/AskPanel.tsx`` (drives one turn per
 send), ``components/assistant/useAssistantHost.ts`` (implements the

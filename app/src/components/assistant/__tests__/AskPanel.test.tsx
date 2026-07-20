@@ -15,22 +15,25 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { AskPanel } from '../AskPanel';
 import { useAssistantStore } from '../../../stores/assistant';
 
+const mockLanguage = { current: 'en' };
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string, opts?: Record<string, unknown>) => {
       if (opts && 'tool' in opts) return `${key}:${opts.tool}`;
+      if (opts && 'tools' in opts) return `${key}:${opts.tools}`;
       return key;
     },
-    i18n: { language: 'en' },
+    i18n: { get language() { return mockLanguage.current; } },
   }),
 }));
 vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({ getQueryData: () => undefined }),
 }));
+const mockBackend = { current: 'on-device' };
 vi.mock('../../../hooks/useCurrentProfile', () => ({
   useCurrentProfile: () => ({
     currentProfile: { id: 'p1', timezone: 'UTC' },
-    settings: { assistantModelId: 'test-model' },
+    settings: { assistantModelId: 'test-model', get assistantBackend() { return mockBackend.current; } },
   }),
 }));
 vi.mock('../../../hooks/useFreshAccessToken', () => ({
@@ -38,11 +41,7 @@ vi.mock('../../../hooks/useFreshAccessToken', () => ({
 }));
 const navigateMock = vi.fn();
 vi.mock('../useAssistantHost', () => ({
-  useAssistantHost: () => ({
-    host: { confirm: vi.fn(), navigate: navigateMock, onActivity: vi.fn() },
-    pendingConfirm: null,
-    resolveConfirm: vi.fn(),
-  }),
+  useAssistantHost: () => ({ host: { navigate: navigateMock, onActivity: vi.fn() } }),
 }));
 vi.mock('../../../lib/assistant/tools', () => ({
   getToolByName: (name: string) => ({ name, description: `${name} description` }),
@@ -132,7 +131,9 @@ describe('AskPanel', () => {
     expect(screen.queryByTestId('assistant-raw-output')).not.toBeInTheDocument();
   });
 
-  it('renders one step per tool activity, with its compact input and status', () => {
+  // One line that each step replaces, not a row per step: a turn can make
+  // several round trips, and stacking them pushed the answer off screen.
+  it('shows only the latest activity, replacing the previous one', () => {
     useAssistantStore.setState({
       activities: [
         { toolName: 'count_events', status: 'running', input: { interval: '24 hour' } },
@@ -143,9 +144,29 @@ describe('AskPanel', () => {
     render(<AskPanel />);
 
     const steps = screen.getAllByTestId('assistant-activity-step');
+    expect(steps).toHaveLength(1);
+    expect(steps[0]).toHaveTextContent('assistant.activity.done:count_events');
+  });
+
+  // The model's own turns were invisible in the app while the logs were full
+  // of them; the panel could only say "Thinking". They get their own line
+  // because sharing one with the tool step meant the tool call overwrote the
+  // reasoning that chose it, milliseconds later.
+  it('shows the model\'s reasoning alongside the tool step, on its own line', () => {
+    useAssistantStore.setState({
+      activities: [
+        { toolName: 'count_events', status: 'done', input: {} },
+        { kind: 'model', detail: 'Counts alone cannot answer this,\nI need list_events.', toolName: 'list_events', status: 'running', input: {} },
+      ],
+    });
+
+    render(<AskPanel />);
+
+    const steps = screen.getAllByTestId('assistant-activity-step');
     expect(steps).toHaveLength(2);
-    expect(steps[0]).toHaveTextContent('assistant.activity.running:count_events');
-    expect(steps[0]).toHaveTextContent('"interval":"24 hour"');
+    // Newlines flattened so a long chain of thought cannot reflow the panel.
+    expect(steps[0]).toHaveTextContent('Counts alone cannot answer this, I need list_events.');
+    // The tool step survives on its own line rather than replacing the thought.
     expect(steps[1]).toHaveTextContent('assistant.activity.done:count_events');
   });
 
@@ -243,7 +264,8 @@ describe('AskPanel', () => {
 
     const step = screen.getByTestId('assistant-activity-step');
     const answer = screen.getByTestId('assistant-message-assistant');
-    expect(step).toHaveTextContent('assistant.activity.done:count_events');
+    // Finished turns name the tools used rather than the last step alone.
+    expect(step).toHaveTextContent('assistant.activity.used:count_events');
     // DOCUMENT_POSITION_FOLLOWING: `answer` comes after `step` in DOM order,
     // i.e. the step chip renders above the answer, not below it.
     expect(step.compareDocumentPosition(answer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -268,5 +290,42 @@ describe('AskPanel', () => {
     render(<AskPanel />);
 
     expect(screen.queryByTestId('assistant-result-cards')).not.toBeInTheDocument();
+  });
+
+  // The on-device model is small and English-first; the app says so rather
+  // than letting a non-English user discover it through worse answers.
+  describe('language notice', () => {
+    it('warns when the app language is not English and the model runs on-device', () => {
+      mockLanguage.current = 'de';
+      mockBackend.current = 'on-device';
+      render(<AskPanel />);
+      expect(screen.getByTestId('assistant-english-notice')).toBeInTheDocument();
+    });
+
+    it('stays hidden in English', () => {
+      mockLanguage.current = 'en-GB';
+      mockBackend.current = 'on-device';
+      render(<AskPanel />);
+      expect(screen.queryByTestId('assistant-english-notice')).not.toBeInTheDocument();
+    });
+
+    // Shown on Ollama too. This used to be treated as an on-device model
+    // quality issue, which is the smaller half of it: requiredReadTool matches
+    // English words to decide when live data is mandatory, the triage prompt is
+    // English, and resolveWhen parses English time phrases. Those guards fail
+    // silently in another language whatever model is answering.
+    it('warns on Ollama too, since the English-only machinery is not the model', () => {
+      mockLanguage.current = 'zh';
+      mockBackend.current = 'ollama';
+      render(<AskPanel />);
+      expect(screen.getByTestId('assistant-english-notice')).toBeInTheDocument();
+    });
+
+    it('stays hidden in English on Ollama', () => {
+      mockLanguage.current = 'en';
+      mockBackend.current = 'ollama';
+      render(<AskPanel />);
+      expect(screen.queryByTestId('assistant-english-notice')).not.toBeInTheDocument();
+    });
   });
 });

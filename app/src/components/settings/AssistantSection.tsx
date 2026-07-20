@@ -22,9 +22,10 @@ import { Switch } from '../ui/switch';
 import { Button } from '../ui/button';
 import { SectionHeader, SettingsCard, SettingsRow, RowLabel } from './SettingsLayout';
 import { AssistantOllamaSection } from './AssistantOllamaSection';
+import { AssistantAdvancedSection } from './AssistantAdvancedSection';
 import { ASSISTANT } from '../../lib/zmninja-ng-constants';
-import { useWebGpuAvailable } from '../../hooks/useWebGpuAvailable';
 import { Platform } from '../../lib/platform';
+import { useWebGpuAvailable } from '../../hooks/useWebGpuAvailable';
 import { useToast } from '../../hooks/use-toast';
 import { deleteModel, downloadModel, isModelDownloaded } from '../../lib/assistant/model-download';
 import { getModelStorageInfo, formatStorageBytes, type ModelStorageInfo } from '../../lib/assistant/model-storage';
@@ -61,22 +62,23 @@ export function AssistantSection({
   // WebGPU") but without claiming the device lacks WebGPU.
   const hasWebGPU = useWebGpuAvailable();
   const webGpuUnavailable = hasWebGPU === false;
-  // Not offered on any phone/tablet: this is memory, not WebGPU (mobile has
-  // WebGPU). A WebView renderer is memory-capped and every WebLLM model plus
-  // the app heap and KV cache exceeds it, crashing the app mid-load. On iOS the
-  // WKWebView content process hits a hard 2 GB jetsam ceiling; on Android the
-  // renderer is killed and the OS fires a device-wide low-memory event (both
-  // verified on device, refs #246). The Ollama backend runs the model on a
-  // server and has no such limit. Desktop (web/Electron) is not native, so it
-  // keeps on-device.
-  const onDeviceUnsupported = Platform.isIOS || Platform.isAndroid;
+  const availableModels = useMemo(
+    () => ASSISTANT.webllmModels,
+    [],
+  );
 
   const selectedModel =
-    ASSISTANT.webllmModels.find((m) => m.id === settings.assistantModelId) ?? ASSISTANT.webllmModels[0];
+    availableModels.find((m) => m.id === settings.assistantModelId) ?? availableModels[0];
+  const modelId = selectedModel.id;
 
   const [downloadStatus, setDownloadStatus] = useState<DownloadStatus>('checking');
   const [deleting, setDeleting] = useState(false);
   const [storageInfo, setStorageInfo] = useState<ModelStorageInfo | undefined>(undefined);
+  // Native models live on the filesystem, not in a browser storage partition,
+  // so `getModelStorageInfo` cannot see them; the plugin reports the directory
+  // size instead.
+  // Set by the Cancel button so the resulting download rejection is reported as
+  // a user action rather than a failure toast.
 
   // The backgroundTasks store is the authoritative source for download
   // progress: `downloadModel` reports into it directly, so deriving
@@ -87,7 +89,6 @@ export function AssistantSection({
   // locally rather than subscribing with an inline `.find()` selector, which
   // would return a new reference every render and defeat memoization.
   const tasks = useBackgroundTasks((s) => s.tasks);
-  const modelId = settings.assistantModelId;
 
   const downloadTask = useMemo<BackgroundTask | undefined>(() => {
     let match: BackgroundTask | undefined;
@@ -99,15 +100,16 @@ export function AssistantSection({
 
   const downloading = downloadTask?.status === 'pending' || downloadTask?.status === 'in_progress';
 
+
   // Latest selected model id, read *after* the awaits below resolve. The
   // select is disabled while downloading/deleting (primary guard), but a
   // parent could still push a different `assistantModelId` mid-operation
   // (e.g. profile switch), so a stale download/delete resolving must not
   // clobber the status of whatever model is displayed by then.
-  const selectedModelIdRef = useRef(settings.assistantModelId);
+  const selectedModelIdRef = useRef(modelId);
   useEffect(() => {
-    selectedModelIdRef.current = settings.assistantModelId;
-  }, [settings.assistantModelId]);
+    selectedModelIdRef.current = modelId;
+  }, [modelId]);
 
   // Guards post-await setState from running after unmount. Re-set on every
   // mount: StrictMode's mount/unmount/remount would otherwise leave it false
@@ -123,18 +125,18 @@ export function AssistantSection({
   useEffect(() => {
     let cancelled = false;
     setDownloadStatus('checking');
-    isModelDownloaded(settings.assistantModelId)
+    isModelDownloaded(modelId)
       .then((downloaded) => {
         if (!cancelled) setDownloadStatus(downloaded ? 'downloaded' : 'not-downloaded');
       })
       .catch((error) => {
-        log.assistant('isModelDownloaded check failed', LogLevel.ERROR, { modelId: settings.assistantModelId, error });
+        log.assistant('isModelDownloaded check failed', LogLevel.ERROR, { modelId, error });
         if (!cancelled) setDownloadStatus('not-downloaded');
       });
     return () => {
       cancelled = true;
     };
-  }, [settings.assistantModelId]);
+  }, [modelId]);
 
   // Re-checks the cache the moment this model's download task reaches a
   // terminal state, instead of waiting on `handleDownload`'s own promise
@@ -202,24 +204,22 @@ export function AssistantSection({
     return () => {
       cancelled = true;
     };
-  }, [downloadStatus, settings.assistantModelId]);
+  }, [downloadStatus, modelId]);
 
   // Only starts the download; `downloadModel` reports progress/completion/
   // failure onto its background task itself (the effect above reacts to
   // that), so this no longer owns a local "in flight" flag or gates button
   // state on its own promise settling.
   const handleDownload = useCallback(() => {
-    const modelId = settings.assistantModelId;
     downloadModel(modelId).catch((error) => {
       // `downloadModel` normally reports failures onto its background task
       // rather than rejecting; this only catches an unexpected throw before
       // that task bookkeeping runs.
       log.assistant('downloadModel threw', LogLevel.ERROR, { modelId, error });
     });
-  }, [settings.assistantModelId]);
+  }, [modelId]);
 
   const handleDelete = useCallback(async () => {
-    const modelId = settings.assistantModelId;
     setDeleting(true);
     try {
       await deleteModel(modelId);
@@ -238,7 +238,7 @@ export function AssistantSection({
     } finally {
       if (mountedRef.current) setDeleting(false);
     }
-  }, [settings.assistantModelId, t, toast]);
+  }, [modelId, t, toast]);
 
   return (
     <section>
@@ -260,37 +260,32 @@ export function AssistantSection({
 
         {settings.assistantEnabled && (
           <>
-            <div className="px-4 py-3 space-y-2">
-              <RowLabel label={t('settings.assistant.backend')} />
-          <select
-                className="text-sm bg-background border rounded px-2 py-1.5 w-full sm:w-64"
-                value={settings.assistantBackend}
-                onChange={(e) => update('assistantBackend', e.target.value as AssistantBackend)}
-                data-testid="assistant-backend-select"
-              >
-                {/* Disabled, not hidden, on iOS: the user still sees the option
-                    exists and reads why it is unavailable, rather than it
-                    silently vanishing (it works on their desktop). */}
-                <option value="on-device" disabled={onDeviceUnsupported}>
-                  {t('settings.assistant.backend_on_device')}
-                </option>
-                <option value="ollama">{t('settings.assistant.backend_ollama')}</option>
-              </select>
-              {/* Shown on iOS whichever backend is selected, so the greyed-out
-                  on-device option is always explained, not only while it is the
-                  active one. */}
-              {onDeviceUnsupported && (
-                <div className="space-y-1 pt-1" data-testid="assistant-mobile-unsupported">
-                  <p className="text-xs text-muted-foreground">{t('settings.assistant.mobile_unsupported')}</p>
-                  <p className="text-xs text-muted-foreground">{t('settings.assistant.mobile_unsupported_hint')}</p>
-                </div>
-              )}
-            </div>
+            {/* No backend choice on a phone or tablet: on-device was removed
+                there, so the picker would offer one option and one dead end.
+                The note says why rather than leaving the absence unexplained,
+                which is what makes a missing feature read as a bug. */}
+            {Platform.isNative ? (
+              <div className="px-4 py-3 space-y-1" data-testid="assistant-on-device-unavailable">
+                <p className="text-xs text-muted-foreground">{t('settings.assistant.on_device_mobile_disabled')}</p>
+              </div>
+            ) : (
+              <div className="px-4 py-3 space-y-2">
+                <RowLabel label={t('settings.assistant.backend')} />
+                <select
+                  className="text-sm bg-background border rounded px-2 py-1.5 w-full sm:w-64"
+                  value={settings.assistantBackend}
+                  onChange={(e) => update('assistantBackend', e.target.value as AssistantBackend)}
+                  data-testid="assistant-backend-select"
+                >
+                  <option value="on-device">{t('settings.assistant.backend_on_device')}</option>
+                  <option value="ollama">{t('settings.assistant.backend_ollama')}</option>
+                </select>
+              </div>
+            )}
 
-            {settings.assistantBackend === 'ollama' ? (
+            {settings.assistantBackend === 'ollama' || Platform.isNative ? (
               <AssistantOllamaSection settings={settings} update={update} currentProfile={currentProfile} />
             ) : (
-              !onDeviceUnsupported &&
               webGpuUnavailable && (
                 <div className="px-4 py-3 space-y-1" data-testid="assistant-no-webgpu">
                   <p className="text-xs text-muted-foreground">{t('settings.assistant.no_webgpu')}</p>
@@ -299,7 +294,7 @@ export function AssistantSection({
               )
             )}
 
-            {settings.assistantBackend === 'on-device' && hasWebGPU === true && !onDeviceUnsupported && (
+            {!Platform.isNative && settings.assistantBackend === 'on-device' && hasWebGPU === true && (
               <>
                 <div className="px-4 py-3 space-y-2">
                   <RowLabel label={t('settings.assistant.model')} />
@@ -312,14 +307,16 @@ export function AssistantSection({
                     disabled={downloading || deleting}
                     data-testid="assistant-model-select"
                   >
-                    {ASSISTANT.webllmModels.map((m) => (
+                    {availableModels.map((m) => (
                       <option key={m.id} value={m.id}>
                         {m.label}
                       </option>
             ))}
           </select>
           <p className="text-xs text-muted-foreground">
-            {t('settings.assistant.on_device_ollama_hint')}
+            {t('settings.assistant.on_device_ollama_hint', {
+              model: ASSISTANT.recommendedOllamaModel,
+            })}
           </p>
         </div>
 
@@ -402,6 +399,10 @@ export function AssistantSection({
                 </div>
               </>
             )}
+
+            {/* Last, and collapsed: these apply to whichever backend is
+                selected, and none of them is part of normal setup. */}
+            <AssistantAdvancedSection settings={settings} update={update} />
           </>
         )}
       </SettingsCard>

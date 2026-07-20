@@ -7,6 +7,11 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+const mockNative = { current: true };
+vi.mock('../../../lib/platform', () => ({
+  Platform: { get isNative() { return mockNative.current; } },
+}));
 import { AssistantWidget } from '../AssistantWidget';
 import { useAssistantPanelStore } from '../../../stores/assistantPanel';
 import { useAssistantStore } from '../../../stores/assistant';
@@ -40,6 +45,7 @@ vi.mock('../../../hooks/useIsMobile', () => ({
 
 describe('AssistantWidget', () => {
   beforeEach(() => {
+    mockNative.current = true;
     useAssistantPanelStore.setState({
       state: 'closed',
       size: { width: ASSISTANT_PANEL.defaultWidth, height: ASSISTANT_PANEL.defaultHeight },
@@ -218,15 +224,31 @@ describe('AssistantWidget', () => {
     const user = userEvent.setup();
     await user.click(clearButton);
 
-    expect(useAssistantStore.getState().getThread('p1')).toEqual([]);
+    // A note is left behind rather than an empty panel: a conversation
+    // vanishing with no explanation reads as a bug. It is a contextBoundary,
+    // so the model cannot see past it either (agent.ts slices there).
+    expect(useAssistantStore.getState().getThread('p1')).toEqual([
+      { role: 'assistant', text: '__i18n:assistant.context_cleared_manual', contextBoundary: true },
+    ]);
     expect(useAssistantStore.getState().activities).toEqual([]);
   });
 
-  it('disables Clear when the current profile thread is empty', () => {
+  it('disables Clear when there is nothing to clear and no model to unload', () => {
+    mockNative.current = false;
     useAssistantPanelStore.setState({ state: 'open' });
     render(<AssistantWidget />);
 
     expect(screen.getByTestId('assistant-clear')).toBeDisabled();
+  });
+
+  // On a phone an empty thread can still have a loaded model behind it, and
+  // Clear is what frees that memory.
+  it('keeps Clear enabled on native with an empty thread, to unload the model', () => {
+    mockNative.current = true;
+    useAssistantPanelStore.setState({ state: 'open' });
+    render(<AssistantWidget />);
+
+    expect(screen.getByTestId('assistant-clear')).toBeEnabled();
   });
 
   it('disables Clear while a turn is running, even with a non-empty thread', () => {
@@ -238,4 +260,5 @@ describe('AssistantWidget', () => {
 
     expect(screen.getByTestId('assistant-clear')).toBeDisabled();
   });
+
 });
