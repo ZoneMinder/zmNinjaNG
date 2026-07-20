@@ -9,9 +9,8 @@ vi.mock('../../stores/profile', () => ({
   useProfileStore: vi.fn(),
 }));
 
-vi.mock('../../stores/settings', () => ({
-  useSettingsStore: vi.fn(),
-  DEFAULT_SETTINGS: {
+vi.mock('../../stores/settings', () => {
+  const DEFAULT_SETTINGS = {
     viewMode: 'snapshot',
     displayMode: 'normal',
     theme: 'system',
@@ -25,8 +24,13 @@ vi.mock('../../stores/settings', () => ({
     eventsThumbnailFit: 'contain',
     disableLogRedaction: false,
     dashboardRefreshInterval: 30,
-  },
-}));
+  };
+  return {
+    useSettingsStore: vi.fn(),
+    DEFAULT_SETTINGS,
+    mergeProfileSettings: (raw: Record<string, unknown> | undefined) => ({ ...DEFAULT_SETTINGS, ...raw }),
+  };
+});
 
 vi.mock('zustand/react/shallow', () => ({
   useShallow: (fn: unknown) => fn,
