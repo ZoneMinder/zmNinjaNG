@@ -492,7 +492,17 @@ export const useSettingsStore = create<SettingsState>()(
 
       getProfileSettings: (profileId) => {
         const settings = get().profileSettings[profileId];
-        return { ...DEFAULT_SETTINGS, ...settings };
+        const merged = { ...DEFAULT_SETTINGS, ...settings };
+        // On-device (WebGPU/WebLLM) has no runtime on phones/tablets, so a
+        // native profile must never sit on it: the chat would read 'on-device',
+        // find no runtime, and report "not configured" even though Settings
+        // only exposes Ollama there. moveNativeOffOnDevice() rewrites profiles
+        // that already stored 'on-device'; this also covers ones created after
+        // migration and the default merged in above (refs #246).
+        if (Platform.isNative && merged.assistantBackend === 'on-device') {
+          merged.assistantBackend = 'ollama';
+        }
+        return merged;
       },
 
       updateProfileSettings: (profileId, updates) => {

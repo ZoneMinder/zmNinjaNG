@@ -279,8 +279,13 @@ export function AssistantOllamaSection({ settings, update, currentProfile }: Ass
             label={t('settings.assistant.ollama_url')}
             desc={t('settings.assistant.ollama_url_hint')}
           />
+        {/* Show the ZM-derived suggestion as real editable text, not a grey
+            placeholder the user would have to retype from scratch to tweak.
+            Empty stored value still resolves the same way at use time
+            (effectiveBaseUrl below), so clearing the field re-shows the
+            suggestion. */}
         <Input
-          value={settings.assistantOllamaBaseUrl}
+          value={settings.assistantOllamaBaseUrl || suggestedBaseUrl}
           onChange={(e) => update('assistantOllamaBaseUrl', e.target.value)}
           onBlur={() => void loadModels()}
           placeholder={suggestedBaseUrl}

@@ -1324,6 +1324,7 @@
       "open": "Abrir"
     },
     "context_cleared_manual": "Conversación borrada. El modelo del dispositivo se descargó para liberar memoria; se cargará de nuevo con tu próxima pregunta.",
+    "context_cleared_manual_remote": "Conversación borrada.",
     "model_unavailable_native": "Este modelo no funciona en tu dispositivo. Elige un modelo del dispositivo en Ajustes.",
     "english_only_notice": "Pregunta en inglés. El asistente no funciona de forma fiable en otros idiomas: las preguntas pueden malinterpretarse o responderse sin consultar tus cámaras."
   }

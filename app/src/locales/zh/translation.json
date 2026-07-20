@@ -1324,6 +1324,7 @@
       "open": "打开"
     },
     "context_cleared_manual": "对话已清除。设备端模型已卸载以释放内存，下次提问时会重新加载。",
+    "context_cleared_manual_remote": "对话已清除。",
     "model_unavailable_native": "此模型无法在你的设备上运行。请在设置中选择设备端模型。",
     "english_only_notice": "请用英语提问。助手在其他语言下无法可靠工作：问题可能被误解，或在未查询摄像头的情况下作答。"
   }

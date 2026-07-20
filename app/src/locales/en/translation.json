@@ -1324,6 +1324,7 @@
       "open": "Open"
     },
     "context_cleared_manual": "Conversation cleared. The on-device model was unloaded to free memory; it will load again on your next question.",
+    "context_cleared_manual_remote": "Conversation cleared.",
     "model_unavailable_native": "This model cannot run on your device. Choose an on-device model in Settings.",
     "english_only_notice": "Ask in English. The assistant does not work reliably in other languages: questions may be misunderstood or answered without checking your cameras."
   }

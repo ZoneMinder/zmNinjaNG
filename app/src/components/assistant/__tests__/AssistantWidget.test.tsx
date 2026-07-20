@@ -212,6 +212,9 @@ describe('AssistantWidget', () => {
   });
 
   it('Clear resets the current profile thread and clears activities', async () => {
+    // Native runs the Ollama backend, so the cleared note must not claim an
+    // on-device model was unloaded (there is none to unload).
+    mockSettings = { assistantBackend: 'ollama' };
     useAssistantPanelStore.setState({ state: 'open' });
     useAssistantStore.getState().append('p1', { role: 'user', text: 'is the front door armed?' });
     useAssistantStore.setState({ activities: [{ toolName: 'list_monitors', status: 'done', input: {} }] });
@@ -228,7 +231,7 @@ describe('AssistantWidget', () => {
     // vanishing with no explanation reads as a bug. It is a contextBoundary,
     // so the model cannot see past it either (agent.ts slices there).
     expect(useAssistantStore.getState().getThread('p1')).toEqual([
-      { role: 'assistant', text: '__i18n:assistant.context_cleared_manual', contextBoundary: true },
+      { role: 'assistant', text: '__i18n:assistant.context_cleared_manual_remote', contextBoundary: true },
     ]);
     expect(useAssistantStore.getState().activities).toEqual([]);
   });

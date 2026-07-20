@@ -15,8 +15,11 @@ import { ASSISTANT } from '../../lib/zmninja-ng-constants';
 import { Platform } from '../../lib/platform';
 
 /** Marks the point the model can no longer see (agent.ts's
- *  sliceAfterContextBoundary), and is rendered as a divider by AskPanel. */
+ *  sliceAfterContextBoundary), and is rendered as a divider by AskPanel. The
+ *  on-device variant tells the user memory was freed; the remote (Ollama)
+ *  variant must not, since no local model was ever loaded to unload. */
 const CONTEXT_CLEARED_MANUAL_KEY = 'assistant.context_cleared_manual';
+const CONTEXT_CLEARED_MANUAL_REMOTE_KEY = 'assistant.context_cleared_manual_remote';
 
 export interface AssistantChrome {
   /** Model + where it runs, e.g. "Qwen3 1.7B · On-device". Empty when nothing
@@ -67,7 +70,11 @@ export function useAssistantChrome(): AssistantChrome {
       // A note rather than an empty panel: a conversation vanishing with no
       // explanation reads as a bug, and this is also the boundary the model
       // cannot see past (agent.ts slices the history here).
-      append(profileId, { role: 'assistant', text: `__i18n:${CONTEXT_CLEARED_MANUAL_KEY}`, contextBoundary: true });
+      const clearedKey =
+        settings.assistantBackend === 'on-device'
+          ? CONTEXT_CLEARED_MANUAL_KEY
+          : CONTEXT_CLEARED_MANUAL_REMOTE_KEY;
+      append(profileId, { role: 'assistant', text: `__i18n:${clearedKey}`, contextBoundary: true });
     },
     minimize,
     close,

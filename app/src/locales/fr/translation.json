@@ -1324,6 +1324,7 @@
       "open": "Ouvrir"
     },
     "context_cleared_manual": "Conversation effacée. Le modèle sur l'appareil a été déchargé pour libérer de la mémoire ; il se rechargera à votre prochaine question.",
+    "context_cleared_manual_remote": "Conversation effacée.",
     "model_unavailable_native": "Ce modèle ne fonctionne pas sur votre appareil. Choisissez un modèle sur l'appareil dans les Réglages.",
     "english_only_notice": "Posez vos questions en anglais. L'assistant ne fonctionne pas de manière fiable dans d'autres langues : les questions peuvent être mal comprises ou traitées sans consulter vos caméras."
   }
