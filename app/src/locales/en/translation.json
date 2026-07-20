@@ -313,7 +313,7 @@
       "select": "Select monitors"
     },
     "assistant": {
-      "title": "Ninjii - AI chatbot",
+      "title": "Ninjii (Beta) - AI chatbot",
       "subtitle": "Answer questions and run actions, on-device or via your own local server",
       "enable": "Enable Ninjii",
       "backend": "Backend",
@@ -1280,7 +1280,7 @@
     "no_such_monitor": "No monitor #{{n}}"
   },
   "assistant": {
-    "title": "Ninjii",
+    "title": "Ninjii (Beta)",
     "clear": "Clear",
     "minimize": "Minimize",
     "reopen": "Open Ninjii",

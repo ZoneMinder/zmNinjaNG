@@ -313,7 +313,7 @@
       "select": "选择监视器"
     },
     "assistant": {
-      "title": "Ninjii - AI 聊天机器人",
+      "title": "Ninjii (Beta) - AI 聊天机器人",
       "subtitle": "回答问题并执行操作，可在本地设备或通过你自己的本地服务器运行",
       "enable": "启用 Ninjii",
       "backend": "后端",
@@ -1280,7 +1280,7 @@
     "no_such_monitor": "没有监视器 #{{n}}"
   },
   "assistant": {
-    "title": "Ninjii",
+    "title": "Ninjii (Beta)",
     "clear": "清除",
     "minimize": "最小化",
     "reopen": "打开 Ninjii",
