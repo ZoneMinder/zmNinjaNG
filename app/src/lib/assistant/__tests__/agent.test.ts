@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { runAssistantTurn, truncateHistory, sliceAfterContextBoundary, isContextNearlyFull, requiresLiveData } from '../agent';
+import { runAssistantTurn, truncateHistory, sliceAfterContextBoundary, isContextNearlyFull } from '../agent';
 import { MockProvider } from '../providers/mock';
 import type { AssistantHost, AssistantMessage } from '../types';
 import { asProfileId } from '../../../api/types';
@@ -67,9 +67,10 @@ describe('a turn given no tools', () => {
     expect(out[0].text).toBe('Here is a plain answer.');
   });
 
-  // The same question WITH tools must still be held to the requirement, or the
-  // fix above would have quietly disabled the live-data guard everywhere.
-  it('still demands live data when tools are available', async () => {
+  // The English keyword requirement is gone (refs #265); what remains is the
+  // language-neutral nudge: one reminder for a tool-less answer, then the
+  // second answer is accepted rather than replaced.
+  it('nudges once, then accepts, when the model answers a data question without tools', async () => {
     const p = new MockProvider();
     p.setScript([
       { text: 'I think nothing happened.', toolCalls: [] },
@@ -78,7 +79,7 @@ describe('a turn given no tools', () => {
 
     const out = await runAssistantTurn(baseOpts(p, host(), [{ role: 'user', text: 'summarize yesterday' }]));
 
-    expect(out[out.length - 1].text).toBe('__i18n:assistant.live_data_required');
+    expect(out[out.length - 1].text).toBe('Still nothing.');
   });
 
   // The English regexes cannot see a German question, so a tool-less answer to
@@ -99,25 +100,6 @@ describe('a turn given no tools', () => {
     // Two provider calls: answer, reminder, same answer accepted.
     expect(chatSpy).toHaveBeenCalledTimes(2);
     vi.restoreAllMocks();
-  });
-});
-
-describe('requiresLiveData', () => {
-  it('recognises the questions the loop would demand a tool for', () => {
-    expect(requiresLiveData('summarize yesterday')).toBe(true);
-    // Both of the questions triage misclassified as CHAT in live transcripts.
-    // This function now decides these outright and the triage call is skipped,
-    // so a wrong classification cannot reach them at all.
-    expect(requiresLiveData('summarize today')).toBe(true);
-    expect(requiresLiveData('how many people came today')).toBe(true);
-    expect(requiresLiveData('is the server ok')).toBe(true);
-    expect(requiresLiveData('what cameras do I have')).toBe(true);
-  });
-
-  it('leaves genuine small talk alone', () => {
-    expect(requiresLiveData('hello')).toBe(false);
-    expect(requiresLiveData('thanks!')).toBe(false);
-    expect(requiresLiveData('what is the capital of France')).toBe(false);
   });
 });
 

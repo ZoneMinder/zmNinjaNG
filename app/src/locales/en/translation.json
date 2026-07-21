@@ -1299,7 +1299,6 @@
       "used": "Used {{tools}}"
     },
     "iteration_cap_reached": "Stopped after too many steps. Try a simpler request.",
-    "live_data_required": "I could not load current ZoneMinder data, so I can’t provide a reliable answer.",
     "context_cleared": "This conversation filled up the model's context, so I've started a fresh one. The messages above are still here for you to read, but I can't see them any more.",
     "parse_error": "Sorry, I had trouble putting together a response. Could you try rephrasing?",
     "show_raw_output": "Show model output",
@@ -1327,6 +1326,6 @@
     "context_cleared_manual": "Conversation cleared. The on-device model was unloaded to free memory; it will load again on your next question.",
     "context_cleared_manual_remote": "Conversation cleared.",
     "model_unavailable_native": "This model cannot run on your device. Choose an on-device model in Settings.",
-    "english_only_notice": "Ask in English. The assistant does not work reliably in other languages: questions may be misunderstood or answered without checking your cameras."
+    "english_only_notice": "The assistant understands other languages, but works best in English: some answer-accuracy checks only run on English replies."
   }
 }

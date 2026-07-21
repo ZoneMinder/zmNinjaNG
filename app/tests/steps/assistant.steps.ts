@@ -66,7 +66,7 @@ async function seedScript(page: import('@playwright/test').Page, script: Assista
 
 Given('the assistant will answer {string} after calling count_events', async ({ page }, answer: string) => {
   await seedScript(page, [
-    { toolCalls: [{ id: '1', name: 'count_events', input: { interval: '1 day' } }] },
+    { toolCalls: [{ id: '1', name: 'count_events', input: { lastCount: 1, lastUnit: 'day' } }] },
     { text: answer, toolCalls: [] },
   ]);
 });
@@ -99,7 +99,7 @@ Given(
   'the assistant will answer {string} using {string} prompt tokens',
   async ({ page }, answer: string, promptTokens: string) => {
     await seedScript(page, [
-      { toolCalls: [{ id: '1', name: 'count_events', input: { interval: '1 day' } }] },
+      { toolCalls: [{ id: '1', name: 'count_events', input: { lastCount: 1, lastUnit: 'day' } }] },
       {
         text: answer,
         toolCalls: [],

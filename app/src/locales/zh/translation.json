@@ -1299,7 +1299,6 @@
       "used": "已使用 {{tools}}"
     },
     "iteration_cap_reached": "步骤过多已停止，请尝试更简单的请求。",
-    "live_data_required": "无法加载当前 ZoneMinder 数据，因此无法提供可靠的回答。",
     "context_cleared": "本次对话已填满模型的上下文，因此我已开始新的对话。上面的消息你仍可查看，但我已看不到它们了。",
     "parse_error": "抱歉，无法生成回复，请换个说法再试。",
     "show_raw_output": "查看模型输出",
@@ -1327,6 +1326,6 @@
     "context_cleared_manual": "对话已清除。设备端模型已卸载以释放内存，下次提问时会重新加载。",
     "context_cleared_manual_remote": "对话已清除。",
     "model_unavailable_native": "此模型无法在你的设备上运行。请在设置中选择设备端模型。",
-    "english_only_notice": "请用英语提问。助手在其他语言下无法可靠工作：问题可能被误解，或在未查询摄像头的情况下作答。"
+    "english_only_notice": "助手可以理解其他语言，但英语效果最好：部分回答准确性检查仅适用于英语回复。"
   }
 }

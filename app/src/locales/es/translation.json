@@ -1299,7 +1299,6 @@
       "used": "Se usó {{tools}}"
     },
     "iteration_cap_reached": "Detenido tras demasiados pasos. Prueba con una solicitud más simple.",
-    "live_data_required": "No pude cargar datos actuales de ZoneMinder, así que no puedo dar una respuesta fiable.",
     "context_cleared": "Esta conversación llenó el contexto del modelo, así que he empezado una nueva. Los mensajes de arriba siguen ahí para que los leas, pero yo ya no puedo verlos.",
     "parse_error": "No se pudo generar una respuesta. Prueba a reformular la pregunta.",
     "show_raw_output": "Ver salida del modelo",
@@ -1327,6 +1326,6 @@
     "context_cleared_manual": "Conversación borrada. El modelo del dispositivo se descargó para liberar memoria; se cargará de nuevo con tu próxima pregunta.",
     "context_cleared_manual_remote": "Conversación borrada.",
     "model_unavailable_native": "Este modelo no funciona en tu dispositivo. Elige un modelo del dispositivo en Ajustes.",
-    "english_only_notice": "Pregunta en inglés. El asistente no funciona de forma fiable en otros idiomas: las preguntas pueden malinterpretarse o responderse sin consultar tus cámaras."
+    "english_only_notice": "El asistente entiende otros idiomas, pero funciona mejor en inglés: algunas comprobaciones de respuestas solo se aplican en inglés."
   }
 }

@@ -1299,7 +1299,6 @@
       "used": "A utilisé {{tools}}"
     },
     "iteration_cap_reached": "Arrêté après trop d'étapes. Essayez une demande plus simple.",
-    "live_data_required": "Je n’ai pas pu charger les données ZoneMinder actuelles, donc je ne peux pas fournir une réponse fiable.",
     "context_cleared": "Cette conversation a saturé le contexte du modèle, j'en ai donc démarré une nouvelle. Les messages ci-dessus restent lisibles pour vous, mais je ne les vois plus.",
     "parse_error": "Impossible de générer une réponse. Essayez de reformuler.",
     "show_raw_output": "Voir la sortie du modèle",
@@ -1327,6 +1326,6 @@
     "context_cleared_manual": "Conversation effacée. Le modèle sur l'appareil a été déchargé pour libérer de la mémoire ; il se rechargera à votre prochaine question.",
     "context_cleared_manual_remote": "Conversation effacée.",
     "model_unavailable_native": "Ce modèle ne fonctionne pas sur votre appareil. Choisissez un modèle sur l'appareil dans les Réglages.",
-    "english_only_notice": "Posez vos questions en anglais. L'assistant ne fonctionne pas de manière fiable dans d'autres langues : les questions peuvent être mal comprises ou traitées sans consulter vos caméras."
+    "english_only_notice": "L'assistant comprend d'autres langues, mais fonctionne mieux en anglais : certaines vérifications de réponses ne s'appliquent qu'en anglais."
   }
 }
