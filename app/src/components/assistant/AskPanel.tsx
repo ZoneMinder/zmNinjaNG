@@ -430,6 +430,9 @@ export function AskPanel() {
         // zone the system prompt already told the model "today" means.
         timezone: currentProfile?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
         question: text,
+        // Gates English-only text heuristics (ungroundedWhenWords) off for
+        // other locales; same source as `system`'s locale line (refs #259).
+        locale: i18n.language,
         objectLabels,
       };
       const history = useAssistantStore.getState().getThread(profileId);

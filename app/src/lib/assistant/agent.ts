@@ -293,6 +293,14 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
   const readToolRequirement = tools.length > 0 ? requiredReadTool(history) : undefined;
   let requiredReadToolComplete = false;
   let requiredReadToolReminderSent = false;
+  /** Language-neutral net under the English-only requirement above (refs
+   *  #259): a turn that was routed here WITH tools (triage said this is a
+   *  ZoneMinder question) and answers without ever running one gets a single
+   *  generic reminder in any language. Unlike the specific requirement it
+   *  never hard-fails: without the regex match there is no certainty data was
+   *  required, so the second tool-less answer is accepted rather than
+   *  replaced. */
+  let genericToolReminderSent = false;
   /** `name:JSON(input)` for every tool call attempted this turn, so an
    *  identical repeat can be refused rather than re-run (see the loop below). */
   const calledSignatures = new Set<string>();
@@ -382,6 +390,29 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
           usage: lastUsage,
         });
         return produced;
+      }
+
+      // The language-neutral net (see genericToolReminderSent above). Only
+      // when the SPECIFIC requirement never matched: for a non-English
+      // question the regexes cannot see, this is the only nudge toward live
+      // data the turn gets.
+      if (
+        !readToolRequirement &&
+        !genericToolReminderSent &&
+        tools.length > 0 &&
+        toolOutputs.length === 0 &&
+        turn.text &&
+        !turn.text.startsWith('__i18n:')
+      ) {
+        genericToolReminderSent = true;
+        lastUsage = turn.usage ?? lastUsage;
+        history.push({
+          role: 'user',
+          text:
+            'If that answer states any fact about this ZoneMinder system (cameras, events, detections, server), ' +
+            'call the read tool that provides it now and answer from its result. If it does not, send the same answer again.',
+        });
+        continue;
       }
       assistantMsg.display = dedupeDisplay(turnDisplay);
       assistantMsg.trace = turnTrace.length > 0 ? [...turnTrace] : undefined;

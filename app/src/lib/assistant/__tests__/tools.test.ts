@@ -888,6 +888,20 @@ describe('list_events when resolution (refs #246)', () => {
     expect(getEvents).not.toHaveBeenCalled();
   });
 
+  // WHEN_FILLER is an English word list; against another locale it flags
+  // legitimate connectives as invented and burns a correction round on a
+  // correct call, so the check is gated to English locales (refs #259).
+  it('skips the invented-words check for a non-English locale', async () => {
+    const tool = getToolByName('list_events')!;
+    const r = await tool.execute(
+      { when: 'yesterday' },
+      { ...ctx(), timezone: 'America/New_York', question: 'was geschah gestern', locale: 'de' },
+    );
+
+    expect(r.isError).toBeFalsy();
+    expect(getEvents).toHaveBeenCalled();
+  });
+
   // The whole point of giving the model the vocabulary: a label the detector
   // never writes cannot answer anything, and a zero-row "none" for it is
   // wrong when the real label was sitting right there.

@@ -238,7 +238,10 @@ const listEventsTool: ToolDefinition = {
       // the model corrects instead of silently querying the wrong window.
       const whenPhrase = isOmittedArg(input.when) ? undefined : String(input.when);
       let resolvedWhen: { startDateTime: string; endDateTime: string } | undefined;
-      if (whenPhrase && ctx.question) {
+      // English-locale only: WHEN_FILLER is an English word list, and against
+      // another language it flags legitimate connectives ("desde", "von") as
+      // invented, burning a correction round on a correct call (refs #259).
+      if (whenPhrase && ctx.question && (ctx.locale ?? 'en').toLowerCase().startsWith('en')) {
         // The contract is "the user's own words". A phrase carrying words the
         // user never wrote is the prompt's example leaking into the argument,
         // and it narrows the window without anyone noticing.

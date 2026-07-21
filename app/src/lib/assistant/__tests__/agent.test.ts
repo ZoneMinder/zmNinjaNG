@@ -80,6 +80,26 @@ describe('a turn given no tools', () => {
 
     expect(out[out.length - 1].text).toBe('__i18n:assistant.live_data_required');
   });
+
+  // The English regexes cannot see a German question, so a tool-less answer to
+  // one gets a single language-neutral reminder (refs #259). Unlike the
+  // specific requirement, a second tool-less answer is accepted, not replaced:
+  // without the regex there is no certainty data was required.
+  it('nudges a tool-less answer once in any language, then accepts it', async () => {
+    const p = new MockProvider();
+    p.setScript([
+      { text: 'Gestern gab es drei Ereignisse.', toolCalls: [] },
+      { text: 'Gestern gab es drei Ereignisse.', toolCalls: [] },
+    ]);
+
+    const chatSpy = vi.spyOn(p, 'chat');
+    const out = await runAssistantTurn(baseOpts(p, host(), [{ role: 'user', text: 'Was ist gestern passiert?' }]));
+
+    expect(out[out.length - 1].text).toBe('Gestern gab es drei Ereignisse.');
+    // Two provider calls: answer, reminder, same answer accepted.
+    expect(chatSpy).toHaveBeenCalledTimes(2);
+    vi.restoreAllMocks();
+  });
 });
 
 describe('requiresLiveData', () => {
@@ -456,13 +476,16 @@ describe('runAssistantTurn', () => {
       sent = structuredClone(messages);
       return { text: 'answer', toolCalls: [] };
     });
-    await runAssistantTurn(
-      baseOpts(p, host(), [
+    await runAssistantTurn({
+      ...baseOpts(p, host(), [
         { role: 'user', text: 'ancient history' },
         { role: 'assistant', text: 'cleared', contextBoundary: true },
         { role: 'user', text: 'fresh question' },
       ]),
-    );
+      // No tools: this test is about history mechanics, and a tool-less answer
+      // with tools available would trip the generic live-data reminder.
+      tools: [],
+    });
     // The pre-boundary messages are gone from what the model sees: that IS the
     // clear. Leaving them would make the auto-clear cosmetic.
     expect(sent).toEqual([{ role: 'user', text: 'fresh question' }]);
@@ -483,20 +506,21 @@ describe('runAssistantTurn', () => {
       role: 'user' as const,
       text: `msg ${i}`,
     }));
-    const out = await runAssistantTurn(baseOpts(p, host(), long));
+    const out = await runAssistantTurn({ ...baseOpts(p, host(), long), tools: [] });
     expect(out).toEqual([{ role: 'assistant', text: 'answer', toolCalls: [], raw: undefined, display: undefined, usage: undefined }]);
   });
 
   it('returns only this turn\'s new messages after a context boundary', async () => {
     const p = new MockProvider();
     p.setScript([{ text: 'answer', toolCalls: [] }]);
-    const out = await runAssistantTurn(
-      baseOpts(p, host(), [
+    const out = await runAssistantTurn({
+      ...baseOpts(p, host(), [
         { role: 'user', text: 'old' },
         { role: 'assistant', text: 'cleared', contextBoundary: true },
         { role: 'user', text: 'new' },
       ]),
-    );
+      tools: [],
+    });
     expect(out).toHaveLength(1);
     expect(out[0].text).toBe('answer');
   });
@@ -506,7 +530,7 @@ describe('runAssistantTurn', () => {
     p.setScript([
       { text: 'answer', toolCalls: [], usage: { promptTokens: 1200, completionTokens: 30, totalTokens: 1230 } },
     ]);
-    const out = await runAssistantTurn(baseOpts(p, host(), [{ role: 'user', text: 'q' }]));
+    const out = await runAssistantTurn({ ...baseOpts(p, host(), [{ role: 'user', text: 'q' }]), tools: [] });
     expect(out[out.length - 1].usage).toEqual({ promptTokens: 1200, completionTokens: 30, totalTokens: 1230 });
   });
 
