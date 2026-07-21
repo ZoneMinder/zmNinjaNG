@@ -315,10 +315,12 @@ describe('AssistantSection download/delete', () => {
       />
     );
 
-    // The retired id resolves to the one supported model rather than leaving
-    // the picker blank or the status unknown (AssistantSection.tsx:82).
+    // The retired id resolves to its retiredModelIds target (still Llama,
+    // independent of which model is the fresh-install default) rather than
+    // leaving the picker blank or the status unknown (AssistantSection.tsx:82).
+    const mapped = ASSISTANT.retiredModelIds[MODEL_B];
     await waitFor(() => expect(screen.getByTestId('assistant-model-downloaded-status')).toBeInTheDocument());
-    expect(isModelDownloadedMock).toHaveBeenCalledWith(MODEL_A);
-    expect(screen.getByTestId('assistant-model-select')).toHaveValue(MODEL_A);
+    expect(isModelDownloadedMock).toHaveBeenCalledWith(mapped);
+    expect(screen.getByTestId('assistant-model-select')).toHaveValue(mapped);
   });
 });

@@ -733,9 +733,11 @@ export const ASSISTANT = {
   // to an activity step in AskPanel (rule 11: truncate long text).
   activityInputPreviewChars: 40,
   // On-device only runs on desktop (web/Electron); mobile is gated off for
-  // memory (see AssistantSection). So the default targets a desktop, where
-  // Gemma 2B loads comfortably.
-  defaultModelId: 'Llama-3.2-3B-Instruct-q4f16_1-MLC',
+  // memory (see AssistantSection). So the default targets a desktop. Qwen3 4B
+  // after a WebGPU device pass confirmed the MLC build with thinking off
+  // (refs #265); it beat the llama class across the eval suite (see
+  // webllmModels). Existing installs keep their saved model choice.
+  defaultModelId: 'Qwen3-4B-q4f16_1-MLC',
   // Ordered smallest first: the top of the picker is the safest thing to load
   // on a phone, and `approxSizeMb` is web-llm's own `vram_required_MB` for the
   // record (measured at ITS 4096 window, so the real figure at the

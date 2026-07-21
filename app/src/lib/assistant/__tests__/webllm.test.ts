@@ -486,11 +486,13 @@ describe('WebLlmProvider.chat', () => {
     const create = vi.fn().mockResolvedValue({ choices: [{ message: { content: '{"answer": "It is armed."}' } }] });
     vi.mocked(getLoadedEngine).mockResolvedValue({ chat: { completions: { create } } } as never);
 
-    const provider = new WebLlmProvider(ASSISTANT.defaultModelId);
+    // Explicitly the non-Qwen model, so the extra_body assertion below stays
+    // about model family, not about which model is the current default.
+    const provider = new WebLlmProvider('Llama-3.2-3B-Instruct-q4f16_1-MLC');
     const turn = await provider.chat([{ role: 'user', text: 'hi' }], [], 'sys', new AbortController().signal);
 
     expect(turn).toMatchObject({ text: 'It is armed.', toolCalls: [] });
-    expect(getLoadedEngine).toHaveBeenCalledWith(ASSISTANT.defaultModelId);
+    expect(getLoadedEngine).toHaveBeenCalledWith('Llama-3.2-3B-Instruct-q4f16_1-MLC');
     const call = create.mock.calls[0][0];
     expect(call).toEqual(
       expect.objectContaining({
