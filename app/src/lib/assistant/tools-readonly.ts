@@ -277,7 +277,7 @@ const listEventsTool: ToolDefinition = {
       // splitting the jobs: both reference models copied phrases perfectly
       // but filled the fields directly at 27/36 and 15/36.
       const whenPhrase = isOmittedArg(input.when) ? undefined : String(input.when);
-      let resolvedWhen: { startDateTime: string; endDateTime: string } | undefined;
+      let resolvedWhen: { startDateTime?: string; endDateTime?: string } | undefined;
       if (whenPhrase) {
         if (!ctx.interpretWhen) throw new Error('Time phrases are unavailable right now; retry without `when`.');
         const fields = await ctx.interpretWhen(whenPhrase);

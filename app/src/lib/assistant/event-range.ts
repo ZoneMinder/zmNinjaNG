@@ -41,13 +41,21 @@ export interface WindowFields {
   daysAgo?: number;
   weekday?: string;
   date?: string;
+  /** Calendar span, inclusive on both ends: "april" is fromDate 2026-04-01 +
+   *  toDate 2026-04-30. Either side may stand alone ("since july 1"). The
+   *  general primitive for every calendar-aligned window (a named month,
+   *  "this month", an explicit range, a year), so no month/quarter/year
+   *  field list ever needs enumerating (refs #265). */
+  fromDate?: string;
+  toDate?: string;
   fromTime?: string;
   toTime?: string;
 }
 
 export interface ResolvedEventRange {
-  startDateTime: string;
-  endDateTime: string;
+  /** Either side may be absent for a one-sided window ("since july 1"). */
+  startDateTime?: string;
+  endDateTime?: string;
 }
 
 /** Formats a real instant as the ZM API's local-timezone datetime string.
@@ -80,20 +88,64 @@ function clockMinutes(value: string): number | undefined {
  * for the model to correct from, or `undefined` when no window field was
  * given at all (an unfiltered query, which the caller reports as such).
  */
+const DATE_SHAPE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Local midnight at the start of `date` (YYYY-MM-DD) in `timezone`, plus
+ *  `dayOffset` days, as a real instant. */
+function dateMidnight(date: string, timezone: string, dayOffset: number): Date | undefined {
+  const parsed = new Date(`${date}T12:00:00`);
+  // An impossible calendar date must become a corrective error upstream:
+  // V8 turns a 13th month into Invalid Date but ROLLS 2026-02-29 over to
+  // March 1, so a round-trip compare is needed, not just a NaN check.
+  if (Number.isNaN(parsed.getTime()) || format(parsed, 'yyyy-MM-dd') !== date) return undefined;
+  const zoned = startOfDay(toZonedTime(fromZonedTime(parsed, timezone), timezone));
+  return fromZonedTime(dayOffset === 0 ? zoned : subDays(zoned, -dayOffset), timezone);
+}
+
 export function resolveWindow(
   fields: WindowFields,
   now: Date,
   timezone: string,
 ): ResolvedEventRange | { error: string } | undefined {
-  const { lastCount, lastUnit, daysAgo, weekday, date, fromTime, toTime } = fields;
+  const { lastCount, lastUnit, daysAgo, weekday, date, fromDate, toDate, fromTime, toTime } = fields;
   const dayPickers = [daysAgo !== undefined, weekday !== undefined, date !== undefined].filter(Boolean).length;
   const rolling = lastCount !== undefined || lastUnit !== undefined;
+  const ranged = fromDate !== undefined || toDate !== undefined;
 
-  if (rolling && dayPickers > 0) {
-    return { error: 'Send either a rolling window (lastCount+lastUnit) or a day (daysAgo, weekday, or date), not both.' };
+  if ([rolling, dayPickers > 0, ranged].filter(Boolean).length > 1) {
+    return { error: 'Send ONE window shape: a rolling window (lastCount+lastUnit), a day (daysAgo, weekday, or date), or a span (fromDate/toDate).' };
   }
   if (dayPickers > 1) {
     return { error: 'Send only one of daysAgo, weekday, or date.' };
+  }
+
+  if (ranged) {
+    if (fromTime !== undefined || toTime !== undefined) {
+      return { error: 'fromTime/toTime narrow a single day; use daysAgo, weekday, or date alongside them.' };
+    }
+    for (const [name, value] of [['fromDate', fromDate], ['toDate', toDate]] as const) {
+      if (value !== undefined && !DATE_SHAPE.test(String(value).trim())) {
+        return { error: `${name} must be "YYYY-MM-DD". Received "${String(value)}".` };
+      }
+    }
+    const start = fromDate === undefined ? undefined : dateMidnight(String(fromDate).trim(), timezone, 0);
+    // toDate is INCLUSIVE: the window closes at the midnight after it,
+    // capped at now so "this month" never claims the future.
+    const endRaw = toDate === undefined ? undefined : dateMidnight(String(toDate).trim(), timezone, 1);
+    if ((fromDate !== undefined && start === undefined) || (toDate !== undefined && endRaw === undefined)) {
+      return { error: `"${String(start === undefined ? fromDate : toDate)}" is not a real calendar date.` };
+    }
+    const end = endRaw === undefined ? undefined : endRaw.getTime() > now.getTime() ? now : endRaw;
+    if (start && start.getTime() > now.getTime()) {
+      return { error: `fromDate "${String(fromDate)}" is in the future.` };
+    }
+    if (start && end && end.getTime() <= start.getTime()) {
+      return { error: 'toDate must be on or after fromDate.' };
+    }
+    return {
+      ...(start ? { startDateTime: formatForZm(start, timezone) } : {}),
+      ...(end ? { endDateTime: formatForZm(end, timezone) } : {}),
+    };
   }
 
   if (rolling) {

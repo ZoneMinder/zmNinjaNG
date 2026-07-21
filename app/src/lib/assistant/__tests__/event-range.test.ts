@@ -41,7 +41,7 @@ describe('rolling windows', () => {
   });
 
   it('rejects a rolling window combined with a day field or day narrowing', () => {
-    expect(at({ lastCount: 1, lastUnit: 'day', daysAgo: 1 })).toMatchObject({ error: expect.stringContaining('not both') });
+    expect(at({ lastCount: 1, lastUnit: 'day', daysAgo: 1 })).toMatchObject({ error: expect.stringContaining('ONE window shape') });
     expect(at({ lastCount: 1, lastUnit: 'day', fromTime: '16:00' })).toMatchObject({
       error: expect.stringContaining('cannot combine'),
     });
@@ -82,6 +82,48 @@ describe('single days', () => {
 
   it('rejects more than one day picker', () => {
     expect(at({ daysAgo: 1, weekday: 'sunday' })).toMatchObject({ error: expect.stringContaining('only one') });
+  });
+});
+
+describe('calendar spans (fromDate/toDate)', () => {
+  // The case that forced the primitive: "summarize april" was squeezed into
+  // {date:"2026-04-01"} and queried one day of a 30-day month (refs #265).
+  it('resolves an inclusive month span', () => {
+    expect(at({ fromDate: '2026-04-01', toDate: '2026-04-30' })).toEqual({
+      startDateTime: '2026-04-01 00:00:00',
+      endDateTime: '2026-05-01 00:00:00',
+    });
+  });
+
+  it('caps a span ending today (or later) at now', () => {
+    expect(at({ fromDate: '2026-07-01', toDate: '2026-07-16' })).toEqual({
+      startDateTime: '2026-07-01 00:00:00',
+      endDateTime: '2026-07-16 10:30:00',
+    });
+    expect(at({ fromDate: '2026-07-01', toDate: '2026-07-31' })).toEqual({
+      startDateTime: '2026-07-01 00:00:00',
+      endDateTime: '2026-07-16 10:30:00',
+    });
+  });
+
+  it('allows one-sided spans', () => {
+    expect(at({ fromDate: '2026-07-01' })).toEqual({ startDateTime: '2026-07-01 00:00:00' });
+    expect(at({ toDate: '2026-06-30' })).toEqual({ endDateTime: '2026-07-01 00:00:00' });
+  });
+
+  it('rejects bad shapes, inverted spans, future starts, and mixed window shapes', () => {
+    expect(at({ fromDate: 'april' })).toMatchObject({ error: expect.stringContaining('YYYY-MM-DD') });
+    // llama produced "february" as 2026-02-29 (leap confusion): shape-valid,
+    // calendar-impossible, must be a corrective error not a NaN throw.
+    expect(at({ fromDate: '2026-02-01', toDate: '2026-02-29' })).toMatchObject({
+      error: expect.stringContaining('not a real calendar date'),
+    });
+    expect(at({ fromDate: '2026-05-10', toDate: '2026-05-01' })).toMatchObject({ error: expect.stringContaining('on or after') });
+    expect(at({ fromDate: '2026-08-01' })).toMatchObject({ error: expect.stringContaining('future') });
+    expect(at({ fromDate: '2026-04-01', daysAgo: 1 })).toMatchObject({ error: expect.stringContaining('ONE window shape') });
+    expect(at({ fromDate: '2026-04-01', toDate: '2026-04-30', fromTime: '16:00' })).toMatchObject({
+      error: expect.stringContaining('single day'),
+    });
   });
 });
 

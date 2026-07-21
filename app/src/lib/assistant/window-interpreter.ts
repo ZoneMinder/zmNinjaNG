@@ -32,6 +32,8 @@ export const WINDOW_SCHEMA: Record<string, unknown> = {
     daysAgo: { type: 'number' },
     weekday: { type: 'string', enum: [...WEEKDAYS] },
     date: { type: 'string' },
+    fromDate: { type: 'string' },
+    toDate: { type: 'string' },
     fromTime: { type: 'string' },
     toTime: { type: 'string' },
     none: { type: 'boolean' },
@@ -41,8 +43,10 @@ export const WINDOW_SCHEMA: Record<string, unknown> = {
 
 /** Model-facing (rule 5 exempt). The few-shot lines teach the mapping the
  *  schema cannot express; they are examples for a model, not a grammar the
- *  app executes. */
-function buildInterpreterPrompt(now: Date, timezone: string): string {
+ *  app executes. Exported so the eval harness scores EXACTLY what production
+ *  sends: a hand-copied prompt in the harness drifted the moment this one
+ *  changed, and measured a bug the app did not have. */
+export function buildInterpreterPrompt(now: Date, timezone: string): string {
   const today = format(toZonedTime(now, timezone), 'EEEE, yyyy-MM-dd');
   return [
     'You convert a human time phrase into a JSON time window. Reply with ONLY one JSON object.',
@@ -51,7 +55,8 @@ function buildInterpreterPrompt(now: Date, timezone: string): string {
     '- lastCount + lastUnit: a rolling span ending now. "past 2 weeks" -> {"lastCount":2,"lastUnit":"week"}.',
     '- daysAgo: one calendar day. "today" -> {"daysAgo":0}. "yesterday" -> {"daysAgo":1}.',
     '- weekday: the most recent such day. "on sunday" -> {"weekday":"sunday"}.',
-    '- date: an explicit calendar date. "July 15" -> {"date":"2026-07-15"} (use the year that makes it most recent, never future).',
+    '- date: one explicit calendar date. "July 15" -> {"date":"2026-07-15"} (use the year that makes it most recent, never future).',
+    '- fromDate + toDate: a calendar span, both inclusive. "april" -> {"fromDate":"2026-04-01","toDate":"2026-04-30"}. "this month" -> the 1st of the current month through today. "june 1 to june 15" -> both dates. Either side may stand alone: "since july 1" -> {"fromDate":"2026-07-01"}.',
     '- fromTime/toTime: 24h "HH:MM", narrowing a single day. "yesterday from 4pm to 10pm" -> {"daysAgo":1,"fromTime":"16:00","toTime":"22:00"}.',
     '- none: true when the phrase asks for no time limit. "all time" -> {"none":true}.',
     'The phrase may be in any language: "letzte Woche" -> {"lastCount":1,"lastUnit":"week"}; "ayer" -> {"daysAgo":1}.',
@@ -111,6 +116,8 @@ function parseFields(text: string): WindowFields | undefined {
     if (raw.daysAgo !== undefined) fields.daysAgo = Number(raw.daysAgo);
     if (raw.weekday !== undefined) fields.weekday = String(raw.weekday);
     if (raw.date !== undefined) fields.date = String(raw.date);
+    if (raw.fromDate !== undefined) fields.fromDate = String(raw.fromDate);
+    if (raw.toDate !== undefined) fields.toDate = String(raw.toDate);
     if (raw.fromTime !== undefined) fields.fromTime = String(raw.fromTime);
     if (raw.toTime !== undefined) fields.toTime = String(raw.toTime);
     return fields;

@@ -84,6 +84,9 @@ const TOOL_CASES: ToolCase[] = [
   { q: 'summarize last week', tool: 'list_events', args: (a) => String(a.when).toLowerCase().includes('last week') },
   { q: 'what happened in the past 2 weeks', tool: 'list_events', args: (a) => /past 2 weeks|2 weeks/.test(String(a.when).toLowerCase()) },
   { q: 'was war gestern bei mir los', tool: 'list_events', args: (a) => String(a.when).toLowerCase().includes('gestern') },
+  // A summary must not grow an objectType: observed live on "summarize april",
+  // which attached every known label and silently excluded no-detection events.
+  { q: 'summarize april', tool: 'list_events', args: (a) => String(a.when).toLowerCase().includes('april') && a.objectType === undefined },
   { q: 'how many people came today', tool: 'list_events', args: (a) => String(a.when).toLowerCase().includes('today') && String(a.objectType).includes('person') },
   // Triage answers these with NO tools in production (see triage.ts), so the
   // prompt is not what decides them. Kept visible, scored separately.
@@ -450,32 +453,30 @@ const INTERPRET_CASES: Array<{ phrase: string; ok: (f: Record<string, unknown>) 
   { phrase: '2 days ago', ok: (f) => f.daysAgo === 2 },
   { phrase: 'last week', ok: (f) => (f.lastUnit === 'week' && f.lastCount === 1) || (f.lastUnit === 'day' && f.lastCount === 7) },
   { phrase: 'past 2 weeks', ok: (f) => (f.lastUnit === 'week' && f.lastCount === 2) || (f.lastUnit === 'day' && f.lastCount === 14) },
-  { phrase: 'previous month', ok: (f) => (f.lastUnit === 'month' && f.lastCount === 1) || (f.lastUnit === 'day' && f.lastCount === 30) },
+  // "previous month" is legitimately either a rolling month or calendar June
+  // (from a July run date); both resolve to a sane window.
+  { phrase: 'previous month', ok: (f) => (f.lastUnit === 'month' && f.lastCount === 1) || (f.lastUnit === 'day' && f.lastCount === 30) || (f.fromDate === '2026-06-01' && f.toDate === '2026-06-30') },
   { phrase: 'last 3 hours', ok: (f) => f.lastUnit === 'hour' && f.lastCount === 3 },
   { phrase: 'on sunday', ok: (f) => f.weekday === 'sunday' },
   { phrase: 'yesterday from 4pm to 10pm', ok: (f) => f.daysAgo === 1 && f.fromTime === '16:00' && f.toTime === '22:00' },
+  // Calendar spans (refs #265): "summarize april" once queried April 1 only.
+  { phrase: 'april', ok: (f) => f.fromDate === '2026-04-01' && f.toDate === '2026-04-30' },
+  { phrase: 'february', ok: (f) => f.fromDate === '2026-02-01' && f.toDate === '2026-02-28' },
+  { phrase: 'this month', ok: (f) => String(f.fromDate ?? '').endsWith('-01') && f.fromDate === new Date().toISOString().slice(0, 8) + '01' },
+  { phrase: 'june 1 to june 15', ok: (f) => f.fromDate === '2026-06-01' && f.toDate === '2026-06-15' },
+  // A gratuitous month-end toDate is fine: resolveWindow caps the end at now,
+  // so the effective window is identical to the open-ended form.
+  { phrase: 'since july 1', ok: (f) => f.fromDate === '2026-07-01' && (f.toDate === undefined || String(f.toDate) >= new Date().toISOString().slice(0, 10)) },
   { phrase: 'letzte Woche', ok: (f) => (f.lastUnit === 'week' && f.lastCount === 1) || (f.lastUnit === 'day' && f.lastCount === 7) },
   { phrase: 'ayer', ok: (f) => f.daysAgo === 1 },
   { phrase: 'hier soir', ok: (f) => f.daysAgo === 1 },
 ];
 
 async function scoreInterpreter(runs: number) {
-  const { WINDOW_SCHEMA } = await import('../src/lib/assistant/window-interpreter');
-  const { format } = await import('date-fns');
-  const today = format(new Date(), 'EEEE, yyyy-MM-dd');
-  const system = [
-    'You convert a human time phrase into a JSON time window. Reply with ONLY one JSON object.',
-    `Today is ${today} (timezone America/New_York).`,
-    'Fields (use the fewest that express the phrase):',
-    '- lastCount + lastUnit: a rolling span ending now. "past 2 weeks" -> {"lastCount":2,"lastUnit":"week"}.',
-    '- daysAgo: one calendar day. "today" -> {"daysAgo":0}. "yesterday" -> {"daysAgo":1}.',
-    '- weekday: the most recent such day. "on sunday" -> {"weekday":"sunday"}.',
-    '- date: an explicit calendar date. "July 15" -> {"date":"2026-07-15"} (use the year that makes it most recent, never future).',
-    '- fromTime/toTime: 24h "HH:MM", narrowing a single day. "yesterday from 4pm to 10pm" -> {"daysAgo":1,"fromTime":"16:00","toTime":"22:00"}.',
-    '- none: true when the phrase asks for no time limit. "all time" -> {"none":true}.',
-    'The phrase may be in any language: "letzte Woche" -> {"lastCount":1,"lastUnit":"week"}; "ayer" -> {"daysAgo":1}.',
-    'A calendar day word is never a rolling span: "today" is daysAgo 0, NOT lastCount 1 day.',
-  ].join('\n');
+  const { WINDOW_SCHEMA, buildInterpreterPrompt } = await import('../src/lib/assistant/window-interpreter');
+  // The REAL production prompt: a hand-copied version here drifted behind a
+  // schema change and measured a bug the app did not have.
+  const system = buildInterpreterPrompt(new Date(), 'America/New_York');
   let pass = 0;
   let total = 0;
   const failures: string[] = [];

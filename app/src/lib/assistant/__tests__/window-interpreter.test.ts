@@ -34,6 +34,14 @@ describe('interpretWhen', () => {
     expect(fields).toEqual({ lastCount: 2, lastUnit: 'week' });
   });
 
+  it('parses a calendar span', async () => {
+    const p = providerSaying('{"fromDate": "2026-04-01", "toDate": "2026-04-30"}');
+    expect(await interpretWhen('april', p, NOW, 'UTC', new AbortController().signal)).toEqual({
+      fromDate: '2026-04-01',
+      toDate: '2026-04-30',
+    });
+  });
+
   it('maps none:true to an empty window', async () => {
     const p = providerSaying('{"none": true}');
     expect(await interpretWhen('all time', p, NOW, 'UTC', new AbortController().signal)).toEqual({});
