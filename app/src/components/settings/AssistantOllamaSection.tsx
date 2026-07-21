@@ -257,13 +257,17 @@ export function AssistantOllamaSection({ settings, update, currentProfile }: Ass
   // return it (e.g. it was unloaded, or the value was typed in manually
   // before ever fetching), so switching to the dropdown never silently
   // discards a working manual entry.
-  /** Whether the server already serves the recommended model. Ollama reports
-   *  ids with a tag (`llama3.2:latest`, `llama3.2:3b`), and any tag of it is
-   *  the same recommendation, so this matches the name before the colon. */
-  const hasRecommendedModel = useMemo(
-    () => (models ?? []).some((m) => m.split(':')[0] === ASSISTANT.recommendedOllamaModel),
-    [models],
-  );
+  /** Whether the server already serves the recommended model. A TAGGED
+   *  recommendation (`qwen3:8b`) names one exact size, and a sibling tag
+   *  (`qwen3:0.6b`) is a different model with different scores, so it must
+   *  match exactly. An untagged recommendation accepts any tag of that name
+   *  (`llama3.2:latest` counts for `llama3.2`). */
+  const hasRecommendedModel = useMemo(() => {
+    const recommended = ASSISTANT.recommendedOllamaModel;
+    return (models ?? []).some((m) =>
+      recommended.includes(':') ? m === recommended : m.split(':')[0] === recommended,
+    );
+  }, [models]);
 
   const selectableModels = useMemo(() => {
     if (!models) return [];

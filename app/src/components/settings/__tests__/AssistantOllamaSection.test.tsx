@@ -225,6 +225,23 @@ describe('AssistantOllamaSection', () => {
       expect(screen.getByTestId('assistant-ollama-model')).toBeInTheDocument();
     });
 
+    // The recommendation is a TAGGED id (qwen3:8b): a sibling tag is a
+    // different model with different measured scores, so only the exact id
+    // hides the "pull it" hint.
+    it('shows the pull hint until the exact recommended model is served', async () => {
+      listOpenAiModelsMock.mockResolvedValue(['qwen3:0.6b', 'gemma2']);
+      render(<AssistantOllamaSection settings={settings} update={vi.fn()} currentProfile={profile} />);
+      await waitFor(() => expect(listOpenAiModelsMock).toHaveBeenCalled());
+      expect(await screen.findByTestId('assistant-ollama-recommended-missing')).toBeInTheDocument();
+    });
+
+    it('hides the pull hint when the recommended model is served', async () => {
+      listOpenAiModelsMock.mockResolvedValue(['qwen3:8b']);
+      render(<AssistantOllamaSection settings={settings} update={vi.fn()} currentProfile={profile} />);
+      await waitFor(() => expect(listOpenAiModelsMock).toHaveBeenCalled());
+      expect(screen.queryByTestId('assistant-ollama-recommended-missing')).not.toBeInTheDocument();
+    });
+
     it('includes the saved model in the dropdown even if the fetch did not return it', async () => {
       listOpenAiModelsMock.mockResolvedValue(['gemma2']);
       render(

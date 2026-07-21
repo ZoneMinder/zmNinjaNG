@@ -77,7 +77,7 @@ Set **Backend** to **Ollama** and give the app the address of your server. Left 
 
 **Test model**, next to the model list, checks two separate things and tells you which one failed. First that the server answers at all, and then that the model you picked can call the app's tools. A model that cannot, such as gemma2, is reachable but useless here: it never looks anything up, so the assistant can only guess. A large model may take a minute to answer the first test while the server loads it into memory, and the button reports which step it is waiting on.
 
-The model list fills in automatically from the server, and you can also type a model name by hand. A GPU-backed Ollama server is recommended, and Llama 3.2 on one may work better than the on-device model. If your server does not have it, Settings shows you the `ollama pull` command to add it. The **API key** field is optional, for a server that requires one; it is stored in your device's secure storage, not alongside the rest of your settings.
+The model list fills in automatically from the server, and you can also type a model name by hand. A GPU-backed Ollama server is recommended, and Qwen3 8B on one answers noticeably better than the on-device model; Llama 3.2 is a good pick when you want the fastest possible replies. If your server does not have the recommended model, Settings shows you the `ollama pull` command to add it. The **API key** field is optional, for a server that requires one; it is stored in your device's secure storage, not alongside the rest of your settings.
 
 ## Long conversations
 

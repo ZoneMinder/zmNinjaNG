@@ -806,16 +806,22 @@ export const ASSISTANT = {
   // putting a single question near 45s. It also emitted undecoded
   // byte-fallback tokens into user-visible text (see sanitize.ts).
   //
-  // So llama3.2: it is by far the fastest, its one measured weakness
-  // (stringifying an array argument) is handled in code by coerceLabelList in
-  // tool-helpers.ts, and a wrong argument SHAPE that the app repairs costs the
-  // user nothing, while 45s per question costs them the feature. Speed is what
-  // the table measured most reliably.
+  // The re-measurement that table asked for happened (refs #259; full
+  // prompt-eval suite, 3 runs/case, temp 0, plus live agent-loop runs):
   //
-  // Do not re-derive this from the table alone. A real re-measurement wants
-  // full turns, more questions, and output integrity and latency scored
-  // alongside tool choice.
-  recommendedOllamaModel: 'llama3.2',
+  //   qwen3:8b   33/33 native, 24/24 envelope   62s suite with
+  //              `ollamaReasoningEffort` applied (~2s/turn); 321s without
+  //   llama3.2   33/33 native, 21/24 envelope   15s suite (~0.5s/turn)
+  //   qwen3:4b   same scores as 8b, but dense: 747s suite
+  //   qwen3:30b  same scores as 8b, 18GB, nothing extra
+  //   qwen3:1.7b 21/33 native, 12/24 envelope
+  //
+  // qwen3:8b with reasoning disabled matches the 30B model's perfect scores
+  // at ~2s a turn, and unlike llama3.2 it never reaches for a tool on small
+  // talk (6/6 restraint) and never drops objectType on "how many <thing>"
+  // questions. llama3.2 remains the fast fallback; its misses are covered by
+  // the loop's guards rather than the model.
+  recommendedOllamaModel: 'qwen3:8b',
   // Prefix for the secure-storage key holding the optional Ollama/OpenAI
   // Bearer API key, suffixed with the profile id (lib/security/secureStorage.ts).
   // Never held in profile settings (rule 7 settings are plaintext-persisted).
