@@ -283,9 +283,10 @@ export interface AssistantProvider {
   ): Promise<AssistantTurn>;
   /** The context window this backend is running with, when it is knowable.
    *  Set for on-device models (we pass the window to CreateMLCEngine, so we
-   *  know it exactly); undefined for Ollama, where the window is the server's
-   *  `num_ctx` and nothing in the OpenAI-compatible API reports it. Undefined
-   *  means AskPanel cannot judge "close to full" and so never auto-clears. */
+   *  know it exactly); for Ollama it is learned from the native `/api/ps`
+   *  endpoint after the first chat of the session (the OpenAI-compatible API
+   *  never reports `num_ctx`). Undefined means AskPanel cannot judge "close
+   *  to full" and so never auto-clears. */
   readonly contextWindow?: number;
 }
 

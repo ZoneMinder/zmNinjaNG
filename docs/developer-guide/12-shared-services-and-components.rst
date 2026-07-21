@@ -1092,8 +1092,14 @@ runs against the real app and against tests without a DOM.
 
 ``runAssistantTurn`` (``agent.ts``) is a bounded loop
 (``ASSISTANT.maxToolIterations``, 6) that calls
-``provider.chat(history, TOOLS, system, signal)``, resolves each returned
-``ToolCall`` via ``getToolByName`` (``tools.ts``), and executes it. It resolves
+``provider.chat(history, tools, system, signal)`` with the turn's own tool
+list (``opts.tools``, defaulting to ``TOOLS``) and executes each returned
+``ToolCall`` against a definition found in that same list. The list is the
+execution authority: a turn triage routed here with no tools must treat an
+invented call as unavailable, so the registry's ``getToolByName`` and
+``isWithheldToolName`` (``tools.ts``) are consulted only to phrase the
+refusal, distinguishing a withheld action from a known tool on a tool-less
+turn and from a plain typo. It resolves
 with only the messages that turn produced, never the history it was handed:
 what it sends the model is a trimmed view of the caller's thread (the boundary
 slice below, then ``ASSISTANT.maxHistoryMessages``), so returning a "history"
@@ -1110,61 +1116,51 @@ is the decision itself: it compares the ``promptTokens`` a backend reported
 against that backend's ``contextWindow``, and returns false whenever either is
 unknown. Both are measured rather than estimated: the app never counts tokens
 itself, it reads ``usage`` off the response (``providers/usage.ts`` maps the
-OpenAI-shaped block both backends answer with), and ``contextWindow`` is set
-only by the on-device provider, which knows it because ``model-download.ts``
-passed it to ``CreateMLCEngine``. ``TOOLS``
-is the registry: ``readOnlyTools`` (``tools-readonly.ts``, no confirmation
-needed, monitor/event lookups, server health, navigation) concatenated with
-``destructiveTools`` (``tools-destructive.ts``, arm/disarm a monitor, trigger
-or cancel an alarm, change a monitor's function, change the run state, delete
-or archive an event). The model picks which tool to call from that one list;
-the app, not the model, decides whether the call needs a human to confirm it
-first.
+OpenAI-shaped block both backends answer with), and ``contextWindow`` comes
+from two places: the on-device provider knows it exactly because
+``model-download.ts`` passed it to ``CreateMLCEngine``, and ``OpenAiProvider``
+learns it after a chat turn by asking Ollama's native ``/api/ps`` what window
+the loaded model actually runs with (``refreshContextWindow``, cached per
+``baseUrl::model`` in ``CONTEXT_WINDOWS``; the OpenAI-compatible API never
+reports ``num_ctx``), so auto-clear works on that backend from the next turn
+on. A server without the endpoint records 0 and is never asked again.
 
-Destructive tools are the one place the app hands the model write access to
-the ZoneMinder server, so ``agent.ts`` gates every one of them behind a single
-choke point (simplified from ``agent.ts``: the real loop wraps this in a
-try/catch that turns a thrown error into a failed tool result):
+``TOOLS`` is the registry, and it holds only ``readOnlyTools``
+(``tools-readonly.ts``: monitor/event lookups, server health, navigation).
+There are no destructive tools and no confirmation gate: the actions the
+assistant used to offer behind a confirm dialog (arm/disarm, run state,
+monitor function, alarms, deleting or archiving an event) were removed
+outright, so nothing in ``lib/assistant/`` imports a mutating API and
+``ToolDefinition`` (``types.ts``) cannot express one. ``WITHHELD_TOOL_NAMES``
+(``tools.ts``) keeps those old names only as strings, so the loop can explain
+why such a call will not run instead of reporting an unknown tool, which
+reads to a model like a typo worth retrying.
 
-.. code:: typescript
-
-   if (def.destructive) {
-     req = def.buildConfirm
-       ? await def.buildConfirm(call.input, ctx)
-       : { toolName: def.name, messageKey: 'assistant.confirm.generic', messageParams: {}, params: call.input };
-     const ok = await host.confirm(req).catch(() => false);
-     if (!ok) {
-       results.push({ callId: call.id, output: 'User declined this action.' });
-       continue; // execute() never runs
-     }
-   }
-
-There is no second branch that reaches ``def.execute`` for a destructive
-tool: a thrown ``buildConfirm``, a declined confirm, or an aborted turn all
-short-circuit to a fixed "declined" or error result. ``buildConfirm`` itself
-only builds the request, for example ``deleteEventTool`` fetches the event
-first so the confirmation names the real monitor and start time instead of a
-bare id; it never calls ``confirm`` itself, that belongs to the loop above.
+Before a call executes, the loop runs its gates in order: availability in the
+turn's tool list, a duplicate-signature check (``toolCallSignature`` over
+``stripOmittedArgs``-normalized input, so a repeat spelled with placeholder
+arguments is still refused), ``objectQuestionMismatch`` (``count_events``
+cannot answer an object-type question), and ``validateToolInput`` against the
+tool's own schema. Each failure returns as an ordinary error tool result the
+model corrects from within the same turn; what passes runs through
+``captureApiCalls`` so the transcript records the ZoneMinder requests the
+tool actually made.
 
 ``providers/provider.ts``'s ``getAssistantProvider`` decides which model
-answers:
-
-.. code:: typescript
-
-   export function getAssistantProvider(): AssistantProvider {
-     if (isAssistantTestMode()) return sharedMockProvider;
-     throw new Error(PROVIDER_NOT_AVAILABLE_MESSAGE);
-   }
-
-Phase 1 (this codebase today) wires only the deterministic ``MockProvider``
-(``providers/mock.ts``), reachable solely in non-production builds behind
-``isAssistantTestMode()``; every real build path throws, which is why the
-Settings assistant section shows the model picker but marks download "coming
-in the next update" (``components/settings/AssistantSection.tsx``). Phase 2
-replaces the ``throw`` with an on-device provider built on ``@mlc-ai/web-llm``
-that runs in the browser via WebGPU: no message or tool result in this loop is
-ever sent to a server other than the ZoneMinder server the tool call itself
-targets.
+answers: the deterministic ``sharedMockProvider`` (``providers/mock.ts``) in
+non-production e2e mode behind ``isAssistantTestMode()``, ``OpenAiProvider``
+when the profile's backend is Ollama, and ``WebLlmProvider`` otherwise. The
+on-device provider runs on ``@mlc-ai/web-llm`` in the browser via WebGPU, so
+on that path no message or tool result is ever sent to a server other than
+the ZoneMinder server the tool call itself targets. Both adapters constrain
+generation where their backend can enforce it: ``WebLlmProvider`` compiles
+its two-shape JSON envelope (``ENVELOPE_SCHEMA``) through the engine's
+grammar via ``response_format``, falling back to prompt-plus-parser for the
+session if the engine rejects it, and ``OpenAiProvider`` maps ``complete``'s
+``jsonSchema`` to ``response_format: json_schema``. Both also retry an
+unparseable reply up to ``ASSISTANT.maxParseAttempts`` as a self-repair: the
+failed reply plus a correction naming the fault are appended, and the
+temperature is raised only on the final attempt.
 
 Each entry in ``ASSISTANT.webllmModels`` (``lib/zmninja-ng-constants.ts``)
 carries its id, its approximate download size, and its own

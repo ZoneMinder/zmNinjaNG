@@ -1,8 +1,5 @@
 /**
  * Shared helpers for assistant tool executors (refs #246).
- *
- * Split out of tools.ts so tools-readonly.ts and tools-destructive.ts can
- * both use them without pulling each other in.
  */
 import { log, LogLevel } from '../logger';
 import { ASSISTANT } from '../zmninja-ng-constants';
