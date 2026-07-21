@@ -504,9 +504,71 @@ async function scoreInterpreter(runs: number) {
   return { pass, total, failures };
 }
 
+
+/** Triage cases (refs #265): the classifier is scored over a MATRIX of
+ *  intents, time spans, and languages, because its historical failures were
+ *  all combinations outside its example list ("summarize" + any range). */
+const TRIAGE_CASES: Array<{ q: string; kind: 'ZONEMINDER' | 'ACTION' | 'CHAT' }> = [
+  // summarize/recap intent across time spans, question and imperative forms
+  { q: 'summarize today', kind: 'ZONEMINDER' },
+  { q: 'summarize last week', kind: 'ZONEMINDER' },
+  { q: 'summarize this month for me please', kind: 'ZONEMINDER' },
+  { q: 'give me a recap of the past 3 days', kind: 'ZONEMINDER' },
+  { q: 'what happened between june 1 and june 15', kind: 'ZONEMINDER' },
+  { q: 'was war letzte Woche bei mir los', kind: 'ZONEMINDER' },
+  { q: 'how many people came by today', kind: 'ZONEMINDER' },
+  { q: 'is the server ok', kind: 'ZONEMINDER' },
+  { q: 'show me the front camera', kind: 'ZONEMINDER' },
+  // actions
+  { q: 'arm the backyard camera', kind: 'ACTION' },
+  { q: 'delete all events from last month', kind: 'ACTION' },
+  // chat, including summarize-verbs about NON-system things
+  { q: 'hello', kind: 'CHAT' },
+  { q: 'thanks!', kind: 'CHAT' },
+  { q: 'what is the capital of France', kind: 'CHAT' },
+  { q: 'summarize the plot of Blade Runner', kind: 'CHAT' },
+];
+
+async function scoreTriage(runs: number) {
+  const { TRIAGE_PROMPT_FOR_EVAL, TRIAGE_SCHEMA } = await import('../src/lib/assistant/triage');
+  let pass = 0;
+  let total = 0;
+  const failures: string[] = [];
+  for (const c of TRIAGE_CASES) {
+    for (let i = 0; i < runs; i++) {
+      total++;
+      try {
+        const r = await chat({
+          model: MODEL,
+          messages: [{ role: 'system', content: TRIAGE_PROMPT_FOR_EVAL }, { role: 'user', content: c.q }],
+          stream: false,
+          max_tokens: 60,
+          ...(TEMP === undefined ? {} : { temperature: TEMP }),
+          ...REASONING,
+          response_format: { type: 'json_schema', json_schema: { name: 'result', schema: TRIAGE_SCHEMA, strict: true } },
+        });
+        const text = r.choices?.[0]?.message?.content ?? '';
+        const kind = JSON.parse(text)?.kind;
+        if (kind === c.kind) pass++;
+        else failures.push(`[triage] "${c.q}" -> ${kind}, expected ${c.kind}`);
+      } catch (e) {
+        failures.push(`[triage] "${c.q}" error: ${(e as Error).message}`);
+      }
+    }
+  }
+  return { pass, total, failures };
+}
+
 const variant = process.argv[2] ?? 'baseline';
 const runs = Number(process.argv[3] ?? 2);
 const started = Date.now();
+if (variant === 'triage') {
+  const w = await scoreTriage(runs);
+  console.log(`\n=== triage via ${MODEL}, temp ${TEMP ?? 'default'} ===`);
+  console.log(`triage: ${w.pass}/${w.total}`);
+  for (const f of w.failures) console.log(`  ${f}`);
+  process.exit(0);
+}
 if (variant === 'interpret') {
   const w = await scoreInterpreter(runs);
   console.log(`\n=== interpreter via ${MODEL}, temp ${TEMP ?? 'default'} ===`);

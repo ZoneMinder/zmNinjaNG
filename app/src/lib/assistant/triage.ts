@@ -21,27 +21,35 @@ import { sanitizeModelText } from './sanitize';
 
 export type RequestKind = 'zoneminder' | 'chat' | 'action';
 
-/** Model-facing (rule 5 exempt): never rendered, only matched below. */
+/** Model-facing (rule 5 exempt): never rendered, only matched below.
+ *
+ *  Written as a RULE over two orthogonal dimensions (what is wanted done,
+ *  and what it concerns), not as example instances (refs #265). The old
+ *  instance list ("how many people came by today") taught the classifier a
+ *  handful of verb-times-time combinations, and every combination outside it
+ *  misclassified: "summarize yesterday", "summarize last week", and
+ *  "summarize this month" all went to CHAT, one after another, because no
+ *  example looked like an imperative or mentioned a week. The time span is
+ *  the interpreter's job and never decides the category, and the prompt now
+ *  says exactly that; the template examples ("summarize <any period>") show
+ *  the shape of the rule rather than enumerate its instances. */
 const TRIAGE_PROMPT = [
-  'You are a classifier for a ZoneMinder security-camera app. Read the user message and reply with EXACTLY',
-  'one word, nothing else:',
+  'You classify one user message for a ZoneMinder security-camera app. Reply with EXACTLY one word.',
   '',
-  'ZONEMINDER - they are asking about cameras, monitors, events, detections, recordings, server health,',
-  '  or want to be taken to a screen in the app.',
-  'ACTION - they are asking to CHANGE something: arm or disarm a monitor, enable or disable a camera,',
+  'Decide by WHAT THE USER WANTS DONE and WHAT IT CONCERNS, whatever language the message is in:',
+  'classify its meaning, not its words. Asking what happened at their place or home means this',
+  'camera system. A time span in the message (today, last week, this month, an hour, any custom',
+  'range) NEVER changes the category.',
+  '',
+  'ZONEMINDER - any request to summarize, recap, count, list, look up, check, or view THIS system\'s',
+  '  cameras, monitors, events, detections, recordings, activity, or server health, or to be taken to a',
+  '  screen in the app. Questions and commands alike, in any language: "summarize <any period>",',
+  '  "what happened <any period>", "how many <thing> <any period>", "is the server ok",',
+  '  "show me <camera>".',
+  'ACTION - a request to CHANGE something here: arm or disarm a monitor, enable or disable a camera,',
   '  trigger or cancel an alarm, change the run state or a monitor function, delete or archive an event.',
-  'CHAT - anything else: greetings, thanks, small talk, questions about you, or any topic unrelated to',
-  '  this app.',
-  '',
-  'Examples:',
-  '"how many people came by today" -> ZONEMINDER',
-  '"is the server ok" -> ZONEMINDER',
-  '"show me the front camera" -> ZONEMINDER',
-  '"arm the backyard camera" -> ACTION',
-  '"delete that event" -> ACTION',
-  '"hello" -> CHAT',
-  '"thanks!" -> CHAT',
-  '"what is the capital of France" -> CHAT',
+  'CHAT - anything NOT about this system: greetings, thanks, small talk, questions about you, general',
+  '  knowledge, or summarizing something that is not this system\'s activity.',
   '',
   'Reply with one word: ZONEMINDER, ACTION, or CHAT.',
 ].join('\n');
@@ -63,6 +71,11 @@ export const TRIAGE_SCHEMA = {
  *  appears, not whether the reply is clean. ZONEMINDER wins ties: routing a
  *  real question to the chat path would answer it with no data at all, which
  *  is the worse failure. */
+/** The triage prompt, exported for the eval harness (scripts/prompt-eval.mts
+ *  triage stage) so the classifier is scored on exactly what production
+ *  sends. Not used elsewhere. */
+export const TRIAGE_PROMPT_FOR_EVAL = TRIAGE_PROMPT;
+
 export function parseRequestKind(reply: string): RequestKind {
   try {
     const kind = (JSON.parse(reply) as { kind?: unknown }).kind;
