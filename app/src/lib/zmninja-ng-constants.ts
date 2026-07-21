@@ -762,8 +762,8 @@ export const ASSISTANT = {
   // this app's system prompt, so the model would never see the tool contract.
   // Do not re-add without checking a newer web-llm first.
   // A short list, not a menu: a picker of six was six prompt-compatibility
-  // surfaces to keep working. Llama 3.2 is what the assistant is tuned
-  // against on every backend and stays the default (`defaultModelId`).
+  // surfaces to keep working. Qwen3 4B is the default (`defaultModelId`);
+  // Llama 3.2 3B stays as the smaller option and the retired-id target.
   //
   // These sizes because this list only ever serves desktop and web: the
   // assistant's on-device backend is not offered on phones or tablets at all,

@@ -2165,8 +2165,12 @@ property of the registry (``TOOLS`` holds no mutating tool and
    models). A dedicated interpreter call (``interpretWhen``,
    ``window-interpreter.ts``) then maps the phrase onto structured fields
    (``lastCount``+``lastUnit``, ``daysAgo``, ``weekday``, ``date``,
-   ``fromTime``/``toTime``) under a constrained schema, cached per phrase
-   and day; "letzte Woche" becomes ``lastCount: 1, lastUnit: "week"``.
+   ``fromDate``/``toDate`` calendar spans, ``fromTime``/``toTime``) under a
+   constrained schema, cached per phrase and day; "letzte Woche" becomes
+   ``lastCount: 1, lastUnit: "week"``, and "april" becomes an inclusive
+   ``fromDate``/``toDate`` month span (either side may stand alone, the end
+   is capped at now, and an impossible date like a non-leap February 29 is
+   a corrective error, since V8 would otherwise roll it into March).
    Finally ``resolveWindow`` (``event-range.ts``) does the arithmetic into
    concrete ZM datetime strings against the profile timezone. No app-side
    phrase grammar exists anywhere on this path; the middle job was given its
@@ -2190,6 +2194,20 @@ property of the registry (``TOOLS`` holds no mutating tool and
    path.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/api-capture.ts>`__
    · → :doc:`07-api-and-data-fetching`
+
+#. **The result does the arithmetic, the model does the reading.**
+   ``list_events`` output leads with a code-built ``summary`` sentence
+   (``buildResultSummary``, ``result-summary.ts``) the model is told to quote
+   as its first sentence. ``matchCount`` is the server's TRUE total from ZM
+   pagination, not the page: two capped results both used to say 25 and the
+   model compared the caps as totals, so the sentence now leads with the real
+   count ("142 events ... The 25 most recent are listed.") and the
+   per-monitor and per-object tallies say "(listed rows)" whenever rows were
+   capped. ``busiestHour``/``countsByHour`` are tallied app-side from the
+   listed rows and ride OUTSIDE the summary, so quoting the summary never
+   narrows the result cards to one hour unless the question asked for it.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/result-summary.ts>`__
+   · → :doc:`12-shared-services-and-components`
 
 #. **Grounding is checked by code, not by a judge model.** When a turn that
    fetched data answers, ``retryIsUnusable`` (``grounding.ts``) checks two
@@ -2218,7 +2236,14 @@ property of the registry (``TOOLS`` holds no mutating tool and
    and renders assistant text as Markdown, except the ``__i18n:`` sentinels
    (iteration cap, context cleared), which
    ``renderAssistantText`` localizes with ``t()`` instead of treating as
-   literal text.
+   literal text. Result cards under the answer are selected by the answer
+   itself: an answer about specific rows ends with one machine-readable
+   ``SHOW: events=<ids> monitors=<ids>`` line, which
+   ``extractShowDirective`` (``display.ts``) strips before display and
+   ``filterDisplayByShow`` uses to pick which cards render; ids no tool
+   produced select nothing, and an answer with no directive shows every
+   card. Monitor cards render live previews (``LiveMonitorPlayer``), capped
+   at ``ASSISTANT.maxLiveMonitorCards``.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/assistant/AskPanel.tsx#L180>`__
    · → :doc:`05-component-architecture`
 

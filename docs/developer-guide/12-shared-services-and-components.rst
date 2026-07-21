@@ -1175,8 +1175,7 @@ so Llama 3.2's native 128K would need gigabytes by itself. Each value is
 therefore ``min(the model's native window, ASSISTANT.contextWindowCap)``, which
 is why the Llama 3.2 3B entry sits at the cap rather than its native 128K. A
 model id absent from the list gets no override at all rather than a guessed
-window. The list holds one model now (see below), so the per-model shape is
-about the next entry rather than about choosing between current ones.
+window.
 
 ``chatOptsFor`` always sends ``sliding_window_size: -1`` alongside the window,
 and that pairing is load-bearing. web-llm throws
@@ -1198,13 +1197,19 @@ corrupted output (empty at 16384, token soup at 8192). Its native 512-token
 window is the only untried mode and is smaller than this app's system prompt, so
 the model would never see the tool contract.
 
-``webllmModels`` lists exactly one model. The picker used to offer six, and the
-six differed in the one behaviour that matters: whether the model calls a tool
-at all rather than answering from nothing. Llama 3.2 is what the assistant is
-tuned against on every backend, so the WebGPU path pins
-``Llama-3.2-3B-Instruct-q4f16_1-MLC``. This list only ever serves desktop and
-web: the on-device backend is not offered on phones or tablets at all. ``ASSISTANT.retiredModelIds`` maps every id the list
-used to carry onto that model, and ``SETTINGS_VERSION`` moves with it so the
+``webllmModels`` lists two models: ``Llama-3.2-3B-Instruct-q4f16_1-MLC`` and
+``Qwen3-4B-q4f16_1-MLC``, with Qwen3 4B as ``ASSISTANT.defaultModelId`` for
+fresh installs after it beat the llama class across the eval suite. The picker
+used to offer six, and the six differed in the one behaviour that matters:
+whether the model calls a tool at all rather than answering from nothing; the
+short list keeps every entry measured against the same question suite. Qwen3
+is a reasoning model, so ``WebLlmProvider`` sends web-llm's
+``extra_body: { enable_thinking: false }`` for Qwen3 model ids: the engine
+pre-closes an empty think block so the model cannot reason, unlike the
+``/no_think`` text directive, which only hides the tag. This list only ever
+serves desktop and web: the on-device backend is not offered on phones or
+tablets at all. ``ASSISTANT.retiredModelIds`` maps every id the list used to
+carry onto Llama 3.2 3B, and ``SETTINGS_VERSION`` moves with it so the
 rewrite reaches installs already persisted at the previous version.
 
 **Used by:** ``components/assistant/AskPanel.tsx`` (drives one turn per

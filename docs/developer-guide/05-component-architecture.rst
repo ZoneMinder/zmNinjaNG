@@ -1292,9 +1292,8 @@ for it.
 the per-profile thread in ``useAssistantStore``, builds a system prompt from
 the current profile's monitor list and ZM version (``buildSystemPrompt``),
 and calls ``runAssistantTurn`` with an ``AbortController`` it owns. That same
-controller's ``signal`` is what an abort or an unmount cancels, and unmounting
-also resolves any pending confirmation as declined so the agent loop never
-hangs waiting on a panel that is gone.
+controller's ``signal`` is what an abort or an unmount cancels, so the agent
+loop never keeps generating for a panel that is gone.
 
 **Rendering the model's answer.** ``agent.ts`` never renders user-facing text
 itself; the only text it emits outside a normal reply is the sentinel
@@ -1317,16 +1316,16 @@ no translation lookup for a normal reply, only for this one fixed sentinel
 (rule 5's "never hardcode user-facing strings" still holds, it just applies
 to the sentinel's key, not to arbitrary model output).
 
-**Confirming a destructive tool.** ``useAssistantHost``
+**The host has no confirm flow.** ``useAssistantHost``
 (``components/assistant/useAssistantHost.ts``) is the ``AssistantHost``
-implementation ``AskPanel`` hands to ``runAssistantTurn``: its ``confirm``
-parks the ``ConfirmRequest`` in local state and returns a Promise that only
-``resolveConfirm`` can settle. ``AskPanel`` renders ``AssistantConfirmCard``
-whenever that state is non-null, and wires its Accept/Cancel buttons straight
-to ``resolveConfirm(true)`` / ``resolveConfirm(false)``. ``navigate`` on the
-same host closes the palette (``setOpen(false)``) before routing, so a
-``navigate`` tool call collapses the panel as a side effect instead of
-leaving a chat window open behind the page it just navigated to.
+implementation ``AskPanel`` hands to ``runAssistantTurn``. The assistant is
+read-only: there are no destructive tools, so the confirmation flow an
+earlier revision carried (``confirm``/``resolveConfirm`` and a confirm card)
+no longer exists; a request to change something gets a plain refusal that
+points at the right screen instead. ``navigate`` on the host closes the
+palette (``setOpen(false)``) before routing, so a ``navigate`` tool call
+collapses the panel as a side effect instead of leaving a chat window open
+behind the page it just navigated to.
 
 **Used by:** ``CommandPalette.tsx`` (the only mount point). ``useAssistantStore``
 holds the per-profile conversation thread and is not persisted, closing the
