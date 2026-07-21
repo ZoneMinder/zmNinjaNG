@@ -489,16 +489,22 @@ describe('sampling temperature', () => {
     });
   });
 
-  it('raises the temperature on a retry so the sampler can escape a bad reply', async () => {
-    // At temperature 0 a retry returns the identical unparseable text, which
-    // would spend every attempt for nothing.
+  it('self-repairs on a retry, and only raises the temperature on the last attempt', async () => {
+    // The retry is not a blind re-roll: the failed reply plus a correction are
+    // appended, so a greedy retry already generates from a different prompt.
+    // Only the final attempt raises the temperature, for a model stuck on the
+    // same broken shape regardless of the correction.
     httpPostMock.mockResolvedValue({ data: { choices: [{ message: {} }] } });
     const p = new OpenAiProvider({ baseUrl: 'http://zm:11434/v1', model: 'llama3.2' });
     await p.chat([{ role: 'user', text: 'summarize today' }], [], 'sys', new AbortController().signal);
-    expect(httpPostMock.mock.calls.length).toBeGreaterThan(1);
-    expect(httpPostMock.mock.calls[1][1]).toMatchObject({
-      temperature: ASSISTANT.assistantRetryTemperature,
-    });
+    expect(httpPostMock.mock.calls.length).toBe(ASSISTANT.maxParseAttempts);
+
+    const secondAttempt = httpPostMock.mock.calls[1][1] as { temperature: number; messages: Array<{ role: string; content: string }> };
+    expect(secondAttempt.temperature).toBe(ASSISTANT.assistantTemperature);
+    expect(secondAttempt.messages.at(-1)?.content).toContain('empty or unusable');
+
+    const lastAttempt = httpPostMock.mock.calls[ASSISTANT.maxParseAttempts - 1][1] as { temperature: number };
+    expect(lastAttempt.temperature).toBe(ASSISTANT.assistantRetryTemperature);
     expect(ASSISTANT.assistantRetryTemperature).toBeGreaterThan(ASSISTANT.assistantTemperature);
   });
 });

@@ -76,6 +76,12 @@ const OUTPUT_CONTRACT = [
   'To answer the user: {"answer": "<your reply>"}',
 ].join('\n');
 
+/** Appended (with the failed reply) before a parse retry, so the retry knows
+ *  what it did wrong instead of being re-rolled blind. At temperature 0 a
+ *  blind retry returns the identical broken text; naming the fault changes
+ *  the prompt, which is what actually moves a greedy sampler. */
+const SELF_REPAIR_PROMPT = `Your last reply was not one valid JSON object, so it could not be used. Send it again, corrected.\n${OUTPUT_CONTRACT}`;
+
 /** The tool catalog for the system message. Format rules live in
  *  `OUTPUT_CONTRACT`, appended at the generation point instead. */
 function buildToolCatalog(tools: ToolDefinition[]): string {
@@ -529,11 +535,13 @@ export class WebLlmProvider implements AssistantProvider {
 
     // Retry a degenerate/unparseable reply rather than apologizing on the first
     // one: small models sometimes emit an empty code fence or non-JSON. The
-    // first attempt is greedy (temperature 0) because that measured best for
-    // answer accuracy, so the retry has to raise the temperature itself: at 0
-    // the sampler would return the identical unparseable text and the attempts
-    // would be spent for nothing. The last attempt's turn (with its `raw`
-    // content) is what surfaces if none parse (refs #246).
+    // retry is a SELF-REPAIR, not a blind re-roll: the failed reply plus a
+    // correction naming the fault are appended, so even the greedy first
+    // temperature (0, measured best for accuracy) produces a different
+    // generation. The final attempt also raises the temperature, in case the
+    // model is stuck on the same broken shape regardless of the correction.
+    // The last attempt's turn (with its `raw` content) is what surfaces if
+    // none parse (refs #246).
     let turn: AssistantTurn = { text: PARSE_ERROR_TEXT, toolCalls: [] };
     for (let attempt = 1; attempt <= ASSISTANT.maxParseAttempts; attempt++) {
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
@@ -550,7 +558,7 @@ export class WebLlmProvider implements AssistantProvider {
         // Raises whatever was configured rather than replacing it, so a user
         // who chose a higher temperature does not get a LOWER one on retry.
         temperature:
-          attempt === 1
+          attempt < ASSISTANT.maxParseAttempts
             ? this.temperature
             : Math.max(this.temperature, ASSISTANT.assistantRetryTemperature),
       });
@@ -592,6 +600,11 @@ export class WebLlmProvider implements AssistantProvider {
         attempt,
         maxAttempts: ASSISTANT.maxParseAttempts,
       });
+      // The self-repair context the next attempt sees: what came back, and why
+      // it was unusable. Accumulates across attempts on purpose, so the model
+      // never loses sight of a shape it already tried and failed with.
+      chatMessages.push({ role: 'assistant', content });
+      chatMessages.push({ role: 'user', content: SELF_REPAIR_PROMPT });
     }
     return turn;
   }

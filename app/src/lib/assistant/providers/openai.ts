@@ -37,6 +37,13 @@ const PORTABLE_TOOL_FALLBACK =
   'If you cannot emit a native tool call, respond with exactly one JSON object: ' +
   '{"tool":"<tool name>","input":{...}} or {"answer":"<text>"}.';
 
+/** Appended (with the failed reply) before a parse retry, so the retry knows
+ *  what went wrong instead of being re-rolled blind; see webllm.ts's
+ *  SELF_REPAIR_PROMPT for why a blind retry at temperature 0 is wasted. */
+const SELF_REPAIR_PROMPT =
+  'Your last reply was empty or unusable. Reply again: answer the user in plain text, ' +
+  'or call one of the provided tools.';
+
 export interface OpenAiProviderConfig {
   /** e.g. `http://localhost:11434/v1` (no trailing `/chat/completions`). */
   baseUrl: string;
@@ -427,9 +434,10 @@ export class OpenAiProvider implements AssistantProvider {
     // `tools`/`tool_choice` omitted entirely when there are none, rather than
     // sent empty with `tool_choice: 'auto'`, which invites a server to look for
     // a tool that is not there.
+    const chatMessages = buildOpenAiMessages(system, messages, tools.length > 0);
     const body = {
       model,
-      messages: buildOpenAiMessages(system, messages, tools.length > 0),
+      messages: chatMessages,
       ...(tools.length > 0 ? { tools: toOpenAiTools(tools), tool_choice: 'auto' } : {}),
       stream: false,
       max_tokens: ASSISTANT.ollamaMaxTokens,
@@ -439,30 +447,32 @@ export class OpenAiProvider implements AssistantProvider {
     // Retried like the on-device path, not single-shot. A degenerate reply
     // (empty content, prose that is neither a native tool call nor the portable
     // JSON) used to surface the apology to the user directly here, while the
-    // WebLLM path quietly re-rolled and recovered. The first attempt is greedy
-    // (temperature 0) because that measured best for answer accuracy, so the
-    // retry raises the temperature itself: at 0 the server would return the
-    // identical unparseable reply and the attempts would be spent for nothing.
-    // The cost is one more network round trip on a reply that was going to be
-    // discarded anyway.
+    // WebLLM path quietly re-rolled and recovered. The retry is a self-repair:
+    // the failed reply and a correction naming the fault are appended, so even
+    // the greedy first temperature (0, measured best for accuracy) produces a
+    // different generation. The final attempt also raises the temperature, in
+    // case the model is stuck regardless of the correction. The cost is one
+    // more network round trip on a reply that was going to be discarded anyway.
     let turn: AssistantTurn = { text: PARSE_ERROR_TEXT, toolCalls: [] };
     for (let attempt = 1; attempt <= ASSISTANT.maxParseAttempts; attempt++) {
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
       log.assistant('Sending Ollama chat completion request', LogLevel.DEBUG, {
         baseUrl,
         model,
-        messageCount: body.messages.length,
+        messageCount: chatMessages.length,
         attempt,
       });
 
-      // Rebuilt per attempt: only the temperature changes (see above).
+      // Rebuilt per attempt: the self-repair context grows and the temperature
+      // may change; everything else is the same body.
       const attemptBody = {
         ...body,
+        messages: [...chatMessages],
         // The retry must be able to move even when the first attempt is greedy,
         // so it raises whatever temperature was configured rather than
         // replacing it.
         temperature:
-          attempt === 1
+          attempt < ASSISTANT.maxParseAttempts
             ? this.temperature
             : Math.max(this.temperature, ASSISTANT.assistantRetryTemperature),
       };
@@ -515,6 +525,10 @@ export class OpenAiProvider implements AssistantProvider {
         maxAttempts: ASSISTANT.maxParseAttempts,
         response: response.data,
       });
+      // The self-repair context the next attempt sees: what came back, and why
+      // it was unusable. Accumulates across attempts on purpose.
+      chatMessages.push({ role: 'assistant', content: message?.content ?? '' });
+      chatMessages.push({ role: 'user', content: SELF_REPAIR_PROMPT });
     }
     return turn;
   }

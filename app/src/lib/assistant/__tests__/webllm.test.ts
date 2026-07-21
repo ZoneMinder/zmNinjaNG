@@ -499,6 +499,14 @@ describe('WebLlmProvider.chat', () => {
 
     expect(turn.text).toBe('Two people came.');
     expect(create).toHaveBeenCalledTimes(2);
+
+    // The retry is a self-repair, not a blind re-roll: the failed reply plus a
+    // correction restating the contract are appended, and the greedy
+    // temperature is kept (only the FINAL attempt raises it).
+    const retryCall = create.mock.calls[1][0] as { temperature: number; messages: Array<{ role: string; content: string }> };
+    expect(retryCall.messages.at(-2)).toMatchObject({ role: 'assistant', content: '```' });
+    expect(retryCall.messages.at(-1)?.content).toContain('not one valid JSON object');
+    expect(retryCall.temperature).toBe(ASSISTANT.assistantTemperature);
   });
 
   it('gives up with the parse-error apology, carrying raw, after every attempt degenerates', async () => {
