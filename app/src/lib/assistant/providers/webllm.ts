@@ -17,11 +17,12 @@
  * engine rejects it at runtime the adapter falls back to prompt + parser for
  * the rest of the session (see `grammarUsable`) instead of failing turns.
  *
- * The default model, Qwen3-1.7B, is a reasoning model that emits a
- * `<think>...</think>` chain-of-thought block before its final answer;
- * `parseWebLlmTurn` strips that block before extracting JSON so the model's
- * scratch-work (which may itself contain brace-y text) is never mistaken for
- * the real reply.
+ * The default model, Qwen3 4B, is a reasoning model. `createCompletion`
+ * disables that for real via `extra_body: { enable_thinking: false }` (the
+ * engine pre-closes an empty think block), and `parseWebLlmTurn` still
+ * strips any `<think>...</think>` block before extracting JSON so model
+ * scratch-work (which may itself contain brace-y text) is never mistaken
+ * for the real reply.
  *
  * `buildWebLlmMessages` and `parseWebLlmTurn` are pure and exported so they
  * unit-test without WebGPU; only `WebLlmProvider.chat` touches the engine.
