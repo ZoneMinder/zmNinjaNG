@@ -429,13 +429,13 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
     const results: ToolResult[] = [];
     for (const call of turn.toolCalls) {
       if (signal.aborted) return produced;
-      const def = getToolByName(call.name);
-      // Resolved in the registry, but also checked against THIS turn's tool
-      // list: a turn given no tools (triage classified it as chat or as an
-      // unsupported action) must treat an invented call as unavailable rather
-      // than running it.
-      const available = def !== undefined && tools.some((t) => t.name === call.name);
-      if (!available) {
+      // THIS turn's tool list is the execution authority, not the registry:
+      // a turn given no tools (triage classified it as chat or an unsupported
+      // action) must treat an invented call as unavailable, and a caller that
+      // passes its own definitions (tests, fixtures) must have exactly those
+      // run. The registry is consulted only to phrase the refusal (refs #259).
+      const def = tools.find((t) => t.name === call.name);
+      if (!def) {
         // A withheld action is not the same as a typo: told "unknown tool", a
         // model retries variations of the name. Told why, it explains to the
         // user instead.
@@ -443,7 +443,7 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
           callId: call.id,
           output: isWithheldToolName(call.name)
             ? WITHHELD_TOOL_REFUSAL
-            : def
+            : getToolByName(call.name)
               ? 'No tools are available for this request. Answer the user directly, in plain text.'
               : `Unknown tool: ${call.name}`,
           isError: true,
