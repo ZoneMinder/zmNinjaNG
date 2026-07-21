@@ -178,6 +178,24 @@ function formatTimestamp(value: string | undefined | null, ctx: ToolContext): st
   return formatAppDateTime(parsed, ctx.dateTimeFormat);
 }
 
+/** Raw ZM wall-clock starts tallied into absolute-hour buckets
+ *  (`YYYY-MM-DD HH:00:00` keys). Shared by the summary's busiest-hour clause
+ *  and the card-narrowing below it (refs #264). */
+function hourBuckets(rawStarts: readonly string[]): Record<string, number> {
+  return rawStarts.reduce<Record<string, number>>((acc, raw) => {
+    const key = `${raw.slice(0, 13)}:00:00`;
+    acc[key] = (acc[key] ?? 0) + 1;
+    return acc;
+  }, {});
+}
+
+/** Whether the question asks for a busiest/peak hour. English heuristic with
+ *  the same standing as objectQuestionMismatch: it narrows presentation only,
+ *  and a miss just shows every card. */
+function asksBusiestHour(question: string | undefined): boolean {
+  return /\b(?:busiest|peak|most active)\b[^.?!]*\bhour\b/i.test(question ?? '');
+}
+
 /** Clamps a model-supplied limit into [1, ASSISTANT.maxListEventsLimit].
  *  Non-numeric or negative input (NaN, -5, "banana") falls back to the max
  *  instead of producing a NaN/negative EventFilters.limit. */
@@ -455,12 +473,9 @@ const listEventsTool: ToolDefinition = {
         // badly, so the tally is computed here and the winning hour handed
         // over as a finished clause (refs #264). Buckets are absolute hours
         // (date + hour) in ZM wall clock, labelled in the profile's format.
-        const hourCounts = rawStarts.slice(0, rowsToShow.length).reduce<Record<string, number>>((acc, raw) => {
-          const key = `${raw.slice(0, 13)}:00:00`;
-          acc[key] = (acc[key] ?? 0) + 1;
-          return acc;
-        }, {});
-        const hourEntries = Object.entries(hourCounts).sort((a, b) => b[1] - a[1]);
+        const hourEntries = Object.entries(hourBuckets(rawStarts.slice(0, rowsToShow.length))).sort(
+          (a, b) => b[1] - a[1],
+        );
         const busiestHour =
           rowsToShow.length > 1 && hourEntries.length > 0
             ? { label: String(formatTimestamp(hourEntries[0][0], ctx)), count: hourEntries[0][1] }
@@ -505,9 +520,20 @@ const listEventsTool: ToolDefinition = {
         output = buildOutput(shown);
       }
 
-      // Cards mirror EXACTLY the rows the model was given. Building them from
-      // the full set is what let the UI contradict the answer.
-      const display = res.events.slice(0, shown.length).map(({ Event: e }) =>
+      // Cards mirror the rows the model was given, with one narrowing: a
+      // busiest-hour question is about ONE hour, and a full-day card wall
+      // under an answer naming nine events read as a contradiction
+      // (refs #264). The model still sees every row (it needs the whole day
+      // to rank hours); only the presentation narrows, and only when the
+      // question asked for a busiest hour and one exists.
+      const shownEvents = res.events.slice(0, shown.length);
+      let displayEvents = shownEvents;
+      if (asksBusiestHour(ctx.question) && shown.length > 1) {
+        const top = Object.entries(hourBuckets(rawStarts.slice(0, shown.length))).sort((a, b) => b[1] - a[1])[0]?.[0];
+        const inTopHour = shownEvents.filter(({ Event: e }) => `${e.StartDateTime.slice(0, 13)}:00:00` === top);
+        if (inTopHour.length > 0) displayEvents = inTopHour;
+      }
+      const display = displayEvents.map(({ Event: e }) =>
         buildEventDisplayEntity(e, nameById.get(e.MonitorId) ?? e.MonitorId, monitors, ctx),
       );
       return { output, display };

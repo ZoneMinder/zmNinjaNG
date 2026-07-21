@@ -882,6 +882,30 @@ describe('list_events when resolution (refs #246)', () => {
     expect(getEvents).toHaveBeenCalledWith(expect.objectContaining({ startDateTime: '2026-07-15 00:00:00' }));
   });
 
+  // A busiest-hour answer is about ONE hour; cards for the whole day under it
+  // read as a contradiction. The model still receives every row (refs #264).
+  it('narrows result cards to the busiest hour when that is what was asked', async () => {
+    vi.mocked(getEvents).mockResolvedValueOnce({
+      events: [
+        { Event: { Id: '1', MonitorId: '1', StartDateTime: '2026-07-15 08:10:00', Length: '30', Notes: 'detected:person' } },
+        { Event: { Id: '2', MonitorId: '1', StartDateTime: '2026-07-15 08:40:00', Length: '30', Notes: 'detected:person' } },
+        { Event: { Id: '3', MonitorId: '2', StartDateTime: '2026-07-15 11:20:00', Length: '30', Notes: 'detected:car' } },
+      ],
+      pagination: { page: 1, pageCount: 1, current: 1, count: 3, prevPage: false, nextPage: false, limit: 25, totalCount: 3 },
+    } as never);
+
+    const tool = getToolByName('list_events')!;
+    const r = await tool.execute(
+      { when: 'yesterday' },
+      { ...ctx(), timezone: 'America/New_York', question: 'what was my busiest hour yesterday' },
+    );
+
+    // Model output keeps all three rows; cards narrow to the 08:00 hour's two.
+    expect(JSON.parse(r.output).events).toHaveLength(3);
+    expect(r.display).toHaveLength(2);
+    expect(r.display?.map((d) => d.id)).toEqual(['1', '2']);
+  });
+
   // "Busiest hour" is timestamp arithmetic, so the tool computes the tally
   // and hands the winner over as a finished clause (refs #264).
   it('reports the busiest hour and per-hour counts from the shown rows', async () => {
