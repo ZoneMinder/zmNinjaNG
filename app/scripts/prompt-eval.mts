@@ -77,9 +77,14 @@ interface ToolCase {
 }
 
 const TOOL_CASES: ToolCase[] = [
-  { q: 'summarize today', tool: 'list_events', args: (a) => a.when === 'today' && a.objectType === undefined },
-  { q: 'what happened yesterday', tool: 'list_events', args: (a) => a.when === 'yesterday' && a.objectType === undefined },
-  { q: 'how many people came today', tool: 'list_events', args: (a) => a.when === 'today' && String(a.objectType).includes('person') },
+  { q: 'summarize today', tool: 'list_events', args: (a) => String(a.when).toLowerCase().includes('today') && a.objectType === undefined },
+  { q: 'what happened yesterday', tool: 'list_events', args: (a) => String(a.when).toLowerCase().includes('yesterday') && a.objectType === undefined },
+  // The phrasings the old English phrase grammar could not read (refs #265):
+  // the model interprets them into structured fields, in any language.
+  { q: 'summarize last week', tool: 'list_events', args: (a) => String(a.when).toLowerCase().includes('last week') },
+  { q: 'what happened in the past 2 weeks', tool: 'list_events', args: (a) => /past 2 weeks|2 weeks/.test(String(a.when).toLowerCase()) },
+  { q: 'was war gestern bei mir los', tool: 'list_events', args: (a) => String(a.when).toLowerCase().includes('gestern') },
+  { q: 'how many people came today', tool: 'list_events', args: (a) => String(a.when).toLowerCase().includes('today') && String(a.objectType).includes('person') },
   // Triage answers these with NO tools in production (see triage.ts), so the
   // prompt is not what decides them. Kept visible, scored separately.
   {
@@ -87,15 +92,15 @@ const TOOL_CASES: ToolCase[] = [
     tool: 'list_events',
     args: (a) => {
       const t = (a.objectType ?? []) as string[];
-      return a.when === 'yesterday' && t.includes('car') && t.includes('truck');
+      return String(a.when).toLowerCase().includes('yesterday') && t.includes('car') && t.includes('truck');
     },
   },
   // count_events measures ONE rolling window and cannot rank hours; the
   // list_events result carries the app-computed busiest-hour clause (refs #264).
-  { q: 'what was my busiest hour yesterday', tool: 'list_events', args: (a) => a.when === 'yesterday' },
+  { q: 'what was my busiest hour yesterday', tool: 'list_events', args: (a) => String(a.when).toLowerCase().includes('yesterday') },
   { q: 'is the server ok', tool: 'get_server_health' },
   { q: 'what cameras do I have', tool: 'list_monitors' },
-  { q: 'how many events in the last 24 hours', tool: 'count_events', args: (a) => /day|24/.test(String(a.interval)) },
+  { q: 'how many events in the last 24 hours', tool: 'count_events', args: (a) => (a.lastUnit === 'hour' && a.lastCount === 24) || (a.lastUnit === 'day' && a.lastCount === 1) },
   { q: 'what tags are available', tool: 'list_tags' },
   { q: 'hello', tool: null, triaged: true },
   { q: 'what is the capital of France', tool: null, triaged: true },
@@ -297,6 +302,11 @@ async function scoreTools(system: string, runs: number) {
         // argument is llama3.2's known habit and coerceLabelList handles it.
         args = stripOmittedArgs(args);
         if (args.objectType !== undefined) args.objectType = coerceLabelList(args.objectType);
+        // Same repair the executor applies (refs #265): numeric window fields
+        // arrive as strings from llama3.2 and Number() them before use.
+        for (const key of ['lastCount', 'daysAgo']) {
+          if (typeof args[key] === 'string' && args[key] !== '' && !Number.isNaN(Number(args[key]))) args[key] = Number(args[key]);
+        }
         if (c.args && !c.args(args)) {
           failures.push(`[tool] "${c.q}" args ${JSON.stringify(args)}`);
           continue;
@@ -328,7 +338,7 @@ async function scoreAnswers(system: string, runs: number) {
               role: 'assistant',
               content: '',
               tool_calls: [
-                { id: 'c1', type: 'function', function: { name: 'list_events', arguments: '{"when":"today"}' } },
+                { id: 'c1', type: 'function', function: { name: 'list_events', arguments: '{"daysAgo":0}' } },
               ],
             },
             { role: 'tool', tool_call_id: 'c1', content: c.result },
@@ -429,9 +439,81 @@ async function scoreWebLlmContract(runs: number) {
   return { pass, total, failures };
 }
 
+
+/** Interpreter cases (refs #265): phrase in, structured fields out, measured
+ *  against the live model under the same constrained schema production uses.
+ *  The variants here are exactly what the deleted phrase grammar could not
+ *  read and what the direct-DSL contract got wrong. */
+const INTERPRET_CASES: Array<{ phrase: string; ok: (f: Record<string, unknown>) => boolean }> = [
+  { phrase: 'today', ok: (f) => f.daysAgo === 0 },
+  { phrase: 'yesterday', ok: (f) => f.daysAgo === 1 },
+  { phrase: '2 days ago', ok: (f) => f.daysAgo === 2 },
+  { phrase: 'last week', ok: (f) => (f.lastUnit === 'week' && f.lastCount === 1) || (f.lastUnit === 'day' && f.lastCount === 7) },
+  { phrase: 'past 2 weeks', ok: (f) => (f.lastUnit === 'week' && f.lastCount === 2) || (f.lastUnit === 'day' && f.lastCount === 14) },
+  { phrase: 'previous month', ok: (f) => (f.lastUnit === 'month' && f.lastCount === 1) || (f.lastUnit === 'day' && f.lastCount === 30) },
+  { phrase: 'last 3 hours', ok: (f) => f.lastUnit === 'hour' && f.lastCount === 3 },
+  { phrase: 'on sunday', ok: (f) => f.weekday === 'sunday' },
+  { phrase: 'yesterday from 4pm to 10pm', ok: (f) => f.daysAgo === 1 && f.fromTime === '16:00' && f.toTime === '22:00' },
+  { phrase: 'letzte Woche', ok: (f) => (f.lastUnit === 'week' && f.lastCount === 1) || (f.lastUnit === 'day' && f.lastCount === 7) },
+  { phrase: 'ayer', ok: (f) => f.daysAgo === 1 },
+  { phrase: 'hier soir', ok: (f) => f.daysAgo === 1 },
+];
+
+async function scoreInterpreter(runs: number) {
+  const { WINDOW_SCHEMA } = await import('../src/lib/assistant/window-interpreter');
+  const { format } = await import('date-fns');
+  const today = format(new Date(), 'EEEE, yyyy-MM-dd');
+  const system = [
+    'You convert a human time phrase into a JSON time window. Reply with ONLY one JSON object.',
+    `Today is ${today} (timezone America/New_York).`,
+    'Fields (use the fewest that express the phrase):',
+    '- lastCount + lastUnit: a rolling span ending now. "past 2 weeks" -> {"lastCount":2,"lastUnit":"week"}.',
+    '- daysAgo: one calendar day. "today" -> {"daysAgo":0}. "yesterday" -> {"daysAgo":1}.',
+    '- weekday: the most recent such day. "on sunday" -> {"weekday":"sunday"}.',
+    '- date: an explicit calendar date. "July 15" -> {"date":"2026-07-15"} (use the year that makes it most recent, never future).',
+    '- fromTime/toTime: 24h "HH:MM", narrowing a single day. "yesterday from 4pm to 10pm" -> {"daysAgo":1,"fromTime":"16:00","toTime":"22:00"}.',
+    '- none: true when the phrase asks for no time limit. "all time" -> {"none":true}.',
+    'The phrase may be in any language: "letzte Woche" -> {"lastCount":1,"lastUnit":"week"}; "ayer" -> {"daysAgo":1}.',
+    'A calendar day word is never a rolling span: "today" is daysAgo 0, NOT lastCount 1 day.',
+  ].join('\n');
+  let pass = 0;
+  let total = 0;
+  const failures: string[] = [];
+  for (const c of INTERPRET_CASES) {
+    for (let i = 0; i < runs; i++) {
+      total++;
+      try {
+        const r = await chat({
+          model: MODEL,
+          messages: [{ role: 'system', content: system }, { role: 'user', content: c.phrase }],
+          stream: false,
+          max_tokens: 300,
+          ...(TEMP === undefined ? {} : { temperature: TEMP }),
+          ...REASONING,
+          response_format: { type: 'json_schema', json_schema: { name: 'window', schema: WINDOW_SCHEMA, strict: true } },
+        });
+        const text = r.choices?.[0]?.message?.content ?? '';
+        const fields = JSON.parse(/\{[\s\S]*\}/.exec(text)?.[0] ?? '{}');
+        if (c.ok(fields)) pass++;
+        else failures.push(`[interpret] "${c.phrase}" -> ${JSON.stringify(fields)}`);
+      } catch (e) {
+        failures.push(`[interpret] "${c.phrase}" error: ${(e as Error).message}`);
+      }
+    }
+  }
+  return { pass, total, failures };
+}
+
 const variant = process.argv[2] ?? 'baseline';
 const runs = Number(process.argv[3] ?? 2);
 const started = Date.now();
+if (variant === 'interpret') {
+  const w = await scoreInterpreter(runs);
+  console.log(`\n=== interpreter via ${MODEL}, temp ${TEMP ?? 'default'} ===`);
+  console.log(`interpret: ${w.pass}/${w.total}`);
+  for (const f of w.failures) console.log(`  ${f}`);
+  process.exit(0);
+}
 if (variant === 'webllm') {
   const w = await scoreWebLlmContract(runs);
   console.log(`\n=== webllm contract via ${MODEL}, temp ${TEMP ?? 'default'} (PROXY: no WebGPU here) ===`);

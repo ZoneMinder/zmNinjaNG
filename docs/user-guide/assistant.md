@@ -125,7 +125,7 @@ While the model is loading, the chat says so instead of showing the usual "Think
 
 ## Language
 
-Ask the assistant in English. This is not only about the model's own ability: the rules that decide exactly which lookup a question needs, and the reading of time phrases like "yesterday from 4pm to 10pm", both understand English only. In another language the app can still nudge the model once to check your cameras before answering, but it cannot verify the details the way it does in English, so a question is more likely to be misunderstood. This holds on every backend, including a server-backed model through Ollama. The app's own screens stay translated as usual; a note appears above the conversation when the app language is not English.
+The assistant now understands questions in other languages: the model itself interprets your time words ("letzte Woche", "ayer por la tarde") into the exact window it looks up, and tool routing no longer depends on English keywords. English remains the best-tested path, and a few answer-accuracy safeguards (such as catching an answer that contradicts the data) only recognize English replies, so a note above the conversation says as much when the app language is not English. Replies come back in the app's language either way.
 
 ## Privacy
 
