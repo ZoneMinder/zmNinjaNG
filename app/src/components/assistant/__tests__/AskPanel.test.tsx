@@ -62,6 +62,12 @@ vi.mock('../../../lib/assistant/tools', () => ({
   getToolByName: (name: string) => ({ name, description: `${name} description` }),
 }));
 vi.mock('../../../api/auth', () => ({ getVersion: vi.fn() }));
+// Monitor result cards resolve their live preview through the shared monitors
+// query; neither the query nor a real stream belongs in this test (refs #264).
+vi.mock('../../../hooks/useMonitors', () => ({ useMonitors: () => ({ monitors: [] }) }));
+vi.mock('../../monitors/LiveMonitorPlayer', () => ({
+  LiveMonitorPlayer: () => <div data-testid="assistant-live-player-stub" />,
+}));
 // Rendering the real EventThumbnail would need <img> load/error events jsdom
 // never fires; a stub keeps this test focused on the card, not the thumbnail
 // component (which has its own tests in EventThumbnail.test.tsx).

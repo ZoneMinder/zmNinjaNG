@@ -707,6 +707,11 @@ export const ASSISTANT = {
   // vocabulary (person, car, dog, truck, ...) without pasting a long tail of
   // rare labels into a context window this assistant is already tight on.
   objectLabelHintLimit: 12,
+  // Monitor result cards render a LIVE preview (refs #264), and each one is
+  // a real stream with real bandwidth and server cost. Above this many
+  // monitor cards in one answer, cards fall back to text: "show me the
+  // garage" wants a stream, "list my 12 cameras" wants a list.
+  maxLiveMonitorCards: 4,
   requestTimeoutMs: 120000,
   // A "Test connection" click only needs to know the server answers, not run a
   // full chat turn: `requestTimeoutMs` (120s) covers the WORST case (a slow
