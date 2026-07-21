@@ -32,6 +32,15 @@ describe('parseRequestKind', () => {
   it('prefers zoneminder when more than one keyword appears', () => {
     expect(parseRequestKind('not CHAT, this is ZONEMINDER')).toBe('zoneminder');
   });
+
+  // A schema-constrained backend replies with exactly this shape (see
+  // TRIAGE_SCHEMA); it is read before the loose substring match, so a stray
+  // keyword inside a longer JSON string cannot outvote the verdict field.
+  it('reads the constrained {"kind":...} verdict first', () => {
+    expect(parseRequestKind('{"kind":"CHAT"}')).toBe('chat');
+    expect(parseRequestKind('{"kind":"ACTION"}')).toBe('action');
+    expect(parseRequestKind('{"kind":"ZONEMINDER"}')).toBe('zoneminder');
+  });
 });
 
 describe('classifyRequest', () => {
@@ -42,9 +51,12 @@ describe('classifyRequest', () => {
     const provider = providerSaying('CHAT');
     await classifyRequest(provider, 'hello', new AbortController().signal);
 
-    const [system, text] = vi.mocked(provider.complete).mock.calls[0];
+    const [system, text, , schema] = vi.mocked(provider.complete).mock.calls[0];
     expect(system).toContain('ZONEMINDER');
     expect(text).toBe('hello');
+    // The verdict schema rides along so a backend that can constrain
+    // generation returns exactly {"kind":"..."} instead of prose.
+    expect(schema).toMatchObject({ properties: { kind: { enum: ['ZONEMINDER', 'ACTION', 'CHAT'] } } });
   });
 
   // A triage outage must degrade to the previous behaviour (everything reaches

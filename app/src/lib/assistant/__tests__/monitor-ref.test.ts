@@ -63,4 +63,12 @@ describe('resolveMonitorRef', () => {
   it('errors on an empty ref', () => {
     expect(resolveMonitorRef('   ', monitors)).toHaveProperty('error');
   });
+
+  // ASCII-only normalization turned every non-Latin name into '', so two such
+  // monitors collided as false "duplicates" and any non-ASCII ref matched both.
+  it('resolves non-Latin names individually', () => {
+    const cyrillic = [monitor('7', 'Кухня'), monitor('8', 'Двор')];
+    expect(resolveMonitorRef('кухня', cyrillic)).toEqual({ id: '7' });
+    expect(resolveMonitorRef('двор', cyrillic)).toEqual({ id: '8' });
+  });
 });

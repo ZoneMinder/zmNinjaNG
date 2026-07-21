@@ -7,7 +7,7 @@
  * WebGPU or the real `@mlc-ai/web-llm` package.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { buildWebLlmMessages, parseWebLlmTurn, WebLlmProvider } from '../providers/webllm';
+import { buildWebLlmMessages, parseWebLlmTurn, WebLlmProvider, resetGrammarUsableForTests } from '../providers/webllm';
 import type { AssistantMessage, ToolDefinition } from '../types';
 import { ASSISTANT } from '../../zmninja-ng-constants';
 import { readOnlyTools } from '../tools-readonly';
@@ -454,6 +454,9 @@ describe('parseWebLlmTurn', () => {
 describe('WebLlmProvider.chat', () => {
   beforeEach(() => {
     vi.mocked(getLoadedEngine).mockReset();
+    // The grammar-fallback flag is module state; a test that flips it must not
+    // leak into the next.
+    resetGrammarUsableForTests();
   });
 
   it('throws AbortError immediately when the signal is already aborted, without loading the engine', async () => {
@@ -480,9 +483,35 @@ describe('WebLlmProvider.chat', () => {
         max_tokens: ASSISTANT.maxTokens,
       }),
     );
-    // response_format crashes web-llm 0.2.84's XGrammar JSON-schema compiler
-    // with a BindingError when no schema string is supplied; must never be sent.
-    expect(call).not.toHaveProperty('response_format');
+    // Constrained to the envelope schema. The schema STRING is load-bearing:
+    // web-llm 0.2.84's XGrammar compiler throws a WASM BindingError when
+    // json_object mode is requested with no schema, so json_object must never
+    // be sent bare.
+    expect(call.response_format).toEqual({ type: 'json_object', schema: expect.stringContaining('"tool"') });
+  });
+
+  // The XGrammar compiler has crashed before (see the module header), so the
+  // constraint must be belt-and-braces: an engine that rejects it degrades to
+  // prompt + parser for the session instead of failing every turn.
+  it('falls back to unconstrained generation when the engine rejects the schema', async () => {
+    const create = vi
+      .fn()
+      .mockImplementation((req: { response_format?: unknown }) => {
+        if (req.response_format) throw new Error('BindingError: Cannot pass non-string to std::string');
+        return Promise.resolve({ choices: [{ message: { content: '{"answer": "ok"}' } }] });
+      });
+    vi.mocked(getLoadedEngine).mockResolvedValue({ chat: { completions: { create } } } as never);
+
+    const provider = new WebLlmProvider(ASSISTANT.defaultModelId);
+    const turn = await provider.chat([{ role: 'user', text: 'hi' }], [], 'sys', new AbortController().signal);
+    expect(turn.text).toBe('ok');
+
+    // And the rejection is remembered: the next turn goes straight to
+    // unconstrained instead of paying the crash again.
+    const callsBefore = create.mock.calls.length;
+    await provider.chat([{ role: 'user', text: 'hi again' }], [], 'sys', new AbortController().signal);
+    const newCalls = create.mock.calls.slice(callsBefore) as Array<[{ response_format?: unknown }]>;
+    expect(newCalls.every(([req]) => req.response_format === undefined)).toBe(true);
   });
 
   // The model produced just "```" (a bare code fence, nothing inside) on a real
@@ -499,6 +528,14 @@ describe('WebLlmProvider.chat', () => {
 
     expect(turn.text).toBe('Two people came.');
     expect(create).toHaveBeenCalledTimes(2);
+
+    // The retry is a self-repair, not a blind re-roll: the failed reply plus a
+    // correction restating the contract are appended, and the greedy
+    // temperature is kept (only the FINAL attempt raises it).
+    const retryCall = create.mock.calls[1][0] as { temperature: number; messages: Array<{ role: string; content: string }> };
+    expect(retryCall.messages.at(-2)).toMatchObject({ role: 'assistant', content: '```' });
+    expect(retryCall.messages.at(-1)?.content).toContain('not one valid JSON object');
+    expect(retryCall.temperature).toBe(ASSISTANT.assistantTemperature);
   });
 
   it('gives up with the parse-error apology, carrying raw, after every attempt degenerates', async () => {
@@ -511,6 +548,27 @@ describe('WebLlmProvider.chat', () => {
     expect(turn.text).toBe('__i18n:assistant.parse_error');
     expect(turn.raw).toBe('```');
     expect(create).toHaveBeenCalledTimes(ASSISTANT.maxParseAttempts);
+  });
+
+  // The Abort button used to be cosmetic on this backend: the loop only
+  // checked the signal BETWEEN attempts, so an in-flight generation ran to
+  // completion regardless.
+  it('interrupts an in-flight generation on abort and throws AbortError', async () => {
+    const controller = new AbortController();
+    const interruptGenerate = vi.fn();
+    const create = vi.fn().mockImplementation(() => {
+      // Abort while the request is "in flight"; the wired listener should
+      // interrupt the engine, and the resolved partial reply must be discarded.
+      controller.abort();
+      return Promise.resolve({ choices: [{ message: { content: '{"answer": "partial' } }] });
+    });
+    vi.mocked(getLoadedEngine).mockResolvedValue({ chat: { completions: { create } }, interruptGenerate } as never);
+
+    const provider = new WebLlmProvider(ASSISTANT.defaultModelId);
+    await expect(
+      provider.chat([{ role: 'user', text: 'hi' }], [], 'sys', controller.signal),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(interruptGenerate).toHaveBeenCalled();
   });
 
   it('does not retry a valid answer', async () => {

@@ -25,9 +25,9 @@ describe('argument normalization before a tool runs', () => {
   // helper that could.
   it('strips the null-filled arguments before calling the tool', async () => {
     const execute = vi.fn().mockResolvedValue({ output: '{"matchCount":0}' });
-    vi.spyOn(await import('../tools'), 'getToolByName').mockReturnValue({
+    const stubTool = {
       name: 'list_events', description: 'd', schema: { type: 'object', properties: {} }, execute,
-    } as never);
+    } as never;
 
     const p = new MockProvider();
     p.setScript([
@@ -43,7 +43,7 @@ describe('argument normalization before a tool runs', () => {
       { text: 'done', toolCalls: [] },
     ]);
 
-    await runAssistantTurn(baseOpts(p, host(), [{ role: 'user', text: 'summarize today' }]));
+    await runAssistantTurn({ ...baseOpts(p, host(), [{ role: 'user', text: 'summarize today' }]), tools: [stubTool] });
 
     expect(execute).toHaveBeenCalledWith({ limit: 25, when: 'today' }, expect.anything());
   });
@@ -79,6 +79,26 @@ describe('a turn given no tools', () => {
     const out = await runAssistantTurn(baseOpts(p, host(), [{ role: 'user', text: 'summarize yesterday' }]));
 
     expect(out[out.length - 1].text).toBe('__i18n:assistant.live_data_required');
+  });
+
+  // The English regexes cannot see a German question, so a tool-less answer to
+  // one gets a single language-neutral reminder (refs #259). Unlike the
+  // specific requirement, a second tool-less answer is accepted, not replaced:
+  // without the regex there is no certainty data was required.
+  it('nudges a tool-less answer once in any language, then accepts it', async () => {
+    const p = new MockProvider();
+    p.setScript([
+      { text: 'Gestern gab es drei Ereignisse.', toolCalls: [] },
+      { text: 'Gestern gab es drei Ereignisse.', toolCalls: [] },
+    ]);
+
+    const chatSpy = vi.spyOn(p, 'chat');
+    const out = await runAssistantTurn(baseOpts(p, host(), [{ role: 'user', text: 'Was ist gestern passiert?' }]));
+
+    expect(out[out.length - 1].text).toBe('Gestern gab es drei Ereignisse.');
+    // Two provider calls: answer, reminder, same answer accepted.
+    expect(chatSpy).toHaveBeenCalledTimes(2);
+    vi.restoreAllMocks();
   });
 });
 
@@ -128,19 +148,19 @@ describe('grounding check', () => {
     '"matchCount":5,"events":[{"id":"1"}]}';
 
   async function runWithAnswers(answers: string[]) {
-    vi.spyOn(await import('../tools'), 'getToolByName').mockReturnValue({
+    const stubTool = {
       name: 'list_events',
       description: 'd',
       schema: { type: 'object', properties: {} },
       execute: vi.fn().mockResolvedValue({ output: RESULT }),
-    } as never);
+    } as never;
     const p = new MockProvider();
     p.setScript([
       { toolCalls: [{ id: 'c1', name: 'list_events', input: { when: 'today' } }] },
       ...answers.map((text) => ({ text, toolCalls: [] })),
     ]);
     const produced = await runAssistantTurn(
-      baseOpts(p, host(), [{ role: 'user', text: 'summarize today' }]),
+      { ...baseOpts(p, host(), [{ role: 'user', text: 'summarize today' }]), tools: [stubTool] },
     );
     return produced.at(-1)!;
   }
@@ -172,19 +192,19 @@ describe('grounding check', () => {
   });
 
   it('leaves an honest empty answer alone when the data really is empty', async () => {
-    vi.spyOn(await import('../tools'), 'getToolByName').mockReturnValue({
+    const stubTool = {
       name: 'list_events',
       description: 'd',
       schema: { type: 'object', properties: {} },
       execute: vi.fn().mockResolvedValue({ output: '{"summary":"No events today.","matchCount":0,"events":[]}' }),
-    } as never);
+    } as never;
     const p = new MockProvider();
     p.setScript([
       { toolCalls: [{ id: 'c1', name: 'list_events', input: { when: 'today' } }] },
       { text: 'No events were recorded today.', toolCalls: [] },
     ]);
     const produced = await runAssistantTurn(
-      baseOpts(p, host(), [{ role: 'user', text: 'summarize today' }]),
+      { ...baseOpts(p, host(), [{ role: 'user', text: 'summarize today' }]), tools: [stubTool] },
     );
     expect(produced.at(-1)!.text).toBe('No events were recorded today.');
   });
@@ -414,9 +434,9 @@ describe('isContextNearlyFull', () => {
     ]);
     // Each result is most of the character budget on its own.
     const execute = vi.fn().mockResolvedValue({ output: 'x'.repeat(ASSISTANT.maxHistoryCharacters - 100) });
-    vi.spyOn(await import('../tools'), 'getToolByName').mockReturnValue({
+    const stubTool = {
       name: 'list_events', description: '', schema: {}, execute,
-    } as never);
+    } as never;
     const sizes: number[] = [];
     vi.spyOn(p, 'chat').mockImplementation(async (messages) => {
       sizes.push(messages.reduce((n, m) => n + (m.text?.length ?? 0) + JSON.stringify(m.toolResults ?? '').length, 0));
@@ -428,7 +448,7 @@ describe('isContextNearlyFull', () => {
       return scripted as never;
     });
 
-    await runAssistantTurn(baseOpts(p, host(), [{ role: 'user', text: 'q' }]));
+    await runAssistantTurn({ ...baseOpts(p, host(), [{ role: 'user', text: 'q' }]), tools: [stubTool] });
 
     // Two large results were appended, yet the prompt never carried both.
     expect(Math.max(...sizes)).toBeLessThan(ASSISTANT.maxHistoryCharacters * 2);
@@ -456,13 +476,16 @@ describe('runAssistantTurn', () => {
       sent = structuredClone(messages);
       return { text: 'answer', toolCalls: [] };
     });
-    await runAssistantTurn(
-      baseOpts(p, host(), [
+    await runAssistantTurn({
+      ...baseOpts(p, host(), [
         { role: 'user', text: 'ancient history' },
         { role: 'assistant', text: 'cleared', contextBoundary: true },
         { role: 'user', text: 'fresh question' },
       ]),
-    );
+      // No tools: this test is about history mechanics, and a tool-less answer
+      // with tools available would trip the generic live-data reminder.
+      tools: [],
+    });
     // The pre-boundary messages are gone from what the model sees: that IS the
     // clear. Leaving them would make the auto-clear cosmetic.
     expect(sent).toEqual([{ role: 'user', text: 'fresh question' }]);
@@ -483,20 +506,21 @@ describe('runAssistantTurn', () => {
       role: 'user' as const,
       text: `msg ${i}`,
     }));
-    const out = await runAssistantTurn(baseOpts(p, host(), long));
+    const out = await runAssistantTurn({ ...baseOpts(p, host(), long), tools: [] });
     expect(out).toEqual([{ role: 'assistant', text: 'answer', toolCalls: [], raw: undefined, display: undefined, usage: undefined }]);
   });
 
   it('returns only this turn\'s new messages after a context boundary', async () => {
     const p = new MockProvider();
     p.setScript([{ text: 'answer', toolCalls: [] }]);
-    const out = await runAssistantTurn(
-      baseOpts(p, host(), [
+    const out = await runAssistantTurn({
+      ...baseOpts(p, host(), [
         { role: 'user', text: 'old' },
         { role: 'assistant', text: 'cleared', contextBoundary: true },
         { role: 'user', text: 'new' },
       ]),
-    );
+      tools: [],
+    });
     expect(out).toHaveLength(1);
     expect(out[0].text).toBe('answer');
   });
@@ -506,7 +530,7 @@ describe('runAssistantTurn', () => {
     p.setScript([
       { text: 'answer', toolCalls: [], usage: { promptTokens: 1200, completionTokens: 30, totalTokens: 1230 } },
     ]);
-    const out = await runAssistantTurn(baseOpts(p, host(), [{ role: 'user', text: 'q' }]));
+    const out = await runAssistantTurn({ ...baseOpts(p, host(), [{ role: 'user', text: 'q' }]), tools: [] });
     expect(out[out.length - 1].usage).toEqual({ promptTokens: 1200, completionTokens: 30, totalTokens: 1230 });
   });
 
@@ -522,11 +546,11 @@ describe('runAssistantTurn', () => {
       // full the window is.
       { text: 'done', toolCalls: [], usage: { promptTokens: 1500, completionTokens: 20, totalTokens: 1520 } },
     ]);
-    vi.spyOn(await import('../tools'), 'getToolByName').mockReturnValue({
+    const stubTool = {
       name: 'list_monitors', description: '', schema: {}, destructive: false,
       execute: async () => ({ output: '[]' }),
-    } as never);
-    const out = await runAssistantTurn(baseOpts(p, host(), [{ role: 'user', text: 'q' }]));
+    } as never;
+    const out = await runAssistantTurn({ ...baseOpts(p, host(), [{ role: 'user', text: 'q' }]), tools: [stubTool] });
     expect(out[out.length - 1].usage?.promptTokens).toBe(1500);
     vi.restoreAllMocks();
   });
@@ -544,14 +568,14 @@ describe('runAssistantTurn', () => {
       { text: 'done', toolCalls: [] },
     ]);
     const execute = vi.fn().mockResolvedValue({ output: '{"total":15}' });
-    vi.spyOn(await import('../tools'), 'getToolByName').mockReturnValue({
+    const stubTool = {
       name: 'count_events', description: '', schema: {}, execute,
-    } as never);
+    } as never;
 
     // "how many events" rather than "how many people": count_events is now
     // refused outright for an object-type question (objectQuestionMismatch),
     // and this test is about the repeat guard, not about tool choice.
-    const out = await runAssistantTurn(baseOpts(p, host(), [{ role: 'user', text: 'how many events today' }]));
+    const out = await runAssistantTurn({ ...baseOpts(p, host(), [{ role: 'user', text: 'how many events today' }]), tools: [stubTool] });
 
     expect(execute).toHaveBeenCalledTimes(1);
     const repeat = out.filter((m) => m.role === 'tool')[1];
@@ -568,11 +592,11 @@ describe('runAssistantTurn', () => {
       { text: 'done', toolCalls: [] },
     ]);
     const execute = vi.fn().mockResolvedValue({ output: '{"events":[]}' });
-    vi.spyOn(await import('../tools'), 'getToolByName').mockReturnValue({
+    const stubTool = {
       name: 'list_events', description: '', schema: {}, execute,
-    } as never);
+    } as never;
 
-    await runAssistantTurn(baseOpts(p, host(), [{ role: 'user', text: 'how many people today' }]));
+    await runAssistantTurn({ ...baseOpts(p, host(), [{ role: 'user', text: 'how many people today' }]), tools: [stubTool] });
 
     expect(execute).toHaveBeenCalledTimes(2);
     vi.restoreAllMocks();
@@ -619,15 +643,15 @@ describe('runAssistantTurn', () => {
       { text: 'One event today.', toolCalls: [] },
     ]);
     const h = host();
-    vi.spyOn(await import('../tools'), 'getToolByName').mockReturnValue({
+    const stubTool = {
       name: 'list_events', description: '', schema: {}, destructive: false,
       execute: async () => ({
         output: '[{"id":"1"}]',
         display: [{ kind: 'event', id: '1', title: 'Front Door', navigatePath: '/events/1', imageUrls: ['thumb'] }],
       }),
-    } as never);
+    } as never;
 
-    const out = await runAssistantTurn(baseOpts(p, h, [{ role: 'user', text: 'Summarize my day' }]));
+    const out = await runAssistantTurn({ ...baseOpts(p, h, [{ role: 'user', text: 'Summarize my day' }]), tools: [stubTool] });
 
     expect(out.map((message) => message.text)).not.toContain('Invented daily summary');
     expect(h.onActivity).toHaveBeenCalledWith({ toolName: 'list_events', status: 'done', input: { range: 'today' } });
@@ -646,12 +670,12 @@ describe('runAssistantTurn', () => {
       { text: 'Front Door is connected.', toolCalls: [] },
     ]);
     const h = host();
-    vi.spyOn(await import('../tools'), 'getToolByName').mockReturnValue({
+    const stubTool = {
       name: 'list_monitors', description: '', schema: {}, destructive: false,
       execute: async () => ({ output: '[{"name":"Front Door","status":"Connected"}]' }),
-    } as never);
+    } as never;
 
-    const out = await runAssistantTurn(baseOpts(p, h, [{ role: 'user', text: 'What is my camera status?' }]));
+    const out = await runAssistantTurn({ ...baseOpts(p, h, [{ role: 'user', text: 'What is my camera status?' }]), tools: [stubTool] });
 
     expect(out.map((message) => message.text)).not.toContain('Front Door is armed.');
     expect(h.onActivity).toHaveBeenCalledWith({ toolName: 'list_monitors', status: 'done', input: {} });
@@ -663,11 +687,11 @@ describe('runAssistantTurn', () => {
     const p = new MockProvider();
     p.setScript(Array.from({ length: 10 }, () => ({ toolCalls: [{ id: 'c', name: 'list_monitors', input: {} }] })));
     const h = host();
-    vi.spyOn(await import('../tools'), 'getToolByName').mockReturnValue({
+    const stubTool = {
       name: 'list_monitors', description: '', schema: {}, destructive: false,
       execute: async () => ({ output: '[]' }),
-    } as never);
-    const out = await runAssistantTurn(baseOpts(p, h, [{ role: 'user', text: 'go' }]));
+    } as never;
+    const out = await runAssistantTurn({ ...baseOpts(p, h, [{ role: 'user', text: 'go' }]), tools: [stubTool] });
     // Deviation from the brief's literal assertion (see agent.test.ts / task-6-report.md):
     // agent.ts pushes the untranslated `__i18n:<key>` sentinel per the brief's own note
     // ("localized by the panel at render; see Task 8"), never English prose, per rule 5.
@@ -691,11 +715,11 @@ describe('runAssistantTurn', () => {
       { text: 'Front Door was the most active.', toolCalls: [] },
     ]);
     const h = host();
-    vi.spyOn(await import('../tools'), 'getToolByName').mockReturnValue({
+    const stubTool = {
       name: 'count_events', description: '', schema: {}, destructive: false,
       execute: async () => ({ output: '{"Front Door": 5}' }),
-    } as never);
-    await runAssistantTurn(baseOpts(p, h, [{ role: 'user', text: 'which monitor was most active?' }]));
+    } as never;
+    await runAssistantTurn({ ...baseOpts(p, h, [{ role: 'user', text: 'which monitor was most active?' }]), tools: [stubTool] });
 
     expect(h.onActivity).toHaveBeenCalledWith({
       toolName: 'count_events',
@@ -719,11 +743,11 @@ describe('runAssistantTurn', () => {
     const display = [
       { kind: 'monitor' as const, id: '1', title: 'Front Door', navigatePath: '/monitors/1' },
     ];
-    vi.spyOn(await import('../tools'), 'getToolByName').mockReturnValue({
+    const stubTool = {
       name: 'list_monitors', description: '', schema: {}, destructive: false,
       execute: async () => ({ output: '[]', display }),
-    } as never);
-    const out = await runAssistantTurn(baseOpts(p, h, [{ role: 'user', text: 'list monitors' }]));
+    } as never;
+    const out = await runAssistantTurn({ ...baseOpts(p, h, [{ role: 'user', text: 'list monitors' }]), tools: [stubTool] });
     const toolMsg = out.find((m) => m.role === 'tool');
     expect(toolMsg?.display).toBeUndefined();
     const finalMsg = out[out.length - 1];
@@ -739,11 +763,11 @@ describe('runAssistantTurn', () => {
       { text: 'All good.', toolCalls: [] },
     ]);
     const h = host();
-    vi.spyOn(await import('../tools'), 'getToolByName').mockReturnValue({
+    const stubTool = {
       name: 'get_server_health', description: '', schema: {}, destructive: false,
       execute: async () => ({ output: '{}' }),
-    } as never);
-    const out = await runAssistantTurn(baseOpts(p, h, [{ role: 'user', text: 'is the server ok?' }]));
+    } as never;
+    const out = await runAssistantTurn({ ...baseOpts(p, h, [{ role: 'user', text: 'is the server ok?' }]), tools: [stubTool] });
     const finalMsg = out[out.length - 1];
     expect(finalMsg.display).toBeUndefined();
   });
@@ -757,11 +781,15 @@ describe('runAssistantTurn', () => {
     ]);
     const h = host();
     const card = { kind: 'event' as const, id: '42', title: 'Front Door · today', navigatePath: '/events/42' };
-    vi.spyOn(await import('../tools'), 'getToolByName').mockImplementation((name: string) => ({
-      name, description: '', schema: {}, destructive: false,
+    const stubTool = {
+      name: 'list_events', description: '', schema: {}, destructive: false,
       execute: async () => ({ output: '{}', display: [card] }),
-    } as never));
-    const out = await runAssistantTurn(baseOpts(p, h, [{ role: 'user', text: 'tell me about event 42' }]));
+    } as never;
+    const stubTool2 = {
+      name: 'get_event', description: '', schema: {}, destructive: false,
+      execute: async () => ({ output: '{}', display: [card] }),
+    } as never;
+    const out = await runAssistantTurn({ ...baseOpts(p, h, [{ role: 'user', text: 'tell me about event 42' }]), tools: [stubTool, stubTool2] });
     const finalMsg = out[out.length - 1];
     expect(finalMsg.display).toEqual([card]);
   });

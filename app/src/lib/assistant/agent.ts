@@ -293,9 +293,22 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
   const readToolRequirement = tools.length > 0 ? requiredReadTool(history) : undefined;
   let requiredReadToolComplete = false;
   let requiredReadToolReminderSent = false;
+  /** Language-neutral net under the English-only requirement above (refs
+   *  #259): a turn that was routed here WITH tools (triage said this is a
+   *  ZoneMinder question) and answers without ever running one gets a single
+   *  generic reminder in any language. Unlike the specific requirement it
+   *  never hard-fails: without the regex match there is no certainty data was
+   *  required, so the second tool-less answer is accepted rather than
+   *  replaced. */
+  let genericToolReminderSent = false;
   /** `name:JSON(input)` for every tool call attempted this turn, so an
    *  identical repeat can be refused rather than re-run (see the loop below). */
   const calledSignatures = new Set<string>();
+  /** Whether the model attempted ANY tool call this turn, successful or not.
+   *  The generic reminder below targets a model that answered without even
+   *  trying a tool; a model whose attempts were refused (withheld action,
+   *  unknown name) already got its guidance as tool results. */
+  let anyToolCallAttempted = false;
   /** Every tool result this turn produced, for the verification step. */
   const toolOutputs: string[] = [];
   /** The grounding check runs at most once, like the optional judge: a model
@@ -383,6 +396,29 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
         });
         return produced;
       }
+
+      // The language-neutral net (see genericToolReminderSent above). Only
+      // when the SPECIFIC requirement never matched: for a non-English
+      // question the regexes cannot see, this is the only nudge toward live
+      // data the turn gets.
+      if (
+        !readToolRequirement &&
+        !genericToolReminderSent &&
+        tools.length > 0 &&
+        !anyToolCallAttempted &&
+        turn.text &&
+        !turn.text.startsWith('__i18n:')
+      ) {
+        genericToolReminderSent = true;
+        lastUsage = turn.usage ?? lastUsage;
+        history.push({
+          role: 'user',
+          text:
+            'If that answer states any fact about this ZoneMinder system (cameras, events, detections, server), ' +
+            'call the read tool that provides it now and answer from its result. If it does not, send the same answer again.',
+        });
+        continue;
+      }
       assistantMsg.display = dedupeDisplay(turnDisplay);
       assistantMsg.trace = turnTrace.length > 0 ? [...turnTrace] : undefined;
       // The last iteration's usage, not the first: each tool round-trip
@@ -394,17 +430,18 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
     }
     lastUsage = turn.usage ?? lastUsage;
     push(assistantMsg);
+    anyToolCallAttempted = true;
 
     const results: ToolResult[] = [];
     for (const call of turn.toolCalls) {
       if (signal.aborted) return produced;
-      const def = getToolByName(call.name);
-      // Resolved in the registry, but also checked against THIS turn's tool
-      // list: a turn given no tools (triage classified it as chat or as an
-      // unsupported action) must treat an invented call as unavailable rather
-      // than running it.
-      const available = def !== undefined && tools.some((t) => t.name === call.name);
-      if (!available) {
+      // THIS turn's tool list is the execution authority, not the registry:
+      // a turn given no tools (triage classified it as chat or an unsupported
+      // action) must treat an invented call as unavailable, and a caller that
+      // passes its own definitions (tests, fixtures) must have exactly those
+      // run. The registry is consulted only to phrase the refusal (refs #259).
+      const def = tools.find((t) => t.name === call.name);
+      if (!def) {
         // A withheld action is not the same as a typo: told "unknown tool", a
         // model retries variations of the name. Told why, it explains to the
         // user instead.
@@ -412,7 +449,7 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
           callId: call.id,
           output: isWithheldToolName(call.name)
             ? WITHHELD_TOOL_REFUSAL
-            : def
+            : getToolByName(call.name)
               ? 'No tools are available for this request. Answer the user directly, in plain text.'
               : `Unknown tool: ${call.name}`,
           isError: true,

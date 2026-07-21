@@ -2010,12 +2010,14 @@ current is Flow 11.
 Flow 19: Asking the assistant a question
 -----------------------------------------
 
-Typing ``?`` opens a chat box backed either by an on-device WebLLM model or
-an OpenAI-compatible server such as Ollama. The tool-use loop decides which
-ZoneMinder API calls to make and confirmation guards destructive calls. The
-counterintuitive part is that local and remote models use different tool
-protocols, but both adapt to the same ``AssistantTurn`` before the agent loop
-sees them.
+Pressing ``?`` (or picking the Ask command in the palette) opens a floating
+chat window backed either by an on-device WebLLM model or an OpenAI-compatible
+server such as Ollama. The question is classified before any tool is offered,
+then a tool-use loop decides which ZoneMinder API calls answer it. The
+counterintuitive part is that there is no confirmation gate anywhere in this
+flow: every tool the loop can reach is read-only, so "is this call safe" is a
+property of the registry (``TOOLS`` holds no mutating tool and
+``ToolDefinition`` cannot express one), never a runtime decision.
 
 .. mermaid::
 
@@ -2023,198 +2025,222 @@ sees them.
        autonumber
        participant Key as Ask entry point
        participant Panel as AskPanel
+       participant Triage as classifyRequest
        participant Agent as runAssistantTurn
        participant Prov as AssistantProvider
        participant Tool as Tool executor
-       participant Host as Confirm host
        participant ZM as ZoneMinder
 
-       Key->>Panel: openAsk(), palette renders AskPanel
-       Panel->>Agent: runAssistantTurn(history, system)
-       Agent->>Prov: provider.chat(history, TOOLS)
-       Prov-->>Agent: toolCalls
-       Agent->>Tool: getToolByName, buildConfirm if destructive
-       Agent->>Host: host.confirm(request)
-       Host-->>Agent: accepted or declined
-       Note over Agent,Host: the only path to execute() for a destructive tool
-       Agent->>Tool: execute(input), only if accepted
+       Key->>Panel: open(), widget renders AskPanel
+       Panel->>Panel: requiresLiveData(question)?
+       alt heuristic is silent
+           Panel->>Triage: provider.complete(TRIAGE_PROMPT, TRIAGE_SCHEMA)
+           Triage-->>Panel: zoneminder / chat / action
+       end
+       Panel->>Agent: runAssistantTurn(history, system, tools)
+       Agent->>Prov: provider.chat (constrained JSON or native tools)
+       Prov-->>Agent: AssistantTurn (toolCalls or text)
+       Agent->>Agent: gates: availability, repeat, mismatch, schema
+       Agent->>Tool: execute(input) via captureApiCalls
        Tool->>ZM: api/* request
-       ZM-->>Tool: response
-       Agent-->>Panel: updated history
-       Panel->>Panel: render markdown / activities
+       ZM-->>Tool: rows
+       Agent->>Agent: grounding and live-data checks
+       Agent-->>Panel: this turn's messages
+       Panel->>Panel: render; append context boundary if nearly full
 
-#. **The `?` key opens Ask mode.** ``components/KeyboardShortcuts.tsx``'s
+#. **The `?` key opens the assistant window.** ``components/KeyboardShortcuts.tsx``'s
    ``onKeyDown`` treats ``?`` as dual-purpose: when the assistant is enabled
-   (``settings.assistantEnabled``) it calls ``useCommandPaletteStore``'s
-   ``openAsk()`` instead of showing the shortcuts help overlay. Typing a
-   leading ``?`` into the command palette's own input
-   (``components/CommandPalette.tsx``) is the second entry point, same store
-   call. This branch has to be checked first: everything after it assumes Ask
-   mode, not plain command-palette navigation.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/KeyboardShortcuts.tsx#L133>`__
+   (``settings.assistantEnabled``) it calls ``useAssistantPanelStore``'s
+   ``open()`` instead of showing the shortcuts help overlay. The command
+   palette's Ask item (``components/CommandPalette.tsx``) is the second entry
+   point, same store call. This branch has to be checked first: everything
+   after it assumes the assistant, not the help overlay.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/KeyboardShortcuts.tsx#L134>`__
    · → :doc:`05-component-architecture`
 
-#. **The store flips into Ask mode, not just open.** ``stores/commandPalette.ts``'s
-   ``openAsk`` sets ``{ open: true, mode: 'ask' }`` in one update, and
-   ``setOpen(false)`` always resets ``mode`` back to ``'command'``, so reopening
-   the palette with ``/`` never lands back in a stale Ask session.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/commandPalette.ts#L30>`__
-   · → :doc:`03-state-management-zustand`
-
-#. **The palette swaps its body for the chat.** ``CommandPalette.tsx`` renders
-   ``<AskPanel/>`` in place of the results list whenever ``mode === 'ask'``,
-   inside the same ``Dialog``; the top input keeps handling text, but arrow-key
-   and Enter handling is handed off, ``AskPanel`` owns its own keydown.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/CommandPalette.tsx#L178>`__
+#. **One widget owns the window states.** ``AssistantWidget``
+   (``components/assistant/AssistantWidget.tsx``) switches on
+   ``useAssistantPanelStore``'s ``state``: nothing when closed, a floating
+   button when minimized, the conversation shell when open. The shell is the
+   resizable desktop card or the mobile bottom sheet, chosen by viewport, and
+   both embed the same ``AskPanel``. It stays mounted (hidden) while
+   minimized, so the conversation and any in-flight turn survive collapsing
+   to the button.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/assistant/AssistantWidget.tsx>`__
    · → :doc:`05-component-architecture`
 
-#. **Sending a message starts one turn.** ``AskPanel``'s ``handleSend`` appends
-   the user's text to the per-profile thread in ``useAssistantStore``, builds a
-   compact system prompt from timezone and ZM version (``buildSystemPrompt``),
-   and creates the ``AbortController`` this turn runs under. The monitor list
-   is not copied into every prompt because ``list_monitors`` resolves names
-   when needed.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/assistant/AskPanel.tsx#L112>`__
-   · → :doc:`12-shared-services-and-components`
+#. **Sending a message assembles the turn's context.** ``AskPanel``'s
+   ``handleSend`` appends the user's text to the per-profile thread, reads the
+   optional Bearer key from secure storage, and hands a ``ProviderConfig`` to
+   ``getAssistantProvider`` (``lib/assistant/providers/provider.ts``), which
+   returns ``WebLlmProvider`` on-device or ``OpenAiProvider`` for Ollama.
+   ``buildSystemPrompt`` (``system-prompt.ts``) folds in the profile timezone,
+   locale, ZM version, and the install's own detected-object labels. The
+   monitor list is not copied into every prompt because ``list_monitors``
+   resolves names when needed.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/assistant/AskPanel.tsx#L349>`__
+   · → :doc:`05-component-architecture`
 
-#. **The provider selects its backend contract.** ``getAssistantProvider``
-   (``lib/assistant/providers/provider.ts``) returns the deterministic
-   ``MockProvider`` only for non-production e2e mode. Otherwise it creates
-   ``WebLlmProvider`` for the downloaded local model or ``OpenAiProvider``
-   for the configured server. WebLLM uses its portable JSON tool contract; the
-   remote adapter prefers native calls and accepts that JSON shape as a
-   fallback before the shared agent safeguards run.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/providers/provider.ts#L23>`__
+#. **Triage decides what kind of request this is before any tool is offered.**
+   The deterministic check runs first: ``requiresLiveData`` (``agent.ts``)
+   recognises known English data questions outright, and when it fires there
+   is no triage call at all, because triage has misclassified exactly those
+   questions before. Otherwise ``classifyRequest`` (``triage.ts``) runs
+   ``provider.complete`` with ``TRIAGE_SCHEMA``, a
+   ``{"kind": ZONEMINDER|ACTION|CHAT}`` JSON Schema a backend may enforce
+   through constrained generation, so the reply is exactly
+   ``{"kind":"CHAT"}`` where the server supports it and a loose one-word
+   match everywhere else. A chat or action verdict runs the turn with
+   ``tools: []`` and ``buildNoToolPrompt``: the way to stop a small model
+   reaching for a tool is to hand it none, not to ask it nicely.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/triage.ts>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **The tool-use loop.** ``runAssistantTurn`` (``lib/assistant/agent.ts``)
-   calls ``provider.chat(history, TOOLS, system, signal)`` in a loop capped at
-   ``ASSISTANT.maxToolIterations`` (6 turns), so a model that keeps calling
-   tools cannot run forever; hitting the cap ends the loop with the
-   ``__i18n:assistant.iteration_cap_reached`` sentinel instead of a real reply.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/agent.ts#L37>`__
+   slices the history at the last context boundary, trims it to the message,
+   character, and turn budgets (``truncateHistory``), and calls
+   ``provider.chat(history, tools, system, signal)`` in a loop capped at
+   ``ASSISTANT.maxToolIterations`` (6); hitting the cap ends the turn with the
+   ``__i18n:assistant.iteration_cap_reached`` sentinel instead of a real
+   reply. There is no confirm step in this loop and nothing for one to guard:
+   the file's own header explains that the read-only guarantee is structural,
+   not a runtime decision.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/agent.ts#L253>`__
    · → :doc:`12-shared-services-and-components`
 
-#. **Resolve each tool call by name.** For every ``ToolCall`` the model
-   returns, ``getToolByName`` (``lib/assistant/tools.ts``) looks it up in
-   ``TOOLS``, the concatenation of ``readOnlyTools`` and ``destructiveTools``;
-   an unresolved name becomes an error result instead of throwing, so one bad
-   call cannot crash the turn.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/tools.ts#L18>`__
+#. **The on-device provider constrains generation to the envelope.**
+   ``WebLlmProvider.chat`` never uses WebLLM's native function calling: every
+   reply must be one of two JSON shapes, ``{"tool": ..., "input": ...}`` or
+   ``{"answer": ...}``, and generation is constrained to exactly those via
+   ``response_format: { type: 'json_object', schema }`` with the
+   ``ENVELOPE_SCHEMA`` string, so the sampler cannot produce prose around the
+   JSON. If the engine's grammar compiler rejects the request once,
+   ``grammarUsable`` flips false for the session and the prompt-plus-parser
+   cascade carries the contract alone. The abort signal is wired to
+   ``engine.interruptGenerate()``, the only way to actually stop an in-flight
+   on-device generation.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/providers/webllm.ts>`__
    · → :doc:`12-shared-services-and-components`
 
-#. **Validate the arguments, because the schema did not.** A tool's ``schema``
-   is prose in the system prompt, not a contract anything enforces: the model
-   can send whatever it likes. ``list_events`` therefore checks ``range``
-   against ``isEventRange`` (``event-range.ts``) and resolves ``monitorId``
-   through ``resolveMonitorRef`` (``monitor-ref.ts``) BEFORE it queries, and
-   turns either failure into an error result naming the valid values so the
-   next iteration can retry. This ordering is the whole point. A small model
-   passes the monitor NAME it saw in an earlier row ("FrontDoor"), and
-   ZoneMinder answers ``MonitorId:FrontDoor`` with ``total: 0``, which is
-   indistinguishable from a real negative by the time it reaches the answer:
-   the model reported "no one came to your front door" about a camera it had
-   never queried. An unresolvable argument must fail loudly; an empty result
-   set reads like an answer.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/monitor-ref.ts#L38>`__
+#. **The remote provider uses native tools and stops teaching the fallback.**
+   ``OpenAiProvider.chat`` sends each ``ToolDefinition`` as a native ``tools``
+   entry (``toOpenAiTools``) and includes ``PORTABLE_TOOL_FALLBACK`` (the same
+   JSON envelope, taught as a prompt line) only until the server emits a
+   native tool call; ``NATIVE_TOOL_SERVERS`` remembers which
+   ``baseUrl::model`` pairs have this session, because for a capable model
+   that instruction invites ``{"answer": ...}`` JSON as text where a plain
+   answer was wanted. ``complete``'s ``jsonSchema`` maps to
+   ``response_format: json_schema``, which Ollama compiles into a grammar
+   constraint, so triage gets the same constrained decoding on this backend.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/providers/openai.ts>`__
    · → :doc:`12-shared-services-and-components`
 
-#. **Build the confirmation before asking.** ``tools-destructive.ts``'s
-   ``buildConfirm`` never calls ``confirm`` itself, it only fetches whatever
-   detail the message needs; ``deleteEventTool`` calls ``getEvent`` first so
-   the confirmation names the real monitor and start time, not a bare id.
-   Building it here, next to the tool's ``execute``, keeps each destructive
-   tool's message logic with the tool instead of duplicated in the agent loop.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/tools-destructive.ts#L157>`__
+#. **Both providers self-repair an unparseable reply.** A reply that parses to
+   neither a tool call nor an answer is retried up to
+   ``ASSISTANT.maxParseAttempts`` (3), and the retry is a self-repair, not a
+   blind re-roll: the failed reply plus a correction naming the fault
+   (``SELF_REPAIR_PROMPT``) are appended before the next attempt, so even a
+   temperature-0 greedy sampler produces a different generation. The
+   temperature is raised (to ``ASSISTANT.assistantRetryTemperature``) only on
+   the final attempt, in case the model is stuck regardless of the correction.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/providers/webllm.ts>`__
    · → :doc:`12-shared-services-and-components`
 
-#. **The confirm gate: the one path to `execute()`.** Back in ``agent.ts``,
-   ``runAssistantTurn`` awaits ``host.confirm(req)`` and only proceeds to
-   ``def.execute`` if it resolves ``true``; a thrown ``buildConfirm``, a
-   declined confirm, or an aborted turn all short-circuit to a fixed "declined"
-   or error result instead. The file's own header comment calls this out as the
-   single choke point: no other branch reaches ``execute`` for a destructive
-   tool.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/agent.ts#L75>`__
+#. **Four gates run before any tool executes.** The turn's own ``opts.tools``
+   list is the execution authority, not the registry: the definition must come
+   from that list, and ``getToolByName``/``isWithheldToolName`` (``tools.ts``)
+   are consulted only to phrase the refusal for a name outside it,
+   distinguishing a withheld action (``WITHHELD_TOOL_NAMES``: the arm, alarm,
+   run-state, delete, and archive actions the assistant no longer implements
+   at all) from a known tool on a tool-less turn and from a typo. Then, in
+   order: an identical repeat is refused (``toolCallSignature`` over
+   ``stripOmittedArgs``-normalized input, so placeholder spelling cannot
+   disguise one), ``objectQuestionMismatch`` refuses ``count_events`` for an
+   object-type question it cannot answer, and ``validateToolInput`` checks the
+   input against the tool's own schema. Each failure returns as an ordinary
+   error result the model corrects from within the same turn, which is
+   cheaper than a request that succeeds against the wrong data and gets
+   answered confidently.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/agent.ts#L430>`__
    · → :doc:`12-shared-services-and-components`
 
-#. **The host bridges the store-free loop to React.** ``useAssistantHost``
-   (``components/assistant/useAssistantHost.ts``) is the ``AssistantHost``
-   ``AskPanel`` hands to the loop; its ``confirm`` parks the request in local
-   state and returns a Promise that only ``resolveConfirm`` (wired to the
-   confirm card's buttons, an abort, or an unmount) can settle. Nothing in
-   ``agent.ts`` imports React or a store directly; this hook is the only place
-   that closes that gap for the real app.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/assistant/useAssistantHost.ts#L35>`__
-   · → :doc:`05-component-architecture`
+#. **The app, not the model, does the date arithmetic.** ``list_events`` takes
+   ``when``: the user's own time words, copied verbatim ("yesterday from 4pm
+   to 10pm"), which ``resolveWhen`` (``event-range.ts``) resolves into
+   concrete ZM datetime strings against the profile timezone, because a small
+   model repeats a phrase accurately and computes a date badly.
+   ``ungroundedWhenWords`` rejects a phrase containing words the user never
+   wrote, since models lift example phrases from the prompt. The old ``range``
+   enum and ``startTime``/``endTime`` inputs no longer exist and
+   ``isEventRange``/``resolveEventRange`` are deleted; ``resolveWhen``'s
+   ``LEGACY`` map still accepts the old enum keywords in case a persisted
+   thread replays one.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/event-range.ts#L102>`__
+   · → :doc:`12-shared-services-and-components`
 
-#. **The card renders and waits.** ``AssistantConfirmCard`` shows the
-   localized ``messageKey``/``messageParams`` and a collapsible raw-params
-   block, then calls ``onAccept`` or ``onCancel``, which resolve the host's
-   Promise. Cancel is the default-focused button, so a stray Enter keypress on
-   a destructive confirmation declines it rather than running it.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/assistant/AssistantConfirmCard.tsx#L23>`__
-   · → :doc:`05-component-architecture`
-
-#. **Only acceptance reaches the ZoneMinder server.** Resolving ``true`` lets
-   ``runAssistantTurn`` call ``def.execute``, which for ``delete_event`` calls
-   ``deleteEvent`` (``api/events.ts``), the same authenticated request every
-   other delete in the app sends. There is no separate "assistant" API path.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/events.ts#L451>`__
+#. **Results feed back into history.** ``captureApiCalls`` wraps
+   ``def.execute`` so the transcript records the actual ZoneMinder requests
+   each tool made; outputs become ``ToolResult``s in one ``role: 'tool'``
+   message and the loop calls ``provider.chat`` again with them, so the model
+   sees what its own call returned before deciding to call another tool or
+   answer. The requests themselves are the same authenticated ``api/*``
+   helpers the rest of the app uses: there is no separate "assistant" API
+   path.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/api-capture.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
-#. **Results feed back into history.** Each tool's output becomes a
-   ``ToolResult``, pushed as one ``role: 'tool'`` message; the loop then calls
-   ``provider.chat`` again with the extended history, so the model sees what
-   its own tool call returned before deciding whether to call another tool or
-   answer in text.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/agent.ts#L98>`__
+#. **Grounding is checked by code, not by a judge model.** When a turn that
+   fetched data answers, ``retryIsUnusable`` (``grounding.ts``) checks two
+   decidable faults: ``deniesTheData`` (a nothing-found claim over results
+   whose ``matchCount`` is positive, guarded so any positive count in the
+   answer reads as describing the data rather than denying it) and
+   ``echoesToolOutput`` (the raw result JSON returned as the answer). One
+   correction retry (``buildGroundingCorrection``) is allowed; if the retry
+   fails the same check, ``fallbackAnswerFromData`` answers with the tool's
+   own code-built summary line. There is no second model call: the judge this
+   file used to hold never caught a fabrication and rejected accurate answers.
+   Separately, the live-data requirement (``requiredReadTool``'s deliberately
+   English-only regexes in ``agent.ts``) sends one reminder and then
+   hard-fails to ``__i18n:assistant.live_data_required`` if the required read
+   tool never ran, and a language-neutral net gives a tool-less answer on a
+   tools-available turn one generic reminder, accepting the second answer
+   rather than replacing it.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/grounding.ts>`__
    · → :doc:`12-shared-services-and-components`
 
-#. **Render the reply.** Once a turn returns with no more tool calls,
-   ``runAssistantTurn`` resolves with only the messages that turn produced, and
-   ``AskPanel`` appends them to the store. The loop deliberately does not return
-   the history it was given: what it sends the model is a trimmed view of the
-   panel's thread (see the next step), so a returned "history" would be a
-   different length than the panel's own and any arithmetic against it would
-   drop messages. ``AskPanel`` renders assistant text as Markdown, except the
-   sentinels ``agent.ts`` and the panel emit themselves
-   (``__i18n:assistant.iteration_cap_reached``,
-   ``__i18n:assistant.context_cleared``), which ``renderAssistantText``
-   localizes with ``t()`` instead of treating as literal text.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/assistant/AskPanel.tsx#L70>`__
+#. **Render the reply.** ``runAssistantTurn`` resolves with only the messages
+   this turn produced, never the history it was handed: what it sends the
+   model is a trimmed view of the panel's thread, so a returned "history"
+   would be a different length than the panel's own. ``AskPanel`` appends
+   them, attaches the accumulated activity steps to the final answer message,
+   and renders assistant text as Markdown, except the ``__i18n:`` sentinels
+   (iteration cap, live-data requirement, context cleared), which
+   ``renderAssistantText`` localizes with ``t()`` instead of treating as
+   literal text.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/assistant/AskPanel.tsx#L180>`__
    · → :doc:`05-component-architecture`
 
-#. **Clear the context before it overflows.** A conversation grows the prompt
-   every turn (history plus tool results), and a model's context window is
-   finite, so ``AskPanel`` checks ``isContextNearlyFull(provider.contextWindow,
-   usage)`` against the ``promptTokens`` the backend reported for the turn that
-   just finished. Past ``ASSISTANT.contextClearThreshold`` (0.75) it appends an
+#. **Clear the context before it overflows.** ``AskPanel`` checks
+   ``isContextNearlyFull(provider.contextWindow, usage)`` against the
+   ``promptTokens`` the backend reported for the turn that just finished; past
+   ``ASSISTANT.contextClearThreshold`` (0.75) it appends an
    ``assistant.context_cleared`` notice carrying ``contextBoundary: true``.
-   The check runs on the finished turn rather than before the next one because
-   ``promptTokens`` is a measurement, not an estimate: the app never counts
-   tokens itself. The threshold sits below 1.0 by more than ``maxTokens`` so the
-   next turn still has room to answer; clearing only once the window is full
-   would mean the turn that discovers the problem is the turn that fails on it.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/agent.ts#L45>`__
+   ``contextWindow`` is exact on-device (the value ``model-download.ts``
+   passed to ``CreateMLCEngine``) and learned on Ollama: after a chat turn,
+   ``OpenAiProvider``'s ``refreshContextWindow`` asks Ollama's native
+   ``/api/ps`` what window the loaded model actually runs with (the
+   OpenAI-compatible API never reports ``num_ctx``) and caches it in
+   ``CONTEXT_WINDOWS``, so auto-clear works on that backend from the next
+   turn on. On the next send, ``sliceAfterContextBoundary`` (``agent.ts``)
+   hides everything before the boundary from the model while the thread in
+   ``stores/assistant.ts`` keeps rendering it: the user keeps their
+   scrollback, the model gets its window back.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/agent.ts#L189>`__
    · → :doc:`12-shared-services-and-components`
 
-#. **A boundary hides history from the model, not from the user.** On the next
-   send, ``sliceAfterContextBoundary`` (``agent.ts``) drops everything up to and
-   including the last ``contextBoundary`` message before the message-count cap
-   applies, so ``provider.chat`` sees only what came after it. The thread in
-   ``stores/assistant.ts`` still holds every message, so the transcript above
-   the notice stays on screen. This is the whole reason the boundary is a marker
-   rather than a call to the store's ``reset``: the user keeps their scrollback,
-   the model gets its window back. ``contextWindow`` is undefined on the Ollama
-   provider (the window is the server's ``num_ctx``, which the
-   OpenAI-compatible API never reports), so this never fires there.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/agent.ts#L50>`__
-   · → :doc:`12-shared-services-and-components`
-
-Typing text without a leading ``?`` skips all of this and returns to plain
-command-palette navigation: a direct ``navigate()`` call with no model, no
-tools, and no confirmation gate, documented alongside this entry point in
+Typing text into the command palette without choosing the Ask item skips all
+of this and stays plain command-palette navigation: a direct ``navigate()``
+call with no model and no tools, documented alongside this entry point in
 :doc:`05-component-architecture`.
 
 These flows touch most of the moving parts of the app. When you need to change

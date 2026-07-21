@@ -37,6 +37,54 @@ const PORTABLE_TOOL_FALLBACK =
   'If you cannot emit a native tool call, respond with exactly one JSON object: ' +
   '{"tool":"<tool name>","input":{...}} or {"answer":"<text>"}.';
 
+/** Appended (with the failed reply) before a parse retry, so the retry knows
+ *  what went wrong instead of being re-rolled blind; see webllm.ts's
+ *  SELF_REPAIR_PROMPT for why a blind retry at temperature 0 is wasted. */
+const SELF_REPAIR_PROMPT =
+  'Your last reply was empty or unusable. Reply again: answer the user in plain text, ' +
+  'or call one of the provided tools.';
+
+/** `baseUrl::model` pairs that have emitted a NATIVE tool call this session.
+ *  Once a server has demonstrated native tool calling, the portable JSON
+ *  fallback is dropped from its system prompt: for a capable model that
+ *  instruction is not just dead weight, it invites `{"answer":...}` JSON as
+ *  text where a plain answer or a native call was wanted. Module state, not an
+ *  instance field, because AskPanel builds a fresh provider every turn.
+ *  ponytail: session-only memory; persist the Settings probe verdict into
+ *  profile settings if the first turn of every session needs it too. */
+const NATIVE_TOOL_SERVERS = new Set<string>();
+
+/** Test-only: module state survives across tests in one file. */
+export function resetNativeToolServersForTests(): void {
+  NATIVE_TOOL_SERVERS.clear();
+}
+
+/** `baseUrl::model` -> the context window the server is actually running the
+ *  model with, learned from Ollama's native `/api/ps` (the OpenAI-compatible
+ *  API never reports `num_ctx`, which is why `contextWindow` was permanently
+ *  unknown here and auto-clear never ran on this backend). `0` marks a server
+ *  that was asked and had no answer (not Ollama, model not loaded), so it is
+ *  not asked again every turn. Session-scoped like NATIVE_TOOL_SERVERS. */
+const CONTEXT_WINDOWS = new Map<string, number>();
+
+/** Test-only. */
+export function resetContextWindowsForTests(): void {
+  CONTEXT_WINDOWS.clear();
+  OLLAMA_SERVERS.clear();
+}
+
+/** Base URLs whose native `/api/ps` endpoint answered, i.e. confirmed Ollama.
+ *  Gates Ollama-only request fields (`reasoning_effort`): a genuine OpenAI
+ *  server rejects that param on non-reasoning models, so it is only sent
+ *  where it is known safe. Populated by `refreshContextWindow`, which runs
+ *  after the first completed turn; the first turn against a fresh server
+ *  therefore still pays for reasoning, every later one skips it. */
+const OLLAMA_SERVERS = new Set<string>();
+
+interface OllamaPsResponse {
+  models?: Array<{ name?: string; model?: string; context_length?: number }>;
+}
+
 export interface OpenAiProviderConfig {
   /** e.g. `http://localhost:11434/v1` (no trailing `/chat/completions`). */
   baseUrl: string;
@@ -93,9 +141,12 @@ export function buildOpenAiMessages(
    *  on-device path has always said "You have no tools available" in this
    *  case; this says the same thing. */
   hasTools = true,
+  /** Whether the portable JSON fallback is still worth teaching. False once
+   *  the server has emitted a native tool call (see NATIVE_TOOL_SERVERS). */
+  includePortableFallback = true,
 ): OpenAiMessageWire[] {
-  const contract = hasTools ? PORTABLE_TOOL_FALLBACK : NO_TOOLS_NOTICE;
-  const messages: OpenAiMessageWire[] = [{ role: 'system', content: `${system}\n${contract}` }];
+  const contract = !hasTools ? NO_TOOLS_NOTICE : includePortableFallback ? PORTABLE_TOOL_FALLBACK : undefined;
+  const messages: OpenAiMessageWire[] = [{ role: 'system', content: contract ? `${system}\n${contract}` : system }];
 
   for (const msg of history) {
     if (msg.role === 'user') {
@@ -369,9 +420,57 @@ export class OpenAiProvider implements AssistantProvider {
     this.config = config;
   }
 
+  private get serverKey(): string {
+    return `${this.config.baseUrl}::${this.config.model}`;
+  }
+
+  /** The window `/api/ps` reported for this server+model, once a turn has run
+   *  and the lookup resolved (see `refreshContextWindow`). AskPanel reads this
+   *  after each turn, and the cache is module-scoped, so the window learned
+   *  during turn N drives the auto-clear decision from turn N+1 on. */
+  get contextWindow(): number | undefined {
+    const window = CONTEXT_WINDOWS.get(this.serverKey);
+    return window ? window : undefined;
+  }
+
+  /** Fire-and-forget: asks Ollama's native API what window the loaded model
+   *  actually runs with. `/api/ps` only lists LOADED models, so this runs
+   *  after a chat completion, when the model is certainly loaded. A server
+   *  without the endpoint (not Ollama) records 0 and is never asked again. */
+  private refreshContextWindow(): void {
+    if (CONTEXT_WINDOWS.has(this.serverKey)) return;
+    const { baseUrl, model } = this.config;
+    const root = baseUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
+    void (async () => {
+      try {
+        const response = await httpGet<OllamaPsResponse>(`${root}/api/ps`, {
+          timeoutMs: ASSISTANT.testConnectionTimeoutMs,
+          intent: 'Assistant Ollama context window',
+        });
+        // The endpoint answering at all is the Ollama confirmation the
+        // reasoning_effort gate needs, whether or not this model is listed.
+        OLLAMA_SERVERS.add(this.config.baseUrl);
+        const entry = response?.data?.models?.find((m) => m.model === model || m.name === model);
+        CONTEXT_WINDOWS.set(this.serverKey, entry?.context_length ?? 0);
+        log.assistant('Ollama context window learned', LogLevel.DEBUG, { model, contextWindow: entry?.context_length });
+      } catch {
+        CONTEXT_WINDOWS.set(this.serverKey, 0);
+      }
+    })();
+  }
+
   /** The configured value, or the measured default when Settings has none. */
   private get temperature(): number {
     return this.config.temperature ?? ASSISTANT.assistantTemperature;
+  }
+
+  /** `reasoning_effort` for confirmed Ollama servers only (see
+   *  OLLAMA_SERVERS and ASSISTANT.ollamaReasoningEffort): measured at ~5x
+   *  faster turns on thinking models with identical eval scores. */
+  private get reasoningFields(): Record<string, string> {
+    return OLLAMA_SERVERS.has(this.config.baseUrl)
+      ? { reasoning_effort: ASSISTANT.ollamaReasoningEffort }
+      : {};
   }
 
   private get timeoutMs(): number {
@@ -380,8 +479,12 @@ export class OpenAiProvider implements AssistantProvider {
 
   /** Bare system + user, with no `tools` field at all; see
    *  `AssistantProvider.complete`. This path never carried the envelope
-   *  scaffolding, but it did send tool schemas the classifier had no use for. */
-  async complete(system: string, text: string, signal: AbortSignal): Promise<CompletionResult> {
+   *  scaffolding, but it did send tool schemas the classifier had no use for.
+   *  `jsonSchema` becomes `response_format: json_schema`, which Ollama >= 0.5
+   *  compiles into a grammar constraint; a server that rejects the field
+   *  fails the request, which callers like triage already treat as "no
+   *  verdict" and degrade from. */
+  async complete(system: string, text: string, signal: AbortSignal, jsonSchema?: Record<string, unknown>): Promise<CompletionResult> {
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
     const { baseUrl, model, apiKey } = this.config;
     const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
@@ -396,6 +499,10 @@ export class OpenAiProvider implements AssistantProvider {
       stream: false,
       max_tokens: ASSISTANT.ollamaMaxTokens,
       temperature: this.temperature,
+      ...this.reasoningFields,
+      ...(jsonSchema
+        ? { response_format: { type: 'json_schema', json_schema: { name: 'result', schema: jsonSchema, strict: true } } }
+        : {}),
     };
     const startedAt = Date.now();
     const response = await httpPost<OpenAiChatResponse>(url, body, {
@@ -405,6 +512,9 @@ export class OpenAiProvider implements AssistantProvider {
       intent: 'Assistant Ollama completion',
     });
     const content = response.data?.choices?.[0]?.message?.content ?? '';
+    // A completion loads the model just as a chat does, so this is also a
+    // valid moment to learn the window and confirm the server is Ollama.
+    this.refreshContextWindow();
     return {
       text: content,
       exchange: captureExchange({ backend: 'ollama', model, sent: body, received: content, startedAt }),
@@ -427,42 +537,46 @@ export class OpenAiProvider implements AssistantProvider {
     // `tools`/`tool_choice` omitted entirely when there are none, rather than
     // sent empty with `tool_choice: 'auto'`, which invites a server to look for
     // a tool that is not there.
+    const chatMessages = buildOpenAiMessages(system, messages, tools.length > 0, !NATIVE_TOOL_SERVERS.has(this.serverKey));
     const body = {
       model,
-      messages: buildOpenAiMessages(system, messages, tools.length > 0),
+      messages: chatMessages,
       ...(tools.length > 0 ? { tools: toOpenAiTools(tools), tool_choice: 'auto' } : {}),
       stream: false,
       max_tokens: ASSISTANT.ollamaMaxTokens,
       temperature: this.temperature,
+      ...this.reasoningFields,
     };
 
     // Retried like the on-device path, not single-shot. A degenerate reply
     // (empty content, prose that is neither a native tool call nor the portable
     // JSON) used to surface the apology to the user directly here, while the
-    // WebLLM path quietly re-rolled and recovered. The first attempt is greedy
-    // (temperature 0) because that measured best for answer accuracy, so the
-    // retry raises the temperature itself: at 0 the server would return the
-    // identical unparseable reply and the attempts would be spent for nothing.
-    // The cost is one more network round trip on a reply that was going to be
-    // discarded anyway.
+    // WebLLM path quietly re-rolled and recovered. The retry is a self-repair:
+    // the failed reply and a correction naming the fault are appended, so even
+    // the greedy first temperature (0, measured best for accuracy) produces a
+    // different generation. The final attempt also raises the temperature, in
+    // case the model is stuck regardless of the correction. The cost is one
+    // more network round trip on a reply that was going to be discarded anyway.
     let turn: AssistantTurn = { text: PARSE_ERROR_TEXT, toolCalls: [] };
     for (let attempt = 1; attempt <= ASSISTANT.maxParseAttempts; attempt++) {
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
       log.assistant('Sending Ollama chat completion request', LogLevel.DEBUG, {
         baseUrl,
         model,
-        messageCount: body.messages.length,
+        messageCount: chatMessages.length,
         attempt,
       });
 
-      // Rebuilt per attempt: only the temperature changes (see above).
+      // Rebuilt per attempt: the self-repair context grows and the temperature
+      // may change; everything else is the same body.
       const attemptBody = {
         ...body,
+        messages: [...chatMessages],
         // The retry must be able to move even when the first attempt is greedy,
         // so it raises whatever temperature was configured rather than
         // replacing it.
         temperature:
-          attempt === 1
+          attempt < ASSISTANT.maxParseAttempts
             ? this.temperature
             : Math.max(this.temperature, ASSISTANT.assistantRetryTemperature),
       };
@@ -476,6 +590,12 @@ export class OpenAiProvider implements AssistantProvider {
 
       const message = response.data?.choices?.[0]?.message;
       log.assistant('Ollama raw response', LogLevel.DEBUG, { baseUrl, model, message, attempt });
+      // A native tool call proves the server's tool template works; later
+      // turns stop teaching the portable JSON fallback (see NATIVE_TOOL_SERVERS).
+      if ((message?.tool_calls?.length ?? 0) > 0) NATIVE_TOOL_SERVERS.add(this.serverKey);
+      // The model is certainly loaded now, so /api/ps can say what window it
+      // runs with; enables auto-clear on this backend from the next turn.
+      this.refreshContextWindow();
 
       // Nothing downstream can tell a complete answer from one that stopped
       // mid-sentence, so the truncation has to be named here or it is
@@ -515,6 +635,10 @@ export class OpenAiProvider implements AssistantProvider {
         maxAttempts: ASSISTANT.maxParseAttempts,
         response: response.data,
       });
+      // The self-repair context the next attempt sees: what came back, and why
+      // it was unusable. Accumulates across attempts on purpose.
+      chatMessages.push({ role: 'assistant', content: message?.content ?? '' });
+      chatMessages.push({ role: 'user', content: SELF_REPAIR_PROMPT });
     }
     return turn;
   }

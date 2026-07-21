@@ -260,7 +260,7 @@ describe('read-only tools', () => {
       'treats %o as "all monitors", not a failed lookup',
       async (placeholder) => {
         const tool = getToolByName('list_events')!;
-        const r = await tool.execute({ monitorId: placeholder, range: 'today' }, ctx());
+        const r = await tool.execute({ monitorId: placeholder, when: 'today' }, ctx());
         expect(r.isError).toBeFalsy();
         expect(vi.mocked(getEvents)).toHaveBeenCalledWith(expect.objectContaining({ monitorId: undefined }));
       },
@@ -271,34 +271,6 @@ describe('read-only tools', () => {
       const r = await tool.execute({ objectType: 'null' }, ctx());
       expect(r.isError).toBeFalsy();
       expect(vi.mocked(getEvents)).toHaveBeenCalledWith(expect.objectContaining({ notesRegexp: undefined }));
-    });
-  });
-
-  // `resolveEventRange` switches over the EventRange union with no default:
-  // TypeScript proves that exhaustive, but the model is not a typechecker. It
-  // sent "last week", the switch fell through returning undefined, and the
-  // date filter silently vanished, so an unscoped query answered a question
-  // about last week.
-  describe('list_events range validation', () => {
-    it('errors on a range outside the enum instead of dropping the date filter', async () => {
-      const tool = getToolByName('list_events')!;
-      const r = await tool.execute({ range: 'last week' }, ctx());
-      expect(r.isError).toBe(true);
-      // The valid values, so the model can retry with one.
-      expect(r.output).toContain('last_7d');
-      expect(vi.mocked(getEvents)).not.toHaveBeenCalled();
-    });
-
-    it('applies a date filter for a valid range', async () => {
-      const tool = getToolByName('list_events')!;
-      const r = await tool.execute({ range: 'yesterday' }, ctx());
-      expect(r.isError).toBeFalsy();
-      expect(vi.mocked(getEvents)).toHaveBeenCalledWith(
-        expect.objectContaining({
-          startDateTime: expect.any(String),
-          endDateTime: expect.any(String),
-        }),
-      );
     });
   });
 
@@ -714,6 +686,12 @@ describe('coerceLabelList', () => {
     expect(coerceLabelList('car')).toEqual(['car']);
     expect(coerceLabelList('')).toEqual([]);
   });
+
+  // The Python-quote repair must not run on valid JSON: a global '->" swap
+  // corrupted any label that legitimately contains an apostrophe.
+  it('keeps an apostrophe inside a valid JSON label', () => {
+    expect(coerceLabelList('["driver\'s seat", "car"]')).toEqual(["driver's seat", 'car']);
+  });
 });
 
 describe('isOmittedArg', () => {
@@ -746,6 +724,13 @@ describe('objectTypePattern', () => {
     expect(objectTypePattern('.*')).toBe('');
     expect(objectTypePattern('ca(r|t)')).toBe('cart');
     expect(objectTypePattern(['car', ''])).toBe('car');
+  });
+
+  // A detector may write labels in any script. ASCII-only normalization turned
+  // them into '', which silently dropped the object filter.
+  it('keeps non-Latin labels', () => {
+    expect(objectTypePattern('собака')).toBe('собака');
+    expect(objectTypePattern(['人', 'car'])).toBe('(人|car)');
   });
 });
 
@@ -808,12 +793,20 @@ describe('validateToolInput (the refine step, refs #246)', () => {
     const tool = getToolByName('list_events')!;
     expect(validateToolInput(tool.schema, { eventIds: 'not-an-array' })).toContain('must be array');
   });
+
+  // `Number(['5'])` is 5, so a single-element array used to slip through the
+  // number check as if it were numeric.
+  it('rejects a non-numeric value for a number argument', () => {
+    const tool = getToolByName('list_events')!;
+    expect(validateToolInput(tool.schema, { limit: ['5'] })).toContain('limit must be a number');
+    expect(validateToolInput(tool.schema, { limit: '10' })).toBeUndefined();
+  });
 });
 
-describe('list_events range resolution (refs #246)', () => {
-  // Fixes the clock so `resolveEventRange`'s `new Date()` call inside the
-  // executor is deterministic; matches event-range.test.ts's own NOW so the
-  // expected wall-clock strings line up with that file's documented math.
+describe('list_events when resolution (refs #246)', () => {
+  // Fixes the clock so `resolveWhen`'s `new Date()` call inside the executor
+  // is deterministic; matches event-range.test.ts's own NOW so the expected
+  // wall-clock strings line up with that file's documented math.
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
@@ -824,9 +817,9 @@ describe('list_events range resolution (refs #246)', () => {
     vi.useRealTimers();
   });
 
-  it('resolves range against ctx.timezone into startDateTime/endDateTime filters', async () => {
+  it('resolves `when` against ctx.timezone into startDateTime/endDateTime filters', async () => {
     const tool = getToolByName('list_events')!;
-    await tool.execute({ range: 'today' }, { ...ctx(), timezone: 'America/New_York' });
+    await tool.execute({ when: 'today' }, { ...ctx(), timezone: 'America/New_York' });
     expect(getEvents).toHaveBeenCalledWith(
       expect.objectContaining({ startDateTime: '2026-07-16 00:00:00', endDateTime: '2026-07-16 10:30:00' }),
     );
@@ -834,21 +827,10 @@ describe('list_events range resolution (refs #246)', () => {
 
   it('falls back to the browser timezone when ctx.timezone is unset', async () => {
     const tool = getToolByName('list_events')!;
-    const r = await tool.execute({ range: 'last_hour' }, ctx());
+    const r = await tool.execute({ when: 'last hour' }, ctx());
     expect(r.isError).toBeFalsy();
     expect(getEvents).toHaveBeenCalledWith(
       expect.objectContaining({ startDateTime: expect.any(String), endDateTime: expect.any(String) }),
-    );
-  });
-
-  it('an explicit startTime/endTime overrides range', async () => {
-    const tool = getToolByName('list_events')!;
-    await tool.execute(
-      { range: 'today', startTime: '2020-01-01 00:00:00', endTime: '2020-01-02 00:00:00' },
-      { ...ctx(), timezone: 'America/New_York' },
-    );
-    expect(getEvents).toHaveBeenCalledWith(
-      expect.objectContaining({ startDateTime: '2020-01-01 00:00:00', endDateTime: '2020-01-02 00:00:00' }),
     );
   });
 
@@ -904,6 +886,20 @@ describe('list_events range resolution (refs #246)', () => {
     expect(r.output).toContain('words the user did not write');
     expect(r.output).toContain('4pm');
     expect(getEvents).not.toHaveBeenCalled();
+  });
+
+  // WHEN_FILLER is an English word list; against another locale it flags
+  // legitimate connectives as invented and burns a correction round on a
+  // correct call, so the check is gated to English locales (refs #259).
+  it('skips the invented-words check for a non-English locale', async () => {
+    const tool = getToolByName('list_events')!;
+    const r = await tool.execute(
+      { when: 'yesterday' },
+      { ...ctx(), timezone: 'America/New_York', question: 'was geschah gestern', locale: 'de' },
+    );
+
+    expect(r.isError).toBeFalsy();
+    expect(getEvents).toHaveBeenCalled();
   });
 
   // The whole point of giving the model the vocabulary: a label the detector
@@ -963,62 +959,19 @@ describe('list_events range resolution (refs #246)', () => {
     expect(getEvents).not.toHaveBeenCalled();
   });
 
-  it('lets `when` outrank the coarser range keyword', async () => {
+  // An objectType that normalizes to nothing must error, not silently query
+  // unfiltered: every event would be presented as the "filtered" result.
+  it('refuses an objectType that normalizes to an empty pattern', async () => {
     const tool = getToolByName('list_events')!;
-    await tool.execute({ when: 'today before noon', range: 'last_7d' }, { ...ctx(), timezone: 'America/New_York' });
-    expect(getEvents).toHaveBeenCalledWith(
-      expect.objectContaining({ startDateTime: '2026-07-16 00:00:00', endDateTime: '2026-07-16 12:00:00' }),
-    );
-  });
-
-  // Observed: "how many people came yesterday from 4pm to 10pm" produced
-  // `StartDateTime >=: 16:00` with no date at all, so the query was anchored
-  // to no day and answered anyway.
-  it('anchors a bare time of day to the day the range names', async () => {
-    const tool = getToolByName('list_events')!;
-    const r = await tool.execute(
-      { range: 'yesterday', startTime: '16:00', endTime: '22:00', objectType: 'person' },
-      { ...ctx(), timezone: 'America/New_York' },
-    );
-    expect(r.isError).toBeFalsy();
-    expect(getEvents).toHaveBeenCalledWith(
-      expect.objectContaining({
-        startDateTime: '2026-07-15 16:00:00',
-        endDateTime: '2026-07-15 22:00:00',
-        notesRegexp: 'detected:.*person',
-      }),
-    );
-  });
-
-  it('refuses a bare time with no day to attach it to, instead of querying an undated window', async () => {
-    const tool = getToolByName('list_events')!;
-    const r = await tool.execute({ startTime: '16:00', endTime: '22:00' }, { ...ctx(), timezone: 'America/New_York' });
+    const r = await tool.execute({ when: 'today', objectType: '@#$' }, { ...ctx(), timezone: 'America/New_York' });
     expect(r.isError).toBe(true);
-    expect(r.output).toContain('time of day with no date');
+    expect(r.output).toContain('not a usable label');
     expect(getEvents).not.toHaveBeenCalled();
   });
 
-  it('refuses a bare time paired with a rolling range, which names no single day', async () => {
+  it('combines when with objectType into a notesRegexp filter, for "how many people today" style questions', async () => {
     const tool = getToolByName('list_events')!;
-    const r = await tool.execute(
-      { range: 'last_7d', startTime: '16:00' },
-      { ...ctx(), timezone: 'America/New_York' },
-    );
-    expect(r.isError).toBe(true);
-    expect(getEvents).not.toHaveBeenCalled();
-  });
-
-  it('refuses a datetime it cannot understand rather than passing it to the API', async () => {
-    const tool = getToolByName('list_events')!;
-    const r = await tool.execute({ startTime: 'yesterday 4pm' }, { ...ctx(), timezone: 'America/New_York' });
-    expect(r.isError).toBe(true);
-    expect(r.output).toContain('not a date this app understands');
-    expect(getEvents).not.toHaveBeenCalled();
-  });
-
-  it('combines range with objectType into a notesRegexp filter, for "how many people today" style questions', async () => {
-    const tool = getToolByName('list_events')!;
-    await tool.execute({ range: 'today', objectType: 'person' }, { ...ctx(), timezone: 'America/New_York' });
+    await tool.execute({ when: 'today', objectType: 'person' }, { ...ctx(), timezone: 'America/New_York' });
     expect(getEvents).toHaveBeenCalledWith(
       expect.objectContaining({ startDateTime: '2026-07-16 00:00:00', notesRegexp: 'detected:.*person' }),
     );
@@ -1123,7 +1076,7 @@ describe('list_events range resolution (refs #246)', () => {
       respond(emptyPage, emptyPage);
       const tool = getToolByName('list_events')!;
 
-      const r = await tool.execute({ range: 'today', objectType: 'person' }, ctx());
+      const r = await tool.execute({ when: 'today', objectType: 'person' }, ctx());
 
       expect(r.isError).toBeFalsy();
       const parsed = JSON.parse(r.output);
@@ -1146,7 +1099,7 @@ describe('list_events range resolution (refs #246)', () => {
     it('does not probe when the objectType query returned rows', async () => {
       const tool = getToolByName('list_events')!;
 
-      const r = await tool.execute({ range: 'today', objectType: 'person' }, ctx());
+      const r = await tool.execute({ when: 'today', objectType: 'person' }, ctx());
 
       expect(r.isError).toBeFalsy();
       expect(getEvents).toHaveBeenCalledTimes(1);

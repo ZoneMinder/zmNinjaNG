@@ -31,6 +31,12 @@ describe('deniesTheData', () => {
   it('stays quiet when no result carries a count it can check', () => {
     expect(deniesTheData('Nothing was found.', ['some plain text result'])).toBe(false);
   });
+
+  // A scoped negative is a description of the data, not a denial of it, and
+  // "correcting" it replaced a right answer with a rewrite.
+  it('passes a partial negative that also reports a positive count', () => {
+    expect(deniesTheData('No animals were detected, but 5 people came by.', data)).toBe(false);
+  });
 });
 
 describe('echoesToolOutput', () => {

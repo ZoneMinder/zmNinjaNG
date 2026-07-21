@@ -19,16 +19,7 @@ import { ASSISTANT } from '../zmninja-ng-constants';
 import { buildResultSummary, countObjects } from './result-summary';
 import { parseDetectedObjects } from '../event/event-detection';
 import { buildEventDisplayEntity, buildMonitorDisplayEntity } from './display';
-import {
-  EVENT_RANGES,
-  resolveEventRange,
-  isEventRange,
-  resolveWhen,
-  asBareTimeOfDay,
-  hasCalendarDate,
-  singleDayOfRange,
-  type EventRange,
-} from './event-range';
+import { resolveWhen } from './event-range';
 import { resolveMonitorRef } from './monitor-ref';
 import type { ToolDefinition } from './types';
 import { safeExecute, isOmittedArg, objectTypePattern, coerceLabelList, ungroundedWhenWords, NAVIGATE_ALLOWLIST } from './tool-helpers';
@@ -193,7 +184,7 @@ const listEventsTool: ToolDefinition = {
     'you must describe, since the app shows their thumbnails below your answer. Each row includes the monitor ' +
     'NAME (not just its id), the detected object types, score, duration, and a notes preview, so answer using ' +
     'those, not raw ids. A tag filter and event ids cannot be combined (the server rejects it); pass one or ' +
-    'the other. An explicit startTime/endTime overrides range if both are given.',
+    'the other.',
   schema: {
     type: 'object',
     properties: {
@@ -238,15 +229,6 @@ const listEventsTool: ToolDefinition = {
       return { output: 'Cannot filter by tag and event ids together.', isError: true };
     }
     const limit = clampListEventsLimit(input.limit);
-    // Rejected before any query runs. An out-of-enum range used to fall
-    // through resolveEventRange and leave the window off the query entirely,
-    // so "last week" silently asked about all of time (refs #246).
-    if (input.range !== undefined && !isEventRange(input.range)) {
-      return {
-        output: `Unknown range "${String(input.range)}". Valid ranges: ${EVENT_RANGES.join(', ')}.`,
-        isError: true,
-      };
-    }
     return safeExecute('list_events', async () => {
       const timezone = ctx.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -256,7 +238,10 @@ const listEventsTool: ToolDefinition = {
       // the model corrects instead of silently querying the wrong window.
       const whenPhrase = isOmittedArg(input.when) ? undefined : String(input.when);
       let resolvedWhen: { startDateTime: string; endDateTime: string } | undefined;
-      if (whenPhrase && ctx.question) {
+      // English-locale only: WHEN_FILLER is an English word list, and against
+      // another language it flags legitimate connectives ("desde", "von") as
+      // invented, burning a correction round on a correct call (refs #259).
+      if (whenPhrase && ctx.question && (ctx.locale ?? 'en').toLowerCase().startsWith('en')) {
         // The contract is "the user's own words". A phrase carrying words the
         // user never wrote is the prompt's example leaking into the argument,
         // and it narrows the window without anyone noticing.
@@ -274,40 +259,6 @@ const listEventsTool: ToolDefinition = {
         if ('error' in parsed) throw new Error(parsed.error);
         resolvedWhen = parsed;
       }
-
-      const range = input.range as EventRange | undefined;
-      const explicitStart = isOmittedArg(input.startTime) ? undefined : String(input.startTime);
-      const explicitEnd = isOmittedArg(input.endTime) ? undefined : String(input.endTime);
-      // Resolved whenever a range is given, not only when a bound is missing:
-      // a bare time of day needs the range's calendar day to anchor to, and
-      // the old condition skipped resolution in exactly the case that needs it
-      // most ("yesterday from 4pm to 10pm" sets range AND both bounds).
-      const resolved = range ? resolveEventRange(range, new Date(), timezone) : undefined;
-      const anchorDay = range && resolved ? singleDayOfRange(range, resolved) : undefined;
-
-      /** A model-supplied bound as a datetime the API can use. A bare time of
-       *  day is anchored to the range's day; anything carrying its own date
-       *  passes through; anything else is refused rather than sent as-is. */
-      const anchorBound = (value: string | undefined, field: 'startTime' | 'endTime'): string | undefined => {
-        if (value === undefined) return undefined;
-        const timeOfDay = asBareTimeOfDay(value);
-        if (timeOfDay) {
-          if (!anchorDay) {
-            throw new Error(
-              `${field} "${value}" is a time of day with no date, and this query has no single day to attach it to. ` +
-                'Either add range "today" or "yesterday" alongside it, or pass the full "YYYY-MM-DD HH:MM:SS".',
-            );
-          }
-          return `${anchorDay} ${timeOfDay}`;
-        }
-        if (!hasCalendarDate(value)) {
-          throw new Error(
-            `${field} "${value}" is not a date this app understands. Use "YYYY-MM-DD HH:MM:SS", ` +
-              'or a bare "HH:MM" together with range "today" or "yesterday".',
-          );
-        }
-        return value;
-      };
 
       // Monitors first, and awaited rather than raced with getEvents: the
       // events query cannot be built until the model's `monitorId` (often a
@@ -336,6 +287,15 @@ const listEventsTool: ToolDefinition = {
         ? (Array.isArray(objectTypeRaw) ? objectTypeRaw.join(', ') : String(objectTypeRaw))
         : undefined;
       const objectPattern = objectTypeRaw ? objectTypePattern(objectTypeRaw) : undefined;
+      // An objectType that normalizes to nothing must be an error, not an
+      // unfiltered query: silently dropping the filter presents every event
+      // as the "filtered" result.
+      if (objectTypeRaw && !objectPattern) {
+        throw new Error(
+          `objectType "${String(objectType)}" is not a usable label. Pass a label exactly as this ` +
+            'installation records it, or omit objectType entirely.',
+        );
+      }
 
       // Refused before the query, not discovered as zero rows afterwards.
       // Asked about "vehicles" the model sent objectType "vehicle" despite the
@@ -365,18 +325,17 @@ const listEventsTool: ToolDefinition = {
        *  ever recorded. A function because the zero-match branch needs it
        *  before the rows exist. */
       const windowOf = () => {
-        const from = anchorBound(explicitStart, 'startTime') ?? resolvedWhen?.startDateTime ?? resolved?.startDateTime;
-        const to = anchorBound(explicitEnd, 'endTime') ?? resolvedWhen?.endDateTime ?? resolved?.endDateTime;
+        const from = resolvedWhen?.startDateTime;
+        const to = resolvedWhen?.endDateTime;
         return from || to ? { from: from ?? null, to: to ?? null } : 'all recorded events, no time filter applied';
       };
 
       const filters: EventFilters = {
         monitorId,
-        // Precedence: an explicit timestamp the model supplied, then the
-        // resolved `when` phrase, then the `range` keyword. `when` outranks
-        // `range` because it is the more specific statement of the same thing.
-        startDateTime: anchorBound(explicitStart, 'startTime') ?? resolvedWhen?.startDateTime ?? resolved?.startDateTime,
-        endDateTime: anchorBound(explicitEnd, 'endTime') ?? resolvedWhen?.endDateTime ?? resolved?.endDateTime,
+        // `when` is the only time argument this tool takes: the resolved
+        // phrase, or no window at all (see event-range.ts's resolveWhen).
+        startDateTime: resolvedWhen?.startDateTime,
+        endDateTime: resolvedWhen?.endDateTime,
         // Expanded through the category map, so "vehicles" matches the car and
         // truck rows a detector actually writes (see objectTypePattern).
         notesRegexp: objectPattern ? `detected:.*${objectPattern}` : undefined,

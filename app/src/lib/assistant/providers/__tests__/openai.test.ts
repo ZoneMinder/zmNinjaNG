@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { buildOpenAiMessages, toOpenAiTools, parseOpenAiTurn, OpenAiProvider, listOpenAiModels, probeToolSupport, toolSupportFromError, suggestOllamaBaseUrl } from '../openai';
+import { buildOpenAiMessages, toOpenAiTools, parseOpenAiTurn, OpenAiProvider, listOpenAiModels, probeToolSupport, toolSupportFromError, suggestOllamaBaseUrl, resetNativeToolServersForTests, resetContextWindowsForTests } from '../openai';
 import type { AssistantMessage, ToolDefinition } from '../../types';
 import { ASSISTANT } from '../../../zmninja-ng-constants';
 
@@ -82,6 +82,12 @@ describe('buildOpenAiMessages', () => {
 
   it('keeps the portable fallback when tools are available', () => {
     expect(buildOpenAiMessages('sys', [], true)[0].content).toContain('If you cannot emit a native tool call');
+  });
+
+  // Once a server has emitted a native tool call, the fallback is dead weight
+  // that invites `{"answer":...}` JSON as text; the prompt drops it.
+  it('drops the portable fallback when told the server calls tools natively', () => {
+    expect(buildOpenAiMessages('sys', [], true, false)[0].content).toBe('sys');
   });
 });
 
@@ -469,6 +475,110 @@ describe('probeToolSupport timeouts', () => {
   });
 });
 
+describe('native tool-call memory', () => {
+  beforeEach(() => {
+    httpPostMock.mockReset();
+    resetNativeToolServersForTests();
+  });
+
+  it('drops the portable fallback for a server that has emitted a native tool call', async () => {
+    httpPostMock.mockResolvedValue({
+      data: { choices: [{ message: { tool_calls: [{ id: 'c1', type: 'function', function: { name: 'count_events', arguments: '{}' } }] } }] },
+    });
+    const p = new OpenAiProvider({ baseUrl: 'http://zm:11434/v1', model: 'llama3.2' });
+    await p.chat([{ role: 'user', text: 'count today' }], [TOOL], 'sys', new AbortController().signal);
+    const first = httpPostMock.mock.calls[0][1] as { messages: Array<{ content: string }> };
+    expect(first.messages[0].content).toContain('If you cannot emit a native tool call');
+
+    // A FRESH provider instance for the same server: AskPanel builds one per
+    // turn, so the memory must live beyond the instance.
+    const p2 = new OpenAiProvider({ baseUrl: 'http://zm:11434/v1', model: 'llama3.2' });
+    await p2.chat([{ role: 'user', text: 'count today' }], [TOOL], 'sys', new AbortController().signal);
+    const second = httpPostMock.mock.calls[1][1] as { messages: Array<{ content: string }> };
+    expect(second.messages[0].content).not.toContain('If you cannot emit a native tool call');
+  });
+});
+
+describe('context window discovery', () => {
+  beforeEach(() => {
+    httpPostMock.mockReset();
+    httpGetMock.mockReset();
+    resetContextWindowsForTests();
+    resetNativeToolServersForTests();
+  });
+
+  it('learns num_ctx from /api/ps after a chat and serves it to later instances', async () => {
+    httpPostMock.mockResolvedValue({ data: { choices: [{ message: { content: 'hi' } }] } });
+    httpGetMock.mockResolvedValue({ data: { models: [{ model: 'llama3.2', context_length: 131072 }] } });
+
+    const p = new OpenAiProvider({ baseUrl: 'http://zm:11434/v1', model: 'llama3.2' });
+    expect(p.contextWindow).toBeUndefined();
+    await p.chat([{ role: 'user', text: 'hello' }], [], 'sys', new AbortController().signal);
+    await Promise.resolve();
+
+    // The native endpoint, not the OpenAI-compatible one.
+    expect(httpGetMock.mock.calls[0][0]).toBe('http://zm:11434/api/ps');
+    // AskPanel builds a fresh provider each turn; the window must survive that.
+    const p2 = new OpenAiProvider({ baseUrl: 'http://zm:11434/v1', model: 'llama3.2' });
+    expect(p2.contextWindow).toBe(131072);
+  });
+
+  // reasoning_effort is Ollama-only: a genuine OpenAI server rejects it on
+  // non-reasoning models, so it is sent only once /api/ps has confirmed the
+  // server. Measured ~5x faster turns on thinking models, identical scores.
+  it('sends reasoning_effort only after the server is confirmed Ollama', async () => {
+    httpPostMock.mockResolvedValue({ data: { choices: [{ message: { content: 'hi' } }] } });
+    httpGetMock.mockResolvedValue({ data: { models: [{ model: 'qwen3:8b', context_length: 40960 }] } });
+
+    const p = new OpenAiProvider({ baseUrl: 'http://zm:11434/v1', model: 'qwen3:8b' });
+    await p.chat([{ role: 'user', text: 'hello' }], [], 'sys', new AbortController().signal);
+    expect(httpPostMock.mock.calls[0][1]).not.toHaveProperty('reasoning_effort');
+    await Promise.resolve();
+
+    const p2 = new OpenAiProvider({ baseUrl: 'http://zm:11434/v1', model: 'qwen3:8b' });
+    await p2.chat([{ role: 'user', text: 'again' }], [], 'sys', new AbortController().signal);
+    expect(httpPostMock.mock.calls[1][1]).toMatchObject({ reasoning_effort: ASSISTANT.ollamaReasoningEffort });
+  });
+
+  it('records a server without the endpoint and never asks again', async () => {
+    httpPostMock.mockResolvedValue({ data: { choices: [{ message: { content: 'hi' } }] } });
+    httpGetMock.mockRejectedValue(new Error('HTTP 404'));
+
+    const p = new OpenAiProvider({ baseUrl: 'http://api.example/v1', model: 'gpt' });
+    await p.chat([{ role: 'user', text: 'hello' }], [], 'sys', new AbortController().signal);
+    await Promise.resolve();
+    await p.chat([{ role: 'user', text: 'again' }], [], 'sys', new AbortController().signal);
+    await Promise.resolve();
+
+    expect(p.contextWindow).toBeUndefined();
+    expect(httpGetMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('constrained completion', () => {
+  beforeEach(() => {
+    httpPostMock.mockReset();
+  });
+
+  it('sends jsonSchema as response_format json_schema', async () => {
+    httpPostMock.mockResolvedValue({ data: { choices: [{ message: { content: '{"kind":"CHAT"}' } }] } });
+    const p = new OpenAiProvider({ baseUrl: 'http://zm:11434/v1', model: 'llama3.2' });
+    const schema = { type: 'object', properties: { kind: { type: 'string' } } };
+    const result = await p.complete('sys', 'hello', new AbortController().signal, schema);
+    expect(result.text).toBe('{"kind":"CHAT"}');
+    expect(httpPostMock.mock.calls[0][1]).toMatchObject({
+      response_format: { type: 'json_schema', json_schema: { name: 'result', schema, strict: true } },
+    });
+  });
+
+  it('sends no response_format without a schema', async () => {
+    httpPostMock.mockResolvedValue({ data: { choices: [{ message: { content: 'CHAT' } }] } });
+    const p = new OpenAiProvider({ baseUrl: 'http://zm:11434/v1', model: 'llama3.2' });
+    await p.complete('sys', 'hello', new AbortController().signal);
+    expect(httpPostMock.mock.calls[0][1]).not.toHaveProperty('response_format');
+  });
+});
+
 describe('sampling temperature', () => {
   beforeEach(() => {
     httpPostMock.mockReset();
@@ -489,16 +599,22 @@ describe('sampling temperature', () => {
     });
   });
 
-  it('raises the temperature on a retry so the sampler can escape a bad reply', async () => {
-    // At temperature 0 a retry returns the identical unparseable text, which
-    // would spend every attempt for nothing.
+  it('self-repairs on a retry, and only raises the temperature on the last attempt', async () => {
+    // The retry is not a blind re-roll: the failed reply plus a correction are
+    // appended, so a greedy retry already generates from a different prompt.
+    // Only the final attempt raises the temperature, for a model stuck on the
+    // same broken shape regardless of the correction.
     httpPostMock.mockResolvedValue({ data: { choices: [{ message: {} }] } });
     const p = new OpenAiProvider({ baseUrl: 'http://zm:11434/v1', model: 'llama3.2' });
     await p.chat([{ role: 'user', text: 'summarize today' }], [], 'sys', new AbortController().signal);
-    expect(httpPostMock.mock.calls.length).toBeGreaterThan(1);
-    expect(httpPostMock.mock.calls[1][1]).toMatchObject({
-      temperature: ASSISTANT.assistantRetryTemperature,
-    });
+    expect(httpPostMock.mock.calls.length).toBe(ASSISTANT.maxParseAttempts);
+
+    const secondAttempt = httpPostMock.mock.calls[1][1] as { temperature: number; messages: Array<{ role: string; content: string }> };
+    expect(secondAttempt.temperature).toBe(ASSISTANT.assistantTemperature);
+    expect(secondAttempt.messages.at(-1)?.content).toContain('empty or unusable');
+
+    const lastAttempt = httpPostMock.mock.calls[ASSISTANT.maxParseAttempts - 1][1] as { temperature: number };
+    expect(lastAttempt.temperature).toBe(ASSISTANT.assistantRetryTemperature);
     expect(ASSISTANT.assistantRetryTemperature).toBeGreaterThan(ASSISTANT.assistantTemperature);
   });
 });

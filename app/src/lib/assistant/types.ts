@@ -170,6 +170,10 @@ export interface ToolContext {
    *  model-supplied phrase came from the user rather than from an example in
    *  the prompt (see `list_events`' `when`). */
   question?: string;
+  /** The active UI locale (BCP 47, e.g. `de` or `en-US`). English-only text
+   *  heuristics (ungroundedWhenWords) are gated on it so they never
+   *  false-positive on another language's connectives (refs #259). */
+  locale?: string;
   /** Detected-object labels this install writes (object-labels.ts). A tool
    *  rejects an objectType outside this list rather than querying a label the
    *  detector never emits. */
@@ -263,8 +267,14 @@ export interface AssistantProvider {
    * replied `{"answer": "There were 10 vehicles detected yesterday."}` instead
    * of OK or PROBLEM, so the check could only ever pass. It was a no-op on two
    * of three backends.
+   *
+   * `jsonSchema`, when given, asks the backend to CONSTRAIN generation to that
+   * JSON Schema (Ollama `response_format: json_schema`, WebLLM XGrammar). A
+   * backend that cannot constrain ignores it, so the caller must still parse
+   * defensively; the schema turns a usually-right reply into an always-shaped
+   * one where the backend supports it.
    */
-  complete(system: string, text: string, signal: AbortSignal): Promise<CompletionResult>;
+  complete(system: string, text: string, signal: AbortSignal, jsonSchema?: Record<string, unknown>): Promise<CompletionResult>;
   chat(
     messages: AssistantMessage[],
     tools: ToolDefinition[],
@@ -273,9 +283,10 @@ export interface AssistantProvider {
   ): Promise<AssistantTurn>;
   /** The context window this backend is running with, when it is knowable.
    *  Set for on-device models (we pass the window to CreateMLCEngine, so we
-   *  know it exactly); undefined for Ollama, where the window is the server's
-   *  `num_ctx` and nothing in the OpenAI-compatible API reports it. Undefined
-   *  means AskPanel cannot judge "close to full" and so never auto-clears. */
+   *  know it exactly); for Ollama it is learned from the native `/api/ps`
+   *  endpoint after the first chat of the session (the OpenAI-compatible API
+   *  never reports `num_ctx`). Undefined means AskPanel cannot judge "close
+   *  to full" and so never auto-clears. */
   readonly contextWindow?: number;
 }
 

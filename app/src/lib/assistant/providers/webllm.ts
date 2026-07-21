@@ -7,12 +7,15 @@
  * exactly one of two JSON shapes: `{"tool": "<name>", "input": {...}}` for
  * one tool call, or `{"answer": "<text>"}` to answer directly.
  *
- * `response_format: { type: 'json_object' }` is deliberately NOT sent: in
- * `@mlc-ai/web-llm@0.2.84`, `json_object` mode routes into the XGrammar
- * JSON-schema compiler (`GrammarCompiler.CompileJSONSchema`), which expects a
- * schema STRING. With no `response_format.schema` supplied it throws a WASM
- * `BindingError: Cannot pass non-string to std::string`, crashing every chat
- * turn. So the constraint here is prompt + parser only, not `response_format`.
+ * Generation is additionally CONSTRAINED to the envelope schema via
+ * `response_format: { type: 'json_object', schema }`. The schema string is
+ * mandatory: in `@mlc-ai/web-llm@0.2.84`, `json_object` mode routes into the
+ * XGrammar JSON-schema compiler (`GrammarCompiler.CompileJSONSchema`), which
+ * expects a schema STRING and throws a WASM `BindingError: Cannot pass
+ * non-string to std::string` without one, crashing every chat turn. Because
+ * that compiler has crashed before, the constraint is belt-and-braces: if the
+ * engine rejects it at runtime the adapter falls back to prompt + parser for
+ * the rest of the session (see `grammarUsable`) instead of failing turns.
  *
  * The default model, Qwen3-1.7B, is a reasoning model that emits a
  * `<think>...</think>` chain-of-thought block before its final answer;
@@ -75,6 +78,45 @@ const OUTPUT_CONTRACT = [
   'To call a tool: {"tool": "<tool name>", "input": { ... }}',
   'To answer the user: {"answer": "<your reply>"}',
 ].join('\n');
+
+/** Appended (with the failed reply) before a parse retry, so the retry knows
+ *  what it did wrong instead of being re-rolled blind. At temperature 0 a
+ *  blind retry returns the identical broken text; naming the fault changes
+ *  the prompt, which is what actually moves a greedy sampler. */
+const SELF_REPAIR_PROMPT = `Your last reply was not one valid JSON object, so it could not be used. Send it again, corrected.\n${OUTPUT_CONTRACT}`;
+
+/** The two contract shapes as one JSON Schema, handed to XGrammar so the
+ *  sampler literally cannot produce prose around the JSON, a markdown fence,
+ *  or a third shape. The parser cascade stays: it is the fallback for a
+ *  runtime where the grammar compiler is unusable (see `grammarUsable`). */
+const ENVELOPE_SCHEMA = JSON.stringify({
+  anyOf: [
+    {
+      type: 'object',
+      properties: { tool: { type: 'string' }, input: { type: 'object' } },
+      required: ['tool', 'input'],
+      additionalProperties: false,
+    },
+    {
+      type: 'object',
+      properties: { answer: { type: 'string' } },
+      required: ['answer'],
+      additionalProperties: false,
+    },
+  ],
+});
+
+/** Whether this session's engine accepts schema-constrained generation. Flips
+ *  false on the first rejection and stays false: the failure mode is a WASM
+ *  throw on EVERY constrained call (see the module header), so retrying the
+ *  constraint each turn would pay the crash once per turn for nothing. */
+let grammarUsable = true;
+
+/** Test-only: the flag above is module state and vitest re-imports modules per
+ *  file, not per test. */
+export function resetGrammarUsableForTests(): void {
+  grammarUsable = true;
+}
 
 /** The tool catalog for the system message. Format rules live in
  *  `OUTPUT_CONTRACT`, appended at the generation point instead. */
@@ -491,9 +533,64 @@ export class WebLlmProvider implements AssistantProvider {
     this.contextWindow = ASSISTANT.webllmModels.find((m) => m.id === modelId)?.contextWindowSize;
   }
 
+  /** One completion, schema-constrained when a schema is given and the engine
+   *  accepts it. Falls back to unconstrained generation the first time the
+   *  grammar compiler rejects a request, and remembers that for the session:
+   *  the parser cascade then carries the contract alone, as it always did. */
+  private async createCompletion(
+    engine: Awaited<ReturnType<typeof getLoadedEngine>>,
+    messages: ChatCompletionMessageParam[],
+    temperature: number,
+    schema?: string,
+  ) {
+    if (schema && grammarUsable) {
+      try {
+        return await engine.chat.completions.create({
+          messages,
+          max_tokens: ASSISTANT.maxTokens,
+          temperature,
+          response_format: { type: 'json_object', schema },
+        });
+      } catch (error) {
+        grammarUsable = false;
+        log.assistant('WebLLM rejected schema-constrained generation; prompt-only for this session', LogLevel.WARN, {
+          modelId: this.modelId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    return engine.chat.completions.create({ messages, max_tokens: ASSISTANT.maxTokens, temperature });
+  }
+
+  /** Runs `work` with the abort signal wired to `engine.interruptGenerate()`.
+   *  Without this an in-flight generation ran to completion regardless of the
+   *  Abort button: the loop only ever checked the signal BETWEEN attempts, so
+   *  a slow on-device turn could not actually be stopped. Interrupting makes
+   *  the pending `create` resolve early (with partial text); the caller's own
+   *  `signal.aborted` check then turns that into an AbortError. */
+  private async withInterrupt<T>(
+    engine: Awaited<ReturnType<typeof getLoadedEngine>>,
+    signal: AbortSignal,
+    work: () => Promise<T>,
+  ): Promise<T> {
+    const onAbort = () => {
+      try {
+        engine.interruptGenerate();
+      } catch {
+        // Nothing generating right now; the aborted-signal checks still stop the turn.
+      }
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    try {
+      return await work();
+    } finally {
+      signal.removeEventListener('abort', onAbort);
+    }
+  }
+
   /** Bare system + user, deliberately bypassing `buildWebLlmMessages`: no tool
    *  catalog, no few-shot, no OUTPUT_CONTRACT. See `AssistantProvider`. */
-  async complete(system: string, text: string, signal: AbortSignal): Promise<CompletionResult> {
+  async complete(system: string, text: string, signal: AbortSignal, jsonSchema?: Record<string, unknown>): Promise<CompletionResult> {
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
     const engine = await getLoadedEngine(this.modelId);
     const messages: ChatCompletionMessageParam[] = [
@@ -501,11 +598,10 @@ export class WebLlmProvider implements AssistantProvider {
       { role: 'user', content: text },
     ];
     const startedAt = Date.now();
-    const response = await engine.chat.completions.create({
-      messages,
-      max_tokens: ASSISTANT.maxTokens,
-      temperature: this.temperature,
-    });
+    const response = await this.withInterrupt(engine, signal, () =>
+      this.createCompletion(engine, messages, this.temperature, jsonSchema ? JSON.stringify(jsonSchema) : undefined),
+    );
+    if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
     // `stripThinkBlock` via parseWebLlmTurn is not used here: the caller wants
     // the raw words, and a reasoning model's block is handled by the caller's
     // own keyword matching.
@@ -529,11 +625,13 @@ export class WebLlmProvider implements AssistantProvider {
 
     // Retry a degenerate/unparseable reply rather than apologizing on the first
     // one: small models sometimes emit an empty code fence or non-JSON. The
-    // first attempt is greedy (temperature 0) because that measured best for
-    // answer accuracy, so the retry has to raise the temperature itself: at 0
-    // the sampler would return the identical unparseable text and the attempts
-    // would be spent for nothing. The last attempt's turn (with its `raw`
-    // content) is what surfaces if none parse (refs #246).
+    // retry is a SELF-REPAIR, not a blind re-roll: the failed reply plus a
+    // correction naming the fault are appended, so even the greedy first
+    // temperature (0, measured best for accuracy) produces a different
+    // generation. The final attempt also raises the temperature, in case the
+    // model is stuck on the same broken shape regardless of the correction.
+    // The last attempt's turn (with its `raw` content) is what surfaces if
+    // none parse (refs #246).
     let turn: AssistantTurn = { text: PARSE_ERROR_TEXT, toolCalls: [] };
     for (let attempt = 1; attempt <= ASSISTANT.maxParseAttempts; attempt++) {
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
@@ -544,16 +642,19 @@ export class WebLlmProvider implements AssistantProvider {
       });
 
       const startedAt = Date.now();
-      const response = await engine.chat.completions.create({
-        messages: chatMessages,
-        max_tokens: ASSISTANT.maxTokens,
-        // Raises whatever was configured rather than replacing it, so a user
-        // who chose a higher temperature does not get a LOWER one on retry.
-        temperature:
-          attempt === 1
+      const response = await this.withInterrupt(engine, signal, () =>
+        this.createCompletion(
+          engine,
+          chatMessages,
+          // Raises whatever was configured rather than replacing it, so a user
+          // who chose a higher temperature does not get a LOWER one on retry.
+          attempt < ASSISTANT.maxParseAttempts
             ? this.temperature
             : Math.max(this.temperature, ASSISTANT.assistantRetryTemperature),
-      });
+          ENVELOPE_SCHEMA,
+        ),
+      );
+      if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
 
       const content = response.choices[0]?.message?.content ?? '';
       log.assistant('WebLLM raw response', LogLevel.DEBUG, { modelId: this.modelId, content, attempt });
@@ -592,6 +693,11 @@ export class WebLlmProvider implements AssistantProvider {
         attempt,
         maxAttempts: ASSISTANT.maxParseAttempts,
       });
+      // The self-repair context the next attempt sees: what came back, and why
+      // it was unusable. Accumulates across attempts on purpose, so the model
+      // never loses sight of a shape it already tried and failed with.
+      chatMessages.push({ role: 'assistant', content });
+      chatMessages.push({ role: 'user', content: SELF_REPAIR_PROMPT });
     }
     return turn;
   }

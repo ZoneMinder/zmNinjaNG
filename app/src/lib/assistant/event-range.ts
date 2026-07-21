@@ -4,37 +4,16 @@
  *
  * Small/local models (Gemma, Qwen, etc. run through Ollama or on-device) are
  * unreliable at computing an ISO timestamp for "today" or "yesterday"
- * themselves: this is why `list_events`' `range` input exists at all (see
+ * themselves: this is why `list_events`' `when` input exists at all (see
  * `tools-readonly.ts`). Resolving it here, in app code, means the model only
- * ever has to pick a keyword, never compute a date. `now` and `timezone` are
- * both explicit parameters, never read from a store, so this stays pure and
- * unit-testable with a fixed clock and a fixed zone regardless of the CI
- * runner's own system timezone.
+ * ever has to repeat the user's phrase, never compute a date. `now` and
+ * `timezone` are both explicit parameters, never read from a store, so this
+ * stays pure and unit-testable with a fixed clock and a fixed zone regardless
+ * of the CI runner's own system timezone.
  */
 import { subHours, subDays, startOfDay, addMinutes, format } from 'date-fns';
 import { toZonedTime, fromZonedTime } from 'date-fns-tz';
 import { ZM_API_DATETIME_FORMAT } from '../zm/zm-constants';
-
-/** `today`/`yesterday` are calendar-day boundaries (local midnight to local
- *  midnight) in the caller's timezone. The rest are rolling windows ending
- *  "now": a fixed duration back from the current instant, not calendar-aligned. */
-export const EVENT_RANGES = ['today', 'yesterday', 'last_hour', 'last_24h', 'last_7d', 'last_30d'] as const;
-export type EventRange = (typeof EVENT_RANGES)[number];
-
-/**
- * Whether `value` is a range `resolveEventRange` can actually resolve.
- *
- * Needed because `resolveEventRange`'s switch is exhaustive over `EventRange`
- * and therefore has no default branch: that exhaustiveness is a compile-time
- * proof about OUR callers, and says nothing about a model that answers with
- * "last week". Such a value fell through the switch, returned undefined, and
- * silently dropped the date filter, leaving an unscoped query answering a
- * question about a specific window. Anything crossing the model boundary must
- * pass through here first.
- */
-export function isEventRange(value: unknown): value is EventRange {
-  return typeof value === 'string' && (EVENT_RANGES as readonly string[]).includes(value);
-}
 
 export interface ResolvedEventRange {
   startDateTime: string;
@@ -58,40 +37,6 @@ function localMidnight(now: Date, timezone: string, daysAgo: number): Date {
   const zonedToday = startOfDay(toZonedTime(now, timezone));
   const zonedMidnight = daysAgo > 0 ? subDays(zonedToday, daysAgo) : zonedToday;
   return fromZonedTime(zonedMidnight, timezone);
-}
-
-/** A wall-clock time carrying no date at all ("16:00", "4:05:30"), normalized
- *  to `HH:MM:SS`, or undefined if `value` is not one.
- *
- *  Asked "how many people came yesterday from 4pm to 10pm", the model sent
- *  `startTime: "16:00"` / `endTime: "22:00"`. Nothing validated them, so the
- *  query went out as `StartDateTime >=: 16:00` with no date: not yesterday,
- *  not any day, and answered with a straight face. A time of day is a
- *  perfectly reasonable thing for the model to produce; what it cannot be
- *  trusted to do is work out which calendar day to staple it to, which is the
- *  same reason `range` exists (see this module's header). */
-export function asBareTimeOfDay(value: string): string | undefined {
-  const match = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(value.trim());
-  if (!match) return undefined;
-  const [, hours, minutes, seconds] = match;
-  if (Number(hours) > 23 || Number(minutes) > 59 || Number(seconds ?? '0') > 59) return undefined;
-  return `${hours.padStart(2, '0')}:${minutes}:${seconds ?? '00'}`;
-}
-
-/** Whether `value` carries its own calendar date, so it can go to the API as
- *  it stands. Deliberately a shape check, not a parse: this only decides
- *  whether the model supplied a date, and anything that is neither this nor a
- *  bare time is rejected rather than guessed at. */
-export function hasCalendarDate(value: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}([ T]\d{1,2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:?\d{2})?)?$/.test(value.trim());
-}
-
-/** The single calendar day (`YYYY-MM-DD`) a range covers, or undefined for a
- *  rolling window. Only `today`/`yesterday` are calendar-aligned, so only they
- *  can give a bare time of day a date to attach to; "4pm" inside "last 7 days"
- *  names no particular day and is rejected instead of picking one. */
-export function singleDayOfRange(range: EventRange, resolved: ResolvedEventRange): string | undefined {
-  return range === 'today' || range === 'yesterday' ? resolved.startDateTime.slice(0, 10) : undefined;
 }
 
 /** One clock time expressed the way people write it, as minutes past
@@ -185,7 +130,7 @@ export function resolveWhen(
     const rest = dayMatch[2]?.trim();
 
     // The whole day. "today" ends now rather than at a midnight that has not
-    // happened yet, matching resolveEventRange.
+    // happened yet.
     if (!rest) {
       return {
         startDateTime: formatForZm(dayStart, timezone),
@@ -230,26 +175,4 @@ export function resolveWhen(
       `Could not read "${phrase}" as a time window. Use a phrase like "today", "yesterday", ` +
       '"last 24 hours", "last 7 days", "yesterday from 4pm to 10pm", or "today before noon".',
   };
-}
-
-/** Resolves one `EventRange` keyword into `startDateTime`/`endDateTime`
- *  strings for `EventFilters`, anchored to `now` in `timezone`. */
-export function resolveEventRange(range: EventRange, now: Date, timezone: string): ResolvedEventRange {
-  switch (range) {
-    case 'today':
-      return { startDateTime: formatForZm(localMidnight(now, timezone, 0), timezone), endDateTime: formatForZm(now, timezone) };
-    case 'yesterday':
-      return {
-        startDateTime: formatForZm(localMidnight(now, timezone, 1), timezone),
-        endDateTime: formatForZm(localMidnight(now, timezone, 0), timezone),
-      };
-    case 'last_hour':
-      return { startDateTime: formatForZm(subHours(now, 1), timezone), endDateTime: formatForZm(now, timezone) };
-    case 'last_24h':
-      return { startDateTime: formatForZm(subHours(now, 24), timezone), endDateTime: formatForZm(now, timezone) };
-    case 'last_7d':
-      return { startDateTime: formatForZm(subDays(now, 7), timezone), endDateTime: formatForZm(now, timezone) };
-    case 'last_30d':
-      return { startDateTime: formatForZm(subDays(now, 30), timezone), endDateTime: formatForZm(now, timezone) };
-  }
 }
