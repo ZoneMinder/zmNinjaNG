@@ -756,6 +756,31 @@ describe('runAssistantTurn', () => {
     expect(finalMsg.display).toEqual(display);
   });
 
+  // The SHOW directive (refs #264): the model names the ids its answer is
+  // about, the line comes off the text, and only those cards render.
+  it('strips a SHOW directive from the answer and narrows the cards to its ids', async () => {
+    const display = [
+      { kind: 'event', id: '101', title: 'a', navigatePath: '/events/101' },
+      { kind: 'event', id: '102', title: 'b', navigatePath: '/events/102' },
+      { kind: 'event', id: '103', title: 'c', navigatePath: '/events/103' },
+    ];
+    const stubTool = {
+      name: 'list_events', description: '', schema: {},
+      execute: async () => ({ output: '{"matchCount":3}', display }),
+    } as never;
+    const p = new MockProvider();
+    p.setScript([
+      { toolCalls: [{ id: 'c1', name: 'list_events', input: { when: 'today' } }] },
+      { text: 'The two that matter happened at 8 AM.\nSHOW: events=101,103', toolCalls: [] },
+    ]);
+
+    const out = await runAssistantTurn({ ...baseOpts(p, host(), [{ role: 'user', text: 'summarize today' }]), tools: [stubTool] });
+
+    const finalMsg = out[out.length - 1];
+    expect(finalMsg.text).toBe('The two that matter happened at 8 AM.');
+    expect(finalMsg.display?.map((d) => d.id)).toEqual(['101', '103']);
+  });
+
   it('leaves display undefined on the final message when no tool call returned display', async () => {
     const p = new MockProvider();
     p.setScript([

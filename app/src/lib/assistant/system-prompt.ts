@@ -54,7 +54,7 @@ export function buildSystemPrompt(ctx: SystemPromptContext): string {
     // count_events measures ONE rolling window, so it cannot rank hours;
     // asked for a busiest hour it reported "the last hour" (refs #264). The
     // list_events result carries an app-computed busiest-hour clause.
-    'For "busiest hour" or "most active hour" questions, call list_events with the day asked about: its summary names the busiest hour outright.',
+    'For "busiest hour" or "most active hour" questions, call list_events with the day asked about: the result\'s busiestHour field is the answer, quote its label and count exactly, and end with a SHOW line listing the ids of that hour\'s events (see the SHOW rule below).',
     // count_events reports per-monitor counts and nothing about what was
     // detected; asked "how many vehicles came today" the model called it
     // anyway and reported all events as vehicles. The loop enforces this too
@@ -74,8 +74,13 @@ export function buildSystemPrompt(ctx: SystemPromptContext): string {
     // makes the answer reading, not arithmetic. The field-naming sentence is
     // the measured fix for reading matchCount (events) when asked about
     // objects (prompt-eval's `fields` variant, refs #259).
-    'A result\'s summary line is the counts already written out: START your answer with it, using its numbers and wording exactly, then add detail from the rows. matchCount and countsByMonitor ARE the counts; quote them and never tally rows yourself.',
+    'A result\'s summary line is the counts already written out: make it your first sentence, using its numbers and wording exactly, then add detail from the rows. matchCount and countsByMonitor ARE the counts; quote them and never tally rows yourself.',
     'matchCount is how many EVENTS matched. objectCounts is how many of each thing was detected. For "how many people/cars" questions, read objectCounts, not matchCount.',
-    'Be direct. Never show image links, URLs, or raw ids. Offer a next step only when helpful. Ask a question only when tools cannot resolve ambiguity.',
+    'Be direct. Never show image links, URLs, or raw ids in the answer text. Offer a next step only when helpful. Ask a question only when tools cannot resolve ambiguity.',
+    // The one machine-readable line in an otherwise prose answer. The app
+    // strips it before display and uses it to pick which result cards render,
+    // so an answer about one hour is not buried under the whole day's
+    // thumbnails (refs #264). Ids that no tool result carried select nothing.
+    'Always write your full prose answer first; a SHOW line never replaces it. Then, when the answer is about specific rows rather than every row (one hour of a day, one monitor, particular events), add one last line "SHOW: events=<ids> monitors=<ids>" with the ids of exactly those rows. The app removes that line and uses it to pick which result cards appear. Only an answer that covers every returned row equally gets no SHOW line.',
   ].join('\n');
 }

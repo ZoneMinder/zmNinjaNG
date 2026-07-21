@@ -64,13 +64,8 @@ export function buildResultSummary(params: {
   countsByMonitor: Record<string, number>;
   objectCounts: Record<string, number>;
   partial: boolean;
-  /** The hour with the most SHOWN rows, when the caller computed one:
-   *  "busiest hour" is arithmetic over timestamps, which is exactly the kind
-   *  of derivation the model gets wrong, so it is supplied as a finished
-   *  clause instead (refs #264). */
-  busiestHour?: { label: string; count: number };
 }): string {
-  const { window, matchCount, countsByMonitor, objectCounts, partial, busiestHour } = params;
+  const { window, matchCount, countsByMonitor, objectCounts, partial } = params;
 
   // A string window means no time filter was applied. Saying so is the point:
   // told only a count, the model named a period it had never queried.
@@ -90,10 +85,6 @@ export function buildResultSummary(params: {
 
   const byObject = describeCounts(objectCounts);
   if (byObject) parts.push(`Detected: ${byObject}.`);
-
-  if (busiestHour) {
-    parts.push(`Busiest hour: ${busiestHour.label} (${busiestHour.count} ${busiestHour.count === 1 ? 'event' : 'events'}).`);
-  }
 
   if (partial) {
     parts.push('This is a partial result: more events matched than are listed here.');

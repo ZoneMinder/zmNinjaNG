@@ -189,13 +189,6 @@ function hourBuckets(rawStarts: readonly string[]): Record<string, number> {
   }, {});
 }
 
-/** Whether the question asks for a busiest/peak hour. English heuristic with
- *  the same standing as objectQuestionMismatch: it narrows presentation only,
- *  and a miss just shows every card. */
-function asksBusiestHour(question: string | undefined): boolean {
-  return /\b(?:busiest|peak|most active)\b[^.?!]*\bhour\b/i.test(question ?? '');
-}
-
 /** Clamps a model-supplied limit into [1, ASSISTANT.maxListEventsLimit].
  *  Non-numeric or negative input (NaN, -5, "banana") falls back to the max
  *  instead of producing a NaN/negative EventFilters.limit. */
@@ -494,14 +487,18 @@ const listEventsTool: ToolDefinition = {
           countsByMonitor,
           objectCounts,
           partial: Boolean(truncated),
-          busiestHour,
         });
+        // busiestHour rides OUTSIDE the summary on purpose: answers quote the
+        // summary verbatim, and an hour label inside it would make the
+        // answer-narrowing in agent.ts (refs #264) shrink the cards for every
+        // summarize question, not just busiest-hour ones.
         const base = {
           summary,
           window,
           matchCount: rowsToShow.length,
           countsByMonitor,
           objectCounts,
+          ...(busiestHour ? { busiestHour } : {}),
           ...(countsByHour ? { countsByHour } : {}),
           events: rowsToShow,
         };
@@ -520,20 +517,11 @@ const listEventsTool: ToolDefinition = {
         output = buildOutput(shown);
       }
 
-      // Cards mirror the rows the model was given, with one narrowing: a
-      // busiest-hour question is about ONE hour, and a full-day card wall
-      // under an answer naming nine events read as a contradiction
-      // (refs #264). The model still sees every row (it needs the whole day
-      // to rank hours); only the presentation narrows, and only when the
-      // question asked for a busiest hour and one exists.
-      const shownEvents = res.events.slice(0, shown.length);
-      let displayEvents = shownEvents;
-      if (asksBusiestHour(ctx.question) && shown.length > 1) {
-        const top = Object.entries(hourBuckets(rawStarts.slice(0, shown.length))).sort((a, b) => b[1] - a[1])[0]?.[0];
-        const inTopHour = shownEvents.filter(({ Event: e }) => `${e.StartDateTime.slice(0, 13)}:00:00` === top);
-        if (inTopHour.length > 0) displayEvents = inTopHour;
-      }
-      const display = displayEvents.map(({ Event: e }) =>
+      // Cards mirror EXACTLY the rows the model was given; whether they all
+      // RENDER is decided later, against the answer text (agent.ts's
+      // narrowDisplayToAnswer, refs #264), because only the finished answer
+      // says which rows it is about.
+      const display = res.events.slice(0, shown.length).map(({ Event: e }) =>
         buildEventDisplayEntity(e, nameById.get(e.MonitorId) ?? e.MonitorId, monitors, ctx),
       );
       return { output, display };

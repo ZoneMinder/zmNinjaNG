@@ -12,6 +12,7 @@ import type { AssistantMessage, AssistantProvider, AssistantHost, DisplayEntity,
 import { getToolByName, isWithheldToolName, TOOLS } from './tools';
 import { validateToolInput, objectQuestionMismatch, toolCallSignature, stripOmittedArgs } from './tool-helpers';
 import { captureApiCalls } from './api-capture';
+import { extractShowDirective, filterDisplayByShow } from './display';
 import { buildGroundingCorrection, fallbackAnswerFromData, retryIsUnusable } from './grounding';
 import { sanitizeModelText } from './sanitize';
 import { ASSISTANT } from '../zmninja-ng-constants';
@@ -347,6 +348,11 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
     if (turn.reasoning) {
       host.onActivity({ kind: 'model', detail: turn.reasoning, toolName: turn.toolCalls[0]?.name ?? '', status: 'running', input: {} });
     }
+    // The SHOW directive rides on the END of the answer text and must come
+    // off before anything reads it: the user never sees the line, and the
+    // grounding checks judge the prose, not the machine trailer (refs #264).
+    const { text: answerText, show } = turn.text ? extractShowDirective(turn.text) : { text: turn.text };
+    turn.text = answerText;
     const assistantMsg: AssistantMessage = { role: 'assistant', text: turn.text, toolCalls: turn.toolCalls, raw: turn.raw };
 
     if (turn.toolCalls.length === 0) {
@@ -419,7 +425,11 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
         });
         continue;
       }
-      assistantMsg.display = dedupeDisplay(turnDisplay);
+      // De-duped, then narrowed to the cards the model's SHOW directive
+      // selected (refs #264): the ids can only match cards this turn's tools
+      // produced, and no directive (or one matching nothing) shows everything.
+      const deduped = dedupeDisplay(turnDisplay);
+      assistantMsg.display = deduped && show ? filterDisplayByShow(deduped, show) : deduped;
       assistantMsg.trace = turnTrace.length > 0 ? [...turnTrace] : undefined;
       // The last iteration's usage, not the first: each tool round-trip
       // re-sends the history plus the new tool results, so the final call has
