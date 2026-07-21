@@ -70,7 +70,16 @@ const CONTEXT_WINDOWS = new Map<string, number>();
 /** Test-only. */
 export function resetContextWindowsForTests(): void {
   CONTEXT_WINDOWS.clear();
+  OLLAMA_SERVERS.clear();
 }
+
+/** Base URLs whose native `/api/ps` endpoint answered, i.e. confirmed Ollama.
+ *  Gates Ollama-only request fields (`reasoning_effort`): a genuine OpenAI
+ *  server rejects that param on non-reasoning models, so it is only sent
+ *  where it is known safe. Populated by `refreshContextWindow`, which runs
+ *  after the first completed turn; the first turn against a fresh server
+ *  therefore still pays for reasoning, every later one skips it. */
+const OLLAMA_SERVERS = new Set<string>();
 
 interface OllamaPsResponse {
   models?: Array<{ name?: string; model?: string; context_length?: number }>;
@@ -438,6 +447,9 @@ export class OpenAiProvider implements AssistantProvider {
           timeoutMs: ASSISTANT.testConnectionTimeoutMs,
           intent: 'Assistant Ollama context window',
         });
+        // The endpoint answering at all is the Ollama confirmation the
+        // reasoning_effort gate needs, whether or not this model is listed.
+        OLLAMA_SERVERS.add(this.config.baseUrl);
         const entry = response?.data?.models?.find((m) => m.model === model || m.name === model);
         CONTEXT_WINDOWS.set(this.serverKey, entry?.context_length ?? 0);
         log.assistant('Ollama context window learned', LogLevel.DEBUG, { model, contextWindow: entry?.context_length });
@@ -450,6 +462,15 @@ export class OpenAiProvider implements AssistantProvider {
   /** The configured value, or the measured default when Settings has none. */
   private get temperature(): number {
     return this.config.temperature ?? ASSISTANT.assistantTemperature;
+  }
+
+  /** `reasoning_effort` for confirmed Ollama servers only (see
+   *  OLLAMA_SERVERS and ASSISTANT.ollamaReasoningEffort): measured at ~5x
+   *  faster turns on thinking models with identical eval scores. */
+  private get reasoningFields(): Record<string, string> {
+    return OLLAMA_SERVERS.has(this.config.baseUrl)
+      ? { reasoning_effort: ASSISTANT.ollamaReasoningEffort }
+      : {};
   }
 
   private get timeoutMs(): number {
@@ -478,6 +499,7 @@ export class OpenAiProvider implements AssistantProvider {
       stream: false,
       max_tokens: ASSISTANT.ollamaMaxTokens,
       temperature: this.temperature,
+      ...this.reasoningFields,
       ...(jsonSchema
         ? { response_format: { type: 'json_schema', json_schema: { name: 'result', schema: jsonSchema, strict: true } } }
         : {}),
@@ -490,6 +512,9 @@ export class OpenAiProvider implements AssistantProvider {
       intent: 'Assistant Ollama completion',
     });
     const content = response.data?.choices?.[0]?.message?.content ?? '';
+    // A completion loads the model just as a chat does, so this is also a
+    // valid moment to learn the window and confirm the server is Ollama.
+    this.refreshContextWindow();
     return {
       text: content,
       exchange: captureExchange({ backend: 'ollama', model, sent: body, received: content, startedAt }),
@@ -520,6 +545,7 @@ export class OpenAiProvider implements AssistantProvider {
       stream: false,
       max_tokens: ASSISTANT.ollamaMaxTokens,
       temperature: this.temperature,
+      ...this.reasoningFields,
     };
 
     // Retried like the on-device path, not single-shot. A degenerate reply

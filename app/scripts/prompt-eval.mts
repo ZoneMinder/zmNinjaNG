@@ -37,6 +37,17 @@ const MODEL = process.env.MODEL ?? 'llama3.2:latest';
 // Uncontrolled sampling made two runs of the SAME prompt differ by 7 points,
 // which is larger than any difference between prompts. Pin it.
 const TEMP = process.env.TEMP === undefined ? undefined : Number(process.env.TEMP);
+/** NOTHINK=1 appends Qwen3's `/no_think` soft switch to the system prompt,
+ *  for measuring what disabling the reasoning block costs in accuracy and
+ *  buys in latency (refs #259). No effect on non-Qwen3 models.
+ *
+ *  Measured caveat: on Ollama 0.32 the soft switch only hides the think TAG;
+ *  the model still reasons (the /v1 reply carries a `reasoning` field and the
+ *  latency is unchanged). REASONING=none sends OpenAI's `reasoning_effort`,
+ *  which Ollama maps to think-off for real: 0.4s vs 3.7s on the same
+ *  question. Non-thinking models ignore the field. */
+const NOTHINK = process.env.NOTHINK ? '\n\n/no_think' : '';
+const REASONING = process.env.REASONING ? { reasoning_effort: process.env.REASONING } : {};
 
 const OBJECT_LABELS = ['car', 'carrot', 'person', 'truck'];
 
@@ -141,10 +152,10 @@ function systemPrompt(variant: string): string {
     locale: 'en-US',
     objectLabels: OBJECT_LABELS,
   } as never);
-  if (variant === 'baseline') return base;
+  if (variant === 'baseline') return base + NOTHINK;
   const override = VARIANTS[variant];
   if (!override) throw new Error(`unknown variant: ${variant}`);
-  return override(base);
+  return override(base) + NOTHINK;
 }
 
 /** Variants are transformations of the real prompt, so they can never drift
@@ -226,6 +237,7 @@ async function scoreTools(system: string, runs: number) {
           stream: false,
           max_tokens: 4096,
           ...(TEMP === undefined ? {} : { temperature: TEMP }),
+          ...REASONING,
         });
         const call = r.choices?.[0]?.message?.tool_calls?.[0];
         if (c.tool === null) {
@@ -300,6 +312,7 @@ async function scoreAnswers(system: string, runs: number) {
           stream: false,
           max_tokens: 4096,
           ...(TEMP === undefined ? {} : { temperature: TEMP }),
+          ...REASONING,
         });
         const text = r.choices?.[0]?.message?.content ?? '';
         if (!text) {
@@ -337,11 +350,13 @@ async function scoreWebLlmContract(runs: number) {
     if (c.triaged) continue;
     for (let i = 0; i < runs; i++) {
       total++;
+      // With NOTHINK set, a Qwen3 model id makes buildWebLlmMessages append
+      // /no_think itself, exercising the adapter's real directive path.
       const messages = buildWebLlmMessages(
         system,
         [{ role: 'user', text: c.q }],
         TOOLS,
-        'Llama-3.2-3B-Instruct-q4f16_1-MLC',
+        process.env.NOTHINK ? 'Qwen3-8B-q4f16_1-MLC' : 'Llama-3.2-3B-Instruct-q4f16_1-MLC',
       );
       // CONSTRAIN=1 approximates the on-device XGrammar envelope constraint
       // (webllm.ts's ENVELOPE_SCHEMA) with Ollama's json_schema grammar.
@@ -358,6 +373,7 @@ async function scoreWebLlmContract(runs: number) {
           stream: false,
           max_tokens: 4096,
           ...(TEMP === undefined ? {} : { temperature: TEMP }),
+          ...REASONING,
           ...(process.env.CONSTRAIN
             ? { response_format: { type: 'json_schema', json_schema: { name: 'envelope', schema: envelope, strict: true } } }
             : {}),

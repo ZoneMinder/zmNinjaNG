@@ -523,6 +523,23 @@ describe('context window discovery', () => {
     expect(p2.contextWindow).toBe(131072);
   });
 
+  // reasoning_effort is Ollama-only: a genuine OpenAI server rejects it on
+  // non-reasoning models, so it is sent only once /api/ps has confirmed the
+  // server. Measured ~5x faster turns on thinking models, identical scores.
+  it('sends reasoning_effort only after the server is confirmed Ollama', async () => {
+    httpPostMock.mockResolvedValue({ data: { choices: [{ message: { content: 'hi' } }] } });
+    httpGetMock.mockResolvedValue({ data: { models: [{ model: 'qwen3:8b', context_length: 40960 }] } });
+
+    const p = new OpenAiProvider({ baseUrl: 'http://zm:11434/v1', model: 'qwen3:8b' });
+    await p.chat([{ role: 'user', text: 'hello' }], [], 'sys', new AbortController().signal);
+    expect(httpPostMock.mock.calls[0][1]).not.toHaveProperty('reasoning_effort');
+    await Promise.resolve();
+
+    const p2 = new OpenAiProvider({ baseUrl: 'http://zm:11434/v1', model: 'qwen3:8b' });
+    await p2.chat([{ role: 'user', text: 'again' }], [], 'sys', new AbortController().signal);
+    expect(httpPostMock.mock.calls[1][1]).toMatchObject({ reasoning_effort: ASSISTANT.ollamaReasoningEffort });
+  });
+
   it('records a server without the endpoint and never asks again', async () => {
     httpPostMock.mockResolvedValue({ data: { choices: [{ message: { content: 'hi' } }] } });
     httpGetMock.mockRejectedValue(new Error('HTTP 404'));

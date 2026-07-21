@@ -92,9 +92,15 @@ describe.skipIf(!BASE)('live Ollama integration', () => {
     });
 
     const answer = out[out.length - 1];
+    if (process.env.LIVE_OLLAMA_DEBUG) process.stderr.write(`ANSWER ${JSON.stringify(answer.text)}\n`);
     expect(answer.role).toBe('assistant');
-    // Grounded in the fixture: the real counts, no denial, no raw JSON dump.
-    expect(answer.text).toMatch(/\b3\b/);
+    // Grounded in the fixture, phrasing left to the model: a real count from
+    // the data (total or per-monitor), a real monitor name, no nothing-found
+    // denial, no raw JSON dump. Exact summary-quoting is the eval harness's
+    // job (scripts/prompt-eval.mts), not this loop-mechanics check.
+    expect(answer.text).toMatch(/\b(3|three|2|two)\b/i);
+    expect(answer.text).toMatch(/Front Door|Garage/);
+    expect(answer.text).not.toMatch(/\bno events?\b|\bnothing (was )?found\b/i);
     expect(answer.text?.trim().startsWith('{')).toBe(false);
   }, 240_000);
 });
