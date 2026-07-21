@@ -19,11 +19,11 @@ import { ASSISTANT } from '../zmninja-ng-constants';
 import { buildResultSummary, countObjects } from './result-summary';
 import { parseDetectedObjects } from '../event/event-detection';
 import { buildEventDisplayEntity, buildMonitorDisplayEntity } from './display';
-import { resolveWhen } from './event-range';
+import { resolveWindow, type WindowFields } from './event-range';
 import { formatAppDateTime } from '../format-date-time';
 import { resolveMonitorRef } from './monitor-ref';
 import type { ToolContext, ToolDefinition } from './types';
-import { safeExecute, isOmittedArg, objectTypePattern, coerceLabelList, ungroundedWhenWords, NAVIGATE_ALLOWLIST } from './tool-helpers';
+import { safeExecute, isOmittedArg, objectTypePattern, coerceLabelList, NAVIGATE_ALLOWLIST } from './tool-helpers';
 
 /** Maps a raw MonitorData into the clean, model-friendly shape shared by
  *  list_monitors and get_monitor (refs #246): '0'/'1' strings become
@@ -134,24 +134,36 @@ const getMonitorTool: ToolDefinition = {
 const countEventsTool: ToolDefinition = {
   name: 'count_events',
   description:
-    'Count events per monitor over a ROLLING interval ending now, such as "1 hour" or "1 day" (that means ' +
-    'the last 24 hours, NOT since local midnight), covering ALL monitors in one call (no monitorId needed) ' +
-    'and reporting the combined total. Use this for "how many events in the last N hours/days" or ' +
-    '"summarize recent events" questions instead of list_events, which returns individual rows. ' +
+    'Count events per monitor over a ROLLING window ending now (lastCount + lastUnit; {"lastCount":1,' +
+    '"lastUnit":"day"} means the last 24 hours, NOT since local midnight), covering ALL monitors in one ' +
+    'call (no monitorId needed) and reporting the combined total. Use this for "how many events in the ' +
+    'last N hours/days" questions instead of list_events, which returns individual rows. ' +
     'It has TWO hard limits. It CANNOT express a calendar day: for "today" (since local midnight) or ' +
-    '"yesterday", call list_events with when instead. It CANNOT filter or report detected object types: ' +
+    '"yesterday", call list_events instead. It CANNOT filter or report detected object types: ' +
     'it returns event COUNTS ONLY and says nothing about what was detected, so for "how many ' +
     'people/cars/animals" questions call list_events with objectType instead. Calling this tool for an ' +
     'object-type question returns numbers that cannot answer it.',
   schema: {
     type: 'object',
-    properties: { interval: { type: 'string', description: 'A rolling window ending now, e.g. "1 hour", "1 day".' } },
-    required: ['interval'],
+    properties: {
+      lastCount: { type: 'number', description: 'How many lastUnits back the window reaches, e.g. 24 with "hour".' },
+      lastUnit: {
+        type: 'string',
+        enum: ['minute', 'hour', 'day', 'week', 'month'],
+        description: 'The unit of the rolling window.',
+      },
+    },
+    required: ['lastCount', 'lastUnit'],
+    additionalProperties: false,
   },
   execute: (input, _ctx) =>
     safeExecute('count_events', async () => {
-      const interval = String(input.interval ?? '');
-      if (!interval) throw new Error('interval is required');
+      const count = Number(input.lastCount);
+      const unit = String(input.lastUnit ?? '');
+      if (!Number.isFinite(count) || count <= 0 || !unit) throw new Error('lastCount and lastUnit are required.');
+      // ZoneMinder's consoleEvents endpoint takes a MySQL INTERVAL phrase; the
+      // singular unit is valid for any count ("2 week").
+      const interval = `${Math.floor(count)} ${unit}`;
       const [counts, { monitors }] = await Promise.all([getConsoleEvents(interval), getMonitors()]);
       const nameById = new Map(monitors.map((m) => [m.Monitor.Id, m.Monitor.Name]));
       const rows = counts
@@ -203,9 +215,8 @@ const listEventsTool: ToolDefinition = {
   description:
     'List individual events, newest first, optionally filtered by monitor, time window, detected object ' +
     'type, a single tag, or an explicit set of event ids. For ANY time window, COPY the user\'s own time ' +
-    'words into `when` and nothing more; the app converts the phrase against the profile\'s own timezone, ' +
-    'so never compute a date yourself. Whole days, rolling windows and parts of a day are all understood, ' +
-    'but send only what the user actually said. Combine when with objectType ' +
+    'words into `when`, verbatim and in their language; the app interprets the phrase and turns it into ' +
+    'exact timestamps in the profile\'s timezone. Combine when with objectType ' +
     'ONLY for questions that name an object, passing the labels this installation records (the system ' +
     'prompt lists them) and never the user\'s own word for them. Omit objectType for a summary. The ' +
     'rows this returns for a filter are exactly what ' +
@@ -225,12 +236,10 @@ const listEventsTool: ToolDefinition = {
       when: {
         type: 'string',
         description:
-          'PREFERRED for any time window. COPY the user\'s own time words, exactly as they wrote them and ' +
-          'nothing more. Whole days ("today", "yesterday", a weekday name, "N days ago"), rolling windows ' +
-          '("last N hours/days") and parts of a day (from X to Y, before X, after X) are all understood. ' +
-          'The app converts the phrase to exact timestamps in the ' +
-          'profile\'s timezone, so never work out a date yourself and never pass a date here. Do not send a ' +
-          'time of day the user did not mention.',
+          'The time window in the user\'s OWN words, copied verbatim, in whatever language they used ' +
+          '("yesterday", "last week", "letzte Woche", "2 days ago", "sunday from 4pm to 10pm"). The app ' +
+          'interprets the phrase and converts it to exact timestamps in the profile\'s timezone; never ' +
+          'compute a date yourself and never add time words the user did not say.',
       },
       objectType: {
         // Both shapes, declared honestly: the model is asked to send a list for
@@ -261,32 +270,21 @@ const listEventsTool: ToolDefinition = {
     return safeExecute('list_events', async () => {
       const timezone = ctx.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-      // `when` first: it is the argument the model is asked to fill, and it
-      // carries the user's own phrasing rather than arithmetic the model did.
-      // A phrase it cannot read is thrown back naming the unreadable part, so
-      // the model corrects instead of silently querying the wrong window.
+      // The phrase is the user's own words; a dedicated model call interprets
+      // it into structured fields (window-interpreter.ts) and resolveWindow
+      // does the arithmetic (refs #265). Any failure on the way becomes a
+      // corrective error the calling model retries from. Measured before
+      // splitting the jobs: both reference models copied phrases perfectly
+      // but filled the fields directly at 27/36 and 15/36.
       const whenPhrase = isOmittedArg(input.when) ? undefined : String(input.when);
       let resolvedWhen: { startDateTime: string; endDateTime: string } | undefined;
-      // English-locale only: WHEN_FILLER is an English word list, and against
-      // another language it flags legitimate connectives ("desde", "von") as
-      // invented, burning a correction round on a correct call (refs #259).
-      if (whenPhrase && ctx.question && (ctx.locale ?? 'en').toLowerCase().startsWith('en')) {
-        // The contract is "the user's own words". A phrase carrying words the
-        // user never wrote is the prompt's example leaking into the argument,
-        // and it narrows the window without anyone noticing.
-        const invented = ungroundedWhenWords(whenPhrase, ctx.question);
-        if (invented.length > 0) {
-          throw new Error(
-            `when "${whenPhrase}" contains words the user did not write (${invented.join(', ')}). ` +
-              'Copy the time period from the question itself, exactly as the user phrased it, and nothing more. ' +
-              'The examples in the tool description are formats, not values to send.',
-          );
-        }
-      }
       if (whenPhrase) {
-        const parsed = resolveWhen(whenPhrase, new Date(), timezone);
-        if ('error' in parsed) throw new Error(parsed.error);
-        resolvedWhen = parsed;
+        if (!ctx.interpretWhen) throw new Error('Time phrases are unavailable right now; retry without `when`.');
+        const fields = await ctx.interpretWhen(whenPhrase);
+        if ('error' in fields && fields.error) throw new Error(String(fields.error));
+        const window = resolveWindow(fields as WindowFields, new Date(), timezone);
+        if (window && 'error' in window) throw new Error(window.error);
+        resolvedWhen = window;
       }
 
       // Monitors first, and awaited rather than raced with getEvents: the
@@ -362,7 +360,7 @@ const listEventsTool: ToolDefinition = {
       const filters: EventFilters = {
         monitorId,
         // `when` is the only time argument this tool takes: the resolved
-        // phrase, or no window at all (see event-range.ts's resolveWhen).
+        // fields, or no window at all (see event-range.ts's resolveWindow).
         startDateTime: resolvedWhen?.startDateTime,
         endDateTime: resolvedWhen?.endDateTime,
         // Expanded through the category map, so "vehicles" matches the car and

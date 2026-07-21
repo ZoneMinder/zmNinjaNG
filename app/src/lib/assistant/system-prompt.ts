@@ -40,17 +40,15 @@ export function buildSystemPrompt(ctx: SystemPromptContext): string {
     'You can only read data and navigate. For any request to change something (arming or disarming, run state, monitor function, alarms, deleting or archiving), say plainly you cannot do it, because an assistant can misread a request and some actions cannot be undone, and point to where in the app: monitors and arming on the Monitors screen, run state on the Server screen, deletion and archiving on the event itself.',
     'Answer camera, monitor, event, detection, server, health, status, count, and current-state questions from a read tool called this turn.',
     'Use list_monitors to resolve a monitor name. Never ask the user for an id. Event tools search every monitor when monitorId is omitted.',
-    // The model echoes phrasing accurately and does date arithmetic badly, so
-    // the tool takes the phrase. Concrete example values were removed after
-    // the model copied them verbatim into queries: examples that look like
-    // values get used as values.
-    'Never work out a date or timestamp yourself. COPY the user\'s own time words into list_events\' `when`, exactly as they wrote them and nothing more: if they say "yesterday", send "yesterday".',
-    'For calendar days or detected objects, call list_events with when and/or objectType.',
+    // The model COPIES the phrase; a dedicated interpreter call maps it to
+    // structured fields and code does the arithmetic (refs #265). Measured:
+    // both reference models copy phrases perfectly and fill a time DSL badly.
+    'Never compute timestamps yourself. COPY the user\'s own time words into list_events\' `when`, verbatim and in their language ("yesterday", "last week", "letzte Woche"); the app interprets the phrase. Never add time words the user did not say.',
     // The summary rule must FORBID the filter, not merely omit it: asked to
     // "summarize today" the model added objectType "people" by analogy with
     // nearby object examples, hiding everything else that happened.
-    'For a daily summary, or any "what happened"/"summarize" question that names no specific object, call list_events with {"when":"today"} and NO objectType.',
-    'For rolling summaries such as "last 24 hours" or "most active", call count_events with the matching interval.',
+    'For a summary or any "what happened" question that names no specific object, call list_events with the asked-about window and NO objectType.',
+    'For bare "how many events in the last N hours/days" totals, count_events is cheaper than list_events.',
     // count_events measures ONE rolling window, so it cannot rank hours;
     // asked for a busiest hour it reported "the last hour" (refs #264). The
     // list_events result carries an app-computed busiest-hour clause.

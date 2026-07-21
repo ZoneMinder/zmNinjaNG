@@ -50,18 +50,18 @@ describe('buildSystemPrompt', () => {
     expect(p).toContain("Today's date is Thursday, 2026-07-16 in timezone America/New_York");
   });
 
-  it('instructs the model to call list_events with when/objectType for day- or object-type-specific questions', () => {
+  it('teaches phrase copying, with interpretation done by the app (refs #265)', () => {
     const p = buildSystemPrompt(base);
-    expect(p).toContain('call list_events with when and/or objectType');
+    expect(p).toContain("COPY the user's own time words");
+    expect(p).toContain('`when`');
     expect(p).toContain('Describe only rows the query returned');
   });
 
   // The model echoes the user's phrasing accurately and does date arithmetic
   // badly, so the prompt has to send it to `when` rather than to a timestamp.
-  it('forbids working out a date, pointing at the when parameter instead', () => {
+  it('forbids computing timestamps outright', () => {
     const p = buildSystemPrompt(base);
-    expect(p).toContain('Never work out a date or timestamp yourself');
-    expect(p).toContain('`when`');
+    expect(p).toContain('Never compute timestamps yourself');
   });
 
   it('instructs the model to answer directly and never paste image links/ids, since the app shows thumbnails', () => {
@@ -69,9 +69,9 @@ describe('buildSystemPrompt', () => {
     expect(p).toContain('Never show image links, URLs, or raw ids');
   });
 
-  it('redirects count_events to a rolling window only, not a calendar day', () => {
+  it('offers count_events for bare rolling totals', () => {
     const p = buildSystemPrompt(base);
-    expect(p).toContain('rolling summaries such as "last 24 hours"');
+    expect(p).toContain('count_events is cheaper');
   });
 
   it('never mentions a JSON tool-call contract or WebLLM-specific directives (model-agnostic prompt)', () => {

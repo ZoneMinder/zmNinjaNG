@@ -27,7 +27,7 @@ import { getVersion } from '../../api/auth';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
 import { resolveMinStreamingPort } from '../../lib/monitor/multiport';
-import { runAssistantTurn, isContextNearlyFull, requiresLiveData } from '../../lib/assistant/agent';
+import { runAssistantTurn, isContextNearlyFull } from '../../lib/assistant/agent';
 import {
   getAssistantProvider,
   isAssistantTestMode,
@@ -36,6 +36,7 @@ import {
 import { sharedMockProvider } from '../../lib/assistant/providers/mock';
 import { buildSystemPrompt } from '../../lib/assistant/system-prompt';
 import { getObjectLabels } from '../../lib/assistant/object-labels';
+import { interpretWhen } from '../../lib/assistant/window-interpreter';
 import { suggestOllamaBaseUrl, warmOllamaModel } from '../../lib/assistant/providers/openai';
 import { classifyRequest, buildNoToolPrompt, type RequestKind } from '../../lib/assistant/triage';
 import type { AssistantMessage, AssistantTurn, ProviderConfig, ToolActivity, ToolContext, TraceEntry } from '../../lib/assistant/types';
@@ -287,12 +288,10 @@ export function AskPanel() {
   const setRunning = useAssistantStore((s) => s.setRunning);
   const clearActivities = useAssistantStore((s) => s.clearActivities);
 
-  // Every backend, not just on-device. The on-device model's answer quality is
-  // the smaller half of this: `requiredReadTool` (agent.ts) matches English
-  // words to decide when live data is mandatory, the triage prompt is English,
-  // and `resolveWhen` parses English time phrases. Asked in another language
-  // those guards silently do not fire, which is just as true of a GPU-backed
-  // Ollama server as of a phone.
+  // Every backend, not just on-device. The remaining English surface is the
+  // triage prompt and the grounding regexes; time interpretation and tool
+  // routing are language-neutral since refs #265 (the model interprets, the
+  // loop fails open).
   // `startsWith`, not equality: i18next reports regional variants like "en-GB".
   const assistantInNonEnglish = !i18n.language.toLowerCase().startsWith('en');
 
@@ -462,10 +461,19 @@ export function AskPanel() {
         // zone the system prompt already told the model "today" means.
         timezone: currentProfile?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
         question: text,
-        // Gates English-only text heuristics (ungroundedWhenWords) off for
-        // other locales; same source as `system`'s locale line (refs #259).
         locale: i18n.language,
         objectLabels,
+        // The `when` phrase interpreter (refs #265): the session's own model
+        // maps the user's time words to structured fields under a constrained
+        // schema, so no app-side phrase grammar exists.
+        interpretWhen: (phrase: string) =>
+          interpretWhen(
+            phrase,
+            provider,
+            new Date(),
+            currentProfile?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+            controller.signal,
+          ),
       };
       const history = useAssistantStore.getState().getThread(profileId);
 
@@ -486,26 +494,15 @@ export function AskPanel() {
         initialTrace.push(entry);
         host.onTrace?.(entry);
       };
-      // The deterministic check runs FIRST, and when it fires there is no
-      // triage call at all. Triage is one small model's opinion and it gets
-      // this wrong: it answered CHAT for both "summarize yesterday" and
-      // "summarize today", the second being near-identical to an example in
-      // its own prompt. Its verdict was then overruled anyway, so the round
-      // trip bought a wrong answer and ~400ms. Asking a model what this
-      // function already knows is the part worth removing, not just the part
-      // where we ignore the reply.
-      //
-      // Triage still decides everything the heuristic is silent on, which is
-      // what it is good at: greetings, small talk, and change-requests it
-      // routes to a tool-less refusal.
-      const needsLiveData = requiresLiveData(text);
-      const kind: RequestKind =
-        needsLiveData || isAssistantTestMode()
-          ? 'zoneminder'
-          : await classifyRequest(provider, text, controller.signal, collectTrace);
-      if (needsLiveData) {
-        log.assistant('Triage skipped: the question needs live data', LogLevel.DEBUG, {});
-      }
+      // Triage is ADVISORY (refs #265): a misclassified data question is no
+      // longer refused, because the loop fails open: a tool-less turn whose
+      // model calls a real registry read tool flips to the full registry and
+      // runs it. That made the old English keyword overrule (requiresLiveData)
+      // deletable: it was a hardcoded vocabulary in front of exactly the
+      // language interpretation the model does better.
+      const kind: RequestKind = isAssistantTestMode()
+        ? 'zoneminder'
+        : await classifyRequest(provider, text, controller.signal, collectTrace);
       log.assistant('Request classified', LogLevel.DEBUG, { kind });
 
       // Already only this turn's new messages (see runAssistantTurn): the
@@ -589,12 +586,11 @@ export function AskPanel() {
             and a lone notice is still an empty conversation. */}
         {thread.every((m) => m.contextBoundary) && <AssistantIntro onExampleClick={handleExampleClick} />}
 
-        {/* The on-device model is a small English-first model, and its job here
-            (reason, then emit a strict reply format) is where a small model
-            degrades most in other languages. Saying so is honest; the
-            alternative was pretending every language works equally well.
-            Ollama runs whatever model the user chose, so this does not apply
-            there. */}
+        {/* Honest, not alarmist (refs #265): time interpretation and tool
+            routing are language-neutral now (the model interprets, the loop
+            fails open), but the grounding safeguards only recognize English
+            replies and English is the measured path, so a non-English app
+            language still gets a note saying English works best. */}
         {assistantInNonEnglish && (
           <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground" data-testid="assistant-english-notice">
             {t('assistant.english_only_notice')}

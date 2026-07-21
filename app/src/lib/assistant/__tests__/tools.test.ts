@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getToolByName, isWithheldToolName, readOnlyTools, WITHHELD_TOOL_NAMES, TOOLS } from '../tools';
-import { safeExecute, validateToolInput, objectTypePattern, coerceLabelList, isOmittedArg, stripOmittedArgs, objectQuestionMismatch, ungroundedWhenWords, toolCallSignature } from '../tool-helpers';
+import { safeExecute, validateToolInput, objectTypePattern, coerceLabelList, isOmittedArg, stripOmittedArgs, objectQuestionMismatch, toolCallSignature } from '../tool-helpers';
 import type { ToolContext } from '../types';
 import { asProfileId } from '../../../api/types';
 import { ASSISTANT } from '../../zmninja-ng-constants';
@@ -101,11 +101,24 @@ vi.mock('../../../api/tags', async () => {
   };
 });
 
+/** Test-local interpreter stub (refs #265): in production interpretWhen is a
+ *  model call; here a fixed phrase->fields map keeps executors deterministic. */
+const INTERPRETED: Record<string, Record<string, unknown>> = {
+  today: { daysAgo: 0 },
+  yesterday: { daysAgo: 1 },
+  'last hour': { lastCount: 1, lastUnit: 'hour' },
+  'yesterday from 4pm to 10pm': { daysAgo: 1, fromTime: '16:00', toTime: '22:00' },
+  gestern: { daysAgo: 1 },
+};
+
 function ctx(): ToolContext {
   return {
     profileId: asProfileId('p1'),
     queryClient: { fetchQuery: (o: { queryFn: () => unknown }) => o.queryFn() } as never,
     host: { navigate: vi.fn(), onActivity: vi.fn() },
+    interpretWhen: vi.fn(async (phrase: string) =>
+      INTERPRETED[phrase.toLowerCase()] ?? { error: `Could not interpret "${phrase}" as a time window.` },
+    ),
   };
 }
 
@@ -406,7 +419,7 @@ describe('read-only tools', () => {
 
   it('count_events maps monitor ids to names', async () => {
     const tool = getToolByName('count_events')!;
-    const r = await tool.execute({ interval: '1 hour' }, ctx());
+    const r = await tool.execute({ lastCount: 1, lastUnit: 'hour' }, ctx());
     expect(r.isError).toBeFalsy();
     expect(r.output).toContain('Front Door');
     expect(r.output).toContain('3');
@@ -414,7 +427,7 @@ describe('read-only tools', () => {
 
   it('count_events reports the summed total across monitors', async () => {
     const tool = getToolByName('count_events')!;
-    const r = await tool.execute({ interval: '1 hour' }, ctx());
+    const r = await tool.execute({ lastCount: 1, lastUnit: 'hour' }, ctx());
     expect(r.isError).toBeFalsy();
     const result = JSON.parse(r.output as string);
     expect(result).toMatchObject({
@@ -556,55 +569,33 @@ describe('read-only tools', () => {
   });
 });
 
-describe('ungroundedWhenWords', () => {
-  // The model sent when "yesterday from 4pm to 10pm" for a question that said
-  // only "yesterday": the example phrase from the prompt, not the user's words.
-  it('names the words the user never wrote', () => {
-    expect(ungroundedWhenWords('yesterday from 4pm to 10pm', 'how many vehicles came yesterday')).toEqual([
-      '4pm',
-      '10pm',
-    ]);
-  });
-
-  it('passes a phrase the user actually used', () => {
-    expect(ungroundedWhenWords('yesterday', 'how many vehicles came yesterday')).toEqual([]);
-    expect(
-      ungroundedWhenWords('yesterday from 4pm to 10pm', 'how many people came yesterday from 4pm to 10pm'),
-    ).toEqual([]);
-  });
-
-  it('ignores connective filler the user would not repeat', () => {
-    expect(ungroundedWhenWords('last 24 hours', 'what happened in the last 24 hours')).toEqual([]);
-  });
-});
-
 describe('toolCallSignature', () => {
   // Ollama sent {"monitorId":"","when":"yesterday","objectType":""} and then
   // {"when":"yesterday"}: the same query, two different strings, so the repeat
   // guard did not fire and the identical query ran again.
   it('treats omitted-argument spellings as the same call', () => {
-    const a = toolCallSignature('list_events', { monitorId: '', when: 'yesterday', objectType: '' });
-    const b = toolCallSignature('list_events', { when: 'yesterday' });
-    const c = toolCallSignature('list_events', { when: 'yesterday', objectType: null });
+    const a = toolCallSignature('list_events', { monitorId: '', daysAgo: 1, objectType: '' });
+    const b = toolCallSignature('list_events', { daysAgo: 1 });
+    const c = toolCallSignature('list_events', { daysAgo: 1, objectType: null });
     expect(a).toBe(b);
     expect(b).toBe(c);
   });
 
   it('ignores key order', () => {
-    expect(toolCallSignature('list_events', { when: 'today', limit: 5 })).toBe(
-      toolCallSignature('list_events', { limit: 5, when: 'today' }),
+    expect(toolCallSignature('list_events', { daysAgo: 0, limit: 5 })).toBe(
+      toolCallSignature('list_events', { limit: 5, daysAgo: 0 }),
     );
   });
 
   it('still separates genuinely different calls', () => {
-    expect(toolCallSignature('list_events', { when: 'today' })).not.toBe(
-      toolCallSignature('list_events', { when: 'yesterday' }),
+    expect(toolCallSignature('list_events', { daysAgo: 0 })).not.toBe(
+      toolCallSignature('list_events', { daysAgo: 1 }),
     );
-    expect(toolCallSignature('list_events', { when: 'today' })).not.toBe(
-      toolCallSignature('count_events', { when: 'today' }),
+    expect(toolCallSignature('list_events', { daysAgo: 0 })).not.toBe(
+      toolCallSignature('count_events', { daysAgo: 0 }),
     );
-    expect(toolCallSignature('list_events', { when: 'today', objectType: 'car' })).not.toBe(
-      toolCallSignature('list_events', { when: 'today' }),
+    expect(toolCallSignature('list_events', { daysAgo: 0, objectType: 'car' })).not.toBe(
+      toolCallSignature('list_events', { daysAgo: 0 }),
     );
   });
 });
@@ -652,17 +643,17 @@ describe('stripOmittedArgs', () => {
   // became the next crash.
   it('drops the null-filled arguments a model sends for "unused"', () => {
     expect(
-      stripOmittedArgs({ eventIds: null, limit: 25, when: 'today', monitorId: null, objectType: null, tag: null }),
-    ).toEqual({ limit: 25, when: 'today' });
+      stripOmittedArgs({ eventIds: null, limit: 25, daysAgo: 0, monitorId: null, objectType: null, tag: null }),
+    ).toEqual({ limit: 25, daysAgo: 0 });
   });
 
   it('drops placeholder strings and empty arrays too', () => {
-    expect(stripOmittedArgs({ when: 'today', objectType: '{}', tag: '', eventIds: [] })).toEqual({ when: 'today' });
+    expect(stripOmittedArgs({ daysAgo: 0, objectType: '{}', tag: '', eventIds: [] })).toEqual({ daysAgo: 0 });
   });
 
   it('keeps every real value, including falsy ones that mean something', () => {
-    expect(stripOmittedArgs({ when: 'today', objectType: ['car'], limit: 0 })).toEqual({
-      when: 'today',
+    expect(stripOmittedArgs({ daysAgo: 0, objectType: ['car'], limit: 0 })).toEqual({
+      daysAgo: 0,
       objectType: ['car'],
       limit: 0,
     });
@@ -745,11 +736,9 @@ describe('validateToolInput (the refine step, refs #246)', () => {
     expect(error).toContain('mode must be one of: fast, slow');
   });
 
-  // The failure this replaced: the model put the user's phrase in `range`,
-  // which was an enum. With `when` the only time field, the phrase has one
-  // place to go, and a stale `range` is now reported as an unknown argument
-  // that names `when` as a valid one.
-  it('steers a stale range argument to the field that replaced it', () => {
+  // A stale argument from an older contract (`range`, `when`) is reported as
+  // unknown, with the structured window fields named as the valid ones.
+  it('steers a stale time argument to the fields that replaced it', () => {
     const tool = getToolByName('list_events')!;
     const error = validateToolInput(tool.schema, { range: 'yesterday from 16:00 to 22:00' });
     expect(error).toContain('range is not an argument of this tool');
@@ -927,33 +916,6 @@ describe('list_events when resolution (refs #246)', () => {
     expect(parsed.countsByMonitor).toEqual({ 'Front Door': 2, '2': 1 });
   });
 
-  it('refuses a when phrase carrying words the user never wrote', async () => {
-    const tool = getToolByName('list_events')!;
-    const r = await tool.execute(
-      { when: 'yesterday from 4pm to 10pm', objectType: 'car' },
-      { ...ctx(), timezone: 'America/New_York', question: 'how many vehicles came yesterday' },
-    );
-
-    expect(r.isError).toBe(true);
-    expect(r.output).toContain('words the user did not write');
-    expect(r.output).toContain('4pm');
-    expect(getEvents).not.toHaveBeenCalled();
-  });
-
-  // WHEN_FILLER is an English word list; against another locale it flags
-  // legitimate connectives as invented and burns a correction round on a
-  // correct call, so the check is gated to English locales (refs #259).
-  it('skips the invented-words check for a non-English locale', async () => {
-    const tool = getToolByName('list_events')!;
-    const r = await tool.execute(
-      { when: 'yesterday' },
-      { ...ctx(), timezone: 'America/New_York', question: 'was geschah gestern', locale: 'de' },
-    );
-
-    expect(r.isError).toBeFalsy();
-    expect(getEvents).toHaveBeenCalled();
-  });
-
   // The whole point of giving the model the vocabulary: a label the detector
   // never writes cannot answer anything, and a zero-row "none" for it is
   // wrong when the real label was sitting right there.
@@ -1003,11 +965,11 @@ describe('list_events when resolution (refs #246)', () => {
     expect(getEvents).toHaveBeenCalledWith(expect.objectContaining({ notesRegexp: 'detected:.*(car|truck)' }));
   });
 
-  it('hands back an unreadable `when` phrase instead of querying a guessed window', async () => {
+  it('hands back an uninterpretable when phrase instead of querying a guessed window', async () => {
     const tool = getToolByName('list_events')!;
     const r = await tool.execute({ when: 'sometime last spring' }, { ...ctx(), timezone: 'America/New_York' });
     expect(r.isError).toBe(true);
-    expect(r.output).toContain('Could not read');
+    expect(r.output).toContain('Could not interpret');
     expect(getEvents).not.toHaveBeenCalled();
   });
 

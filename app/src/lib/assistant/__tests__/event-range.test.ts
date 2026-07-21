@@ -1,134 +1,113 @@
+/**
+ * resolveWindow (refs #265): structured window fields in, exact ZM datetime
+ * strings out. The model interprets human time words into these fields; this
+ * module owns ONLY the arithmetic, so these tests fix the clock and the zone
+ * and assert exact wall-clock strings.
+ */
 import { describe, it, expect } from 'vitest';
-import { parseClockTime, resolveWhen } from '../event-range';
+import { resolveWindow } from '../event-range';
 
-// 2026-07-16T14:30:00Z is 2026-07-16 10:30:00 in America/New_York (EDT,
-// UTC-4) and 2026-07-16 23:30:00 in Asia/Tokyo (UTC+9): same UTC instant,
-// different local wall-clock hour, both still within 2026-07-16.
+// 2026-07-16T14:30:00Z is Thursday 2026-07-16 10:30:00 in America/New_York
+// (EDT, UTC-4) and 2026-07-16 23:30:00 in Asia/Tokyo (UTC+9).
 const NOW = new Date('2026-07-16T14:30:00Z');
+const at = (fields: Parameters<typeof resolveWindow>[0], timezone = 'America/New_York') =>
+  resolveWindow(fields, NOW, timezone);
 
-describe('resolveWhen timezone handling', () => {
-  it('resolves "today" using a different timezone\'s own wall-clock hour', () => {
-    const r = resolveWhen('today', NOW, 'Asia/Tokyo');
-    expect(r).toEqual({ startDateTime: '2026-07-16 00:00:00', endDateTime: '2026-07-16 23:30:00' });
+describe('rolling windows', () => {
+  it('resolves lastCount+lastUnit back from now', () => {
+    expect(at({ lastCount: 1, lastUnit: 'hour' })).toEqual({
+      startDateTime: '2026-07-16 09:30:00',
+      endDateTime: '2026-07-16 10:30:00',
+    });
+    expect(at({ lastCount: 7, lastUnit: 'day' })).toEqual({
+      startDateTime: '2026-07-09 10:30:00',
+      endDateTime: '2026-07-16 10:30:00',
+    });
+    expect(at({ lastCount: 1, lastUnit: 'week' })).toEqual({
+      startDateTime: '2026-07-09 10:30:00',
+      endDateTime: '2026-07-16 10:30:00',
+    });
+    expect(at({ lastCount: 30, lastUnit: 'minute' })).toEqual({
+      startDateTime: '2026-07-16 10:00:00',
+      endDateTime: '2026-07-16 10:30:00',
+    });
   });
 
-  it('resolves "today" onto the correct calendar day even when zones disagree on the date', () => {
-    // 2026-07-16T23:30:00Z is 2026-07-16 19:30 in New York but already
-    // 2026-07-17 08:30 in Tokyo: the two zones must resolve different days.
-    const crossing = new Date('2026-07-16T23:30:00Z');
-    expect(resolveWhen('today', crossing, 'America/New_York')).toEqual({
-      startDateTime: '2026-07-16 00:00:00', endDateTime: '2026-07-16 19:30:00',
-    });
-    expect(resolveWhen('today', crossing, 'Asia/Tokyo')).toEqual({
-      startDateTime: '2026-07-17 00:00:00', endDateTime: '2026-07-17 08:30:00',
-    });
+  it('rejects half a rolling window, a bad unit, and a bad count with corrective errors', () => {
+    expect(at({ lastCount: 7 })).toMatchObject({ error: expect.stringContaining('lastUnit') });
+    expect(at({ lastUnit: 'day' })).toMatchObject({ error: expect.stringContaining('lastCount') });
+    expect(at({ lastCount: 7, lastUnit: 'fortnight' })).toMatchObject({ error: expect.stringContaining('lastUnit must be one of') });
+    expect(at({ lastCount: -2, lastUnit: 'day' })).toMatchObject({ error: expect.stringContaining('positive') });
   });
 
-  // The keywords the retired `range` enum used, still understood in case a
-  // model repeats one from a persisted thread (see resolveWhen's LEGACY map).
-  it('still resolves the legacy enum keywords', () => {
-    expect(resolveWhen('last_24h', NOW, 'America/New_York')).toEqual({
-      startDateTime: '2026-07-15 10:30:00', endDateTime: '2026-07-16 10:30:00',
-    });
-    expect(resolveWhen('last_7d', NOW, 'America/New_York')).toEqual({
-      startDateTime: '2026-07-09 10:30:00', endDateTime: '2026-07-16 10:30:00',
+  it('rejects a rolling window combined with a day field or day narrowing', () => {
+    expect(at({ lastCount: 1, lastUnit: 'day', daysAgo: 1 })).toMatchObject({ error: expect.stringContaining('not both') });
+    expect(at({ lastCount: 1, lastUnit: 'day', fromTime: '16:00' })).toMatchObject({
+      error: expect.stringContaining('cannot combine'),
     });
   });
 });
 
-// NOW is 2026-07-16 10:30:00 in America/New_York, so "yesterday" is the 15th.
-describe('resolveWhen (English time windows)', () => {
-  const when = (phrase: string) => resolveWhen(phrase, NOW, 'America/New_York');
-
-  it('reads clock times the way people write them', () => {
-    expect(parseClockTime('4pm')).toBe(16 * 60);
-    expect(parseClockTime('4:30pm')).toBe(16 * 60 + 30);
-    expect(parseClockTime('16:00')).toBe(16 * 60);
-    expect(parseClockTime('noon')).toBe(12 * 60);
-    expect(parseClockTime('midnight')).toBe(0);
-    expect(parseClockTime('12am')).toBe(0);
-    expect(parseClockTime('12pm')).toBe(12 * 60);
-    expect(parseClockTime('half past four')).toBeUndefined();
-    expect(parseClockTime('25:00')).toBeUndefined();
+describe('single days', () => {
+  it('resolves daysAgo as calendar days: 0 ends now, 1 is midnight to midnight', () => {
+    expect(at({ daysAgo: 0 })).toEqual({ startDateTime: '2026-07-16 00:00:00', endDateTime: '2026-07-16 10:30:00' });
+    expect(at({ daysAgo: 1 })).toEqual({ startDateTime: '2026-07-15 00:00:00', endDateTime: '2026-07-16 00:00:00' });
+    expect(at({ daysAgo: 2 })).toEqual({ startDateTime: '2026-07-14 00:00:00', endDateTime: '2026-07-15 00:00:00' });
   });
 
-  it('resolves whole days', () => {
-    expect(when('today')).toEqual({ startDateTime: '2026-07-16 00:00:00', endDateTime: '2026-07-16 10:30:00' });
-    expect(when('yesterday')).toEqual({ startDateTime: '2026-07-15 00:00:00', endDateTime: '2026-07-16 00:00:00' });
+  it('resolves a weekday as the most recent such day, today included', () => {
+    // NOW is a Thursday.
+    expect(at({ weekday: 'sunday' })).toEqual({ startDateTime: '2026-07-12 00:00:00', endDateTime: '2026-07-13 00:00:00' });
+    expect(at({ weekday: 'thursday' })).toEqual({ startDateTime: '2026-07-16 00:00:00', endDateTime: '2026-07-16 10:30:00' });
   });
 
-  // The two phrasings live use rejected first (refs #262). NOW is Thursday
-  // 2026-07-16, so "2 days ago" is Tuesday the 14th and the most recent
-  // Sunday is the 12th.
-  it('resolves "N days ago" as that calendar day', () => {
-    expect(when('2 days ago')).toEqual({ startDateTime: '2026-07-14 00:00:00', endDateTime: '2026-07-15 00:00:00' });
-    expect(when('1 day ago')).toEqual({ startDateTime: '2026-07-15 00:00:00', endDateTime: '2026-07-16 00:00:00' });
+  it('resolves an explicit date', () => {
+    expect(at({ date: '2026-07-10' })).toEqual({ startDateTime: '2026-07-10 00:00:00', endDateTime: '2026-07-11 00:00:00' });
+    expect(at({ date: 'July 10' })).toMatchObject({ error: expect.stringContaining('YYYY-MM-DD') });
+    expect(at({ date: '2026-08-01' })).toMatchObject({ error: expect.stringContaining('future') });
   });
 
-  it('resolves weekday names as the most recent such day', () => {
-    const sunday = { startDateTime: '2026-07-12 00:00:00', endDateTime: '2026-07-13 00:00:00' };
-    expect(when('sunday')).toEqual(sunday);
-    expect(when('on sunday')).toEqual(sunday);
-    expect(when('last sunday')).toEqual(sunday);
-  });
-
-  // A bare weekday that IS today means today; only "last" reaches back a week.
-  it('distinguishes "thursday" (today) from "last thursday" when asked on a Thursday', () => {
-    expect(when('thursday')).toEqual({ startDateTime: '2026-07-16 00:00:00', endDateTime: '2026-07-16 10:30:00' });
-    expect(when('last thursday')).toEqual({ startDateTime: '2026-07-09 00:00:00', endDateTime: '2026-07-10 00:00:00' });
-  });
-
-  it('composes a weekday with part-of-day narrowing', () => {
-    expect(when('sunday from 4pm to 10pm')).toEqual({
-      startDateTime: '2026-07-12 16:00:00',
-      endDateTime: '2026-07-12 22:00:00',
-    });
-    expect(when('2 days ago after 9am')).toEqual({
-      startDateTime: '2026-07-14 09:00:00',
-      endDateTime: '2026-07-15 00:00:00',
-    });
-  });
-
-  it('resolves rolling windows', () => {
-    expect(when('last hour')).toEqual({ startDateTime: '2026-07-16 09:30:00', endDateTime: '2026-07-16 10:30:00' });
-    expect(when('last 24 hours')).toEqual({ startDateTime: '2026-07-15 10:30:00', endDateTime: '2026-07-16 10:30:00' });
-    expect(when('past 30 minutes')).toEqual({ startDateTime: '2026-07-16 10:00:00', endDateTime: '2026-07-16 10:30:00' });
-    expect(when('last 7 days')).toEqual({ startDateTime: '2026-07-09 10:30:00', endDateTime: '2026-07-16 10:30:00' });
-  });
-
-  // The case that started this: the model only has to echo the user's phrase.
-  it('resolves part of a named day', () => {
-    expect(when('yesterday from 4pm to 10pm')).toEqual({
-      startDateTime: '2026-07-15 16:00:00',
-      endDateTime: '2026-07-15 22:00:00',
-    });
-    expect(when('today between 9am and noon')).toEqual({
-      startDateTime: '2026-07-16 09:00:00',
-      endDateTime: '2026-07-16 12:00:00',
-    });
-    expect(when('yesterday 16:00 to 22:00')).toEqual({
-      startDateTime: '2026-07-15 16:00:00',
-      endDateTime: '2026-07-15 22:00:00',
-    });
-  });
-
-  it('resolves one-sided windows', () => {
-    expect(when('yesterday after 4pm')).toEqual({
-      startDateTime: '2026-07-15 16:00:00',
-      endDateTime: '2026-07-16 00:00:00',
-    });
-    expect(when('today before noon')).toEqual({
+  it('resolves the day in the profile timezone, not the runtime zone', () => {
+    // 2026-07-16T23:30:00Z is still the 16th in New York but the 17th in Tokyo.
+    const crossing = new Date('2026-07-16T23:30:00Z');
+    expect(resolveWindow({ daysAgo: 0 }, crossing, 'America/New_York')).toEqual({
       startDateTime: '2026-07-16 00:00:00',
-      endDateTime: '2026-07-16 12:00:00',
+      endDateTime: '2026-07-16 19:30:00',
+    });
+    expect(resolveWindow({ daysAgo: 0 }, crossing, 'Asia/Tokyo')).toEqual({
+      startDateTime: '2026-07-17 00:00:00',
+      endDateTime: '2026-07-17 08:30:00',
     });
   });
 
-  // Errors, not guesses: each names what could not be read so the model can
-  // correct rather than retry the same phrase.
-  it('reports what it could not read instead of guessing', () => {
-    expect(when('')).toMatchObject({ error: expect.stringContaining('empty') });
-    expect(when('sometime last spring')).toMatchObject({ error: expect.stringContaining('Could not read') });
-    expect(when('yesterday from 4pm to bananas')).toMatchObject({ error: expect.stringContaining('bananas') });
-    expect(when('yesterday from 10pm to 4pm')).toMatchObject({ error: expect.stringContaining('not after') });
+  it('rejects more than one day picker', () => {
+    expect(at({ daysAgo: 1, weekday: 'sunday' })).toMatchObject({ error: expect.stringContaining('only one') });
+  });
+});
+
+describe('day narrowing', () => {
+  it('narrows a single day with fromTime/toTime', () => {
+    expect(at({ daysAgo: 1, fromTime: '16:00', toTime: '22:00' })).toEqual({
+      startDateTime: '2026-07-15 16:00:00',
+      endDateTime: '2026-07-15 22:00:00',
+    });
+    expect(at({ weekday: 'sunday', fromTime: '09:00' })).toEqual({
+      startDateTime: '2026-07-12 09:00:00',
+      endDateTime: '2026-07-13 00:00:00',
+    });
+  });
+
+  it('rejects narrowing without a day, bad clock shapes, and inverted windows', () => {
+    expect(at({ fromTime: '16:00' })).toMatchObject({ error: expect.stringContaining('need a day') });
+    expect(at({ daysAgo: 1, fromTime: '4pm' })).toMatchObject({ error: expect.stringContaining('HH:MM') });
+    expect(at({ daysAgo: 1, fromTime: '22:00', toTime: '16:00' })).toMatchObject({
+      error: expect.stringContaining('after'),
+    });
+  });
+});
+
+describe('no window', () => {
+  it('returns undefined when no field is set, so the caller reports an unfiltered query', () => {
+    expect(at({})).toBeUndefined();
   });
 });

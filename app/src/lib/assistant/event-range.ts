@@ -1,19 +1,49 @@
 /**
- * Resolves the assistant's relative event-date filters ("today", "yesterday",
- * rolling windows) into concrete ZM API datetime strings (refs #246).
+ * Converts the assistant's STRUCTURED time-window fields into concrete ZM API
+ * datetime strings (refs #265).
  *
- * Small/local models (Gemma, Qwen, etc. run through Ollama or on-device) are
- * unreliable at computing an ISO timestamp for "today" or "yesterday"
- * themselves: this is why `list_events`' `when` input exists at all (see
- * `tools-readonly.ts`). Resolving it here, in app code, means the model only
- * ever has to repeat the user's phrase, never compute a date. `now` and
- * `timezone` are both explicit parameters, never read from a store, so this
- * stays pure and unit-testable with a fixed clock and a fixed zone regardless
- * of the CI runner's own system timezone.
+ * The model interprets the user's time words, in any phrasing and language,
+ * into flat fields (`lastCount`+`lastUnit`, `daysAgo`, `weekday`, `date`,
+ * `fromTime`/`toTime`); this module only does arithmetic on them. This
+ * replaced an English phrase grammar (`resolveWhen`) that understood exactly
+ * the phrasings someone had written regexes for and silently failed on every
+ * other human variant. Interpretation is what a language model is good at;
+ * date arithmetic is what code is good at; each now does its own job.
+ *
+ * `now` and `timezone` are explicit parameters, never read from a store, so
+ * this stays pure and unit-testable with a fixed clock and a fixed zone
+ * regardless of the CI runner's own system timezone.
  */
-import { subHours, subDays, startOfDay, addMinutes, format } from 'date-fns';
+import { subHours, startOfDay, subDays, addMinutes, format } from 'date-fns';
 import { toZonedTime, fromZonedTime } from 'date-fns-tz';
 import { ZM_API_DATETIME_FORMAT } from '../zm/zm-constants';
+
+/** Closed, universal sets: the tool CONTRACT, not a vocabulary. The model
+ *  maps whatever the user said onto these; no word list exists app-side. */
+export const WINDOW_UNITS = ['minute', 'hour', 'day', 'week', 'month'] as const;
+export const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
+
+const UNIT_HOURS: Record<(typeof WINDOW_UNITS)[number], number> = {
+  minute: 1 / 60,
+  hour: 1,
+  day: 24,
+  // ponytail: rolling approximations; calendar-aligned weeks/months are a
+  // `calendarAgo` field away if anyone asks for "last calendar month".
+  week: 24 * 7,
+  month: 24 * 30,
+};
+
+/** The window fields the event tools accept. All optional; validation of
+ *  combinations happens in `resolveWindow` with corrective errors. */
+export interface WindowFields {
+  lastCount?: number;
+  lastUnit?: string;
+  daysAgo?: number;
+  weekday?: string;
+  date?: string;
+  fromTime?: string;
+  toTime?: string;
+}
 
 export interface ResolvedEventRange {
   startDateTime: string;
@@ -21,184 +51,119 @@ export interface ResolvedEventRange {
 }
 
 /** Formats a real instant as the ZM API's local-timezone datetime string.
- *  `toZonedTime` + `format` is date-fns-tz's own documented recipe for this:
- *  `toZonedTime` shifts `instant` so that plain `Date` getters (which
- *  `date-fns`'s `format` reads) return `timezone`'s wall-clock values
- *  regardless of the runtime's own system timezone. */
+ *  `toZonedTime` + `format` is date-fns-tz's own documented recipe for this. */
 function formatForZm(instant: Date, timezone: string): string {
   return format(toZonedTime(instant, timezone), ZM_API_DATETIME_FORMAT);
 }
 
 /** Local midnight, `daysAgo` calendar days before `now`'s day in `timezone`,
- *  returned as a real UTC instant. `fromZonedTime` is the reverse of
- *  `toZonedTime`: it reads `zonedMidnight`'s plain `Date` getters as
- *  `timezone`'s wall clock and converts that back to the actual instant. */
+ *  returned as a real UTC instant. */
 function localMidnight(now: Date, timezone: string, daysAgo: number): Date {
   const zonedToday = startOfDay(toZonedTime(now, timezone));
   const zonedMidnight = daysAgo > 0 ? subDays(zonedToday, daysAgo) : zonedToday;
   return fromZonedTime(zonedMidnight, timezone);
 }
 
-/** One clock time expressed the way people write it, as minutes past
- *  midnight: "4pm", "4:30pm", "16:00", "noon", "midnight". Undefined if the
- *  text is not a time at all. */
-export function parseClockTime(text: string): number | undefined {
-  const value = text.trim().toLowerCase().replace(/\./g, '');
-  if (value === 'noon' || value === 'midday') return 12 * 60;
-  if (value === 'midnight') return 0;
-
-  const match = /^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/.exec(value);
+/** Strict `HH:MM` (24h) as minutes past midnight, or undefined. The model is
+ *  asked for exactly this shape; anything else is refused, not guessed at. */
+function clockMinutes(value: string): number | undefined {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
   if (!match) return undefined;
-  const [, rawHour, rawMinute, meridiem] = match;
-  let hour = Number(rawHour);
-  const minute = Number(rawMinute ?? '0');
-  if (minute > 59) return undefined;
-
-  if (meridiem) {
-    if (hour < 1 || hour > 12) return undefined;
-    if (meridiem === 'am') hour = hour === 12 ? 0 : hour;
-    else hour = hour === 12 ? 12 : hour + 12;
-  } else if (hour > 23) {
-    return undefined;
-  }
-  return hour * 60 + minute;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) return undefined;
+  return hours * 60 + minutes;
 }
 
-const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-
 /**
- * How many calendar days back a leading day phrase refers to, or undefined if
- * the text does not start with one. Returns the rest of the phrase too, so
- * part-of-day narrowing composes with every form ("sunday after 4pm").
- *
- * Understood: "today", "yesterday", "N days ago", and weekday names with an
- * optional "on"/"last"/"this". A bare or "on"/"this" weekday is the most
- * recent such day, today included ("on thursday" asked on a Thursday is
- * today); "last" always reaches into the past week ("last thursday" asked on
- * a Thursday is seven days ago). These were the two most common phrasings in
- * live use that the resolver rejected (refs #262).
+ * The exact start/stop pair the window fields describe, an `{error}` written
+ * for the model to correct from, or `undefined` when no window field was
+ * given at all (an unfiltered query, which the caller reports as such).
  */
-function parseLeadingDay(text: string, now: Date, timezone: string): { daysAgo: number; rest?: string } | undefined {
-  const dayWord = /^(to-?day|yester-?day)(?: (.*))?$/.exec(text);
-  if (dayWord) return { daysAgo: /^to/.test(dayWord[1]) ? 0 : 1, rest: dayWord[2] };
-
-  const daysAgo = /^(\d+) days? ago(?: (.*))?$/.exec(text);
-  if (daysAgo) return { daysAgo: Number(daysAgo[1]), rest: daysAgo[2] };
-
-  const weekday = /^(?:(on|last|this) )?(sunday|monday|tuesday|wednesday|thursday|friday|saturday)(?: (.*))?$/.exec(text);
-  if (weekday) {
-    const todayDow = toZonedTime(now, timezone).getDay();
-    const targetDow = WEEKDAYS.indexOf(weekday[2]);
-    const back = (todayDow - targetDow + 7) % 7;
-    return { daysAgo: weekday[1] === 'last' && back === 0 ? 7 : back, rest: weekday[3] };
-  }
-
-  return undefined;
-}
-
-const ROLLING_UNIT_HOURS: Record<string, number> = {
-  minute: 1 / 60, minutes: 1 / 60,
-  hour: 1, hours: 1,
-  day: 24, days: 24,
-  week: 24 * 7, weeks: 24 * 7,
-  month: 24 * 30, months: 24 * 30,
-};
-
-/**
- * Resolves a time window written the way a person says it.
- *
- * This exists because asking the model for a date is the one thing it
- * reliably gets wrong. Measured on llama3.2, "how many people came yesterday
- * from 4pm to 10pm" produced `range: "yesterday from 16:00 to 22:00"` (prose
- * in an enum field), and full ISO pairs ending on the 19th and the 20th when
- * yesterday was the 18th. The model is good at repeating the phrase the user
- * typed and bad at arithmetic on it, so the tool now takes the phrase and does
- * the arithmetic here, where a fixed clock and a fixed zone make it testable.
- *
- * Understood:
- *   "today", "yesterday"
- *   "last hour", "last 24 hours", "past 30 minutes", "last 7 days"
- *   "yesterday from 4pm to 10pm", "today between 9am and noon"
- *   "yesterday after 4pm", "today before noon"
- *
- * Returns an error message (not a throw) naming what was not understood, so
- * the caller can hand it back to the model as a correction.
- */
-export function resolveWhen(
-  phrase: string,
+export function resolveWindow(
+  fields: WindowFields,
   now: Date,
   timezone: string,
-): ResolvedEventRange | { error: string } {
-  // The enum keywords this parameter replaced, in case a model repeats one
-  // from an older conversation or a persisted thread.
-  const LEGACY = new Map([
-    ['last_hour', 'last hour'], ['last_24h', 'last 24 hours'],
-    ['last_7d', 'last 7 days'], ['last_30d', 'last 30 days'],
-  ]);
-  const raw = phrase.trim().toLowerCase().replace(/\s+/g, ' ');
-  const text = LEGACY.get(raw) ?? raw;
-  if (!text) return { error: 'when was empty.' };
+): ResolvedEventRange | { error: string } | undefined {
+  const { lastCount, lastUnit, daysAgo, weekday, date, fromTime, toTime } = fields;
+  const dayPickers = [daysAgo !== undefined, weekday !== undefined, date !== undefined].filter(Boolean).length;
+  const rolling = lastCount !== undefined || lastUnit !== undefined;
 
-  // "last 7 days" / "past 30 minutes" / "last hour"
-  const rolling = /^(?:in the )?(?:last|past|previous) (\d+ )?(minute|minutes|hour|hours|day|days|week|weeks|month|months)$/.exec(text);
-  if (rolling) {
-    const count = Number(rolling[1] ?? '1');
-    const hours = ROLLING_UNIT_HOURS[rolling[2]] * count;
-    return { startDateTime: formatForZm(subHours(now, hours), timezone), endDateTime: formatForZm(now, timezone) };
+  if (rolling && dayPickers > 0) {
+    return { error: 'Send either a rolling window (lastCount+lastUnit) or a day (daysAgo, weekday, or date), not both.' };
+  }
+  if (dayPickers > 1) {
+    return { error: 'Send only one of daysAgo, weekday, or date.' };
   }
 
-  // A day phrase (today, yesterday, "2 days ago", a weekday), optionally
-  // narrowed to part of that day.
-  const dayMatch = parseLeadingDay(text, now, timezone);
-  if (dayMatch) {
-    const { daysAgo } = dayMatch;
-    const dayStart = localMidnight(now, timezone, daysAgo);
-    const rest = dayMatch.rest?.trim();
-
-    // The whole day. "today" ends now rather than at a midnight that has not
-    // happened yet.
-    if (!rest) {
-      return {
-        startDateTime: formatForZm(dayStart, timezone),
-        endDateTime: formatForZm(daysAgo === 0 ? now : localMidnight(now, timezone, daysAgo - 1), timezone),
-      };
+  if (rolling) {
+    if (lastCount === undefined || lastUnit === undefined) {
+      return { error: 'A rolling window needs both lastCount and lastUnit.' };
     }
-
-    const window =
-      /^(?:from |between )?(.+?) (?:to|and|until|till|-) (.+)$/.exec(rest) ??
-      /^(after|since|before|until) (.+)$/.exec(rest);
-    if (!window) return { error: `Could not read "${rest}" as a time of day.` };
-
-    const isBound = /^(after|since|before|until)$/.test(window[1]);
-    const startText = isBound ? undefined : window[1];
-    const endText = isBound ? undefined : window[2];
-    const boundMinutes = isBound ? parseClockTime(window[2]) : undefined;
-
-    if (isBound) {
-      if (boundMinutes === undefined) return { error: `Could not read "${window[2]}" as a time of day.` };
-      const at = addMinutes(dayStart, boundMinutes);
-      const dayEnd = daysAgo === 0 ? now : localMidnight(now, timezone, daysAgo - 1);
-      return /^(after|since)$/.test(window[1])
-        ? { startDateTime: formatForZm(at, timezone), endDateTime: formatForZm(dayEnd, timezone) }
-        : { startDateTime: formatForZm(dayStart, timezone), endDateTime: formatForZm(at, timezone) };
+    const count = Number(lastCount);
+    if (!Number.isFinite(count) || count <= 0) {
+      return { error: `lastCount must be a positive number. Received "${String(lastCount)}".` };
     }
-
-    const startMinutes = parseClockTime(startText!);
-    const endMinutes = parseClockTime(endText!);
-    if (startMinutes === undefined) return { error: `Could not read "${startText}" as a time of day.` };
-    if (endMinutes === undefined) return { error: `Could not read "${endText}" as a time of day.` };
-    if (endMinutes <= startMinutes) {
-      return { error: `"${endText}" is not after "${startText}"; a window cannot end before it starts.` };
+    const unit = String(lastUnit).toLowerCase() as (typeof WINDOW_UNITS)[number];
+    if (!WINDOW_UNITS.includes(unit)) {
+      return { error: `lastUnit must be one of: ${WINDOW_UNITS.join(', ')}. Received "${String(lastUnit)}".` };
+    }
+    if (fromTime !== undefined || toTime !== undefined) {
+      return { error: 'fromTime/toTime narrow a single day; they cannot combine with a rolling window.' };
     }
     return {
-      startDateTime: formatForZm(addMinutes(dayStart, startMinutes), timezone),
-      endDateTime: formatForZm(addMinutes(dayStart, endMinutes), timezone),
+      startDateTime: formatForZm(subHours(now, UNIT_HOURS[unit] * count), timezone),
+      endDateTime: formatForZm(now, timezone),
     };
   }
 
+  let back: number | undefined;
+  if (daysAgo !== undefined) {
+    const n = Number(daysAgo);
+    if (!Number.isFinite(n) || n < 0) return { error: `daysAgo must be 0 or more. Received "${String(daysAgo)}".` };
+    back = Math.floor(n);
+  } else if (weekday !== undefined) {
+    const target = WEEKDAYS.indexOf(String(weekday).toLowerCase() as (typeof WEEKDAYS)[number]);
+    if (target === -1) return { error: `weekday must be one of: ${WEEKDAYS.join(', ')}. Received "${String(weekday)}".` };
+    // Most recent such day, today included: the model interprets "last
+    // sunday" vs "sunday" itself and can send daysAgo when it means a
+    // different week.
+    back = (toZonedTime(now, timezone).getDay() - target + 7) % 7;
+  } else if (date !== undefined) {
+    const text = String(date).trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+      return { error: `date must be "YYYY-MM-DD". Received "${String(date)}".` };
+    }
+    const zonedToday = startOfDay(toZonedTime(now, timezone));
+    const zonedTarget = startOfDay(toZonedTime(fromZonedTime(new Date(`${text}T12:00:00`), timezone), timezone));
+    back = Math.round((zonedToday.getTime() - zonedTarget.getTime()) / 86_400_000);
+    if (back < 0) return { error: `date "${text}" is in the future.` };
+  }
+
+  if (back === undefined) {
+    if (fromTime !== undefined || toTime !== undefined) {
+      return { error: 'fromTime/toTime need a day: send daysAgo, weekday, or date alongside them.' };
+    }
+    return undefined;
+  }
+
+  const dayStart = localMidnight(now, timezone, back);
+  const dayEnd = back === 0 ? now : localMidnight(now, timezone, back - 1);
+
+  const fromMinutes = fromTime === undefined ? undefined : clockMinutes(String(fromTime));
+  const toMinutes = toTime === undefined ? undefined : clockMinutes(String(toTime));
+  if (fromTime !== undefined && fromMinutes === undefined) {
+    return { error: `fromTime must be 24h "HH:MM". Received "${String(fromTime)}".` };
+  }
+  if (toTime !== undefined && toMinutes === undefined) {
+    return { error: `toTime must be 24h "HH:MM". Received "${String(toTime)}".` };
+  }
+  if (fromMinutes !== undefined && toMinutes !== undefined && toMinutes <= fromMinutes) {
+    return { error: 'toTime must be after fromTime.' };
+  }
+
   return {
-    error:
-      `Could not read "${phrase}" as a time window. Use a phrase like "today", "yesterday", "sunday", ` +
-      '"2 days ago", "last 24 hours", "last 7 days", "yesterday from 4pm to 10pm", or "today before noon".',
+    startDateTime: formatForZm(fromMinutes === undefined ? dayStart : addMinutes(dayStart, fromMinutes), timezone),
+    endDateTime: formatForZm(toMinutes === undefined ? dayEnd : addMinutes(dayStart, toMinutes), timezone),
   };
 }

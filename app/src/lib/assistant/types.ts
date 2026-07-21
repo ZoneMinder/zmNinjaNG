@@ -170,10 +170,13 @@ export interface ToolContext {
    *  model-supplied phrase came from the user rather than from an example in
    *  the prompt (see `list_events`' `when`). */
   question?: string;
-  /** The active UI locale (BCP 47, e.g. `de` or `en-US`). English-only text
-   *  heuristics (ungroundedWhenWords) are gated on it so they never
-   *  false-positive on another language's connectives (refs #259). */
+  /** The active UI locale (BCP 47, e.g. `de` or `en-US`). */
   locale?: string;
+  /** Interprets a human time phrase into structured window fields using the
+   *  session's model under a constrained schema (window-interpreter.ts,
+   *  refs #265). Injected by AskPanel so the tool layer stays provider-free;
+   *  a context without it cannot resolve `when` phrases and says so. */
+  interpretWhen?: (phrase: string) => Promise<import('./event-range').WindowFields | { error: string }>;
   /** Detected-object labels this install writes (object-labels.ts). A tool
    *  rejects an objectType outside this list rather than querying a label the
    *  detector never emits. */
