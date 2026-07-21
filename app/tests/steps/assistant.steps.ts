@@ -1,7 +1,7 @@
 import { createBdd } from 'playwright-bdd';
 import { expect } from '@playwright/test';
 import { testConfig } from '../helpers/config';
-import { getAlarmStatus, cancelAlarmDirect } from '../helpers/zm-api';
+import { getAlarmStatus } from '../helpers/zm-api';
 import { STORAGE_KEYS } from '../../src/lib/zmninja-ng-constants';
 import type { AssistantTurn } from '../../src/lib/assistant/types';
 
@@ -71,8 +71,14 @@ Given('the assistant will answer {string} after calling count_events', async ({ 
   ]);
 });
 
-Given('the assistant will call trigger_alarm on monitor {string}', async ({ page }, monitorId: string) => {
-  await seedScript(page, [{ toolCalls: [{ id: '1', name: 'trigger_alarm', input: { monitorId } }] }]);
+/** A model that reaches for the withheld action: the loop refuses the call
+ *  (WITHHELD_TOOL_REFUSAL in agent.ts, no destructive tools exist) and the
+ *  second scripted turn is the model relaying that refusal to the user. */
+Given('the assistant will call trigger_alarm and then relay the refusal', async ({ page }) => {
+  await seedScript(page, [
+    { toolCalls: [{ id: '1', name: 'trigger_alarm', input: { monitorId: '1' } }] },
+    { text: 'I cannot trigger alarms. Do that from the Monitors screen.', toolCalls: [] },
+  ]);
 });
 
 /** The window `sharedMockProvider` claims, standing in for an on-device model's
@@ -84,12 +90,16 @@ Given('the assistant backend has a context window of {string} tokens', async ({ 
   }, Number(tokens));
 });
 
-/** A single-turn answer reporting `promptTokens`, which is what the auto-clear
- *  threshold is measured against. */
+/** A count_events round then an answer reporting `promptTokens`, which is
+ *  what the auto-clear threshold is measured against. The tool round is not
+ *  decoration: the scenario asks an events question, and the loop's live-data
+ *  requirement (agent.ts) holds any events question to a successful
+ *  list_events/count_events call before it accepts an answer. */
 Given(
   'the assistant will answer {string} using {string} prompt tokens',
   async ({ page }, answer: string, promptTokens: string) => {
     await seedScript(page, [
+      { toolCalls: [{ id: '1', name: 'count_events', input: { interval: '1 day' } }] },
       {
         text: answer,
         toolCalls: [],
@@ -162,35 +172,14 @@ Then('an activity chip for {string} should have appeared', async ({ page }, tool
   });
 });
 
-Then('the assistant confirm card should be visible', async ({ page }) => {
-  await expect(page.getByTestId('assistant-confirm')).toBeVisible({ timeout: testConfig.timeouts.transition });
-});
-
-When('I cancel the confirmation', async ({ page }) => {
-  await page.getByTestId('assistant-confirm-cancel').click();
-});
-
-When('I confirm the confirmation', async ({ page }) => {
-  await page.getByTestId('assistant-confirm-accept').click();
-});
-
-// Ground truth from the server (rule 34): the confirm/cancel click proves the
-// UI decision, but the alarm state itself is asserted from the API so a
-// regression in the confirm gate (agent.ts) can't pass by leaving the
-// monitor's real state unchecked. Neither step needs a Playwright fixture,
-// but playwright-bdd requires an object-destructuring first argument to
-// detect that (an empty pattern reads as "no fixtures requested").
+// Ground truth from the server (rule 34): the refusal text proves the UI
+// outcome, but the alarm state itself is asserted from the API so a
+// regression that let a withheld tool execute (agent.ts) can't pass by
+// leaving the monitor's real state unchecked. The step needs no Playwright
+// fixture, but playwright-bdd requires an object-destructuring first argument
+// to detect that (an empty pattern reads as "no fixtures requested").
 // eslint-disable-next-line no-empty-pattern
 Then('monitor {string} should not be in alarm', async ({}, monitorId: string) => {
   await expect.poll(() => getAlarmStatus(monitorId), { timeout: testConfig.timeouts.transition }).toBe(false);
 });
 
-// eslint-disable-next-line no-empty-pattern
-Then('monitor {string} should be in alarm', async ({}, monitorId: string) => {
-  await expect.poll(() => getAlarmStatus(monitorId), { timeout: testConfig.timeouts.pageLoad }).toBe(true);
-
-  // Cleanup: the scenario proved the assistant can trigger the alarm above;
-  // leaving it armed would fail unrelated monitor-state assertions in later runs.
-  await cancelAlarmDirect(monitorId);
-  await expect.poll(() => getAlarmStatus(monitorId), { timeout: testConfig.timeouts.transition }).toBe(false);
-});

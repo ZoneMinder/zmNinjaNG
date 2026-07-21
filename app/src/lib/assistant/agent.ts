@@ -304,6 +304,11 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
   /** `name:JSON(input)` for every tool call attempted this turn, so an
    *  identical repeat can be refused rather than re-run (see the loop below). */
   const calledSignatures = new Set<string>();
+  /** Whether the model attempted ANY tool call this turn, successful or not.
+   *  The generic reminder below targets a model that answered without even
+   *  trying a tool; a model whose attempts were refused (withheld action,
+   *  unknown name) already got its guidance as tool results. */
+  let anyToolCallAttempted = false;
   /** Every tool result this turn produced, for the verification step. */
   const toolOutputs: string[] = [];
   /** The grounding check runs at most once, like the optional judge: a model
@@ -400,7 +405,7 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
         !readToolRequirement &&
         !genericToolReminderSent &&
         tools.length > 0 &&
-        toolOutputs.length === 0 &&
+        !anyToolCallAttempted &&
         turn.text &&
         !turn.text.startsWith('__i18n:')
       ) {
@@ -425,6 +430,7 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
     }
     lastUsage = turn.usage ?? lastUsage;
     push(assistantMsg);
+    anyToolCallAttempted = true;
 
     const results: ToolResult[] = [];
     for (const call of turn.toolCalls) {

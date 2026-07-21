@@ -50,16 +50,14 @@ Feature: In-app assistant
     Then the assistant reply should contain "Short answer"
     And the context-cleared notice should not be visible
 
-  Scenario: Destructive action requires confirmation
+  # The assistant has no destructive tools at all (see lib/assistant/tools.ts):
+  # a model that tries one is refused in the agent loop and relays the refusal.
+  Scenario: Destructive action is refused, nothing executes
     Given I am logged into zmNinjaNg
     And the assistant is enabled with the mock backend
-    And the assistant will call trigger_alarm on monitor "1"
+    And the assistant will call trigger_alarm and then relay the refusal
     When I press the "?" key
     Then the assistant panel should open
-    When I ask "trigger the alarm on monitor 1"
-    Then the assistant confirm card should be visible
-    When I cancel the confirmation
-    Then monitor "1" should not be in alarm
-    When I ask "trigger the alarm on monitor 1"
-    And I confirm the confirmation
-    Then monitor "1" should be in alarm
+    When I ask "trigger the alarm please"
+    Then the assistant reply should contain "cannot"
+    And monitor "1" should not be in alarm
