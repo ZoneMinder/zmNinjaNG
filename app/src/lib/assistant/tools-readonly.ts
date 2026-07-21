@@ -419,6 +419,10 @@ const listEventsTool: ToolDefinition = {
         durationSec: Number(e.Length),
         objects: parseDetectedObjects(e.Notes),
       }));
+      // Raw wall-clock starts aligned with `rows`, for the per-hour tally
+      // below: `rows.start` is already re-rendered in the profile's display
+      // format, which no longer slices into hour buckets.
+      const rawStarts = res.events.map(({ Event: e }) => e.StartDateTime);
 
       // State the window that was actually queried. Asked "how many people came
       // to my house", the model queried no time range at all and then answered
@@ -447,6 +451,24 @@ const listEventsTool: ToolDefinition = {
           return acc;
         }, {});
         const objectCounts = countObjects(rowsToShow as { monitor?: unknown; objects?: unknown }[]);
+        // "Busiest hour" is arithmetic over timestamps, which the model does
+        // badly, so the tally is computed here and the winning hour handed
+        // over as a finished clause (refs #264). Buckets are absolute hours
+        // (date + hour) in ZM wall clock, labelled in the profile's format.
+        const hourCounts = rawStarts.slice(0, rowsToShow.length).reduce<Record<string, number>>((acc, raw) => {
+          const key = `${raw.slice(0, 13)}:00:00`;
+          acc[key] = (acc[key] ?? 0) + 1;
+          return acc;
+        }, {});
+        const hourEntries = Object.entries(hourCounts).sort((a, b) => b[1] - a[1]);
+        const busiestHour =
+          rowsToShow.length > 1 && hourEntries.length > 0
+            ? { label: String(formatTimestamp(hourEntries[0][0], ctx)), count: hourEntries[0][1] }
+            : undefined;
+        const countsByHour =
+          hourEntries.length > 1
+            ? Object.fromEntries(hourEntries.map(([key, count]) => [String(formatTimestamp(key, ctx)), count]))
+            : undefined;
         // The counts, already written out. Supplying the numbers was not enough:
         // asked to summarize, the model enumerated all five rows and quoted
         // neither matchCount nor countsByMonitor. `summary` leads the object so
@@ -457,8 +479,17 @@ const listEventsTool: ToolDefinition = {
           countsByMonitor,
           objectCounts,
           partial: Boolean(truncated),
+          busiestHour,
         });
-        const base = { summary, window, matchCount: rowsToShow.length, countsByMonitor, objectCounts, events: rowsToShow };
+        const base = {
+          summary,
+          window,
+          matchCount: rowsToShow.length,
+          countsByMonitor,
+          objectCounts,
+          ...(countsByHour ? { countsByHour } : {}),
+          events: rowsToShow,
+        };
         return JSON.stringify(
           truncated ? { ...base, shownEvents: rowsToShow.length, moreMatchesExist: true } : base,
         );

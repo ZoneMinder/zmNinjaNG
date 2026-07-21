@@ -882,6 +882,26 @@ describe('list_events when resolution (refs #246)', () => {
     expect(getEvents).toHaveBeenCalledWith(expect.objectContaining({ startDateTime: '2026-07-15 00:00:00' }));
   });
 
+  // "Busiest hour" is timestamp arithmetic, so the tool computes the tally
+  // and hands the winner over as a finished clause (refs #264).
+  it('reports the busiest hour and per-hour counts from the shown rows', async () => {
+    vi.mocked(getEvents).mockResolvedValueOnce({
+      events: [
+        { Event: { Id: '1', MonitorId: '1', StartDateTime: '2026-07-15 08:10:00', Length: '30', Notes: 'detected:person' } },
+        { Event: { Id: '2', MonitorId: '1', StartDateTime: '2026-07-15 08:40:00', Length: '30', Notes: 'detected:person' } },
+        { Event: { Id: '3', MonitorId: '2', StartDateTime: '2026-07-15 11:20:00', Length: '30', Notes: 'detected:car' } },
+      ],
+      pagination: { page: 1, pageCount: 1, current: 1, count: 3, prevPage: false, nextPage: false, limit: 25, totalCount: 3 },
+    } as never);
+
+    const tool = getToolByName('list_events')!;
+    const r = await tool.execute({ when: 'yesterday' }, { ...ctx(), timezone: 'America/New_York' });
+
+    const parsed = JSON.parse(r.output);
+    expect(parsed.summary).toContain('Busiest hour: 2026-07-15 08:00:00 (2 events).');
+    expect(parsed.countsByHour).toEqual({ '2026-07-15 08:00:00': 2, '2026-07-15 11:00:00': 1 });
+  });
+
   // The model reported ten rows as "8 Front Yard, 2 Garage Outdoor" when the
   // real split was four and six. It should be reading a tally, not counting.
   it('supplies the per-monitor tally so the model never counts rows', async () => {

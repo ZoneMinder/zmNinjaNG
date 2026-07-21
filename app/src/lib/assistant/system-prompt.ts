@@ -51,6 +51,10 @@ export function buildSystemPrompt(ctx: SystemPromptContext): string {
     // nearby object examples, hiding everything else that happened.
     'For a daily summary, or any "what happened"/"summarize" question that names no specific object, call list_events with {"when":"today"} and NO objectType.',
     'For rolling summaries such as "last 24 hours" or "most active", call count_events with the matching interval.',
+    // count_events measures ONE rolling window, so it cannot rank hours;
+    // asked for a busiest hour it reported "the last hour" (refs #264). The
+    // list_events result carries an app-computed busiest-hour clause.
+    'For "busiest hour" or "most active hour" questions, call list_events with the day asked about: its summary names the busiest hour outright.',
     // count_events reports per-monitor counts and nothing about what was
     // detected; asked "how many vehicles came today" the model called it
     // anyway and reported all events as vehicles. The loop enforces this too

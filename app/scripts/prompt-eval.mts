@@ -82,6 +82,9 @@ const TOOL_CASES: ToolCase[] = [
       return a.when === 'yesterday' && t.includes('car') && t.includes('truck');
     },
   },
+  // count_events measures ONE rolling window and cannot rank hours; the
+  // list_events result carries the app-computed busiest-hour clause (refs #264).
+  { q: 'what was my busiest hour yesterday', tool: 'list_events', args: (a) => a.when === 'yesterday' },
   { q: 'is the server ok', tool: 'get_server_health' },
   { q: 'what cameras do I have', tool: 'list_monitors' },
   { q: 'how many events in the last 24 hours', tool: 'count_events', args: (a) => /day|24/.test(String(a.interval)) },
