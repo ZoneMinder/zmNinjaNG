@@ -85,12 +85,15 @@ export function validateToolInput(
     if (expected.length === 0) continue;
 
     const actual = Array.isArray(value) ? 'array' : typeof value === 'object' ? 'object' : typeof value;
-    if (expected.includes('number') && expected.length === 1 && typeof value !== 'number' && Number.isNaN(Number(value))) {
+    // Only a STRING may coerce to number: `Number([])` is 0 and `Number(null)`
+    // is 0, so anything looser lets `limit: []` through as a "number".
+    const numericString = typeof value === 'string' && value.trim() !== '' && !Number.isNaN(Number(value));
+    if (expected.includes('number') && expected.length === 1 && typeof value !== 'number' && !numericString) {
       return `${name} must be a number. Received "${String(value)}".`;
     }
     if (expected.includes('array') && actual === 'array') continue;
     if (expected.includes('string') && actual === 'string') continue;
-    if (expected.includes('number') && (actual === 'number' || !Number.isNaN(Number(value)))) continue;
+    if (expected.includes('number') && (actual === 'number' || numericString)) continue;
     return `${name} must be ${expected.join(' or ')}. Received ${actual}.`;
   }
 
@@ -124,11 +127,15 @@ export function coerceLabelList(value: unknown): string[] {
   if (Array.isArray(value)) return value.map((entry) => String(entry));
   const text = String(value ?? '').trim();
   if (!text.startsWith('[') && !text.startsWith('{')) return text ? [text] : [];
-  try {
-    const parsed: unknown = JSON.parse(text.replace(/'/g, '"'));
-    if (Array.isArray(parsed)) return parsed.map((entry) => String(entry));
-  } catch {
-    // Fall through to the split below: a half-formed list is still readable.
+  // Strict JSON first: the global quote swap below corrupts a label that
+  // legitimately contains an apostrophe, so it only runs when real JSON failed.
+  for (const candidate of [text, text.replace(/'/g, '"')]) {
+    try {
+      const parsed: unknown = JSON.parse(candidate);
+      if (Array.isArray(parsed)) return parsed.map((entry) => String(entry));
+    } catch {
+      // Fall through: try the quote-swapped form, then the split below.
+    }
   }
   return text
     .replace(/^[[{]|[\]}]$/g, '')
@@ -138,8 +145,11 @@ export function coerceLabelList(value: unknown): string[] {
 }
 
 export function objectTypePattern(objectType: string | readonly string[]): string {
+  // Unicode letters and digits survive, not just ASCII: a detector writing
+  // non-Latin labels used to normalize to '' here, which silently dropped the
+  // object filter and presented unfiltered rows as the filtered result.
   const labels = coerceLabelList(objectType)
-    .map((value) => value.trim().toLowerCase().replace(/[^a-z0-9 _-]/g, ''))
+    .map((value) => value.trim().toLowerCase().replace(/[^\p{L}\p{N} _-]/gu, ''))
     .filter((value) => value.length > 0);
   if (labels.length === 0) return '';
   return labels.length === 1 ? labels[0] : `(${labels.join('|')})`;

@@ -686,6 +686,12 @@ describe('coerceLabelList', () => {
     expect(coerceLabelList('car')).toEqual(['car']);
     expect(coerceLabelList('')).toEqual([]);
   });
+
+  // The Python-quote repair must not run on valid JSON: a global '->" swap
+  // corrupted any label that legitimately contains an apostrophe.
+  it('keeps an apostrophe inside a valid JSON label', () => {
+    expect(coerceLabelList('["driver\'s seat", "car"]')).toEqual(["driver's seat", 'car']);
+  });
 });
 
 describe('isOmittedArg', () => {
@@ -718,6 +724,13 @@ describe('objectTypePattern', () => {
     expect(objectTypePattern('.*')).toBe('');
     expect(objectTypePattern('ca(r|t)')).toBe('cart');
     expect(objectTypePattern(['car', ''])).toBe('car');
+  });
+
+  // A detector may write labels in any script. ASCII-only normalization turned
+  // them into '', which silently dropped the object filter.
+  it('keeps non-Latin labels', () => {
+    expect(objectTypePattern('собака')).toBe('собака');
+    expect(objectTypePattern(['人', 'car'])).toBe('(人|car)');
   });
 });
 
@@ -779,6 +792,14 @@ describe('validateToolInput (the refine step, refs #246)', () => {
   it('still holds a single-type argument to its type', () => {
     const tool = getToolByName('list_events')!;
     expect(validateToolInput(tool.schema, { eventIds: 'not-an-array' })).toContain('must be array');
+  });
+
+  // `Number(['5'])` is 5, so a single-element array used to slip through the
+  // number check as if it were numeric.
+  it('rejects a non-numeric value for a number argument', () => {
+    const tool = getToolByName('list_events')!;
+    expect(validateToolInput(tool.schema, { limit: ['5'] })).toContain('limit must be a number');
+    expect(validateToolInput(tool.schema, { limit: '10' })).toBeUndefined();
   });
 });
 
@@ -921,6 +942,16 @@ describe('list_events when resolution (refs #246)', () => {
     const r = await tool.execute({ when: 'sometime last spring' }, { ...ctx(), timezone: 'America/New_York' });
     expect(r.isError).toBe(true);
     expect(r.output).toContain('Could not read');
+    expect(getEvents).not.toHaveBeenCalled();
+  });
+
+  // An objectType that normalizes to nothing must error, not silently query
+  // unfiltered: every event would be presented as the "filtered" result.
+  it('refuses an objectType that normalizes to an empty pattern', async () => {
+    const tool = getToolByName('list_events')!;
+    const r = await tool.execute({ when: 'today', objectType: '@#$' }, { ...ctx(), timezone: 'America/New_York' });
+    expect(r.isError).toBe(true);
+    expect(r.output).toContain('not a usable label');
     expect(getEvents).not.toHaveBeenCalled();
   });
 

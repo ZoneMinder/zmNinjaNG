@@ -18,10 +18,12 @@ import type { MonitorData } from '../../api/types';
 
 export type MonitorRefResolution = { id: string } | { error: string };
 
-/** Only ASCII letters and digits, lowercased: makes "Front Door", "front
- *  door" and "FrontDoor" the same key, which covers how models mangle names. */
+/** Letters and digits only (any script), lowercased: makes "Front Door",
+ *  "front door" and "FrontDoor" the same key, which covers how models mangle
+ *  names. Unicode-aware, or two monitors with non-Latin names both normalize
+ *  to '' and collide as false "duplicates". */
 function normalizeName(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return value.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 }
 
 /**

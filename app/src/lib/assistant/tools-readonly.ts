@@ -284,6 +284,15 @@ const listEventsTool: ToolDefinition = {
         ? (Array.isArray(objectTypeRaw) ? objectTypeRaw.join(', ') : String(objectTypeRaw))
         : undefined;
       const objectPattern = objectTypeRaw ? objectTypePattern(objectTypeRaw) : undefined;
+      // An objectType that normalizes to nothing must be an error, not an
+      // unfiltered query: silently dropping the filter presents every event
+      // as the "filtered" result.
+      if (objectTypeRaw && !objectPattern) {
+        throw new Error(
+          `objectType "${String(objectType)}" is not a usable label. Pass a label exactly as this ` +
+            'installation records it, or omit objectType entirely.',
+        );
+      }
 
       // Refused before the query, not discovered as zero rows afterwards.
       // Asked about "vehicles" the model sent objectType "vehicle" despite the

@@ -36,6 +36,11 @@ export function deniesTheData(answer: string, toolOutputs: string[]): boolean {
       answer,
     );
   if (!claimsNothing) return false;
+  // A partial negative ("no animals, but 5 people came by") is describing the
+  // data, not denying it: any positive count in the answer means the model saw
+  // rows, so the nothing-found phrase is scoped, and correcting it would
+  // replace a right answer with a rewrite.
+  if (/\b[1-9]\d*\b/.test(answer)) return false;
   return toolOutputs.some((output) => {
     const match = /"matchCount"\s*:\s*(\d+)/.exec(output);
     return match !== null && Number(match[1]) > 0;
