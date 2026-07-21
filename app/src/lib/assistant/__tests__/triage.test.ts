@@ -44,7 +44,7 @@ describe('parseRequestKind', () => {
 });
 
 describe('classifyRequest', () => {
-  // `complete`, not `chat`: through `chat` the WebLLM and MNN paths wrap the
+  // `complete`, not `chat`: through `chat` the provider paths wrap the
   // call in the agent's tool catalog, few-shot block and JSON output contract,
   // and the classifier answers like an assistant instead of classifying.
   it('uses a plain completion, with the triage prompt as the system message', async () => {
