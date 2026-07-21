@@ -59,6 +59,23 @@ export function resetNativeToolServersForTests(): void {
   NATIVE_TOOL_SERVERS.clear();
 }
 
+/** `baseUrl::model` -> the context window the server is actually running the
+ *  model with, learned from Ollama's native `/api/ps` (the OpenAI-compatible
+ *  API never reports `num_ctx`, which is why `contextWindow` was permanently
+ *  unknown here and auto-clear never ran on this backend). `0` marks a server
+ *  that was asked and had no answer (not Ollama, model not loaded), so it is
+ *  not asked again every turn. Session-scoped like NATIVE_TOOL_SERVERS. */
+const CONTEXT_WINDOWS = new Map<string, number>();
+
+/** Test-only. */
+export function resetContextWindowsForTests(): void {
+  CONTEXT_WINDOWS.clear();
+}
+
+interface OllamaPsResponse {
+  models?: Array<{ name?: string; model?: string; context_length?: number }>;
+}
+
 export interface OpenAiProviderConfig {
   /** e.g. `http://localhost:11434/v1` (no trailing `/chat/completions`). */
   baseUrl: string;
@@ -394,6 +411,42 @@ export class OpenAiProvider implements AssistantProvider {
     this.config = config;
   }
 
+  private get serverKey(): string {
+    return `${this.config.baseUrl}::${this.config.model}`;
+  }
+
+  /** The window `/api/ps` reported for this server+model, once a turn has run
+   *  and the lookup resolved (see `refreshContextWindow`). AskPanel reads this
+   *  after each turn, and the cache is module-scoped, so the window learned
+   *  during turn N drives the auto-clear decision from turn N+1 on. */
+  get contextWindow(): number | undefined {
+    const window = CONTEXT_WINDOWS.get(this.serverKey);
+    return window ? window : undefined;
+  }
+
+  /** Fire-and-forget: asks Ollama's native API what window the loaded model
+   *  actually runs with. `/api/ps` only lists LOADED models, so this runs
+   *  after a chat completion, when the model is certainly loaded. A server
+   *  without the endpoint (not Ollama) records 0 and is never asked again. */
+  private refreshContextWindow(): void {
+    if (CONTEXT_WINDOWS.has(this.serverKey)) return;
+    const { baseUrl, model } = this.config;
+    const root = baseUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
+    void (async () => {
+      try {
+        const response = await httpGet<OllamaPsResponse>(`${root}/api/ps`, {
+          timeoutMs: ASSISTANT.testConnectionTimeoutMs,
+          intent: 'Assistant Ollama context window',
+        });
+        const entry = response?.data?.models?.find((m) => m.model === model || m.name === model);
+        CONTEXT_WINDOWS.set(this.serverKey, entry?.context_length ?? 0);
+        log.assistant('Ollama context window learned', LogLevel.DEBUG, { model, contextWindow: entry?.context_length });
+      } catch {
+        CONTEXT_WINDOWS.set(this.serverKey, 0);
+      }
+    })();
+  }
+
   /** The configured value, or the measured default when Settings has none. */
   private get temperature(): number {
     return this.config.temperature ?? ASSISTANT.assistantTemperature;
@@ -459,8 +512,7 @@ export class OpenAiProvider implements AssistantProvider {
     // `tools`/`tool_choice` omitted entirely when there are none, rather than
     // sent empty with `tool_choice: 'auto'`, which invites a server to look for
     // a tool that is not there.
-    const serverKey = `${baseUrl}::${model}`;
-    const chatMessages = buildOpenAiMessages(system, messages, tools.length > 0, !NATIVE_TOOL_SERVERS.has(serverKey));
+    const chatMessages = buildOpenAiMessages(system, messages, tools.length > 0, !NATIVE_TOOL_SERVERS.has(this.serverKey));
     const body = {
       model,
       messages: chatMessages,
@@ -514,7 +566,10 @@ export class OpenAiProvider implements AssistantProvider {
       log.assistant('Ollama raw response', LogLevel.DEBUG, { baseUrl, model, message, attempt });
       // A native tool call proves the server's tool template works; later
       // turns stop teaching the portable JSON fallback (see NATIVE_TOOL_SERVERS).
-      if ((message?.tool_calls?.length ?? 0) > 0) NATIVE_TOOL_SERVERS.add(serverKey);
+      if ((message?.tool_calls?.length ?? 0) > 0) NATIVE_TOOL_SERVERS.add(this.serverKey);
+      // The model is certainly loaded now, so /api/ps can say what window it
+      // runs with; enables auto-clear on this backend from the next turn.
+      this.refreshContextWindow();
 
       // Nothing downstream can tell a complete answer from one that stopped
       // mid-sentence, so the truncation has to be named here or it is

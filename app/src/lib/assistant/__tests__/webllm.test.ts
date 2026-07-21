@@ -550,6 +550,27 @@ describe('WebLlmProvider.chat', () => {
     expect(create).toHaveBeenCalledTimes(ASSISTANT.maxParseAttempts);
   });
 
+  // The Abort button used to be cosmetic on this backend: the loop only
+  // checked the signal BETWEEN attempts, so an in-flight generation ran to
+  // completion regardless.
+  it('interrupts an in-flight generation on abort and throws AbortError', async () => {
+    const controller = new AbortController();
+    const interruptGenerate = vi.fn();
+    const create = vi.fn().mockImplementation(() => {
+      // Abort while the request is "in flight"; the wired listener should
+      // interrupt the engine, and the resolved partial reply must be discarded.
+      controller.abort();
+      return Promise.resolve({ choices: [{ message: { content: '{"answer": "partial' } }] });
+    });
+    vi.mocked(getLoadedEngine).mockResolvedValue({ chat: { completions: { create } }, interruptGenerate } as never);
+
+    const provider = new WebLlmProvider(ASSISTANT.defaultModelId);
+    await expect(
+      provider.chat([{ role: 'user', text: 'hi' }], [], 'sys', controller.signal),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(interruptGenerate).toHaveBeenCalled();
+  });
+
   it('does not retry a valid answer', async () => {
     const create = vi.fn().mockResolvedValue({ choices: [{ message: { content: '{"answer": "ok"}' } }] });
     vi.mocked(getLoadedEngine).mockResolvedValue({ chat: { completions: { create } } } as never);

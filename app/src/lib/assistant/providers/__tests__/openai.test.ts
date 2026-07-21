@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { buildOpenAiMessages, toOpenAiTools, parseOpenAiTurn, OpenAiProvider, listOpenAiModels, probeToolSupport, toolSupportFromError, suggestOllamaBaseUrl, resetNativeToolServersForTests } from '../openai';
+import { buildOpenAiMessages, toOpenAiTools, parseOpenAiTurn, OpenAiProvider, listOpenAiModels, probeToolSupport, toolSupportFromError, suggestOllamaBaseUrl, resetNativeToolServersForTests, resetContextWindowsForTests } from '../openai';
 import type { AssistantMessage, ToolDefinition } from '../../types';
 import { ASSISTANT } from '../../../zmninja-ng-constants';
 
@@ -496,6 +496,45 @@ describe('native tool-call memory', () => {
     await p2.chat([{ role: 'user', text: 'count today' }], [TOOL], 'sys', new AbortController().signal);
     const second = httpPostMock.mock.calls[1][1] as { messages: Array<{ content: string }> };
     expect(second.messages[0].content).not.toContain('If you cannot emit a native tool call');
+  });
+});
+
+describe('context window discovery', () => {
+  beforeEach(() => {
+    httpPostMock.mockReset();
+    httpGetMock.mockReset();
+    resetContextWindowsForTests();
+    resetNativeToolServersForTests();
+  });
+
+  it('learns num_ctx from /api/ps after a chat and serves it to later instances', async () => {
+    httpPostMock.mockResolvedValue({ data: { choices: [{ message: { content: 'hi' } }] } });
+    httpGetMock.mockResolvedValue({ data: { models: [{ model: 'llama3.2', context_length: 131072 }] } });
+
+    const p = new OpenAiProvider({ baseUrl: 'http://zm:11434/v1', model: 'llama3.2' });
+    expect(p.contextWindow).toBeUndefined();
+    await p.chat([{ role: 'user', text: 'hello' }], [], 'sys', new AbortController().signal);
+    await Promise.resolve();
+
+    // The native endpoint, not the OpenAI-compatible one.
+    expect(httpGetMock.mock.calls[0][0]).toBe('http://zm:11434/api/ps');
+    // AskPanel builds a fresh provider each turn; the window must survive that.
+    const p2 = new OpenAiProvider({ baseUrl: 'http://zm:11434/v1', model: 'llama3.2' });
+    expect(p2.contextWindow).toBe(131072);
+  });
+
+  it('records a server without the endpoint and never asks again', async () => {
+    httpPostMock.mockResolvedValue({ data: { choices: [{ message: { content: 'hi' } }] } });
+    httpGetMock.mockRejectedValue(new Error('HTTP 404'));
+
+    const p = new OpenAiProvider({ baseUrl: 'http://api.example/v1', model: 'gpt' });
+    await p.chat([{ role: 'user', text: 'hello' }], [], 'sys', new AbortController().signal);
+    await Promise.resolve();
+    await p.chat([{ role: 'user', text: 'again' }], [], 'sys', new AbortController().signal);
+    await Promise.resolve();
+
+    expect(p.contextWindow).toBeUndefined();
+    expect(httpGetMock).toHaveBeenCalledTimes(1);
   });
 });
 

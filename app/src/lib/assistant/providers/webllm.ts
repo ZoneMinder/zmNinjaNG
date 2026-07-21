@@ -562,6 +562,32 @@ export class WebLlmProvider implements AssistantProvider {
     return engine.chat.completions.create({ messages, max_tokens: ASSISTANT.maxTokens, temperature });
   }
 
+  /** Runs `work` with the abort signal wired to `engine.interruptGenerate()`.
+   *  Without this an in-flight generation ran to completion regardless of the
+   *  Abort button: the loop only ever checked the signal BETWEEN attempts, so
+   *  a slow on-device turn could not actually be stopped. Interrupting makes
+   *  the pending `create` resolve early (with partial text); the caller's own
+   *  `signal.aborted` check then turns that into an AbortError. */
+  private async withInterrupt<T>(
+    engine: Awaited<ReturnType<typeof getLoadedEngine>>,
+    signal: AbortSignal,
+    work: () => Promise<T>,
+  ): Promise<T> {
+    const onAbort = () => {
+      try {
+        engine.interruptGenerate();
+      } catch {
+        // Nothing generating right now; the aborted-signal checks still stop the turn.
+      }
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    try {
+      return await work();
+    } finally {
+      signal.removeEventListener('abort', onAbort);
+    }
+  }
+
   /** Bare system + user, deliberately bypassing `buildWebLlmMessages`: no tool
    *  catalog, no few-shot, no OUTPUT_CONTRACT. See `AssistantProvider`. */
   async complete(system: string, text: string, signal: AbortSignal, jsonSchema?: Record<string, unknown>): Promise<CompletionResult> {
@@ -572,12 +598,10 @@ export class WebLlmProvider implements AssistantProvider {
       { role: 'user', content: text },
     ];
     const startedAt = Date.now();
-    const response = await this.createCompletion(
-      engine,
-      messages,
-      this.temperature,
-      jsonSchema ? JSON.stringify(jsonSchema) : undefined,
+    const response = await this.withInterrupt(engine, signal, () =>
+      this.createCompletion(engine, messages, this.temperature, jsonSchema ? JSON.stringify(jsonSchema) : undefined),
     );
+    if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
     // `stripThinkBlock` via parseWebLlmTurn is not used here: the caller wants
     // the raw words, and a reasoning model's block is handled by the caller's
     // own keyword matching.
@@ -618,16 +642,19 @@ export class WebLlmProvider implements AssistantProvider {
       });
 
       const startedAt = Date.now();
-      const response = await this.createCompletion(
-        engine,
-        chatMessages,
-        // Raises whatever was configured rather than replacing it, so a user
-        // who chose a higher temperature does not get a LOWER one on retry.
-        attempt < ASSISTANT.maxParseAttempts
-          ? this.temperature
-          : Math.max(this.temperature, ASSISTANT.assistantRetryTemperature),
-        ENVELOPE_SCHEMA,
+      const response = await this.withInterrupt(engine, signal, () =>
+        this.createCompletion(
+          engine,
+          chatMessages,
+          // Raises whatever was configured rather than replacing it, so a user
+          // who chose a higher temperature does not get a LOWER one on retry.
+          attempt < ASSISTANT.maxParseAttempts
+            ? this.temperature
+            : Math.max(this.temperature, ASSISTANT.assistantRetryTemperature),
+          ENVELOPE_SCHEMA,
+        ),
       );
+      if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
 
       const content = response.choices[0]?.message?.content ?? '';
       log.assistant('WebLLM raw response', LogLevel.DEBUG, { modelId: this.modelId, content, attempt });
