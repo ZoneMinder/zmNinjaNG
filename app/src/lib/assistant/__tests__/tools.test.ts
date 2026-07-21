@@ -853,6 +853,35 @@ describe('list_events when resolution (refs #246)', () => {
     );
   });
 
+  // The model echoes whatever time format the rows carry, so rendering rows
+  // and window through the profile's own format makes answers match the rest
+  // of the app (rule 21, refs #262). No format in the context leaves ZM's raw
+  // timestamps untouched (covered by every other test in this file).
+  it('renders row and window times in the profile date/time format when given one', async () => {
+    vi.mocked(getEvents).mockResolvedValueOnce({
+      events: [
+        { Event: { Id: '1', MonitorId: '1', StartDateTime: '2026-07-15 16:05:00', Length: '30', Notes: 'detected:person' } },
+      ],
+      pagination: { page: 1, pageCount: 1, current: 1, count: 1, prevPage: false, nextPage: false, limit: 25, totalCount: 1 },
+    } as never);
+
+    const tool = getToolByName('list_events')!;
+    const r = await tool.execute(
+      { when: 'yesterday' },
+      {
+        ...ctx(),
+        timezone: 'America/New_York',
+        dateTimeFormat: { dateFormat: 'MMM d, yyyy', timeFormat: '12h', customDateFormat: '', customTimeFormat: '' },
+      },
+    );
+
+    const parsed = JSON.parse(r.output);
+    expect(parsed.events[0].start).toBe('Jul 15, 2026, 4:05:00 PM');
+    expect(parsed.window.from).toBe('Jul 15, 2026, 12:00:00 AM');
+    // The QUERY still uses raw ZM timestamps; only the presentation formats.
+    expect(getEvents).toHaveBeenCalledWith(expect.objectContaining({ startDateTime: '2026-07-15 00:00:00' }));
+  });
+
   // The model reported ten rows as "8 Front Yard, 2 Garage Outdoor" when the
   // real split was four and six. It should be reading a tally, not counting.
   it('supplies the per-monitor tally so the model never counts rows', async () => {

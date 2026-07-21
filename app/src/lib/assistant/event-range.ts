@@ -64,10 +64,35 @@ export function parseClockTime(text: string): number | undefined {
   return hour * 60 + minute;
 }
 
-/** How many days back a day-word refers to, or undefined if it is not one. */
-function dayWordOffset(word: string): number | undefined {
-  if (/^to-?day$/.test(word)) return 0;
-  if (/^yester-?day$/.test(word)) return 1;
+const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+
+/**
+ * How many calendar days back a leading day phrase refers to, or undefined if
+ * the text does not start with one. Returns the rest of the phrase too, so
+ * part-of-day narrowing composes with every form ("sunday after 4pm").
+ *
+ * Understood: "today", "yesterday", "N days ago", and weekday names with an
+ * optional "on"/"last"/"this". A bare or "on"/"this" weekday is the most
+ * recent such day, today included ("on thursday" asked on a Thursday is
+ * today); "last" always reaches into the past week ("last thursday" asked on
+ * a Thursday is seven days ago). These were the two most common phrasings in
+ * live use that the resolver rejected (refs #262).
+ */
+function parseLeadingDay(text: string, now: Date, timezone: string): { daysAgo: number; rest?: string } | undefined {
+  const dayWord = /^(to-?day|yester-?day)(?: (.*))?$/.exec(text);
+  if (dayWord) return { daysAgo: /^to/.test(dayWord[1]) ? 0 : 1, rest: dayWord[2] };
+
+  const daysAgo = /^(\d+) days? ago(?: (.*))?$/.exec(text);
+  if (daysAgo) return { daysAgo: Number(daysAgo[1]), rest: daysAgo[2] };
+
+  const weekday = /^(?:(on|last|this) )?(sunday|monday|tuesday|wednesday|thursday|friday|saturday)(?: (.*))?$/.exec(text);
+  if (weekday) {
+    const todayDow = toZonedTime(now, timezone).getDay();
+    const targetDow = WEEKDAYS.indexOf(weekday[2]);
+    const back = (todayDow - targetDow + 7) % 7;
+    return { daysAgo: weekday[1] === 'last' && back === 0 ? 7 : back, rest: weekday[3] };
+  }
+
   return undefined;
 }
 
@@ -122,12 +147,13 @@ export function resolveWhen(
     return { startDateTime: formatForZm(subHours(now, hours), timezone), endDateTime: formatForZm(now, timezone) };
   }
 
-  // A day word, optionally narrowed to part of that day.
-  const dayMatch = /^(to-?day|yester-?day)(?: (.*))?$/.exec(text);
+  // A day phrase (today, yesterday, "2 days ago", a weekday), optionally
+  // narrowed to part of that day.
+  const dayMatch = parseLeadingDay(text, now, timezone);
   if (dayMatch) {
-    const daysAgo = dayWordOffset(dayMatch[1])!;
+    const { daysAgo } = dayMatch;
     const dayStart = localMidnight(now, timezone, daysAgo);
-    const rest = dayMatch[2]?.trim();
+    const rest = dayMatch.rest?.trim();
 
     // The whole day. "today" ends now rather than at a midnight that has not
     // happened yet.
@@ -172,7 +198,7 @@ export function resolveWhen(
 
   return {
     error:
-      `Could not read "${phrase}" as a time window. Use a phrase like "today", "yesterday", ` +
-      '"last 24 hours", "last 7 days", "yesterday from 4pm to 10pm", or "today before noon".',
+      `Could not read "${phrase}" as a time window. Use a phrase like "today", "yesterday", "sunday", ` +
+      '"2 days ago", "last 24 hours", "last 7 days", "yesterday from 4pm to 10pm", or "today before noon".',
   };
 }

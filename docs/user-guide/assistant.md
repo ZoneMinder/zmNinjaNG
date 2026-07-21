@@ -39,6 +39,7 @@ Examples of what you can ask:
 - "Summarize today"
 - "How many events happened on the driveway camera in the last hour?"
 - "How many people came by yesterday?"
+- "What was my busiest hour on Sunday?" (weekday names and "2 days ago" work too)
 - "Show me the most recent event on the front door camera" (Ninjii navigates you there)
 
 Ask it to change something, such as "arm the backyard camera" or "delete event 1234", and it will tell you it cannot and point you to the screen where you can. See below for why.

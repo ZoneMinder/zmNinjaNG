@@ -57,6 +57,38 @@ describe('resolveWhen (English time windows)', () => {
     expect(when('yesterday')).toEqual({ startDateTime: '2026-07-15 00:00:00', endDateTime: '2026-07-16 00:00:00' });
   });
 
+  // The two phrasings live use rejected first (refs #262). NOW is Thursday
+  // 2026-07-16, so "2 days ago" is Tuesday the 14th and the most recent
+  // Sunday is the 12th.
+  it('resolves "N days ago" as that calendar day', () => {
+    expect(when('2 days ago')).toEqual({ startDateTime: '2026-07-14 00:00:00', endDateTime: '2026-07-15 00:00:00' });
+    expect(when('1 day ago')).toEqual({ startDateTime: '2026-07-15 00:00:00', endDateTime: '2026-07-16 00:00:00' });
+  });
+
+  it('resolves weekday names as the most recent such day', () => {
+    const sunday = { startDateTime: '2026-07-12 00:00:00', endDateTime: '2026-07-13 00:00:00' };
+    expect(when('sunday')).toEqual(sunday);
+    expect(when('on sunday')).toEqual(sunday);
+    expect(when('last sunday')).toEqual(sunday);
+  });
+
+  // A bare weekday that IS today means today; only "last" reaches back a week.
+  it('distinguishes "thursday" (today) from "last thursday" when asked on a Thursday', () => {
+    expect(when('thursday')).toEqual({ startDateTime: '2026-07-16 00:00:00', endDateTime: '2026-07-16 10:30:00' });
+    expect(when('last thursday')).toEqual({ startDateTime: '2026-07-09 00:00:00', endDateTime: '2026-07-10 00:00:00' });
+  });
+
+  it('composes a weekday with part-of-day narrowing', () => {
+    expect(when('sunday from 4pm to 10pm')).toEqual({
+      startDateTime: '2026-07-12 16:00:00',
+      endDateTime: '2026-07-12 22:00:00',
+    });
+    expect(when('2 days ago after 9am')).toEqual({
+      startDateTime: '2026-07-14 09:00:00',
+      endDateTime: '2026-07-15 00:00:00',
+    });
+  });
+
   it('resolves rolling windows', () => {
     expect(when('last hour')).toEqual({ startDateTime: '2026-07-16 09:30:00', endDateTime: '2026-07-16 10:30:00' });
     expect(when('last 24 hours')).toEqual({ startDateTime: '2026-07-15 10:30:00', endDateTime: '2026-07-16 10:30:00' });

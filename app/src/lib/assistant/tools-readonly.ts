@@ -20,8 +20,9 @@ import { buildResultSummary, countObjects } from './result-summary';
 import { parseDetectedObjects } from '../event/event-detection';
 import { buildEventDisplayEntity, buildMonitorDisplayEntity } from './display';
 import { resolveWhen } from './event-range';
+import { formatAppDateTime } from '../format-date-time';
 import { resolveMonitorRef } from './monitor-ref';
-import type { ToolDefinition } from './types';
+import type { ToolContext, ToolDefinition } from './types';
 import { safeExecute, isOmittedArg, objectTypePattern, coerceLabelList, ungroundedWhenWords, NAVIGATE_ALLOWLIST } from './tool-helpers';
 
 /** Maps a raw MonitorData into the clean, model-friendly shape shared by
@@ -161,6 +162,22 @@ const countEventsTool: ToolDefinition = {
     }),
 };
 
+/** A ZM timestamp re-rendered in the profile's own date/time format, so the
+ *  model quotes times the way the user reads them everywhere else in the app
+ *  (rule 21, refs #262). The model reliably echoes whatever format the rows
+ *  carry, so formatting the data IS formatting the answer. Raw when the
+ *  context carries no format (tests, older callers) or the value does not
+ *  parse; query filters never pass through here.
+ *  ponytail: parses the ZM wall-clock string in the runtime's own zone, same
+ *  as the result cards do; a profile-timezone-aware parse needs date-fns-tz
+ *  plumbing everywhere cards already accept this. */
+function formatTimestamp(value: string | undefined | null, ctx: ToolContext): string | undefined | null {
+  if (!value || !ctx.dateTimeFormat) return value;
+  const parsed = new Date(value.replace(' ', 'T'));
+  if (Number.isNaN(parsed.getTime())) return value;
+  return formatAppDateTime(parsed, ctx.dateTimeFormat);
+}
+
 /** Clamps a model-supplied limit into [1, ASSISTANT.maxListEventsLimit].
  *  Non-numeric or negative input (NaN, -5, "banana") falls back to the max
  *  instead of producing a NaN/negative EventFilters.limit. */
@@ -198,8 +215,9 @@ const listEventsTool: ToolDefinition = {
         type: 'string',
         description:
           'PREFERRED for any time window. COPY the user\'s own time words, exactly as they wrote them and ' +
-          'nothing more. Whole days, rolling windows ("last N hours/days") and parts of a day (from X to Y, ' +
-          'before X, after X) are all understood. The app converts the phrase to exact timestamps in the ' +
+          'nothing more. Whole days ("today", "yesterday", a weekday name, "N days ago"), rolling windows ' +
+          '("last N hours/days") and parts of a day (from X to Y, before X, after X) are all understood. ' +
+          'The app converts the phrase to exact timestamps in the ' +
           'profile\'s timezone, so never work out a date yourself and never pass a date here. Do not send a ' +
           'time of day the user did not mention.',
       },
@@ -325,8 +343,8 @@ const listEventsTool: ToolDefinition = {
        *  ever recorded. A function because the zero-match branch needs it
        *  before the rows exist. */
       const windowOf = () => {
-        const from = resolvedWhen?.startDateTime;
-        const to = resolvedWhen?.endDateTime;
+        const from = formatTimestamp(resolvedWhen?.startDateTime, ctx);
+        const to = formatTimestamp(resolvedWhen?.endDateTime, ctx);
         return from || to ? { from: from ?? null, to: to ?? null } : 'all recorded events, no time filter applied';
       };
 
@@ -397,7 +415,7 @@ const listEventsTool: ToolDefinition = {
       const rows = res.events.map(({ Event: e }) => ({
         id: e.Id,
         monitor: nameById.get(e.MonitorId) ?? e.MonitorId,
-        start: e.StartDateTime,
+        start: formatTimestamp(e.StartDateTime, ctx),
         durationSec: Number(e.Length),
         objects: parseDetectedObjects(e.Notes),
       }));
@@ -497,8 +515,8 @@ const getEventTool: ToolDefinition = {
         monitor: monitorName,
         monitorId: e.MonitorId,
         cause: e.Cause,
-        start: e.StartDateTime,
-        end: e.EndDateTime,
+        start: formatTimestamp(e.StartDateTime, ctx),
+        end: formatTimestamp(e.EndDateTime, ctx),
         durationSec: Number(e.Length),
         frames: Number(e.Frames),
         alarmFrames: Number(e.AlarmFrames),

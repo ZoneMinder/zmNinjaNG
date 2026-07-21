@@ -2166,9 +2166,13 @@ property of the registry (``TOOLS`` holds no mutating tool and
 
 #. **The app, not the model, does the date arithmetic.** ``list_events`` takes
    ``when``: the user's own time words, copied verbatim ("yesterday from 4pm
-   to 10pm"), which ``resolveWhen`` (``event-range.ts``) resolves into
-   concrete ZM datetime strings against the profile timezone, because a small
-   model repeats a phrase accurately and computes a date badly.
+   to 10pm", "on sunday", "2 days ago"), which ``resolveWhen``
+   (``event-range.ts``) resolves into concrete ZM datetime strings against
+   the profile timezone, because a small model repeats a phrase accurately
+   and computes a date badly. Row and window timestamps in the OUTPUT are
+   re-rendered through the profile's date/time format
+   (``formatTimestamp``, ``tools-readonly.ts``): the model echoes whatever
+   format the rows carry, so formatting the data is formatting the answer.
    ``ungroundedWhenWords`` rejects a phrase containing words the user never
    wrote, since models lift example phrases from the prompt. The old ``range``
    enum and ``startTime``/``endTime`` inputs no longer exist and
