@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { buildOpenAiMessages, toOpenAiTools, parseOpenAiTurn, OpenAiProvider, listOpenAiModels, probeToolSupport, toolSupportFromError, suggestOllamaBaseUrl } from '../openai';
+import { buildOpenAiMessages, toOpenAiTools, parseOpenAiTurn, OpenAiProvider, listOpenAiModels, probeToolSupport, toolSupportFromError, suggestOllamaBaseUrl, resetNativeToolServersForTests } from '../openai';
 import type { AssistantMessage, ToolDefinition } from '../../types';
 import { ASSISTANT } from '../../../zmninja-ng-constants';
 
@@ -82,6 +82,12 @@ describe('buildOpenAiMessages', () => {
 
   it('keeps the portable fallback when tools are available', () => {
     expect(buildOpenAiMessages('sys', [], true)[0].content).toContain('If you cannot emit a native tool call');
+  });
+
+  // Once a server has emitted a native tool call, the fallback is dead weight
+  // that invites `{"answer":...}` JSON as text; the prompt drops it.
+  it('drops the portable fallback when told the server calls tools natively', () => {
+    expect(buildOpenAiMessages('sys', [], true, false)[0].content).toBe('sys');
   });
 });
 
@@ -466,6 +472,54 @@ describe('probeToolSupport timeouts', () => {
   it('still rethrows errors that are neither a timeout nor a tool-support verdict', async () => {
     httpPostMock.mockRejectedValue(new Error('boom'));
     await expect(probeToolSupport('http://zm:11434/v1', 'gemma4')).rejects.toThrow('boom');
+  });
+});
+
+describe('native tool-call memory', () => {
+  beforeEach(() => {
+    httpPostMock.mockReset();
+    resetNativeToolServersForTests();
+  });
+
+  it('drops the portable fallback for a server that has emitted a native tool call', async () => {
+    httpPostMock.mockResolvedValue({
+      data: { choices: [{ message: { tool_calls: [{ id: 'c1', type: 'function', function: { name: 'count_events', arguments: '{}' } }] } }] },
+    });
+    const p = new OpenAiProvider({ baseUrl: 'http://zm:11434/v1', model: 'llama3.2' });
+    await p.chat([{ role: 'user', text: 'count today' }], [TOOL], 'sys', new AbortController().signal);
+    const first = httpPostMock.mock.calls[0][1] as { messages: Array<{ content: string }> };
+    expect(first.messages[0].content).toContain('If you cannot emit a native tool call');
+
+    // A FRESH provider instance for the same server: AskPanel builds one per
+    // turn, so the memory must live beyond the instance.
+    const p2 = new OpenAiProvider({ baseUrl: 'http://zm:11434/v1', model: 'llama3.2' });
+    await p2.chat([{ role: 'user', text: 'count today' }], [TOOL], 'sys', new AbortController().signal);
+    const second = httpPostMock.mock.calls[1][1] as { messages: Array<{ content: string }> };
+    expect(second.messages[0].content).not.toContain('If you cannot emit a native tool call');
+  });
+});
+
+describe('constrained completion', () => {
+  beforeEach(() => {
+    httpPostMock.mockReset();
+  });
+
+  it('sends jsonSchema as response_format json_schema', async () => {
+    httpPostMock.mockResolvedValue({ data: { choices: [{ message: { content: '{"kind":"CHAT"}' } }] } });
+    const p = new OpenAiProvider({ baseUrl: 'http://zm:11434/v1', model: 'llama3.2' });
+    const schema = { type: 'object', properties: { kind: { type: 'string' } } };
+    const result = await p.complete('sys', 'hello', new AbortController().signal, schema);
+    expect(result.text).toBe('{"kind":"CHAT"}');
+    expect(httpPostMock.mock.calls[0][1]).toMatchObject({
+      response_format: { type: 'json_schema', json_schema: { name: 'result', schema, strict: true } },
+    });
+  });
+
+  it('sends no response_format without a schema', async () => {
+    httpPostMock.mockResolvedValue({ data: { choices: [{ message: { content: 'CHAT' } }] } });
+    const p = new OpenAiProvider({ baseUrl: 'http://zm:11434/v1', model: 'llama3.2' });
+    await p.complete('sys', 'hello', new AbortController().signal);
+    expect(httpPostMock.mock.calls[0][1]).not.toHaveProperty('response_format');
   });
 });
 

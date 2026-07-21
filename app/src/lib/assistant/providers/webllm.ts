@@ -7,12 +7,15 @@
  * exactly one of two JSON shapes: `{"tool": "<name>", "input": {...}}` for
  * one tool call, or `{"answer": "<text>"}` to answer directly.
  *
- * `response_format: { type: 'json_object' }` is deliberately NOT sent: in
- * `@mlc-ai/web-llm@0.2.84`, `json_object` mode routes into the XGrammar
- * JSON-schema compiler (`GrammarCompiler.CompileJSONSchema`), which expects a
- * schema STRING. With no `response_format.schema` supplied it throws a WASM
- * `BindingError: Cannot pass non-string to std::string`, crashing every chat
- * turn. So the constraint here is prompt + parser only, not `response_format`.
+ * Generation is additionally CONSTRAINED to the envelope schema via
+ * `response_format: { type: 'json_object', schema }`. The schema string is
+ * mandatory: in `@mlc-ai/web-llm@0.2.84`, `json_object` mode routes into the
+ * XGrammar JSON-schema compiler (`GrammarCompiler.CompileJSONSchema`), which
+ * expects a schema STRING and throws a WASM `BindingError: Cannot pass
+ * non-string to std::string` without one, crashing every chat turn. Because
+ * that compiler has crashed before, the constraint is belt-and-braces: if the
+ * engine rejects it at runtime the adapter falls back to prompt + parser for
+ * the rest of the session (see `grammarUsable`) instead of failing turns.
  *
  * The default model, Qwen3-1.7B, is a reasoning model that emits a
  * `<think>...</think>` chain-of-thought block before its final answer;
@@ -81,6 +84,39 @@ const OUTPUT_CONTRACT = [
  *  blind retry returns the identical broken text; naming the fault changes
  *  the prompt, which is what actually moves a greedy sampler. */
 const SELF_REPAIR_PROMPT = `Your last reply was not one valid JSON object, so it could not be used. Send it again, corrected.\n${OUTPUT_CONTRACT}`;
+
+/** The two contract shapes as one JSON Schema, handed to XGrammar so the
+ *  sampler literally cannot produce prose around the JSON, a markdown fence,
+ *  or a third shape. The parser cascade stays: it is the fallback for a
+ *  runtime where the grammar compiler is unusable (see `grammarUsable`). */
+const ENVELOPE_SCHEMA = JSON.stringify({
+  anyOf: [
+    {
+      type: 'object',
+      properties: { tool: { type: 'string' }, input: { type: 'object' } },
+      required: ['tool', 'input'],
+      additionalProperties: false,
+    },
+    {
+      type: 'object',
+      properties: { answer: { type: 'string' } },
+      required: ['answer'],
+      additionalProperties: false,
+    },
+  ],
+});
+
+/** Whether this session's engine accepts schema-constrained generation. Flips
+ *  false on the first rejection and stays false: the failure mode is a WASM
+ *  throw on EVERY constrained call (see the module header), so retrying the
+ *  constraint each turn would pay the crash once per turn for nothing. */
+let grammarUsable = true;
+
+/** Test-only: the flag above is module state and vitest re-imports modules per
+ *  file, not per test. */
+export function resetGrammarUsableForTests(): void {
+  grammarUsable = true;
+}
 
 /** The tool catalog for the system message. Format rules live in
  *  `OUTPUT_CONTRACT`, appended at the generation point instead. */
@@ -497,9 +533,38 @@ export class WebLlmProvider implements AssistantProvider {
     this.contextWindow = ASSISTANT.webllmModels.find((m) => m.id === modelId)?.contextWindowSize;
   }
 
+  /** One completion, schema-constrained when a schema is given and the engine
+   *  accepts it. Falls back to unconstrained generation the first time the
+   *  grammar compiler rejects a request, and remembers that for the session:
+   *  the parser cascade then carries the contract alone, as it always did. */
+  private async createCompletion(
+    engine: Awaited<ReturnType<typeof getLoadedEngine>>,
+    messages: ChatCompletionMessageParam[],
+    temperature: number,
+    schema?: string,
+  ) {
+    if (schema && grammarUsable) {
+      try {
+        return await engine.chat.completions.create({
+          messages,
+          max_tokens: ASSISTANT.maxTokens,
+          temperature,
+          response_format: { type: 'json_object', schema },
+        });
+      } catch (error) {
+        grammarUsable = false;
+        log.assistant('WebLLM rejected schema-constrained generation; prompt-only for this session', LogLevel.WARN, {
+          modelId: this.modelId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    return engine.chat.completions.create({ messages, max_tokens: ASSISTANT.maxTokens, temperature });
+  }
+
   /** Bare system + user, deliberately bypassing `buildWebLlmMessages`: no tool
    *  catalog, no few-shot, no OUTPUT_CONTRACT. See `AssistantProvider`. */
-  async complete(system: string, text: string, signal: AbortSignal): Promise<CompletionResult> {
+  async complete(system: string, text: string, signal: AbortSignal, jsonSchema?: Record<string, unknown>): Promise<CompletionResult> {
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
     const engine = await getLoadedEngine(this.modelId);
     const messages: ChatCompletionMessageParam[] = [
@@ -507,11 +572,12 @@ export class WebLlmProvider implements AssistantProvider {
       { role: 'user', content: text },
     ];
     const startedAt = Date.now();
-    const response = await engine.chat.completions.create({
+    const response = await this.createCompletion(
+      engine,
       messages,
-      max_tokens: ASSISTANT.maxTokens,
-      temperature: this.temperature,
-    });
+      this.temperature,
+      jsonSchema ? JSON.stringify(jsonSchema) : undefined,
+    );
     // `stripThinkBlock` via parseWebLlmTurn is not used here: the caller wants
     // the raw words, and a reasoning model's block is handled by the caller's
     // own keyword matching.
@@ -552,16 +618,16 @@ export class WebLlmProvider implements AssistantProvider {
       });
 
       const startedAt = Date.now();
-      const response = await engine.chat.completions.create({
-        messages: chatMessages,
-        max_tokens: ASSISTANT.maxTokens,
+      const response = await this.createCompletion(
+        engine,
+        chatMessages,
         // Raises whatever was configured rather than replacing it, so a user
         // who chose a higher temperature does not get a LOWER one on retry.
-        temperature:
-          attempt < ASSISTANT.maxParseAttempts
-            ? this.temperature
-            : Math.max(this.temperature, ASSISTANT.assistantRetryTemperature),
-      });
+        attempt < ASSISTANT.maxParseAttempts
+          ? this.temperature
+          : Math.max(this.temperature, ASSISTANT.assistantRetryTemperature),
+        ENVELOPE_SCHEMA,
+      );
 
       const content = response.choices[0]?.message?.content ?? '';
       log.assistant('WebLLM raw response', LogLevel.DEBUG, { modelId: this.modelId, content, attempt });

@@ -46,16 +46,38 @@ const TRIAGE_PROMPT = [
   'Reply with one word: ZONEMINDER, ACTION, or CHAT.',
 ].join('\n');
 
-/** Matched loosely on purpose: a small model asked for one word still says
- *  "CHAT." or `{"answer":"CHAT"}` (the on-device paths wrap every reply in
- *  that envelope), so the decision is which keyword appears, not whether the
- *  reply is clean. ZONEMINDER wins ties: routing a real question to the chat
- *  path would answer it with no data at all, which is the worse failure. */
+/** The verdict as a schema, for a backend that can constrain generation to it
+ *  (see `AssistantProvider.complete`). Constrained, the reply is exactly
+ *  `{"kind":"CHAT"}` and the substring fallback below never guesses. */
+export const TRIAGE_SCHEMA = {
+  type: 'object',
+  properties: { kind: { type: 'string', enum: ['ZONEMINDER', 'ACTION', 'CHAT'] } },
+  required: ['kind'],
+  additionalProperties: false,
+} as const;
+
+/** A schema-constrained backend replies `{"kind":"CHAT"}`; that is read
+ *  first. Everything else is matched loosely on purpose: a small model asked
+ *  for one word still says "CHAT." or `{"answer":"CHAT"}` (the on-device
+ *  paths wrap every reply in that envelope), so the decision is which keyword
+ *  appears, not whether the reply is clean. ZONEMINDER wins ties: routing a
+ *  real question to the chat path would answer it with no data at all, which
+ *  is the worse failure. */
 export function parseRequestKind(reply: string): RequestKind {
-  const text = reply.toUpperCase();
-  if (text.includes('ZONEMINDER')) return 'zoneminder';
-  if (text.includes('ACTION')) return 'action';
-  if (text.includes('CHAT')) return 'chat';
+  try {
+    const kind = (JSON.parse(reply) as { kind?: unknown }).kind;
+    if (typeof kind === 'string') return parseKindWord(kind);
+  } catch {
+    // Not the constrained shape; fall through to the loose match.
+  }
+  return parseKindWord(reply);
+}
+
+function parseKindWord(text: string): RequestKind {
+  const upper = text.toUpperCase();
+  if (upper.includes('ZONEMINDER')) return 'zoneminder';
+  if (upper.includes('ACTION')) return 'action';
+  if (upper.includes('CHAT')) return 'chat';
   return 'zoneminder';
 }
 
@@ -78,8 +100,10 @@ export async function classifyRequest(
   try {
     // `complete`, not `chat`: a classifier handed the tool catalog, the
     // few-shot block and the JSON output contract answers like an assistant
-    // instead of returning a verdict.
-    const result = await provider.complete(TRIAGE_PROMPT, question, signal);
+    // instead of returning a verdict. The schema constrains a backend that
+    // can enforce it to `{"kind":"..."}`; the parser still accepts the loose
+    // one-word reply from a backend that cannot.
+    const result = await provider.complete(TRIAGE_PROMPT, question, signal, TRIAGE_SCHEMA as unknown as Record<string, unknown>);
     if (result.exchange) {
       onTrace?.({ kind: 'exchange', exchange: { ...result.exchange, backend: `${result.exchange.backend} (triage)` } });
     }

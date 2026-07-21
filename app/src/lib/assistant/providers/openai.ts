@@ -44,6 +44,21 @@ const SELF_REPAIR_PROMPT =
   'Your last reply was empty or unusable. Reply again: answer the user in plain text, ' +
   'or call one of the provided tools.';
 
+/** `baseUrl::model` pairs that have emitted a NATIVE tool call this session.
+ *  Once a server has demonstrated native tool calling, the portable JSON
+ *  fallback is dropped from its system prompt: for a capable model that
+ *  instruction is not just dead weight, it invites `{"answer":...}` JSON as
+ *  text where a plain answer or a native call was wanted. Module state, not an
+ *  instance field, because AskPanel builds a fresh provider every turn.
+ *  ponytail: session-only memory; persist the Settings probe verdict into
+ *  profile settings if the first turn of every session needs it too. */
+const NATIVE_TOOL_SERVERS = new Set<string>();
+
+/** Test-only: module state survives across tests in one file. */
+export function resetNativeToolServersForTests(): void {
+  NATIVE_TOOL_SERVERS.clear();
+}
+
 export interface OpenAiProviderConfig {
   /** e.g. `http://localhost:11434/v1` (no trailing `/chat/completions`). */
   baseUrl: string;
@@ -100,9 +115,12 @@ export function buildOpenAiMessages(
    *  on-device path has always said "You have no tools available" in this
    *  case; this says the same thing. */
   hasTools = true,
+  /** Whether the portable JSON fallback is still worth teaching. False once
+   *  the server has emitted a native tool call (see NATIVE_TOOL_SERVERS). */
+  includePortableFallback = true,
 ): OpenAiMessageWire[] {
-  const contract = hasTools ? PORTABLE_TOOL_FALLBACK : NO_TOOLS_NOTICE;
-  const messages: OpenAiMessageWire[] = [{ role: 'system', content: `${system}\n${contract}` }];
+  const contract = !hasTools ? NO_TOOLS_NOTICE : includePortableFallback ? PORTABLE_TOOL_FALLBACK : undefined;
+  const messages: OpenAiMessageWire[] = [{ role: 'system', content: contract ? `${system}\n${contract}` : system }];
 
   for (const msg of history) {
     if (msg.role === 'user') {
@@ -387,8 +405,12 @@ export class OpenAiProvider implements AssistantProvider {
 
   /** Bare system + user, with no `tools` field at all; see
    *  `AssistantProvider.complete`. This path never carried the envelope
-   *  scaffolding, but it did send tool schemas the classifier had no use for. */
-  async complete(system: string, text: string, signal: AbortSignal): Promise<CompletionResult> {
+   *  scaffolding, but it did send tool schemas the classifier had no use for.
+   *  `jsonSchema` becomes `response_format: json_schema`, which Ollama >= 0.5
+   *  compiles into a grammar constraint; a server that rejects the field
+   *  fails the request, which callers like triage already treat as "no
+   *  verdict" and degrade from. */
+  async complete(system: string, text: string, signal: AbortSignal, jsonSchema?: Record<string, unknown>): Promise<CompletionResult> {
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
     const { baseUrl, model, apiKey } = this.config;
     const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
@@ -403,6 +425,9 @@ export class OpenAiProvider implements AssistantProvider {
       stream: false,
       max_tokens: ASSISTANT.ollamaMaxTokens,
       temperature: this.temperature,
+      ...(jsonSchema
+        ? { response_format: { type: 'json_schema', json_schema: { name: 'result', schema: jsonSchema, strict: true } } }
+        : {}),
     };
     const startedAt = Date.now();
     const response = await httpPost<OpenAiChatResponse>(url, body, {
@@ -434,7 +459,8 @@ export class OpenAiProvider implements AssistantProvider {
     // `tools`/`tool_choice` omitted entirely when there are none, rather than
     // sent empty with `tool_choice: 'auto'`, which invites a server to look for
     // a tool that is not there.
-    const chatMessages = buildOpenAiMessages(system, messages, tools.length > 0);
+    const serverKey = `${baseUrl}::${model}`;
+    const chatMessages = buildOpenAiMessages(system, messages, tools.length > 0, !NATIVE_TOOL_SERVERS.has(serverKey));
     const body = {
       model,
       messages: chatMessages,
@@ -486,6 +512,9 @@ export class OpenAiProvider implements AssistantProvider {
 
       const message = response.data?.choices?.[0]?.message;
       log.assistant('Ollama raw response', LogLevel.DEBUG, { baseUrl, model, message, attempt });
+      // A native tool call proves the server's tool template works; later
+      // turns stop teaching the portable JSON fallback (see NATIVE_TOOL_SERVERS).
+      if ((message?.tool_calls?.length ?? 0) > 0) NATIVE_TOOL_SERVERS.add(serverKey);
 
       // Nothing downstream can tell a complete answer from one that stopped
       // mid-sentence, so the truncation has to be named here or it is

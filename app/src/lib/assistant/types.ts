@@ -263,8 +263,14 @@ export interface AssistantProvider {
    * replied `{"answer": "There were 10 vehicles detected yesterday."}` instead
    * of OK or PROBLEM, so the check could only ever pass. It was a no-op on two
    * of three backends.
+   *
+   * `jsonSchema`, when given, asks the backend to CONSTRAIN generation to that
+   * JSON Schema (Ollama `response_format: json_schema`, WebLLM XGrammar). A
+   * backend that cannot constrain ignores it, so the caller must still parse
+   * defensively; the schema turns a usually-right reply into an always-shaped
+   * one where the backend supports it.
    */
-  complete(system: string, text: string, signal: AbortSignal): Promise<CompletionResult>;
+  complete(system: string, text: string, signal: AbortSignal, jsonSchema?: Record<string, unknown>): Promise<CompletionResult>;
   chat(
     messages: AssistantMessage[],
     tools: ToolDefinition[],
