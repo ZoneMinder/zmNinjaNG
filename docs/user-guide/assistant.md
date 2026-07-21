@@ -64,9 +64,10 @@ On a desktop or in a browser, the model runs inside the app using your GPU (WebG
 
 | Model | Download | Notes |
 |---|---|---|
-| Llama 3.2 3B | ~2264 MB | The only on-device model on desktop. |
+| Llama 3.2 3B | ~2264 MB | The default. Fastest download, smallest memory footprint. |
+| Qwen3 4B | ~3432 MB | Answers camera questions more accurately in server-side testing. Needs about a gigabyte more GPU memory. |
 
-Earlier versions offered a choice of six models. Ninjii is tuned against Llama 3.2 on every backend, and the models it replaced varied widely in whether they would use a tool at all, so there is now one model per backend rather than a picker. If your settings still name a model that was removed, the app moves you to Llama 3.2 3B automatically.
+Earlier versions offered a choice of six models. The models that choice replaced varied widely in whether they would use a tool at all, so the list is now short and every entry on it is tested against the same question suite. If your settings still name a model that was removed, the app moves you to Llama 3.2 3B automatically.
 
 The download size is a floor, not the total: running a model needs additional memory on top of its weights, and how much depends on how long the conversation gets.
 
@@ -103,7 +104,7 @@ Two things to know about the qwen3 family:
 
 Some models cannot drive the assistant at all: gemma2 has no tool support and qwen2.5-coder never uses one, so with either the assistant can only guess. The **Test model** button catches both cases before you commit to a model.
 
-The on-device Llama 3.2 3B passed 21 of 24 lookup checks in an equivalent test. Its misses were answering from memory instead of looking things up, which the app detects and corrects by insisting on a lookup, at the cost of a slower reply. A server-backed qwen3:8b answers noticeably better and faster than on-device; on-device remains the choice when the conversation must not leave your machine.
+The on-device Llama 3.2 3B passed 21 of 24 lookup checks in an equivalent test. Its misses were answering from memory instead of looking things up, which the app detects and corrects by insisting on a lookup, at the cost of a slower reply. The on-device Qwen3 4B option scored between Llama 3.2 and the server-backed qwen3:8b in the same suite, at the cost of a larger download and more GPU memory. A server-backed qwen3:8b answers noticeably better and faster than either; on-device remains the choice when the conversation must not leave your machine.
 
 ## Long conversations
 

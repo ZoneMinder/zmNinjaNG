@@ -552,6 +552,12 @@ export class WebLlmProvider implements AssistantProvider {
     temperature: number,
     schema?: string,
   ) {
+    // The REAL Qwen3 no-think switch: web-llm pre-closes an empty <think/>
+    // block in the reply, so the model cannot reason at all. The /no_think
+    // directive in the system message (buildWebLlmMessages) is only the soft
+    // form; measured on Ollama it hides the tag without skipping the
+    // reasoning. Ignored by non-Qwen3 models.
+    const extraBody = isQwen3Model(this.modelId) ? { extra_body: { enable_thinking: false } } : {};
     if (schema && grammarUsable) {
       try {
         return await engine.chat.completions.create({
@@ -559,6 +565,7 @@ export class WebLlmProvider implements AssistantProvider {
           max_tokens: ASSISTANT.maxTokens,
           temperature,
           response_format: { type: 'json_object', schema },
+          ...extraBody,
         });
       } catch (error) {
         grammarUsable = false;
@@ -568,7 +575,7 @@ export class WebLlmProvider implements AssistantProvider {
         });
       }
     }
-    return engine.chat.completions.create({ messages, max_tokens: ASSISTANT.maxTokens, temperature });
+    return engine.chat.completions.create({ messages, max_tokens: ASSISTANT.maxTokens, temperature, ...extraBody });
   }
 
   /** Runs `work` with the abort signal wired to `engine.interruptGenerate()`.

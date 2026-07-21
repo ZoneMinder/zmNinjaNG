@@ -502,6 +502,20 @@ describe('WebLlmProvider.chat', () => {
     // json_object mode is requested with no schema, so json_object must never
     // be sent bare.
     expect(call.response_format).toEqual({ type: 'json_object', schema: expect.stringContaining('"tool"') });
+    // Llama is not a thinking model; the Qwen3-only switch must stay off it.
+    expect(call.extra_body).toBeUndefined();
+  });
+
+  it('disables thinking via extra_body for a Qwen3 model', async () => {
+    const create = vi.fn().mockResolvedValue({ choices: [{ message: { content: '{"answer": "ok"}' } }] });
+    vi.mocked(getLoadedEngine).mockResolvedValue({ chat: { completions: { create } } } as never);
+
+    const provider = new WebLlmProvider('Qwen3-4B-q4f16_1-MLC');
+    await provider.chat([{ role: 'user', text: 'hi' }], [], 'sys', new AbortController().signal);
+
+    // The hard switch: web-llm pre-closes an empty think block, so the model
+    // cannot reason. The /no_think text directive alone is soft (measured).
+    expect(create.mock.calls[0][0].extra_body).toEqual({ enable_thinking: false });
   });
 
   // The XGrammar compiler has crashed before (see the module header), so the
