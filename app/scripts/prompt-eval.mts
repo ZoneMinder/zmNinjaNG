@@ -13,6 +13,8 @@
  * Usage (from app/):
  *   TEMP=0 npx tsx scripts/prompt-eval.mts baseline 6
  *   MODEL=gemma4:latest OLLAMA=http://host:11434/v1 npx tsx scripts/prompt-eval.mts baseline 6
+ *   TEMP=0 CONSTRAIN=1 npx tsx scripts/prompt-eval.mts webllm 3   # envelope-schema-constrained proxy,
+ *     approximating the on-device XGrammar constraint (refs #259) via Ollama json_schema
  *
  * Needs a reachable Ollama server, so it is NOT part of `npm test`: it is the
  * thing to run when changing the system prompt, the tool schemas, or the
@@ -341,6 +343,14 @@ async function scoreWebLlmContract(runs: number) {
         TOOLS,
         'Llama-3.2-3B-Instruct-q4f16_1-MLC',
       );
+      // CONSTRAIN=1 approximates the on-device XGrammar envelope constraint
+      // (webllm.ts's ENVELOPE_SCHEMA) with Ollama's json_schema grammar.
+      const envelope = {
+        anyOf: [
+          { type: 'object', properties: { tool: { type: 'string' }, input: { type: 'object' } }, required: ['tool', 'input'], additionalProperties: false },
+          { type: 'object', properties: { answer: { type: 'string' } }, required: ['answer'], additionalProperties: false },
+        ],
+      };
       try {
         const r = await chat({
           model: MODEL,
@@ -348,6 +358,9 @@ async function scoreWebLlmContract(runs: number) {
           stream: false,
           max_tokens: 4096,
           ...(TEMP === undefined ? {} : { temperature: TEMP }),
+          ...(process.env.CONSTRAIN
+            ? { response_format: { type: 'json_schema', json_schema: { name: 'envelope', schema: envelope, strict: true } } }
+            : {}),
         });
         const turn = parseWebLlmTurn(r.choices?.[0]?.message?.content ?? '');
         const call = turn.toolCalls[0];
