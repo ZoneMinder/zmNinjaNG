@@ -438,6 +438,15 @@ function toTurn(parsed: unknown): AssistantTurn | undefined {
     if (nested?.toolCalls.length) return nested;
     return { text: obj.answer, toolCalls: [] };
   }
+  // Qwen's own tool-call template: `{"name": ..., "arguments": {...}}`,
+  // usually wrapped in <tool_call> tags. Observed live through Ollama when
+  // the server-side template failed to parse it into native tool_calls: the
+  // shape then arrived as CONTENT, and printing it as an answer showed the
+  // user raw XML (refs #264). It names a call as unambiguously as the
+  // contract shape does, so honor it.
+  if (typeof obj.name === 'string' && (obj.arguments === undefined || (obj.arguments !== null && typeof obj.arguments === 'object'))) {
+    return { toolCalls: [{ id: crypto.randomUUID(), name: obj.name, input: (obj.arguments ?? {}) as Record<string, unknown> }] };
+  }
   return undefined;
 }
 
@@ -543,6 +552,12 @@ export class WebLlmProvider implements AssistantProvider {
     temperature: number,
     schema?: string,
   ) {
+    // The REAL Qwen3 no-think switch: web-llm pre-closes an empty <think/>
+    // block in the reply, so the model cannot reason at all. The /no_think
+    // directive in the system message (buildWebLlmMessages) is only the soft
+    // form; measured on Ollama it hides the tag without skipping the
+    // reasoning. Ignored by non-Qwen3 models.
+    const extraBody = isQwen3Model(this.modelId) ? { extra_body: { enable_thinking: false } } : {};
     if (schema && grammarUsable) {
       try {
         return await engine.chat.completions.create({
@@ -550,6 +565,7 @@ export class WebLlmProvider implements AssistantProvider {
           max_tokens: ASSISTANT.maxTokens,
           temperature,
           response_format: { type: 'json_object', schema },
+          ...extraBody,
         });
       } catch (error) {
         grammarUsable = false;
@@ -559,7 +575,7 @@ export class WebLlmProvider implements AssistantProvider {
         });
       }
     }
-    return engine.chat.completions.create({ messages, max_tokens: ASSISTANT.maxTokens, temperature });
+    return engine.chat.completions.create({ messages, max_tokens: ASSISTANT.maxTokens, temperature, ...extraBody });
   }
 
   /** Runs `work` with the abort signal wired to `engine.interruptGenerate()`.

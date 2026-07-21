@@ -56,6 +56,24 @@ describe('buildResultSummary', () => {
       partial: true,
     });
     expect(summary).toContain('partial result');
+    expect(summary).toContain('By monitor (listed rows)');
+  });
+
+  it('leads with the true total when rows were capped, so comparisons quote real counts', () => {
+    // Observed live: two capped results both said 25 and the model compared
+    // the page caps as totals.
+    const summary = buildResultSummary({
+      window: WINDOW,
+      matchCount: 25,
+      countsByMonitor: { A: 25 },
+      objectCounts: { person: 25 },
+      partial: true,
+      totalMatches: 142,
+    });
+    expect(summary).toContain('142 events');
+    expect(summary).toContain('The 25 most recent are listed.');
+    expect(summary).toContain('By monitor (listed rows)');
+    expect(summary).not.toContain('partial result');
   });
 
   it('reports an empty result without inventing a period', () => {

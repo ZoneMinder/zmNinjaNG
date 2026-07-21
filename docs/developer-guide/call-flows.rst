@@ -2032,11 +2032,8 @@ property of the registry (``TOOLS`` holds no mutating tool and
        participant ZM as ZoneMinder
 
        Key->>Panel: open(), widget renders AskPanel
-       Panel->>Panel: requiresLiveData(question)?
-       alt heuristic is silent
-           Panel->>Triage: provider.complete(TRIAGE_PROMPT, TRIAGE_SCHEMA)
-           Triage-->>Panel: zoneminder / chat / action
-       end
+       Panel->>Triage: provider.complete(TRIAGE_PROMPT, TRIAGE_SCHEMA)
+       Triage-->>Panel: zoneminder / chat / action (advisory)
        Panel->>Agent: runAssistantTurn(history, system, tools)
        Agent->>Prov: provider.chat (constrained JSON or native tools)
        Prov-->>Agent: AssistantTurn (toolCalls or text)
@@ -2081,18 +2078,16 @@ property of the registry (``TOOLS`` holds no mutating tool and
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/assistant/AskPanel.tsx#L349>`__
    · → :doc:`05-component-architecture`
 
-#. **Triage decides what kind of request this is before any tool is offered.**
-   The deterministic check runs first: ``requiresLiveData`` (``agent.ts``)
-   recognises known English data questions outright, and when it fires there
-   is no triage call at all, because triage has misclassified exactly those
-   questions before. Otherwise ``classifyRequest`` (``triage.ts``) runs
-   ``provider.complete`` with ``TRIAGE_SCHEMA``, a
-   ``{"kind": ZONEMINDER|ACTION|CHAT}`` JSON Schema a backend may enforce
-   through constrained generation, so the reply is exactly
-   ``{"kind":"CHAT"}`` where the server supports it and a loose one-word
-   match everywhere else. A chat or action verdict runs the turn with
-   ``tools: []`` and ``buildNoToolPrompt``: the way to stop a small model
-   reaching for a tool is to hand it none, not to ask it nicely.
+#. **Triage classifies the request, and its verdict is advisory.**
+   ``classifyRequest`` (``triage.ts``) runs ``provider.complete`` with
+   ``TRIAGE_SCHEMA``, a ``{"kind": ZONEMINDER|ACTION|CHAT}`` JSON Schema a
+   backend may enforce through constrained generation, so the reply is
+   exactly ``{"kind":"CHAT"}`` where the server supports it and a loose
+   one-word match everywhere else. A chat or action verdict runs the turn
+   with ``tools: []`` and ``buildNoToolPrompt``. A wrong verdict cannot
+   refuse a data question any more: the loop fails open (next steps), so the
+   old English keyword overrule (``requiresLiveData``) is deleted rather
+   than maintained as a vocabulary.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/triage.ts>`__
    · → :doc:`12-shared-services-and-components`
 
@@ -2164,18 +2159,25 @@ property of the registry (``TOOLS`` holds no mutating tool and
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/agent.ts#L430>`__
    · → :doc:`12-shared-services-and-components`
 
-#. **The app, not the model, does the date arithmetic.** ``list_events`` takes
-   ``when``: the user's own time words, copied verbatim ("yesterday from 4pm
-   to 10pm"), which ``resolveWhen`` (``event-range.ts``) resolves into
-   concrete ZM datetime strings against the profile timezone, because a small
-   model repeats a phrase accurately and computes a date badly.
-   ``ungroundedWhenWords`` rejects a phrase containing words the user never
-   wrote, since models lift example phrases from the prompt. The old ``range``
-   enum and ``startTime``/``endTime`` inputs no longer exist and
-   ``isEventRange``/``resolveEventRange`` are deleted; ``resolveWhen``'s
-   ``LEGACY`` map still accepts the old enum keywords in case a persisted
-   thread replays one.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/event-range.ts#L102>`__
+#. **Three jobs, three owners: copy, interpret, compute.** The assistant
+   model COPIES the user's time words into ``list_events``' ``when``
+   verbatim, in whatever language (measured perfect on both reference
+   models). A dedicated interpreter call (``interpretWhen``,
+   ``window-interpreter.ts``) then maps the phrase onto structured fields
+   (``lastCount``+``lastUnit``, ``daysAgo``, ``weekday``, ``date``,
+   ``fromTime``/``toTime``) under a constrained schema, cached per phrase
+   and day; "letzte Woche" becomes ``lastCount: 1, lastUnit: "week"``.
+   Finally ``resolveWindow`` (``event-range.ts``) does the arithmetic into
+   concrete ZM datetime strings against the profile timezone. No app-side
+   phrase grammar exists anywhere on this path; the middle job was given its
+   own model call after measurement showed the assistant models copy phrases
+   perfectly but fill the fields directly at 27/36 and 15/36. Any failure
+   along the way returns a corrective error the calling model retries from.
+   Row and window timestamps in the OUTPUT are re-rendered through the
+   profile's date/time format (``formatTimestamp``, ``tools-readonly.ts``):
+   the model echoes whatever format the rows carry, so formatting the data
+   is formatting the answer.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/window-interpreter.ts>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Results feed back into history.** ``captureApiCalls`` wraps
@@ -2199,12 +2201,12 @@ property of the registry (``TOOLS`` holds no mutating tool and
    fails the same check, ``fallbackAnswerFromData`` answers with the tool's
    own code-built summary line. There is no second model call: the judge this
    file used to hold never caught a fabrication and rejected accurate answers.
-   Separately, the live-data requirement (``requiredReadTool``'s deliberately
-   English-only regexes in ``agent.ts``) sends one reminder and then
-   hard-fails to ``__i18n:assistant.live_data_required`` if the required read
-   tool never ran, and a language-neutral net gives a tool-less answer on a
-   tools-available turn one generic reminder, accepting the second answer
-   rather than replacing it.
+   Separately, two language-neutral nets replace the old English live-data
+   regexes (refs #265): a tool-less turn whose model calls a real registry
+   read tool fails OPEN (``activeTools`` flips to the registry and the call
+   runs, since the model's own attempt outranks the classifier), and a
+   tools-available turn answered without any tool attempt gets one generic
+   reminder, with the second answer accepted rather than replaced.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/grounding.ts>`__
    · → :doc:`12-shared-services-and-components`
 
@@ -2214,7 +2216,7 @@ property of the registry (``TOOLS`` holds no mutating tool and
    would be a different length than the panel's own. ``AskPanel`` appends
    them, attaches the accumulated activity steps to the final answer message,
    and renders assistant text as Markdown, except the ``__i18n:`` sentinels
-   (iteration cap, live-data requirement, context cleared), which
+   (iteration cap, context cleared), which
    ``renderAssistantText`` localizes with ``t()`` instead of treating as
    literal text.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/assistant/AskPanel.tsx#L180>`__

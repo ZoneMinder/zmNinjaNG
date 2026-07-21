@@ -55,6 +55,14 @@ const OBJECT_LABELS = ['car', 'carrot', 'person', 'truck'];
 const TODAY_RESULT =
   '{"summary":"5 events between 2026-07-20 00:00:00 and 2026-07-20 09:31:51. By monitor: FrontDoor 2, Front Yard 2, Garage Outdoor 1. Detected: person 4, car 1.","window":{"from":"2026-07-20 00:00:00","to":"2026-07-20 09:31:51"},"matchCount":5,"countsByMonitor":{"FrontDoor":2,"Front Yard":2,"Garage Outdoor":1},"objectCounts":{"person":4,"car":1},"events":[{"id":"253363","monitor":"FrontDoor","start":"2026-07-20 08:36:33","durationSec":30.02,"objects":["person"]},{"id":"253362","monitor":"Front Yard","start":"2026-07-20 08:36:21","durationSec":30.06,"objects":["person"]},{"id":"253361","monitor":"Front Yard","start":"2026-07-20 08:35:45","durationSec":30.03,"objects":["person"]},{"id":"253360","monitor":"FrontDoor","start":"2026-07-20 08:35:19","durationSec":30,"objects":["person"]},{"id":"253359","monitor":"Garage Outdoor","start":"2026-07-20 08:20:59","durationSec":30,"objects":["car"]}]}';
 
+// TODAY_RESULT with the busiestHour/countsByHour fields list_events now
+// reports (refs #264), and one row moved out of the busy hour so the SHOW
+// directive has a real subset to select: four rows in 08:00, one in 09:00.
+const BUSIEST_RESULT = TODAY_RESULT.replace(
+  '"matchCount":5,',
+  '"matchCount":5,"busiestHour":{"label":"2026-07-20 08:00:00","count":4},"countsByHour":{"2026-07-20 08:00:00":4,"2026-07-20 09:00:00":1},',
+).replace('"start":"2026-07-20 08:20:59"', '"start":"2026-07-20 09:31:00"');
+
 const EMPTY_RESULT =
   '{"summary":"No events between 2026-07-20 00:00:00 and 2026-07-20 09:31:51.","window":{"from":"2026-07-20 00:00:00","to":"2026-07-20 09:31:51"},"matchCount":0,"countsByMonitor":{},"objectCounts":{},"events":[]}';
 
@@ -66,12 +74,32 @@ interface ToolCase {
   args?: (a: Record<string, unknown>) => boolean;
   /** Handled by triage before the prompt sees it; reported, not scored. */
   triaged?: boolean;
+  /** Check `tool` and `args` against EVERY call in the reply, not just the
+   *  first. For multi-window questions where a fault on any call corrupts
+   *  the answer ("compare X to Y" creeping objectType onto both calls). */
+  allCalls?: boolean;
 }
 
 const TOOL_CASES: ToolCase[] = [
-  { q: 'summarize today', tool: 'list_events', args: (a) => a.when === 'today' && a.objectType === undefined },
-  { q: 'what happened yesterday', tool: 'list_events', args: (a) => a.when === 'yesterday' && a.objectType === undefined },
-  { q: 'how many people came today', tool: 'list_events', args: (a) => a.when === 'today' && String(a.objectType).includes('person') },
+  { q: 'summarize today', tool: 'list_events', args: (a) => String(a.when).toLowerCase().includes('today') && a.objectType === undefined },
+  { q: 'what happened yesterday', tool: 'list_events', args: (a) => String(a.when).toLowerCase().includes('yesterday') && a.objectType === undefined },
+  // The phrasings the old English phrase grammar could not read (refs #265):
+  // the model interprets them into structured fields, in any language.
+  { q: 'summarize last week', tool: 'list_events', args: (a) => String(a.when).toLowerCase().includes('last week') },
+  { q: 'what happened in the past 2 weeks', tool: 'list_events', args: (a) => /past 2 weeks|2 weeks/.test(String(a.when).toLowerCase()) },
+  { q: 'was war gestern bei mir los', tool: 'list_events', args: (a) => String(a.when).toLowerCase().includes('gestern') },
+  // A summary must not grow an objectType: observed live on "summarize april",
+  // which attached every known label and silently excluded no-detection events.
+  { q: 'summarize april', tool: 'list_events', args: (a) => String(a.when).toLowerCase().includes('april') && a.objectType === undefined },
+  // Observed live (refs #246): "compare may to june" attached the whole known
+  // vocabulary to BOTH calls, silently excluding no-detection events.
+  {
+    q: 'compare may to june',
+    tool: 'list_events',
+    allCalls: true,
+    args: (a) => /may|june/.test(String(a.when).toLowerCase()) && a.objectType === undefined,
+  },
+  { q: 'how many people came today', tool: 'list_events', args: (a) => String(a.when).toLowerCase().includes('today') && String(a.objectType).includes('person') },
   // Triage answers these with NO tools in production (see triage.ts), so the
   // prompt is not what decides them. Kept visible, scored separately.
   {
@@ -79,12 +107,15 @@ const TOOL_CASES: ToolCase[] = [
     tool: 'list_events',
     args: (a) => {
       const t = (a.objectType ?? []) as string[];
-      return a.when === 'yesterday' && t.includes('car') && t.includes('truck');
+      return String(a.when).toLowerCase().includes('yesterday') && t.includes('car') && t.includes('truck');
     },
   },
+  // count_events measures ONE rolling window and cannot rank hours; the
+  // list_events result carries the app-computed busiest-hour clause (refs #264).
+  { q: 'what was my busiest hour yesterday', tool: 'list_events', args: (a) => String(a.when).toLowerCase().includes('yesterday') },
   { q: 'is the server ok', tool: 'get_server_health' },
   { q: 'what cameras do I have', tool: 'list_monitors' },
-  { q: 'how many events in the last 24 hours', tool: 'count_events', args: (a) => /day|24/.test(String(a.interval)) },
+  { q: 'how many events in the last 24 hours', tool: 'count_events', args: (a) => (a.lastUnit === 'hour' && a.lastCount === 24) || (a.lastUnit === 'day' && a.lastCount === 1) },
   { q: 'what tags are available', tool: 'list_tags' },
   { q: 'hello', tool: null, triaged: true },
   { q: 'what is the capital of France', tool: null, triaged: true },
@@ -121,6 +152,21 @@ const ANSWER_CASES: AnswerCase[] = [
       { name: 'person-count', ok: (a) => /\b4\b/.test(a) },
       { name: 'no-denial', ok: (a) => !deniesData(a) },
       { name: 'not-json', ok: (a) => !a.trim().startsWith('{') },
+    ],
+  },
+  {
+    q: 'what was my busiest hour today',
+    result: BUSIEST_RESULT,
+    checks: [
+      // The hour itself, however phrased: card narrowing is id-driven (SHOW),
+      // so exact label quoting stopped being load-bearing.
+      { name: 'names-hour', ok: (a) => /8:00|08:00|8 ?am/i.test(a) },
+      { name: 'count', ok: (a) => /\b4\b/.test(a) },
+      { name: 'no-denial', ok: (a) => !deniesData(a) },
+      { name: 'not-json', ok: (a) => !a.trim().startsWith('{') },
+      // The SHOW directive (refs #264): the busy hour's ids selected, the
+      // 09:00 stray excluded, so only the answer's cards render.
+      { name: 'show-subset', ok: (a) => /SHOW: ?events=/.test(a) && a.includes('253363') && !/SHOW:[^\n]*253359/.test(a) },
     ],
   },
   {
@@ -239,7 +285,8 @@ async function scoreTools(system: string, runs: number) {
           ...(TEMP === undefined ? {} : { temperature: TEMP }),
           ...REASONING,
         });
-        const call = r.choices?.[0]?.message?.tool_calls?.[0];
+        const allReplyCalls = r.choices?.[0]?.message?.tool_calls ?? [];
+        const call = allReplyCalls[0];
         if (c.tool === null) {
           // Counted against the triaged tally, not the scored one: incrementing
           // `pass` here made the score exceed its own total (30/24).
@@ -255,26 +302,41 @@ async function scoreTools(system: string, runs: number) {
           failures.push(`[tool] "${c.q}" called nothing, expected ${c.tool}`);
           continue;
         }
-        if (call.function.name !== c.tool) {
-          failures.push(`[tool] "${c.q}" called ${call.function.name}, expected ${c.tool}`);
-          continue;
+        // allCalls cases check every call in the reply; a fault on any one
+        // corrupts the answer. Others check the first only.
+        const toCheck = c.allCalls ? allReplyCalls : [call];
+        let failed = false;
+        for (const checked of toCheck) {
+          if (checked.function.name !== c.tool) {
+            failures.push(`[tool] "${c.q}" called ${checked.function.name}, expected ${c.tool}`);
+            failed = true;
+            break;
+          }
+          let args: Record<string, unknown> = {};
+          try {
+            args = JSON.parse(checked.function.arguments || '{}');
+          } catch {
+            failures.push(`[tool] "${c.q}" arguments were not JSON`);
+            failed = true;
+            break;
+          }
+          // The SAME repairs the app applies before a tool runs, so a fault it
+          // already fixes is not counted against the prompt. A stringified array
+          // argument is llama3.2's known habit and coerceLabelList handles it.
+          args = stripOmittedArgs(args);
+          if (args.objectType !== undefined) args.objectType = coerceLabelList(args.objectType);
+          // Same repair the executor applies (refs #265): numeric window fields
+          // arrive as strings from llama3.2 and Number() them before use.
+          for (const key of ['lastCount', 'daysAgo']) {
+            if (typeof args[key] === 'string' && args[key] !== '' && !Number.isNaN(Number(args[key]))) args[key] = Number(args[key]);
+          }
+          if (c.args && !c.args(args)) {
+            failures.push(`[tool] "${c.q}" args ${JSON.stringify(args)}`);
+            failed = true;
+            break;
+          }
         }
-        let args: Record<string, unknown> = {};
-        try {
-          args = JSON.parse(call.function.arguments || '{}');
-        } catch {
-          failures.push(`[tool] "${c.q}" arguments were not JSON`);
-          continue;
-        }
-        // The SAME repairs the app applies before a tool runs, so a fault it
-        // already fixes is not counted against the prompt. A stringified array
-        // argument is llama3.2's known habit and coerceLabelList handles it.
-        args = stripOmittedArgs(args);
-        if (args.objectType !== undefined) args.objectType = coerceLabelList(args.objectType);
-        if (c.args && !c.args(args)) {
-          failures.push(`[tool] "${c.q}" args ${JSON.stringify(args)}`);
-          continue;
-        }
+        if (failed) continue;
         if (c.triaged) triagedPass++; else pass++;
       } catch (e) {
         failures.push(`[tool] "${c.q}" error: ${(e as Error).message}`);
@@ -302,7 +364,7 @@ async function scoreAnswers(system: string, runs: number) {
               role: 'assistant',
               content: '',
               tool_calls: [
-                { id: 'c1', type: 'function', function: { name: 'list_events', arguments: '{"when":"today"}' } },
+                { id: 'c1', type: 'function', function: { name: 'list_events', arguments: '{"daysAgo":0}' } },
               ],
             },
             { role: 'tool', tool_call_id: 'c1', content: c.result },
@@ -403,9 +465,141 @@ async function scoreWebLlmContract(runs: number) {
   return { pass, total, failures };
 }
 
+
+/** Interpreter cases (refs #265): phrase in, structured fields out, measured
+ *  against the live model under the same constrained schema production uses.
+ *  The variants here are exactly what the deleted phrase grammar could not
+ *  read and what the direct-DSL contract got wrong. */
+const INTERPRET_CASES: Array<{ phrase: string; ok: (f: Record<string, unknown>) => boolean }> = [
+  { phrase: 'today', ok: (f) => f.daysAgo === 0 },
+  { phrase: 'yesterday', ok: (f) => f.daysAgo === 1 },
+  { phrase: '2 days ago', ok: (f) => f.daysAgo === 2 },
+  { phrase: 'last week', ok: (f) => (f.lastUnit === 'week' && f.lastCount === 1) || (f.lastUnit === 'day' && f.lastCount === 7) },
+  { phrase: 'past 2 weeks', ok: (f) => (f.lastUnit === 'week' && f.lastCount === 2) || (f.lastUnit === 'day' && f.lastCount === 14) },
+  // "previous month" is legitimately either a rolling month or calendar June
+  // (from a July run date); both resolve to a sane window.
+  { phrase: 'previous month', ok: (f) => (f.lastUnit === 'month' && f.lastCount === 1) || (f.lastUnit === 'day' && f.lastCount === 30) || (f.fromDate === '2026-06-01' && f.toDate === '2026-06-30') },
+  { phrase: 'last 3 hours', ok: (f) => f.lastUnit === 'hour' && f.lastCount === 3 },
+  { phrase: 'on sunday', ok: (f) => f.weekday === 'sunday' },
+  { phrase: 'yesterday from 4pm to 10pm', ok: (f) => f.daysAgo === 1 && f.fromTime === '16:00' && f.toTime === '22:00' },
+  // Calendar spans (refs #265): "summarize april" once queried April 1 only.
+  { phrase: 'april', ok: (f) => f.fromDate === '2026-04-01' && f.toDate === '2026-04-30' },
+  { phrase: 'february', ok: (f) => f.fromDate === '2026-02-01' && f.toDate === '2026-02-28' },
+  { phrase: 'this month', ok: (f) => String(f.fromDate ?? '').endsWith('-01') && f.fromDate === new Date().toISOString().slice(0, 8) + '01' },
+  { phrase: 'june 1 to june 15', ok: (f) => f.fromDate === '2026-06-01' && f.toDate === '2026-06-15' },
+  // A gratuitous month-end toDate is fine: resolveWindow caps the end at now,
+  // so the effective window is identical to the open-ended form.
+  { phrase: 'since july 1', ok: (f) => f.fromDate === '2026-07-01' && (f.toDate === undefined || String(f.toDate) >= new Date().toISOString().slice(0, 10)) },
+  { phrase: 'letzte Woche', ok: (f) => (f.lastUnit === 'week' && f.lastCount === 1) || (f.lastUnit === 'day' && f.lastCount === 7) },
+  { phrase: 'ayer', ok: (f) => f.daysAgo === 1 },
+  { phrase: 'hier soir', ok: (f) => f.daysAgo === 1 },
+];
+
+async function scoreInterpreter(runs: number) {
+  const { WINDOW_SCHEMA, buildInterpreterPrompt } = await import('../src/lib/assistant/window-interpreter');
+  // The REAL production prompt: a hand-copied version here drifted behind a
+  // schema change and measured a bug the app did not have.
+  const system = buildInterpreterPrompt(new Date(), 'America/New_York');
+  let pass = 0;
+  let total = 0;
+  const failures: string[] = [];
+  for (const c of INTERPRET_CASES) {
+    for (let i = 0; i < runs; i++) {
+      total++;
+      try {
+        const r = await chat({
+          model: MODEL,
+          messages: [{ role: 'system', content: system }, { role: 'user', content: c.phrase }],
+          stream: false,
+          max_tokens: 300,
+          ...(TEMP === undefined ? {} : { temperature: TEMP }),
+          ...REASONING,
+          response_format: { type: 'json_schema', json_schema: { name: 'window', schema: WINDOW_SCHEMA, strict: true } },
+        });
+        const text = r.choices?.[0]?.message?.content ?? '';
+        const fields = JSON.parse(/\{[\s\S]*\}/.exec(text)?.[0] ?? '{}');
+        if (c.ok(fields)) pass++;
+        else failures.push(`[interpret] "${c.phrase}" -> ${JSON.stringify(fields)}`);
+      } catch (e) {
+        failures.push(`[interpret] "${c.phrase}" error: ${(e as Error).message}`);
+      }
+    }
+  }
+  return { pass, total, failures };
+}
+
+
+/** Triage cases (refs #265): the classifier is scored over a MATRIX of
+ *  intents, time spans, and languages, because its historical failures were
+ *  all combinations outside its example list ("summarize" + any range). */
+const TRIAGE_CASES: Array<{ q: string; kind: 'ZONEMINDER' | 'ACTION' | 'CHAT' }> = [
+  // summarize/recap intent across time spans, question and imperative forms
+  { q: 'summarize today', kind: 'ZONEMINDER' },
+  { q: 'summarize last week', kind: 'ZONEMINDER' },
+  { q: 'summarize this month for me please', kind: 'ZONEMINDER' },
+  { q: 'give me a recap of the past 3 days', kind: 'ZONEMINDER' },
+  { q: 'what happened between june 1 and june 15', kind: 'ZONEMINDER' },
+  { q: 'was war letzte Woche bei mir los', kind: 'ZONEMINDER' },
+  { q: 'how many people came by today', kind: 'ZONEMINDER' },
+  { q: 'is the server ok', kind: 'ZONEMINDER' },
+  { q: 'show me the front camera', kind: 'ZONEMINDER' },
+  // actions
+  { q: 'arm the backyard camera', kind: 'ACTION' },
+  { q: 'delete all events from last month', kind: 'ACTION' },
+  // chat, including summarize-verbs about NON-system things
+  { q: 'hello', kind: 'CHAT' },
+  { q: 'thanks!', kind: 'CHAT' },
+  { q: 'what is the capital of France', kind: 'CHAT' },
+  { q: 'summarize the plot of Blade Runner', kind: 'CHAT' },
+];
+
+async function scoreTriage(runs: number) {
+  const { TRIAGE_PROMPT_FOR_EVAL, TRIAGE_SCHEMA } = await import('../src/lib/assistant/triage');
+  let pass = 0;
+  let total = 0;
+  const failures: string[] = [];
+  for (const c of TRIAGE_CASES) {
+    for (let i = 0; i < runs; i++) {
+      total++;
+      try {
+        const r = await chat({
+          model: MODEL,
+          messages: [{ role: 'system', content: TRIAGE_PROMPT_FOR_EVAL }, { role: 'user', content: c.q }],
+          stream: false,
+          max_tokens: 60,
+          ...(TEMP === undefined ? {} : { temperature: TEMP }),
+          ...REASONING,
+          response_format: { type: 'json_schema', json_schema: { name: 'result', schema: TRIAGE_SCHEMA, strict: true } },
+        });
+        const text = r.choices?.[0]?.message?.content ?? '';
+        const kind = JSON.parse(text)?.kind;
+        if (kind === c.kind) pass++;
+        else failures.push(`[triage] "${c.q}" -> ${kind}, expected ${c.kind}`);
+      } catch (e) {
+        failures.push(`[triage] "${c.q}" error: ${(e as Error).message}`);
+      }
+    }
+  }
+  return { pass, total, failures };
+}
+
 const variant = process.argv[2] ?? 'baseline';
 const runs = Number(process.argv[3] ?? 2);
 const started = Date.now();
+if (variant === 'triage') {
+  const w = await scoreTriage(runs);
+  console.log(`\n=== triage via ${MODEL}, temp ${TEMP ?? 'default'} ===`);
+  console.log(`triage: ${w.pass}/${w.total}`);
+  for (const f of w.failures) console.log(`  ${f}`);
+  process.exit(0);
+}
+if (variant === 'interpret') {
+  const w = await scoreInterpreter(runs);
+  console.log(`\n=== interpreter via ${MODEL}, temp ${TEMP ?? 'default'} ===`);
+  console.log(`interpret: ${w.pass}/${w.total}`);
+  for (const f of w.failures) console.log(`  ${f}`);
+  process.exit(0);
+}
 if (variant === 'webllm') {
   const w = await scoreWebLlmContract(runs);
   console.log(`\n=== webllm contract via ${MODEL}, temp ${TEMP ?? 'default'} (PROXY: no WebGPU here) ===`);

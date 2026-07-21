@@ -12,6 +12,7 @@ import type { AssistantMessage, AssistantProvider, AssistantHost, DisplayEntity,
 import { getToolByName, isWithheldToolName, TOOLS } from './tools';
 import { validateToolInput, objectQuestionMismatch, toolCallSignature, stripOmittedArgs } from './tool-helpers';
 import { captureApiCalls } from './api-capture';
+import { extractShowDirective, filterDisplayByShow } from './display';
 import { buildGroundingCorrection, fallbackAnswerFromData, retryIsUnusable } from './grounding';
 import { sanitizeModelText } from './sanitize';
 import { ASSISTANT } from '../zmninja-ng-constants';
@@ -20,7 +21,6 @@ import { log, LogLevel } from '../logger';
 /** Localized by the panel at render (Task 8): agent.ts never renders user-facing
  *  text itself, it only ever emits this key behind the `__i18n:` sentinel. */
 const ITERATION_CAP_KEY = 'assistant.iteration_cap_reached';
-const LIVE_DATA_REQUIRED_KEY = 'assistant.live_data_required';
 
 /** Returned to the model when it calls one of the actions the assistant no
  *  longer implements (see `WITHHELD_TOOL_NAMES` in tools.ts). Model-facing, so
@@ -34,63 +34,6 @@ const WITHHELD_TOOL_REFUSAL =
   'and say where: monitors and arming on the Monitors screen, run state on the Server screen, event ' +
   'deletion and archiving on that event. Do not retry any tool for this request.';
 
-interface ReadToolRequirement {
-  names: readonly string[];
-  reminder: string;
-}
-
-/**
- * Matches English only, deliberately.
- *
- * The obvious "fix" is keyword lists per language, and it is worse than
- * nothing: the terms are guesses at how someone phrases a question rather than
- * translated UI strings, no word list ever covers a language (a German user
- * can ask about events without using any noun on the list), and the collisions
- * are silent (French "hier" = yesterday, German "hier" = here, so a German
- * greeting would trip an events guard).
- *
- * The on-device model is an English-first 2B reasoning distill emitting a
- * strict JSON contract, so English is the path we actually support. The app
- * tells the user that outright when it is running on-device in another
- * language (see AskPanel's language notice) rather than implying, through a
- * half-working guard, that every language is equally supported.
- */
-function requiredReadTool(history: AssistantMessage[]): ReadToolRequirement | undefined {
-  const request = [...history].reverse().find((message) => message.role === 'user')?.text ?? '';
-  return readToolRequirementFor(request);
-}
-
-/** Whether this app's own heuristic says a question cannot be answered without
- *  fetching live data.
- *
- *  Exported so the caller can overrule a triage misclassification with it.
- *  Triage called "summarize yesterday" CHAT, the turn therefore ran with no
- *  tools, and this requirement then demanded a tool call that could not be
- *  made: the model called `list_events`, was told no tools were available,
- *  answered, was told to call a tool, and went round until the iteration cap.
- *  Two guards disagreeing is a deadlock, so they are made to agree. */
-export function requiresLiveData(question: string): boolean {
-  return readToolRequirementFor(question) !== undefined;
-}
-
-function readToolRequirementFor(request: string): ReadToolRequirement | undefined {
-  if (/\b(?:summar(?:y|i[sz]e)|recap|overview)\b.{0,80}\b(?:day|today|events?|activity)\b|\b(?:day|today)\b.{0,80}\b(?:summar(?:y|i[sz]e)|recap|overview)\b/i.test(request)) {
-    return {
-      names: ['list_events'],
-      reminder: 'Daily-summary requirement: call list_events with {"when":"today"} now. Do not answer until its result is available.',
-    };
-  }
-  if (/\b(?:server|health)\b/i.test(request)) {
-    return { names: ['get_server_health'], reminder: 'Live-data requirement: call get_server_health now. Do not answer until its result is available.' };
-  }
-  if (/\b(?:event|events?|detection|detections?|activity|activities|today|yesterday)\b/i.test(request)) {
-    return { names: ['list_events', 'count_events'], reminder: 'Live-data requirement: call list_events or count_events now. Do not answer until its result is available.' };
-  }
-  if (/\b(?:camera|cameras|monitor|monitors?|status|armed|disarmed|fps)\b/i.test(request)) {
-    return { names: ['list_monitors', 'get_monitor'], reminder: 'Live-data requirement: call list_monitors or get_monitor now. Do not answer until its result is available.' };
-  }
-  return undefined;
-}
 
 /** De-dupes by `kind`+`id` (the same event/monitor can surface from more than
  *  one tool call in a turn, e.g. list_events then get_event on one of its
@@ -287,19 +230,17 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
    *  iteration-cap message below can still tell AskPanel how full the window
    *  got: a turn that burns every iteration is exactly the kind that fills it. */
   let lastUsage: TokenUsage | undefined;
-  // Skipped entirely for a turn with no tools: demanding a tool call that
-  // cannot be made is the deadlock above. Belt and braces alongside the
-  // caller's own check, so no future routing decision can recreate it.
-  const readToolRequirement = tools.length > 0 ? requiredReadTool(history) : undefined;
-  let requiredReadToolComplete = false;
-  let requiredReadToolReminderSent = false;
-  /** Language-neutral net under the English-only requirement above (refs
-   *  #259): a turn that was routed here WITH tools (triage said this is a
-   *  ZoneMinder question) and answers without ever running one gets a single
-   *  generic reminder in any language. Unlike the specific requirement it
-   *  never hard-fails: without the regex match there is no certainty data was
-   *  required, so the second tool-less answer is accepted rather than
-   *  replaced. */
+  /** The tools THIS turn may execute. Starts as the caller's routing decision
+   *  and fails OPEN (refs #265): when a tool-less (triage chat/action) turn
+   *  produces a call for a real registry read tool, the model's own attempt
+   *  is better routing evidence than any classifier, so the turn flips to the
+   *  full registry and the call runs instead of being refused. Everything in
+   *  the registry is read-only, so opening up is always safe. */
+  let activeTools = tools;
+  /** Language-neutral live-data net (refs #259, #265: this replaced English
+   *  keyword regexes entirely): a turn routed here WITH tools that answers
+   *  without ever attempting one gets a single generic reminder, in any
+   *  language. It never hard-fails; the second tool-less answer is accepted. */
   let genericToolReminderSent = false;
   /** `name:JSON(input)` for every tool call attempted this turn, so an
    *  identical repeat can be refused rather than re-run (see the loop below). */
@@ -329,7 +270,7 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
     const bounded = truncateHistory(history, ASSISTANT.maxHistoryMessages, ASSISTANT.maxHistoryCharacters);
     if (bounded.length !== history.length) history.splice(0, history.length, ...bounded);
 
-    const rawTurn = await provider.chat(history, tools, system, signal);
+    const rawTurn = await provider.chat(history, activeTools, system, signal);
     // Repaired here, once, for every backend: this is the single point all
     // providers pass through, and it is upstream of both the history the model
     // is replayed and the answer the user reads. `exchange` keeps the raw text
@@ -347,6 +288,11 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
     if (turn.reasoning) {
       host.onActivity({ kind: 'model', detail: turn.reasoning, toolName: turn.toolCalls[0]?.name ?? '', status: 'running', input: {} });
     }
+    // The SHOW directive rides on the END of the answer text and must come
+    // off before anything reads it: the user never sees the line, and the
+    // grounding checks judge the prose, not the machine trailer (refs #264).
+    const { text: answerText, show } = turn.text ? extractShowDirective(turn.text) : { text: turn.text };
+    turn.text = answerText;
     const assistantMsg: AssistantMessage = { role: 'assistant', text: turn.text, toolCalls: turn.toolCalls, raw: turn.raw };
 
     if (turn.toolCalls.length === 0) {
@@ -381,30 +327,10 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
         }
       }
 
-      if (readToolRequirement && !requiredReadToolComplete) {
-        lastUsage = turn.usage ?? lastUsage;
-        if (!requiredReadToolReminderSent) {
-          requiredReadToolReminderSent = true;
-          history.push({ role: 'user', text: readToolRequirement.reminder });
-          continue;
-        }
-        push({
-          role: 'assistant',
-          text: `__i18n:${LIVE_DATA_REQUIRED_KEY}`,
-          trace: turnTrace.length > 0 ? [...turnTrace] : undefined,
-          usage: lastUsage,
-        });
-        return produced;
-      }
-
-      // The language-neutral net (see genericToolReminderSent above). Only
-      // when the SPECIFIC requirement never matched: for a non-English
-      // question the regexes cannot see, this is the only nudge toward live
-      // data the turn gets.
+      // The language-neutral net (see genericToolReminderSent above).
       if (
-        !readToolRequirement &&
         !genericToolReminderSent &&
-        tools.length > 0 &&
+        activeTools.length > 0 &&
         !anyToolCallAttempted &&
         turn.text &&
         !turn.text.startsWith('__i18n:')
@@ -419,7 +345,11 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
         });
         continue;
       }
-      assistantMsg.display = dedupeDisplay(turnDisplay);
+      // De-duped, then narrowed to the cards the model's SHOW directive
+      // selected (refs #264): the ids can only match cards this turn's tools
+      // produced, and no directive (or one matching nothing) shows everything.
+      const deduped = dedupeDisplay(turnDisplay);
+      assistantMsg.display = deduped && show ? filterDisplayByShow(deduped, show) : deduped;
       assistantMsg.trace = turnTrace.length > 0 ? [...turnTrace] : undefined;
       // The last iteration's usage, not the first: each tool round-trip
       // re-sends the history plus the new tool results, so the final call has
@@ -435,12 +365,21 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
     const results: ToolResult[] = [];
     for (const call of turn.toolCalls) {
       if (signal.aborted) return produced;
-      // THIS turn's tool list is the execution authority, not the registry:
-      // a turn given no tools (triage classified it as chat or an unsupported
-      // action) must treat an invented call as unavailable, and a caller that
+      // THIS turn's tool list is the execution authority: a caller that
       // passes its own definitions (tests, fixtures) must have exactly those
-      // run. The registry is consulted only to phrase the refusal (refs #259).
-      const def = tools.find((t) => t.name === call.name);
+      // run. One exception fails OPEN (refs #265): a turn that was routed
+      // here with NO tools (triage said chat/action) but whose model calls a
+      // real registry read tool has just out-voted the classifier: "summarize
+      // last week" was triaged CHAT, the model called list_events anyway, and
+      // refusing it turned a correct instinct into an apology. The registry
+      // is read-only, so honoring the call is always safe.
+      if (activeTools.length === 0 && tools.length === 0 && getToolByName(call.name)) {
+        log.assistant('Tool-less turn called a real read tool; enabling the registry (triage overruled)', LogLevel.INFO, {
+          toolName: call.name,
+        });
+        activeTools = TOOLS;
+      }
+      const def = activeTools.find((t) => t.name === call.name);
       if (!def) {
         // A withheld action is not the same as a typo: told "unknown tool", a
         // model retries variations of the name. Told why, it explains to the
@@ -526,7 +465,6 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
         results.push({ callId: call.id, output: r.output, isError: r.isError, display: r.display, apiCalls });
         trace({ kind: 'tool', name: call.name, input: call.input, output: r.output, isError: r.isError, apiCalls });
         if (!r.isError) toolOutputs.push(r.output);
-        if (readToolRequirement?.names.includes(call.name) && !r.isError) requiredReadToolComplete = true;
         host.onActivity({ toolName: call.name, status: r.isError ? 'error' : 'done', input: call.input });
       } catch (e) {
         const message = e instanceof Error ? e.message : 'Tool failed';
@@ -544,7 +482,7 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
 
   push({
     role: 'assistant',
-    text: `__i18n:${readToolRequirement && !requiredReadToolComplete ? LIVE_DATA_REQUIRED_KEY : ITERATION_CAP_KEY}`,
+    text: `__i18n:${ITERATION_CAP_KEY}`,
     display: dedupeDisplay(turnDisplay),
     trace: turnTrace.length > 0 ? [...turnTrace] : undefined,
     usage: lastUsage,

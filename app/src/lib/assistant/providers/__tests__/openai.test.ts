@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { buildOpenAiMessages, toOpenAiTools, parseOpenAiTurn, OpenAiProvider, listOpenAiModels, probeToolSupport, toolSupportFromError, suggestOllamaBaseUrl, resetNativeToolServersForTests, resetContextWindowsForTests } from '../openai';
+import { buildOpenAiMessages, toOpenAiTools, parseOpenAiTurn, OpenAiProvider, listOpenAiModels, probeToolSupport, toolSupportFromError, suggestOllamaBaseUrl, resetNativeToolServersForTests, resetContextWindowsForTests, warmOllamaModel, resetWarmedModelsForTests } from '../openai';
 import type { AssistantMessage, ToolDefinition } from '../../types';
 import { ASSISTANT } from '../../../zmninja-ng-constants';
 
@@ -140,6 +140,21 @@ describe('parseOpenAiTurn', () => {
   it('degrades a missing message to the parse-error sentinel instead of throwing', () => {
     const turn = parseOpenAiTurn(undefined);
     expect(turn).toEqual({ text: '__i18n:assistant.parse_error', toolCalls: [] });
+  });
+
+  // Observed live on qwen3:8b: the server-side template failed to map the
+  // model's Hermes-style call onto native tool_calls, the XML arrived as
+  // content, and the lenient prose fallback printed it into the chat
+  // (refs #264).
+  it('parses a Hermes tool_call arriving as content into the call it names', () => {
+    const turn = parseOpenAiTurn({ content: '<tool_call>\n{"name": "count_events", "arguments": {"interval":"1 hour"}}\n</tool_call>' });
+    expect(turn.toolCalls[0]).toMatchObject({ name: 'count_events', input: { interval: '1 hour' } });
+  });
+
+  it('fails unparseable tool_call content instead of printing it as the answer', () => {
+    const turn = parseOpenAiTurn({ content: '<tool_call>{ not json at all' });
+    expect(turn.text).toBe('__i18n:assistant.parse_error');
+    expect(turn.raw).toContain('<tool_call>');
   });
 
   // Measured against qwen3:30b-a3b through Ollama: a reasoning model that
@@ -552,6 +567,51 @@ describe('context window discovery', () => {
 
     expect(p.contextWindow).toBeUndefined();
     expect(httpGetMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('warmOllamaModel', () => {
+  beforeEach(() => {
+    httpPostMock.mockReset();
+    httpGetMock.mockReset();
+    resetWarmedModelsForTests();
+    resetContextWindowsForTests();
+    resetNativeToolServersForTests();
+  });
+
+  it('loads the model via the native generate endpoint and confirms the server', async () => {
+    httpPostMock.mockResolvedValue({ data: { done: true } });
+    httpGetMock.mockResolvedValue({ data: { models: [{ model: 'qwen3:8b', context_length: 40960 }] } });
+
+    const warmed = await warmOllamaModel({ baseUrl: 'http://zm:11434/v1', model: 'qwen3:8b' });
+    expect(warmed).toBe(true);
+    expect(httpPostMock.mock.calls[0][0]).toBe('http://zm:11434/api/generate');
+    expect(httpPostMock.mock.calls[0][1]).toEqual({ model: 'qwen3:8b' });
+
+    // The whole point: the FIRST chat after a warmup already runs confirmed,
+    // with reasoning disabled and the context window known.
+    httpPostMock.mockResolvedValue({ data: { choices: [{ message: { content: 'hi' } }] } });
+    const p = new OpenAiProvider({ baseUrl: 'http://zm:11434/v1', model: 'qwen3:8b' });
+    expect(p.contextWindow).toBe(40960);
+    await p.chat([{ role: 'user', text: 'hello' }], [], 'sys', new AbortController().signal);
+    expect(httpPostMock.mock.calls.at(-1)?.[1]).toMatchObject({ reasoning_effort: ASSISTANT.ollamaReasoningEffort });
+  });
+
+  it('issues one warmup per server and model for the session', async () => {
+    httpPostMock.mockResolvedValue({ data: { done: true } });
+    httpGetMock.mockResolvedValue({ data: { models: [] } });
+    await warmOllamaModel({ baseUrl: 'http://zm:11434/v1', model: 'qwen3:8b' });
+    await expect(warmOllamaModel({ baseUrl: 'http://zm:11434/v1', model: 'qwen3:8b' })).resolves.toBe(false);
+    expect(httpPostMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('never throws, and lets a later open retry after a failure', async () => {
+    httpPostMock.mockRejectedValue(new Error('ECONNREFUSED'));
+    await expect(warmOllamaModel({ baseUrl: 'http://down:11434/v1', model: 'qwen3:8b' })).resolves.toBe(false);
+
+    httpPostMock.mockResolvedValue({ data: { done: true } });
+    httpGetMock.mockResolvedValue({ data: { models: [] } });
+    await expect(warmOllamaModel({ baseUrl: 'http://down:11434/v1', model: 'qwen3:8b' })).resolves.toBe(true);
   });
 });
 

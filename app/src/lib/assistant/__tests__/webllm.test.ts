@@ -345,6 +345,20 @@ describe('parseWebLlmTurn', () => {
     expect(turn.toolCalls[0].input).toEqual({});
   });
 
+  // Qwen's own tool-call template, observed arriving as CONTENT through
+  // Ollama when the server-side template failed to parse it into native
+  // tool_calls; printed as an answer it showed the user raw XML (refs #264).
+  it('recovers a Hermes-style <tool_call>{"name","arguments"}</tool_call> as the call it names', () => {
+    const turn = parseWebLlmTurn('<tool_call>\n{"name": "count_events", "arguments": {"interval":"1 hour"}}\n</tool_call>');
+    expect(turn.toolCalls).toHaveLength(1);
+    expect(turn.toolCalls[0].name).toBe('count_events');
+    expect(turn.toolCalls[0].input).toEqual({ interval: '1 hour' });
+  });
+
+  it('recovers a bare {"name","arguments"} object, with missing arguments as empty input', () => {
+    expect(parseWebLlmTurn('{"name":"list_monitors"}').toolCalls[0]).toMatchObject({ name: 'list_monitors', input: {} });
+  });
+
   it('falls back gracefully when even the embedded-object recovery finds no valid JSON', () => {
     const turn = parseWebLlmTurn('Sure, here you go: { this is not valid json');
     expect(turn).toEqual({
@@ -488,6 +502,20 @@ describe('WebLlmProvider.chat', () => {
     // json_object mode is requested with no schema, so json_object must never
     // be sent bare.
     expect(call.response_format).toEqual({ type: 'json_object', schema: expect.stringContaining('"tool"') });
+    // Llama is not a thinking model; the Qwen3-only switch must stay off it.
+    expect(call.extra_body).toBeUndefined();
+  });
+
+  it('disables thinking via extra_body for a Qwen3 model', async () => {
+    const create = vi.fn().mockResolvedValue({ choices: [{ message: { content: '{"answer": "ok"}' } }] });
+    vi.mocked(getLoadedEngine).mockResolvedValue({ chat: { completions: { create } } } as never);
+
+    const provider = new WebLlmProvider('Qwen3-4B-q4f16_1-MLC');
+    await provider.chat([{ role: 'user', text: 'hi' }], [], 'sys', new AbortController().signal);
+
+    // The hard switch: web-llm pre-closes an empty think block, so the model
+    // cannot reason. The /no_think text directive alone is soft (measured).
+    expect(create.mock.calls[0][0].extra_body).toEqual({ enable_thinking: false });
   });
 
   // The XGrammar compiler has crashed before (see the module header), so the

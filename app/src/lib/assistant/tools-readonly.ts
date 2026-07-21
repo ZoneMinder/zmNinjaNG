@@ -19,10 +19,11 @@ import { ASSISTANT } from '../zmninja-ng-constants';
 import { buildResultSummary, countObjects } from './result-summary';
 import { parseDetectedObjects } from '../event/event-detection';
 import { buildEventDisplayEntity, buildMonitorDisplayEntity } from './display';
-import { resolveWhen } from './event-range';
+import { resolveWindow, type WindowFields } from './event-range';
+import { formatAppDateTime } from '../format-date-time';
 import { resolveMonitorRef } from './monitor-ref';
-import type { ToolDefinition } from './types';
-import { safeExecute, isOmittedArg, objectTypePattern, coerceLabelList, ungroundedWhenWords, NAVIGATE_ALLOWLIST } from './tool-helpers';
+import type { ToolContext, ToolDefinition } from './types';
+import { safeExecute, isOmittedArg, objectTypePattern, coerceLabelList, NAVIGATE_ALLOWLIST } from './tool-helpers';
 
 /** Maps a raw MonitorData into the clean, model-friendly shape shared by
  *  list_monitors and get_monitor (refs #246): '0'/'1' strings become
@@ -133,24 +134,36 @@ const getMonitorTool: ToolDefinition = {
 const countEventsTool: ToolDefinition = {
   name: 'count_events',
   description:
-    'Count events per monitor over a ROLLING interval ending now, such as "1 hour" or "1 day" (that means ' +
-    'the last 24 hours, NOT since local midnight), covering ALL monitors in one call (no monitorId needed) ' +
-    'and reporting the combined total. Use this for "how many events in the last N hours/days" or ' +
-    '"summarize recent events" questions instead of list_events, which returns individual rows. ' +
+    'Count events per monitor over a ROLLING window ending now (lastCount + lastUnit; {"lastCount":1,' +
+    '"lastUnit":"day"} means the last 24 hours, NOT since local midnight), covering ALL monitors in one ' +
+    'call (no monitorId needed) and reporting the combined total. Use this for "how many events in the ' +
+    'last N hours/days" questions instead of list_events, which returns individual rows. ' +
     'It has TWO hard limits. It CANNOT express a calendar day: for "today" (since local midnight) or ' +
-    '"yesterday", call list_events with when instead. It CANNOT filter or report detected object types: ' +
+    '"yesterday", call list_events instead. It CANNOT filter or report detected object types: ' +
     'it returns event COUNTS ONLY and says nothing about what was detected, so for "how many ' +
     'people/cars/animals" questions call list_events with objectType instead. Calling this tool for an ' +
     'object-type question returns numbers that cannot answer it.',
   schema: {
     type: 'object',
-    properties: { interval: { type: 'string', description: 'A rolling window ending now, e.g. "1 hour", "1 day".' } },
-    required: ['interval'],
+    properties: {
+      lastCount: { type: 'number', description: 'How many lastUnits back the window reaches, e.g. 24 with "hour".' },
+      lastUnit: {
+        type: 'string',
+        enum: ['minute', 'hour', 'day', 'week', 'month'],
+        description: 'The unit of the rolling window.',
+      },
+    },
+    required: ['lastCount', 'lastUnit'],
+    additionalProperties: false,
   },
   execute: (input, _ctx) =>
     safeExecute('count_events', async () => {
-      const interval = String(input.interval ?? '');
-      if (!interval) throw new Error('interval is required');
+      const count = Number(input.lastCount);
+      const unit = String(input.lastUnit ?? '');
+      if (!Number.isFinite(count) || count <= 0 || !unit) throw new Error('lastCount and lastUnit are required.');
+      // ZoneMinder's consoleEvents endpoint takes a MySQL INTERVAL phrase; the
+      // singular unit is valid for any count ("2 week").
+      const interval = `${Math.floor(count)} ${unit}`;
       const [counts, { monitors }] = await Promise.all([getConsoleEvents(interval), getMonitors()]);
       const nameById = new Map(monitors.map((m) => [m.Monitor.Id, m.Monitor.Name]));
       const rows = counts
@@ -160,6 +173,33 @@ const countEventsTool: ToolDefinition = {
       return JSON.stringify({ interval, total, monitors: rows });
     }),
 };
+
+/** A ZM timestamp re-rendered in the profile's own date/time format, so the
+ *  model quotes times the way the user reads them everywhere else in the app
+ *  (rule 21, refs #262). The model reliably echoes whatever format the rows
+ *  carry, so formatting the data IS formatting the answer. Raw when the
+ *  context carries no format (tests, older callers) or the value does not
+ *  parse; query filters never pass through here.
+ *  ponytail: parses the ZM wall-clock string in the runtime's own zone, same
+ *  as the result cards do; a profile-timezone-aware parse needs date-fns-tz
+ *  plumbing everywhere cards already accept this. */
+function formatTimestamp(value: string | undefined | null, ctx: ToolContext): string | undefined | null {
+  if (!value || !ctx.dateTimeFormat) return value;
+  const parsed = new Date(value.replace(' ', 'T'));
+  if (Number.isNaN(parsed.getTime())) return value;
+  return formatAppDateTime(parsed, ctx.dateTimeFormat);
+}
+
+/** Raw ZM wall-clock starts tallied into absolute-hour buckets
+ *  (`YYYY-MM-DD HH:00:00` keys). Shared by the summary's busiest-hour clause
+ *  and the card-narrowing below it (refs #264). */
+function hourBuckets(rawStarts: readonly string[]): Record<string, number> {
+  return rawStarts.reduce<Record<string, number>>((acc, raw) => {
+    const key = `${raw.slice(0, 13)}:00:00`;
+    acc[key] = (acc[key] ?? 0) + 1;
+    return acc;
+  }, {});
+}
 
 /** Clamps a model-supplied limit into [1, ASSISTANT.maxListEventsLimit].
  *  Non-numeric or negative input (NaN, -5, "banana") falls back to the max
@@ -175,9 +215,8 @@ const listEventsTool: ToolDefinition = {
   description:
     'List individual events, newest first, optionally filtered by monitor, time window, detected object ' +
     'type, a single tag, or an explicit set of event ids. For ANY time window, COPY the user\'s own time ' +
-    'words into `when` and nothing more; the app converts the phrase against the profile\'s own timezone, ' +
-    'so never compute a date yourself. Whole days, rolling windows and parts of a day are all understood, ' +
-    'but send only what the user actually said. Combine when with objectType ' +
+    'words into `when`, verbatim and in their language; the app interprets the phrase and turns it into ' +
+    'exact timestamps in the profile\'s timezone. Combine when with objectType ' +
     'ONLY for questions that name an object, passing the labels this installation records (the system ' +
     'prompt lists them) and never the user\'s own word for them. Omit objectType for a summary. The ' +
     'rows this returns for a filter are exactly what ' +
@@ -197,11 +236,10 @@ const listEventsTool: ToolDefinition = {
       when: {
         type: 'string',
         description:
-          'PREFERRED for any time window. COPY the user\'s own time words, exactly as they wrote them and ' +
-          'nothing more. Whole days, rolling windows ("last N hours/days") and parts of a day (from X to Y, ' +
-          'before X, after X) are all understood. The app converts the phrase to exact timestamps in the ' +
-          'profile\'s timezone, so never work out a date yourself and never pass a date here. Do not send a ' +
-          'time of day the user did not mention.',
+          'The time window in the user\'s OWN words, copied verbatim, in whatever language they used ' +
+          '("yesterday", "last week", "letzte Woche", "2 days ago", "sunday from 4pm to 10pm"). The app ' +
+          'interprets the phrase and converts it to exact timestamps in the profile\'s timezone; never ' +
+          'compute a date yourself and never add time words the user did not say.',
       },
       objectType: {
         // Both shapes, declared honestly: the model is asked to send a list for
@@ -232,32 +270,21 @@ const listEventsTool: ToolDefinition = {
     return safeExecute('list_events', async () => {
       const timezone = ctx.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-      // `when` first: it is the argument the model is asked to fill, and it
-      // carries the user's own phrasing rather than arithmetic the model did.
-      // A phrase it cannot read is thrown back naming the unreadable part, so
-      // the model corrects instead of silently querying the wrong window.
+      // The phrase is the user's own words; a dedicated model call interprets
+      // it into structured fields (window-interpreter.ts) and resolveWindow
+      // does the arithmetic (refs #265). Any failure on the way becomes a
+      // corrective error the calling model retries from. Measured before
+      // splitting the jobs: both reference models copied phrases perfectly
+      // but filled the fields directly at 27/36 and 15/36.
       const whenPhrase = isOmittedArg(input.when) ? undefined : String(input.when);
-      let resolvedWhen: { startDateTime: string; endDateTime: string } | undefined;
-      // English-locale only: WHEN_FILLER is an English word list, and against
-      // another language it flags legitimate connectives ("desde", "von") as
-      // invented, burning a correction round on a correct call (refs #259).
-      if (whenPhrase && ctx.question && (ctx.locale ?? 'en').toLowerCase().startsWith('en')) {
-        // The contract is "the user's own words". A phrase carrying words the
-        // user never wrote is the prompt's example leaking into the argument,
-        // and it narrows the window without anyone noticing.
-        const invented = ungroundedWhenWords(whenPhrase, ctx.question);
-        if (invented.length > 0) {
-          throw new Error(
-            `when "${whenPhrase}" contains words the user did not write (${invented.join(', ')}). ` +
-              'Copy the time period from the question itself, exactly as the user phrased it, and nothing more. ' +
-              'The examples in the tool description are formats, not values to send.',
-          );
-        }
-      }
+      let resolvedWhen: { startDateTime?: string; endDateTime?: string } | undefined;
       if (whenPhrase) {
-        const parsed = resolveWhen(whenPhrase, new Date(), timezone);
-        if ('error' in parsed) throw new Error(parsed.error);
-        resolvedWhen = parsed;
+        if (!ctx.interpretWhen) throw new Error('Time phrases are unavailable right now; retry without `when`.');
+        const fields = await ctx.interpretWhen(whenPhrase);
+        if ('error' in fields && fields.error) throw new Error(String(fields.error));
+        const window = resolveWindow(fields as WindowFields, new Date(), timezone);
+        if (window && 'error' in window) throw new Error(window.error);
+        resolvedWhen = window;
       }
 
       // Monitors first, and awaited rather than raced with getEvents: the
@@ -325,15 +352,15 @@ const listEventsTool: ToolDefinition = {
        *  ever recorded. A function because the zero-match branch needs it
        *  before the rows exist. */
       const windowOf = () => {
-        const from = resolvedWhen?.startDateTime;
-        const to = resolvedWhen?.endDateTime;
+        const from = formatTimestamp(resolvedWhen?.startDateTime, ctx);
+        const to = formatTimestamp(resolvedWhen?.endDateTime, ctx);
         return from || to ? { from: from ?? null, to: to ?? null } : 'all recorded events, no time filter applied';
       };
 
       const filters: EventFilters = {
         monitorId,
         // `when` is the only time argument this tool takes: the resolved
-        // phrase, or no window at all (see event-range.ts's resolveWhen).
+        // fields, or no window at all (see event-range.ts's resolveWindow).
         startDateTime: resolvedWhen?.startDateTime,
         endDateTime: resolvedWhen?.endDateTime,
         // Expanded through the category map, so "vehicles" matches the car and
@@ -397,10 +424,14 @@ const listEventsTool: ToolDefinition = {
       const rows = res.events.map(({ Event: e }) => ({
         id: e.Id,
         monitor: nameById.get(e.MonitorId) ?? e.MonitorId,
-        start: e.StartDateTime,
+        start: formatTimestamp(e.StartDateTime, ctx),
         durationSec: Number(e.Length),
         objects: parseDetectedObjects(e.Notes),
       }));
+      // Raw wall-clock starts aligned with `rows`, for the per-hour tally
+      // below: `rows.start` is already re-rendered in the profile's display
+      // format, which no longer slices into hour buckets.
+      const rawStarts = res.events.map(({ Event: e }) => e.StartDateTime);
 
       // State the window that was actually queried. Asked "how many people came
       // to my house", the model queried no time range at all and then answered
@@ -417,6 +448,9 @@ const listEventsTool: ToolDefinition = {
        *  allowance is a guess. */
       const buildOutput = (rowsToShow: typeof rows) => {
         const truncated = rowsToShow.length < rows.length || res.pagination.nextPage;
+        // The server's true match total. Two capped results both said
+        // "matchCount":25 and the model compared the page caps as totals.
+        const totalMatches = Math.max(res.pagination.totalCount ?? 0, rows.length);
         // Counted here, not left to the model. Asked "how many vehicles came
         // yesterday" against ten rows (four Front Yard, six Garage Outdoor), it
         // answered "8 on the Front Yard and 2 on the Garage Outdoor": the total
@@ -429,6 +463,21 @@ const listEventsTool: ToolDefinition = {
           return acc;
         }, {});
         const objectCounts = countObjects(rowsToShow as { monitor?: unknown; objects?: unknown }[]);
+        // "Busiest hour" is arithmetic over timestamps, which the model does
+        // badly, so the tally is computed here and the winning hour handed
+        // over as a finished clause (refs #264). Buckets are absolute hours
+        // (date + hour) in ZM wall clock, labelled in the profile's format.
+        const hourEntries = Object.entries(hourBuckets(rawStarts.slice(0, rowsToShow.length))).sort(
+          (a, b) => b[1] - a[1],
+        );
+        const busiestHour =
+          rowsToShow.length > 1 && hourEntries.length > 0
+            ? { label: String(formatTimestamp(hourEntries[0][0], ctx)), count: hourEntries[0][1] }
+            : undefined;
+        const countsByHour =
+          hourEntries.length > 1
+            ? Object.fromEntries(hourEntries.map(([key, count]) => [String(formatTimestamp(key, ctx)), count]))
+            : undefined;
         // The counts, already written out. Supplying the numbers was not enough:
         // asked to summarize, the model enumerated all five rows and quoted
         // neither matchCount nor countsByMonitor. `summary` leads the object so
@@ -439,8 +488,23 @@ const listEventsTool: ToolDefinition = {
           countsByMonitor,
           objectCounts,
           partial: Boolean(truncated),
+          totalMatches,
         });
-        const base = { summary, window, matchCount: rowsToShow.length, countsByMonitor, objectCounts, events: rowsToShow };
+        // busiestHour rides OUTSIDE the summary on purpose: answers quote the
+        // summary verbatim, and an hour label inside it would make the
+        // answer-narrowing in agent.ts (refs #264) shrink the cards for every
+        // summarize question, not just busiest-hour ones.
+        const base = {
+          summary,
+          window,
+          // The TOTAL that matched, not the page: quoted directly in answers.
+          matchCount: totalMatches,
+          countsByMonitor,
+          objectCounts,
+          ...(busiestHour ? { busiestHour } : {}),
+          ...(countsByHour ? { countsByHour } : {}),
+          events: rowsToShow,
+        };
         return JSON.stringify(
           truncated ? { ...base, shownEvents: rowsToShow.length, moreMatchesExist: true } : base,
         );
@@ -456,8 +520,10 @@ const listEventsTool: ToolDefinition = {
         output = buildOutput(shown);
       }
 
-      // Cards mirror EXACTLY the rows the model was given. Building them from
-      // the full set is what let the UI contradict the answer.
+      // Cards mirror EXACTLY the rows the model was given; whether they all
+      // RENDER is decided later, against the answer text (agent.ts's
+      // narrowDisplayToAnswer, refs #264), because only the finished answer
+      // says which rows it is about.
       const display = res.events.slice(0, shown.length).map(({ Event: e }) =>
         buildEventDisplayEntity(e, nameById.get(e.MonitorId) ?? e.MonitorId, monitors, ctx),
       );
@@ -497,8 +563,8 @@ const getEventTool: ToolDefinition = {
         monitor: monitorName,
         monitorId: e.MonitorId,
         cause: e.Cause,
-        start: e.StartDateTime,
-        end: e.EndDateTime,
+        start: formatTimestamp(e.StartDateTime, ctx),
+        end: formatTimestamp(e.EndDateTime, ctx),
         durationSec: Number(e.Length),
         frames: Number(e.Frames),
         alarmFrames: Number(e.AlarmFrames),

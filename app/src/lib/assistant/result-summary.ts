@@ -56,7 +56,10 @@ export type ResultWindow = { from?: string | null; to?: string | null } | string
  * The finished sentence, for the model to quote rather than reconstruct.
  *
  * `partial` marks a result whose rows were capped, so the model says so instead
- * of presenting a truncated list as the whole picture.
+ * of presenting a truncated list as the whole picture. `totalMatches` is the
+ * server's true match total when it exceeds the rows shown: without it, a
+ * comparison of two capped results read both page caps as "similar totals"
+ * (observed live: two windows both reported 25, real totals unknown).
  */
 export function buildResultSummary(params: {
   window: ResultWindow;
@@ -64,8 +67,9 @@ export function buildResultSummary(params: {
   countsByMonitor: Record<string, number>;
   objectCounts: Record<string, number>;
   partial: boolean;
+  totalMatches?: number;
 }): string {
-  const { window, matchCount, countsByMonitor, objectCounts, partial } = params;
+  const { window, matchCount, countsByMonitor, objectCounts, partial, totalMatches } = params;
 
   // A string window means no time filter was applied. Saying so is the point:
   // told only a count, the model named a period it had never queried.
@@ -78,15 +82,23 @@ export function buildResultSummary(params: {
 
   if (matchCount === 0) return `No events${range}.`;
 
-  const parts: string[] = [`${matchCount} ${matchCount === 1 ? 'event' : 'events'}${range}.`];
+  // Lead with the true total when it is known and larger than the page, so an
+  // answer that quotes this sentence quotes the real count, not the cap.
+  const knownTotal = totalMatches !== undefined && totalMatches > matchCount;
+  const lead = knownTotal ? totalMatches : matchCount;
+  const parts: string[] = [`${lead} ${lead === 1 ? 'event' : 'events'}${range}.`];
+  if (knownTotal) parts.push(`The ${matchCount} most recent are listed.`);
 
+  // The tallies cover the listed rows only; say so whenever rows were capped,
+  // so the model cannot present a page tally as the window's.
+  const scope = knownTotal || partial ? ' (listed rows)' : '';
   const byMonitor = describeCounts(countsByMonitor);
-  if (byMonitor) parts.push(`By monitor: ${byMonitor}.`);
+  if (byMonitor) parts.push(`By monitor${scope}: ${byMonitor}.`);
 
   const byObject = describeCounts(objectCounts);
-  if (byObject) parts.push(`Detected: ${byObject}.`);
+  if (byObject) parts.push(`Detected${scope}: ${byObject}.`);
 
-  if (partial) {
+  if (partial && !knownTotal) {
     parts.push('This is a partial result: more events matched than are listed here.');
   }
 

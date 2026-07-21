@@ -193,34 +193,6 @@ export function objectQuestionMismatch(
 }
 
 /**
- * Whether a model-supplied time phrase actually came from the user, or was
- * lifted from an example in the prompt.
- *
- * Asked "how many vehicles came yesterday", the model sent
- * `when: "yesterday from 4pm to 10pm"`, the exact example phrase written in
- * the tool description and the system prompt. The query then covered six hours
- * of the day instead of all of it, silently, and the answer was confidently
- * wrong. The tool's own contract is "put the user's own words in `when`", so
- * that contract is checkable: every significant word of the phrase should
- * appear in the question.
- *
- * Only flags words the user never wrote. Filler and connective words are
- * ignored, so "yesterday" against "how many vehicles came yesterday" passes
- * while "4pm" does not.
- */
-const WHEN_FILLER = new Set(['from', 'to', 'and', 'the', 'at', 'in', 'on', 'between', 'until', 'till', 'of', 'a']);
-
-export function ungroundedWhenWords(phrase: string, question: string): string[] {
-  const asked = question.toLowerCase();
-  return phrase
-    .toLowerCase()
-    .split(/[\s,]+/)
-    .map((word) => word.trim())
-    .filter((word) => word.length > 0 && !WHEN_FILLER.has(word))
-    .filter((word) => !asked.includes(word));
-}
-
-/**
  * Drops every argument the model meant to leave out, before the tool sees it.
  *
  * Each tool used to do this itself, one argument at a time, and each one that

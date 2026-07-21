@@ -39,7 +39,10 @@ Examples of what you can ask:
 - "Summarize today"
 - "How many events happened on the driveway camera in the last hour?"
 - "How many people came by yesterday?"
+- "What was my busiest hour on Sunday?" (weekday names and "2 days ago" work too)
 - "Show me the most recent event on the front door camera" (Ninjii navigates you there)
+
+Answers come with cards underneath: event thumbnails you can tap to open the event, and monitor cards with a live preview when the answer is about a few specific cameras (a long list of monitors stays text, since every preview is a real stream). The cards are the rows the answer is about, not everything the lookup touched: ask for your busiest hour and you get that hour's events, not the whole day's.
 
 Ask it to change something, such as "arm the backyard camera" or "delete event 1234", and it will tell you it cannot and point you to the screen where you can. See below for why.
 
@@ -61,9 +64,10 @@ On a desktop or in a browser, the model runs inside the app using your GPU (WebG
 
 | Model | Download | Notes |
 |---|---|---|
-| Llama 3.2 3B | ~2264 MB | The only on-device model on desktop. |
+| Llama 3.2 3B | ~2264 MB | The default. Fastest download, smallest memory footprint. |
+| Qwen3 4B | ~3432 MB | Answers camera questions more accurately in server-side testing. Needs about a gigabyte more GPU memory. |
 
-Earlier versions offered a choice of six models. Ninjii is tuned against Llama 3.2 on every backend, and the models it replaced varied widely in whether they would use a tool at all, so there is now one model per backend rather than a picker. If your settings still name a model that was removed, the app moves you to Llama 3.2 3B automatically.
+Earlier versions offered a choice of six models. The models that choice replaced varied widely in whether they would use a tool at all, so the list is now short and every entry on it is tested against the same question suite. If your settings still name a model that was removed, the app moves you to Llama 3.2 3B automatically.
 
 The download size is a floor, not the total: running a model needs additional memory on top of its weights, and how much depends on how long the conversation gets.
 
@@ -81,7 +85,7 @@ The model list fills in automatically from the server, and you can also type a m
 
 ## Performance and accuracy
 
-Which model you pick matters more than any other assistant setting. zmNinjaNg carries a test suite for exactly this: eleven camera-and-events questions ("summarize today", "how many people came today", "is the server ok", and so on), each asked three times against known data, scored on whether the model looked the right thing up with usable filters and whether its answer quoted the data correctly. Every claim below comes from that suite, measured in July 2026 against Ollama 0.32 on a GPU server. Your hardware changes the times, not the accuracy.
+Which model you pick matters more than any other assistant setting. zmNinjaNg carries a test suite for exactly this: fourteen camera-and-events questions ("summarize today", "how many people came today", "compare may to june", "is the server ok", and so on), each asked three times against known data, scored on whether the model looked the right thing up with usable filters and whether its answer quoted the data correctly. Every claim below comes from that suite, measured in July 2026 against Ollama 0.32 on a GPU server. Your hardware changes the times, not the accuracy.
 
 | Ollama model | Accuracy | Typical reply |
 |---|---|---|
@@ -100,7 +104,7 @@ Two things to know about the qwen3 family:
 
 Some models cannot drive the assistant at all: gemma2 has no tool support and qwen2.5-coder never uses one, so with either the assistant can only guess. The **Test model** button catches both cases before you commit to a model.
 
-The on-device Llama 3.2 3B passed 21 of 24 lookup checks in an equivalent test. Its misses were answering from memory instead of looking things up, which the app detects and corrects by insisting on a lookup, at the cost of a slower reply. A server-backed qwen3:8b answers noticeably better and faster than on-device; on-device remains the choice when the conversation must not leave your machine.
+The on-device Llama 3.2 3B passed 21 of 24 lookup checks in an equivalent test. Its misses were answering from memory instead of looking things up, which the app detects and corrects by insisting on a lookup, at the cost of a slower reply. The on-device Qwen3 4B option scored between Llama 3.2 and the server-backed qwen3:8b in the same suite, at the cost of a larger download and more GPU memory. A server-backed qwen3:8b answers noticeably better and faster than either; on-device remains the choice when the conversation must not leave your machine.
 
 ## Long conversations
 
@@ -122,7 +126,7 @@ While the model is loading, the chat says so instead of showing the usual "Think
 
 ## Language
 
-Ask the assistant in English. This is not only about the model's own ability: the rules that decide exactly which lookup a question needs, and the reading of time phrases like "yesterday from 4pm to 10pm", both understand English only. In another language the app can still nudge the model once to check your cameras before answering, but it cannot verify the details the way it does in English, so a question is more likely to be misunderstood. This holds on every backend, including a server-backed model through Ollama. The app's own screens stay translated as usual; a note appears above the conversation when the app language is not English.
+The assistant now understands questions in other languages: the model itself interprets your time words ("letzte Woche", "ayer por la tarde") into the exact window it looks up, and tool routing no longer depends on English keywords. English remains the best-tested path, and a few answer-accuracy safeguards (such as catching an answer that contradicts the data) only recognize English replies, so a note above the conversation says as much when the app language is not English. Replies come back in the app's language either way.
 
 ## Privacy
 

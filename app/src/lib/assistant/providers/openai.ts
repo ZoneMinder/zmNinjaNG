@@ -85,6 +85,65 @@ interface OllamaPsResponse {
   models?: Array<{ name?: string; model?: string; context_length?: number }>;
 }
 
+/** `baseUrl::model` pairs a warmup has already been issued for this session,
+ *  so reopening the panel does not re-post a load. A FAILED warmup is removed
+ *  again: the server may simply have been down at that moment, and the next
+ *  panel open should retry rather than remember the outage all session. */
+const WARMED_MODELS = new Set<string>();
+
+/** Test-only. */
+export function resetWarmedModelsForTests(): void {
+  WARMED_MODELS.clear();
+}
+
+/**
+ * Loads `model` into the Ollama server's memory before the first question
+ * (refs #261). An empty `/api/generate` body is Ollama's documented
+ * load-only call: it resolves once the model is resident and generates
+ * nothing. This is also the earliest possible Ollama confirmation, so the
+ * FIRST chat of the session already runs with `reasoning_effort` applied and
+ * a known context window; without it, both waited for the first completed
+ * call, which is how a first question came to cost ~36s (cold load plus one
+ * full thinking chain) while every later one took ~2s.
+ *
+ * Resolves `true` when the model is loaded, `false` when the warmup was
+ * already issued or failed. Never throws: a warmup must not break the panel,
+ * and a real turn surfaces real failures with better messages.
+ */
+export async function warmOllamaModel(config: OpenAiProviderConfig): Promise<boolean> {
+  const key = `${config.baseUrl}::${config.model}`;
+  if (WARMED_MODELS.has(key)) return false;
+  WARMED_MODELS.add(key);
+  const root = config.baseUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`;
+  try {
+    await httpPost(
+      `${root}/api/generate`,
+      { model: config.model },
+      { headers, timeoutMs: ASSISTANT.modelProbeTimeoutMs, intent: 'Assistant Ollama model warmup' },
+    );
+    OLLAMA_SERVERS.add(config.baseUrl);
+    // The window while we are here, same data refreshContextWindow reads
+    // after a turn; the model is certainly loaded now.
+    const ps = await httpGet<OllamaPsResponse>(`${root}/api/ps`, {
+      timeoutMs: ASSISTANT.testConnectionTimeoutMs,
+      intent: 'Assistant Ollama context window',
+    });
+    const entry = ps?.data?.models?.find((m) => m.model === config.model || m.name === config.model);
+    if (entry?.context_length) CONTEXT_WINDOWS.set(key, entry.context_length);
+    log.assistant('Ollama model warmed', LogLevel.INFO, { model: config.model, contextWindow: entry?.context_length });
+    return true;
+  } catch (error) {
+    WARMED_MODELS.delete(key);
+    log.assistant('Ollama model warmup failed; the first question will load it instead', LogLevel.WARN, {
+      model: config.model,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+}
+
 export interface OpenAiProviderConfig {
   /** e.g. `http://localhost:11434/v1` (no trailing `/chat/completions`). */
   baseUrl: string;
@@ -222,6 +281,11 @@ export function parseOpenAiTurn(message: OpenAiResponseMessage | undefined): Ass
   if (content.trim() === '') return { text: PARSE_ERROR_TEXT, toolCalls: [] };
   const portableTurn = parseWebLlmTurn(content);
   if (portableTurn.text !== PARSE_ERROR_TEXT) return portableTurn;
+  // Content that still carries a tool-call wrapper after the parser gave up
+  // is a malformed call, not prose: returning it as the answer printed raw
+  // <tool_call> XML into the chat (refs #264). Fail it so the self-repair
+  // retry runs instead.
+  if (/<tool_call>/i.test(content)) return { text: PARSE_ERROR_TEXT, toolCalls: [], raw: content };
   return { text: content, toolCalls: [] };
 }
 

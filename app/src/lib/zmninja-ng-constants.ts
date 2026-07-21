@@ -707,6 +707,11 @@ export const ASSISTANT = {
   // vocabulary (person, car, dog, truck, ...) without pasting a long tail of
   // rare labels into a context window this assistant is already tight on.
   objectLabelHintLimit: 12,
+  // Monitor result cards render a LIVE preview (refs #264), and each one is
+  // a real stream with real bandwidth and server cost. Above this many
+  // monitor cards in one answer, cards fall back to text: "show me the
+  // garage" wants a stream, "list my 12 cameras" wants a list.
+  maxLiveMonitorCards: 4,
   requestTimeoutMs: 120000,
   // A "Test connection" click only needs to know the server answers, not run a
   // full chat turn: `requestTimeoutMs` (120s) covers the WORST case (a slow
@@ -754,16 +759,22 @@ export const ASSISTANT = {
   // Its own 512-token window is the only untried mode and is far smaller than
   // this app's system prompt, so the model would never see the tool contract.
   // Do not re-add without checking a newer web-llm first.
-  // One model, not a menu. Llama 3.2 is what the assistant is tuned against on
-  // every backend (see `recommendedOllamaModel` for the measurements and
-  // and a picker of six was six
-  // prompt-compatibility surfaces to keep working rather than one.
+  // A short list, not a menu: a picker of six was six prompt-compatibility
+  // surfaces to keep working. Llama 3.2 is what the assistant is tuned
+  // against on every backend and stays the default (`defaultModelId`).
   //
-  // The 3B because this list only ever serves desktop and web: the assistant's
-  // on-device backend is not offered on phones or tablets at all, so there is
-  // no memory-tight device to size down for here.
+  // These sizes because this list only ever serves desktop and web: the
+  // assistant's on-device backend is not offered on phones or tablets at all,
+  // so there is no memory-tight device to size down for here.
   webllmModels: [
     { id: 'Llama-3.2-3B-Instruct-q4f16_1-MLC', label: 'Llama 3.2 3B', approxSizeMb: 2264, contextWindowSize: 16384 },
+    // Candidate upgrade (refs #246): qwen family led every server-side eval,
+    // and the 4B-class proxy (qwen3:4b-instruct, temp 0, 3 runs/case) scored
+    // tool 36/42, answer 12/12, interpret 48/51, triage 42/45 vs the llama3.2
+    // class's 30/42 tool. Thinking is disabled for real via WebLLM's
+    // enable_thinking:false (providers/webllm.ts). Not the default until a
+    // WebGPU device pass confirms the MLC build.
+    { id: 'Qwen3-4B-q4f16_1-MLC', label: 'Qwen3 4B', approxSizeMb: 3432, contextWindowSize: 16384 },
   ],
   /** Saved `assistantModelId` values no longer in `webllmModels`, mapped to
    *  their replacement. Consumed by migrateSettings (stores/settings.ts).

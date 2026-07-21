@@ -7,10 +7,18 @@
  * (`EventThumbnail`) are for the user only and never touch the model, and
  * "Open" just calls the host's `navigate`, which closes the palette and
  * routes (see useAssistantHost.ts).
+ *
+ * Monitor cards carry a LIVE preview (refs #264) when the answer is about a
+ * few monitors; above `ASSISTANT.maxLiveMonitorCards` they fall back to
+ * text, since each preview is a real stream with real cost.
  */
 import { useTranslation } from 'react-i18next';
 import { EventThumbnail } from '../events/EventThumbnail';
+import { LiveMonitorPlayer } from '../monitors/LiveMonitorPlayer';
+import { useMonitors } from '../../hooks/useMonitors';
+import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { Button } from '../ui/button';
+import { ASSISTANT } from '../../lib/zmninja-ng-constants';
 import type { AssistantHost, DisplayEntity } from '../../lib/assistant/types';
 
 export interface AssistantResultCardsProps {
@@ -20,11 +28,22 @@ export interface AssistantResultCardsProps {
 
 export function AssistantResultCards({ entities, host }: AssistantResultCardsProps) {
   const { t } = useTranslation();
+  // The shared monitors query (cached, bandwidth-managed polling): cards only
+  // READ it to resolve a card's monitor id to the stream-capable Monitor
+  // object; no extra requests when the cache is warm.
+  const { monitors } = useMonitors();
+  const { currentProfile } = useCurrentProfile();
+  const monitorCardCount = entities.filter((e) => e.kind === 'monitor').length;
+  const livePreviews = monitorCardCount > 0 && monitorCardCount <= ASSISTANT.maxLiveMonitorCards;
 
   return (
     <div className="flex flex-wrap gap-2" data-testid="assistant-result-cards">
       {entities.map((entity) => {
         const open = () => host.navigate(entity.navigatePath);
+        const liveMonitor =
+          entity.kind === 'monitor' && livePreviews
+            ? monitors.find((m) => m.Monitor.Id === entity.id)?.Monitor
+            : undefined;
         return (
           <div
             key={`${entity.kind}-${entity.id}`}
@@ -40,6 +59,20 @@ export function AssistantResultCards({ entities, host }: AssistantResultCardsPro
             data-testid={`assistant-card-${entity.kind}`}
             className="flex w-full min-w-0 max-w-full items-center gap-2 rounded-md border border-border/60 bg-background p-2 text-left cursor-pointer hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary sm:w-64"
           >
+            {liveMonitor && (
+              <div
+                className="h-14 w-24 shrink-0 overflow-hidden rounded bg-card border border-border/40"
+                data-testid="assistant-card-monitor-live"
+              >
+                <LiveMonitorPlayer
+                  monitor={liveMonitor}
+                  profile={currentProfile}
+                  className="h-full w-full"
+                  objectFit="cover"
+                  muted
+                />
+              </div>
+            )}
             {entity.kind === 'event' && (
               <div className="h-12 w-12 shrink-0 overflow-hidden rounded bg-card border border-border/40">
                 <EventThumbnail

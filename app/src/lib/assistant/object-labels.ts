@@ -77,6 +77,11 @@ export function buildObjectLabelLine(labels: string[]): string {
     `Detected object labels seen recently on this installation: ${labels.join(', ')}. ` +
     'When the user names a category ("vehicles", "animals", "people"), pass EVERY label above that belongs ' +
     'to it as objectType, for example objectType ["car","truck"] for vehicles. Pass labels exactly as ' +
-    'written above, never the user\'s word for them. Other labels may exist that are not in this list.'
+    'written above, never the user\'s word for them. Other labels may exist that are not in this list. ' +
+    // The scoping sentence lives HERE, at the attractor: with the vocabulary
+    // alone in view, "summarize april" grew objectType with every known
+    // label, deterministically, silently excluding no-detection events.
+    'This list is ONLY for questions that name such a thing; a summary, recap, or comparison names none, ' +
+    'so it takes no objectType, ever.'
   );
 }
