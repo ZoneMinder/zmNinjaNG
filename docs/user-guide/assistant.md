@@ -84,7 +84,7 @@ The model list fills in automatically from the server, and you can also type a m
 
 ## Performance and accuracy
 
-Which model you pick matters more than any other assistant setting. zmNinjaNg carries a test suite for exactly this: eleven camera-and-events questions ("summarize today", "how many people came today", "is the server ok", and so on), each asked three times against known data, scored on whether the model looked the right thing up with usable filters and whether its answer quoted the data correctly. Every claim below comes from that suite, measured in July 2026 against Ollama 0.32 on a GPU server. Your hardware changes the times, not the accuracy.
+Which model you pick matters more than any other assistant setting. zmNinjaNg carries a test suite for exactly this: fourteen camera-and-events questions ("summarize today", "how many people came today", "compare may to june", "is the server ok", and so on), each asked three times against known data, scored on whether the model looked the right thing up with usable filters and whether its answer quoted the data correctly. Every claim below comes from that suite, measured in July 2026 against Ollama 0.32 on a GPU server. Your hardware changes the times, not the accuracy.
 
 | Ollama model | Accuracy | Typical reply |
 |---|---|---|

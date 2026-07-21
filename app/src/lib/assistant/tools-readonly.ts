@@ -448,6 +448,9 @@ const listEventsTool: ToolDefinition = {
        *  allowance is a guess. */
       const buildOutput = (rowsToShow: typeof rows) => {
         const truncated = rowsToShow.length < rows.length || res.pagination.nextPage;
+        // The server's true match total. Two capped results both said
+        // "matchCount":25 and the model compared the page caps as totals.
+        const totalMatches = Math.max(res.pagination.totalCount ?? 0, rows.length);
         // Counted here, not left to the model. Asked "how many vehicles came
         // yesterday" against ten rows (four Front Yard, six Garage Outdoor), it
         // answered "8 on the Front Yard and 2 on the Garage Outdoor": the total
@@ -485,6 +488,7 @@ const listEventsTool: ToolDefinition = {
           countsByMonitor,
           objectCounts,
           partial: Boolean(truncated),
+          totalMatches,
         });
         // busiestHour rides OUTSIDE the summary on purpose: answers quote the
         // summary verbatim, and an hour label inside it would make the
@@ -493,7 +497,8 @@ const listEventsTool: ToolDefinition = {
         const base = {
           summary,
           window,
-          matchCount: rowsToShow.length,
+          // The TOTAL that matched, not the page: quoted directly in answers.
+          matchCount: totalMatches,
           countsByMonitor,
           objectCounts,
           ...(busiestHour ? { busiestHour } : {}),

@@ -1146,6 +1146,10 @@ describe('list_events when resolution (refs #246)', () => {
     expect(parsed.moreMatchesExist).toBe(true);
     expect(parsed.shownEvents).toBe(1);
     expect(parsed.events).toHaveLength(1);
+    // matchCount is the server's TRUE total, not the page (refs #246):
+    // comparisons must quote real counts, never the cap.
+    expect(parsed.matchCount).toBe(2);
+    expect(parsed.summary).toContain('2 events');
   });
 
   it('leaves the more-matches flag unset when every match fits on the page', async () => {

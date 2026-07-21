@@ -74,6 +74,10 @@ interface ToolCase {
   args?: (a: Record<string, unknown>) => boolean;
   /** Handled by triage before the prompt sees it; reported, not scored. */
   triaged?: boolean;
+  /** Check `tool` and `args` against EVERY call in the reply, not just the
+   *  first. For multi-window questions where a fault on any call corrupts
+   *  the answer ("compare X to Y" creeping objectType onto both calls). */
+  allCalls?: boolean;
 }
 
 const TOOL_CASES: ToolCase[] = [
@@ -87,6 +91,14 @@ const TOOL_CASES: ToolCase[] = [
   // A summary must not grow an objectType: observed live on "summarize april",
   // which attached every known label and silently excluded no-detection events.
   { q: 'summarize april', tool: 'list_events', args: (a) => String(a.when).toLowerCase().includes('april') && a.objectType === undefined },
+  // Observed live (refs #246): "compare may to june" attached the whole known
+  // vocabulary to BOTH calls, silently excluding no-detection events.
+  {
+    q: 'compare may to june',
+    tool: 'list_events',
+    allCalls: true,
+    args: (a) => /may|june/.test(String(a.when).toLowerCase()) && a.objectType === undefined,
+  },
   { q: 'how many people came today', tool: 'list_events', args: (a) => String(a.when).toLowerCase().includes('today') && String(a.objectType).includes('person') },
   // Triage answers these with NO tools in production (see triage.ts), so the
   // prompt is not what decides them. Kept visible, scored separately.
@@ -273,7 +285,8 @@ async function scoreTools(system: string, runs: number) {
           ...(TEMP === undefined ? {} : { temperature: TEMP }),
           ...REASONING,
         });
-        const call = r.choices?.[0]?.message?.tool_calls?.[0];
+        const allReplyCalls = r.choices?.[0]?.message?.tool_calls ?? [];
+        const call = allReplyCalls[0];
         if (c.tool === null) {
           // Counted against the triaged tally, not the scored one: incrementing
           // `pass` here made the score exceed its own total (30/24).
@@ -289,31 +302,41 @@ async function scoreTools(system: string, runs: number) {
           failures.push(`[tool] "${c.q}" called nothing, expected ${c.tool}`);
           continue;
         }
-        if (call.function.name !== c.tool) {
-          failures.push(`[tool] "${c.q}" called ${call.function.name}, expected ${c.tool}`);
-          continue;
+        // allCalls cases check every call in the reply; a fault on any one
+        // corrupts the answer. Others check the first only.
+        const toCheck = c.allCalls ? allReplyCalls : [call];
+        let failed = false;
+        for (const checked of toCheck) {
+          if (checked.function.name !== c.tool) {
+            failures.push(`[tool] "${c.q}" called ${checked.function.name}, expected ${c.tool}`);
+            failed = true;
+            break;
+          }
+          let args: Record<string, unknown> = {};
+          try {
+            args = JSON.parse(checked.function.arguments || '{}');
+          } catch {
+            failures.push(`[tool] "${c.q}" arguments were not JSON`);
+            failed = true;
+            break;
+          }
+          // The SAME repairs the app applies before a tool runs, so a fault it
+          // already fixes is not counted against the prompt. A stringified array
+          // argument is llama3.2's known habit and coerceLabelList handles it.
+          args = stripOmittedArgs(args);
+          if (args.objectType !== undefined) args.objectType = coerceLabelList(args.objectType);
+          // Same repair the executor applies (refs #265): numeric window fields
+          // arrive as strings from llama3.2 and Number() them before use.
+          for (const key of ['lastCount', 'daysAgo']) {
+            if (typeof args[key] === 'string' && args[key] !== '' && !Number.isNaN(Number(args[key]))) args[key] = Number(args[key]);
+          }
+          if (c.args && !c.args(args)) {
+            failures.push(`[tool] "${c.q}" args ${JSON.stringify(args)}`);
+            failed = true;
+            break;
+          }
         }
-        let args: Record<string, unknown> = {};
-        try {
-          args = JSON.parse(call.function.arguments || '{}');
-        } catch {
-          failures.push(`[tool] "${c.q}" arguments were not JSON`);
-          continue;
-        }
-        // The SAME repairs the app applies before a tool runs, so a fault it
-        // already fixes is not counted against the prompt. A stringified array
-        // argument is llama3.2's known habit and coerceLabelList handles it.
-        args = stripOmittedArgs(args);
-        if (args.objectType !== undefined) args.objectType = coerceLabelList(args.objectType);
-        // Same repair the executor applies (refs #265): numeric window fields
-        // arrive as strings from llama3.2 and Number() them before use.
-        for (const key of ['lastCount', 'daysAgo']) {
-          if (typeof args[key] === 'string' && args[key] !== '' && !Number.isNaN(Number(args[key]))) args[key] = Number(args[key]);
-        }
-        if (c.args && !c.args(args)) {
-          failures.push(`[tool] "${c.q}" args ${JSON.stringify(args)}`);
-          continue;
-        }
+        if (failed) continue;
         if (c.triaged) triagedPass++; else pass++;
       } catch (e) {
         failures.push(`[tool] "${c.q}" error: ${(e as Error).message}`);

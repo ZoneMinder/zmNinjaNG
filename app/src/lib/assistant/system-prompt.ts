@@ -46,8 +46,12 @@ export function buildSystemPrompt(ctx: SystemPromptContext): string {
     'Never compute timestamps yourself. COPY the user\'s own time words into list_events\' `when`, verbatim and in their language ("yesterday", "last week", "letzte Woche"); the app interprets the phrase. Never add time words the user did not say.',
     // The summary rule must FORBID the filter, not merely omit it: asked to
     // "summarize today" the model added objectType "people" by analogy with
-    // nearby object examples, hiding everything else that happened.
+    // nearby object examples, hiding everything else that happened. Merging
+    // the comparison rule INTO this sentence broke it (measured: "summarize
+    // april" regressed to creeping the vocabulary), so comparisons get their
+    // own line.
     'For a summary or any "what happened" question that names no specific object, call list_events with the asked-about window and NO objectType.',
+    '"compare <A> to <B>" means two such summaries, one list_events call per period with `when` as the only argument: "compare may to june" is exactly {"when":"may"} then {"when":"june"}. objectType in a comparison is WRONG: it hides every event without a detection.',
     'For bare "how many events in the last N hours/days" totals, count_events is cheaper than list_events.',
     // count_events measures ONE rolling window, so it cannot rank hours;
     // asked for a busiest hour it reported "the last hour" (refs #264). The
@@ -73,6 +77,10 @@ export function buildSystemPrompt(ctx: SystemPromptContext): string {
     // the measured fix for reading matchCount (events) when asked about
     // objects (prompt-eval's `fields` variant, refs #259).
     'A result\'s summary line is the counts already written out: make it your first sentence, using its numbers and wording exactly, then add detail from the rows. matchCount and countsByMonitor ARE the counts; quote them and never tally rows yourself.',
+    // Unchanged when matchCount became the true total (refs #246): every
+    // longer variant naming "listed rows" or comparisons cost llama3.2 its
+    // per-monitor quoting (measured); the summary sentence already leads with
+    // the true total, and answers quote the summary.
     'matchCount is how many EVENTS matched. objectCounts is how many of each thing was detected. For "how many people/cars" questions, read objectCounts, not matchCount.',
     'Be direct. Never show image links, URLs, or raw ids in the answer text. Offer a next step only when helpful. Ask a question only when tools cannot resolve ambiguity.',
     // The one machine-readable line in an otherwise prose answer. The app
