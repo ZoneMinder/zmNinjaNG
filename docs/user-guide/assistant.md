@@ -64,8 +64,8 @@ On a desktop or in a browser, the model runs inside the app using your GPU (WebG
 
 | Model | Download | Notes |
 |---|---|---|
-| Llama 3.2 3B | ~2264 MB | The default. Fastest download, smallest memory footprint. |
-| Qwen3 4B | ~3432 MB | Answers camera questions more accurately in server-side testing. Needs about a gigabyte more GPU memory. |
+| Llama 3.2 3B | ~2264 MB | Fastest download, smallest memory footprint. |
+| Qwen3 4B | ~3432 MB | The default. Answers camera questions more accurately in testing. Needs about a gigabyte more GPU memory. |
 
 Earlier versions offered a choice of six models. The models that choice replaced varied widely in whether they would use a tool at all, so the list is now short and every entry on it is tested against the same question suite. If your settings still name a model that was removed, the app moves you to Llama 3.2 3B automatically.
 
