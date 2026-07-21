@@ -79,6 +79,29 @@ Set **Backend** to **Ollama** and give the app the address of your server. Left 
 
 The model list fills in automatically from the server, and you can also type a model name by hand. A GPU-backed Ollama server is recommended, and Qwen3 8B on one answers noticeably better than the on-device model; Llama 3.2 is a good pick when you want the fastest possible replies. If your server does not have the recommended model, Settings shows you the `ollama pull` command to add it. The **API key** field is optional, for a server that requires one; it is stored in your device's secure storage, not alongside the rest of your settings.
 
+## Performance and accuracy
+
+Which model you pick matters more than any other assistant setting. zmNinjaNg carries a test suite for exactly this: eleven camera-and-events questions ("summarize today", "how many people came today", "is the server ok", and so on), each asked three times against known data, scored on whether the model looked the right thing up with usable filters and whether its answer quoted the data correctly. Every claim below comes from that suite, measured in July 2026 against Ollama 0.32 on a GPU server. Your hardware changes the times, not the accuracy.
+
+| Ollama model | Accuracy | Typical reply |
+|---|---|---|
+| **qwen3:8b** (recommended) | every check passed | about 2 seconds |
+| llama3.2 | every check passed, leaning on the app's guardrails | about half a second |
+| qwen3:30b-a3b | every check passed | about 11 seconds |
+| qwen3:4b | every check passed | about 20 seconds |
+| qwen3:1.7b | roughly a third of checks failed | about 3 seconds |
+
+Why qwen3:8b: it is the smallest model that passed every check on its own judgement. It never mistook small talk for a camera question, and never dropped the object filter on questions like "how many people came today". llama3.2 reaches the same final scores but only because the app corrects it along the way, and each correction costs an extra round trip; it stays the right choice when reply speed matters most.
+
+Two things to know about the qwen3 family:
+
+- They are "thinking" models that normally reason at length before answering. The app turns that off automatically on Ollama, which made replies about five times faster in testing with identical accuracy. The very first question after the app meets a new server still includes one slow, thinking reply.
+- The size tag matters: qwen3:8b passed everything, while qwen3:1.7b failed a third of the same checks. A sibling tag is a different model, not a smaller copy of the same one.
+
+Some models cannot drive the assistant at all: gemma2 has no tool support and qwen2.5-coder never uses one, so with either the assistant can only guess. The **Test model** button catches both cases before you commit to a model.
+
+The on-device Llama 3.2 3B passed 21 of 24 lookup checks in an equivalent test. Its misses were answering from memory instead of looking things up, which the app detects and corrects by insisting on a lookup, at the cost of a slower reply. A server-backed qwen3:8b answers noticeably better and faster than on-device; on-device remains the choice when the conversation must not leave your machine.
+
 ## Long conversations
 
 Every model can only hold so much of a conversation at once. Ninjii limits the amount of recent history and each tool result it sends to a model. When an on-device conversation approaches its known limit, Ninjii posts a note saying it has started a fresh one, and stops sending earlier messages to the model. The messages above that note stay on screen for you to read; the model simply no longer sees them. On Ollama the limit belongs to your server's configuration and the app cannot read it, so it cannot know when to clear automatically.
@@ -99,7 +122,7 @@ While the model is loading, the chat says so instead of showing the usual "Think
 
 ## Language
 
-Ask the assistant in English. This is not only about the model's own ability: the rules that decide when Ninjii must fetch live data before answering, and the reading of time phrases like "yesterday from 4pm to 10pm", both understand English only. Asked in another language they do not apply, so a question can be misunderstood, or answered without checking your cameras at all. This holds on every backend, including a server-backed model through Ollama. The app's own screens stay translated as usual; a note appears above the conversation when the app language is not English.
+Ask the assistant in English. This is not only about the model's own ability: the rules that decide exactly which lookup a question needs, and the reading of time phrases like "yesterday from 4pm to 10pm", both understand English only. In another language the app can still nudge the model once to check your cameras before answering, but it cannot verify the details the way it does in English, so a question is more likely to be misunderstood. This holds on every backend, including a server-backed model through Ollama. The app's own screens stay translated as usual; a note appears above the conversation when the app language is not English.
 
 ## Privacy
 
