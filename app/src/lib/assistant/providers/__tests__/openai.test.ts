@@ -142,6 +142,21 @@ describe('parseOpenAiTurn', () => {
     expect(turn).toEqual({ text: '__i18n:assistant.parse_error', toolCalls: [] });
   });
 
+  // Observed live on qwen3:8b: the server-side template failed to map the
+  // model's Hermes-style call onto native tool_calls, the XML arrived as
+  // content, and the lenient prose fallback printed it into the chat
+  // (refs #264).
+  it('parses a Hermes tool_call arriving as content into the call it names', () => {
+    const turn = parseOpenAiTurn({ content: '<tool_call>\n{"name": "count_events", "arguments": {"interval":"1 hour"}}\n</tool_call>' });
+    expect(turn.toolCalls[0]).toMatchObject({ name: 'count_events', input: { interval: '1 hour' } });
+  });
+
+  it('fails unparseable tool_call content instead of printing it as the answer', () => {
+    const turn = parseOpenAiTurn({ content: '<tool_call>{ not json at all' });
+    expect(turn.text).toBe('__i18n:assistant.parse_error');
+    expect(turn.raw).toContain('<tool_call>');
+  });
+
   // Measured against qwen3:30b-a3b through Ollama: a reasoning model that
   // spends the whole token budget thinking returns its chain of thought in a
   // separate `reasoning` field and leaves `content` empty. Rendered as-is that

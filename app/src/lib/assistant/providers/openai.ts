@@ -281,6 +281,11 @@ export function parseOpenAiTurn(message: OpenAiResponseMessage | undefined): Ass
   if (content.trim() === '') return { text: PARSE_ERROR_TEXT, toolCalls: [] };
   const portableTurn = parseWebLlmTurn(content);
   if (portableTurn.text !== PARSE_ERROR_TEXT) return portableTurn;
+  // Content that still carries a tool-call wrapper after the parser gave up
+  // is a malformed call, not prose: returning it as the answer printed raw
+  // <tool_call> XML into the chat (refs #264). Fail it so the self-repair
+  // retry runs instead.
+  if (/<tool_call>/i.test(content)) return { text: PARSE_ERROR_TEXT, toolCalls: [], raw: content };
   return { text: content, toolCalls: [] };
 }
 

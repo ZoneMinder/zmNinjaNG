@@ -438,6 +438,15 @@ function toTurn(parsed: unknown): AssistantTurn | undefined {
     if (nested?.toolCalls.length) return nested;
     return { text: obj.answer, toolCalls: [] };
   }
+  // Qwen's own tool-call template: `{"name": ..., "arguments": {...}}`,
+  // usually wrapped in <tool_call> tags. Observed live through Ollama when
+  // the server-side template failed to parse it into native tool_calls: the
+  // shape then arrived as CONTENT, and printing it as an answer showed the
+  // user raw XML (refs #264). It names a call as unambiguously as the
+  // contract shape does, so honor it.
+  if (typeof obj.name === 'string' && (obj.arguments === undefined || (obj.arguments !== null && typeof obj.arguments === 'object'))) {
+    return { toolCalls: [{ id: crypto.randomUUID(), name: obj.name, input: (obj.arguments ?? {}) as Record<string, unknown> }] };
+  }
   return undefined;
 }
 

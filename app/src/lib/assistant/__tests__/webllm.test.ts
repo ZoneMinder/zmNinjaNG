@@ -345,6 +345,20 @@ describe('parseWebLlmTurn', () => {
     expect(turn.toolCalls[0].input).toEqual({});
   });
 
+  // Qwen's own tool-call template, observed arriving as CONTENT through
+  // Ollama when the server-side template failed to parse it into native
+  // tool_calls; printed as an answer it showed the user raw XML (refs #264).
+  it('recovers a Hermes-style <tool_call>{"name","arguments"}</tool_call> as the call it names', () => {
+    const turn = parseWebLlmTurn('<tool_call>\n{"name": "count_events", "arguments": {"interval":"1 hour"}}\n</tool_call>');
+    expect(turn.toolCalls).toHaveLength(1);
+    expect(turn.toolCalls[0].name).toBe('count_events');
+    expect(turn.toolCalls[0].input).toEqual({ interval: '1 hour' });
+  });
+
+  it('recovers a bare {"name","arguments"} object, with missing arguments as empty input', () => {
+    expect(parseWebLlmTurn('{"name":"list_monitors"}').toolCalls[0]).toMatchObject({ name: 'list_monitors', input: {} });
+  });
+
   it('falls back gracefully when even the embedded-object recovery finds no valid JSON', () => {
     const turn = parseWebLlmTurn('Sure, here you go: { this is not valid json');
     expect(turn).toEqual({
