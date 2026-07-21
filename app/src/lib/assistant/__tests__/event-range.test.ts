@@ -1,19 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { resolveEventRange, asBareTimeOfDay, hasCalendarDate, singleDayOfRange, parseClockTime, resolveWhen } from '../event-range';
+import { parseClockTime, resolveWhen } from '../event-range';
 
 // 2026-07-16T14:30:00Z is 2026-07-16 10:30:00 in America/New_York (EDT,
 // UTC-4) and 2026-07-16 23:30:00 in Asia/Tokyo (UTC+9): same UTC instant,
 // different local wall-clock hour, both still within 2026-07-16.
 const NOW = new Date('2026-07-16T14:30:00Z');
 
-describe('resolveEventRange', () => {
-  it('resolves "today" to local midnight..now in the caller\'s timezone', () => {
-    const r = resolveEventRange('today', NOW, 'America/New_York');
-    expect(r).toEqual({ startDateTime: '2026-07-16 00:00:00', endDateTime: '2026-07-16 10:30:00' });
-  });
-
+describe('resolveWhen timezone handling', () => {
   it('resolves "today" using a different timezone\'s own wall-clock hour', () => {
-    const r = resolveEventRange('today', NOW, 'Asia/Tokyo');
+    const r = resolveWhen('today', NOW, 'Asia/Tokyo');
     expect(r).toEqual({ startDateTime: '2026-07-16 00:00:00', endDateTime: '2026-07-16 23:30:00' });
   });
 
@@ -21,74 +16,23 @@ describe('resolveEventRange', () => {
     // 2026-07-16T23:30:00Z is 2026-07-16 19:30 in New York but already
     // 2026-07-17 08:30 in Tokyo: the two zones must resolve different days.
     const crossing = new Date('2026-07-16T23:30:00Z');
-    expect(resolveEventRange('today', crossing, 'America/New_York')).toEqual({
+    expect(resolveWhen('today', crossing, 'America/New_York')).toEqual({
       startDateTime: '2026-07-16 00:00:00', endDateTime: '2026-07-16 19:30:00',
     });
-    expect(resolveEventRange('today', crossing, 'Asia/Tokyo')).toEqual({
+    expect(resolveWhen('today', crossing, 'Asia/Tokyo')).toEqual({
       startDateTime: '2026-07-17 00:00:00', endDateTime: '2026-07-17 08:30:00',
     });
   });
 
-  it('resolves "yesterday" to local midnight two days back..local midnight today', () => {
-    const r = resolveEventRange('yesterday', NOW, 'America/New_York');
-    expect(r).toEqual({ startDateTime: '2026-07-15 00:00:00', endDateTime: '2026-07-16 00:00:00' });
-  });
-
-  it('resolves "last_hour" as a rolling window, not a calendar boundary', () => {
-    const r = resolveEventRange('last_hour', NOW, 'America/New_York');
-    expect(r).toEqual({ startDateTime: '2026-07-16 09:30:00', endDateTime: '2026-07-16 10:30:00' });
-  });
-
-  it('resolves "last_24h" as now minus 24 hours', () => {
-    const r = resolveEventRange('last_24h', NOW, 'America/New_York');
-    expect(r).toEqual({ startDateTime: '2026-07-15 10:30:00', endDateTime: '2026-07-16 10:30:00' });
-  });
-
-  it('resolves "last_7d" as now minus 7 days', () => {
-    const r = resolveEventRange('last_7d', NOW, 'America/New_York');
-    expect(r).toEqual({ startDateTime: '2026-07-09 10:30:00', endDateTime: '2026-07-16 10:30:00' });
-  });
-
-  it('resolves "last_30d" as now minus 30 days', () => {
-    const r = resolveEventRange('last_30d', NOW, 'America/New_York');
-    expect(r).toEqual({ startDateTime: '2026-06-16 10:30:00', endDateTime: '2026-07-16 10:30:00' });
-  });
-});
-
-describe('time-of-day bounds', () => {
-  it('normalizes a bare time, with or without seconds', () => {
-    expect(asBareTimeOfDay('16:00')).toBe('16:00:00');
-    expect(asBareTimeOfDay('4:05:30')).toBe('04:05:30');
-    expect(asBareTimeOfDay(' 22:00 ')).toBe('22:00:00');
-  });
-
-  it('rejects anything that is not a plain wall-clock time', () => {
-    expect(asBareTimeOfDay('4pm')).toBeUndefined();
-    expect(asBareTimeOfDay('24:00')).toBeUndefined();
-    expect(asBareTimeOfDay('16:60')).toBeUndefined();
-    expect(asBareTimeOfDay('2026-07-18 16:00:00')).toBeUndefined();
-    expect(asBareTimeOfDay('yesterday')).toBeUndefined();
-  });
-
-  it('recognizes values that carry their own date', () => {
-    expect(hasCalendarDate('2026-07-18')).toBe(true);
-    expect(hasCalendarDate('2026-07-18 16:00:00')).toBe(true);
-    expect(hasCalendarDate('2026-07-18T16:00:00Z')).toBe(true);
-    expect(hasCalendarDate('16:00')).toBe(false);
-    expect(hasCalendarDate('last tuesday')).toBe(false);
-  });
-
-  // Only a calendar-aligned range names one day, so only those can anchor a
-  // bare time: "4pm" inside "last 7 days" is not a moment.
-  it('gives a day only for the calendar-day ranges', () => {
-    const yesterday = resolveEventRange('yesterday', NOW, 'America/New_York');
-    expect(singleDayOfRange('yesterday', yesterday)).toBe('2026-07-15');
-
-    const today = resolveEventRange('today', NOW, 'America/New_York');
-    expect(singleDayOfRange('today', today)).toBe('2026-07-16');
-
-    const rolling = resolveEventRange('last_7d', NOW, 'America/New_York');
-    expect(singleDayOfRange('last_7d', rolling)).toBeUndefined();
+  // The keywords the retired `range` enum used, still understood in case a
+  // model repeats one from a persisted thread (see resolveWhen's LEGACY map).
+  it('still resolves the legacy enum keywords', () => {
+    expect(resolveWhen('last_24h', NOW, 'America/New_York')).toEqual({
+      startDateTime: '2026-07-15 10:30:00', endDateTime: '2026-07-16 10:30:00',
+    });
+    expect(resolveWhen('last_7d', NOW, 'America/New_York')).toEqual({
+      startDateTime: '2026-07-09 10:30:00', endDateTime: '2026-07-16 10:30:00',
+    });
   });
 });
 
