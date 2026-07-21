@@ -36,7 +36,7 @@ import {
 import { sharedMockProvider } from '../../lib/assistant/providers/mock';
 import { buildSystemPrompt } from '../../lib/assistant/system-prompt';
 import { getObjectLabels } from '../../lib/assistant/object-labels';
-import { suggestOllamaBaseUrl } from '../../lib/assistant/providers/openai';
+import { suggestOllamaBaseUrl, warmOllamaModel } from '../../lib/assistant/providers/openai';
 import { classifyRequest, buildNoToolPrompt, type RequestKind } from '../../lib/assistant/triage';
 import type { AssistantMessage, AssistantTurn, ProviderConfig, ToolActivity, ToolContext, TraceEntry } from '../../lib/assistant/types';
 import { log, LogLevel } from '../../lib/logger';
@@ -299,6 +299,9 @@ export function AskPanel() {
   const [input, setInput] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [notConfigured, setNotConfigured] = useState(false);
+  /** The model a warmup is loading right now, for the status line below the
+   *  thread; null when no warmup is in flight (refs #261). */
+  const [warmingModel, setWarmingModel] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const prevThreadLengthRef = useRef(thread.length);
@@ -318,6 +321,35 @@ export function AskPanel() {
       abortControllerRef.current?.abort();
     };
   }, []);
+
+  // Warm the Ollama model as soon as the panel opens, instead of letting the
+  // FIRST question pay for it: measured live, a cold first question cost ~36s
+  // (VRAM load plus one full thinking chain, since reasoning is only disabled
+  // once the server is confirmed) while every later one took ~2s (refs #261).
+  // warmOllamaModel de-dupes per session, so reopening the panel is free, and
+  // it never throws; a server that is down surfaces on the real turn instead.
+  // Not in test mode: the mock backend has no server to warm, and a stray
+  // request would fail noisily in e2e logs.
+  useEffect(() => {
+    if (settings.assistantBackend !== 'ollama' || !profileId || isAssistantTestMode()) return;
+    const model = settings.assistantOllamaModel;
+    if (!model) return;
+    let cancelled = false;
+    void (async () => {
+      const apiKey = await getSecureValue(`${ASSISTANT.apiKeyStoragePrefix}${profileId}`);
+      const baseUrl =
+        settings.assistantOllamaBaseUrl ||
+        suggestOllamaBaseUrl(currentProfile?.apiUrl) ||
+        ASSISTANT.defaultOllamaBaseUrl;
+      if (cancelled) return;
+      setWarmingModel(model);
+      await warmOllamaModel({ baseUrl, model, apiKey: apiKey ?? undefined });
+      if (!cancelled) setWarmingModel(null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [settings.assistantBackend, settings.assistantOllamaModel, settings.assistantOllamaBaseUrl, profileId, currentProfile?.apiUrl]);
 
   // The Clear button now lives in AssistantWidget.tsx, which resets the
   // shared store (`reset(profileId)` + `clearActivities()`). This component
@@ -651,6 +683,16 @@ export function AskPanel() {
           <p className="flex items-center gap-1 text-xs text-muted-foreground" data-testid="assistant-status">
             <Loader2 className="h-3 w-3 animate-spin" />
             {t('assistant.thinking')}
+          </p>
+        )}
+
+        {/* The warmup started when the panel opened (refs #261). Shown even
+            while a turn runs on a cold server: the "Thinking" line above would
+            otherwise claim progress while the real wait is the model load. */}
+        {warmingModel && (
+          <p className="flex items-center gap-1 text-xs text-muted-foreground" data-testid="assistant-model-loading">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            {t('assistant.loading_model', { model: warmingModel })}
           </p>
         )}
 

@@ -1291,6 +1291,7 @@
     "send": "Envoyer",
     "abort": "Arrêter",
     "thinking": "Réflexion...",
+    "loading_model": "Chargement de {{model}} sur le serveur...",
     "activity": {
       "running": "Exécution de {{tool}}...",
       "done": "{{tool}} terminé",

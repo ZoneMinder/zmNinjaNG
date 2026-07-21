@@ -1291,6 +1291,7 @@
     "send": "发送",
     "abort": "停止",
     "thinking": "思考中...",
+    "loading_model": "正在服务器上加载 {{model}}...",
     "activity": {
       "running": "正在运行 {{tool}}...",
       "done": "{{tool}} 已完成",

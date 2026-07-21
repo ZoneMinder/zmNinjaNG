@@ -9,7 +9,7 @@
  * mocked following the pattern in components/__tests__/CommandPalette.test.tsx
  * to avoid transitively loading stores/profile via log-sanitizer -> client.
  */
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { AskPanel } from '../AskPanel';
@@ -30,11 +30,26 @@ vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({ getQueryData: () => undefined }),
 }));
 const mockBackend = { current: 'on-device' };
+const mockOllamaModel = { current: '' };
 vi.mock('../../../hooks/useCurrentProfile', () => ({
   useCurrentProfile: () => ({
     currentProfile: { id: 'p1', timezone: 'UTC' },
-    settings: { assistantModelId: 'test-model', get assistantBackend() { return mockBackend.current; } },
+    settings: {
+      assistantModelId: 'test-model',
+      get assistantBackend() { return mockBackend.current; },
+      get assistantOllamaModel() { return mockOllamaModel.current; },
+      assistantOllamaBaseUrl: 'http://zm:11434/v1',
+    },
   }),
+}));
+// The warmup effect (refs #261) resolves the stored API key and fires
+// warmOllamaModel on mount for the Ollama backend; both are stubbed so the
+// test controls when the warmup settles and no request leaves jsdom.
+vi.mock('../../../lib/security/secureStorage', () => ({ getSecureValue: vi.fn().mockResolvedValue(null) }));
+const warmResolvers: Array<(v: boolean) => void> = [];
+vi.mock('../../../lib/assistant/providers/openai', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  warmOllamaModel: vi.fn(() => new Promise<boolean>((resolve) => warmResolvers.push(resolve))),
 }));
 vi.mock('../../../hooks/useFreshAccessToken', () => ({
   useFreshAccessToken: () => ({ token: null, isFresh: false }),
@@ -57,6 +72,9 @@ vi.mock('../../events/EventThumbnail', () => ({
 describe('AskPanel', () => {
   beforeEach(() => {
     useAssistantStore.setState({ threads: {}, running: false, activities: [] });
+    mockBackend.current = 'on-device';
+    mockOllamaModel.current = '';
+    warmResolvers.length = 0;
   });
 
   it('renders Ninjii\'s self-introduction when the thread is empty (refs #246)', () => {
@@ -80,6 +98,26 @@ describe('AskPanel', () => {
     expect(input.value).toBe('assistant.intro_example_1');
     // No turn was sent: the thread is still empty and the intro still shows.
     expect(screen.getByTestId('assistant-intro')).toBeInTheDocument();
+  });
+
+  // The warmup starts when the panel opens with the Ollama backend, and the
+  // chat says so while it runs (refs #261): without the line, a cold server's
+  // ~36s load looked like a hang or hid behind a misleading "Thinking".
+  it('shows the model-loading line while the Ollama warmup runs, then hides it', async () => {
+    mockBackend.current = 'ollama';
+    mockOllamaModel.current = 'qwen3:8b';
+
+    render(<AskPanel />);
+
+    expect(await screen.findByTestId('assistant-model-loading')).toHaveTextContent('assistant.loading_model');
+    warmResolvers.pop()?.(true);
+    await waitFor(() => expect(screen.queryByTestId('assistant-model-loading')).not.toBeInTheDocument());
+  });
+
+  it('starts no warmup on the on-device backend', () => {
+    render(<AskPanel />);
+    expect(screen.queryByTestId('assistant-model-loading')).not.toBeInTheDocument();
+    expect(warmResolvers).toHaveLength(0);
   });
 
   it('does not render the self-introduction once the thread has messages', () => {
