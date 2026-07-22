@@ -2153,8 +2153,46 @@ property of the registry (``TOOLS`` holds no mutating tool and
    no streaming. An unparseable reply retries through the same self-repair
    loop (``SELF_REPAIR_PROMPT``, ``ASSISTANT.maxParseAttempts``) the other two
    providers use, because ``parseWebLlmTurn`` and the retry shape are shared
-   code, not a native-specific copy.
+   code, not a native-specific copy. The model itself and the engine it runs
+   on are both pinned, not chosen at runtime: ``ASSISTANT.nativeLlmModel``
+   (``lib/zmninja-ng-constants.ts``) names Qwen3-4B-Instruct-2507 at a
+   Q4_K_M GGUF quantization from unsloth's HuggingFace repo, and
+   ``app/ios/App/LlamaKit/Package.swift``'s ``binaryTarget`` fetches
+   llama.cpp release ``b10087``'s XCFramework by URL and checksum.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/providers/native-llm.ts>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **A stable code, not a screen-scraped message, decides how a native
+   failure surfaces.** ``LlamaPlugin.chat`` (Swift) rejects with a fixed
+   ``code`` (``MODEL_NOT_DOWNLOADED``, ``CHAT_BUSY``, or ``ENGINE_FAILED``
+   for anything else), which Capacitor copies onto the JS exception
+   untouched. ``NativeLlmProvider.mapPluginError`` (``providers/native-llm.ts``)
+   switches on that code, never on Swift's localized message: a missing
+   model maps to the same ``NATIVE_LLM_NOT_AVAILABLE_MESSAGE`` the
+   off-platform case throws, so ``AskPanel``'s existing "not configured, go
+   to Settings" prompt covers it with no separate UI path, while
+   ``CHAT_BUSY`` and ``ENGINE_FAILED`` (or no code at all) become
+   ``__i18n:assistant.native_busy`` and ``__i18n:assistant.native_engine_failed``,
+   sentinel strings ``AskPanel`` already renders through ``t()`` (see the
+   render-the-reply step below) rather than as literal text. The Swift-side
+   reason is logged, never shown, since it is an untranslated
+   ``localizedDescription``.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/providers/native-llm.ts#L92>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **A download failure carries its native reason into the settings toast.**
+   Unlike a chat failure, a download failure is not coded: Swift's
+   ``URLSessionDownloadDelegate`` rejects with ``DOWNLOAD_FAILED`` and
+   ``URLSession``'s own OS-localized error text. ``downloadNativeModel``
+   (``lib/assistant/native-model-download.ts``) fails the
+   ``backgroundTasks`` task with that error, and ``AssistantNativeSection``
+   reads ``downloadTask.error.message`` straight into
+   ``settings.assistant.download_failed_reason``, falling back to a
+   reason-less toast only when the task carries no error. A failed
+   re-download never touches a prior model file: the native side only
+   writes the final destination on success, so an interrupted re-download
+   leaves the previously downloaded model in place.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/settings/AssistantNativeSection.tsx#L129>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **The remote provider uses native tools and stops teaching the fallback.**

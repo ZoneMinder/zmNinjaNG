@@ -1157,7 +1157,14 @@ the native provider (iOS only, gated by ``useNativeLlmSupported`` on a
 question") runs a llama.cpp model in-process through the Capacitor
 ``NativeLlm`` bridge instead of a browser engine; on either on-device path no
 message or tool result is ever sent to a server other than the ZoneMinder
-server the tool call itself targets. All three network-facing adapters
+server the tool call itself targets. The native model is fixed, not
+user-chosen: ``ASSISTANT.nativeLlmModel`` (``lib/zmninja-ng-constants.ts``) is
+the source of truth, naming Qwen3-4B-Instruct-2507 at a Q4_K_M GGUF
+quantization pulled from unsloth's HuggingFace repo rather than Qwen's own,
+since Qwen publishes no official GGUF conversion of this model. The
+llama.cpp build it runs on is pinned rather than floating: ``binaryTarget``
+in ``app/ios/App/LlamaKit/Package.swift`` fetches release ``b10087``'s
+prebuilt XCFramework by URL and checksum. All three adapters
 constrain generation where their backend can enforce it: ``WebLlmProvider``
 compiles its two-shape JSON envelope (``ENVELOPE_SCHEMA``) through the
 engine's grammar via ``response_format``, falling back to prompt-plus-parser
