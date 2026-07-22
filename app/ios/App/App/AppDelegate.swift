@@ -61,6 +61,7 @@ class ViewController: CAPBridgeViewController {
     override func capacitorDidLoad() {
         bridge?.registerPluginInstance(SSLTrustPlugin())
         bridge?.registerPluginInstance(SafeAreaPlugin())
+        bridge?.registerPluginInstance(LlamaPlugin())
     }
 
     override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {

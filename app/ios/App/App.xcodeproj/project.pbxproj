@@ -15,6 +15,9 @@
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		A88DB358838FDF0A668FC00E /* CapApp-SPM in Frameworks */ = {isa = PBXBuildFile; productRef = C711DAF4018D41AEA77227D3 /* CapApp-SPM */; };
+		DC11AA0200000000000F0005 /* LlamaKit in Frameworks */ = {isa = PBXBuildFile; productRef = DC11AA0200000000000F0011 /* LlamaKit */; };
+		DC11AA0200000000000F0001 /* LlamaPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC11AA0200000000000F0002 /* LlamaPlugin.swift */; };
+		DC11AA0200000000000F0003 /* LlamaEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC11AA0200000000000F0004 /* LlamaEngine.swift */; };
 		DC10E70100000000000F0001 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC10E70100000000000F0003 /* NotificationService.swift */; };
 		DC10E70100000000000F0002 /* ImageNotification.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = DC10E70100000000000F0005 /* ImageNotification.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		DC31AE442F5DAA5700F5EABD /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = DC31AE432F5DAA5700F5EABD /* PrivacyInfo.xcprivacy */; };
@@ -66,6 +69,8 @@
 		DC3ECBB92EFC1BDC00F7400B /* AppRelease.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AppRelease.entitlements; sourceTree = "<group>"; };
 		DC4FCM0130000000000F0002 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		DC55AA0100000000000F0002 /* SSLTrustPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSLTrustPlugin.swift; sourceTree = "<group>"; };
+		DC11AA0200000000000F0002 /* LlamaPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LlamaPlugin.swift; sourceTree = "<group>"; };
+		DC11AA0200000000000F0004 /* LlamaEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LlamaEngine.swift; sourceTree = "<group>"; };
 		DC55AA0100000000000F0004 /* SafeAreaPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafeAreaPlugin.swift; sourceTree = "<group>"; };
 		DC55AA0100000000000F0006 /* X509CertInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = X509CertInfo.swift; sourceTree = "<group>"; };
 		DCEC04202EE7528400FEFD4D /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
@@ -78,6 +83,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A88DB358838FDF0A668FC00E /* CapApp-SPM in Frameworks */,
+				DC11AA0200000000000F0005 /* LlamaKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -119,6 +125,8 @@
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
 				DC55AA0100000000000F0002 /* SSLTrustPlugin.swift */,
+				DC11AA0200000000000F0002 /* LlamaPlugin.swift */,
+				DC11AA0200000000000F0004 /* LlamaEngine.swift */,
 				DC55AA0100000000000F0004 /* SafeAreaPlugin.swift */,
 				DC55AA0100000000000F0006 /* X509CertInfo.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
@@ -161,6 +169,7 @@
 			name = App;
 			packageProductDependencies = (
 				C711DAF4018D41AEA77227D3 /* CapApp-SPM */,
+				DC11AA0200000000000F0011 /* LlamaKit */,
 			);
 			productName = App;
 			productReference = 504EC3041FED79650016851F /* App.app */;
@@ -214,6 +223,7 @@
 			mainGroup = 504EC2FB1FED79650016851F;
 			packageReferences = (
 				0FD04928F6DE90341B42FEC5 /* XCLocalSwiftPackageReference "CapApp-SPM" */,
+				DC11AA0200000000000F0010 /* XCLocalSwiftPackageReference "LlamaKit" */,
 			);
 			productRefGroup = 504EC3051FED79650016851F /* Products */;
 			projectDirPath = "";
@@ -258,6 +268,8 @@
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				DC55AA0100000000000F0001 /* SSLTrustPlugin.swift in Sources */,
+				DC11AA0200000000000F0001 /* LlamaPlugin.swift in Sources */,
+				DC11AA0200000000000F0003 /* LlamaEngine.swift in Sources */,
 				DC55AA0100000000000F0003 /* SafeAreaPlugin.swift in Sources */,
 				DC55AA0100000000000F0005 /* X509CertInfo.swift in Sources */,
 			);
@@ -535,6 +547,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = "CapApp-SPM";
 		};
+		DC11AA0200000000000F0010 /* XCLocalSwiftPackageReference "LlamaKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = LlamaKit;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -542,6 +558,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 0FD04928F6DE90341B42FEC5 /* XCLocalSwiftPackageReference "CapApp-SPM" */;
 			productName = "CapApp-SPM";
+		};
+		DC11AA0200000000000F0011 /* LlamaKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DC11AA0200000000000F0010 /* XCLocalSwiftPackageReference "LlamaKit" */;
+			productName = LlamaKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
