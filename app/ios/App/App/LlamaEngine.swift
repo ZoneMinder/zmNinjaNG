@@ -156,6 +156,11 @@ final class LlamaEngine {
         // token budget; triage is tiny, so chat keeps effectively its full context.
         cparams.n_seq_max = 2
         cparams.kv_unified = true
+        // Quantized KV (q8_0) + flash attention (needed for quantized V; Metal FA works). fp16 KV
+        // @ 8192 ~= 1.2GB; q8_0 @ 8192 (iOS) ~= 600MB, fitting 6GB iPhones alongside 2.5GB weights.
+        cparams.type_k = GGML_TYPE_Q8_0
+        cparams.type_v = GGML_TYPE_Q8_0
+        cparams.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_ENABLED
         guard let c = llama_init_from_model(model, cparams) else { throw LlamaEngineError.contextInitFailed }
         ctx = c
         ctxSize = nCtx

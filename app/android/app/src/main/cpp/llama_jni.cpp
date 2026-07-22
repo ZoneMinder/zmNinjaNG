@@ -69,6 +69,12 @@ llama_context *ensure_context_locked(llama_model *model, int n_ctx_req, int n_th
     // keeps effectively its full context. Serial execution makes the shared-buffer cost nil.
     cp.n_seq_max = 2;
     cp.kv_unified = true;
+    // Quantize the KV cache (q8_0) + flash attention (required for quantized V; CPU FA exists at
+    // b10087). fp16 KV @ 8192 ~= 1.2GB; q8_0 @ 4096 (the Android contextSize cap) ~= 300MB, so
+    // weights (2.5GB) + KV stay under the 8GB-phone budget that was OOM-killing the app.
+    cp.type_k = GGML_TYPE_Q8_0;
+    cp.type_v = GGML_TYPE_Q8_0;
+    cp.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_ENABLED;
     g_ctx = llama_init_from_model(model, cp);
     if (g_ctx) g_ctx_size = n_ctx_req;
     return g_ctx;

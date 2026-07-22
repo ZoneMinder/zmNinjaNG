@@ -35,8 +35,10 @@ export class NativeLlmProvider implements AssistantProvider {
   private readonly modelId = ASSISTANT.nativeLlmModel.id;
   private readonly temperature: number;
   /** The window this model is loaded with; known exactly, same as WebLLM's
-   *  per-model `contextWindowSize` (see `WebLlmProvider.contextWindow`). */
-  readonly contextWindow = ASSISTANT.nativeLlmModel.contextSize;
+   *  per-model `contextWindowSize` (see `WebLlmProvider.contextWindow`). Android uses a
+   *  smaller window so the quantized KV cache fits 8GB phones; this getter reports the SAME
+   *  value `chat`/`complete` send as `contextSize`, so the JS auto-clear math stays honest. */
+  readonly contextWindow = Platform.isAndroid ? ASSISTANT.nativeLlmModel.contextSizeAndroid : ASSISTANT.nativeLlmModel.contextSize;
 
   constructor(temperature?: number) {
     this.temperature = temperature ?? ASSISTANT.assistantTemperature;
