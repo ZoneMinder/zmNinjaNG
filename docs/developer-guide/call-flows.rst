@@ -2126,10 +2126,12 @@ property of the registry (``TOOLS`` holds no mutating tool and
    the web/Electron bundle for a backend those platforms can never run). On
    iOS, ``LlamaPlugin.isSupported`` answers ``false`` below a 5.5GB
    physical-memory floor (``LlamaPlugin.swift``). On Android,
-   ``NativeLlmPlugin.isSupported`` (``NativeLlmPlugin.java``) checks the same
-   5.5GB floor against ``ActivityManager.MemoryInfo.totalMem`` and also
-   refuses a device where ``ActivityManager.isLowRamDevice()`` is true, since
-   that flag catches devices a raw memory number alone misses. A device that
+   ``NativeLlmPlugin.isSupported`` (``NativeLlmPlugin.java``) requires an 11GB
+   floor against ``ActivityManager.MemoryInfo.totalMem`` (a 12GB-class phone;
+   ``totalMem`` underreports nominal RAM by ~1GB, and an 8GB Pixel 8 was
+   OOM-killed mid-reply even with a quantized KV cache) and also refuses a
+   device where ``ActivityManager.isLowRamDevice()`` is true, since that flag
+   catches devices a raw memory number alone misses. A device that
    fails either platform's check never sees **On-device (native)** in
    ``AssistantSection``'s backend ``<select>`` at all, not a disabled option
    the user has to interpret. Once ``settings.assistantBackend`` is

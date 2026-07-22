@@ -1153,7 +1153,8 @@ when the profile's backend is Ollama, ``NativeLlmProvider`` when it is
 ``'native'`` (refs #270), and ``WebLlmProvider`` otherwise. The on-device
 WebLLM provider runs on ``@mlc-ai/web-llm`` in the browser via WebGPU, and
 the native provider (iPhone, iPad, and Android, gated by
-``useNativeLlmSupported`` on a 5.5GB physical-memory floor; see
+``useNativeLlmSupported`` on a physical-memory floor: 5.5GB on iOS, 11GB on
+Android for a 12GB-class phone; see
 :doc:`call-flows`'s "Asking the assistant a question") runs a llama.cpp
 model in-process through the Capacitor ``NativeLlm`` bridge instead of a
 browser engine; on either on-device path no message or tool result is ever
