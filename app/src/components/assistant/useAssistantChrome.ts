@@ -49,6 +49,11 @@ export function useAssistantChrome(): AssistantChrome {
   const close = useAssistantPanelStore((s) => s.close);
 
   const backendLabel = useMemo(() => {
+    // Fixed single model on the native backend, so no catalog lookup; its
+    // label already says "(native)", making the on-device mode suffix enough.
+    if (settings.assistantBackend === 'native') {
+      return `${ASSISTANT.nativeLlmModel.label} · ${t('settings.assistant.backend_on_device')}`;
+    }
     const mode =
       settings.assistantBackend === 'ollama'
         ? t('settings.assistant.backend_ollama')
