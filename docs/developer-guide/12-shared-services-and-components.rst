@@ -1149,15 +1149,24 @@ tool actually made.
 ``providers/provider.ts``'s ``getAssistantProvider`` decides which model
 answers: the deterministic ``sharedMockProvider`` (``providers/mock.ts``) in
 non-production e2e mode behind ``isAssistantTestMode()``, ``OpenAiProvider``
-when the profile's backend is Ollama, and ``WebLlmProvider`` otherwise. The
-on-device provider runs on ``@mlc-ai/web-llm`` in the browser via WebGPU, so
-on that path no message or tool result is ever sent to a server other than
-the ZoneMinder server the tool call itself targets. Both adapters constrain
-generation where their backend can enforce it: ``WebLlmProvider`` compiles
-its two-shape JSON envelope (``ENVELOPE_SCHEMA``) through the engine's
-grammar via ``response_format``, falling back to prompt-plus-parser for the
-session if the engine rejects it, and ``OpenAiProvider`` maps ``complete``'s
-``jsonSchema`` to ``response_format: json_schema``. Both also retry an
+when the profile's backend is Ollama, ``NativeLlmProvider`` when it is
+``'native'`` (refs #270), and ``WebLlmProvider`` otherwise. The on-device
+WebLLM provider runs on ``@mlc-ai/web-llm`` in the browser via WebGPU, and
+the native provider (iOS only, gated by ``useNativeLlmSupported`` on a
+5.5GB physical-memory floor; see :doc:`call-flows`'s "Asking the assistant a
+question") runs a llama.cpp model in-process through the Capacitor
+``NativeLlm`` bridge instead of a browser engine; on either on-device path no
+message or tool result is ever sent to a server other than the ZoneMinder
+server the tool call itself targets. All three network-facing adapters
+constrain generation where their backend can enforce it: ``WebLlmProvider``
+compiles its two-shape JSON envelope (``ENVELOPE_SCHEMA``) through the
+engine's grammar via ``response_format``, falling back to prompt-plus-parser
+for the session if the engine rejects it, and ``OpenAiProvider`` maps
+``complete``'s ``jsonSchema`` to ``response_format: json_schema``.
+``NativeLlmProvider`` has no grammar-constrained decoding to reach for, so it
+always runs the same prompt-plus-parser path WebLLM falls back to, reusing
+``buildWebLlmMessages``/``parseWebLlmTurn`` from ``providers/webllm.ts``
+directly rather than a native-specific copy. All three also retry an
 unparseable reply up to ``ASSISTANT.maxParseAttempts`` as a self-repair: the
 failed reply plus a correction naming the fault are appended, and the
 temperature is raised only on the final attempt.

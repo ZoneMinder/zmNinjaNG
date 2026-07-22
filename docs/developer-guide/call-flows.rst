@@ -2011,8 +2011,9 @@ Flow 19: Asking the assistant a question
 -----------------------------------------
 
 Pressing ``?`` (or picking the Ask command in the palette) opens a floating
-chat window backed either by an on-device WebLLM model or an OpenAI-compatible
-server such as Ollama. The question is classified before any tool is offered,
+chat window backed by one of three providers: an on-device WebLLM model, the
+on-device native llama.cpp bridge (iPhone/iPad only, refs #270), or an
+OpenAI-compatible server such as Ollama. The question is classified before any tool is offered,
 then a tool-use loop decides which ZoneMinder API calls answer it. The
 counterintuitive part is that there is no confirmation gate anywhere in this
 flow: every tool the loop can reach is read-only, so "is this call safe" is a
@@ -2115,6 +2116,45 @@ property of the registry (``TOOLS`` holds no mutating tool and
    ``engine.interruptGenerate()``, the only way to actually stop an in-flight
    on-device generation.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/providers/webllm.ts>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **The native backend's settings gate is a device probe, not a toggle.**
+   ``useNativeLlmSupported`` (``hooks/useNativeLlmSupported.ts``) probes the
+   Capacitor ``NativeLlm`` plugin's ``isSupported()`` once on mount, imported
+   only behind ``Platform.isNative`` (rule 13, since the plugin package is
+   iOS-only and would otherwise ship into the web/Electron bundle for a
+   backend those platforms can never run). On iOS, ``LlamaPlugin.isSupported``
+   answers ``false`` below a 5.5GB physical-memory floor
+   (``LlamaPlugin.swift``), so a device that fails the check never sees
+   **On-device (native)** in ``AssistantSection``'s backend ``<select>`` at
+   all, not a disabled option the user has to interpret. Once
+   ``settings.assistantBackend`` is ``'native'``, ``getAssistantProvider``
+   (``providers/provider.ts``) returns a ``NativeLlmProvider`` in place of
+   ``WebLlmProvider`` or ``OpenAiProvider``, the same one-field switch the
+   other two backends already go through.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useNativeLlmSupported.ts>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **The native provider reuses WebLLM's prompt and parser.** Only the
+   transport is native: ``NativeLlmProvider.chat`` (``providers/native-llm.ts``)
+   builds the turn's messages with the same ``buildWebLlmMessages`` WebLLM
+   uses (tool catalog, few-shot, ``OUTPUT_CONTRACT``, ``/no_think`` for the
+   reasoning family) and parses the reply with the same ``parseWebLlmTurn``,
+   imported straight from ``providers/webllm.ts`` rather than reimplemented;
+   the module's own header states that only the transport differs from
+   WebLLM. Each call crosses the Capacitor bridge as one ``NativeLlm.chat()``
+   invocation carrying the JSON message array, temperature, and context size.
+   Swift's ``LlamaPlugin`` hands the request to ``LlamaEngine``, a llama.cpp
+   context loaded with ``n_gpu_layers`` set high enough to run on Metal on a
+   real device (0 in the simulator, where Metal is unavailable), which
+   renders the messages through the model's own built-in chat template
+   (``llama_model_chat_template``) rather than a template the app supplies,
+   and returns one ``{content, promptTokens, completionTokens}`` reply with
+   no streaming. An unparseable reply retries through the same self-repair
+   loop (``SELF_REPAIR_PROMPT``, ``ASSISTANT.maxParseAttempts``) the other two
+   providers use, because ``parseWebLlmTurn`` and the retry shape are shared
+   code, not a native-specific copy.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/providers/native-llm.ts>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **The remote provider uses native tools and stops teaching the fallback.**
