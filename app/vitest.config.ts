@@ -17,6 +17,7 @@ export default defineConfig({
       '**/node_modules/**',
       '**/dist/**',
       'tests/**', // Exclude Playwright E2E tests (root tests/, not src/tests/)
+      'android/**', // Exclude the native Android tree (llama.cpp FetchContent source under .cxx/_deps)
       '.features-gen/**', // Exclude generated playwright-bdd specs
       '**/*.spec.ts', // Exclude Playwright test files
     ],

@@ -7,13 +7,6 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include(FetchContent)
-# Fetch llama.cpp OUTSIDE the repo tree: the default _deps dir lives under the module's
-# .cxx/ build output, and the vitest root is app/, so a cloned source tree there breaks
-# `npm test` (llama.cpp's own *.test.* / tsconfig files get globbed). A home cache also
-# survives `clean` and avoids re-cloning.
-if(NOT DEFINED FETCHCONTENT_BASE_DIR OR FETCHCONTENT_BASE_DIR MATCHES "\\.cxx")
-    set(FETCHCONTENT_BASE_DIR "$ENV{HOME}/.cache/zmninja-ng/llama-cpp" CACHE PATH "" FORCE)
-endif()
 FetchContent_Declare(
     llama_cpp
     GIT_REPOSITORY https://github.com/ggml-org/llama.cpp.git
