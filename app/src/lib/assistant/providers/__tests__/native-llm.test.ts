@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { NativeLlmProvider } from '../native-llm';
+import { NativeLlmProvider, NATIVE_LLM_NOT_AVAILABLE_MESSAGE } from '../native-llm';
 import type { ToolDefinition } from '../../types';
 import { ASSISTANT } from '../../../zmninja-ng-constants';
 
@@ -113,6 +113,53 @@ describe('NativeLlmProvider.chat', () => {
     expect(turn.exchange!.received).toContain('ok');
   });
 
+  // Coded plugin rejections (LlamaPlugin.swift's `call.reject(message, code)`,
+  // refs #270): the provider translates `.code`, not the raw English message,
+  // into what AskPanel renders.
+  it('maps a MODEL_NOT_DOWNLOADED rejection to the shared "not available" message', async () => {
+    chatMock.mockRejectedValue(Object.assign(new Error('Model is not downloaded'), { code: 'MODEL_NOT_DOWNLOADED' }));
+
+    const provider = new NativeLlmProvider();
+    await expect(
+      provider.chat([{ role: 'user', text: 'hi' }], [], 'sys', new AbortController().signal),
+    ).rejects.toThrow(NATIVE_LLM_NOT_AVAILABLE_MESSAGE);
+  });
+
+  it('maps a CHAT_BUSY rejection to the localized busy sentinel', async () => {
+    chatMock.mockRejectedValue(Object.assign(new Error('A chat is already running'), { code: 'CHAT_BUSY' }));
+
+    const provider = new NativeLlmProvider();
+    await expect(
+      provider.chat([{ role: 'user', text: 'hi' }], [], 'sys', new AbortController().signal),
+    ).rejects.toThrow('__i18n:assistant.native_busy');
+  });
+
+  it('maps an ENGINE_FAILED (or any other/missing) rejection to the generic localized sentinel, logging the raw reason', async () => {
+    const { log, LogLevel: Level } = await import('../../../logger');
+    const spy = vi.spyOn(log, 'assistant');
+    chatMock.mockRejectedValue(Object.assign(new Error('Failed to load model'), { code: 'ENGINE_FAILED' }));
+
+    const provider = new NativeLlmProvider();
+    await expect(
+      provider.chat([{ role: 'user', text: 'hi' }], [], 'sys', new AbortController().signal),
+    ).rejects.toThrow('__i18n:assistant.native_engine_failed');
+
+    expect(spy).toHaveBeenCalledWith(
+      'Native LLM chat failed',
+      Level.ERROR,
+      expect.objectContaining({ code: 'ENGINE_FAILED', message: 'Failed to load model' }),
+    );
+  });
+
+  it('falls back to the generic localized sentinel for a rejection with no code at all', async () => {
+    chatMock.mockRejectedValue(new Error('network hiccup'));
+
+    const provider = new NativeLlmProvider();
+    await expect(
+      provider.chat([{ role: 'user', text: 'hi' }], [], 'sys', new AbortController().signal),
+    ).rejects.toThrow('__i18n:assistant.native_engine_failed');
+  });
+
   it('builds messages via buildWebLlmMessages: few-shot present, /no_think appended for the qwen3 model id', async () => {
     chatMock.mockResolvedValue({ content: '{"answer": "ok"}', promptTokens: 10, completionTokens: 5 });
 
@@ -129,12 +176,12 @@ describe('NativeLlmProvider.chat', () => {
 });
 
 describe('NativeLlmProvider platform gate', () => {
-  it('throws when not running on a native platform', async () => {
+  it('throws the shared "not available" message when not running on a native platform', async () => {
     vi.resetModules();
     vi.doMock('../../../platform', () => ({ Platform: { isNative: false } }));
-    const { NativeLlmProvider: GatedProvider } = await import('../native-llm');
+    const { NativeLlmProvider: GatedProvider, NATIVE_LLM_NOT_AVAILABLE_MESSAGE: gatedMessage } = await import('../native-llm');
     const provider = new GatedProvider();
-    await expect(provider.chat([], [], 'sys', new AbortController().signal)).rejects.toThrow();
+    await expect(provider.chat([], [], 'sys', new AbortController().signal)).rejects.toThrow(gatedMessage);
     vi.doUnmock('../../../platform');
   });
 });

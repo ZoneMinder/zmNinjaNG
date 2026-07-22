@@ -131,7 +131,13 @@ export function AssistantNativeSection() {
       setDownloadStatus('not-downloaded');
       toast({
         title: t('common.error'),
-        description: t('settings.assistant.download_failed'),
+        // The reason is the native side's rejection message (LlamaPlugin.swift's
+        // `call.reject`), already OS-localized for URLSession failures - shown
+        // as-is, same as the background-tasks drawer already does for a failed
+        // task (refs #270).
+        description: downloadTask.error?.message
+          ? t('settings.assistant.download_failed_reason', { reason: downloadTask.error.message })
+          : t('settings.assistant.download_failed'),
         variant: 'destructive',
       });
     }

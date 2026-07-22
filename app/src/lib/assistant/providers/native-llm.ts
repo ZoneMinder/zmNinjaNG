@@ -15,10 +15,17 @@ import { log, LogLevel } from '../../logger';
 import { Platform } from '../../platform';
 import { buildWebLlmMessages, parseWebLlmTurn, SELF_REPAIR_PROMPT, PARSE_ERROR_TEXT } from './webllm';
 import { captureExchange } from '../exchange';
+import { MODEL_NOT_AVAILABLE_MESSAGE } from '../model-download';
 
 /** Thrown when this provider is constructed off a native platform (web,
- *  Electron): the llama.cpp bridge only exists in the iOS/Android build. */
-export const NATIVE_LLM_NOT_AVAILABLE_MESSAGE = 'On-device native model backend is only available on iOS or Android.';
+ *  Electron): the llama.cpp bridge only exists in the iOS/Android build.
+ *  Deliberately the SAME message WebLLM's missing-cache case throws (owned by
+ *  `model-download.ts`, imported here rather than from `providers/provider.ts`
+ *  to avoid a cycle, same reasoning as that module's own `MODEL_NOT_AVAILABLE_MESSAGE`
+ *  comment): AskPanel's existing `PROVIDER_NOT_AVAILABLE_MESSAGE` check
+ *  ("not configured, go to Settings") then covers this case too, with no
+ *  separate UI path for it (refs #270). */
+export const NATIVE_LLM_NOT_AVAILABLE_MESSAGE = MODEL_NOT_AVAILABLE_MESSAGE;
 
 /** The on-device native provider: one llama.cpp model (loaded/managed by the
  *  plugin itself), driven with the same constrained-JSON contract WebLLM uses
@@ -64,10 +71,33 @@ export class NativeLlmProvider implements AssistantProvider {
       return await work();
     } catch (error) {
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
-      throw error;
+      throw this.mapPluginError(error);
     } finally {
       signal.removeEventListener('abort', onAbort);
     }
+  }
+
+  /** Translates a rejected `plugin.chat()` call into the Error this provider
+   *  should throw, keyed on the stable `code` LlamaPlugin.swift's `chat`
+   *  rejects with (Capacitor copies every key of the native side's error
+   *  object, `code` included, onto the JS exception it rejects with - see
+   *  native-bridge.js's `returnResult`). MODEL_NOT_DOWNLOADED reuses
+   *  `NATIVE_LLM_NOT_AVAILABLE_MESSAGE` so it gets the same "not configured"
+   *  treatment as the off-platform case above; CHAT_BUSY gets its own
+   *  localized `__i18n:` copy (AskPanel already renders any thrown
+   *  `__i18n:`-prefixed message via `t()`, see its `I18N_SENTINEL` handling);
+   *  everything else (ENGINE_FAILED, or no code at all) falls back to a
+   *  generic localized message, with the real reason only in the log - not
+   *  shown to the user, since it is Swift's untranslated `localizedDescription`. */
+  private mapPluginError(error: unknown): Error {
+    const code = error && typeof error === 'object' && 'code' in error ? (error as { code?: unknown }).code : undefined;
+    if (code === 'MODEL_NOT_DOWNLOADED') return new Error(NATIVE_LLM_NOT_AVAILABLE_MESSAGE);
+    if (code === 'CHAT_BUSY') return new Error('__i18n:assistant.native_busy');
+    log.assistant('Native LLM chat failed', LogLevel.ERROR, {
+      code,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return new Error('__i18n:assistant.native_engine_failed');
   }
 
   /** Bare system + user, deliberately bypassing `buildWebLlmMessages`: no tool

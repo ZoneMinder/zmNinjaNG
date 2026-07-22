@@ -174,7 +174,7 @@ describe('AssistantNativeSection', () => {
     expect(screen.getByTestId('assistant-native-model-downloaded-status')).toBeInTheDocument();
   });
 
-  it('surfaces an error toast and returns to not-downloaded when the task fails', async () => {
+  it('surfaces an error toast with the native reason and returns to not-downloaded when the task fails', async () => {
     isNativeModelDownloadedMock.mockResolvedValue({ downloaded: false });
     const taskId = seedInProgressTask();
 
@@ -183,12 +183,17 @@ describe('AssistantNativeSection', () => {
     await waitFor(() => expect(screen.getByTestId('assistant-native-model-download')).toBeDisabled());
 
     await act(async () => {
-      useBackgroundTasks.getState().failTask(taskId, new Error('download failed'));
+      useBackgroundTasks.getState().failTask(taskId, new Error('The Internet connection appears to be offline.'));
     });
 
     await waitFor(() => expect(screen.getByTestId('assistant-native-model-download')).not.toBeDisabled());
     expect(toastMock).toHaveBeenCalled();
     expect(toastMock.mock.calls[0][0]).toMatchObject({ variant: 'destructive' });
+    // The toast shows WHY the download failed (LlamaPlugin.swift's rejection
+    // message, already OS-localized), not just a generic "download failed".
+    expect(tMock).toHaveBeenCalledWith('settings.assistant.download_failed_reason', {
+      reason: 'The Internet connection appears to be offline.',
+    });
   });
 
   it('does not treat a task for a different model as downloading', async () => {
