@@ -2,6 +2,7 @@ package com.zoneminder.zmNinjaNG;
 
 import android.app.ActivityManager;
 import android.content.Context;
+import android.os.PowerManager;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -233,6 +234,12 @@ public class NativeLlmPlugin extends Plugin {
         // Where the ggml-cpu variant .so are; the native DL loader needs this (see nativeChat).
         final String libDir = getContext().getApplicationInfo().nativeLibraryDir;
         chatExecutor.execute(() -> {
+            // Keep the CPU alive while generating so a screen-off long "think" doesn't freeze.
+            // 10-min ceiling so a wedged generation can't pin the CPU indefinitely.
+            PowerManager pm = (PowerManager) getContext().getSystemService(Context.POWER_SERVICE);
+            PowerManager.WakeLock wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "zmNinjaNg:NativeLlmChat");
+            wl.setReferenceCounted(false);
+            wl.acquire(10 * 60 * 1000L);
             try {
                 int[] counts = new int[2];
                 byte[] bytes = nativeChat(modelId, path, libDir, fRoles, fContents,
@@ -245,6 +252,7 @@ public class NativeLlmPlugin extends Plugin {
             } catch (RuntimeException e) {
                 call.reject(e.getMessage() != null ? e.getMessage() : "Engine failed", "ENGINE_FAILED");
             } finally {
+                if (wl.isHeld()) wl.release();
                 chatInFlight.set(false);
             }
         });
