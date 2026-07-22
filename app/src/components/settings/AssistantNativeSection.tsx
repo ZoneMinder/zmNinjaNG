@@ -224,8 +224,12 @@ export function AssistantNativeSection() {
         </div>
       )}
 
-      <div className="px-4 py-3">
+      <div className="px-4 py-3 space-y-1">
         <p className="text-xs text-muted-foreground">{t('settings.assistant.privacy')}</p>
+        {/* Same warning the WebLLM block shows (AssistantSection): native
+            inference lives in device memory too, and the escape hatch is the
+            same Ollama backend. */}
+        <p className="text-xs text-muted-foreground">{t('settings.assistant.oom_note')}</p>
       </div>
     </>
   );

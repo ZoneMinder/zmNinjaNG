@@ -360,7 +360,7 @@
       "storage_persistent_yes": "持久化：是",
       "storage_persistent_no": "持久化：否",
       "storage_note": "存储在应用本地存储中，删除后一并移除。",
-      "oom_note": "本地模型在设备内存中运行。如果应用崩溃或模型加载失败，说明设备内存不足：请选择更小的模型，或切换到 Ollama 后端在服务器上运行。",
+      "oom_note": "本地模型在设备内存中运行。如果应用崩溃或模型加载失败，说明设备内存不足：请切换到 Ollama 后端在服务器上运行。",
       "mobile_unsupported": "手机和平板不支持设备端模型。",
       "mobile_unsupported_hint": "手机或平板会限制应用可用的内存，而每个模型加载所需的内存都超过此上限，会导致内存耗尽并使应用崩溃。请改用 Ollama 后端在你自己的服务器上运行模型。",
       "ollama_no_tools_title": "{{model}} 无法使用工具",

@@ -360,7 +360,7 @@
       "storage_persistent_yes": "Persistant : oui",
       "storage_persistent_no": "Persistant : non",
       "storage_note": "Stocké dans le stockage local de l'appli. Supprimé par Supprimer.",
-      "oom_note": "Les modèles locaux s'exécutent dans la mémoire de votre appareil. Si l'appli plante ou que le modèle ne se charge pas, l'appareil manque de mémoire : choisissez un modèle plus petit, ou passez au backend Ollama pour l'exécuter sur un serveur.",
+      "oom_note": "Les modèles locaux s'exécutent dans la mémoire de votre appareil. Si l'appli plante ou que le modèle ne se charge pas, l'appareil manque de mémoire : passez au backend Ollama pour l'exécuter sur un serveur.",
       "mobile_unsupported": "Les modèles sur l’appareil ne sont pas pris en charge sur les téléphones et tablettes.",
       "mobile_unsupported_hint": "Un téléphone ou une tablette limite la mémoire que l’appli peut utiliser, et chaque modèle en demande plus pour se charger : l’appli manquerait de mémoire et planterait. Utilisez le backend Ollama pour exécuter le modèle sur votre propre serveur.",
       "ollama_no_tools_title": "{{model}} ne peut pas utiliser les outils",

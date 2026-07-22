@@ -360,7 +360,7 @@
       "storage_persistent_yes": "Persistent: yes",
       "storage_persistent_no": "Persistent: no",
       "storage_note": "Stored in the app's local storage. Removed by Delete.",
-      "oom_note": "Local models run in your device's memory. If the app crashes or the model fails to load, the device is out of memory: pick a smaller model, or switch to the Ollama backend to run it on a server.",
+      "oom_note": "Local models run in your device's memory. If the app crashes or the model fails to load, the device is out of memory: switch to the Ollama backend to run it on a server.",
       "mobile_unsupported": "On-device models aren't supported on phones or tablets.",
       "mobile_unsupported_hint": "A phone or tablet caps how much memory the app may use, and every model needs more than that to load, so it would run out of memory and crash the app. Use the Ollama backend to run the model on your own server instead.",
       "ollama_no_tools_title": "{{model}} cannot use tools",

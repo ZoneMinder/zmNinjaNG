@@ -360,7 +360,7 @@
       "storage_persistent_yes": "Dauerhaft: ja",
       "storage_persistent_no": "Dauerhaft: nein",
       "storage_note": "Liegt im lokalen Speicher der App. Wird mit Löschen entfernt.",
-      "oom_note": "Lokale Modelle laufen im Speicher deines Geräts. Stürzt die App ab oder lädt das Modell nicht, ist der Speicher des Geräts erschöpft: Wähle ein kleineres Modell, oder wechsle zum Ollama-Backend, um es auf einem Server auszuführen.",
+      "oom_note": "Lokale Modelle laufen im Speicher deines Geräts. Stürzt die App ab oder lädt das Modell nicht, ist der Speicher des Geräts erschöpft: Wechsle zum Ollama-Backend, um es auf einem Server auszuführen.",
       "mobile_unsupported": "Modelle auf dem Gerät werden auf Smartphones und Tablets nicht unterstützt.",
       "mobile_unsupported_hint": "Ein Smartphone oder Tablet begrenzt den Speicher, den die App nutzen darf, und jedes Modell braucht zum Laden mehr, sodass der Speicher voll wäre und die App abstürzt. Nutze stattdessen das Ollama-Backend, um das Modell auf deinem eigenen Server auszuführen.",
       "ollama_no_tools_title": "{{model}} kann keine Tools verwenden",

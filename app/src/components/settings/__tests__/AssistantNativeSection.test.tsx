@@ -72,6 +72,9 @@ describe('AssistantNativeSection', () => {
 
     await waitFor(() => expect(screen.getByTestId('assistant-native-model-download')).not.toBeDisabled());
     expect(screen.getByTestId('assistant-native-model-delete')).toBeDisabled();
+    // Crash/out-of-memory warning with the Ollama pointer, same oom_note key
+    // the WebLLM block renders.
+    expect(screen.getByText('settings.assistant.oom_note')).toBeInTheDocument();
   });
 
   it('shows Delete enabled and Download disabled, plus the storage row, when the model is downloaded', async () => {
