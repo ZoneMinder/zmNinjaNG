@@ -48,8 +48,12 @@ public class NativeLlmPlugin extends Plugin {
     private static native void nativeFreeIfLoaded(String modelId);
     private static native void nativeFreeContext();
 
-    // 5.5 GiB physical-memory floor for on-device inference (matches iOS).
-    private static final long MEMORY_FLOOR = (long) (5.5 * 1024 * 1024 * 1024);
+    // Require a 12GB-nominal device. totalMem underreports ~1 GiB, so 11 GiB catches 12GB phones
+    // (Pixel 8 Pro / S-Ultra class) and excludes the 8GB class. Evidence: on an 8GB Pixel 8, three
+    // foreground lmkd kills even with q8_0 KV + 512 batch — the ~2.5GB resident model working set
+    // plus the app and system exceed 8GB under real load. A tiered smaller model was rejected too
+    // (qwen3:1.7b scored 36% vs 4b-instruct 86% on the tool eval), so 8GB phones use Ollama instead.
+    private static final long MEMORY_FLOOR = (long) (11.0 * 1024 * 1024 * 1024);
 
     // Serial chat guard: a second concurrent chat is rejected, never queued.
     private final ExecutorService chatExecutor = Executors.newSingleThreadExecutor();
@@ -90,16 +94,18 @@ public class NativeLlmPlugin extends Plugin {
     private static final int TRIAGE_RESERVE = 512;
 
     /** Context window derived from total RAM, not tuned for any one phone. totalMem underreports
-     *  nominal RAM (~11 GiB on a 12 GB device, ~7.4 on 8 GB), so tiers sit ~1 GiB below nominal.
-     *  Bigger n_ctx = bigger KV cache; too big OOM-kills mid-generation (refs #270). */
+     *  nominal RAM (~11 GiB on a 12 GB device), so tiers sit ~1 GiB below nominal. Bigger n_ctx =
+     *  bigger KV cache; too big OOM-kills mid-generation (refs #270). NOTE: the MEMORY_FLOOR gate
+     *  (>=11 GiB) means only the 8192 tier is currently reachable; the lower tiers are kept to
+     *  document the RAM->window intent and stay correct if the floor is ever lowered. */
     private int deviceContextSize() {
         ActivityManager am = (ActivityManager) getContext().getSystemService(Context.ACTIVITY_SERVICE);
         ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
         am.getMemoryInfo(mi);
         long gib = 1024L * 1024 * 1024;
-        if (mi.totalMem >= 11 * gib) return 8192; // 12GB-class
-        if (mi.totalMem >= 7 * gib) return 4096;  // 8GB-class (e.g. Pixel 8)
-        return 2048;                              // 6GB-class (passes the 5.5GB floor)
+        if (mi.totalMem >= 11 * gib) return 8192; // 12GB-class (the only tier the gate admits)
+        if (mi.totalMem >= 7 * gib) return 4096;  // 8GB-class (gated out today)
+        return 2048;                              // smaller (gated out today)
     }
 
     @PluginMethod
