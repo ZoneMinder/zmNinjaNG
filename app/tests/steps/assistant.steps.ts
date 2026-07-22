@@ -183,3 +183,41 @@ Then('monitor {string} should not be in alarm', async ({}, monitorId: string) =>
   await expect.poll(() => getAlarmStatus(monitorId), { timeout: testConfig.timeouts.transition }).toBe(false);
 });
 
+/** Seeds `window.__nativeLlmMockSupported`, the seam `useNativeLlmSupported`
+ *  reads (gated by `isAssistantTestMode()`) instead of the real
+ *  `Platform.isNative` + `NativeLlm.isSupported()` probe: Chromium e2e has no
+ *  real native bridge to fake, and `NativeLlm` has no `web` jsImplementation,
+ *  so a genuine probe always rejects there. Cast rather than relying on the
+ *  ambient `Window.__nativeLlmMockSupported` declaration (same reasoning as
+ *  `seedScript` above: this steps file is a separate tsc project that never
+ *  imports the hook). Must run before the step that (re)mounts
+ *  `AssistantSection` (the hook's probe effect has an empty dependency array
+ *  and only runs on mount). */
+Given('the native LLM backend reports as supported', async ({ page }) => {
+  await page.evaluate(() => {
+    (window as unknown as { __nativeLlmMockSupported?: boolean }).__nativeLlmMockSupported = true;
+  });
+});
+
+When('I select the native backend', async ({ page }) => {
+  await page.getByTestId('assistant-backend-select').selectOption('native');
+});
+
+Then('I should see the native backend option', async ({ page }) => {
+  await expect(page.getByTestId('assistant-backend-select').locator('option[value="native"]')).toHaveCount(1, {
+    timeout: testConfig.timeouts.element,
+  });
+});
+
+Then('I should not see the native backend option', async ({ page }) => {
+  await expect(page.getByTestId('assistant-backend-select').locator('option[value="native"]')).toHaveCount(0, {
+    timeout: testConfig.timeouts.element,
+  });
+});
+
+Then('I should see the native model download button', async ({ page }) => {
+  await expect(page.getByTestId('assistant-native-model-download')).toBeVisible({
+    timeout: testConfig.timeouts.element,
+  });
+});
+

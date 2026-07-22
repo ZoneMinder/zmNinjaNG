@@ -61,3 +61,24 @@ Feature: In-app assistant
     When I ask "trigger the alarm please"
     Then the assistant reply should contain "cannot"
     And monitor "1" should not be in alarm
+
+  # NativeLlm (llama.cpp bridge) runs on iOS and Android (refs #270); Chromium
+  # has no real native bridge to fake, so "supported" is driven by the
+  # useNativeLlmSupported test seam (window.__nativeLlmMockSupported), the
+  # same seam layering as the WebGPU/mock-backend stubs above.
+  @ios-phone @android
+  Scenario: Native backend option appears when the device reports support, and selecting it shows the download control
+    Given I am logged into zmNinjaNg
+    And the assistant is enabled with the mock backend
+    And the native LLM backend reports as supported
+    When I navigate to the "Settings" page
+    Then I should see the native backend option
+    When I select the native backend
+    Then I should see the native model download button
+
+  @ios-phone @android
+  Scenario: Native backend option is absent without a supported native LLM backend
+    Given I am logged into zmNinjaNg
+    And the assistant is enabled with the mock backend
+    When I navigate to the "Settings" page
+    Then I should not see the native backend option
