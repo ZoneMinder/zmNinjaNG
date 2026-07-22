@@ -25,6 +25,7 @@ import { AssistantOllamaSection } from './AssistantOllamaSection';
 import { AssistantNativeSection } from './AssistantNativeSection';
 import { AssistantAdvancedSection } from './AssistantAdvancedSection';
 import { ASSISTANT } from '../../lib/zmninja-ng-constants';
+import { NINJII_LOGO_URL } from '../../lib/assistant/ninjii-logo';
 import { Platform } from '../../lib/platform';
 import { useWebGpuAvailable } from '../../hooks/useWebGpuAvailable';
 import { useNativeLlmSupported } from '../../hooks/useNativeLlmSupported';
@@ -255,7 +256,7 @@ export function AssistantSection({
           {/* Decorative: the label in this row already names Ninjii. Sized to
               the two-line row it sits in, which is what gives it room to read
               at a glance. */}
-          <img src={ASSISTANT.logoPath} alt="" className="h-10 w-10 shrink-0 rounded object-contain" />
+          <img src={NINJII_LOGO_URL} alt="" className="h-10 w-10 shrink-0 rounded object-contain" />
           <Switch
             id="assistant-enabled"
             checked={settings.assistantEnabled}
@@ -273,25 +274,30 @@ export function AssistantSection({
                 the note says why rather than leaving the absence
                 unexplained, which is what makes a missing feature read as a
                 bug. */}
-            {Platform.isNative ? (
-              nativeSupported === true ? (
-                <div className="px-4 py-3 space-y-2">
-                  <RowLabel label={t('settings.assistant.backend')} />
-                  <select
-                    className="text-sm bg-background border rounded px-2 py-1.5 w-full sm:w-64"
-                    value={settings.assistantBackend}
-                    onChange={(e) => update('assistantBackend', e.target.value as AssistantBackend)}
-                    data-testid="assistant-backend-select"
-                  >
-                    <option value="ollama">{t('settings.assistant.backend_ollama')}</option>
-                    <option value="native">{t('settings.assistant.backend_native')}</option>
-                  </select>
-                </div>
-              ) : (
-                <div className="px-4 py-3 space-y-1" data-testid="assistant-on-device-unavailable">
-                  <p className="text-xs text-muted-foreground">{t('settings.assistant.on_device_mobile_disabled')}</p>
-                </div>
-              )
+            {/* `nativeSupported === true` is checked first (not
+                `Platform.isNative`) so the e2e test seam in
+                `useNativeLlmSupported` (which can only flip `nativeSupported`,
+                never the real `Platform.isNative`) reaches this branch.
+                Equivalent to the old `Platform.isNative &&` gate in
+                production, since the hook itself only ever resolves `true`
+                on a native platform there. */}
+            {nativeSupported === true ? (
+              <div className="px-4 py-3 space-y-2">
+                <RowLabel label={t('settings.assistant.backend')} />
+                <select
+                  className="text-sm bg-background border rounded px-2 py-1.5 w-full sm:w-64"
+                  value={settings.assistantBackend}
+                  onChange={(e) => update('assistantBackend', e.target.value as AssistantBackend)}
+                  data-testid="assistant-backend-select"
+                >
+                  <option value="ollama">{t('settings.assistant.backend_ollama')}</option>
+                  <option value="native">{t('settings.assistant.backend_native')}</option>
+                </select>
+              </div>
+            ) : Platform.isNative ? (
+              <div className="px-4 py-3 space-y-1" data-testid="assistant-on-device-unavailable">
+                <p className="text-xs text-muted-foreground">{t('settings.assistant.on_device_mobile_disabled')}</p>
+              </div>
             ) : (
               <div className="px-4 py-3 space-y-2">
                 <RowLabel label={t('settings.assistant.backend')} />
@@ -307,7 +313,7 @@ export function AssistantSection({
               </div>
             )}
 
-            {Platform.isNative && nativeSupported === true && settings.assistantBackend === 'native' ? (
+            {nativeSupported === true && settings.assistantBackend === 'native' ? (
               <AssistantNativeSection />
             ) : settings.assistantBackend === 'ollama' || Platform.isNative ? (
               <AssistantOllamaSection settings={settings} update={update} currentProfile={currentProfile} />

@@ -14,6 +14,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { AskPanel } from '../AskPanel';
 import { useAssistantStore } from '../../../stores/assistant';
+import { NINJII_LOGO_URL } from '../../../lib/assistant/ninjii-logo';
 
 const mockLanguage = { current: 'en' };
 vi.mock('react-i18next', () => ({
@@ -88,7 +89,7 @@ describe('AskPanel', () => {
 
     const intro = screen.getByTestId('assistant-intro');
     expect(intro).toBeInTheDocument();
-    expect(screen.getByAltText('assistant.title')).toHaveAttribute('src', '/ninjii.png');
+    expect(screen.getByAltText('assistant.title')).toHaveAttribute('src', NINJII_LOGO_URL);
     expect(intro).toHaveTextContent('assistant.intro_greeting');
     expect(intro).toHaveTextContent('assistant.intro_help');
     expect(screen.getAllByTestId('assistant-example-prompt')).toHaveLength(4);

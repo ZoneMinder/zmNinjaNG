@@ -13,7 +13,8 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Minus, Trash2, X } from 'lucide-react';
 import { useAssistantPanelStore } from '../../stores/assistantPanel';
-import { ASSISTANT, ASSISTANT_PANEL } from '../../lib/zmninja-ng-constants';
+import { ASSISTANT_PANEL } from '../../lib/zmninja-ng-constants';
+import { NINJII_LOGO_URL } from '../../lib/assistant/ninjii-logo';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
 import { AskPanel } from './AskPanel';
@@ -94,7 +95,7 @@ export function AssistantDesktopPanel() {
       </div>
 
       <div className="flex items-center gap-2 border-b border-primary/20 bg-primary/5 py-2 pl-3 pr-2">
-        <img src={ASSISTANT.logoPath} alt={t('assistant.title')} className="h-5 w-5 shrink-0 rounded object-contain" />
+        <img src={NINJII_LOGO_URL} alt={t('assistant.title')} className="h-5 w-5 shrink-0 rounded object-contain" />
         <div className="flex-1 min-w-0">
           <div className="truncate text-sm font-medium leading-tight">{t('assistant.title')}</div>
           <div className="flex items-center gap-1.5">

@@ -8,7 +8,7 @@
  * edit it before it becomes a real turn.
  */
 import { useTranslation } from 'react-i18next';
-import { ASSISTANT } from '../../lib/zmninja-ng-constants';
+import { NINJII_LOGO_URL } from '../../lib/assistant/ninjii-logo';
 
 export interface AssistantIntroProps {
   onExampleClick: (text: string) => void;
@@ -25,7 +25,7 @@ export function AssistantIntro({ onExampleClick }: AssistantIntroProps) {
 
   return (
     <div className="flex flex-col items-center gap-3 px-4 py-8 text-center" data-testid="assistant-intro">
-      <img src={ASSISTANT.logoPath} alt={t('assistant.title')} className="h-16 w-16 rounded-full object-contain" />
+      <img src={NINJII_LOGO_URL} alt={t('assistant.title')} className="h-16 w-16 rounded-full object-contain" />
       <p className="text-sm font-medium">{t('assistant.intro_greeting')}</p>
       <p className="text-xs text-muted-foreground">{t('assistant.intro_help')}</p>
       <div className="flex flex-wrap justify-center gap-2 pt-1">

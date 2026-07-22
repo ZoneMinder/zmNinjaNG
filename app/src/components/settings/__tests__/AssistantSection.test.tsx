@@ -12,7 +12,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { AssistantSection } from '../AssistantSection';
 import { DEFAULT_SETTINGS } from '../../../stores/settings';
-import { ASSISTANT } from '../../../lib/zmninja-ng-constants';
+import { NINJII_LOGO_URL } from '../../../lib/assistant/ninjii-logo';
 
 const isModelDownloadedMock = vi.fn().mockResolvedValue(false);
 const { useCapacitorListenerMock } = vi.hoisted(() => ({ useCapacitorListenerMock: vi.fn() }));
@@ -281,7 +281,7 @@ describe('AssistantSection backend picker and gating', () => {
       />
     );
 
-    const logo = container.querySelector(`img[src="${ASSISTANT.logoPath}"]`);
+    const logo = container.querySelector(`img[src="${NINJII_LOGO_URL}"]`);
     expect(logo).toBeInTheDocument();
     // Decorative: the row's label already names Ninjii, so an alt text here
     // would make a screen reader announce the name twice.

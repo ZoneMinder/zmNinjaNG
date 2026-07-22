@@ -13,7 +13,7 @@
 import { useTranslation } from 'react-i18next';
 import { useAssistantPanelStore } from '../../stores/assistantPanel';
 import { useIsMobile } from '../../hooks/useIsMobile';
-import { ASSISTANT } from '../../lib/zmninja-ng-constants';
+import { NINJII_LOGO_URL } from '../../lib/assistant/ninjii-logo';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
 import { AssistantDesktopPanel } from './AssistantDesktopPanel';
@@ -40,7 +40,7 @@ export function AssistantWidget() {
           className="fixed bottom-20 right-4 z-50 h-12 w-12 rounded-full shadow-lg"
         >
           {/* decorative: the button's own aria-label already names Ninjii */}
-          <img src={ASSISTANT.logoPath} alt="" className="h-7 w-7 rounded-full object-contain" />
+          <img src={NINJII_LOGO_URL} alt="" className="h-7 w-7 rounded-full object-contain" />
         </Button>
       )}
 

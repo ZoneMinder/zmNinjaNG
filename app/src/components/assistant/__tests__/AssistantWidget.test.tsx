@@ -16,6 +16,7 @@ import { AssistantWidget } from '../AssistantWidget';
 import { useAssistantPanelStore } from '../../../stores/assistantPanel';
 import { useAssistantStore } from '../../../stores/assistant';
 import { ASSISTANT, ASSISTANT_PANEL } from '../../../lib/zmninja-ng-constants';
+import { NINJII_LOGO_URL } from '../../../lib/assistant/ninjii-logo';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -142,7 +143,7 @@ describe('AssistantWidget', () => {
     expect(fab).toHaveAccessibleName('assistant.reopen');
     // Ninjii's logo replaces the lucide icon in the FAB (refs #246); it's
     // decorative since the button's own aria-label already names Ninjii.
-    expect(fab.querySelector('img')).toHaveAttribute('src', '/ninjii.png');
+    expect(fab.querySelector('img')).toHaveAttribute('src', NINJII_LOGO_URL);
 
     const user = userEvent.setup();
     await user.click(fab);
@@ -160,7 +161,7 @@ describe('AssistantWidget', () => {
     expect(screen.getByTestId('assistant-minimize')).toBeInTheDocument();
     expect(screen.getByTestId('assistant-close')).toBeInTheDocument();
     // Ninjii's logo in the header, to the left of the title (refs #246).
-    expect(screen.getByAltText('assistant.title')).toHaveAttribute('src', '/ninjii.png');
+    expect(screen.getByAltText('assistant.title')).toHaveAttribute('src', NINJII_LOGO_URL);
   });
 
   it('renders Ninjii in a visually distinct desktop workspace', () => {
