@@ -676,6 +676,13 @@ export const ASSISTANT = {
   // prevent. A remote retry costs a network round trip rather than local
   // decode, but only on a reply that was going to be thrown away anyway.
   maxParseAttempts: 3,
+  // Ollama's non-streaming /chat/completions gives no progress signal, so a cold
+  // server-side model load just looks like a slow request. Past this, show an honest
+  // "still working, the server may be loading" note that ticks elapsed seconds (refs #270).
+  assistantServerSlowMs: 8000,
+  // Below this prefill suffix the KV reuse makes the first-fill fast enough that a status
+  // note would just flicker; only larger (re)fills are worth surfacing (refs #270).
+  assistantPrefillNoteMinTokens: 256,
   // web-llm's prebuilt registry entries cap context_window_size at 4096 for
   // every model (ModelRecord.overrides in @mlc-ai/web-llm's prebuiltAppConfig;
   // all 165 entries are 4096 or lower), well under what the models support

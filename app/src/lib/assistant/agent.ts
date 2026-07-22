@@ -270,7 +270,10 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
     const bounded = truncateHistory(history, ASSISTANT.maxHistoryMessages, ASSISTANT.maxHistoryCharacters);
     if (bounded.length !== history.length) history.splice(0, history.length, ...bounded);
 
-    const rawTurn = await provider.chat(history, activeTools, system, signal);
+    const rawTurn = await provider.chat(history, activeTools, system, signal, (s) => host.onStatus?.(s));
+    // Slow-phase status is only meaningful while the provider is loading/prefilling; once the
+    // model starts producing this round's answer, clear it so tool steps / "Thinking" show instead.
+    host.onStatus?.(null);
     // Repaired here, once, for every backend: this is the single point all
     // providers pass through, and it is upstream of both the history the model
     // is replayed and the answer the user reads. `exchange` keeps the raw text

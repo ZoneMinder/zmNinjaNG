@@ -284,6 +284,7 @@ export function AskPanel() {
   const running = useAssistantStore((s) => s.running);
   const activities = useAssistantStore((s) => s.activities);
   const liveTrace = useAssistantStore((s) => s.liveTrace);
+  const phase = useAssistantStore((s) => s.phase);
   const append = useAssistantStore((s) => s.append);
   const setRunning = useAssistantStore((s) => s.setRunning);
   const clearActivities = useAssistantStore((s) => s.clearActivities);
@@ -301,6 +302,40 @@ export function AskPanel() {
   /** The model a warmup is loading right now, for the status line below the
    *  thread; null when no warmup is in flight (refs #261). */
   const [warmingModel, setWarmingModel] = useState<string | null>(null);
+  /** Ticks elapsed seconds while the Ollama server-slow note shows: no protocol progress
+   *  exists there, so elapsed time is the only honest metric. Interval cleared on phase
+   *  change and unmount (no timer leak). */
+  const [serverSlowSec, setServerSlowSec] = useState(0);
+  useEffect(() => {
+    if (phase?.phase !== 'server_slow') {
+      setServerSlowSec(0);
+      return;
+    }
+    const started = Date.now();
+    setServerSlowSec(0);
+    const id = setInterval(() => setServerSlowSec(Math.floor((Date.now() - started) / 1000)), 1000);
+    return () => clearInterval(id);
+  }, [phase?.phase]);
+
+  // Localized, explicit-number status for a slow-but-not-every-time phase (refs #270). The UI
+  // owns wording, percent/elapsed formatting and the show-nothing threshold; providers only
+  // report raw phases. null renders nothing (fast prefill below the threshold, or no phase).
+  const statusLabel: string | null = (() => {
+    if (!phase) return null;
+    const percent = Math.round((phase.progress ?? 0) * 100);
+    switch (phase.phase) {
+      case 'loading_model':
+        return t('assistant.status.loading_model', { percent });
+      case 'prefill':
+        return (phase.tokens ?? 0) < ASSISTANT.assistantPrefillNoteMinTokens ? null : t('assistant.status.prefill', { percent });
+      case 'retry':
+        return t('assistant.status.retry');
+      case 'server_slow':
+        return t('assistant.status.server_slow', { seconds: serverSlowSec });
+      default:
+        return null;
+    }
+  })();
   const abortControllerRef = useRef<AbortController | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const prevThreadLengthRef = useRef(thread.length);
@@ -502,7 +537,7 @@ export function AskPanel() {
       // language interpretation the model does better.
       const kind: RequestKind = isAssistantTestMode()
         ? 'zoneminder'
-        : await classifyRequest(provider, text, controller.signal, collectTrace);
+        : await classifyRequest(provider, text, controller.signal, collectTrace, (s) => host.onStatus?.(s));
       log.assistant('Request classified', LogLevel.DEBUG, { kind });
 
       // Already only this turn's new messages (see runAssistantTurn): the
@@ -676,9 +711,11 @@ export function AskPanel() {
         {running && liveTrace.length > 0 && <ModelTranscript trace={liveTrace} t={t} live />}
 
         {running && (
-          <p className="flex items-center gap-1 text-xs text-muted-foreground" data-testid="assistant-status">
-            <Loader2 className="h-3 w-3 animate-spin" />
-            {t('assistant.thinking')}
+          <p className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground" data-testid="assistant-status">
+            <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
+            {/* A slow-phase note (model load %, first-fill %, retry, server elapsed) replaces
+                the generic "Thinking" while that phase runs, then clears back to it. */}
+            <span className="truncate" title={statusLabel ?? undefined}>{statusLabel ?? t('assistant.thinking')}</span>
           </p>
         )}
 

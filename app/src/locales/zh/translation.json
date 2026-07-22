@@ -1295,6 +1295,12 @@
     "abort": "停止",
     "thinking": "思考中...",
     "loading_model": "正在服务器上加载 {{model}}...",
+    "status": {
+      "loading_model": "正在加载模型… {{percent}}%",
+      "prefill": "正在读取对话… {{percent}}%",
+      "retry": "正在重新格式化答案…",
+      "server_slow": "仍在处理… {{seconds}} 秒"
+    },
     "activity": {
       "running": "正在运行 {{tool}}...",
       "done": "{{tool}} 已完成",

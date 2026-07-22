@@ -19,7 +19,7 @@
  * `Access-Control-Allow-Origin`, so a `fetch()`-based adapter would be
  * unusable from a native build talking to a LAN Ollama instance.
  */
-import type { AssistantProvider, AssistantMessage, AssistantTurn, CompletionResult, ToolCall, ToolDefinition } from '../types';
+import type { AssistantProvider, AssistantMessage, AssistantStatus, AssistantTurn, CompletionResult, ToolCall, ToolDefinition } from '../types';
 import { httpGet, httpPost } from '../../http';
 import { ASSISTANT } from '../../zmninja-ng-constants';
 import { isAbortError } from '../../is-abort-error';
@@ -548,7 +548,25 @@ export class OpenAiProvider implements AssistantProvider {
    *  compiles into a grammar constraint; a server that rejects the field
    *  fails the request, which callers like triage already treat as "no
    *  verdict" and degrade from. */
-  async complete(system: string, text: string, signal: AbortSignal, jsonSchema?: Record<string, unknown>): Promise<CompletionResult> {
+  /** Runs one request; if it hasn't returned by `assistantServerSlowMs`, emits the honest
+   *  "server may be loading" note (no protocol progress exists, so the UI ticks elapsed time). */
+  private async withSlowNote<T>(onStatus: ((s: AssistantStatus) => void) | undefined, work: () => Promise<T>): Promise<T> {
+    if (!onStatus) return work();
+    const timer = setTimeout(() => onStatus({ phase: 'server_slow' }), ASSISTANT.assistantServerSlowMs);
+    try {
+      return await work();
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async complete(
+    system: string,
+    text: string,
+    signal: AbortSignal,
+    jsonSchema?: Record<string, unknown>,
+    onStatus?: (status: AssistantStatus) => void,
+  ): Promise<CompletionResult> {
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
     const { baseUrl, model, apiKey } = this.config;
     const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
@@ -569,12 +587,14 @@ export class OpenAiProvider implements AssistantProvider {
         : {}),
     };
     const startedAt = Date.now();
-    const response = await httpPost<OpenAiChatResponse>(url, body, {
-      headers,
-      signal,
-      timeoutMs: this.timeoutMs,
-      intent: 'Assistant Ollama completion',
-    });
+    const response = await this.withSlowNote(onStatus, () =>
+      httpPost<OpenAiChatResponse>(url, body, {
+        headers,
+        signal,
+        timeoutMs: this.timeoutMs,
+        intent: 'Assistant Ollama completion',
+      }),
+    );
     const content = response.data?.choices?.[0]?.message?.content ?? '';
     // A completion loads the model just as a chat does, so this is also a
     // valid moment to learn the window and confirm the server is Ollama.
@@ -590,6 +610,7 @@ export class OpenAiProvider implements AssistantProvider {
     tools: ToolDefinition[],
     system: string,
     signal: AbortSignal,
+    onStatus?: (status: AssistantStatus) => void,
   ): Promise<AssistantTurn> {
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
 
@@ -624,6 +645,7 @@ export class OpenAiProvider implements AssistantProvider {
     let turn: AssistantTurn = { text: PARSE_ERROR_TEXT, toolCalls: [] };
     for (let attempt = 1; attempt <= ASSISTANT.maxParseAttempts; attempt++) {
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+      if (attempt > 1) onStatus?.({ phase: 'retry', attempt });
       log.assistant('Sending Ollama chat completion request', LogLevel.DEBUG, {
         baseUrl,
         model,
@@ -645,12 +667,15 @@ export class OpenAiProvider implements AssistantProvider {
             : Math.max(this.temperature, ASSISTANT.assistantRetryTemperature),
       };
       const startedAt = Date.now();
-      const response = await httpPost<OpenAiChatResponse>(url, attemptBody, {
-        headers,
-        signal,
-        timeoutMs: this.timeoutMs,
-        intent: 'Assistant Ollama chat',
-      });
+      // Only the first round-trip gets the slow-server note: after it, the model is loaded.
+      const response = await this.withSlowNote(attempt === 1 ? onStatus : undefined, () =>
+        httpPost<OpenAiChatResponse>(url, attemptBody, {
+          headers,
+          signal,
+          timeoutMs: this.timeoutMs,
+          intent: 'Assistant Ollama chat',
+        }),
+      );
 
       const message = response.data?.choices?.[0]?.message;
       log.assistant('Ollama raw response', LogLevel.DEBUG, { baseUrl, model, message, attempt });

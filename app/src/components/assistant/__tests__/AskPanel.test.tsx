@@ -373,4 +373,34 @@ describe('AskPanel', () => {
       expect(screen.queryByTestId('assistant-english-notice')).not.toBeInTheDocument();
     });
   });
+
+  describe('slow-phase status line', () => {
+    it('shows the model-load status while the load phase runs', () => {
+      useAssistantStore.setState({ running: true, phase: { phase: 'loading_model', progress: 0.43 } });
+      render(<AskPanel />);
+      expect(screen.getByTestId('assistant-status')).toHaveTextContent('assistant.status.loading_model');
+    });
+
+    it('hides the prefill note under the token threshold, falling back to Thinking', () => {
+      useAssistantStore.setState({ running: true, phase: { phase: 'prefill', progress: 1, tokens: 100 } });
+      render(<AskPanel />);
+      expect(screen.getByTestId('assistant-status')).toHaveTextContent('assistant.thinking');
+    });
+
+    it('shows the prefill note above the token threshold', () => {
+      useAssistantStore.setState({ running: true, phase: { phase: 'prefill', progress: 0.62, tokens: 1000 } });
+      render(<AskPanel />);
+      expect(screen.getByTestId('assistant-status')).toHaveTextContent('assistant.status.prefill');
+    });
+
+    it('shows the server-slow note and clears its interval on unmount (no timer leak)', () => {
+      const clearSpy = vi.spyOn(global, 'clearInterval');
+      useAssistantStore.setState({ running: true, phase: { phase: 'server_slow' } });
+      const { unmount } = render(<AskPanel />);
+      expect(screen.getByTestId('assistant-status')).toHaveTextContent('assistant.status.server_slow');
+      unmount();
+      expect(clearSpy).toHaveBeenCalled();
+      clearSpy.mockRestore();
+    });
+  });
 });

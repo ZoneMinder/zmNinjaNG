@@ -492,7 +492,8 @@ describe('WebLlmProvider.chat', () => {
     const turn = await provider.chat([{ role: 'user', text: 'hi' }], [], 'sys', new AbortController().signal);
 
     expect(turn).toMatchObject({ text: 'It is armed.', toolCalls: [] });
-    expect(getLoadedEngine).toHaveBeenCalledWith('Llama-3.2-3B-Instruct-q4f16_1-MLC');
+    // Second arg is the optional load-progress hook, undefined when no onStatus is passed.
+    expect(getLoadedEngine).toHaveBeenCalledWith('Llama-3.2-3B-Instruct-q4f16_1-MLC', undefined);
     const call = create.mock.calls[0][0];
     expect(call).toEqual(
       expect.objectContaining({

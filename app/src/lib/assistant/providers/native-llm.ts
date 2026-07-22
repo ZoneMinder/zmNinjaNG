@@ -8,7 +8,8 @@
  * different transport: a Capacitor plugin call instead of a WebGPU engine,
  * so only the transport is implemented here.
  */
-import type { AssistantProvider, AssistantMessage, AssistantTurn, CompletionResult, ToolDefinition } from '../types';
+import type { AssistantProvider, AssistantMessage, AssistantStatus, AssistantTurn, CompletionResult, ToolDefinition } from '../types';
+import type { PluginListenerHandle } from '@capacitor/core';
 import type { ChatCompletionMessageParam } from '@mlc-ai/web-llm';
 import { ASSISTANT } from '../../zmninja-ng-constants';
 import { log, LogLevel } from '../../logger';
@@ -105,41 +106,72 @@ export class NativeLlmProvider implements AssistantProvider {
    *  `jsonSchema` is accepted for interface parity but unenforced: the plugin
    *  has no grammar-constrained decoding, same prompt-only situation as
    *  WebLLM's own fallback when its grammar compiler is unusable. */
-  async complete(system: string, text: string, signal: AbortSignal, _jsonSchema?: Record<string, unknown>): Promise<CompletionResult> {
+  /** Adds the native `chatStatus` listener (weight load / prefill phases) for one call,
+   *  forwarding to `onStatus`. Always removed by the caller's finally, mirroring the
+   *  download listener discipline. */
+  private async subscribeStatus(
+    plugin: Awaited<ReturnType<NativeLlmProvider['getPlugin']>>['NativeLlm'],
+    onStatus?: (status: AssistantStatus) => void,
+  ): Promise<PluginListenerHandle | null> {
+    if (!onStatus) return null;
+    return plugin.addListener('chatStatus', (p) => onStatus({ phase: p.phase, progress: p.progress, tokens: p.tokens }));
+  }
+
+  async complete(
+    system: string,
+    text: string,
+    signal: AbortSignal,
+    _jsonSchema?: Record<string, unknown>,
+    onStatus?: (status: AssistantStatus) => void,
+  ): Promise<CompletionResult> {
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
     const { NativeLlm: plugin } = await this.getPlugin();
+    const statusHandle = await this.subscribeStatus(plugin, onStatus);
     const messages: ChatCompletionMessageParam[] = [
       { role: 'system', content: system },
       { role: 'user', content: text },
     ];
     const startedAt = Date.now();
-    const response = await this.withCancel(plugin, signal, () =>
-      plugin.chat({
-        modelId: this.modelId,
-        messagesJson: JSON.stringify(messages),
-        temperature: this.temperature,
-        maxTokens: ASSISTANT.maxTokens,
-        contextSize: this.contextWindow,
-      }),
-    );
-    if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
-    return {
-      text: response.content,
-      exchange: captureExchange({ backend: 'native', model: this.modelId, sent: messages, received: response.content, startedAt }),
-    };
+    try {
+      const response = await this.withCancel(plugin, signal, () =>
+        plugin.chat({
+          modelId: this.modelId,
+          messagesJson: JSON.stringify(messages),
+          temperature: this.temperature,
+          maxTokens: ASSISTANT.maxTokens,
+          contextSize: this.contextWindow,
+        }),
+      );
+      if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+      return {
+        text: response.content,
+        exchange: captureExchange({ backend: 'native', model: this.modelId, sent: messages, received: response.content, startedAt }),
+      };
+    } finally {
+      await statusHandle?.remove();
+    }
   }
 
-  async chat(messages: AssistantMessage[], tools: ToolDefinition[], system: string, signal: AbortSignal): Promise<AssistantTurn> {
+  async chat(
+    messages: AssistantMessage[],
+    tools: ToolDefinition[],
+    system: string,
+    signal: AbortSignal,
+    onStatus?: (status: AssistantStatus) => void,
+  ): Promise<AssistantTurn> {
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
     const { NativeLlm: plugin } = await this.getPlugin();
     const chatMessages = buildWebLlmMessages(system, messages, tools, this.modelId);
+    const statusHandle = await this.subscribeStatus(plugin, onStatus);
 
     // Same self-repair retry shape as WebLlmProvider.chat / OpenAiProvider.chat:
     // the failed reply plus a correction naming the fault are appended before
     // each retry, and only the FINAL attempt raises the temperature.
     let turn: AssistantTurn = { text: PARSE_ERROR_TEXT, toolCalls: [] };
+    try {
     for (let attempt = 1; attempt <= ASSISTANT.maxParseAttempts; attempt++) {
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+      if (attempt > 1) onStatus?.({ phase: 'retry', attempt });
       log.assistant('Sending native LLM chat request', LogLevel.DEBUG, {
         modelId: this.modelId,
         messageCount: chatMessages.length,
@@ -187,5 +219,8 @@ export class NativeLlmProvider implements AssistantProvider {
       chatMessages.push({ role: 'user', content: SELF_REPAIR_PROMPT });
     }
     return turn;
+    } finally {
+      await statusHandle?.remove();
+    }
   }
 }

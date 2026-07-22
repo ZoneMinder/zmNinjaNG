@@ -249,9 +249,25 @@ export interface ToolActivity {
   input: Record<string, unknown>;
 }
 
+/** A slow-but-not-every-time phase during a running turn, surfaced as a transient status
+ *  line and cleared when the turn ends. Provider-generic across all backends (refs #270):
+ *  - `loading_model`: weights/engine loading (native flash load, WebLLM GPU load); `progress` 0..1.
+ *  - `prefill`: native first-fill; `progress` 0..1, `tokens` = suffix count (UI thresholds on it).
+ *  - `retry`: a self-repair reformat attempt (attempt > 1).
+ *  - `server_slow`: Ollama first round-trip exceeded the threshold (no protocol progress; UI ticks elapsed).
+ *  The UI owns all wording, percent/elapsed formatting, and the show-nothing threshold. */
+export interface AssistantStatus {
+  phase: 'loading_model' | 'prefill' | 'retry' | 'server_slow';
+  progress?: number;
+  tokens?: number;
+  attempt?: number;
+}
+
 export interface AssistantHost {
   navigate(path: string): void;
   onActivity(activity: ToolActivity): void;
+  /** Optional: receives transient slow-phase status during a running turn; `null` clears it. */
+  onStatus?(status: AssistantStatus | null): void;
   /** Optional: receives each trace step as it happens, so the panel can show
    *  the transcript DURING a turn instead of only once the answer lands. A
    *  host that does not care simply omits it. */
@@ -277,12 +293,19 @@ export interface AssistantProvider {
    * defensively; the schema turns a usually-right reply into an always-shaped
    * one where the backend supports it.
    */
-  complete(system: string, text: string, signal: AbortSignal, jsonSchema?: Record<string, unknown>): Promise<CompletionResult>;
+  complete(
+    system: string,
+    text: string,
+    signal: AbortSignal,
+    jsonSchema?: Record<string, unknown>,
+    onStatus?: (status: AssistantStatus) => void,
+  ): Promise<CompletionResult>;
   chat(
     messages: AssistantMessage[],
     tools: ToolDefinition[],
     system: string,
     signal: AbortSignal,
+    onStatus?: (status: AssistantStatus) => void,
   ): Promise<AssistantTurn>;
   /** The context window this backend is running with, when it is knowable.
    *  Set for on-device models (we pass the window to CreateMLCEngine, so we

@@ -267,9 +267,9 @@ export async function downloadModel(modelId: string, opts: DownloadModelOpts = {
  *  evicted it since, `hasModelInCache` says the same thing (false), and both
  *  cases should surface as an error so the UI can prompt the user to
  *  (re-)download rather than stall a chat request on an unrequested fetch. */
-export async function getLoadedEngine(modelId: string): Promise<MLCEngineInterface> {
+export async function getLoadedEngine(modelId: string, onProgress?: (fraction: number) => void): Promise<MLCEngineInterface> {
   if (loadedEngine?.modelId === modelId) {
-    return loadedEngine.engine;
+    return loadedEngine.engine; // resident: no load, report nothing
   }
 
   // A different model is resident: free it before loading this one so only
@@ -285,7 +285,9 @@ export async function getLoadedEngine(modelId: string): Promise<MLCEngineInterfa
     throw new Error(MODEL_NOT_AVAILABLE_MESSAGE);
   }
 
-  const engine = await createEngineOnce(modelId);
+  // Only the actual construct path reports load progress (0..1); a resident engine
+  // returned above emits nothing. We surface OUR label + the fraction, not web-llm's text.
+  const engine = await createEngineOnce(modelId, onProgress ? { initProgressCallback: (report) => onProgress(report.progress) } : undefined);
   loadedEngine = { modelId, engine };
   return engine;
 }

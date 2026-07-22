@@ -25,6 +25,7 @@ export function useAssistantHost() {
   const minimizePanel = useAssistantPanelStore((s) => s.minimize);
   const pushActivity = useAssistantStore((s) => s.pushActivity);
   const pushTrace = useAssistantStore((s) => s.pushTrace);
+  const setPhase = useAssistantStore((s) => s.setPhase);
 
   const host: AssistantHost = {
     navigate: (path) => {
@@ -33,6 +34,7 @@ export function useAssistantHost() {
     },
     onActivity: (a) => pushActivity(a),
     onTrace: (e) => pushTrace(e),
+    onStatus: (s) => setPhase(s),
   };
 
   return { host };

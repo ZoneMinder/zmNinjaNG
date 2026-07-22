@@ -1295,6 +1295,12 @@
     "abort": "Stop",
     "thinking": "Thinking...",
     "loading_model": "Loading {{model}} on the server...",
+    "status": {
+      "loading_model": "Loading model… {{percent}}%",
+      "prefill": "Reading conversation… {{percent}}%",
+      "retry": "Reformatting the answer…",
+      "server_slow": "Still working… {{seconds}}s"
+    },
     "activity": {
       "running": "Running {{tool}}...",
       "done": "{{tool}} done",

@@ -16,7 +16,7 @@
  * catalog, no few-shot block, no history, and a one-word reply, so the call is
  * dominated by prefill rather than generation even on the native path.
  */
-import type { AssistantMessage, AssistantProvider, TraceEntry } from './types';
+import type { AssistantMessage, AssistantProvider, AssistantStatus, TraceEntry } from './types';
 import { sanitizeModelText } from './sanitize';
 
 export type RequestKind = 'zoneminder' | 'chat' | 'action';
@@ -109,6 +109,7 @@ export async function classifyRequest(
    *  two calls that decided whether it ran at all, or whether its answer was
    *  accepted. */
   onTrace?: (entry: TraceEntry) => void,
+  onStatus?: (status: AssistantStatus) => void,
 ): Promise<RequestKind> {
   try {
     // `complete`, not `chat`: a classifier handed the tool catalog, the
@@ -116,7 +117,7 @@ export async function classifyRequest(
     // instead of returning a verdict. The schema constrains a backend that
     // can enforce it to `{"kind":"..."}`; the parser still accepts the loose
     // one-word reply from a backend that cannot.
-    const result = await provider.complete(TRIAGE_PROMPT, question, signal, TRIAGE_SCHEMA as unknown as Record<string, unknown>);
+    const result = await provider.complete(TRIAGE_PROMPT, question, signal, TRIAGE_SCHEMA as unknown as Record<string, unknown>, onStatus);
     if (result.exchange) {
       onTrace?.({ kind: 'exchange', exchange: { ...result.exchange, backend: `${result.exchange.backend} (triage)` } });
     }

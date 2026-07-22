@@ -5,6 +5,12 @@ import { ASSISTANT } from '../../../zmninja-ng-constants';
 
 const chatMock = vi.fn();
 const cancelChatMock = vi.fn().mockResolvedValue(undefined);
+const removeMock = vi.fn().mockResolvedValue(undefined);
+let capturedStatusCb: ((p: Record<string, unknown>) => void) | null = null;
+const addListenerMock = vi.fn(async (_event: string, cb: (p: Record<string, unknown>) => void) => {
+  capturedStatusCb = cb;
+  return { remove: removeMock };
+});
 vi.mock('../../../../plugins/native-llm', () => ({
   NativeLlm: {
     // Same device-faithful trap as the global mock in tests/setup.ts: the
@@ -16,6 +22,7 @@ vi.mock('../../../../plugins/native-llm', () => ({
     },
     chat: (options: unknown) => chatMock(options),
     cancelChat: () => cancelChatMock(),
+    addListener: (event: string, cb: (p: Record<string, unknown>) => void) => addListenerMock(event, cb),
   },
 }));
 
@@ -34,6 +41,22 @@ describe('NativeLlmProvider.chat', () => {
   beforeEach(() => {
     chatMock.mockReset();
     cancelChatMock.mockClear();
+    removeMock.mockClear();
+    addListenerMock.mockClear();
+    capturedStatusCb = null;
+  });
+
+  it('forwards native chatStatus phases to onStatus and always removes the listener', async () => {
+    chatMock.mockImplementation(async () => {
+      capturedStatusCb?.({ phase: 'prefill', progress: 0.5, tokens: 1000, cached: 200 });
+      return { content: '{"answer":"ok"}', promptTokens: 1200, completionTokens: 5 };
+    });
+    const onStatus = vi.fn();
+    const provider = new NativeLlmProvider();
+    await provider.chat([{ role: 'user', text: 'hi' }], [], 'sys', new AbortController().signal, onStatus);
+    // `cached` is dropped; the UI only needs phase/progress/tokens.
+    expect(onStatus).toHaveBeenCalledWith({ phase: 'prefill', progress: 0.5, tokens: 1000 });
+    expect(removeMock).toHaveBeenCalledTimes(1);
   });
 
   it('parses a well-formed reply into an answer turn', async () => {

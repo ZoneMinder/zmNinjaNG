@@ -28,7 +28,7 @@
  * unit-test without WebGPU; only `WebLlmProvider.chat` touches the engine.
  */
 import type { ChatCompletionMessageParam } from '@mlc-ai/web-llm';
-import type { AssistantProvider, AssistantMessage, AssistantTurn, CompletionResult, ToolDefinition } from '../types';
+import type { AssistantProvider, AssistantMessage, AssistantStatus, AssistantTurn, CompletionResult, ToolDefinition } from '../types';
 import { ASSISTANT } from '../../zmninja-ng-constants';
 import { log, LogLevel } from '../../logger';
 import { getLoadedEngine } from '../model-download';
@@ -607,9 +607,15 @@ export class WebLlmProvider implements AssistantProvider {
 
   /** Bare system + user, deliberately bypassing `buildWebLlmMessages`: no tool
    *  catalog, no few-shot, no OUTPUT_CONTRACT. See `AssistantProvider`. */
-  async complete(system: string, text: string, signal: AbortSignal, jsonSchema?: Record<string, unknown>): Promise<CompletionResult> {
+  async complete(
+    system: string,
+    text: string,
+    signal: AbortSignal,
+    jsonSchema?: Record<string, unknown>,
+    onStatus?: (status: AssistantStatus) => void,
+  ): Promise<CompletionResult> {
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
-    const engine = await getLoadedEngine(this.modelId);
+    const engine = await getLoadedEngine(this.modelId, onStatus ? (progress) => onStatus({ phase: 'loading_model', progress }) : undefined);
     const messages: ChatCompletionMessageParam[] = [
       { role: 'system', content: system },
       { role: 'user', content: text },
@@ -634,10 +640,11 @@ export class WebLlmProvider implements AssistantProvider {
     tools: ToolDefinition[],
     system: string,
     signal: AbortSignal,
+    onStatus?: (status: AssistantStatus) => void,
   ): Promise<AssistantTurn> {
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
 
-    const engine = await getLoadedEngine(this.modelId);
+    const engine = await getLoadedEngine(this.modelId, onStatus ? (progress) => onStatus({ phase: 'loading_model', progress }) : undefined);
     const chatMessages = buildWebLlmMessages(system, messages, tools, this.modelId);
 
     // Retry a degenerate/unparseable reply rather than apologizing on the first
@@ -652,6 +659,7 @@ export class WebLlmProvider implements AssistantProvider {
     let turn: AssistantTurn = { text: PARSE_ERROR_TEXT, toolCalls: [] };
     for (let attempt = 1; attempt <= ASSISTANT.maxParseAttempts; attempt++) {
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+      if (attempt > 1) onStatus?.({ phase: 'retry', attempt });
       log.assistant('Sending WebLLM chat completion request', LogLevel.DEBUG, {
         modelId: this.modelId,
         messageCount: chatMessages.length,
