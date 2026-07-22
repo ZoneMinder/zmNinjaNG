@@ -63,6 +63,13 @@ final class LlamaEngine {
 
     // MARK: Lifecycle
 
+    /// True while a chat is generating. Callers (delete/unload) use it to avoid
+    /// freeing the model out from under a running chat (use-after-free).
+    var isBusy: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return busy
+    }
+
     func cancelChat() {
         lock.lock(); cancelRequested = true; lock.unlock()
     }

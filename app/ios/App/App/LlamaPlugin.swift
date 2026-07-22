@@ -51,6 +51,10 @@ public class LlamaPlugin: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDelegat
 
     @objc func deleteModel(_ call: CAPPluginCall) {
         guard let modelId = call.getString("modelId") else { return call.reject("modelId is required") }
+        // Never free the model out from under a running chat (use-after-free).
+        if LlamaEngine.shared.isBusy {
+            return call.reject("A reply is being generated; try again when it finishes", "CHAT_BUSY")
+        }
         LlamaEngine.shared.unloadIfLoaded(modelId: modelId)
         if let url = try? modelURL(modelId) {
             try? FileManager.default.removeItem(at: url)
@@ -160,6 +164,9 @@ public class LlamaPlugin: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDelegat
     }
 
     @objc func unload(_ call: CAPPluginCall) {
+        if LlamaEngine.shared.isBusy {
+            return call.reject("A reply is being generated; try again when it finishes", "CHAT_BUSY")
+        }
         LlamaEngine.shared.unload()
         call.resolve()
     }

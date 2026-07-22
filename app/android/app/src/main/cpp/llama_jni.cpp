@@ -48,7 +48,7 @@ llama_model *ensure_model(const std::string &model_id, const std::string &model_
 
 void throw_engine_failed(JNIEnv *env, const char *msg) {
     jclass cls = env->FindClass("java/lang/RuntimeException");
-    env->ThrowNew(cls, msg);
+    if (cls) env->ThrowNew(cls, msg);
 }
 
 std::string jstr(JNIEnv *env, jstring s) {
@@ -68,10 +68,14 @@ bool apply_template(llama_model *model, JNIEnv *env, jobjectArray roles,
     std::vector<std::string> role_s(n), content_s(n);
     std::vector<llama_chat_message> msgs(n);
     for (jsize i = 0; i < n; i++) {
-        role_s[i] = jstr(env, (jstring) env->GetObjectArrayElement(roles, i));
-        content_s[i] = jstr(env, (jstring) env->GetObjectArrayElement(contents, i));
+        jstring r = (jstring) env->GetObjectArrayElement(roles, i);
+        jstring c = (jstring) env->GetObjectArrayElement(contents, i);
+        role_s[i] = jstr(env, r);
+        content_s[i] = jstr(env, c);
         msgs[i].role = role_s[i].c_str();
         msgs[i].content = content_s[i].c_str();
+        env->DeleteLocalRef(r);
+        env->DeleteLocalRef(c);
     }
     const char *tmpl = llama_model_chat_template(model, nullptr);
     if (!tmpl) return false;

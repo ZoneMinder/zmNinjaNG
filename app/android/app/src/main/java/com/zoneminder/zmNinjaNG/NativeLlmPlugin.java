@@ -89,6 +89,11 @@ public class NativeLlmPlugin extends Plugin {
     public void deleteModel(PluginCall call) {
         String modelId = call.getString("modelId");
         if (modelId == null) { call.reject("modelId is required"); return; }
+        // Never free the model out from under a running chat (use-after-free).
+        if (chatInFlight.get()) {
+            call.reject("A reply is being generated; try again when it finishes", "CHAT_BUSY");
+            return;
+        }
         nativeFreeIfLoaded(modelId);
         File file = modelFile(modelId);
         if (file.exists()) file.delete();
@@ -126,10 +131,10 @@ public class NativeLlmPlugin extends Plugin {
             conn.connect();
             long total = conn.getContentLengthLong();
 
+            long received = 0;
             try (InputStream in = conn.getInputStream();
                  FileOutputStream out = new FileOutputStream(temp)) {
                 byte[] buf = new byte[64 * 1024];
-                long received = 0;
                 long lastEmit = 0;
                 int n;
                 while ((n = in.read(buf)) != -1) {
@@ -142,6 +147,15 @@ public class NativeLlmPlugin extends Plugin {
                         lastEmit = now;
                     }
                 }
+            }
+
+            // A dropped connection ends the read loop cleanly; with a known length,
+            // a short read means a truncated (corrupt) file — never rename it over the
+            // previous good model.
+            if (total > 0 && received != total) {
+                temp.delete();
+                call.reject("Download failed: truncated (" + received + "/" + total + ")", "DOWNLOAD_FAILED");
+                return;
             }
 
             if (dest.exists()) dest.delete();
@@ -242,6 +256,10 @@ public class NativeLlmPlugin extends Plugin {
 
     @PluginMethod
     public void unload(PluginCall call) {
+        if (chatInFlight.get()) {
+            call.reject("A reply is being generated; try again when it finishes", "CHAT_BUSY");
+            return;
+        }
         nativeUnload();
         call.resolve();
     }
