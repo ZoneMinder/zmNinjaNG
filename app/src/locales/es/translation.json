@@ -320,6 +320,7 @@
       "backend_on_device": "En el dispositivo",
       "backend_ollama": "Ollama (remoto)",
       "backend_native": "En el dispositivo (nativo)",
+      "native_unsupported_memory": "Este dispositivo no admite modelos en el dispositivo: no tiene suficiente memoria para ejecutarlos. Usa un servidor Ollama en su lugar, configurado abajo.",
       "on_device_mobile_disabled": "Los modelos en el dispositivo no están disponibles en teléfonos ni tabletas: necesitan más memoria de la que puede usar una app móvil y las respuestas tardan minutos. Usa un servidor Ollama, configurado abajo.",
       "no_webgpu": "Requiere WebGPU, no disponible en este dispositivo.",
       "no_webgpu_hint": "Usa Ollama en su lugar: funciona sin WebGPU.",

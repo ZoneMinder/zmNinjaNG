@@ -320,6 +320,7 @@
       "backend_on_device": "Auf dem Gerät",
       "backend_ollama": "Ollama (extern)",
       "backend_native": "Auf dem Gerät (nativ)",
+      "native_unsupported_memory": "Auf diesem Gerät werden lokale Modelle nicht unterstützt: Es hat nicht genug Speicher, um sie auszuführen. Verwende stattdessen einen Ollama-Server, Einrichtung unten.",
       "on_device_mobile_disabled": "Modelle auf dem Gerät sind auf Smartphones und Tablets nicht verfügbar: Sie benötigen mehr Speicher, als eine mobile App nutzen darf, und Antworten dauern Minuten. Verwenden Sie stattdessen einen Ollama-Server (siehe unten).",
       "no_webgpu": "Erfordert WebGPU, auf diesem Gerät nicht verfügbar.",
       "no_webgpu_hint": "Nutze stattdessen Ollama: funktioniert ohne WebGPU.",

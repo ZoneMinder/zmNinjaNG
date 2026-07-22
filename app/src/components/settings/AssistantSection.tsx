@@ -68,7 +68,7 @@ export function AssistantSection({
   // Same undefined-while-probing/boolean-once-resolved shape as hasWebGPU
   // above, but for the native (llama.cpp bridge) backend: only meaningful on
   // a native platform, where the plugin actually exists.
-  const nativeSupported = useNativeLlmSupported();
+  const { supported: nativeSupported, reason: nativeUnsupportedReason } = useNativeLlmSupported();
   const availableModels = useMemo(
     () => ASSISTANT.webllmModels,
     [],
@@ -296,7 +296,15 @@ export function AssistantSection({
               </div>
             ) : Platform.isNative ? (
               <div className="px-4 py-3 space-y-1" data-testid="assistant-on-device-unavailable">
-                <p className="text-xs text-muted-foreground">{t('settings.assistant.on_device_mobile_disabled')}</p>
+                {/* Device-specific when the plugin gave a reason ('memory':
+                    the probe ran and THIS device failed the gate); the
+                    generic mobile note otherwise (probe still running,
+                    plugin missing, or probe rejected). */}
+                <p className="text-xs text-muted-foreground">
+                  {nativeUnsupportedReason === 'memory'
+                    ? t('settings.assistant.native_unsupported_memory')
+                    : t('settings.assistant.on_device_mobile_disabled')}
+                </p>
               </div>
             ) : (
               <div className="px-4 py-3 space-y-2">

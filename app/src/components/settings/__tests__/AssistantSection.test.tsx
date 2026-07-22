@@ -29,8 +29,9 @@ vi.mock('../../../hooks/useCapacitorListener', () => ({ useCapacitorListener: us
 // Defaults unsupported so every test that doesn't touch this explicitly keeps
 // the pre-existing "note + forced Ollama" behavior on a native platform.
 let nativeSupported: boolean | undefined = false;
+let nativeUnsupportedReason: 'platform' | 'memory' | undefined;
 vi.mock('../../../hooks/useNativeLlmSupported', () => ({
-  useNativeLlmSupported: () => nativeSupported,
+  useNativeLlmSupported: () => ({ supported: nativeSupported, reason: nativeUnsupportedReason }),
 }));
 
 const isNativeModelDownloadedMock = vi.fn().mockResolvedValue({ downloaded: false });
@@ -114,6 +115,7 @@ describe('AssistantSection backend picker and gating', () => {
     isAndroid = false;
     isNative = false;
     nativeSupported = false;
+    nativeUnsupportedReason = undefined;
   });
 
   // On-device was removed on phones and tablets. The picker must not offer a
@@ -174,6 +176,31 @@ describe('AssistantSection backend picker and gating', () => {
       expect(await screen.findByTestId('assistant-on-device-unavailable')).toBeInTheDocument();
       expect(screen.queryByTestId('assistant-backend-select')).not.toBeInTheDocument();
       expect(screen.getByTestId('assistant-ollama-url')).toBeInTheDocument();
+    });
+
+    it('names this device and the memory reason when the plugin reports reason "memory"', async () => {
+      isNative = true;
+      nativeSupported = false;
+      nativeUnsupportedReason = 'memory';
+      render(
+        <AssistantSection settings={enabledSettings} update={vi.fn()} currentProfile={profile} updateSettings={vi.fn()} />,
+      );
+
+      const note = await screen.findByTestId('assistant-on-device-unavailable');
+      expect(within(note).getByText('settings.assistant.native_unsupported_memory')).toBeInTheDocument();
+      expect(within(note).queryByText('settings.assistant.on_device_mobile_disabled')).not.toBeInTheDocument();
+    });
+
+    it('falls back to the generic note when the probe failed without a reason', async () => {
+      isNative = true;
+      nativeSupported = false;
+      nativeUnsupportedReason = undefined;
+      render(
+        <AssistantSection settings={enabledSettings} update={vi.fn()} currentProfile={profile} updateSettings={vi.fn()} />,
+      );
+
+      const note = await screen.findByTestId('assistant-on-device-unavailable');
+      expect(within(note).getByText('settings.assistant.on_device_mobile_disabled')).toBeInTheDocument();
     });
 
     it('shows an Ollama/native backend picker once the device passes isSupported(), defaulting to Ollama', async () => {
