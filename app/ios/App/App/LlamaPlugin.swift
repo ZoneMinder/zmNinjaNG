@@ -1,5 +1,6 @@
 import Foundation
 import Capacitor
+import UIKit
 
 /// Native LLM plugin: downloads GGUF models and runs on-device inference via llama.cpp (Metal).
 /// JS contract: app/src/plugins/native-llm/definitions.ts
@@ -27,6 +28,20 @@ public class LlamaPlugin: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDelegat
     private var downloadTask: URLSessionDownloadTask?
     private var downloadCall: CAPPluginCall?
     private var downloadModelId: String?
+
+    // MARK: - Lifecycle
+
+    override public func load() {
+        // Memory valve: under pressure, free the persistent KV context (keep the model).
+        // LlamaEngine defers the free if a chat is generating. Mirrors Android's onTrimMemory.
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(handleMemoryWarning),
+            name: UIApplication.didReceiveMemoryWarningNotification, object: nil)
+    }
+
+    @objc private func handleMemoryWarning() {
+        LlamaEngine.shared.freeContextUnderPressure()
+    }
 
     // MARK: - Capability
 

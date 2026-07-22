@@ -1,7 +1,9 @@
 package com.zoneminder.zmNinjaNG;
 
 import android.app.ActivityManager;
+import android.content.ComponentCallbacks2;
 import android.content.Context;
+import android.content.res.Configuration;
 import android.os.PowerManager;
 
 import com.getcapacitor.JSObject;
@@ -41,6 +43,7 @@ public class NativeLlmPlugin extends Plugin {
     private static native void nativeCancelChat();
     private static native void nativeUnload();
     private static native void nativeFreeIfLoaded(String modelId);
+    private static native void nativeFreeContext();
 
     // 5.5 GiB physical-memory floor for on-device inference (matches iOS).
     private static final long MEMORY_FLOOR = (long) (5.5 * 1024 * 1024 * 1024);
@@ -53,6 +56,22 @@ public class NativeLlmPlugin extends Plugin {
     private final AtomicBoolean downloadInProgress = new AtomicBoolean(false);
     private volatile boolean downloadCanceled = false;
     private volatile HttpURLConnection activeConnection = null;
+
+    @Override
+    public void load() {
+        // Memory valve: under real pressure, free the persistent KV context (keep the model).
+        // Routed through chatExecutor so it queues after any in-flight chat instead of racing it.
+        getContext().registerComponentCallbacks(new ComponentCallbacks2() {
+            @Override
+            public void onTrimMemory(int level) {
+                if (level >= TRIM_MEMORY_RUNNING_CRITICAL) {
+                    chatExecutor.execute(NativeLlmPlugin::nativeFreeContext);
+                }
+            }
+            @Override public void onConfigurationChanged(Configuration newConfig) {}
+            @Override public void onLowMemory() {}
+        });
+    }
 
     // MARK: - Capability
 

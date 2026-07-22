@@ -16,6 +16,7 @@
 
 #define LOG_TAG "NativeLlm"
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
+#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 
 namespace {
 
@@ -25,12 +26,41 @@ bool g_backend_ready = false;
 llama_model *g_model = nullptr;
 std::string g_loaded_id;
 
+// Persistent context + its KV, kept resident across chat calls so a repeated prefix
+// (tool rounds, retries, growing history) is not re-prefilled. g_cached = the exact
+// token sequence currently in the KV (prompt + generated) from the previous call.
+llama_context *g_ctx = nullptr;
+int g_ctx_size = 0;                    // n_ctx the resident ctx was built with
+std::vector<llama_token> g_cached;
+
+void free_context_locked() {
+    if (g_ctx) { llama_free(g_ctx); g_ctx = nullptr; }
+    g_ctx_size = 0;
+    g_cached.clear();
+}
+
 void free_model_locked() {
+    free_context_locked();
     if (g_model) {
         llama_model_free(g_model);
         g_model = nullptr;
         g_loaded_id.clear();
     }
+}
+
+// Reuse the resident context if it matches the requested size, else (re)create it.
+// A different contextSize discards the KV. Must be called under g_lock.
+llama_context *ensure_context_locked(llama_model *model, int n_ctx_req, int n_threads) {
+    if (g_ctx && g_ctx_size == n_ctx_req) return g_ctx;
+    free_context_locked();
+    llama_context_params cp = llama_context_default_params();
+    cp.n_ctx = (uint32_t) n_ctx_req;
+    cp.n_batch = cp.n_ctx; // whole prefill decoded in one llama_decode
+    cp.n_threads = n_threads;
+    cp.n_threads_batch = n_threads;
+    g_ctx = llama_init_from_model(model, cp);
+    if (g_ctx) g_ctx_size = n_ctx_req;
+    return g_ctx;
 }
 
 // Load (or reuse) the resident model. Caller holds no lock; we take it here.
@@ -161,10 +191,6 @@ Java_com_zoneminder_zmNinjaNG_NativeLlmPlugin_nativeChat(
         throw_engine_failed(env, "Failed to apply chat template"); return nullptr;
     }
 
-    // Context sized by the caller; whole prompt decoded in one llama_decode.
-    llama_context_params cparams = llama_context_default_params();
-    cparams.n_ctx = (uint32_t) std::max(256, (int) context_size);
-    cparams.n_batch = cparams.n_ctx;
     // Thread count = performance cores only. Big.LITTLE Android SoCs pair the big cluster with
     // ~4 little (A5xx) cores that straggle on prefill; on-device llama-bench (Pixel 8 / Tensor G3,
     // 1 X3 + 4 A715 + 4 A510 = 9 hw threads) pp512 peaked at 5 threads (16.19 t/s) and REGRESSED
@@ -172,9 +198,16 @@ Java_com_zoneminder_zmNinjaNG_NativeLlmPlugin_nativeChat(
     // [4,6] so odd core counts stay sane.
     int hw = (int) std::thread::hardware_concurrency();
     int n_threads = std::max(4, std::min(6, hw - 4));
-    cparams.n_threads = n_threads;
-    cparams.n_threads_batch = n_threads;
-    llama_context *ctx = llama_init_from_model(model, cparams);
+
+    // Persistent context, sized by the caller (recreated only if contextSize changed).
+    // Serial execution (Java chatInFlight gate + single-thread executor) makes the ctx a
+    // single owner during the chat, so the KV work below needs no lock; only the create/free
+    // of g_ctx is guarded (vs the trim free, which the executor also serializes).
+    llama_context *ctx;
+    {
+        std::lock_guard<std::mutex> lk(g_lock);
+        ctx = ensure_context_locked(model, std::max(256, (int) context_size), n_threads);
+    }
     if (!ctx) { throw_engine_failed(env, "Failed to initialize context"); return nullptr; }
 
     // Sampler chain: greedy at temperature 0, else top-k/top-p/min-p/temp.
@@ -192,11 +225,23 @@ Java_com_zoneminder_zmNinjaNG_NativeLlmPlugin_nativeChat(
     std::vector<llama_token> prompt_tokens = tokenize(vocab, prompt);
     int n_ctx = (int) llama_n_ctx(ctx);
     if (prompt_tokens.empty() || (int) prompt_tokens.size() >= n_ctx) {
-        llama_sampler_free(smpl); llama_free(ctx);
+        llama_sampler_free(smpl);
         throw_engine_failed(env, "Prompt exceeds context size"); return nullptr;
     }
 
-    llama_batch batch = llama_batch_init((int32_t) prompt_tokens.size(), 0, 1);
+    // KV reuse: keep the longest prefix already in the KV, evict the divergent tail,
+    // prefill only the changed suffix. Back off by one if the whole prompt is cached
+    // (must decode at least the last token to get logits to sample from).
+    size_t n_common = 0;
+    size_t maxc = std::min(g_cached.size(), prompt_tokens.size());
+    while (n_common < maxc && g_cached[n_common] == prompt_tokens[n_common]) n_common++;
+    if (n_common == prompt_tokens.size()) n_common--;
+    llama_memory_seq_rm(llama_get_memory(ctx), 0, (llama_pos) n_common, -1);
+    LOGI("KV reuse: prompt=%zu cached=%zu common=%zu prefill=%zu",
+         prompt_tokens.size(), g_cached.size(), n_common, prompt_tokens.size() - n_common);
+
+    int suffix = (int) prompt_tokens.size() - (int) n_common;
+    llama_batch batch = llama_batch_init(std::max(1, suffix), 0, 1);
     auto add_token = [&](llama_token id, llama_pos pos, bool logits) {
         int i = batch.n_tokens;
         batch.token[i] = id;
@@ -208,37 +253,50 @@ Java_com_zoneminder_zmNinjaNG_NativeLlmPlugin_nativeChat(
     };
 
     batch.n_tokens = 0;
-    for (size_t i = 0; i < prompt_tokens.size(); i++)
+    for (size_t i = n_common; i < prompt_tokens.size(); i++)
         add_token(prompt_tokens[i], (llama_pos) i, false);
     batch.logits[batch.n_tokens - 1] = 1; // sample from the last prompt token
 
     if (llama_decode(ctx, batch) != 0) {
-        llama_batch_free(batch); llama_sampler_free(smpl); llama_free(ctx);
+        llama_batch_free(batch); llama_sampler_free(smpl);
+        g_cached.clear(); // KV now inconsistent -> full re-prefill next call
         throw_engine_failed(env, "Failed to decode prompt"); return nullptr;
     }
 
     // Generation loop. On cancel, stop and return the partial completion (the JS
     // side turns an aborted call into AbortError regardless of resolve/reject).
     std::vector<char> pieces;
+    std::vector<llama_token> generated;
     int completion = 0;
+    bool kv_valid = true;
     llama_pos n_cur = (llama_pos) prompt_tokens.size();
     while (completion < max_tokens && n_cur < (llama_pos) n_ctx) {
-        if (g_cancel.load()) break;
+        if (g_cancel.load()) { kv_valid = false; break; } // partial gen in KV -> drop cache
         llama_token new_token = llama_sampler_sample(smpl, ctx, -1);
         if (llama_vocab_is_eog(vocab, new_token)) break;
         append_piece(vocab, new_token, pieces);
+        generated.push_back(new_token);
         completion++;
 
         batch.n_tokens = 0;
         add_token(new_token, n_cur, true);
         n_cur++;
-        if (llama_decode(ctx, batch) != 0) break;
+        if (llama_decode(ctx, batch) != 0) { kv_valid = false; break; }
     }
 
     llama_batch_free(batch);
     llama_sampler_free(smpl);
-    llama_free(ctx);
+    // ctx persists. Update the cache to exactly what the KV now holds (prompt + generated),
+    // or drop it if generation left the KV in a partial state.
+    if (kv_valid) {
+        g_cached = prompt_tokens;
+        g_cached.insert(g_cached.end(), generated.begin(), generated.end());
+    } else {
+        g_cached.clear();
+    }
 
+    // promptTokens stays the FULL prompt count (JS context-window accounting depends on it),
+    // NOT the prefilled suffix.
     jint counts[2] = { (jint) prompt_tokens.size(), (jint) completion };
     env->SetIntArrayRegion(out_counts, 0, 2, counts);
 
@@ -258,6 +316,15 @@ JNIEXPORT void JNICALL
 Java_com_zoneminder_zmNinjaNG_NativeLlmPlugin_nativeUnload(JNIEnv *, jclass) {
     std::lock_guard<std::mutex> lk(g_lock);
     free_model_locked();
+}
+
+// Memory valve: free the resident context + KV (keep the model). Called from the plugin's
+// onTrimMemory via the chat executor, so it never races an in-flight chat. Next chat pays
+// one full prefill to rebuild.
+JNIEXPORT void JNICALL
+Java_com_zoneminder_zmNinjaNG_NativeLlmPlugin_nativeFreeContext(JNIEnv *, jclass) {
+    std::lock_guard<std::mutex> lk(g_lock);
+    if (g_ctx) { LOGI("freeing KV context under memory pressure"); free_context_locked(); }
 }
 
 JNIEXPORT void JNICALL

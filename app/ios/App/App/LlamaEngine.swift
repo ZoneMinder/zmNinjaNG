@@ -59,6 +59,14 @@ final class LlamaEngine {
     private var loadedModelId: String?
     private var model: OpaquePointer?
 
+    // Persistent context + its KV, kept resident across chat calls so a repeated prefix
+    // (tool rounds, retries, growing history) is not re-prefilled. `cached` = the exact
+    // token sequence currently in the KV (prompt + generated) from the previous call.
+    private var ctx: OpaquePointer?
+    private var ctxSize = 0                 // n_ctx the resident ctx was built with
+    private var cached: [llama_token] = []
+    private var freeCtxPending = false      // memory warning arrived mid-chat; free when it ends
+
     private init() {}
 
     // MARK: Lifecycle
@@ -87,11 +95,48 @@ final class LlamaEngine {
     }
 
     private func freeModelLocked() {
+        freeContextLocked()
         if let m = model {
             llama_model_free(m)
             model = nil
             loadedModelId = nil
         }
+    }
+
+    private func freeContextLocked() {
+        if let c = ctx { llama_free(c); ctx = nil }
+        ctxSize = 0
+        cached.removeAll()
+    }
+
+    /// Memory valve: free the resident context + KV (keep the model). If a chat is running it
+    /// still needs the ctx, so defer the free until the chat's `defer` fires. Next chat pays
+    /// one full prefill to rebuild. Mirrors Android's onTrimMemory hook.
+    func freeContextUnderPressure() {
+        lock.lock(); defer { lock.unlock() }
+        if busy {
+            freeCtxPending = true
+        } else if ctx != nil {
+            NSLog("NativeLlm: freeing KV context under memory pressure")
+            freeContextLocked()
+        }
+    }
+
+    /// Reuse the resident context if it matches the requested size, else (re)create it.
+    /// A different contextSize discards the KV.
+    private func ensureContext(model: OpaquePointer, nCtx: Int, nThreads: Int32) throws -> OpaquePointer {
+        lock.lock(); defer { lock.unlock() }
+        if let c = ctx, ctxSize == nCtx { return c }
+        freeContextLocked()
+        var cparams = llama_context_default_params()
+        cparams.n_ctx = UInt32(nCtx)
+        cparams.n_batch = cparams.n_ctx // whole prefill decoded in one llama_decode
+        cparams.n_threads = nThreads
+        cparams.n_threads_batch = nThreads
+        guard let c = llama_init_from_model(model, cparams) else { throw LlamaEngineError.contextInitFailed }
+        ctx = c
+        ctxSize = nCtx
+        return c
     }
 
     // MARK: Chat
@@ -105,22 +150,21 @@ final class LlamaEngine {
         cancelRequested = false
         if !backendReady { llama_backend_init(); backendReady = true }
         lock.unlock()
-        defer { lock.lock(); busy = false; lock.unlock() }
+        defer {
+            lock.lock()
+            if freeCtxPending { freeContextLocked(); freeCtxPending = false }
+            busy = false
+            lock.unlock()
+        }
 
         let model = try ensureModel(modelId: modelId, modelPath: modelPath)
         let vocab = llama_model_get_vocab(model)
 
         let prompt = try applyTemplate(model: model, messagesJson: messagesJson)
 
-        // Context sized by the caller.
-        var cparams = llama_context_default_params()
-        cparams.n_ctx = UInt32(max(256, contextSize))
-        cparams.n_batch = cparams.n_ctx // whole prompt is decoded in one llama_decode call
+        // Persistent context, sized by the caller (recreated only if contextSize changed).
         let nThreads = Int32(max(1, min(8, ProcessInfo.processInfo.processorCount - 2)))
-        cparams.n_threads = nThreads
-        cparams.n_threads_batch = nThreads
-        guard let ctx = llama_init_from_model(model, cparams) else { throw LlamaEngineError.contextInitFailed }
-        defer { llama_free(ctx) }
+        let ctx = try ensureContext(model: model, nCtx: max(256, contextSize), nThreads: nThreads)
 
         // Sampler chain: greedy at temperature 0, else top-k/top-p/min-p/temp (llama.cpp CLI defaults).
         let smpl = llama_sampler_chain_init(llama_sampler_chain_default_params())
@@ -139,36 +183,59 @@ final class LlamaEngine {
         let nCtx = Int(llama_n_ctx(ctx))
         guard !promptTokens.isEmpty, promptTokens.count < nCtx else { throw LlamaEngineError.promptTooLong }
 
-        var batch = llama_batch_init(Int32(max(promptTokens.count, 1)), 0, 1)
+        // KV reuse: keep the longest prefix already in the KV, evict the divergent tail, prefill
+        // only the changed suffix. Back off by one if the whole prompt is cached (must decode at
+        // least the last token to sample from its logits).
+        var nCommon = 0
+        let maxCommon = min(cached.count, promptTokens.count)
+        while nCommon < maxCommon && cached[nCommon] == promptTokens[nCommon] { nCommon += 1 }
+        if nCommon == promptTokens.count { nCommon -= 1 }
+        llama_memory_seq_rm(llama_get_memory(ctx), 0, llama_pos(nCommon), -1)
+
+        let suffix = promptTokens.count - nCommon
+        var batch = llama_batch_init(Int32(max(suffix, 1)), 0, 1)
         defer { llama_batch_free(batch) }
 
         batchClear(&batch)
-        for (i, tok) in promptTokens.enumerated() {
-            batchAdd(&batch, tok, llama_pos(i), [0], false)
+        for i in nCommon..<promptTokens.count {
+            batchAdd(&batch, promptTokens[i], llama_pos(i), [0], false)
         }
         batch.logits[Int(batch.n_tokens) - 1] = 1 // sample from the last prompt token
-        guard llama_decode(ctx, batch) == 0 else { throw LlamaEngineError.contextInitFailed }
+        guard llama_decode(ctx, batch) == 0 else {
+            cached.removeAll() // KV now inconsistent -> full re-prefill next call
+            throw LlamaEngineError.contextInitFailed
+        }
 
-        // Generation loop.
+        // Generation loop. On cancel, stop and return the partial completion (the JS side turns
+        // an aborted call into AbortError regardless), dropping the cache since the KV is partial.
         var pieces: [CChar] = []
+        var generated: [llama_token] = []
         var completion = 0
+        var kvValid = true
         var nCur = llama_pos(promptTokens.count)
         while completion < maxTokens && nCur < llama_pos(nCtx) {
             lock.lock(); let cancelled = cancelRequested; lock.unlock()
-            if cancelled { throw LlamaEngineError.cancelled }
+            if cancelled { kvValid = false; break }
 
             let newToken = llama_sampler_sample(smpl, ctx, -1)
             if llama_vocab_is_eog(vocab, newToken) { break }
 
             pieces.append(contentsOf: tokenToPiece(vocab: vocab, token: newToken))
+            generated.append(newToken)
             completion += 1
 
             batchClear(&batch)
             batchAdd(&batch, newToken, nCur, [0], true)
             nCur += 1
-            if llama_decode(ctx, batch) != 0 { break }
+            if llama_decode(ctx, batch) != 0 { kvValid = false; break }
         }
 
+        // ctx persists. Update the cache to exactly what the KV now holds (prompt + generated),
+        // or drop it if generation left the KV partial.
+        cached = kvValid ? promptTokens + generated : []
+
+        // promptTokens stays the FULL prompt count (JS context-window accounting depends on it),
+        // NOT the prefilled suffix.
         let content = String(cString: pieces + [0])
         return LlamaChatResult(content: content, promptTokens: promptTokens.count, completionTokens: completion)
     }
