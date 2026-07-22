@@ -140,3 +140,11 @@ Either way the conversation is not saved. Closing zmNinjaNg clears it.
 ## Platform support
 
 The on-device backend runs on desktop and in the browser, where there is enough memory to hold a model, and it needs a GPU with WebGPU support. It is not offered on phones or tablets: a mobile app is capped at far less memory than a model needs, so loading one crashes the app. Ollama has neither requirement and works anywhere the app runs, so it is the way to use the assistant on a phone or tablet, or on a desktop without WebGPU.
+
+On the Linux desktop app, picking the on-device backend usually shows a "no WebGPU" note. That is not a missing GPU: Chromium ships with WebGPU turned off on Linux because Vulkan driver support there is uneven, and the app inherits that default. You can turn it on by launching the app with Chromium's own flags:
+
+```
+zmNinjaNg --enable-unsafe-webgpu --enable-features=Vulkan
+```
+
+(For the AppImage, put the flags after the AppImage file name.) This needs working Vulkan drivers, and "unsafe" is in the flag's name because Chromium has not finished hardening this path on Linux; if the app becomes unstable, drop the flags and use Ollama instead. On macOS and Windows none of this is needed, WebGPU is on by default there.
