@@ -208,6 +208,10 @@ final class LlamaEngine {
 
         let promptTokens = tokenize(vocab: vocab, text: prompt, addBos: true)
         let nCtx = Int(llama_n_ctx(ctx))
+        // Checks THIS slot's prompt against n_ctx, but with kv_unified both slots share the
+        // n_ctx-cell pool: combined slot occupancy near n_ctx can still fail a later llama_decode.
+        // Recoverable, not corrupting — the slot's cache is dropped on failure and re-prefilled
+        // from seq_rm 0 next call; JS context auto-clear shrinks slot 0. Accepted ceiling.
         guard !promptTokens.isEmpty, promptTokens.count < nCtx else { throw LlamaEngineError.promptTooLong }
 
         // KV reuse: keep the longest prefix already in the KV, evict the divergent tail, prefill

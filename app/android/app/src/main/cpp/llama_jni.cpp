@@ -274,6 +274,11 @@ Java_com_zoneminder_zmNinjaNG_NativeLlmPlugin_nativeChat(
 
     std::vector<llama_token> prompt_tokens = tokenize(vocab, prompt);
     int n_ctx = (int) llama_n_ctx(ctx);
+    // This checks THIS slot's prompt against n_ctx, but with kv_unified both slots share the
+    // n_ctx-cell pool: combined slot occupancy near n_ctx can still fail a later llama_decode.
+    // That is recoverable, not corrupting — this slot's cache is dropped on failure and the next
+    // call re-prefills from seq_rm 0; JS context auto-clear shrinks slot 0. Accepted ceiling
+    // (triage is tiny, so chat effectively keeps the full window).
     if (prompt_tokens.empty() || (int) prompt_tokens.size() >= n_ctx) {
         llama_sampler_free(smpl);
         throw_engine_failed(env, "Prompt exceeds context size"); return nullptr;

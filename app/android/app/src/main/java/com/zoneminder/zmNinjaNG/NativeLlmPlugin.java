@@ -292,6 +292,8 @@ public class NativeLlmPlugin extends Plugin {
         final Activity act = getActivity();
         if (act == null) return;
         act.runOnUiThread(() -> {
+            // The activity can tear down between capture and this UI-thread turn -> getWindow() null.
+            if (act.getWindow() == null) return;
             if (on) act.getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
             else act.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         });
