@@ -37,7 +37,7 @@ import { captureExchange } from '../exchange';
 
 /** i18n-free (rule 5): AskPanel resolves this sentinel via `t()`, same as
  *  agent.ts's iteration-cap message. */
-const PARSE_ERROR_TEXT = '__i18n:assistant.parse_error';
+export const PARSE_ERROR_TEXT = '__i18n:assistant.parse_error';
 
 /** One compact signature line per tool instead of a raw `JSON.stringify` of
  *  its JSON Schema. A 2B on-device model does not reliably parse nested
@@ -84,7 +84,7 @@ const OUTPUT_CONTRACT = [
  *  what it did wrong instead of being re-rolled blind. At temperature 0 a
  *  blind retry returns the identical broken text; naming the fault changes
  *  the prompt, which is what actually moves a greedy sampler. */
-const SELF_REPAIR_PROMPT = `Your last reply was not one valid JSON object, so it could not be used. Send it again, corrected.\n${OUTPUT_CONTRACT}`;
+export const SELF_REPAIR_PROMPT = `Your last reply was not one valid JSON object, so it could not be used. Send it again, corrected.\n${OUTPUT_CONTRACT}`;
 
 /** The two contract shapes as one JSON Schema, handed to XGrammar so the
  *  sampler literally cannot produce prose around the JSON, a markdown fence,

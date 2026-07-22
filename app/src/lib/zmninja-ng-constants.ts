@@ -794,6 +794,13 @@ export const ASSISTANT = {
     'gemma-2-2b-it-q4f16_1-MLC': 'Llama-3.2-3B-Instruct-q4f16_1-MLC',
     'Qwen3-1.7B-q4f16_1-MLC': 'Llama-3.2-3B-Instruct-q4f16_1-MLC',
   } as Record<string, string>,
+  // The native (llama.cpp bridge) on-device model, refs #270. Only `id` and
+  // `contextSize` are populated here for NativeLlmProvider; the download url,
+  // label and size fields land in Task 3 alongside the download UI.
+  nativeLlmModel: {
+    id: 'Qwen3-4B-Instruct-2507-Q4_K_M',
+    contextSize: 8192,
+  },
   // Ollama's default local HTTP address, OpenAI-compatible endpoint (refs #246).
   // On a phone this must be replaced with the Ollama server's LAN address:
   // "localhost" from the app's own process never reaches a server on another

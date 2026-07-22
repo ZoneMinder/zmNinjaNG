@@ -1,0 +1,110 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { NativeLlmProvider } from '../native-llm';
+import type { ToolDefinition } from '../../types';
+import { ASSISTANT } from '../../../zmninja-ng-constants';
+
+const chatMock = vi.fn();
+const cancelChatMock = vi.fn().mockResolvedValue(undefined);
+vi.mock('../../../../plugins/native-llm', () => ({
+  NativeLlm: {
+    chat: (options: unknown) => chatMock(options),
+    cancelChat: () => cancelChatMock(),
+  },
+}));
+
+vi.mock('../../../platform', () => ({
+  Platform: { isNative: true },
+}));
+
+const TOOL: ToolDefinition = {
+  name: 'count_events',
+  description: 'Counts events',
+  schema: { type: 'object', properties: { interval: { type: 'string' } } },
+  execute: vi.fn(),
+};
+
+describe('NativeLlmProvider.chat', () => {
+  beforeEach(() => {
+    chatMock.mockReset();
+    cancelChatMock.mockClear();
+  });
+
+  it('parses a well-formed reply into an answer turn', async () => {
+    chatMock.mockResolvedValue({ content: '{"answer": "There were 5 events today."}', promptTokens: 100, completionTokens: 20 });
+
+    const provider = new NativeLlmProvider();
+    const turn = await provider.chat([{ role: 'user', text: 'how many today?' }], [TOOL], 'sys', new AbortController().signal);
+
+    expect(turn.text).toBe('There were 5 events today.');
+    expect(turn.toolCalls).toEqual([]);
+  });
+
+  // Self-repair retry: a garbage first reply is followed by the failed reply
+  // plus a correction, and the second attempt recovers.
+  it('retries a garbage reply with a self-repair prompt, then succeeds', async () => {
+    chatMock
+      .mockResolvedValueOnce({ content: '```', promptTokens: 50, completionTokens: 5 })
+      .mockResolvedValueOnce({ content: '{"answer": "Two people came."}', promptTokens: 60, completionTokens: 10 });
+
+    const provider = new NativeLlmProvider();
+    const turn = await provider.chat([{ role: 'user', text: 'hi' }], [], 'sys', new AbortController().signal);
+
+    expect(turn.text).toBe('Two people came.');
+    expect(chatMock).toHaveBeenCalledTimes(2);
+
+    const secondOptions = chatMock.mock.calls[1][0] as { messagesJson: string };
+    const secondMessages = JSON.parse(secondOptions.messagesJson) as Array<{ role: string; content: string }>;
+    expect(secondMessages.at(-2)).toMatchObject({ role: 'assistant', content: '```' });
+    expect(secondMessages.at(-1)?.content).toContain('not one valid JSON object');
+  });
+
+  it('cancels the native call and throws AbortError when the signal aborts mid-flight', async () => {
+    const controller = new AbortController();
+    chatMock.mockImplementation(() => {
+      controller.abort();
+      return Promise.resolve({ content: '{"answer": "partial"}', promptTokens: 1, completionTokens: 1 });
+    });
+
+    const provider = new NativeLlmProvider();
+    await expect(
+      provider.chat([{ role: 'user', text: 'hi' }], [], 'sys', controller.signal),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(cancelChatMock).toHaveBeenCalled();
+  });
+
+  it('attaches usage and exchange to the returned turn', async () => {
+    chatMock.mockResolvedValue({ content: '{"answer": "ok"}', promptTokens: 123, completionTokens: 45 });
+
+    const provider = new NativeLlmProvider();
+    const turn = await provider.chat([{ role: 'user', text: 'hi' }], [], 'sys', new AbortController().signal);
+
+    expect(turn.usage).toEqual({ promptTokens: 123, completionTokens: 45, totalTokens: 168 });
+    expect(turn.exchange).toMatchObject({ backend: 'native', model: ASSISTANT.nativeLlmModel.id });
+    expect(turn.exchange!.received).toContain('ok');
+  });
+
+  it('builds messages via buildWebLlmMessages: few-shot present, /no_think appended for the qwen3 model id', async () => {
+    chatMock.mockResolvedValue({ content: '{"answer": "ok"}', promptTokens: 10, completionTokens: 5 });
+
+    const provider = new NativeLlmProvider();
+    await provider.chat([{ role: 'user', text: 'hi' }], [TOOL], 'sys', new AbortController().signal);
+
+    const options = chatMock.mock.calls[0][0] as { messagesJson: string; modelId: string };
+    const messages = JSON.parse(options.messagesJson) as Array<{ role: string; content: string }>;
+    expect(options.modelId).toBe(ASSISTANT.nativeLlmModel.id);
+    expect(messages[0].content).toContain('/no_think');
+    // Few-shot anchors follow the system message.
+    expect(messages[1]).toMatchObject({ role: 'user', content: 'How many events were recorded today?' });
+  });
+});
+
+describe('NativeLlmProvider platform gate', () => {
+  it('throws when not running on a native platform', async () => {
+    vi.resetModules();
+    vi.doMock('../../../platform', () => ({ Platform: { isNative: false } }));
+    const { NativeLlmProvider: GatedProvider } = await import('../native-llm');
+    const provider = new GatedProvider();
+    await expect(provider.chat([], [], 'sys', new AbortController().signal)).rejects.toThrow();
+    vi.doUnmock('../../../platform');
+  });
+});
