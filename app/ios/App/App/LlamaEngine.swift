@@ -217,7 +217,8 @@ final class LlamaEngine {
         let capacity = utf8Count + (addBos ? 1 : 0) + 1
         let tokens = UnsafeMutablePointer<llama_token>.allocate(capacity: capacity)
         defer { tokens.deallocate() }
-        let n = llama_tokenize(vocab, text, Int32(utf8Count), tokens, Int32(capacity), addBos, false)
+        // parse_special = true: the prompt is templated, so <|im_start|> etc. must tokenize as control tokens, not literal text.
+        let n = llama_tokenize(vocab, text, Int32(utf8Count), tokens, Int32(capacity), addBos, true)
         guard n > 0 else { return [] }
         return (0..<Int(n)).map { tokens[$0] }
     }

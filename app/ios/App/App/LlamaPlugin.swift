@@ -111,10 +111,8 @@ public class LlamaPlugin: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDelegat
 
     public func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         guard let error = error else { return } // success handled in didFinishDownloadingTo
-        // Clean any partial file and reject the pending download call.
-        if let modelId = downloadModelId, let url = try? modelURL(modelId) {
-            try? FileManager.default.removeItem(at: url)
-        }
+        // URLSession owns and cleans its temp file; the final destination is only written
+        // on success, so do not touch it here — a failed re-download must keep any prior model.
         downloadCall?.reject("Download failed: \(error.localizedDescription)")
         clearDownload()
     }
