@@ -65,7 +65,7 @@ public class LlamaPlugin: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDelegat
         guard let urlStr = call.getString("url"), let url = URL(string: urlStr) else {
             return call.reject("url is required")
         }
-        if downloadTask != nil { return call.reject("A download is already in progress") }
+        if downloadTask != nil { return call.reject("A download is already in progress", "DOWNLOAD_IN_PROGRESS") }
         call.keepAlive = true
         downloadCall = call
         downloadModelId = modelId
@@ -104,7 +104,7 @@ public class LlamaPlugin: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDelegat
             try dest.setResourceValues(values)
             call.resolve()
         } catch {
-            call.reject("Failed to save model: \(error.localizedDescription)")
+            call.reject("Failed to save model: \(error.localizedDescription)", "SAVE_FAILED")
         }
         clearDownload()
     }
@@ -113,7 +113,7 @@ public class LlamaPlugin: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDelegat
         guard let error = error else { return } // success handled in didFinishDownloadingTo
         // URLSession owns and cleans its temp file; the final destination is only written
         // on success, so do not touch it here — a failed re-download must keep any prior model.
-        downloadCall?.reject("Download failed: \(error.localizedDescription)")
+        downloadCall?.reject("Download failed: \(error.localizedDescription)", "DOWNLOAD_FAILED")
         clearDownload()
     }
 
@@ -133,7 +133,7 @@ public class LlamaPlugin: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDelegat
         let contextSize = call.getInt("contextSize") ?? 2048
 
         guard let url = try? modelURL(modelId), FileManager.default.fileExists(atPath: url.path) else {
-            return call.reject("Model is not downloaded")
+            return call.reject("Model is not downloaded", "MODEL_NOT_DOWNLOADED")
         }
 
         DispatchQueue.global(qos: .userInitiated).async {
@@ -146,8 +146,10 @@ public class LlamaPlugin: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDelegat
                     "promptTokens": result.promptTokens,
                     "completionTokens": result.completionTokens,
                 ])
+            } catch LlamaEngineError.busy {
+                call.reject(LlamaEngineError.busy.localizedDescription, "CHAT_BUSY")
             } catch {
-                call.reject(error.localizedDescription)
+                call.reject(error.localizedDescription, "ENGINE_FAILED")
             }
         }
     }
