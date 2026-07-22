@@ -140,6 +140,7 @@ export class NativeLlmProvider implements AssistantProvider {
           temperature: this.temperature,
           maxTokens: ASSISTANT.maxTokens,
           contextSize: this.contextWindow,
+          cacheSlot: 1, // triage/complete: its own KV sequence so it never evicts the chat cache
         }),
       );
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
@@ -186,6 +187,7 @@ export class NativeLlmProvider implements AssistantProvider {
           temperature: attempt < ASSISTANT.maxParseAttempts ? this.temperature : Math.max(this.temperature, ASSISTANT.assistantRetryTemperature),
           maxTokens: ASSISTANT.maxTokens,
           contextSize: this.contextWindow,
+          cacheSlot: 0, // main chat: the conversation KV sequence
         }),
       );
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError');

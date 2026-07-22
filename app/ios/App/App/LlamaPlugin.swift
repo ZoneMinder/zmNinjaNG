@@ -150,6 +150,7 @@ public class LlamaPlugin: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDelegat
         let temperature = call.getDouble("temperature") ?? 0
         let maxTokens = call.getInt("maxTokens") ?? 512
         let contextSize = call.getInt("contextSize") ?? 2048
+        let cacheSlot = call.getInt("cacheSlot") ?? 0 // 0 = chat, 1 = triage (separate KV sequences)
 
         guard let url = try? modelURL(modelId), FileManager.default.fileExists(atPath: url.path) else {
             return call.reject("Model is not downloaded", "MODEL_NOT_DOWNLOADED")
@@ -159,7 +160,7 @@ public class LlamaPlugin: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDelegat
             do {
                 let result = try LlamaEngine.shared.chat(
                     modelId: modelId, modelPath: url.path, messagesJson: messagesJson,
-                    temperature: temperature, maxTokens: maxTokens, contextSize: contextSize,
+                    temperature: temperature, maxTokens: maxTokens, contextSize: contextSize, cacheSlot: cacheSlot,
                     onStatus: { [weak self] phase, progress, tokens, cached in
                         self?.notifyListeners("chatStatus", data: [
                             "phase": phase, "progress": progress, "tokens": tokens, "cached": cached,

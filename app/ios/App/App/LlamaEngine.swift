@@ -78,7 +78,10 @@ final class LlamaEngine {
     // token sequence currently in the KV (prompt + generated) from the previous call.
     private var ctx: OpaquePointer?
     private var ctxSize = 0                 // n_ctx the resident ctx was built with
-    private var cached: [llama_token] = []
+    // One KV sequence PER PURPOSE (slot 0 = chat, slot 1 = triage): they use different
+    // system prompts, so sharing one sequence made each triage call's seq_rm evict the
+    // conversation cache. `cached[slot]` is the exact token sequence in that slot's KV.
+    private var cached: [[llama_token]] = [[], []]
     private var freeCtxPending = false      // memory warning arrived mid-chat; free when it ends
 
     private init() {}
@@ -120,7 +123,7 @@ final class LlamaEngine {
     private func freeContextLocked() {
         if let c = ctx { llama_free(c); ctx = nil }
         ctxSize = 0
-        cached.removeAll()
+        cached = [[], []]
     }
 
     /// Memory valve: free the resident context + KV (keep the model). If a chat is running it
@@ -147,6 +150,12 @@ final class LlamaEngine {
         cparams.n_batch = cparams.n_ctx // whole prefill decoded in one llama_decode
         cparams.n_threads = nThreads
         cparams.n_threads_batch = nThreads
+        // Two purpose-specific KV sequences (chat/triage). kv_unified keeps the KV a single
+        // shared n_ctx-cell pool where each sequence can address the full n_ctx, instead of the
+        // default even split (n_ctx/n_seq_max) that would halve chat's window. Slots share the
+        // token budget; triage is tiny, so chat keeps effectively its full context.
+        cparams.n_seq_max = 2
+        cparams.kv_unified = true
         guard let c = llama_init_from_model(model, cparams) else { throw LlamaEngineError.contextInitFailed }
         ctx = c
         ctxSize = nCtx
@@ -156,8 +165,10 @@ final class LlamaEngine {
     // MARK: Chat
 
     func chat(modelId: String, modelPath: String, messagesJson: String,
-              temperature: Double, maxTokens: Int, contextSize: Int,
+              temperature: Double, maxTokens: Int, contextSize: Int, cacheSlot: Int = 0,
               onStatus: ((String, Double, Int, Int) -> Void)? = nil) throws -> LlamaChatResult {
+        let slot = cacheSlot == 1 ? 1 : 0            // 0 = chat, 1 = triage (separate KV sequences)
+        let seq = llama_seq_id(slot)
         // Serial guard: reject a second concurrent chat cleanly.
         lock.lock()
         if busy { lock.unlock(); throw LlamaEngineError.busy }
@@ -203,10 +214,10 @@ final class LlamaEngine {
         // only the changed suffix. Back off by one if the whole prompt is cached (must decode at
         // least the last token to sample from its logits).
         var nCommon = 0
-        let maxCommon = min(cached.count, promptTokens.count)
-        while nCommon < maxCommon && cached[nCommon] == promptTokens[nCommon] { nCommon += 1 }
+        let maxCommon = min(cached[slot].count, promptTokens.count)
+        while nCommon < maxCommon && cached[slot][nCommon] == promptTokens[nCommon] { nCommon += 1 }
         if nCommon == promptTokens.count { nCommon -= 1 }
-        llama_memory_seq_rm(llama_get_memory(ctx), 0, llama_pos(nCommon), -1)
+        llama_memory_seq_rm(llama_get_memory(ctx), seq, llama_pos(nCommon), -1)
 
         let suffix = promptTokens.count - nCommon
         let chunkSize = 1024
@@ -220,11 +231,11 @@ final class LlamaEngine {
         while start < promptTokens.count {
             let end = min(start + chunkSize, promptTokens.count)
             batchClear(&batch)
-            for i in start..<end { batchAdd(&batch, promptTokens[i], llama_pos(i), [0], false) }
+            for i in start..<end { batchAdd(&batch, promptTokens[i], llama_pos(i), [seq], false) }
             let isLast = end == promptTokens.count
             if isLast { batch.logits[Int(batch.n_tokens) - 1] = 1 } // sample from the last prompt token
             guard llama_decode(ctx, batch) == 0 else {
-                cached.removeAll() // KV now inconsistent -> full re-prefill next call
+                cached[slot].removeAll() // this slot's KV now inconsistent -> full re-prefill next call
                 throw LlamaEngineError.contextInitFailed
             }
             let pr = Float(end - nCommon) / Float(suffix)
@@ -254,14 +265,14 @@ final class LlamaEngine {
             completion += 1
 
             batchClear(&batch)
-            batchAdd(&batch, newToken, nCur, [0], true)
+            batchAdd(&batch, newToken, nCur, [seq], true)
             nCur += 1
             if llama_decode(ctx, batch) != 0 { kvValid = false; break }
         }
 
         // ctx persists. Update the cache to exactly what the KV now holds (prompt + generated),
         // or drop it if generation left the KV partial.
-        cached = kvValid ? promptTokens + generated : []
+        cached[slot] = kvValid ? promptTokens + generated : []
 
         // promptTokens stays the FULL prompt count (JS context-window accounting depends on it),
         // NOT the prefilled suffix.

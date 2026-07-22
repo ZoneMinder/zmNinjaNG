@@ -39,7 +39,8 @@ public class NativeLlmPlugin extends Plugin {
     // returns the raw UTF-8 completion bytes, and throws RuntimeException on engine failure.
     private static native byte[] nativeChat(String modelId, String modelPath, String libDir,
                                             NativeLlmPlugin plugin, String[] roles, String[] contents,
-                                            double temperature, int maxTokens, int contextSize, int[] outCounts);
+                                            double temperature, int maxTokens, int contextSize,
+                                            int cacheSlot, int[] outCounts);
     private static native void nativeCancelChat();
     private static native void nativeUnload();
     private static native void nativeFreeIfLoaded(String modelId);
@@ -222,6 +223,7 @@ public class NativeLlmPlugin extends Plugin {
         double temperature = call.getDouble("temperature", 0.0);
         int maxTokens = call.getInt("maxTokens", 512);
         int contextSize = call.getInt("contextSize", 2048);
+        int cacheSlot = call.getInt("cacheSlot", 0); // 0 = chat, 1 = triage (separate KV sequences)
 
         File file = modelFile(modelId);
         if (!file.exists()) { call.reject("Model is not downloaded", "MODEL_NOT_DOWNLOADED"); return; }
@@ -262,7 +264,7 @@ public class NativeLlmPlugin extends Plugin {
             try {
                 int[] counts = new int[2];
                 byte[] bytes = nativeChat(modelId, path, libDir, this, fRoles, fContents,
-                                          temperature, maxTokens, contextSize, counts);
+                                          temperature, maxTokens, contextSize, cacheSlot, counts);
                 JSObject ret = new JSObject();
                 ret.put("content", new String(bytes, StandardCharsets.UTF_8));
                 ret.put("promptTokens", counts[0]);

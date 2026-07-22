@@ -27,16 +27,20 @@ llama_model *g_model = nullptr;
 std::string g_loaded_id;
 
 // Persistent context + its KV, kept resident across chat calls so a repeated prefix
-// (tool rounds, retries, growing history) is not re-prefilled. g_cached = the exact
-// token sequence currently in the KV (prompt + generated) from the previous call.
+// (tool rounds, retries, growing history) is not re-prefilled. One KV sequence PER
+// PURPOSE (slot 0 = chat, slot 1 = triage): they use different system prompts, so
+// sharing one sequence made each triage call's seq_rm evict the conversation cache
+// (device log: triage prompt=311 cached=0, then chat cached=315 common=4). g_cached[slot]
+// is the exact token sequence currently in that slot's KV.
 llama_context *g_ctx = nullptr;
 int g_ctx_size = 0;                    // n_ctx the resident ctx was built with
-std::vector<llama_token> g_cached;
+std::vector<llama_token> g_cached[2];
 
 void free_context_locked() {
     if (g_ctx) { llama_free(g_ctx); g_ctx = nullptr; }
     g_ctx_size = 0;
-    g_cached.clear();
+    g_cached[0].clear();
+    g_cached[1].clear();
 }
 
 void free_model_locked() {
@@ -58,6 +62,13 @@ llama_context *ensure_context_locked(llama_model *model, int n_ctx_req, int n_th
     cp.n_batch = cp.n_ctx; // whole prefill decoded in one llama_decode
     cp.n_threads = n_threads;
     cp.n_threads_batch = n_threads;
+    // Two purpose-specific KV sequences (chat/triage). kv_unified keeps the KV a single
+    // shared n_ctx-cell pool where EACH sequence can address the full n_ctx (n_ctx_seq =
+    // n_ctx), instead of the default even split (n_ctx/n_seq_max) that would halve chat's
+    // window. The two slots share the n_ctx token budget; triage is tiny (~512), so chat
+    // keeps effectively its full context. Serial execution makes the shared-buffer cost nil.
+    cp.n_seq_max = 2;
+    cp.kv_unified = true;
     g_ctx = llama_init_from_model(model, cp);
     if (g_ctx) g_ctx_size = n_ctx_req;
     return g_ctx;
@@ -192,7 +203,11 @@ JNIEXPORT jbyteArray JNICALL
 Java_com_zoneminder_zmNinjaNG_NativeLlmPlugin_nativeChat(
         JNIEnv *env, jclass, jstring j_model_id, jstring j_model_path, jstring j_lib_dir,
         jobject j_plugin, jobjectArray roles, jobjectArray contents,
-        jdouble temperature, jint max_tokens, jint context_size, jintArray out_counts) {
+        jdouble temperature, jint max_tokens, jint context_size, jint cache_slot, jintArray out_counts) {
+
+    // Purpose-specific KV sequence: slot 0 = chat, slot 1 = triage (see g_cached comment).
+    const int slot = (cache_slot == 1) ? 1 : 0;
+    const llama_seq_id seq = (llama_seq_id) slot;
 
     Emitter emitter;
     emitter.env = env;
@@ -267,13 +282,14 @@ Java_com_zoneminder_zmNinjaNG_NativeLlmPlugin_nativeChat(
     // KV reuse: keep the longest prefix already in the KV, evict the divergent tail,
     // prefill only the changed suffix. Back off by one if the whole prompt is cached
     // (must decode at least the last token to get logits to sample from).
+    std::vector<llama_token> &cached = g_cached[slot];
     size_t n_common = 0;
-    size_t maxc = std::min(g_cached.size(), prompt_tokens.size());
-    while (n_common < maxc && g_cached[n_common] == prompt_tokens[n_common]) n_common++;
+    size_t maxc = std::min(cached.size(), prompt_tokens.size());
+    while (n_common < maxc && cached[n_common] == prompt_tokens[n_common]) n_common++;
     if (n_common == prompt_tokens.size()) n_common--;
-    llama_memory_seq_rm(llama_get_memory(ctx), 0, (llama_pos) n_common, -1);
-    LOGI("KV reuse: prompt=%zu cached=%zu common=%zu prefill=%zu",
-         prompt_tokens.size(), g_cached.size(), n_common, prompt_tokens.size() - n_common);
+    llama_memory_seq_rm(llama_get_memory(ctx), seq, (llama_pos) n_common, -1);
+    LOGI("KV reuse[slot=%d]: prompt=%zu cached=%zu common=%zu prefill=%zu",
+         slot, prompt_tokens.size(), cached.size(), n_common, prompt_tokens.size() - n_common);
 
     int suffix = (int) prompt_tokens.size() - (int) n_common;
     const int CHUNK = 1024;
@@ -283,7 +299,7 @@ Java_com_zoneminder_zmNinjaNG_NativeLlmPlugin_nativeChat(
         batch.token[i] = id;
         batch.pos[i] = pos;
         batch.n_seq_id[i] = 1;
-        batch.seq_id[i][0] = 0;
+        batch.seq_id[i][0] = seq;
         batch.logits[i] = logits ? 1 : 0;
         batch.n_tokens++;
     };
@@ -306,7 +322,7 @@ Java_com_zoneminder_zmNinjaNG_NativeLlmPlugin_nativeChat(
     }
     if (!prefill_ok) {
         llama_batch_free(batch); llama_sampler_free(smpl);
-        g_cached.clear(); // KV now inconsistent -> full re-prefill next call
+        cached.clear(); // this slot's KV now inconsistent -> full re-prefill next call
         throw_engine_failed(env, "Failed to decode prompt"); return nullptr;
     }
 
@@ -336,10 +352,10 @@ Java_com_zoneminder_zmNinjaNG_NativeLlmPlugin_nativeChat(
     // ctx persists. Update the cache to exactly what the KV now holds (prompt + generated),
     // or drop it if generation left the KV in a partial state.
     if (kv_valid) {
-        g_cached = prompt_tokens;
-        g_cached.insert(g_cached.end(), generated.begin(), generated.end());
+        cached = prompt_tokens;
+        cached.insert(cached.end(), generated.begin(), generated.end());
     } else {
-        g_cached.clear();
+        cached.clear();
     }
 
     // promptTokens stays the FULL prompt count (JS context-window accounting depends on it),

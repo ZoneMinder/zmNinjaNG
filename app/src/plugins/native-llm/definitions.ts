@@ -12,6 +12,8 @@ export interface NativeLlmPlugin {
     temperature: number;
     maxTokens: number;
     contextSize: number;
+    cacheSlot?: number; // KV sequence: 0 = chat (default), 1 = triage. Separate slots so triage
+    // never evicts the conversation cache (additive; omitting it keeps slot 0).
   }): Promise<{ content: string; promptTokens: number; completionTokens: number }>;
   cancelChat(): Promise<void>;
   unload(): Promise<void>;
