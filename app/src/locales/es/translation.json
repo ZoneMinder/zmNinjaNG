@@ -319,7 +319,7 @@
       "backend": "Backend",
       "backend_on_device": "En el dispositivo",
       "backend_ollama": "Ollama (remoto)",
-      "backend_native": "On-device (native)",
+      "backend_native": "En el dispositivo (nativo)",
       "on_device_mobile_disabled": "Los modelos en el dispositivo no están disponibles en teléfonos ni tabletas: necesitan más memoria de la que puede usar una app móvil y las respuestas tardan minutos. Usa un servidor Ollama, configurado abajo.",
       "no_webgpu": "Requiere WebGPU, no disponible en este dispositivo.",
       "no_webgpu_hint": "Usa Ollama en su lugar: funciona sin WebGPU.",

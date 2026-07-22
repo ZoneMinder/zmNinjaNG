@@ -319,7 +319,7 @@
       "backend": "后端",
       "backend_on_device": "设备端",
       "backend_ollama": "Ollama（远程）",
-      "backend_native": "On-device (native)",
+      "backend_native": "设备端（原生）",
       "on_device_mobile_disabled": "手机和平板不支持设备端模型：所需内存超出移动应用的限制，且回答需要数分钟。请改用下方配置的 Ollama 服务器。",
       "no_webgpu": "需要 WebGPU，此设备不支持。",
       "no_webgpu_hint": "请改用 Ollama：无需 WebGPU 即可运行。",
