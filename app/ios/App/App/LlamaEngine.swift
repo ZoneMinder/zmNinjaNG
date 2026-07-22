@@ -108,6 +108,7 @@ final class LlamaEngine {
         // Context sized by the caller.
         var cparams = llama_context_default_params()
         cparams.n_ctx = UInt32(max(256, contextSize))
+        cparams.n_batch = cparams.n_ctx // whole prompt is decoded in one llama_decode call
         let nThreads = Int32(max(1, min(8, ProcessInfo.processInfo.processorCount - 2)))
         cparams.n_threads = nThreads
         cparams.n_threads_batch = nThreads

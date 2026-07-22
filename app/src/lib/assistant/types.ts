@@ -105,7 +105,7 @@ export interface ToolResult {
  *  native `tools` schemas. Reading a turn is the only way to see which one a
  *  given answer came from. */
 export interface ModelExchange {
-  /** The backend that served this exchange ('webllm' | 'ollama'). */
+  /** The backend that served this exchange ('webllm' | 'ollama' | 'native'). */
   backend: string;
   model: string;
   /** The request body as sent, pretty-printed. Truncated to
