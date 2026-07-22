@@ -99,10 +99,22 @@ export function AssistantNativeSection() {
   // AssistantSection.tsx's WebLLM block). A completed task that turns out not
   // to be on disk (the native side reported done but the file isn't there)
   // surfaces the same failure toast the WebLLM block shows.
+  // One handling per task transition: `toast` (and potentially `t`) are
+  // render-unstable identities (use-toast builds a fresh closure per render),
+  // so this effect re-fires on every render while a terminal task exists, and
+  // each probe stores a fresh `storage` object, which re-renders. Without
+  // this key guard those two feed each other and the native bridge gets
+  // hammered with isModelDownloaded calls until the task is cleared (seen as
+  // endless "TO JS {downloaded:true,...}" device log lines, refs #270).
+  const handledTaskRef = useRef<string | undefined>(undefined);
+
   useEffect(() => {
     if (!downloadTask) return;
+    const transitionKey = `${downloadTask.id}:${downloadTask.status}`;
+    if (handledTaskRef.current === transitionKey) return;
 
     if (downloadTask.status === 'completed') {
+      handledTaskRef.current = transitionKey;
       void probeDownloaded().then((downloaded) => {
         if (downloaded === false) {
           toast({
@@ -115,6 +127,7 @@ export function AssistantNativeSection() {
     }
 
     if (downloadTask.status === 'failed') {
+      handledTaskRef.current = transitionKey;
       setDownloadStatus('not-downloaded');
       toast({
         title: t('common.error'),

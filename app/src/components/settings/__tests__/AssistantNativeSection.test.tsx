@@ -34,8 +34,12 @@ vi.mock('react-i18next', () => ({
 }));
 
 const toastMock = vi.fn();
+// Like the real hook, returns a NEW object with a NEW `toast` closure on every
+// render: effect deps that include `toast` are re-compared against a fresh
+// identity each time, which is exactly what drove the endless
+// isModelDownloaded probe loop on device (refs #270).
 vi.mock('../../../hooks/use-toast', () => ({
-  useToast: () => ({ toast: toastMock }),
+  useToast: () => ({ toast: (...args: unknown[]) => toastMock(...args) }),
 }));
 
 /** Adds a download task for the native model in the real backgroundTasks
@@ -199,5 +203,26 @@ describe('AssistantNativeSection', () => {
     const downloadButton = await screen.findByTestId('assistant-native-model-download');
     await waitFor(() => expect(downloadButton).not.toBeDisabled());
     expect(downloadButton).toHaveTextContent('settings.assistant.download');
+  });
+
+  it('probes exactly once per completed task, not once per render (refs #270 device log spam)', async () => {
+    isNativeModelDownloadedMock.mockResolvedValue({ downloaded: true, sizeBytes: 1, path: '/m.gguf' });
+
+    const { rerender } = render(<AssistantNativeSection />);
+    await waitFor(() => expect(isNativeModelDownloadedMock).toHaveBeenCalledTimes(1)); // mount probe
+
+    const taskId = seedInProgressTask();
+    act(() => useBackgroundTasks.getState().completeTask(taskId));
+    await waitFor(() => expect(isNativeModelDownloadedMock).toHaveBeenCalledTimes(2)); // completion recheck
+
+    // Every re-render hands the effect a fresh `toast` identity (see the
+    // use-toast mock above), and each probe stores a new `storage` object,
+    // which itself re-renders: without a handled-transition guard this
+    // self-sustains and hammers the native bridge until the task is cleared.
+    for (let i = 0; i < 3; i++) {
+      rerender(<AssistantNativeSection />);
+      await act(async () => {});
+    }
+    expect(isNativeModelDownloadedMock).toHaveBeenCalledTimes(2);
   });
 });
