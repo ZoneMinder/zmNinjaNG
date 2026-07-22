@@ -169,9 +169,10 @@ public class LlamaPlugin: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDelegat
                 let result = try LlamaEngine.shared.chat(
                     modelId: modelId, modelPath: url.path, messagesJson: messagesJson,
                     temperature: temperature, maxTokens: maxTokens, contextSize: contextSize, cacheSlot: cacheSlot,
-                    onStatus: { [weak self] phase, progress, tokens, cached in
+                    onStatus: { [weak self] phase, progress, tokens, cached, chunk, chunks in
                         self?.notifyListeners("chatStatus", data: [
                             "phase": phase, "progress": progress, "tokens": tokens, "cached": cached,
+                            "chunk": chunk, "chunks": chunks, "slot": cacheSlot,
                         ])
                     })
                 call.resolve([

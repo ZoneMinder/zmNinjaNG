@@ -308,12 +308,15 @@ public class NativeLlmPlugin extends Plugin {
 
     /** Called from the JNI layer during nativeChat to surface in-turn phase progress
      *  (loading_model / prefill) to JS. Runs on the chat executor thread. */
-    void emitChatStatus(String phase, double progress, int tokens, int cached) {
+    void emitChatStatus(String phase, double progress, int tokens, int cached, int chunk, int chunks, int slot) {
         JSObject data = new JSObject();
         data.put("phase", phase);
         data.put("progress", progress);
         data.put("tokens", tokens);
         data.put("cached", cached);
+        data.put("chunk", chunk);
+        data.put("chunks", chunks);
+        data.put("slot", slot);
         notifyListeners("chatStatus", data);
     }
 

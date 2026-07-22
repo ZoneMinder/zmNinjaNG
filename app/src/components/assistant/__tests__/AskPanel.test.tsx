@@ -22,6 +22,7 @@ vi.mock('react-i18next', () => ({
     t: (key: string, opts?: Record<string, unknown>) => {
       if (opts && 'tool' in opts) return `${key}:${opts.tool}`;
       if (opts && 'tools' in opts) return `${key}:${opts.tools}`;
+      if (opts && 'chunk' in opts) return `${key}:${opts.chunk}/${opts.chunks}:${opts.percent}`;
       return key;
     },
     i18n: { get language() { return mockLanguage.current; } },
@@ -382,15 +383,28 @@ describe('AskPanel', () => {
     });
 
     it('hides the prefill note under the token threshold, falling back to Thinking', () => {
-      useAssistantStore.setState({ running: true, phase: { phase: 'prefill', progress: 1, tokens: 100 } });
+      useAssistantStore.setState({ running: true, phase: { phase: 'prefill', progress: 0.5, tokens: 100 } });
       render(<AskPanel />);
       expect(screen.getByTestId('assistant-status')).toHaveTextContent('assistant.thinking');
     });
 
-    it('shows the prefill note above the token threshold', () => {
-      useAssistantStore.setState({ running: true, phase: { phase: 'prefill', progress: 0.62, tokens: 1000 } });
+    it('triage prefill (slot 1) reads "understanding", with batch progress', () => {
+      useAssistantStore.setState({ running: true, phase: { phase: 'prefill', progress: 0.55, tokens: 1000, chunk: 3, chunks: 6, slot: 1 } });
       render(<AskPanel />);
-      expect(screen.getByTestId('assistant-status')).toHaveTextContent('assistant.status.prefill');
+      // mock t echoes key:chunk/chunks:percent
+      expect(screen.getByTestId('assistant-status')).toHaveTextContent('assistant.status.understanding:3/6:55');
+    });
+
+    it('first-turn chat prefill (slot 0, no prior assistant reply) reads "preparing"', () => {
+      useAssistantStore.setState({ threads: { p1: [{ role: 'user', text: 'hello' }] }, running: true, phase: { phase: 'prefill', progress: 0.5, tokens: 1000, chunk: 1, chunks: 2, slot: 0 } });
+      render(<AskPanel />);
+      expect(screen.getByTestId('assistant-status')).toHaveTextContent('assistant.status.preparing:1/2:50');
+    });
+
+    it('chat prefill with history (slot 0, prior assistant reply) reads "reading conversation"', () => {
+      useAssistantStore.setState({ threads: { p1: [{ role: 'user', text: 'q' }, { role: 'assistant', text: 'a' }] }, running: true, phase: { phase: 'prefill', progress: 0.5, tokens: 1000, chunk: 2, chunks: 4, slot: 0 } });
+      render(<AskPanel />);
+      expect(screen.getByTestId('assistant-status')).toHaveTextContent('assistant.status.prefill:2/4:50');
     });
 
     it('clears the prefill note at 100% (decode window), keeping the running indicator', () => {

@@ -261,6 +261,11 @@ export interface AssistantStatus {
   progress?: number;
   tokens?: number;
   attempt?: number;
+  /** Native prefill batching + purpose, for contextual wording: chunk = 1-based batch index,
+   *  chunks = total batches, slot = 0 chat / 1 triage. */
+  chunk?: number;
+  chunks?: number;
+  slot?: number;
 }
 
 export interface AssistantHost {

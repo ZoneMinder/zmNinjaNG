@@ -25,6 +25,14 @@ export interface NativeLlmPlugin {
   // decides presentation/threshold. `progress` is 0..1; `tokens` is the prefill suffix count.
   addListener(
     eventName: 'chatStatus',
-    listenerFunc: (p: { phase: 'loading_model' | 'prefill'; progress: number; tokens: number; cached: number }) => void,
+    listenerFunc: (p: {
+      phase: 'loading_model' | 'prefill';
+      progress: number;
+      tokens: number;
+      cached: number;
+      chunk: number; // 1-based prefill chunk index (0 for loading_model)
+      chunks: number; // total prefill chunks (0 for loading_model)
+      slot: number; // KV/cache slot: 0 = chat, 1 = triage
+    }) => void,
   ): Promise<PluginListenerHandle>;
 }

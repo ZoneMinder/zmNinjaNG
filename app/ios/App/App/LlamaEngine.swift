@@ -49,13 +49,13 @@ private func batchAdd(_ batch: inout llama_batch, _ id: llama_token, _ pos: llam
 /// Boxes the status callback so llama.cpp's context-free C `progress_callback` can reach it
 /// via `user_data`. 5%-delta throttle guards the JS bridge from spam during weight load.
 private final class ProgressBox {
-    let onStatus: (String, Double, Int, Int) -> Void
+    let onStatus: (String, Double, Int, Int, Int, Int) -> Void
     var lastLoad: Float = -1
-    init(_ onStatus: @escaping (String, Double, Int, Int) -> Void) { self.onStatus = onStatus }
+    init(_ onStatus: @escaping (String, Double, Int, Int, Int, Int) -> Void) { self.onStatus = onStatus }
     func report(_ p: Float) {
         if p - lastLoad >= 0.05 || p >= 1.0 {
             lastLoad = p
-            onStatus("loading_model", Double(p), 0, 0)
+            onStatus("loading_model", Double(p), 0, 0, 0, 0)
         }
     }
 }
@@ -166,7 +166,7 @@ final class LlamaEngine {
 
     func chat(modelId: String, modelPath: String, messagesJson: String,
               temperature: Double, maxTokens: Int, contextSize: Int, cacheSlot: Int = 0,
-              onStatus: ((String, Double, Int, Int) -> Void)? = nil) throws -> LlamaChatResult {
+              onStatus: ((String, Double, Int, Int, Int, Int) -> Void)? = nil) throws -> LlamaChatResult {
         let slot = cacheSlot == 1 ? 1 : 0            // 0 = chat, 1 = triage (separate KV sequences)
         let seq = llama_seq_id(slot)
         // Serial guard: reject a second concurrent chat cleanly.
@@ -233,6 +233,7 @@ final class LlamaEngine {
 
         // Chunked prefill so the long first-fill reports progress between llama_decode calls.
         // n_batch = n_ctx keeps each chunk a single batch; 1024 is perf-negligible vs one big batch.
+        let chunks = (suffix + chunkSize - 1) / chunkSize
         var lastPrefill: Float = -1
         var start = nCommon
         while start < promptTokens.count {
@@ -245,10 +246,11 @@ final class LlamaEngine {
                 cached[slot].removeAll() // this slot's KV now inconsistent -> full re-prefill next call
                 throw LlamaEngineError.contextInitFailed
             }
+            let chunk = (start - nCommon) / chunkSize + 1 // 1-based
             let pr = Float(end - nCommon) / Float(suffix)
             if pr - lastPrefill >= 0.05 || isLast {
                 lastPrefill = pr
-                onStatus?("prefill", Double(pr), suffix, nCommon)
+                onStatus?("prefill", Double(pr), suffix, nCommon, chunk, chunks)
             }
             start = end
         }

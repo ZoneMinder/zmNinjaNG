@@ -1297,7 +1297,9 @@
     "loading_model": "正在服务器上加载 {{model}}...",
     "status": {
       "loading_model": "正在加载模型… {{percent}}%",
-      "prefill": "正在读取对话… {{percent}}%",
+      "prefill": "正在读取对话… ({{chunk}}/{{chunks}}，{{percent}}%)",
+      "understanding": "正在理解你的问题… ({{chunk}}/{{chunks}}，{{percent}}%)",
+      "preparing": "正在准备助手… ({{chunk}}/{{chunks}}，{{percent}}%)",
       "retry": "正在重新格式化答案…",
       "server_slow": "仍在处理… {{seconds}} 秒"
     },

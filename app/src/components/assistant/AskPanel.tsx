@@ -326,11 +326,18 @@ export function AskPanel() {
     switch (phase.phase) {
       case 'loading_model':
         return t('assistant.status.loading_model', { percent });
-      case 'prefill':
+      case 'prefill': {
         // At 100% the fill is done but the (silent) decode still runs; showing a frozen
         // "…100%" through it reads as stuck, so fall back to the plain running indicator.
         if ((phase.progress ?? 0) >= 1) return null;
-        return (phase.tokens ?? 0) < ASSISTANT.assistantPrefillNoteMinTokens ? null : t('assistant.status.prefill', { percent });
+        if ((phase.tokens ?? 0) < ASSISTANT.assistantPrefillNoteMinTokens) return null;
+        const batch = { chunk: phase.chunk ?? 1, chunks: phase.chunks ?? 1, percent };
+        // Wording by purpose: triage (slot 1) is understanding the question; a first-turn chat
+        // (no prior assistant reply) is reading the system instructions, not the conversation.
+        if (phase.slot === 1) return t('assistant.status.understanding', batch);
+        const hasHistory = thread.some((m) => m.role === 'assistant');
+        return t(hasHistory ? 'assistant.status.prefill' : 'assistant.status.preparing', batch);
+      }
       case 'retry':
         return t('assistant.status.retry');
       case 'server_slow':

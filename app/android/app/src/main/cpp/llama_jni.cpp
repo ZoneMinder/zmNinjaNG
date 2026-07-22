@@ -81,12 +81,14 @@ struct Emitter {
     JNIEnv *env = nullptr;
     jobject plugin = nullptr;
     jmethodID mid = nullptr;
+    int slot = 0;
     float last_load = -1.0f;
     float last_prefill = -1.0f;
-    void emit(const char *phase, double progress, int tokens, int cached) {
+    void emit(const char *phase, double progress, int tokens, int cached, int chunk, int chunks) {
         if (!plugin || !mid) return;
         jstring p = env->NewStringUTF(phase);
-        env->CallVoidMethod(plugin, mid, p, (jdouble) progress, (jint) tokens, (jint) cached);
+        env->CallVoidMethod(plugin, mid, p, (jdouble) progress, (jint) tokens, (jint) cached,
+                            (jint) chunk, (jint) chunks, (jint) slot);
         env->DeleteLocalRef(p);
     }
 };
@@ -96,7 +98,7 @@ bool model_progress_cb(float progress, void *ud) {
     Emitter *e = static_cast<Emitter *>(ud);
     if (e && (progress - e->last_load >= 0.05f || progress >= 1.0f)) {
         e->last_load = progress;
-        e->emit("loading_model", progress, 0, 0);
+        e->emit("loading_model", progress, 0, 0, 0, 0);
     }
     return true;
 }
@@ -212,7 +214,8 @@ Java_com_zoneminder_zmNinjaNG_NativeLlmPlugin_nativeChat(
     Emitter emitter;
     emitter.env = env;
     emitter.plugin = j_plugin;
-    emitter.mid = env->GetMethodID(env->GetObjectClass(j_plugin), "emitChatStatus", "(Ljava/lang/String;DII)V");
+    emitter.slot = slot;
+    emitter.mid = env->GetMethodID(env->GetObjectClass(j_plugin), "emitChatStatus", "(Ljava/lang/String;DIIIII)V");
 
     {
         std::lock_guard<std::mutex> lk(g_lock);
@@ -315,6 +318,7 @@ Java_com_zoneminder_zmNinjaNG_NativeLlmPlugin_nativeChat(
 
     // Chunked prefill so the long first-fill reports progress between llama_decode calls.
     // n_batch = n_ctx keeps each chunk a single batch; 1024 is perf-negligible vs one big batch.
+    const int chunks = (suffix + CHUNK - 1) / CHUNK;
     bool prefill_ok = true;
     for (int start = (int) n_common; start < (int) prompt_tokens.size(); start += CHUNK) {
         int end = std::min(start + CHUNK, (int) prompt_tokens.size());
@@ -323,10 +327,11 @@ Java_com_zoneminder_zmNinjaNG_NativeLlmPlugin_nativeChat(
         bool is_last = (end == (int) prompt_tokens.size());
         if (is_last) batch.logits[batch.n_tokens - 1] = 1; // sample from the last prompt token
         if (llama_decode(ctx, batch) != 0) { prefill_ok = false; break; }
+        int chunk = (start - (int) n_common) / CHUNK + 1; // 1-based
         float pr = (float) (end - (int) n_common) / (float) suffix;
         if (pr - emitter.last_prefill >= 0.05f || is_last) {
             emitter.last_prefill = pr;
-            emitter.emit("prefill", pr, suffix, (int) n_common);
+            emitter.emit("prefill", pr, suffix, (int) n_common, chunk, chunks);
         }
     }
     if (!prefill_ok) {

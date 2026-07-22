@@ -1297,7 +1297,9 @@
     "loading_model": "Loading {{model}} on the server...",
     "status": {
       "loading_model": "Loading model… {{percent}}%",
-      "prefill": "Reading conversation… {{percent}}%",
+      "prefill": "Reading conversation… ({{chunk}} of {{chunks}}, {{percent}}%)",
+      "understanding": "Understanding your question… ({{chunk}} of {{chunks}}, {{percent}}%)",
+      "preparing": "Preparing the assistant… ({{chunk}} of {{chunks}}, {{percent}}%)",
       "retry": "Reformatting the answer…",
       "server_slow": "Still working… {{seconds}}s"
     },

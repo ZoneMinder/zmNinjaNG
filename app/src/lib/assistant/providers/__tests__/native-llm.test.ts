@@ -48,14 +48,14 @@ describe('NativeLlmProvider.chat', () => {
 
   it('forwards native chatStatus phases to onStatus and always removes the listener', async () => {
     chatMock.mockImplementation(async () => {
-      capturedStatusCb?.({ phase: 'prefill', progress: 0.5, tokens: 1000, cached: 200 });
+      capturedStatusCb?.({ phase: 'prefill', progress: 0.5, tokens: 1000, cached: 200, chunk: 2, chunks: 4, slot: 0 });
       return { content: '{"answer":"ok"}', promptTokens: 1200, completionTokens: 5 };
     });
     const onStatus = vi.fn();
     const provider = new NativeLlmProvider();
     await provider.chat([{ role: 'user', text: 'hi' }], [], 'sys', new AbortController().signal, onStatus);
-    // `cached` is dropped; the UI only needs phase/progress/tokens.
-    expect(onStatus).toHaveBeenCalledWith({ phase: 'prefill', progress: 0.5, tokens: 1000 });
+    // Raw passthrough of phase/progress/tokens + batch (chunk/chunks) + slot; `cached` is dropped.
+    expect(onStatus).toHaveBeenCalledWith({ phase: 'prefill', progress: 0.5, tokens: 1000, chunk: 2, chunks: 4, slot: 0 });
     expect(removeMock).toHaveBeenCalledTimes(1);
   });
 

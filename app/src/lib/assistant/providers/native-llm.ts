@@ -114,7 +114,9 @@ export class NativeLlmProvider implements AssistantProvider {
     onStatus?: (status: AssistantStatus) => void,
   ): Promise<PluginListenerHandle | null> {
     if (!onStatus) return null;
-    return plugin.addListener('chatStatus', (p) => onStatus({ phase: p.phase, progress: p.progress, tokens: p.tokens }));
+    return plugin.addListener('chatStatus', (p) =>
+      onStatus({ phase: p.phase, progress: p.progress, tokens: p.tokens, chunk: p.chunk, chunks: p.chunks, slot: p.slot }),
+    );
   }
 
   async complete(
