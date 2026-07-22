@@ -1152,19 +1152,27 @@ non-production e2e mode behind ``isAssistantTestMode()``, ``OpenAiProvider``
 when the profile's backend is Ollama, ``NativeLlmProvider`` when it is
 ``'native'`` (refs #270), and ``WebLlmProvider`` otherwise. The on-device
 WebLLM provider runs on ``@mlc-ai/web-llm`` in the browser via WebGPU, and
-the native provider (iOS only, gated by ``useNativeLlmSupported`` on a
-5.5GB physical-memory floor; see :doc:`call-flows`'s "Asking the assistant a
-question") runs a llama.cpp model in-process through the Capacitor
-``NativeLlm`` bridge instead of a browser engine; on either on-device path no
-message or tool result is ever sent to a server other than the ZoneMinder
-server the tool call itself targets. The native model is fixed, not
-user-chosen: ``ASSISTANT.nativeLlmModel`` (``lib/zmninja-ng-constants.ts``) is
-the source of truth, naming Qwen3-4B-Instruct-2507 at a Q4_K_M GGUF
-quantization pulled from unsloth's HuggingFace repo rather than Qwen's own,
-since Qwen publishes no official GGUF conversion of this model. The
-llama.cpp build it runs on is pinned rather than floating: ``binaryTarget``
-in ``app/ios/App/LlamaKit/Package.swift`` fetches release ``b10087``'s
-prebuilt XCFramework by URL and checksum. All three adapters
+the native provider (iPhone, iPad, and Android, gated by
+``useNativeLlmSupported`` on a 5.5GB physical-memory floor; see
+:doc:`call-flows`'s "Asking the assistant a question") runs a llama.cpp
+model in-process through the Capacitor ``NativeLlm`` bridge instead of a
+browser engine; on either on-device path no message or tool result is ever
+sent to a server other than the ZoneMinder server the tool call itself
+targets. iOS runs that model on Metal through ``LlamaEngine`` (Swift);
+Android has no GPU backend for it yet, so its JNI engine
+(``llama_jni.cpp``) builds CPU-only for ``arm64-v8a``, with Vulkan out of
+scope for now (issue #270), and answers correspondingly slower than on
+iPhone. The native model is fixed, not user-chosen: ``ASSISTANT.nativeLlmModel``
+(``lib/zmninja-ng-constants.ts``) is the source of truth, naming
+Qwen3-4B-Instruct-2507 at a Q4_K_M GGUF quantization pulled from unsloth's
+HuggingFace repo rather than Qwen's own, since Qwen publishes no official
+GGUF conversion of this model. The llama.cpp build it runs on is pinned
+rather than floating, to the same tag on both platforms: ``binaryTarget`` in
+``app/ios/App/LlamaKit/Package.swift`` fetches release ``b10087``'s prebuilt
+XCFramework by URL and checksum, while
+``app/android/app/src/main/cpp/CMakeLists.txt`` pins the same ``b10087``
+tag through CMake's ``FetchContent`` and builds it from source at compile
+time. All three adapters
 constrain generation where their backend can enforce it: ``WebLlmProvider``
 compiles its two-shape JSON envelope (``ENVELOPE_SCHEMA``) through the
 engine's grammar via ``response_format``, falling back to prompt-plus-parser

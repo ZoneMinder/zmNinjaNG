@@ -2012,7 +2012,7 @@ Flow 19: Asking the assistant a question
 
 Pressing ``?`` (or picking the Ask command in the palette) opens a floating
 chat window backed by one of three providers: an on-device WebLLM model, the
-on-device native llama.cpp bridge (iPhone/iPad only, refs #270), or an
+on-device native llama.cpp bridge (iPhone, iPad, and Android, refs #270), or an
 OpenAI-compatible server such as Ollama. The question is classified before any tool is offered,
 then a tool-use loop decides which ZoneMinder API calls answer it. The
 counterintuitive part is that there is no confirmation gate anywhere in this
@@ -2121,17 +2121,22 @@ property of the registry (``TOOLS`` holds no mutating tool and
 #. **The native backend's settings gate is a device probe, not a toggle.**
    ``useNativeLlmSupported`` (``hooks/useNativeLlmSupported.ts``) probes the
    Capacitor ``NativeLlm`` plugin's ``isSupported()`` once on mount, imported
-   only behind ``Platform.isNative`` (rule 13, since the plugin package is
-   iOS-only and would otherwise ship into the web/Electron bundle for a
-   backend those platforms can never run). On iOS, ``LlamaPlugin.isSupported``
-   answers ``false`` below a 5.5GB physical-memory floor
-   (``LlamaPlugin.swift``), so a device that fails the check never sees
-   **On-device (native)** in ``AssistantSection``'s backend ``<select>`` at
-   all, not a disabled option the user has to interpret. Once
-   ``settings.assistantBackend`` is ``'native'``, ``getAssistantProvider``
-   (``providers/provider.ts``) returns a ``NativeLlmProvider`` in place of
-   ``WebLlmProvider`` or ``OpenAiProvider``, the same one-field switch the
-   other two backends already go through.
+   only behind ``Platform.isNative`` (rule 13, since the plugin package only
+   ships native implementations and would otherwise pull llama.cpp glue into
+   the web/Electron bundle for a backend those platforms can never run). On
+   iOS, ``LlamaPlugin.isSupported`` answers ``false`` below a 5.5GB
+   physical-memory floor (``LlamaPlugin.swift``). On Android,
+   ``NativeLlmPlugin.isSupported`` (``NativeLlmPlugin.java``) checks the same
+   5.5GB floor against ``ActivityManager.MemoryInfo.totalMem`` and also
+   refuses a device where ``ActivityManager.isLowRamDevice()`` is true, since
+   that flag catches devices a raw memory number alone misses. A device that
+   fails either platform's check never sees **On-device (native)** in
+   ``AssistantSection``'s backend ``<select>`` at all, not a disabled option
+   the user has to interpret. Once ``settings.assistantBackend`` is
+   ``'native'``, ``getAssistantProvider`` (``providers/provider.ts``) returns
+   a ``NativeLlmProvider`` in place of ``WebLlmProvider`` or
+   ``OpenAiProvider``, the same one-field switch the other two backends
+   already go through.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useNativeLlmSupported.ts>`__
    · → :doc:`12-shared-services-and-components`
 
@@ -2143,47 +2148,61 @@ property of the registry (``TOOLS`` holds no mutating tool and
    imported straight from ``providers/webllm.ts`` rather than reimplemented;
    the module's own header states that only the transport differs from
    WebLLM. Each call crosses the Capacitor bridge as one ``NativeLlm.chat()``
-   invocation carrying the JSON message array, temperature, and context size.
-   Swift's ``LlamaPlugin`` hands the request to ``LlamaEngine``, a llama.cpp
-   context loaded with ``n_gpu_layers`` set high enough to run on Metal on a
-   real device (0 in the simulator, where Metal is unavailable), which
-   renders the messages through the model's own built-in chat template
-   (``llama_model_chat_template``) rather than a template the app supplies,
-   and returns one ``{content, promptTokens, completionTokens}`` reply with
-   no streaming. An unparseable reply retries through the same self-repair
-   loop (``SELF_REPAIR_PROMPT``, ``ASSISTANT.maxParseAttempts``) the other two
-   providers use, because ``parseWebLlmTurn`` and the retry shape are shared
-   code, not a native-specific copy. The model itself and the engine it runs
-   on are both pinned, not chosen at runtime: ``ASSISTANT.nativeLlmModel``
-   (``lib/zmninja-ng-constants.ts``) names Qwen3-4B-Instruct-2507 at a
-   Q4_K_M GGUF quantization from unsloth's HuggingFace repo, and
-   ``app/ios/App/LlamaKit/Package.swift``'s ``binaryTarget`` fetches
-   llama.cpp release ``b10087``'s XCFramework by URL and checksum.
+   invocation carrying the JSON message array, temperature, and context size,
+   the same call on both platforms since ``NativeLlmProvider`` has no
+   platform branch of its own. Swift's ``LlamaPlugin`` hands the request to
+   ``LlamaEngine``, a llama.cpp context loaded with ``n_gpu_layers`` set high
+   enough to run on Metal on a real device (0 in the simulator, where Metal
+   is unavailable). Android's ``NativeLlmPlugin`` (Java) hands the same
+   request to a JNI engine (``llama_jni.cpp``) built CPU-only for
+   ``arm64-v8a``; Vulkan is deferred (issue #270), so there is no GPU path
+   on Android and replies run correspondingly slower than iPhone's Metal
+   path. Both engines render the messages through the model's own built-in
+   chat template (``llama_model_chat_template``) rather than a template the
+   app supplies, and return one ``{content, promptTokens, completionTokens}``
+   reply with no streaming. An unparseable reply retries through the same
+   self-repair loop (``SELF_REPAIR_PROMPT``, ``ASSISTANT.maxParseAttempts``)
+   the other two providers use, because ``parseWebLlmTurn`` and the retry
+   shape are shared code, not a native-specific copy. The model itself and
+   the engine it runs on are both pinned, not chosen at runtime:
+   ``ASSISTANT.nativeLlmModel`` (``lib/zmninja-ng-constants.ts``) names
+   Qwen3-4B-Instruct-2507 at a Q4_K_M GGUF quantization from unsloth's
+   HuggingFace repo. On iOS, ``app/ios/App/LlamaKit/Package.swift``'s
+   ``binaryTarget`` fetches llama.cpp release ``b10087``'s XCFramework by
+   URL and checksum; on Android, ``app/android/app/src/main/cpp/CMakeLists.txt``
+   pins the same tag through CMake's ``FetchContent`` and builds the CPU
+   backend from source at build time instead of fetching a prebuilt binary.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/providers/native-llm.ts>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **A stable code, not a screen-scraped message, decides how a native
-   failure surfaces.** ``LlamaPlugin.chat`` (Swift) rejects with a fixed
-   ``code`` (``MODEL_NOT_DOWNLOADED``, ``CHAT_BUSY``, or ``ENGINE_FAILED``
-   for anything else), which Capacitor copies onto the JS exception
-   untouched. ``NativeLlmProvider.mapPluginError`` (``providers/native-llm.ts``)
-   switches on that code, never on Swift's localized message: a missing
-   model maps to the same ``NATIVE_LLM_NOT_AVAILABLE_MESSAGE`` the
+   failure surfaces.** ``LlamaPlugin.chat`` (Swift) and ``NativeLlmPlugin.chat``
+   (Java) reject with the same fixed set of codes (``MODEL_NOT_DOWNLOADED``,
+   ``CHAT_BUSY``, or ``ENGINE_FAILED`` for anything else), which Capacitor
+   copies onto the JS exception untouched. ``NativeLlmProvider.mapPluginError`` (``providers/native-llm.ts``)
+   switches on that code, never on the platform's own localized message: a
+   missing model maps to the same ``NATIVE_LLM_NOT_AVAILABLE_MESSAGE`` the
    off-platform case throws, so ``AskPanel``'s existing "not configured, go
    to Settings" prompt covers it with no separate UI path, while
    ``CHAT_BUSY`` and ``ENGINE_FAILED`` (or no code at all) become
    ``__i18n:assistant.native_busy`` and ``__i18n:assistant.native_engine_failed``,
    sentinel strings ``AskPanel`` already renders through ``t()`` (see the
-   render-the-reply step below) rather than as literal text. The Swift-side
-   reason is logged, never shown, since it is an untranslated
-   ``localizedDescription``.
+   render-the-reply step below) rather than as literal text. The native-side
+   reason (Swift's ``localizedDescription`` or the Java exception's message)
+   is logged, never shown, since neither is translated. ``CHAT_BUSY`` also
+   guards ``deleteModel`` and ``unload`` on both platforms, not just
+   ``chat``: freeing the loaded model out from under an in-flight generation
+   is a use-after-free, so both reject with ``CHAT_BUSY`` while a reply is
+   still generating instead of tearing down the model underneath it.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/providers/native-llm.ts#L92>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **A download failure carries its native reason into the settings toast.**
    Unlike a chat failure, a download failure is not coded: Swift's
    ``URLSessionDownloadDelegate`` rejects with ``DOWNLOAD_FAILED`` and
-   ``URLSession``'s own OS-localized error text. ``downloadNativeModel``
+   ``URLSession``'s own OS-localized error text; Android's ``NativeLlmPlugin``
+   rejects the same ``DOWNLOAD_FAILED`` code from its own plain
+   ``HttpURLConnection`` download loop instead. ``downloadNativeModel``
    (``lib/assistant/native-model-download.ts``) fails the
    ``backgroundTasks`` task with that error, and ``AssistantNativeSection``
    reads ``downloadTask.error.message`` straight into

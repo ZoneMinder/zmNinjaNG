@@ -9,10 +9,10 @@ Go to **Settings > Ninjii** and turn on **Enable Ninjii**.
 Underneath, **Backend** picks where the model runs:
 
 - **On-device**: the model runs inside the app on your computer's GPU, using WebGPU. Nothing leaves your device. **Desktop and web only** (see below).
-- **On-device (native)**: on a supported iPhone or iPad, the model runs inside the app itself instead of a browser engine, using the device's GPU (Metal). Nothing leaves your device. **iPhone and iPad only**, and only on a device with enough memory (see below).
+- **On-device (native)**: on a supported iPhone, iPad, or Android phone, the model runs inside the app itself instead of a browser engine, using the device's GPU (Metal) on iPhone and iPad, or the CPU on Android. Nothing leaves your device. Only on a device with enough memory (see below); Android has no GPU path yet, so replies there are slower than on an iPhone.
 - **Ollama**: the model runs on an [Ollama](https://ollama.com) server (or anything else speaking the OpenAI-compatible chat API) that you point the app at.
 
-The WebGPU on-device backend is not offered on phones or tablets: those models need more memory than a mobile browser engine is allowed to use, and answers take minutes on phone hardware. An iPhone or iPad with at least 6GB of RAM gets the native on-device backend instead (see below); on a device below that memory, or on Android, there is no on-device choice, just a note saying so and the Ollama settings. On a desktop or in a browser, WebGPU on-device is available whenever your GPU supports WebGPU.
+The WebGPU on-device backend is not offered on phones or tablets: those models need more memory than a mobile browser engine is allowed to use, and answers take minutes on phone hardware. A phone or tablet with roughly 6GB of RAM or more, whether an iPhone, an iPad, or an Android phone such as the Pixel 8 class, gets the native on-device backend instead (see below); below that memory there is no on-device choice, just a note saying so and the Ollama settings. On a desktop or in a browser, WebGPU on-device is available whenever your GPU supports WebGPU.
 
 The chat window's header always names the model that is answering and where it runs, for example "Llama 3.2 3B · On-device" or "llama3.2:latest · Ollama", so you never have to open Settings to check which one you are talking to. On the Ollama backend a coloured dot next to that label shows whether the server is reachable: green means connected, red means it cannot be reached (check the address, or that the server is running), and a pulsing amber dot means the app is still checking. The dot rechecks periodically while the window is open. On-device has no server to reach, so no dot appears.
 
@@ -59,7 +59,7 @@ Ask for one of these and the assistant will say it cannot do it and point you to
 
 ## The on-device model (desktop and web)
 
-On a desktop or in a browser, the model runs inside the app using your GPU (WebGPU), the same way a game or video effect uses the GPU, rather than sending your conversation to a company's servers over the internet. This is not available on phones or tablets; a supported iPhone or iPad gets its own on-device backend instead (see below), and Ollama remains the alternative everywhere.
+On a desktop or in a browser, the model runs inside the app using your GPU (WebGPU), the same way a game or video effect uses the GPU, rather than sending your conversation to a company's servers over the internet. This is not available on phones or tablets; a supported iPhone, iPad, or Android phone gets its own on-device backend instead (see below), and Ollama remains the alternative everywhere.
 
 **Settings > Ninjii > Model** shows which model runs, then **Download** fetches it. The download runs as a background task you can watch or cancel, and the model is stored on your device until you tap **Delete**.
 
@@ -76,13 +76,15 @@ The download size is a floor, not the total: running a model needs additional me
 Local models run in your computer's memory. If the app crashes or the model never finishes loading, the machine does not have enough memory for it. Switch to the Ollama backend to run the model on a server instead. This is the same note shown next to the model picker in Settings.
 :::
 
-## The on-device model on iPhone and iPad
+## The on-device model on iPhone, iPad, and Android
 
-WebGPU on-device does not run in a mobile browser engine, but a recent iPhone or iPad can still run the model itself, inside the app, instead of talking to a server. **Settings > Ninjii > Backend** offers **On-device (native)** only when your device qualifies; on a device that does not, the option simply does not appear, and Ollama is the only backend shown.
+WebGPU on-device does not run in a mobile browser engine, but a recent iPhone, iPad, or Android phone can still run the model itself, inside the app, instead of talking to a server. **Settings > Ninjii > Backend** offers **On-device (native)** only when your device qualifies; on a device that does not, the option simply does not appear, and Ollama is the only backend shown.
 
-Qualifying takes memory, not a particular iPhone or iPad generation: the app checks your device's physical memory at startup and only offers the native backend above roughly 6GB. A device below that threshold, or an Android phone or tablet, never sees the option, so there is nothing to turn off if the app decides not to offer it.
+Qualifying takes memory, not a particular device generation: the app checks your device's physical memory at startup and only offers the native backend above roughly 6GB, on iPhone, iPad, or Android (for example a Pixel 8 or newer, roughly 6GB-and-up class phones). A device below that threshold never sees the option, so there is nothing to turn off if the app decides not to offer it.
 
-The model is a single fixed choice (Qwen3 4B Instruct), unlike the desktop and web picker above. **Settings > Ninjii > Model** shows its download size, about 2.5GB, and **Download** fetches it once, the same background task you can watch or cancel that other downloads use. It stays on your device until you tap **Delete**, and nothing about it changes on later app updates unless you delete and download it again.
+iPhone and iPad run the model on the device's GPU (Metal); Android has no equivalent GPU path yet, so it runs on the CPU instead, which is noticeably slower. Set expectations accordingly: a reply that takes a couple of seconds on an iPhone can take much longer on an Android phone. Ollama stays the recommended way to run the assistant on Android when reply speed matters more than keeping the conversation fully on-device.
+
+The model is a single fixed choice (Qwen3 4B Instruct), unlike the desktop and web picker above. **Settings > Ninjii > Model** shows its download size, about 2.5GB on both iOS and Android, and **Download** fetches it once, the same background task you can watch or cancel that other downloads use. It stays on your device until you tap **Delete**, and nothing about it changes on later app updates unless you delete and download it again.
 
 As with WebGPU on-device, this is fully on-device: your questions, the assistant's answers, and anything it looks up on your ZoneMinder server never leave your phone or tablet except to reach that server itself. No conversation data goes to Ollama, to zmNinjaNg, or to any AI company.
 
@@ -143,14 +145,14 @@ The assistant now understands questions in other languages: the model itself int
 
 No third-party AI service ever sees your cameras, events, or questions. Which machines do see them depends on the backend:
 
-- **On-device** (desktop and web, or the iPhone/iPad native backend): your questions, the answers, and anything the assistant looks up stay on your device. The only network requests are to your own ZoneMinder server, the same requests every other screen in the app makes.
+- **On-device** (desktop and web, or the native backend on iPhone, iPad, or Android): your questions, the answers, and anything the assistant looks up stay on your device. The only network requests are to your own ZoneMinder server, the same requests every other screen in the app makes.
 - **Ollama**: the same data, plus your questions and the assistant's answers, also go to the Ollama server you configured. That server is yours; the app never sends the conversation anywhere else.
 
 Either way the conversation is not saved. Closing zmNinjaNg clears it.
 
 ## Platform support
 
-The WebGPU on-device backend runs on desktop and in the browser, where there is enough memory to hold a model, and it needs a GPU with WebGPU support. It is not offered on phones or tablets: a mobile browser engine is capped at far less memory than a model needs, so loading one crashes the app. An iPhone or iPad with enough physical memory gets its own native on-device backend instead (see above), with no browser engine or WebGPU involved; below that memory, and on Android, there is no on-device choice at all. Ollama has none of these requirements and works anywhere the app runs, so it is the way to use the assistant on a phone or tablet without enough memory for on-device, or on a desktop without WebGPU.
+The WebGPU on-device backend runs on desktop and in the browser, where there is enough memory to hold a model, and it needs a GPU with WebGPU support. It is not offered on phones or tablets: a mobile browser engine is capped at far less memory than a model needs, so loading one crashes the app. An iPhone, iPad, or Android phone with enough physical memory gets its own native on-device backend instead (see above), with no browser engine or WebGPU involved; below that memory there is no on-device choice at all. Ollama has none of these requirements and works anywhere the app runs, so it is the way to use the assistant on a phone or tablet without enough memory for on-device, or on a desktop without WebGPU.
 
 On the Linux desktop app, picking the on-device backend usually shows a "no WebGPU" note. That is not a missing GPU: Chromium ships with WebGPU turned off on Linux because Vulkan driver support there is uneven, and the app inherits that default. You can turn it on by launching the app with Chromium's own flags:
 
