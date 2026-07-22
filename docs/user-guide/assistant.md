@@ -23,7 +23,7 @@ Once enabled, there are three ways to start a conversation:
 - Open the command palette (`/`, the sidebar button, or the mobile header icon) and tap **Ask**.
 - Type a leading `?` directly into the command palette's search field.
 
-Before you have typed anything, Ninjii shows a few example prompts as tappable chips (one of them "Summarize my day"). Tapping a chip drops its text into the input so you can send it as-is or edit it first.
+Before you have typed anything, Ninjii shows a few example prompts as tappable chips (one of them is "Summarize my day"). Tapping a chip drops its text into the input so you can send it as-is or edit it first.
 
 Type your question and press Enter (or tap Send). While the assistant is working, a spinner and the name of whatever it is doing (for example, looking up an event or checking a monitor) show above the input. Tap the stop button to cancel a request in progress.
 
@@ -67,7 +67,7 @@ On a desktop or in a browser, the model runs inside the app using your GPU (WebG
 | Llama 3.2 3B | ~2264 MB | Fastest download, smallest memory footprint. |
 | Qwen3 4B | ~3432 MB | The default. Answers camera questions more accurately in testing. Needs about a gigabyte more GPU memory. |
 
-Earlier versions offered a choice of six models. The models that choice replaced varied widely in whether they would use a tool at all, so the list is now short and every entry on it is tested against the same question suite. If your settings still name a model that was removed, the app moves you to Llama 3.2 3B automatically.
+Earlier versions offered a choice of six models. Those models varied widely in whether they would use a tool at all, so the list is now short and every entry on it is tested against the same question suite. If your settings still name a model that was removed, the app moves you to Llama 3.2 3B automatically.
 
 The download size is a floor, not the total: running a model needs additional memory on top of its weights, and how much depends on how long the conversation gets.
 
@@ -79,9 +79,9 @@ Local models run in your computer's memory. If the app crashes or the model neve
 
 Set **Backend** to **Ollama** and give the app the address of your server. Left empty, the app uses your ZoneMinder server's own address on port 11434, which is right when Ollama runs on that machine. The field's placeholder shows the address it will use. Type a different one if your Ollama server is elsewhere. Avoid `localhost` on a phone: there it means the phone itself, which is not running Ollama.
 
-**Test model**, next to the model list, checks two separate things and tells you which one failed. First that the server answers at all, and then that the model you picked can call the app's tools. A model that cannot, such as gemma2, is reachable but useless here: it never looks anything up, so the assistant can only guess. A large model may take a minute to answer the first test while the server loads it into memory, and the button reports which step it is waiting on.
+**Test model**, next to the model list, checks two separate things and tells you which one failed: first that the server answers at all, and then that the model you picked can call the app's tools. A model that cannot, such as gemma2, is reachable but useless here: it never looks anything up, so the assistant can only guess. A large model may take a minute to answer the first test while the server loads it into memory, and the button reports which step it is waiting on.
 
-The model list fills in automatically from the server, and you can also type a model name by hand. A GPU-backed Ollama server is recommended, and Qwen3 8B on one answers noticeably better than the on-device model; Llama 3.2 is a good pick when you want the fastest possible replies. If your server does not have the recommended model, Settings shows you the `ollama pull` command to add it. The **API key** field is optional, for a server that requires one; it is stored in your device's secure storage, not alongside the rest of your settings.
+The model list fills in automatically from the server, and you can also type a model name by hand. A GPU-backed Ollama server is recommended, and Qwen3 8B on such a server answers noticeably better than the on-device model; Llama 3.2 is a good pick when you want the fastest possible replies. If your server does not have the recommended model, Settings shows you the `ollama pull` command to add it. The **API key** field is optional, for a server that requires one; it is stored in your device's secure storage, not alongside the rest of your settings.
 
 ## Performance and accuracy
 
@@ -118,7 +118,7 @@ While the model is loading, the chat says so instead of showing the usual "Think
 
 **Advanced** at the bottom of the assistant settings is collapsed by default. Nothing in it needs changing for normal use.
 
-**Temperature** controls how much the model varies its wording. Leave it at 0. Testing this app's own questions against a real server, 0 answered every one correctly, while the default of higher settings got several wrong on the same questions, including reporting the total number of events when asked how many people were detected. Above 0 the assistant is more likely to state a count, a time, or a camera name that is not in the results it was given.
+**Temperature** controls how much the model varies its wording. Leave it at 0. Testing this app's own questions against a real server, 0 answered every one correctly, while higher settings got several wrong on the same questions, including reporting the total number of events when asked how many people were detected. Above 0 the assistant is more likely to state a count, a time, or a camera name that is not in the results it was given.
 
 **Reply timeout** is how long to wait for one answer, in seconds. Raise it if your server runs the model on a processor rather than a graphics card, where a single answer can take minutes. Lower it if you would rather be told quickly that something is wrong.
 
