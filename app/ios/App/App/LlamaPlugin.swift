@@ -43,13 +43,26 @@ public class LlamaPlugin: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDelegat
         LlamaEngine.shared.freeContextUnderPressure()
     }
 
+    // Triage runs in the second KV slot of the shared unified pool; reserve its cells from the
+    // window advertised to JS so context auto-clear trims before cross-slot overflow.
+    private static let triageReserve = 512
+
+    /// Context window derived from physical RAM, not tuned for any one device: 8GB+ iPhones get
+    /// 8192, 6GB (which pass the floor with the extended-memory entitlement) get 6144. Bigger
+    /// n_ctx = bigger KV cache; too big OOM-kills mid-generation (refs #270).
+    private func deviceContextSize() -> Int {
+        ProcessInfo.processInfo.physicalMemory >= UInt64(8) * 1024 * 1024 * 1024 ? 8192 : 6144
+    }
+
     // MARK: - Capability
 
     @objc func isSupported(_ call: CAPPluginCall) {
         if ProcessInfo.processInfo.physicalMemory < LlamaPlugin.memoryFloor {
             call.resolve(["supported": false, "reason": "memory"])
         } else {
-            call.resolve(["supported": true])
+            // Advertised chat window = device tier minus the triage reserve; the provider reports
+            // it as contextWindow so JS auto-clear matches what the native pool can hold.
+            call.resolve(["supported": true, "contextSize": deviceContextSize() - LlamaPlugin.triageReserve])
         }
     }
 
@@ -149,7 +162,10 @@ public class LlamaPlugin: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDelegat
         guard let messagesJson = call.getString("messagesJson") else { return call.reject("messagesJson is required") }
         let temperature = call.getDouble("temperature") ?? 0
         let maxTokens = call.getInt("maxTokens") ?? 512
-        let contextSize = call.getInt("contextSize") ?? 2048
+        // Cap the JS-requested window down to the device tier: native owns sizing (RAM-derived),
+        // JS only asks for an upper bound. The full tier is created here (both slots share it);
+        // only the isSupported-advertised window subtracts the triage reserve.
+        let contextSize = min(call.getInt("contextSize") ?? 8192, deviceContextSize())
         let cacheSlot = call.getInt("cacheSlot") ?? 0 // 0 = chat, 1 = triage (separate KV sequences)
 
         guard let url = try? modelURL(modelId), FileManager.default.fileExists(atPath: url.path) else {

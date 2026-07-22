@@ -85,6 +85,23 @@ public class NativeLlmPlugin extends Plugin {
 
     // MARK: - Capability
 
+    // Triage runs in the second KV slot of the shared unified pool; reserve its cells from the
+    // window advertised to JS so context auto-clear trims history before cross-slot overflow.
+    private static final int TRIAGE_RESERVE = 512;
+
+    /** Context window derived from total RAM, not tuned for any one phone. totalMem underreports
+     *  nominal RAM (~11 GiB on a 12 GB device, ~7.4 on 8 GB), so tiers sit ~1 GiB below nominal.
+     *  Bigger n_ctx = bigger KV cache; too big OOM-kills mid-generation (refs #270). */
+    private int deviceContextSize() {
+        ActivityManager am = (ActivityManager) getContext().getSystemService(Context.ACTIVITY_SERVICE);
+        ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
+        am.getMemoryInfo(mi);
+        long gib = 1024L * 1024 * 1024;
+        if (mi.totalMem >= 11 * gib) return 8192; // 12GB-class
+        if (mi.totalMem >= 7 * gib) return 4096;  // 8GB-class (e.g. Pixel 8)
+        return 2048;                              // 6GB-class (passes the 5.5GB floor)
+    }
+
     @PluginMethod
     public void isSupported(PluginCall call) {
         ActivityManager am = (ActivityManager) getContext().getSystemService(Context.ACTIVITY_SERVICE);
@@ -94,6 +111,9 @@ public class NativeLlmPlugin extends Plugin {
         JSObject ret = new JSObject();
         ret.put("supported", ok);
         if (!ok) ret.put("reason", "memory");
+        // Advertised chat window = device tier minus the triage reserve; the provider reports it
+        // as contextWindow so the JS auto-clear math matches what the native pool can actually hold.
+        else ret.put("contextSize", deviceContextSize() - TRIAGE_RESERVE);
         call.resolve(ret);
     }
 
@@ -231,7 +251,10 @@ public class NativeLlmPlugin extends Plugin {
         if (messagesJson == null) { call.reject("messagesJson is required"); return; }
         double temperature = call.getDouble("temperature", 0.0);
         int maxTokens = call.getInt("maxTokens", 512);
-        int contextSize = call.getInt("contextSize", 2048);
+        // Cap the JS-requested window down to the device tier: native owns sizing (RAM-derived),
+        // JS only asks for an upper bound. Native creates the FULL tier here (both slots share it);
+        // only the window advertised via isSupported subtracts the triage reserve.
+        int contextSize = Math.min(call.getInt("contextSize", 8192), deviceContextSize());
         int cacheSlot = call.getInt("cacheSlot", 0); // 0 = chat, 1 = triage (separate KV sequences)
 
         File file = modelFile(modelId);

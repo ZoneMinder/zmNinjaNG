@@ -1,7 +1,9 @@
 import type { PluginListenerHandle } from '@capacitor/core';
 
 export interface NativeLlmPlugin {
-  isSupported(): Promise<{ supported: boolean; reason?: 'platform' | 'memory' }>;
+  // `contextSize` (present when supported) is the device-tiered chat window the provider adopts
+  // for both the chat param and its contextWindow getter: RAM-derived, minus the triage reserve.
+  isSupported(): Promise<{ supported: boolean; reason?: 'platform' | 'memory'; contextSize?: number }>;
   isModelDownloaded(options: { modelId: string }): Promise<{ downloaded: boolean; sizeBytes?: number; path?: string }>;
   downloadModel(options: { modelId: string; url: string }): Promise<void>; // resolves when download completes; progress via listener
   cancelDownload(): Promise<void>;

@@ -59,7 +59,14 @@ llama_context *ensure_context_locked(llama_model *model, int n_ctx_req, int n_th
     free_context_locked();
     llama_context_params cp = llama_context_default_params();
     cp.n_ctx = (uint32_t) n_ctx_req;
-    cp.n_batch = cp.n_ctx; // whole prefill decoded in one llama_decode
+    // Batch = the prefill chunk size (256), not n_ctx. ggml compute buffers scale with n_batch;
+    // at 4096 they were hundreds of MB of anonymous (non-reclaimable) RAM and spiked the OOM
+    // during the very first triage prefill. Chunked prefill means no single llama_decode exceeds
+    // the chunk, so 512 (chunk 256 + headroom for the 1-token generation decodes) is ample;
+    // compute buffers now ~tens of MB. 512 is a CPU-universal buffer size (about compute-buffer
+    // footprint, not this phone), not a per-device tier. n_ubatch tracks it.
+    cp.n_batch = 512;
+    cp.n_ubatch = 512;
     cp.n_threads = n_threads;
     cp.n_threads_batch = n_threads;
     // Two purpose-specific KV sequences (chat/triage). kv_unified keeps the KV a single
@@ -254,7 +261,9 @@ Java_com_zoneminder_zmNinjaNG_NativeLlmPlugin_nativeChat(
     // ~4 little (A5xx) cores that straggle on prefill; on-device llama-bench (Pixel 8 / Tensor G3,
     // 1 X3 + 4 A715 + 4 A510 = 9 hw threads) pp512 peaked at 5 threads (16.19 t/s) and REGRESSED
     // at 7 (15.78) — the 4 little cores hurt. hw-4 drops the little cluster (9-4=5 here); clamped
-    // [4,6] so odd core counts stay sane.
+    // [4,6] so odd core counts stay sane. Device-derived from hw count, assuming the common
+    // ~4-efficiency-core big.LITTLE layout; not a per-core cpufreq topology parse (fiddly, and the
+    // clamp covers the spread) — ponytail: parse cpufreq max per core if a device is mis-served.
     int hw = (int) std::thread::hardware_concurrency();
     int n_threads = std::max(4, std::min(6, hw - 4));
 

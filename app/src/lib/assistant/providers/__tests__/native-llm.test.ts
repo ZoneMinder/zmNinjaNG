@@ -5,6 +5,7 @@ import { ASSISTANT } from '../../../zmninja-ng-constants';
 
 const chatMock = vi.fn();
 const cancelChatMock = vi.fn().mockResolvedValue(undefined);
+const isSupportedMock = vi.fn().mockResolvedValue({ supported: true, contextSize: 3584 });
 const removeMock = vi.fn().mockResolvedValue(undefined);
 let capturedStatusCb: ((p: Record<string, unknown>) => void) | null = null;
 const addListenerMock = vi.fn(async (_event: string, cb: (p: Record<string, unknown>) => void) => {
@@ -22,6 +23,7 @@ vi.mock('../../../../plugins/native-llm', () => ({
     },
     chat: (options: unknown) => chatMock(options),
     cancelChat: () => cancelChatMock(),
+    isSupported: () => isSupportedMock(),
     addListener: (event: string, cb: (p: Record<string, unknown>) => void) => addListenerMock(event, cb),
   },
 }));
@@ -43,7 +45,18 @@ describe('NativeLlmProvider.chat', () => {
     cancelChatMock.mockClear();
     removeMock.mockClear();
     addListenerMock.mockClear();
+    isSupportedMock.mockClear();
+    isSupportedMock.mockResolvedValue({ supported: true, contextSize: 3584 });
     capturedStatusCb = null;
+  });
+
+  it('adopts the device-tiered context window from isSupported (e.g. Android 4096 tier - 512 reserve)', async () => {
+    isSupportedMock.mockResolvedValue({ supported: true, contextSize: 3584 });
+    chatMock.mockResolvedValue({ content: '{"answer":"ok"}', promptTokens: 100, completionTokens: 5 });
+    const provider = new NativeLlmProvider();
+    expect(provider.contextWindow).toBeUndefined(); // not learned until the first native call
+    await provider.chat([{ role: 'user', text: 'hi' }], [], 'sys', new AbortController().signal);
+    expect(provider.contextWindow).toBe(3584);
   });
 
   it('forwards native chatStatus phases to onStatus and always removes the listener', async () => {

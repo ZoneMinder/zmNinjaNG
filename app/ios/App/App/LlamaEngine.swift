@@ -147,7 +147,12 @@ final class LlamaEngine {
         freeContextLocked()
         var cparams = llama_context_default_params()
         cparams.n_ctx = UInt32(nCtx)
-        cparams.n_batch = cparams.n_ctx // whole prefill decoded in one llama_decode
+        // Batch = the prefill chunk size (1024), not n_ctx. ggml compute buffers scale with
+        // n_batch; at n_ctx they were hundreds of MB of anonymous RAM. Chunked prefill caps any
+        // single llama_decode at the chunk, so 1024 is ample (1024/1024 is a Metal universal, not
+        // device-specific — it's about buffer size, not this phone). n_ubatch tracks it.
+        cparams.n_batch = 1024
+        cparams.n_ubatch = 1024
         cparams.n_threads = nThreads
         cparams.n_threads_batch = nThreads
         // Two purpose-specific KV sequences (chat/triage). kv_unified keeps the KV a single

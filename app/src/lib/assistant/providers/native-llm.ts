@@ -34,11 +34,15 @@ export const NATIVE_LLM_NOT_AVAILABLE_MESSAGE = MODEL_NOT_AVAILABLE_MESSAGE;
 export class NativeLlmProvider implements AssistantProvider {
   private readonly modelId = ASSISTANT.nativeLlmModel.id;
   private readonly temperature: number;
-  /** The window this model is loaded with; known exactly, same as WebLLM's
-   *  per-model `contextWindowSize` (see `WebLlmProvider.contextWindow`). Android uses a
-   *  smaller window so the quantized KV cache fits 8GB phones; this getter reports the SAME
-   *  value `chat`/`complete` send as `contextSize`, so the JS auto-clear math stays honest. */
-  readonly contextWindow = Platform.isAndroid ? ASSISTANT.nativeLlmModel.contextSizeAndroid : ASSISTANT.nativeLlmModel.contextSize;
+  /** The device-tiered chat window, learned from `isSupported().contextSize` on the first
+   *  native call this turn (RAM-derived, minus the triage reserve). Undefined until then;
+   *  `isContextNearlyFull` no-ops on undefined, and it is read only AFTER a turn's chat has
+   *  run (AskPanel), by which point it is populated. Instance-scoped: a fresh provider per turn
+   *  re-learns it cheaply rather than caching stale values across a device/RAM change. */
+  private deviceContextWindow?: number;
+  get contextWindow(): number | undefined {
+    return this.deviceContextWindow;
+  }
 
   constructor(temperature?: number) {
     this.temperature = temperature ?? ASSISTANT.assistantTemperature;
@@ -121,6 +125,20 @@ export class NativeLlmProvider implements AssistantProvider {
     );
   }
 
+  /** Learn the device-tiered chat window from `isSupported()` once per provider instance.
+   *  Best-effort: on failure `deviceContextWindow` stays undefined (auto-clear simply no-ops). */
+  private async ensureDeviceContext(
+    plugin: Awaited<ReturnType<NativeLlmProvider['getPlugin']>>['NativeLlm'],
+  ): Promise<void> {
+    if (this.deviceContextWindow !== undefined) return;
+    try {
+      const r = await plugin.isSupported();
+      if (typeof r.contextSize === 'number') this.deviceContextWindow = r.contextSize;
+    } catch (error) {
+      log.assistant('Native LLM isSupported (contextSize) probe failed', LogLevel.WARN, { error });
+    }
+  }
+
   async complete(
     system: string,
     text: string,
@@ -130,6 +148,7 @@ export class NativeLlmProvider implements AssistantProvider {
   ): Promise<CompletionResult> {
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
     const { NativeLlm: plugin } = await this.getPlugin();
+    await this.ensureDeviceContext(plugin);
     const statusHandle = await this.subscribeStatus(plugin, onStatus);
     const messages: ChatCompletionMessageParam[] = [
       { role: 'system', content: system },
@@ -143,7 +162,7 @@ export class NativeLlmProvider implements AssistantProvider {
           messagesJson: JSON.stringify(messages),
           temperature: this.temperature,
           maxTokens: ASSISTANT.maxTokens,
-          contextSize: this.contextWindow,
+          contextSize: ASSISTANT.nativeLlmModel.contextSize, // nominal max; native caps to the device tier
           cacheSlot: 1, // triage/complete: its own KV sequence so it never evicts the chat cache
         }),
       );
@@ -166,6 +185,7 @@ export class NativeLlmProvider implements AssistantProvider {
   ): Promise<AssistantTurn> {
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
     const { NativeLlm: plugin } = await this.getPlugin();
+    await this.ensureDeviceContext(plugin);
     const chatMessages = buildWebLlmMessages(system, messages, tools, this.modelId);
     const statusHandle = await this.subscribeStatus(plugin, onStatus);
 
@@ -190,7 +210,7 @@ export class NativeLlmProvider implements AssistantProvider {
           messagesJson: JSON.stringify(chatMessages),
           temperature: attempt < ASSISTANT.maxParseAttempts ? this.temperature : Math.max(this.temperature, ASSISTANT.assistantRetryTemperature),
           maxTokens: ASSISTANT.maxTokens,
-          contextSize: this.contextWindow,
+          contextSize: ASSISTANT.nativeLlmModel.contextSize, // nominal max; native caps to the device tier
           cacheSlot: 0, // main chat: the conversation KV sequence
         }),
       );

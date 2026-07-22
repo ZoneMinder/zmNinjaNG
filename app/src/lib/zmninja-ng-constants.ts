@@ -810,13 +810,9 @@ export const ASSISTANT = {
   // trusted for `webllmModels`' MLC conversions elsewhere in this app.
   nativeLlmModel: {
     id: 'Qwen3-4B-Instruct-2507-Q4_K_M',
+    // Nominal max window JS asks for; native (NativeLlmPlugin.isSupported/chat) derives the real
+    // window from device RAM and caps down to it, reporting the adopted value back via isSupported.
     contextSize: 8192,
-    // Android caps at 4096 to fit the KV cache on 8GB phones (2.5GB weights + KV must not OOM).
-    // With q8_0 KV that is ~300MB (vs ~600MB q8_0 @ 8192 on iOS); the 4096-cell unified pool is
-    // shared by both slots (triage ~512 + chat ~3500), enough for our ~2200-token prompts once
-    // JS context auto-clear trims history. NativeLlmProvider picks per platform and reports the
-    // same value from contextWindow so the auto-clear math stays honest.
-    contextSizeAndroid: 4096,
     label: 'Qwen 3 4B Instruct (native)',
     url: 'https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/main/Qwen3-4B-Instruct-2507-Q4_K_M.gguf',
     approxSizeMb: 2500,
