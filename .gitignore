@@ -65,3 +65,6 @@ vendor/bundle/
 
 # Release notice temp drafts
 .notice-draft-*.json
+
+# LlamaKit SPM build artifacts
+app/ios/App/LlamaKit/.build/
