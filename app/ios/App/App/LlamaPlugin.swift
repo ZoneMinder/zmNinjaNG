@@ -157,6 +157,10 @@ public class LlamaPlugin: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDelegat
         }
 
         DispatchQueue.global(qos: .userInitiated).async {
+            // Keep the screen awake while generating (foreground-only) so the user watching the
+            // status line isn't left on a sleeping screen. Always cleared: success/error/cancel.
+            DispatchQueue.main.async { UIApplication.shared.isIdleTimerDisabled = true }
+            defer { DispatchQueue.main.async { UIApplication.shared.isIdleTimerDisabled = false } }
             do {
                 let result = try LlamaEngine.shared.chat(
                     modelId: modelId, modelPath: url.path, messagesJson: messagesJson,

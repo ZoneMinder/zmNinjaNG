@@ -4,7 +4,9 @@ import android.app.ActivityManager;
 import android.content.ComponentCallbacks2;
 import android.content.Context;
 import android.content.res.Configuration;
+import android.app.Activity;
 import android.os.PowerManager;
+import android.view.WindowManager;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -261,6 +263,9 @@ public class NativeLlmPlugin extends Plugin {
             PowerManager.WakeLock wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "zmNinjaNg:NativeLlmChat");
             wl.setReferenceCounted(false);
             wl.acquire(10 * 60 * 1000L);
+            // Keep the screen on too (foreground only) so the user watching the status line
+            // isn't left staring at a sleeping screen; the wakelock still covers screen-off.
+            setKeepScreenOn(true);
             try {
                 int[] counts = new int[2];
                 byte[] bytes = nativeChat(modelId, path, libDir, this, fRoles, fContents,
@@ -274,8 +279,21 @@ public class NativeLlmPlugin extends Plugin {
                 call.reject(e.getMessage() != null ? e.getMessage() : "Engine failed", "ENGINE_FAILED");
             } finally {
                 if (wl.isHeld()) wl.release();
+                setKeepScreenOn(false);
                 chatInFlight.set(false);
             }
+        });
+    }
+
+    /** Toggle FLAG_KEEP_SCREEN_ON on the activity window (must run on the UI thread).
+     *  Foreground-only by nature, which is exactly the scope wanted; no-op if the activity
+     *  is gone. Paired with the wakelock around generation. */
+    private void setKeepScreenOn(boolean on) {
+        final Activity act = getActivity();
+        if (act == null) return;
+        act.runOnUiThread(() -> {
+            if (on) act.getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            else act.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         });
     }
 
