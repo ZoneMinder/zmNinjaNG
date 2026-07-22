@@ -7,6 +7,13 @@ const chatMock = vi.fn();
 const cancelChatMock = vi.fn().mockResolvedValue(undefined);
 vi.mock('../../../../plugins/native-llm', () => ({
   NativeLlm: {
+    // Same device-faithful trap as the global mock in tests/setup.ts: the
+    // real Capacitor proxy treats `.then` as a native method, so resolving a
+    // promise with the plugin object hangs on device. Throwing keeps this
+    // test honest about that contract.
+    then: () => {
+      throw new Error('"NativeLlm.then()" is not implemented (never resolve a promise with the plugin proxy)');
+    },
     chat: (options: unknown) => chatMock(options),
     cancelChat: () => cancelChatMock(),
   },

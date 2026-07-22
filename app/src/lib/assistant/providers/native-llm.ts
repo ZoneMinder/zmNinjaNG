@@ -39,8 +39,11 @@ export class NativeLlmProvider implements AssistantProvider {
    *  the web/Electron bundle for a backend those platforms can never run. */
   private async getPlugin() {
     if (!Platform.isNative) throw new Error(NATIVE_LLM_NOT_AVAILABLE_MESSAGE);
-    const { NativeLlm } = await import('../../../plugins/native-llm');
-    return NativeLlm;
+    // Namespace, not the plugin object: resolving a promise with Capacitor's
+    // registerPlugin proxy makes the runtime probe `.then` as a native method,
+    // which rejects as unimplemented while the awaiter hangs forever (refs
+    // #270). Callers destructure `NativeLlm` AFTER the await.
+    return import('../../../plugins/native-llm');
   }
 
   /** One `plugin.chat()` call, with the abort signal wired to `cancelChat()`.
@@ -50,7 +53,7 @@ export class NativeLlmProvider implements AssistantProvider {
    *  AbortError callers expect, regardless of whether cancellation resolved
    *  the call or made it reject. */
   private async withCancel<T>(
-    plugin: Awaited<ReturnType<NativeLlmProvider['getPlugin']>>,
+    plugin: Awaited<ReturnType<NativeLlmProvider['getPlugin']>>['NativeLlm'],
     signal: AbortSignal,
     work: () => Promise<T>,
   ): Promise<T> {
@@ -74,7 +77,7 @@ export class NativeLlmProvider implements AssistantProvider {
    *  WebLLM's own fallback when its grammar compiler is unusable. */
   async complete(system: string, text: string, signal: AbortSignal, _jsonSchema?: Record<string, unknown>): Promise<CompletionResult> {
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
-    const plugin = await this.getPlugin();
+    const { NativeLlm: plugin } = await this.getPlugin();
     const messages: ChatCompletionMessageParam[] = [
       { role: 'system', content: system },
       { role: 'user', content: text },
@@ -98,7 +101,7 @@ export class NativeLlmProvider implements AssistantProvider {
 
   async chat(messages: AssistantMessage[], tools: ToolDefinition[], system: string, signal: AbortSignal): Promise<AssistantTurn> {
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
-    const plugin = await this.getPlugin();
+    const { NativeLlm: plugin } = await this.getPlugin();
     const chatMessages = buildWebLlmMessages(system, messages, tools, this.modelId);
 
     // Same self-repair retry shape as WebLlmProvider.chat / OpenAiProvider.chat:

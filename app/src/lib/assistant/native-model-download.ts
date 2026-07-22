@@ -25,8 +25,13 @@ const MODEL_ID = ASSISTANT.nativeLlmModel.id;
  *  the web/Electron bundle for a backend those platforms can never run. */
 async function getPlugin() {
   if (!Platform.isNative) throw new Error(NATIVE_MODEL_NOT_AVAILABLE_MESSAGE);
-  const { NativeLlm } = await import('../../plugins/native-llm');
-  return NativeLlm;
+  // Resolves with the module namespace, NOT the plugin object: Capacitor's
+  // registerPlugin proxy intercepts every property access as a native method
+  // call, so resolving a promise with the proxy makes the JS runtime probe
+  // `.then` on it, which the native side rejects as unimplemented while the
+  // awaiting promise hangs forever (seen on device as a stuck 'checking'
+  // state, refs #270). Callers destructure `NativeLlm` AFTER the await.
+  return import('../../plugins/native-llm');
 }
 
 export interface NativeModelStatus {
@@ -39,13 +44,13 @@ export interface NativeModelStatus {
  *  and path so the settings UI can show storage info without a separate
  *  browser-storage probe (native models don't live in a browser partition). */
 export async function isNativeModelDownloaded(): Promise<NativeModelStatus> {
-  const plugin = await getPlugin();
+  const { NativeLlm: plugin } = await getPlugin();
   return plugin.isModelDownloaded({ modelId: MODEL_ID });
 }
 
 /** Removes the downloaded native model. */
 export async function deleteNativeModel(): Promise<void> {
-  const plugin = await getPlugin();
+  const { NativeLlm: plugin } = await getPlugin();
   await plugin.deleteModel({ modelId: MODEL_ID });
   log.assistant(`Deleted native model "${MODEL_ID}"`, LogLevel.INFO, { modelId: MODEL_ID });
 }
@@ -58,7 +63,7 @@ export async function deleteNativeModel(): Promise<void> {
  *  flag) so a cancel is always reported as `cancelTask`, whichever way that
  *  promise settles. */
 export async function downloadNativeModel(): Promise<void> {
-  const plugin = await getPlugin();
+  const { NativeLlm: plugin } = await getPlugin();
   const tasks = useBackgroundTasks.getState();
   const { label, url, approxSizeMb } = ASSISTANT.nativeLlmModel;
 

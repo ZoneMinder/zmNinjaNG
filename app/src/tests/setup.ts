@@ -182,6 +182,14 @@ vi.mock('../src/plugins/ssl-trust', () => ({
 // Mock NativeLlm plugin
 vi.mock('../plugins/native-llm', () => ({
   NativeLlm: {
+    // Device-faithful proxy trap: Capacitor's registerPlugin proxy turns ANY
+    // property access into a native method call, so `await <plugin>` (promise
+    // resolution probing `.then`) hangs forever on a real device with
+    // '"NativeLlm.then()" is not implemented'. Throwing here makes that
+    // misuse fail loudly in tests instead of passing against a plain object.
+    then: () => {
+      throw new Error('"NativeLlm.then()" is not implemented (never resolve a promise with the plugin proxy)');
+    },
     isSupported: vi.fn().mockResolvedValue({ supported: false, reason: 'platform' }),
     isModelDownloaded: vi.fn().mockResolvedValue({ downloaded: false }),
     downloadModel: vi.fn().mockResolvedValue(undefined),
