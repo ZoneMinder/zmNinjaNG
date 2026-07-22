@@ -179,6 +179,21 @@ vi.mock('../src/plugins/ssl-trust', () => ({
   },
 }));
 
+// Mock NativeLlm plugin
+vi.mock('../src/plugins/native-llm', () => ({
+  NativeLlm: {
+    isSupported: vi.fn().mockResolvedValue({ supported: false, reason: 'platform' }),
+    isModelDownloaded: vi.fn().mockResolvedValue({ downloaded: false }),
+    downloadModel: vi.fn().mockResolvedValue(undefined),
+    cancelDownload: vi.fn().mockResolvedValue(undefined),
+    deleteModel: vi.fn().mockResolvedValue(undefined),
+    chat: vi.fn().mockResolvedValue({ content: '', promptTokens: 0, completionTokens: 0 }),
+    cancelChat: vi.fn().mockResolvedValue(undefined),
+    unload: vi.fn().mockResolvedValue(undefined),
+    addListener: vi.fn().mockResolvedValue({ remove: vi.fn() }),
+  },
+}));
+
 // Mock SafeArea plugin
 vi.mock('../src/plugins/safe-area', () => ({
   SafeArea: {
