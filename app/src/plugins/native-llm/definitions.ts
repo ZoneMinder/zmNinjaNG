@@ -19,4 +19,10 @@ export interface NativeLlmPlugin {
     eventName: 'downloadProgress',
     listenerFunc: (p: { modelId: string; bytesDownloaded: number; totalBytes: number }) => void,
   ): Promise<PluginListenerHandle>;
+  // In-turn phase status during chat(): weight load and prefill progress. Additive; JS
+  // decides presentation/threshold. `progress` is 0..1; `tokens` is the prefill suffix count.
+  addListener(
+    eventName: 'chatStatus',
+    listenerFunc: (p: { phase: 'loading_model' | 'prefill'; progress: number; tokens: number; cached: number }) => void,
+  ): Promise<PluginListenerHandle>;
 }

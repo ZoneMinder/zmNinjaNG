@@ -38,8 +38,8 @@ public class NativeLlmPlugin extends Plugin {
     // Inference (cpp/llama_jni.cpp). nativeChat fills outCounts = {promptTokens, completionTokens},
     // returns the raw UTF-8 completion bytes, and throws RuntimeException on engine failure.
     private static native byte[] nativeChat(String modelId, String modelPath, String libDir,
-                                            String[] roles, String[] contents, double temperature,
-                                            int maxTokens, int contextSize, int[] outCounts);
+                                            NativeLlmPlugin plugin, String[] roles, String[] contents,
+                                            double temperature, int maxTokens, int contextSize, int[] outCounts);
     private static native void nativeCancelChat();
     private static native void nativeUnload();
     private static native void nativeFreeIfLoaded(String modelId);
@@ -261,7 +261,7 @@ public class NativeLlmPlugin extends Plugin {
             wl.acquire(10 * 60 * 1000L);
             try {
                 int[] counts = new int[2];
-                byte[] bytes = nativeChat(modelId, path, libDir, fRoles, fContents,
+                byte[] bytes = nativeChat(modelId, path, libDir, this, fRoles, fContents,
                                           temperature, maxTokens, contextSize, counts);
                 JSObject ret = new JSObject();
                 ret.put("content", new String(bytes, StandardCharsets.UTF_8));
@@ -275,6 +275,17 @@ public class NativeLlmPlugin extends Plugin {
                 chatInFlight.set(false);
             }
         });
+    }
+
+    /** Called from the JNI layer during nativeChat to surface in-turn phase progress
+     *  (loading_model / prefill) to JS. Runs on the chat executor thread. */
+    void emitChatStatus(String phase, double progress, int tokens, int cached) {
+        JSObject data = new JSObject();
+        data.put("phase", phase);
+        data.put("progress", progress);
+        data.put("tokens", tokens);
+        data.put("cached", cached);
+        notifyListeners("chatStatus", data);
     }
 
     @PluginMethod

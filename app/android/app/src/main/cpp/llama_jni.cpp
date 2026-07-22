@@ -63,13 +63,43 @@ llama_context *ensure_context_locked(llama_model *model, int n_ctx_req, int n_th
     return g_ctx;
 }
 
-// Load (or reuse) the resident model. Caller holds no lock; we take it here.
-llama_model *ensure_model(const std::string &model_id, const std::string &model_path) {
+// Emits chatStatus phases to JS by calling the plugin's emitChatStatus (which owns
+// notifyListeners). Valid only for the duration of one nativeChat call (its JNIEnv is
+// thread-bound; chats are serial). 5%-delta throttle guards the bridge from spam.
+struct Emitter {
+    JNIEnv *env = nullptr;
+    jobject plugin = nullptr;
+    jmethodID mid = nullptr;
+    float last_load = -1.0f;
+    float last_prefill = -1.0f;
+    void emit(const char *phase, double progress, int tokens, int cached) {
+        if (!plugin || !mid) return;
+        jstring p = env->NewStringUTF(phase);
+        env->CallVoidMethod(plugin, mid, p, (jdouble) progress, (jint) tokens, (jint) cached);
+        env->DeleteLocalRef(p);
+    }
+};
+
+// llama_model_params.progress_callback: fires during weight load (0..1); return true to continue.
+bool model_progress_cb(float progress, void *ud) {
+    Emitter *e = static_cast<Emitter *>(ud);
+    if (e && (progress - e->last_load >= 0.05f || progress >= 1.0f)) {
+        e->last_load = progress;
+        e->emit("loading_model", progress, 0, 0);
+    }
+    return true;
+}
+
+// Load (or reuse) the resident model. Caller holds no lock; we take it here. A cache hit
+// emits nothing (no load happened).
+llama_model *ensure_model(const std::string &model_id, const std::string &model_path, Emitter *emit) {
     std::lock_guard<std::mutex> lk(g_lock);
     if (g_model && g_loaded_id == model_id) return g_model;
     free_model_locked();
     llama_model_params mparams = llama_model_default_params();
     mparams.n_gpu_layers = 0; // CPU backend only on Android
+    mparams.progress_callback = model_progress_cb;
+    mparams.progress_callback_user_data = emit;
     llama_model *m = llama_model_load_from_file(model_path.c_str(), mparams);
     if (!m) return nullptr;
     g_model = m;
@@ -161,8 +191,13 @@ extern "C" {
 JNIEXPORT jbyteArray JNICALL
 Java_com_zoneminder_zmNinjaNG_NativeLlmPlugin_nativeChat(
         JNIEnv *env, jclass, jstring j_model_id, jstring j_model_path, jstring j_lib_dir,
-        jobjectArray roles, jobjectArray contents,
+        jobject j_plugin, jobjectArray roles, jobjectArray contents,
         jdouble temperature, jint max_tokens, jint context_size, jintArray out_counts) {
+
+    Emitter emitter;
+    emitter.env = env;
+    emitter.plugin = j_plugin;
+    emitter.mid = env->GetMethodID(env->GetObjectClass(j_plugin), "emitChatStatus", "(Ljava/lang/String;DII)V");
 
     {
         std::lock_guard<std::mutex> lk(g_lock);
@@ -182,7 +217,7 @@ Java_com_zoneminder_zmNinjaNG_NativeLlmPlugin_nativeChat(
     std::string model_id = jstr(env, j_model_id);
     std::string model_path = jstr(env, j_model_path);
 
-    llama_model *model = ensure_model(model_id, model_path);
+    llama_model *model = ensure_model(model_id, model_path, &emitter);
     if (!model) { throw_engine_failed(env, "Failed to load model"); return nullptr; }
     const llama_vocab *vocab = llama_model_get_vocab(model);
 
@@ -241,7 +276,8 @@ Java_com_zoneminder_zmNinjaNG_NativeLlmPlugin_nativeChat(
          prompt_tokens.size(), g_cached.size(), n_common, prompt_tokens.size() - n_common);
 
     int suffix = (int) prompt_tokens.size() - (int) n_common;
-    llama_batch batch = llama_batch_init(std::max(1, suffix), 0, 1);
+    const int CHUNK = 1024;
+    llama_batch batch = llama_batch_init(std::max(1, std::min(suffix, CHUNK)), 0, 1);
     auto add_token = [&](llama_token id, llama_pos pos, bool logits) {
         int i = batch.n_tokens;
         batch.token[i] = id;
@@ -252,12 +288,23 @@ Java_com_zoneminder_zmNinjaNG_NativeLlmPlugin_nativeChat(
         batch.n_tokens++;
     };
 
-    batch.n_tokens = 0;
-    for (size_t i = n_common; i < prompt_tokens.size(); i++)
-        add_token(prompt_tokens[i], (llama_pos) i, false);
-    batch.logits[batch.n_tokens - 1] = 1; // sample from the last prompt token
-
-    if (llama_decode(ctx, batch) != 0) {
+    // Chunked prefill so the long first-fill reports progress between llama_decode calls.
+    // n_batch = n_ctx keeps each chunk a single batch; 1024 is perf-negligible vs one big batch.
+    bool prefill_ok = true;
+    for (int start = (int) n_common; start < (int) prompt_tokens.size(); start += CHUNK) {
+        int end = std::min(start + CHUNK, (int) prompt_tokens.size());
+        batch.n_tokens = 0;
+        for (int i = start; i < end; i++) add_token(prompt_tokens[i], (llama_pos) i, false);
+        bool is_last = (end == (int) prompt_tokens.size());
+        if (is_last) batch.logits[batch.n_tokens - 1] = 1; // sample from the last prompt token
+        if (llama_decode(ctx, batch) != 0) { prefill_ok = false; break; }
+        float pr = (float) (end - (int) n_common) / (float) suffix;
+        if (pr - emitter.last_prefill >= 0.05f || is_last) {
+            emitter.last_prefill = pr;
+            emitter.emit("prefill", pr, suffix, (int) n_common);
+        }
+    }
+    if (!prefill_ok) {
         llama_batch_free(batch); llama_sampler_free(smpl);
         g_cached.clear(); // KV now inconsistent -> full re-prefill next call
         throw_engine_failed(env, "Failed to decode prompt"); return nullptr;

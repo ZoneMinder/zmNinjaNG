@@ -46,6 +46,20 @@ private func batchAdd(_ batch: inout llama_batch, _ id: llama_token, _ pos: llam
     batch.n_tokens += 1
 }
 
+/// Boxes the status callback so llama.cpp's context-free C `progress_callback` can reach it
+/// via `user_data`. 5%-delta throttle guards the JS bridge from spam during weight load.
+private final class ProgressBox {
+    let onStatus: (String, Double, Int, Int) -> Void
+    var lastLoad: Float = -1
+    init(_ onStatus: @escaping (String, Double, Int, Int) -> Void) { self.onStatus = onStatus }
+    func report(_ p: Float) {
+        if p - lastLoad >= 0.05 || p >= 1.0 {
+            lastLoad = p
+            onStatus("loading_model", Double(p), 0, 0)
+        }
+    }
+}
+
 /// Owns the resident llama.cpp model and runs inference. Serial: a second concurrent
 /// chat is rejected with `.busy`. Model stays resident across chats (keyed by modelId),
 /// freed on unload/deleteModel. A context is created per chat with the caller's contextSize.
@@ -142,7 +156,8 @@ final class LlamaEngine {
     // MARK: Chat
 
     func chat(modelId: String, modelPath: String, messagesJson: String,
-              temperature: Double, maxTokens: Int, contextSize: Int) throws -> LlamaChatResult {
+              temperature: Double, maxTokens: Int, contextSize: Int,
+              onStatus: ((String, Double, Int, Int) -> Void)? = nil) throws -> LlamaChatResult {
         // Serial guard: reject a second concurrent chat cleanly.
         lock.lock()
         if busy { lock.unlock(); throw LlamaEngineError.busy }
@@ -157,7 +172,8 @@ final class LlamaEngine {
             lock.unlock()
         }
 
-        let model = try ensureModel(modelId: modelId, modelPath: modelPath)
+        let progressBox = onStatus.map { ProgressBox($0) }
+        let model = try ensureModel(modelId: modelId, modelPath: modelPath, progressBox: progressBox)
         let vocab = llama_model_get_vocab(model)
 
         let prompt = try applyTemplate(model: model, messagesJson: messagesJson)
@@ -193,17 +209,30 @@ final class LlamaEngine {
         llama_memory_seq_rm(llama_get_memory(ctx), 0, llama_pos(nCommon), -1)
 
         let suffix = promptTokens.count - nCommon
-        var batch = llama_batch_init(Int32(max(suffix, 1)), 0, 1)
+        let chunkSize = 1024
+        var batch = llama_batch_init(Int32(max(1, min(suffix, chunkSize))), 0, 1)
         defer { llama_batch_free(batch) }
 
-        batchClear(&batch)
-        for i in nCommon..<promptTokens.count {
-            batchAdd(&batch, promptTokens[i], llama_pos(i), [0], false)
-        }
-        batch.logits[Int(batch.n_tokens) - 1] = 1 // sample from the last prompt token
-        guard llama_decode(ctx, batch) == 0 else {
-            cached.removeAll() // KV now inconsistent -> full re-prefill next call
-            throw LlamaEngineError.contextInitFailed
+        // Chunked prefill so the long first-fill reports progress between llama_decode calls.
+        // n_batch = n_ctx keeps each chunk a single batch; 1024 is perf-negligible vs one big batch.
+        var lastPrefill: Float = -1
+        var start = nCommon
+        while start < promptTokens.count {
+            let end = min(start + chunkSize, promptTokens.count)
+            batchClear(&batch)
+            for i in start..<end { batchAdd(&batch, promptTokens[i], llama_pos(i), [0], false) }
+            let isLast = end == promptTokens.count
+            if isLast { batch.logits[Int(batch.n_tokens) - 1] = 1 } // sample from the last prompt token
+            guard llama_decode(ctx, batch) == 0 else {
+                cached.removeAll() // KV now inconsistent -> full re-prefill next call
+                throw LlamaEngineError.contextInitFailed
+            }
+            let pr = Float(end - nCommon) / Float(suffix)
+            if pr - lastPrefill >= 0.05 || isLast {
+                lastPrefill = pr
+                onStatus?("prefill", Double(pr), suffix, nCommon)
+            }
+            start = end
         }
 
         // Generation loop. On cancel, stop and return the partial completion (the JS side turns
@@ -242,8 +271,8 @@ final class LlamaEngine {
 
     // MARK: Helpers
 
-    private func ensureModel(modelId: String, modelPath: String) throws -> OpaquePointer {
-        if loadedModelId == modelId, let m = model { return m }
+    private func ensureModel(modelId: String, modelPath: String, progressBox: ProgressBox? = nil) throws -> OpaquePointer {
+        if loadedModelId == modelId, let m = model { return m } // cache hit: no load, emit nothing
         freeModelLocked()
         var mparams = llama_model_default_params()
         #if targetEnvironment(simulator)
@@ -251,6 +280,16 @@ final class LlamaEngine {
         #else
         mparams.n_gpu_layers = 99
         #endif
+        if let box = progressBox {
+            // Context-free C callback reaches the box via user_data. `box` outlives this
+            // synchronous load, so passUnretained is safe.
+            mparams.progress_callback = { progress, ctx in
+                guard let ctx = ctx else { return true }
+                Unmanaged<ProgressBox>.fromOpaque(ctx).takeUnretainedValue().report(progress)
+                return true
+            }
+            mparams.progress_callback_user_data = Unmanaged.passUnretained(box).toOpaque()
+        }
         guard let m = llama_model_load_from_file(modelPath, mparams) else { throw LlamaEngineError.modelLoadFailed }
         model = m
         loadedModelId = modelId
