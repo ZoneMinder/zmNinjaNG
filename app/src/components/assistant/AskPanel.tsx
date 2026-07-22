@@ -606,6 +606,11 @@ export function AskPanel() {
       }
     } finally {
       setRunning(false);
+      // Also on error/abort paths: a surviving `server_slow` phase would keep
+      // its elapsed-seconds interval ticking invisibly until the next send
+      // (the status line itself is hidden by `running`, but the effect keys
+      // on the phase).
+      useAssistantStore.getState().setPhase(null);
       abortControllerRef.current = null;
     }
   };
