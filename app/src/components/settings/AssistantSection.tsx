@@ -22,10 +22,12 @@ import { Switch } from '../ui/switch';
 import { Button } from '../ui/button';
 import { SectionHeader, SettingsCard, SettingsRow, RowLabel } from './SettingsLayout';
 import { AssistantOllamaSection } from './AssistantOllamaSection';
+import { AssistantNativeSection } from './AssistantNativeSection';
 import { AssistantAdvancedSection } from './AssistantAdvancedSection';
 import { ASSISTANT } from '../../lib/zmninja-ng-constants';
 import { Platform } from '../../lib/platform';
 import { useWebGpuAvailable } from '../../hooks/useWebGpuAvailable';
+import { useNativeLlmSupported } from '../../hooks/useNativeLlmSupported';
 import { useToast } from '../../hooks/use-toast';
 import { deleteModel, downloadModel, isModelDownloaded } from '../../lib/assistant/model-download';
 import { getModelStorageInfo, formatStorageBytes, type ModelStorageInfo } from '../../lib/assistant/model-storage';
@@ -62,6 +64,10 @@ export function AssistantSection({
   // WebGPU") but without claiming the device lacks WebGPU.
   const hasWebGPU = useWebGpuAvailable();
   const webGpuUnavailable = hasWebGPU === false;
+  // Same undefined-while-probing/boolean-once-resolved shape as hasWebGPU
+  // above, but for the native (llama.cpp bridge) backend: only meaningful on
+  // a native platform, where the plugin actually exists.
+  const nativeSupported = useNativeLlmSupported();
   const availableModels = useMemo(
     () => ASSISTANT.webllmModels,
     [],
@@ -260,14 +266,32 @@ export function AssistantSection({
 
         {settings.assistantEnabled && (
           <>
-            {/* No backend choice on a phone or tablet: on-device was removed
-                there, so the picker would offer one option and one dead end.
-                The note says why rather than leaving the absence unexplained,
-                which is what makes a missing feature read as a bug. */}
+            {/* On-device WebGPU was removed on a phone or tablet: the picker
+                would offer one dead-end option. The native (llama.cpp
+                bridge) backend takes its place there once the device passes
+                `NativeLlm.isSupported()`; until then (or if it never does)
+                the note says why rather than leaving the absence
+                unexplained, which is what makes a missing feature read as a
+                bug. */}
             {Platform.isNative ? (
-              <div className="px-4 py-3 space-y-1" data-testid="assistant-on-device-unavailable">
-                <p className="text-xs text-muted-foreground">{t('settings.assistant.on_device_mobile_disabled')}</p>
-              </div>
+              nativeSupported === true ? (
+                <div className="px-4 py-3 space-y-2">
+                  <RowLabel label={t('settings.assistant.backend')} />
+                  <select
+                    className="text-sm bg-background border rounded px-2 py-1.5 w-full sm:w-64"
+                    value={settings.assistantBackend}
+                    onChange={(e) => update('assistantBackend', e.target.value as AssistantBackend)}
+                    data-testid="assistant-backend-select"
+                  >
+                    <option value="ollama">{t('settings.assistant.backend_ollama')}</option>
+                    <option value="native">{t('settings.assistant.backend_native')}</option>
+                  </select>
+                </div>
+              ) : (
+                <div className="px-4 py-3 space-y-1" data-testid="assistant-on-device-unavailable">
+                  <p className="text-xs text-muted-foreground">{t('settings.assistant.on_device_mobile_disabled')}</p>
+                </div>
+              )
             ) : (
               <div className="px-4 py-3 space-y-2">
                 <RowLabel label={t('settings.assistant.backend')} />
@@ -283,7 +307,9 @@ export function AssistantSection({
               </div>
             )}
 
-            {settings.assistantBackend === 'ollama' || Platform.isNative ? (
+            {Platform.isNative && nativeSupported === true && settings.assistantBackend === 'native' ? (
+              <AssistantNativeSection />
+            ) : settings.assistantBackend === 'ollama' || Platform.isNative ? (
               <AssistantOllamaSection settings={settings} update={update} currentProfile={currentProfile} />
             ) : (
               webGpuUnavailable && (

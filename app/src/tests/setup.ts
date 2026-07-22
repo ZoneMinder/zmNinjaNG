@@ -180,7 +180,7 @@ vi.mock('../src/plugins/ssl-trust', () => ({
 }));
 
 // Mock NativeLlm plugin
-vi.mock('../src/plugins/native-llm', () => ({
+vi.mock('../plugins/native-llm', () => ({
   NativeLlm: {
     isSupported: vi.fn().mockResolvedValue({ supported: false, reason: 'platform' }),
     isModelDownloaded: vi.fn().mockResolvedValue({ downloaded: false }),

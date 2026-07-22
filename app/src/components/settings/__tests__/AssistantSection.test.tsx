@@ -9,7 +9,7 @@
  * pins that down explicitly since it's easy to regress).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { AssistantSection } from '../AssistantSection';
 import { DEFAULT_SETTINGS } from '../../../stores/settings';
 import { ASSISTANT } from '../../../lib/zmninja-ng-constants';
@@ -24,6 +24,21 @@ vi.mock('../../../lib/assistant/model-download', () => ({
 }));
 
 vi.mock('../../../hooks/useCapacitorListener', () => ({ useCapacitorListener: useCapacitorListenerMock }));
+
+// Mutable so a test can stand in for a supported/unsupported native device.
+// Defaults unsupported so every test that doesn't touch this explicitly keeps
+// the pre-existing "note + forced Ollama" behavior on a native platform.
+let nativeSupported: boolean | undefined = false;
+vi.mock('../../../hooks/useNativeLlmSupported', () => ({
+  useNativeLlmSupported: () => nativeSupported,
+}));
+
+const isNativeModelDownloadedMock = vi.fn().mockResolvedValue({ downloaded: false });
+vi.mock('../../../lib/assistant/native-model-download', () => ({
+  isNativeModelDownloaded: () => isNativeModelDownloadedMock(),
+  downloadNativeModel: vi.fn(),
+  deleteNativeModel: vi.fn(),
+}));
 
 let webGpuAvailable: boolean | undefined = true;
 vi.mock('../../../hooks/useWebGpuAvailable', () => ({
@@ -92,11 +107,13 @@ describe('AssistantSection backend picker and gating', () => {
 
   beforeEach(() => {
     isModelDownloadedMock.mockReset().mockResolvedValue(false);
+    isNativeModelDownloadedMock.mockReset().mockResolvedValue({ downloaded: false });
     useCapacitorListenerMock.mockReset();
     webGpuAvailable = true;
     isIOS = false;
     isAndroid = false;
     isNative = false;
+    nativeSupported = false;
   });
 
   // On-device was removed on phones and tablets. The picker must not offer a
@@ -128,6 +145,76 @@ describe('AssistantSection backend picker and gating', () => {
       await screen.findByTestId('assistant-on-device-unavailable');
       expect(screen.queryByTestId('assistant-model-select')).not.toBeInTheDocument();
       expect(screen.queryByTestId('assistant-model-download')).not.toBeInTheDocument();
+    });
+  });
+
+  // Task 4 (refs #270): the native (llama.cpp bridge) backend replaces the
+  // "on-device unavailable" note on a phone or tablet once the plugin's own
+  // isSupported() probe passes.
+  describe('native backend on a phone or tablet', () => {
+    it('keeps the unavailable note and forces Ollama while the isSupported() probe is still in flight', async () => {
+      isNative = true;
+      nativeSupported = undefined;
+      render(
+        <AssistantSection settings={enabledSettings} update={vi.fn()} currentProfile={profile} updateSettings={vi.fn()} />,
+      );
+
+      expect(await screen.findByTestId('assistant-on-device-unavailable')).toBeInTheDocument();
+      expect(screen.queryByTestId('assistant-backend-select')).not.toBeInTheDocument();
+      expect(screen.getByTestId('assistant-ollama-url')).toBeInTheDocument();
+    });
+
+    it('keeps the unavailable note and forces Ollama when the device fails the isSupported() probe', async () => {
+      isNative = true;
+      nativeSupported = false;
+      render(
+        <AssistantSection settings={enabledSettings} update={vi.fn()} currentProfile={profile} updateSettings={vi.fn()} />,
+      );
+
+      expect(await screen.findByTestId('assistant-on-device-unavailable')).toBeInTheDocument();
+      expect(screen.queryByTestId('assistant-backend-select')).not.toBeInTheDocument();
+      expect(screen.getByTestId('assistant-ollama-url')).toBeInTheDocument();
+    });
+
+    it('shows an Ollama/native backend picker once the device passes isSupported(), defaulting to Ollama', async () => {
+      isNative = true;
+      nativeSupported = true;
+      render(
+        <AssistantSection settings={enabledSettings} update={vi.fn()} currentProfile={profile} updateSettings={vi.fn()} />,
+      );
+
+      const select = await screen.findByTestId('assistant-backend-select');
+      expect(screen.queryByTestId('assistant-on-device-unavailable')).not.toBeInTheDocument();
+      expect(within(select).getByText('settings.assistant.backend_ollama')).toBeInTheDocument();
+      expect(within(select).getByText('settings.assistant.backend_native')).toBeInTheDocument();
+      expect(within(select).queryByText('settings.assistant.backend_on_device')).not.toBeInTheDocument();
+      expect(screen.getByTestId('assistant-ollama-url')).toBeInTheDocument();
+    });
+
+    it('switches to the native download/delete section when native is selected', async () => {
+      isNative = true;
+      nativeSupported = true;
+      const update = vi.fn();
+      const { rerender } = render(
+        <AssistantSection settings={enabledSettings} update={update} currentProfile={profile} updateSettings={vi.fn()} />,
+      );
+
+      const select = await screen.findByTestId('assistant-backend-select');
+      fireEvent.change(select, { target: { value: 'native' } });
+      expect(update).toHaveBeenCalledWith('assistantBackend', 'native');
+
+      rerender(
+        <AssistantSection
+          settings={{ ...enabledSettings, assistantBackend: 'native' }}
+          update={update}
+          currentProfile={profile}
+          updateSettings={vi.fn()}
+        />,
+      );
+
+      expect(screen.queryByTestId('assistant-ollama-url')).not.toBeInTheDocument();
+      expect(await screen.findByTestId('assistant-native-model-download')).toBeInTheDocument();
+      expect(screen.getByTestId('assistant-native-model-delete')).toBeInTheDocument();
     });
   });
 
