@@ -20,6 +20,10 @@ vi.mock('../../../lib/assistant/model-download', () => ({
   isModelDownloaded: (modelId: string) => isModelDownloadedMock(modelId),
   downloadModel: (modelId: string) => downloadModelMock(modelId),
   deleteModel: (modelId: string) => deleteModelMock(modelId),
+  // Re-exported by providers/provider.ts, which this component now reaches
+  // via useNativeLlmSupported -> isAssistantTestMode; without it the whole
+  // suite file fails to load.
+  MODEL_NOT_AVAILABLE_MESSAGE: 'model not available',
 }));
 
 vi.mock('../../../lib/assistant/model-storage', async () => {
