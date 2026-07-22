@@ -1,5 +1,14 @@
 [
   {
+    "id": "release-2.0.0",
+    "title": "New in-app assistant and continuous event playback",
+    "body": "- Added an in-app assistant that can answer questions about your cameras and events, using either a remote server or a model that runs on your device.\n- The assistant shows a suggested question to get started and a status dot indicating whether its server is reachable.\n- The assistant understands everyday time phrases like \"yesterday afternoon\" and shows times in your chosen time format.\n- The assistant answers its first question faster and no longer shows raw tool text in the chat.\n- Events can now play back continuously, moving on to the next event automatically.\n- Fixed the event player looping the same event after continuous playback.\n- Fixed a connection error when validating against ZoneMinder 1.38.3.\n- Fixed on-device assistant model downloads being lost before they finished installing.\n\n[Full changelog](https://github.com/ZoneMinder/zmNinjaNg/releases/tag/zmNinjaNg-2.0.0)",
+    "publishedAt": "2026-07-22T10:27:55.577Z",
+    "severity": "info",
+    "link": "https://github.com/ZoneMinder/zmNinjaNg/releases/tag/zmNinjaNg-2.0.0",
+    "minAppVersion": "2.0.0"
+  },
+  {
     "id": "release-1.4.0",
     "title": "zmNinjaNg 1.4.0: new views, settings, and fixes",
     "body": "- The monitor card badge now counts events since you last looked instead of always the last 7 days.\n- The Events view can now show relative times such as \"5 minutes ago\".\n- Added a per-profile setting to turn on STUN servers for WebRTC streaming.\n- The startup dialog is now labeled \"Connecting to server\" instead of \"Finishing setup\".\n- Fixed event images that could fail to load because the wrong event ID was sent in image requests.\n- Keyboard shortcuts now work on desktop even when TV mode is on.\n- Fixed the montage showing the wrong number of columns for some layouts, such as 5 or 9 columns.\n- Fixed connecting to servers with self-signed certificates on iOS.\n- Returning from an event no longer scrolls the events list back to the top.\n\n[Full changelog](https://github.com/ZoneMinder/zmNinjaNg/releases/tag/zmNinjaNg-1.4.0)",
