@@ -80,16 +80,29 @@ jobs:
             }
 
             const body = target.body || '';
-            const hits = findFlaggable(body);
+            let hits = findFlaggable(body);
             if (hits.length === 0) { core.info('No flaggable download links.'); return; }
-
-            let newBody = body;
-            for (const h of hits) newBody = newBody.split(h.raw).join(REDACTION);
 
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const issueNumber = context.payload.issue.number;
             const author = target.user.login;
+
+            // A first-timer quoting or re-pasting a link a trusted user already
+            // posted in this thread is not spam (issue #268): drop those hits.
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number: issueNumber, per_page: 100,
+            });
+            const trustedText = comments
+              .filter((c) => c.user.type !== 'Bot' && !UNTRUSTED.has(c.author_association || ''))
+              .map((c) => c.body || '')
+              .concat(UNTRUSTED.has(context.payload.issue.author_association || '') ? [] : [context.payload.issue.body || ''])
+              .join('\n');
+            hits = hits.filter((h) => !trustedText.includes(h.url));
+            if (hits.length === 0) { core.info('All flagged links already posted by trusted users.'); return; }
+
+            let newBody = body;
+            for (const h of hits) newBody = newBody.split(h.raw).join(REDACTION);
 
             if (isComment) {
               await github.rest.issues.updateComment({ owner, repo, comment_id: target.id, body: newBody });
@@ -103,13 +116,13 @@ jobs:
               .join('\n');
             const historyOf = isComment ? "comment's" : "issue's";
             const message = [
-              `Hi @${author}, links from new accounts are automatically held for review. The following off-site link was removed from your ${isComment ? 'comment' : 'issue'} for now; a maintainer will restore it shortly if it is legitimate:`,
+              `Hi \`@${author}\`, links from new accounts are automatically held for review. The following off-site link was removed from your ${isComment ? 'comment' : 'issue'} for now; a maintainer will restore it shortly if it is legitimate:`,
               '',
               list,
               '',
               `Please do not download or run anything from links posted by new accounts until a maintainer confirms them.`,
               '',
-              `@${MAINTAINER} first-time contributor (@${author}, \`${association}\`) posted an off-allowlist link in the ${where}. It stays in the ${historyOf} edit history, so restore it if this is a false positive; hide/delete and report the account if it is spam.`,
+              `@${MAINTAINER} first-time contributor (\`@${author}\`, \`${association}\`) posted an off-allowlist link in the ${where}. It stays in the ${historyOf} edit history, so restore it if this is a false positive; hide/delete and report the account if it is spam.`,
             ].join('\n');
             await github.rest.issues.createComment({ owner, repo, issue_number: issueNumber, body: message });
 
