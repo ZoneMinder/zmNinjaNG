@@ -393,6 +393,14 @@ describe('AskPanel', () => {
       expect(screen.getByTestId('assistant-status')).toHaveTextContent('assistant.status.prefill');
     });
 
+    it('clears the prefill note at 100% (decode window), keeping the running indicator', () => {
+      useAssistantStore.setState({ running: true, phase: { phase: 'prefill', progress: 1, tokens: 1000 } });
+      render(<AskPanel />);
+      const status = screen.getByTestId('assistant-status'); // running indicator still present
+      expect(status).toHaveTextContent('assistant.thinking');
+      expect(status).not.toHaveTextContent('assistant.status.prefill');
+    });
+
     it('shows the server-slow note and clears its interval on unmount (no timer leak)', () => {
       const clearSpy = vi.spyOn(global, 'clearInterval');
       useAssistantStore.setState({ running: true, phase: { phase: 'server_slow' } });

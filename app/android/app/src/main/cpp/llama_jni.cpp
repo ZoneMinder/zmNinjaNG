@@ -292,7 +292,11 @@ Java_com_zoneminder_zmNinjaNG_NativeLlmPlugin_nativeChat(
          slot, prompt_tokens.size(), cached.size(), n_common, prompt_tokens.size() - n_common);
 
     int suffix = (int) prompt_tokens.size() - (int) n_common;
-    const int CHUNK = 1024;
+    // Prefill chunk size = one status tick per chunk. At the measured ~16 tok/s CPU prefill,
+    // 1024 tokens is ~64s between ticks (the status looked frozen); 256 is ~16s/tick, ~8 ticks
+    // on a 2000-token fill, and the batch-efficiency loss at 256 is negligible on CPU. (iOS/Metal
+    // prefill is fast enough that its constant stays 1024 — see LlamaEngine.swift.)
+    const int CHUNK = 256;
     llama_batch batch = llama_batch_init(std::max(1, std::min(suffix, CHUNK)), 0, 1);
     auto add_token = [&](llama_token id, llama_pos pos, bool logits) {
         int i = batch.n_tokens;

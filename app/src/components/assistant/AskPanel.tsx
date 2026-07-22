@@ -327,6 +327,9 @@ export function AskPanel() {
       case 'loading_model':
         return t('assistant.status.loading_model', { percent });
       case 'prefill':
+        // At 100% the fill is done but the (silent) decode still runs; showing a frozen
+        // "…100%" through it reads as stuck, so fall back to the plain running indicator.
+        if ((phase.progress ?? 0) >= 1) return null;
         return (phase.tokens ?? 0) < ASSISTANT.assistantPrefillNoteMinTokens ? null : t('assistant.status.prefill', { percent });
       case 'retry':
         return t('assistant.status.retry');

@@ -220,6 +220,9 @@ final class LlamaEngine {
         llama_memory_seq_rm(llama_get_memory(ctx), seq, llama_pos(nCommon), -1)
 
         let suffix = promptTokens.count - nCommon
+        // Prefill chunk size = one status tick per chunk. Metal prefill is fast (hundreds of
+        // tok/s), so 1024 already ticks often enough and keeps batch efficiency; Android CPU
+        // (~16 tok/s) uses 256 for visible progress — see llama_jni.cpp.
         let chunkSize = 1024
         var batch = llama_batch_init(Int32(max(1, min(suffix, chunkSize))), 0, 1)
         defer { llama_batch_free(batch) }
