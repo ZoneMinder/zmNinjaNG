@@ -33,7 +33,11 @@ android {
         }
         externalNativeBuild {
             cmake {
-                arguments "-DANDROID_STL=c++_shared", "-DCMAKE_BUILD_TYPE=Release"
+                // FLEXIBLE_PAGE_SIZES: 16KB-page ELF alignment for every .so this
+                // cmake build links (nativellm + fetched llama/ggml). Required on
+                // 16KB-page devices (Pixel 8+ era); default only from NDK r28,
+                // explicit on the pinned r27.
+                arguments "-DANDROID_STL=c++_shared", "-DCMAKE_BUILD_TYPE=Release", "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"
             }
         }
         aaptOptions {
