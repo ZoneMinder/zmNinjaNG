@@ -54,7 +54,8 @@ export class NativeLlmProvider implements AssistantProvider {
     signal: AbortSignal,
     work: () => Promise<T>,
   ): Promise<T> {
-    const onAbort = () => void plugin.cancelChat();
+    const onAbort = () =>
+      void plugin.cancelChat().catch((error) => log.assistant('Native LLM cancelChat failed', LogLevel.WARN, { error }));
     signal.addEventListener('abort', onAbort, { once: true });
     try {
       return await work();

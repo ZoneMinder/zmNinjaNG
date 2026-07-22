@@ -72,6 +72,29 @@ describe('NativeLlmProvider.chat', () => {
     expect(cancelChatMock).toHaveBeenCalled();
   });
 
+  // Fire-and-forget cancelChat() must not become an unhandled rejection when
+  // the native side has nothing in flight to cancel: caught and logged at
+  // WARN, and the abort still surfaces cleanly as AbortError.
+  it('logs a rejecting cancelChat at WARN instead of an unhandled rejection, and still throws AbortError', async () => {
+    const { log, LogLevel: Level } = await import('../../../logger');
+    const spy = vi.spyOn(log, 'assistant');
+    cancelChatMock.mockRejectedValueOnce(new Error('nothing to cancel'));
+    const controller = new AbortController();
+    chatMock.mockImplementation(() => {
+      controller.abort();
+      return Promise.resolve({ content: '{"answer": "partial"}', promptTokens: 1, completionTokens: 1 });
+    });
+
+    const provider = new NativeLlmProvider();
+    await expect(
+      provider.chat([{ role: 'user', text: 'hi' }], [], 'sys', controller.signal),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    // Lets any unhandled rejection from the fire-and-forget cancelChat surface.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(spy).toHaveBeenCalledWith('Native LLM cancelChat failed', Level.WARN, expect.objectContaining({ error: expect.any(Error) }));
+  });
+
   it('attaches usage and exchange to the returned turn', async () => {
     chatMock.mockResolvedValue({ content: '{"answer": "ok"}', promptTokens: 123, completionTokens: 45 });
 
