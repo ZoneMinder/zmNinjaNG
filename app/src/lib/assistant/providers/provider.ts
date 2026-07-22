@@ -3,6 +3,7 @@ import { STORAGE_KEYS } from '../../zmninja-ng-constants';
 import { sharedMockProvider } from './mock';
 import { WebLlmProvider } from './webllm';
 import { OpenAiProvider } from './openai';
+import { NativeLlmProvider } from './native-llm';
 import { MODEL_NOT_AVAILABLE_MESSAGE } from '../model-download';
 
 /** `getAssistantProvider` itself never throws this outside test mode (it
@@ -25,10 +26,11 @@ export function isAssistantTestMode(): boolean {
 }
 
 /** Returns the mock in test mode, otherwise the provider for `config.backend`:
- *  the on-device WebLLM provider (`config.modelId`) or the OpenAI-compatible
+ *  the on-device WebLLM provider (`config.modelId`), the OpenAI-compatible
  *  remote adapter (`config.ollamaBaseUrl`/`config.ollamaModel`/`config.apiKey`)
- *  for Ollama. `config` is ignored in test mode: the shared mock is scripted
- *  by the caller (e.g. e2e steps), not tied to any backend or model. */
+ *  for Ollama, or the native llama.cpp bridge (refs #270) for 'native'.
+ *  `config` is ignored in test mode: the shared mock is scripted by the
+ *  caller (e.g. e2e steps), not tied to any backend or model. */
 export function getAssistantProvider(config: ProviderConfig): AssistantProvider {
   if (isAssistantTestMode()) return sharedMockProvider;
   if (config.backend === 'ollama') {
@@ -40,5 +42,6 @@ export function getAssistantProvider(config: ProviderConfig): AssistantProvider 
       timeoutMs: config.timeoutMs,
     });
   }
+  if (config.backend === 'native') return new NativeLlmProvider(config.temperature);
   return new WebLlmProvider(config.modelId, config.temperature);
 }

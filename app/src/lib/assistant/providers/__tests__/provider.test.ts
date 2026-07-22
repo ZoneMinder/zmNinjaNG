@@ -3,6 +3,7 @@ import { isAssistantTestMode, getAssistantProvider } from '../provider';
 import { sharedMockProvider } from '../mock';
 import { WebLlmProvider } from '../webllm';
 import { OpenAiProvider } from '../openai';
+import { NativeLlmProvider } from '../native-llm';
 import { STORAGE_KEYS } from '../../../zmninja-ng-constants';
 import type { ProviderConfig } from '../../types';
 
@@ -20,6 +21,13 @@ const ollamaConfig: ProviderConfig = {
   modelId: MODEL_ID,
   ollamaBaseUrl: 'http://localhost:11434/v1',
   ollamaModel: 'qwen2.5:3b',
+};
+
+const nativeConfig: ProviderConfig = {
+  backend: 'native',
+  modelId: MODEL_ID,
+  ollamaBaseUrl: 'http://localhost:11434/v1',
+  ollamaModel: '',
 };
 
 describe('isAssistantTestMode', () => {
@@ -73,6 +81,7 @@ describe('getAssistantProvider', () => {
 
     expect(getAssistantProvider(onDeviceConfig)).toBe(sharedMockProvider);
     expect(getAssistantProvider(ollamaConfig)).toBe(sharedMockProvider);
+    expect(getAssistantProvider(nativeConfig)).toBe(sharedMockProvider);
   });
 
   it('returns a WebLlmProvider for backend "on-device" when not in test mode', () => {
@@ -92,5 +101,11 @@ describe('getAssistantProvider', () => {
     localStorage.setItem(STORAGE_KEYS.assistantTestMode, '1');
 
     expect(getAssistantProvider(onDeviceConfig)).toBeInstanceOf(WebLlmProvider);
+  });
+
+  it('returns a NativeLlmProvider for backend "native" when not in test mode', () => {
+    vi.stubEnv('PROD', false);
+
+    expect(getAssistantProvider(nativeConfig)).toBeInstanceOf(NativeLlmProvider);
   });
 });

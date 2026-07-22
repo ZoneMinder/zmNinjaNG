@@ -294,9 +294,10 @@ export interface AssistantProvider {
 }
 
 /** Which chat backend drives the assistant (refs #246): the on-device WebLLM
- *  model (providers/webllm.ts) or a remote OpenAI-compatible server such as
- *  Ollama (providers/openai.ts). */
-export type AssistantBackend = 'on-device' | 'ollama';
+ *  model (providers/webllm.ts), a remote OpenAI-compatible server such as
+ *  Ollama (providers/openai.ts), or the native llama.cpp bridge (refs #270,
+ *  providers/native-llm.ts). */
+export type AssistantBackend = 'on-device' | 'ollama' | 'native';
 
 /** Assembled by the caller (AskPanel) from profile settings plus the
  *  optional secure-stored API key, and handed to `getAssistantProvider`

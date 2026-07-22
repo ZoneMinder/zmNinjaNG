@@ -794,12 +794,20 @@ export const ASSISTANT = {
     'gemma-2-2b-it-q4f16_1-MLC': 'Llama-3.2-3B-Instruct-q4f16_1-MLC',
     'Qwen3-1.7B-q4f16_1-MLC': 'Llama-3.2-3B-Instruct-q4f16_1-MLC',
   } as Record<string, string>,
-  // The native (llama.cpp bridge) on-device model, refs #270. Only `id` and
-  // `contextSize` are populated here for NativeLlmProvider; the download url,
-  // label and size fields land in Task 3 alongside the download UI.
+  // The native (llama.cpp bridge) on-device model, refs #270.
+  //
+  // `url` points at unsloth's GGUF conversion, not a `Qwen/...-GGUF` repo:
+  // Qwen does not publish an official GGUF repo for this model (verified via
+  // the HF API model list for "Qwen3-4B-Instruct-2507-GGUF" on 2026-07-22 --
+  // no `Qwen/` owner in the results). unsloth is the same quantizer already
+  // trusted for `webllmModels`' MLC conversions elsewhere in this app.
   nativeLlmModel: {
     id: 'Qwen3-4B-Instruct-2507-Q4_K_M',
     contextSize: 8192,
+    label: 'Qwen 3 4B Instruct (native)',
+    url: 'https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/main/Qwen3-4B-Instruct-2507-Q4_K_M.gguf',
+    approxSizeMb: 2500,
+    minPhysicalMemoryGb: 5.5,
   },
   // Ollama's default local HTTP address, OpenAI-compatible endpoint (refs #246).
   // On a phone this must be replaced with the Ollama server's LAN address:

@@ -332,4 +332,15 @@ describe('assistant backend migration for mobile', () => {
     expect(s.assistantBackend).toBe('ollama');
     isNative = false;
   });
+
+  // refs #270: 'native' (the llama.cpp bridge) has no on-device replacement
+  // the way 'on-device' does, so mergeProfileSettings must leave it alone --
+  // including on a desktop/web profile that only stored it because it was
+  // synced from an iOS device. The provider throws at chat time instead.
+  it('leaves a "native" backend untouched on a non-native platform', () => {
+    isNative = false;
+    useSettingsStore.getState().updateProfileSettings('profile-native', { assistantBackend: 'native' });
+    const s = useSettingsStore.getState().getProfileSettings('profile-native');
+    expect(s.assistantBackend).toBe('native');
+  });
 });
