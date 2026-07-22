@@ -46,6 +46,16 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    packagingOptions {
+        jniLibs {
+            // Extract native libs to disk (pre-AGP-8 behavior). Required: ggml's
+            // runtime CPU-variant dispatch scans nativeLibraryDir with opendir
+            // (ggml_backend_load_all_from_path), which cannot see libs packed
+            // inside the APK - with the AGP 8 default the scan finds zero
+            // backends and every model load fails instantly (refs #270).
+            useLegacyPackaging = true
+        }
+    }
     buildTypes {
         release {
             signingConfig signingConfigs.release
