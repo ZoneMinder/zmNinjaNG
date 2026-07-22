@@ -75,13 +75,27 @@ export async function downloadNativeModel(): Promise<void> {
     },
   });
 
-  const handle = await plugin.addListener('downloadProgress', (p) => {
-    if (cancelled || p.modelId !== MODEL_ID) return;
-    const pct = p.totalBytes > 0 ? Math.round((p.bytesDownloaded / p.totalBytes) * 100) : 0;
-    tasks.updateProgress(taskId, pct, p.bytesDownloaded);
-  });
-
+  // Both `addListener` and `downloadModel` run inside the try: an addListener
+  // rejection (the bridge call itself failing) must reach the same
+  // fail/cancel handling as a downloadModel rejection, or the task the
+  // earlier addTask() created is left 'pending' forever with no recovery.
+  let handle: Awaited<ReturnType<typeof plugin.addListener>> | undefined;
   try {
+    handle = await plugin.addListener('downloadProgress', (p) => {
+      if (cancelled || p.modelId !== MODEL_ID) return;
+      const pct = p.totalBytes > 0 ? Math.round((p.bytesDownloaded / p.totalBytes) * 100) : 0;
+      tasks.updateProgress(taskId, pct, p.bytesDownloaded);
+    });
+
+    // A cancel that landed while addListener was in flight: nothing has
+    // started on the native side yet, so bail without ever calling
+    // downloadModel (cancelFn already asked the plugin to cancel, which
+    // would otherwise have nothing in flight to cancel).
+    if (cancelled) {
+      tasks.cancelTask(taskId);
+      return;
+    }
+
     await plugin.downloadModel({ modelId: MODEL_ID, url });
     if (cancelled) {
       tasks.cancelTask(taskId);
@@ -97,6 +111,6 @@ export async function downloadNativeModel(): Promise<void> {
       tasks.failTask(taskId, error);
     }
   } finally {
-    void handle.remove();
+    void handle?.remove();
   }
 }

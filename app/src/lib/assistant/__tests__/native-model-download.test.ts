@@ -203,5 +203,42 @@ describe('native-model-download', () => {
       await expect(downloadNativeModel()).rejects.toThrow(NATIVE_MODEL_NOT_AVAILABLE_MESSAGE);
       expect(useBackgroundTasks.getState().tasks).toHaveLength(0);
     });
+
+    // Reviewer finding: addListener used to run before the try block, so a
+    // rejecting bridge call left the task 'pending' forever with no failTask
+    // and no way for the caller to observe or recover from it.
+    it('fails the task (does not leave it pending forever) when addListener rejects', async () => {
+      vi.mocked(NativeLlm.addListener).mockRejectedValue(new Error('bridge unavailable'));
+
+      await downloadNativeModel();
+
+      const task = useBackgroundTasks.getState().tasks[0];
+      expect(task.status).toBe('failed');
+      expect(task.error?.message).toBe('bridge unavailable');
+      expect(NativeLlm.downloadModel).not.toHaveBeenCalled();
+    });
+
+    // Reviewer finding: a cancel landing between addTask and downloadModel
+    // (e.g. while addListener is still in flight) must not let downloadModel
+    // start anyway, since cancelDownload() already ran with nothing in flight
+    // to cancel.
+    it('bails to cancelTask without calling plugin.downloadModel when cancelled before it starts', async () => {
+      let resolveAddListener!: (h: { remove: () => Promise<void> }) => void;
+      vi.mocked(NativeLlm.addListener).mockReturnValue(
+        new Promise((resolve) => { resolveAddListener = resolve; }),
+      );
+
+      const promise = downloadNativeModel();
+      await vi.waitFor(() => expect(useBackgroundTasks.getState().tasks).toHaveLength(1));
+      const taskId = useBackgroundTasks.getState().tasks[0].id;
+
+      useBackgroundTasks.getState().cancelTask(taskId);
+      resolveAddListener({ remove: vi.fn().mockResolvedValue(undefined) });
+      await promise;
+
+      expect(NativeLlm.downloadModel).not.toHaveBeenCalled();
+      const task = useBackgroundTasks.getState().tasks[0];
+      expect(task.status).toBe('cancelled');
+    });
   });
 });
