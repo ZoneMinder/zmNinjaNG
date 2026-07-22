@@ -34,9 +34,9 @@ public class NativeLlmPlugin extends Plugin {
 
     // Inference (cpp/llama_jni.cpp). nativeChat fills outCounts = {promptTokens, completionTokens},
     // returns the raw UTF-8 completion bytes, and throws RuntimeException on engine failure.
-    private static native byte[] nativeChat(String modelId, String modelPath, String[] roles,
-                                            String[] contents, double temperature, int maxTokens,
-                                            int contextSize, int[] outCounts);
+    private static native byte[] nativeChat(String modelId, String modelPath, String libDir,
+                                            String[] roles, String[] contents, double temperature,
+                                            int maxTokens, int contextSize, int[] outCounts);
     private static native void nativeCancelChat();
     private static native void nativeUnload();
     private static native void nativeFreeIfLoaded(String modelId);
@@ -230,10 +230,12 @@ public class NativeLlmPlugin extends Plugin {
 
         final String[] fRoles = roles, fContents = contents;
         final String path = file.getAbsolutePath();
+        // Where the ggml-cpu variant .so are; the native DL loader needs this (see nativeChat).
+        final String libDir = getContext().getApplicationInfo().nativeLibraryDir;
         chatExecutor.execute(() -> {
             try {
                 int[] counts = new int[2];
-                byte[] bytes = nativeChat(modelId, path, fRoles, fContents,
+                byte[] bytes = nativeChat(modelId, path, libDir, fRoles, fContents,
                                           temperature, maxTokens, contextSize, counts);
                 JSObject ret = new JSObject();
                 ret.put("content", new String(bytes, StandardCharsets.UTF_8));

@@ -12,6 +12,7 @@
 #include <algorithm>
 
 #include "llama.h"
+#include "ggml-backend.h"
 
 #define LOG_TAG "NativeLlm"
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
@@ -129,13 +130,22 @@ extern "C" {
 
 JNIEXPORT jbyteArray JNICALL
 Java_com_zoneminder_zmNinjaNG_NativeLlmPlugin_nativeChat(
-        JNIEnv *env, jclass, jstring j_model_id, jstring j_model_path,
+        JNIEnv *env, jclass, jstring j_model_id, jstring j_model_path, jstring j_lib_dir,
         jobjectArray roles, jobjectArray contents,
         jdouble temperature, jint max_tokens, jint context_size, jintArray out_counts) {
 
     {
         std::lock_guard<std::mutex> lk(g_lock);
-        if (!g_backend_ready) { llama_backend_init(); g_backend_ready = true; }
+        if (!g_backend_ready) {
+            // GGML_BACKEND_DL: the ggml-cpu variant .so are dlopen'd at runtime, and ggml's
+            // auto-search uses /proc/self/exe's dir — which on Android is app_process, not the
+            // app's lib dir. So we must point the loader at the app's nativeLibraryDir explicitly
+            // (mirrors llama.cpp's own examples/llama.android). Without this no CPU backend loads.
+            std::string lib_dir = jstr(env, j_lib_dir);
+            ggml_backend_load_all_from_path(lib_dir.empty() ? nullptr : lib_dir.c_str());
+            llama_backend_init();
+            g_backend_ready = true;
+        }
     }
     g_cancel = false;
 
@@ -155,7 +165,13 @@ Java_com_zoneminder_zmNinjaNG_NativeLlmPlugin_nativeChat(
     llama_context_params cparams = llama_context_default_params();
     cparams.n_ctx = (uint32_t) std::max(256, (int) context_size);
     cparams.n_batch = cparams.n_ctx;
-    int n_threads = std::max(1, std::min(8, (int) std::thread::hardware_concurrency() - 2));
+    // Thread count = performance cores only. Big.LITTLE Android SoCs pair the big cluster with
+    // ~4 little (A5xx) cores that straggle on prefill; on-device llama-bench (Pixel 8 / Tensor G3,
+    // 1 X3 + 4 A715 + 4 A510 = 9 hw threads) pp512 peaked at 5 threads (16.19 t/s) and REGRESSED
+    // at 7 (15.78) — the 4 little cores hurt. hw-4 drops the little cluster (9-4=5 here); clamped
+    // [4,6] so odd core counts stay sane.
+    int hw = (int) std::thread::hardware_concurrency();
+    int n_threads = std::max(4, std::min(6, hw - 4));
     cparams.n_threads = n_threads;
     cparams.n_threads_batch = n_threads;
     llama_context *ctx = llama_init_from_model(model, cparams);
