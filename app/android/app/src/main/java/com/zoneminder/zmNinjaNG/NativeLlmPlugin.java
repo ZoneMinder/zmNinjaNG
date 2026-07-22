@@ -67,7 +67,14 @@ public class NativeLlmPlugin extends Plugin {
         getContext().registerComponentCallbacks(new ComponentCallbacks2() {
             @Override
             public void onTrimMemory(int level) {
-                if (level >= TRIM_MEMORY_RUNNING_CRITICAL) {
+                // Trim levels are NOT a severity scale: UI_HIDDEN (20) and
+                // BACKGROUND (40) sit numerically above RUNNING_CRITICAL (15)
+                // but fire on routine UI transitions (keyboard, brief app
+                // switch), and a plain ">=" wiped the KV cache before nearly
+                // every turn (seen on device, refs #270). Free only on real
+                // pressure: RUNNING_CRITICAL while foreground, or MODERATE and
+                // above while cached (about to be killed anyway).
+                if (level == TRIM_MEMORY_RUNNING_CRITICAL || level >= TRIM_MEMORY_MODERATE) {
                     chatExecutor.execute(NativeLlmPlugin::nativeFreeContext);
                 }
             }
