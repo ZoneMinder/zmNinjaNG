@@ -1,5 +1,30 @@
 # Changelog
 
+## [zmNinjaNg-2.0.0](https://github.com/ZoneMinder/zmNinjaNg/tree/zmNinjaNg-2.0.0) (2026-07-22)
+
+[Full Changelog](https://github.com/ZoneMinder/zmNinjaNg/compare/zmNinjaNg-1.4.0...zmNinjaNg-2.0.0)
+
+**Implemented enhancements:**
+
+- feat\(assistant\): intro suggested-question chip + Ollama connection status dot [\#251](https://github.com/ZoneMinder/zmNinjaNg/issues/251)
+- Feature Request - Continuous event stream [\#250](https://github.com/ZoneMinder/zmNinjaNg/issues/250)
+- feat: in-app assistant with pluggable LLM backend \(remote or on-device\) [\#246](https://github.com/ZoneMinder/zmNinjaNg/issues/246)
+
+**Fixed bugs:**
+
+- fix: prevent ZMS event player from looping after continuous advance [\#252](https://github.com/ZoneMinder/zmNinjaNg/issues/252)
+- API validation fails for field V4LMultiBuffer on ZoneMinder 1.38.3 [\#247](https://github.com/ZoneMinder/zmNinjaNg/issues/247)
+- Android release AAB ships without native debug symbols \(NDK not on CI runner\) [\#244](https://github.com/ZoneMinder/zmNinjaNg/issues/244)
+
+**Closed issues:**
+
+- Assistant: structured time windows — model interprets human time, app does arithmetic, no phrase grammar [\#265](https://github.com/ZoneMinder/zmNinjaNg/issues/265)
+- Assistant: raw \<tool\_call\> XML leaks into chat; busiest-hour questions unanswerable by either tool [\#264](https://github.com/ZoneMinder/zmNinjaNg/issues/264)
+- Assistant: resolveWhen rejects common human time phrases; answer times ignore the app time format [\#262](https://github.com/ZoneMinder/zmNinjaNg/issues/262)
+- Assistant: first Ollama question pays ~36s for cold model load and one thinking turn [\#261](https://github.com/ZoneMinder/zmNinjaNg/issues/261)
+- Assistant: erratic model output — constrained decoding, brittle guardrails, prompt verbosity, validation bugs [\#259](https://github.com/ZoneMinder/zmNinjaNg/issues/259)
+- fix: persist native MNN download before CFNetwork cleanup [\#255](https://github.com/ZoneMinder/zmNinjaNg/issues/255)
+
 ## [zmNinjaNg-1.4.0](https://github.com/ZoneMinder/zmNinjaNg/tree/zmNinjaNg-1.4.0) (2026-07-15)
 
 [Full Changelog](https://github.com/ZoneMinder/zmNinjaNg/compare/zmNinjaNg-1.3.0...zmNinjaNg-1.4.0)
