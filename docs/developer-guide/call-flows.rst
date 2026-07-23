@@ -2362,7 +2362,12 @@ property of the registry (``TOOLS`` holds no mutating tool and
    read tool fails OPEN (``activeTools`` flips to the registry and the call
    runs, since the model's own attempt outranks the classifier), and a
    tools-available turn answered without any tool attempt gets one generic
-   reminder, with the second answer accepted rather than replaced.
+   reminder, with the second answer accepted rather than replaced. The
+   fail-open path pushes back once first (refs #270): the first tool-less
+   call is answered with a corrective error asking the model to reply in
+   plain text if the message was conversation, and only a model that insists
+   on the next call opens the registry, so a greeting that reflexively calls
+   a tool does not come back as an event report.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/grounding.ts>`__
    · → :doc:`12-shared-services-and-components`
 

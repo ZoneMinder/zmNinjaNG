@@ -251,6 +251,14 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
    *  without ever attempting one gets a single generic reminder, in any
    *  language. It never hard-fails; the second tool-less answer is accepted. */
   let genericToolReminderSent = false;
+  /** The fail-open gate (below) gets ONE corrective pushback before it opens
+   *  the registry. Observed on-device: Apple Foundation Models answered "hello"
+   *  (triaged CHAT, tool-less turn) by calling count_events, and the bare
+   *  fail-open ran it, so a greeting came back as an event report. A model that
+   *  insists after one explicit pushback has out-voted the classifier (keeps the
+   *  #265 "summarize last week" recovery); a format-reflex call does not survive
+   *  the pushback. */
+  let toolLessPushbackSent = false;
   /** `name:JSON(input)` for every tool call attempted this turn, so an
    *  identical repeat can be refused rather than re-run (see the loop below). */
   const calledSignatures = new Set<string>();
@@ -385,8 +393,32 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
       // last week" was triaged CHAT, the model called list_events anyway, and
       // refusing it turned a correct instinct into an apology. The registry
       // is read-only, so honoring the call is always safe.
+      //
+      // But one pushback first (refs #270): Apple Foundation Models answered a
+      // bare "hello" by calling count_events, and opening the registry on that
+      // first call turned a greeting into an event report. So the first
+      // tool-less call gets a corrective error asking the model to answer
+      // conversation in plain text; only a model that INSISTS on the second
+      // call has really out-voted the classifier. A format reflex does not
+      // survive the pushback; the #265 "summarize last week" recovery does.
       if (activeTools.length === 0 && tools.length === 0 && getToolByName(call.name)) {
-        log.assistant('Tool-less turn called a real read tool; enabling the registry (triage overruled)', LogLevel.INFO, {
+        if (!toolLessPushbackSent) {
+          toolLessPushbackSent = true;
+          log.assistant('Tool-less turn called a real read tool; pushing back once before fail-open', LogLevel.WARN, {
+            toolName: call.name,
+          });
+          results.push({
+            callId: call.id,
+            output:
+              'No tools are available for this turn. If the user\'s message is conversation (a greeting, thanks, ' +
+              'small talk), answer it in plain text. Only call this tool again if the user genuinely asked about ' +
+              'this ZoneMinder system (cameras, events, detections, server).',
+            isError: true,
+          });
+          host.onActivity({ toolName: call.name, status: 'error', input: call.input });
+          continue;
+        }
+        log.assistant('Tool-less turn insisted after pushback; enabling the registry (triage overruled)', LogLevel.INFO, {
           toolName: call.name,
         });
         activeTools = TOOLS;

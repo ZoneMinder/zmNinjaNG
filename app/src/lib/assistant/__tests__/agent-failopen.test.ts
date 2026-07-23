@@ -7,12 +7,12 @@
  * correct instinct into an apology. Separate file because executing the REAL
  * registry tool needs the full api mock set (mirroring tools.test.ts).
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { runAssistantTurn } from '../agent';
 import { MockProvider } from '../providers/mock';
 import type { AssistantHost } from '../types';
 import { asProfileId } from '../../../api/types';
-import { getEvents } from '../../../api/events';
+import { getEvents, getConsoleEvents } from '../../../api/events';
 
 vi.mock('../../../api/monitors', () => ({
   getMonitors: vi.fn().mockResolvedValue({ monitors: [{ Monitor: { Id: '1', Name: 'Front Door' } }] }),
@@ -42,10 +42,15 @@ vi.mock('../../../api/tags', () => ({ getTags: vi.fn(), getEventTags: vi.fn(), e
 const host: AssistantHost = { navigate: vi.fn(), onActivity: vi.fn() };
 
 describe('fail-open tool routing', () => {
-  it('runs a registry read tool the model calls on a tool-less turn', async () => {
+  // Mocks are module-level; clear call history so one test's tool run does not
+  // count against another's "not called" assertion.
+  beforeEach(() => vi.clearAllMocks());
+
+  it('runs a registry read tool after the model insists through one pushback', async () => {
     const p = new MockProvider();
     p.setScript([
       { toolCalls: [{ id: 'c1', name: 'list_events', input: { when: 'last week' } }] },
+      { toolCalls: [{ id: 'c2', name: 'list_events', input: { when: 'last week' } }] },
       { text: 'No events in the last week.', toolCalls: [] },
     ]);
 
@@ -64,13 +69,38 @@ describe('fail-open tool routing', () => {
       tools: [],
     });
 
-    // The call executed (the query went out) instead of being refused.
+    // First call is pushed back, the model insists, then the query executes:
+    // the #265 recovery still works through one pushback.
     expect(vi.mocked(getEvents)).toHaveBeenCalledWith(
       expect.objectContaining({ startDateTime: expect.any(String), endDateTime: expect.any(String) }),
     );
-    const toolMsg = out.find((m) => m.role === 'tool');
-    expect(toolMsg?.toolResults?.[0]?.output).not.toContain('No tools are available');
     expect(out[out.length - 1].text).toBe('No events in the last week.');
+  });
+
+  it('pushes back once and takes the greeting reply instead of running the tool', async () => {
+    const p = new MockProvider();
+    p.setScript([
+      { toolCalls: [{ id: 'c1', name: 'count_events', input: { interval: '1 day' } }] },
+      { text: 'Hello! How can I help?', toolCalls: [] },
+    ]);
+
+    const out = await runAssistantTurn({
+      provider: p,
+      host,
+      ctx: { profileId: asProfileId('p1'), queryClient: {} as never, host },
+      history: [{ role: 'user', text: 'hello' }],
+      system: 'sys',
+      signal: new AbortController().signal,
+      tools: [],
+    });
+
+    // The greeting was answered in plain text; no read tool ran.
+    expect(vi.mocked(getConsoleEvents)).not.toHaveBeenCalled();
+    expect(vi.mocked(getEvents)).not.toHaveBeenCalled();
+    const toolMsg = out.find((m) => m.role === 'tool');
+    expect(toolMsg?.toolResults?.[0]?.isError).toBe(true);
+    expect(toolMsg?.toolResults?.[0]?.output).toContain('No tools are available for this turn');
+    expect(out[out.length - 1].text).toBe('Hello! How can I help?');
   });
 
   it('still refuses a withheld action on a tool-less turn', async () => {
