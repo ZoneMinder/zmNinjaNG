@@ -34,6 +34,15 @@ const WITHHELD_TOOL_REFUSAL =
   'and say where: monitors and arming on the Monitors screen, run state on the Server screen, event ' +
   'deletion and archiving on that event. Do not retry any tool for this request.';
 
+/** Appended to a rejected or thrown tool result. Observed on-device: a
+ *  count_events rejected with "lastCount is required" was followed by the model
+ *  answering "There were 10 events recorded today" with no tool data at all. The
+ *  bare validator error invites answering without data, so spell out the two
+ *  allowed moves and forbid inventing facts (refs #270). */
+const TOOL_FAILURE_GUARD =
+  ' Either correct the call and try again, or tell the user the data could not be retrieved.' +
+  ' Never state counts, times, or facts you did not get from a tool result.';
+
 
 /** De-dupes by `kind`+`id` (the same event/monitor can surface from more than
  *  one tool call in a turn, e.g. list_events then get_event on one of its
@@ -450,7 +459,7 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
           input: call.input,
           error: schemaError,
         });
-        results.push({ callId: call.id, output: schemaError, isError: true });
+        results.push({ callId: call.id, output: schemaError + TOOL_FAILURE_GUARD, isError: true });
         host.onActivity({ toolName: call.name, status: 'error', input: call.input });
         continue;
       }
@@ -472,7 +481,7 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
       } catch (e) {
         const message = e instanceof Error ? e.message : 'Tool failed';
         log.assistant(`Tool "${call.name}" threw`, LogLevel.ERROR, { toolName: call.name, error: message });
-        results.push({ callId: call.id, output: message, isError: true });
+        results.push({ callId: call.id, output: message + TOOL_FAILURE_GUARD, isError: true });
         host.onActivity({ toolName: call.name, status: 'error', input: call.input });
       }
     }

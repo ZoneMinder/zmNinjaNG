@@ -566,6 +566,33 @@ describe('runAssistantTurn', () => {
     vi.restoreAllMocks();
   });
 
+  // A schema-rejected call must not leave the model free to answer from
+  // nothing. Observed on-device: count_events rejected with "lastCount is
+  // required" was followed by a fabricated "There were 10 events recorded
+  // today". The result now carries the two allowed moves and a ban on
+  // inventing facts (refs #270).
+  it('appends the do-not-fabricate guard to a schema-rejected tool result', async () => {
+    const p = new MockProvider();
+    p.setScript([
+      { toolCalls: [{ id: 'c1', name: 'count_events', input: {} }] },
+      { text: 'done', toolCalls: [] },
+    ]);
+    const execute = vi.fn().mockResolvedValue({ output: '{"total":15}' });
+    const stubTool = {
+      name: 'count_events', description: '',
+      schema: { type: 'object', properties: {}, required: ['lastCount'] }, execute,
+    } as never;
+
+    const out = await runAssistantTurn({ ...baseOpts(p, host(), [{ role: 'user', text: 'how many events today' }]), tools: [stubTool] });
+
+    const result = out.find((m) => m.role === 'tool')?.toolResults?.[0];
+    expect(execute).not.toHaveBeenCalled();
+    expect(result?.isError).toBe(true);
+    expect(result?.output).toContain('lastCount is required');
+    expect(result?.output).toContain('Never state counts');
+    vi.restoreAllMocks();
+  });
+
   it('still allows the same tool with different arguments', async () => {
     const p = new MockProvider();
     p.setScript([
