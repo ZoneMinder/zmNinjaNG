@@ -114,13 +114,19 @@ describe('AppleIntelligenceProvider.chat', () => {
     expect(spy).toHaveBeenCalledWith('Apple Intelligence cancelChat failed', Level.WARN, expect.objectContaining({ error: expect.any(Error) }));
   });
 
-  it('attaches an exchange but no usage to the returned turn', async () => {
-    chatMock.mockResolvedValue({ content: '{"answer": "ok"}' });
+  it('attaches an exchange and estimated usage to the returned turn', async () => {
+    const content = '{"answer": "ok"}';
+    chatMock.mockResolvedValue({ content });
 
     const provider = new AppleIntelligenceProvider();
     const turn = await provider.chat([{ role: 'user', text: 'hi' }], [], 'sys', new AbortController().signal);
 
-    expect(turn.usage).toBeUndefined(); // Foundation Models reports no token counts
+    // Foundation Models reports no counts; usage is a chars/3.5 estimate so
+    // AskPanel's auto-clear can act before the small context window overflows.
+    expect(turn.usage).toBeDefined();
+    expect(turn.usage!.promptTokens).toBeGreaterThan(0);
+    expect(turn.usage!.completionTokens).toBe(Math.ceil(content.length / 3.5));
+    expect(turn.usage!.totalTokens).toBe(turn.usage!.promptTokens + turn.usage!.completionTokens);
     expect(turn.exchange).toMatchObject({ backend: 'apple', model: ASSISTANT.appleIntelligenceModelId });
     expect(turn.exchange!.received).toContain('ok');
   });

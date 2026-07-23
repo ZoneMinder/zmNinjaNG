@@ -186,8 +186,20 @@ export class AppleIntelligenceProvider implements AssistantProvider {
       log.assistant('Apple Intelligence raw response', LogLevel.DEBUG, { modelId: this.modelId, content: response.content, attempt });
 
       turn = parseWebLlmTurn(response.content);
-      // No usage: the Foundation Models API reports no token counts, so `turn.usage`
-      // stays undefined (absent counts, not zero - see AssistantTurn.usage).
+      // Foundation Models reports no token counts. This estimate exists solely so
+      // AskPanel's auto-clear can act BEFORE the (small, e.g. 4096) context window
+      // overflows and the engine fails; the numbers are approximate by design.
+      // chars/3.5 (English ~4 chars/token) deliberately OVERestimates tokens, which
+      // errs toward clearing the context early rather than crashing on overflow.
+      // Same estimate on every attempt, mirroring native-llm.ts's per-attempt shape.
+      const messagesJson = JSON.stringify(chatMessages);
+      const promptTokens = Math.ceil(messagesJson.length / 3.5);
+      const completionTokens = Math.ceil(response.content.length / 3.5);
+      turn.usage = {
+        promptTokens,
+        completionTokens,
+        totalTokens: promptTokens + completionTokens,
+      };
       // Captured on every attempt, so a retried turn shows what it retried from;
       // the last attempt's capture is the one that survives on `turn`.
       turn.exchange = captureExchange({
