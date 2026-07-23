@@ -268,6 +268,57 @@ describe('AppleIntelligenceProvider.chat', () => {
     expect(schema.anyOf.map((s) => s.properties?.tool?.enum?.[0])).toEqual(['count_events', 'list_monitors']);
   });
 
+  // A failed call's error feedback also arrives as a `role: 'tool'` message, but
+  // it is a correction, not data. Observed live, counting it unlocked the answer
+  // branch and the model fabricated event counts instead of fixing the call.
+  it('keeps the answer branch locked when the only tool result is an error', async () => {
+    chatMock.mockResolvedValue({ content: '{"tool": "count_events", "input": {}}' });
+
+    const provider = new AppleIntelligenceProvider();
+    await provider.chat(
+      [
+        { role: 'user', text: 'how many today?' },
+        { role: 'tool', toolResults: [{ callId: '1', output: 'Unknown tool: count_event', isError: true }] },
+      ],
+      [TOOL],
+      'sys',
+      new AbortController().signal,
+    );
+
+    const options = chatMock.mock.calls[0][0] as { schemaJson: string };
+    expect(options.schemaJson).not.toContain('answer');
+    const schema = JSON.parse(options.schemaJson) as { anyOf?: unknown; required?: string[] };
+    expect(schema.anyOf).toBeUndefined();
+    expect(schema.required).toEqual(['tool', 'input']);
+  });
+
+  it('offers the answer branch when one result succeeded alongside a failed one', async () => {
+    chatMock.mockResolvedValue({ content: '{"answer": "ok"}' });
+
+    const provider = new AppleIntelligenceProvider();
+    await provider.chat(
+      [
+        { role: 'user', text: 'how many today?' },
+        {
+          role: 'tool',
+          toolResults: [
+            { callId: '1', output: 'bad arguments', isError: true },
+            { callId: '2', output: '14 events' },
+          ],
+        },
+      ],
+      [TOOL],
+      'sys',
+      new AbortController().signal,
+    );
+
+    const options = chatMock.mock.calls[0][0] as { schemaJson: string };
+    const schema = JSON.parse(options.schemaJson) as {
+      anyOf: Array<{ properties?: { tool?: { enum?: string[] }; answer?: unknown } }>;
+    };
+    expect(schema.anyOf.some((s) => s.properties?.answer !== undefined && s.properties.tool === undefined)).toBe(true);
+  });
+
   // The retry path must not quietly widen the schema back to the union: the
   // same tool-only schema is re-sent with the neutral correction.
   it('re-sends the same tool-only schema on a retry attempt', async () => {

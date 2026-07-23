@@ -246,8 +246,14 @@ export class AppleIntelligenceProvider implements AssistantProvider {
     // tightens one. A per-turn check ("a tool result after the last user
     // message") would be wrong here, because the agent loop pushes its own
     // mid-turn corrections as `role: 'user'` AFTER tool results have landed.
+    // Only a SUCCESSFUL result counts. A failed call's error feedback is also a
+    // `role: 'tool'` message, but it is a correction, not data: observed live,
+    // it unlocked the answer branch and the model fabricated event counts
+    // instead of fixing the call. The branch stays locked until a tool actually
+    // returned something (refs #270).
     // Built once, so every retry attempt below re-sends the same schema.
-    const schemaJson = buildTurnSchema(tools, messages.some((m) => m.role === 'tool'));
+    const hasToolResult = messages.some((m) => m.role === 'tool' && (m.toolResults ?? []).some((r) => !r.isError));
+    const schemaJson = buildTurnSchema(tools, hasToolResult);
 
     // Same retry shape as NativeLlmProvider.chat / WebLlmProvider.chat: the
     // failed reply plus a correction are appended before each retry (here the
