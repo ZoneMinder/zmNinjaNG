@@ -20,6 +20,10 @@ public class AppleIntelligencePlugin: CAPPlugin, CAPBridgedPlugin {
         let content: String
     }
 
+    // Model-facing role markers for the flattened transcript.
+    private static let assistantRolePrefix = "Assistant:\n"
+    private static let userRolePrefix = "User:\n"
+
     // One in-flight generation at a time (mirrors LlamaPlugin's busy discipline).
     private var chatTask: Task<Void, Never>?
 
@@ -72,14 +76,28 @@ public class AppleIntelligencePlugin: CAPPlugin, CAPBridgedPlugin {
             .joined(separator: "\n\n")
         let prompt = messages
             .filter { $0.role != "system" }
-            .map { ($0.role == "assistant" ? "Assistant:\n" : "User:\n") + $0.content }
+            .map { ($0.role == "assistant" ? Self.assistantRolePrefix : Self.userRolePrefix) + $0.content }
             .joined(separator: "\n\n")
+
+        let schemaJson = call.getString("schemaJson")
 
         let task = Task { [weak self] in
             defer { self?.chatTask = nil }
             do {
                 let session = LanguageModelSession(instructions: instructions.isEmpty ? nil : instructions)
                 let options = GenerationOptions(temperature: temperature, maximumResponseTokens: maxTokens)
+
+                // Schema-constrained (guided) generation when the caller supplies a JSON Schema.
+                // A bad/unbuildable schema falls back to unconstrained generation; it never fails the chat.
+                if let schemaJson,
+                   let schemaData = schemaJson.data(using: .utf8),
+                   let schemaRoot = (try? JSONSerialization.jsonObject(with: schemaData)) as? [String: Any],
+                   let generationSchema = self?.buildGenerationSchema(fromJsonSchema: schemaRoot) {
+                    let response = try await session.respond(to: prompt, schema: generationSchema, options: options)
+                    call.resolve(["content": response.content.jsonString])
+                    return
+                }
+
                 let response = try await session.respond(to: prompt, options: options)
                 call.resolve(["content": response.content])
             } catch is CancellationError {
@@ -90,6 +108,72 @@ public class AppleIntelligencePlugin: CAPPlugin, CAPBridgedPlugin {
             }
         }
         chatTask = task
+    }
+
+    // MARK: - Guided generation schema
+
+    /// Build a `GenerationSchema` from a JSON Schema subset. Returns nil (caller falls back to
+    /// unconstrained generation) if construction throws.
+    @available(iOS 26.0, *)
+    private func buildGenerationSchema(fromJsonSchema json: [String: Any]) -> GenerationSchema? {
+        let root = dynamicSchema(fromJsonSchema: json, name: "Turn")
+        if let schema = try? GenerationSchema(root: root, dependencies: []) {
+            return schema
+        }
+        CAPLog.print("[AppleIntelligence] guided schema build failed; falling back to unconstrained")
+        return nil
+    }
+
+    /// Recursively convert a JSON Schema subset into a `DynamicGenerationSchema`.
+    /// Unknown/unsupported shapes degrade to a String primitive so this never crashes.
+    @available(iOS 26.0, *)
+    private func dynamicSchema(fromJsonSchema json: [String: Any], name: String) -> DynamicGenerationSchema {
+        let description = json["description"] as? String
+
+        // String enum -> anyOf choices [String]
+        if let choices = json["enum"] as? [String] {
+            return DynamicGenerationSchema(name: name, description: description, anyOf: choices)
+        }
+
+        // Top-level anyOf -> anyOf choices [DynamicGenerationSchema]
+        if let anyOf = json["anyOf"] as? [[String: Any]] {
+            let choices = anyOf.enumerated().map { index, sub in
+                dynamicSchema(fromJsonSchema: sub, name: "\(name)_\(index)")
+            }
+            return DynamicGenerationSchema(name: name, description: description, anyOf: choices)
+        }
+
+        switch json["type"] as? String {
+        case "string":
+            return DynamicGenerationSchema(type: String.self)
+        case "number":
+            return DynamicGenerationSchema(type: Double.self)
+        case "integer":
+            return DynamicGenerationSchema(type: Int.self)
+        case "boolean":
+            return DynamicGenerationSchema(type: Bool.self)
+        case "array":
+            let items = json["items"] as? [String: Any] ?? [:]
+            let element = dynamicSchema(fromJsonSchema: items, name: "\(name)_item")
+            return DynamicGenerationSchema(arrayOf: element)
+        case "object":
+            let properties = json["properties"] as? [String: Any] ?? [:]
+            let required = Set(json["required"] as? [String] ?? [])
+            let props: [DynamicGenerationSchema.Property] = properties.map { key, value in
+                let propJson = value as? [String: Any] ?? [:]
+                let propSchema = dynamicSchema(fromJsonSchema: propJson, name: "\(name)_\(key)")
+                return DynamicGenerationSchema.Property(
+                    name: key,
+                    description: propJson["description"] as? String,
+                    schema: propSchema,
+                    isOptional: !required.contains(key)
+                )
+            }
+            return DynamicGenerationSchema(name: name, description: description, properties: props)
+        default:
+            // Unknown/missing type -> String primitive; never crash.
+            return DynamicGenerationSchema(type: String.self)
+        }
     }
 
     @objc func cancelChat(_ call: CAPPluginCall) {

@@ -26,6 +26,40 @@ import { MODEL_NOT_AVAILABLE_MESSAGE } from '../model-download';
  *  path (refs #270, same reasoning as native-llm.ts's own constant). */
 export const APPLE_INTELLIGENCE_NOT_AVAILABLE_MESSAGE = MODEL_NOT_AVAILABLE_MESSAGE;
 
+/** The turn contract expressed as a JSON Schema for the plugin's constrained
+ *  decoder, so the reply EXACTLY matches one of the shapes `parseWebLlmTurn`
+ *  accepts. Unlike WebLLM's fixed `ENVELOPE_SCHEMA`, the tool branch is
+ *  specialized per registered tool: the name is pinned with `enum` and the
+ *  real `input` schema is inlined, so the model cannot invent a tool name or
+ *  malformed arguments.
+ *
+ *  Constrained decoding is what kills the observed Foundation Models failures:
+ *  an answer emitted as a bare number, malformed JSON, and invented tool args
+ *  all become structurally impossible. A tool-less turn gets the answer-only
+ *  schema, so a tool call cannot be produced where there is no tool to call.
+ *
+ *  Shapes mirror the TOP-LEVEL contract (`{"answer": "..."}` /
+ *  `{"tool": "<name>", "input": {...}}`) that `OUTPUT_CONTRACT`, the few-shot
+ *  examples, and history re-serialization in `buildWebLlmMessages` all use, so
+ *  the constrained output flows through `parseWebLlmTurn`'s primary path and
+ *  stays consistent with the rest of the prompt. Disjoint required keys
+ *  (`answer` vs `tool`) also make the `anyOf` trivial for the decoder to
+ *  discriminate. */
+function buildTurnSchema(tools: ToolDefinition[]): string {
+  const answerSchema = { type: 'object', properties: { answer: { type: 'string' } }, required: ['answer'] };
+  if (tools.length === 0) return JSON.stringify(answerSchema);
+  return JSON.stringify({
+    anyOf: [
+      answerSchema,
+      ...tools.map((tool) => ({
+        type: 'object',
+        properties: { tool: { enum: [tool.name] }, input: tool.schema },
+        required: ['tool', 'input'],
+      })),
+    ],
+  });
+}
+
 /** The on-device Apple Foundation Models provider: the OS-managed system model,
  *  driven with the same constrained-JSON contract WebLLM uses (see module
  *  header) instead of reimplementing prompt building or parsing. */
@@ -116,14 +150,15 @@ export class AppleIntelligenceProvider implements AssistantProvider {
 
   /** Bare system + user, deliberately bypassing `buildWebLlmMessages`: no tool
    *  catalog, no few-shot, no OUTPUT_CONTRACT (mirrors `NativeLlmProvider.complete`).
-   *  `jsonSchema` is accepted for interface parity but unenforced: the Foundation
-   *  Models bridge has no grammar-constrained decoding, so the caller must still
-   *  parse defensively. */
+   *  `jsonSchema`, when given, is forwarded as `schemaJson` so the plugin's
+   *  constrained decoder shapes the reply: triage and the window interpreter
+   *  finally get always-shaped output on this backend instead of a
+   *  usually-right one the caller has to parse defensively. */
   async complete(
     system: string,
     text: string,
     signal: AbortSignal,
-    _jsonSchema?: Record<string, unknown>,
+    jsonSchema?: Record<string, unknown>,
     _onStatus?: (status: AssistantStatus) => void,
   ): Promise<CompletionResult> {
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
@@ -139,6 +174,7 @@ export class AppleIntelligenceProvider implements AssistantProvider {
         messagesJson: JSON.stringify(messages),
         temperature: this.temperature,
         maxTokens: ASSISTANT.maxTokens,
+        ...(jsonSchema ? { schemaJson: JSON.stringify(jsonSchema) } : {}),
       }),
     );
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
@@ -159,6 +195,7 @@ export class AppleIntelligenceProvider implements AssistantProvider {
     const { AppleIntelligence: plugin } = await this.getPlugin();
     await this.ensureDeviceContext(plugin);
     const chatMessages = buildWebLlmMessages(system, messages, tools, this.modelId);
+    const schemaJson = buildTurnSchema(tools);
 
     // Same self-repair retry shape as NativeLlmProvider.chat / WebLlmProvider.chat:
     // the failed reply plus a correction naming the fault are appended before
@@ -179,6 +216,7 @@ export class AppleIntelligenceProvider implements AssistantProvider {
           messagesJson: JSON.stringify(chatMessages),
           temperature: attempt < ASSISTANT.maxParseAttempts ? this.temperature : Math.max(this.temperature, ASSISTANT.assistantRetryTemperature),
           maxTokens: ASSISTANT.maxTokens,
+          schemaJson,
         }),
       );
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError');

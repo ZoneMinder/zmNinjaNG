@@ -168,6 +168,63 @@ describe('AppleIntelligenceProvider.chat', () => {
     ).rejects.toThrow('__i18n:assistant.native_engine_failed');
   });
 
+  // Constrained decoding: with tools, the plugin gets a per-turn schema whose
+  // anyOf carries the answer shape plus one tool branch pinning each tool name.
+  it('passes a schemaJson whose anyOf pins the tool name when tools are given', async () => {
+    chatMock.mockResolvedValue({ content: '{"answer": "ok"}' });
+
+    const provider = new AppleIntelligenceProvider();
+    await provider.chat([{ role: 'user', text: 'hi' }], [TOOL], 'sys', new AbortController().signal);
+
+    const options = chatMock.mock.calls[0][0] as { schemaJson: string };
+    const schema = JSON.parse(options.schemaJson) as {
+      anyOf: Array<{ properties?: { tool?: { enum?: string[] }; answer?: unknown; input?: unknown } }>;
+    };
+    // The answer branch is present...
+    expect(schema.anyOf.some((s) => s.properties?.answer !== undefined && s.properties.tool === undefined)).toBe(true);
+    // ...and a tool branch pins count_events with its input schema inlined.
+    const toolBranch = schema.anyOf.find((s) => s.properties?.tool?.enum?.includes('count_events'));
+    expect(toolBranch).toBeDefined();
+    expect(toolBranch!.properties!.input).toEqual(TOOL.schema);
+  });
+
+  // A tool-less turn gets the answer-only schema, so a tool call is structurally
+  // impossible where there is no tool to call.
+  it('passes an answer-only schemaJson when no tools are given', async () => {
+    chatMock.mockResolvedValue({ content: '{"answer": "ok"}' });
+
+    const provider = new AppleIntelligenceProvider();
+    await provider.chat([{ role: 'user', text: 'hi' }], [], 'sys', new AbortController().signal);
+
+    const options = chatMock.mock.calls[0][0] as { schemaJson: string };
+    const schema = JSON.parse(options.schemaJson) as { anyOf?: unknown; required?: string[]; properties?: Record<string, unknown> };
+    expect(schema.anyOf).toBeUndefined();
+    expect(schema.required).toEqual(['answer']);
+    expect(Object.keys(schema.properties ?? {})).toEqual(['answer']);
+  });
+
+  it('forwards a complete() jsonSchema to the plugin as schemaJson', async () => {
+    chatMock.mockResolvedValue({ content: 'OK' });
+    const jsonSchema = { type: 'object', properties: { verdict: { type: 'string' } }, required: ['verdict'] };
+
+    const provider = new AppleIntelligenceProvider();
+    await provider.complete('sys', 'check this', new AbortController().signal, jsonSchema);
+
+    const options = chatMock.mock.calls[0][0] as { schemaJson?: string };
+    expect(options.schemaJson).toBeDefined();
+    expect(JSON.parse(options.schemaJson!)).toEqual(jsonSchema);
+  });
+
+  it('omits schemaJson from complete() when no jsonSchema is given', async () => {
+    chatMock.mockResolvedValue({ content: 'OK' });
+
+    const provider = new AppleIntelligenceProvider();
+    await provider.complete('sys', 'hi', new AbortController().signal);
+
+    const options = chatMock.mock.calls[0][0] as { schemaJson?: string };
+    expect(options.schemaJson).toBeUndefined();
+  });
+
   it('builds messages via buildWebLlmMessages: few-shot anchors present', async () => {
     chatMock.mockResolvedValue({ content: '{"answer": "ok"}' });
 

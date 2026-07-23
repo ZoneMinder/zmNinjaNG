@@ -13,6 +13,11 @@ export interface AppleIntelligencePlugin {
     messagesJson: string; // JSON array of {role, content}, OpenAI-shaped
     temperature: number;
     maxTokens: number;
+    // Optional JSON Schema (stringified) the native side constrains generation to,
+    // so the reply EXACTLY matches it. Supported subset: object/properties/required,
+    // string/number/integer/boolean, enum (strings), array/items, and a top-level
+    // anyOf. Omitted for an unconstrained call.
+    schemaJson?: string;
   }): Promise<{ content: string }>; // no token counts: the Foundation Models API reports none
   cancelChat(): Promise<void>;
 }
