@@ -816,7 +816,6 @@ export const ASSISTANT = {
     label: 'Qwen 3 4B Instruct (native)',
     url: 'https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/main/Qwen3-4B-Instruct-2507-Q4_K_M.gguf',
     approxSizeMb: 2500,
-    minPhysicalMemoryGb: 5.5,
   },
   // Ollama's default local HTTP address, OpenAI-compatible endpoint (refs #246).
   // On a phone this must be replaced with the Ollama server's LAN address:
