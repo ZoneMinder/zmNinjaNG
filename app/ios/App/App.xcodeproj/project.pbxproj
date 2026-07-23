@@ -17,6 +17,7 @@
 		A88DB358838FDF0A668FC00E /* CapApp-SPM in Frameworks */ = {isa = PBXBuildFile; productRef = C711DAF4018D41AEA77227D3 /* CapApp-SPM */; };
 		DC11AA0200000000000F0005 /* LlamaKit in Frameworks */ = {isa = PBXBuildFile; productRef = DC11AA0200000000000F0011 /* LlamaKit */; };
 		DC11AA0200000000000F0001 /* LlamaPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC11AA0200000000000F0002 /* LlamaPlugin.swift */; };
+		DC12AA0200000000000F0001 /* AppleIntelligencePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC12AA0200000000000F0002 /* AppleIntelligencePlugin.swift */; };
 		DC11AA0200000000000F0003 /* LlamaEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC11AA0200000000000F0004 /* LlamaEngine.swift */; };
 		DC10E70100000000000F0001 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC10E70100000000000F0003 /* NotificationService.swift */; };
 		DC10E70100000000000F0002 /* ImageNotification.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = DC10E70100000000000F0005 /* ImageNotification.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -70,6 +71,7 @@
 		DC4FCM0130000000000F0002 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		DC55AA0100000000000F0002 /* SSLTrustPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSLTrustPlugin.swift; sourceTree = "<group>"; };
 		DC11AA0200000000000F0002 /* LlamaPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LlamaPlugin.swift; sourceTree = "<group>"; };
+		DC12AA0200000000000F0002 /* AppleIntelligencePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleIntelligencePlugin.swift; sourceTree = "<group>"; };
 		DC11AA0200000000000F0004 /* LlamaEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LlamaEngine.swift; sourceTree = "<group>"; };
 		DC55AA0100000000000F0004 /* SafeAreaPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafeAreaPlugin.swift; sourceTree = "<group>"; };
 		DC55AA0100000000000F0006 /* X509CertInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = X509CertInfo.swift; sourceTree = "<group>"; };
@@ -126,6 +128,7 @@
 				504EC3071FED79650016851F /* AppDelegate.swift */,
 				DC55AA0100000000000F0002 /* SSLTrustPlugin.swift */,
 				DC11AA0200000000000F0002 /* LlamaPlugin.swift */,
+				DC12AA0200000000000F0002 /* AppleIntelligencePlugin.swift */,
 				DC11AA0200000000000F0004 /* LlamaEngine.swift */,
 				DC55AA0100000000000F0004 /* SafeAreaPlugin.swift */,
 				DC55AA0100000000000F0006 /* X509CertInfo.swift */,
@@ -269,6 +272,7 @@
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				DC55AA0100000000000F0001 /* SSLTrustPlugin.swift in Sources */,
 				DC11AA0200000000000F0001 /* LlamaPlugin.swift in Sources */,
+				DC12AA0200000000000F0001 /* AppleIntelligencePlugin.swift in Sources */,
 				DC11AA0200000000000F0003 /* LlamaEngine.swift in Sources */,
 				DC55AA0100000000000F0003 /* SafeAreaPlugin.swift in Sources */,
 				DC55AA0100000000000F0005 /* X509CertInfo.swift in Sources */,

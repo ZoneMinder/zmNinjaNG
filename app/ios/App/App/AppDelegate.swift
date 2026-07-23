@@ -62,6 +62,7 @@ class ViewController: CAPBridgeViewController {
         bridge?.registerPluginInstance(SSLTrustPlugin())
         bridge?.registerPluginInstance(SafeAreaPlugin())
         bridge?.registerPluginInstance(LlamaPlugin())
+        bridge?.registerPluginInstance(AppleIntelligencePlugin())
     }
 
     override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
