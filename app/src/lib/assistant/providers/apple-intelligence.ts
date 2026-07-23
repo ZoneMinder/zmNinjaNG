@@ -194,7 +194,12 @@ export class AppleIntelligenceProvider implements AssistantProvider {
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
     const { AppleIntelligence: plugin } = await this.getPlugin();
     await this.ensureDeviceContext(plugin);
-    const chatMessages = buildWebLlmMessages(system, messages, tools, this.modelId);
+    // Few-shot only when there are tools to teach. Observed live: on a
+    // tool-less greeting turn Foundation Models parroted the few-shot
+    // event-count answer template and ignored the disclaimer message that
+    // follows it. With no tools there is nothing for the examples to teach, and
+    // the constrained schema already fixes the reply format (refs #270).
+    const chatMessages = buildWebLlmMessages(system, messages, tools, this.modelId, tools.length > 0);
     const schemaJson = buildTurnSchema(tools);
 
     // Same self-repair retry shape as NativeLlmProvider.chat / WebLlmProvider.chat:

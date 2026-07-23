@@ -235,6 +235,25 @@ describe('AppleIntelligenceProvider.chat', () => {
     const messages = JSON.parse(options.messagesJson) as Array<{ role: string; content: string }>;
     // Few-shot anchors follow the system message.
     expect(messages[1]).toMatchObject({ role: 'user', content: 'How many events were recorded today?' });
+    expect(options.messagesJson).toContain('EXAMPLE_MONITOR_A');
+  });
+
+  // A tool-less chat turn (a greeting) drops the few-shot: Foundation Models
+  // parroted the example's event-count answer instead of replying to the
+  // greeting, and with no tools the examples teach nothing (refs #270).
+  it('omits the few-shot examples on a tool-less chat turn', async () => {
+    chatMock.mockResolvedValue({ content: '{"answer": "Hi there."}' });
+
+    const provider = new AppleIntelligenceProvider();
+    await provider.chat([{ role: 'user', text: 'hello' }], [], 'sys', new AbortController().signal);
+
+    const options = chatMock.mock.calls[0][0] as { messagesJson: string };
+    expect(options.messagesJson).not.toContain('EXAMPLE_MONITOR_A');
+    const messages = JSON.parse(options.messagesJson) as Array<{ role: string; content: string }>;
+    // The real user turn follows the system message directly (its content also
+    // carries the appended OUTPUT_CONTRACT).
+    expect(messages[1].role).toBe('user');
+    expect(messages[1].content).toContain('hello');
   });
 });
 
