@@ -170,13 +170,22 @@ describe('AppleIntelligenceProvider.chat', () => {
     ).rejects.toThrow('__i18n:assistant.native_engine_failed');
   });
 
-  // Constrained decoding: with tools, the plugin gets a per-turn schema whose
-  // anyOf carries the answer shape plus one tool branch pinning each tool name.
-  it('passes a schemaJson whose anyOf pins the tool name when tools are given', async () => {
+  // Constrained decoding: with tools and a tool result already in the turn, the
+  // plugin gets a schema whose anyOf carries the answer shape plus one tool
+  // branch pinning each tool name.
+  it('passes a schemaJson whose anyOf pins the tool name and offers the answer branch once a tool result exists', async () => {
     chatMock.mockResolvedValue({ content: '{"answer": "ok"}' });
 
     const provider = new AppleIntelligenceProvider();
-    await provider.chat([{ role: 'user', text: 'hi' }], [TOOL], 'sys', new AbortController().signal);
+    await provider.chat(
+      [
+        { role: 'user', text: 'hi' },
+        { role: 'tool', toolResults: [{ callId: '1', output: '14 events' }] },
+      ],
+      [TOOL],
+      'sys',
+      new AbortController().signal,
+    );
 
     const options = chatMock.mock.calls[0][0] as { schemaJson: string };
     const schema = JSON.parse(options.schemaJson) as {
@@ -188,6 +197,57 @@ describe('AppleIntelligenceProvider.chat', () => {
     const toolBranch = schema.anyOf.find((s) => s.properties?.tool?.enum?.includes('count_events'));
     expect(toolBranch).toBeDefined();
     expect(toolBranch!.properties!.input).toEqual(TOOL.schema);
+  });
+
+  // The fabrication fix (refs #270): tools registered and nothing fetched yet
+  // means NO answer branch at all, so this model cannot answer a data question
+  // out of thin air. A lone tool needs no anyOf wrapper.
+  it('drops the answer branch entirely when tools are given and no tool result is in the turn', async () => {
+    chatMock.mockResolvedValue({ content: '{"tool": "count_events", "input": {}}' });
+
+    const provider = new AppleIntelligenceProvider();
+    await provider.chat([{ role: 'user', text: 'how many today?' }], [TOOL], 'sys', new AbortController().signal);
+
+    const options = chatMock.mock.calls[0][0] as { schemaJson: string };
+    expect(options.schemaJson).not.toContain('answer');
+    const schema = JSON.parse(options.schemaJson) as {
+      anyOf?: unknown;
+      required?: string[];
+      properties?: { tool?: { enum?: string[] }; input?: unknown };
+    };
+    expect(schema.anyOf).toBeUndefined();
+    expect(schema.required).toEqual(['tool', 'input']);
+    expect(schema.properties?.tool?.enum).toEqual(['count_events']);
+    expect(schema.properties?.input).toEqual(TOOL.schema);
+  });
+
+  it('offers every tool branch and no answer branch when several tools are given with no tool result', async () => {
+    chatMock.mockResolvedValue({ content: '{"tool": "count_events", "input": {}}' });
+    const other: ToolDefinition = { name: 'list_monitors', description: 'Lists monitors', schema: { type: 'object', properties: {} }, execute: vi.fn() };
+
+    const provider = new AppleIntelligenceProvider();
+    await provider.chat([{ role: 'user', text: 'how many today?' }], [TOOL, other], 'sys', new AbortController().signal);
+
+    const options = chatMock.mock.calls[0][0] as { schemaJson: string };
+    expect(options.schemaJson).not.toContain('answer');
+    const schema = JSON.parse(options.schemaJson) as { anyOf: Array<{ properties?: { tool?: { enum?: string[] } } }> };
+    expect(schema.anyOf.map((s) => s.properties?.tool?.enum?.[0])).toEqual(['count_events', 'list_monitors']);
+  });
+
+  // The retry path must not quietly widen the schema back to the union: the
+  // same tool-only schema is re-sent with the neutral correction.
+  it('re-sends the same tool-only schema on a retry attempt', async () => {
+    chatMock
+      .mockResolvedValueOnce({ content: '```' })
+      .mockResolvedValueOnce({ content: '{"tool": "count_events", "input": {}}' });
+
+    const provider = new AppleIntelligenceProvider();
+    await provider.chat([{ role: 'user', text: 'how many today?' }], [TOOL], 'sys', new AbortController().signal);
+
+    const first = chatMock.mock.calls[0][0] as { schemaJson: string };
+    const second = chatMock.mock.calls[1][0] as { schemaJson: string };
+    expect(second.schemaJson).toBe(first.schemaJson);
+    expect(second.schemaJson).not.toContain('answer');
   });
 
   // A tool-less turn gets the answer-only schema, so a tool call is structurally

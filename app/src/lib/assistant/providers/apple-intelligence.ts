@@ -40,6 +40,17 @@ export const APPLE_INTELLIGENCE_NOT_AVAILABLE_MESSAGE = MODEL_NOT_AVAILABLE_MESS
  *  all become structurally impossible. A tool-less turn gets the answer-only
  *  schema, so a tool call cannot be produced where there is no tool to call.
  *
+ *  `hasToolResult` is the mirror image of that, and the reason it exists: a
+ *  chat-trained model offered an answer branch prefers it, and Foundation
+ *  Models was observed answering a data question straight out of that branch
+ *  with fabricated counts ("15 events today, 10 yesterday") while no tool ran.
+ *  Prose nudges do not move this model, so the branch is simply removed until
+ *  real data exists in the turn: with tools registered and no tool result yet,
+ *  the schema offers ONLY the tool branches, which makes an ungrounded answer
+ *  structurally impossible instead of merely discouraged. Once a tool result is
+ *  present the answer branch comes back, so the model can report what it read.
+ *
+ *
  *  Shapes mirror the TOP-LEVEL contract (`{"answer": "..."}` /
  *  `{"tool": "<name>", "input": {...}}`) that history re-serialization in
  *  `buildWebLlmMessages` uses, so the constrained output flows through
@@ -47,19 +58,18 @@ export const APPLE_INTELLIGENCE_NOT_AVAILABLE_MESSAGE = MODEL_NOT_AVAILABLE_MESS
  *  turns already in the prompt. Disjoint required keys
  *  (`answer` vs `tool`) also make the `anyOf` trivial for the decoder to
  *  discriminate. */
-function buildTurnSchema(tools: ToolDefinition[]): string {
+function buildTurnSchema(tools: ToolDefinition[], hasToolResult: boolean): string {
   const answerSchema = { type: 'object', properties: { answer: { type: 'string' } }, required: ['answer'] };
   if (tools.length === 0) return JSON.stringify(answerSchema);
-  return JSON.stringify({
-    anyOf: [
-      answerSchema,
-      ...tools.map((tool) => ({
-        type: 'object',
-        properties: { tool: { enum: [tool.name] }, input: tool.schema },
-        required: ['tool', 'input'],
-      })),
-    ],
-  });
+  const toolSchemas = tools.map((tool) => ({
+    type: 'object',
+    properties: { tool: { enum: [tool.name] }, input: tool.schema },
+    required: ['tool', 'input'],
+  }));
+  // Tools registered but nothing fetched yet: tool branches only. A single tool
+  // needs no `anyOf` wrapper (the Swift converter takes a bare object schema).
+  if (!hasToolResult) return JSON.stringify(toolSchemas.length === 1 ? toolSchemas[0] : { anyOf: toolSchemas });
+  return JSON.stringify({ anyOf: [answerSchema, ...toolSchemas] });
 }
 
 /** The retry correction for this backend, in place of WebLLM's
@@ -212,7 +222,16 @@ export class AppleIntelligenceProvider implements AssistantProvider {
     // ({"answer": "{"}). The per-turn schema already pins the legal tool names
     // and their input shapes, so nothing is lost (refs #270).
     const chatMessages = buildWebLlmMessages(system, messages, tools, this.modelId, false, true, false);
-    const schemaJson = buildTurnSchema(tools);
+    // Whether any data has been fetched, which decides if the answer branch is
+    // offered at all (see buildTurnSchema). `messages` is the caller's whole
+    // trimmed thread, not just this turn, so a conversation whose EARLIER turns
+    // ran tools reports true on the first call of a new turn. That looseness is
+    // deliberate: it only restores the previous union schema, never wrongly
+    // tightens one. A per-turn check ("a tool result after the last user
+    // message") would be wrong here, because the agent loop pushes its own
+    // mid-turn corrections as `role: 'user'` AFTER tool results have landed.
+    // Built once, so every retry attempt below re-sends the same schema.
+    const schemaJson = buildTurnSchema(tools, messages.some((m) => m.role === 'tool'));
 
     // Same retry shape as NativeLlmProvider.chat / WebLlmProvider.chat: the
     // failed reply plus a correction are appended before each retry (here the
