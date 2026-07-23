@@ -90,6 +90,17 @@ describe('buildNoToolPrompt', () => {
     expect(prompt).toContain('Do not mention tools');
   });
 
+  // The chat policy (refs #270): warm on small talk, out of scope for
+  // everything that is not this system.
+  it('answers small talk warmly and deflects code, prose, and general knowledge', () => {
+    const prompt = buildNoToolPrompt('BASE PROMPT', 'chat');
+    expect(prompt).toContain('A greeting, a thank you, or small talk gets a short warm reply');
+    expect(prompt).toContain('Never write code,');
+    expect(prompt).toContain('poems, or essays');
+    expect(prompt).toContain("you are meant for questions about the user's");
+    expect(prompt).toContain('cameras, events, and ZoneMinder system.');
+  });
+
   it('tells an action turn to refuse and say where to do it by hand', () => {
     const prompt = buildNoToolPrompt('BASE PROMPT', 'action');
     expect(prompt).toContain('cannot be undone');

@@ -74,6 +74,15 @@ describe('buildSystemPrompt', () => {
     expect(p).toContain('count_events is cheaper');
   });
 
+  // Triage normally keeps small talk away from this prompt; this line is what
+  // answers it when triage misses or fails open (refs #270). The scope half of
+  // the policy is in triage.ts's tool-less prompt, which is measured there:
+  // every wording of it here cost tool-selection accuracy.
+  it('tells the model to answer small talk warmly', () => {
+    const p = buildSystemPrompt(base);
+    expect(p).toContain('Greetings, thanks, and small talk get a short warm reply');
+  });
+
   it('never mentions a JSON tool-call contract or WebLLM-specific directives (model-agnostic prompt)', () => {
     const p = buildSystemPrompt(base);
     expect(p.toLowerCase()).not.toContain('"tool"');

@@ -147,6 +147,15 @@ export function buildNoToolPrompt(base: string, kind: Exclude<RequestKind, 'zone
           'This message is not a question about this ZoneMinder installation. Answer it directly and briefly',
           'as yourself. Do not mention tools, do not list what you can do unless asked, and do not invent any',
           'camera, event, or server information.',
+          // The scope half of the chat policy lives here rather than in the base
+          // prompt: this instruction only ever rides a tool-less turn, so it
+          // cannot pull a real ZoneMinder question away from its tool, which is
+          // what every base-prompt wording of it did in the eval harness (refs
+          // #270). Greetings stay warm; only the task asks get deflected.
+          'A greeting, a thank you, or small talk gets a short warm reply, nothing more. Never write code,',
+          'poems, or essays, and never take on general knowledge or calculation tasks: for those, and for any',
+          'other question that is not about this system, say you are meant for questions about the user\'s',
+          'cameras, events, and ZoneMinder system.',
         ].join('\n');
 
   return `${base}\n\n${instruction}`;

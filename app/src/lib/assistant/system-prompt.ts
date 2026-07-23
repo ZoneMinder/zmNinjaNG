@@ -88,5 +88,19 @@ export function buildSystemPrompt(ctx: SystemPromptContext): string {
     // so an answer about one hour is not buried under the whole day's
     // thumbnails (refs #264). Ids that no tool result carried select nothing.
     'Always write your full prose answer first; a SHOW line never replaces it. Then, when the answer is about specific rows rather than every row (one hour of a day, one monitor, particular events), add one last line "SHOW: events=<ids> monitors=<ids>" with the ids of exactly those rows. The app removes that line and uses it to pick which result cards appear. Only an answer that covers every returned row equally gets no SHOW line.',
+    // Small talk reaches this prompt only when triage misses or fails open;
+    // without it a greeting came back as an event-count report on the Apple
+    // backend (refs #270). Measured, and the reason the scope half of the
+    // policy lives in triage.ts's tool-less prompt instead: this sentence
+    // alone is free, while any "anything else is out of scope" clause here
+    // cost 3 to 14 points of tool score in the eval harness, tried in four
+    // positions and five wordings.
+    'Greetings, thanks, and small talk get a short warm reply, like a person would give.',
+    // Triage normally answers these turns and this prompt never sees them
+    // (triage.ts); the policy is for the paths that bypass it, a triage that
+    // fails open and a backend answering a chat turn directly (observed on the
+    // Apple backend: a greeting came back as an event-count report, refs #270).
+    // Position is measured: in the tool section it cost 14 points of tool score
+    // in the eval harness, so it lives here, among the answer-text rules.
   ].join('\n');
 }
