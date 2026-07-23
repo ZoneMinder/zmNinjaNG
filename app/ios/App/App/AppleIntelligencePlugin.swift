@@ -24,6 +24,10 @@ public class AppleIntelligencePlugin: CAPPlugin, CAPBridgedPlugin {
     private static let assistantRolePrefix = "Assistant:\n"
     private static let userRolePrefix = "User:\n"
 
+    // Apple's on-device model context window, and the slice of it reserved for the reply.
+    private static let contextWindow = 4096
+    private static let responseReserve = 1024
+
     // One in-flight generation at a time (mirrors LlamaPlugin's busy discipline).
     private var chatTask: Task<Void, Never>?
 
@@ -35,8 +39,12 @@ public class AppleIntelligencePlugin: CAPPlugin, CAPBridgedPlugin {
         }
         switch SystemLanguageModel.default.availability {
         case .available:
-            // Apple on-device model context window; advertised like LlamaPlugin.isSupported.
-            call.resolve(["supported": true, "contextSize": 4096])
+            // Advertised like LlamaPlugin.isSupported, but the USABLE window, not the raw one:
+            // mirrors LlamaPlugin's triageReserve pattern. The JS auto-clear budget must leave
+            // decoder headroom, or constrained generation truncates at the window edge and
+            // deserialization fails ("Failed to deserialize a Generable type from model
+            // output", refs #270).
+            call.resolve(["supported": true, "contextSize": Self.contextWindow - Self.responseReserve])
         case .unavailable(let reason):
             let mapped: String
             switch reason {

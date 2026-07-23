@@ -80,6 +80,19 @@ function buildTurnSchema(tools: ToolDefinition[], hasToolResult: boolean): strin
  *  cannot reintroduce JSON-shaped text into the answer field. */
 const APPLE_RETRY_PROMPT = 'Your last reply was empty or unusable. Answer the user\'s question.';
 
+/** True when a rejected `plugin.chat()` is guided generation running out of
+ *  window rather than a broken engine: Foundation Models rejects with
+ *  ENGINE_FAILED and "Failed to deserialize a Generable type from model output"
+ *  when the decode truncates at the context edge mid-JSON. Observed live to be
+ *  intermittent and prompt-size dependent, with every schema shape proven valid
+ *  by an on-device probe (refs #270), so it is retryable, not fatal. Read off
+ *  the mapped error's `cause`, which carries the native rejection verbatim. */
+function isTruncatedGeneration(error: unknown): boolean {
+  const cause = error instanceof Error ? error.cause : undefined;
+  const message = cause instanceof Error ? cause.message : typeof cause === 'string' ? cause : '';
+  return message.toLowerCase().includes('deserialize');
+}
+
 /** The on-device Apple Foundation Models provider: the OS-managed system model,
  *  driven with the same constrained-JSON contract WebLLM uses (see module
  *  header) instead of reimplementing prompt building or parsing. */
@@ -151,7 +164,10 @@ export class AppleIntelligenceProvider implements AssistantProvider {
       code,
       message: error instanceof Error ? error.message : String(error),
     });
-    return new Error('__i18n:assistant.native_engine_failed');
+    // `cause` keeps the native rejection reachable without putting it in front of
+    // the user: `chat` reads it to tell a retryable truncation apart from a real
+    // engine failure (see isTruncatedGeneration).
+    return new Error('__i18n:assistant.native_engine_failed', { cause: error });
   }
 
   /** Learn the usable chat window from `isSupported()` once per provider instance.
@@ -248,14 +264,30 @@ export class AppleIntelligenceProvider implements AssistantProvider {
       });
 
       const startedAt = Date.now();
-      const response = await this.withCancel(plugin, signal, () =>
-        plugin.chat({
-          messagesJson: JSON.stringify(chatMessages),
-          temperature: attempt < ASSISTANT.maxParseAttempts ? this.temperature : Math.max(this.temperature, ASSISTANT.assistantRetryTemperature),
-          maxTokens: ASSISTANT.maxTokens,
-          schemaJson,
-        }),
-      );
+      let response: { content: string };
+      try {
+        response = await this.withCancel(plugin, signal, () =>
+          plugin.chat({
+            messagesJson: JSON.stringify(chatMessages),
+            temperature: attempt < ASSISTANT.maxParseAttempts ? this.temperature : Math.max(this.temperature, ASSISTANT.assistantRetryTemperature),
+            maxTokens: ASSISTANT.maxTokens,
+            schemaJson,
+          }),
+        );
+      } catch (error) {
+        // A truncated constrained decode is a failed ATTEMPT, not a failed turn:
+        // spend the remaining attempts on it (the last one also raises the
+        // temperature) instead of surfacing a dead end for something the very
+        // next call usually gets right. Every other rejection still propagates
+        // exactly as before, and so does this one once attempts run out.
+        if (!isTruncatedGeneration(error) || attempt === ASSISTANT.maxParseAttempts) throw error;
+        log.assistant('Apple Intelligence generation truncated at the context edge; retrying', LogLevel.WARN, {
+          modelId: this.modelId,
+          attempt,
+          maxAttempts: ASSISTANT.maxParseAttempts,
+        });
+        continue;
+      }
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
 
       log.assistant('Apple Intelligence raw response', LogLevel.DEBUG, { modelId: this.modelId, content: response.content, attempt });
@@ -267,8 +299,10 @@ export class AppleIntelligenceProvider implements AssistantProvider {
       // chars/3.5 (English ~4 chars/token) deliberately OVERestimates tokens, which
       // errs toward clearing the context early rather than crashing on overflow.
       // Same estimate on every attempt, mirroring native-llm.ts's per-attempt shape.
+      // The schema counts too: guided generation feeds it to the decoder, so it
+      // occupies the same window the messages do (refs #270).
       const messagesJson = JSON.stringify(chatMessages);
-      const promptTokens = Math.ceil(messagesJson.length / 3.5);
+      const promptTokens = Math.ceil((messagesJson.length + schemaJson.length) / 3.5);
       const completionTokens = Math.ceil(response.content.length / 3.5);
       turn.usage = {
         promptTokens,

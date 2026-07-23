@@ -125,8 +125,12 @@ describe('AppleIntelligenceProvider.chat', () => {
 
     // Foundation Models reports no counts; usage is a chars/3.5 estimate so
     // AskPanel's auto-clear can act before the small context window overflows.
+    // The schema is part of the prompt budget under guided generation, so it is
+    // counted alongside the messages (refs #270).
+    const sent = chatMock.mock.calls[0][0] as { messagesJson: string; schemaJson: string };
     expect(turn.usage).toBeDefined();
-    expect(turn.usage!.promptTokens).toBeGreaterThan(0);
+    expect(turn.usage!.promptTokens).toBe(Math.ceil((sent.messagesJson.length + sent.schemaJson.length) / 3.5));
+    expect(turn.usage!.promptTokens).toBeGreaterThan(Math.ceil(sent.messagesJson.length / 3.5));
     expect(turn.usage!.completionTokens).toBe(Math.ceil(content.length / 3.5));
     expect(turn.usage!.totalTokens).toBe(turn.usage!.promptTokens + turn.usage!.completionTokens);
     expect(turn.exchange).toMatchObject({ backend: 'apple', model: ASSISTANT.appleIntelligenceModelId });
@@ -159,6 +163,36 @@ describe('AppleIntelligenceProvider.chat', () => {
       Level.ERROR,
       expect.objectContaining({ code: 'ENGINE_FAILED', message: 'Failed to run model' }),
     );
+  });
+
+  // A truncated constrained decode (the prompt crowding the window so generation
+  // stops mid-JSON) rejects as ENGINE_FAILED with a deserialize message. That is
+  // a failed attempt, not a failed turn, so the loop spends another attempt on it
+  // (refs #270).
+  it('retries an ENGINE_FAILED deserialize rejection and returns the next attempt\'s answer', async () => {
+    chatMock
+      .mockRejectedValueOnce(
+        Object.assign(new Error('Failed to deserialize a Generable type from model output'), { code: 'ENGINE_FAILED' }),
+      )
+      .mockResolvedValueOnce({ content: '{"answer": "Four events."}' });
+
+    const provider = new AppleIntelligenceProvider();
+    const turn = await provider.chat([{ role: 'user', text: 'how many?' }], [], 'sys', new AbortController().signal);
+
+    expect(turn.text).toBe('Four events.');
+    expect(chatMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('rethrows the mapped engine error when every attempt truncates', async () => {
+    chatMock.mockRejectedValue(
+      Object.assign(new Error('Failed to deserialize a Generable type from model output'), { code: 'ENGINE_FAILED' }),
+    );
+
+    const provider = new AppleIntelligenceProvider();
+    await expect(
+      provider.chat([{ role: 'user', text: 'how many?' }], [], 'sys', new AbortController().signal),
+    ).rejects.toThrow('__i18n:assistant.native_engine_failed');
+    expect(chatMock).toHaveBeenCalledTimes(ASSISTANT.maxParseAttempts);
   });
 
   it('falls back to the generic localized sentinel for a rejection with no code at all', async () => {
