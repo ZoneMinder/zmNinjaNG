@@ -2011,8 +2011,9 @@ Flow 19: Asking the assistant a question
 -----------------------------------------
 
 Pressing ``?`` (or picking the Ask command in the palette) opens a floating
-chat window backed by one of three providers: an on-device WebLLM model, the
-on-device native llama.cpp bridge (iPhone, iPad, and Android, refs #270), or an
+chat window backed by one of four providers: an on-device WebLLM model, the
+on-device native llama.cpp bridge (iPhone, iPad, and Android, refs #270), Apple's
+OS-hosted Foundation Models system model (iOS 26, refs #270), or an
 OpenAI-compatible server such as Ollama. The question is classified before any tool is offered,
 then a tool-use loop decides which ZoneMinder API calls answer it. The
 counterintuitive part is that there is no confirmation gate anywhere in this
@@ -2140,7 +2141,17 @@ property of the registry (``TOOLS`` holds no mutating tool and
    ``'native'``, ``getAssistantProvider`` (``providers/provider.ts``) returns
    a ``NativeLlmProvider`` in place of ``WebLlmProvider`` or
    ``OpenAiProvider``, the same one-field switch the other two backends
-   already go through.
+   already go through. The Apple Intelligence backend has its own independent
+   probe, ``useAppleIntelligenceSupported`` (``hooks/useAppleIntelligenceSupported.ts``),
+   which calls the ``AppleIntelligence`` plugin's ``isSupported()`` the same
+   way: ``AssistantSection`` shows the **On-device (Apple Intelligence)**
+   option only when it resolves supported, and a "turn it on in iOS Settings"
+   hint only when the reason is ``disabled`` (Apple Intelligence off), not for
+   ``platform`` (ineligible device or pre-iOS-26) or ``notReady`` (still
+   provisioning). Because the two on-device gates are independent, a phone can
+   qualify for one and not the other, and ``settings.assistantBackend`` of
+   ``'apple'`` makes ``getAssistantProvider`` return an
+   ``AppleIntelligenceProvider`` (next step).
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useNativeLlmSupported.ts>`__
    · → :doc:`12-shared-services-and-components`
 
@@ -2177,6 +2188,32 @@ property of the registry (``TOOLS`` holds no mutating tool and
    pins the same tag through CMake's ``FetchContent`` and builds the CPU
    backend from source at build time instead of fetching a prebuilt binary.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/providers/native-llm.ts>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **The Apple Intelligence provider reuses the same stack over an OS-hosted
+   model.** For the ``'apple'`` backend ``AppleIntelligenceProvider.chat``
+   (``providers/apple-intelligence.ts``) builds the turn with the same
+   ``buildWebLlmMessages`` and parses with the same ``parseWebLlmTurn`` as the
+   WebLLM and native providers, and retries through the same
+   ``SELF_REPAIR_PROMPT``/``ASSISTANT.maxParseAttempts`` self-repair loop,
+   because none of that is backend-specific. Only the transport differs: each
+   call crosses the Capacitor ``AppleIntelligence`` bridge as one
+   ``plugin.chat({messagesJson, temperature, maxTokens})``, which
+   ``AppleIntelligencePlugin.swift`` (iOS only) turns into a single
+   ``LanguageModelSession.respond`` on Apple's Foundation Models system model,
+   with the abort signal wired to the plugin's ``cancelChat()``. What the native
+   path carries but this one drops all follows from the OS owning the model:
+   there is no download or model file, the model is fixed
+   (``ASSISTANT.appleIntelligenceModelId``, not user-chosen), and the Foundation
+   Models API reports no token counts, so ``turn.usage`` stays undefined. Its
+   ``contextWindow`` is learned instead from ``isSupported().contextSize`` (4096)
+   on the first native call of the turn, so auto-clear still works. Rejections
+   map on the plugin's stable ``code`` exactly as the native provider's do:
+   ``CHAT_BUSY`` to ``__i18n:assistant.native_busy`` and anything else to
+   ``__i18n:assistant.native_engine_failed`` (both strings shared, both being
+   on-device engines), never the Swift ``localizedDescription``, which is only
+   logged.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/providers/apple-intelligence.ts>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **A stable code, not a screen-scraped message, decides how a native

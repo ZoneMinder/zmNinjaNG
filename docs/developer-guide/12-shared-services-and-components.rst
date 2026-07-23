@@ -1116,9 +1116,12 @@ is the decision itself: it compares the ``promptTokens`` a backend reported
 against that backend's ``contextWindow``, and returns false whenever either is
 unknown. Both are measured rather than estimated: the app never counts tokens
 itself, it reads ``usage`` off the response (``providers/usage.ts`` maps the
-OpenAI-shaped block both backends answer with), and ``contextWindow`` comes
-from two places: the on-device provider knows it exactly because
-``model-download.ts`` passed it to ``CreateMLCEngine``, and ``OpenAiProvider``
+OpenAI-shaped block the WebLLM, native, and Ollama backends answer with; the
+Apple backend reports no usage, so its counts stay undefined), and
+``contextWindow`` is per-backend: the WebLLM provider knows it exactly because
+``model-download.ts`` passed it to ``CreateMLCEngine``, ``AppleIntelligenceProvider``
+learns it from the plugin's ``isSupported().contextSize`` on its first native
+call (see its own section below), and ``OpenAiProvider``
 learns it after a chat turn by asking Ollama's native ``/api/ps`` what window
 the loaded model actually runs with (``refreshContextWindow``, cached per
 ``baseUrl::model`` in ``CONTEXT_WINDOWS``; the OpenAI-compatible API never
@@ -1150,7 +1153,8 @@ tool actually made.
 answers: the deterministic ``sharedMockProvider`` (``providers/mock.ts``) in
 non-production e2e mode behind ``isAssistantTestMode()``, ``OpenAiProvider``
 when the profile's backend is Ollama, ``NativeLlmProvider`` when it is
-``'native'`` (refs #270), and ``WebLlmProvider`` otherwise. The on-device
+``'native'`` (refs #270), ``AppleIntelligenceProvider`` when it is ``'apple'``
+(refs #270), and ``WebLlmProvider`` otherwise. The on-device
 WebLLM provider runs on ``@mlc-ai/web-llm`` in the browser via WebGPU, and
 the native provider (iPhone, iPad, and Android, gated by
 ``useNativeLlmSupported`` on a physical-memory floor: 5.5GB on iOS, 9.5GB on
@@ -1186,6 +1190,40 @@ directly rather than a native-specific copy. All three also retry an
 unparseable reply up to ``ASSISTANT.maxParseAttempts`` as a self-repair: the
 failed reply plus a correction naming the fault are appended, and the
 temperature is raised only on the final attempt.
+
+``AppleIntelligenceProvider`` (``providers/apple-intelligence.ts``, refs #270)
+is a fourth backend and structurally a trimmed ``NativeLlmProvider``: the
+``'apple'`` backend runs Apple's OS-hosted Foundation Models system model over
+the Capacitor ``AppleIntelligence`` bridge (iOS only), reusing the same
+``buildWebLlmMessages``/``parseWebLlmTurn``/``SELF_REPAIR_PROMPT`` stack and the
+same prompt-plus-parser, self-repair loop the native provider does, because the
+bridge has no grammar-constrained decoding either. What the native provider
+carries but this one drops follows from the OS owning the model: there is no
+download, no model file, no KV-cache slot, and the Foundation Models API reports
+no token counts, so ``turn.usage`` stays undefined and ``providers/usage.ts`` is
+never consulted for this backend. Its ``contextWindow`` is not passed in at load
+time (there is no load): the provider learns it from the plugin's
+``isSupported().contextSize`` (4096) on the first native call of a turn and
+caches it per instance, so ``isContextNearlyFull`` can auto-clear from the next
+turn on, the same measured-not-estimated rule the other backends follow. It maps
+the plugin's stable rejection ``code`` the way ``NativeLlmProvider`` does:
+``CHAT_BUSY`` becomes ``__i18n:assistant.native_busy`` and everything else
+``__i18n:assistant.native_engine_failed`` (both strings shared with the native
+backend, since both are on-device engines), never the native side's untranslated
+``localizedDescription``, which is only logged. The bridge itself
+(``ios/App/App/AppleIntelligencePlugin.swift``, jsName ``AppleIntelligence``,
+TS wrapper ``app/src/plugins/apple-intelligence/``) exposes only
+``isSupported``/``chat``/``cancelChat``: ``isSupported`` returns
+``supported: false`` with a ``reason`` of ``platform`` (ineligible device or
+pre-iOS-26), ``disabled`` (Apple Intelligence switched off), or ``notReady``
+(still provisioning), which ``useAppleIntelligenceSupported``
+(``hooks/useAppleIntelligenceSupported.ts``, mirroring ``useNativeLlmSupported``)
+surfaces so ``AssistantSection`` shows the **On-device (Apple Intelligence)**
+option only when supported and a "turn it on in iOS Settings" hint only for
+``disabled``. ``chat`` drives one ``LanguageModelSession.respond`` per call with
+no streaming, and ``cancelChat`` cancels the in-flight ``Task``; the two on-device
+gates (``'apple'`` and ``'native'``) are independent probes, so a phone can offer
+one without the other.
 
 Each entry in ``ASSISTANT.webllmModels`` (``lib/zmninja-ng-constants.ts``)
 carries its id, its approximate download size, and its own

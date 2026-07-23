@@ -10,6 +10,7 @@ Underneath, **Backend** picks where the model runs:
 
 - **On-device**: the model runs inside the app on your computer's GPU, using WebGPU. Nothing leaves your device. **Desktop and web only** (see below).
 - **On-device (native)**: on a supported iPhone, iPad, or Android phone, the model runs inside the app itself instead of a browser engine, using the device's GPU (Metal) on iPhone and iPad, or the CPU on Android. Nothing leaves your device. Only on a device with enough memory (see below); Android has no GPU path yet, so replies there are slower than on an iPhone.
+- **On-device (Apple Intelligence)**: on an iPhone 15 Pro or newer running iOS 26 with Apple Intelligence turned on, the assistant uses Apple's own on-device system model. There is nothing to download: Apple ships and runs the model as part of iOS, so it uses none of the app's memory for model weights. Nothing leaves your device (see below).
 - **Ollama**: the model runs on an [Ollama](https://ollama.com) server (or anything else speaking the OpenAI-compatible chat API) that you point the app at.
 
 The WebGPU on-device backend is not offered on phones or tablets: those models need more memory than a mobile browser engine is allowed to use, and answers take minutes on phone hardware. An iPhone or iPad with roughly 6GB of RAM or more gets the native on-device backend instead (see below). Android needs more: only a 12GB-class phone (for example a Pixel 8 Pro or a Galaxy S Ultra) qualifies, because the model runs on the CPU and its working set has to fit alongside everything else the phone is doing. An 8GB Android phone such as the Pixel 8 uses Ollama instead. Below the threshold there is no on-device choice, just a note saying so and the Ollama settings. On a desktop or in a browser, WebGPU on-device is available whenever your GPU supports WebGPU.
@@ -88,6 +89,18 @@ The model is a single fixed choice (Qwen3 4B Instruct), unlike the desktop and w
 
 As with WebGPU on-device, this is fully on-device: your questions, the assistant's answers, and anything it looks up on your ZoneMinder server never leave your phone or tablet except to reach that server itself. No conversation data goes to Ollama, to zmNinjaNg, or to any AI company.
 
+## The on-device model with Apple Intelligence (iOS 26)
+
+On an iPhone that supports Apple Intelligence, the assistant can use Apple's own on-device system model instead of a model the app ships or downloads. **Settings > Ninjii > Backend** offers **On-device (Apple Intelligence)** only when three things are true: the phone is eligible hardware (iPhone 15 Pro or newer), it runs iOS 26, and Apple Intelligence is turned on in iOS Settings. When any of these is missing the option does not appear, and the other backends are shown instead.
+
+If your phone has Apple Intelligence hardware and iOS 26 but you have not turned Apple Intelligence on, Settings shows a short note telling you to enable it in iOS Settings. Turn it on there and the backend option appears. While iOS is still preparing Apple Intelligence after you enable it, the option stays hidden until the model is ready.
+
+This backend is separate from **On-device (native)** above and does not share its memory requirement: a phone can offer Apple Intelligence without qualifying for the native backend, or the other way round, so each option appears on its own.
+
+Unlike the other on-device backends, there is nothing to download and no **Model** picker: Apple manages the model as part of iOS, and it uses none of the app's memory for model weights. The model, and therefore how well it answers and which languages it replies in, is Apple's, not something zmNinjaNg selects or tunes. Everything else about the assistant works the same way.
+
+This is fully on-device: your questions, the assistant's answers, and anything it looks up on your ZoneMinder server never leave your phone except to reach that server itself. No conversation data goes to Apple, to Ollama, to zmNinjaNg, or to any AI company.
+
 ## Running the model on your own server (Ollama)
 
 Set **Backend** to **Ollama** and give the app the address of your server. Left empty, the app uses your ZoneMinder server's own address on port 11434, which is right when Ollama runs on that machine. The field's placeholder shows the address it will use. Type a different one if your Ollama server is elsewhere. Avoid `localhost` on a phone: there it means the phone itself, which is not running Ollama.
@@ -145,14 +158,14 @@ The assistant now understands questions in other languages: the model itself int
 
 No third-party AI service ever sees your cameras, events, or questions. Which machines do see them depends on the backend:
 
-- **On-device** (desktop and web, or the native backend on iPhone, iPad, or Android): your questions, the answers, and anything the assistant looks up stay on your device. The only network requests are to your own ZoneMinder server, the same requests every other screen in the app makes.
+- **On-device** (desktop and web, the native backend on iPhone, iPad, or Android, or Apple Intelligence on iOS 26): your questions, the answers, and anything the assistant looks up stay on your device. The only network requests are to your own ZoneMinder server, the same requests every other screen in the app makes.
 - **Ollama**: the same data, plus your questions and the assistant's answers, also go to the Ollama server you configured. That server is yours; the app never sends the conversation anywhere else.
 
 Either way the conversation is not saved. Closing zmNinjaNg clears it.
 
 ## Platform support
 
-The WebGPU on-device backend runs on desktop and in the browser, where there is enough memory to hold a model, and it needs a GPU with WebGPU support. It is not offered on phones or tablets: a mobile browser engine is capped at far less memory than a model needs, so loading one crashes the app. An iPhone, iPad, or Android phone with enough physical memory gets its own native on-device backend instead (see above), with no browser engine or WebGPU involved; below that memory there is no on-device choice at all. Ollama has none of these requirements and works anywhere the app runs, so it is the way to use the assistant on a phone or tablet without enough memory for on-device, or on a desktop without WebGPU.
+The WebGPU on-device backend runs on desktop and in the browser, where there is enough memory to hold a model, and it needs a GPU with WebGPU support. It is not offered on phones or tablets: a mobile browser engine is capped at far less memory than a model needs, so loading one crashes the app. An iPhone, iPad, or Android phone with enough physical memory gets its own native on-device backend instead (see above), with no browser engine or WebGPU involved; below that memory there is no on-device choice at all. An iPhone 15 Pro or newer on iOS 26 with Apple Intelligence turned on can additionally use Apple's on-device system model, which needs no memory of its own because iOS hosts the model (see above). Ollama has none of these requirements and works anywhere the app runs, so it is the way to use the assistant on a phone or tablet without enough memory for on-device, or on a desktop without WebGPU.
 
 On the Linux desktop app, picking the on-device backend usually shows a "no WebGPU" note. That is not a missing GPU: Chromium ships with WebGPU turned off on Linux because Vulkan driver support there is uneven, and the app inherits that default. You can turn it on by launching the app with Chromium's own flags:
 
