@@ -34,6 +34,14 @@ vi.mock('../../../hooks/useNativeLlmSupported', () => ({
   useNativeLlmSupported: () => ({ supported: nativeSupported, reason: nativeUnsupportedReason }),
 }));
 
+// Same seam for the OS-hosted Apple Foundation Models backend. Defaults
+// unsupported so existing tests keep their pre-apple behavior.
+let appleSupported: boolean | undefined = false;
+let appleUnsupportedReason: 'platform' | 'disabled' | 'notReady' | undefined;
+vi.mock('../../../hooks/useAppleIntelligenceSupported', () => ({
+  useAppleIntelligenceSupported: () => ({ supported: appleSupported, reason: appleUnsupportedReason }),
+}));
+
 const isNativeModelDownloadedMock = vi.fn().mockResolvedValue({ downloaded: false });
 vi.mock('../../../lib/assistant/native-model-download', () => ({
   isNativeModelDownloaded: () => isNativeModelDownloadedMock(),
@@ -116,6 +124,8 @@ describe('AssistantSection backend picker and gating', () => {
     isNative = false;
     nativeSupported = false;
     nativeUnsupportedReason = undefined;
+    appleSupported = false;
+    appleUnsupportedReason = undefined;
   });
 
   // On-device was removed on phones and tablets. The picker must not offer a
@@ -242,6 +252,93 @@ describe('AssistantSection backend picker and gating', () => {
       expect(screen.queryByTestId('assistant-ollama-url')).not.toBeInTheDocument();
       expect(await screen.findByTestId('assistant-native-model-download')).toBeInTheDocument();
       expect(screen.getByTestId('assistant-native-model-delete')).toBeInTheDocument();
+    });
+  });
+
+  // Task (refs #270): the OS-hosted Apple Foundation Models backend appears in
+  // the picker on its own probe, independent of the native (llama.cpp) gate.
+  describe('Apple Intelligence backend on a phone or tablet', () => {
+    it('offers the Apple Intelligence option in the picker when the probe passes, even without native support', async () => {
+      isNative = true;
+      appleSupported = true; // nativeSupported stays false
+      render(
+        <AssistantSection settings={enabledSettings} update={vi.fn()} currentProfile={profile} updateSettings={vi.fn()} />,
+      );
+
+      const select = await screen.findByTestId('assistant-backend-select');
+      expect(screen.queryByTestId('assistant-on-device-unavailable')).not.toBeInTheDocument();
+      expect(within(select).getByText('settings.assistant.backend_apple')).toBeInTheDocument();
+      expect(within(select).getByText('settings.assistant.backend_ollama')).toBeInTheDocument();
+      expect(within(select).queryByText('settings.assistant.backend_native')).not.toBeInTheDocument();
+    });
+
+    it('lists apple before ollama before native when both on-device backends are supported', async () => {
+      isNative = true;
+      appleSupported = true;
+      nativeSupported = true;
+      render(
+        <AssistantSection settings={enabledSettings} update={vi.fn()} currentProfile={profile} updateSettings={vi.fn()} />,
+      );
+
+      const select = await screen.findByTestId('assistant-backend-select');
+      const values = within(select)
+        .getAllByRole('option')
+        .map((o) => (o as HTMLOptionElement).value);
+      expect(values).toEqual(['apple', 'ollama', 'native']);
+    });
+
+    it('omits the Apple Intelligence option when the probe does not report support', async () => {
+      isNative = true;
+      nativeSupported = true; // picker is present, but apple is not offered
+      appleSupported = false;
+      render(
+        <AssistantSection settings={enabledSettings} update={vi.fn()} currentProfile={profile} updateSettings={vi.fn()} />,
+      );
+
+      const select = await screen.findByTestId('assistant-backend-select');
+      expect(within(select).queryByText('settings.assistant.backend_apple')).not.toBeInTheDocument();
+    });
+
+    it('renders no download/delete surface when the apple backend is selected', async () => {
+      isNative = true;
+      appleSupported = true;
+      render(
+        <AssistantSection
+          settings={{ ...enabledSettings, assistantBackend: 'apple' }}
+          update={vi.fn()}
+          currentProfile={profile}
+          updateSettings={vi.fn()}
+        />,
+      );
+
+      await screen.findByTestId('assistant-backend-select');
+      expect(screen.queryByTestId('assistant-ollama-url')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('assistant-native-model-download')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('assistant-model-select')).not.toBeInTheDocument();
+    });
+
+    it('shows the enable-Apple-Intelligence hint when the probe reports reason "disabled"', async () => {
+      isNative = true;
+      appleSupported = false;
+      appleUnsupportedReason = 'disabled';
+      render(
+        <AssistantSection settings={enabledSettings} update={vi.fn()} currentProfile={profile} updateSettings={vi.fn()} />,
+      );
+
+      const hint = await screen.findByTestId('assistant-apple-disabled');
+      expect(within(hint).getByText('settings.assistant.apple_disabled_hint')).toBeInTheDocument();
+    });
+
+    it('shows no apple hint for reasons other than "disabled"', async () => {
+      isNative = true;
+      appleSupported = false;
+      appleUnsupportedReason = 'notReady';
+      render(
+        <AssistantSection settings={enabledSettings} update={vi.fn()} currentProfile={profile} updateSettings={vi.fn()} />,
+      );
+
+      await screen.findByTestId('assistant-on-device-unavailable');
+      expect(screen.queryByTestId('assistant-apple-disabled')).not.toBeInTheDocument();
     });
   });
 

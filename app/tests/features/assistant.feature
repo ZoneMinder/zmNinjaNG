@@ -82,3 +82,17 @@ Feature: In-app assistant
     And the assistant is enabled with the mock backend
     When I navigate to the "Settings" page
     Then I should not see the native backend option
+
+  # Apple Foundation Models (system LLM) is iOS-only (refs #270), so this is
+  # tagged @ios-phone alone. Same seam layering as the native scenarios above:
+  # `window.__appleIntelligenceMockSupported` drives "supported" because
+  # Chromium has no Apple Intelligence bridge to fake.
+  @ios-phone
+  Scenario: Apple Intelligence backend option appears when the device reports support, and selecting it persists
+    Given I am logged into zmNinjaNg
+    And the assistant is enabled with the mock backend
+    And the Apple Intelligence backend reports as supported
+    When I navigate to the "Settings" page
+    Then I should see the Apple Intelligence backend option
+    When I select the Apple Intelligence backend
+    Then the Apple Intelligence backend should be selected

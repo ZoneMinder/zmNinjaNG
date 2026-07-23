@@ -221,3 +221,32 @@ Then('I should see the native model download button', async ({ page }) => {
   });
 });
 
+/** Seeds `window.__appleIntelligenceMockSupported`, the seam
+ *  `useAppleIntelligenceSupported` reads (gated by `isAssistantTestMode()`)
+ *  instead of the real `Platform.isNative` + `AppleIntelligence.isSupported()`
+ *  probe: Chromium e2e has no Apple Intelligence bridge to fake, and
+ *  `AppleIntelligence` has no `web` jsImplementation, so a genuine probe always
+ *  rejects there. Same reasoning and timing constraint as the native seam
+ *  above: must run before the step that (re)mounts `AssistantSection`. */
+Given('the Apple Intelligence backend reports as supported', async ({ page }) => {
+  await page.evaluate(() => {
+    (window as unknown as { __appleIntelligenceMockSupported?: boolean }).__appleIntelligenceMockSupported = true;
+  });
+});
+
+Then('I should see the Apple Intelligence backend option', async ({ page }) => {
+  await expect(page.getByTestId('assistant-backend-select').locator('option[value="apple"]')).toHaveCount(1, {
+    timeout: testConfig.timeouts.element,
+  });
+});
+
+When('I select the Apple Intelligence backend', async ({ page }) => {
+  await page.getByTestId('assistant-backend-select').selectOption('apple');
+});
+
+Then('the Apple Intelligence backend should be selected', async ({ page }) => {
+  await expect(page.getByTestId('assistant-backend-select')).toHaveValue('apple', {
+    timeout: testConfig.timeouts.element,
+  });
+});
+

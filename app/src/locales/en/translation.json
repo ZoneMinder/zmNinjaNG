@@ -320,6 +320,8 @@
       "backend_on_device": "On-device",
       "backend_ollama": "Ollama (remote)",
       "backend_native": "On-device (native)",
+      "backend_apple": "On-device (Apple Intelligence)",
+      "apple_disabled_hint": "Enable Apple Intelligence in iOS Settings to use this backend.",
       "native_unsupported_memory": "On-device models are not supported on this device: it does not have enough memory to run them. Use an Ollama server instead, set up below.",
       "on_device_mobile_disabled": "On-device models are not available on phones and tablets: they need more memory than a mobile app is allowed to use, and answers take minutes. Use an Ollama server instead, set up below.",
       "no_webgpu": "Requires WebGPU, not available on this device.",

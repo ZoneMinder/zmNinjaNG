@@ -320,6 +320,8 @@
       "backend_on_device": "设备端",
       "backend_ollama": "Ollama（远程）",
       "backend_native": "设备端（原生）",
+      "backend_apple": "设备端（Apple Intelligence）",
+      "apple_disabled_hint": "在 iOS 设置中开启 Apple Intelligence 以使用此后端。",
       "native_unsupported_memory": "此设备不支持设备端模型：内存不足，无法运行。请改用 Ollama 服务器，在下方设置。",
       "on_device_mobile_disabled": "手机和平板不支持设备端模型：所需内存超出移动应用的限制，且回答需要数分钟。请改用下方配置的 Ollama 服务器。",
       "no_webgpu": "需要 WebGPU，此设备不支持。",

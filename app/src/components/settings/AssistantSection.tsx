@@ -29,6 +29,7 @@ import { NINJII_LOGO_URL } from '../../lib/assistant/ninjii-logo';
 import { Platform } from '../../lib/platform';
 import { useWebGpuAvailable } from '../../hooks/useWebGpuAvailable';
 import { useNativeLlmSupported } from '../../hooks/useNativeLlmSupported';
+import { useAppleIntelligenceSupported } from '../../hooks/useAppleIntelligenceSupported';
 import { useToast } from '../../hooks/use-toast';
 import { deleteModel, downloadModel, isModelDownloaded } from '../../lib/assistant/model-download';
 import { getModelStorageInfo, formatStorageBytes, type ModelStorageInfo } from '../../lib/assistant/model-storage';
@@ -69,6 +70,11 @@ export function AssistantSection({
   // above, but for the native (llama.cpp bridge) backend: only meaningful on
   // a native platform, where the plugin actually exists.
   const { supported: nativeSupported, reason: nativeUnsupportedReason } = useNativeLlmSupported();
+  // Same shape again, for the OS-hosted Apple Foundation Models backend
+  // (iOS 26 Apple-Intelligence iPhones). Independent of the native
+  // (llama.cpp) gate: a phone can have Apple Intelligence while failing the
+  // native memory gate, so both options are offered on their own probes.
+  const { supported: appleSupported, reason: appleUnsupportedReason } = useAppleIntelligenceSupported();
   const availableModels = useMemo(
     () => ASSISTANT.webllmModels,
     [],
@@ -281,7 +287,13 @@ export function AssistantSection({
                 Equivalent to the old `Platform.isNative &&` gate in
                 production, since the hook itself only ever resolves `true`
                 on a native platform there. */}
-            {nativeSupported === true ? (
+            {/* The picker shows on a native platform as soon as EITHER on-device
+                backend passes its own probe: Apple Foundation Models
+                (`appleSupported`) or the llama.cpp bridge (`nativeSupported`).
+                Options are ordered apple → ollama → native, each gated on its
+                probe; Ollama is always present. When neither on-device backend
+                is supported the note branch below replaces the picker. */}
+            {nativeSupported === true || appleSupported === true ? (
               <div className="px-4 py-3 space-y-2">
                 <RowLabel label={t('settings.assistant.backend')} />
                 <select
@@ -290,8 +302,13 @@ export function AssistantSection({
                   onChange={(e) => update('assistantBackend', e.target.value as AssistantBackend)}
                   data-testid="assistant-backend-select"
                 >
+                  {appleSupported === true && (
+                    <option value="apple">{t('settings.assistant.backend_apple')}</option>
+                  )}
                   <option value="ollama">{t('settings.assistant.backend_ollama')}</option>
-                  <option value="native">{t('settings.assistant.backend_native')}</option>
+                  {nativeSupported === true && (
+                    <option value="native">{t('settings.assistant.backend_native')}</option>
+                  )}
                 </select>
               </div>
             ) : Platform.isNative ? (
@@ -321,8 +338,24 @@ export function AssistantSection({
               </div>
             )}
 
+            {/* Apple Intelligence is present but the user has it switched off in
+                iOS Settings: the picker can't offer the option, so name the one
+                thing that unlocks it. Only for reason 'disabled': 'platform'
+                (device/OS can't run it) and 'notReady' (still provisioning) are
+                not user-actionable here, and undefined means no probe result. */}
+            {appleUnsupportedReason === 'disabled' && (
+              <div className="px-4 py-3 space-y-1" data-testid="assistant-apple-disabled">
+                <p className="text-xs text-muted-foreground">{t('settings.assistant.apple_disabled_hint')}</p>
+              </div>
+            )}
+
             {nativeSupported === true && settings.assistantBackend === 'native' ? (
               <AssistantNativeSection />
+            ) : settings.assistantBackend === 'apple' ? (
+              // Apple Foundation Models is OS-hosted: no download/delete surface,
+              // no KV-cache slot, no token counts. Nothing renders below the
+              // picker for this backend.
+              null
             ) : settings.assistantBackend === 'ollama' || Platform.isNative ? (
               <AssistantOllamaSection settings={settings} update={update} currentProfile={currentProfile} />
             ) : (
