@@ -43,6 +43,12 @@ const TOOL_FAILURE_GUARD =
   ' Either correct the call and try again, or tell the user the data could not be retrieved.' +
   ' Never state counts, times, or facts you did not get from a tool result.';
 
+/** Model-facing pushback before the fail-open gate unlocks the registry (refs #270). */
+const TOOL_LESS_PUSHBACK =
+  'No tools are available for this turn. If the user\'s message is conversation (a greeting, thanks, ' +
+  'small talk), answer it in plain text. Only call this tool again if the user genuinely asked about ' +
+  'this ZoneMinder system (cameras, events, detections, server).';
+
 
 /** De-dupes by `kind`+`id` (the same event/monitor can surface from more than
  *  one tool call in a turn, e.g. list_events then get_event on one of its
@@ -409,10 +415,7 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
           });
           results.push({
             callId: call.id,
-            output:
-              'No tools are available for this turn. If the user\'s message is conversation (a greeting, thanks, ' +
-              'small talk), answer it in plain text. Only call this tool again if the user genuinely asked about ' +
-              'this ZoneMinder system (cameras, events, detections, server).',
+            output: TOOL_LESS_PUSHBACK,
             isError: true,
           });
           host.onActivity({ toolName: call.name, status: 'error', input: call.input });
