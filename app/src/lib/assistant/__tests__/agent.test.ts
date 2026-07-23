@@ -47,6 +47,41 @@ describe('argument normalization before a tool runs', () => {
 
     expect(execute).toHaveBeenCalledWith({ limit: 25, when: 'today' }, expect.anything());
   });
+
+  // Weak models (Apple FM, qwen) call count_events with the tool's OWN internal
+  // `{"interval":"1 day"}` shape. additionalProperties:false + required
+  // lastCount/lastUnit would reject it; the pre-validation repair splits it so
+  // the call runs instead of looping on the rejection (refs #270).
+  it('repairs a count_events interval string into lastCount + lastUnit', async () => {
+    const execute = vi.fn().mockResolvedValue({ output: '{"total":10}' });
+    const countTool = {
+      name: 'count_events',
+      description: 'd',
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['lastCount', 'lastUnit'],
+        properties: {
+          lastCount: { type: 'number' },
+          lastUnit: { type: 'string', enum: ['minute', 'hour', 'day', 'week', 'month'] },
+        },
+      },
+      execute,
+    } as never;
+
+    const p = new MockProvider();
+    p.setScript([
+      { toolCalls: [{ id: 'c1', name: 'count_events', input: { interval: '1 day' } }] },
+      { text: 'done', toolCalls: [] },
+    ]);
+
+    await runAssistantTurn({
+      ...baseOpts(p, host(), [{ role: 'user', text: 'how many events today?' }]),
+      tools: [countTool],
+    });
+
+    expect(execute).toHaveBeenCalledWith({ lastCount: 1, lastUnit: 'day' }, expect.anything());
+  });
 });
 
 describe('a turn given no tools', () => {

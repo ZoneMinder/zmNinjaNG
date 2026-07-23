@@ -10,7 +10,7 @@
  */
 import type { AssistantMessage, AssistantProvider, AssistantHost, DisplayEntity, TokenUsage, TraceEntry, ToolContext, ToolDefinition, ToolResult } from './types';
 import { getToolByName, isWithheldToolName, TOOLS } from './tools';
-import { validateToolInput, objectQuestionMismatch, toolCallSignature, stripOmittedArgs } from './tool-helpers';
+import { validateToolInput, objectQuestionMismatch, toolCallSignature, stripOmittedArgs, repairCountEventsInterval } from './tool-helpers';
 import { captureApiCalls } from './api-capture';
 import { extractShowDirective, filterDisplayByShow } from './display';
 import { buildGroundingCorrection, fallbackAnswerFromData, retryIsUnusable } from './grounding';
@@ -417,7 +417,11 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
       // instead of spending the turn discovering the same result (refs #246).
       // Normalized once, here, rather than in every tool: an argument the
       // model filled with null/""/"{}" is absent from this point on.
-      const input = stripOmittedArgs(call.input);
+      // count_events also gets its interval repaired: weak models echo the
+      // tool's internal `{"interval":"1 day"}` shape back instead of the
+      // schema's lastCount+lastUnit (observed on Apple FM and qwen).
+      const stripped = stripOmittedArgs(call.input);
+      const input = call.name === 'count_events' ? repairCountEventsInterval(stripped) : stripped;
       const signature = toolCallSignature(call.name, input);
       if (calledSignatures.has(signature)) {
         results.push({

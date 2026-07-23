@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getToolByName, isWithheldToolName, readOnlyTools, WITHHELD_TOOL_NAMES, TOOLS } from '../tools';
-import { safeExecute, validateToolInput, objectTypePattern, coerceLabelList, isOmittedArg, stripOmittedArgs, objectQuestionMismatch, toolCallSignature } from '../tool-helpers';
+import { safeExecute, validateToolInput, objectTypePattern, coerceLabelList, isOmittedArg, stripOmittedArgs, objectQuestionMismatch, toolCallSignature, repairCountEventsInterval } from '../tool-helpers';
 import type { ToolContext } from '../types';
 import { asProfileId } from '../../../api/types';
 import { ASSISTANT } from '../../zmninja-ng-constants';
@@ -657,6 +657,32 @@ describe('stripOmittedArgs', () => {
       objectType: ['car'],
       limit: 0,
     });
+  });
+});
+
+describe('repairCountEventsInterval', () => {
+  // Weak models (Apple Foundation Models, qwen) call count_events with the
+  // tool's OWN internal MySQL-interval shape `{"interval":"1 day"}` instead of
+  // the schema's lastCount+lastUnit. additionalProperties:false rejects it and
+  // they never recover, so split it into the two real fields before validation.
+  it('splits an interval string into lastCount + lastUnit and drops interval', () => {
+    expect(repairCountEventsInterval({ interval: '1 day' })).toEqual({ lastCount: 1, lastUnit: 'day' });
+  });
+
+  it('handles multi-digit counts', () => {
+    expect(repairCountEventsInterval({ interval: '24 hour' })).toEqual({ lastCount: 24, lastUnit: 'hour' });
+  });
+
+  it('normalizes a plural unit to singular', () => {
+    expect(repairCountEventsInterval({ interval: '7 days' })).toEqual({ lastCount: 7, lastUnit: 'day' });
+  });
+
+  it('leaves a correct call untouched when lastCount is already present', () => {
+    expect(repairCountEventsInterval({ lastCount: 1, lastUnit: 'day' })).toEqual({ lastCount: 1, lastUnit: 'day' });
+  });
+
+  it('passes a non-matching string through unchanged', () => {
+    expect(repairCountEventsInterval({ interval: 'yesterday' })).toEqual({ interval: 'yesterday' });
   });
 });
 

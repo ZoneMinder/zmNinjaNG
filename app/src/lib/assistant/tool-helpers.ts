@@ -218,6 +218,35 @@ export function stripOmittedArgs(input: Record<string, unknown>): Record<string,
   return kept;
 }
 
+/** MySQL DATE_SUB interval unit words the model echoes back. Kept beside the
+ *  repair below because they are the exact shapes `count_events`'s executor
+ *  builds internally, not an open grammar. */
+const INTERVAL_STRING = /^\s*(\d+)\s+(minute|hour|day|week|month)s?\s*$/i;
+
+/**
+ * Repairs a `count_events` input where the model handed back the tool's OWN
+ * internal MySQL-interval shape instead of the schema arguments.
+ *
+ * The executor builds a `${lastCount} ${lastUnit}` string (e.g. "1 day") for a
+ * `DATE_SUB(..., INTERVAL ...)` clause. Small models see that string echoed in
+ * the trace and call the tool with `{"interval":"1 day"}`, a field the schema
+ * does not have, missing the `lastCount`+`lastUnit` it requires. With
+ * `additionalProperties: false` the validator rejects it, and weak models
+ * (observed on Apple Foundation Models and qwen) never find their way back to
+ * the real arguments. Split the interval into the two schema fields it maps to,
+ * before validation, so the call runs instead of looping on the rejection.
+ *
+ * Only fires when `interval` is a string of that shape AND `lastCount` was not
+ * already supplied: a model that sent the correct arguments is left untouched.
+ */
+export function repairCountEventsInterval(input: Record<string, unknown>): Record<string, unknown> {
+  if (input.lastCount !== undefined) return input;
+  const match = typeof input.interval === 'string' ? INTERVAL_STRING.exec(input.interval) : null;
+  if (!match) return input;
+  const { interval: _dropped, ...rest } = input;
+  return { ...rest, lastCount: Number(match[1]), lastUnit: match[2].toLowerCase() };
+}
+
 /** A stable identity for one tool call, so the same call twice in a turn is
  *  recognised however the model spelled it.
  *
