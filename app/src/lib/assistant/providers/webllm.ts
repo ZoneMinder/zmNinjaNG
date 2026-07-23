@@ -203,7 +203,15 @@ function isQwen3Model(modelId: string): boolean {
  *
  *  `OUTPUT_CONTRACT` is appended to the LAST user message rather than stated
  *  once in the system message, so the format rule is the final thing the
- *  model reads before it generates (see that constant's doc comment). */
+ *  model reads before it generates (see that constant's doc comment).
+ *
+ *  `includeOutputContract` exists for guided-generation backends (Apple
+ *  Foundation Models), which enforce the reply shape at the decoder. There a
+ *  textual JSON contract fights the constraint: the model, already forced into
+ *  `{"answer": "..."}`, writes the JSON it was told to produce INSIDE the
+ *  constrained string field, yielding answers like `{` or `[` (refs #270). It
+ *  defaults to true so the WebLLM and native paths stay byte-identical to the
+ *  prompt the qwen evals were calibrated against. */
 export function buildWebLlmMessages(
   system: string,
   history: AssistantMessage[],
@@ -211,6 +219,7 @@ export function buildWebLlmMessages(
   modelId: string,
   includeFewShot = true,
   disableThinking = true,
+  includeOutputContract = true,
 ): ChatCompletionMessageParam[] {
   const systemContent = `${system}\n\n${buildToolCatalog(tools)}${disableThinking && isQwen3Model(modelId) ? '\n\n/no_think' : ''}`;
   const messages: ChatCompletionMessageParam[] = [
@@ -245,11 +254,13 @@ export function buildWebLlmMessages(
   // The format rule goes on the last user message only: repeating it on every
   // intermediate tool result spent tokens restating something the model had
   // already followed, and the copy that matters is the one nearest generation.
-  const last = messages[messages.length - 1];
-  if (last?.role === 'user') {
-    last.content = `${String(last.content ?? '')}\n\n${OUTPUT_CONTRACT}`;
-  } else {
-    messages.push({ role: 'user', content: OUTPUT_CONTRACT });
+  if (includeOutputContract) {
+    const last = messages[messages.length - 1];
+    if (last?.role === 'user') {
+      last.content = `${String(last.content ?? '')}\n\n${OUTPUT_CONTRACT}`;
+    } else {
+      messages.push({ role: 'user', content: OUTPUT_CONTRACT });
+    }
   }
 
   return messages;

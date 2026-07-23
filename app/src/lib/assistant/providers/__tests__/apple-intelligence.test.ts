@@ -58,9 +58,10 @@ describe('AppleIntelligenceProvider.chat', () => {
     expect(turn.toolCalls).toEqual([]);
   });
 
-  // Self-repair retry: a garbage first reply is followed by the failed reply
-  // plus a correction, and the second attempt recovers.
-  it('retries a garbage reply with a self-repair prompt, then succeeds', async () => {
+  // Retry: a garbage first reply is followed by the failed reply plus a
+  // neutral correction (never WebLLM's contract-restating SELF_REPAIR_PROMPT,
+  // refs #270), and the second attempt recovers.
+  it('retries a garbage reply with a contract-free correction, then succeeds', async () => {
     chatMock
       .mockResolvedValueOnce({ content: '```' })
       .mockResolvedValueOnce({ content: '{"answer": "Two people came."}' });
@@ -74,7 +75,8 @@ describe('AppleIntelligenceProvider.chat', () => {
     const secondOptions = chatMock.mock.calls[1][0] as { messagesJson: string };
     const secondMessages = JSON.parse(secondOptions.messagesJson) as Array<{ role: string; content: string }>;
     expect(secondMessages.at(-2)).toMatchObject({ role: 'assistant', content: '```' });
-    expect(secondMessages.at(-1)?.content).toContain('not one valid JSON object');
+    expect(secondMessages.at(-1)?.content).toContain('empty or unusable');
+    expect(secondOptions.messagesJson).not.toContain('Respond with ONLY a single JSON object');
   });
 
   it('cancels the native call and throws AbortError when the signal aborts mid-flight', async () => {
@@ -225,35 +227,25 @@ describe('AppleIntelligenceProvider.chat', () => {
     expect(options.schemaJson).toBeUndefined();
   });
 
-  it('builds messages via buildWebLlmMessages: few-shot anchors present', async () => {
-    chatMock.mockResolvedValue({ content: '{"answer": "ok"}' });
-
-    const provider = new AppleIntelligenceProvider();
-    await provider.chat([{ role: 'user', text: 'hi' }], [TOOL], 'sys', new AbortController().signal);
-
-    const options = chatMock.mock.calls[0][0] as { messagesJson: string };
-    const messages = JSON.parse(options.messagesJson) as Array<{ role: string; content: string }>;
-    // Few-shot anchors follow the system message.
-    expect(messages[1]).toMatchObject({ role: 'user', content: 'How many events were recorded today?' });
-    expect(options.messagesJson).toContain('EXAMPLE_MONITOR_A');
-  });
-
-  // A tool-less chat turn (a greeting) drops the few-shot: Foundation Models
-  // parroted the example's event-count answer instead of replying to the
-  // greeting, and with no tools the examples teach nothing (refs #270).
-  it('omits the few-shot examples on a tool-less chat turn', async () => {
+  // All format teaching leaves the prompt on this backend: the schema enforces
+  // the reply shape at the decoder, and the textual contract made the model
+  // write JSON inside the constrained answer string while the few-shot got
+  // parroted verbatim (refs #270). Asserted on BOTH turn kinds.
+  it.each([
+    ['with tools', [TOOL]],
+    ['tool-less', [] as ToolDefinition[]],
+  ])('omits the few-shot examples and the output contract on a %s chat turn', async (_label, turnTools) => {
     chatMock.mockResolvedValue({ content: '{"answer": "Hi there."}' });
 
     const provider = new AppleIntelligenceProvider();
-    await provider.chat([{ role: 'user', text: 'hello' }], [], 'sys', new AbortController().signal);
+    await provider.chat([{ role: 'user', text: 'hello' }], turnTools, 'sys', new AbortController().signal);
 
     const options = chatMock.mock.calls[0][0] as { messagesJson: string };
     expect(options.messagesJson).not.toContain('EXAMPLE_MONITOR_A');
+    expect(options.messagesJson).not.toContain('Respond with ONLY a single JSON object');
     const messages = JSON.parse(options.messagesJson) as Array<{ role: string; content: string }>;
-    // The real user turn follows the system message directly (its content also
-    // carries the appended OUTPUT_CONTRACT).
-    expect(messages[1].role).toBe('user');
-    expect(messages[1].content).toContain('hello');
+    // The real user turn follows the system message directly, verbatim.
+    expect(messages[1]).toMatchObject({ role: 'user', content: 'hello' });
   });
 });
 

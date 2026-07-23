@@ -3,9 +3,11 @@
  * bridge, refs #270)
  *
  * Structurally a trimmed `providers/native-llm.ts`: the prompt/parse stack is
- * again reused wholesale from `providers/webllm.ts` (`buildWebLlmMessages`,
- * `parseWebLlmTurn`, `SELF_REPAIR_PROMPT`), driving the same constrained-JSON
- * contract over a different transport. Unlike the native bridge, the OS owns
+ * again reused from `providers/webllm.ts` (`buildWebLlmMessages`,
+ * `parseWebLlmTurn`), driving the same JSON turn shape over a different
+ * transport. The format teaching is the one part NOT reused: this backend
+ * constrains generation with a schema, so the few-shot block and the textual
+ * output contract are switched off (see `chat`). Unlike the native bridge, the OS owns
  * the model: there is no download, no KV cache slot, no weight-load/prefill
  * status stream, and no token counts, so those concerns are simply absent here.
  */
@@ -14,7 +16,7 @@ import type { ChatCompletionMessageParam } from '@mlc-ai/web-llm';
 import { ASSISTANT } from '../../zmninja-ng-constants';
 import { log, LogLevel } from '../../logger';
 import { Platform } from '../../platform';
-import { buildWebLlmMessages, parseWebLlmTurn, SELF_REPAIR_PROMPT, PARSE_ERROR_TEXT } from './webllm';
+import { buildWebLlmMessages, parseWebLlmTurn, PARSE_ERROR_TEXT } from './webllm';
 import { captureExchange } from '../exchange';
 import { MODEL_NOT_AVAILABLE_MESSAGE } from '../model-download';
 
@@ -39,10 +41,10 @@ export const APPLE_INTELLIGENCE_NOT_AVAILABLE_MESSAGE = MODEL_NOT_AVAILABLE_MESS
  *  schema, so a tool call cannot be produced where there is no tool to call.
  *
  *  Shapes mirror the TOP-LEVEL contract (`{"answer": "..."}` /
- *  `{"tool": "<name>", "input": {...}}`) that `OUTPUT_CONTRACT`, the few-shot
- *  examples, and history re-serialization in `buildWebLlmMessages` all use, so
- *  the constrained output flows through `parseWebLlmTurn`'s primary path and
- *  stays consistent with the rest of the prompt. Disjoint required keys
+ *  `{"tool": "<name>", "input": {...}}`) that history re-serialization in
+ *  `buildWebLlmMessages` uses, so the constrained output flows through
+ *  `parseWebLlmTurn`'s primary path and stays consistent with the assistant
+ *  turns already in the prompt. Disjoint required keys
  *  (`answer` vs `tool`) also make the `anyOf` trivial for the decoder to
  *  discriminate. */
 function buildTurnSchema(tools: ToolDefinition[]): string {
@@ -59,6 +61,14 @@ function buildTurnSchema(tools: ToolDefinition[]): string {
     ],
   });
 }
+
+/** The retry correction for this backend, in place of WebLLM's
+ *  `SELF_REPAIR_PROMPT`. That one restates `OUTPUT_CONTRACT`, which is exactly
+ *  the format teaching guided generation cannot tolerate (refs #270), and under
+ *  a constrained decoder an unparseable reply is nearly impossible anyway: what
+ *  is left to correct is an empty or content-free one. Kept neutral so a retry
+ *  cannot reintroduce JSON-shaped text into the answer field. */
+const APPLE_RETRY_PROMPT = 'Your last reply was empty or unusable. Answer the user\'s question.';
 
 /** The on-device Apple Foundation Models provider: the OS-managed system model,
  *  driven with the same constrained-JSON contract WebLLM uses (see module
@@ -194,17 +204,20 @@ export class AppleIntelligenceProvider implements AssistantProvider {
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
     const { AppleIntelligence: plugin } = await this.getPlugin();
     await this.ensureDeviceContext(plugin);
-    // Few-shot only when there are tools to teach. Observed live: on a
-    // tool-less greeting turn Foundation Models parroted the few-shot
-    // event-count answer template and ignored the disclaimer message that
-    // follows it. With no tools there is nothing for the examples to teach, and
-    // the constrained schema already fixes the reply format (refs #270).
-    const chatMessages = buildWebLlmMessages(system, messages, tools, this.modelId, tools.length > 0);
+    // No few-shot and no OUTPUT_CONTRACT on this backend: with guided
+    // generation the reply shape is enforced at the decoder, so all format
+    // teaching must leave the prompt. Observed live: the few-shot event-count
+    // answer template was parroted verbatim on tool turns too, and the textual
+    // contract made the model write JSON INSIDE the constrained answer string
+    // ({"answer": "{"}). The per-turn schema already pins the legal tool names
+    // and their input shapes, so nothing is lost (refs #270).
+    const chatMessages = buildWebLlmMessages(system, messages, tools, this.modelId, false, true, false);
     const schemaJson = buildTurnSchema(tools);
 
-    // Same self-repair retry shape as NativeLlmProvider.chat / WebLlmProvider.chat:
-    // the failed reply plus a correction naming the fault are appended before
-    // each retry, and only the FINAL attempt raises the temperature.
+    // Same retry shape as NativeLlmProvider.chat / WebLlmProvider.chat: the
+    // failed reply plus a correction are appended before each retry (here the
+    // contract-free `APPLE_RETRY_PROMPT`), and only the FINAL attempt raises
+    // the temperature.
     let turn: AssistantTurn = { text: PARSE_ERROR_TEXT, toolCalls: [] };
     for (let attempt = 1; attempt <= ASSISTANT.maxParseAttempts; attempt++) {
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
@@ -261,7 +274,7 @@ export class AppleIntelligenceProvider implements AssistantProvider {
         maxAttempts: ASSISTANT.maxParseAttempts,
       });
       chatMessages.push({ role: 'assistant', content: response.content });
-      chatMessages.push({ role: 'user', content: SELF_REPAIR_PROMPT });
+      chatMessages.push({ role: 'user', content: APPLE_RETRY_PROMPT });
     }
     return turn;
   }

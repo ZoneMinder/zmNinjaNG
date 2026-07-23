@@ -129,6 +129,20 @@ describe('buildWebLlmMessages', () => {
     expect(messages[1 + FEW_SHOT_COUNT].content).toContain('3 events found');
   });
 
+  // The output contract is opt-out for guided-generation backends only (refs
+  // #270): the default path must keep emitting it byte-identically, since the
+  // qwen evals were calibrated against that exact prompt.
+  it('drops the output contract only when includeOutputContract is false', () => {
+    const history: AssistantMessage[] = [{ role: 'user', text: 'hello' }];
+    const withContract = buildWebLlmMessages('sys', history, [], GENERIC_MODEL_ID);
+    const withoutContract = buildWebLlmMessages('sys', history, [], GENERIC_MODEL_ID, true, true, false);
+
+    expect(withContract.at(-1)?.content).toContain('Respond with ONLY a single JSON object');
+    expect(withoutContract.at(-1)).toEqual({ role: 'user', content: 'hello' });
+    // Default arg is unchanged from before the opt-out existed.
+    expect(buildWebLlmMessages('sys', history, [], GENERIC_MODEL_ID, true, true)).toEqual(withContract);
+  });
+
   it('appends the /no_think directive to the system message for a Qwen3 model id', () => {
     const messages = buildWebLlmMessages('sys', [], [], 'Qwen3-1.7B-q4f16_1-MLC');
     expect(messages[0].content).toContain('/no_think');
