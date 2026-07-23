@@ -4,6 +4,7 @@ import { sharedMockProvider } from '../mock';
 import { WebLlmProvider } from '../webllm';
 import { OpenAiProvider } from '../openai';
 import { NativeLlmProvider } from '../native-llm';
+import { AppleIntelligenceProvider } from '../apple-intelligence';
 import { STORAGE_KEYS } from '../../../zmninja-ng-constants';
 import type { ProviderConfig } from '../../types';
 
@@ -25,6 +26,13 @@ const ollamaConfig: ProviderConfig = {
 
 const nativeConfig: ProviderConfig = {
   backend: 'native',
+  modelId: MODEL_ID,
+  ollamaBaseUrl: 'http://localhost:11434/v1',
+  ollamaModel: '',
+};
+
+const appleConfig: ProviderConfig = {
+  backend: 'apple',
   modelId: MODEL_ID,
   ollamaBaseUrl: 'http://localhost:11434/v1',
   ollamaModel: '',
@@ -82,6 +90,7 @@ describe('getAssistantProvider', () => {
     expect(getAssistantProvider(onDeviceConfig)).toBe(sharedMockProvider);
     expect(getAssistantProvider(ollamaConfig)).toBe(sharedMockProvider);
     expect(getAssistantProvider(nativeConfig)).toBe(sharedMockProvider);
+    expect(getAssistantProvider(appleConfig)).toBe(sharedMockProvider);
   });
 
   it('returns a WebLlmProvider for backend "on-device" when not in test mode', () => {
@@ -107,5 +116,11 @@ describe('getAssistantProvider', () => {
     vi.stubEnv('PROD', false);
 
     expect(getAssistantProvider(nativeConfig)).toBeInstanceOf(NativeLlmProvider);
+  });
+
+  it('returns an AppleIntelligenceProvider for backend "apple" when not in test mode', () => {
+    vi.stubEnv('PROD', false);
+
+    expect(getAssistantProvider(appleConfig)).toBeInstanceOf(AppleIntelligenceProvider);
   });
 });

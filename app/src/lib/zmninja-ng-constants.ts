@@ -817,6 +817,10 @@ export const ASSISTANT = {
     url: 'https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/main/Qwen3-4B-Instruct-2507-Q4_K_M.gguf',
     approxSizeMb: 2500,
   },
+  // Apple Foundation Models (`AppleIntelligence` bridge, refs #270): the OS owns the model, so
+  // there is no id to download or select. This fixed label is only the `model` field stamped onto
+  // captured exchanges so a transcript names which backend answered.
+  appleIntelligenceModelId: 'apple-intelligence',
   // Ollama's default local HTTP address, OpenAI-compatible endpoint (refs #246).
   // On a phone this must be replaced with the Ollama server's LAN address:
   // "localhost" from the app's own process never reaches a server on another

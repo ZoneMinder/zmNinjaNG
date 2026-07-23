@@ -1,0 +1,187 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { AppleIntelligenceProvider } from '../apple-intelligence';
+import type { ToolDefinition } from '../../types';
+import { ASSISTANT } from '../../../zmninja-ng-constants';
+
+const chatMock = vi.fn();
+const cancelChatMock = vi.fn().mockResolvedValue(undefined);
+const isSupportedMock = vi.fn().mockResolvedValue({ supported: true, contextSize: 4096 });
+vi.mock('../../../../plugins/apple-intelligence', () => ({
+  AppleIntelligence: {
+    // Same device-faithful trap as native-llm's mock: the real Capacitor proxy
+    // treats `.then` as a native method, so resolving a promise with the plugin
+    // object hangs on device. Throwing keeps this test honest about that contract.
+    then: () => {
+      throw new Error('"AppleIntelligence.then()" is not implemented (never resolve a promise with the plugin proxy)');
+    },
+    chat: (options: unknown) => chatMock(options),
+    cancelChat: () => cancelChatMock(),
+    isSupported: () => isSupportedMock(),
+  },
+}));
+
+vi.mock('../../../platform', () => ({
+  Platform: { isNative: true },
+}));
+
+const TOOL: ToolDefinition = {
+  name: 'count_events',
+  description: 'Counts events',
+  schema: { type: 'object', properties: { interval: { type: 'string' } } },
+  execute: vi.fn(),
+};
+
+describe('AppleIntelligenceProvider.chat', () => {
+  beforeEach(() => {
+    chatMock.mockReset();
+    cancelChatMock.mockClear();
+    isSupportedMock.mockClear();
+    isSupportedMock.mockResolvedValue({ supported: true, contextSize: 4096 });
+  });
+
+  it('adopts the usable context window learned from isSupported', async () => {
+    isSupportedMock.mockResolvedValue({ supported: true, contextSize: 4096 });
+    chatMock.mockResolvedValue({ content: '{"answer":"ok"}' });
+    const provider = new AppleIntelligenceProvider();
+    expect(provider.contextWindow).toBeUndefined(); // not learned until the first native call
+    await provider.chat([{ role: 'user', text: 'hi' }], [], 'sys', new AbortController().signal);
+    expect(provider.contextWindow).toBe(4096);
+  });
+
+  it('parses a well-formed reply into an answer turn', async () => {
+    chatMock.mockResolvedValue({ content: '{"answer": "There were 5 events today."}' });
+
+    const provider = new AppleIntelligenceProvider();
+    const turn = await provider.chat([{ role: 'user', text: 'how many today?' }], [TOOL], 'sys', new AbortController().signal);
+
+    expect(turn.text).toBe('There were 5 events today.');
+    expect(turn.toolCalls).toEqual([]);
+  });
+
+  // Self-repair retry: a garbage first reply is followed by the failed reply
+  // plus a correction, and the second attempt recovers.
+  it('retries a garbage reply with a self-repair prompt, then succeeds', async () => {
+    chatMock
+      .mockResolvedValueOnce({ content: '```' })
+      .mockResolvedValueOnce({ content: '{"answer": "Two people came."}' });
+
+    const provider = new AppleIntelligenceProvider();
+    const turn = await provider.chat([{ role: 'user', text: 'hi' }], [], 'sys', new AbortController().signal);
+
+    expect(turn.text).toBe('Two people came.');
+    expect(chatMock).toHaveBeenCalledTimes(2);
+
+    const secondOptions = chatMock.mock.calls[1][0] as { messagesJson: string };
+    const secondMessages = JSON.parse(secondOptions.messagesJson) as Array<{ role: string; content: string }>;
+    expect(secondMessages.at(-2)).toMatchObject({ role: 'assistant', content: '```' });
+    expect(secondMessages.at(-1)?.content).toContain('not one valid JSON object');
+  });
+
+  it('cancels the native call and throws AbortError when the signal aborts mid-flight', async () => {
+    const controller = new AbortController();
+    chatMock.mockImplementation(() => {
+      controller.abort();
+      return Promise.resolve({ content: '{"answer": "partial"}' });
+    });
+
+    const provider = new AppleIntelligenceProvider();
+    await expect(
+      provider.chat([{ role: 'user', text: 'hi' }], [], 'sys', controller.signal),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(cancelChatMock).toHaveBeenCalled();
+  });
+
+  // Fire-and-forget cancelChat() must not become an unhandled rejection when
+  // the native side has nothing in flight to cancel: caught and logged at
+  // WARN, and the abort still surfaces cleanly as AbortError.
+  it('logs a rejecting cancelChat at WARN instead of an unhandled rejection, and still throws AbortError', async () => {
+    const { log, LogLevel: Level } = await import('../../../logger');
+    const spy = vi.spyOn(log, 'assistant');
+    cancelChatMock.mockRejectedValueOnce(new Error('nothing to cancel'));
+    const controller = new AbortController();
+    chatMock.mockImplementation(() => {
+      controller.abort();
+      return Promise.resolve({ content: '{"answer": "partial"}' });
+    });
+
+    const provider = new AppleIntelligenceProvider();
+    await expect(
+      provider.chat([{ role: 'user', text: 'hi' }], [], 'sys', controller.signal),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    // Lets any unhandled rejection from the fire-and-forget cancelChat surface.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(spy).toHaveBeenCalledWith('Apple Intelligence cancelChat failed', Level.WARN, expect.objectContaining({ error: expect.any(Error) }));
+  });
+
+  it('attaches an exchange but no usage to the returned turn', async () => {
+    chatMock.mockResolvedValue({ content: '{"answer": "ok"}' });
+
+    const provider = new AppleIntelligenceProvider();
+    const turn = await provider.chat([{ role: 'user', text: 'hi' }], [], 'sys', new AbortController().signal);
+
+    expect(turn.usage).toBeUndefined(); // Foundation Models reports no token counts
+    expect(turn.exchange).toMatchObject({ backend: 'apple', model: ASSISTANT.appleIntelligenceModelId });
+    expect(turn.exchange!.received).toContain('ok');
+  });
+
+  // Coded plugin rejections (the native side's `reject(message, code)`, refs
+  // #270): the provider translates `.code`, not the raw English message.
+  it('maps a CHAT_BUSY rejection to the localized busy sentinel', async () => {
+    chatMock.mockRejectedValue(Object.assign(new Error('A chat is already running'), { code: 'CHAT_BUSY' }));
+
+    const provider = new AppleIntelligenceProvider();
+    await expect(
+      provider.chat([{ role: 'user', text: 'hi' }], [], 'sys', new AbortController().signal),
+    ).rejects.toThrow('__i18n:assistant.native_busy');
+  });
+
+  it('maps an ENGINE_FAILED (or any other/missing) rejection to the generic localized sentinel, logging the raw reason', async () => {
+    const { log, LogLevel: Level } = await import('../../../logger');
+    const spy = vi.spyOn(log, 'assistant');
+    chatMock.mockRejectedValue(Object.assign(new Error('Failed to run model'), { code: 'ENGINE_FAILED' }));
+
+    const provider = new AppleIntelligenceProvider();
+    await expect(
+      provider.chat([{ role: 'user', text: 'hi' }], [], 'sys', new AbortController().signal),
+    ).rejects.toThrow('__i18n:assistant.native_engine_failed');
+
+    expect(spy).toHaveBeenCalledWith(
+      'Apple Intelligence chat failed',
+      Level.ERROR,
+      expect.objectContaining({ code: 'ENGINE_FAILED', message: 'Failed to run model' }),
+    );
+  });
+
+  it('falls back to the generic localized sentinel for a rejection with no code at all', async () => {
+    chatMock.mockRejectedValue(new Error('network hiccup'));
+
+    const provider = new AppleIntelligenceProvider();
+    await expect(
+      provider.chat([{ role: 'user', text: 'hi' }], [], 'sys', new AbortController().signal),
+    ).rejects.toThrow('__i18n:assistant.native_engine_failed');
+  });
+
+  it('builds messages via buildWebLlmMessages: few-shot anchors present', async () => {
+    chatMock.mockResolvedValue({ content: '{"answer": "ok"}' });
+
+    const provider = new AppleIntelligenceProvider();
+    await provider.chat([{ role: 'user', text: 'hi' }], [TOOL], 'sys', new AbortController().signal);
+
+    const options = chatMock.mock.calls[0][0] as { messagesJson: string };
+    const messages = JSON.parse(options.messagesJson) as Array<{ role: string; content: string }>;
+    // Few-shot anchors follow the system message.
+    expect(messages[1]).toMatchObject({ role: 'user', content: 'How many events were recorded today?' });
+  });
+});
+
+describe('AppleIntelligenceProvider platform gate', () => {
+  it('throws the shared "not available" message when not running on a native platform', async () => {
+    vi.resetModules();
+    vi.doMock('../../../platform', () => ({ Platform: { isNative: false } }));
+    const { AppleIntelligenceProvider: GatedProvider, APPLE_INTELLIGENCE_NOT_AVAILABLE_MESSAGE: gatedMessage } = await import('../apple-intelligence');
+    const provider = new GatedProvider();
+    await expect(provider.chat([], [], 'sys', new AbortController().signal)).rejects.toThrow(gatedMessage);
+    vi.doUnmock('../../../platform');
+  });
+});

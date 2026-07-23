@@ -202,6 +202,19 @@ vi.mock('../plugins/native-llm', () => ({
   },
 }));
 
+vi.mock('../plugins/apple-intelligence', () => ({
+  AppleIntelligence: {
+    // Same device-faithful proxy trap as the NativeLlm mock above: `await
+    // <plugin>` must fail loudly rather than hang on a real device.
+    then: () => {
+      throw new Error('"AppleIntelligence.then()" is not implemented (never resolve a promise with the plugin proxy)');
+    },
+    isSupported: vi.fn().mockResolvedValue({ supported: false, reason: 'platform' }),
+    chat: vi.fn().mockResolvedValue({ content: '' }),
+    cancelChat: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
 // Mock SafeArea plugin
 vi.mock('../src/plugins/safe-area', () => ({
   SafeArea: {

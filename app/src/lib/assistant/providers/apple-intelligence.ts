@@ -1,0 +1,213 @@
+/**
+ * Apple Foundation Models adapter (via the Capacitor `AppleIntelligence`
+ * bridge, refs #270)
+ *
+ * Structurally a trimmed `providers/native-llm.ts`: the prompt/parse stack is
+ * again reused wholesale from `providers/webllm.ts` (`buildWebLlmMessages`,
+ * `parseWebLlmTurn`, `SELF_REPAIR_PROMPT`), driving the same constrained-JSON
+ * contract over a different transport. Unlike the native bridge, the OS owns
+ * the model: there is no download, no KV cache slot, no weight-load/prefill
+ * status stream, and no token counts, so those concerns are simply absent here.
+ */
+import type { AssistantProvider, AssistantMessage, AssistantStatus, AssistantTurn, CompletionResult, ToolDefinition } from '../types';
+import type { ChatCompletionMessageParam } from '@mlc-ai/web-llm';
+import { ASSISTANT } from '../../zmninja-ng-constants';
+import { log, LogLevel } from '../../logger';
+import { Platform } from '../../platform';
+import { buildWebLlmMessages, parseWebLlmTurn, SELF_REPAIR_PROMPT, PARSE_ERROR_TEXT } from './webllm';
+import { captureExchange } from '../exchange';
+import { MODEL_NOT_AVAILABLE_MESSAGE } from '../model-download';
+
+/** Thrown when this provider is constructed off a supporting platform (web,
+ *  Electron, Android): the `AppleIntelligence` bridge only exists in the iOS
+ *  build. Deliberately the SAME message the native/WebLLM missing-model cases
+ *  throw so AskPanel's existing `PROVIDER_NOT_AVAILABLE_MESSAGE` check
+ *  ("not configured, go to Settings") covers this case too, with no separate UI
+ *  path (refs #270, same reasoning as native-llm.ts's own constant). */
+export const APPLE_INTELLIGENCE_NOT_AVAILABLE_MESSAGE = MODEL_NOT_AVAILABLE_MESSAGE;
+
+/** The on-device Apple Foundation Models provider: the OS-managed system model,
+ *  driven with the same constrained-JSON contract WebLLM uses (see module
+ *  header) instead of reimplementing prompt building or parsing. */
+export class AppleIntelligenceProvider implements AssistantProvider {
+  private readonly modelId = ASSISTANT.appleIntelligenceModelId;
+  private readonly temperature: number;
+  /** The model's usable chat window, learned from `isSupported().contextSize` on the first native
+   *  call this turn. Undefined until then; `isContextNearlyFull` no-ops on undefined, and it is read
+   *  only AFTER a turn's chat has run (AskPanel), by which point it is populated. Instance-scoped: a
+   *  fresh provider per turn re-learns it cheaply rather than caching a stale value. */
+  private deviceContextWindow?: number;
+  get contextWindow(): number | undefined {
+    return this.deviceContextWindow;
+  }
+
+  constructor(temperature?: number) {
+    this.temperature = temperature ?? ASSISTANT.assistantTemperature;
+  }
+
+  /** Dynamic import behind a platform check (rule 13): the plugin package is
+   *  native-only, so importing it eagerly would pull native bridge code into
+   *  the web/Electron bundle for a backend those platforms can never run. */
+  private async getPlugin() {
+    if (!Platform.isNative) throw new Error(APPLE_INTELLIGENCE_NOT_AVAILABLE_MESSAGE);
+    // Namespace, not the plugin object: resolving a promise with Capacitor's
+    // registerPlugin proxy makes the runtime probe `.then` as a native method,
+    // which rejects as unimplemented while the awaiter hangs forever (refs
+    // #270). Callers destructure `AppleIntelligence` AFTER the await.
+    return import('../../../plugins/apple-intelligence');
+  }
+
+  /** One `plugin.chat()` call, with the abort signal wired to `cancelChat()`.
+   *  Mirrors `NativeLlmProvider.withCancel`: the listener asks the native side
+   *  to stop generating, and the caller's own `signal.aborted` check (run right
+   *  after this resolves, success or failure) turns that into the AbortError
+   *  callers expect, regardless of whether cancellation resolved the call or
+   *  made it reject. */
+  private async withCancel<T>(
+    plugin: Awaited<ReturnType<AppleIntelligenceProvider['getPlugin']>>['AppleIntelligence'],
+    signal: AbortSignal,
+    work: () => Promise<T>,
+  ): Promise<T> {
+    const onAbort = () =>
+      void plugin.cancelChat().catch((error) => log.assistant('Apple Intelligence cancelChat failed', LogLevel.WARN, { error }));
+    signal.addEventListener('abort', onAbort, { once: true });
+    try {
+      return await work();
+    } catch (error) {
+      if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+      throw this.mapPluginError(error);
+    } finally {
+      signal.removeEventListener('abort', onAbort);
+    }
+  }
+
+  /** Translates a rejected `plugin.chat()` call into the Error this provider
+   *  should throw, keyed on the stable `code` the native side rejects with
+   *  (Capacitor copies every key of the native error object, `code` included,
+   *  onto the JS exception). CHAT_BUSY gets its own localized `__i18n:` copy
+   *  (AskPanel renders any thrown `__i18n:`-prefixed message via `t()`);
+   *  everything else falls back to a generic localized message, with the real
+   *  reason only in the log - not shown to the user, since it is the native
+   *  side's untranslated `localizedDescription`. The `__i18n:` keys are shared
+   *  with the native backend (no new strings, both are on-device engines). */
+  private mapPluginError(error: unknown): Error {
+    const code = error && typeof error === 'object' && 'code' in error ? (error as { code?: unknown }).code : undefined;
+    if (code === 'CHAT_BUSY') return new Error('__i18n:assistant.native_busy');
+    log.assistant('Apple Intelligence chat failed', LogLevel.ERROR, {
+      code,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return new Error('__i18n:assistant.native_engine_failed');
+  }
+
+  /** Learn the usable chat window from `isSupported()` once per provider instance.
+   *  Best-effort: on failure `deviceContextWindow` stays undefined (auto-clear simply no-ops). */
+  private async ensureDeviceContext(
+    plugin: Awaited<ReturnType<AppleIntelligenceProvider['getPlugin']>>['AppleIntelligence'],
+  ): Promise<void> {
+    if (this.deviceContextWindow !== undefined) return;
+    try {
+      const r = await plugin.isSupported();
+      if (typeof r.contextSize === 'number') this.deviceContextWindow = r.contextSize;
+    } catch (error) {
+      log.assistant('Apple Intelligence isSupported (contextSize) probe failed', LogLevel.WARN, { error });
+    }
+  }
+
+  /** Bare system + user, deliberately bypassing `buildWebLlmMessages`: no tool
+   *  catalog, no few-shot, no OUTPUT_CONTRACT (mirrors `NativeLlmProvider.complete`).
+   *  `jsonSchema` is accepted for interface parity but unenforced: the Foundation
+   *  Models bridge has no grammar-constrained decoding, so the caller must still
+   *  parse defensively. */
+  async complete(
+    system: string,
+    text: string,
+    signal: AbortSignal,
+    _jsonSchema?: Record<string, unknown>,
+    _onStatus?: (status: AssistantStatus) => void,
+  ): Promise<CompletionResult> {
+    if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+    const { AppleIntelligence: plugin } = await this.getPlugin();
+    await this.ensureDeviceContext(plugin);
+    const messages: ChatCompletionMessageParam[] = [
+      { role: 'system', content: system },
+      { role: 'user', content: text },
+    ];
+    const startedAt = Date.now();
+    const response = await this.withCancel(plugin, signal, () =>
+      plugin.chat({
+        messagesJson: JSON.stringify(messages),
+        temperature: this.temperature,
+        maxTokens: ASSISTANT.maxTokens,
+      }),
+    );
+    if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+    return {
+      text: response.content,
+      exchange: captureExchange({ backend: 'apple', model: this.modelId, sent: messages, received: response.content, startedAt }),
+    };
+  }
+
+  async chat(
+    messages: AssistantMessage[],
+    tools: ToolDefinition[],
+    system: string,
+    signal: AbortSignal,
+    onStatus?: (status: AssistantStatus) => void,
+  ): Promise<AssistantTurn> {
+    if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+    const { AppleIntelligence: plugin } = await this.getPlugin();
+    await this.ensureDeviceContext(plugin);
+    const chatMessages = buildWebLlmMessages(system, messages, tools, this.modelId);
+
+    // Same self-repair retry shape as NativeLlmProvider.chat / WebLlmProvider.chat:
+    // the failed reply plus a correction naming the fault are appended before
+    // each retry, and only the FINAL attempt raises the temperature.
+    let turn: AssistantTurn = { text: PARSE_ERROR_TEXT, toolCalls: [] };
+    for (let attempt = 1; attempt <= ASSISTANT.maxParseAttempts; attempt++) {
+      if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+      if (attempt > 1) onStatus?.({ phase: 'retry', attempt });
+      log.assistant('Sending Apple Intelligence chat request', LogLevel.DEBUG, {
+        modelId: this.modelId,
+        messageCount: chatMessages.length,
+        attempt,
+      });
+
+      const startedAt = Date.now();
+      const response = await this.withCancel(plugin, signal, () =>
+        plugin.chat({
+          messagesJson: JSON.stringify(chatMessages),
+          temperature: attempt < ASSISTANT.maxParseAttempts ? this.temperature : Math.max(this.temperature, ASSISTANT.assistantRetryTemperature),
+          maxTokens: ASSISTANT.maxTokens,
+        }),
+      );
+      if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+
+      log.assistant('Apple Intelligence raw response', LogLevel.DEBUG, { modelId: this.modelId, content: response.content, attempt });
+
+      turn = parseWebLlmTurn(response.content);
+      // No usage: the Foundation Models API reports no token counts, so `turn.usage`
+      // stays undefined (absent counts, not zero - see AssistantTurn.usage).
+      // Captured on every attempt, so a retried turn shows what it retried from;
+      // the last attempt's capture is the one that survives on `turn`.
+      turn.exchange = captureExchange({
+        backend: 'apple',
+        model: this.modelId,
+        sent: chatMessages,
+        received: response.content,
+        startedAt,
+      });
+      if (turn.text !== PARSE_ERROR_TEXT) return turn;
+
+      log.assistant('Apple Intelligence response failed to parse; retrying if attempts remain', LogLevel.WARN, {
+        modelId: this.modelId,
+        content: response.content,
+        attempt,
+        maxAttempts: ASSISTANT.maxParseAttempts,
+      });
+      chatMessages.push({ role: 'assistant', content: response.content });
+      chatMessages.push({ role: 'user', content: SELF_REPAIR_PROMPT });
+    }
+    return turn;
+  }
+}

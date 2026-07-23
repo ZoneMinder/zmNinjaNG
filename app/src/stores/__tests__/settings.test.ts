@@ -343,4 +343,14 @@ describe('assistant backend migration for mobile', () => {
     const s = useSettingsStore.getState().getProfileSettings('profile-native');
     expect(s.assistantBackend).toBe('native');
   });
+
+  // refs #270: 'apple' (Apple Foundation Models) is an on-device engine like
+  // 'native', with no 'on-device' coercion; mergeProfileSettings leaves it be
+  // even on a desktop/web profile that only stored it via an iOS device sync.
+  it('leaves an "apple" backend untouched on a non-native platform', () => {
+    isNative = false;
+    useSettingsStore.getState().updateProfileSettings('profile-apple', { assistantBackend: 'apple' });
+    const s = useSettingsStore.getState().getProfileSettings('profile-apple');
+    expect(s.assistantBackend).toBe('apple');
+  });
 });
