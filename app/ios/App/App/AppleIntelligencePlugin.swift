@@ -93,7 +93,11 @@ public class AppleIntelligencePlugin: CAPPlugin, CAPBridgedPlugin {
                    let schemaData = schemaJson.data(using: .utf8),
                    let schemaRoot = (try? JSONSerialization.jsonObject(with: schemaData)) as? [String: Any],
                    let generationSchema = self?.buildGenerationSchema(fromJsonSchema: schemaRoot) {
-                    let response = try await session.respond(to: prompt, schema: generationSchema, options: options)
+                    // includeSchemaInPrompt defaults to true, which injects the full schema text
+                    // into the prompt ON TOP of the tool catalog the JS layer already sends; on the
+                    // 4096-token window that overflowed on the FIRST turn of a fresh conversation
+                    // (refs #270). The decoder constraint alone is what we want.
+                    let response = try await session.respond(to: prompt, schema: generationSchema, includeSchemaInPrompt: false, options: options)
                     call.resolve(["content": response.content.jsonString])
                     return
                 }
