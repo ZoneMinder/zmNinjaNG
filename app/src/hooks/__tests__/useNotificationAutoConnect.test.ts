@@ -530,7 +530,9 @@ describe('useNotificationAutoConnect', () => {
         await Promise.resolve();
       });
 
-      expect(params.reconnect).toHaveBeenCalled();
+      // Forced: the socket still reads as connected, so an unforced reconnect
+      // would be refused by the service (refs #274).
+      expect(params.reconnect).toHaveBeenCalledWith(true);
     });
 
     it('does not call reconnect when WebSocket is alive on tab focus', async () => {
@@ -554,7 +556,9 @@ describe('useNotificationAutoConnect', () => {
       expect(params.reconnect).not.toHaveBeenCalled();
     });
 
-    it('does not check liveness when not connected on tab focus', async () => {
+    // A hidden tab has its timers frozen, so the scheduled backoff reconnect
+    // may be minutes out or may never have run. Retry on focus (refs #274).
+    it('reconnects without a liveness check when disconnected on tab focus', async () => {
       const params = makeParams({
         isConnected: false,
         settings: { ...defaultSettings, enabled: true, notificationMode: 'es' },
@@ -571,6 +575,7 @@ describe('useNotificationAutoConnect', () => {
       });
 
       expect(mockCheckAlive).not.toHaveBeenCalled();
+      expect(params.reconnect).toHaveBeenCalledWith();
     });
 
     it('removes visibilitychange listener on unmount', () => {
@@ -584,6 +589,52 @@ describe('useNotificationAutoConnect', () => {
       expect(removed).toBe(true);
 
       removeEventSpy.mockRestore();
+    });
+  });
+
+  describe('app resume reconnect (native)', () => {
+    it('reconnects on app resume while disconnected, without a liveness check', async () => {
+      mockPlatform.isNative = true;
+      const params = makeParams({
+        isConnected: false,
+        settings: { ...defaultSettings, enabled: true, notificationMode: 'es' },
+      });
+      renderHook(() => useNotificationAutoConnect(params));
+
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      const handler = mockAppAddListener.mock.calls.find(([event]) => event === 'appStateChange')?.[1];
+      await act(async () => {
+        await handler({ isActive: true });
+      });
+
+      expect(mockCheckAlive).not.toHaveBeenCalled();
+      expect(params.reconnect).toHaveBeenCalledWith();
+    });
+
+    it('forces a reconnect on app resume when the socket does not answer', async () => {
+      mockPlatform.isNative = true;
+      mockCheckAlive.mockResolvedValue(false);
+      const params = makeParams({
+        isConnected: true,
+        settings: { ...defaultSettings, enabled: true, notificationMode: 'es' },
+      });
+      renderHook(() => useNotificationAutoConnect(params));
+
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      const handler = mockAppAddListener.mock.calls.find(([event]) => event === 'appStateChange')?.[1];
+      await act(async () => {
+        await handler({ isActive: true });
+      });
+
+      expect(params.reconnect).toHaveBeenCalledWith(true);
     });
   });
 });

@@ -1657,9 +1657,22 @@ Singleton via ``getNotificationService()``.
   whether a response arrives in time. ``useNotificationAutoConnect`` calls it
   on app resume (mobile ``appStateChange``) and tab visibility change (desktop
   ``visibilitychange``) to detect a socket the OS killed while backgrounded.
-- ``reconnectNow()`` fires on network restore. ``useNotificationAutoConnect``
+  It only runs when the store still believes it is connected; a resume that
+  finds the state already disconnected skips the ping and reconnects at once,
+  because the backoff timer was frozen along with the rest of the WebView.
+- ``reconnectNow(force)`` fires on network restore. ``useNotificationAutoConnect``
   listens to ``window.addEventListener('online')`` on desktop/web and
-  ``@capacitor/network`` on mobile.
+  ``@capacitor/network`` on mobile. Without ``force`` it declines to act while
+  the state is connected, connecting, or authenticating. A failed liveness check
+  passes ``force``: a socket that outlived an app suspension reads as ``OPEN``
+  with a dead peer, so the caller that proved it is gone would otherwise be the
+  one caller turned away (refs #274). Forcing closes the stale socket first,
+  clearing ``this.ws`` so the late close event fails the handler identity guard
+  and cannot schedule a second, competing reconnect.
+- Every failure path ends in either a live socket or a scheduled reconnect. A
+  ``WebSocket`` constructor throw produces no close event, so ``_connect``
+  schedules the retry from its own catch; the auth timeout closes the socket but
+  leaves ``this.ws`` set so ``_handleClose`` runs and schedules it there.
 
 The service imports no stores. ``stores/notifications.ts`` injects a
 ``ZMNotificationProviders`` object at connect time carrying the fresh-token

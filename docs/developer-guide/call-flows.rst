@@ -782,7 +782,11 @@ alive, and turns each live alarm into an event in the store and a toast on scree
 
 #. **Reconnect with backoff.** On an unintended close, ``_scheduleReconnect`` waits
    an exponential, jittered delay (capped at two minutes); ``reconnectNow`` jumps
-   the queue on network-restored.
+   the queue on network-restored and on app resume. Resume matters more than it
+   looks: a suspended WebView freezes that timer, so without the resume nudge the
+   app can sit disconnected for the full two-minute cap after a phone unlock.
+   ``reconnectNow(true)`` additionally replaces a socket that still reads as open
+   but failed its liveness ping (refs #274).
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/notifications.ts#L518>`__
    · → :doc:`12-shared-services-and-components`
 

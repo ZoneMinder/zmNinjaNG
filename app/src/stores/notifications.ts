@@ -78,7 +78,8 @@ interface NotificationState {
   // Actions - Connection
   connect: (profileId: string, username: string, password: string, portalUrl: string) => Promise<void>;
   disconnect: () => void;
-  reconnect: () => Promise<void>;
+  /** @param force - reconnect even while the service still reports connected */
+  reconnect: (force?: boolean) => Promise<void>;
 
   // Actions - Events
   addEvent: (profileId: string, event: ZMAlarmEvent, source?: NotificationSource) => void;
@@ -325,10 +326,10 @@ export const useNotificationStore = create<NotificationState>()(
         });
       },
 
-      reconnect: async () => {
-        log.notifications('Triggering reconnect', LogLevel.INFO);
+      reconnect: async (force = false) => {
+        log.notifications('Triggering reconnect', LogLevel.INFO, { force });
         const service = getNotificationService();
-        service.reconnectNow();
+        service.reconnectNow(force);
       },
 
       // ========== Event Actions ==========

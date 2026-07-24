@@ -74,6 +74,8 @@ Tap a notification entry to jump to the corresponding event.
 - Ensure the server hostname is correct
 - Check app logs for WebSocket connection errors
 
+The connection to the Event Server drops while the app is backgrounded or the phone is locked, because the operating system suspends the app. Reopening the app reconnects it, and the status badge returns to connected within a few seconds. Push notifications are delivered over a separate channel, so they keep arriving even during that gap.
+
 **No in-app notifications (Direct mode, desktop)**
 - Verify ZoneMinder's Notifications API is available (the Direct option will be greyed out if not detected)
 - Check that the polling interval is configured

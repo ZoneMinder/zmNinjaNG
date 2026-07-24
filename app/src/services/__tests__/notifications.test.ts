@@ -236,6 +236,42 @@ describe('ZMNotificationService', () => {
       expect(wsCtor).toHaveBeenCalledTimes(1);
     });
 
+    // A socket that survived an app suspension reads as OPEN with a dead peer,
+    // so the failed liveness check is the only signal it is gone (refs #274).
+    it('reconnectNow(force) replaces a socket the state still calls connected', async () => {
+      const stale = await connectAndAuth();
+
+      service.reconnectNow(true);
+
+      expect(wsCtor).toHaveBeenCalledTimes(2);
+      expect(stale.readyState).toBe(MockWebSocket.CLOSED);
+    });
+
+    it('ignores the stale socket closing after a forced reconnect', async () => {
+      const stale = await connectAndAuth();
+      service.reconnectNow(true);
+
+      // The old socket's close event arrives late; it must not schedule a
+      // second reconnect on top of the one already running.
+      stale._triggerClose(false, 1006);
+      await vi.advanceTimersByTimeAsync(300_000);
+
+      expect(wsCtor).toHaveBeenCalledTimes(2);
+    });
+
+    it('schedules a reconnect when the WebSocket constructor throws', async () => {
+      (wsCtor as unknown as ReturnType<typeof vi.fn>).mockImplementationOnce(() => {
+        throw new Error('SecurityError: blocked scheme');
+      });
+
+      await service.connect(testConfig, providers);
+      expect(service.getState()).toBe('error');
+
+      // Nothing produced a close event, so only the catch can retry
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(wsCtor).toHaveBeenCalledTimes(2);
+    });
+
     it('does not auto-reconnect after auth failure', async () => {
       const connectPromise = service.connect(testConfig);
       const ws = wsCtor.instances[0];
@@ -263,6 +299,23 @@ describe('ZMNotificationService', () => {
 
       // State should be error (set by timeout before catch block)
       expect(service.getState()).toBe('error');
+    });
+
+    // The timeout used to null `this.ws` before closing, so the close event
+    // failed the handler's identity guard and no reconnect was ever scheduled:
+    // the app sat in 'error' until the user tapped Connect (refs #274).
+    it('still reconnects after the socket closes following an auth timeout', async () => {
+      const connectPromise = service.connect(testConfig);
+      const ws = wsCtor.instances[0];
+      ws._triggerOpen();
+
+      await vi.advanceTimersByTimeAsync(20_000);
+      await connectPromise;
+
+      ws._triggerClose(false, 1006);
+      await vi.advanceTimersByTimeAsync(3000);
+
+      expect(wsCtor).toHaveBeenCalledTimes(2);
     });
   });
 
