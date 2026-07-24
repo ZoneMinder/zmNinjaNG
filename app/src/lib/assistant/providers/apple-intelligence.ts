@@ -2,14 +2,15 @@
  * Apple Foundation Models adapter (via the Capacitor `AppleIntelligence`
  * bridge, refs #270)
  *
- * Structurally a trimmed `providers/native-llm.ts`: the prompt/parse stack is
- * again reused from `providers/webllm.ts` (`buildWebLlmMessages`,
+ * Structurally a trimmed `providers/native-llm.ts`: the message assembly and
+ * parsing are reused from `providers/webllm.ts` (`buildWebLlmMessages`,
  * `parseWebLlmTurn`), driving the same JSON turn shape over a different
- * transport. The format teaching is the one part NOT reused: this backend
- * constrains generation with a schema, so the few-shot block and the textual
- * output contract are switched off (see `chat`). Unlike the native bridge, the OS owns
- * the model: there is no download, no KV cache slot, no weight-load/prefill
- * status stream, and no token counts, so those concerns are simply absent here.
+ * transport. The INSTRUCTIONS are the part not reused: this backend constrains
+ * generation with a schema, so the few-shot block and the textual output
+ * contract are switched off, and the prompt itself is rebuilt to Apple's
+ * Foundation Models guidance (see `buildAppleInstructions`). Unlike the native
+ * bridge, the OS owns the model: there is no download, no KV cache slot and no
+ * weight-load/prefill status stream, so those concerns are simply absent here.
  */
 import type { AssistantProvider, AssistantMessage, AssistantStatus, AssistantTurn, CompletionResult, ToolDefinition } from '../types';
 import type { ChatCompletionMessageParam } from '@mlc-ai/web-llm';
@@ -27,6 +28,15 @@ import { MODEL_NOT_AVAILABLE_MESSAGE } from '../model-download';
  *  ("not configured, go to Settings") covers this case too, with no separate UI
  *  path (refs #270, same reasoning as native-llm.ts's own constant). */
 export const APPLE_INTELLIGENCE_NOT_AVAILABLE_MESSAGE = MODEL_NOT_AVAILABLE_MESSAGE;
+
+/** The first property of every schema branch below, and optional in all of
+ *  them. Apple's guided-generation guidance is to let the model write a short
+ *  reason BEFORE the field that depends on it: generation is sequential, so a
+ *  property emitted first is the only one that can condition the rest. The
+ *  turn parser reads `tool`/`answer` and ignores every other key
+ *  (`toTurn` in webllm.ts), so the extra field costs a sentence and nothing
+ *  else. Optional, so a model with nothing to say skips it. */
+const REASONING_PROPERTY = { reasoning: { type: 'string', description: 'One sentence of reasoning first.' } };
 
 /** The turn contract expressed as a JSON Schema for the plugin's constrained
  *  decoder, so the reply EXACTLY matches one of the shapes `parseWebLlmTurn`
@@ -59,17 +69,100 @@ export const APPLE_INTELLIGENCE_NOT_AVAILABLE_MESSAGE = MODEL_NOT_AVAILABLE_MESS
  *  (`answer` vs `tool`) also make the `anyOf` trivial for the decoder to
  *  discriminate. */
 function buildTurnSchema(tools: ToolDefinition[], hasToolResult: boolean): string {
-  const answerSchema = { type: 'object', properties: { answer: { type: 'string' } }, required: ['answer'] };
+  const answerSchema = { type: 'object', properties: { ...REASONING_PROPERTY, answer: { type: 'string' } }, required: ['answer'] };
   if (tools.length === 0) return JSON.stringify(answerSchema);
   const toolSchemas = tools.map((tool) => ({
     type: 'object',
-    properties: { tool: { enum: [tool.name] }, input: tool.schema },
+    properties: { ...REASONING_PROPERTY, tool: { enum: [tool.name] }, input: tool.schema },
     required: ['tool', 'input'],
   }));
   // Tools registered but nothing fetched yet: tool branches only. A single tool
   // needs no `anyOf` wrapper (the Swift converter takes a bare object schema).
   if (!hasToolResult) return JSON.stringify(toolSchemas.length === 1 ? toolSchemas[0] : { anyOf: toolSchemas });
   return JSON.stringify({ anyOf: [answerSchema, ...toolSchemas] });
+}
+
+/** The lines of `buildSystemPrompt` that carry INSTALL-SPECIFIC facts: today's
+ *  date and timezone, the ZoneMinder version, the answer locale, and the
+ *  detected-object vocabulary. Everything else in that prompt is model-neutral
+ *  prose tuned against the qwen evals, which `buildAppleInstructions` restates
+ *  in a form Foundation Models can actually follow; these four cannot be
+ *  restated, because only the caller knows them.
+ *
+ *  Matched on a stable phrase of each line rather than by position, and the
+ *  test suite asserts every one of them survives a real `buildSystemPrompt`
+ *  output, so a reworded prompt fails a test instead of silently dropping a
+ *  fact the tools depend on. */
+const DYNAMIC_FACT_MARKERS = ["Today's date is", 'ZoneMinder version:', 'locale code:', 'Detected object labels'];
+
+/** The first sentence of a tool description. Apple's guidance is few tools with
+ *  SHORT descriptions; the registry's are three to six sentences long, written
+ *  for models that reward exhaustive prose, and pasting all nine of them costs
+ *  more of this small window than the whole rest of the instructions. The lead
+ *  sentence is the one that says what the tool does; the rest is guard rails the
+ *  turn schema now enforces structurally. Full descriptions stay in use on every
+ *  other backend.
+ *
+ *  An abbreviation is not a sentence end: `navigate`'s description says "(e.g.
+ *  /events/42)" and splitting there left the model the fragment "Navigate the
+ *  app to a specific in-app path (e.g.". A "x.y." abbreviation is recognized by
+ *  the period two characters back. */
+function firstSentence(description: string): string {
+  for (let end = description.indexOf('. '); end !== -1; end = description.indexOf('. ', end + 1)) {
+    if (description[end - 2] !== '.') return description.slice(0, end + 1);
+  }
+  return description;
+}
+
+/** The instruction block for this backend, in place of the shared system prompt
+ *  plus WebLLM's tool catalog (refs #270).
+ *
+ *  Apple documents what Foundation Models responds to: a "You are ..." persona
+ *  that also says who the user is, a few short paragraphs in the imperative,
+ *  emphasis words, short examples INSIDE the instructions, and the single most
+ *  important rule repeated at the end. It also documents what it does badly:
+ *  long prompts. The shared prompt is neither, by design (it is tuned for the
+ *  Ollama and WebLLM models against the eval harness), so this composes an
+ *  FM-native block instead of forwarding it: the caller's dynamic facts are
+ *  carried verbatim (see `DYNAMIC_FACT_MARKERS`), and its measured behavioural
+ *  rules are restated as short imperatives. Measured on the standard fixture:
+ *  well under half the characters of the prompt it replaces.
+ *
+ *  The examples are tool calls only, never an answer with data in it: an
+ *  example answer carrying plausible counts was repeated verbatim as this
+ *  installation's data on the WebLLM path (see `buildFewShotExamples`), and the
+ *  EXAMPLE_ prefix keeps the one placeholder id unmistakable. */
+function buildAppleInstructions(system: string, tools: ToolDefinition[]): string {
+  const facts = system.split('\n').filter((line) => DYNAMIC_FACT_MARKERS.some((marker) => line.includes(marker)));
+  const toolBlock =
+    tools.length === 0
+      ? 'You have no tools this turn. Answer the person directly.'
+      : [
+          'Call ONE tool per turn until you have the data, then answer. Tools:',
+          tools.map((tool) => `- ${tool.name}: ${firstSentence(tool.description)}`).join('\n'),
+          '',
+          'You must only read data and navigate. Say plainly that you cannot arm, disarm, change run state, or delete anything, and name the screen that can: Monitors, Server, or the event itself.',
+          'Copy the person\'s own time words into list_events\' `when`, verbatim and in their language ("yesterday", "letzte Woche"). Never compute a date or a timestamp yourself.',
+          'A summary, recap, or comparison names no thing, so it must carry NO objectType. Only a question naming people, cars, animals, or packages takes objectType, and it must use list_events.',
+          'Quote the result\'s summary line, matchCount, and countsByMonitor exactly. Never tally rows yourself.',
+          'Greetings and thanks get one short, warm sentence.',
+          'When your answer is about particular rows rather than all of them, end it with one line: SHOW: events=<ids> monitors=<ids>',
+          '',
+          'Examples of one turn:',
+          '{"reasoning": "The person wants a rolling 24 hour total.", "tool": "count_events", "input": {"lastCount": 24, "lastUnit": "hour"}}',
+          '{"reasoning": "Copy the time words the person used.", "tool": "list_events", "input": {"when": "yesterday"}}',
+          '{"reasoning": "The name is already resolved.", "tool": "get_monitor", "input": {"monitorId": "EXAMPLE_MONITOR_ID"}}',
+        ].join('\n');
+  return [
+    'You are Ninjii, an expert assistant for the person\'s ZoneMinder security camera system. The person owns these cameras and asks about their own recordings. Your name is spelled exactly "Ninjii" and never changes.',
+    facts.join('\n'),
+    toolBlock,
+    // Apple's closing rule, and the failure this backend actually shows: it
+    // answered data questions with invented counts (refs #270).
+    'Every fact you state must come from a tool result in this turn. Never invent a count, a name, an id, or a time.',
+  ]
+    .filter((block) => block !== '')
+    .join('\n\n');
 }
 
 /** The retry correction for this backend, in place of WebLLM's
@@ -91,6 +184,17 @@ function isTruncatedGeneration(error: unknown): boolean {
   const cause = error instanceof Error ? error.cause : undefined;
   const message = cause instanceof Error ? cause.message : typeof cause === 'string' ? cause : '';
   return message.toLowerCase().includes('deserialize');
+}
+
+/** True when the native side rejected because the prompt no longer fits the
+ *  model's context window (`CONTEXT_FULL`). Distinct from
+ *  `isTruncatedGeneration`: re-sending the same prompt cannot help, only a
+ *  shorter one can. Read off the mapped error's `cause`, which carries the
+ *  native rejection with its `code`. */
+function isContextFull(error: unknown): boolean {
+  const cause = error instanceof Error ? error.cause : undefined;
+  const code = cause && typeof cause === 'object' && 'code' in cause ? (cause as { code?: unknown }).code : undefined;
+  return code === 'CONTEXT_FULL';
 }
 
 /** The on-device Apple Foundation Models provider: the OS-managed system model,
@@ -237,7 +341,11 @@ export class AppleIntelligenceProvider implements AssistantProvider {
     // contract made the model write JSON INSIDE the constrained answer string
     // ({"answer": "{"}). The per-turn schema already pins the legal tool names
     // and their input shapes, so nothing is lost (refs #270).
-    const chatMessages = buildWebLlmMessages(system, messages, tools, this.modelId, false, true, false);
+    // The prompt itself is rebuilt for this backend (see buildAppleInstructions):
+    // persona, the caller's dynamic facts, short tool lines, short examples, and
+    // the one rule that matters repeated last. The shared catalog is switched
+    // off with it, since those instructions carry their own.
+    const chatMessages = buildWebLlmMessages(buildAppleInstructions(system, tools), messages, tools, this.modelId, false, true, false, false);
     // Whether any data has been fetched, which decides if the answer branch is
     // offered at all (see buildTurnSchema). `messages` is the caller's whole
     // trimmed thread, not just this turn, so a conversation whose EARLIER turns
@@ -260,6 +368,9 @@ export class AppleIntelligenceProvider implements AssistantProvider {
     // contract-free `APPLE_RETRY_PROMPT`), and only the FINAL attempt raises
     // the temperature.
     let turn: AssistantTurn = { text: PARSE_ERROR_TEXT, toolCalls: [] };
+    // The context-full recovery below is allowed once per turn: a second
+    // overflow after the history was already halved is a prompt that cannot fit.
+    let historyDropped = false;
     for (let attempt = 1; attempt <= ASSISTANT.maxParseAttempts; attempt++) {
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
       if (attempt > 1) onStatus?.({ phase: 'retry', attempt });
@@ -270,7 +381,7 @@ export class AppleIntelligenceProvider implements AssistantProvider {
       });
 
       const startedAt = Date.now();
-      let response: { content: string };
+      let response: { content: string; promptTokens?: number; completionTokens?: number };
       try {
         response = await this.withCancel(plugin, signal, () =>
           plugin.chat({
@@ -281,6 +392,21 @@ export class AppleIntelligenceProvider implements AssistantProvider {
           }),
         );
       } catch (error) {
+        // Out of window, not broken: re-sending the same prompt cannot help, so
+        // drop the oldest half of the conversation (never the instructions) and
+        // send the same turn again. Mirrors Apple's condensed-transcript
+        // recovery, which rebuilds a session from a shortened transcript when
+        // one overflows. Once per turn; a second overflow propagates.
+        if (isContextFull(error) && !historyDropped) {
+          historyDropped = true;
+          log.assistant('Apple Intelligence context full; retrying with the oldest half of the history dropped', LogLevel.WARN, {
+            modelId: this.modelId,
+            messageCount: chatMessages.length,
+            attempt,
+          });
+          chatMessages.splice(1, Math.floor((chatMessages.length - 1) / 2));
+          continue;
+        }
         // A truncated constrained decode is a failed ATTEMPT, not a failed turn:
         // spend the remaining attempts on it (the last one also raises the
         // temperature) instead of surfacing a dead end for something the very
@@ -299,17 +425,17 @@ export class AppleIntelligenceProvider implements AssistantProvider {
       log.assistant('Apple Intelligence raw response', LogLevel.DEBUG, { modelId: this.modelId, content: response.content, attempt });
 
       turn = parseWebLlmTurn(response.content);
-      // Foundation Models reports no token counts. This estimate exists solely so
-      // AskPanel's auto-clear can act BEFORE the (small, e.g. 4096) context window
-      // overflows and the engine fails; the numbers are approximate by design.
+      // Real counts when the plugin reports them, so AskPanel's fullness check
+      // measures the window the way the model does. The fallback is for an OS
+      // build that reports none: an estimate exists at all only so auto-clear can
+      // act BEFORE the (small, e.g. 4096) window overflows and the engine fails.
       // chars/3.5 (English ~4 chars/token) deliberately OVERestimates tokens, which
       // errs toward clearing the context early rather than crashing on overflow.
-      // Same estimate on every attempt, mirroring native-llm.ts's per-attempt shape.
       // The schema counts too: guided generation feeds it to the decoder, so it
       // occupies the same window the messages do (refs #270).
       const messagesJson = JSON.stringify(chatMessages);
-      const promptTokens = Math.ceil((messagesJson.length + schemaJson.length) / 3.5);
-      const completionTokens = Math.ceil(response.content.length / 3.5);
+      const promptTokens = response.promptTokens ?? Math.ceil((messagesJson.length + schemaJson.length) / 3.5);
+      const completionTokens = response.completionTokens ?? Math.ceil(response.content.length / 3.5);
       turn.usage = {
         promptTokens,
         completionTokens,

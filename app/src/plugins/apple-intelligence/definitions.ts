@@ -18,6 +18,13 @@ export interface AppleIntelligencePlugin {
     // string/number/integer/boolean, enum (strings), array/items, and a top-level
     // anyOf. Omitted for an unconstrained call.
     schemaJson?: string;
-  }): Promise<{ content: string }>; // no token counts: the Foundation Models API reports none
+  }): Promise<{
+    content: string;
+    // Real counts when the Foundation Models session exposes them for this OS
+    // build; absent otherwise, in which case the provider falls back to its own
+    // chars/3.5 estimate (refs #270).
+    promptTokens?: number;
+    completionTokens?: number;
+  }>;
   cancelChat(): Promise<void>;
 }

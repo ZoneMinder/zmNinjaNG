@@ -211,7 +211,13 @@ function isQwen3Model(modelId: string): boolean {
  *  `{"answer": "..."}`, writes the JSON it was told to produce INSIDE the
  *  constrained string field, yielding answers like `{` or `[` (refs #270). It
  *  defaults to true so the WebLLM and native paths stay byte-identical to the
- *  prompt the qwen evals were calibrated against. */
+ *  prompt the qwen evals were calibrated against.
+ *
+ *  `includeToolCatalog` is the same kind of opt-out, for a caller that writes
+ *  its own catalog: the Apple provider states each tool as name plus one short
+ *  sentence, per Apple's short-tool-description guidance, and must not also
+ *  carry this full-description one (refs #270). `tools` is still passed there,
+ *  since the history serialization below needs it. */
 export function buildWebLlmMessages(
   system: string,
   history: AssistantMessage[],
@@ -220,8 +226,10 @@ export function buildWebLlmMessages(
   includeFewShot = true,
   disableThinking = true,
   includeOutputContract = true,
+  includeToolCatalog = true,
 ): ChatCompletionMessageParam[] {
-  const systemContent = `${system}\n\n${buildToolCatalog(tools)}${disableThinking && isQwen3Model(modelId) ? '\n\n/no_think' : ''}`;
+  const catalog = includeToolCatalog ? `\n\n${buildToolCatalog(tools)}` : '';
+  const systemContent = `${system}${catalog}${disableThinking && isQwen3Model(modelId) ? '\n\n/no_think' : ''}`;
   const messages: ChatCompletionMessageParam[] = [
     { role: 'system', content: systemContent },
     ...(includeFewShot ? buildFewShotExamples() : []),

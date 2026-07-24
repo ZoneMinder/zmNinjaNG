@@ -20,16 +20,16 @@ public class AppleIntelligencePlugin: CAPPlugin, CAPBridgedPlugin {
         let content: String
     }
 
-    // Model-facing role markers for the flattened transcript.
-    private static let assistantRolePrefix = "Assistant:\n"
-    private static let userRolePrefix = "User:\n"
-
     // Apple's on-device model context window, and the slice of it reserved for the reply.
     private static let contextWindow = 4096
     private static let responseReserve = 1024
 
     // One in-flight generation at a time (mirrors LlamaPlugin's busy discipline).
     private var chatTask: Task<Void, Never>?
+
+    // Held so the prewarmed session (and the assets it loaded) outlives isSupported.
+    // Typed AnyObject because stored properties cannot carry @available.
+    private var prewarmSession: AnyObject?
 
     // MARK: - Capability
 
@@ -39,6 +39,10 @@ public class AppleIntelligencePlugin: CAPPlugin, CAPBridgedPlugin {
         }
         switch SystemLanguageModel.default.availability {
         case .available:
+            // Eagerly load model resources so the first real turn does not pay that latency.
+            let session = LanguageModelSession()
+            session.prewarm()
+            prewarmSession = session
             // Advertised like LlamaPlugin.isSupported, but the USABLE window, not the raw one:
             // mirrors LlamaPlugin's triageReserve pattern. The JS auto-clear budget must leave
             // decoder headroom, or constrained generation truncates at the window edge and
@@ -77,49 +81,111 @@ public class AppleIntelligencePlugin: CAPPlugin, CAPBridgedPlugin {
             return call.reject("messagesJson is invalid")
         }
 
-        // ponytail: flattened transcript; upgrade path = Transcript(entries:) role-typed history
-        let instructions = messages
+        // Role-typed multiturn history. The last user message is not part of the history:
+        // it is the prompt this turn responds to.
+        let conversation = messages.filter { $0.role != "system" }
+        guard let lastUserIndex = conversation.lastIndex(where: { $0.role == "user" }) else {
+            return call.reject("messagesJson has no user message")
+        }
+        let prompt = conversation[lastUserIndex].content
+
+        let systemText = messages
             .filter { $0.role == "system" }
             .map { $0.content }
             .joined(separator: "\n\n")
-        let prompt = messages
-            .filter { $0.role != "system" }
-            .map { ($0.role == "assistant" ? Self.assistantRolePrefix : Self.userRolePrefix) + $0.content }
-            .joined(separator: "\n\n")
+
+        var entries: [Transcript.Entry] = []
+        if !systemText.isEmpty {
+            entries.append(.instructions(Transcript.Instructions(
+                segments: [.text(Transcript.TextSegment(content: systemText))],
+                toolDefinitions: []
+            )))
+        }
+        for message in conversation[..<lastUserIndex] {
+            let segments: [Transcript.Segment] = [.text(Transcript.TextSegment(content: message.content))]
+            entries.append(message.role == "assistant"
+                ? .response(Transcript.Response(assetIDs: [], segments: segments))
+                : .prompt(Transcript.Prompt(segments: segments)))
+        }
+        let history = entries
 
         let schemaJson = call.getString("schemaJson")
 
         let task = Task { [weak self] in
             defer { self?.chatTask = nil }
             do {
-                let session = LanguageModelSession(instructions: instructions.isEmpty ? nil : instructions)
+                let session = LanguageModelSession(transcript: Transcript(entries: history))
                 let options = GenerationOptions(temperature: temperature, maximumResponseTokens: maxTokens)
 
                 // Schema-constrained (guided) generation when the caller supplies a JSON Schema.
                 // A bad/unbuildable schema falls back to unconstrained generation; it never fails the chat.
+                var generationSchema: GenerationSchema?
                 if let schemaJson,
                    let schemaData = schemaJson.data(using: .utf8),
-                   let schemaRoot = (try? JSONSerialization.jsonObject(with: schemaData)) as? [String: Any],
-                   let generationSchema = self?.buildGenerationSchema(fromJsonSchema: schemaRoot) {
+                   let schemaRoot = (try? JSONSerialization.jsonObject(with: schemaData)) as? [String: Any] {
+                    generationSchema = self?.buildGenerationSchema(fromJsonSchema: schemaRoot)
+                }
+
+                let content: String
+                if let generationSchema {
                     // includeSchemaInPrompt defaults to true, which injects the full schema text
                     // into the prompt ON TOP of the tool catalog the JS layer already sends; on the
                     // 4096-token window that overflowed on the FIRST turn of a fresh conversation
                     // (refs #270). The decoder constraint alone is what we want.
                     let response = try await session.respond(to: prompt, schema: generationSchema, includeSchemaInPrompt: false, options: options)
-                    call.resolve(["content": response.content.jsonString])
-                    return
+                    content = response.content.jsonString
+                } else {
+                    let response = try await session.respond(to: prompt, options: options)
+                    content = response.content
                 }
 
-                let response = try await session.respond(to: prompt, options: options)
-                call.resolve(["content": response.content])
+                var result: [String: Any] = ["content": content]
+                // Exact counts from the tokenizer (iOS 26.4+). If unavailable or the count
+                // throws, omit the keys: JS reads absent as unknown rather than trusting an
+                // estimate.
+                if #available(iOS 26.4, *),
+                   let usage = try? await Self.tokenUsage(
+                       history: history,
+                       prompt: prompt,
+                       schema: generationSchema,
+                       content: content
+                   ) {
+                    result["promptTokens"] = usage.prompt
+                    result["completionTokens"] = usage.completion
+                }
+                call.resolve(result)
             } catch is CancellationError {
                 call.reject("Cancelled", "CANCELLED")
+            } catch let error as LanguageModelSession.GenerationError {
+                if case .exceededContextWindowSize = error {
+                    call.reject(error.localizedDescription, "CONTEXT_FULL")
+                } else {
+                    // Guardrail violation and the rest.
+                    call.reject(error.localizedDescription, "ENGINE_FAILED")
+                }
             } catch {
-                // Guardrail violation and other GenerationError land here.
                 call.reject(error.localizedDescription, "ENGINE_FAILED")
             }
         }
         chatTask = task
+    }
+
+    /// Exact prompt/completion token counts for one turn, from the model's tokenizer.
+    @available(iOS 26.4, *)
+    private static func tokenUsage(
+        history: [Transcript.Entry],
+        prompt: String,
+        schema: GenerationSchema?,
+        content: String
+    ) async throws -> (prompt: Int, completion: Int) {
+        let model = SystemLanguageModel.default
+        var promptTokens = history.isEmpty ? 0 : try await model.tokenCount(for: history)
+        promptTokens += try await model.tokenCount(for: prompt)
+        if let schema {
+            promptTokens += try await model.tokenCount(for: schema)
+        }
+        let completionTokens = try await model.tokenCount(for: content)
+        return (promptTokens, completionTokens)
     }
 
     // MARK: - Guided generation schema
