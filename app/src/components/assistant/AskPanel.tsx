@@ -38,6 +38,7 @@ import { buildSystemPrompt } from '../../lib/assistant/system-prompt';
 import { getObjectLabels } from '../../lib/assistant/object-labels';
 import { TOOLS, specializeToolSchemas } from '../../lib/assistant/tools';
 import { interpretWhen } from '../../lib/assistant/window-interpreter';
+import { extractTimeframes, buildTimeframeSystemLine } from '../../lib/assistant/timeframe-stage';
 import { suggestOllamaBaseUrl, warmOllamaModel } from '../../lib/assistant/providers/openai';
 import { classifyRequest, buildNoToolPrompt, type RequestKind } from '../../lib/assistant/triage';
 import type { AssistantMessage, AssistantTurn, ProviderConfig, ToolActivity, ToolContext, TraceEntry } from '../../lib/assistant/types';
@@ -551,6 +552,32 @@ export function AskPanel() {
         : await classifyRequest(provider, text, controller.signal, collectTrace, (s) => host.onStatus?.(s));
       log.assistant('Request classified', LogLevel.DEBUG, { kind });
 
+      // Every timeframe the question names is extracted and resolved BEFORE the
+      // tool round (refs #270, pipeline-v2): the native tool loops cannot nest
+      // the interpreter call inside a tool call, and resolving up front warms
+      // interpretWhen's per-day cache so the later tool call never has to. A
+      // question that states a period nothing can resolve abstains here and the
+      // turn ends, instead of answering a wrong window with real data. Skipped
+      // in test mode for the same reason triage is: the mock provider replays a
+      // fixed script, and an extra call would consume the turn the scenario
+      // meant for the answer.
+      let turnSystem = kind === 'zoneminder' ? system : buildNoToolPrompt(system, kind);
+      if (kind === 'zoneminder' && !isAssistantTestMode()) {
+        const { phrases, abstained } = await extractTimeframes(
+          text,
+          provider,
+          new Date(),
+          currentProfile?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+          controller.signal,
+        );
+        if (abstained) {
+          append(profileId, { role: 'assistant', text: `${I18N_SENTINEL}assistant.timeframe_unclear` });
+          return;
+        }
+        ctx.allowedWhenPhrases = phrases;
+        turnSystem = `${system}\n${buildTimeframeSystemLine(phrases)}`;
+      }
+
       // Already only this turn's new messages (see runAssistantTurn): the
       // thread in the store keeps everything else.
       const newMessages = await runAssistantTurn({
@@ -558,7 +585,7 @@ export function AskPanel() {
         host,
         ctx,
         history,
-        system: kind === 'zoneminder' ? system : buildNoToolPrompt(system, kind),
+        system: turnSystem,
         signal: controller.signal,
         // Specialized rather than the bare registry: objectType is pinned to
         // this install's labels so the model cannot decode an invented one

@@ -192,6 +192,12 @@ export interface ToolContext {
    *  refs #265). Injected by AskPanel so the tool layer stays provider-free;
    *  a context without it cannot resolve `when` phrases and says so. */
   interpretWhen?: (phrase: string) => Promise<import('./event-range').WindowFields | { error: string }>;
+  /** Timeframes the pre-tool stage already extracted and resolved for this
+   *  turn (timeframe-stage.ts, refs #270). A `when` phrase matching one of
+   *  these passes the provenance check even when it is not in the question,
+   *  which is what makes the default-today case legal ("today" was resolved
+   *  by the stage though the user never typed it). */
+  allowedWhenPhrases?: string[];
   /** Detected-object labels this install writes (object-labels.ts). A tool
    *  rejects an objectType outside this list rather than querying a label the
    *  detector never emits. */

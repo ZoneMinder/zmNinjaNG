@@ -152,6 +152,94 @@ export function objectTypePattern(objectType: string | readonly string[]): strin
   return labels.length === 1 ? labels[0] : `(${labels.join('|')})`;
 }
 
+/** Common category words a user says mapped onto the object labels an
+ *  installation might record.
+ *
+ *  The map expands COMMON category words (the words a user actually says, like
+ *  "vehicle" or "anyone") onto candidate labels; `matchLabels` then intersects
+ *  every expansion with the labels THIS installation actually records, so the
+ *  map never invents a label and nothing is hardcoded about a given detector.
+ *  It only says which words might mean the same thing, not what any detector
+ *  emits. Member labels double as reverse lookups: a member word ("bus") the
+ *  install does not record maps through its category to the ones it does. */
+const CATEGORY_LABEL_SETS: Readonly<Record<string, readonly string[]>> = {
+  vehicle: ['car', 'truck', 'bus', 'boat', 'motorcycle', 'bicycle', 'van'],
+  person: ['person'],
+  people: ['person'],
+  human: ['person'],
+  humans: ['person'],
+  anyone: ['person'],
+  somebody: ['person'],
+  someone: ['person'],
+  animal: ['dog', 'cat', 'bird', 'horse', 'cow', 'sheep', 'bear', 'deer'],
+};
+
+/** Two words are the same label ignoring a simple singular/plural difference
+ *  ("car"/"cars", "bus"/"buses"). No irregular forms: "people" is handled by
+ *  the category map, not here. */
+function sameLabelWord(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (`${a}s` === b || `${b}s` === a) return true;
+  if (`${a}es` === b || `${b}es` === a) return true;
+  return false;
+}
+
+/** The candidate label set for a category word, whether it is a category key
+ *  ("vehicle") or a member of one ("car"). Plural-tolerant on the key. */
+function categoryLabelsFor(word: string): readonly string[] | undefined {
+  for (const [key, set] of Object.entries(CATEGORY_LABEL_SETS)) {
+    if (sameLabelWord(key, word)) return set;
+  }
+  for (const set of Object.values(CATEGORY_LABEL_SETS)) {
+    if (set.some((member) => sameLabelWord(member, word))) return set;
+  }
+  return undefined;
+}
+
+/**
+ * Matches the user's OWN object words to the labels an installation actually
+ * records, fuzzily: "vehicles" onto whatever vehicle labels exist (car, truck),
+ * "anyone" onto person, "animals" onto dog/cat, and exact/plural labels
+ * straight through.
+ *
+ * Each requested word matches the real labels directly first (exact or
+ * singular/plural), and only expands through `CATEGORY_LABEL_SETS` when no real
+ * label matched it. Every expansion is intersected with `available`, so a
+ * category word yields only the labels this detector really writes and never an
+ * invented one. Words nothing matches come back in `unmatched`, for the caller
+ * to reject with the real vocabulary.
+ */
+export function matchLabels(
+  requested: readonly string[],
+  available: readonly string[],
+): { matched: string[]; unmatched: string[] } {
+  const avail = available.map((a) => a.trim().toLowerCase()).filter((a) => a.length > 0);
+  const matched = new Set<string>();
+  const unmatched: string[] = [];
+
+  for (const raw of requested) {
+    const word = raw.trim().toLowerCase();
+    if (word.length === 0) continue;
+
+    const direct = avail.filter((a) => sameLabelWord(a, word));
+    if (direct.length > 0) {
+      direct.forEach((a) => matched.add(a));
+      continue;
+    }
+
+    const category = categoryLabelsFor(word);
+    const expanded = category ? avail.filter((a) => category.some((member) => sameLabelWord(a, member))) : [];
+    if (expanded.length > 0) {
+      expanded.forEach((a) => matched.add(a));
+      continue;
+    }
+
+    unmatched.push(raw.trim());
+  }
+
+  return { matched: [...matched], unmatched };
+}
+
 /** Category words the system prompt itself teaches the model to map onto
  *  labels (see `buildObjectLabelLine`). Kept beside that instruction rather
  *  than guessed at: these are OUR words, not an attempt to enumerate a
@@ -205,11 +293,22 @@ export function objectQuestionMismatch(
  * copy of the user's own time words in their own language, so a phrase that
  * really came from this question is a substring of it. That test needs no
  * phrase grammar and no language list, which is why it can be applied at all.
+ *
+ * `allowedPhrases` are the timeframes the pre-tool stage already resolved for
+ * this turn (timeframe-stage.ts). A phrase matching one of them passes even
+ * when it is not in the question: that is how the default-today case is legal,
+ * where the stage resolved "today" though the user never typed it.
  */
-export function whenNotFromQuestion(whenPhrase: string, question: string | undefined): string | undefined {
+export function whenNotFromQuestion(
+  whenPhrase: string,
+  question: string | undefined,
+  allowedPhrases?: string[],
+): string | undefined {
   if (!question) return undefined;
   const normalize = (text: string) => text.trim().toLowerCase().replace(/\s+/g, ' ');
-  if (normalize(question).includes(normalize(whenPhrase))) return undefined;
+  const normalizedWhen = normalize(whenPhrase);
+  if (normalize(question).includes(normalizedWhen)) return undefined;
+  if (allowedPhrases?.some((phrase) => normalize(phrase) === normalizedWhen)) return undefined;
 
   return (
     `The when value "${whenPhrase}" does not appear in the question you are answering. ` +

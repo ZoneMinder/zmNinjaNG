@@ -28,6 +28,7 @@ import {
   isOmittedArg,
   objectTypePattern,
   coerceLabelList,
+  matchLabels,
   whenNotFromQuestion,
   NAVIGATE_ALLOWLIST,
 } from './tool-helpers';
@@ -288,7 +289,7 @@ const listEventsTool: ToolDefinition = {
       if (whenPhrase) {
         // Provenance first: a phrase the model carried over from an earlier
         // turn interprets perfectly and answers the wrong day with real data.
-        const wrongTurn = whenNotFromQuestion(whenPhrase, ctx.question);
+        const wrongTurn = whenNotFromQuestion(whenPhrase, ctx.question, ctx.allowedWhenPhrases);
         if (wrongTurn) throw new Error(wrongTurn);
         if (!ctx.interpretWhen) throw new Error('Time phrases are unavailable right now; retry without `when`.');
         const fields = await ctx.interpretWhen(whenPhrase);
@@ -324,7 +325,7 @@ const listEventsTool: ToolDefinition = {
       const objectType = objectTypeRaw
         ? (Array.isArray(objectTypeRaw) ? objectTypeRaw.join(', ') : String(objectTypeRaw))
         : undefined;
-      const objectPattern = objectTypeRaw ? objectTypePattern(objectTypeRaw) : undefined;
+      let objectPattern = objectTypeRaw ? objectTypePattern(objectTypeRaw) : undefined;
       // An objectType that normalizes to nothing must be an error, not an
       // unfiltered query: silently dropping the filter presents every event
       // as the "filtered" result.
@@ -335,25 +336,25 @@ const listEventsTool: ToolDefinition = {
         );
       }
 
-      // Refused before the query, not discovered as zero rows afterwards.
-      // Asked about "vehicles" the model sent objectType "vehicle" despite the
-      // vocabulary being in its prompt; the query then matched nothing and the
-      // honest "none" was wrong, because cars were there and a car is a
-      // vehicle. A label this detector never writes cannot answer anything, so
-      // the model is sent back to the real list instead.
+      // Match the user's OWN words to this install's real labels before the
+      // query, fuzzily: "vehicles" onto the car and truck rows a detector
+      // actually writes, "anyone" onto person (see matchLabels). Asked about
+      // "vehicles" the model used to send objectType "vehicle", the query
+      // matched nothing, and the honest "none" was wrong because cars were
+      // there and a car is a vehicle. Every matched word queries the REAL
+      // labels; any word left unmatched sends the model back to the real list,
+      // since a label this detector never writes cannot answer anything.
       if (objectTypeRaw && ctx.objectLabels?.length) {
-        const known = new Set(ctx.objectLabels.map((label) => label.toLowerCase()));
-        const unknown = coerceLabelList(objectTypeRaw)
-          .map((v) => v.toLowerCase().trim())
-          .filter((v) => v.length > 0 && !known.has(v));
-        if (unknown.length > 0) {
+        const { matched, unmatched } = matchLabels(coerceLabelList(objectTypeRaw), ctx.objectLabels);
+        if (unmatched.length > 0) {
           throw new Error(
-            `objectType ${unknown.map((u) => `"${u}"`).join(', ')} is not a label this installation records. ` +
+            `objectType ${unmatched.map((u) => `"${u}"`).join(', ')} is not a label this installation records. ` +
               `The labels it does record are: ${ctx.objectLabels.join(', ')}. ` +
               'Retry with every label from that list that matches what the user asked about, as an array, ' +
               `for example objectType ["car","truck"] for a question about vehicles.`,
           );
         }
+        if (matched.length > 0) objectPattern = objectTypePattern(matched);
       }
 
       /** The window actually queried, in the shape the model is shown. Must

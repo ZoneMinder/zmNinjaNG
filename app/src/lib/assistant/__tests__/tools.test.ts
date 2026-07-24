@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getToolByName, isWithheldToolName, readOnlyTools, WITHHELD_TOOL_NAMES, TOOLS } from '../tools';
-import { safeExecute, validateToolInput, objectTypePattern, coerceLabelList, isOmittedArg, stripOmittedArgs, objectQuestionMismatch, whenNotFromQuestion, toolCallSignature, repairCountEventsInterval } from '../tool-helpers';
+import { safeExecute, validateToolInput, objectTypePattern, coerceLabelList, matchLabels, isOmittedArg, stripOmittedArgs, objectQuestionMismatch, whenNotFromQuestion, toolCallSignature, repairCountEventsInterval } from '../tool-helpers';
 import type { ToolContext } from '../types';
 import { asProfileId } from '../../../api/types';
 import { ASSISTANT } from '../../zmninja-ng-constants';
@@ -683,6 +683,22 @@ describe('whenNotFromQuestion', () => {
     expect(message).toContain('summarize today');
     expect(message).toContain('omit when');
   });
+
+  // The default-today case: the timeframe stage resolved "today" though the
+  // user never typed it, so an allowed phrase passes even when the question
+  // does not contain it (refs #270).
+  it('passes a phrase absent from the question but present in allowedPhrases', () => {
+    expect(whenNotFromQuestion('today', 'give me a summary', ['today'])).toBeUndefined();
+  });
+
+  it('matches an allowed phrase ignoring case and whitespace', () => {
+    expect(whenNotFromQuestion('  TODAY ', 'a summary please', ['today'])).toBeUndefined();
+  });
+
+  it('still rejects a phrase in neither the question nor allowedPhrases', () => {
+    const message = whenNotFromQuestion('yesterday', 'summarize today', ['today']);
+    expect(message).toContain('"yesterday"');
+  });
 });
 
 describe('stripOmittedArgs', () => {
@@ -798,6 +814,43 @@ describe('objectTypePattern', () => {
   it('keeps non-Latin labels', () => {
     expect(objectTypePattern('собака')).toBe('собака');
     expect(objectTypePattern(['人', 'car'])).toBe('(人|car)');
+  });
+});
+
+describe('matchLabels', () => {
+  // A category word maps onto whatever members this install records, and only
+  // those: "vehicles" against [car, person, truck] is car+truck, never bus.
+  it('expands a category word to the members intersected with the real labels', () => {
+    expect(matchLabels(['vehicles'], ['car', 'person', 'truck'])).toEqual({
+      matched: ['car', 'truck'],
+      unmatched: [],
+    });
+  });
+
+  it('maps every person-word onto person', () => {
+    expect(matchLabels(['people'], ['car', 'person', 'truck'])).toEqual({ matched: ['person'], unmatched: [] });
+    expect(matchLabels(['anyone'], ['person']).matched).toEqual(['person']);
+  });
+
+  it('maps an animal category onto the animals recorded', () => {
+    expect(matchLabels(['animals'], ['dog', 'cat', 'car']).matched).toEqual(['dog', 'cat']);
+  });
+
+  it('passes an exact label straight through', () => {
+    expect(matchLabels(['car'], ['car', 'person'])).toEqual({ matched: ['car'], unmatched: [] });
+  });
+
+  it('tolerates singular and plural', () => {
+    expect(matchLabels(['cars'], ['car']).matched).toEqual(['car']);
+    expect(matchLabels(['buses'], ['bus']).matched).toEqual(['bus']);
+  });
+
+  it('leaves a word nothing matches unmatched', () => {
+    expect(matchLabels(['unicorn'], ['car', 'person'])).toEqual({ matched: [], unmatched: ['unicorn'] });
+  });
+
+  it('matches nothing against an empty vocabulary', () => {
+    expect(matchLabels(['car', 'vehicles'], [])).toEqual({ matched: [], unmatched: ['car', 'vehicles'] });
   });
 });
 
@@ -998,14 +1051,27 @@ describe('list_events when resolution (refs #246)', () => {
   it('refuses an objectType this install does not record, naming the ones it does', async () => {
     const tool = getToolByName('list_events')!;
     const r = await tool.execute(
-      { when: 'yesterday', objectType: 'vehicle' },
-      { ...ctx(), timezone: 'America/New_York', question: 'how many vehicles came yesterday', objectLabels: ['car', 'person', 'truck'] },
+      { when: 'yesterday', objectType: 'unicorn' },
+      { ...ctx(), timezone: 'America/New_York', question: 'did a unicorn appear yesterday', objectLabels: ['car', 'person', 'truck'] },
     );
 
     expect(r.isError).toBe(true);
-    expect(r.output).toContain('not a label this installation records');
+    expect(r.output).toContain('"unicorn" is not a label this installation records');
     expect(r.output).toContain('car, person, truck');
     expect(getEvents).not.toHaveBeenCalled();
+  });
+
+  // The user's word "vehicles" is not a label any detector writes; matchLabels
+  // maps it onto the car and truck rows this install actually records.
+  it('expands a category word onto the real labels it records', async () => {
+    const tool = getToolByName('list_events')!;
+    const r = await tool.execute(
+      { when: 'yesterday', objectType: 'vehicles' },
+      { ...ctx(), timezone: 'America/New_York', question: 'how many vehicles came yesterday', objectLabels: ['car', 'person', 'truck'] },
+    );
+
+    expect(r.isError).toBeFalsy();
+    expect(getEvents).toHaveBeenCalledWith(expect.objectContaining({ notesRegexp: 'detected:.*(car|truck)' }));
   });
 
   it('accepts a list the model stringified rather than rejecting it as one label', async () => {

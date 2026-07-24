@@ -1341,6 +1341,7 @@
     "context_cleared_manual": "Conversación borrada. El modelo del dispositivo se descargó para liberar memoria; se cargará de nuevo con tu próxima pregunta.",
     "context_cleared_manual_remote": "Conversación borrada.",
     "model_unavailable_native": "Este modelo no funciona en tu dispositivo. Elige un modelo del dispositivo en Ajustes.",
-    "english_only_notice": "El asistente entiende otros idiomas, pero funciona mejor en inglés: algunas comprobaciones de respuestas solo se aplican en inglés."
+    "english_only_notice": "El asistente entiende otros idiomas, pero funciona mejor en inglés: algunas comprobaciones de respuestas solo se aplican en inglés.",
+    "timeframe_unclear": "No pude determinar el período de tiempo al que te refieres. Indica el período, por ejemplo «hoy» o «21 de julio»."
   }
 }
