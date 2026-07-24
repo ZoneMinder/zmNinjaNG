@@ -74,6 +74,19 @@ describe('classifyRequest', () => {
     expect(system).not.toContain('-> ZONEMINDER');
   });
 
+  // Superlative/statistic questions ("busiest hour", "most active camera",
+  // "quietest day") are ZONEMINDER events questions (refs #270). Taught as the
+  // "rank" verb in the ZONEMINDER template, not as example instances, which
+  // over-broadened. On Apple Foundation Models "what was my busiest hour"
+  // triaged ACTION and the tool-less turn then fabricated an hour.
+  it('teaches the rank verb that covers superlative and statistic questions', async () => {
+    const provider = providerSaying('ZONEMINDER');
+    await classifyRequest(provider, 'what was my busiest hour', new AbortController().signal);
+
+    const [system] = vi.mocked(provider.complete).mock.calls[0];
+    expect(system).toContain('summarize, recap, count, rank, list, look up, check, or view');
+  });
+
   // A triage outage must degrade to the previous behaviour (everything reaches
   // the tool loop), never to an assistant that cannot answer questions.
   it('falls back to zoneminder when the provider throws', async () => {

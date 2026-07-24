@@ -40,6 +40,15 @@ export type RequestKind = 'zoneminder' | 'chat' | 'action';
  *  classified as CHAT or ACTION. On that backend the tool-less turn answers
  *  with an answer-only schema and no fail-open recovery, so a misroute is a
  *  dead end ("No information available") and triage accuracy is the ceiling.
+ *  The "rank" verb covers superlative and statistic questions the same way
+ *  (refs #270): "what was my busiest hour", "which camera was most active",
+ *  "quietest day this week" are ZONEMINDER events questions, and on Apple FM
+ *  "what was my busiest hour" triaged ACTION and the tool-less turn then
+ *  fabricated an hour. Added as a verb (the "what is wanted done" dimension),
+ *  not as example instances: adding both a verb and a superlative example
+ *  over-broadened and pulled "summarize the plot of Blade Runner" into
+ *  ZONEMINDER 3/3 on llama3.2 (qwen3:4b-instruct and llama3.2 both already
+ *  route the superlatives to ZONEMINDER; the verb is for the weaker backend).
  *
  *  They are taught IN the template list rather than as an appended block of
  *  "message -> VERDICT" examples, which is what was tried first and measured
@@ -59,7 +68,7 @@ const TRIAGE_PROMPT = [
   'camera system. A time span in the message (today, last week, this month, an hour, any custom',
   'range) NEVER changes the category.',
   '',
-  'ZONEMINDER - any request to summarize, recap, count, list, look up, check, or view THIS system\'s',
+  'ZONEMINDER - any request to summarize, recap, count, rank, list, look up, check, or view THIS system\'s',
   '  cameras, monitors, events, detections, recordings, activity, or server health, or to be taken to a',
   '  screen in the app. Questions and commands alike, in any language: "summarize <any period>",',
   '  "what happened <any period>", "how many <thing> came <any period>", "did anyone come by",',
