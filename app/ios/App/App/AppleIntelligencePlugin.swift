@@ -13,11 +13,19 @@ public class AppleIntelligencePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "isSupported", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "chat", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "cancelChat", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "resolveToolCall", returnType: CAPPluginReturnPromise),
     ]
 
     private struct ChatMessage: Decodable {
         let role: String
         let content: String
+    }
+
+    /// One entry of the `toolsJson` array: the JS-side tool catalog.
+    private struct ToolSpec: Decodable {
+        let name: String
+        let description: String
+        let schemaJson: String?
     }
 
     // Apple's on-device model context window, and the slice of it reserved for the reply.
@@ -30,6 +38,12 @@ public class AppleIntelligencePlugin: CAPPlugin, CAPBridgedPlugin {
     // Held so the prewarmed session (and the assets it loaded) outlives isSupported.
     // Typed AnyObject because stored properties cannot carry @available.
     private var prewarmSession: AnyObject?
+
+    // Native tool calls parked mid-generation while JS executes them.
+    private let toolCalls = ToolCallRegistry()
+
+    // How long a bridged tool call may wait on JS before it is failed.
+    private static let toolCallTimeout: UInt64 = 120_000_000_000
 
     // MARK: - Capability
 
@@ -110,17 +124,25 @@ public class AppleIntelligencePlugin: CAPPlugin, CAPBridgedPlugin {
         let history = entries
 
         let schemaJson = call.getString("schemaJson")
+        let toolsJson = call.getString("toolsJson")
 
         let task = Task { [weak self] in
             defer { self?.chatTask = nil }
             do {
-                let session = LanguageModelSession(transcript: Transcript(entries: history))
+                // Native tool calling: the model picks and fills the tool, we bridge execution to JS.
+                let tools = self?.buildTools(fromToolsJson: toolsJson) ?? []
+
+                let session = tools.isEmpty
+                    ? LanguageModelSession(transcript: Transcript(entries: history))
+                    : LanguageModelSession(tools: tools, transcript: Transcript(entries: history))
                 let options = GenerationOptions(temperature: temperature, maximumResponseTokens: maxTokens)
 
                 // Schema-constrained (guided) generation when the caller supplies a JSON Schema.
                 // A bad/unbuildable schema falls back to unconstrained generation; it never fails the chat.
+                // Never combined with native tools: with tools the reply is prose, not a shaped object.
                 var generationSchema: GenerationSchema?
-                if let schemaJson,
+                if tools.isEmpty,
+                   let schemaJson,
                    let schemaData = schemaJson.data(using: .utf8),
                    let schemaRoot = (try? JSONSerialization.jsonObject(with: schemaData)) as? [String: Any] {
                     generationSchema = self?.buildGenerationSchema(fromJsonSchema: schemaRoot)
@@ -186,6 +208,76 @@ public class AppleIntelligencePlugin: CAPPlugin, CAPBridgedPlugin {
         }
         let completionTokens = try await model.tokenCount(for: content)
         return (promptTokens, completionTokens)
+    }
+
+    // MARK: - Native tool calling
+
+    /// Turn the JS tool catalog into FoundationModels tools whose execution bridges back to JS.
+    /// Returns [] when the caller sent no tools, or the JSON is unusable.
+    @available(iOS 26.0, *)
+    private func buildTools(fromToolsJson toolsJson: String?) -> [any Tool] {
+        guard let toolsJson,
+              let data = toolsJson.data(using: .utf8),
+              let specs = try? JSONDecoder().decode([ToolSpec].self, from: data),
+              !specs.isEmpty else {
+            return []
+        }
+        return specs.compactMap { spec -> (any Tool)? in
+            // A tool with no argument schema still has to expose one, so it degrades to an empty
+            // object: the model can call it, just without arguments. An unbuildable schema drops
+            // the tool rather than offering the model something it cannot fill.
+            var root = DynamicGenerationSchema(name: spec.name, description: spec.description, properties: [])
+            if let schemaJson = spec.schemaJson,
+               let schemaData = schemaJson.data(using: .utf8),
+               let schemaRoot = (try? JSONSerialization.jsonObject(with: schemaData)) as? [String: Any] {
+                root = dynamicSchema(fromJsonSchema: schemaRoot, name: spec.name)
+            }
+            guard let parameters = try? GenerationSchema(root: root, dependencies: []) else {
+                CAPLog.print("[AppleIntelligence] tool schema build failed; dropping tool \(spec.name)")
+                return nil
+            }
+            return BridgedTool(
+                name: spec.name,
+                description: spec.description,
+                parameters: parameters,
+                invoke: { [weak self] name, argumentsJson in
+                    guard let self else { throw CancellationError() }
+                    return try await self.runBridgedToolCall(name: name, argumentsJson: argumentsJson)
+                }
+            )
+        }
+    }
+
+    /// Emit a `toolCall` event and suspend until JS calls `resolveToolCall` (or the timeout fires).
+    private func runBridgedToolCall(name: String, argumentsJson: String) async throws -> String {
+        let callId = UUID().uuidString
+        let registry = toolCalls
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<String, Error>) in
+            Task { [weak self] in
+                await registry.register(callId, continuation)
+                self?.notifyListeners("toolCall", data: [
+                    "callId": callId,
+                    "name": name,
+                    "argumentsJson": argumentsJson,
+                ])
+                try? await Task.sleep(nanoseconds: Self.toolCallTimeout)
+                await registry.resume(callId, with: .failure(ToolBridgeError.timedOut(name)))
+            }
+        }
+    }
+
+    /// JS hands back the tool's output. An unknown callId is a late resolution after a timeout or
+    /// cancel, so it resolves silently instead of erroring.
+    @objc func resolveToolCall(_ call: CAPPluginCall) {
+        guard let callId = call.getString("callId") else {
+            return call.reject("callId is required")
+        }
+        let output = call.getString("output") ?? ""
+        let registry = toolCalls
+        Task {
+            await registry.resume(callId, with: .success(output))
+            call.resolve()
+        }
     }
 
     // MARK: - Guided generation schema
@@ -256,6 +348,60 @@ public class AppleIntelligencePlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func cancelChat(_ call: CAPPluginCall) {
         chatTask?.cancel()
-        call.resolve()
+        // A generation parked on a bridged tool call is not cancellable through the task alone:
+        // fail the pending calls too, or the bridge hangs until the timeout.
+        let registry = toolCalls
+        Task {
+            await registry.failAll(CancellationError())
+            call.resolve()
+        }
+    }
+}
+
+// MARK: - Tool bridge
+
+private enum ToolBridgeError: LocalizedError {
+    case timedOut(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .timedOut(let name): return "Tool \(name) did not respond in time"
+        }
+    }
+}
+
+/// Continuations for tool calls the model started and JS has not answered yet.
+private actor ToolCallRegistry {
+    private var pending: [String: CheckedContinuation<String, Error>] = [:]
+
+    func register(_ callId: String, _ continuation: CheckedContinuation<String, Error>) {
+        pending[callId] = continuation
+    }
+
+    /// No-op when the call is already settled (late resolve, or a resolve after timeout/cancel).
+    func resume(_ callId: String, with result: Result<String, Error>) {
+        pending.removeValue(forKey: callId)?.resume(with: result)
+    }
+
+    func failAll(_ error: Error) {
+        let outstanding = pending.values
+        pending.removeAll()
+        for continuation in outstanding { continuation.resume(throwing: error) }
+    }
+}
+
+/// A FoundationModels tool whose body is executed by the JS layer over the Capacitor bridge.
+@available(iOS 26.0, *)
+private struct BridgedTool: Tool {
+    typealias Arguments = GeneratedContent
+    typealias Output = String
+
+    let name: String
+    let description: String
+    let parameters: GenerationSchema
+    let invoke: @Sendable (String, String) async throws -> String
+
+    func call(arguments: GeneratedContent) async throws -> String {
+        try await invoke(name, arguments.jsonString)
     }
 }

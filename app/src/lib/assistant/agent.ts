@@ -8,7 +8,7 @@
  * So there is no confirmation gate in this file and nothing for a model to
  * talk its way past (see tools.ts for why the actions were removed).
  */
-import type { AssistantMessage, AssistantProvider, AssistantHost, DisplayEntity, TokenUsage, TraceEntry, ToolContext, ToolDefinition, ToolResult } from './types';
+import type { AssistantMessage, AssistantProvider, AssistantHost, DisplayEntity, TokenUsage, TraceEntry, ToolCall, ToolContext, ToolDefinition, ToolResult } from './types';
 import { getToolByName, isWithheldToolName, TOOLS } from './tools';
 import { validateToolInput, objectQuestionMismatch, toolCallSignature, stripOmittedArgs, repairCountEventsInterval } from './tool-helpers';
 import { captureApiCalls } from './api-capture';
@@ -281,6 +281,155 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
   let groundingRetried = false;
   const question = [...opts.history].reverse().find((m) => m.role === 'user')?.text ?? '';
 
+  /** Everything that happens to ONE tool call: the fail-open pushback, the
+   *  unknown/withheld-name refusals, the duplicate-signature guard, argument
+   *  normalization, the object-question and schema refusals, execution with API
+   *  capture, and the activity/trace reporting. Always resolves with exactly one
+   *  `ToolResult`, never rejects.
+   *
+   *  A closure rather than a top-level function because every one of those steps
+   *  reads or writes this turn's state (`activeTools`, `calledSignatures`,
+   *  `toolOutputs`, the trace). It exists so a backend whose own runtime drives
+   *  the tool loop (see `runTool` in types.ts) runs each call through the SAME
+   *  machinery as the loop below rather than a parallel copy of it. */
+  const runOneCall = async (call: ToolCall): Promise<ToolResult> => {
+    // THIS turn's tool list is the execution authority: a caller that
+    // passes its own definitions (tests, fixtures) must have exactly those
+    // run. One exception fails OPEN (refs #265): a turn that was routed
+    // here with NO tools (triage said chat/action) but whose model calls a
+    // real registry read tool has just out-voted the classifier: "summarize
+    // last week" was triaged CHAT, the model called list_events anyway, and
+    // refusing it turned a correct instinct into an apology. The registry
+    // is read-only, so honoring the call is always safe.
+    //
+    // But one pushback first (refs #270): Apple Foundation Models answered a
+    // bare "hello" by calling count_events, and opening the registry on that
+    // first call turned a greeting into an event report. So the first
+    // tool-less call gets a corrective error asking the model to answer
+    // conversation in plain text; only a model that INSISTS on the second
+    // call has really out-voted the classifier. A format reflex does not
+    // survive the pushback; the #265 "summarize last week" recovery does.
+    if (activeTools.length === 0 && tools.length === 0 && getToolByName(call.name)) {
+      if (!toolLessPushbackSent) {
+        toolLessPushbackSent = true;
+        log.assistant('Tool-less turn called a real read tool; pushing back once before fail-open', LogLevel.WARN, {
+          toolName: call.name,
+        });
+        host.onActivity({ toolName: call.name, status: 'error', input: call.input });
+        return { callId: call.id, output: TOOL_LESS_PUSHBACK, isError: true };
+      }
+      log.assistant('Tool-less turn insisted after pushback; enabling the registry (triage overruled)', LogLevel.INFO, {
+        toolName: call.name,
+      });
+      activeTools = TOOLS;
+    }
+    const def = activeTools.find((t) => t.name === call.name);
+    if (!def) {
+      // A withheld action is not the same as a typo: told "unknown tool", a
+      // model retries variations of the name. Told why, it explains to the
+      // user instead.
+      return {
+        callId: call.id,
+        output: isWithheldToolName(call.name)
+          ? WITHHELD_TOOL_REFUSAL
+          : getToolByName(call.name)
+            ? 'No tools are available for this request. Answer the user directly, in plain text.'
+            : `Unknown tool: ${call.name}`,
+        isError: true,
+      };
+    }
+
+    // A tool called twice with identical arguments in one turn cannot return
+    // anything new, so re-running it only burns iterations until the cap.
+    // Observed: asked "how many people came home today", the model called
+    // count_events {"interval":"1 day"} three times (that tool reports counts
+    // only, never object types) and then answered from data that could not
+    // contain the answer. Refusing the repeat tells it to change course
+    // instead of spending the turn discovering the same result (refs #246).
+    // Normalized once, here, rather than in every tool: an argument the
+    // model filled with null/""/"{}" is absent from this point on.
+    // count_events also gets its interval repaired: weak models echo the
+    // tool's internal `{"interval":"1 day"}` shape back instead of the
+    // schema's lastCount+lastUnit (observed on Apple FM and qwen).
+    const stripped = stripOmittedArgs(call.input);
+    const input = call.name === 'count_events' ? repairCountEventsInterval(stripped) : stripped;
+    const signature = toolCallSignature(call.name, input);
+    if (calledSignatures.has(signature)) {
+      return {
+        callId: call.id,
+        output:
+          `You already called ${call.name} with these exact arguments in this turn and its result is above. ` +
+          'Repeating it returns the same data. Either call a DIFFERENT tool, or call this one with ' +
+          'different arguments, or answer using the results you already have.',
+        isError: true,
+      };
+    }
+    calledSignatures.add(signature);
+
+    // The refine step: reject an input the schema already rules out, before
+    // any request goes out. Returned as an ordinary tool result so the model
+    // corrects and retries within the same turn, which is cheaper than a
+    // request that succeeds against the wrong window and answers confidently
+    // from it.
+    // count_events reports COUNTS ONLY and says nothing about what was
+    // detected. Its own description says so, and the system prompt says so,
+    // and asked "how many vehicles came today vs yesterday" the model called
+    // it anyway and reported all 14 events as vehicles. Advice the model can
+    // ignore is not a constraint; this one it cannot.
+    const objectMismatch = objectQuestionMismatch(call.name, question, opts.objectLabels ?? []);
+    if (objectMismatch) {
+      log.assistant(`Tool "${call.name}" refused: cannot answer an object-type question`, LogLevel.WARN, {
+        toolName: call.name,
+      });
+      host.onActivity({ toolName: call.name, status: 'error', input: call.input });
+      return { callId: call.id, output: objectMismatch, isError: true };
+    }
+
+    const schemaError = validateToolInput(def.schema, input);
+    if (schemaError) {
+      log.assistant(`Tool "${call.name}" call rejected before running`, LogLevel.WARN, {
+        toolName: call.name,
+        input: call.input,
+        error: schemaError,
+      });
+      host.onActivity({ toolName: call.name, status: 'error', input: call.input });
+      return { callId: call.id, output: schemaError + TOOL_FAILURE_GUARD, isError: true };
+    }
+
+    // No confirmation gate here, and none needed: every tool in TOOLS is
+    // read-only, and the type cannot express one that is not (see
+    // ToolDefinition in types.ts). Nothing reachable from this loop mutates
+    // anything, so there is no runtime decision about whether to run.
+    host.onActivity({ toolName: call.name, status: 'running', input: call.input });
+    try {
+      // `navigate`'s `closePanel: true` needs no separate handling here: the
+      // real host's `navigate()` implementation closes the panel itself as a
+      // side effect of the call this makes below (see Task 9's host hook).
+      const { result: r, calls: apiCalls } = await captureApiCalls(() => def.execute(input, ctx));
+      trace({ kind: 'tool', name: call.name, input: call.input, output: r.output, isError: r.isError, apiCalls });
+      if (!r.isError) toolOutputs.push(r.output);
+      host.onActivity({ toolName: call.name, status: r.isError ? 'error' : 'done', input: call.input });
+      return { callId: call.id, output: r.output, isError: r.isError, display: r.display, apiCalls };
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Tool failed';
+      log.assistant(`Tool "${call.name}" threw`, LogLevel.ERROR, { toolName: call.name, error: message });
+      host.onActivity({ toolName: call.name, status: 'error', input: call.input });
+      return { callId: call.id, output: message + TOOL_FAILURE_GUARD, isError: true };
+    }
+  };
+
+  /** Handed to `provider.chat` for a backend whose runtime owns the tool loop
+   *  (the apple backend today): it calls this instead of returning `toolCalls`,
+   *  and every call still goes through `runOneCall`. The synthetic id keeps the
+   *  results distinguishable in the one `role: 'tool'` message they land in. */
+  let nativeCallCount = 0;
+  const runTool = async (name: string, input: Record<string, unknown>) => {
+    anyToolCallAttempted = true;
+    const call: ToolCall = { id: `native-${++nativeCallCount}`, name, input };
+    const result = await runOneCall(call);
+    return { ...result, name, input };
+  };
+
   for (let i = 0; i < ASSISTANT.maxToolIterations; i++) {
     if (signal.aborted) return produced;
     // Re-bound every iteration, not just at the start of the turn. Tool results
@@ -293,7 +442,7 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
     const bounded = truncateHistory(history, ASSISTANT.maxHistoryMessages, ASSISTANT.maxHistoryCharacters);
     if (bounded.length !== history.length) history.splice(0, history.length, ...bounded);
 
-    const rawTurn = await provider.chat(history, activeTools, system, signal, (s) => host.onStatus?.(s));
+    const rawTurn = await provider.chat(history, activeTools, system, signal, (s) => host.onStatus?.(s), runTool);
     // Slow-phase status is only meaningful while the provider is loading/prefilling; once the
     // model starts producing this round's answer, clear it so tool steps / "Thinking" show instead.
     host.onStatus?.(null);
@@ -320,6 +469,24 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
     const { text: answerText, show } = turn.text ? extractShowDirective(turn.text) : { text: turn.text };
     turn.text = answerText;
     const assistantMsg: AssistantMessage = { role: 'assistant', text: turn.text, toolCalls: turn.toolCalls, raw: turn.raw };
+
+    // A backend that ran its own tool loop (see `runTool` above) has already
+    // finished iterating, so this turn is the answer. Its calls went through
+    // `runOneCall`, so the activity steps and the trace entries are already
+    // recorded; what is left is what the loop below does at the END of an
+    // iteration: pool the result cards and put the results in history as one
+    // `role: 'tool'` message, so the transcript and the persisted thread come
+    // out the same shape as the loop path's (refs #270).
+    if (turn.nativeToolResults?.length) {
+      turnDisplay.push(...turn.nativeToolResults.flatMap((r) => r.display ?? []));
+      push({ role: 'tool', toolResults: turn.nativeToolResults });
+      const deduped = dedupeDisplay(turnDisplay);
+      assistantMsg.display = deduped && show ? filterDisplayByShow(deduped, show) : deduped;
+      assistantMsg.trace = turnTrace.length > 0 ? [...turnTrace] : undefined;
+      assistantMsg.usage = turn.usage;
+      push(assistantMsg);
+      return produced;
+    }
 
     if (turn.toolCalls.length === 0) {
       // The grounding check, which runs for EVERY turn that fetched data,
@@ -391,138 +558,7 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
     const results: ToolResult[] = [];
     for (const call of turn.toolCalls) {
       if (signal.aborted) return produced;
-      // THIS turn's tool list is the execution authority: a caller that
-      // passes its own definitions (tests, fixtures) must have exactly those
-      // run. One exception fails OPEN (refs #265): a turn that was routed
-      // here with NO tools (triage said chat/action) but whose model calls a
-      // real registry read tool has just out-voted the classifier: "summarize
-      // last week" was triaged CHAT, the model called list_events anyway, and
-      // refusing it turned a correct instinct into an apology. The registry
-      // is read-only, so honoring the call is always safe.
-      //
-      // But one pushback first (refs #270): Apple Foundation Models answered a
-      // bare "hello" by calling count_events, and opening the registry on that
-      // first call turned a greeting into an event report. So the first
-      // tool-less call gets a corrective error asking the model to answer
-      // conversation in plain text; only a model that INSISTS on the second
-      // call has really out-voted the classifier. A format reflex does not
-      // survive the pushback; the #265 "summarize last week" recovery does.
-      if (activeTools.length === 0 && tools.length === 0 && getToolByName(call.name)) {
-        if (!toolLessPushbackSent) {
-          toolLessPushbackSent = true;
-          log.assistant('Tool-less turn called a real read tool; pushing back once before fail-open', LogLevel.WARN, {
-            toolName: call.name,
-          });
-          results.push({
-            callId: call.id,
-            output: TOOL_LESS_PUSHBACK,
-            isError: true,
-          });
-          host.onActivity({ toolName: call.name, status: 'error', input: call.input });
-          continue;
-        }
-        log.assistant('Tool-less turn insisted after pushback; enabling the registry (triage overruled)', LogLevel.INFO, {
-          toolName: call.name,
-        });
-        activeTools = TOOLS;
-      }
-      const def = activeTools.find((t) => t.name === call.name);
-      if (!def) {
-        // A withheld action is not the same as a typo: told "unknown tool", a
-        // model retries variations of the name. Told why, it explains to the
-        // user instead.
-        results.push({
-          callId: call.id,
-          output: isWithheldToolName(call.name)
-            ? WITHHELD_TOOL_REFUSAL
-            : getToolByName(call.name)
-              ? 'No tools are available for this request. Answer the user directly, in plain text.'
-              : `Unknown tool: ${call.name}`,
-          isError: true,
-        });
-        continue;
-      }
-
-      // A tool called twice with identical arguments in one turn cannot return
-      // anything new, so re-running it only burns iterations until the cap.
-      // Observed: asked "how many people came home today", the model called
-      // count_events {"interval":"1 day"} three times (that tool reports counts
-      // only, never object types) and then answered from data that could not
-      // contain the answer. Refusing the repeat tells it to change course
-      // instead of spending the turn discovering the same result (refs #246).
-      // Normalized once, here, rather than in every tool: an argument the
-      // model filled with null/""/"{}" is absent from this point on.
-      // count_events also gets its interval repaired: weak models echo the
-      // tool's internal `{"interval":"1 day"}` shape back instead of the
-      // schema's lastCount+lastUnit (observed on Apple FM and qwen).
-      const stripped = stripOmittedArgs(call.input);
-      const input = call.name === 'count_events' ? repairCountEventsInterval(stripped) : stripped;
-      const signature = toolCallSignature(call.name, input);
-      if (calledSignatures.has(signature)) {
-        results.push({
-          callId: call.id,
-          output:
-            `You already called ${call.name} with these exact arguments in this turn and its result is above. ` +
-            'Repeating it returns the same data. Either call a DIFFERENT tool, or call this one with ' +
-            'different arguments, or answer using the results you already have.',
-          isError: true,
-        });
-        continue;
-      }
-      calledSignatures.add(signature);
-
-      // The refine step: reject an input the schema already rules out, before
-      // any request goes out. Returned as an ordinary tool result so the model
-      // corrects and retries within the same turn, which is cheaper than a
-      // request that succeeds against the wrong window and answers confidently
-      // from it.
-      // count_events reports COUNTS ONLY and says nothing about what was
-      // detected. Its own description says so, and the system prompt says so,
-      // and asked "how many vehicles came today vs yesterday" the model called
-      // it anyway and reported all 14 events as vehicles. Advice the model can
-      // ignore is not a constraint; this one it cannot.
-      const objectMismatch = objectQuestionMismatch(call.name, question, opts.objectLabels ?? []);
-      if (objectMismatch) {
-        log.assistant(`Tool "${call.name}" refused: cannot answer an object-type question`, LogLevel.WARN, {
-          toolName: call.name,
-        });
-        results.push({ callId: call.id, output: objectMismatch, isError: true });
-        host.onActivity({ toolName: call.name, status: 'error', input: call.input });
-        continue;
-      }
-
-      const schemaError = validateToolInput(def.schema, input);
-      if (schemaError) {
-        log.assistant(`Tool "${call.name}" call rejected before running`, LogLevel.WARN, {
-          toolName: call.name,
-          input: call.input,
-          error: schemaError,
-        });
-        results.push({ callId: call.id, output: schemaError + TOOL_FAILURE_GUARD, isError: true });
-        host.onActivity({ toolName: call.name, status: 'error', input: call.input });
-        continue;
-      }
-
-      // No confirmation gate here, and none needed: every tool in TOOLS is
-      // read-only, and the type cannot express one that is not (see
-      // ToolDefinition in types.ts). Nothing reachable from this loop mutates
-      // anything, so there is no runtime decision about whether to run.
-      host.onActivity({ toolName: call.name, status: 'running', input: call.input });
-      try {
-        // `navigate`'s `closePanel: true` needs no separate handling here: the
-        // real host's `navigate()` implementation closes the panel itself as a
-        // side effect of the call this makes below (see Task 9's host hook).
-        const { result: r, calls: apiCalls } = await captureApiCalls(() => def.execute(input, ctx));
-        results.push({ callId: call.id, output: r.output, isError: r.isError, display: r.display, apiCalls });
-        trace({ kind: 'tool', name: call.name, input: call.input, output: r.output, isError: r.isError, apiCalls });
-        if (!r.isError) toolOutputs.push(r.output);
-        host.onActivity({ toolName: call.name, status: r.isError ? 'error' : 'done', input: call.input });
-      } catch (e) {
-        const message = e instanceof Error ? e.message : 'Tool failed';
-        log.assistant(`Tool "${call.name}" threw`, LogLevel.ERROR, { toolName: call.name, error: message });
-        results.push({ callId: call.id, output: message + TOOL_FAILURE_GUARD, isError: true });
-        host.onActivity({ toolName: call.name, status: 'error', input: call.input });
-      }
+      results.push(await runOneCall(call));
     }
     // Collect this iteration's result cards into the turn-wide pool; they are
     // NOT attached here (UI-only, never fed back to `provider.chat`). Only the

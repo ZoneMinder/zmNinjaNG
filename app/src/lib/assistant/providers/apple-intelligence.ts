@@ -12,11 +12,20 @@
  * bridge, the OS owns the model: there is no download, no KV cache slot and no
  * weight-load/prefill status stream, so those concerns are simply absent here.
  */
-import type { AssistantProvider, AssistantMessage, AssistantStatus, AssistantTurn, CompletionResult, ToolDefinition } from '../types';
+import type {
+  AssistantProvider,
+  AssistantMessage,
+  AssistantStatus,
+  AssistantTurn,
+  CompletionResult,
+  ExecutedToolCall,
+  ToolDefinition,
+} from '../types';
 import type { ChatCompletionMessageParam } from '@mlc-ai/web-llm';
 import { ASSISTANT } from '../../zmninja-ng-constants';
 import { log, LogLevel } from '../../logger';
 import { Platform } from '../../platform';
+import { NO_TOOL_INSTRUCTIONS } from '../triage';
 import { buildWebLlmMessages, parseWebLlmTurn, PARSE_ERROR_TEXT } from './webllm';
 import { captureExchange } from '../exchange';
 import { MODEL_NOT_AVAILABLE_MESSAGE } from '../model-download';
@@ -28,15 +37,6 @@ import { MODEL_NOT_AVAILABLE_MESSAGE } from '../model-download';
  *  ("not configured, go to Settings") covers this case too, with no separate UI
  *  path (refs #270, same reasoning as native-llm.ts's own constant). */
 export const APPLE_INTELLIGENCE_NOT_AVAILABLE_MESSAGE = MODEL_NOT_AVAILABLE_MESSAGE;
-
-/** The first property of every schema branch below, and optional in all of
- *  them. Apple's guided-generation guidance is to let the model write a short
- *  reason BEFORE the field that depends on it: generation is sequential, so a
- *  property emitted first is the only one that can condition the rest. The
- *  turn parser reads `tool`/`answer` and ignores every other key
- *  (`toTurn` in webllm.ts), so the extra field costs a sentence and nothing
- *  else. Optional, so a model with nothing to say skips it. */
-const REASONING_PROPERTY = { reasoning: { type: 'string', description: 'One sentence of reasoning first.' } };
 
 /** The turn contract expressed as a JSON Schema for the plugin's constrained
  *  decoder, so the reply EXACTLY matches one of the shapes `parseWebLlmTurn`
@@ -67,13 +67,20 @@ const REASONING_PROPERTY = { reasoning: { type: 'string', description: 'One sent
  *  `parseWebLlmTurn`'s primary path and stays consistent with the assistant
  *  turns already in the prompt. Disjoint required keys
  *  (`answer` vs `tool`) also make the `anyOf` trivial for the decoder to
- *  discriminate. */
+ *  discriminate.
+ *
+ *  This path is the FALLBACK now that the tool loop runs natively (see
+ *  `chat`), and it carries no `reasoning` property any more: a leading
+ *  free-text field was implicated in the intermittent "Failed to deserialize a
+ *  Generable type" rejections (it is the one field whose length the decoder
+ *  cannot bound), and it only ever conditioned the model, since the parser
+ *  ignored it (refs #270). */
 function buildTurnSchema(tools: ToolDefinition[], hasToolResult: boolean): string {
-  const answerSchema = { type: 'object', properties: { ...REASONING_PROPERTY, answer: { type: 'string' } }, required: ['answer'] };
+  const answerSchema = { type: 'object', properties: { answer: { type: 'string' } }, required: ['answer'] };
   if (tools.length === 0) return JSON.stringify(answerSchema);
   const toolSchemas = tools.map((tool) => ({
     type: 'object',
-    properties: { ...REASONING_PROPERTY, tool: { enum: [tool.name] }, input: tool.schema },
+    properties: { tool: { enum: [tool.name] }, input: tool.schema },
     required: ['tool', 'input'],
   }));
   // Tools registered but nothing fetched yet: tool branches only. A single tool
@@ -114,6 +121,37 @@ function firstSentence(description: string): string {
   return description;
 }
 
+/** The arguments of a native tool call, read defensively off the event: the
+ *  framework hands them over as a JSON string, and anything that is not an
+ *  object becomes an empty input. That is deliberately not an exception: the
+ *  agent's own validation then rejects the call with a message the model can
+ *  correct from, whereas a throwing listener would leave the native session
+ *  waiting for a result that never comes (refs #270). */
+function parseToolArguments(argumentsJson: string, toolName: string): Record<string, unknown> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(argumentsJson || '{}');
+  } catch {
+    parsed = undefined;
+  }
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed as Record<string, unknown>;
+  log.assistant('Apple Intelligence tool call arguments were not a JSON object', LogLevel.WARN, { toolName, argumentsJson });
+  return {};
+}
+
+/** The behavioural rules a tool-carrying turn gets, each one a measured failure
+ *  of this backend restated as a short imperative. Shared by both tool paths:
+ *  the framework's native tool loop enforces the CALL shape, never what the
+ *  model may say about a result. */
+const TOOL_TURN_RULES = [
+  'You must only read data and navigate. Say plainly that you cannot arm, disarm, change run state, or delete anything, and name the screen that can: Monitors, Server, or the event itself.',
+  'Copy the person\'s own time words into list_events\' `when`, verbatim and in their language ("yesterday", "letzte Woche"). Never compute a date or a timestamp yourself.',
+  'A summary, recap, or comparison names no thing, so it must carry NO objectType. Only a question naming people, cars, animals, or packages takes objectType, and it must use list_events.',
+  'Quote the result\'s summary line, matchCount, and countsByMonitor exactly. Never tally rows yourself.',
+  'Greetings and thanks get one short, warm sentence.',
+  'When your answer is about particular rows rather than all of them, end it with one line: SHOW: events=<ids> monitors=<ids>',
+];
+
 /** The instruction block for this backend, in place of the shared system prompt
  *  plus WebLLM's tool catalog (refs #270).
  *
@@ -132,30 +170,43 @@ function firstSentence(description: string): string {
  *  example answer carrying plausible counts was repeated verbatim as this
  *  installation's data on the WebLLM path (see `buildFewShotExamples`), and the
  *  EXAMPLE_ prefix keeps the one placeholder id unmistakable. */
-function buildAppleInstructions(system: string, tools: ToolDefinition[]): string {
+function buildAppleInstructions(system: string, tools: ToolDefinition[], nativeTools = false): string {
   const facts = system.split('\n').filter((line) => DYNAMIC_FACT_MARKERS.some((marker) => line.includes(marker)));
+  // The tool-less turn's whole routing decision (triage said chat or action),
+  // carried over verbatim rather than restated: without it a CHAT turn lost the
+  // scope refusal and an ACTION turn lost the "name the screen that can do it"
+  // instruction, which are the only guidance those turns get (refs #270).
+  const policy = Object.values(NO_TOOL_INSTRUCTIONS).find((text) => system.includes(text)) ?? '';
   const toolBlock =
     tools.length === 0
       ? 'You have no tools this turn. Answer the person directly.'
       : [
-          'Call ONE tool per turn until you have the data, then answer. Tools:',
-          tools.map((tool) => `- ${tool.name}: ${firstSentence(tool.description)}`).join('\n'),
+          // Native tool calling: the framework picks the calls from the schemas
+          // it was handed, so a catalog here would be a second, drifting copy of
+          // them, and the JSON turn examples would teach a shape this path never
+          // produces. The behavioural rules are what remains ours to state.
+          nativeTools
+            ? 'Call a tool whenever the answer needs data from this system, then answer in plain sentences.'
+            : [
+                'Call ONE tool per turn until you have the data, then answer. Tools:',
+                tools.map((tool) => `- ${tool.name}: ${firstSentence(tool.description)}`).join('\n'),
+              ].join('\n'),
           '',
-          'You must only read data and navigate. Say plainly that you cannot arm, disarm, change run state, or delete anything, and name the screen that can: Monitors, Server, or the event itself.',
-          'Copy the person\'s own time words into list_events\' `when`, verbatim and in their language ("yesterday", "letzte Woche"). Never compute a date or a timestamp yourself.',
-          'A summary, recap, or comparison names no thing, so it must carry NO objectType. Only a question naming people, cars, animals, or packages takes objectType, and it must use list_events.',
-          'Quote the result\'s summary line, matchCount, and countsByMonitor exactly. Never tally rows yourself.',
-          'Greetings and thanks get one short, warm sentence.',
-          'When your answer is about particular rows rather than all of them, end it with one line: SHOW: events=<ids> monitors=<ids>',
-          '',
-          'Examples of one turn:',
-          '{"reasoning": "The person wants a rolling 24 hour total.", "tool": "count_events", "input": {"lastCount": 24, "lastUnit": "hour"}}',
-          '{"reasoning": "Copy the time words the person used.", "tool": "list_events", "input": {"when": "yesterday"}}',
-          '{"reasoning": "The name is already resolved.", "tool": "get_monitor", "input": {"monitorId": "EXAMPLE_MONITOR_ID"}}',
+          ...TOOL_TURN_RULES,
+          ...(nativeTools
+            ? []
+            : [
+                '',
+                'Examples of one turn:',
+                '{"tool": "count_events", "input": {"lastCount": 24, "lastUnit": "hour"}}',
+                '{"tool": "list_events", "input": {"when": "yesterday"}}',
+                '{"tool": "get_monitor", "input": {"monitorId": "EXAMPLE_MONITOR_ID"}}',
+              ]),
         ].join('\n');
   return [
     'You are Ninjii, an expert assistant for the person\'s ZoneMinder security camera system. The person owns these cameras and asks about their own recordings. Your name is spelled exactly "Ninjii" and never changes.',
     facts.join('\n'),
+    policy,
     toolBlock,
     // Apple's closing rule, and the failure this backend actually shows: it
     // answered data questions with invented counts (refs #270).
@@ -324,16 +375,100 @@ export class AppleIntelligenceProvider implements AssistantProvider {
     };
   }
 
+  /** The native tool loop: Foundation Models owns the iteration (refs #270).
+   *
+   *  The tool schemas go to the framework, which decides the calls, emits each
+   *  one as a `toolCall` event, waits for `resolveToolCall`, and resolves the
+   *  chat with PROSE once it has what it needs. So there is no per-call round
+   *  trip through the agent loop, no turn schema, and no JSON turn shape to
+   *  parse: the model calls tools the way it was trained to, and the guided
+   *  path below stays as the fallback for a turn with no tools.
+   *
+   *  Each call still runs through the agent's own machinery via `runTool`
+   *  (duplicate guard, argument repair, schema validation, activity and trace),
+   *  so a native turn and a loop turn execute tools identically; the executed
+   *  calls ride back on `nativeToolResults` for the transcript and history. */
+  private async chatWithNativeTools(
+    plugin: Awaited<ReturnType<AppleIntelligenceProvider['getPlugin']>>['AppleIntelligence'],
+    messages: AssistantMessage[],
+    tools: ToolDefinition[],
+    system: string,
+    signal: AbortSignal,
+    runTool: (name: string, input: Record<string, unknown>) => Promise<ExecutedToolCall>,
+  ): Promise<AssistantTurn> {
+    const chatMessages = buildWebLlmMessages(buildAppleInstructions(system, tools, true), messages, tools, this.modelId, false, true, false, false);
+    const toolsJson = JSON.stringify(
+      // Short descriptions, the same first-sentence trim the catalog used
+      // (see `firstSentence`): the framework injects these into the window
+      // itself, so the registry's full prose would cost what removing the
+      // catalog just saved.
+      tools.map((tool) => ({ name: tool.name, description: firstSentence(tool.description), schemaJson: JSON.stringify(tool.schema) })),
+    );
+    const executed: ExecutedToolCall[] = [];
+
+    const onToolCall = async (event: { callId: string; name: string; argumentsJson: string }) => {
+      let output: string;
+      try {
+        const result = await runTool(event.name, parseToolArguments(event.argumentsJson, event.name));
+        executed.push(result);
+        output = result.output;
+      } catch (error) {
+        // The model reads whatever comes back, so a thrown tool is reported to
+        // it as text rather than left to hang the native session.
+        output = error instanceof Error ? error.message : String(error);
+        log.assistant('Apple Intelligence native tool call threw', LogLevel.ERROR, { toolName: event.name, error: output });
+      }
+      await plugin
+        .resolveToolCall({ callId: event.callId, output })
+        .catch((error) => log.assistant('Apple Intelligence resolveToolCall failed', LogLevel.WARN, { error }));
+    };
+
+    const startedAt = Date.now();
+    const handle = await plugin.addListener('toolCall', (event) => void onToolCall(event));
+    let response: { content: string; promptTokens?: number; completionTokens?: number };
+    try {
+      response = await this.withCancel(plugin, signal, () =>
+        plugin.chat({
+          messagesJson: JSON.stringify(chatMessages),
+          temperature: this.temperature,
+          maxTokens: ASSISTANT.maxTokens,
+          toolsJson,
+        }),
+      );
+    } finally {
+      await handle.remove();
+    }
+    if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+    log.assistant('Apple Intelligence native tool turn finished', LogLevel.DEBUG, {
+      modelId: this.modelId,
+      toolCalls: executed.length,
+    });
+
+    const promptTokens = response.promptTokens ?? Math.ceil((JSON.stringify(chatMessages).length + toolsJson.length) / 3.5);
+    const completionTokens = response.completionTokens ?? Math.ceil(response.content.length / 3.5);
+    return {
+      text: response.content,
+      toolCalls: [],
+      nativeToolResults: executed,
+      usage: { promptTokens, completionTokens, totalTokens: promptTokens + completionTokens },
+      exchange: captureExchange({ backend: 'apple', model: this.modelId, sent: chatMessages, received: response.content, startedAt }),
+    };
+  }
+
   async chat(
     messages: AssistantMessage[],
     tools: ToolDefinition[],
     system: string,
     signal: AbortSignal,
     onStatus?: (status: AssistantStatus) => void,
+    runTool?: (name: string, input: Record<string, unknown>) => Promise<ExecutedToolCall>,
   ): Promise<AssistantTurn> {
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
     const { AppleIntelligence: plugin } = await this.getPlugin();
     await this.ensureDeviceContext(plugin);
+    // Tools plus a caller that can execute them: hand the framework its own
+    // tool loop. Everything below is the fallback path for a tool-less turn.
+    if (runTool && tools.length > 0) return this.chatWithNativeTools(plugin, messages, tools, system, signal, runTool);
     // No few-shot and no OUTPUT_CONTRACT on this backend: with guided
     // generation the reply shape is enforced at the decoder, so all format
     // teaching must leave the prompt. Observed live: the few-shot event-count

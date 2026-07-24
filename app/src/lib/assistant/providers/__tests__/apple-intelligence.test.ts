@@ -3,12 +3,18 @@ import { AppleIntelligenceProvider } from '../apple-intelligence';
 import { buildWebLlmMessages } from '../webllm';
 import { buildSystemPrompt } from '../../system-prompt';
 import { readOnlyTools } from '../../tools-readonly';
+import { buildNoToolPrompt } from '../../triage';
 import type { ToolDefinition } from '../../types';
 import { ASSISTANT } from '../../../zmninja-ng-constants';
 
 const chatMock = vi.fn();
 const cancelChatMock = vi.fn().mockResolvedValue(undefined);
 const isSupportedMock = vi.fn().mockResolvedValue({ supported: true, contextSize: 4096 });
+const resolveToolCallMock = vi.fn().mockResolvedValue(undefined);
+const removeListenerMock = vi.fn().mockResolvedValue(undefined);
+/** The `toolCall` listener the provider registered, so a test can fire the
+ *  event the native tool loop would. */
+let toolCallListener: ((event: { callId: string; name: string; argumentsJson: string }) => void) | undefined;
 vi.mock('../../../../plugins/apple-intelligence', () => ({
   AppleIntelligence: {
     // Same device-faithful trap as native-llm's mock: the real Capacitor proxy
@@ -20,6 +26,11 @@ vi.mock('../../../../plugins/apple-intelligence', () => ({
     chat: (options: unknown) => chatMock(options),
     cancelChat: () => cancelChatMock(),
     isSupported: () => isSupportedMock(),
+    resolveToolCall: (options: unknown) => resolveToolCallMock(options),
+    addListener: (_event: string, listener: (event: { callId: string; name: string; argumentsJson: string }) => void) => {
+      toolCallListener = listener;
+      return Promise.resolve({ remove: () => removeListenerMock() });
+    },
   },
 }));
 
@@ -369,28 +380,28 @@ describe('AppleIntelligenceProvider.chat', () => {
     const schema = JSON.parse(options.schemaJson) as { anyOf?: unknown; required?: string[]; properties?: Record<string, unknown> };
     expect(schema.anyOf).toBeUndefined();
     expect(schema.required).toEqual(['answer']);
-    expect(Object.keys(schema.properties ?? {})).toEqual(['reasoning', 'answer']);
+    expect(Object.keys(schema.properties ?? {})).toEqual(['answer']);
   });
 
-  // Apple's reasoning-first technique: generation is sequential, so a short
-  // reason emitted BEFORE the decision is the only part that can condition it.
-  // Optional in every branch, and ignored by the parser (refs #270).
+  // The leading free-text `reasoning` property is gone from every branch: it is
+  // the one field whose length the decoder cannot bound, and it was implicated
+  // in the intermittent "Failed to deserialize a Generable type" rejections. The
+  // parser never read it, so nothing downstream changes (refs #270).
   it.each([
     ['answer-only (no tools)', [] as ToolDefinition[], []],
     ['tool-only (no result yet)', [TOOL], []],
     ['the union (a tool result exists)', [TOOL], [{ role: 'tool' as const, toolResults: [{ callId: '1', output: '14 events' }] }]],
-  ])('puts an optional reasoning property first in every %s schema branch', async (_label, turnTools, history) => {
+  ])('carries no reasoning property in any %s schema branch', async (_label, turnTools, history) => {
     chatMock.mockResolvedValue({ content: '{"answer": "ok"}' });
 
     const provider = new AppleIntelligenceProvider();
     await provider.chat([{ role: 'user', text: 'hi' }, ...history], turnTools, 'sys', new AbortController().signal);
 
     const { schemaJson } = chatMock.mock.calls[0][0] as { schemaJson: string };
+    expect(schemaJson).not.toContain('reasoning');
     const parsed = JSON.parse(schemaJson) as { anyOf?: Branch[] } & Branch;
     for (const branch of parsed.anyOf ?? [parsed]) {
-      expect(Object.keys(branch.properties ?? {})[0]).toBe('reasoning');
-      expect(branch.properties?.reasoning).toEqual({ type: 'string', description: 'One sentence of reasoning first.' });
-      expect(branch.required).not.toContain('reasoning');
+      expect(branch.properties?.reasoning).toBeUndefined();
     }
   });
 
@@ -532,7 +543,7 @@ describe('AppleIntelligenceProvider instructions', () => {
   it('carries short tool-call examples in the exact turn shape, with placeholder values only', async () => {
     const instructions = await runFixtureTurn();
 
-    expect(instructions).toContain('{"reasoning": "The person wants a rolling 24 hour total.", "tool": "count_events", "input": {"lastCount": 24, "lastUnit": "hour"}}');
+    expect(instructions).toContain('{"tool": "count_events", "input": {"lastCount": 24, "lastUnit": "hour"}}');
     expect(instructions).toContain('"tool": "list_events", "input": {"when": "yesterday"}}');
     expect(instructions).toContain('EXAMPLE_MONITOR_ID');
     // Three examples, and none of them an answer carrying data the model could
@@ -575,6 +586,40 @@ describe('AppleIntelligenceProvider instructions', () => {
     expect(instructions.length).toBeLessThan(previous.length * 0.7);
   });
 
+  // The tool-less turn's policy text is the whole routing decision triage made,
+  // and it is appended to the prompt by `buildNoToolPrompt`. Rebuilding the
+  // instructions around the dynamic facts alone silently dropped it, so a CHAT
+  // turn lost its scope refusal and an ACTION turn lost the "here is the screen
+  // that can do it" instruction (refs #270).
+  it('carries the CHAT policy text through into the instructions', async () => {
+    const provider = new AppleIntelligenceProvider();
+    await provider.chat(
+      [{ role: 'user', text: 'write me a poem' }],
+      [],
+      buildNoToolPrompt(FIXTURE_SYSTEM, 'chat'),
+      new AbortController().signal,
+    );
+    const instructions = sentInstructions();
+
+    expect(instructions).toContain('say you are meant for questions about the user\'s');
+    expect(instructions).toContain('cameras, events, and ZoneMinder system.');
+    expect(instructions).toContain('A greeting, a thank you, or small talk gets a short warm reply, nothing more.');
+  });
+
+  it('carries the ACTION policy text through into the instructions', async () => {
+    const provider = new AppleIntelligenceProvider();
+    await provider.chat(
+      [{ role: 'user', text: 'arm the back camera' }],
+      [],
+      buildNoToolPrompt(FIXTURE_SYSTEM, 'action'),
+      new AbortController().signal,
+    );
+    const instructions = sentInstructions();
+
+    expect(instructions).toContain('The user has asked you to CHANGE something.');
+    expect(instructions).toContain('monitors and arming on the Monitors screen, run state on the Server screen');
+  });
+
   it('says there are no tools and offers no examples on a tool-less turn', async () => {
     const instructions = await runFixtureTurn([]);
 
@@ -584,6 +629,120 @@ describe('AppleIntelligenceProvider instructions', () => {
     // The persona and the closing rule still frame it.
     expect(instructions).toContain('You are Ninjii');
     expect(instructions).toContain('Every fact you state must come from a tool result in this turn.');
+  });
+});
+
+// Native tool calling (refs #270): given a `runTool` callback and tools, the
+// framework owns the loop. The provider ships the tool schemas, executes each
+// emitted call through the agent's machinery, hands the output back, and
+// returns the model's PROSE answer with everything it ran attached.
+describe('AppleIntelligenceProvider native tool calling', () => {
+  beforeEach(() => {
+    chatMock.mockReset();
+    resolveToolCallMock.mockClear();
+    removeListenerMock.mockClear();
+    toolCallListener = undefined;
+    isSupportedMock.mockResolvedValue({ supported: true, contextSize: 4096 });
+  });
+
+  /** Drives one native turn: the plugin fires `calls` at the registered
+   *  listener (as the framework would) and then resolves with prose. */
+  function scriptNativeTurn(calls: Array<{ callId: string; name: string; argumentsJson: string }>, content = 'There were 14 events.') {
+    chatMock.mockImplementation(async () => {
+      for (const call of calls) toolCallListener?.(call);
+      // Lets the listener's own async work (runTool, resolveToolCall) settle
+      // before the chat resolves, which is what the native session does by
+      // blocking on resolveToolCall.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      return { content };
+    });
+  }
+
+  it('sends the tool catalog as toolsJson and no schemaJson at all', async () => {
+    scriptNativeTurn([]);
+    const runTool = vi.fn();
+
+    const provider = new AppleIntelligenceProvider();
+    await provider.chat([{ role: 'user', text: 'how many today?' }], [TOOL], 'sys', new AbortController().signal, undefined, runTool);
+
+    const options = chatMock.mock.calls[0][0] as { toolsJson?: string; schemaJson?: string };
+    expect(options.schemaJson).toBeUndefined();
+    expect(JSON.parse(options.toolsJson!)).toEqual([
+      { name: 'count_events', description: 'Counts events', schemaJson: JSON.stringify(TOOL.schema) },
+    ]);
+    // One source of truth for the tools: the prompt no longer restates them,
+    // and the JSON turn examples would teach a shape this path never produces.
+    const instructions = sentInstructions();
+    expect(instructions).not.toContain('- count_events:');
+    expect(instructions).not.toContain('"tool":');
+    // The behavioural rules and the persona still frame the turn.
+    expect(instructions).toContain('You are Ninjii');
+    expect(instructions).toContain('Never tally rows yourself.');
+  });
+
+  it('runs each emitted toolCall through runTool and resolves it with the output, in order', async () => {
+    scriptNativeTurn([
+      { callId: 'a', name: 'count_events', argumentsJson: '{"lastCount":1,"lastUnit":"day"}' },
+      { callId: 'b', name: 'list_events', argumentsJson: '{"when":"yesterday"}' },
+    ]);
+    const runTool = vi
+      .fn()
+      .mockResolvedValueOnce({ callId: 'x1', name: 'count_events', input: { lastCount: 1, lastUnit: 'day' }, output: '14 events' })
+      .mockResolvedValueOnce({ callId: 'x2', name: 'list_events', input: { when: 'yesterday' }, output: '3 rows' });
+
+    const provider = new AppleIntelligenceProvider();
+    const turn = await provider.chat([{ role: 'user', text: 'how many today?' }], [TOOL], 'sys', new AbortController().signal, undefined, runTool);
+
+    expect(runTool.mock.calls).toEqual([
+      ['count_events', { lastCount: 1, lastUnit: 'day' }],
+      ['list_events', { when: 'yesterday' }],
+    ]);
+    expect(resolveToolCallMock.mock.calls.map(([o]) => o)).toEqual([
+      { callId: 'a', output: '14 events' },
+      { callId: 'b', output: '3 rows' },
+    ]);
+    // The reply is prose, not a JSON turn, and everything that ran comes back
+    // in order for the transcript.
+    expect(turn.text).toBe('There were 14 events.');
+    expect(turn.toolCalls).toEqual([]);
+    expect(turn.nativeToolResults?.map((r) => r.name)).toEqual(['count_events', 'list_events']);
+    expect(turn.nativeToolResults?.map((r) => r.output)).toEqual(['14 events', '3 rows']);
+    expect(removeListenerMock).toHaveBeenCalled();
+  });
+
+  it('resolves the waiting call with the error text when runTool throws', async () => {
+    scriptNativeTurn([{ callId: 'a', name: 'count_events', argumentsJson: '{}' }]);
+    const runTool = vi.fn().mockRejectedValue(new Error('profile is offline'));
+
+    const provider = new AppleIntelligenceProvider();
+    const turn = await provider.chat([{ role: 'user', text: 'how many?' }], [TOOL], 'sys', new AbortController().signal, undefined, runTool);
+
+    expect(resolveToolCallMock).toHaveBeenCalledWith({ callId: 'a', output: 'profile is offline' });
+    expect(turn.nativeToolResults).toEqual([]);
+  });
+
+  it('passes an empty input when the arguments are not a JSON object, instead of throwing at the listener', async () => {
+    scriptNativeTurn([{ callId: 'a', name: 'count_events', argumentsJson: 'not json' }]);
+    const runTool = vi.fn().mockResolvedValue({ callId: 'x', name: 'count_events', input: {}, output: 'lastCount is required' });
+
+    const provider = new AppleIntelligenceProvider();
+    await provider.chat([{ role: 'user', text: 'how many?' }], [TOOL], 'sys', new AbortController().signal, undefined, runTool);
+
+    expect(runTool).toHaveBeenCalledWith('count_events', {});
+    expect(resolveToolCallMock).toHaveBeenCalledWith({ callId: 'a', output: 'lastCount is required' });
+  });
+
+  it('keeps the guided schema path for a tool-less turn even when runTool is given', async () => {
+    chatMock.mockResolvedValue({ content: '{"answer": "Hi there."}' });
+
+    const provider = new AppleIntelligenceProvider();
+    const turn = await provider.chat([{ role: 'user', text: 'hello' }], [], 'sys', new AbortController().signal, undefined, vi.fn());
+
+    const options = chatMock.mock.calls[0][0] as { toolsJson?: string; schemaJson?: string };
+    expect(options.toolsJson).toBeUndefined();
+    expect(JSON.parse(options.schemaJson!)).toEqual({ type: 'object', properties: { answer: { type: 'string' } }, required: ['answer'] });
+    expect(turn.text).toBe('Hi there.');
+    expect(turn.nativeToolResults).toBeUndefined();
   });
 });
 

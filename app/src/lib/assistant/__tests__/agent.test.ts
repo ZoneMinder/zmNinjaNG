@@ -863,3 +863,78 @@ describe('runAssistantTurn', () => {
     expect(finalMsg.display).toEqual([card]);
   });
 });
+
+// A backend whose own runtime drives the tool loop (the apple backend, refs
+// #270): it executes through the `runTool` callback and returns the finished
+// answer with `nativeToolResults` set. The turn must come out of the agent in
+// the same shape the loop path produces, or the transcript, the result cards
+// and the persisted thread would differ by backend.
+describe('a provider that runs the tool loop natively', () => {
+  const card = { kind: 'event' as const, id: '42', title: 'Front Door', navigatePath: '/events/42' };
+  const stubTool = {
+    name: 'list_events', description: '', schema: { type: 'object', properties: {} }, destructive: false,
+    execute: async () => ({ output: '{"matchCount":1}', display: [card] }),
+  } as never;
+
+  /** Answers by calling one tool through `runTool`, the way the native loop does. */
+  class NativeProvider {
+    complete = vi.fn();
+    async chat(
+      _messages: AssistantMessage[],
+      _tools: never,
+      _system: string,
+      _signal: AbortSignal,
+      _onStatus?: unknown,
+      runTool?: (name: string, input: Record<string, unknown>) => Promise<never>,
+    ) {
+      const result = await runTool!('list_events', { when: 'today' });
+      return {
+        text: 'One event today.',
+        toolCalls: [],
+        nativeToolResults: [result],
+        usage: { promptTokens: 100, completionTokens: 10, totalTokens: 110 },
+      };
+    }
+  }
+
+  it('produces the same history, trace, display and activity shape as the loop path', async () => {
+    const h = host();
+    const traced: unknown[] = [];
+    const native = await runAssistantTurn({
+      ...baseOpts(new NativeProvider() as never, h, [{ role: 'user', text: 'what happened today?' }]),
+      host: { ...h, onTrace: (e) => traced.push(e) },
+      tools: [stubTool],
+    });
+
+    const loopProvider = new MockProvider();
+    loopProvider.setScript([
+      { toolCalls: [{ id: 'c1', name: 'list_events', input: { when: 'today' } }] },
+      { text: 'One event today.', toolCalls: [] },
+    ]);
+    const loop = await runAssistantTurn({
+      ...baseOpts(loopProvider, host(), [{ role: 'user', text: 'what happened today?' }]),
+      tools: [stubTool],
+    });
+
+    // The loop path opens with the tool-call assistant message the model sent;
+    // a native turn has none to report, so it starts at the results.
+    expect(native.map((m) => m.role)).toEqual(['tool', 'assistant']);
+    expect(loop.map((m) => m.role)).toEqual(['assistant', 'tool', 'assistant']);
+    // The tool message carries the same executed result, plus the name/input
+    // the native runtime chose.
+    expect(native[0].toolResults).toEqual([
+      { ...loop[1].toolResults![0], callId: 'native-1', name: 'list_events', input: { when: 'today' } },
+    ]);
+    // The answer message is identical in every field the panel renders.
+    const strip = (m: AssistantMessage) => ({ text: m.text, toolCalls: m.toolCalls, display: m.display, trace: m.trace });
+    expect(strip(native[1])).toEqual(strip(loop[2]));
+    expect(native[1].display).toEqual([card]);
+    expect(native[1].usage).toEqual({ promptTokens: 100, completionTokens: 10, totalTokens: 110 });
+    // The tool ran through the same machinery: one trace entry, and the
+    // running/done activity pair.
+    expect(traced).toEqual([
+      { kind: 'tool', name: 'list_events', input: { when: 'today' }, output: '{"matchCount":1}', isError: undefined, apiCalls: [] },
+    ]);
+    expect((h.onActivity as ReturnType<typeof vi.fn>).mock.calls.map(([a]) => a.status)).toEqual(['running', 'done']);
+  });
+});

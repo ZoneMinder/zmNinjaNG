@@ -2190,22 +2190,39 @@ property of the registry (``TOOLS`` holds no mutating tool and
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/providers/native-llm.ts>`__
    · → :doc:`12-shared-services-and-components`
 
-#. **The Apple Intelligence provider reuses the same stack over an OS-hosted
-   model.** For the ``'apple'`` backend ``AppleIntelligenceProvider.chat``
-   (``providers/apple-intelligence.ts``) builds the turn with the same
-   ``buildWebLlmMessages`` and parses with the same ``parseWebLlmTurn`` as the
-   WebLLM and native providers, and retries through the same
-   ``SELF_REPAIR_PROMPT``/``ASSISTANT.maxParseAttempts`` self-repair loop,
-   because none of that is backend-specific. Only the transport differs: each
-   call crosses the Capacitor ``AppleIntelligence`` bridge as one
-   ``plugin.chat({messagesJson, temperature, maxTokens})``, which
-   ``AppleIntelligencePlugin.swift`` (iOS only) turns into a single
-   ``LanguageModelSession.respond`` on Apple's Foundation Models system model,
-   with the abort signal wired to the plugin's ``cancelChat()``. What the native
-   path carries but this one drops all follows from the OS owning the model:
+#. **The Apple Intelligence provider lets Foundation Models run the tool loop
+   itself.** For the ``'apple'`` backend ``AppleIntelligenceProvider.chat``
+   (``providers/apple-intelligence.ts``) assembles the messages with
+   ``buildWebLlmMessages``, but around instructions it composes itself
+   (``buildAppleInstructions``: the persona, the caller's dynamic facts, the
+   tool-less policy text triage appended, and the behavioural rules), never the
+   shared prompt with its tool catalog, few-shot block and ``OUTPUT_CONTRACT``.
+   A turn that has tools takes the NATIVE path: the tool schemas cross the
+   bridge as ``plugin.chat({messagesJson, temperature, maxTokens, toolsJson})``,
+   ``AppleIntelligencePlugin.swift`` (iOS only) registers them as Foundation
+   Models tools on the ``LanguageModelSession``, and the framework decides and
+   sequences the calls itself. Each call comes back to JS as a ``toolCall``
+   plugin event, the provider runs it through the ``runTool`` callback
+   ``runAssistantTurn`` handed to ``chat`` (so the duplicate-call guard,
+   argument repair, schema validation, activity steps and trace entries are the
+   agent's own, shared with every other backend), and answers the waiting
+   session with ``plugin.resolveToolCall({callId, output})``; a failed tool
+   resolves with its error text, which is what the model has to read to correct
+   itself. The chat promise then resolves with PROSE, and the provider returns
+   it with ``nativeToolResults`` set, which tells ``runAssistantTurn`` the turn
+   is already finished. A tool-less turn (triage said chat or action) instead
+   takes the guided fallback path: ``schemaJson`` constrains the reply to the
+   answer-only shape, ``parseWebLlmTurn`` reads it, and an empty or unusable
+   reply retries with ``APPLE_RETRY_PROMPT`` (never WebLLM's contract-restating
+   ``SELF_REPAIR_PROMPT``, which would teach a format guided generation already
+   enforces). The abort signal is wired to the plugin's ``cancelChat()`` on both
+   paths. What the native llama.cpp path carries but this one drops all follows
+   from the OS owning the model:
    there is no download or model file, the model is fixed
-   (``ASSISTANT.appleIntelligenceModelId``, not user-chosen), and the Foundation
-   Models API reports no token counts, so ``turn.usage`` stays undefined. Its
+   (``ASSISTANT.appleIntelligenceModelId``, not user-chosen), and an OS build
+   that reports no token counts leaves ``turn.usage`` on the provider's own
+   characters-over-3.5 estimate, so auto-clear can still act before the small
+   window overflows. Its
    ``contextWindow`` is learned instead from ``isSupported().contextSize`` (4096)
    on the first native call of the turn, so auto-clear still works. Rejections
    map on the plugin's stable ``code`` exactly as the native provider's do:

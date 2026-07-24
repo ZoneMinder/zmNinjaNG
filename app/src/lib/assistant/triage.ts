@@ -146,43 +146,48 @@ export async function classifyRequest(
   }
 }
 
+/** The tool-less policy text `buildNoToolPrompt` appends, exported so a backend
+ *  that rebuilds the prompt for itself can carry it over verbatim instead of
+ *  restating it. The apple provider composes its own instructions from the
+ *  caller's prompt (see `buildAppleInstructions`) and would otherwise drop this
+ *  block, which is the entire routing decision for a chat or action turn. */
+export const NO_TOOL_INSTRUCTIONS: Record<Exclude<RequestKind, 'zoneminder'>, string> = {
+  action: [
+    'The user has asked you to CHANGE something. You cannot: this assistant can only read data and',
+    'navigate. Say plainly that you cannot do it, that this is because an assistant can misread a',
+    'request and some of these actions cannot be undone, and tell them where to do it themselves:',
+    'monitors and arming on the Monitors screen, run state on the Server screen, deleting and',
+    'archiving on the event itself. Do not offer to do it another way.',
+    // Observed on Apple Foundation Models (refs #270): an action turn
+    // refused the change and then invented the system's condition,
+    // "Server is healthy. FPS: 1.0. Health: 100%". No tool ran on this
+    // turn, so every such number is fabricated.
+    'Never state any system fact, count, status, or health figure: no tool has run on this turn, so',
+    'you have retrieved nothing and have nothing to report.',
+  ].join('\n'),
+  chat: [
+    'This message is not a question about this ZoneMinder installation. Answer it directly and briefly',
+    'as yourself. Do not mention tools, do not list what you can do unless asked, and do not invent any',
+    'camera, event, or server information.',
+    // The scope half of the chat policy lives here rather than in the base
+    // prompt: this instruction only ever rides a tool-less turn, so it
+    // cannot pull a real ZoneMinder question away from its tool, which is
+    // what every base-prompt wording of it did in the eval harness (refs
+    // #270). Greetings stay warm; only the task asks get deflected.
+    'A greeting, a thank you, or small talk gets a short warm reply, nothing more. Never write code,',
+    'poems, or essays, and never take on general knowledge or calculation tasks: for those, and for any',
+    'other question that is not about this system, say you are meant for questions about the user\'s',
+    'cameras, events, and ZoneMinder system.',
+  ].join('\n'),
+};
+
 /** The system prompt for a request that must be answered WITHOUT tools.
  *
  *  `base` still leads so the assistant keeps its identity and its read-only
  *  framing; what changes is that there is nothing to call, and it is told so,
  *  rather than being handed nine tools and asked to show restraint. */
 export function buildNoToolPrompt(base: string, kind: Exclude<RequestKind, 'zoneminder'>): string {
-  const instruction =
-    kind === 'action'
-      ? [
-          'The user has asked you to CHANGE something. You cannot: this assistant can only read data and',
-          'navigate. Say plainly that you cannot do it, that this is because an assistant can misread a',
-          'request and some of these actions cannot be undone, and tell them where to do it themselves:',
-          'monitors and arming on the Monitors screen, run state on the Server screen, deleting and',
-          'archiving on the event itself. Do not offer to do it another way.',
-          // Observed on Apple Foundation Models (refs #270): an action turn
-          // refused the change and then invented the system's condition,
-          // "Server is healthy. FPS: 1.0. Health: 100%". No tool ran on this
-          // turn, so every such number is fabricated.
-          'Never state any system fact, count, status, or health figure: no tool has run on this turn, so',
-          'you have retrieved nothing and have nothing to report.',
-        ].join('\n')
-      : [
-          'This message is not a question about this ZoneMinder installation. Answer it directly and briefly',
-          'as yourself. Do not mention tools, do not list what you can do unless asked, and do not invent any',
-          'camera, event, or server information.',
-          // The scope half of the chat policy lives here rather than in the base
-          // prompt: this instruction only ever rides a tool-less turn, so it
-          // cannot pull a real ZoneMinder question away from its tool, which is
-          // what every base-prompt wording of it did in the eval harness (refs
-          // #270). Greetings stay warm; only the task asks get deflected.
-          'A greeting, a thank you, or small talk gets a short warm reply, nothing more. Never write code,',
-          'poems, or essays, and never take on general knowledge or calculation tasks: for those, and for any',
-          'other question that is not about this system, say you are meant for questions about the user\'s',
-          'cameras, events, and ZoneMinder system.',
-        ].join('\n');
-
-  return `${base}\n\n${instruction}`;
+  return `${base}\n\n${NO_TOOL_INSTRUCTIONS[kind]}`;
 }
 
 export function buildTriageMessages(question: string): AssistantMessage[] {

@@ -84,6 +84,13 @@ export interface ToolCall {
   input: Record<string, unknown>;
 }
 
+/** A tool call a backend's OWN runtime decided on and the agent executed for
+ *  it, kept with the arguments it ran with. The agent loop already has the
+ *  name and input on the `ToolCall` it dispatched; a native tool loop resolves
+ *  inside `provider.chat`, so the pair has to travel back out attached to the
+ *  result (see `AssistantTurn.nativeToolResults`). */
+export type ExecutedToolCall = ToolResult & { name: string; input: Record<string, unknown> };
+
 export interface ToolResult {
   /** The ZoneMinder requests this tool actually made ("GET /zm/api/... -> 200
    *  (45ms)"), for the panel transcript. Diagnostic only: never sent to the
@@ -162,6 +169,14 @@ export interface AssistantTurn {
    *  kept so the panel can show what it was working on across a multi-step
    *  turn. Undefined for a model that emits none. */
   reasoning?: string;
+  /** Everything a backend's native tool loop executed while producing this
+   *  turn, in the order it ran (refs #270). Set only by a backend that
+   *  orchestrates tool calls itself through `chat`'s `runTool` callback: the
+   *  iterating is already done, so `toolCalls` is empty and `text` is the
+   *  final answer. `runAssistantTurn` treats such a turn as final and records
+   *  these results the way it records its own loop's, so the transcript, the
+   *  result cards and the stored history come out the same shape. */
+  nativeToolResults?: ExecutedToolCall[];
 }
 
 export interface ToolContext {
@@ -305,12 +320,27 @@ export interface AssistantProvider {
     jsonSchema?: Record<string, unknown>,
     onStatus?: (status: AssistantStatus) => void,
   ): Promise<CompletionResult>;
+  /**
+   * One model turn. A backend either returns the tool calls it wants run (the
+   * agent loop executes them and calls `chat` again), or, when its own runtime
+   * owns the tool loop, executes them through `runTool` and returns the final
+   * answer with `nativeToolResults` set.
+   *
+   * `runTool` runs ONE tool call through the agent's own per-call machinery
+   * (duplicate-call guard, argument normalization, schema validation, activity
+   * and trace reporting) and resolves with its result. It never rejects for a
+   * tool-side failure: a refused or thrown call comes back as a result with
+   * `isError`, which is what the model must read to correct itself. Only the
+   * apple backend uses it today; every other backend ignores it and returns
+   * `toolCalls` as before.
+   */
   chat(
     messages: AssistantMessage[],
     tools: ToolDefinition[],
     system: string,
     signal: AbortSignal,
     onStatus?: (status: AssistantStatus) => void,
+    runTool?: (name: string, input: Record<string, unknown>) => Promise<ExecutedToolCall>,
   ): Promise<AssistantTurn>;
   /** The context window this backend is running with, when it is knowable.
    *  Set for on-device models (we pass the window to CreateMLCEngine, so we
