@@ -24,6 +24,7 @@ import { SectionHeader, SettingsCard, SettingsRow, RowLabel } from './SettingsLa
 import { AssistantOllamaSection } from './AssistantOllamaSection';
 import { AssistantNativeSection } from './AssistantNativeSection';
 import { AssistantAdvancedSection } from './AssistantAdvancedSection';
+import { AssistantFmEvalRow } from './AssistantFmEvalRow';
 import { ASSISTANT } from '../../lib/zmninja-ng-constants';
 import { NINJII_LOGO_URL } from '../../lib/assistant/ninjii-logo';
 import { Platform } from '../../lib/platform';
@@ -353,9 +354,10 @@ export function AssistantSection({
               <AssistantNativeSection />
             ) : settings.assistantBackend === 'apple' ? (
               // Apple Foundation Models is OS-hosted: no download/delete surface,
-              // no KV-cache slot, no token counts. Nothing renders below the
-              // picker for this backend.
-              null
+              // no KV-cache slot, no token counts. The only control here is the
+              // developer on-device eval, shown when this supported backend is
+              // the selected one (refs #270).
+              appleSupported === true ? <AssistantFmEvalRow /> : null
             ) : settings.assistantBackend === 'ollama' || Platform.isNative ? (
               <AssistantOllamaSection settings={settings} update={update} currentProfile={currentProfile} />
             ) : (

@@ -21,6 +21,9 @@ vi.mock('../../../lib/assistant/model-download', () => ({
   isModelDownloaded: (modelId: string) => isModelDownloadedMock(modelId),
   downloadModel: vi.fn(),
   deleteModel: vi.fn(),
+  // Pulled in transitively now that the apple eval row imports
+  // AppleIntelligenceProvider (which re-exports this constant).
+  MODEL_NOT_AVAILABLE_MESSAGE: '__i18n:assistant.model_not_available',
 }));
 
 vi.mock('../../../hooks/useCapacitorListener', () => ({ useCapacitorListener: useCapacitorListenerMock }));
@@ -315,6 +318,40 @@ describe('AssistantSection backend picker and gating', () => {
       expect(screen.queryByTestId('assistant-ollama-url')).not.toBeInTheDocument();
       expect(screen.queryByTestId('assistant-native-model-download')).not.toBeInTheDocument();
       expect(screen.queryByTestId('assistant-model-select')).not.toBeInTheDocument();
+    });
+
+    // Task 2 (refs #270): the developer on-device eval row is the ONLY control
+    // under the apple backend, and only when that supported backend is selected.
+    it('shows the on-device eval run button when the apple backend is selected and supported', async () => {
+      isNative = true;
+      appleSupported = true;
+      render(
+        <AssistantSection
+          settings={{ ...enabledSettings, assistantBackend: 'apple' }}
+          update={vi.fn()}
+          currentProfile={profile}
+          updateSettings={vi.fn()}
+        />,
+      );
+
+      expect(await screen.findByTestId('fm-eval-run')).toBeInTheDocument();
+    });
+
+    it('does not show the eval row for a non-apple backend even when apple is supported', async () => {
+      isNative = true;
+      appleSupported = true;
+      nativeSupported = true;
+      render(
+        <AssistantSection
+          settings={{ ...enabledSettings, assistantBackend: 'ollama' }}
+          update={vi.fn()}
+          currentProfile={profile}
+          updateSettings={vi.fn()}
+        />,
+      );
+
+      await screen.findByTestId('assistant-backend-select');
+      expect(screen.queryByTestId('fm-eval-run')).not.toBeInTheDocument();
     });
 
     it('shows the enable-Apple-Intelligence hint when the probe reports reason "disabled"', async () => {
