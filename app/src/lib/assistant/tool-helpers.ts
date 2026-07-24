@@ -354,6 +354,60 @@ export function calendarTimeframeMismatch(resolvedTimeframes: ResolvedTimeframe[
   );
 }
 
+/** Non-time words that carry no provenance: pure glue between the words that
+ *  do. `am`/`pm` are consumed by time canonicalization, so they belong here
+ *  too. Kept small on purpose: only English structural glue, never content. */
+const WHEN_STOPWORDS = new Set(['to', 'from', 'and', 'between', 'at', 'the', 'am', 'pm']);
+
+/** The alphabetic, non-stopword tokens of a phrase, lowercased.
+ *
+ *  Splitting on non-letters drops digits and colons, so a time like "10:00" or
+ *  "10am" leaves no word token (its "am" is a stopword) and is compared as a
+ *  time instead. Languages without word delimiters (Chinese) yield a single
+ *  token that the substring check below still matches, so the verbatim-copy
+ *  contract holds with no English grammar and no language list. */
+function whenWordTokens(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/[^\p{L}]+/u)
+    .filter((token) => token.length > 0 && !WHEN_STOPWORDS.has(token));
+}
+
+/** Every TIME token of a phrase as minutes-of-day.
+ *
+ *  Accepts the forms that actually arrive across models and phrasings: `10am`,
+ *  `10 am`, `10:00`, `10:00:00 AM`, `18:00`, `6pm`. A dash range like "10am-6pm"
+ *  yields two tokens (the dash is not part of either match). A bare number with
+ *  neither a colon nor a meridian is NOT a time, so "last 3 days" contributes
+ *  nothing. A 24-hour hour (>= 13) ignores any meridian a model wrongly appended
+ *  ("18:00:00 PM"), matching the 12-hour "6pm" the user actually wrote. */
+function whenTimeTokens(text: string): number[] {
+  const times: number[] = [];
+  const re = /(\d{1,2})(?::(\d{2}))?(?::\d{2})?\s*(am|pm)?/gi;
+  for (const match of text.toLowerCase().matchAll(re)) {
+    const [full, hourStr, minStr, meridian] = match;
+    if (!full.includes(':') && !meridian) continue;
+    let hour = Number(hourStr);
+    if (meridian && hour <= 12) {
+      if (meridian === 'pm') hour = hour === 12 ? 12 : hour + 12;
+      else hour = hour === 12 ? 0 : hour;
+    }
+    times.push((hour % 24) * 60 + (minStr ? Number(minStr) : 0));
+  }
+  return times;
+}
+
+/** Whether a `when` phrase is grounded in the question (or an allowed phrase):
+ *  every non-stopword word of the when appears in one of them, AND every
+ *  canonical time of the when appears among the question's canonical times. */
+function whenMatchesQuestion(whenPhrase: string, question: string, allowedPhrases?: string[]): boolean {
+  const haystacks = [question.toLowerCase(), ...(allowedPhrases ?? []).map((phrase) => phrase.toLowerCase())];
+  const wordsOk = whenWordTokens(whenPhrase).every((word) => haystacks.some((hay) => hay.includes(word)));
+  const questionTimes = new Set(whenTimeTokens(question));
+  const timesOk = whenTimeTokens(whenPhrase).every((time) => questionTimes.has(time));
+  return wordsOk && timesOk;
+}
+
 /**
  * Corrective text when a `when` phrase did not come from the question being
  * answered, or undefined when its provenance checks out.
@@ -364,12 +418,17 @@ export function calendarTimeframeMismatch(resolvedTimeframes: ResolvedTimeframe[
  * phrase came from the conversation history, not from the question.
  *
  * The design contract makes that checkable. `when` is specified as a verbatim
- * copy of the user's own time words in their own language, so a phrase that
- * really came from this question is a substring of it. That test needs no
- * phrase grammar and no language list, which is why it can be applied at all.
+ * copy of the user's own time words, so a phrase that really came from this
+ * question has every word present in it. Verbatim SUBSTRING matching was too
+ * brittle: "yesterday 10:00:00 AM to 18:00:00 PM" is exactly "Compare 10am-6pm
+ * yesterday and today." rephrased, yet "10:00:00 AM" is not the substring
+ * "10am", so the correct call was rejected into an identical-retry death loop.
+ * Instead, words match by plain normalized presence (no grammar, so any
+ * language passes) and times match by canonical minutes-of-day (so 10am and
+ * 10:00:00 AM are the same instant).
  *
  * `allowedPhrases` are the timeframes the pre-tool stage already resolved for
- * this turn (timeframe-stage.ts). A phrase matching one of them passes even
+ * this turn (timeframe-stage.ts). A phrase equal to one of them passes even
  * when it is not in the question: that is how the default-today case is legal,
  * where the stage resolved "today" though the user never typed it.
  */
@@ -380,8 +439,8 @@ export function whenNotFromQuestion(
 ): string | undefined {
   if (!question) return undefined;
   const normalizedWhen = normalizeWhenPhrase(whenPhrase);
-  if (normalizeWhenPhrase(question).includes(normalizedWhen)) return undefined;
   if (allowedPhrases?.some((phrase) => normalizeWhenPhrase(phrase) === normalizedWhen)) return undefined;
+  if (whenMatchesQuestion(whenPhrase, question, allowedPhrases)) return undefined;
 
   return (
     `The when value "${whenPhrase}" does not appear in the question you are answering. ` +
@@ -413,7 +472,20 @@ export function repairWhenPhrase(
   allowedPhrases?: string[],
 ): string | undefined {
   if (!whenNotFromQuestion(whenPhrase, question, allowedPhrases)) return undefined;
-  return allowedPhrases?.length === 1 ? allowedPhrases[0] : undefined;
+  if (allowedPhrases?.length !== 1) return undefined;
+  const phrase = allowedPhrases[0];
+  // Containment gate (refs #270): override only when the resolved phrase's own
+  // tokens are all present in the model's `when`. Without it the single
+  // resolved timeframe was force-substituted wholesale, rewriting "today
+  // 10:00:00 AM to 18:00:00 PM" to a resolved "yesterday" and answering the
+  // wrong day with confidence. A stray phrase that CARRIES the resolved one
+  // ("yesterday afternoon" -> "yesterday") still repairs the death loop; a
+  // phrase that contradicts it is left for whenNotFromQuestion to reject.
+  const whenWords = new Set(whenWordTokens(whenPhrase));
+  const whenTimes = new Set(whenTimeTokens(whenPhrase));
+  const wordsContained = whenWordTokens(phrase).every((word) => whenWords.has(word));
+  const timesContained = whenTimeTokens(phrase).every((time) => whenTimes.has(time));
+  return wordsContained && timesContained ? phrase : undefined;
 }
 
 /**

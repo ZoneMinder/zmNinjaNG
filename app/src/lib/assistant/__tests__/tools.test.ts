@@ -109,6 +109,9 @@ const INTERPRETED: Record<string, Record<string, unknown>> = {
   yesterday: { daysAgo: 1 },
   'last hour': { lastCount: 1, lastUnit: 'hour' },
   'yesterday from 4pm to 10pm': { daysAgo: 1, fromTime: '16:00', toTime: '22:00' },
+  'yesterday 10:00:00 am to 18:00:00 pm': { daysAgo: 1, fromTime: '10:00', toTime: '18:00' },
+  'today 10:00:00 am to 18:00:00 pm': { daysAgo: 0, fromTime: '10:00', toTime: '18:00' },
+  'yesterday afternoon': { daysAgo: 1 },
   gestern: { daysAgo: 1 },
 };
 
@@ -290,22 +293,48 @@ describe('read-only tools', () => {
     expect(context.interpretWhen).toHaveBeenCalledWith('today');
   });
 
+  // The live failure (refs #270): the model rephrased "10am-6pm" as
+  // "10:00:00 AM to 18:00:00 PM" - the same instants - and verbatim-substring
+  // provenance rejected it into an identical-retry death loop. Token matching
+  // accepts it because the canonical times line up.
+  it('list_events accepts a rephrased time-range when matching the question', async () => {
+    const tool = getToolByName('list_events')!;
+    const context = { ...ctx(), question: 'Compare 10am-6pm yesterday and today.' };
+    const r = await tool.execute({ when: 'yesterday 10:00:00 AM to 18:00:00 PM' }, context);
+    expect(r.isError).toBeFalsy();
+    expect(context.interpretWhen).toHaveBeenCalledWith('yesterday 10:00:00 AM to 18:00:00 PM');
+  });
+
   // The model repeats a rejected call verbatim rather than correcting it (nine
   // identical retries to budget death, observed live). One resolved timeframe
-  // makes the right `when` computable, so repair and run instead of rejecting.
-  it('list_events overrides a stray when to the single resolved timeframe', async () => {
+  // whose tokens the stray `when` already CARRIES makes the right `when`
+  // computable, so repair and run instead of rejecting.
+  it('list_events overrides a stray when that contains the single resolved timeframe', async () => {
     const warn = vi.spyOn(log, 'assistant').mockImplementation(() => {});
     const tool = getToolByName('list_events')!;
-    const context = { ...ctx(), question: 'summarize today', allowedWhenPhrases: ['today'] };
-    const r = await tool.execute({ when: 'yesterday' }, context);
+    const context = { ...ctx(), question: 'summarize today', allowedWhenPhrases: ['yesterday'] };
+    const r = await tool.execute({ when: 'yesterday afternoon' }, context);
     expect(r.isError).toBeFalsy();
-    expect(context.interpretWhen).toHaveBeenCalledWith('today');
+    expect(context.interpretWhen).toHaveBeenCalledWith('yesterday');
     expect(warn).toHaveBeenCalledWith(
       'list_events when overridden to the resolved timeframe',
       expect.anything(),
-      { from: 'yesterday', to: 'today' },
+      { from: 'yesterday afternoon', to: 'yesterday' },
     );
     warn.mockRestore();
+  });
+
+  // The wrong-day repro (refs #270): a stray `when` about a DIFFERENT day must
+  // not be force-substituted with the single resolved timeframe. Containment
+  // fails ("yesterday" is not in "today 10:00..."), so the call is rejected
+  // rather than silently rewritten to answer the wrong day with real data.
+  it('list_events rejects a stray when the resolved timeframe contradicts', async () => {
+    const tool = getToolByName('list_events')!;
+    const context = { ...ctx(), question: 'summarize today', allowedWhenPhrases: ['yesterday'] };
+    const r = await tool.execute({ when: 'today 10:00:00 AM to 18:00:00 PM' }, context);
+    expect(r.isError).toBe(true);
+    expect(context.interpretWhen).not.toHaveBeenCalledWith('yesterday');
+    expect(vi.mocked(getEvents)).not.toHaveBeenCalled();
   });
 
   // Several resolved timeframes is genuinely ambiguous: keep rejecting.
@@ -794,6 +823,21 @@ describe('whenNotFromQuestion', () => {
   it('still rejects a phrase in neither the question nor allowedPhrases', () => {
     const message = whenNotFromQuestion('yesterday', 'summarize today', ['today']);
     expect(message).toContain('"yesterday"');
+  });
+
+  // The live failure (refs #270): a rephrased time range with the same instants
+  // must pass even though "10:00:00 AM" is not the substring "10am". Both days
+  // named in the question are legal.
+  it('accepts a rephrased time-range when whose canonical times match the question', () => {
+    const question = 'Compare 10am-6pm yesterday and today.';
+    expect(whenNotFromQuestion('yesterday 10:00:00 AM to 18:00:00 PM', question)).toBeUndefined();
+    expect(whenNotFromQuestion('today 10:00:00 AM to 18:00:00 PM', question)).toBeUndefined();
+  });
+
+  // Words present but a time the question never named: still the wrong window.
+  it('rejects a time-range when whose times are absent from the question', () => {
+    const message = whenNotFromQuestion('yesterday 3pm to 5pm', 'Compare 10am-6pm yesterday and today.');
+    expect(message).toContain('"yesterday 3pm to 5pm"');
   });
 });
 
