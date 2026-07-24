@@ -87,14 +87,32 @@ export const WINDOW_SCHEMA: Record<string, unknown> = {
 
 /** Part-of-day words across en/fr/es/de, already accent-stripped and lowercase
  *  (the form `normalizePhrase` produces before matching). Matched as whole words
- *  so "soir" does not fire inside "soiree" nor "manana" inside "semana". */
-const PART_OF_DAY_WORDS = [
+ *  so "soir" does not fire inside "soiree" nor "manana" inside "semana".
+ *  Exported so the deterministic scanner (timeframe-stage.ts) recognizes the
+ *  same part-of-day vocabulary this interpreter does, rather than duplicating it. */
+export const PART_OF_DAY_WORDS = [
   'morning', 'afternoon', 'evening', 'night', 'noon', 'midnight',
   'matin', 'soir', 'apres-midi', 'nuit',
   'manana', 'tarde', 'noche',
   'morgen', 'abend', 'nacht',
 ];
 const PART_OF_DAY_RE = new RegExp(`\\b(${PART_OF_DAY_WORDS.join('|')})\\b`);
+/** Weekday NAMES across en/de/es/fr, accent-stripped and lowercase (the form
+ *  `normalizePhrase` produces), matched as whole words. The weekday branch is the
+ *  ONE clock branch whose band stays optional (the measured qwen-compat
+ *  exception), so it is the simplest fit among the clock branches and a
+ *  constrained decoder is drawn to it, decoding a non-weekday phrase ("yesterday
+ *  evening", "today between 9am and 5pm") as a weekday. A phrase without a weekday
+ *  word cannot mean one, so the branch is offered only when one is present.
+ *  Exported so the deterministic scanner (timeframe-stage.ts) recognizes the same
+ *  weekday vocabulary rather than keeping a second list. */
+export const WEEKDAY_WORDS = [
+  'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
+  'montag', 'dienstag', 'mittwoch', 'donnerstag', 'freitag', 'samstag', 'sonnabend', 'sonntag',
+  'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo',
+  'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche',
+];
+const WEEKDAY_RE = new RegExp(`\\b(${WEEKDAY_WORDS.join('|')})\\b`);
 /** A wall-clock marker in the phrase: "4pm"/"9 am", "16:30", or a bare numeric
  *  range "4-6". Any of these means the phrase names a clock band. */
 const CLOCK_RE = /\d\s*(am|pm)\b|\d{1,2}:\d{2}|\d+\s*-\s*\d+/;
@@ -103,8 +121,10 @@ const CLOCK_RE = /\d\s*(am|pm)\b|\d{1,2}:\d{2}|\d+\s*-\s*\d+/;
  *  family too (e.g. "last 2 nights"). */
 const ROLLING_RE = /\b(past|last|previous)\s+\d+/;
 /** Month and season NAMES (English; an unlisted language falls open, see
- *  `selectBranches`). A bare one of these, no digits, means a whole-month span. */
-const MONTH_SEASON_NAMES = new Set([
+ *  `selectBranches`). A bare one of these, no digits, means a whole-month span.
+ *  Exported so the deterministic scanner (timeframe-stage.ts) recognizes the same
+ *  month/season vocabulary rather than duplicating it. */
+export const MONTH_SEASON_NAMES = new Set([
   'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august',
   'september', 'october', 'november', 'december',
   'spring', 'summer', 'autumn', 'fall', 'winter',
@@ -132,9 +152,11 @@ function normalizePhrase(phrase: string): string {
  *  the FULL schema unchanged (fail-open, byte-identical to before).
  *
  *  - CLOCK marker (a wall-clock token or a part-of-day word) -> ONLY the branches
- *    that can carry fromTime/toTime (day+clock, weekday incl. its optional band,
- *    dayOfMonth+clock, date+clock). A rolling marker present too keeps the rolling
- *    family as well ("last 2 nights").
+ *    that can carry fromTime/toTime (day+clock, dayOfMonth+clock, date+clock). The
+ *    weekday branch joins them ONLY when the phrase carries a weekday word: its
+ *    band is optional, making it the simplest fit a decoder gravitates to, so a
+ *    phrase with no weekday word must not be able to decode to it. A rolling
+ *    marker present too keeps the rolling family as well ("last 2 nights").
  *  - BARE month/season name, no digits -> ONLY the both-ends span branch, so
  *    "april" cannot decode to an open or single-date branch.
  *  - No marker -> the full schema, exactly as today.
@@ -148,9 +170,14 @@ export function selectBranches(phrase: string): Record<string, unknown> {
   const hasClock = CLOCK_RE.test(norm) || PART_OF_DAY_RE.test(norm);
   if (hasClock) {
     const hasRolling = ROLLING_RE.test(norm);
-    const picked = branches.filter(
-      (b) => b.properties.fromTime !== undefined || (hasRolling && b.properties.lastCount !== undefined),
-    );
+    const hasWeekday = WEEKDAY_RE.test(norm);
+    const picked = branches.filter((b) => {
+      // The weekday branch keeps its clock band optional, so a decoder takes it as
+      // the simplest fit and mislabels non-weekday phrases as weekdays. Offer it
+      // only when the phrase actually names a weekday.
+      if (b.properties.weekday !== undefined) return hasWeekday;
+      return b.properties.fromTime !== undefined || (hasRolling && b.properties.lastCount !== undefined);
+    });
     return wrap(picked);
   }
 

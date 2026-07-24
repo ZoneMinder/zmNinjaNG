@@ -42,6 +42,11 @@ const band = (v: unknown, lo: string, hi: string): boolean => {
 const startsOn = (r: ResolvedRange, d: string): boolean => okRange(r) && String(r.startDateTime ?? '').startsWith(d);
 const endsOnDate = (r: ResolvedRange, d: string): boolean => okRange(r) && String(r.endDateTime ?? '').startsWith(d);
 const endsBy = (r: ResolvedRange, iso: string): boolean => okRange(r) && String(r.endDateTime ?? '') <= `${iso} 23:59:59`;
+/** Resolved endpoints matched exactly, for cases where the same window is
+ *  reachable through more than one branch (daysAgo vs an explicit date) and only
+ *  the resolved range, not the raw fields, distinguishes a correct answer. */
+const startsAt = (r: ResolvedRange, dt: string): boolean => okRange(r) && r.startDateTime === dt;
+const endsAt = (r: ResolvedRange, dt: string): boolean => okRange(r) && r.endDateTime === dt;
 
 export interface TimeInterpretCase {
   /** The human time phrase fed to `interpretWhen`. */
@@ -67,36 +72,41 @@ export interface TimeExtractCase {
 }
 
 /** 36 interpretation cases across 10 CLASSES, not variants of one phrase.
- *  Predicates check the RESOLVED range through resolveWindow where that is
- *  cleaner than raw fields (spans, capping, code-computed weekend/ordinal), and
- *  raw fields where that is the crisper contract (daysAgo, rolling). */
+ *  Predicates check the RESOLVED range through resolveWindow whenever a window is
+ *  reachable through more than one branch (a day as daysAgo, an explicit date, or
+ *  the matching weekday all resolve to the same range, and the decoder may send
+ *  any of them), so an equivalent-but-different branch is never a false negative.
+ *  Raw fields are asserted only where the branch is the crisp contract with no
+ *  equivalent (rolling spans, none). */
 export const TIME_INTERPRET_CASES: TimeInterpretCase[] = [
-  // relative days
-  { phrase: 'today', cls: 'relative-day', ok: (f) => f.daysAgo === 0 },
-  { phrase: 'yesterday', cls: 'relative-day', ok: (f) => f.daysAgo === 1 },
-  { phrase: 'the day before yesterday', cls: 'relative-day', ok: (f) => f.daysAgo === 2 },
-  { phrase: '3 days ago', cls: 'relative-day', ok: (f) => f.daysAgo === 3 },
+  // relative days (checked on the resolved range: "today" is equally correct as
+  // daysAgo 0 or as the explicit date 2026-07-19, and the decoder may send either)
+  { phrase: 'today', cls: 'relative-day', ok: (_f, r) => startsOn(r, '2026-07-19') },
+  { phrase: 'yesterday', cls: 'relative-day', ok: (_f, r) => startsOn(r, '2026-07-18') },
+  { phrase: 'the day before yesterday', cls: 'relative-day', ok: (_f, r) => startsOn(r, '2026-07-17') },
+  { phrase: '3 days ago', cls: 'relative-day', ok: (_f, r) => startsOn(r, '2026-07-16') },
   // rolling spans
   { phrase: 'past 3 hours', cls: 'rolling', ok: (f) => f.lastUnit === 'hour' && f.lastCount === 3 },
   { phrase: 'last 6 hours', cls: 'rolling', ok: (f) => f.lastUnit === 'hour' && f.lastCount === 6 },
   { phrase: 'past 5 days', cls: 'rolling', ok: (f) => f.lastUnit === 'day' && f.lastCount === 5 },
   { phrase: 'last 2 weeks', cls: 'rolling', ok: (f) => (f.lastUnit === 'week' && f.lastCount === 2) || (f.lastUnit === 'day' && f.lastCount === 14) },
   { phrase: 'past 30 days', cls: 'rolling', ok: (f) => (f.lastUnit === 'day' && f.lastCount === 30) || (f.lastUnit === 'month' && f.lastCount === 1) },
-  // part of day
-  { phrase: 'this morning', cls: 'part-of-day', ok: (f) => f.daysAgo === 0 && band(f.fromTime, '05:00', '08:00') && band(f.toTime, '11:00', '13:00') },
-  { phrase: 'last night', cls: 'part-of-day', ok: (f) => f.daysAgo === 1 && band(f.fromTime, '17:00', '22:00') && band(f.toTime, '22:00', '23:59') },
-  { phrase: 'yesterday evening', cls: 'part-of-day', ok: (f) => f.daysAgo === 1 && band(f.fromTime, '17:00', '19:00') && band(f.toTime, '21:00', '23:59') },
-  { phrase: 'around noon', cls: 'part-of-day', ok: (f) => f.daysAgo === 0 && band(f.fromTime, '10:00', '12:00') && band(f.toTime, '12:00', '14:00') },
-  // weekday references
-  { phrase: 'on sunday', cls: 'weekday', ok: (f) => f.weekday === 'sunday' || f.daysAgo === 0 },
-  { phrase: 'last tuesday night', cls: 'weekday', ok: (f, r) => (f.weekday === 'tuesday' || startsOn(r, '2026-07-14')) && band(f.fromTime, '17:00', '23:00') },
+  // part of day (day anchored on the resolved range so a day+clock or date+clock
+  // branch both pass; the band stays on the raw times so the model keeps room)
+  { phrase: 'this morning', cls: 'part-of-day', ok: (f, r) => startsOn(r, '2026-07-19') && band(f.fromTime, '05:00', '08:00') && band(f.toTime, '11:00', '13:00') },
+  { phrase: 'last night', cls: 'part-of-day', ok: (f, r) => startsOn(r, '2026-07-18') && band(f.fromTime, '17:00', '22:00') && band(f.toTime, '22:00', '23:59') },
+  { phrase: 'yesterday evening', cls: 'part-of-day', ok: (f, r) => startsOn(r, '2026-07-18') && band(f.fromTime, '17:00', '19:00') && band(f.toTime, '21:00', '23:59') },
+  { phrase: 'around noon', cls: 'part-of-day', ok: (f, r) => startsOn(r, '2026-07-19') && band(f.fromTime, '10:00', '12:00') && band(f.toTime, '12:00', '14:00') },
+  // weekday references (resolved range, so weekday/daysAgo/date branches all pass)
+  { phrase: 'on sunday', cls: 'weekday', ok: (_f, r) => startsOn(r, '2026-07-19') },
+  { phrase: 'last tuesday night', cls: 'weekday', ok: (f, r) => startsOn(r, '2026-07-14') && band(f.fromTime, '17:00', '23:00') },
   // weekend (code computes the two dates from the `weekend` field; resolved
   // range checked so either the field or a correct fromDate/toDate passes)
   { phrase: 'this weekend', cls: 'weekend', ok: (_f, r) => startsOn(r, '2026-07-18') && endsOnDate(r, '2026-07-19') },
   { phrase: 'last weekend', cls: 'weekend', ok: (_f, r) => startsOn(r, '2026-07-11') && endsOnDate(r, '2026-07-13') },
   // ordinal / partial dates
   { phrase: 'the 21st', cls: 'ordinal-date', ok: (_f, r) => startsOn(r, '2026-06-21') },
-  { phrase: 'July 15', cls: 'ordinal-date', ok: (f) => f.date === '2026-07-15' },
+  { phrase: 'July 15', cls: 'ordinal-date', ok: (_f, r) => startsOn(r, '2026-07-15') },
   { phrase: 'June 1 to 15', cls: 'ordinal-date', ok: (f) => f.fromDate === '2026-06-01' && f.toDate === '2026-06-15' },
   // month / year spans (resolved range: the model may over-count a month end,
   // which resolveWindow clamps to the real last day)
@@ -106,19 +116,20 @@ export const TIME_INTERPRET_CASES: TimeInterpretCase[] = [
   { phrase: 'last month', cls: 'month-year', ok: (f) => (f.fromDate === '2026-06-01' && f.toDate === '2026-06-30') || (f.lastUnit === 'month' && f.lastCount === 1) },
   { phrase: 'this year', cls: 'month-year', ok: (f, r) => f.fromDate === '2026-01-01' && endsBy(r, '2026-07-19') },
   { phrase: 'since july 1', cls: 'month-year', ok: (f) => f.fromDate === '2026-07-01' && (f.toDate === undefined || String(f.toDate) >= '2026-07-19') },
-  // clock ranges
-  { phrase: 'yesterday from 4pm to 10pm', cls: 'clock-range', ok: (f) => f.daysAgo === 1 && f.fromTime === '16:00' && f.toTime === '22:00' },
-  { phrase: 'today between 9am and 5pm', cls: 'clock-range', ok: (f) => f.daysAgo === 0 && f.fromTime === '09:00' && f.toTime === '17:00' },
+  // clock ranges (resolved endpoints: a date branch that lands on the same day is
+  // as correct as daysAgo, so "yesterday" as 2026-07-18 passes on the range)
+  { phrase: 'yesterday from 4pm to 10pm', cls: 'clock-range', ok: (_f, r) => startsAt(r, '2026-07-18 16:00:00') && endsAt(r, '2026-07-18 22:00:00') },
+  { phrase: 'today between 9am and 5pm', cls: 'clock-range', ok: (_f, r) => startsAt(r, '2026-07-19 09:00:00') && endsAt(r, '2026-07-19 17:00:00') },
   // no time (production's parseFields maps none:true -> {}; accept either shape)
   { phrase: 'all time', cls: 'no-time', ok: (f) => f.none === true || Object.keys(f).length === 0 },
   { phrase: 'ever', cls: 'no-time', ok: (f) => f.none === true || Object.keys(f).length === 0 },
   // non-English (de / es / fr)
   { phrase: 'letzte Woche', cls: 'non-english', ok: (f) => (f.lastUnit === 'week' && f.lastCount === 1) || (f.lastUnit === 'day' && f.lastCount === 7) },
-  { phrase: 'ayer', cls: 'non-english', ok: (f) => f.daysAgo === 1 },
-  { phrase: 'ce matin', cls: 'non-english', ok: (f) => f.daysAgo === 0 && band(f.fromTime, '05:00', '08:00') && band(f.toTime, '11:00', '13:00') },
+  { phrase: 'ayer', cls: 'non-english', ok: (_f, r) => startsOn(r, '2026-07-18') },
+  { phrase: 'ce matin', cls: 'non-english', ok: (f, r) => startsOn(r, '2026-07-19') && band(f.fromTime, '05:00', '08:00') && band(f.toTime, '11:00', '13:00') },
   { phrase: 'el fin de semana pasado', cls: 'non-english', ok: (_f, r) => startsOn(r, '2026-07-11') && endsOnDate(r, '2026-07-13') },
-  { phrase: 'hier soir', cls: 'non-english', ok: (f) => f.daysAgo === 1 && band(f.fromTime, '17:00', '20:00') && toMin(f.toTime) >= toMin('21:00') },
-  { phrase: 'vorgestern', cls: 'non-english', ok: (f) => f.daysAgo === 2 },
+  { phrase: 'hier soir', cls: 'non-english', ok: (f, r) => startsOn(r, '2026-07-18') && band(f.fromTime, '17:00', '20:00') && toMin(f.toTime) >= toMin('21:00') },
+  { phrase: 'vorgestern', cls: 'non-english', ok: (_f, r) => startsOn(r, '2026-07-17') },
 ];
 
 /** 16 extraction cases: multiple time expressions in one question, time words

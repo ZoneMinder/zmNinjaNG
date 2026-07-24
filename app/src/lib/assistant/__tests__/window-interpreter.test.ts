@@ -190,6 +190,25 @@ describe('selectBranches', () => {
     expect(sets.some((req) => req.includes('lastCount'))).toBe(true);
   });
 
+  // The weekday branch is the one clock branch whose band stays optional, so a
+  // decoder drifts to it and mislabels a non-weekday clock phrase as a weekday.
+  // Offer it only when the phrase names a weekday (en or another language).
+  it('keeps the weekday branch when a clock phrase names a weekday', () => {
+    for (const phrase of ['last tuesday night', 'mardi soir', 'friday from 4pm to 6pm']) {
+      const sets = requiredSets(selectBranches(phrase));
+      expect(sets.some((req) => req.includes('weekday'))).toBe(true);
+    }
+  });
+
+  it('drops the weekday branch from a clock phrase with no weekday word', () => {
+    for (const phrase of ['yesterday evening', 'today between 9am and 5pm', 'this morning', 'ce matin']) {
+      const sets = requiredSets(selectBranches(phrase));
+      expect(sets.some((req) => req.includes('weekday'))).toBe(false);
+      // Every offered branch still carries a clock band (or the rolling pair).
+      expect(sets.every((req) => req.includes('fromTime') || req.includes('lastCount'))).toBe(true);
+    }
+  });
+
   it('offers only the both-ends span for a bare month or season', () => {
     for (const phrase of ['april', 'in april', 'this summer']) {
       const sets = requiredSets(selectBranches(phrase));
@@ -198,7 +217,9 @@ describe('selectBranches', () => {
   });
 
   it('falls open to the full schema for unmarked phrases', () => {
-    for (const phrase of ['yesterday', 'letzte Woche', 'all time', 'the 21st']) {
+    // 'on sunday' names a weekday but carries no clock marker, so it takes the
+    // non-clock path and is offered the full schema, weekday branch included.
+    for (const phrase of ['yesterday', 'letzte Woche', 'all time', 'the 21st', 'on sunday']) {
       expect(selectBranches(phrase)).toBe(WINDOW_SCHEMA);
     }
   });
