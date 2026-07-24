@@ -70,4 +70,45 @@ describe('interpretWhen', () => {
     const p = { complete: vi.fn().mockRejectedValue(new DOMException('Aborted', 'AbortError')) } as unknown as AssistantProvider;
     await expect(interpretWhen('today', p, NOW, 'UTC', new AbortController().signal)).rejects.toThrow('Aborted');
   });
+
+  // A constrained decoder junk-fills optionals under a wide shape (Apple FM
+  // stamped "weekend":0 on nearly every failure). The repair drops that field
+  // when a real day signal is present; a genuine weekend phrase keeps it.
+  it('drops a junk weekend field when a day signal is present', async () => {
+    const p = providerSaying('{"daysAgo": 0, "weekend": 0}');
+    expect(await interpretWhen('today', p, NOW, 'UTC', new AbortController().signal)).toEqual({ daysAgo: 0 });
+  });
+
+  it('keeps weekend when it stands alone', async () => {
+    const p = providerSaying('{"weekend": 1}');
+    expect(await interpretWhen('last weekend', p, NOW, 'UTC', new AbortController().signal)).toEqual({ weekend: 1 });
+  });
+
+  it('drops lastCount that arrived without lastUnit', async () => {
+    const p = providerSaying('{"lastCount": 3}');
+    expect(await interpretWhen('past 3 weeks', p, NOW, 'UTC', new AbortController().signal)).toEqual({});
+  });
+});
+
+describe('WINDOW_SCHEMA', () => {
+  const branches = (WINDOW_SCHEMA as { anyOf: Array<{ properties: Record<string, unknown>; required: string[] }> }).anyOf;
+
+  it('is a top-level anyOf of per-class branches, each with required fields', () => {
+    expect(Array.isArray(branches)).toBe(true);
+    for (const b of branches) {
+      expect(Array.isArray(b.required)).toBe(true);
+      expect(b.required.length).toBeGreaterThan(0);
+      // Every required key must be declared as a property of its own branch.
+      for (const key of b.required) expect(b.properties).toHaveProperty(key);
+    }
+  });
+
+  it('makes the two measured failure signatures unexpressable in a single branch', () => {
+    // No branch offers both lastCount and lastUnit as anything but a required
+    // pair, and no branch pairs weekend with a day field.
+    const rolling = branches.find((b) => b.required.includes('lastCount'));
+    expect(rolling?.required).toEqual(expect.arrayContaining(['lastCount', 'lastUnit']));
+    const weekendBranch = branches.find((b) => b.required.includes('weekend'));
+    expect(Object.keys(weekendBranch?.properties ?? {})).toEqual(['weekend']);
+  });
 });

@@ -21,26 +21,41 @@ import { toZonedTime } from 'date-fns-tz';
 import { log, LogLevel } from '../logger';
 
 /** The interpreter's output contract, enforced via constrained generation on
- *  backends that support it (Ollama json_schema, WebLLM XGrammar) and parsed
- *  defensively everywhere. `none: true` means the phrase names no time window
- *  at all ("everything you have"). */
+ *  backends that support it (Ollama json_schema, WebLLM XGrammar, Apple FM
+ *  DynamicGenerationSchema) and parsed defensively everywhere.
+ *
+ *  A top-level anyOf of small per-class branches, each with its identifying
+ *  field(s) REQUIRED. One wide object of 10+ all-optional fields invites a
+ *  constrained decoder to junk-fill optionals (measured on Apple FM: a spurious
+ *  "weekend":0 on nearly every failure) and to drop paired fields (every rolling
+ *  case kept lastCount but dropped lastUnit). Required-field branches make both
+ *  impossible by construction: FM scored 30/50 under the wide shape and 0/5 on
+ *  rolling with lastUnit dropped every time. The branch shape stays a FLAT
+ *  object with the same key names, so `parseFields` and `resolveWindow` read the
+ *  same keys regardless of which branch produced them. `none: true` means the
+ *  phrase names no time window at all ("everything you have"). fromTime/toTime
+ *  stay optional inside a day branch because they only ever narrow a day. */
 export const WINDOW_SCHEMA: Record<string, unknown> = {
-  type: 'object',
-  properties: {
-    lastCount: { type: 'number' },
-    lastUnit: { type: 'string', enum: [...WINDOW_UNITS] },
-    daysAgo: { type: 'number' },
-    weekday: { type: 'string', enum: [...WEEKDAYS] },
-    dayOfMonth: { type: 'number' },
-    weekend: { type: 'number' },
-    date: { type: 'string' },
-    fromDate: { type: 'string' },
-    toDate: { type: 'string' },
-    fromTime: { type: 'string' },
-    toTime: { type: 'string' },
-    none: { type: 'boolean' },
-  },
-  additionalProperties: false,
+  anyOf: [
+    // rolling span ending now: both halves are meaningless alone.
+    { type: 'object', properties: { lastCount: { type: 'number' }, lastUnit: { type: 'string', enum: [...WINDOW_UNITS] } }, required: ['lastCount', 'lastUnit'], additionalProperties: false },
+    // one calendar day, optionally narrowed to a clock band ("this morning").
+    { type: 'object', properties: { daysAgo: { type: 'number' }, fromTime: { type: 'string' }, toTime: { type: 'string' } }, required: ['daysAgo'], additionalProperties: false },
+    // most recent such weekday, optionally narrowed ("last tuesday night").
+    { type: 'object', properties: { weekday: { type: 'string', enum: [...WEEKDAYS] }, fromTime: { type: 'string' }, toTime: { type: 'string' } }, required: ['weekday'], additionalProperties: false },
+    // a bare ordinal day-of-month, optionally narrowed ("the 21st").
+    { type: 'object', properties: { dayOfMonth: { type: 'number' }, fromTime: { type: 'string' }, toTime: { type: 'string' } }, required: ['dayOfMonth'], additionalProperties: false },
+    // one explicit calendar date, optionally narrowed ("July 15 morning").
+    { type: 'object', properties: { date: { type: 'string' }, fromTime: { type: 'string' }, toTime: { type: 'string' } }, required: ['date'], additionalProperties: false },
+    // whole weekends ago; code computes the two dates.
+    { type: 'object', properties: { weekend: { type: 'number' } }, required: ['weekend'], additionalProperties: false },
+    // calendar span with a start; toDate optional makes it open-ended or closed.
+    { type: 'object', properties: { fromDate: { type: 'string' }, toDate: { type: 'string' } }, required: ['fromDate'], additionalProperties: false },
+    // calendar span open at the start ("until july 15").
+    { type: 'object', properties: { toDate: { type: 'string' } }, required: ['toDate'], additionalProperties: false },
+    // no time limit at all.
+    { type: 'object', properties: { none: { type: 'boolean' } }, required: ['none'], additionalProperties: false },
+  ],
 };
 
 /** Model-facing (rule 5 exempt). The few-shot lines teach the mapping the
@@ -128,8 +143,32 @@ function parseFields(text: string): WindowFields | undefined {
     if (raw.toDate !== undefined) fields.toDate = String(raw.toDate);
     if (raw.fromTime !== undefined) fields.fromTime = String(raw.fromTime);
     if (raw.toTime !== undefined) fields.toTime = String(raw.toTime);
-    return fields;
+    return repairFields(fields);
   } catch {
     return undefined;
   }
+}
+
+/** Undoes the two signatures a constrained decoder leaves under a wide optional
+ *  shape, in case a backend emits a mixed object despite the anyOf branches:
+ *  a junk-filled `weekend` sitting beside a real day signal (a genuine weekend
+ *  phrase produces `weekend` alone), and a `lastCount` with no `lastUnit` (an
+ *  uninterpretable half-pair `resolveWindow` could only reject). Dropping each
+ *  is safer than passing a mixed shape downstream. */
+function repairFields(fields: WindowFields): WindowFields {
+  const daySignal =
+    fields.daysAgo !== undefined ||
+    fields.date !== undefined ||
+    fields.weekday !== undefined ||
+    fields.dayOfMonth !== undefined ||
+    fields.lastCount !== undefined;
+  if (fields.weekend !== undefined && daySignal) {
+    log.assistant('Dropping junk-filled weekend beside a day signal', LogLevel.DEBUG, { fields: { ...fields } });
+    delete fields.weekend;
+  }
+  if (fields.lastCount !== undefined && fields.lastUnit === undefined) {
+    log.assistant('Dropping lastCount without lastUnit', LogLevel.DEBUG, { fields: { ...fields } });
+    delete fields.lastCount;
+  }
+  return fields;
 }
