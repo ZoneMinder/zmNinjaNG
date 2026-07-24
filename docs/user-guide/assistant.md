@@ -1,6 +1,6 @@
 # Ninjii, the assistant
 
-Ninjii answers questions about your cameras and events, and can take you to a screen in the app. It is read-only: it cannot change or delete anything on your ZoneMinder server. The model that answers runs either on your device or on a server you run yourself. Nothing goes to a server operated by zmNinjaNg or any AI company.
+Ninjii answers questions about your cameras and events. It is read-only: it cannot change or delete anything on your ZoneMinder server. Its event and monitor answers come with cards you tap to open that screen; Ninjii does not move the app on its own. The model that answers runs either on your device or on a server you run yourself. Nothing goes to a server operated by zmNinjaNg or any AI company.
 
 ## Enabling the Assistant
 
@@ -42,7 +42,7 @@ Examples of what you can ask:
 - "How many events happened on the driveway camera in the last hour?"
 - "How many people came by yesterday?"
 - "What was my busiest hour on Sunday?" (weekday names and "2 days ago" work too)
-- "Show me the most recent event on the front door camera" (Ninjii navigates you there)
+- "Show me the most recent event on the front door camera" (tap the card in the answer to open it)
 
 Answers come with cards underneath: event thumbnails you can tap to open the event, and monitor cards with a live preview when the answer is about a few specific cameras (a long list of monitors stays text, since every preview is a real stream). The cards are the rows the answer is about, not everything the lookup touched: ask for your busiest hour and you get that hour's events, not the whole day's.
 
@@ -52,7 +52,7 @@ Ninjii only knows what its tools can look up: your monitors, events, groups, tag
 
 ## The assistant cannot change anything
 
-The assistant is read-only. It can look things up and take you to a screen, and that is all. It cannot arm or disarm a monitor, trigger or cancel an alarm, change a monitor's function, change the run state, or delete or archive an event.
+The assistant is read-only. It can look things up, and that is all. It cannot arm or disarm a monitor, trigger or cancel an alarm, change a monitor's function, change the run state, or delete or archive an event.
 
 This is deliberate. The assistant works by having a language model choose which action matches your words, and a model can misread a request: "clear out today's events" is one phrasing away from deleting them, and "I'm home" is one phrasing away from changing your run state. Earlier versions asked you to confirm each action first, but that put the entire safeguard on a single tap, in a dialog that looks the same whether the model understood you or not. Deleting an event cannot be undone, and a monitor left disarmed records nothing.
 

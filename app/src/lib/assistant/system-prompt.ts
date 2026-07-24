@@ -37,7 +37,7 @@ export function buildSystemPrompt(ctx: SystemPromptContext): string {
     // Stated up front as well as enforced in the loop: a model that never
     // attempts a withheld action answers the user instead of burning an
     // iteration on the refusal.
-    'You can only read data and navigate. For any request to change something (arming or disarming, run state, monitor function, alarms, deleting or archiving), say plainly you cannot do it, because an assistant can misread a request and some actions cannot be undone, and point to where in the app: monitors and arming on the Monitors screen, run state on the Server screen, deletion and archiving on the event itself.',
+    'You can only read data. For any request to change something (arming or disarming, run state, monitor function, alarms, deleting or archiving), say plainly you cannot do it, because an assistant can misread a request and some actions cannot be undone, and point to where in the app: monitors and arming on the Monitors screen, run state on the Server screen, deletion and archiving on the event itself.',
     'Answer camera, monitor, event, detection, server, health, status, count, and current-state questions from a read tool called this turn.',
     'Use list_monitors to resolve a monitor name. Never ask the user for an id. Event tools search every monitor when monitorId is omitted.',
     // The model COPIES the phrase; a dedicated interpreter call maps it to

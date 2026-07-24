@@ -1,8 +1,8 @@
 /**
  * useAssistantHost tests (refs #246): `navigate()` must minimize the
- * floating assistant panel before routing, so the agent's `navigate` tool
- * call (or an "Open" result-card click) collapses the panel to the FAB
- * instead of unmounting the conversation underneath it.
+ * floating assistant panel before routing, so an "Open" result-card click
+ * collapses the panel to the FAB instead of unmounting the conversation
+ * underneath it.
  */
 import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';

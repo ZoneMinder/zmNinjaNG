@@ -158,23 +158,6 @@ describe('read-only tools', () => {
     });
   });
 
-  it('navigate rejects a route outside the allowlist', async () => {
-    const c = ctx();
-    const tool = getToolByName('navigate')!;
-    const r = await tool.execute({ path: '/admin/delete-all' }, c);
-    expect(r.isError).toBe(true);
-    expect(c.host.navigate).not.toHaveBeenCalled();
-  });
-
-  it('navigate accepts an allowlisted route and asks the panel to close', async () => {
-    const c = ctx();
-    const tool = getToolByName('navigate')!;
-    const r = await tool.execute({ path: '/events/42' }, c);
-    expect(r.isError).toBeFalsy();
-    expect(r.closePanel).toBe(true);
-    expect(c.host.navigate).toHaveBeenCalledWith('/events/42');
-  });
-
   // Same model habit as list_events, less dangerous outcome: getMonitor("Front
   // Door") fails at the API rather than returning an empty set, so it never
   // became a false "no". It still fails a question it could have answered.

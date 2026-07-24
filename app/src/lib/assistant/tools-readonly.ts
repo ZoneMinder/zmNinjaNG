@@ -3,8 +3,7 @@
  *
  * Every executor wraps its fetch in `safeExecute` so a failed request turns
  * into `{ output: message, isError: true }` instead of throwing into the
- * agent loop. `navigate` is the one exception: it validates before touching
- * the network and never calls the api layer at all.
+ * agent loop.
  */
 import { getMonitors, getMonitor, getAlarmStatus } from '../../api/monitors';
 import { getEvents, getEvent, getConsoleEvents } from '../../api/events';
@@ -34,7 +33,6 @@ import {
   repairWhenPhrase,
   objectTypeUngrounded,
   calendarTimeframeMismatch,
-  NAVIGATE_ALLOWLIST,
 } from './tool-helpers';
 
 /** Maps a raw MonitorData into the clean, model-friendly shape shared by
@@ -708,28 +706,6 @@ const listTagsTool: ToolDefinition = {
     }),
 };
 
-const navigateTool: ToolDefinition = {
-  name: 'navigate',
-  description:
-    'Navigate the app to a specific in-app path (e.g. "/monitors/3", "/events/42", "/montage", "/timeline", ' +
-    '"/dashboard", "/server"). Only call this when the user explicitly asks to be taken somewhere. Closes the ' +
-    'assistant panel on success.',
-  schema: {
-    type: 'object',
-    properties: { path: { type: 'string', description: 'An in-app path, e.g. "/events/42".' } },
-    required: ['path'],
-  },
-  execute: async (input, ctx) => {
-    const path = String(input.path ?? '');
-    const allowed = NAVIGATE_ALLOWLIST.some((re) => re.test(path));
-    if (!allowed) {
-      return { output: `Path "${path}" is not allowed for navigation.`, isError: true };
-    }
-    ctx.host.navigate(path);
-    return { output: 'navigated', closePanel: true };
-  },
-};
-
 export const readOnlyTools: ToolDefinition[] = [
   listMonitorsTool,
   getMonitorTool,
@@ -739,5 +715,4 @@ export const readOnlyTools: ToolDefinition[] = [
   getServerHealthTool,
   listGroupsTool,
   listTagsTool,
-  navigateTool,
 ];

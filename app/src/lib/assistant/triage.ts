@@ -2,7 +2,7 @@
  * Decides what KIND of request this is before any tool is offered (refs #246).
  *
  * The agent loop hands the model every tool on every turn, so "hello" was
- * answered with `navigate({"path":"/home"})` and "arm the backyard camera"
+ * answered with `list_monitors({})` and "arm the backyard camera"
  * with `get_monitor`: given a tool list and no reason to use it, a small model
  * uses it anyway. Measured on llama3.2, those two cases failed 3/3 each, and
  * no amount of prompt rules fixed them (removing or adding rules moved the
@@ -153,8 +153,8 @@ export async function classifyRequest(
  *  block, which is the entire routing decision for a chat or action turn. */
 export const NO_TOOL_INSTRUCTIONS: Record<Exclude<RequestKind, 'zoneminder'>, string> = {
   action: [
-    'The user has asked you to CHANGE something. You cannot: this assistant can only read data and',
-    'navigate. Say plainly that you cannot do it, that this is because an assistant can misread a',
+    'The user has asked you to CHANGE something. You cannot: this assistant can only read data.',
+    'Say plainly that you cannot do it, that this is because an assistant can misread a',
     'request and some of these actions cannot be undone, and tell them where to do it themselves:',
     'monitors and arming on the Monitors screen, run state on the Server screen, deleting and',
     'archiving on the event itself. Do not offer to do it another way.',

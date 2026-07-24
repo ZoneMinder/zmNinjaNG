@@ -249,8 +249,6 @@ export interface ToolContext {
 export interface ToolExecuteResult {
   output: string;
   isError?: boolean;
-  /** navigate sets this so the agent closes the palette after the call. */
-  closePanel?: boolean;
   /** UI-only result cards for list_events/get_event/list_monitors/get_monitor
    *  (refs #246). Never folded into `output`, which is the only thing the
    *  model sees. */

@@ -38,7 +38,9 @@ const WITHHELD_TOOL_REFUSAL =
   'because a language model can misread a request and act on something the user did not ask for, and ' +
   'some of those actions cannot be undone. Tell the user this action must be done by hand in the app, ' +
   'and say where: monitors and arming on the Monitors screen, run state on the Server screen, event ' +
-  'deletion and archiving on that event. Do not retry any tool for this request.';
+  'deletion and archiving on that event. If the request was to open or go to a screen, the assistant no ' +
+  'longer routes the app itself; tell the user to tap the card shown with an answer, or to navigate the ' +
+  'app themselves. Do not retry any tool for this request.';
 
 /** Appended to a rejected or thrown tool result. Observed on-device: a
  *  count_events rejected with "lastCount is required" was followed by the model
@@ -408,9 +410,6 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
     // anything, so there is no runtime decision about whether to run.
     host.onActivity({ toolName: call.name, status: 'running', input: call.input });
     try {
-      // `navigate`'s `closePanel: true` needs no separate handling here: the
-      // real host's `navigate()` implementation closes the panel itself as a
-      // side effect of the call this makes below (see Task 9's host hook).
       const { result: r, calls: apiCalls } = await captureApiCalls(() => def.execute(input, ctx));
       trace({ kind: 'tool', name: call.name, input: call.input, output: r.output, isError: r.isError, apiCalls });
       if (!r.isError) toolOutputs.push(r.output);

@@ -489,13 +489,6 @@ export function toolCallSignature(name: string, input: Record<string, unknown>):
   return `${name}:${JSON.stringify(meaningful)}`;
 }
 
-/** Routes the assistant may send the user to. Anything else is rejected
- *  before `ctx.host.navigate` is ever called. */
-export const NAVIGATE_ALLOWLIST = [
-  /^\/monitors$/, /^\/monitors\/[^/]+$/, /^\/events$/, /^\/events\/[^/]+$/,
-  /^\/montage$/, /^\/timeline$/, /^\/dashboard$/, /^\/server$/,
-];
-
 /** A tool's `run` callback may return a bare output string, or (refs #246)
  *  an output plus UI-only result cards for the ones that look up events or
  *  monitors. Deliberately no `isError`: throwing is the only way to produce an

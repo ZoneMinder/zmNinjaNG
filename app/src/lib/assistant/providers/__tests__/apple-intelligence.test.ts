@@ -575,8 +575,9 @@ describe('AppleIntelligenceProvider instructions', () => {
     // shape, so the prose guard rails are dead weight in this window.
     expect(instructions).not.toContain('Call this first when the user refers to a monitor by name');
     expect(instructions).not.toContain('It has TWO hard limits.');
-    // An abbreviation is not a sentence end.
-    expect(instructions).toContain('- navigate: Navigate the app to a specific in-app path (e.g. "/monitors/3"');
+    // Only the lead sentence survives; the second sentence is dropped.
+    expect(instructions).toContain('- count_events: Count events per monitor over a ROLLING window ending now');
+    expect(instructions).not.toContain('Use this for "how many events in the last N hours/days"');
   });
 
   it('is far shorter than the shared prompt plus the full tool catalog it replaces', async () => {

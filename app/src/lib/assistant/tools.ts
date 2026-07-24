@@ -93,6 +93,7 @@ export const WITHHELD_TOOL_NAMES: readonly string[] = [
   'change_run_state',
   'delete_event',
   'archive_event',
+  'navigate',
 ];
 
 /** Whether `name` is a withheld action, so the agent loop can say why it will

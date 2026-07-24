@@ -1322,10 +1322,12 @@ implementation ``AskPanel`` hands to ``runAssistantTurn``. The assistant is
 read-only: there are no destructive tools, so the confirmation flow an
 earlier revision carried (``confirm``/``resolveConfirm`` and a confirm card)
 no longer exists; a request to change something gets a plain refusal that
-points at the right screen instead. ``navigate`` on the host closes the
-palette (``setOpen(false)``) before routing, so a ``navigate`` tool call
-collapses the panel as a side effect instead of leaving a chat window open
-behind the page it just navigated to.
+points at the right screen instead. ``navigate`` on the host minimizes the
+assistant panel (``stores/assistantPanel.ts``) before routing, so an "Open"
+click on an event or monitor result card collapses the panel to the FAB
+instead of leaving a chat window open behind the page it just opened. The
+assistant itself never routes the app: result cards are the only navigation
+affordance.
 
 **Used by:** ``CommandPalette.tsx`` (the only mount point). ``useAssistantStore``
 holds the per-profile conversation thread and is not persisted, closing the

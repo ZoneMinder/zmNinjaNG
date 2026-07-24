@@ -104,21 +104,15 @@ const DYNAMIC_FACT_MARKERS = ["Today's date is", 'ZoneMinder version:', 'locale 
 
 /** The first sentence of a tool description. Apple's guidance is few tools with
  *  SHORT descriptions; the registry's are three to six sentences long, written
- *  for models that reward exhaustive prose, and pasting all nine of them costs
+ *  for models that reward exhaustive prose, and pasting all eight of them costs
  *  more of this small window than the whole rest of the instructions. The lead
  *  sentence is the one that says what the tool does; the rest is guard rails the
  *  turn schema now enforces structurally. Full descriptions stay in use on every
- *  other backend.
- *
- *  An abbreviation is not a sentence end: `navigate`'s description says "(e.g.
- *  /events/42)" and splitting there left the model the fragment "Navigate the
- *  app to a specific in-app path (e.g.". A "x.y." abbreviation is recognized by
- *  the period two characters back. */
+ *  other backend. No current description carries a mid-sentence abbreviation, so
+ *  the first ". " is always the real boundary. */
 function firstSentence(description: string): string {
-  for (let end = description.indexOf('. '); end !== -1; end = description.indexOf('. ', end + 1)) {
-    if (description[end - 2] !== '.') return description.slice(0, end + 1);
-  }
-  return description;
+  const end = description.indexOf('. ');
+  return end === -1 ? description : description.slice(0, end + 1);
 }
 
 /** The arguments of a native tool call, read defensively off the event: the
@@ -151,7 +145,7 @@ const TOOL_BUDGET_EXHAUSTED_TEXT = 'Tool budget for this turn is exhausted. Answ
  *  the framework's native tool loop enforces the CALL shape, never what the
  *  model may say about a result. */
 const TOOL_TURN_RULES = [
-  'You must only read data and navigate. Say plainly that you cannot arm, disarm, change run state, or delete anything, and name the screen that can: Monitors, Server, or the event itself.',
+  'You must only read data. Say plainly that you cannot arm, disarm, change run state, or delete anything, and name the screen that can: Monitors, Server, or the event itself.',
   'Copy the person\'s own time words into list_events\' `when`, verbatim and in their language ("yesterday", "letzte Woche"). Never compute a date or a timestamp yourself.',
   'A summary, recap, or comparison names no thing, so it must carry NO objectType. Only a question naming people, cars, animals, or packages takes objectType, and it must use list_events.',
   'Quote the result\'s summary line, matchCount, and countsByMonitor exactly. Never tally rows yourself.',
