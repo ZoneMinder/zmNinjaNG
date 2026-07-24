@@ -8,6 +8,7 @@ import { getEvents } from '../../../api/events';
 import { getMonitor, getMonitors } from '../../../api/monitors';
 import { getStorages, getServers } from '../../../api/server';
 import { DEFAULT_THUMBNAIL_FALLBACK_CHAIN } from '../../../stores/settings';
+import { log } from '../../logger';
 
 const { mockMonitor, mockMonitorStatus } = vi.hoisted(() => ({
   mockMonitor: {
@@ -304,6 +305,66 @@ describe('read-only tools', () => {
     const r = await tool.execute({ when: 'today' }, context);
     expect(r.isError).toBeFalsy();
     expect(context.interpretWhen).toHaveBeenCalledWith('today');
+  });
+
+  // The model repeats a rejected call verbatim rather than correcting it (nine
+  // identical retries to budget death, observed live). One resolved timeframe
+  // makes the right `when` computable, so repair and run instead of rejecting.
+  it('list_events overrides a stray when to the single resolved timeframe', async () => {
+    const warn = vi.spyOn(log, 'assistant').mockImplementation(() => {});
+    const tool = getToolByName('list_events')!;
+    const context = { ...ctx(), question: 'summarize today', allowedWhenPhrases: ['today'] };
+    const r = await tool.execute({ when: 'yesterday' }, context);
+    expect(r.isError).toBeFalsy();
+    expect(context.interpretWhen).toHaveBeenCalledWith('today');
+    expect(warn).toHaveBeenCalledWith(
+      'list_events when overridden to the resolved timeframe',
+      expect.anything(),
+      { from: 'yesterday', to: 'today' },
+    );
+    warn.mockRestore();
+  });
+
+  // Several resolved timeframes is genuinely ambiguous: keep rejecting.
+  it('list_events still rejects a stray when when several timeframes resolved', async () => {
+    const tool = getToolByName('list_events')!;
+    const context = { ...ctx(), question: 'summarize today', allowedWhenPhrases: ['today', 'last hour'] };
+    const r = await tool.execute({ when: 'yesterday' }, context);
+    expect(r.isError).toBe(true);
+    expect(vi.mocked(getEvents)).not.toHaveBeenCalled();
+  });
+
+  // No stage ran (zero allowed phrases): prior reject behavior is untouched.
+  it('list_events rejects a stray when when no timeframe resolved', async () => {
+    const tool = getToolByName('list_events')!;
+    const r = await tool.execute({ when: 'yesterday' }, { ...ctx(), question: 'summarize today' });
+    expect(r.isError).toBe(true);
+    expect(vi.mocked(getEvents)).not.toHaveBeenCalled();
+  });
+
+  // Same repeat-a-rejection death loop, objectType edition: a question naming no
+  // object gets the spurious filter dropped so the summary runs once.
+  it('list_events drops an objectType the question never named', async () => {
+    const warn = vi.spyOn(log, 'assistant').mockImplementation(() => {});
+    const tool = getToolByName('list_events')!;
+    const r = await tool.execute({ objectType: ['person'] }, { ...ctx(), question: 'summarize today' });
+    expect(r.isError).toBeFalsy();
+    expect(vi.mocked(getEvents)).toHaveBeenCalledWith(expect.objectContaining({ notesRegexp: undefined }));
+    expect(warn).toHaveBeenCalledWith(
+      'list_events objectType dropped: the question names no object',
+      expect.anything(),
+      { dropped: 'person' },
+    );
+    warn.mockRestore();
+  });
+
+  it('list_events keeps an objectType the question does name', async () => {
+    const tool = getToolByName('list_events')!;
+    const r = await tool.execute({ objectType: ['person'] }, { ...ctx(), question: 'how many people came today' });
+    expect(r.isError).toBeFalsy();
+    expect(vi.mocked(getEvents)).toHaveBeenCalledWith(
+      expect.objectContaining({ notesRegexp: 'detected:.*person' }),
+    );
   });
 
   it('list_events never combines tag and event-id filters', async () => {
@@ -1129,8 +1190,11 @@ describe('list_events when resolution (refs #246)', () => {
   it('accepts a list the model stringified rather than rejecting it as one label', async () => {
     const tool = getToolByName('list_events')!;
     const r = await tool.execute(
+      // Question names "vehicles" so the parsed objectType survives the
+      // ungrounded-objectType strip and the stringified-list parse is what is
+      // under test here.
       { when: 'today', objectType: "['car', 'truck']" },
-      { ...ctx(), timezone: 'America/New_York', question: 'summarize today', objectLabels: ['car', 'person', 'truck'] },
+      { ...ctx(), timezone: 'America/New_York', question: 'summarize vehicles today', objectLabels: ['car', 'person', 'truck'] },
     );
 
     expect(r.isError).toBeFalsy();

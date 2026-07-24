@@ -16,6 +16,7 @@ import { getGroups } from '../../api/groups';
 import { getTags, getEventTags, extractUniqueTags } from '../../api/tags';
 import type { MonitorData } from '../../api/types';
 import { ASSISTANT } from '../zmninja-ng-constants';
+import { log, LogLevel } from '../logger';
 import { buildResultSummary, countObjects } from './result-summary';
 import { parseDetectedObjects } from '../event/event-detection';
 import { buildEventDisplayEntity, buildMonitorDisplayEntity } from './display';
@@ -30,6 +31,8 @@ import {
   coerceLabelList,
   matchLabels,
   whenNotFromQuestion,
+  repairWhenPhrase,
+  objectTypeUngrounded,
   calendarTimeframeMismatch,
   NAVIGATE_ALLOWLIST,
 } from './tool-helpers';
@@ -291,13 +294,26 @@ const listEventsTool: ToolDefinition = {
       // corrective error the calling model retries from. Measured before
       // splitting the jobs: both reference models copied phrases perfectly
       // but filled the fields directly at 27/36 and 15/36.
-      const whenPhrase = isOmittedArg(input.when) ? undefined : String(input.when);
+      let whenPhrase = isOmittedArg(input.when) ? undefined : String(input.when);
       let resolvedWhen: { startDateTime?: string; endDateTime?: string } | undefined;
       if (whenPhrase) {
         // Provenance first: a phrase the model carried over from an earlier
         // turn interprets perfectly and answers the wrong day with real data.
         const wrongTurn = whenNotFromQuestion(whenPhrase, ctx.question, ctx.allowedWhenPhrases);
-        if (wrongTurn) throw new Error(wrongTurn);
+        if (wrongTurn) {
+          // The model repeats a rejected call verbatim rather than correcting
+          // it (observed live: nine identical list_events {"when":"yesterday"}
+          // retries to budget death, zero data). When exactly one timeframe was
+          // resolved for the turn the right `when` is computable, so repair and
+          // run instead of rejecting, mirroring repairCountEventsInterval.
+          const override = repairWhenPhrase(whenPhrase, ctx.question, ctx.allowedWhenPhrases);
+          if (!override) throw new Error(wrongTurn);
+          log.assistant('list_events when overridden to the resolved timeframe', LogLevel.WARN, {
+            from: whenPhrase,
+            to: override,
+          });
+          whenPhrase = override;
+        }
         if (!ctx.interpretWhen) throw new Error('Time phrases are unavailable right now; retry without `when`.');
         const fields = await ctx.interpretWhen(whenPhrase);
         if ('error' in fields && fields.error) throw new Error(String(fields.error));
@@ -328,7 +344,21 @@ const listEventsTool: ToolDefinition = {
       // `detected:.*null` and silently match no events.
       // A string or an array; `objectTypePattern` normalizes and sanitizes
       // both. `objectType` is only for the messages the model reads back.
-      const objectTypeRaw = isOmittedArg(input.objectType) ? undefined : (input.objectType as string | string[]);
+      let objectTypeRaw = isOmittedArg(input.objectType) ? undefined : (input.objectType as string | string[]);
+      // The model repeats a rejected call verbatim rather than correcting it
+      // (observed live: nine identical list_events {"objectType":["person"]}
+      // retries to budget death on a plain "summarize today"). When the
+      // objectType is ungrounded in the question the filter is spurious, not
+      // ambiguous, so it is computable: drop it and answer the summary,
+      // mirroring repairCountEventsInterval. A question that DOES name the
+      // object (label, category word, or the objectType verbatim) leaves the
+      // matchLabels flow below unchanged, so an unrecorded label the user really
+      // asked about ("unicorn") still reaches its vocabulary reject.
+      if (objectTypeRaw !== undefined && objectTypeUngrounded(ctx.question, objectTypeRaw, ctx.objectLabels ?? [])) {
+        const dropped = Array.isArray(objectTypeRaw) ? objectTypeRaw.join(', ') : String(objectTypeRaw);
+        log.assistant('list_events objectType dropped: the question names no object', LogLevel.WARN, { dropped });
+        objectTypeRaw = undefined;
+      }
       const objectType = objectTypeRaw
         ? (Array.isArray(objectTypeRaw) ? objectTypeRaw.join(', ') : String(objectTypeRaw))
         : undefined;

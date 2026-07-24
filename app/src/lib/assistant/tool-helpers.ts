@@ -268,6 +268,46 @@ const CATEGORY_WORDS = ['vehicle', 'animal', 'people', 'person', 'package'];
  * The words come from the install's own vocabulary plus the category words the
  * prompt teaches, so nothing is hardcoded about what a given detector emits.
  */
+/** The object word a question actually names, or undefined when it names none:
+ *  an install label ("person", "car") or a category word the prompt teaches
+ *  ("vehicle", "animal"), plural-tolerant. Extracted so the count_events
+ *  mismatch guard and the list_events objectType-strip repair decide "does this
+ *  question mention an object" from exactly the same vocabulary. */
+export function questionNamesObject(question: string, objectLabels: readonly string[]): string | undefined {
+  const asked = question.toLowerCase();
+  const words = [...objectLabels.map((l) => l.toLowerCase()), ...CATEGORY_WORDS];
+  return words.find((word) => new RegExp(`\\b${word}s?\\b`).test(asked));
+}
+
+/**
+ * Whether a list_events `objectType` is ungrounded in the question: the question
+ * names no object this install records, no category word the prompt teaches, AND
+ * none of the model's own objectType labels appears in it verbatim.
+ *
+ * The model repeats a rejected call verbatim rather than correcting it (observed
+ * live: nine identical list_events {"objectType":["person"]} retries to budget
+ * death on a plain "summarize today"). An ungrounded filter is spurious, not
+ * ambiguous, so it is computable: the executor drops it and runs the summary
+ * once, mirroring `repairCountEventsInterval`.
+ *
+ * The verbatim check keeps a genuine but UNRECORDED object the user actually
+ * named ("did a unicorn appear yesterday"): that stays for `matchLabels` to
+ * reject with the real vocabulary, rather than being silently dropped here.
+ */
+export function objectTypeUngrounded(
+  question: string | undefined,
+  objectType: string | readonly string[],
+  objectLabels: readonly string[],
+): boolean {
+  if (!question) return false;
+  if (questionNamesObject(question, objectLabels)) return false;
+  const asked = question.toLowerCase();
+  return !coerceLabelList(objectType)
+    .map((label) => label.trim().toLowerCase())
+    .filter((label) => label.length > 0)
+    .some((label) => new RegExp(`\\b${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}s?\\b`).test(asked));
+}
+
 export function objectQuestionMismatch(
   toolName: string,
   question: string,
@@ -275,9 +315,7 @@ export function objectQuestionMismatch(
 ): string | undefined {
   if (toolName !== 'count_events') return undefined;
 
-  const asked = question.toLowerCase();
-  const words = [...objectLabels.map((l) => l.toLowerCase()), ...CATEGORY_WORDS];
-  const named = words.find((word) => new RegExp(`\\b${word}s?\\b`).test(asked));
+  const named = questionNamesObject(question, objectLabels);
   if (!named) return undefined;
 
   return (
@@ -351,6 +389,31 @@ export function whenNotFromQuestion(
     `never time words from earlier turns. The question is: "${question}". ` +
     `Retry with the time words copied from it, or omit when entirely if it names no time.`
   );
+}
+
+/**
+ * The resolved timeframe a stray list_events `when` should be corrected TO, or
+ * undefined to leave the call for `whenNotFromQuestion` to reject.
+ *
+ * The model repeats a rejected call verbatim rather than correcting it: after
+ * `whenNotFromQuestion` refused `when: "yesterday"` on "summarize today", the
+ * model resent the identical call nine times to budget exhaustion and the turn
+ * died with no data. When the pre-tool stage resolved exactly ONE timeframe for
+ * this turn there is no ambiguity about the period meant, so the right `when` is
+ * computable: return that phrase and let the call run, converting the death loop
+ * into one grounded call the way `repairCountEventsInterval` does.
+ *
+ * Undefined when the phrase already checks out (no repair needed), or when the
+ * turn resolved zero or several timeframes: several is genuinely ambiguous and
+ * keeps the existing rejection; zero means no stage ran, leaving prior behavior.
+ */
+export function repairWhenPhrase(
+  whenPhrase: string,
+  question: string | undefined,
+  allowedPhrases?: string[],
+): string | undefined {
+  if (!whenNotFromQuestion(whenPhrase, question, allowedPhrases)) return undefined;
+  return allowedPhrases?.length === 1 ? allowedPhrases[0] : undefined;
 }
 
 /**
