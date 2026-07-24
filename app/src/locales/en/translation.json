@@ -1347,7 +1347,7 @@
     "context_cleared_manual": "Conversation cleared. The on-device model was unloaded to free memory; it will load again on your next question.",
     "context_cleared_manual_remote": "Conversation cleared.",
     "model_unavailable_native": "This model cannot run on your device. Choose an on-device model in Settings.",
-    "english_only_notice": "The assistant understands other languages, but works best in English: some answer-accuracy checks only run on English replies.",
+    "english_only_notice": "The assistant is tested in English only; answers in other languages may be less reliable.",
     "timeframe_unclear": "I could not work out the time period you mean. Tell me the period, like \"today\" or \"July 21\"."
   }
 }

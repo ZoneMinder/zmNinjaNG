@@ -1347,7 +1347,7 @@
     "context_cleared_manual": "对话已清除。设备端模型已卸载以释放内存，下次提问时会重新加载。",
     "context_cleared_manual_remote": "对话已清除。",
     "model_unavailable_native": "此模型无法在你的设备上运行。请在设置中选择设备端模型。",
-    "english_only_notice": "助手可以理解其他语言，但英语效果最好：部分回答准确性检查仅适用于英语回复。",
+    "english_only_notice": "助手仅在英语环境下测试；其他语言的回答可能不够可靠。",
     "timeframe_unclear": "我无法确定你指的时间段。请说明时间段，例如“今天”或“7月21日”。"
   }
 }

@@ -1347,7 +1347,7 @@
     "context_cleared_manual": "Conversation effacée. Le modèle sur l'appareil a été déchargé pour libérer de la mémoire ; il se rechargera à votre prochaine question.",
     "context_cleared_manual_remote": "Conversation effacée.",
     "model_unavailable_native": "Ce modèle ne fonctionne pas sur votre appareil. Choisissez un modèle sur l'appareil dans les Réglages.",
-    "english_only_notice": "L'assistant comprend d'autres langues, mais fonctionne mieux en anglais : certaines vérifications de réponses ne s'appliquent qu'en anglais.",
+    "english_only_notice": "L'assistant est testé uniquement en anglais ; les réponses dans d'autres langues peuvent être moins fiables.",
     "timeframe_unclear": "Je n'ai pas pu déterminer la période que vous visez. Indiquez la période, par exemple « aujourd'hui » ou « 21 juillet »."
   }
 }

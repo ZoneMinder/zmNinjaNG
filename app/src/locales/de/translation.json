@@ -1347,7 +1347,7 @@
     "context_cleared_manual": "Unterhaltung gelöscht. Das Modell auf dem Gerät wurde entladen, um Speicher freizugeben; es wird bei deiner nächsten Frage neu geladen.",
     "context_cleared_manual_remote": "Unterhaltung gelöscht.",
     "model_unavailable_native": "Dieses Modell läuft nicht auf deinem Gerät. Wähle in den Einstellungen ein Modell für das Gerät.",
-    "english_only_notice": "Der Assistent versteht auch andere Sprachen, funktioniert aber auf Englisch am besten: einige Antwortprüfungen laufen nur bei englischen Antworten.",
+    "english_only_notice": "Der Assistent ist nur auf Englisch getestet; Antworten in anderen Sprachen sind möglicherweise weniger zuverlässig.",
     "timeframe_unclear": "Ich konnte den gemeinten Zeitraum nicht ermitteln. Nenne den Zeitraum, zum Beispiel „heute“ oder „21. Juli“."
   }
 }
