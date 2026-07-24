@@ -937,4 +937,35 @@ describe('a provider that runs the tool loop natively', () => {
     ]);
     expect((h.onActivity as ReturnType<typeof vi.fn>).mock.calls.map(([a]) => a.status)).toEqual(['running', 'done']);
   });
+
+  // A native turn cut short at its tool-call budget comes back with the data
+  // and no prose (see chatWithNativeTools): the answer is built from the tool's
+  // own summary rather than shown as an empty bubble.
+  it('answers from the tool summary when a native turn returns no text', async () => {
+    const summaryTool = {
+      name: 'list_events', description: '', schema: { type: 'object', properties: {} }, destructive: false,
+      execute: async () => ({ output: '{"summary":"1 event today.","matchCount":1}' }),
+    } as never;
+    class SilentNativeProvider {
+      complete = vi.fn();
+      async chat(
+        _messages: AssistantMessage[],
+        _tools: never,
+        _system: string,
+        _signal: AbortSignal,
+        _onStatus?: unknown,
+        runTool?: (name: string, input: Record<string, unknown>) => Promise<never>,
+      ) {
+        const result = await runTool!('list_events', { when: 'today' });
+        return { text: '', toolCalls: [], nativeToolResults: [result] };
+      }
+    }
+
+    const out = await runAssistantTurn({
+      ...baseOpts(new SilentNativeProvider() as never, host(), [{ role: 'user', text: 'what happened today?' }]),
+      tools: [summaryTool],
+    });
+
+    expect(out[out.length - 1].text).toBe('1 event today.');
+  });
 });

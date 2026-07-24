@@ -32,8 +32,13 @@ public class AppleIntelligencePlugin: CAPPlugin, CAPBridgedPlugin {
     private static let contextWindow = 4096
     private static let responseReserve = 1024
 
-    // One in-flight generation at a time (mirrors LlamaPlugin's busy discipline).
-    private var chatTask: Task<Void, Never>?
+    // Two independent busy slots, not one. The JS window interpreter (refs #265) legitimately
+    // nests a schema-constrained completion inside a bridged tool call, so a utility chat can be
+    // in flight while a tool-loop chat waits on JS. The sessions are independent
+    // (a fresh LanguageModelSession per chat, no shared state), so only same-kind concurrency
+    // is rejected: a second tool-loop, or a second utility chat, still gets CHAT_BUSY.
+    private var chatTask: Task<Void, Never>?      // chats WITH toolsJson (the tool loop)
+    private var utilityTask: Task<Void, Never>?   // chats WITHOUT toolsJson (one-shot completions)
 
     // Held so the prewarmed session (and the assets it loaded) outlives isSupported.
     // Typed AnyObject because stored properties cannot carry @available.
@@ -84,7 +89,10 @@ public class AppleIntelligencePlugin: CAPPlugin, CAPBridgedPlugin {
         guard let messagesJson = call.getString("messagesJson") else {
             return call.reject("messagesJson is required")
         }
-        if chatTask != nil {
+        // A tool-loop chat and a utility chat gate independently; see chatTask/utilityTask.
+        let toolsJson = call.getString("toolsJson")
+        let isToolLoop = toolsJson != nil
+        if isToolLoop ? chatTask != nil : utilityTask != nil {
             return call.reject("A chat is already running", "CHAT_BUSY")
         }
         let temperature = call.getDouble("temperature") ?? 0
@@ -124,10 +132,11 @@ public class AppleIntelligencePlugin: CAPPlugin, CAPBridgedPlugin {
         let history = entries
 
         let schemaJson = call.getString("schemaJson")
-        let toolsJson = call.getString("toolsJson")
 
         let task = Task { [weak self] in
-            defer { self?.chatTask = nil }
+            defer {
+                if isToolLoop { self?.chatTask = nil } else { self?.utilityTask = nil }
+            }
             do {
                 // Native tool calling: the model picks and fills the tool, we bridge execution to JS.
                 let tools = self?.buildTools(fromToolsJson: toolsJson) ?? []
@@ -189,7 +198,7 @@ public class AppleIntelligencePlugin: CAPPlugin, CAPBridgedPlugin {
                 call.reject(error.localizedDescription, "ENGINE_FAILED")
             }
         }
-        chatTask = task
+        if isToolLoop { chatTask = task } else { utilityTask = task }
     }
 
     /// Exact prompt/completion token counts for one turn, from the model's tokenizer.
@@ -348,6 +357,7 @@ public class AppleIntelligencePlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func cancelChat(_ call: CAPPluginCall) {
         chatTask?.cancel()
+        utilityTask?.cancel()
         // A generation parked on a bridged tool call is not cancellable through the task alone:
         // fail the pending calls too, or the bridge hangs until the timeout.
         let registry = toolCalls

@@ -139,6 +139,13 @@ function parseToolArguments(argumentsJson: string, toolName: string): Record<str
   return {};
 }
 
+/** Handed back in place of a tool result once a native turn has spent its call
+ *  budget (`ASSISTANT.appleNativeToolCallBudget`). Terminal on purpose: it does
+ *  not describe a fixable fault, because the model that reaches it is retrying
+ *  variants of a call that already worked, so the only useful instruction is to
+ *  stop and answer from what it has. */
+const TOOL_BUDGET_EXHAUSTED_TEXT = 'Tool budget for this turn is exhausted. Answer now from the results you already have.';
+
 /** The behavioural rules a tool-carrying turn gets, each one a measured failure
  *  of this backend restated as a short imperative. Shared by both tool paths:
  *  the framework's native tool loop enforces the CALL shape, never what the
@@ -405,22 +412,46 @@ export class AppleIntelligenceProvider implements AssistantProvider {
       tools.map((tool) => ({ name: tool.name, description: firstSentence(tool.description), schemaJson: JSON.stringify(tool.schema) })),
     );
     const executed: ExecutedToolCall[] = [];
+    /** Every call the framework emitted this turn, budgeted or not. */
+    let bridgedCalls = 0;
+    /** Whether the budget already asked the native session to stop, so the ask
+     *  happens once however many calls were already queued behind it. */
+    let budgetCancelled = false;
 
     const onToolCall = async (event: { callId: string; name: string; argumentsJson: string }) => {
       let output: string;
-      try {
-        const result = await runTool(event.name, parseToolArguments(event.argumentsJson, event.name));
-        executed.push(result);
-        output = result.output;
-      } catch (error) {
-        // The model reads whatever comes back, so a thrown tool is reported to
-        // it as text rather than left to hang the native session.
-        output = error instanceof Error ? error.message : String(error);
-        log.assistant('Apple Intelligence native tool call threw', LogLevel.ERROR, { toolName: event.name, error: output });
+      // Past the budget the call is refused without running: the framework
+      // owns this loop, so nothing else here can end a retry storm, and each
+      // extra result it fed back was window the answer needed (refs #270).
+      const overBudget = ++bridgedCalls > ASSISTANT.appleNativeToolCallBudget;
+      if (overBudget) {
+        output = TOOL_BUDGET_EXHAUSTED_TEXT;
+        log.assistant('Apple Intelligence native tool budget exhausted; refusing the call', LogLevel.WARN, {
+          toolName: event.name,
+          bridgedCalls,
+          budget: ASSISTANT.appleNativeToolCallBudget,
+        });
+      } else {
+        try {
+          const result = await runTool(event.name, parseToolArguments(event.argumentsJson, event.name));
+          executed.push(result);
+          output = result.output;
+        } catch (error) {
+          // The model reads whatever comes back, so a thrown tool is reported to
+          // it as text rather than left to hang the native session.
+          output = error instanceof Error ? error.message : String(error);
+          log.assistant('Apple Intelligence native tool call threw', LogLevel.ERROR, { toolName: event.name, error: output });
+        }
       }
       await plugin
         .resolveToolCall({ callId: event.callId, output })
         .catch((error) => log.assistant('Apple Intelligence resolveToolCall failed', LogLevel.WARN, { error }));
+      // Resolved first, so the native session is never left waiting on a call
+      // it will be told to abandon a moment later.
+      if (overBudget && !budgetCancelled) {
+        budgetCancelled = true;
+        await plugin.cancelChat().catch((error) => log.assistant('Apple Intelligence cancelChat failed', LogLevel.WARN, { error }));
+      }
     };
 
     const startedAt = Date.now();
@@ -435,6 +466,18 @@ export class AppleIntelligenceProvider implements AssistantProvider {
           toolsJson,
         }),
       );
+    } catch (error) {
+      // The budget's own cancellation coming back, as CANCELLED or (if the
+      // window went over before the stop landed) CONTEXT_FULL. Either way the
+      // turn holds real data, so it returns with an empty answer and the agent
+      // writes one from the results rather than showing an engine failure for
+      // a turn that succeeded. Nothing usable collected still propagates.
+      if (!budgetCancelled || !executed.some((r) => r.isError !== true)) throw error;
+      log.assistant('Apple Intelligence native turn ended at the tool budget; answering from the collected results', LogLevel.WARN, {
+        modelId: this.modelId,
+        toolCalls: executed.length,
+      });
+      response = { content: '' };
     } finally {
       await handle.remove();
     }

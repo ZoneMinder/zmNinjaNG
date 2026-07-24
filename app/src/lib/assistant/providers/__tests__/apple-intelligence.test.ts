@@ -639,6 +639,7 @@ describe('AppleIntelligenceProvider instructions', () => {
 describe('AppleIntelligenceProvider native tool calling', () => {
   beforeEach(() => {
     chatMock.mockReset();
+    cancelChatMock.mockClear();
     resolveToolCallMock.mockClear();
     removeListenerMock.mockClear();
     toolCallListener = undefined;
@@ -730,6 +731,58 @@ describe('AppleIntelligenceProvider native tool calling', () => {
 
     expect(runTool).toHaveBeenCalledWith('count_events', {});
     expect(resolveToolCallMock).toHaveBeenCalledWith({ callId: 'a', output: 'lastCount is required' });
+  });
+
+  // The retry-storm guardrail (refs #270): the framework owns the native loop,
+  // so nothing but this budget can stop a model that keeps re-calling a tool
+  // until the accumulated results overflow the window.
+  const BUDGET = ASSISTANT.appleNativeToolCallBudget;
+  /** `count` tool calls fired at the listener, then a chat that rejects the way
+   *  the native session does once `cancelChat()` lands. */
+  function scriptCancelledStorm(count: number) {
+    const calls = Array.from({ length: count }, (_, i) => ({ callId: `c${i}`, name: 'count_events', argumentsJson: '{}' }));
+    chatMock.mockImplementation(async () => {
+      for (const call of calls) toolCallListener?.(call);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      throw Object.assign(new Error('cancelled'), { code: 'CANCELLED' });
+    });
+  }
+
+  it('refuses tool calls past the per-turn budget, cancels the chat once, and returns what it collected', async () => {
+    scriptCancelledStorm(BUDGET + 3);
+    const runTool = vi.fn().mockResolvedValue({ callId: 'x', name: 'count_events', input: {}, output: '14 events' });
+
+    const provider = new AppleIntelligenceProvider();
+    const turn = await provider.chat([{ role: 'user', text: 'how many today?' }], [TOOL], 'sys', new AbortController().signal, undefined, runTool);
+
+    // Only the budgeted calls ran; the rest were answered without touching a tool.
+    expect(runTool).toHaveBeenCalledTimes(BUDGET);
+    // Every call was answered, budgeted or not, so the native session is never
+    // left waiting. A refusal resolves without running a tool, so it lands
+    // ahead of the budgeted ones: counted, not ordered.
+    const outputs = resolveToolCallMock.mock.calls.map(([o]) => (o as { output: string }).output);
+    const refusal = 'Tool budget for this turn is exhausted. Answer now from the results you already have.';
+    expect(outputs).toHaveLength(BUDGET + 3);
+    expect(outputs.filter((o) => o === '14 events')).toHaveLength(BUDGET);
+    expect(outputs.filter((o) => o === refusal)).toHaveLength(3);
+    // Asked to stop once, however many calls were already queued behind it.
+    expect(cancelChatMock).toHaveBeenCalledTimes(1);
+    // The rejection that follows is our own cancellation, and the turn holds
+    // real data, so it comes back answerless instead of throwing.
+    expect(turn.text).toBe('');
+    expect(turn.nativeToolResults).toHaveLength(BUDGET);
+    expect(turn.usage?.totalTokens).toBeGreaterThan(0);
+  });
+
+  it('rethrows the cancelled turn when the budget was spent without a single usable result', async () => {
+    scriptCancelledStorm(BUDGET + 1);
+    const runTool = vi.fn().mockRejectedValue(new Error('profile is offline'));
+
+    const provider = new AppleIntelligenceProvider();
+    await expect(
+      provider.chat([{ role: 'user', text: 'how many today?' }], [TOOL], 'sys', new AbortController().signal, undefined, runTool),
+    ).rejects.toThrow('__i18n:assistant.native_engine_failed');
+    expect(cancelChatMock).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the guided schema path for a tool-less turn even when runTool is given', async () => {

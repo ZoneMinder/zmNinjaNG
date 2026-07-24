@@ -676,6 +676,16 @@ export const ASSISTANT = {
   // prevent. A remote retry costs a network round trip rather than local
   // decode, but only on a reply that was going to be thrown away anyway.
   maxParseAttempts: 3,
+  // How many tool calls the apple backend's NATIVE loop may bridge in one turn
+  // (refs #270). `maxToolIterations` cannot bound that loop: the framework owns
+  // the iteration and the agent only sees the finished turn. Observed live: the
+  // model called list_events roughly fifteen times with small argument variants,
+  // ignoring the duplicate-call guard text it was handed each time, until the
+  // accumulated results overflowed the window (CONTEXT_FULL) and the turn died
+  // with the data already in hand. Eight is above any legitimate turn seen (a
+  // multi-monitor comparison runs three to five calls) and well under what the
+  // window can hold, so it stops a retry storm without cutting real work short.
+  appleNativeToolCallBudget: 8,
   // Ollama's non-streaming /chat/completions gives no progress signal, so a cold
   // server-side model load just looks like a slow request. Past this, show an honest
   // "still working, the server may be loading" note that ticks elapsed seconds (refs #270).

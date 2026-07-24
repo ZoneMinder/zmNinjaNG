@@ -22,6 +22,12 @@ import { log, LogLevel } from '../logger';
  *  text itself, it only ever emits this key behind the `__i18n:` sentinel. */
 const ITERATION_CAP_KEY = 'assistant.iteration_cap_reached';
 
+/** The last resort for a turn that produced no answer text and no tool summary
+ *  to build one from. Same key the providers emit for an unparseable reply
+ *  (`PARSE_ERROR_TEXT`), restated here rather than imported so the loop keeps
+ *  no dependency on any one provider module. */
+const PARSE_ERROR_KEY = 'assistant.parse_error';
+
 /** Returned to the model when it calls one of the actions the assistant no
  *  longer implements (see `WITHHELD_TOOL_NAMES` in tools.ts). Model-facing, so
  *  it is plain English the model rewrites for the user, not an `__i18n:` key. */
@@ -480,6 +486,13 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
     if (turn.nativeToolResults?.length) {
       turnDisplay.push(...turn.nativeToolResults.flatMap((r) => r.display ?? []));
       push({ role: 'tool', toolResults: turn.nativeToolResults });
+      // A native turn cut short at its tool-call budget ends with the data but
+      // no prose (see chatWithNativeTools). The grounded fallback already built
+      // for ungrounded retries covers it: the sentence the tool itself wrote,
+      // so it cannot be wrong about the rows.
+      if (!assistantMsg.text?.trim()) {
+        assistantMsg.text = fallbackAnswerFromData(toolOutputs) ?? `__i18n:${PARSE_ERROR_KEY}`;
+      }
       const deduped = dedupeDisplay(turnDisplay);
       assistantMsg.display = deduped && show ? filterDisplayByShow(deduped, show) : deduped;
       assistantMsg.trace = turnTrace.length > 0 ? [...turnTrace] : undefined;
