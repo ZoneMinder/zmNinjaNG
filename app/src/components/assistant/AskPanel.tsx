@@ -36,6 +36,7 @@ import {
 import { sharedMockProvider } from '../../lib/assistant/providers/mock';
 import { buildSystemPrompt } from '../../lib/assistant/system-prompt';
 import { getObjectLabels } from '../../lib/assistant/object-labels';
+import { TOOLS, specializeToolSchemas } from '../../lib/assistant/tools';
 import { interpretWhen } from '../../lib/assistant/window-interpreter';
 import { suggestOllamaBaseUrl, warmOllamaModel } from '../../lib/assistant/providers/openai';
 import { classifyRequest, buildNoToolPrompt, type RequestKind } from '../../lib/assistant/triage';
@@ -559,7 +560,10 @@ export function AskPanel() {
         history,
         system: kind === 'zoneminder' ? system : buildNoToolPrompt(system, kind),
         signal: controller.signal,
-        tools: kind === 'zoneminder' ? undefined : [],
+        // Specialized rather than the bare registry: objectType is pinned to
+        // this install's labels so the model cannot decode an invented one
+        // (refs #270, see specializeToolSchemas).
+        tools: kind === 'zoneminder' ? specializeToolSchemas(TOOLS, objectLabels) : [],
         objectLabels,
         initialTrace,
         historyTurns: settings.assistantHistoryTurns,

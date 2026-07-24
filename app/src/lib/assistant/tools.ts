@@ -29,6 +29,57 @@ export { readOnlyTools } from './tools-readonly';
 export const TOOLS: ToolDefinition[] = [...readOnlyTools];
 
 /**
+ * The same tools with `objectType` pinned to the labels this install records.
+ *
+ * Observed on the Apple Intelligence backend (refs #270): asked for plain
+ * event counts, the model called `list_events` with objectType "summary",
+ * which is not a label any detector writes. The executor rejected it and named
+ * the real labels (car, person, truck), the model tried more invented
+ * variants, and the turn spent its whole iteration budget without answering.
+ * The registry declares objectType as a free string, so guided decoding had
+ * nothing to hold it to and the correction could only ever arrive after the
+ * fact.
+ *
+ * Injecting the install's labels as an `enum` makes it structural instead: the
+ * Apple schema converter turns an enum into decoder choices, so a label that
+ * does not exist can no longer be generated. The registry itself stays generic
+ * (evals and other callers run without an install), and both accepted shapes
+ * survive: one label, or an array of them for a category word.
+ *
+ * `type` and `items` are left in place next to the added `anyOf` so the
+ * pre-flight validator (`validateToolInput`) and the WebLLM signature line
+ * still read the property exactly as they did before.
+ *
+ * No labels known (a fresh install, or the sample failed) returns `tools`
+ * unchanged.
+ */
+export function specializeToolSchemas(
+  tools: ToolDefinition[],
+  objectLabels: readonly string[] | undefined,
+): ToolDefinition[] {
+  const labels = (objectLabels ?? []).filter((label) => label.trim() !== '');
+  if (labels.length === 0) return tools;
+  return tools.map((tool) => {
+    const properties = (tool.schema.properties ?? {}) as Record<string, Record<string, unknown>>;
+    const spec = properties.objectType;
+    if (!spec) return tool;
+    const types = (Array.isArray(spec.type) ? spec.type : spec.type ? [spec.type] : []) as string[];
+    const branches = [
+      ...(types.includes('string') ? [{ type: 'string', enum: [...labels] }] : []),
+      ...(types.includes('array') ? [{ type: 'array', items: { type: 'string', enum: [...labels] } }] : []),
+    ];
+    if (branches.length === 0) return tool;
+    return {
+      ...tool,
+      schema: {
+        ...tool.schema,
+        properties: { ...properties, objectType: { ...spec, anyOf: branches } },
+      },
+    };
+  });
+}
+
+/**
  * Names the assistant used to expose, kept ONLY so the agent loop can explain
  * itself when a model asks for one (they appear in model training data and in
  * older conversations). This is a list of strings, deliberately not a registry
