@@ -121,8 +121,14 @@ export const TIME_INTERPRET_CASES: TimeInterpretCase[] = [
   { phrase: 'vorgestern', cls: 'non-english', ok: (f) => f.daysAgo === 2 },
 ];
 
-/** 14 extraction cases: multiple time expressions in one question, time words
- *  embedded mid-sentence, zero-time questions, one non-English. */
+/** 16 extraction cases: multiple time expressions in one question, time words
+ *  embedded mid-sentence, zero-time questions, one non-English.
+ *
+ *  A compact clock range on its own ("10am-6pm", "9-5") resolves to an error by
+ *  design: a bare time-of-day has no day to anchor it. Extraction must still
+ *  surface it verbatim, because the token-level provenance layer (the answering
+ *  model copies allowed phrases into `when`) lets the model legally compose it
+ *  with a day word drawn from the same question ("10am-6pm" + "yesterday"). */
 export const TIME_EXTRACT_CASES: TimeExtractCase[] = [
   { question: 'what happened today', expect: ['today'] },
   { question: 'compare today and yesterday', expect: ['today', 'yesterday'] },
@@ -131,6 +137,10 @@ export const TIME_EXTRACT_CASES: TimeExtractCase[] = [
   { question: 'show me events from july 15 and july 21', expect: ['july 15', 'july 21'] },
   { question: 'anything between june 1 and june 15', expect: ['june 1', 'june 15'] },
   { question: 'who came by yesterday from 4pm to 10pm', expect: ['yesterday', '4pm', '10pm'] },
+  // Compact clock ranges: a dash form and a bare "between X and Y", each with a
+  // day word the range attaches to.
+  { question: 'Compare 10am-6pm yesterday and today.', expect: ['10am-6pm', 'yesterday', 'today'] },
+  { question: 'anything between 9-5 today', expect: ['9-5', 'today'] },
   { question: 'were there cars in the driveway yesterday afternoon', expect: ['yesterday', 'afternoon'] },
   { question: 'give me a recap of last month', expect: ['last month'] },
   { question: 'how busy was it in april', expect: ['april'] },
