@@ -32,7 +32,25 @@ export type RequestKind = 'zoneminder' | 'chat' | 'action';
  *  example looked like an imperative or mentioned a week. The time span is
  *  the interpreter's job and never decides the category, and the prompt now
  *  says exactly that; the template examples ("summarize <any period>") show
- *  the shape of the rule rather than enumerate its instances. */
+ *  the shape of the rule rather than enumerate its instances.
+ *
+ *  The count and presence shapes ("how many <thing> came <any period>", "did
+ *  anyone come by") are there for the Apple Foundation Models backend (refs
+ *  #270), where "how many people came today" and "how many cars came today"
+ *  classified as CHAT or ACTION. On that backend the tool-less turn answers
+ *  with an answer-only schema and no fail-open recovery, so a misroute is a
+ *  dead end ("No information available") and triage accuracy is the ceiling.
+ *
+ *  They are taught IN the template list rather than as an appended block of
+ *  "message -> VERDICT" examples, which is what was tried first and measured
+ *  worse on every wording (qwen3:4b-instruct, temp 0, schema-constrained, 18
+ *  cases): the arrow block scored 10/18 against 16/18 for the prompt without
+ *  it, and a bare extra rule sentence scored 11/18. The failure mode is not
+ *  misclassification but stalling: asked a question the prompt quotes back at
+ *  it, the model spends its whole token budget on whitespace before the
+ *  constrained JSON. Editing the existing list instead costs no length and
+ *  measured 34/36. Add nothing here without re-running `prompt-eval.mts
+ *  triage`. */
 const TRIAGE_PROMPT = [
   'You classify one user message for a ZoneMinder security-camera app. Reply with EXACTLY one word.',
   '',
@@ -44,7 +62,7 @@ const TRIAGE_PROMPT = [
   'ZONEMINDER - any request to summarize, recap, count, list, look up, check, or view THIS system\'s',
   '  cameras, monitors, events, detections, recordings, activity, or server health, or to be taken to a',
   '  screen in the app. Questions and commands alike, in any language: "summarize <any period>",',
-  '  "what happened <any period>", "how many <thing> <any period>", "is the server ok",',
+  '  "what happened <any period>", "how many <thing> came <any period>", "did anyone come by",',
   '  "show me <camera>".',
   'ACTION - a request to CHANGE something here: arm or disarm a monitor, enable or disable a camera,',
   '  trigger or cancel an alarm, change the run state or a monitor function, delete or archive an event.',
@@ -142,6 +160,12 @@ export function buildNoToolPrompt(base: string, kind: Exclude<RequestKind, 'zone
           'request and some of these actions cannot be undone, and tell them where to do it themselves:',
           'monitors and arming on the Monitors screen, run state on the Server screen, deleting and',
           'archiving on the event itself. Do not offer to do it another way.',
+          // Observed on Apple Foundation Models (refs #270): an action turn
+          // refused the change and then invented the system's condition,
+          // "Server is healthy. FPS: 1.0. Health: 100%". No tool ran on this
+          // turn, so every such number is fabricated.
+          'Never state any system fact, count, status, or health figure: no tool has run on this turn, so',
+          'you have retrieved nothing and have nothing to report.',
         ].join('\n')
       : [
           'This message is not a question about this ZoneMinder installation. Answer it directly and briefly',

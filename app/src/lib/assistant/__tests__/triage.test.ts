@@ -59,6 +59,21 @@ describe('classifyRequest', () => {
     expect(schema).toMatchObject({ properties: { kind: { enum: ['ZONEMINDER', 'ACTION', 'CHAT'] } } });
   });
 
+  // The boundary that failed on Apple Foundation Models (refs #270): casual
+  // count and presence questions triaged as CHAT or ACTION, and the tool-less
+  // turn then answered "No information available" with no way back. Taught as
+  // shapes in the ZONEMINDER list; an appended block of "message -> VERDICT"
+  // examples measured worse (see the prompt comment).
+  it('teaches the count and presence shapes that fix the casual-phrasing boundary', async () => {
+    const provider = providerSaying('ZONEMINDER');
+    await classifyRequest(provider, 'how many people came today', new AbortController().signal);
+
+    const [system] = vi.mocked(provider.complete).mock.calls[0];
+    expect(system).toContain('"how many <thing> came <any period>"');
+    expect(system).toContain('"did anyone come by"');
+    expect(system).not.toContain('-> ZONEMINDER');
+  });
+
   // A triage outage must degrade to the previous behaviour (everything reaches
   // the tool loop), never to an assistant that cannot answer questions.
   it('falls back to zoneminder when the provider throws', async () => {
@@ -105,5 +120,13 @@ describe('buildNoToolPrompt', () => {
     const prompt = buildNoToolPrompt('BASE PROMPT', 'action');
     expect(prompt).toContain('cannot be undone');
     expect(prompt).toContain('Monitors screen');
+  });
+
+  // An action turn refused the change and then invented "Server is healthy.
+  // FPS: 1.0. Health: 100%" (refs #270). No tool runs on this turn.
+  it('forbids an action turn from stating system facts it never retrieved', () => {
+    const prompt = buildNoToolPrompt('BASE PROMPT', 'action');
+    expect(prompt).toContain('Never state any system fact, count, status, or health figure');
+    expect(prompt).toContain('you have retrieved nothing');
   });
 });

@@ -541,6 +541,11 @@ const TRIAGE_CASES: Array<{ q: string; kind: 'ZONEMINDER' | 'ACTION' | 'CHAT' }>
   { q: 'what happened between june 1 and june 15', kind: 'ZONEMINDER' },
   { q: 'was war letzte Woche bei mir los', kind: 'ZONEMINDER' },
   { q: 'how many people came by today', kind: 'ZONEMINDER' },
+  // Both misrouted live on Apple Foundation Models (refs #270): a count or
+  // presence question phrased casually, with no camera and no ZoneMinder word
+  // in it.
+  { q: 'how many cars came today', kind: 'ZONEMINDER' },
+  { q: 'did anyone come by', kind: 'ZONEMINDER' },
   { q: 'is the server ok', kind: 'ZONEMINDER' },
   { q: 'show me the front camera', kind: 'ZONEMINDER' },
   // actions
