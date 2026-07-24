@@ -1,5 +1,7 @@
+import type { TFunction } from 'i18next';
 import type { AssistantProvider, ProviderConfig } from '../types';
-import { STORAGE_KEYS } from '../../zmninja-ng-constants';
+import type { ProfileSettings } from '../../../stores/settings';
+import { ASSISTANT, STORAGE_KEYS } from '../../zmninja-ng-constants';
 import { sharedMockProvider } from './mock';
 import { WebLlmProvider } from './webllm';
 import { OpenAiProvider } from './openai';
@@ -47,4 +49,53 @@ export function getAssistantProvider(config: ProviderConfig): AssistantProvider 
   if (config.backend === 'native') return new NativeLlmProvider(config.temperature);
   if (config.backend === 'apple') return new AppleIntelligenceProvider(config.temperature);
   return new WebLlmProvider(config.modelId, config.temperature);
+}
+
+/**
+ * The chat header's backend label: the model the ACTIVE backend runs, plus
+ * where it runs, composed as "<model> · <mode>" (mode alone when a backend has
+ * no model string to show).
+ *
+ * The switch is EXHAUSTIVE on `AssistantBackend`; the
+ * `const exhaustive: never = backend` default makes a new backend member added
+ * without a label here FAIL tsc. That compile error is the feature: the header,
+ * and any future surface, can never silently fall through to another backend's
+ * model name -- which is exactly the 'apple'-shows-qwen bug this replaces
+ * (refs #270).
+ */
+export function assistantBackendLabel(
+  settings: Pick<ProfileSettings, 'assistantBackend' | 'assistantModelId' | 'assistantOllamaModel'>,
+  t: TFunction,
+): string {
+  const backend = settings.assistantBackend;
+  let model: string;
+  let mode: string;
+  switch (backend) {
+    case 'on-device':
+      model =
+        ASSISTANT.webllmModels.find((m) => m.id === settings.assistantModelId)?.label ??
+        settings.assistantModelId;
+      mode = t('settings.assistant.backend_on_device');
+      break;
+    case 'ollama':
+      model = settings.assistantOllamaModel;
+      mode = t('settings.assistant.backend_ollama');
+      break;
+    case 'native':
+      // Fixed single native model, so no catalog lookup; its label already says
+      // "(native)", making the on-device mode suffix enough.
+      model = ASSISTANT.nativeLlmModel.label;
+      mode = t('settings.assistant.backend_on_device');
+      break;
+    case 'apple':
+      // OS-owned model, no id to select; brand name, deliberately untranslated.
+      model = 'Apple Intelligence';
+      mode = t('settings.assistant.backend_on_device');
+      break;
+    default: {
+      const exhaustive: never = backend;
+      return exhaustive;
+    }
+  }
+  return model ? `${model} · ${mode}` : mode;
 }

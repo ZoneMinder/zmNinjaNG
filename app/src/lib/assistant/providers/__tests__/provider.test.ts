@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { isAssistantTestMode, getAssistantProvider } from '../provider';
+import type { TFunction } from 'i18next';
+import { isAssistantTestMode, getAssistantProvider, assistantBackendLabel } from '../provider';
 import { sharedMockProvider } from '../mock';
 import { WebLlmProvider } from '../webllm';
 import { OpenAiProvider } from '../openai';
 import { NativeLlmProvider } from '../native-llm';
 import { AppleIntelligenceProvider } from '../apple-intelligence';
-import { STORAGE_KEYS } from '../../../zmninja-ng-constants';
+import { ASSISTANT, STORAGE_KEYS } from '../../../zmninja-ng-constants';
 import type { ProviderConfig } from '../../types';
 
 const MODEL_ID = 'Qwen3-1.7B-q4f16_1-MLC';
@@ -122,5 +123,46 @@ describe('getAssistantProvider', () => {
     vi.stubEnv('PROD', false);
 
     expect(getAssistantProvider(appleConfig)).toBeInstanceOf(AppleIntelligenceProvider);
+  });
+});
+
+describe('assistantBackendLabel', () => {
+  // Minimal t stub: returns the key. The label composes "<model> · <key>", so
+  // asserting on the raw key is enough to prove the right mode was chosen.
+  const t = ((key: string) => key) as unknown as TFunction;
+
+  it('shows the WebLLM catalog label for the on-device backend', () => {
+    const label = assistantBackendLabel(
+      { assistantBackend: 'on-device', assistantModelId: ASSISTANT.webllmModels[0].id, assistantOllamaModel: '' },
+      t,
+    );
+    expect(label).toBe(`${ASSISTANT.webllmModels[0].label} · settings.assistant.backend_on_device`);
+  });
+
+  it('shows the Ollama model name for the ollama backend', () => {
+    const label = assistantBackendLabel(
+      { assistantBackend: 'ollama', assistantModelId: '', assistantOllamaModel: 'qwen3:8b' },
+      t,
+    );
+    expect(label).toBe('qwen3:8b · settings.assistant.backend_ollama');
+  });
+
+  it('shows the fixed native model label for the native backend', () => {
+    const label = assistantBackendLabel(
+      { assistantBackend: 'native', assistantModelId: 'Llama-3.2-3B-Instruct-q4f16_1-MLC', assistantOllamaModel: '' },
+      t,
+    );
+    expect(label).toBe(`${ASSISTANT.nativeLlmModel.label} · settings.assistant.backend_on_device`);
+    // Never leaks a selected WebLLM model id on a non-WebLLM backend.
+    expect(label).not.toContain('Llama-3.2');
+  });
+
+  it('shows the Apple Intelligence brand for the apple backend, not the WebLLM catalog', () => {
+    const label = assistantBackendLabel(
+      { assistantBackend: 'apple', assistantModelId: ASSISTANT.webllmModels[0].id, assistantOllamaModel: '' },
+      t,
+    );
+    expect(label).toBe('Apple Intelligence · settings.assistant.backend_on_device');
+    expect(label).not.toContain(ASSISTANT.webllmModels[0].label);
   });
 });

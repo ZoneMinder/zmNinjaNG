@@ -11,7 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useAssistantStore } from '../../stores/assistant';
 import { useAssistantPanelStore } from '../../stores/assistantPanel';
-import { ASSISTANT } from '../../lib/zmninja-ng-constants';
+import { assistantBackendLabel } from '../../lib/assistant/providers/provider';
 import { Platform } from '../../lib/platform';
 
 /** Marks the point the model can no longer see (agent.ts's
@@ -48,23 +48,10 @@ export function useAssistantChrome(): AssistantChrome {
   const minimize = useAssistantPanelStore((s) => s.minimize);
   const close = useAssistantPanelStore((s) => s.close);
 
-  const backendLabel = useMemo(() => {
-    // Fixed single model on the native backend, so no catalog lookup; its
-    // label already says "(native)", making the on-device mode suffix enough.
-    if (settings.assistantBackend === 'native') {
-      return `${ASSISTANT.nativeLlmModel.label} · ${t('settings.assistant.backend_on_device')}`;
-    }
-    const mode =
-      settings.assistantBackend === 'ollama'
-        ? t('settings.assistant.backend_ollama')
-        : t('settings.assistant.backend_on_device');
-    const model =
-      settings.assistantBackend === 'ollama'
-        ? settings.assistantOllamaModel
-        : (ASSISTANT.webllmModels.find((m) => m.id === settings.assistantModelId)?.label ??
-          settings.assistantModelId);
-    return model ? `${model} · ${mode}` : mode;
-  }, [settings.assistantBackend, settings.assistantModelId, settings.assistantOllamaModel, t]);
+  const backendLabel = useMemo(
+    () => assistantBackendLabel(settings, t),
+    [settings.assistantBackend, settings.assistantModelId, settings.assistantOllamaModel, t],
+  );
 
   return {
     backendLabel,
