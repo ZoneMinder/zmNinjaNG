@@ -22,10 +22,10 @@
  */
 import { format } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
-import { interpretWhen } from './window-interpreter';
+import { interpretWhen, PART_OF_DAY_WORDS, WEEKDAY_WORDS, MONTH_SEASON_NAMES } from './window-interpreter';
 import { normalizeWhenPhrase } from './tool-helpers';
 import { log, LogLevel } from '../logger';
-import type { WindowFields } from './event-range';
+import { WINDOW_UNITS, type WindowFields } from './event-range';
 import type { AssistantProvider, ResolvedTimeframe } from './types';
 
 /** The extractor's output contract, constrained on backends that support it
@@ -80,6 +80,89 @@ function parsePhrases(text: string): string[] {
   }
 }
 
+/** A clock token: "4pm", "9 am", "16:30", "9:00pm". Requires a meridian or a
+ *  colon, so a bare number ("9") is not one on its own (the compact-dash class
+ *  handles bare numbers around a dash). */
+const CLOCK_TOKEN = String.raw`\d{1,2}(?::\d{2})?\s*(?:am|pm)|\d{1,2}:\d{2}`;
+/** Unit words a rolling span counts in, reusing the interpreter's own unit list
+ *  plus "year" (which the interpreter cannot resolve but the scan still surfaces). */
+const ROLLING_UNITS = `${WINDOW_UNITS.join('|')}|year`;
+
+/** Deterministic, question-order, deduped scan for EVERY time expression whose
+ *  class code can decide, returning each as a VERBATIM substring of the question.
+ *  Verbatim is a contract: the provenance filter (whenNotFromQuestion) and the
+ *  answering model's copy-into-`when` rule both require the phrase to be an exact
+ *  substring of the question it came from.
+ *
+ *  The classes, each matched by one pattern below:
+ *  1. Clock ranges: written spans "from 4pm to 10pm"/"between 9am and 5pm" (both
+ *     ends clock tokens) and compact "10am-6pm"/"9-5"/"16:00-18:00".
+ *  2. Month-name + day number: "july 15", "june 1".
+ *  3. Rolling spans: "(past|last|previous) <n> <unit>" -> "past 2 weeks".
+ *  4. Compound relative periods: "last month", "this month", "this year",
+ *     "last week", "this week", "last weekend", "this weekend".
+ *  5. Day words + part-of-day: "today"/"yesterday"/"tonight", a modifier +
+ *     part-of-day ("this morning", "yesterday afternoon"), and bare part-of-day.
+ *  6. Weekday references incl. "last <weekday>", across the shared WEEKDAY_WORDS.
+ *  7. Bare month/season names: "april".
+ *  8. Bare ordinals: "the 21st", "21st".
+ *
+ *  Longer matches win over the shorter ones they contain ("july" inside
+ *  "july 15", "yesterday" inside "yesterday afternoon"), so each span is listed
+ *  once, at its most specific.
+ *
+ *  ponytail: month/season names include the everyday words "may", "march",
+ *  "fall", "spring", so a non-time use ("it may rain") over-matches to a month.
+ *  Upgrade path if that bites: require a leading in/the/this/last for those four. */
+export function scanTimeExpressions(question: string): string[] {
+  const months = [...MONTH_SEASON_NAMES].join('|');
+  const patterns: RegExp[] = [
+    new RegExp(String.raw`\bfrom\s+(?:${CLOCK_TOKEN})\s+(?:to|until|through|till)\s+(?:${CLOCK_TOKEN})`, 'gi'),
+    new RegExp(String.raw`\bbetween\s+(?:${CLOCK_TOKEN})\s+and\s+(?:${CLOCK_TOKEN})`, 'gi'),
+    new RegExp(String.raw`\b\d{1,2}(?::\d{2})?(?:\s*(?:am|pm))?\s*[-–]\s*\d{1,2}(?::\d{2})?(?:\s*(?:am|pm))?\b`, 'gi'),
+    new RegExp(String.raw`\b(?:${months})\s+\d{1,2}(?:st|nd|rd|th)?\b`, 'gi'),
+    new RegExp(String.raw`\b(?:past|last|previous)\s+\d+\s+(?:${ROLLING_UNITS})s?\b`, 'gi'),
+    new RegExp(String.raw`\b(?:last|this|next)\s+(?:month|week|weekend|year)\b`, 'gi'),
+    new RegExp(String.raw`\b(?:(?:this|last|yesterday)\s+)?(?:${PART_OF_DAY_WORDS.join('|')})\b`, 'gi'),
+    new RegExp(String.raw`\b(?:today|tonight|yesterday)\b`, 'gi'),
+    new RegExp(String.raw`\b(?:(?:last|this|next|on)\s+)?(?:${WEEKDAY_WORDS.join('|')})\b`, 'gi'),
+    new RegExp(String.raw`\b(?:${months})\b`, 'gi'),
+    new RegExp(String.raw`\b(?:the\s+)?\d{1,2}(?:st|nd|rd|th)\b`, 'gi'),
+  ];
+
+  const found: Array<{ start: number; end: number; text: string }> = [];
+  for (const re of patterns) {
+    for (const m of question.matchAll(re)) {
+      if (m.index === undefined) continue;
+      const text = m[0];
+      if (text.trim().length === 0) continue;
+      found.push({ start: m.index, end: m.index + text.length, text });
+    }
+  }
+
+  // Longest-first at each start so a container is kept before what it holds;
+  // then drop any span fully inside an already-kept one.
+  found.sort((a, b) => a.start - b.start || b.end - a.end);
+  const kept: Array<{ start: number; end: number; text: string }> = [];
+  for (const m of found) {
+    if (kept.some((k) => k.start <= m.start && m.end <= k.end)) continue;
+    kept.push(m);
+  }
+
+  // Appearance order, deduped on the normalized form ("today"/"Today" collapse
+  // to the first occurrence).
+  kept.sort((a, b) => a.start - b.start);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const m of kept) {
+    const key = normalizeWhenPhrase(m.text);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(m.text);
+  }
+  return out;
+}
+
 export interface ExtractedTimeframes {
   /** The resolved phrases to copy into `when`; the "today" default when the
    *  question named no time. Empty only when `abstained` is true. */
@@ -111,61 +194,84 @@ export async function extractTimeframes(
   timezone: string,
   signal: AbortSignal,
 ): Promise<ExtractedTimeframes> {
+  // Code-first extraction (refs #270): a deterministic scan OWNS every time class
+  // it can recognize, so the shapes that flaked on-device (compact clock ranges
+  // never surfacing, multi-value lists dropping members, even "last month"
+  // vanishing once: measured 11-12/16 across FM runs) are decided in code, not
+  // left to a nondeterministic decoder whose worst shape is exactly a free-string
+  // array. The model call still runs and only ADDS phrasings code cannot see
+  // (unlisted languages, odd wording), so extraction flakiness is bounded to
+  // phrasings no scanner could detect.
+  const scanPhrases = scanTimeExpressions(question);
+
   let extracted: string[] = [];
   try {
     const reply = await provider.complete(buildTimeframePrompt(now, timezone), question, signal, TIMEFRAME_SCHEMA);
     extracted = parsePhrases(reply.text);
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') throw error;
-    // A failed extraction cannot tell time words apart from none: fall open to
-    // the default period rather than blocking the turn (the `when` provenance
-    // guard still protects the tool call). The tool round would fail the same
-    // way if the model were truly unreachable.
     log.assistant('Timeframe extraction failed', LogLevel.WARN, {
       error: error instanceof Error ? error.message : String(error),
     });
-    return { phrases: ['today'], resolved: [], abstained: false };
+    // With the scan in hand the turn is not blind when the model call fails: only
+    // fall straight to the default period when the scan also found nothing (the
+    // pre-scan fail-open path). Otherwise proceed on the scan phrases alone.
+    if (scanPhrases.length === 0) return { phrases: ['today'], resolved: [], abstained: false };
   }
 
   // The model parrots the prompt's own date line (buildTimeframePrompt names
-  // today, the weekday, the ISO date and the timezone), so the extractor
-  // returns time words the user never typed. Provenance is decidable in code,
-  // exactly as whenNotFromQuestion decides it: a phrase that truly came from
-  // the question is a substring of it. Filter to those BEFORE the resolution
-  // loop, so a parroted phrase never reaches the interpreter (observed: 3
-  // parroted phrases cost 3 wasted constrained calls). A filter that leaves
-  // zero phrases is the same as none: the user stated no real timeframe, so
-  // fall to the default period rather than abstain.
+  // today, the weekday, the ISO date and the timezone), so the extractor returns
+  // time words the user never typed. Provenance is decidable in code, exactly as
+  // whenNotFromQuestion decides it: a phrase that truly came from the question is
+  // a substring of it. Filter the MODEL's phrases to those; scan phrases are
+  // verbatim substrings by construction and never need this filter.
   const normalizedQuestion = normalizeWhenPhrase(question);
-  const stated = extracted.filter((phrase) => {
+  const modelStated = extracted.filter((phrase) => {
     if (normalizedQuestion.includes(normalizeWhenPhrase(phrase))) return true;
     log.assistant('Dropped parroted timeframe phrase', LogLevel.DEBUG, { phrase });
     return false;
   });
-  const namedTime = stated.length > 0;
 
-  // De-dupe on the normalized form: the same phrase twice would resolve twice
-  // (cache makes the second free) and clutter the allowed-phrase line.
+  // Union scan + model, de-duped on the normalized form: the scan owns its
+  // classes and wins ties (listed first, in question order), the model only adds
+  // a phrase whose normalized form the scan did not already cover.
+  const scanKeys = new Set(scanPhrases.map(normalizeWhenPhrase));
   const seen = new Set<string>();
-  const candidates = (namedTime ? stated : ['today']).filter((phrase) => {
+  const union: string[] = [];
+  for (const phrase of [...scanPhrases, ...modelStated]) {
     const key = normalizeWhenPhrase(phrase);
-    if (seen.has(key)) return false;
+    if (seen.has(key)) continue;
     seen.add(key);
-    return true;
-  });
+    union.push(phrase);
+  }
+  const namedTime = union.length > 0;
 
   const resolved: ResolvedTimeframe[] = [];
-  for (const phrase of candidates) {
+  for (const phrase of namedTime ? union : ['today']) {
     const fields = await interpretWhen(phrase, provider, now, timezone, signal);
     if ('error' in fields && fields.error) continue;
     resolved.push({ phrase, fields: fields as WindowFields });
   }
 
-  if (resolved.length === 0) {
-    // Two ways here: a stated timeframe that all failed (abstain), or the
-    // "today" default itself failing to resolve (keep it, so the answering
-    // model still has an allowed phrase and the turn proceeds on today).
-    return namedTime ? { phrases: [], resolved: [], abstained: true } : { phrases: ['today'], resolved: [], abstained: false };
-  }
-  return { phrases: resolved.map((tf) => tf.phrase), resolved, abstained: false };
+  // Neither path named a time: the default period, kept even if it failed to
+  // resolve so the turn still proceeds on today.
+  if (!namedTime) return { phrases: ['today'], resolved, abstained: false };
+
+  // A phrase survives into the allowed list if it resolved OR the scan detected
+  // it. An unresolvable compact clock range ("10am-6pm", "9-5", "from 4pm to
+  // 10pm") carries no day to anchor it, yet the token-level provenance layer lets
+  // the answering model legally compose it with a day word from the same
+  // question, so it must still be offered. An unresolved MODEL-only phrase
+  // ("blursday") is a hallucinated period and is dropped.
+  const resolvedKeys = new Set(resolved.map((tf) => normalizeWhenPhrase(tf.phrase)));
+  const phrases = union.filter((phrase) => {
+    const key = normalizeWhenPhrase(phrase);
+    return resolvedKeys.has(key) || scanKeys.has(key);
+  });
+
+  // Everything stated failed to resolve and the scan vouched for nothing: the
+  // question named a period no interpretation could work out, so abstain rather
+  // than answer a wrong window with real data.
+  if (phrases.length === 0) return { phrases: [], resolved: [], abstained: true };
+  return { phrases, resolved, abstained: false };
 }

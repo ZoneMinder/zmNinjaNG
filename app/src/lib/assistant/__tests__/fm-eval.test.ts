@@ -16,10 +16,12 @@ vi.mock('../time-eval-cases', () => ({
     { phrase: 'yesterday', cls: 'relative-day', ok: (f: Record<string, unknown>) => f.daysAgo === 1 },
   ],
   TIME_EXTRACT_CASES: [
-    // Not a 'today' expect: 'today' is the extractor's default fallback, so a
-    // 'today' case can never actually fail and would not exercise the failure
-    // path.
-    { question: 'summarize the past 2 weeks', expect: ['past 2 weeks'] },
+    // A non-English phrase the deterministic scanner cannot see (scanTimeExpressions
+    // owns the English classes), so extraction rides on the model alone and the
+    // failure path is reachable when the model misses. A 'today' expect would be
+    // the extractor's default fallback and could never fail; an English phrase the
+    // scanner recognizes could never fail either.
+    { question: 'was war letzte woche los', expect: ['letzte woche'] },
     { question: 'what cameras do I have', none: true },
   ],
 }));
@@ -53,8 +55,8 @@ class ScriptProvider implements AssistantProvider {
 const ALL_CORRECT: Record<string, string> = {
   'p:today': '{"daysAgo":0}',
   'p:yesterday': '{"daysAgo":1}',
-  'p:past 2 weeks': '{"lastCount":2,"lastUnit":"week"}',
-  'q:summarize the past 2 weeks': '{"phrases":["past 2 weeks"]}',
+  'p:letzte woche': '{"lastCount":1,"lastUnit":"week"}',
+  'q:was war letzte woche los': '{"phrases":["letzte woche"]}',
   'q:what cameras do i have': '{"phrases":[]}',
 };
 
@@ -72,7 +74,7 @@ describe('runFmTimeEval', () => {
     expect(report.failures).toEqual([]);
     expect(report.durationMs).toBeGreaterThanOrEqual(0);
     // 2 interpret cases (today, yesterday) + 2 extract questions + the
-    // 'past 2 weeks' interpretation the first extraction resolves = 5. The
+    // 'letzte woche' interpretation the first extraction resolves = 5. The
     // none-case's default 'today' interpretation hits the cache (today was
     // already interpreted), so it adds no call.
     expect(provider.completeCalls).toBe(5);
@@ -93,13 +95,13 @@ describe('runFmTimeEval', () => {
   });
 
   it('captures a failed extraction case (wrong phrases)', async () => {
-    // Extractor finds no timeframe -> falls to default 'today', which does not
-    // contain the expected 'past 2 weeks'.
-    const provider = new ScriptProvider({ ...ALL_CORRECT, 'q:summarize the past 2 weeks': '{"phrases":[]}' });
+    // The scanner cannot see the German phrase and the model returns none, so the
+    // extractor falls to default 'today', which does not contain 'letzte woche'.
+    const provider = new ScriptProvider({ ...ALL_CORRECT, 'q:was war letzte woche los': '{"phrases":[]}' });
     const report = await runFmTimeEval(provider, FM_EVAL_NOW, FM_EVAL_TZ, new AbortController().signal);
 
     const extractFailure = report.failures.find((f) => f.stage === 'extract');
-    expect(extractFailure).toMatchObject({ input: 'summarize the past 2 weeks', expected: 'past 2 weeks' });
+    expect(extractFailure).toMatchObject({ input: 'was war letzte woche los', expected: 'letzte woche' });
     expect(report.extract.pass).toBe(1);
   });
 

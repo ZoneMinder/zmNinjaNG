@@ -6,7 +6,7 @@
  * warm); interpretation quality is the interpreter's own concern.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { extractTimeframes, TIMEFRAME_SCHEMA, buildTimeframeSystemLine } from '../timeframe-stage';
+import { extractTimeframes, scanTimeExpressions, TIMEFRAME_SCHEMA, buildTimeframeSystemLine } from '../timeframe-stage';
 import { interpretWhen, resetWindowInterpreterCacheForTests } from '../window-interpreter';
 import type { AssistantProvider } from '../types';
 
@@ -26,6 +26,65 @@ function makeProvider(
   }));
   return { complete } as unknown as AssistantProvider;
 }
+
+describe('scanTimeExpressions', () => {
+  it('finds simple day words', () => {
+    expect(scanTimeExpressions('what happened today')).toEqual(['today']);
+    expect(scanTimeExpressions('compare today and yesterday')).toEqual(['today', 'yesterday']);
+    expect(scanTimeExpressions('anything tonight')).toEqual(['tonight']);
+  });
+
+  it('finds modifier + part-of-day and bare part-of-day', () => {
+    expect(scanTimeExpressions('how many people came this morning and this evening')).toEqual([
+      'this morning',
+      'this evening',
+    ]);
+    // The bare "yesterday" is absorbed into the longer "yesterday afternoon".
+    expect(scanTimeExpressions('were there cars yesterday afternoon')).toEqual(['yesterday afternoon']);
+    expect(scanTimeExpressions('anything in the evening')).toEqual(['evening']);
+  });
+
+  it('finds weekday references including "last <weekday>"', () => {
+    expect(scanTimeExpressions('what happened on sunday')).toEqual(['on sunday']);
+    expect(scanTimeExpressions('anything last tuesday')).toEqual(['last tuesday']);
+  });
+
+  it('finds month/season names and compound relative periods', () => {
+    expect(scanTimeExpressions('how busy was it in april')).toEqual(['april']);
+    expect(scanTimeExpressions('give me a recap of last month')).toEqual(['last month']);
+    expect(scanTimeExpressions('what about this week')).toEqual(['this week']);
+    expect(scanTimeExpressions('anything last weekend')).toEqual(['last weekend']);
+    expect(scanTimeExpressions('how did this year go')).toEqual(['this year']);
+  });
+
+  it('finds rolling spans', () => {
+    expect(scanTimeExpressions('summarize the past 2 weeks')).toEqual(['past 2 weeks']);
+    expect(scanTimeExpressions('anything in the last 6 hours')).toEqual(['last 6 hours']);
+  });
+
+  it('finds written and compact clock ranges', () => {
+    expect(scanTimeExpressions('who came by yesterday from 4pm to 10pm')).toEqual(['yesterday', 'from 4pm to 10pm']);
+    expect(scanTimeExpressions('anything today between 9am and 5pm')).toEqual(['today', 'between 9am and 5pm']);
+    expect(scanTimeExpressions('Compare 10am-6pm yesterday and today.')).toEqual(['10am-6pm', 'yesterday', 'today']);
+    expect(scanTimeExpressions('anything between 9-5 today')).toEqual(['9-5', 'today']);
+  });
+
+  it('finds explicit dates and bare ordinals, keeping every list member', () => {
+    expect(scanTimeExpressions('show me events from july 15 and july 21')).toEqual(['july 15', 'july 21']);
+    expect(scanTimeExpressions('anything between june 1 and june 15')).toEqual(['june 1', 'june 15']);
+    expect(scanTimeExpressions('what happened on the 21st')).toEqual(['the 21st']);
+  });
+
+  it('de-dupes on the normalized form, keeping the first occurrence', () => {
+    expect(scanTimeExpressions('today Today')).toEqual(['today']);
+  });
+
+  it('returns [] for a question that names no time', () => {
+    expect(scanTimeExpressions('what cameras do I have')).toEqual([]);
+    expect(scanTimeExpressions('is the server ok')).toEqual([]);
+    expect(scanTimeExpressions('list all my monitors')).toEqual([]);
+  });
+});
 
 describe('extractTimeframes', () => {
   beforeEach(() => resetWindowInterpreterCacheForTests());
@@ -166,6 +225,59 @@ describe('extractTimeframes', () => {
       resolved: [],
       abstained: false,
     });
+  });
+
+  it('keeps scan-found phrases even when the model returns an empty list', async () => {
+    // The decoder drops list members and compact forms nondeterministically; the
+    // scanner owns them, so a compact clock range plus both day words survive even
+    // when the model surfaces nothing. The clock range has no day to anchor it and
+    // does not resolve, yet stays in the allowed list for the model to compose.
+    const p = makeProvider(
+      () => '{"phrases":[],"none":true}',
+      (phrase) => {
+        if (phrase === 'today') return '{"daysAgo":0}';
+        if (phrase === 'yesterday') return '{"daysAgo":1}';
+        return 'no window here';
+      },
+    );
+    const result = await extractTimeframes('Compare 10am-6pm yesterday and today.', p, NOW, TZ, signal());
+    expect(result.abstained).toBe(false);
+    expect(result.phrases).toEqual(['10am-6pm', 'yesterday', 'today']);
+    expect(result.resolved).toEqual([
+      { phrase: 'yesterday', fields: { daysAgo: 1 } },
+      { phrase: 'today', fields: { daysAgo: 0 } },
+    ]);
+  });
+
+  it('keeps scan-found phrases when the model reply is unparseable junk', async () => {
+    const p = makeProvider(
+      () => 'total garbage, no json at all',
+      () => '{"fromDate":"2026-06-01","toDate":"2026-06-30"}',
+    );
+    const result = await extractTimeframes('give me a recap of last month', p, NOW, TZ, signal());
+    expect(result.phrases).toEqual(['last month']);
+    expect(result.abstained).toBe(false);
+  });
+
+  it('proceeds on scan phrases when the extraction model call fails', async () => {
+    const complete = vi.fn(async (system: string) => {
+      if (system.includes('find the time expressions')) throw new Error('offline');
+      return { text: '{"daysAgo":1}' };
+    });
+    const p = { complete } as unknown as AssistantProvider;
+    const result = await extractTimeframes('what happened yesterday', p, NOW, TZ, signal());
+    expect(result.phrases).toEqual(['yesterday']);
+    expect(result.resolved).toEqual([{ phrase: 'yesterday', fields: { daysAgo: 1 } }]);
+    expect(result.abstained).toBe(false);
+  });
+
+  it('unions scan phrases with model phrases the scan could not see', async () => {
+    const p = makeProvider(
+      () => '{"phrases":["letzte woche"],"none":false}',
+      (phrase) => (phrase === 'today' ? '{"daysAgo":0}' : '{"lastCount":1,"lastUnit":"week"}'),
+    );
+    const result = await extractTimeframes('was los today letzte woche', p, NOW, TZ, signal());
+    expect(result.phrases).toEqual(['today', 'letzte woche']);
   });
 
   it('propagates an abort instead of swallowing it', async () => {
