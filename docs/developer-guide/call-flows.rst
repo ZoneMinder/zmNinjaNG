@@ -606,6 +606,16 @@ MJPEG player.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/events/ZmsEventPlayer.tsx#L51>`__
    · → :doc:`05-component-architecture`
 
+#. **The still frames above the player.** ``EventFrameCarousel`` renders the
+   alarm, snapshot, and objdetect frames as thumbnails. ZoneMinder reports no
+   list of which ones exist, so each is requested and any whose image errors
+   removes itself; when all of them error the card disappears. Opening one calls
+   ``onViewerOpenChange``, and ``EventDetail`` pauses the Video.js player it kept
+   from ``onReady`` (or passes ``suspended`` to ``ZmsEventPlayer``), resuming on
+   close only if playback was running.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/events/EventFrameCarousel.tsx#L45>`__
+   · → :doc:`05-component-architecture`
+
 Flow 6: The access-token lifecycle
 ----------------------------------
 

@@ -543,7 +543,14 @@ the user-forced-ZMS branch.
 
 **Props:** ``portalUrl``, ``eventId``, ``token``, ``apiUrl``, ``totalFrames``,
 ``alarmFrames``, ``alarmFrameId``, ``maxScoreFrameId``, ``eventLength``,
-``minStreamingPort``, ``monitorId``, ``className``.
+``minStreamingPort``, ``monitorId``, ``className``, ``suspended``.
+
+``suspended`` pauses the stream while something covers it, currently the
+full-size viewer in ``EventFrameCarousel``. The effect remembers whether the
+stream was running when suspension began and only sends ``CMD_PLAY`` on release
+if it was, so a stream the user paused stays paused. It depends on ``suspended``
+alone and reads ``isPlaying`` without depending on it; taking ``isPlaying`` as a
+dependency would re-run the effect on every ordinary play/pause.
 
 The player exposes transport controls (start, seek back 5s, play / pause, seek
 forward 5s, end), speed presets (0.25x, 0.5x, 1x, 2x, 4x), a frame-position
@@ -579,6 +586,44 @@ When the token is stale, ``zmsUrl`` evaluates to ``''`` and the ``<img>`` does
 not render until the auth store returns a refreshed value. See the access-token
 freshness gate in :doc:`07-api-and-data-fetching` for why this gate exists and
 what counts as fresh.
+
+EventFrameCarousel
+~~~~~~~~~~~~~~~~~~
+
+**Location**: ``src/components/events/EventFrameCarousel.tsx``
+
+Strip of the significant still frames for an event, rendered above the player in
+``EventDetail`` (refs #272). The candidates are ``EVENT_FRAME_TYPES``
+(``lib/zmninja-ng-constants.ts``): ``alarm``, ``snapshot``, ``objdetect``. Each
+one becomes a thumbnail through ``getEventImageUrl`` at
+``EVENT_FRAME_THUMB_WIDTH`` (240 px), and the full-size viewer requests the same
+URL without a width.
+
+**Props:** ``portalUrl``, ``eventId``, ``token``, ``apiUrl``,
+``minStreamingPort``, ``monitorId``, ``hasAlarmFrame``, ``onViewerOpenChange``.
+
+ZoneMinder has no endpoint that reports which of these frames a given event has.
+``objdetect`` only exists when the Event Server or ``zm_detect`` wrote one, and
+the alarm frame only exists for an event that alarmed. So presence is discovered
+by rendering: a thumbnail whose ``<img>`` fires ``onError`` adds its type to a
+``failed`` list and disappears, and the component returns ``null`` once nothing
+is left, which removes the card entirely. ``hasAlarmFrame`` skips the alarm
+candidate up front when the event carries no ``AlarmFrameId``, so the common
+non-alarm case costs no failed request. ``EventDetail`` renders the carousel
+only while ``isAccessTokenFresh``, otherwise a token refresh would fail every
+image at once and hide the card for the rest of the visit.
+
+Collapse state lives in ``CollapsibleCard`` under
+``EVENT_FRAMES_OPEN_STORAGE_KEY``, so it is a device preference in
+``localStorage`` rather than a profile setting: it describes screen layout, not
+server behavior.
+
+``onViewerOpenChange`` is how the covered player gets stopped. ``EventDetail``
+holds the Video.js instance from ``Mp4EventPlayer``'s ``onReady`` in a ref typed
+structurally (``paused``/``play``/``pause``) so the page does not import
+``video.js`` itself, pauses it when the viewer opens, and resumes it on close
+only if it had been playing. The ZMS branches receive the same state through
+``suspended``.
 
 Player selection in EventDetail
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -294,7 +294,14 @@
     "alarm_frame_marker": "Alarm Frame {{frameId}}",
     "max_score_marker": "Max Score Frame {{frameId}}",
     "marker_jumped": "Jumped to {{text}}",
-    "tags": "Tags"
+    "tags": "Tags",
+    "frames_title": "Event frames",
+    "view_frame": "View {{type}} frame",
+    "frame_type": {
+      "alarm": "Alarm",
+      "snapshot": "Snapshot",
+      "objdetect": "Object detection"
+    }
   },
   "settings": {
     "server": "Server",

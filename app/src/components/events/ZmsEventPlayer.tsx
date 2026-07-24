@@ -55,6 +55,9 @@ interface ZmsEventPlayerProps {
   playbackRate?: number;
   /** Called when the user picks a speed preset, so it can be persisted. */
   onRateChange?: (rate: number) => void;
+  /** Pauses the stream while something covers it, such as the full-size frame
+   * viewer (#272). Playback resumes on release only if it was running. */
+  suspended?: boolean;
 }
 
 export function ZmsEventPlayer({
@@ -73,6 +76,7 @@ export function ZmsEventPlayer({
   onEnded,
   playbackRate,
   onRateChange,
+  suspended = false,
 }: ZmsEventPlayerProps) {
   const { t } = useTranslation();
   const bandwidth = useBandwidthSettings();
@@ -316,6 +320,25 @@ export function ZmsEventPlayer({
       setIsPlaying(true);
     }
   }, [isPlaying, sendCommand]);
+
+  // Pause while suspended and resume on release, but only for a stream that was
+  // running: a stream the user had paused stays paused. isPlaying and sendCommand
+  // are read, not depended on, so a normal play/pause does not re-run this.
+  const resumeAfterSuspendRef = useRef(false);
+  useEffect(() => {
+    if (suspended) {
+      resumeAfterSuspendRef.current = isPlaying;
+      if (isPlaying) {
+        sendCommand(ZMS_COMMANDS.cmdPause);
+        setIsPlaying(false);
+      }
+    } else if (resumeAfterSuspendRef.current) {
+      resumeAfterSuspendRef.current = false;
+      sendCommand(ZMS_COMMANDS.cmdPlay);
+      setIsPlaying(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [suspended]);
 
   // Change playback speed with CMD_VARPLAY on the existing connkey, matching
   // ZoneMinder's own event UI. zms resumes playing after a VARPLAY.

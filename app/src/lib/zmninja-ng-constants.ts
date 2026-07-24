@@ -299,6 +299,20 @@ export const EVENT_SCRUB_SEEK_DEBOUNCE_MS = 200;
 export const EVENT_SEEK_FLUSH_DELAY_MS = 400;
 
 /**
+ * Significant frames ZoneMinder can serve for an event (issue #272), in the
+ * order the event frame carousel shows them. ZoneMinder has no API that reports
+ * which of these exist for a given event, so the carousel renders each one and
+ * drops the ones whose image fails to load.
+ */
+export const EVENT_FRAME_TYPES = ['alarm', 'snapshot', 'objdetect'] as const;
+
+/** Width requested for carousel thumbnails, in pixels. */
+export const EVENT_FRAME_THUMB_WIDTH = 240;
+
+/** localStorage key holding the event frame carousel's expanded state. */
+export const EVENT_FRAMES_OPEN_STORAGE_KEY = 'zmninja-event-frames-open';
+
+/**
  * Relative time labels on events (issue #210).
  * List chip only renders for events within this many days; older events read
  * fine from the absolute date. Below the just-now threshold we show "just now".
