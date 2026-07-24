@@ -98,22 +98,21 @@ describe('classifyRequest', () => {
 });
 
 describe('buildNoToolPrompt', () => {
-  it('keeps the base prompt and tells a chat turn not to mention tools', () => {
+  it('keeps the base prompt and tells a chat turn not to call a tool', () => {
     const prompt = buildNoToolPrompt('BASE PROMPT', 'chat');
     expect(prompt).toContain('BASE PROMPT');
-    expect(prompt).toContain('not a question about this ZoneMinder installation');
-    expect(prompt).toContain('Do not mention tools');
+    expect(prompt).toContain('not about this ZoneMinder installation');
+    expect(prompt).toContain('Never call a tool');
   });
 
-  // The chat policy (refs #270): warm on small talk, out of scope for
-  // everything that is not this system.
-  it('answers small talk warmly and deflects code, prose, and general knowledge', () => {
+  // The softer chat policy (refs #270, pipeline-v2): a brief helpful general
+  // answer, one identity mention, a warm reply to small talk, no hard refusal.
+  it('gives a brief general answer with one identity mention and warm small talk', () => {
     const prompt = buildNoToolPrompt('BASE PROMPT', 'chat');
-    expect(prompt).toContain('A greeting, a thank you, or small talk gets a short warm reply');
-    expect(prompt).toContain('Never write code,');
-    expect(prompt).toContain('poems, or essays');
-    expect(prompt).toContain("you are meant for questions about the user's");
-    expect(prompt).toContain('cameras, events, and ZoneMinder system.');
+    expect(prompt).toContain('Give a brief, helpful general answer');
+    expect(prompt).toContain("you are an AI assistant for the user's ZoneMinder system");
+    expect(prompt).toContain('gets one short warm reply');
+    expect(prompt).toContain('never invent any camera,');
   });
 
   it('tells an action turn to refuse and say where to do it by hand', () => {

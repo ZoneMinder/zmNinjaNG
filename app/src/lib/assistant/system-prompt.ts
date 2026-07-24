@@ -76,7 +76,12 @@ export function buildSystemPrompt(ctx: SystemPromptContext): string {
     // makes the answer reading, not arithmetic. The field-naming sentence is
     // the measured fix for reading matchCount (events) when asked about
     // objects (prompt-eval's `fields` variant, refs #259).
-    'A result\'s summary line is the counts already written out: make it your first sentence, using its numbers and wording exactly, then add detail from the rows. matchCount and countsByMonitor ARE the counts; quote them and never tally rows yourself.',
+    // Spec point 6 (refs #270): an event answer gives both the total and the
+    // per-monitor breakdown. Folded into the existing summary rule in place,
+    // rather than a new line, because on qwen3:4b-instruct every added
+    // answer-section sentence perturbed borderline tool selection by ~3 points
+    // in the eval harness; the SHOW rule below already ends it with the ids.
+    'A result\'s summary line is the total and the per-monitor breakdown already written out: make it your first sentence, using its numbers and wording exactly, then add detail from the rows. matchCount and countsByMonitor ARE the counts; quote them and never tally rows yourself.',
     // Unchanged when matchCount became the true total (refs #246): every
     // longer variant naming "listed rows" or comparisons cost llama3.2 its
     // per-monitor quoting (measured); the summary sentence already leads with

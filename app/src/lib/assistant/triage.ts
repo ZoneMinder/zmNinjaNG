@@ -166,18 +166,16 @@ export const NO_TOOL_INSTRUCTIONS: Record<Exclude<RequestKind, 'zoneminder'>, st
     'you have retrieved nothing and have nothing to report.',
   ].join('\n'),
   chat: [
-    'This message is not a question about this ZoneMinder installation. Answer it directly and briefly',
-    'as yourself. Do not mention tools, do not list what you can do unless asked, and do not invent any',
-    'camera, event, or server information.',
-    // The scope half of the chat policy lives here rather than in the base
-    // prompt: this instruction only ever rides a tool-less turn, so it
-    // cannot pull a real ZoneMinder question away from its tool, which is
-    // what every base-prompt wording of it did in the eval harness (refs
-    // #270). Greetings stay warm; only the task asks get deflected.
-    'A greeting, a thank you, or small talk gets a short warm reply, nothing more. Never write code,',
-    'poems, or essays, and never take on general knowledge or calculation tasks: for those, and for any',
-    'other question that is not about this system, say you are meant for questions about the user\'s',
-    'cameras, events, and ZoneMinder system.',
+    // Softer than the old hard refusal (refs #270, pipeline-v2): a chat turn
+    // gets a brief helpful general answer, not a deflection to "I only do
+    // ZoneMinder". The single identity mention keeps the assistant grounded
+    // without listing tools. This instruction only ever rides a tool-less
+    // turn, so it cannot pull a real ZoneMinder question away from its tool,
+    // which is what every base-prompt wording of it did in the eval harness.
+    'This message is not about this ZoneMinder installation. Give a brief, helpful general answer as',
+    'yourself, and mention once that you are an AI assistant for the user\'s ZoneMinder system. A greeting,',
+    'a thank you, or small talk gets one short warm reply. Never call a tool, and never invent any camera,',
+    'event, or server information.',
   ].join('\n'),
 };
 

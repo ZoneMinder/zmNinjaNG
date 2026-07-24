@@ -83,6 +83,14 @@ describe('buildSystemPrompt', () => {
     expect(p).toContain('Greetings, thanks, and small talk get a short warm reply');
   });
 
+  // Spec point 6 (refs #270): an event answer carries both the total and the
+  // per-monitor breakdown, folded into the summary rule; the SHOW rule ends it.
+  it('tells an event answer to give both the total and the per-monitor breakdown', () => {
+    const p = buildSystemPrompt(base);
+    expect(p).toContain('the total and the per-monitor breakdown already written out');
+    expect(p).toContain('SHOW: events=');
+  });
+
   it('never mentions a JSON tool-call contract or WebLLM-specific directives (model-agnostic prompt)', () => {
     const p = buildSystemPrompt(base);
     expect(p.toLowerCase()).not.toContain('"tool"');

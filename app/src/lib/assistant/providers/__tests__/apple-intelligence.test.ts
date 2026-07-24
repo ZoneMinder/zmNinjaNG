@@ -601,9 +601,9 @@ describe('AppleIntelligenceProvider instructions', () => {
     );
     const instructions = sentInstructions();
 
-    expect(instructions).toContain('say you are meant for questions about the user\'s');
-    expect(instructions).toContain('cameras, events, and ZoneMinder system.');
-    expect(instructions).toContain('A greeting, a thank you, or small talk gets a short warm reply, nothing more.');
+    expect(instructions).toContain('Give a brief, helpful general answer');
+    expect(instructions).toContain('you are an AI assistant for the user\'s ZoneMinder system');
+    expect(instructions).toContain('gets one short warm reply');
   });
 
   it('carries the ACTION policy text through into the instructions', async () => {
