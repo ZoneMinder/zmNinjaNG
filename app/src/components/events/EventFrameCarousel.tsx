@@ -164,6 +164,9 @@ function EventFrameViewer({
       <DialogContent
         className="max-w-[95vw] w-full p-2 bg-black border-0"
         data-testid="event-frame-viewer"
+        // The frame itself is the content; the title names it, so Radix's
+        // description slot has nothing to add.
+        aria-describedby={undefined}
       >
         <DialogTitle className="text-sm text-white">{label}</DialogTitle>
         <div ref={ref} className="relative overflow-hidden touch-none">

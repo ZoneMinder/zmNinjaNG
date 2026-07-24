@@ -1807,9 +1807,21 @@ Click-and-hold repeats the action on every button.
    </div>
 
 It takes the whole ``ZoomPanControls`` object rather than nine separate handler
-props, so adding a control does not touch three call sites.
+props, so adding a control does not touch three call sites. Pass it the object
+without the two refs (``const { ref, innerRef, ...controls } = useZoomPan()``)
+when the compiler lint is in play: handing a component an object that still
+carries refs trips ``react-hooks/refs``.
 
-**Used by:** MonitorDetail, EventDetail, ZmsEventPlayer.
+The buttons are an accessory, never the interaction itself. ``useZoomPan``
+binds wheel zoom, pinch, drag-to-pan, and arrow-key pan to the ``ref``
+container through ``@use-gesture``, whose binding effect runs on every render
+and reads the ref as it goes. ``ref`` is therefore a callback ref that also
+stores the node in state: a container rendered through a portal (the frame
+viewer in ``EventFrameCarousel``) is absent on the first commit, and without
+that re-render the gestures would never bind, leaving a view where the buttons
+work and nothing else does (refs #272).
+
+**Used by:** MonitorDetail, EventDetail, ZmsEventPlayer, EventFrameCarousel.
 
 PullToRefreshIndicator (``components/ui/pull-to-refresh-indicator.tsx``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

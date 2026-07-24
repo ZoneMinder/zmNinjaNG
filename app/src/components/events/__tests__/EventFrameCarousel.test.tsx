@@ -82,6 +82,18 @@ describe('EventFrameCarousel', () => {
     expect(screen.queryByTestId('event-frame-viewer-image')).toBeNull();
   });
 
+  // The viewer lives in a portal, where a container that binds gestures only on
+  // its first commit would end up with working buttons and dead gestures.
+  it('zooms the full-size frame on wheel, not only through the buttons', () => {
+    renderCarousel();
+    fireEvent.click(screen.getByTestId('event-frame-thumb-alarm'));
+
+    const zoomTarget = screen.getByTestId('event-frame-viewer-image').parentElement!;
+    fireEvent.wheel(zoomTarget.parentElement!, { deltaY: -120, clientX: 10, clientY: 10 });
+
+    expect(zoomTarget.style.transform).toMatch(/scale\((?!1\))/);
+  });
+
   it('persists the collapsed state', () => {
     const { unmount } = renderCarousel();
 
