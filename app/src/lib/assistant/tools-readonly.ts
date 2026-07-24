@@ -23,7 +23,14 @@ import { resolveWindow, type WindowFields } from './event-range';
 import { formatAppDateTime } from '../format-date-time';
 import { resolveMonitorRef } from './monitor-ref';
 import type { ToolContext, ToolDefinition } from './types';
-import { safeExecute, isOmittedArg, objectTypePattern, coerceLabelList, NAVIGATE_ALLOWLIST } from './tool-helpers';
+import {
+  safeExecute,
+  isOmittedArg,
+  objectTypePattern,
+  coerceLabelList,
+  whenNotFromQuestion,
+  NAVIGATE_ALLOWLIST,
+} from './tool-helpers';
 
 /** Maps a raw MonitorData into the clean, model-friendly shape shared by
  *  list_monitors and get_monitor (refs #246): '0'/'1' strings become
@@ -279,6 +286,10 @@ const listEventsTool: ToolDefinition = {
       const whenPhrase = isOmittedArg(input.when) ? undefined : String(input.when);
       let resolvedWhen: { startDateTime?: string; endDateTime?: string } | undefined;
       if (whenPhrase) {
+        // Provenance first: a phrase the model carried over from an earlier
+        // turn interprets perfectly and answers the wrong day with real data.
+        const wrongTurn = whenNotFromQuestion(whenPhrase, ctx.question);
+        if (wrongTurn) throw new Error(wrongTurn);
         if (!ctx.interpretWhen) throw new Error('Time phrases are unavailable right now; retry without `when`.');
         const fields = await ctx.interpretWhen(whenPhrase);
         if ('error' in fields && fields.error) throw new Error(String(fields.error));

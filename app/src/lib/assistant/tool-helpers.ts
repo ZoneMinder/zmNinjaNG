@@ -193,6 +193,33 @@ export function objectQuestionMismatch(
 }
 
 /**
+ * Corrective text when a `when` phrase did not come from the question being
+ * answered, or undefined when its provenance checks out.
+ *
+ * Observed live: after a few turns about yesterday, the user asked "summarize
+ * today" and the model called list_events with `when: "yesterday"`, then
+ * answered about the wrong day with real data, which reads as correct. The
+ * phrase came from the conversation history, not from the question.
+ *
+ * The design contract makes that checkable. `when` is specified as a verbatim
+ * copy of the user's own time words in their own language, so a phrase that
+ * really came from this question is a substring of it. That test needs no
+ * phrase grammar and no language list, which is why it can be applied at all.
+ */
+export function whenNotFromQuestion(whenPhrase: string, question: string | undefined): string | undefined {
+  if (!question) return undefined;
+  const normalize = (text: string) => text.trim().toLowerCase().replace(/\s+/g, ' ');
+  if (normalize(question).includes(normalize(whenPhrase))) return undefined;
+
+  return (
+    `The when value "${whenPhrase}" does not appear in the question you are answering. ` +
+    `when must copy the user's own time words from THIS question, verbatim and in their language, ` +
+    `never time words from earlier turns. The question is: "${question}". ` +
+    `Retry with the time words copied from it, or omit when entirely if it names no time.`
+  );
+}
+
+/**
  * Drops every argument the model meant to leave out, before the tool sees it.
  *
  * Each tool used to do this itself, one argument at a time, and each one that

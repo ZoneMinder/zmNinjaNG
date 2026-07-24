@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getToolByName, isWithheldToolName, readOnlyTools, WITHHELD_TOOL_NAMES, TOOLS } from '../tools';
-import { safeExecute, validateToolInput, objectTypePattern, coerceLabelList, isOmittedArg, stripOmittedArgs, objectQuestionMismatch, toolCallSignature, repairCountEventsInterval } from '../tool-helpers';
+import { safeExecute, validateToolInput, objectTypePattern, coerceLabelList, isOmittedArg, stripOmittedArgs, objectQuestionMismatch, whenNotFromQuestion, toolCallSignature, repairCountEventsInterval } from '../tool-helpers';
 import type { ToolContext } from '../types';
 import { asProfileId } from '../../../api/types';
 import { ASSISTANT } from '../../zmninja-ng-constants';
@@ -285,6 +285,25 @@ describe('read-only tools', () => {
       expect(r.isError).toBeFalsy();
       expect(vi.mocked(getEvents)).toHaveBeenCalledWith(expect.objectContaining({ notesRegexp: undefined }));
     });
+  });
+
+  // Observed live: earlier turns were about yesterday, the user asked to
+  // summarize today, and the carried-over phrase interpreted fine and answered
+  // the wrong day with real data.
+  it('list_events refuses a when phrase the question never used', async () => {
+    const tool = getToolByName('list_events')!;
+    const r = await tool.execute({ when: 'yesterday' }, { ...ctx(), question: 'summarize today' });
+    expect(r.isError).toBe(true);
+    expect(r.output).toContain('summarize today');
+    expect(vi.mocked(getEvents)).not.toHaveBeenCalled();
+  });
+
+  it('list_events interprets a when phrase the question did use', async () => {
+    const tool = getToolByName('list_events')!;
+    const context = { ...ctx(), question: 'summarize today' };
+    const r = await tool.execute({ when: 'today' }, context);
+    expect(r.isError).toBeFalsy();
+    expect(context.interpretWhen).toHaveBeenCalledWith('today');
   });
 
   it('list_events never combines tag and event-id filters', async () => {
@@ -632,6 +651,37 @@ describe('objectQuestionMismatch', () => {
 
   it('leaves every other tool alone', () => {
     expect(objectQuestionMismatch('list_events', 'how many vehicles today', labels)).toBeUndefined();
+  });
+});
+
+describe('whenNotFromQuestion', () => {
+  it('passes a phrase copied out of the question', () => {
+    expect(whenNotFromQuestion('today', 'summarize today')).toBeUndefined();
+    expect(whenNotFromQuestion('sunday from 4pm to 10pm', 'what happened sunday from 4pm to 10pm')).toBeUndefined();
+  });
+
+  it('ignores case and surrounding whitespace', () => {
+    expect(whenNotFromQuestion('  Last   Week ', 'events from last week please')).toBeUndefined();
+  });
+
+  // The substring test carries no language assumptions, which is the whole
+  // reason a verbatim copy is the contract.
+  it('passes a copied phrase in any language', () => {
+    expect(whenNotFromQuestion('letzte Woche', 'was ist letzte Woche passiert')).toBeUndefined();
+    expect(whenNotFromQuestion('昨天', '昨天有什么事件')).toBeUndefined();
+  });
+
+  it('passes when no question is available', () => {
+    expect(whenNotFromQuestion('yesterday', undefined)).toBeUndefined();
+  });
+
+  // The reported failure: earlier turns about yesterday taught the model the
+  // word, and "summarize today" was answered with yesterday's events.
+  it('rejects a phrase the question never used, quoting the question', () => {
+    const message = whenNotFromQuestion('yesterday', 'summarize today');
+    expect(message).toContain('"yesterday"');
+    expect(message).toContain('summarize today');
+    expect(message).toContain('omit when');
   });
 });
 
