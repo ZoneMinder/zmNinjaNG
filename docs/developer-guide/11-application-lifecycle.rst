@@ -257,7 +257,10 @@ When the user re-opens the app:
 - **WebSocket Liveness**: ``useNotificationAutoConnect`` calls
   ``service.checkAlive(5000)``, which sends a ping and waits for a response. If
   the server does not respond within those 5 seconds, the connection is treated
-  as dead and an immediate reconnect is triggered.
+  as dead and a forced reconnect is triggered: the socket still reads as open,
+  so an ordinary ``reconnectNow()`` would decline (refs #274). When the store
+  already reads disconnected, resume skips the ping and reconnects immediately
+  rather than waiting on a backoff timer that the suspended WebView froze.
 - **Badge Clear**: ``useNotificationDelivered`` listens for ``appStateChange``,
   ingests any notifications delivered while backgrounded into the history
   store, then clears the native badge via

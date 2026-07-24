@@ -381,6 +381,13 @@ export class ZMNotificationService {
       this._setState('error');
       // Don't throw: let _handleClose schedule reconnect for transport failures.
       // For auth failures, disconnect() was already called in _handleMessage.
+      // With no socket left there is no close event coming, so nothing else
+      // would retry: a WebSocket constructor throw (malformed URL, blocked
+      // scheme) used to strand the service in 'error' until the user tapped
+      // Connect (refs #274).
+      if (!this.ws && !this.intentionalDisconnect) {
+        this._scheduleReconnect();
+      }
     }
   }
 
@@ -544,22 +551,34 @@ export class ZMNotificationService {
   /**
    * Trigger an immediate reconnect (e.g., after network comes back online).
    * Cancels any pending scheduled reconnect.
+   *
+   * @param force - Reconnect even while the state says connected. Required
+   *   after a failed liveness check: a socket that survived an app suspension
+   *   can read as OPEN while the peer is long gone, and without this the one
+   *   caller that knows the connection is dead was refused (refs #274).
    */
-  public reconnectNow(): void {
-    if (this.state === 'connected' || this.state === 'connecting' || this.state === 'authenticating') {
+  public reconnectNow(force = false): void {
+    const busy = this.state === 'connected' || this.state === 'connecting' || this.state === 'authenticating';
+    if (busy && !force) {
       return;
     }
     if (!this.config || this.intentionalDisconnect) {
       return;
     }
 
-    log.notifications('Triggering immediate reconnect', LogLevel.INFO);
+    log.notifications('Triggering immediate reconnect', LogLevel.INFO, { force, state: this.state });
 
-    // Cancel any pending scheduled reconnect
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
+    // Drop the stale socket before reconnecting. `this.ws` is cleared first so
+    // the close event fails the handler's identity guard: _handleClose must not
+    // schedule a competing reconnect on top of the one starting here.
+    if (this.ws) {
+      const stale = this.ws;
+      this.ws = null;
+      stale.close();
     }
+
+    // Cancel any pending scheduled reconnect and the keepalive of the old socket
+    this._clearTimers();
 
     // Reset attempt counter on explicit reconnect (e.g., network restored)
     this.reconnectAttempts = 0;
@@ -637,11 +656,11 @@ export class ZMNotificationService {
         this.pendingAuth = null;
         this._setState('error');
 
-        // Close the socket: this triggers _handleClose which will schedule reconnect
-        if (this.ws) {
-          this.ws.close();
-          this.ws = null;
-        }
+        // Close the socket and leave `this.ws` set: every socket handler is
+        // guarded by `this.ws !== ws`, so nulling it here would make the close
+        // event skip _handleClose and no reconnect would ever be scheduled
+        // (refs #274). _handleClose nulls it.
+        this.ws?.close();
 
         reject(new Error('Authentication timeout (20 seconds)'));
       }, 20000);

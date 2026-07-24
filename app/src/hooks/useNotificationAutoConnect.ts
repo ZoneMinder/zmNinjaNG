@@ -33,7 +33,7 @@ interface AutoConnectParams {
   currentProfileId: string | null;
   connect: (profileId: string, username: string, password: string, portalUrl: string) => Promise<void>;
   disconnect: () => void;
-  reconnect: () => void;
+  reconnect: (force?: boolean) => void;
   getDecryptedPassword: (profileId: string) => Promise<string | null | undefined>;
 }
 
@@ -201,7 +201,15 @@ export function useNotificationAutoConnect({
 
     const handleVisibilityChange = async () => {
       if (document.visibilityState !== 'visible') return;
-      if (!isConnected) return;
+
+      // A hidden tab gets its timers frozen, so a scheduled reconnect can be
+      // arbitrarily late (up to the 2 minute backoff cap) or not have run at
+      // all. Retry now instead of waiting it out (refs #274).
+      if (!isConnected) {
+        log.notificationHandler('Tab visible while disconnected, reconnecting now', LogLevel.INFO);
+        reconnect();
+        return;
+      }
 
       log.notificationHandler('Tab visible, checking WebSocket liveness', LogLevel.DEBUG);
       const service = getNotificationService();
@@ -209,7 +217,7 @@ export function useNotificationAutoConnect({
 
       if (!alive) {
         log.notificationHandler('WebSocket not responding after tab resume, reconnecting', LogLevel.WARN);
-        reconnect();
+        reconnect(true);
       }
     };
 
@@ -222,7 +230,16 @@ export function useNotificationAutoConnect({
     () => import('@capacitor/app').then((m) => m.App),
     'appStateChange',
     async ({ isActive }: { isActive: boolean }) => {
-      if (!isActive || !isConnected) return;
+      if (!isActive) return;
+
+      // Suspending the app kills the socket and freezes the WebView's timers,
+      // so the backoff reconnect either fired into a dead network or never ran.
+      // Resuming is the moment to retry, not to wait for a stale timer (#274).
+      if (!isConnected) {
+        log.notificationHandler('App resumed while disconnected, reconnecting now', LogLevel.INFO);
+        reconnect();
+        return;
+      }
 
       log.notificationHandler('App resumed, checking WebSocket liveness', LogLevel.DEBUG);
       const service = getNotificationService();
@@ -230,7 +247,7 @@ export function useNotificationAutoConnect({
 
       if (!alive) {
         log.notificationHandler('WebSocket not responding after app resume, reconnecting', LogLevel.WARN);
-        reconnect();
+        reconnect(true);
       }
     },
     {
