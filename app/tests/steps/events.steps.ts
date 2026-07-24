@@ -789,3 +789,31 @@ Then('I should see the background task drawer if download was triggered', async 
   await expect(drawer.first()).toBeVisible({ timeout: testConfig.timeouts.transition * 2 });
   log.info('E2E: Background task drawer visible', { component: 'e2e' });
 });
+
+// Event frame carousel (#272). Every stored event has a snapshot frame, so the
+// card must appear for any event the server has; the only genuine skip is a
+// server with no events at all, which serverHasEvents() answers from the API.
+Then('I should see the event frames carousel if events exist', async ({ page }) => {
+  if (!(await serverHasEvents())) return;
+  await expect(page.getByTestId('event-frames-card')).toBeVisible({ timeout: testConfig.timeouts.element });
+});
+
+When('I open the first event frame if events exist', async ({ page }) => {
+  if (!(await serverHasEvents())) return;
+  await page.locator('[data-testid^="event-frame-thumb-"]').first().click();
+});
+
+Then('I should see the full-size event frame if events exist', async ({ page }) => {
+  if (!(await serverHasEvents())) return;
+  await expect(page.getByTestId('event-frame-viewer-image')).toBeVisible({ timeout: testConfig.timeouts.element });
+});
+
+When('I close the full-size event frame if events exist', async ({ page }) => {
+  if (!(await serverHasEvents())) return;
+  await page.getByTestId('dialog-close-button').click();
+});
+
+Then('the full-size event frame is gone if events exist', async ({ page }) => {
+  if (!(await serverHasEvents())) return;
+  await expect(page.getByTestId('event-frame-viewer-image')).toBeHidden({ timeout: testConfig.timeouts.element });
+});

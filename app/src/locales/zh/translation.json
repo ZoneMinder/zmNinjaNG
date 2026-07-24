@@ -294,7 +294,14 @@
     "alarm_frame_marker": "报警帧 {{frameId}}",
     "max_score_marker": "最高分数帧 {{frameId}}",
     "marker_jumped": "跳转到 {{text}}",
-    "tags": "标签"
+    "tags": "标签",
+    "frames_title": "事件画面",
+    "view_frame": "查看{{type}}画面",
+    "frame_type": {
+      "alarm": "报警",
+      "snapshot": "快照",
+      "objdetect": "目标检测"
+    }
   },
   "settings": {
     "server": "服务器",

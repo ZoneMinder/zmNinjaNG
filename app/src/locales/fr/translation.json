@@ -294,7 +294,14 @@
     "alarm_frame_marker": "Image d'Alarme {{frameId}}",
     "max_score_marker": "Image Score Maximum {{frameId}}",
     "marker_jumped": "Sauté à {{text}}",
-    "tags": "Tags"
+    "tags": "Tags",
+    "frames_title": "Images de l'événement",
+    "view_frame": "Voir image {{type}}",
+    "frame_type": {
+      "alarm": "Alarme",
+      "snapshot": "Instantané",
+      "objdetect": "Détection d'objets"
+    }
   },
   "settings": {
     "server": "Serveur",

@@ -294,7 +294,14 @@
     "alarm_frame_marker": "Fotograma de Alarma {{frameId}}",
     "max_score_marker": "Fotograma de Máxima Puntuación {{frameId}}",
     "marker_jumped": "Saltado a {{text}}",
-    "tags": "Etiquetas"
+    "tags": "Etiquetas",
+    "frames_title": "Fotogramas del evento",
+    "view_frame": "Ver fotograma {{type}}",
+    "frame_type": {
+      "alarm": "Alarma",
+      "snapshot": "Instantánea",
+      "objdetect": "Detección de objetos"
+    }
   },
   "settings": {
     "server": "Servidor",

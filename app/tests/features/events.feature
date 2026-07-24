@@ -165,3 +165,12 @@ Feature: Event Browsing and Management
     When I switch events view to montage
     Then I should see the events montage grid
     And any relative time labels in the montage read as a duration
+
+  @all
+  Scenario: Event frames carousel opens a frame full size
+    When I click into the first event if events exist
+    Then I should see the event frames carousel if events exist
+    When I open the first event frame if events exist
+    Then I should see the full-size event frame if events exist
+    When I close the full-size event frame if events exist
+    Then the full-size event frame is gone if events exist

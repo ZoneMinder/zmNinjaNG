@@ -66,7 +66,7 @@ vi.mock('../../../api/events', () => ({
   getEventImageUrl: vi.fn().mockReturnValue('https://zm.test/image.jpg'),
 }));
 
-function renderPlayer() {
+function renderPlayer(props: { suspended?: boolean } = {}) {
   return render(
     <ZmsEventPlayer
       portalUrl="https://zm.test"
@@ -75,6 +75,7 @@ function renderPlayer() {
       totalFrames={100}
       alarmFrames={0}
       eventLength={10}
+      {...props}
     />
   );
 }
@@ -128,6 +129,42 @@ describe('ZmsEventPlayer', () => {
     // implementation must not leak into the next one.
     httpGetMock.mockReset();
     httpGetMock.mockResolvedValue({ data: {} });
+  });
+
+  // Suspension (#272): the frame viewer covers the stream, so it pauses while
+  // open and resumes on close. CMD_PAUSE is 1 and CMD_PLAY is 2.
+  it('pauses a running stream while suspended and resumes it on release', () => {
+    const { rerender } = renderPlayer();
+
+    rerender(
+      <ZmsEventPlayer portalUrl="https://zm.test" eventId="42" token="tok" totalFrames={100}
+        alarmFrames={0} eventLength={10} suspended />
+    );
+    expect(callsForCommand('1')).toHaveLength(1);
+
+    rerender(
+      <ZmsEventPlayer portalUrl="https://zm.test" eventId="42" token="tok" totalFrames={100}
+        alarmFrames={0} eventLength={10} suspended={false} />
+    );
+    expect(callsForCommand('2')).toHaveLength(1);
+  });
+
+  it('leaves an already paused stream paused after suspension', () => {
+    const { rerender } = renderPlayer();
+    fireEvent.click(screen.getByTitle('event_detail.pause'));
+    expect(callsForCommand('1')).toHaveLength(1);
+
+    rerender(
+      <ZmsEventPlayer portalUrl="https://zm.test" eventId="42" token="tok" totalFrames={100}
+        alarmFrames={0} eventLength={10} suspended />
+    );
+    rerender(
+      <ZmsEventPlayer portalUrl="https://zm.test" eventId="42" token="tok" totalFrames={100}
+        alarmFrames={0} eventLength={10} suspended={false} />
+    );
+
+    expect(callsForCommand('1')).toHaveLength(1);
+    expect(callsForCommand('2')).toHaveLength(0);
   });
 
   it('stops at the event end instead of requesting a ZMS replay loop', () => {

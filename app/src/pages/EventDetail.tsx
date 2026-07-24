@@ -21,6 +21,7 @@ import { Card } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Mp4EventPlayer } from '../components/events/Mp4EventPlayer';
 import { ZmsEventPlayer } from '../components/events/ZmsEventPlayer';
+import { EventFrameCarousel } from '../components/events/EventFrameCarousel';
 import { TagChip } from '../components/events/TagChip';
 import { ArrowLeft, Calendar, Clock, HardDrive, AlertTriangle, Download, Archive, Video, Star, Timer, Tag, ChevronLeft, ChevronRight, Loader2, ListVideo } from 'lucide-react';
 import { getEventCauseIcon } from '../lib/event/event-icons';
@@ -233,6 +234,28 @@ export default function EventDetail() {
 
   // Pinch-to-zoom and pan for event video/image
   const zoomPan = useZoomPan({ maxScale: 4 });
+
+  // Frame carousel viewer (#272): the full-size image covers the player, so
+  // playback pauses while it is open and resumes on close if it was running.
+  // The player is held structurally so this page does not import video.js.
+  const mp4PlayerRef = useRef<{
+    paused: () => boolean;
+    play: () => void | Promise<void>;
+    pause: () => void;
+  } | null>(null);
+  const [frameViewerOpen, setFrameViewerOpen] = useState(false);
+  const resumeAfterViewerRef = useRef(false);
+  const handleFrameViewerOpenChange = useCallback((open: boolean) => {
+    setFrameViewerOpen(open);
+    const player = mp4PlayerRef.current;
+    if (open) {
+      resumeAfterViewerRef.current = !!player && !player.paused();
+      player?.pause();
+    } else if (resumeAfterViewerRef.current) {
+      resumeAfterViewerRef.current = false;
+      void player?.play();
+    }
+  }, []);
 
   const orientedResolution = useMemo(
     () => getOrientedResolution(
@@ -475,6 +498,21 @@ export default function EventDetail() {
         )}
       >
         <div className="w-full max-w-5xl space-y-3 sm:space-y-4 md:space-y-6">
+          {/* Significant frames for this event (#272). Gated on a fresh token so
+              the thumbnails are not all dropped as failures during a refresh. */}
+          {currentProfile && isAccessTokenFresh && (
+            <EventFrameCarousel
+              portalUrl={resolvedPortalUrl}
+              eventId={event.Event.Id}
+              token={accessToken || undefined}
+              apiUrl={currentProfile.apiUrl}
+              minStreamingPort={effectiveMinStreamingPort}
+              monitorId={event.Event.MonitorId}
+              hasAlarmFrame={!!event.Event.AlarmFrameId}
+              onViewerOpenChange={handleFrameViewerOpenChange}
+            />
+          )}
+
           {/* Video Player or ZMS Playback */}
           {hasVideo ? (
             useZmsFallback ? (
@@ -484,6 +522,7 @@ export default function EventDetail() {
                   portalUrl={resolvedPortalUrl}
                   eventId={event.Event.Id}
                   token={isAccessTokenFresh ? accessToken ?? undefined : undefined}
+                  suspended={frameViewerOpen}
                   apiUrl={currentProfile.apiUrl}
                   totalFrames={parseInt(event.Event.Frames)}
                   alarmFrames={parseInt(event.Event.AlarmFrames)}
@@ -516,6 +555,7 @@ export default function EventDetail() {
                         markers={videoMarkers}
                         onMarkerClick={handleMarkerClick}
                         eventId={event.Event.Id}
+                        onReady={(player) => { mp4PlayerRef.current = player; }}
                         onError={handleVideoError}
                         onEnded={handleVideoEnded}
                         playbackRate={settings.eventPlaybackRate}
@@ -538,6 +578,7 @@ export default function EventDetail() {
                 portalUrl={resolvedPortalUrl}
                 eventId={event.Event.Id}
                 token={accessToken || undefined}
+                suspended={frameViewerOpen}
                 apiUrl={currentProfile.apiUrl}
                 totalFrames={parseInt(event.Event.Frames)}
                 alarmFrames={parseInt(event.Event.AlarmFrames)}
