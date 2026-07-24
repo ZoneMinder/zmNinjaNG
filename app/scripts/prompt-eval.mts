@@ -529,6 +529,99 @@ async function scoreInterpreter(runs: number) {
 }
 
 
+/** TIME cases (refs #270): time understanding must be robust to WIDELY VARIED
+ *  phrasings, proven by measurement across CLASSES of expression, not by fixing
+ *  one phrase at a time. Two model steps own time: EXTRACTION (buildTimeframePrompt
+ *  lists the phrases a question names) and INTERPRETATION (buildInterpreterPrompt +
+ *  WINDOW_SCHEMA turns each phrase into WindowFields; resolveWindow does arithmetic).
+ *  Both prompts are scored here as production sends them.
+ *
+ *  Cases live in the shared src/lib/assistant/time-eval-cases.ts, the ONE source
+ *  of truth the on-device fm-eval runner scores too, so the two can never drift.
+ *  A FIXED clock (Sunday 2026-07-19 14:00 America/New_York) makes every predicate
+ *  deterministic regardless of the run date, and picks a Sunday so "this weekend"
+ *  is unambiguously the current, already-past Sat+Sun rather than a future one. */
+const TIME_NOW = new Date('2026-07-19T18:00:00Z');
+const TIME_TZ = 'America/New_York';
+
+async function scoreTime(runs: number) {
+  const { WINDOW_SCHEMA, buildInterpreterPrompt } = await import('../src/lib/assistant/window-interpreter');
+  const { resolveWindow } = await import('../src/lib/assistant/event-range');
+  const { buildTimeframePrompt, TIMEFRAME_SCHEMA } = await import('../src/lib/assistant/timeframe-stage');
+  const { normalizeWhenPhrase } = await import('../src/lib/assistant/tool-helpers');
+  const { TIME_INTERPRET_CASES, TIME_EXTRACT_CASES } = await import('../src/lib/assistant/time-eval-cases');
+  const interpretSystem = buildInterpreterPrompt(TIME_NOW, TIME_TZ);
+  const extractSystem = buildTimeframePrompt(TIME_NOW, TIME_TZ);
+
+  const byClass = new Map<string, { pass: number; total: number }>();
+  const bump = (cls: string, ok: boolean) => {
+    const e = byClass.get(cls) ?? { pass: 0, total: 0 };
+    e.total++;
+    if (ok) e.pass++;
+    byClass.set(cls, e);
+  };
+  const failures: string[] = [];
+
+  for (const c of TIME_INTERPRET_CASES) {
+    for (let i = 0; i < runs; i++) {
+      try {
+        const r = await chat({
+          model: MODEL,
+          messages: [{ role: 'system', content: interpretSystem }, { role: 'user', content: c.phrase }],
+          stream: false,
+          max_tokens: 300,
+          ...(TEMP === undefined ? {} : { temperature: TEMP }),
+          ...REASONING,
+          response_format: { type: 'json_schema', json_schema: { name: 'window', schema: WINDOW_SCHEMA, strict: true } },
+        });
+        const text = r.choices?.[0]?.message?.content ?? '';
+        const fields = JSON.parse(/\{[\s\S]*\}/.exec(text)?.[0] ?? '{}');
+        const range = resolveWindow(fields, TIME_NOW, TIME_TZ);
+        const good = c.ok(fields, range);
+        bump(c.cls, good);
+        if (!good) failures.push(`[interpret:${c.cls}] "${c.phrase}" -> ${JSON.stringify(fields)}`);
+      } catch (e) {
+        bump(c.cls, false);
+        failures.push(`[interpret:${c.cls}] "${c.phrase}" error: ${(e as Error).message}`);
+      }
+    }
+  }
+
+  for (const c of TIME_EXTRACT_CASES) {
+    for (let i = 0; i < runs; i++) {
+      try {
+        const r = await chat({
+          model: MODEL,
+          messages: [{ role: 'system', content: extractSystem }, { role: 'user', content: c.question }],
+          stream: false,
+          max_tokens: 200,
+          ...(TEMP === undefined ? {} : { temperature: TEMP }),
+          ...REASONING,
+          response_format: { type: 'json_schema', json_schema: { name: 'timeframe', schema: TIMEFRAME_SCHEMA, strict: true } },
+        });
+        const text = r.choices?.[0]?.message?.content ?? '';
+        const raw = JSON.parse(/\{[\s\S]*\}/.exec(text)?.[0] ?? '{}');
+        const phrasesRaw = Array.isArray(raw.phrases) ? raw.phrases.map((p: unknown) => String(p)) : [];
+        // The extractor parrots the prompt's date line; production filters phrases
+        // that are not substrings of the question, so score the same way.
+        const nq = normalizeWhenPhrase(c.question);
+        const phrases = phrasesRaw.filter((p) => nq.includes(normalizeWhenPhrase(p)));
+        const joined = phrases.map((p) => normalizeWhenPhrase(p)).join(' | ');
+        const good = c.none
+          ? phrases.length === 0
+          : phrases.length > 0 && (c.expect ?? []).every((e) => joined.includes(e.toLowerCase()));
+        bump('extract', good);
+        if (!good) failures.push(`[extract] "${c.question}" -> ${JSON.stringify(phrases)}`);
+      } catch (e) {
+        bump('extract', false);
+        failures.push(`[extract] "${c.q}" error: ${(e as Error).message}`);
+      }
+    }
+  }
+  return { byClass, failures };
+}
+
+
 /** Triage cases (refs #265): the classifier is scored over a MATRIX of
  *  intents, time spans, and languages, because its historical failures were
  *  all combinations outside its example list ("summarize" + any range). */
@@ -546,6 +639,11 @@ const TRIAGE_CASES: Array<{ q: string; kind: 'ZONEMINDER' | 'ACTION' | 'CHAT' }>
   // in it.
   { q: 'how many cars came today', kind: 'ZONEMINDER' },
   { q: 'did anyone come by', kind: 'ZONEMINDER' },
+  // Superlative/statistic questions (refs #270): on Apple Foundation Models
+  // "what was my busiest hour" triaged ACTION and the tool-less turn fabricated
+  // an hour. The "rank" verb in the ZONEMINDER template covers these.
+  { q: 'what was my busiest hour', kind: 'ZONEMINDER' },
+  { q: 'which camera was most active', kind: 'ZONEMINDER' },
   { q: 'is the server ok', kind: 'ZONEMINDER' },
   { q: 'show me the front camera', kind: 'ZONEMINDER' },
   // actions
@@ -603,6 +701,26 @@ if (variant === 'interpret') {
   console.log(`\n=== interpreter via ${MODEL}, temp ${TEMP ?? 'default'} ===`);
   console.log(`interpret: ${w.pass}/${w.total}`);
   for (const f of w.failures) console.log(`  ${f}`);
+  process.exit(0);
+}
+if (variant === 'time') {
+  const w = await scoreTime(runs);
+  console.log(`\n=== time via ${MODEL}, temp ${TEMP ?? 'default'}, ${runs} runs/case ===`);
+  let pass = 0;
+  let total = 0;
+  const order = ['relative-day', 'rolling', 'part-of-day', 'weekday', 'weekend', 'ordinal-date', 'month-year', 'clock-range', 'no-time', 'non-english', 'extract'];
+  for (const cls of order) {
+    const e = w.byClass.get(cls);
+    if (!e) continue;
+    pass += e.pass;
+    total += e.total;
+    console.log(`  ${cls.padEnd(13)} ${e.pass}/${e.total}`);
+  }
+  console.log(`TIME:   ${pass}/${total}`);
+  if (w.failures.length) {
+    console.log('\nfailures:');
+    for (const f of w.failures) console.log(`  ${f}`);
+  }
   process.exit(0);
 }
 if (variant === 'webllm') {

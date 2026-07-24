@@ -40,6 +40,14 @@ export interface WindowFields {
   lastUnit?: string;
   daysAgo?: number;
   weekday?: string;
+  /** Most recent past day with this day-of-month number (1-31): "the 21st".
+   *  Code finds the date, exactly as `weekday` finds the most recent weekday,
+   *  because a small model resolves a bare ordinal to the wrong ISO date. */
+  dayOfMonth?: number;
+  /** Whole weekends ago: 0 the most recent Saturday+Sunday ("this weekend"),
+   *  1 the one before ("last weekend"). Code computes the two dates; the model
+   *  cannot reliably work out a weekend's calendar dates (refs #270). */
+  weekend?: number;
   date?: string;
   /** Calendar span, inclusive on both ends: "april" is fromDate 2026-04-01 +
    *  toDate 2026-04-30. Either side may stand alone ("since july 1"). The
@@ -102,21 +110,50 @@ function dateMidnight(date: string, timezone: string, dayOffset: number): Date |
   return fromZonedTime(dayOffset === 0 ? zoned : subDays(zoned, -dayOffset), timezone);
 }
 
+/** The last real day of a month, so an over-long span end from the model
+ *  ("february" as 2026-02-29, a 31-day April) becomes the month's actual end
+ *  rather than a corrective error. Day 0 of the next month is that last day. */
+function clampToMonthEnd(date: string): string | undefined {
+  const match = /^(\d{4})-(\d{2})-\d{2}$/.exec(date);
+  if (!match) return undefined;
+  const month = Number(match[2]);
+  if (month < 1 || month > 12) return undefined;
+  const last = new Date(Number(match[1]), month, 0).getDate();
+  return `${match[1]}-${match[2]}-${String(last).padStart(2, '0')}`;
+}
+
 export function resolveWindow(
   fields: WindowFields,
   now: Date,
   timezone: string,
 ): ResolvedEventRange | { error: string } | undefined {
-  const { lastCount, lastUnit, daysAgo, weekday, date, fromDate, toDate, fromTime, toTime } = fields;
-  const dayPickers = [daysAgo !== undefined, weekday !== undefined, date !== undefined].filter(Boolean).length;
+  const { lastCount, lastUnit, daysAgo, weekday, dayOfMonth, weekend, date, fromDate, toDate, fromTime, toTime } = fields;
+  const dayPickers = [daysAgo !== undefined, weekday !== undefined, dayOfMonth !== undefined, date !== undefined].filter(Boolean).length;
   const rolling = lastCount !== undefined || lastUnit !== undefined;
   const ranged = fromDate !== undefined || toDate !== undefined;
+  const weekendShape = weekend !== undefined;
 
-  if ([rolling, dayPickers > 0, ranged].filter(Boolean).length > 1) {
-    return { error: 'Send ONE window shape: a rolling window (lastCount+lastUnit), a day (daysAgo, weekday, or date), or a span (fromDate/toDate).' };
+  if ([rolling, dayPickers > 0, ranged, weekendShape].filter(Boolean).length > 1) {
+    return { error: 'Send ONE window shape: a rolling window (lastCount+lastUnit), a day (daysAgo, weekday, dayOfMonth, or date), a weekend, or a span (fromDate/toDate).' };
   }
   if (dayPickers > 1) {
-    return { error: 'Send only one of daysAgo, weekday, or date.' };
+    return { error: 'Send only one of daysAgo, weekday, dayOfMonth, or date.' };
+  }
+
+  if (weekendShape) {
+    const n = Number(weekend);
+    if (!Number.isInteger(n) || n < 0) {
+      return { error: `weekend must be 0 (this weekend) or a whole number of weekends ago. Received "${String(weekend)}".` };
+    }
+    // Most recent Saturday on or before today, then n weekends further back.
+    const zonedToday = startOfDay(toZonedTime(now, timezone));
+    const daysSinceSaturday = (toZonedTime(now, timezone).getDay() + 1) % 7; // Sat->0, Sun->1
+    const saturday = subDays(zonedToday, daysSinceSaturday + 7 * n);
+    const start = fromZonedTime(saturday, timezone);
+    // Inclusive of Sunday: the window closes at the Monday midnight, capped at now.
+    const endRaw = fromZonedTime(subDays(saturday, -2), timezone);
+    const end = endRaw.getTime() > now.getTime() ? now : endRaw;
+    return { startDateTime: formatForZm(start, timezone), endDateTime: formatForZm(end, timezone) };
   }
 
   if (ranged) {
@@ -130,8 +167,13 @@ export function resolveWindow(
     }
     const start = fromDate === undefined ? undefined : dateMidnight(String(fromDate).trim(), timezone, 0);
     // toDate is INCLUSIVE: the window closes at the midnight after it,
-    // capped at now so "this month" never claims the future.
-    const endRaw = toDate === undefined ? undefined : dateMidnight(String(toDate).trim(), timezone, 1);
+    // capped at now so "this month" never claims the future. An over-long month
+    // end (the model's 2026-02-29) clamps to the month's real last day.
+    let endRaw = toDate === undefined ? undefined : dateMidnight(String(toDate).trim(), timezone, 1);
+    if (toDate !== undefined && endRaw === undefined) {
+      const clamped = clampToMonthEnd(String(toDate).trim());
+      if (clamped) endRaw = dateMidnight(clamped, timezone, 1);
+    }
     if ((fromDate !== undefined && start === undefined) || (toDate !== undefined && endRaw === undefined)) {
       return { error: `"${String(start === undefined ? fromDate : toDate)}" is not a real calendar date.` };
     }
@@ -181,6 +223,22 @@ export function resolveWindow(
     // sunday" vs "sunday" itself and can send daysAgo when it means a
     // different week.
     back = (toZonedTime(now, timezone).getDay() - target + 7) % 7;
+  } else if (dayOfMonth !== undefined) {
+    const target = Number(dayOfMonth);
+    if (!Number.isInteger(target) || target < 1 || target > 31) {
+      return { error: `dayOfMonth must be a whole number 1-31. Received "${String(dayOfMonth)}".` };
+    }
+    // Most recent day (today included) whose day-of-month is `target`, scanning
+    // back at most two months so a 31st still lands in a shorter month's past.
+    const zonedToday = startOfDay(toZonedTime(now, timezone));
+    let probe = zonedToday;
+    let found = false;
+    for (let i = 0; i < 62; i++) {
+      if (probe.getDate() === target) { found = true; break; }
+      probe = subDays(probe, 1);
+    }
+    if (!found) return { error: `No recent day numbered ${target}.` };
+    back = Math.round((zonedToday.getTime() - probe.getTime()) / 86_400_000);
   } else if (date !== undefined) {
     const text = String(date).trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) {

@@ -106,6 +106,20 @@ describe('calendar spans (fromDate/toDate)', () => {
     });
   });
 
+  it('clamps an over-long month end to the real last day (refs #270)', () => {
+    // 2026 is not a leap year: the model's "february" as 02-29 must resolve to
+    // the whole month, not error, closing at March 1 midnight.
+    expect(at({ fromDate: '2026-02-01', toDate: '2026-02-29' })).toEqual({
+      startDateTime: '2026-02-01 00:00:00',
+      endDateTime: '2026-03-01 00:00:00',
+    });
+    // A 31-day April clamps to April 30.
+    expect(at({ fromDate: '2026-04-01', toDate: '2026-04-31' })).toEqual({
+      startDateTime: '2026-04-01 00:00:00',
+      endDateTime: '2026-05-01 00:00:00',
+    });
+  });
+
   it('allows one-sided spans', () => {
     expect(at({ fromDate: '2026-07-01' })).toEqual({ startDateTime: '2026-07-01 00:00:00' });
     expect(at({ toDate: '2026-06-30' })).toEqual({ endDateTime: '2026-07-01 00:00:00' });
@@ -113,9 +127,9 @@ describe('calendar spans (fromDate/toDate)', () => {
 
   it('rejects bad shapes, inverted spans, future starts, and mixed window shapes', () => {
     expect(at({ fromDate: 'april' })).toMatchObject({ error: expect.stringContaining('YYYY-MM-DD') });
-    // llama produced "february" as 2026-02-29 (leap confusion): shape-valid,
-    // calendar-impossible, must be a corrective error not a NaN throw.
-    expect(at({ fromDate: '2026-02-01', toDate: '2026-02-29' })).toMatchObject({
+    // A calendar-impossible START (not a span end) is still a corrective error,
+    // not a NaN throw: the clamp only rescues an over-long toDate, not fromDate.
+    expect(at({ fromDate: '2026-02-30' })).toMatchObject({
       error: expect.stringContaining('not a real calendar date'),
     });
     expect(at({ fromDate: '2026-05-10', toDate: '2026-05-01' })).toMatchObject({ error: expect.stringContaining('on or after') });
@@ -124,6 +138,66 @@ describe('calendar spans (fromDate/toDate)', () => {
     expect(at({ fromDate: '2026-04-01', toDate: '2026-04-30', fromTime: '16:00' })).toMatchObject({
       error: expect.stringContaining('single day'),
     });
+  });
+});
+
+describe('weekend (refs #270)', () => {
+  // NOW is Thursday 2026-07-16; the most recent Saturday is 2026-07-11.
+  it('resolves the most recent weekend, inclusive of Saturday and Sunday', () => {
+    expect(at({ weekend: 0 })).toEqual({
+      startDateTime: '2026-07-11 00:00:00',
+      endDateTime: '2026-07-13 00:00:00',
+    });
+  });
+
+  it('counts whole weekends back', () => {
+    expect(at({ weekend: 1 })).toEqual({
+      startDateTime: '2026-07-04 00:00:00',
+      endDateTime: '2026-07-06 00:00:00',
+    });
+  });
+
+  it('caps a weekend still in progress at now', () => {
+    // Sunday 2026-07-19 10:30 ET: this weekend started Saturday and has not closed.
+    const sunday = new Date('2026-07-19T14:30:00Z');
+    expect(resolveWindow({ weekend: 0 }, sunday, 'America/New_York')).toEqual({
+      startDateTime: '2026-07-18 00:00:00',
+      endDateTime: '2026-07-19 10:30:00',
+    });
+  });
+
+  it('rejects a negative or fractional weekend and mixing it with another shape', () => {
+    expect(at({ weekend: -1 })).toMatchObject({ error: expect.stringContaining('weekend must be 0') });
+    expect(at({ weekend: 1.5 })).toMatchObject({ error: expect.stringContaining('weekend must be 0') });
+    expect(at({ weekend: 0, daysAgo: 1 })).toMatchObject({ error: expect.stringContaining('ONE window shape') });
+  });
+});
+
+describe('dayOfMonth ordinal (refs #270)', () => {
+  // NOW is 2026-07-16: the most recent 21st is last month's, 2026-06-21.
+  it('resolves a bare ordinal to the most recent past day with that number', () => {
+    expect(at({ dayOfMonth: 21 })).toEqual({
+      startDateTime: '2026-06-21 00:00:00',
+      endDateTime: '2026-06-22 00:00:00',
+    });
+    // The 16th is today, so it is that same day (ends now).
+    expect(at({ dayOfMonth: 16 })).toEqual({
+      startDateTime: '2026-07-16 00:00:00',
+      endDateTime: '2026-07-16 10:30:00',
+    });
+  });
+
+  it('narrows an ordinal day with a clock band', () => {
+    expect(at({ dayOfMonth: 21, fromTime: '20:00', toTime: '23:00' })).toEqual({
+      startDateTime: '2026-06-21 20:00:00',
+      endDateTime: '2026-06-21 23:00:00',
+    });
+  });
+
+  it('rejects an out-of-range ordinal and mixing it with another day picker', () => {
+    expect(at({ dayOfMonth: 0 })).toMatchObject({ error: expect.stringContaining('1-31') });
+    expect(at({ dayOfMonth: 32 })).toMatchObject({ error: expect.stringContaining('1-31') });
+    expect(at({ dayOfMonth: 21, weekday: 'sunday' })).toMatchObject({ error: expect.stringContaining('only one') });
   });
 });
 

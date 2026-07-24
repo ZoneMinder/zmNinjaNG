@@ -47,8 +47,11 @@ export function buildTimeframePrompt(now: Date, timezone: string): string {
   return [
     'You find the time expressions in one question about security-camera events. Reply with ONLY one JSON object.',
     `Today is ${today} (timezone ${timezone}).`,
-    'List every time expression the question contains in "phrases", each copied VERBATIM and in the',
-    'user\'s own language ("today", "yesterday", "last week", "July 21", "letzte Woche", "from 4pm to 10pm").',
+    'A time expression is ANY phrase naming when events happened: a day ("today", "yesterday"), a rolling span',
+    '("the past 2 weeks", "last month"), a part of the day ("this morning", "this evening"), a month or season',
+    '("april", "this summer"), a weekday, a date ("July 21"), or a clock range ("from 4pm to 10pm"). They are',
+    'often embedded mid-sentence: "how busy was it in april" contains "april".',
+    'List every one in "phrases", each copied VERBATIM in the user\'s own language ("today", "letzte Woche", "in april").',
     'Do not translate, normalize, invent, or add a time the question does not state.',
     'A question may hold several time expressions, or none.',
     'Set "none" true and "phrases" [] when the question names no time at all.',
