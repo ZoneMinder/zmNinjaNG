@@ -85,6 +85,96 @@ export const WINDOW_SCHEMA: Record<string, unknown> = {
   ],
 };
 
+/** Part-of-day words across en/fr/es/de, already accent-stripped and lowercase
+ *  (the form `normalizePhrase` produces before matching). Matched as whole words
+ *  so "soir" does not fire inside "soiree" nor "manana" inside "semana". */
+const PART_OF_DAY_WORDS = [
+  'morning', 'afternoon', 'evening', 'night', 'noon', 'midnight',
+  'matin', 'soir', 'apres-midi', 'nuit',
+  'manana', 'tarde', 'noche',
+  'morgen', 'abend', 'nacht',
+];
+const PART_OF_DAY_RE = new RegExp(`\\b(${PART_OF_DAY_WORDS.join('|')})\\b`);
+/** A wall-clock marker in the phrase: "4pm"/"9 am", "16:30", or a bare numeric
+ *  range "4-6". Any of these means the phrase names a clock band. */
+const CLOCK_RE = /\d\s*(am|pm)\b|\d{1,2}:\d{2}|\d+\s*-\s*\d+/;
+/** A rolling span written with an explicit count: "past 2", "last 6". Only
+ *  consulted alongside a clock marker, to decide whether to keep the rolling
+ *  family too (e.g. "last 2 nights"). */
+const ROLLING_RE = /\b(past|last|previous)\s+\d+/;
+/** Month and season NAMES (English; an unlisted language falls open, see
+ *  `selectBranches`). A bare one of these, no digits, means a whole-month span. */
+const MONTH_SEASON_NAMES = new Set([
+  'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august',
+  'september', 'october', 'november', 'december',
+  'spring', 'summer', 'autumn', 'fall', 'winter',
+]);
+/** Leading words allowed before a bare month/season without disqualifying it as
+ *  bare ("the april", "in april", "el/la/le/les ..."). */
+const SPAN_ARTICLES = new Set([
+  'the', 'a', 'an', 'this', 'last', 'in', 'of', 'during',
+  'el', 'la', 'le', 'les', 'der', 'die', 'das',
+]);
+
+/** Accent-insensitive lowercase, so "apres-midi" matches "après-midi" and
+ *  "manana" matches "mañana". */
+function normalizePhrase(phrase: string): string {
+  return phrase.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+}
+
+/** The WINDOW_SCHEMA branches subset to those a phrase's DECIDABLE markers need,
+ *  so a constrained decoder cannot pick the simplest matching branch and drop a
+ *  band the phrase carries (the decoder always takes the simplest branch that
+ *  fits: measured part-of-day 0-1/4 and clock-range 0/2 across four on-device FM
+ *  runs while every bare-day class was perfect, because FM read a clock phrase
+ *  onto a bare-day branch). Markers are decided here in code, so a phrase we can
+ *  detect cannot lose its band by branch choice, and one we cannot detect keeps
+ *  the FULL schema unchanged (fail-open, byte-identical to before).
+ *
+ *  - CLOCK marker (a wall-clock token or a part-of-day word) -> ONLY the branches
+ *    that can carry fromTime/toTime (day+clock, weekday incl. its optional band,
+ *    dayOfMonth+clock, date+clock). A rolling marker present too keeps the rolling
+ *    family as well ("last 2 nights").
+ *  - BARE month/season name, no digits -> ONLY the both-ends span branch, so
+ *    "april" cannot decode to an open or single-date branch.
+ *  - No marker -> the full schema, exactly as today.
+ *
+ *  Wordlist ceiling: an unlisted language matches no marker and falls open to
+ *  today's behavior, never worse. */
+export function selectBranches(phrase: string): Record<string, unknown> {
+  const branches = WINDOW_SCHEMA.anyOf as Array<{ properties: Record<string, unknown>; required: string[] }>;
+  const norm = normalizePhrase(phrase);
+
+  const hasClock = CLOCK_RE.test(norm) || PART_OF_DAY_RE.test(norm);
+  if (hasClock) {
+    const hasRolling = ROLLING_RE.test(norm);
+    const picked = branches.filter(
+      (b) => b.properties.fromTime !== undefined || (hasRolling && b.properties.lastCount !== undefined),
+    );
+    return wrap(picked);
+  }
+
+  if (!/\d/.test(norm)) {
+    const tokens = norm.split(/[^a-z]+/).filter(Boolean);
+    const names = tokens.filter((t) => MONTH_SEASON_NAMES.has(t));
+    const others = tokens.filter((t) => !MONTH_SEASON_NAMES.has(t) && !SPAN_ARTICLES.has(t));
+    if (names.length === 1 && others.length === 0) {
+      return wrap(branches.filter((b) => b.required.includes('fromDate') && b.required.includes('toDate')));
+    }
+  }
+
+  return WINDOW_SCHEMA;
+}
+
+/** A picked branch list as a schema: fall open to the full schema if nothing
+ *  matched (defensive), a bare object for one branch (the Apple FM converter
+ *  wants no single-element anyOf, mirroring buildTurnSchema), else an anyOf. */
+function wrap(picked: Array<Record<string, unknown>>): Record<string, unknown> {
+  if (picked.length === 0) return WINDOW_SCHEMA;
+  if (picked.length === 1) return picked[0];
+  return { anyOf: picked };
+}
+
 /** Model-facing (rule 5 exempt). The few-shot lines teach the mapping the
  *  schema cannot express; they are examples for a model, not a grammar the
  *  app executes. Exported so the eval harness scores EXACTLY what production
@@ -136,7 +226,7 @@ export async function interpretWhen(
 
   let result: WindowFields | { error: string };
   try {
-    const reply = await provider.complete(buildInterpreterPrompt(now, timezone), phrase, signal, WINDOW_SCHEMA);
+    const reply = await provider.complete(buildInterpreterPrompt(now, timezone), phrase, signal, selectBranches(phrase));
     const parsed = parseFields(reply.text);
     if (parsed) clampBareMonthEnd(phrase, parsed);
     result = parsed ?? { error: `Could not interpret "${phrase}" as a time window. Rephrase the when argument.` };

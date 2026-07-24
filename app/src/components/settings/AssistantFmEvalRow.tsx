@@ -49,7 +49,9 @@ export function AssistantFmEvalRow() {
     setState({ phase: 'running', done: 0, total: 0 });
     try {
       const report = await runFmTimeEval(
-        new AppleIntelligenceProvider(),
+        // Temperature 0: eval numbers must be reproducible run to run. Chat
+        // keeps the app temperature; only this diagnostic pins it.
+        new AppleIntelligenceProvider(0),
         FM_EVAL_NOW,
         FM_EVAL_TZ,
         controller.signal,

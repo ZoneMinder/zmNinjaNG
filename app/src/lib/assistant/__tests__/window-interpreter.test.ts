@@ -6,7 +6,7 @@
  * (scripts/prompt-eval.mts interpret stage), not unit tests.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { interpretWhen, resetWindowInterpreterCacheForTests, WINDOW_SCHEMA } from '../window-interpreter';
+import { interpretWhen, resetWindowInterpreterCacheForTests, selectBranches, WINDOW_SCHEMA } from '../window-interpreter';
 import type { AssistantProvider } from '../types';
 
 const NOW = new Date('2026-07-16T14:30:00Z');
@@ -159,5 +159,58 @@ describe('WINDOW_SCHEMA', () => {
       | undefined;
     expect(weekendBranch?.properties.weekend.type).toBe('string');
     expect(weekendBranch?.properties.weekend.enum).toEqual(['this', 'last', 'two-ago']);
+  });
+});
+
+describe('selectBranches', () => {
+  const branchesOf = (schema: Record<string, unknown>): Array<{ required: string[] }> =>
+    (schema.anyOf as Array<{ required: string[] }> | undefined) ?? [schema as unknown as { required: string[] }];
+  const requiredSets = (schema: Record<string, unknown>): string[][] =>
+    branchesOf(schema).map((b) => [...b.required].sort());
+
+  it('offers only clock-capable branches for a wall-clock phrase', () => {
+    const sets = requiredSets(selectBranches('yesterday from 4pm to 10pm'));
+    for (const req of sets) {
+      // Every offered branch can carry a band: it either requires the times or
+      // is the weekday branch whose band is optional.
+      expect(req.includes('fromTime') || req.includes('weekday')).toBe(true);
+    }
+    expect(sets.some((req) => req.includes('lastCount'))).toBe(false);
+  });
+
+  it('routes part-of-day words, accent-insensitively, to the clock family', () => {
+    for (const phrase of ['this morning', 'ce matin', 'hier soir', 'ayer por la mañana']) {
+      const sets = requiredSets(selectBranches(phrase));
+      expect(sets.every((req) => req.includes('fromTime') || req.includes('weekday'))).toBe(true);
+    }
+  });
+
+  it('keeps the rolling family when a rolling count rides a clock word', () => {
+    const sets = requiredSets(selectBranches('last 2 nights'));
+    expect(sets.some((req) => req.includes('lastCount'))).toBe(true);
+  });
+
+  it('offers only the both-ends span for a bare month or season', () => {
+    for (const phrase of ['april', 'in april', 'this summer']) {
+      const sets = requiredSets(selectBranches(phrase));
+      expect(sets).toEqual([['fromDate', 'toDate']]);
+    }
+  });
+
+  it('falls open to the full schema for unmarked phrases', () => {
+    for (const phrase of ['yesterday', 'letzte Woche', 'all time', 'the 21st']) {
+      expect(selectBranches(phrase)).toBe(WINDOW_SCHEMA);
+    }
+  });
+
+  it('interpretWhen sends the phrase-selected schema to the provider', async () => {
+    resetWindowInterpreterCacheForTests();
+    const complete = vi.fn().mockResolvedValue({ text: '{"daysAgo":1,"fromTime":"18:00","toTime":"23:59"}' });
+    const provider = { complete, chat: vi.fn() } as unknown as AssistantProvider;
+    await interpretWhen('yesterday evening', provider, new Date('2026-07-19T18:00:00Z'), 'America/New_York', new AbortController().signal);
+    const sent = complete.mock.calls[0][3] as Record<string, unknown>;
+    expect(sent).not.toBe(WINDOW_SCHEMA);
+    const sets = requiredSets(sent);
+    expect(sets.every((req) => req.includes('fromTime') || req.includes('weekday'))).toBe(true);
   });
 });
