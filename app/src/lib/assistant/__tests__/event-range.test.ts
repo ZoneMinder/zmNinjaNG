@@ -157,6 +157,17 @@ describe('weekend (refs #270)', () => {
     });
   });
 
+  // The schema sends a string enum; resolveWindow maps it to the same
+  // weekends-ago arithmetic as the legacy numeric field.
+  it('maps the string enum to the same window as the number', () => {
+    expect(at({ weekend: 'this' })).toEqual(at({ weekend: 0 }));
+    expect(at({ weekend: 'last' })).toEqual(at({ weekend: 1 }));
+    expect(at({ weekend: 'two-ago' })).toEqual({
+      startDateTime: '2026-06-27 00:00:00',
+      endDateTime: '2026-06-29 00:00:00',
+    });
+  });
+
   it('caps a weekend still in progress at now', () => {
     // Sunday 2026-07-19 10:30 ET: this weekend started Saturday and has not closed.
     const sunday = new Date('2026-07-19T14:30:00Z');

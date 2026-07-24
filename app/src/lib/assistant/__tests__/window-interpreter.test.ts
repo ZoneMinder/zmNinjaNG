@@ -84,9 +84,36 @@ describe('interpretWhen', () => {
     expect(await interpretWhen('last weekend', p, NOW, 'UTC', new AbortController().signal)).toEqual({ weekend: 1 });
   });
 
+  // The schema now emits a string enum for weekend; parseFields passes it through
+  // verbatim and resolveWindow maps it to a weekends-ago number.
+  it('passes a string weekend enum through unchanged', async () => {
+    const p = providerSaying('{"weekend": "last"}');
+    expect(await interpretWhen('last weekend', p, NOW, 'UTC', new AbortController().signal)).toEqual({ weekend: 'last' });
+  });
+
   it('drops lastCount that arrived without lastUnit', async () => {
     const p = providerSaying('{"lastCount": 3}');
     expect(await interpretWhen('past 3 weeks', p, NOW, 'UTC', new AbortController().signal)).toEqual({});
+  });
+
+  // FM's exclusive-end habit on a BARE month name: "last month" arrives as a
+  // fromDate on the 1st and a toDate on the 1st of the NEXT month, which
+  // resolveWindow (inclusive toDate) would overshoot by a day. The clamp fires
+  // only when the phrase names no number.
+  it('clamps an exclusive month end on a digit-free phrase', async () => {
+    const p = providerSaying('{"fromDate": "2026-06-01", "toDate": "2026-07-01"}');
+    expect(await interpretWhen('last month', p, NOW, 'UTC', new AbortController().signal)).toEqual({
+      fromDate: '2026-06-01',
+      toDate: '2026-06-30',
+    });
+  });
+
+  it('leaves an explicit dated span untouched (the phrase carries digits)', async () => {
+    const p = providerSaying('{"fromDate": "2026-06-01", "toDate": "2026-07-01"}');
+    expect(await interpretWhen('june 1 to july 1', p, NOW, 'UTC', new AbortController().signal)).toEqual({
+      fromDate: '2026-06-01',
+      toDate: '2026-07-01',
+    });
   });
 });
 
@@ -103,6 +130,20 @@ describe('WINDOW_SCHEMA', () => {
     }
   });
 
+  // v2: every branch is all-required so FM cannot drop a left-optional field,
+  // with ONE measured exception - the weekday branch keeps fromTime/toTime
+  // optional because splitting it made qwen drop the clock band (see schema doc).
+  it('leaves no optional property in any branch except the weekday clock band', () => {
+    for (const b of branches) {
+      const optional = Object.keys(b.properties).filter((k) => !b.required.includes(k));
+      if (b.required.includes('weekday')) {
+        expect(optional.sort()).toEqual(['fromTime', 'toTime']);
+      } else {
+        expect(optional).toEqual([]);
+      }
+    }
+  });
+
   it('makes the two measured failure signatures unexpressable in a single branch', () => {
     // No branch offers both lastCount and lastUnit as anything but a required
     // pair, and no branch pairs weekend with a day field.
@@ -110,5 +151,13 @@ describe('WINDOW_SCHEMA', () => {
     expect(rolling?.required).toEqual(expect.arrayContaining(['lastCount', 'lastUnit']));
     const weekendBranch = branches.find((b) => b.required.includes('weekend'));
     expect(Object.keys(weekendBranch?.properties ?? {})).toEqual(['weekend']);
+  });
+
+  it('constrains weekend to a string enum the model is exact on', () => {
+    const weekendBranch = branches.find((b) => b.required.includes('weekend')) as
+      | { properties: { weekend: { type: string; enum: string[] } } }
+      | undefined;
+    expect(weekendBranch?.properties.weekend.type).toBe('string');
+    expect(weekendBranch?.properties.weekend.enum).toEqual(['this', 'last', 'two-ago']);
   });
 });

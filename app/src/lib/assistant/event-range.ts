@@ -23,6 +23,12 @@ import { ZM_API_DATETIME_FORMAT } from '../zm/zm-constants';
 export const WINDOW_UNITS = ['minute', 'hour', 'day', 'week', 'month'] as const;
 export const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
 
+/** The interpreter's weekend enum mapped to a weekends-ago count, so the schema
+ *  can constrain the model to exact strings while the arithmetic stays numeric.
+ *  ponytail: three values cover every measured phrase; older weekends are a new
+ *  enum entry away if anyone asks for "three weekends ago". */
+const WEEKEND_REF: Record<string, number> = { this: 0, last: 1, 'two-ago': 2 };
+
 const UNIT_HOURS: Record<(typeof WINDOW_UNITS)[number], number> = {
   minute: 1 / 60,
   hour: 1,
@@ -44,10 +50,13 @@ export interface WindowFields {
    *  Code finds the date, exactly as `weekday` finds the most recent weekday,
    *  because a small model resolves a bare ordinal to the wrong ISO date. */
   dayOfMonth?: number;
-  /** Whole weekends ago: 0 the most recent Saturday+Sunday ("this weekend"),
-   *  1 the one before ("last weekend"). Code computes the two dates; the model
-   *  cannot reliably work out a weekend's calendar dates (refs #270). */
-  weekend?: number;
+  /** Which past weekend. The model sends a string enum ("this"/"last"/
+   *  "two-ago") because it is exact on enums but junk-fills a bare number;
+   *  `WEEKEND_REF` maps it to a weekends-ago count (0 the most recent
+   *  Saturday+Sunday, 1 the one before). Code computes the two dates; the model
+   *  cannot reliably work out a weekend's calendar dates (refs #270). A legacy
+   *  numeric value still resolves. */
+  weekend?: number | string;
   date?: string;
   /** Calendar span, inclusive on both ends: "april" is fromDate 2026-04-01 +
    *  toDate 2026-04-30. Either side may stand alone ("since july 1"). The
@@ -141,7 +150,7 @@ export function resolveWindow(
   }
 
   if (weekendShape) {
-    const n = Number(weekend);
+    const n = typeof weekend === 'string' && weekend in WEEKEND_REF ? WEEKEND_REF[weekend] : Number(weekend);
     if (!Number.isInteger(n) || n < 0) {
       return { error: `weekend must be 0 (this weekend) or a whole number of weekends ago. Received "${String(weekend)}".` };
     }

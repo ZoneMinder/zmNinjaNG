@@ -33,24 +33,51 @@ import { log, LogLevel } from '../logger';
  *  rolling with lastUnit dropped every time. The branch shape stays a FLAT
  *  object with the same key names, so `parseFields` and `resolveWindow` read the
  *  same keys regardless of which branch produced them. `none: true` means the
- *  phrase names no time window at all ("everything you have"). fromTime/toTime
- *  stay optional inside a day branch because they only ever narrow a day. */
+ *  phrase names no time window at all ("everything you have").
+ *
+ *  v2: nearly every branch is all-required, because FM dropped every optional
+ *  field left inside a branch (fromTime/toTime on the day branches, toDate on
+ *  the span branch) exactly as it once dropped lastUnit. So each "narrowed"
+ *  shape becomes its own branch (a day, and a day+clock-band), the span splits
+ *  into three all-required branches (both ends, since-only, until-only), and
+ *  `weekend` is a string enum (FM is exact on enums: weekday scored 100%),
+ *  mapped back to a weekends-ago number in `resolveWindow`.
+ *
+ *  The ONE exception is the weekday branch, which keeps fromTime/toTime optional:
+ *  splitting it regressed qwen, which anchored on the weekday word and dropped
+ *  the clock band on "last tuesday night" (measured 3/3). FM and qwen react to
+ *  the split oppositely there; the qwen 150/150 gate keeps this branch single. */
 export const WINDOW_SCHEMA: Record<string, unknown> = {
   anyOf: [
     // rolling span ending now: both halves are meaningless alone.
     { type: 'object', properties: { lastCount: { type: 'number' }, lastUnit: { type: 'string', enum: [...WINDOW_UNITS] } }, required: ['lastCount', 'lastUnit'], additionalProperties: false },
-    // one calendar day, optionally narrowed to a clock band ("this morning").
-    { type: 'object', properties: { daysAgo: { type: 'number' }, fromTime: { type: 'string' }, toTime: { type: 'string' } }, required: ['daysAgo'], additionalProperties: false },
-    // most recent such weekday, optionally narrowed ("last tuesday night").
+    // one calendar day ("yesterday").
+    { type: 'object', properties: { daysAgo: { type: 'number' } }, required: ['daysAgo'], additionalProperties: false },
+    // one calendar day narrowed to a clock band ("this morning").
+    { type: 'object', properties: { daysAgo: { type: 'number' }, fromTime: { type: 'string' }, toTime: { type: 'string' } }, required: ['daysAgo', 'fromTime', 'toTime'], additionalProperties: false },
+    // most recent such weekday, optionally narrowed to a clock band
+    // ("on sunday", "last tuesday night"). The lone branch that KEEPS fromTime/
+    // toTime optional: splitting it into a bare and a with-times branch (as the
+    // day branch is split) measured qwen dropping the clock band on "last
+    // tuesday night" 3/3, anchoring on the weekday and taking the bare branch.
+    // Unlike the day branches, the weekday word dominates the phrase, so the
+    // model reads the split as license to stop early. FM wants required fields;
+    // qwen needs this one optional; the 150/150 gate decides it.
     { type: 'object', properties: { weekday: { type: 'string', enum: [...WEEKDAYS] }, fromTime: { type: 'string' }, toTime: { type: 'string' } }, required: ['weekday'], additionalProperties: false },
-    // a bare ordinal day-of-month, optionally narrowed ("the 21st").
-    { type: 'object', properties: { dayOfMonth: { type: 'number' }, fromTime: { type: 'string' }, toTime: { type: 'string' } }, required: ['dayOfMonth'], additionalProperties: false },
-    // one explicit calendar date, optionally narrowed ("July 15 morning").
-    { type: 'object', properties: { date: { type: 'string' }, fromTime: { type: 'string' }, toTime: { type: 'string' } }, required: ['date'], additionalProperties: false },
+    // a bare ordinal day-of-month ("the 21st").
+    { type: 'object', properties: { dayOfMonth: { type: 'number' } }, required: ['dayOfMonth'], additionalProperties: false },
+    // that ordinal narrowed to a clock band.
+    { type: 'object', properties: { dayOfMonth: { type: 'number' }, fromTime: { type: 'string' }, toTime: { type: 'string' } }, required: ['dayOfMonth', 'fromTime', 'toTime'], additionalProperties: false },
+    // one explicit calendar date ("July 15").
+    { type: 'object', properties: { date: { type: 'string' } }, required: ['date'], additionalProperties: false },
+    // that date narrowed to a clock band ("July 15 morning").
+    { type: 'object', properties: { date: { type: 'string' }, fromTime: { type: 'string' }, toTime: { type: 'string' } }, required: ['date', 'fromTime', 'toTime'], additionalProperties: false },
     // whole weekends ago; code computes the two dates.
-    { type: 'object', properties: { weekend: { type: 'number' } }, required: ['weekend'], additionalProperties: false },
-    // calendar span with a start; toDate optional makes it open-ended or closed.
-    { type: 'object', properties: { fromDate: { type: 'string' }, toDate: { type: 'string' } }, required: ['fromDate'], additionalProperties: false },
+    { type: 'object', properties: { weekend: { type: 'string', enum: ['this', 'last', 'two-ago'] } }, required: ['weekend'], additionalProperties: false },
+    // calendar span, both ends inclusive ("april", "june 1 to 15").
+    { type: 'object', properties: { fromDate: { type: 'string' }, toDate: { type: 'string' } }, required: ['fromDate', 'toDate'], additionalProperties: false },
+    // calendar span open at the end ("since july 1").
+    { type: 'object', properties: { fromDate: { type: 'string' } }, required: ['fromDate'], additionalProperties: false },
     // calendar span open at the start ("until july 15").
     { type: 'object', properties: { toDate: { type: 'string' } }, required: ['toDate'], additionalProperties: false },
     // no time limit at all.
@@ -73,14 +100,14 @@ export function buildInterpreterPrompt(now: Date, timezone: string): string {
     '- daysAgo: one calendar day. "today" -> {"daysAgo":0}. "yesterday" -> {"daysAgo":1}. "the day before yesterday" -> {"daysAgo":2}.',
     '- weekday: the most recent such day. "on sunday" -> {"weekday":"sunday"}; "last tuesday" -> {"weekday":"tuesday"}.',
     '- dayOfMonth: a bare ordinal, just the number. "the 21st" -> {"dayOfMonth":21}; "on the 3rd" -> {"dayOfMonth":3}. Code picks the most recent past such day, so do NOT work out the date yourself.',
-    '- weekend: whole weekends ago as a number, ONLY when the phrase literally says "weekend". "this weekend" -> {"weekend":0}; "last weekend" -> {"weekend":1}. Code works out the two dates.',
+    '- weekend: which past weekend, ONLY when the phrase literally says "weekend". "this weekend" -> {"weekend":"this"}; "last weekend" -> {"weekend":"last"}; "two weekends ago" -> {"weekend":"two-ago"}. Code works out the two dates.',
     '- date: one explicit calendar date. "July 15" -> {"date":"2026-07-15"} (use the year that makes it most recent, never future).',
     '- fromDate + toDate: a calendar span, both inclusive. "april" -> {"fromDate":"2026-04-01","toDate":"2026-04-30"}. "this month" -> the 1st of the current month through today. "this year" -> {"fromDate":"2026-01-01","toDate":"2026-12-31"}. "june 1 to 15" -> both dates. Either side may stand alone: "since july 1" -> {"fromDate":"2026-07-01"}.',
     '- fromTime/toTime: 24h "HH:MM" from 00:00 to 23:59, narrowing ONE day named by daysAgo/weekday/date. "yesterday from 4pm to 10pm" -> {"daysAgo":1,"fromTime":"16:00","toTime":"22:00"}.',
     '- A part of the day is a day plus a clock band: morning 06:00-12:00, noon 11:00-13:00, afternoon 12:00-18:00, evening 18:00-23:59, night 20:00-23:59. ALWAYS include the day, defaulting to today (daysAgo 0) when none is named: "this morning" -> {"daysAgo":0,"fromTime":"06:00","toTime":"12:00"}; "around noon" -> {"daysAgo":0,"fromTime":"11:00","toTime":"13:00"}; "last night" -> {"daysAgo":1,"fromTime":"20:00","toTime":"23:59"}; "last tuesday night" -> {"weekday":"tuesday","fromTime":"20:00","toTime":"23:59"}.',
     '- none: true when the phrase asks for no time limit. "all time" -> {"none":true}.',
     'Keep BOTH halves of a compound phrase, in any language: a day word and a part of the day both survive. "yesterday evening" -> {"daysAgo":1,"fromTime":"18:00","toTime":"23:59"}; "hier apres-midi" -> {"daysAgo":1,"fromTime":"12:00","toTime":"18:00"}.',
-    'The phrase may be in any language: "letzte Woche" -> {"lastCount":1,"lastUnit":"week"}; "ayer" -> {"daysAgo":1}; "ce matin" -> {"daysAgo":0,"fromTime":"06:00","toTime":"12:00"}; "el fin de semana pasado" -> {"weekend":1}.',
+    'The phrase may be in any language: "letzte Woche" -> {"lastCount":1,"lastUnit":"week"}; "ayer" -> {"daysAgo":1}; "ce matin" -> {"daysAgo":0,"fromTime":"06:00","toTime":"12:00"}; "el fin de semana pasado" -> {"weekend":"last"}.',
     'A calendar day word is never a rolling span: "today" is daysAgo 0, NOT lastCount 1 day. A part of the day is never a rolling span either.',
   ].join('\n');
 }
@@ -111,6 +138,7 @@ export async function interpretWhen(
   try {
     const reply = await provider.complete(buildInterpreterPrompt(now, timezone), phrase, signal, WINDOW_SCHEMA);
     const parsed = parseFields(reply.text);
+    if (parsed) clampBareMonthEnd(phrase, parsed);
     result = parsed ?? { error: `Could not interpret "${phrase}" as a time window. Rephrase the when argument.` };
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') throw error;
@@ -137,7 +165,10 @@ function parseFields(text: string): WindowFields | undefined {
     if (raw.daysAgo !== undefined) fields.daysAgo = Number(raw.daysAgo);
     if (raw.weekday !== undefined) fields.weekday = String(raw.weekday);
     if (raw.dayOfMonth !== undefined) fields.dayOfMonth = Number(raw.dayOfMonth);
-    if (raw.weekend !== undefined) fields.weekend = Number(raw.weekend);
+    // Pass the weekend value through as sent: the schema now emits a string enum
+    // ("this"/"last"/"two-ago"), which resolveWindow maps to a weekends-ago
+    // number. A legacy numeric weekend still round-trips through resolveWindow.
+    if (raw.weekend !== undefined) fields.weekend = typeof raw.weekend === 'number' ? raw.weekend : String(raw.weekend);
     if (raw.date !== undefined) fields.date = String(raw.date);
     if (raw.fromDate !== undefined) fields.fromDate = String(raw.fromDate);
     if (raw.toDate !== undefined) fields.toDate = String(raw.toDate);
@@ -171,4 +202,26 @@ function repairFields(fields: WindowFields): WindowFields {
     delete fields.lastCount;
   }
   return fields;
+}
+
+/** Corrects the model's exclusive-end habit on a BARE month name. On phrases
+ *  with no digits ("last month", "april"), FM tends to send an exclusive toDate
+ *  (the 1st of the next month) beside a fromDate on the 1st of the prior month;
+ *  resolveWindow treats toDate as inclusive, so that overshoots by a day. When
+ *  the phrase names no number and toDate is exactly one month after a first-of-
+ *  month fromDate, snap toDate to fromDate's real month end. A phrase that spells
+ *  its own dates ("june 1 to july 1") keeps its digits and is never touched. */
+function clampBareMonthEnd(phrase: string, fields: WindowFields): void {
+  if (/\d/.test(phrase)) return;
+  const { fromDate, toDate } = fields;
+  if (typeof fromDate !== 'string' || typeof toDate !== 'string') return;
+  const from = /^(\d{4})-(\d{2})-01$/.exec(fromDate);
+  const to = /^(\d{4})-(\d{2})-01$/.exec(toDate);
+  if (!from || !to) return;
+  const fromMonths = Number(from[1]) * 12 + Number(from[2]);
+  const toMonths = Number(to[1]) * 12 + Number(to[2]);
+  if (toMonths - fromMonths !== 1) return;
+  // Day 0 of the month AFTER fromDate's month is fromDate's month's last day.
+  const lastDay = new Date(Number(from[1]), Number(from[2]), 0).getDate();
+  fields.toDate = `${from[1]}-${from[2]}-${String(lastDay).padStart(2, '0')}`;
 }
