@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getToolByName, isWithheldToolName, readOnlyTools, WITHHELD_TOOL_NAMES, TOOLS } from '../tools';
-import { safeExecute, validateToolInput, objectTypePattern, coerceLabelList, matchLabels, isOmittedArg, stripOmittedArgs, objectQuestionMismatch, whenNotFromQuestion, toolCallSignature, repairCountEventsInterval } from '../tool-helpers';
+import { safeExecute, validateToolInput, objectTypePattern, coerceLabelList, matchLabels, isOmittedArg, stripOmittedArgs, objectQuestionMismatch, whenNotFromQuestion, calendarTimeframeMismatch, toolCallSignature, repairCountEventsInterval } from '../tool-helpers';
 import type { ToolContext } from '../types';
 import { asProfileId } from '../../../api/types';
 import { ASSISTANT } from '../../zmninja-ng-constants';
@@ -454,6 +454,33 @@ describe('read-only tools', () => {
     });
   });
 
+  it('count_events refuses a calendar-only timeframe, naming the phrase', async () => {
+    const tool = getToolByName('count_events')!;
+    const r = await tool.execute(
+      { lastCount: 1, lastUnit: 'day' },
+      { ...ctx(), resolvedTimeframes: [{ phrase: 'today', fields: { daysAgo: 0 } }] },
+    );
+    expect(r.isError).toBe(true);
+    expect(r.output).toContain('calendar-based ("today")');
+    expect(r.output).toContain('list_events with when "today"');
+  });
+
+  it('count_events runs when a rolling timeframe is present', async () => {
+    const tool = getToolByName('count_events')!;
+    const r = await tool.execute(
+      { lastCount: 1, lastUnit: 'hour' },
+      { ...ctx(), resolvedTimeframes: [{ phrase: 'last hour', fields: { lastCount: 1, lastUnit: 'hour' } }] },
+    );
+    expect(r.isError).toBeFalsy();
+    expect(r.output).toContain('Front Door');
+  });
+
+  it('count_events runs when no resolvedTimeframes are supplied', async () => {
+    const tool = getToolByName('count_events')!;
+    const r = await tool.execute({ lastCount: 1, lastUnit: 'hour' }, ctx());
+    expect(r.isError).toBeFalsy();
+  });
+
   it('get_event returns duration/frames/score/notes', async () => {
     const tool = getToolByName('get_event')!;
     const r = await tool.execute({ eventId: '42' }, ctx());
@@ -651,6 +678,31 @@ describe('objectQuestionMismatch', () => {
 
   it('leaves every other tool alone', () => {
     expect(objectQuestionMismatch('list_events', 'how many vehicles today', labels)).toBeUndefined();
+  });
+});
+
+describe('calendarTimeframeMismatch', () => {
+  it('refuses when every resolved timeframe is calendar-based, naming the first phrase', () => {
+    const message = calendarTimeframeMismatch([
+      { phrase: 'today', fields: { daysAgo: 0 } },
+      { phrase: 'yesterday', fields: { daysAgo: 1 } },
+    ]);
+    expect(message).toContain('calendar-based ("today")');
+    expect(message).toContain('list_events with when "today"');
+  });
+
+  it('allows the call when any resolved timeframe is a rolling window', () => {
+    expect(
+      calendarTimeframeMismatch([
+        { phrase: 'today', fields: { daysAgo: 0 } },
+        { phrase: 'last hour', fields: { lastCount: 1, lastUnit: 'hour' } },
+      ]),
+    ).toBeUndefined();
+  });
+
+  it('stays off when no timeframes were resolved', () => {
+    expect(calendarTimeframeMismatch(undefined)).toBeUndefined();
+    expect(calendarTimeframeMismatch([])).toBeUndefined();
   });
 });
 

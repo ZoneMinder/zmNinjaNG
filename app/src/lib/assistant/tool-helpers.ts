@@ -3,7 +3,15 @@
  */
 import { log, LogLevel } from '../logger';
 import { ASSISTANT } from '../zmninja-ng-constants';
-import type { DisplayEntity, ToolExecuteResult } from './types';
+import type { DisplayEntity, ResolvedTimeframe, ToolExecuteResult } from './types';
+
+/** Lowercased, trimmed, single-spaced form of a `when` phrase, for comparing
+ *  it against the question it should have come from. Shared so the pre-tool
+ *  parrot filter (timeframe-stage.ts) and the provenance guard below normalize
+ *  identically. */
+export function normalizeWhenPhrase(text: string): string {
+  return text.trim().toLowerCase().replace(/\s+/g, ' ');
+}
 
 /** Literal strings a model emits for an OPTIONAL argument it means to leave
  *  out. Small models routinely send `"null"` (or `"undefined"`, `"none"`,
@@ -281,6 +289,34 @@ export function objectQuestionMismatch(
 }
 
 /**
+ * Corrective text when `count_events` is asked for a calendar-based period it
+ * cannot express, or undefined when a rolling window is present (or nothing was
+ * resolved).
+ *
+ * `count_events` counts a ROLLING window ending now (lastCount+lastUnit); it
+ * cannot express a calendar day like "today" (since local midnight) or
+ * "yesterday". The pre-tool stage already resolved this turn's timeframes
+ * (timeframe-stage.ts), so their shape is decidable in code: if NONE is a
+ * rolling window, the question's period is calendar-based and count_events
+ * would answer a rolling 24h window and report it as the calendar day.
+ * Observed live: asked about today at 6:53 AM, count_events lastCount 1 day
+ * (mostly yesterday evening) returned 29 events on a day that had none.
+ *
+ * Absent `resolvedTimeframes` (other callers, tests) leaves the call untouched.
+ */
+export function calendarTimeframeMismatch(resolvedTimeframes: ResolvedTimeframe[] | undefined): string | undefined {
+  if (!resolvedTimeframes || resolvedTimeframes.length === 0) return undefined;
+  const isRolling = (fields: ResolvedTimeframe['fields']) =>
+    fields.lastCount !== undefined && fields.lastUnit !== undefined;
+  if (resolvedTimeframes.some((tf) => isRolling(tf.fields))) return undefined;
+  const phrase = resolvedTimeframes[0].phrase;
+  return (
+    `This question's time period is calendar-based ("${phrase}"); count_events counts a rolling window ` +
+    `ending now and cannot express it; call list_events with when "${phrase}" instead.`
+  );
+}
+
+/**
  * Corrective text when a `when` phrase did not come from the question being
  * answered, or undefined when its provenance checks out.
  *
@@ -305,10 +341,9 @@ export function whenNotFromQuestion(
   allowedPhrases?: string[],
 ): string | undefined {
   if (!question) return undefined;
-  const normalize = (text: string) => text.trim().toLowerCase().replace(/\s+/g, ' ');
-  const normalizedWhen = normalize(whenPhrase);
-  if (normalize(question).includes(normalizedWhen)) return undefined;
-  if (allowedPhrases?.some((phrase) => normalize(phrase) === normalizedWhen)) return undefined;
+  const normalizedWhen = normalizeWhenPhrase(whenPhrase);
+  if (normalizeWhenPhrase(question).includes(normalizedWhen)) return undefined;
+  if (allowedPhrases?.some((phrase) => normalizeWhenPhrase(phrase) === normalizedWhen)) return undefined;
 
   return (
     `The when value "${whenPhrase}" does not appear in the question you are answering. ` +

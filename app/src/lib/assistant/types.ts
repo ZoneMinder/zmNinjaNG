@@ -179,6 +179,16 @@ export interface AssistantTurn {
   nativeToolResults?: ExecutedToolCall[];
 }
 
+/** One timeframe the pre-tool stage extracted and resolved for this turn
+ *  (timeframe-stage.ts, refs #270): the user's own phrase paired with the
+ *  structured window it interprets to. `fields` carries a rolling window
+ *  (lastCount+lastUnit) or a calendar one (daysAgo/date/fromDate...), which is
+ *  what lets a tool decide in code whether a period is calendar-based. */
+export interface ResolvedTimeframe {
+  phrase: string;
+  fields: import('./event-range').WindowFields;
+}
+
 export interface ToolContext {
   profileId: ProfileId;
   /** The question this turn is answering, so a tool can check that a
@@ -198,6 +208,12 @@ export interface ToolContext {
    *  which is what makes the default-today case legal ("today" was resolved
    *  by the stage though the user never typed it). */
   allowedWhenPhrases?: string[];
+  /** The same timeframes as `allowedWhenPhrases`, each paired with the
+   *  structured window it resolved to (timeframe-stage.ts, refs #270). A tool
+   *  reads these to decide in code whether the turn's period is calendar-based
+   *  or a rolling window: `count_events` refuses a calendar-only period it
+   *  cannot express. Absent (other callers, tests) leaves that guard off. */
+  resolvedTimeframes?: ResolvedTimeframe[];
   /** Detected-object labels this install writes (object-labels.ts). A tool
    *  rejects an objectType outside this list rather than querying a label the
    *  detector never emits. */

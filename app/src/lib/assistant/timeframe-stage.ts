@@ -23,8 +23,10 @@
 import { format } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 import { interpretWhen } from './window-interpreter';
+import { normalizeWhenPhrase } from './tool-helpers';
 import { log, LogLevel } from '../logger';
-import type { AssistantProvider } from './types';
+import type { WindowFields } from './event-range';
+import type { AssistantProvider, ResolvedTimeframe } from './types';
 
 /** The extractor's output contract, constrained on backends that support it
  *  (Ollama json_schema, WebLLM XGrammar) and parsed defensively everywhere.
@@ -78,6 +80,12 @@ export interface ExtractedTimeframes {
   /** The resolved phrases to copy into `when`; the "today" default when the
    *  question named no time. Empty only when `abstained` is true. */
   phrases: string[];
+  /** The same phrases paired with the structured window each resolved to, so
+   *  a tool can decide in code whether the turn's period is calendar-based or a
+   *  rolling window (refs #270). Mirrors `phrases`, except empty on the
+   *  extraction-failure fast path and when even the default period could not be
+   *  resolved (both of which still answer, so the guard using this stays off). */
+  resolved: ResolvedTimeframe[];
   /** The question named a time no interpretation could resolve: the caller
    *  must tell the user and stop, not run the tool round on a wrong window. */
   abstained: boolean;
@@ -112,32 +120,48 @@ export async function extractTimeframes(
     log.assistant('Timeframe extraction failed', LogLevel.WARN, {
       error: error instanceof Error ? error.message : String(error),
     });
-    return { phrases: ['today'], abstained: false };
+    return { phrases: ['today'], resolved: [], abstained: false };
   }
 
-  const namedTime = extracted.length > 0;
+  // The model parrots the prompt's own date line (buildTimeframePrompt names
+  // today, the weekday, the ISO date and the timezone), so the extractor
+  // returns time words the user never typed. Provenance is decidable in code,
+  // exactly as whenNotFromQuestion decides it: a phrase that truly came from
+  // the question is a substring of it. Filter to those BEFORE the resolution
+  // loop, so a parroted phrase never reaches the interpreter (observed: 3
+  // parroted phrases cost 3 wasted constrained calls). A filter that leaves
+  // zero phrases is the same as none: the user stated no real timeframe, so
+  // fall to the default period rather than abstain.
+  const normalizedQuestion = normalizeWhenPhrase(question);
+  const stated = extracted.filter((phrase) => {
+    if (normalizedQuestion.includes(normalizeWhenPhrase(phrase))) return true;
+    log.assistant('Dropped parroted timeframe phrase', LogLevel.DEBUG, { phrase });
+    return false;
+  });
+  const namedTime = stated.length > 0;
+
   // De-dupe on the normalized form: the same phrase twice would resolve twice
   // (cache makes the second free) and clutter the allowed-phrase line.
   const seen = new Set<string>();
-  const candidates = (namedTime ? extracted : ['today']).filter((phrase) => {
-    const key = phrase.toLowerCase();
+  const candidates = (namedTime ? stated : ['today']).filter((phrase) => {
+    const key = normalizeWhenPhrase(phrase);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
 
-  const resolved: string[] = [];
+  const resolved: ResolvedTimeframe[] = [];
   for (const phrase of candidates) {
     const fields = await interpretWhen(phrase, provider, now, timezone, signal);
     if ('error' in fields && fields.error) continue;
-    resolved.push(phrase);
+    resolved.push({ phrase, fields: fields as WindowFields });
   }
 
   if (resolved.length === 0) {
     // Two ways here: a stated timeframe that all failed (abstain), or the
     // "today" default itself failing to resolve (keep it, so the answering
     // model still has an allowed phrase and the turn proceeds on today).
-    return namedTime ? { phrases: [], abstained: true } : { phrases: ['today'], abstained: false };
+    return namedTime ? { phrases: [], resolved: [], abstained: true } : { phrases: ['today'], resolved: [], abstained: false };
   }
-  return { phrases: resolved, abstained: false };
+  return { phrases: resolved.map((tf) => tf.phrase), resolved, abstained: false };
 }

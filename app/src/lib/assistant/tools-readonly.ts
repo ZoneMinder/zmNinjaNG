@@ -30,6 +30,7 @@ import {
   coerceLabelList,
   matchLabels,
   whenNotFromQuestion,
+  calendarTimeframeMismatch,
   NAVIGATE_ALLOWLIST,
 } from './tool-helpers';
 
@@ -164,8 +165,14 @@ const countEventsTool: ToolDefinition = {
     required: ['lastCount', 'lastUnit'],
     additionalProperties: false,
   },
-  execute: (input, _ctx) =>
+  execute: (input, ctx) =>
     safeExecute('count_events', async () => {
+      // The pre-tool stage already resolved this turn's timeframes. If the
+      // period is calendar-based (none of them a rolling window), count_events
+      // cannot express it and would answer a rolling window ending now, so send
+      // the model to list_events instead (refs #270).
+      const calendarMismatch = calendarTimeframeMismatch(ctx.resolvedTimeframes);
+      if (calendarMismatch) throw new Error(calendarMismatch);
       const count = Number(input.lastCount);
       const unit = String(input.lastUnit ?? '');
       if (!Number.isFinite(count) || count <= 0 || !unit) throw new Error('lastCount and lastUnit are required.');

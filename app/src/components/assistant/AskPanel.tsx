@@ -563,7 +563,7 @@ export function AskPanel() {
       // meant for the answer.
       let turnSystem = kind === 'zoneminder' ? system : buildNoToolPrompt(system, kind);
       if (kind === 'zoneminder' && !isAssistantTestMode()) {
-        const { phrases, abstained } = await extractTimeframes(
+        const { phrases, resolved, abstained } = await extractTimeframes(
           text,
           provider,
           new Date(),
@@ -575,6 +575,7 @@ export function AskPanel() {
           return;
         }
         ctx.allowedWhenPhrases = phrases;
+        ctx.resolvedTimeframes = resolved;
         turnSystem = `${system}\n${buildTimeframeSystemLine(phrases)}`;
       }
 

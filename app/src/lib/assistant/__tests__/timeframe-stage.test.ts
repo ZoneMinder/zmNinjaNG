@@ -36,7 +36,14 @@ describe('extractTimeframes', () => {
       (phrase) => (phrase === 'today' ? '{"daysAgo":0}' : '{"daysAgo":1}'),
     );
     const result = await extractTimeframes('today vs yesterday', p, NOW, TZ, signal());
-    expect(result).toEqual({ phrases: ['today', 'yesterday'], abstained: false });
+    expect(result).toEqual({
+      phrases: ['today', 'yesterday'],
+      resolved: [
+        { phrase: 'today', fields: { daysAgo: 0 } },
+        { phrase: 'yesterday', fields: { daysAgo: 1 } },
+      ],
+      abstained: false,
+    });
 
     const [system, text, , schema] = vi.mocked(p.complete).mock.calls[0];
     expect(system).toContain('Today is Thursday, 2026-07-16');
@@ -51,6 +58,7 @@ describe('extractTimeframes', () => {
     );
     expect(await extractTimeframes('give me a summary', p, NOW, TZ, signal())).toEqual({
       phrases: ['today'],
+      resolved: [{ phrase: 'today', fields: { daysAgo: 0 } }],
       abstained: false,
     });
   });
@@ -70,6 +78,7 @@ describe('extractTimeframes', () => {
     );
     expect(await extractTimeframes('what happened blursday', p, NOW, TZ, signal())).toEqual({
       phrases: [],
+      resolved: [],
       abstained: true,
     });
   });
@@ -81,8 +90,46 @@ describe('extractTimeframes', () => {
     );
     expect(await extractTimeframes('today and blursday', p, NOW, TZ, signal())).toEqual({
       phrases: ['today'],
+      resolved: [{ phrase: 'today', fields: { daysAgo: 0 } }],
       abstained: false,
     });
+  });
+
+  it('drops phrases the model parroted from the prompt date line, keeping the real one', async () => {
+    // The model echoes the "Today is Friday, 2026-07-24 ..." line and returns
+    // those as phrases; only "yesterday" was actually in the question. The
+    // parroted ones must never reach the interpreter.
+    const interpret = vi.fn((phrase: string) => (phrase === 'yesterday' ? '{"daysAgo":1}' : '{"daysAgo":0}'));
+    const p = makeProvider(() => '{"phrases":["today","Friday","2026-07-24","yesterday"],"none":false}', interpret);
+    const result = await extractTimeframes('what happened yesterday', p, NOW, TZ, signal());
+    expect(result).toEqual({ phrases: ['yesterday'], resolved: [{ phrase: 'yesterday', fields: { daysAgo: 1 } }], abstained: false });
+    // Only the surviving phrase was interpreted; the three parroted ones were
+    // filtered in code before the loop.
+    expect(interpret).toHaveBeenCalledTimes(1);
+    expect(interpret).toHaveBeenCalledWith('yesterday');
+  });
+
+  it('defaults to today when every phrase was parroted, never abstaining', async () => {
+    // None of these appear in the question, so the filter empties the list;
+    // that is the same as naming no time, which defaults to today (not abstain).
+    const p = makeProvider(
+      () => '{"phrases":["today","Friday","2026-07-24","America/New_York"],"none":false}',
+      () => '{"daysAgo":0}',
+    );
+    expect(await extractTimeframes('any events at my place', p, NOW, TZ, signal())).toEqual({
+      phrases: ['today'],
+      resolved: [{ phrase: 'today', fields: { daysAgo: 0 } }],
+      abstained: false,
+    });
+  });
+
+  it('returns each resolved phrase with the structured window it resolved to', async () => {
+    const p = makeProvider(
+      () => '{"phrases":["last hour"],"none":false}',
+      () => '{"lastCount":1,"lastUnit":"hour"}',
+    );
+    const { resolved } = await extractTimeframes('anything in the last hour', p, NOW, TZ, signal());
+    expect(resolved).toEqual([{ phrase: 'last hour', fields: { lastCount: 1, lastUnit: 'hour' } }]);
   });
 
   it('de-dupes phrases that differ only by case', async () => {
@@ -114,7 +161,11 @@ describe('extractTimeframes', () => {
       return { text: '{"daysAgo":0}' };
     });
     const p = { complete } as unknown as AssistantProvider;
-    expect(await extractTimeframes('summary', p, NOW, TZ, signal())).toEqual({ phrases: ['today'], abstained: false });
+    expect(await extractTimeframes('summary', p, NOW, TZ, signal())).toEqual({
+      phrases: ['today'],
+      resolved: [],
+      abstained: false,
+    });
   });
 
   it('propagates an abort instead of swallowing it', async () => {
