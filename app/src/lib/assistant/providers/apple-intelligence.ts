@@ -461,15 +461,24 @@ export class AppleIntelligenceProvider implements AssistantProvider {
         }),
       );
     } catch (error) {
-      // The budget's own cancellation coming back, as CANCELLED or (if the
-      // window went over before the stop landed) CONTEXT_FULL. Either way the
-      // turn holds real data, so it returns with an empty answer and the agent
-      // writes one from the results rather than showing an engine failure for
-      // a turn that succeeded. Nothing usable collected still propagates.
-      if (!budgetCancelled || !executed.some((r) => r.isError !== true)) throw error;
-      log.assistant('Apple Intelligence native turn ended at the tool budget; answering from the collected results', LogLevel.WARN, {
+      // The turn holds real data in two cases: the budget's own cancellation
+      // coming back (as CANCELLED or, if the window went over before the stop
+      // landed, CONTEXT_FULL), or a plain CONTEXT_FULL that overflowed mid-turn
+      // while grounded results were already collected. Either way it returns
+      // with an empty answer and the agent writes one from the results rather
+      // than showing an engine failure for a turn that already fetched what the
+      // user asked for. A compare turn's grounded results are worth more than a
+      // retried generation that will overflow again, and the loop's data
+      // fallback already renders them; the guided path's condensed-history retry
+      // is deliberately NOT used here, since it drops history but keeps the very
+      // tool results that grew the window. Nothing usable collected still
+      // propagates.
+      const hasGroundedResult = executed.some((r) => r.isError !== true);
+      if (!hasGroundedResult || (!budgetCancelled && !isContextFull(error))) throw error;
+      log.assistant('Apple Intelligence native turn kept its grounded results after a budget stop or context overflow; answering from them', LogLevel.WARN, {
         modelId: this.modelId,
         toolCalls: executed.length,
+        contextFull: isContextFull(error),
       });
       response = { content: '' };
     } finally {

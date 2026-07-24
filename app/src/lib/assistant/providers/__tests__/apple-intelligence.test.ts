@@ -786,6 +786,64 @@ describe('AppleIntelligenceProvider native tool calling', () => {
     expect(cancelChatMock).toHaveBeenCalledTimes(1);
   });
 
+  // A compare turn collects two grounded results, then the next model round
+  // overflows the window mid-generation (CONTEXT_FULL) with no budget stop in
+  // play. The results the user asked for are already in hand, so the turn comes
+  // back answerless for the agent loop's data fallback instead of throwing away
+  // a succeeded fetch. The condensed-history retry is deliberately not used: it
+  // drops history but keeps the tool results that grew the window (refs #270).
+  /** `count` successful calls fired at the listener, then a chat that rejects
+   *  the way the native session does when the window overflows mid-turn. */
+  function scriptContextFullTurn(count: number) {
+    const calls = Array.from({ length: count }, (_, i) => ({ callId: `c${i}`, name: 'count_events', argumentsJson: '{}' }));
+    chatMock.mockImplementation(async () => {
+      for (const call of calls) toolCallListener?.(call);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      throw Object.assign(new Error('Context window full'), { code: 'CONTEXT_FULL' });
+    });
+  }
+
+  it('keeps two grounded results when the window overflows mid-turn instead of throwing', async () => {
+    scriptContextFullTurn(2);
+    const runTool = vi
+      .fn()
+      .mockResolvedValueOnce({ callId: 'x1', name: 'count_events', input: {}, output: '14 events' })
+      .mockResolvedValueOnce({ callId: 'x2', name: 'list_events', input: {}, output: '3 rows' });
+
+    const provider = new AppleIntelligenceProvider();
+    const turn = await provider.chat(
+      [{ role: 'user', text: 'compare today and yesterday' }],
+      [TOOL],
+      'sys',
+      new AbortController().signal,
+      undefined,
+      runTool,
+    );
+
+    // A plain CONTEXT_FULL, not our own budget stop, so cancelChat was never asked.
+    expect(cancelChatMock).not.toHaveBeenCalled();
+    // The overflow is swallowed: the turn comes back answerless with both
+    // grounded results, so the agent loop writes the answer from them.
+    expect(turn.text).toBe('');
+    expect(turn.nativeToolResults?.map((r) => r.output)).toEqual(['14 events', '3 rows']);
+    expect(turn.usage?.totalTokens).toBeGreaterThan(0);
+    // Listener cleanup still ran through the finally.
+    expect(removeListenerMock).toHaveBeenCalled();
+  });
+
+  it('rethrows a mid-turn CONTEXT_FULL when no usable result was collected', async () => {
+    scriptContextFullTurn(1);
+    const runTool = vi.fn().mockRejectedValue(new Error('profile is offline'));
+
+    const provider = new AppleIntelligenceProvider();
+    await expect(
+      provider.chat([{ role: 'user', text: 'how many today?' }], [TOOL], 'sys', new AbortController().signal, undefined, runTool),
+    ).rejects.toThrow('__i18n:assistant.native_engine_failed');
+    // No budget stop and nothing grounded: the overflow propagates, cleanup runs.
+    expect(cancelChatMock).not.toHaveBeenCalled();
+    expect(removeListenerMock).toHaveBeenCalled();
+  });
+
   it('keeps the guided schema path for a tool-less turn even when runTool is given', async () => {
     chatMock.mockResolvedValue({ content: '{"answer": "Hi there."}' });
 
