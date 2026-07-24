@@ -8,10 +8,12 @@ Go to **Settings > Ninjii** and turn on **Enable Ninjii**.
 
 Underneath, **Backend** picks where the model runs:
 
+- **Ollama**: the model runs on an [Ollama](https://ollama.com) server (or anything else speaking the OpenAI-compatible chat API) that you point the app at.
 - **On-device**: the model runs inside the app on your computer's GPU, using WebGPU. Nothing leaves your device. **Desktop and web only** (see below).
 - **On-device (native)**: on a supported iPhone, iPad, or Android phone, the model runs inside the app itself instead of a browser engine, using the device's GPU (Metal) on iPhone and iPad, or the CPU on Android. Nothing leaves your device. Only on a device with enough memory (see below); Android has no GPU path yet, so replies there are slower than on an iPhone.
 - **On-device (Apple Intelligence)**: on an iPhone 15 Pro or newer running iOS 26 with Apple Intelligence turned on, the assistant uses Apple's own on-device system model. There is nothing to download: Apple ships and runs the model as part of iOS, so it uses none of the app's memory for model weights. Nothing leaves your device (see below).
-- **Ollama**: the model runs on an [Ollama](https://ollama.com) server (or anything else speaking the OpenAI-compatible chat API) that you point the app at.
+
+The backends differ in how accurate their answers are, and a note under the picker says so: Ollama is the most accurate, the on-device backends (native on a phone, WebGPU on a desktop) come next, and system models such as Apple Intelligence are the least accurate. When the assistant is running on a system model, the chat window keeps a note suggesting the switch to **On-device (native)**.
 
 The WebGPU on-device backend is not offered on phones or tablets: those models need more memory than a mobile browser engine is allowed to use, and answers take minutes on phone hardware. An iPhone or iPad with roughly 6GB of RAM or more gets the native on-device backend instead (see below). Android needs more: only a 12GB-class phone (for example a Pixel 8 Pro or a Galaxy S Ultra) qualifies, because the model runs on the CPU and its working set has to fit alongside everything else the phone is doing. An 8GB Android phone such as the Pixel 8 uses Ollama instead. Below the threshold there is no on-device choice, just a note saying so and the Ollama settings. On a desktop or in a browser, WebGPU on-device is available whenever your GPU supports WebGPU.
 
