@@ -42,6 +42,18 @@ export function useZoomPan({
   const innerElRef = useRef<HTMLDivElement | null>(null);
   const stateRef = useRef<TransformState>({ scale: 1, x: 0, y: 0 });
 
+  // The container is tracked in state as well as in a ref. useGesture binds to
+  // `target` from an effect that runs on every render and reads `.current` at
+  // that moment, so a container that only enters the DOM in a later commit -
+  // anything rendered through a portal, such as a Radix dialog - is null on the
+  // first bind and would never be retried without a re-render (refs #272).
+  // The effects below depend on this value for the same reason.
+  const [containerEl, setContainerEl] = useState<HTMLDivElement | null>(null);
+  const setContainer = useCallback((el: HTMLDivElement | null) => {
+    containerRef.current = el;
+    setContainerEl(el);
+  }, []);
+
   // Callback ref for the inner (transformed) element
   const innerRef = useCallback((el: HTMLDivElement | null) => {
     innerElRef.current = el;
@@ -291,14 +303,20 @@ export function useZoomPan({
 
   // Grab cursor when zoomed so desktop users discover drag-to-pan.
   useEffect(() => {
+    // Read through the ref: `containerEl` is only the dependency that re-runs
+    // this once the node exists, and styling a value held in state trips
+    // react-hooks/immutability.
     const el = containerRef.current;
     if (!el) return;
     el.style.cursor = isZoomed ? 'grab' : '';
-  }, [isZoomed]);
+  }, [isZoomed, containerEl]);
 
   // Apply touch/drag styles to container and block the browser's native image
   // drag (ghost image) so a mouse drag pans instead of dragging the picture.
   useEffect(() => {
+    // Read through the ref: `containerEl` is only the dependency that re-runs
+    // this once the node exists, and styling a value held in state trips
+    // react-hooks/immutability.
     const el = containerRef.current;
     if (!el) return;
     el.classList.add('no-native-drag');
@@ -310,10 +328,10 @@ export function useZoomPan({
       el.style.touchAction = '';
       el.removeEventListener('dragstart', onDragStart);
     };
-  }, []);
+  }, [containerEl]);
 
   return {
-    ref: containerRef,
+    ref: setContainer,
     innerRef,
     scale: displayScale,
     isZoomed,
