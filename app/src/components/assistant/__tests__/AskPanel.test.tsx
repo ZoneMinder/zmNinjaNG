@@ -375,6 +375,29 @@ describe('AskPanel', () => {
     });
   });
 
+  // A system/OS-hosted backend (Apple Intelligence today) is the least
+  // accurate option; the panel persistently nudges toward the llama.cpp
+  // on-device backend, naming the active backend via assistantBackendLabel.
+  describe('system-model note', () => {
+    it('shows the note when the active backend is a system model (apple)', () => {
+      mockBackend.current = 'apple';
+      render(<AskPanel />);
+      expect(screen.getByTestId('assistant-system-model-note')).toHaveTextContent('assistant.system_model_note');
+    });
+
+    it('stays hidden on the Ollama backend', () => {
+      mockBackend.current = 'ollama';
+      render(<AskPanel />);
+      expect(screen.queryByTestId('assistant-system-model-note')).not.toBeInTheDocument();
+    });
+
+    it('stays hidden on the on-device (llama.cpp/WebGPU) backend', () => {
+      mockBackend.current = 'on-device';
+      render(<AskPanel />);
+      expect(screen.queryByTestId('assistant-system-model-note')).not.toBeInTheDocument();
+    });
+  });
+
   describe('slow-phase status line', () => {
     it('shows the model-load status while the load phase runs', () => {
       useAssistantStore.setState({ running: true, phase: { phase: 'loading_model', progress: 0.43 } });

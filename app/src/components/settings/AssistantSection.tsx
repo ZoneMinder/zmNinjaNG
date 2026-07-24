@@ -291,7 +291,7 @@ export function AssistantSection({
             {/* The picker shows on a native platform as soon as EITHER on-device
                 backend passes its own probe: Apple Foundation Models
                 (`appleSupported`) or the llama.cpp bridge (`nativeSupported`).
-                Options are ordered apple → ollama → native, each gated on its
+                Options are ordered ollama → native → apple, each gated on its
                 probe; Ollama is always present. When neither on-device backend
                 is supported the note branch below replaces the picker. */}
             {nativeSupported === true || appleSupported === true ? (
@@ -303,14 +303,17 @@ export function AssistantSection({
                   onChange={(e) => update('assistantBackend', e.target.value as AssistantBackend)}
                   data-testid="assistant-backend-select"
                 >
-                  {appleSupported === true && (
-                    <option value="apple">{t('settings.assistant.backend_apple')}</option>
-                  )}
                   <option value="ollama">{t('settings.assistant.backend_ollama')}</option>
                   {nativeSupported === true && (
                     <option value="native">{t('settings.assistant.backend_native')}</option>
                   )}
+                  {appleSupported === true && (
+                    <option value="apple">{t('settings.assistant.backend_apple')}</option>
+                  )}
                 </select>
+                <p className="text-xs text-muted-foreground" data-testid="assistant-backend-accuracy-hint">
+                  {t('settings.assistant.backend_accuracy_hint')}
+                </p>
               </div>
             ) : Platform.isNative ? (
               <div className="px-4 py-3 space-y-1" data-testid="assistant-on-device-unavailable">
@@ -336,6 +339,9 @@ export function AssistantSection({
                   <option value="on-device">{t('settings.assistant.backend_on_device')}</option>
                   <option value="ollama">{t('settings.assistant.backend_ollama')}</option>
                 </select>
+                <p className="text-xs text-muted-foreground" data-testid="assistant-backend-accuracy-hint">
+                  {t('settings.assistant.backend_accuracy_hint')}
+                </p>
               </div>
             )}
 

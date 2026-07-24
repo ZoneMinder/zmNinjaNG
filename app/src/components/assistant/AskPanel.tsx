@@ -29,6 +29,7 @@ import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
 import { resolveMinStreamingPort } from '../../lib/monitor/multiport';
 import { runAssistantTurn, isContextNearlyFull } from '../../lib/assistant/agent';
 import {
+  assistantBackendLabel,
   getAssistantProvider,
   isAssistantTestMode,
   PROVIDER_NOT_AVAILABLE_MESSAGE,
@@ -41,7 +42,7 @@ import { interpretWhen } from '../../lib/assistant/window-interpreter';
 import { extractTimeframes, buildTimeframeSystemLine } from '../../lib/assistant/timeframe-stage';
 import { suggestOllamaBaseUrl, warmOllamaModel } from '../../lib/assistant/providers/openai';
 import { classifyRequest, buildNoToolPrompt, type RequestKind } from '../../lib/assistant/triage';
-import type { AssistantMessage, AssistantTurn, ProviderConfig, ToolActivity, ToolContext, TraceEntry } from '../../lib/assistant/types';
+import type { AssistantBackend, AssistantMessage, AssistantTurn, ProviderConfig, ToolActivity, ToolContext, TraceEntry } from '../../lib/assistant/types';
 import { log, LogLevel } from '../../lib/logger';
 import { getSecureValue } from '../../lib/security/secureStorage';
 import { Markdown } from '../../lib/markdown';
@@ -70,6 +71,12 @@ declare global {
 /** The agent loop never renders text itself; it only ever emits this prefix
  *  (see agent.ts's ITERATION_CAP_KEY) to hand the localization job to us. */
 const I18N_SENTINEL = '__i18n:';
+
+/** Backends whose model is an OS/system service the user did not choose and
+ *  cannot swap (least accurate of the offered backends). A future Android
+ *  system backend ('aicore') joins the nudge by being added here, not by a new
+ *  conditional scattered through the panel. */
+const SYSTEM_MODEL_BACKENDS: AssistantBackend[] = ['apple'];
 
 /** Matches `providers/webllm.ts`'s `PARSE_ERROR_TEXT` sentinel key (with the
  *  `__i18n:` prefix already stripped): only this turn ever carries `raw`. */
@@ -297,6 +304,12 @@ export function AskPanel() {
   // loop fails open).
   // `startsWith`, not equality: i18next reports regional variants like "en-GB".
   const assistantInNonEnglish = !i18n.language.toLowerCase().startsWith('en');
+
+  // The active backend runs an OS/system model the user cannot pick or swap,
+  // and it is the least accurate option; a persistent note points at the
+  // llama.cpp on-device backend. `assistantBackendLabel` names the backend so
+  // the string never hardcodes one (refs #270).
+  const usingSystemModel = SYSTEM_MODEL_BACKENDS.includes(settings.assistantBackend);
 
   const [input, setInput] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -676,6 +689,16 @@ export function AskPanel() {
         {assistantInNonEnglish && (
           <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground" data-testid="assistant-english-notice">
             {t('assistant.english_only_notice')}
+          </p>
+        )}
+
+        {/* The active backend is an OS/system model (Apple Intelligence today):
+            least accurate of the offered backends, so nudge toward the
+            llama.cpp on-device backend. The backend name is interpolated, never
+            hardcoded (refs #270). */}
+        {usingSystemModel && (
+          <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground" data-testid="assistant-system-model-note">
+            {t('assistant.system_model_note', { backend: assistantBackendLabel(settings, t) })}
           </p>
         )}
 

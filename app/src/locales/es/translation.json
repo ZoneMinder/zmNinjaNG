@@ -321,6 +321,7 @@
       "backend_ollama": "Ollama (remoto)",
       "backend_native": "En el dispositivo (nativo)",
       "backend_apple": "En el dispositivo (Apple Intelligence)",
+      "backend_accuracy_hint": "Ollama (remoto) es el más preciso. En el dispositivo llama.cpp (móvil) o WebGPU (escritorio) va después. Apple Intelligence y los modelos del sistema Android son los menos precisos.",
       "apple_disabled_hint": "Activa Apple Intelligence en Ajustes de iOS para usar este backend.",
       "fm_eval": "Prueba en el dispositivo",
       "fm_eval_hint": "Comprobación para desarrolladores: puntúa los casos de tiempo con Apple Intelligence en este dispositivo. El informe completo se escribe en el registro de la app.",
@@ -1348,6 +1349,7 @@
     "context_cleared_manual_remote": "Conversación borrada.",
     "model_unavailable_native": "Este modelo no funciona en tu dispositivo. Elige un modelo del dispositivo en Ajustes.",
     "english_only_notice": "El asistente solo está probado en inglés; las respuestas en otros idiomas pueden ser menos fiables.",
+    "system_model_note": "Estás usando {{backend}}. Para mayor precisión, cambia a En el dispositivo (llama.cpp) en Ajustes.",
     "timeframe_unclear": "No pude determinar el período de tiempo al que te refieres. Indica el período, por ejemplo «hoy» o «21 de julio»."
   }
 }

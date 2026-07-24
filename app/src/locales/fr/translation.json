@@ -321,6 +321,7 @@
       "backend_ollama": "Ollama (distant)",
       "backend_native": "Sur l'appareil (natif)",
       "backend_apple": "Sur l'appareil (Apple Intelligence)",
+      "backend_accuracy_hint": "Ollama (distant) est le plus précis. Sur l'appareil llama.cpp (mobile) ou WebGPU (bureau) vient ensuite. Apple Intelligence et les modèles système Android sont les moins précis.",
       "apple_disabled_hint": "Activez Apple Intelligence dans les Réglages iOS pour utiliser ce backend.",
       "fm_eval": "Éval sur l'appareil",
       "fm_eval_hint": "Vérification développeur : évalue les cas temporels avec Apple Intelligence sur cet appareil. Le rapport complet est écrit dans le journal de l'app.",
@@ -1348,6 +1349,7 @@
     "context_cleared_manual_remote": "Conversation effacée.",
     "model_unavailable_native": "Ce modèle ne fonctionne pas sur votre appareil. Choisissez un modèle sur l'appareil dans les Réglages.",
     "english_only_notice": "L'assistant est testé uniquement en anglais ; les réponses dans d'autres langues peuvent être moins fiables.",
+    "system_model_note": "Vous utilisez {{backend}}. Pour une meilleure précision, passez à Sur l'appareil (llama.cpp) dans les Réglages.",
     "timeframe_unclear": "Je n'ai pas pu déterminer la période que vous visez. Indiquez la période, par exemple « aujourd'hui » ou « 21 juillet »."
   }
 }

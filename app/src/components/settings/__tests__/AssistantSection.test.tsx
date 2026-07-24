@@ -275,7 +275,7 @@ describe('AssistantSection backend picker and gating', () => {
       expect(within(select).queryByText('settings.assistant.backend_native')).not.toBeInTheDocument();
     });
 
-    it('lists apple before ollama before native when both on-device backends are supported', async () => {
+    it('lists ollama before native before apple when both on-device backends are supported', async () => {
       isNative = true;
       appleSupported = true;
       nativeSupported = true;
@@ -287,7 +287,19 @@ describe('AssistantSection backend picker and gating', () => {
       const values = within(select)
         .getAllByRole('option')
         .map((o) => (o as HTMLOptionElement).value);
-      expect(values).toEqual(['apple', 'ollama', 'native']);
+      expect(values).toEqual(['ollama', 'native', 'apple']);
+    });
+
+    it('shows the backend accuracy hint under the picker', async () => {
+      isNative = true;
+      appleSupported = true;
+      nativeSupported = true;
+      render(
+        <AssistantSection settings={enabledSettings} update={vi.fn()} currentProfile={profile} updateSettings={vi.fn()} />,
+      );
+
+      const hint = await screen.findByTestId('assistant-backend-accuracy-hint');
+      expect(hint).toHaveTextContent('settings.assistant.backend_accuracy_hint');
     });
 
     it('omits the Apple Intelligence option when the probe does not report support', async () => {
@@ -394,6 +406,22 @@ describe('AssistantSection backend picker and gating', () => {
     expect(screen.getByTestId('assistant-model-select')).toBeInTheDocument();
     expect(screen.queryByTestId('assistant-ollama-url')).not.toBeInTheDocument();
     expect(screen.getByText('settings.assistant.on_device_ollama_hint')).toBeInTheDocument();
+  });
+
+  it('shows the backend accuracy hint under the desktop picker', async () => {
+    render(
+      <AssistantSection
+        settings={enabledSettings}
+        update={vi.fn()}
+        currentProfile={profile}
+        updateSettings={vi.fn()}
+      />
+    );
+    await waitFor(() => expect(isModelDownloadedMock).toHaveBeenCalled());
+
+    expect(screen.getByTestId('assistant-backend-accuracy-hint')).toHaveTextContent(
+      'settings.assistant.backend_accuracy_hint',
+    );
   });
 
   it('switches to the Ollama sub-section and hides the on-device picker when the backend changes', async () => {
