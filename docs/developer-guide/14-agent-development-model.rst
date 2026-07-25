@@ -1,231 +1,231 @@
-The agent development model
-===========================
+Agent development model
+=======================
 
-Most code in this repository is written by AI agents. The maintainer does
-not line-review every diff, and the project is built so that this is safe.
-This chapter explains the idea, the layers that make it work, and the one
-place where a human still reviews deliberately.
+Most code in this repository is written by AI agents, and the diffs are not
+line-reviewed by a person. This chapter explains why that works here, what
+enforces correctness instead, and the two places where a human still
+reviews deliberately.
 
-The idea
---------
+Why diffs are not line-reviewed
+-------------------------------
 
-Reading every generated diff does not scale, and it is also the weakest
-form of review: a human skimming hundreds of lines misses more than a test
-that fails loudly. So the project moves the review effort somewhere else.
-Instead of inspecting output, it constrains input: every rule an agent must
-follow is written down, every rule that a script can check has a script
-checking it, and anything that slips through both is turned into a new rule
-with a new check. Correctness is supposed to come from the structure, not
-from a person staring at a pull request.
+Reading every generated diff stopped scaling early, and it was never good
+review to begin with: a person skimming a few hundred generated lines
+misses more than a failing test does. The effort went into constraints
+instead. Every rule an agent has to follow is written down; every rule a
+script can check has a script checking it; when something breaks that no
+rule covered, the fix has to include the rule that would have covered it.
+The maintainer states what should happen (a bug, a feature, an issue
+number), an agent does the work, and the gates decide whether it lands.
 
-That is the trade. The maintainer states intent ("fix this bug", "add this
-feature", an issue number), the agent does the work, and the gates decide
-whether the work can land.
+A related decision: project knowledge stays in the repository, not in an
+agent's session memory. Session memory cannot be seen by other agents,
+other contributors, or CI, and it disappears with the machine it lives on.
+Commit history has a similar problem: a revert or a string of fixes to the
+same file is something the project already paid to learn, and it stays
+buried unless someone writes the lesson down. The facts in
+`domain-context.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/agents/project/domain-context.md>`__
+came from doing exactly that, once across agent memory and once across the
+full commit history; rule M5 requires the same of every future session.
 
-Two more principles follow from it.
-
-**Knowledge lives in the repo, not in anyone's memory.** Agent sessions
-keep private memory, and it is the worst place for a project fact: it is
-invisible to other agents, other contributors, and CI, and it dies with
-the session or the machine. The same goes for commit history: every revert
-and every fix-after-fix chain is a lesson the project already paid for,
-and leaving it buried means paying for it again. That is why this repo's
-domain playbook was seeded by extracting verified facts out of agent
-memory and out of 2254 commits of history, and why rule M5 makes that flow
-mandatory: facts learned the hard way land in the shared files, and only
-private specifics stay in memory.
-
-**Agent count is a cost, not a quality metric.** A task force of ten
-named agents reads as rigor and usually is not: each dispatch re-reads
-context, and a review of mechanical work finds nothing the gates did not
-already prove. The measure of a workflow is what its steps catch, so
-ceremony concentrates where judgment lives (an independent review of a
-tricky change, one whole-branch review before a PR) and the harness is
-left to do what a fleet of hand-orchestrated agents would only imitate.
-When in doubt, work inline and let the gates decide.
+Multi-agent ceremony is treated as a cost, not as evidence of rigor.
+Dispatching ten agents at a change looks thorough, but every dispatch
+re-reads the same context, and in practice, agent reviews of mechanical
+work here found nothing that the gates had not already proven. Independent
+agent review is reserved for work that needs judgment, plus one
+whole-branch review before every PR. For a small bounded change, working
+inline and letting the gates run is the normal path.
 
 Rules, gates, and practices
 ---------------------------
 
-The system uses three words precisely, and the distinction carries most of
-the design:
+This guide uses three terms with specific meanings.
 
-**Rules are binding statements.** They live in ``AGENTS.md`` with stable
-tier IDs (I1 to I3 for invariants, P for process, C for code, M for the
-meta rules that govern the instruction files themselves) and in
-``AGENTS.project.md`` as project rules. A rule states what must hold, a
-one-clause why, and where it is enforced. Rules change only through the
-self-improvement protocol: the PR that hit the problem proposes the rule,
-the maintainer merges or rejects it. **Contracts** are rules specialized
-to one subsystem: each names what the subsystem owns, the one sanctioned
-path through it, the bypasses that are always bugs, and its gate.
+A **rule** is a binding statement in
+`AGENTS.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/AGENTS.md>`__
+or
+`AGENTS.project.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/AGENTS.project.md>`__.
+Rules in the core file carry stable tier IDs (I for invariants, P for
+process, C for code, M for meta rules about the instruction files
+themselves), and each states what must hold, why, and where it is
+enforced. Rules change through one path: the PR that hit a problem
+proposes the rule change, and the maintainer merges or rejects it. A
+**contract** is a rule scoped to one subsystem. Each contract names what
+the subsystem owns, the sanctioned path through it, the bypasses that are
+always bugs, and the gate that checks it.
 
-**Gates are the scripts that enforce rules.** A rule a script can check
-must have a gate, added in the same change (rule M1); this repo learned
-that from an audit in which every ungated rule had been violated and every
-gated rule held. Gates here include the unit suite, the three blocking
-lints, the ratcheted lint baseline, the CI label guard (every PR carries a
-``core`` or ``refactor`` label, auto-assigned from commit types), and
-``agents-contracts.test.ts``, which checks the instruction system itself:
-contract symbols still exist in the code, the core file stays
-project-free, the instruction files stay under a word budget, commit
-hashes cited as evidence in the domain playbook exist in history, the
-knowledge files contain no emails or addresses, and this guide's rule
-references resolve. A gate's own input gets checked too (rule M2): a
-number a gate reports must describe the thing it claims to measure.
+A **gate** is a script that enforces a rule. Rule M1 requires one for any
+rule a script could check, added in the same change as the rule; an audit
+here once found every ungated rule violated while every gated rule held,
+which is the entire argument. Current gates: the unit suite, three
+blocking lints, the ratcheted lint baseline, a CI
+`label guard <https://github.com/ZoneMinder/zmNinjaNg/blob/main/.github/workflows/label-guard.yml>`__
+that requires a ``core`` or ``refactor`` label on every PR (derived from
+commit types when absent), and
+`agents-contracts.test.ts <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/tests/agents-contracts.test.ts>`__,
+which checks the instruction files themselves: symbols named in contracts
+exist in the code, the core file contains no project names, the
+instruction files stay under a word budget, commit hashes cited as
+evidence exist in history, the knowledge files contain no emails or IP
+addresses, and rule IDs cited in this guide resolve. Rule M2 covers the
+gates' own blind spot: a number a gate reports has to describe the thing
+it claims to measure, because a gate that measures the wrong input passes
+forever.
 
-**Practices are advisory guidance.** They live in the playbooks under
-``agents/``: how to run multi-agent work, how to scale review ceremony to
-risk, which model tier fits which task, plus the domain facts in
-``domain-context.md``. Practices carry evidence (commit hashes, dated
-validation) instead of IDs, load only when the work touches their area,
-and lose to rules on any conflict. A practice earns promotion into a rule
-when violating it starts breaking things; a rule that turns out to be
-wrong is demoted or deleted the same way it entered.
+A **practice** is advisory guidance in the playbooks under
+`agents/ <https://github.com/ZoneMinder/zmNinjaNg/tree/main/agents>`__:
+how to structure multi-agent work, when review ceremony is worth it, which
+model tier fits which kind of task, and the accumulated domain facts.
+Practices cite evidence (commit hashes, a validation date) instead of
+carrying IDs, load only when the work touches their area, and lose to
+rules on any conflict. A practice becomes a rule when ignoring it starts
+breaking things. A rule that turns out to be wrong leaves the same way it
+arrived, through a PR.
 
-The layers
-----------
-
-**Instruction files.** ``AGENTS.md`` at the repo root is the portable core:
-tiered rules with stable IDs (I for invariants, P for process, C for code,
-M for meta rules that govern the files themselves). ``AGENTS.project.md``
-holds what is specific to this project: twelve architecture contracts, each
-naming what a subsystem owns, the one sanctioned path through it, the
-bypasses that are always bugs, and the gate that checks it. When an agent
-needs to change settings behavior, it does not rediscover the design from
-source; the Settings contract states it.
-
-**Playbooks.** ``agents/project/`` holds area guides (testing, docs,
-native, data integrity) and ``domain-context.md``, a file of verified
-project facts: API quirks, platform behavior, approaches that already
-failed. ``agents/generic/`` holds portable workflow guidance. Playbooks
-load only when the work touches their area, so they can be detailed without
-costing every session context.
-
-**Gates.** ``app/src/tests/`` and the CI workflows carry the enforcement
-described in the section above; the covering gates run on every commit and
-the full battery runs before a push or PR (rule P3).
-
-**Agent-side review.** Review still happens on every change; it is done by
-agents, not the maintainer. The workflow in
-``agents/generic/claude-workflows.md`` pairs implementation agents with
-independent reviewer agents on judgment-heavy work, and the final
-whole-branch review before a PR is never skipped. CI runs the full gate
-suite on every push, and the ``claude.yml`` workflow lets the maintainer
-summon an agent onto any issue or PR by mention.
-
-**The self-healing loop.** When something breaks anyway, the fix is not
-just a patch. The self-improvement protocol in ``AGENTS.md`` requires the
-PR that fixes a problem to also propose the instruction change that would
-have prevented it, with the gate M1 demands, and rule M5 requires durable
-facts learned along the way to land in ``domain-context.md`` rather than in
-any one agent's private memory. The maintainer reviews these small
-instruction diffs instead of the large code diffs. Over time the rulebook
-absorbs each failure once.
-
-The monthly review
+How the pieces fit
 ------------------
 
-Gates catch what they were built to catch. Drift, by definition, is what
-nobody wrote a gate for yet: duplication creeping across files, tests that
-pass without asserting much, a convention the repo stopped following. For
-that, the maintainer runs a deliberate deep review about once a month,
-using a scorecard skill built for this purpose.
+`AGENTS.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/AGENTS.md>`__
+at the repo root is the portable core; it contains nothing specific to
+zmNinjaNg.
+`AGENTS.project.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/AGENTS.project.md>`__
+carries the fourteen architecture contracts and the project rules. The
+point of the contracts is that an agent changing, say, settings behavior
+reads the Settings contract instead of rediscovering the design from
+source.
 
-The scorecard review works like an audit, not an essay:
+`agents/project/ <https://github.com/ZoneMinder/zmNinjaNg/tree/main/agents/project>`__
+holds the area playbooks (testing, documentation, native, data integrity)
+and ``domain-context.md``, the verified project facts: API quirks,
+platform behavior, approaches that were tried and reverted.
+`agents/generic/ <https://github.com/ZoneMinder/zmNinjaNg/tree/main/agents/generic>`__
+holds workflow guidance that is not project-specific. Playbooks are read
+when the work touches their area, so they can afford detail that the
+always-loaded files cannot.
 
-- Twelve weighted pillars: architecture, test quality, code quality, DRY,
-  type safety, error handling, security, convention self-consistency,
-  performance, documentation, tooling, accessibility and i18n.
-- Every score is backed by a command that was actually run. A pillar with
-  no command output behind it does not get a number.
-- Test quality is scored by what the suite would catch (assertion density,
-  failure paths, boundary cases, mock saturation), never by test count.
-  The decisive probe: name one plausible bug the suite would miss.
-- Output is a gates table, per-pillar evidence and score, one weighted
-  overall number, and a ranked fix list.
+Enforcement lives in ``app/src/tests/`` and the CI workflows. Covering
+gates run before every commit; the full battery runs before a push or PR
+(rule P3).
 
-The ranked fixes become issues, and the issues become agent work. `Issue
-#281 <https://github.com/ZoneMinder/zmNinjaNg/issues/281>`_ is a worked
-example: a 12-pillar review found React correctness gaps, mis-scoped
-coverage measurement, and import cycles; the issue tracked the hardening
-work, and several of the resulting checks (the cycle gate, scoped lint
-configs) are now permanent gates. That is the loop closing: the monthly
-review finds a class of problem, the fix turns it into a gate, and the
-gates guard it from then on so the next month's review can look for
-something new.
+Review still happens on every change, done by agents rather than the
+maintainer. The workflow in
+`claude-workflows.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/agents/generic/claude-workflows.md>`__
+pairs an implementing agent with an independent reviewing agent for work
+that involves judgment, and one whole-branch review runs before every PR.
+CI runs the full gate suite on every push. The
+`claude.yml <https://github.com/ZoneMinder/zmNinjaNg/blob/main/.github/workflows/claude.yml>`__
+workflow lets the maintainer bring an agent into any issue or PR by
+mentioning it.
 
-The history mining review
--------------------------
+When something breaks despite all of this, the fix is required to carry
+more than the patch: the same PR proposes the instruction change that
+would have prevented the break (with its gate, per M1), and any durable
+fact learned along the way goes into ``domain-context.md`` (per M5). The
+maintainer ends up reviewing small instruction diffs instead of large code
+diffs, and each failure gets absorbed once.
 
-The per-PR protocol captures lessons one fix at a time, but it only fires
-when someone notices a lesson was learned. The ``mine-history`` skill
-(``.claude/skills/mine-history/``) is the periodic sweep for what slipped
-through: it walks the commit history looking at reverts (each one a paid
-experiment), fix-after-fix chains on the same subsystem, and fixes that an
-existing gate should have caught, then reports candidate entries for
-``domain-context.md`` and candidate contracts, every one backed by commit
-hashes. Its first run over this repo's 2254 commits produced two contracts
-(auth tokens and the assistant tool loop, the latter distilled from a
-63-commit fix saga) and twenty domain-context entries.
+Monthly scorecard review
+------------------------
 
-Both reviews are worth running about once a month, but neither is
-mandatory; run them when they earn their time, such as after a heavy fix
-period. If scheduling suits you better, anything that can invoke the CLI
-works (``claude -p "/mine-history"`` from cron or a calendar automation),
-and Claude Code users can create a routine with the ``/schedule`` command,
-for example "run /mine-history on the first of each month".
+Gates only catch what they were built to catch. Drift is whatever nobody
+wrote a gate for yet: duplication spreading across files, tests that pass
+without asserting much, a convention the code quietly stopped following.
+The first of the two deliberate human reviews covers this: roughly once a
+month, a scorecard review of the whole codebase.
+
+The scorecard scores twelve weighted pillars (architecture, test quality,
+code quality, DRY, type safety, error handling, security, convention
+self-consistency, performance, documentation, tooling, accessibility and
+i18n). Two constraints keep it honest. A pillar only gets a number if a
+command was actually run to produce the evidence, and test quality is
+scored by what the suite would catch (assertion density, failure paths,
+boundary cases, mock saturation), never by test count. One useful probe:
+try to name a plausible bug the suite would miss; if that takes under a
+minute, the testing score is inflated. Output ends in a ranked fix list.
+
+Ranked fixes become issues, and issues become agent work.
+`Issue #281 <https://github.com/ZoneMinder/zmNinjaNg/issues/281>`__ shows
+the full cycle: a scorecard run found React correctness gaps, coverage
+measured against the wrong input, and import cycles; the hardening work
+landed under that issue; and several of its checks (the cycle gate, the
+scoped lint configs) stayed behind as permanent gates. The next review
+does not need to look for those problems again.
+
+Mining history for lessons
+--------------------------
+
+The second deliberate review audits the instruction files against the
+commit history. The per-PR protocol only fires when someone notices in the
+moment that a lesson was learned; the
+`mine-history <https://github.com/ZoneMinder/zmNinjaNg/tree/main/.claude/skills/mine-history>`__
+skill catches what nobody noticed. It walks the history looking at
+reverts (something was tried and did not work, which is worth writing
+down), repeated fixes to the same subsystem (one misunderstanding
+surfacing over and over), and fixes that an existing gate should have
+caught. It reports candidate ``domain-context.md`` entries and candidate
+contracts, each with the commit hashes that justify it. Its first run over
+this repo's 2254 commits produced two contracts (auth tokens, and an
+assistant tool-loop contract distilled from 63 fix commits on the same
+failure class) and twenty domain-context entries.
+
+Neither review is mandatory, and about once a month is plenty. Running
+them after a heavy fix period works as well as a schedule. If a schedule
+suits you, anything that can invoke the CLI works
+(``claude -p "/mine-history"`` from cron or a calendar automation), and
+Claude Code users can create a routine with the ``/schedule`` command.
 
 Using this in your own project
 ------------------------------
 
-Copy ``AGENTS.md`` unchanged. It contains no zmNinjaNg names on purpose,
-and the purity gate keeps it that way; project facts go in the other
-files.
+Copy
+`AGENTS.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/AGENTS.md>`__
+unchanged. It contains no zmNinjaNg names on purpose, and the purity gate
+keeps it that way; project facts go in the other files.
 
-Then write an ``AGENTS.project.md`` for your codebase. Most of the work is
-the contracts. Look for the places where your code has one sanctioned path
+Write an ``AGENTS.project.md`` for your codebase. Most of the work is the
+contracts. Find the places where your code has one sanctioned path
 (settings, HTTP, logging, state) and write an Owns / Path / Never / Gate
-block for each, with real symbol names. Five contracts covering the paths
+block for each, using real symbol names. Five contracts covering the paths
 people actually bypass are worth more than a complete inventory.
 
-Copy ``agents-contracts.test.ts`` and point it at your tree: your source
-directory, your forbidden-token list, a word budget measured from your own
-files plus some headroom. Copy ``agents/generic/`` as is and start
-``agents/project/`` with an empty ``domain-context.md``; if the project
-has history, one run of the ``mine-history`` skill fills in most of the
-seed content.
+Copy
+`agents-contracts.test.ts <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/tests/agents-contracts.test.ts>`__
+and point it at your tree: your source directory, your forbidden-token
+list, a word budget measured from your own files plus headroom. Copy
+`agents/generic/ <https://github.com/ZoneMinder/zmNinjaNg/tree/main/agents/generic>`__
+as is, and start ``agents/project/`` with an empty ``domain-context.md``.
+If the project has history, one ``mine-history`` run over all of it
+produces most of the seed content.
 
-Claude Code needs a two-line ``CLAUDE.md`` importing the two instruction
-files; other harnesses read ``AGENTS.md`` directly. The labels, the
-label-guard workflow, and the monthly reviews are optional.
+Claude Code needs a two-line
+`CLAUDE.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/CLAUDE.md>`__
+importing the two instruction files; other harnesses read ``AGENTS.md``
+directly. The labels, the label-guard workflow, and the two periodic
+reviews are all optional.
 
-Resist starting with thirty rules. A handful of contracts plus the core is
-enough, and the protocol grows the rest one incident at a time. Rules that
-arrive with a commit hash behind them get followed. Rules invented in
-advance are the ones that drift.
+Do not start with thirty rules. A handful of contracts plus the core is
+enough, and the protocol grows the rest one incident at a time. A rule
+added because something actually happened gets followed; a rule written
+speculatively is the kind that drifts.
 
 Where everything lives
 ----------------------
 
-Everything this chapter describes is in the repository:
-
-- `AGENTS.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/AGENTS.md>`_, the portable rule core
-- `AGENTS.project.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/AGENTS.project.md>`_, contracts and project rules
-- `CLAUDE.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/CLAUDE.md>`_, the Claude Code shim
-- `agents/generic/claude-workflows.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/agents/generic/claude-workflows.md>`_, the portable workflow playbook
-- `agents/project/ <https://github.com/ZoneMinder/zmNinjaNg/tree/main/agents/project>`_, the area playbooks and `domain-context.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/agents/project/domain-context.md>`_
-- `agents-contracts.test.ts <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/tests/agents-contracts.test.ts>`_, the instruction-system gate
-- `label-guard.yml <https://github.com/ZoneMinder/zmNinjaNg/blob/main/.github/workflows/label-guard.yml>`_, the PR label gate
-- `.claude/skills/mine-history/ <https://github.com/ZoneMinder/zmNinjaNg/tree/main/.claude/skills/mine-history>`_, the history mining skill
+- `AGENTS.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/AGENTS.md>`__, the portable rule core
+- `AGENTS.project.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/AGENTS.project.md>`__, contracts and project rules
+- `CLAUDE.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/CLAUDE.md>`__, the Claude Code shim
+- `agents/generic/claude-workflows.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/agents/generic/claude-workflows.md>`__, the portable workflow playbook
+- `agents/project/ <https://github.com/ZoneMinder/zmNinjaNg/tree/main/agents/project>`__, area playbooks and `domain-context.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/agents/project/domain-context.md>`__
+- `agents-contracts.test.ts <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/tests/agents-contracts.test.ts>`__, the instruction-system gate
+- `label-guard.yml <https://github.com/ZoneMinder/zmNinjaNg/blob/main/.github/workflows/label-guard.yml>`__, the PR label gate
+- `mine-history <https://github.com/ZoneMinder/zmNinjaNg/tree/main/.claude/skills/mine-history>`__, the history mining skill
 
 What this asks of a contributor
 -------------------------------
 
 Human or agent, the entry points are the same: read ``AGENTS.md`` and
-``AGENTS.project.md``, read the playbook for the area, and let the gates
-run. If a rule seems wrong, propose a change to the rule through the
-protocol rather than quietly working around it; a workaround that never
-becomes a rule change is exactly the drift the system exists to prevent.
-See :doc:`09-contributing` for the mechanics of branches, commits, and
-verification commands.
+``AGENTS.project.md``, read the playbook for your area, and let the gates
+run. If a rule seems wrong, propose a change through the protocol instead
+of working around it quietly; a workaround that never becomes a rule
+change is exactly the drift this setup exists to prevent. See
+:doc:`09-contributing` for branches, commits, and verification commands.
