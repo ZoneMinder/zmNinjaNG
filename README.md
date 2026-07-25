@@ -12,13 +12,13 @@
 
 **[Documentation](https://zmninjang.readthedocs.io/en/latest/)**
 
-A web and mobile application for ZoneMinder for viewing live camera feeds, reviewing events, and managing multiple profiles. It is a rewrite of the original [zmNinja](https://zmninja.zoneminder.com/) application, built on React, TypeScript, Capacitor, and Electron. 
+A web and mobile application for ZoneMinder for viewing live camera feeds, reviewing events, a local AI chat agent and much more. It is a rewrite of the original [zmNinja](https://zmninja.zoneminder.com/) application, built on React, TypeScript, Capacitor, and Electron. 
 
 ### Demo
 
 [Watch the demo](https://zmninjang.zoneminder.com/)
 
-### Important Notes:
+###  Notes:
 - zmNinjaNg supports self-signed certificates on mobile (iOS/Android). Enable it in Settings > Connection. On desktop, add your CA to the system trust store. Using proper certificates (e.g. [LetsEncrypt](https://letsencrypt.org/)) is still recommended.
 - zmNinjaNg has been tested with [zmesNg](https://zmeventnotificationng.readthedocs.io/en/latest/) - I'd recommend you switch to this new ecosystem
 
@@ -51,15 +51,16 @@ zmNinjaNg, esNg and pyzmNg heavily use Agentic UI (Claude) for development. Than
 
 #### Pull Requests
 
-I am happy to accept PRs, but I don't want [AI slop](https://en.wikipedia.org/wiki/AI_slop). Funny I am saying this, given this repo is largely AI agent(s) generated. The difference is I understand the code and know how to prompt it with directions that make the tools generate better quality code. Remember these tools are capable but love to write a lot of code doing custom things when simpler/better means are available. They also make mistakes. So here are the rules:
+I am happy to accept PRs, but I don't want [AI slop](https://en.wikipedia.org/wiki/AI_slop). Funny I am saying this, given this repo is largely AI agent(s) generated. The difference is I understand the system and do my best to ensure it follows good principles. Remember these tools are capable but love to write a lot of code doing custom things when simpler/better means are available. They also make mistakes. So here are the rules:
 
-- If you have not read and understood the code you generated, please don't PR it to my repo. Please continue to extend it yourself
+- If you have not read and understood the design of the code you generated, please don't PR it to my repo. Please continue to extend it yourself
 - See my agent rules for [CLAUDE](AGENTS.md) here - please make sure to use it in your agent
 - Before you PR, please do a code review
 
 ###  Notes
 - Self-signed certificates are supported on mobile (iOS/Android) via Settings > Connection. On desktop, add your CA to the system trust store. Using proper certificates (e.g. [LetsEncrypt](https://letsencrypt.org/)) is still recommended.
 - If you want push notifications, you'll have to use a newer [Event Server](https://zmeventnotificationng.readthedocs.io/en/latest/)
+- If you use the AI agent, I'd highly recommend you use Qwen-8b on your Ollama server, or Qwen-3b on device. The local LLMs provided in phones are terrible. 
 
 
 ## Quick Start
