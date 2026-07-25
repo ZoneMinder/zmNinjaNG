@@ -15,7 +15,10 @@ the gates, commit. Evidence from the restructure run: reviews of mechanical
 transcription tasks found zero defects; reviews of judgment work (doc
 remapping, whole-branch review) found every real one. Review where judgment
 lives; skip where the gate already proves the result. The final whole-branch
-review before a PR is the one step never skipped.
+review before a PR is the one step never skipped. Agent count is a cost,
+never a quality signal: prefer the fewest dispatches that produce the
+evidence, and let the harness parallelize instead of choreographing a
+named fleet.
 
 ## Multi-agent execution
 
@@ -47,6 +50,8 @@ review before a PR is the one step never skipped.
   gate.
 - A reviewer only re-runs tests when the code changed after the last run;
   otherwise the implementer's report carries the evidence.
+- Repo-wide greps run from the repo root or with absolute paths; a cwd of
+  a subdirectory silently misses everything above it.
 
 ## Where knowledge goes (M5 in practice)
 

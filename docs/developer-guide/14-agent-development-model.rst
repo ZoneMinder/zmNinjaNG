@@ -22,6 +22,28 @@ That is the trade. The maintainer states intent ("fix this bug", "add this
 feature", an issue number), the agent does the work, and the gates decide
 whether the work can land.
 
+Two more principles follow from it.
+
+**Knowledge lives in the repo, not in anyone's memory.** Agent sessions
+keep private memory, and it is the worst place for a project fact: it is
+invisible to other agents, other contributors, and CI, and it dies with
+the session or the machine. The same goes for commit history: every revert
+and every fix-after-fix chain is a lesson the project already paid for,
+and leaving it buried means paying for it again. That is why this repo's
+domain playbook was seeded by extracting verified facts out of agent
+memory and out of 2254 commits of history, and why rule M5 makes that flow
+mandatory: facts learned the hard way land in the shared files, and only
+private specifics stay in memory.
+
+**Agent count is a cost, not a quality metric.** A task force of ten
+named agents reads as rigor and usually is not: each dispatch re-reads
+context, and a review of mechanical work finds nothing the gates did not
+already prove. The measure of a workflow is what its steps catch, so
+ceremony concentrates where judgment lives (an independent review of a
+tricky change, one whole-branch review before a PR) and the harness is
+left to do what a fleet of hand-orchestrated agents would only imitate.
+When in doubt, work inline and let the gates decide.
+
 Rules, gates, and practices
 ---------------------------
 
@@ -153,6 +175,40 @@ period. If scheduling suits you better, anything that can invoke the CLI
 works (``claude -p "/mine-history"`` from cron or a calendar automation),
 and Claude Code users can create a routine with the ``/schedule`` command,
 for example "run /mine-history on the first of each month".
+
+Using this in your own project
+------------------------------
+
+The system is built to be copied. The split of files is the instruction:
+everything portable is deliberately free of this project's names.
+
+1. Copy ``AGENTS.md`` verbatim. Do not edit it to add your project's
+   facts; that is what the other files are for, and the purity gate
+   exists to keep it that way.
+2. Write your own ``AGENTS.project.md``. The contracts are the real work:
+   walk your codebase and, for each subsystem that has one sanctioned
+   path (settings, HTTP, logging, state, whatever your stack centralizes),
+   write an Owns / Path / Never / Gate block with real symbol names.
+   Start with the five most-bypassed paths, not a complete inventory.
+3. Port the gate. Copy ``app/src/tests/agents-contracts.test.ts``, point
+   it at your source tree, set the forbidden-token list to your project's
+   names, and set the word budget from your own baseline (measure your
+   files, add headroom, ratchet from there).
+4. Copy ``agents/generic/`` as is. Create ``agents/project/`` with
+   whatever area playbooks your project needs, plus an empty
+   ``domain-context.md``. If the project has history, run the
+   ``mine-history`` skill once over all of it; that first sweep is where
+   most of the seed content comes from.
+5. Wire your harness: for Claude Code a two-line ``CLAUDE.md`` importing
+   both instruction files; other harnesses read ``AGENTS.md`` directly and
+   follow its pointer.
+6. Optional: the ``core`` / ``refactor`` labels with the label-guard
+   workflow, and the monthly reviews.
+
+What not to do: do not start with thirty rules. Start with the core plus a
+handful of contracts, and let the protocol grow the rest one incident at a
+time; every rule that arrives with a commit hash behind it will be
+followed, and rules invented in advance are the ones that drift.
 
 What this asks of a contributor
 -------------------------------

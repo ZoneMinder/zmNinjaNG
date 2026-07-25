@@ -1,9 +1,7 @@
 # zmNinjaNg Project Instructions
 
-Read `AGENTS.md` first. This file owns everything project-specific:
-architecture contracts, project rules, verification commands, and the
-playbook table. The sanctioned path is the only path; a bypass is a bug
-even when it works.
+Read `AGENTS.md` first. Contracts, project rules, verification, playbooks.
+The sanctioned path is the only path; a bypass is a bug even when it works.
 
 ## Architecture contracts
 

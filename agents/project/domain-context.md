@@ -99,6 +99,9 @@ matching reality, fixing it is a protocol change like any rule edit.
 - List virtualization of EventListView and Logs with
   `@tanstack/react-virtual` failed twice (blank rows, stale text). Do not
   re-attempt without a materially different approach.
+- The React Compiler lint reports at most one violation per function and
+  only file-scoped `eslint-disable` comments silence it; fixing one
+  violation can reveal the next on the same function.
 
 ## Hardware and CI limits
 
@@ -131,6 +134,28 @@ matching reality, fixing it is a protocol change like any rule edit.
 - Regex "call a tool" nudges are English-only by construction; gate them on
   `ToolContext.locale` and give other locales a language-neutral reminder
   (e74bcb84).
+- Measure assistant prompt changes with `app/scripts/prompt-eval.mts`,
+  which imports the production `buildSystemPrompt`. A hand-copied prompt in
+  the harness drifted once and measured phantom failures; never fork the
+  prompt text into an eval. Two prompt rewrites shipped unmeasured, scored
+  worse, and were reverted (refs #259): baseline before, rerun after, both
+  numbers in the PR.
+- Plain `npx tsx` scripts cannot import app modules that read
+  `import.meta.env`; use vitest with `// @vitest-environment node` and
+  stub `Platform.shouldUseProxy` false, or `lib/http.ts` rewrites absolute
+  URLs to the dev proxy. Run vitest from `app/`, never the repo root (the
+  root run resolves a different config and reports phantom failures).
+- Qwen3 `/no_think` is a placebo on Ollama (hides the tag, still reasons);
+  `reasoning_effort: "none"` on the /v1 endpoint is the real switch, sent
+  only to confirmed-Ollama servers.
+- Time windows use copy-interpret-compute (refs #265): the model copies
+  the user's phrase verbatim, `window-interpreter.ts` maps it to fields,
+  `resolveWindow` does arithmetic. Small models copy perfectly but fail
+  direct field-filling; never regress to direct fills or app-side phrase
+  regexes (deleted twice).
+- Prompt classification rules teach dimensions (intent by subject), never
+  instance lists; an instance-based triage misclassified every combination
+  outside its examples, four times.
 
 ## CI runners
 
