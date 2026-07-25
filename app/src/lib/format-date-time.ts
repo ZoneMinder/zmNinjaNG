@@ -6,8 +6,12 @@
  */
 
 import { format as dateFnsFormat } from 'date-fns';
-import type { DateFormatPreset, TimeFormatPreset } from '../stores/settings';
 import { log, LogLevel } from './logger';
+
+// The presets are declared here rather than in stores/settings, so this module
+// does not depend on the store that stores its output (refs #281).
+export type DateFormatPreset = 'MMM d, yyyy' | 'MMM d' | 'dd/MM/yyyy' | 'dd/MM' | 'custom';
+export type TimeFormatPreset = '12h' | '24h' | 'custom';
 
 export interface FormatSettings {
   dateFormat: DateFormatPreset;

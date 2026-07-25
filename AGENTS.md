@@ -1,64 +1,98 @@
 # Development Guidelines
 
-Read this file before work. Read each listed playbook before work in that area.
+Portable core. This file contains no project-specific names and copies
+verbatim into any project. Load order: this file, then
+`AGENTS.project.md` (architecture contracts, project rules, verification
+commands, playbooks), then the playbook it lists for your work area.
 
-| Work | Read first |
-|---|---|
-| Tests, UI, navigation, or platform checks | `docs/agent-playbooks/testing.md` |
-| Developer or user documentation | `docs/agent-playbooks/documentation.md` |
-| Capacitor, TLS, Electron, downloads, or native paths | `docs/agent-playbooks/native.md` |
-| Assistant tools, WebLLM, or ZoneMinder schemas | `docs/agent-playbooks/data-integrity.md` |
+Adopting this core in another project: copy this file unchanged, then write
+your own `AGENTS.project.md` and the gates it names. Project facts never
+belong in this file.
 
-## Core rules
+## Rule format
 
-1. Write plain, factual prose. No marketing claims, AI filler, recap sections, or em-dashes. Teach React where developer docs first rely on it.
-2. Create or use a GitHub issue before feature or bug work. User instruction to use an existing issue overrides creating one.
-3. Test first. Before commit run `npm test`, `npx tsc -b`, `npm run build`, and relevant feature e2e. Never commit after a failed or unrun gate.
-4. Update user docs for changed behavior. Update developer docs and affected call flows for new APIs, components, hooks, utilities, or documented paths.
-5. Never hardcode user text. Update every locale under `app/src/locales/`.
-6. UI changes need an outcome-based e2e test, platform tags, and `data-testid` on new interactive elements.
-7. Settings are profile-scoped through `getProfileSettings` and `updateProfileSettings`.
-8. Polling uses `useBandwidthSettings()` or `getBandwidthSettings()`. Never hardcode refresh intervals.
-9. Log with a `log.*` helper and explicit `LogLevel`. Never `console.*`.
-10. Use `lib/http.ts` helpers. Never raw `fetch()` or `axios`.
-11. Flex text uses `min-w-0`, `truncate`, and a `title`; multi-line text uses `line-clamp-N`.
-12. Keep files near 400 LOC. No dead code, commented-out replacements, or speculative abstractions.
-13. Capacitor plugins import dynamically behind a platform check and have a test mock.
-14. Mobile downloads use Capacitor HTTP base64 directly, never Blob conversion.
-15. Do not commit plan files.
-16. Finish requested behavior. For materially different UX options, get approval before choosing.
-17. Never merge `main` without user approval.
-18. One logical change per conventional commit. Issue work uses `refs #<id>`; use `fixes` only after user confirms.
-19. Read failures. Fix cause. Do not blindly retry.
-20. Labels must fit 320px. Prefer concise translations.
-21. User-facing date/time uses `useDateTimeFormat()` or `formatAppDate*`, never literal date-fns patterns.
-22. Add a concise general rule only when a new recurring failure warrants it. Keep one-off facts near code.
-23. Semantic constants belong in `lib/zmninja-ng-constants.ts` or `lib/zm-constants.ts`.
-24. GitHub comments identify Claude assisting @pliablepixels, with that exact attribution line. Commits do not.
-25. Do not commit incidental native build-number bumps. Commit intended bumps alone as `chore:`.
-26. React Query keys and invalidations use `query-keys.ts`; profile keys use `asProfileId()`.
-27. Zustand subscriptions select all reactive fields, use `useShallow` when needed, and never mutate `getState()` objects.
-28. Services do not statically import stores. Use gates. Keep `npx madge --circular` at zero.
-29. Query errors use `ErrorBanner` plus `resolveQueryError(err, t)`; loading uses shared query-state skeletons.
-30. New `lib/` modules use their domain folder. No one-file folders.
-31. `lint:a11y` is blocking. Edited files add no general-lint violations.
-32. For issue work, land via an issue-linked PR. If instructed to push directly to default branch, push directly and verify issue timeline.
-33. Only one `npm run test:e2e` per working tree.
-34. Verification runs direct commands, not output-summarizing wrappers.
-35. `AGENTS.md` owns process rules. Developer docs link rule numbers rather than copying them.
-36. When asked for a test build, use a matching existing GitHub workflow. Do not add a workflow unless none fits.
+Every rule is a statement, a one-clause why, and a gate. A rule a script
+could check but names no gate is a defect here. Rules carry stable IDs by
+tier; docs reference IDs, never copied text.
 
-## Working directory
+## Invariants (never simplified away)
 
-Run npm commands from `app/`. Run root `npm install` once before `app/` install so hooks exist.
+- I1. Validate at trust boundaries: server responses, user input, IPC.
+  Malformed input is expected input.
+- I2. Destructive operations need error handling and a recovery path. Lost
+  user data cannot be patched later.
+- I3. Security and accessibility are never traded for simplicity or speed.
+  Gate: blocking accessibility and correctness lints.
 
-## Verification
+## Process
 
-```
-npm test
-npx tsc -b
-npm run build
-npm run test:e2e -- <feature>.feature
-```
+- P1. Create or use an issue before feature or bug work; land through an
+  issue-linked PR. Commits reference the issue; closing keywords only after
+  the user confirms. If instructed to push directly to the default branch,
+  do so and verify the issue timeline.
+- P2. Test first: a failing test precedes the implementation of every
+  feature and bugfix. A test that never failed proves nothing.
+- P3. Run the gates covering the change before every commit; run the full
+  suite before push or PR. Never commit after a failed or unrun gate.
+- P4. Read failures and fix the cause. Never blindly retry.
+- P5. One logical change per conventional commit.
+- P6. Verification runs direct commands. Tooling that transforms output,
+  such as wrappers, compressors, or summarizers, is untrusted until
+  validated once against raw output.
+- P7. Finish the requested behavior. Materially different UX options need
+  approval before choosing.
+- P8. Never merge the default branch without approval.
+- P10. Docs move with behavior: user docs for changed behavior, developer
+  docs and call flows for new APIs, components, hooks, and utilities. Doc
+  prose stays plain and factual, without marketing language or filler.
 
-Last command applies to UI, navigation, and workflow changes. State completed checks in handoff.
+## Code
+
+- C1. Reuse ladder: existing codebase helper, then stdlib, then platform
+  feature, then installed dependency, then new code. A new dependency is a
+  last resort.
+- C2. Keep files near 400 lines. No dead code, commented-out replacements,
+  or speculative abstractions.
+- C3. Never hardcode user-facing text; every locale updates together.
+- C4. Never inline semantic values; constants live in their dedicated
+  modules.
+- C5. New modules live in domain folders. No one-file folders.
+- C6. Test assertions must be able to fail: assert fetched values or
+  user-visible outcomes, never element existence or child count.
+- C7. The lint ratchet baseline shrinks or holds, never grows. Raising a
+  number by hand needs a reason in the commit message.
+
+## Meta (governs this file)
+
+- M1. A rule a script can check needs a gate, added in the same change.
+  Ungated rules drift; an audit of ungated rules found every one violated
+  while every gated rule held.
+- M2. A gate's input needs checking, not just its exit code. Confirm the
+  number a gate reports describes what it claims to measure.
+- M3. Instruction files change only through the self-improvement protocol
+  below. One-off facts go to the project file or a playbook, never here.
+- M4. This file owns process rules; other docs link to rule IDs and never
+  copy the text.
+- M5. Hard-won knowledge is shared, not hoarded: project facts (API
+  quirks, platform behavior, failed approaches) go to the domain playbook,
+  proven workflow practices to the generic playbooks, through the
+  protocol, never only into agent memory. Repo files carry no
+  personal or private data; only such specifics (names, hosts,
+  credentials) and unproven taste stay in agent memory.
+
+## Self-improvement protocol
+
+Trigger: a breakage, review finding, or wasted session an instruction or
+contract would have prevented, or an instruction that itself caused harm.
+
+Action: the PR fixing the problem also proposes the instruction edit, with
+the gate M1 requires. The maintainer merges or rejects it like any diff.
+Agents never edit instruction files outside this protocol.
+
+## Project knowledge
+
+Architecture contracts, project rules, verification commands, and the
+playbook table live in `AGENTS.project.md`. Each contract states what it
+owns, the sanctioned path, forbidden bypasses, and the gate. Trust the
+contract over rediscovering the invariant from code; a code/contract
+mismatch is a finding for the self-improvement protocol.

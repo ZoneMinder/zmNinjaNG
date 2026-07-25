@@ -499,6 +499,7 @@
     "restart_now": "Restart now",
     "minutes": "minutes",
     "disable_log_redaction_desc": "Show passwords/tokens in logs",
+    "disable_log_redaction_warning": "Logs will contain passwords and tokens. Turn off when done.",
     "force_disable_multiport": "Force disable multi-port streaming",
     "force_disable_multiport_desc": "Ignore the server's per-monitor stream ports and use the default port",
     "show_developer_notices": "Show developer notices",

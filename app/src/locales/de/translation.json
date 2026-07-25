@@ -499,6 +499,7 @@
     "restart_now": "Jetzt neu starten",
     "minutes": "Minuten",
     "disable_log_redaction_desc": "Passwörter/Token in Logs anzeigen",
+    "disable_log_redaction_warning": "Logs enthalten Passwörter und Token. Danach wieder ausschalten.",
     "force_disable_multiport": "Multi-Port-Streaming deaktivieren",
     "force_disable_multiport_desc": "Die Stream-Ports pro Monitor des Servers ignorieren und den Standard-Port verwenden",
     "show_developer_notices": "Entwicklerhinweise anzeigen",

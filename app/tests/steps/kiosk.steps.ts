@@ -20,50 +20,6 @@ async function enterPinDigits(page: import('@playwright/test').Page, pin: string
 
 // Kiosk / PIN Steps
 
-Given('I am logged in and on the monitors page', async ({ page }) => {
-  // Navigate to application
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(100);
-  await expect(page.getByTestId('app-init-blocker')).toBeHidden({
-    timeout: testConfig.timeouts.transition * 3,
-  });
-
-  // Wait for either setup page or authenticated page
-  await Promise.race([
-    page.waitForSelector('text=/Welcome to zmNinjaNg/i', { timeout: testConfig.timeouts.transition }),
-    page.waitForSelector('[data-testid="nav-item-dashboard"]', { timeout: testConfig.timeouts.transition })
-  ]);
-
-  // Check if on setup page
-  const isSetupPage = await page.getByRole('button', { name: /connect/i }).isVisible().catch(() => false)
-    || await page.getByLabel(/server url/i).isVisible().catch(() => false);
-  if (isSetupPage) {
-    const { host, username, password } = testConfig.server;
-    await page.getByLabel(/server url/i).fill(host);
-    if (username) await page.getByLabel(/username/i).fill(username);
-    if (password) await page.getByLabel(/password/i).fill(password);
-    const connectBtn = page.getByRole('button', { name: /connect/i });
-    await connectBtn.click();
-    await page.waitForURL((url) => !url.pathname.includes('/profiles/new') && !url.pathname.includes('/setup'), {
-      timeout: testConfig.timeouts.transition * 2,
-    });
-  }
-
-  // Navigate to monitors
-  const navItem = page.locator('[data-testid="nav-item-monitors"]').locator('visible=true').first();
-  try {
-    await navItem.click({ timeout: testConfig.timeouts.transition });
-  } catch {
-    const mobileMenuButton = page.getByTestId('mobile-menu-button');
-    if (await mobileMenuButton.isVisible()) {
-      await mobileMenuButton.click();
-      await page.waitForTimeout(300);
-    }
-    await page.locator('[data-testid="nav-item-monitors"]').first().click({ timeout: 2000 });
-  }
-  await page.waitForURL(/.*monitors/, { timeout: testConfig.timeouts.transition });
-});
-
 When('I click the sidebar kiosk lock button', async ({ page }) => {
   // The lock button in the sidebar has data-testid="sidebar-kiosk-lock"
   const lockBtn = page.getByTestId('sidebar-kiosk-lock')

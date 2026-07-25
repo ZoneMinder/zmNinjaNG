@@ -28,8 +28,8 @@ Translate every value in `app/src/locales/{code}/translation.json`. Do not
 change, add, or drop keys. The key-parity test in step 5 fails if the shape
 drifts from `en`.
 
-Labels must fit 320px (`AGENTS.md` rule 20), so prefer the concise translation
-where two options exist.
+Labels must fit 320px (project rule in `AGENTS.project.md`), so prefer the
+concise translation where two options exist.
 
 ## 3. Add the language name to every translation file
 

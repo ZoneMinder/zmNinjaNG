@@ -1,6 +1,7 @@
 import { createBdd } from 'playwright-bdd';
 import { expect } from '@playwright/test';
 import { testConfig } from '../helpers/config';
+import { getGroupCount } from '../helpers/zm-api';
 import { log } from '../../src/lib/logger';
 
 const { When, Then } = createBdd();
@@ -10,12 +11,24 @@ let monitorCountBeforeFilter = 0;
 
 // Group Filter Steps
 Then('I should see the group filter if groups are available', async ({ page }) => {
+  // Whether the filter should render is a server-side fact. Reading it from the
+  // UI made the step self-confirming: a filter that stopped rendering set
+  // groupFilterAvailable to false and every later step skipped itself.
+  const serverGroupCount = await getGroupCount();
   const groupFilter = page.getByTestId('group-filter-select');
-  // Groups may or may not be configured on the server
-  // We just check if the filter is visible when groups exist
-  groupFilterAvailable = await groupFilter.isVisible({ timeout: 2000 }).catch(() => false);
-  log.info('E2E: Group filter check', { component: 'e2e', available: groupFilterAvailable });
-  // Test passes regardless - we're just checking the UI is correct
+
+  await expect
+    .poll(() => groupFilter.isVisible().catch(() => false), {
+      timeout: testConfig.timeouts.element,
+    })
+    .toBe(serverGroupCount > 0);
+
+  groupFilterAvailable = serverGroupCount > 0;
+  log.info('E2E: Group filter check', {
+    component: 'e2e',
+    available: groupFilterAvailable,
+    serverGroupCount,
+  });
 });
 
 When('I select a group from the filter if available', async ({ page }) => {
@@ -87,14 +100,12 @@ Then('all monitors should be visible again', async ({ page }) => {
     return;
   }
 
-  // After clearing, the monitor count should be >= the filtered count
+  // Clearing the filter restores the unfiltered set, so the count has to come
+  // back to what it was before the group was selected.
   const monitorCards = page.getByTestId('monitor-card');
-  const currentCount = await monitorCards.count().catch(() => 0);
-  log.info('E2E: Monitor count after clearing filter', {
-    component: 'e2e',
-    before: monitorCountBeforeFilter,
-    after: currentCount
-  });
+  await expect
+    .poll(() => monitorCards.count(), { timeout: testConfig.timeouts.pageLoad })
+    .toBe(monitorCountBeforeFilter);
 });
 
 Then('the group filter selection should persist', async ({ page }) => {

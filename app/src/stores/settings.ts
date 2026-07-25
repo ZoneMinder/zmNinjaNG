@@ -6,6 +6,8 @@ import { Platform } from '../lib/platform';
 import type { BandwidthMode } from '../lib/zmninja-ng-constants';
 import { API_REQUEST, ASSISTANT, DEFAULT_EVENT_PLAYBACK_RATE, STORAGE_KEYS } from '../lib/zmninja-ng-constants';
 import type { AssistantBackend } from '../lib/assistant/types';
+import type { DateFormatPreset, TimeFormatPreset } from '../lib/format-date-time';
+import type { ThumbnailFallbackType, ThumbnailFallbackEntry } from '../lib/event/thumbnail-chain';
 
 export type ViewMode = 'snapshot' | 'streaming';
 export type DisplayMode = 'normal' | 'compact';
@@ -16,15 +18,10 @@ export type EventsViewMode = 'list' | 'montage';
 export type ThemePreference = 'amber' | 'cream' | 'dark' | 'light' | 'slate' | 'system';
 export type StreamingMethod = 'auto' | 'mjpeg';
 export type WebRTCProtocol = 'webrtc' | 'mse' | 'hls';
-export type DateFormatPreset = 'MMM d, yyyy' | 'MMM d' | 'dd/MM/yyyy' | 'dd/MM' | 'custom';
-export type TimeFormatPreset = '12h' | '24h' | 'custom';
-export type ThumbnailFallbackType = 'alarm' | 'snapshot' | 'objdetect' | 'custom';
-
-export interface ThumbnailFallbackEntry {
-  type: ThumbnailFallbackType;
-  enabled: boolean;
-  customFid?: string;
-}
+// Declared by the modules that consume them, so those modules do not import
+// this store (refs #281). Re-exported for the existing callers.
+export type { DateFormatPreset, TimeFormatPreset };
+export type { ThumbnailFallbackType, ThumbnailFallbackEntry };
 
 export interface HoverPreviewSettings {
   eventsList: boolean;

@@ -14,6 +14,13 @@
  * placeholder by emitting an empty URL.
  */
 
+/* Freshness is a function of wall-clock time by definition, so the render below
+ * reads the clock. Nothing re-renders on expiry alone, so the value is "as of
+ * the last render" with or without the React Compiler; useTokenRefresh drives
+ * the store update that re-renders us. The compiler lint rules only honour
+ * file-scope disables, and this file holds exactly this one hook. */
+/* eslint-disable react-hooks/purity */
+
 import { useEffect } from 'react';
 import { useAuthStore } from '../stores/auth';
 import { ZM_INTEGRATION } from '../lib/zmninja-ng-constants';

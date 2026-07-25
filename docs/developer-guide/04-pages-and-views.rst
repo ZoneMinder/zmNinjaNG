@@ -149,7 +149,6 @@ Pages live in ``src/pages/``:
    ├── Dashboard.tsx             # Widget grid
    ├── DeveloperNotice.tsx       # Notices fetched from a feed
    ├── EventDetail.tsx           # Event playback
-   ├── EventMontage.tsx          # (not routed, see below)
    ├── Events.tsx                # Event list / montage
    ├── Logs.tsx                  # App and ZM server logs
    ├── MonitorDetail.tsx         # Single monitor + live stream
@@ -161,14 +160,11 @@ Pages live in ``src/pages/``:
    ├── Profiles.tsx              # Select, edit, delete profiles
    ├── Server.tsx                # Server health and run state
    ├── Settings.tsx              # App settings
-   ├── States.tsx                # (not routed, see below)
    └── Timeline.tsx              # Canvas timeline of events
 
-``EventMontage.tsx`` and ``States.tsx`` are not reachable. No route renders
-them and nothing outside their own unit tests imports them. The
-``/event-montage`` route redirects to ``/events?view=montage``, which the
-``Events`` page serves with the ``EventMontageView`` component; that is a
-different file from ``pages/EventMontage.tsx``.
+The ``/event-montage`` route redirects to ``/events?view=montage``, which the
+``Events`` page serves with the ``EventMontageView`` component in
+``src/components/events/``.
 
 Pages are built from Tailwind classes and the shadcn/ui primitives in
 ``src/components/ui/`` (``Button``, ``Card``, ``Input``, ``Select``). Most

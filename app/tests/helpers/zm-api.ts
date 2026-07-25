@@ -95,6 +95,26 @@ export async function getMonitorCount(): Promise<number> {
 }
 
 /**
+ * How many monitor groups the server has.
+ *
+ * The group filter only renders when groups exist, so "is the filter visible"
+ * has no fixed answer. Asking the server first turns that into a real
+ * assertion: with groups the filter must be there, without them it must not.
+ */
+export async function getGroupCount(): Promise<number> {
+  const token = await getAccessToken();
+  const { host } = testConfig.server;
+
+  const res = await fetch(`${host}/api/groups.json?token=${encodeURIComponent(token)}`);
+  if (!res.ok) {
+    throw new Error(`ZM API group list fetch failed: ${res.status} ${res.statusText}`);
+  }
+
+  const data = (await res.json()) as { groups?: unknown[] };
+  return data.groups?.length ?? 0;
+}
+
+/**
  * How many events a monitor has recorded strictly after `since`.
  *
  * Used to seed a reliable "this monitor has new events" precondition in e2e

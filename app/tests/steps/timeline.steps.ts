@@ -16,39 +16,6 @@ async function ensureTimelineFiltersOpen(page: Page) {
   }
 }
 
-
-// Timeline interface elements
-Then('I should see timeline interface elements', async ({ page }) => {
-  const hasButtons = await page.locator('button').count() > 0;
-  const hasInputs = await page.locator('input').count() > 0;
-  const hasSelects = await page.locator('select').count() > 0;
-
-  expect(hasButtons || hasInputs || hasSelects).toBeTruthy();
-});
-
-// Date Pickers
-Then('I should see the start date picker', async ({ page }) => {
-  const startDate = page.getByTestId('timeline-start-date')
-    .or(page.locator('input[type="date"]').first())
-    .or(page.getByLabel(/start date/i));
-  await expect(startDate.first()).toBeVisible({ timeout: testConfig.timeouts.element });
-});
-
-Then('I should see the end date picker', async ({ page }) => {
-  const endDate = page.getByTestId('timeline-end-date')
-    .or(page.locator('input[type="date"]').last())
-    .or(page.getByLabel(/end date/i));
-  await expect(endDate.first()).toBeVisible({ timeout: testConfig.timeouts.element });
-});
-
-// Monitor Filter
-Then('I should see the monitor filter button', async ({ page }) => {
-  const filterBtn = page.getByTestId('timeline-monitor-filter')
-    .or(page.getByRole('button', { name: /monitors|filter/i }))
-    .or(page.locator('button').filter({ hasText: /monitors|all monitors/i }));
-  await expect(filterBtn.first()).toBeVisible({ timeout: testConfig.timeouts.element });
-});
-
 // Quick Date Ranges
 Then('I should see quick date range options', async ({ page }) => {
   // Wait for timeline page content to render
@@ -206,7 +173,7 @@ When('I click on an event in the timeline', async ({ page }) => {
 Then('I should navigate to the event detail page', async ({ page }) => {
   if (!hasTimelineEvents) return;
 
-  await page.waitForURL(/events\/\d+/, { timeout: testConfig.timeouts.transition });
+  await expect(page).toHaveURL(/events\/\d+/, { timeout: testConfig.timeouts.transition });
 });
 
 // Monitor Filter

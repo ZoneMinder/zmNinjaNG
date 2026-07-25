@@ -1363,7 +1363,7 @@ itself; the only text it emits outside a normal reply is the sentinel
 Every other assistant message renders as Markdown directly: the model writes
 in the user's language already (the system prompt tells it to), so there is
 no translation lookup for a normal reply, only for this one fixed sentinel
-(rule 5's "never hardcode user-facing strings" still holds, it just applies
+(the Localization contract's "never hardcode user-facing strings" still holds, it just applies
 to the sentinel's key, not to arbitrary model output).
 
 **The host has no confirm flow.** ``useAssistantHost``

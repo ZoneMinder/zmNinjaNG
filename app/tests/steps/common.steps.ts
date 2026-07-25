@@ -125,20 +125,12 @@ Then('I should see the page heading {string}', async ({ page }, heading: string)
 Then('I should be on the {string} page', async ({ page }, pageName: string) => {
   const pageRoutes: Record<string, string> = { 'Events': 'events' };
   const route = pageRoutes[pageName];
-  await page.waitForURL(new RegExp(`.*${route}$`), { timeout: testConfig.timeouts.transition });
-});
-
-// Check for console errors
-Then('no console errors should be present', async ({ page }) => {
-  // Get console messages from the page
-  page.context().on('console', msg => {
-    if (msg.type() === 'error') {
-      console.error('Console error:', msg.text());
-    }
+  if (!route) {
+    throw new Error(`E2E: no route mapped for page "${pageName}"`);
+  }
+  await expect(page).toHaveURL(new RegExp(`.*${route}$`), {
+    timeout: testConfig.timeouts.transition,
   });
-
-  // No assertion needed here - the test will fail if there are console errors
-  // This is more of a documentation step to indicate we care about console cleanliness
 });
 
 // Generic viewport steps used across multiple features
@@ -152,16 +144,6 @@ Given('the viewport is mobile size', async ({ page }) => {
 // run before the first assertion retry succeeds.
 Given('the viewport is tablet size', async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 768 });
-});
-
-// Generic application health check
-Then('the application should not crash', async ({ page }) => {
-  // Verify page is still responsive
-  await expect(page.locator('body')).toBeVisible();
-  // Check for React error boundaries or crash indicators
-  const errorBoundary = page.locator('text=/something went wrong|error|crash/i');
-  const isErrorVisible = await errorBoundary.isVisible().catch(() => false);
-  expect(isErrorVisible).toBe(false);
 });
 
 // Generic dialog steps used across multiple features

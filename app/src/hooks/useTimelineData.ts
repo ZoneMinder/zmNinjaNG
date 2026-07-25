@@ -169,6 +169,11 @@ export function useTimelineData({
         // Inject a synthetic event so the bar + monitor row appear immediately
         if (latest) {
           const now = Date.now();
+          // Drop arrival stamps past their pulse TTL. Pruning here, where the
+          // map is written, keeps the transform below a pure computation.
+          for (const [id, ts] of liveArrivalTimesRef.current) {
+            if (now - ts > TIMELINE.liveArrivalTtlMs) liveArrivalTimesRef.current.delete(id);
+          }
           liveArrivalTimesRef.current.set(String(latest.EventId), now);
           setLiveInjectedEvents((prev) => [
             ...prev.filter((e) => e.id !== String(latest.EventId)),
@@ -216,12 +221,6 @@ export function useTimelineData({
 
   // Transform API events to TimelineEvent[], merging any live-injected synthetics
   const allTimelineEvents: TimelineEvent[] = useMemo(() => {
-    // Prune expired arrival timestamps
-    const now = Date.now();
-    for (const [id, ts] of liveArrivalTimesRef.current) {
-      if (now - ts > TIMELINE.liveArrivalTtlMs) liveArrivalTimesRef.current.delete(id);
-    }
-
     const apiEvents: TimelineEvent[] = data?.events
       ? data.events.map(({ Event }) => ({
           id: Event.Id,

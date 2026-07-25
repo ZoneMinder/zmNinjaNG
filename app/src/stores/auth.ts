@@ -101,7 +101,14 @@ export const encryptedAuthStorage: PersistStorage<PersistedAuthState> = {
     let token: string | null = null;
     try {
       token = await getSecureValue(AUTH_REFRESH_TOKEN_KEY);
-    } catch {
+    } catch (err) {
+      // A Keychain/Keystore read failure logs the user out on the next refresh.
+      // Silence here made that look like "no token was stored".
+      try {
+        log.auth('Secure storage read failed for the refresh token', LogLevel.ERROR, {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      } catch { /* logger unavailable during early startup */ }
       token = null;
     }
     if (token) {

@@ -103,7 +103,6 @@ vi.mock('../../hooks/useEventFilters', () => ({
 
 vi.mock('../../hooks/usePullToRefresh', () => ({
   usePullToRefresh: () => ({
-    containerRef: { current: null },
     isPulling: false,
     isRefreshing: false,
     pullDistance: 0,

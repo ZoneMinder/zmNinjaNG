@@ -1,0 +1,90 @@
+/**
+ * Enforces AGENTS.md rule 28: the module graph under app/src has no cycles.
+ *
+ * The four cycles that existed before refs #281 were all type-only, so they
+ * were erased at build time and nothing failed. They still made the graph
+ * unsound: turning any one of those `import type` statements into a value
+ * import would have made the cycle real. This walks static imports the way
+ * `madge --circular` does, including type-only ones, and fails with the cycle
+ * path. Written here rather than as a madge devDependency, since the whole
+ * check is a directory walk and a depth-first search.
+ */
+import { describe, it, expect } from 'vitest';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const srcDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+/** `import ... from 'x'`, `export ... from 'x'`, and bare `import 'x'`. */
+const SPECIFIER = /(?:^|\n)\s*(?:import|export)\b[^'"\n]*?(?:from\s*)?['"]([^'"]+)['"]/g;
+
+function collectFiles(dir: string): string[] {
+  const out: string[] = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...collectFiles(full));
+    else if (/\.tsx?$/.test(entry.name) && !entry.name.endsWith('.d.ts')) out.push(full);
+  }
+  return out;
+}
+
+/** Relative specifier to an on-disk module, mirroring the bundler's resolution. */
+function resolve(fromFile: string, spec: string): string | undefined {
+  if (!spec.startsWith('.')) return undefined;
+  const base = path.resolve(path.dirname(fromFile), spec);
+  const candidates = [
+    base,
+    `${base}.ts`,
+    `${base}.tsx`,
+    path.join(base, 'index.ts'),
+    path.join(base, 'index.tsx'),
+  ];
+  return candidates.find((c) => fs.existsSync(c) && fs.statSync(c).isFile());
+}
+
+function buildGraph(files: string[]): Map<string, string[]> {
+  const graph = new Map<string, string[]>();
+  for (const file of files) {
+    const source = fs.readFileSync(file, 'utf8');
+    const edges = new Set<string>();
+    for (const match of source.matchAll(SPECIFIER)) {
+      const target = resolve(file, match[1]);
+      if (target && target !== file) edges.add(target);
+    }
+    graph.set(file, [...edges]);
+  }
+  return graph;
+}
+
+/** Depth-first search, returning every cycle as a readable path. */
+function findCycles(graph: Map<string, string[]>): string[] {
+  const cycles: string[] = [];
+  const state = new Map<string, 'visiting' | 'done'>();
+  const stack: string[] = [];
+
+  const visit = (node: string) => {
+    if (state.get(node) === 'done') return;
+    if (state.get(node) === 'visiting') {
+      const start = stack.indexOf(node);
+      const loop = [...stack.slice(start), node].map((f) => path.relative(srcDir, f));
+      cycles.push(loop.join(' > '));
+      return;
+    }
+    state.set(node, 'visiting');
+    stack.push(node);
+    for (const next of graph.get(node) ?? []) visit(next);
+    stack.pop();
+    state.set(node, 'done');
+  };
+
+  for (const node of graph.keys()) visit(node);
+  return cycles;
+}
+
+describe('module graph', () => {
+  it('has no circular dependencies under app/src', () => {
+    const cycles = findCycles(buildGraph(collectFiles(srcDir)));
+    expect(cycles, `Circular imports found (AGENTS.md rule 28):\n${cycles.join('\n')}`).toEqual([]);
+  });
+});

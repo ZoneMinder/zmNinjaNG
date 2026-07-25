@@ -404,9 +404,9 @@ Steps live in per-screen files under ``tests/steps/`` and use Playwright's
    });
 
 ``await expect(locator).toBeVisible()`` retries until the timeout expires. That
-is why new steps never call ``waitForTimeout`` (rule 34; one legacy placeholder
+is why new steps never call ``waitForTimeout`` (the testing playbook, ``agents/project/testing.md``; one legacy placeholder
 remains in ``platform.steps.ts``): a fixed sleep either wastes time or
-races the app, and rule 34 in ``AGENTS.md`` bans it in new steps.
+races the app, and the testing playbook bans it in new steps.
 
 Selectors come from ``data-testid``, never from visible text. Text is
 translated into five languages, so ``getByText('Delete')`` fails the moment the
@@ -428,7 +428,7 @@ panel regresses and stops rendering, the guard goes false and every assertion
 below it silently no-ops. The test turns green precisely when the feature
 breaks.
 
-Rule 34 in ``AGENTS.md`` requires the capability to come from an independent
+The testing playbook requires the capability to come from an independent
 source, API or fixture data. ``tests/steps/ptz.steps.ts`` asks ZoneMinder:
 
 .. code:: ts
@@ -668,8 +668,8 @@ Finding the exact names your machine uses:
 Before You Commit
 -----------------
 
-Rule 3 in ``AGENTS.md`` at the repo root fixes the verification sequence every
-change must pass, and rule 6 covers cross-platform coverage. Read them there,
+P3 in ``AGENTS.md`` at the repo root fixes the verification sequence every
+change must pass, and the project rules cover cross-platform coverage. Read them there,
 not from a copy: this chapter used to carry one, and it sat a command out of
 date until the #223 audit caught it.
 

@@ -128,12 +128,6 @@ Then('I should see the monitor hover preview', async ({ page }) => {
   expect(box?.width).toBeGreaterThanOrEqual(350);
 });
 
-// Montage Steps
-Then('I should see the montage interface', async ({ page }) => {
-  const hasLayoutControls = await page.locator('select,button').count() > 0;
-  expect(hasLayoutControls).toBeTruthy();
-});
-
 Then('I should see at least {int} monitor in montage grid', async ({ page }, count: number) => {
   const gridItems = page.locator('[data-testid="montage-monitor"]')
     .or(page.locator('.react-grid-item'));

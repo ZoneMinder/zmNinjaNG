@@ -26,7 +26,9 @@ When('I press the {string} navigation key', async ({ page }, key: string) => {
 });
 
 Then('I should be on the {string} section', async ({ page }, route: string) => {
-  await page.waitForURL(new RegExp(`#/${route}$`), { timeout: testConfig.timeouts.transition });
+  await expect(page).toHaveURL(new RegExp(`#/${route}$`), {
+    timeout: testConfig.timeouts.transition,
+  });
 });
 
 When('I open the keyboard shortcuts help', async ({ page }) => {
@@ -53,5 +55,7 @@ When('I jump to monitor number {string}', async ({ page }, number: string) => {
 });
 
 Then('I should be on a monitor detail page', async ({ page }) => {
-  await page.waitForURL(/#\/monitors\/\d+/, { timeout: testConfig.timeouts.transition * 2 });
+  await expect(page).toHaveURL(/#\/monitors\/\d+/, {
+    timeout: testConfig.timeouts.transition * 2,
+  });
 });

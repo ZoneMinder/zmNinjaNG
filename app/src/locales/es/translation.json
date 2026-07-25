@@ -499,6 +499,7 @@
     "restart_now": "Reiniciar ahora",
     "minutes": "minutos",
     "disable_log_redaction_desc": "Mostrar contraseñas/tokens en registros",
+    "disable_log_redaction_warning": "Los registros incluirán contraseñas y tokens. Desactive al terminar.",
     "force_disable_multiport": "Desactivar streaming multipuerto",
     "force_disable_multiport_desc": "Ignorar los puertos de stream por monitor del servidor y usar el puerto predeterminado",
     "show_developer_notices": "Mostrar avisos del desarrollador",

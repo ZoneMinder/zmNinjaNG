@@ -310,7 +310,7 @@ Callsites render a ``VideoOff`` placeholder while ``isFresh`` is
 The hook is used by ``useMonitorStream``, ``MonitorHoverPreview``,
 ``MonitorRecentEvents``, ``EventThumbnailHoverPreview``,
 ``EventPreviewPopover``, ``TimelineScrubber``, ``ZmsEventPlayer``,
-``NotificationHandler``, ``EventMontage``, ``Events``, ``EventDetail``,
+``NotificationHandler``, ``AskPanel``, ``Events``, ``EventDetail``,
 and ``NotificationHistory``. Anything that builds a token-bearing URL the
 runtime fetches directly should go through it (stores, which cannot call
 hooks, read ``getFreshAccessToken()`` from the auth store instead).
@@ -442,7 +442,7 @@ Query keys come from a factory
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Never write a key array inline. Every key comes from ``queryKeys`` in
-``lib/query/query-keys.ts`` (rule 29), and every key in a domain puts the
+``lib/query/query-keys.ts`` (the Server queries contract), and every key in a domain puts the
 profile id in the same position, immediately after the domain name:
 
 .. code:: tsx
@@ -588,8 +588,8 @@ already on screen falls through to the normal view instead of an error wall.
 The ``OfflineBanner`` covers telling the user why. A cold start with no cached
 data still hits the error wall.
 
-Applied in ``pages/Monitors.tsx``, ``Montage.tsx``, ``States.tsx``,
-``Events.tsx``, and ``EventMontage.tsx``. ``MonitorDetail.tsx`` and
+Applied in ``pages/Monitors.tsx``, ``Montage.tsx``, and ``Events.tsx``.
+``MonitorDetail.tsx`` and
 ``EventDetail.tsx`` keep the plain error wall: their guard already combines the
 query error with other required values (``!monitor || !currentProfile``,
 ``!event``), and dropping the error term there changes what a falsy value
@@ -599,13 +599,13 @@ change.
 Error walls always go through ``ErrorBanner`` (``components/ui/query-state.tsx``)
 with ``resolveQueryError(err, t)`` (``lib/query/query-error.ts``), which folds a
 401 into the localized auth prompt and everything else into a translated
-fallback (rule 32). Never render ``error.message`` directly.
+fallback (the Query UI states contract). Never render ``error.message`` directly.
 
 Refetch intervals come from bandwidth settings
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Any query that polls reads its interval from ``useBandwidthSettings()``, never
-a literal (rule 8). The user's Normal/Low choice is the single lever that
+a literal (the Polling contract). The user's Normal/Low choice is the single lever that
 changes network usage across every screen:
 
 .. code:: tsx
@@ -623,9 +623,9 @@ See "Bandwidth Mode Settings" below for the property table.
 Mutations invalidate; they do not write the cache
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-There are exactly two ``useMutation`` call sites in the app, both wrapping
-``changeState`` (``pages/Server.tsx`` and ``pages/States.tsx``). Everything
-else mutates through a plain async handler and then invalidates.
+There is exactly one ``useMutation`` call site in the app, wrapping
+``changeState`` (``pages/Server.tsx``). Everything else mutates through a
+plain async handler and then invalidates.
 
 No mutation in zmNinjaNg does an optimistic update. There is no ``onMutate``
 anywhere in ``app/src``: nothing writes a predicted value into the cache and
@@ -634,15 +634,17 @@ and lets the refetch supply the truth.
 
 .. code:: tsx
 
-   // pages/States.tsx
-   const changeMutation = useMutation({
-     mutationFn: changeState,
+   // pages/Server.tsx
+   const changeStateMutation = useMutation({
+     mutationFn: (stateName: string) => changeState(stateName),
      onSuccess: () => {
+       toast({ title: t('common.success'), description: t('server.state_applied') });
        queryClient.invalidateQueries({ queryKey: queryKeys.states(currentProfile?.id) });
-       toast.success(t('states.change_success'));
      },
-     onError: (error: Error) => {
-       toast.error(t('states.change_error', { error: error.message }));
+     onError: (error) => {
+       toast({ title: t('common.error'), description: t('server.state_apply_failed'),
+               variant: 'destructive' });
+       log.server('Failed to apply state/action', LogLevel.ERROR, error);
      },
    });
 
@@ -868,7 +870,7 @@ Dashboard widget timers
   in snapshot mode; no timer in streaming mode.
 
 The token and stream constants live in ``ZM_INTEGRATION`` in
-``lib/zmninja-ng-constants.ts`` (rule 25), alongside ``httpTimeout`` (10 s),
+``lib/zmninja-ng-constants.ts`` (the Constants contract), alongside ``httpTimeout`` (10 s),
 ``largeHttpTimeout`` (30 s for event responses), and ``loginInterval``
 (30 min); the polling intervals above live in ``BANDWIDTH_SETTINGS`` in the
 same file, as the next section covers. Import them; do not redeclare a
@@ -980,7 +982,7 @@ HTTP Client Architecture
 
 ``src/lib/http.ts`` is the single HTTP entry point across Web, iOS, Android,
 and Electron. Always use ``httpGet``, ``httpPost``, ``httpPut``, ``httpDelete``
-from it. Never raw ``fetch()`` or a third-party HTTP library (rule 10).
+from it. Never raw ``fetch()`` or a third-party HTTP library (the HTTP contract).
 
 The transport is ``lib/http.ts``, its shared shapes are ``lib/http/types.ts``,
 and it reads ``lib/platform.ts`` to pick an adapter. Above it:
@@ -1092,7 +1094,7 @@ Native (iOS/Android)
 .. code:: tsx
 
    // Used when Platform.isNative is true. Dynamic import: a static one
-   // breaks the web bundle (rule 14).
+   // breaks the web bundle (the Native contract).
    const { CapacitorHttp } = await import('@capacitor/core');
    const response = await CapacitorHttp.request({
      method: 'GET',
@@ -1147,7 +1149,7 @@ Type               Description           Use Case
    // Mobile: base64, written straight to the filesystem
    const response = await httpGet<string>(url, { responseType: 'base64' });
 
-On mobile, never convert to a Blob (rule 15). A large MP4 held as a Blob in the
+On mobile, never convert to a Blob (the Native contract). A large MP4 held as a Blob in the
 WebView heap will OOM the app.
 
 Error Handling
@@ -1180,7 +1182,7 @@ rather than ``instanceof``:
    }
 
 Inside React, do not hand-roll this branch. Let the error reach React Query and
-render it through ``ErrorBanner`` + ``resolveQueryError`` (rule 32).
+render it through ``ErrorBanner`` + ``resolveQueryError`` (the Query UI states contract).
 
 The client logs every non-2xx response at ERROR before the caller sees it. For
 endpoints where a status is expected and handled, pass ``expectedStatuses`` so
@@ -1198,8 +1200,8 @@ Schema drift tolerance
 
 ZoneMinder changes what it sends between releases, and the Zod schemas in
 ``api/types.ts`` are the only thing between that and a blank screen. The policy,
-enforced by tests in ``api/__tests__/types.test.ts`` and by rule 43 in
-``AGENTS.md``: a response must never fail because of a field.
+enforced by tests in ``api/__tests__/types.test.ts`` and by the data-integrity
+playbook (``agents/project/data-integrity.md``): a response must never fail because of a field.
 
 There are two distinct hazards, and only one is about *new* fields.
 
@@ -1424,7 +1426,8 @@ Behavior of the ``eventIds`` path:
 Filtering by archived status
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``EventFilters.archived`` (``src/api/events.ts``) is a boolean that, when
+``EventFilters.archived`` (declared in ``src/api/types.ts``, re-exported from
+``src/api/events.ts``) is a boolean that, when
 ``true``, adds an ``Archived:1`` path segment to the server query. The segment
 is composed with the monitor, date, favorites, and tag filter segments in the
 same AND chain. When ``archived`` is ``undefined`` or ``false``, no segment is

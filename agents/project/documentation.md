@@ -33,5 +33,5 @@ Connect each artifact to its user-visible behavior and relevant flow. Examples m
 - No top-level TOC, next-step section, recap, em-dash, or padded rewrite.
 - RST links use `:doc:`; Markdown links use `{doc}`.
 - Before committing a new or rewritten chapter, run banned-word and em-dash checks from the previous version of this guidance.
-- Developer docs cite AGENTS rule numbers instead of copying process rules.
+- Developer docs cite AGENTS.md rule IDs or AGENTS.project.md contract names instead of copying process rules.
 

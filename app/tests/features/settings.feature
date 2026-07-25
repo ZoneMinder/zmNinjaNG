@@ -62,6 +62,15 @@ Feature: Application Settings
     Then the force-disable multiport toggle should be enabled
 
   @all
+  Scenario: Disabling log redaction warns that credentials will be logged
+    When I navigate to the "Settings" page
+    And I expand the Advanced settings section
+    And I enable the log redaction toggle
+    Then I should see the log redaction warning
+    When I disable the log redaction toggle
+    Then the log redaction warning should be gone
+
+  @all
   Scenario: WebRTC STUN toggle persists across navigation
     When I navigate to the "Settings" page
     And I enable the WebRTC STUN toggle

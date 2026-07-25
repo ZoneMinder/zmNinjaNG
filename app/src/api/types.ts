@@ -1,7 +1,32 @@
 import { z } from 'zod';
 import { log, LogLevel } from '../lib/logger';
 import { tolerantArray, withFieldCatch } from '../lib/zm/schema-tolerance';
-import type { EventFilters } from './events';
+
+/** Query shape for the events index. Consumed by api/events.ts. */
+export interface EventFilters {
+  monitorId?: string;
+  startDateTime?: string;
+  endDateTime?: string;
+  archived?: boolean;
+  minAlarmFrames?: number;
+  notesRegexp?: string; // REGEXP filter on Notes field (e.g., "detected:" for object detection)
+  cause?: string; // Filter by event cause (e.g., "Motion", "Continuous", "Signal", "Forced")
+  // Restrict results to these event IDs via ZM's "Id IN:" filter. Used for the
+  // locally-stored favorites concept, which must compose with pagination:
+  // passing the IDs to the server keeps totalCount and "Load More" accurate
+  // (refs #205). An empty array matches no events (returns an empty list with
+  // no request). undefined means "no Id filter".
+  eventIds?: string[];
+  // Restrict results to events carrying any of these ZM tag IDs, via the
+  // server-side "Tags.Id:" filter (one request per tag, merged). Concrete tag
+  // IDs only; the caller expands the "all tags" option to the full tag list.
+  // ZM cannot combine "Tags.Id:" with "Id IN:" in one query, so callers must
+  // not set both eventIds and tagIds (eventIds wins if they do).
+  tagIds?: string[];
+  limit?: number;
+  sort?: string;
+  direction?: 'asc' | 'desc';
+}
 
 // Authentication types
 export const LoginResponseSchema = z.object(

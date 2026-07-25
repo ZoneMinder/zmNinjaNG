@@ -196,16 +196,28 @@ Then('the bandwidth mode label should update', async ({ page }) => {
 
 // Server Steps
 Then('I should see server information displayed', async ({ page }) => {
-  // Poll for any content on the server page (it fetches data from the API)
-  // instead of guessing how long the fetch takes with a fixed sleep.
-  await expect.poll(async () => {
-    const hasHeading = await page.getByRole('heading', { name: /server/i }).isVisible().catch(() => false);
-    const hasVersion = await page.getByText(/version/i).isVisible().catch(() => false);
-    const hasStatus = await page.getByText(/status/i).isVisible().catch(() => false);
-    const hasCards = await page.locator('[role="region"]').count() > 0;
-    const hasAnyContent = await page.locator('main').locator('*').count() > 3;
-    return hasHeading || hasVersion || hasStatus || hasCards || hasAnyContent;
-  }, { timeout: testConfig.timeouts.transition }).toBeTruthy();
+  // The previous version of this step passed whenever <main> had more than
+  // three descendants, so it could not tell a loaded page from an error state.
+  // Assert fetched values instead. Only the unconditional cards are checked:
+  // the server list and storage cards render solely when ZM returns rows, and
+  // a single-server install commonly returns none.
+  const main = page.locator('main');
+
+  // The version card carries a real version from the API rather than the
+  // common.unknown placeholder it falls back to when the request fails. Only
+  // the ZM version is asserted: timezone, load average and disk usage are all
+  // legitimately absent on some installs, and server run state changes between
+  // runs, so none of them are invariants a test can hold.
+  await expect.poll(
+    async () => (await main.textContent()) ?? '',
+    { timeout: testConfig.timeouts.transition },
+  ).toMatch(/ZoneMinder Version\s*\d+\.\d+/);
+
+  // The state control is present and enabled once states have loaded.
+  await expect(page.getByTestId('server-state-select')).toBeVisible({
+    timeout: testConfig.timeouts.transition,
+  });
+  await expect(page.getByTestId('server-refresh-button')).toBeEnabled();
 });
 
 // Notification Steps
@@ -218,22 +230,6 @@ Then('I should see notification interface elements', async ({ page }) => {
     const hasHeading = await page.getByRole('heading').first().isVisible().catch(() => false);
     return hasSettings || hasEmpty || hasSwitches || hasHeading;
   }, { timeout: testConfig.timeouts.transition }).toBeTruthy();
-});
-
-When('I navigate to the notification history', async ({ page }) => {
-  await page.getByTestId('notification-history-button').click();
-  await page.waitForURL(/.*notifications\/history/, { timeout: testConfig.timeouts.transition });
-});
-
-Then('I should see notification history content or empty state', async ({ page }) => {
-  const hasList = await page.getByTestId('notification-history-list').isVisible().catch(() => false);
-  const hasEmpty = await page.getByTestId('notification-history-empty').isVisible().catch(() => false);
-
-  expect(hasList || hasEmpty).toBeTruthy();
-});
-
-Then('I should see notification history page', async ({ page }) => {
-  await expect(page.getByTestId('notification-history')).toBeVisible();
 });
 
 // Logs Steps
@@ -266,32 +262,36 @@ Then('I should see log control elements', async ({ page }) => {
   expect(hasLevelFilter || hasComponentFilter || hasClearButton || hasSaveButton || hasAnyButton).toBeTruthy();
 });
 
-Then('I change the log level to {string}', async ({ page }, level: string) => {
+When('I change the log level to {string}', async ({ page }, level: string) => {
+  // The level select always renders on the logs page (Logs.tsx:405). Skipping
+  // the change when it was not found meant a regression that stopped it
+  // rendering read as "nothing to do here".
   const levelSelect = page.getByTestId('log-level-select');
-  if (await levelSelect.isVisible({ timeout: 2000 }).catch(() => false)) {
-    await levelSelect.click();
-    const option = page.getByTestId(`log-level-option-${level}`);
-    if (await option.isVisible({ timeout: 1000 }).catch(() => false)) {
-      await option.click();
-    }
-  } else {
-    log.info('E2E: Log level select not found', { component: 'e2e' });
-  }
+  await expect(levelSelect).toBeVisible({ timeout: testConfig.timeouts.pageLoad });
+  await levelSelect.click();
+  await page.getByTestId(`log-level-option-${level}`).click();
+  await expect(levelSelect).toContainText(level);
 });
 
-Then('I clear logs if available', async ({ page }) => {
-  const clearButton = page.getByTestId('logs-clear-button')
-    .or(page.getByRole('button', { name: /clear/i }));
-  if (await clearButton.first().isVisible({ timeout: 1000 }).catch(() => false)) {
-    if (await clearButton.first().isEnabled()) {
-      await clearButton.first().click();
-      // Confirm the AlertDialog if it appears
-      const confirmButton = page.getByTestId('logs-clear-confirm');
-      if (await confirmButton.isVisible({ timeout: 1000 }).catch(() => false)) {
-        await confirmButton.click();
-      }
-    }
+When('I clear logs if available', async ({ page }) => {
+  // The clear button is present whenever the app-log source is selected and is
+  // disabled only when there is nothing to clear (Logs.tsx:499-507), so both
+  // branches have something to assert: cleared, or empty to begin with.
+  const clearButton = page.getByTestId('logs-clear-button');
+  await expect(clearButton).toBeVisible({ timeout: testConfig.timeouts.pageLoad });
+
+  if (!(await clearButton.isEnabled())) {
+    await expect(page.getByTestId('log-entry')).toHaveCount(0);
+    return;
   }
+
+  await clearButton.click();
+  await page.getByTestId('logs-clear-confirm').click();
+  await expect
+    .poll(() => page.getByTestId('log-entry').count(), {
+      timeout: testConfig.timeouts.element,
+    })
+    .toBe(0);
 });
 
 // Thumbnail fallback chain steps
@@ -314,6 +314,36 @@ When('I enable the force-disable multiport toggle', async ({ page }) => {
 
 Then('the force-disable multiport toggle should be enabled', async ({ page }) => {
   await expect(page.getByTestId('settings-force-disable-multiport-switch')).toBeChecked();
+});
+
+// Log redaction: turning it off puts credentials in the log file, so the row
+// warns while it is on. The scenario turns it back off, leaving the profile as
+// it found it.
+When('I enable the log redaction toggle', async ({ page }) => {
+  const toggle = page.getByTestId('settings-log-redaction-switch');
+  await expect(toggle).toBeVisible({ timeout: testConfig.timeouts.pageLoad });
+  if (!(await toggle.isChecked().catch(() => false))) {
+    await toggle.click();
+  }
+  await expect(toggle).toBeChecked();
+});
+
+When('I disable the log redaction toggle', async ({ page }) => {
+  const toggle = page.getByTestId('settings-log-redaction-switch');
+  if (await toggle.isChecked().catch(() => false)) {
+    await toggle.click();
+  }
+  await expect(toggle).not.toBeChecked();
+});
+
+Then('I should see the log redaction warning', async ({ page }) => {
+  const warning = page.getByTestId('settings-log-redaction-warning');
+  await expect(warning).toBeVisible({ timeout: testConfig.timeouts.element });
+  await expect(warning).not.toBeEmpty();
+});
+
+Then('the log redaction warning should be gone', async ({ page }) => {
+  await expect(page.getByTestId('settings-log-redaction-warning')).toHaveCount(0);
 });
 
 // WebRTC STUN toggle (visible only when go2rtc/auto streaming is on, the default)

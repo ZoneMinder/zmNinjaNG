@@ -1,5 +1,14 @@
 import { getEventImageUrl } from '../../api/events';
-import type { ThumbnailFallbackEntry } from '../../stores/settings';
+
+// The chain shape is declared here, next to the code that resolves it, so this
+// module and lib/assistant do not import the settings store (refs #281).
+export type ThumbnailFallbackType = 'alarm' | 'snapshot' | 'objdetect' | 'custom';
+
+export interface ThumbnailFallbackEntry {
+  type: ThumbnailFallbackType;
+  enabled: boolean;
+  customFid?: string;
+}
 
 export interface ThumbnailChainOptions {
   token?: string;

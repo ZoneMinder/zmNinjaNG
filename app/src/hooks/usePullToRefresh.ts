@@ -9,16 +9,19 @@
  * - Touch-based gesture detection
  */
 
-import { useRef, useState } from 'react';
+import { useRef, useState, type RefObject } from 'react';
 import { useDrag } from '@use-gesture/react';
 
 interface UsePullToRefreshOptions {
+  /** The scroll container to watch. Owned by the caller, as in useEventMontageGrid. */
+  containerRef: RefObject<HTMLDivElement | null>;
   onRefresh: () => Promise<void> | void;
   threshold?: number;
   enabled?: boolean;
 }
 
 export function usePullToRefresh({
+  containerRef,
   onRefresh,
   threshold = 80,
   enabled = true,
@@ -26,7 +29,6 @@ export function usePullToRefresh({
   const [isPulling, setIsPulling] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const pullDistance = useRef(0);
-  const containerRef = useRef<HTMLDivElement>(null);
 
   const bind = useDrag(
     async ({ movement: [, my], first, last, memo = 0 }) => {
@@ -85,6 +87,5 @@ export function usePullToRefresh({
     isRefreshing,
     pullDistance: pullDistance.current,
     threshold,
-    containerRef,
   };
 }

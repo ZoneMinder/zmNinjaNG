@@ -92,7 +92,7 @@ export function useMonitorStream({
       ? resolveMinStreamingPort(currentProfile?.minStreamingPort, settings.forceDisableMultiPort)
       : undefined;
 
-  const [cacheBuster, setCacheBuster] = useState(Date.now());
+  const [cacheBuster, setCacheBuster] = useState(() => Date.now());
   const imgRef = useRef<HTMLImageElement>(null);
 
   const reconnectAttemptRef = useRef(0);

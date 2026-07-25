@@ -968,18 +968,21 @@ message. ``resolveQueryError`` is that logic extracted once.
    resolveQueryError(error, t);   // fallback: `${t('common.error')}: ${message}`
    resolveQueryError(error, t, { fallbackKey: 'monitors.failed_to_load' });
 
-Seven pages route their error text through it. Monitors, EventMontage, States,
-Timeline, and DeveloperNotice pass a ``fallbackKey`` naming what failed to
-load; Events and Montage take the generic fallback. Six of them hand the result
-to ``ErrorBanner``, while DeveloperNotice renders the string in its own layout.
+Five pages and two assistant components route their error text through it.
+Monitors, Timeline, DeveloperNotice, ``AskPanel``, and
+``AssistantOllamaSection`` pass a ``fallbackKey`` naming what failed to load;
+Events and Montage take the generic fallback. Monitors, Timeline, Events,
+Montage, and ``AskPanel`` hand the result to ``ErrorBanner``; DeveloperNotice
+renders the string in its own layout and ``AssistantOllamaSection`` puts it in
+a toast.
 
 MonitorDetail and EventDetail are the exceptions. Both show a fixed translated
 message with no interpolated error text, so they pass that string straight to
 ``ErrorBanner`` and never call this function: a detail page that could not load
 its one record has nothing to interpolate.
 
-**Used by:** Events, Monitors, EventMontage, Montage, States, Timeline,
-DeveloperNotice.
+**Used by:** Events, Monitors, Montage, Timeline, DeveloperNotice, AskPanel,
+AssistantOllamaSection.
 
 Navigation Service (``lib/navigation.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1248,7 +1251,7 @@ from each model's ``mlc-chat-config.json``, fetched from HuggingFace, which the
 registry's overrides merge over. Llama 3.2 already ships -1, so the pin is a
 no-op for it and a guard against the next sliding-window model. Pinning -1 selects full
 KV-cache mode, matching what the registry's own Mistral entries do. Reading the
-bundled registry alone will not show you any of this (rule 41 in ``AGENTS.md``).
+bundled registry alone will not show you any of this (the data-integrity playbook, ``agents/project/data-integrity.md``).
 
 That same merge is why ``gemma3-1b-it-q4f16_1-MLC`` is not in the list. Its
 stock registry entry cannot load on web-llm 0.2.84 at all: the override sets
@@ -1608,8 +1611,8 @@ component itself, not a rendered element.
      action={{ label: t('events.clear_filters'), onClick: clearFilters }}
    />
 
-**Used by:** Events, EventMontage, Monitors, Montage, NotificationHistory,
-States, Timeline, and the Dashboard when no widgets are configured.
+**Used by:** Events, Monitors, Montage, NotificationHistory, Timeline, the
+HeatmapWidget, and the Dashboard when no widgets are configured.
 
 ErrorBanner and DetailPageSkeleton (``components/ui/query-state.tsx``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1633,9 +1636,9 @@ both defined inline: a title bar plus one aspect-video placeholder.
 nothing to interpolate can hand it a fixed translated string instead of a
 ``resolveQueryError`` result, which is what those two detail pages do.
 
-**Used by:** Events, Monitors, EventMontage, Montage, States, Timeline,
-MonitorDetail, EventDetail. ``DetailPageSkeleton`` has only the two detail
-pages as callers.
+**Used by:** Events, Monitors, Montage, Timeline, MonitorDetail, EventDetail,
+and AskPanel. ``DetailPageSkeleton`` has only the two detail pages as
+callers.
 
 PasswordInput (``components/ui/password-input.tsx``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1842,8 +1845,9 @@ gesture lives in ``hooks/usePullToRefresh.ts``, which wraps
 
 .. code:: tsx
 
-   const { containerRef, bind, isRefreshing, isPulling, pullDistance } =
-     usePullToRefresh({ onRefresh: () => refetch() });
+   const containerRef = useRef<HTMLDivElement>(null);
+   const { bind, isRefreshing, isPulling, pullDistance } =
+     usePullToRefresh({ containerRef, onRefresh: () => refetch() });
 
    <div ref={containerRef} {...bind()} className="overflow-y-auto h-full">
      <PullToRefreshIndicator
@@ -1853,9 +1857,11 @@ gesture lives in ``hooks/usePullToRefresh.ts``, which wraps
      />
    </div>
 
-Spread ``bind()`` onto the scroll container and attach ``containerRef``: the
-hook reads ``scrollTop`` from it to tell a pull-to-refresh from an ordinary
-scroll. It takes ``onRefresh`` plus optional ``threshold`` and ``enabled``.
+Spread ``bind()`` onto the scroll container and pass that container's ref in:
+the hook reads ``scrollTop`` from it to tell a pull-to-refresh from an ordinary
+scroll. The caller owns the ref, the same arrangement ``useEventMontageGrid``
+uses, because a page usually already has one on that element. It takes
+``containerRef`` and ``onRefresh`` plus optional ``threshold`` and ``enabled``.
 
 **Used by:** the Events page.
 
@@ -2007,10 +2013,11 @@ bridges and long-lived singletons; ``components/ui/`` for primitives,
 import a store: invert it with the gate pattern (``api/store-gates.ts``) and
 keep ``npx madge --circular`` at zero.
 
-The repo's ``AGENTS.md`` is the source for the rest, and this guide does not
-restate it. Rules 25 (constants), 29 (query keys), 33 (``lib/`` placement), 9
-(logging), 10 (HTTP), and 23 (dates) all constrain a new shared module. Write
-the test first, next to the source in ``__tests__/`` (:doc:`06-testing-strategy`).
+The repo's ``AGENTS.md`` and ``AGENTS.project.md`` are the source for the
+rest, and this guide does not restate it. The Constants, Server queries,
+Logging, HTTP, and Date and time contracts, plus C5 (``lib/`` placement), all
+constrain a new shared module. Write the test first, next to the source in
+``__tests__/`` (:doc:`06-testing-strategy`).
 
 Then document it here connected to behavior: say what a user can do because
 this code exists, and give one example taken from a real call site. If the new

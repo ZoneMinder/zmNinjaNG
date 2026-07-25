@@ -376,10 +376,20 @@ export function AdvancedSection({
 
           {/* Log Redaction */}
           <SettingsRow>
-            <RowLabel
-              label={t('settings.disable_log_redaction')}
-              desc={t('settings.disable_log_redaction_desc')}
-            />
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium">{t('settings.disable_log_redaction')}</div>
+              <div className="text-xs text-muted-foreground">
+                {t('settings.disable_log_redaction_desc')}
+              </div>
+              {settings.disableLogRedaction && (
+                <p
+                  className="text-xs text-orange-600 dark:text-orange-400 mt-1 font-medium"
+                  data-testid="settings-log-redaction-warning"
+                >
+                  {t('settings.disable_log_redaction_warning')}
+                </p>
+              )}
+            </div>
             <Switch
               id="log-redaction"
               checked={settings.disableLogRedaction}

@@ -1813,7 +1813,7 @@ camera has a pad waiting for you here. The stream underneath the pad is Flow 2.
 #. **The invalidated key comes from the factory.** ``queryKeys.states`` returns
    ``['states', profileId]``, the same array the query in step 2 was keyed with.
    Invalidation matches by key prefix, so this reaches that entry and any future
-   longer key under it. Rule 29 forbids writing the array inline precisely here:
+   longer key under it. The Server queries contract forbids writing the array inline precisely here:
    an invalidator that spells its own key drifts away from the query that reads
    it, and the symptom is a page that silently stops updating. The ``profileId``
    is a branded ``ProfileId``, minted once by ``asProfileId`` when ``addProfile``
@@ -1840,9 +1840,7 @@ camera has a pad waiting for you here. The stream underneath the pad is Flow 2.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Server.tsx#L112>`__
    · → :doc:`05-component-architecture`
 
-``pages/States.tsx`` wraps the same ``changeState`` in its own mutation, but
-nothing routes to it and nothing imports it, so no user ever walks that code
-(issue #231). The Server page holds the app's only ``useMutation`` and its only
+The Server page holds the app's only ``useMutation`` and its only
 write to the ZoneMinder run state; other writes (PTZ, event delete, push
 registration) go through plain handlers, not mutations. Steps 8
 and 9 lean on the client behavior traced in Flow 6: if the access token lapsed
@@ -2138,7 +2136,7 @@ property of the registry (``TOOLS`` holds no mutating tool and
 #. **The native backend's settings gate is a device probe, not a toggle.**
    ``useNativeLlmSupported`` (``hooks/useNativeLlmSupported.ts``) probes the
    Capacitor ``NativeLlm`` plugin's ``isSupported()`` once on mount, imported
-   only behind ``Platform.isNative`` (rule 13, since the plugin package only
+   only behind ``Platform.isNative`` (the Native contract, since the plugin package only
    ships native implementations and would otherwise pull llama.cpp glue into
    the web/Electron bundle for a backend those platforms can never run). On
    iOS, ``LlamaPlugin.isSupported`` answers ``false`` below a 5.5GB
