@@ -12,7 +12,7 @@ vi.mock('react-i18next', () => ({
 }));
 
 // Minimal but valid MonitorData fixture: just enough for calculateHeightUnits
-const makeMonitor = (id: string): MonitorData => ({
+const makeMonitor = (id: string, orientation = 'ROTATE_0'): MonitorData => ({
   Monitor: {
     Id: id,
     Name: `Monitor ${id}`,
@@ -41,7 +41,7 @@ const makeMonitor = (id: string): MonitorData => ({
     Height: '1080',
     Colours: '4',
     Palette: '0',
-    Orientation: 'ROTATE_0',
+    Orientation: orientation,
     Deinterlacing: '0',
     DecoderHWAccelName: null,
     DecoderHWAccelDevice: null,
@@ -250,6 +250,59 @@ describe('proportional columns (#220)', () => {
     const persisted = useSettingsStore.getState()
       .getProfileSettings(profileId).montageByGroup?.['A']?.workingLayout;
     expect(persisted && isLegacyLayout(persisted, 5)).toBe(false);
+  });
+});
+
+// Ported from the deleted src/pages/__tests__/Montage.test.tsx, which had its
+// own copy of calculateHeightUnits. The copy drifted from the shipped one
+// (Math.round for Math.ceil, no card-header term), so its numbers passed while
+// describing a layout the app never rendered. These run through the hook.
+describe('tile heights for rotated monitors', () => {
+  const profileId = 'rotation-profile';
+  const profile = makeProfile(profileId);
+
+  // gridWidth 1200 over 2 display columns: each tile is 600px of video width.
+  // The shipped formula adds MONTAGE_GRID.cardHeaderHeightPx (32) and rounds up
+  // against GRID_LAYOUT.montageRowHeight (1), with margin 0.
+  //   ROTATE_0:  600 * (1080/1920) = 337.5 + 32 -> ceil 370
+  //   ROTATE_90: 600 * (1920/1080) = 1066.6 + 32 -> ceil 1099
+  const heightsFor = (orientation: string, gridWidth = 1200) => {
+    useSettingsStore.setState({ profileSettings: {} });
+    useSettingsStore.getState().updateMontageGroupLayout(profileId, 'A', {
+      gridCols: 2,
+      workingLayout: [],
+    });
+    const settings = useSettingsStore.getState().getProfileSettings(profileId);
+    const monitors = [makeMonitor('1', orientation)];
+
+    type HookProps = Parameters<typeof useMontageGrid>[0];
+    const { result } = renderHook(
+      (props: HookProps) => useMontageGrid(props),
+      { initialProps: { monitors, currentProfile: profile, settings, isEditMode: false, groupKey: 'A' } }
+    );
+    act(() => { result.current.handleWidthChange(gridWidth); });
+    return result.current.layout[0].h;
+  };
+
+  it('sizes an unrotated 1920x1080 tile to the video height plus the card header', () => {
+    expect(heightsFor('ROTATE_0')).toBe(370);
+  });
+
+  it.each(['ROTATE_90', 'ROTATE_270'])('swaps the dimensions for %s', (orientation) => {
+    expect(heightsFor(orientation)).toBe(1099);
+  });
+
+  it('keeps a rotated tile taller than the same monitor unrotated', () => {
+    expect(heightsFor('ROTATE_90')).toBeGreaterThan(heightsFor('ROTATE_0') * 2);
+  });
+
+  it('scales the height with the grid width', () => {
+    const wide = heightsFor('ROTATE_90', 1200);
+    const narrow = heightsFor('ROTATE_90', 1000);
+    // Video height is proportional to width; the fixed header term is the only
+    // part that does not scale, so the ratio lands just under 1200/1000.
+    expect(wide / narrow).toBeGreaterThan(1.15);
+    expect(wide / narrow).toBeLessThan(1.2);
   });
 });
 
