@@ -89,7 +89,7 @@ File Organization
    │   ├── contexts/     # React context providers (PipContext)
    │   ├── hooks/        # Custom React hooks (component logic)
    │   ├── lib/          # Non-React utilities, grouped by domain
-   │   ├── locales/      # i18n translations (en, de, es, fr, zh)
+   │   ├── locales/      # i18n translations, one directory per locale
    │   ├── pages/        # Route-level views
    │   ├── plugins/      # Custom Capacitor plugins (pip, safe-area, ssl-trust)
    │   ├── services/     # Long-lived singletons (notifications, bootstrap)

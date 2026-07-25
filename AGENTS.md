@@ -15,7 +15,7 @@ Read this file before work. Read each listed playbook before work in that area.
 2. Create or use a GitHub issue before feature or bug work. User instruction to use an existing issue overrides creating one.
 3. Test first. Before commit run `npm test`, `npx tsc -b`, `npm run build`, and relevant feature e2e. Never commit after a failed or unrun gate.
 4. Update user docs for changed behavior. Update developer docs and affected call flows for new APIs, components, hooks, utilities, or documented paths.
-5. Never hardcode user text. Update en, de, es, fr, and zh.
+5. Never hardcode user text. Update every locale under `app/src/locales/`.
 6. UI changes need an outcome-based e2e test, platform tags, and `data-testid` on new interactive elements.
 7. Settings are profile-scoped through `getProfileSettings` and `updateProfileSettings`.
 8. Polling uses `useBandwidthSettings()` or `getBandwidthSettings()`. Never hardcode refresh intervals.

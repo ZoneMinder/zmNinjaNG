@@ -103,8 +103,8 @@ interaction changes also need a Gherkin scenario in
 Each rule below is stated in full in ``AGENTS.md``; the one-liners here are
 signposts, not the rule.
 
-- Rule 5: no hardcoded user-facing strings, and every one of the five locales
-  (en, de, es, fr, zh) gets the key.
+- Rule 5: no hardcoded user-facing strings, and every locale directory under
+  ``app/src/locales/`` gets the key.
 - Rule 9: ``log.*`` helpers with an explicit ``LogLevel``, never ``console``.
 - Rule 10: ``httpGet`` / ``httpPost`` and friends from ``lib/http.ts``, never
   raw ``fetch``.

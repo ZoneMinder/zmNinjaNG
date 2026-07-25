@@ -35,14 +35,12 @@ where two options exist.
 
 The `languages` section of each locale lists all languages, so the picker reads
 correctly whatever language the UI is currently in. Add `"{code}": "{Name}"` to
-the `languages` section in all of:
+the `languages` section of every `translation.json` under `app/src/locales/`,
+the new one included. List them first rather than working from memory:
 
-- `app/src/locales/en/translation.json`
-- `app/src/locales/de/translation.json`
-- `app/src/locales/es/translation.json`
-- `app/src/locales/fr/translation.json`
-- `app/src/locales/zh/translation.json`
-- `app/src/locales/{code}/translation.json`
+```bash
+ls app/src/locales
+```
 
 Use the same string `{Name}` in all of them. Language names are not translated.
 
@@ -90,11 +88,10 @@ There are two, and they carry separate hardcoded lists:
 Updating only the first is the common miss: the language works in Settings and
 is absent from the sidebar.
 
-## 7. Update the prose that hardcodes the locale list
+## 7. Update the user doc
 
-- `AGENTS.md` rule 5 names the locales an agent must keep in sync. Add `{code}`.
-- `docs/user-guide/settings.md`, Appearance table, Language row. Add the
-  language's English name to the parenthesised list.
+`docs/user-guide/settings.md`, Appearance table, Language row, names the
+available languages in English. Add the new one.
 
 ## Nothing to do for dates or the assistant
 
@@ -125,11 +122,10 @@ change the visible text.
 ## Checklist
 
 - [ ] `app/src/locales/{code}/translation.json` created and fully translated
-- [ ] `languages.{code}` added to all six translation files
+- [ ] `languages.{code}` added to every translation file under `app/src/locales/`
 - [ ] `app/src/i18n.ts` import and `resources` entry
 - [ ] `app/src/locales/__tests__/translation-keys.test.ts` import and `it.each` row
 - [ ] `app/src/components/settings/AppearanceSection.tsx` `SelectItem`
 - [ ] `app/src/components/layout/LanguageSwitcher.tsx` array entry
-- [ ] `AGENTS.md` rule 5 locale list
 - [ ] `docs/user-guide/settings.md` Language row
 - [ ] `npm test`, `npx tsc -b`, `npm run build`, `npm run test:e2e -- settings.feature`
