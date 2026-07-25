@@ -190,6 +190,21 @@ describe('settings migration v0 -> v1', () => {
     expect(p.theme).toBe('slate');
   });
 
+  // A hoverPreview group written before a surface existed would read that
+  // surface as undefined (off) forever, since the top-level merge in
+  // mergeProfileSettings does not reach into it (refs #270).
+  it('fills hover preview surfaces added since the profile was written', () => {
+    const stored = {
+      profileSettings: { 'profile-h': { hoverPreview: { eventsList: false, notifications: true } } },
+    };
+    const migrated = migrateSettings(stored, SETTINGS_VERSION - 1) as {
+      profileSettings: Record<string, ProfileSettings>;
+    };
+    const hover = migrated.profileSettings['profile-h'].hoverPreview;
+    expect(hover.assistant).toBe(true);
+    expect(hover.eventsList).toBe(false);
+  });
+
   it('fills defaults when legacy fields are absent', () => {
     const legacy = { profileSettings: { 'profile-b': { theme: 'dark' } } };
     const migrated = migrateSettings(legacy, 0) as {

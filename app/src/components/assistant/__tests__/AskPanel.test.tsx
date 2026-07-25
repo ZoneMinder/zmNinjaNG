@@ -41,6 +41,9 @@ vi.mock('../../../hooks/useCurrentProfile', () => ({
       get assistantBackend() { return mockBackend.current; },
       get assistantOllamaModel() { return mockOllamaModel.current; },
       assistantOllamaBaseUrl: 'http://zm:11434/v1',
+      // Event result cards read this surface toggle (refs #270); previews off
+      // keeps these tests about the cards themselves.
+      hoverPreview: { assistant: false },
     },
   }),
 }));

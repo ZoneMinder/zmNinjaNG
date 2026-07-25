@@ -55,6 +55,7 @@ export function buildEventDisplayEntity(
     navigatePath: `/events/${e.Id}`,
     imageUrls,
     cacheKey: e.Id,
+    monitorId: e.MonitorId,
   };
 }
 

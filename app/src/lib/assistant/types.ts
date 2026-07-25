@@ -21,6 +21,10 @@ export interface DisplayEntity {
   imageUrls?: string[];
   /** `EventThumbnail`'s `cacheKey`; defaults to `id` when omitted. */
   cacheKey?: string;
+  /** Owning monitor of an event card, needed by the ZMS hover/long-press
+   *  preview to resolve the streaming port (refs #270). Unset for monitors,
+   *  whose own `id` is the monitor. */
+  monitorId?: string;
 }
 
 /** One entry in the conversation. Assistant turns carry text and/or toolCalls;

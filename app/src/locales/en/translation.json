@@ -547,6 +547,7 @@
         "dashboard": "Dashboard",
         "timeline": "Timeline",
         "notifications": "Notifications",
+        "assistant": "Assistant cards",
         "playback_speed": "Playback speed",
         "playback_speed_desc": "Speed for event hover/long-press previews."
       }

@@ -11,9 +11,15 @@
  * Monitor cards carry a LIVE preview (refs #264) when the answer is about a
  * few monitors; above `ASSISTANT.maxLiveMonitorCards` they fall back to
  * text, since each preview is a real stream with real cost.
+ *
+ * Event cards hover (long-press on mobile) into ZMS playback through the same
+ * `HoverPreview` + `EventZmsHoverPlayer` pair the events list uses, so the
+ * stream gets a fresh connkey on open and a CMD_QUIT on close (refs #270).
  */
 import { useTranslation } from 'react-i18next';
 import { EventThumbnail } from '../events/EventThumbnail';
+import { HoverPreview } from '../ui/hover-preview';
+import { EventZmsHoverPlayer } from '../events/EventThumbnailHoverPreview';
 import { LiveMonitorPlayer } from '../monitors/LiveMonitorPlayer';
 import { useMonitors } from '../../hooks/useMonitors';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
@@ -32,7 +38,7 @@ export function AssistantResultCards({ entities, host }: AssistantResultCardsPro
   // READ it to resolve a card's monitor id to the stream-capable Monitor
   // object; no extra requests when the cache is warm.
   const { monitors } = useMonitors();
-  const { currentProfile } = useCurrentProfile();
+  const { currentProfile, settings } = useCurrentProfile();
   const monitorCardCount = entities.filter((e) => e.kind === 'monitor').length;
   const livePreviews = monitorCardCount > 0 && monitorCardCount <= ASSISTANT.maxLiveMonitorCards;
 
@@ -44,6 +50,21 @@ export function AssistantResultCards({ entities, host }: AssistantResultCardsPro
           entity.kind === 'monitor' && livePreviews
             ? monitors.find((m) => m.Monitor.Id === entity.id)?.Monitor
             : undefined;
+        // Set only when this card can actually stream: an event card, previews
+        // enabled for this surface, and a monitor to resolve the ZMS port with.
+        const hoverMonitorId =
+          entity.kind === 'event' && settings.hoverPreview.assistant ? entity.monitorId : undefined;
+        const thumbnail = (
+          <EventThumbnail
+            urls={entity.imageUrls ?? []}
+            cacheKey={entity.cacheKey ?? entity.id}
+            alt={entity.title}
+            className="h-full w-full"
+            objectFit="cover"
+            loading="lazy"
+            data-testid="assistant-card-thumbnail"
+          />
+        );
         return (
           <div
             key={`${entity.kind}-${entity.id}`}
@@ -75,15 +96,21 @@ export function AssistantResultCards({ entities, host }: AssistantResultCardsPro
             )}
             {entity.kind === 'event' && (
               <div className="h-12 w-12 shrink-0 overflow-hidden rounded bg-card border border-border/40">
-                <EventThumbnail
-                  urls={entity.imageUrls ?? []}
-                  cacheKey={entity.cacheKey ?? entity.id}
-                  alt={entity.title}
-                  className="h-full w-full"
-                  objectFit="cover"
-                  loading="lazy"
-                  data-testid="assistant-card-thumbnail"
-                />
+                {hoverMonitorId ? (
+                  <HoverPreview
+                    aspectRatio={16 / 9}
+                    testId="event-thumbnail-hover-preview"
+                    renderPreview={() => (
+                      <EventZmsHoverPlayer
+                        descriptor={{ eventId: entity.id, monitorId: hoverMonitorId, name: entity.title }}
+                      />
+                    )}
+                  >
+                    {thumbnail}
+                  </HoverPreview>
+                ) : (
+                  thumbnail
+                )}
               </div>
             )}
             <div className="min-w-0 flex-1">

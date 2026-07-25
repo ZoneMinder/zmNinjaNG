@@ -547,6 +547,7 @@
         "dashboard": "Tableau de bord",
         "timeline": "Chronologie",
         "notifications": "Notifications",
+        "assistant": "Cartes de l'assistant",
         "playback_speed": "Vitesse",
         "playback_speed_desc": "Vitesse des aperçus d'événement."
       }

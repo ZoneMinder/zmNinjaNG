@@ -34,6 +34,8 @@ export interface HoverPreviewSettings {
   dashboard: boolean;
   timeline: boolean;
   notifications: boolean;
+  /** Event cards in an assistant answer (refs #270). */
+  assistant: boolean;
 }
 
 export const DEFAULT_HOVER_PREVIEW: HoverPreviewSettings = {
@@ -44,6 +46,7 @@ export const DEFAULT_HOVER_PREVIEW: HoverPreviewSettings = {
   dashboard: true,
   timeline: true,
   notifications: true,
+  assistant: true,
 };
 
 /** ZMS rate parameter (percentage). 100 = 1x real time. */
@@ -402,12 +405,13 @@ export function mergeProfileSettings(raw: Partial<ProfileSettings> | undefined):
  * this number, so a retirement added without a bump never reaches anyone who
  * already ran the app.
  */
-export const SETTINGS_VERSION = 9;
+export const SETTINGS_VERSION = 10;
 
 /**
  * Migrate persisted settings:
  *  - v0 -> v1: flat montage fields to group-keyed maps.
- *  - any -> current: retired `assistantModelId` values to their replacements.
+ *  - any -> current: retired `assistantModelId` values to their replacements,
+ *    and `hoverPreview` surfaces added since the profile was written.
  *
  * The steps run in sequence, not exclusively: a v0 blob gets both, which is
  * why v0->v1 no longer returns early. The model-id rewrite is idempotent and
@@ -416,7 +420,28 @@ export const SETTINGS_VERSION = 9;
  */
 export function migrateSettings(persistedState: unknown, version: number): unknown {
   const state = version >= 1 ? persistedState : migrateV0ToV1(persistedState);
-  return moveNativeOffOnDevice(normalizeRetiredModelIds(state));
+  return moveNativeOffOnDevice(fillHoverPreviewSurfaces(normalizeRetiredModelIds(state)));
+}
+
+/** Fills `hoverPreview` keys added after a profile was last written, so a new
+ *  surface starts at its default instead of reading as undefined (off).
+ *
+ *  Done here rather than in `mergeProfileSettings`: that runs on every read,
+ *  and rebuilding the nested object there would hand a fresh identity to the
+ *  `useShallow(getProfileSettings(...))` selectors (MontageMonitor.tsx), which
+ *  then re-render forever. A migration writes the keys once. */
+function fillHoverPreviewSurfaces(persistedState: unknown): unknown {
+  const state = (persistedState ?? {}) as { profileSettings?: Record<string, unknown> };
+  if (!state.profileSettings) return persistedState;
+
+  const migrated: Record<string, unknown> = {};
+  for (const [profileId, raw] of Object.entries(state.profileSettings)) {
+    const s = (raw ?? {}) as Record<string, unknown>;
+    migrated[profileId] = s.hoverPreview
+      ? { ...s, hoverPreview: { ...DEFAULT_HOVER_PREVIEW, ...(s.hoverPreview as object) } }
+      : s;
+  }
+  return { ...state, profileSettings: migrated };
 }
 
 /** Moves a phone or tablet off the on-device backend.

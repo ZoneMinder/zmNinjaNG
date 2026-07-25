@@ -547,6 +547,7 @@
         "dashboard": "Panel",
         "timeline": "Línea de tiempo",
         "notifications": "Notificaciones",
+        "assistant": "Tarjetas del asistente",
         "playback_speed": "Velocidad",
         "playback_speed_desc": "Velocidad de previsualización de eventos."
       }

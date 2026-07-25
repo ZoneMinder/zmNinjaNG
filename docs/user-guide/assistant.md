@@ -48,6 +48,8 @@ Examples of what you can ask:
 
 Answers come with cards underneath: event thumbnails you can tap to open the event, and monitor cards with a live preview when the answer is about a few specific cameras (a long list of monitors stays text, since every preview is a real stream). The cards are the rows the answer is about, not everything the lookup touched: ask for your busiest hour and you get that hour's events, not the whole day's.
 
+Hover an event card's thumbnail on desktop, or long-press it on a phone or tablet, and the event plays enlarged in place, the same preview the Events list gives you. It closes when you move away or tap elsewhere, and the stream is shut down with it. Turn it off under Settings, Appearance, Hover preview, Assistant cards.
+
 Ask it to change something, such as "arm the backyard camera" or "delete event 1234", and it will tell you it cannot and point you to the screen where you can. See below for why.
 
 Ninjii only knows what its tools can look up: your monitors, events, groups, tags, and server health. Ask it something unrelated to this ZoneMinder server and it answers as an ordinary assistant would, without pretending to have looked anything up.

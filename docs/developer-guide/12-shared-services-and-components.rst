@@ -1717,6 +1717,16 @@ unmount it sends ``ZMS_COMMANDS.cmdQuit`` through ``sendDelayedCmdQuit``, and
 on mount it calls ``cancelPendingQuit`` so a StrictMode remount reuses the same
 connkey rather than killing it.
 
+``EventZmsHoverPlayer`` is exported separately from its wrapper because two
+surfaces already have their own thumbnail markup and only need the player:
+``pages/NotificationHistory.tsx`` and ``components/assistant/AssistantResultCards.tsx``
+(assistant answer cards, refs #270). Both pair it with ``HoverPreview``
+directly and pass a descriptor built from their own data, which is why an
+assistant event card carries ``monitorId`` on its ``DisplayEntity``: the ZMS
+URL cannot resolve a multi-port stream without it. Each surface is gated on its
+own ``hoverPreview`` key, so reuse means one player and one teardown path
+rather than one per screen.
+
 EventThumbnail (``components/events/EventThumbnail.tsx``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

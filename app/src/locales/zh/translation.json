@@ -547,6 +547,7 @@
         "dashboard": "仪表板",
         "timeline": "时间线",
         "notifications": "通知",
+        "assistant": "助手卡片",
         "playback_speed": "播放速度",
         "playback_speed_desc": "事件悬停预览的播放速度。"
       }

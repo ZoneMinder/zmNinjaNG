@@ -25,6 +25,20 @@ Feature: In-app assistant
     Then the assistant reply should contain "You have 3 events"
     And an activity chip for "count_events" should have appeared
 
+  # Event cards use the same HoverPreview + EventZmsHoverPlayer as the events
+  # list (refs #270), so the ZMS stream opens on hover and is quit on release.
+  @web @tauri
+  Scenario: Hovering an event result card plays the event
+    Given I am logged into zmNinjaNg
+    And the assistant is enabled with the mock backend
+    And the assistant will answer "Here are your events" after listing events
+    When I press the "?" key
+    Then the assistant panel should open
+    When I ask "show me the latest events"
+    Then the assistant reply should contain "Here are your events"
+    When I hover the first assistant event card thumbnail if cards exist
+    Then I should see the enlarged assistant event preview if hover was performed
+
   Scenario: A conversation that fills the context window is cleared automatically
     Given I am logged into zmNinjaNg
     And the assistant is enabled with the mock backend
