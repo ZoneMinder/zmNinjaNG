@@ -205,6 +205,20 @@ enough, and the protocol grows the rest one incident at a time. Rules that
 arrive with a commit hash behind them get followed. Rules invented in
 advance are the ones that drift.
 
+Where everything lives
+----------------------
+
+Everything this chapter describes is in the repository:
+
+- `AGENTS.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/AGENTS.md>`_, the portable rule core
+- `AGENTS.project.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/AGENTS.project.md>`_, contracts and project rules
+- `CLAUDE.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/CLAUDE.md>`_, the Claude Code shim
+- `agents/generic/claude-workflows.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/agents/generic/claude-workflows.md>`_, the portable workflow playbook
+- `agents/project/ <https://github.com/ZoneMinder/zmNinjaNg/tree/main/agents/project>`_, the area playbooks and `domain-context.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/agents/project/domain-context.md>`_
+- `agents-contracts.test.ts <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/tests/agents-contracts.test.ts>`_, the instruction-system gate
+- `label-guard.yml <https://github.com/ZoneMinder/zmNinjaNg/blob/main/.github/workflows/label-guard.yml>`_, the PR label gate
+- `.claude/skills/mine-history/ <https://github.com/ZoneMinder/zmNinjaNg/tree/main/.claude/skills/mine-history>`_, the history mining skill
+
 What this asks of a contributor
 -------------------------------
 
