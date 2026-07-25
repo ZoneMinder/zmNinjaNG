@@ -142,7 +142,8 @@ Getting Help
 ------------
 
 - Read ``AGENTS.md`` at the repository root for the development rules. Every
-  rule there is numbered, and the rest of this guide cites those numbers rather
-  than restating them.
+  rule there carries a tiered ID (P3, C6, M1), and the rest of this guide cites
+  those IDs rather than restating them. :doc:`14-agent-development-model`
+  explains the whole system.
 - Read ``app/tests/README.md`` for how the test suites are laid out and run.
 - Look at existing code for patterns before inventing one.
