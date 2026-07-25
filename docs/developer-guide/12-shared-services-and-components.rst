@@ -2013,10 +2013,11 @@ bridges and long-lived singletons; ``components/ui/`` for primitives,
 import a store: invert it with the gate pattern (``api/store-gates.ts``) and
 keep ``npx madge --circular`` at zero.
 
-The repo's ``AGENTS.md`` is the source for the rest, and this guide does not
-restate it. Rules 25 (constants), 29 (query keys), 33 (``lib/`` placement), 9
-(logging), 10 (HTTP), and 23 (dates) all constrain a new shared module. Write
-the test first, next to the source in ``__tests__/`` (:doc:`06-testing-strategy`).
+The repo's ``AGENTS.md`` and ``AGENTS.project.md`` are the source for the
+rest, and this guide does not restate it. The Constants, Server queries,
+Logging, HTTP, and Date and time contracts, plus C5 (``lib/`` placement), all
+constrain a new shared module. Write the test first, next to the source in
+``__tests__/`` (:doc:`06-testing-strategy`).
 
 Then document it here connected to behavior: say what a user can do because
 this code exists, and give one example taken from a real call site. If the new

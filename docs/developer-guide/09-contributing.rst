@@ -1,12 +1,14 @@
 Contributing to zmNinjaNg
 =========================
 
-The process rules for this project live in one place: ``AGENTS.md`` at the
-repo root. They are numbered, and this chapter cites them by number rather
-than repeating them. A restated rule drifts the moment the original changes,
-and this chapter is the proof: it copied out P3's verification commands,
-and went on printing a typecheck flag the rule had already replaced, in four
-separate places. When a rule number below sounds relevant, read the rule.
+The process rules for this project live in ``AGENTS.md`` at the repo root,
+with architecture contracts and project rules in ``AGENTS.project.md``.
+Rules carry tiered IDs, and this chapter cites them by ID rather than
+repeating them. A restated rule drifts the moment the original changes, and
+this chapter is the proof: it copied out P3's verification commands, and
+went on printing a typecheck flag the rule had already replaced, in four
+separate places. When a rule ID or contract below sounds relevant, read the
+source.
 
 Before You Start
 ----------------
@@ -333,8 +335,8 @@ screen. Prefer the single-word synonym (ES "Ajustes", not "Configuración").
 Before You Ask for Review
 -------------------------
 
-Each item names the rule that owns it. Items without a rule number are
-codebase-specific traps with no rule to cite.
+Each item names the rule or contract that owns it. Items without one are
+codebase-specific traps with nothing to cite.
 
 - ☐ P1: issue exists and is referenced
 - ☐ P2/P3: failing test written first; verification sequence run and passing

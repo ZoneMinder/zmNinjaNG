@@ -161,7 +161,7 @@ The `test:e2e:*` names are historical. They do not run the e2e feature suite.
 | `npm run test:e2e:ios-tablet` | same script as `test:screenshots:ios-tablet` | iPad Air simulator |
 | `bash scripts/test-all-platforms.sh` | web e2e, then all three device captures | all |
 
-The `scripts/test-*.sh` wrappers add a Capacitor sync (`npm run android:sync` / `npm run ios:sync`) before launching wdio. That sync bumps native build numbers; see rule 28 in `AGENTS.md` before committing.
+The `scripts/test-*.sh` wrappers add a Capacitor sync (`npm run android:sync` / `npm run ios:sync`) before launching wdio. That sync bumps native build numbers; see the native build-number project rule in `AGENTS.project.md` before committing.
 
 #### Android
 
@@ -223,7 +223,7 @@ Playwright never touches a device. There is no `connectOverCDP()` anywhere in th
 
 Step definitions in `tests/steps/` use Playwright's `page` fixture directly (`page.getByTestId(...)`, `page.click(...)`, etc.). There is no shared driver abstraction layer, because only Playwright reads them.
 
-Steps must assert, not sleep. See rule 34 in `AGENTS.md`.
+Steps must assert, not sleep. See the testing playbook, `docs/agent-playbooks/testing.md`.
 
 ### Config Loader
 
@@ -251,7 +251,7 @@ Summary:
 4. Assert the outcome the scenario name promises. A scenario that cannot assert its name at desktop Chromium width must be renamed to what it does assert.
 5. Run `npm run test:e2e -- <feature>.feature` and confirm it fails before your change and passes after.
 
-Native-only flows (biometrics, push, the share sheet, app lifecycle) have no automated coverage. Verify them by hand on a device and say so in the PR. See rule 27 in `AGENTS.md`.
+Native-only flows (biometrics, push, the share sheet, app lifecycle) have no automated coverage. Verify them by hand on a device and say so in the PR. See the device e2e project rule in `AGENTS.project.md`.
 
 ---
 
