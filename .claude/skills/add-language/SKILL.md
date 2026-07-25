@@ -1,6 +1,6 @@
 ---
 name: add-language
-description: Use when adding a new interface language (locale) to the app, or when asked to translate the UI into another language. Covers the translation file, the two language pickers, the i18n resources, the key-parity test, and the docs and rules that hardcode the locale list.
+description: Use when adding a new interface language (locale) to the app, or when asked to translate the UI into another language. Covers the translation file, the two language pickers, the i18n resources, and the user doc that names the available languages.
 ---
 
 # Adding a new interface language
@@ -60,14 +60,7 @@ resources: {
 },
 ```
 
-## 5. Add the locale to the key-parity test
-
-`app/src/locales/__tests__/translation-keys.test.ts` imports each locale and
-lists it in an `it.each` table. A locale absent from that table is never
-checked, and the test still passes, so this step is easy to skip and expensive
-to skip. Add the import and the `['{code}', {code}]` row.
-
-## 6. Update both language pickers
+## 5. Update both language pickers
 
 There are two, and they carry separate hardcoded lists:
 
@@ -88,20 +81,22 @@ There are two, and they carry separate hardcoded lists:
 Updating only the first is the common miss: the language works in Settings and
 is absent from the sidebar.
 
-## 7. Update the user doc
+## 6. Update the user doc
 
 `docs/user-guide/settings.md`, Appearance table, Language row, names the
 available languages in English. Add the new one.
 
-## Nothing to do for dates or the assistant
+## Nothing to do for dates, the assistant, or the parity test
 
-Both already take the active locale code as data, so neither needs a per-locale
-entry:
+These already take the active locale as data, so none of them needs a
+per-locale entry:
 
 - `app/src/lib/relative-time.ts` passes the code straight to
   `Intl.RelativeTimeFormat`.
 - `app/src/lib/assistant/system-prompt.ts` interpolates the locale into the
   prompt and asks the model to answer in the user's language.
+- `app/src/locales/__tests__/translation-keys.test.ts` discovers locale
+  directories on disk, so the new one is key-checked against `en` with no edit.
 
 ## Verify
 
@@ -124,7 +119,6 @@ change the visible text.
 - [ ] `app/src/locales/{code}/translation.json` created and fully translated
 - [ ] `languages.{code}` added to every translation file under `app/src/locales/`
 - [ ] `app/src/i18n.ts` import and `resources` entry
-- [ ] `app/src/locales/__tests__/translation-keys.test.ts` import and `it.each` row
 - [ ] `app/src/components/settings/AppearanceSection.tsx` `SelectItem`
 - [ ] `app/src/components/layout/LanguageSwitcher.tsx` array entry
 - [ ] `docs/user-guide/settings.md` Language row

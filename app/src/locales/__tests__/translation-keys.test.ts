@@ -1,10 +1,10 @@
 /**
  * Guards against the two ways translations rot silently.
  *
- * i18n.ts sets `fallbackLng: 'en'`, so a key missing from de/es/fr/zh renders
- * the English string in the middle of a translated screen, and a key missing
- * from en renders the raw key id at the user ("events.duration"). Neither
- * throws, and no CI job caught either until these tests existed.
+ * i18n.ts sets `fallbackLng: 'en'`, so a key missing from a translated locale
+ * renders the English string in the middle of a translated screen, and a key
+ * missing from en renders the raw key id at the user ("events.duration").
+ * Neither throws, and no CI job caught either until these tests existed.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'fs';
@@ -12,14 +12,21 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 import en from '../en/translation.json';
-import de from '../de/translation.json';
-import es from '../es/translation.json';
-import fr from '../fr/translation.json';
-import zh from '../zh/translation.json';
 
 type Tree = { [key: string]: string | Tree };
 
-const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const LOCALES = join(dirname(fileURLToPath(import.meta.url)), '..');
+const SRC = join(LOCALES, '..');
+
+/**
+ * Locale directories read from disk rather than listed here, so a language
+ * added to `app/src/locales/` is covered without editing this file. Listing
+ * them by hand meant a new locale was silently unchecked and the suite still
+ * passed.
+ */
+const TRANSLATED: Array<[string, Tree]> = readdirSync(LOCALES)
+  .filter((entry) => entry !== 'en' && entry !== '__tests__' && statSync(join(LOCALES, entry)).isDirectory())
+  .map((code) => [code, JSON.parse(readFileSync(join(LOCALES, code, 'translation.json'), 'utf8')) as Tree]);
 
 /** Every leaf path in a translation tree, e.g. "events.duration". */
 function leafPaths(tree: Tree, prefix = ''): string[] {
@@ -69,13 +76,14 @@ describe('translation keys', () => {
     expect(missing).toEqual([]);
   });
 
-  it.each([
-    ['de', de],
-    ['es', es],
-    ['fr', fr],
-    ['zh', zh],
-  ])('%s has exactly the keys en has', (_lang, tree) => {
+  it('finds the translated locales on disk', () => {
+    // Without this, a discovery bug empties TRANSLATED and it.each below runs
+    // zero cases, which reads as a pass.
+    expect(TRANSLATED.map(([code]) => code)).toEqual(expect.arrayContaining(['de', 'es', 'fr', 'zh']));
+  });
+
+  it.each(TRANSLATED)('%s has exactly the keys en has', (_lang, tree) => {
     const expected = leafPaths(en as Tree).sort();
-    expect(leafPaths(tree as Tree).sort()).toEqual(expected);
+    expect(leafPaths(tree).sort()).toEqual(expected);
   });
 });
