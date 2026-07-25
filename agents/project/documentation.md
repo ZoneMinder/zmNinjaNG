@@ -30,6 +30,10 @@ Connect each artifact to its user-visible behavior and relevant flow. Examples m
 ## Style
 
 - Follow `01-introduction.rst` tone and `call-flows.rst` structure.
+- Write like a developer explaining to a colleague. No headline-style
+  headings ("The X", "A deep dive into Y") and no news-article cadence;
+  a heading or sentence that would fit a press release gets rewritten.
+  Link file mentions in body text to the repository on first use.
 - No top-level TOC, next-step section, recap, em-dash, or padded rewrite.
 - RST links use `:doc:`; Markdown links use `{doc}`.
 - Before committing a new or rewritten chapter, run banned-word and em-dash checks from the previous version of this guidance.
