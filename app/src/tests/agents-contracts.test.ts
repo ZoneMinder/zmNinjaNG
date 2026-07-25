@@ -105,7 +105,7 @@ describe('AGENTS.md stays portable', () => {
     // Claude-only shim). Raising this budget is a deliberate act that needs
     // a reason in the commit message, like the lint ratchet (C7). Lowering
     // it is always welcome.
-    const WORD_BUDGET = 1500;
+    const WORD_BUDGET = 1650;
     const words = (f: string) =>
       fs.readFileSync(path.join(repoRoot, f), 'utf8').split(/\s+/).filter(Boolean).length;
     const total = words('AGENTS.md') + words('AGENTS.project.md') + words('CLAUDE.md');

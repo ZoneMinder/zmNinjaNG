@@ -28,8 +28,20 @@ Gate: `app/src/tests/agents-contracts.test.ts`; review.
 ### Logging
 Owns: all diagnostic output.
 Path: `log` helpers with explicit `LogLevel` (`app/src/lib/logger.ts`).
-Never: `console` calls in app code.
+Never: `console` calls in app code; credentials or tokens in log output or URLs.
 Gate: `app/src/tests/agents-contracts.test.ts`; review.
+
+### Auth tokens
+Owns: token storage, refresh, and login concurrency.
+Path: `getFreshAccessToken` / `login` on the auth store (`app/src/stores/auth.ts`), deduped through one in-flight promise; refresh tokens in platform secure storage.
+Never: refresh calls bypassing the dedup entry points; tokens in URL query strings; plaintext fallback when secure storage fails (drop and re-auth instead).
+Gate: `app/src/stores/__tests__/auth.test.ts`.
+
+### Assistant tool loop
+Owns: whether an assistant turn may answer a data question.
+Path: the turn schema makes the answer branch unreachable until a real tool result exists; execution authority is the turn's own `opts.tools`, not the registry.
+Never: prompt-only grounding guards; raw tool-error text fed back to the model; unparsed tool-call markup rendered as an answer.
+Gate: `app/src/lib/assistant/__tests__/agent.test.ts`; `app/src/lib/assistant/__tests__/grounding.test.ts`.
 
 ### Server queries
 Owns: React Query keys, invalidation, and caching.
