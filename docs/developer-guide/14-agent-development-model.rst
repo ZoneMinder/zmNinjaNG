@@ -179,36 +179,31 @@ for example "run /mine-history on the first of each month".
 Using this in your own project
 ------------------------------
 
-The system is built to be copied. The split of files is the instruction:
-everything portable is deliberately free of this project's names.
+Copy ``AGENTS.md`` unchanged. It contains no zmNinjaNg names on purpose,
+and the purity gate keeps it that way; project facts go in the other
+files.
 
-1. Copy ``AGENTS.md`` verbatim. Do not edit it to add your project's
-   facts; that is what the other files are for, and the purity gate
-   exists to keep it that way.
-2. Write your own ``AGENTS.project.md``. The contracts are the real work:
-   walk your codebase and, for each subsystem that has one sanctioned
-   path (settings, HTTP, logging, state, whatever your stack centralizes),
-   write an Owns / Path / Never / Gate block with real symbol names.
-   Start with the five most-bypassed paths, not a complete inventory.
-3. Port the gate. Copy ``app/src/tests/agents-contracts.test.ts``, point
-   it at your source tree, set the forbidden-token list to your project's
-   names, and set the word budget from your own baseline (measure your
-   files, add headroom, ratchet from there).
-4. Copy ``agents/generic/`` as is. Create ``agents/project/`` with
-   whatever area playbooks your project needs, plus an empty
-   ``domain-context.md``. If the project has history, run the
-   ``mine-history`` skill once over all of it; that first sweep is where
-   most of the seed content comes from.
-5. Wire your harness: for Claude Code a two-line ``CLAUDE.md`` importing
-   both instruction files; other harnesses read ``AGENTS.md`` directly and
-   follow its pointer.
-6. Optional: the ``core`` / ``refactor`` labels with the label-guard
-   workflow, and the monthly reviews.
+Then write an ``AGENTS.project.md`` for your codebase. Most of the work is
+the contracts. Look for the places where your code has one sanctioned path
+(settings, HTTP, logging, state) and write an Owns / Path / Never / Gate
+block for each, with real symbol names. Five contracts covering the paths
+people actually bypass are worth more than a complete inventory.
 
-What not to do: do not start with thirty rules. Start with the core plus a
-handful of contracts, and let the protocol grow the rest one incident at a
-time; every rule that arrives with a commit hash behind it will be
-followed, and rules invented in advance are the ones that drift.
+Copy ``agents-contracts.test.ts`` and point it at your tree: your source
+directory, your forbidden-token list, a word budget measured from your own
+files plus some headroom. Copy ``agents/generic/`` as is and start
+``agents/project/`` with an empty ``domain-context.md``; if the project
+has history, one run of the ``mine-history`` skill fills in most of the
+seed content.
+
+Claude Code needs a two-line ``CLAUDE.md`` importing the two instruction
+files; other harnesses read ``AGENTS.md`` directly. The labels, the
+label-guard workflow, and the monthly reviews are optional.
+
+Resist starting with thirty rules. A handful of contracts plus the core is
+enough, and the protocol grows the rest one incident at a time. Rules that
+arrive with a commit hash behind them get followed. Rules invented in
+advance are the ones that drift.
 
 What this asks of a contributor
 -------------------------------
