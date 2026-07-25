@@ -45,6 +45,13 @@ vi.mock('../../../hooks/use-toast', () => ({
   useToast: () => ({ toast: toastMock }),
 }));
 
+// `toHaveTextContent` matches substrings, and the idle label
+// ("...ollama_test") is a prefix of the busy one ("...ollama_testing"), so
+// asserting the bare string resolved on the first poll while the button was
+// still testing. Anchor it: this is the only thing that distinguishes the two
+// states, and every wait in this file depends on the difference.
+const IDLE_LABEL = /^settings\.assistant\.ollama_test$/;
+
 describe('AssistantOllamaSection', () => {
   const profile = { id: 'p1', apiUrl: 'http://192.168.1.50/zm/api' } as never;
   // With no URL saved, the section falls back to the profile's ZoneMinder host.
@@ -77,8 +84,10 @@ describe('AssistantOllamaSection', () => {
       fireEvent.click(button);
       expect(button).toHaveTextContent('settings.assistant.ollama_testing');
 
-      await waitFor(() => expect(button).toHaveTextContent('settings.assistant.ollama_test'));
-      expect(button).not.toBeDisabled();
+      await waitFor(() => {
+        expect(button).toHaveTextContent(IDLE_LABEL);
+        expect(button).not.toBeDisabled();
+      });
     });
 
     it('returns to the idle label after a rejected test', async () => {
@@ -89,8 +98,10 @@ describe('AssistantOllamaSection', () => {
       fireEvent.click(button);
       expect(button).toHaveTextContent('settings.assistant.ollama_testing');
 
-      await waitFor(() => expect(button).toHaveTextContent('settings.assistant.ollama_test'));
-      expect(button).not.toBeDisabled();
+      await waitFor(() => {
+        expect(button).toHaveTextContent(IDLE_LABEL);
+        expect(button).not.toBeDisabled();
+      });
       await waitFor(() => expect(toastMock).toHaveBeenCalled());
     });
 
@@ -99,7 +110,7 @@ describe('AssistantOllamaSection', () => {
 
       const button = screen.getByTestId('assistant-ollama-test');
       fireEvent.click(button);
-      await waitFor(() => expect(button).toHaveTextContent('settings.assistant.ollama_test'));
+      await waitFor(() => expect(button).toHaveTextContent(IDLE_LABEL));
 
       expect(listOpenAiModelsMock).toHaveBeenLastCalledWith(
         OLLAMA_URL,
@@ -125,8 +136,10 @@ describe('AssistantOllamaSection', () => {
       const button = screen.getByTestId('assistant-ollama-test');
       fireEvent.click(button);
 
-      await waitFor(() => expect(button).toHaveTextContent('settings.assistant.ollama_test'));
-      expect(button).not.toBeDisabled();
+      await waitFor(() => {
+        expect(button).toHaveTextContent(IDLE_LABEL);
+        expect(button).not.toBeDisabled();
+      });
     });
 
     it('reports how many models were found on a successful test', async () => {
@@ -135,7 +148,7 @@ describe('AssistantOllamaSection', () => {
 
       const button = screen.getByTestId('assistant-ollama-test');
       fireEvent.click(button);
-      await waitFor(() => expect(button).toHaveTextContent('settings.assistant.ollama_test'));
+      await waitFor(() => expect(button).toHaveTextContent(IDLE_LABEL));
 
       expect(toastMock).toHaveBeenCalledWith(
         expect.objectContaining({ title: 'settings.assistant.ollama_test_ok' }),
