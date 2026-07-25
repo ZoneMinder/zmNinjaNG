@@ -1424,7 +1424,8 @@ Behavior of the ``eventIds`` path:
 Filtering by archived status
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``EventFilters.archived`` (``src/api/events.ts``) is a boolean that, when
+``EventFilters.archived`` (declared in ``src/api/types.ts``, re-exported from
+``src/api/events.ts``) is a boolean that, when
 ``true``, adds an ``Archived:1`` path segment to the server query. The segment
 is composed with the monitor, date, favorites, and tag filter segments in the
 same AND chain. When ``archived`` is ``undefined`` or ``false``, no segment is

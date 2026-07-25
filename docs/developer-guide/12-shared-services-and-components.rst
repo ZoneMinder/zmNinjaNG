@@ -1842,8 +1842,9 @@ gesture lives in ``hooks/usePullToRefresh.ts``, which wraps
 
 .. code:: tsx
 
-   const { containerRef, bind, isRefreshing, isPulling, pullDistance } =
-     usePullToRefresh({ onRefresh: () => refetch() });
+   const containerRef = useRef<HTMLDivElement>(null);
+   const { bind, isRefreshing, isPulling, pullDistance } =
+     usePullToRefresh({ containerRef, onRefresh: () => refetch() });
 
    <div ref={containerRef} {...bind()} className="overflow-y-auto h-full">
      <PullToRefreshIndicator
@@ -1853,9 +1854,11 @@ gesture lives in ``hooks/usePullToRefresh.ts``, which wraps
      />
    </div>
 
-Spread ``bind()`` onto the scroll container and attach ``containerRef``: the
-hook reads ``scrollTop`` from it to tell a pull-to-refresh from an ordinary
-scroll. It takes ``onRefresh`` plus optional ``threshold`` and ``enabled``.
+Spread ``bind()`` onto the scroll container and pass that container's ref in:
+the hook reads ``scrollTop`` from it to tell a pull-to-refresh from an ordinary
+scroll. The caller owns the ref, the same arrangement ``useEventMontageGrid``
+uses, because a page usually already has one on that element. It takes
+``containerRef`` and ``onRefresh`` plus optional ``threshold`` and ``enabled``.
 
 **Used by:** the Events page.
 
