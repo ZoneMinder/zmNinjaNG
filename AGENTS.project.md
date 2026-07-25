@@ -2,14 +2,14 @@
 
 Read `AGENTS.md` first. This file owns everything project-specific:
 architecture contracts, project rules, verification commands, and the
-playbook table. Contracts state system invariants. The sanctioned path is
-the only path; a bypass is a bug even when it works.
+playbook table. The sanctioned path is the only path; a bypass is a bug
+even when it works.
 
 ## Architecture contracts
 
 ### Settings
 Owns: all profile-scoped user preferences.
-Path: `getProfileSettings` / `updateProfileSettings` on the settings store (`app/src/stores/settings.ts`); every coercion or default lives in `mergeProfileSettings`.
+Path: `getProfileSettings` / `updateProfileSettings` (`app/src/stores/settings.ts`); every coercion or default lives in `mergeProfileSettings`.
 Never: direct storage access; non-profile-scoped preference keys; coercions outside the merge (reactive readers such as `useCurrentProfile` bypass per-getter fixes).
 Gate: `app/src/tests/agents-contracts.test.ts`; review.
 
@@ -63,14 +63,14 @@ Gate: `app/src/tests/agents-contracts.test.ts`; review.
 
 ### Localization
 Owns: all user-facing text.
-Path: locale files under `app/src/locales/` (de, en, es, fr, zh); every locale updates together; both language pickers list every locale.
+Path: locale files under `app/src/locales/` (de, en, es, fr, zh); every locale updates together; both pickers list every locale.
 Never: hardcoded user-facing strings; a string added to one locale only.
 Gate: `app/src/tests/agents-contracts.test.ts`; review.
 
 ### Native
-Owns: everything that touches Capacitor or platform APIs.
-Path: Capacitor plugins import dynamically behind a platform check, each with a test mock; mobile downloads use Capacitor HTTP base64; native TLS trust accepts any certificate when no fingerprint is stored (trust on first use).
-Never: static plugin imports; Blob conversion for mobile downloads; fail-closed TLS without a stored fingerprint (breaks self-signed onboarding).
+Owns: everything touching Capacitor or platform APIs.
+Path: Capacitor plugins import dynamically behind a platform check, with a test mock; mobile downloads use Capacitor HTTP base64; native TLS trust-on-first-use accepts any certificate when no fingerprint is stored.
+Never: static plugin imports; Blob conversion for mobile downloads; fail-closed TLS without stored fingerprint (breaks self-signed onboarding).
 Gate: `app/src/tests/agents-contracts.test.ts`; review.
 
 ### Constants
@@ -81,15 +81,15 @@ Gate: `app/src/tests/agents-contracts.test.ts`; review.
 
 ## Project rules
 
-- Run npm commands from `app/`. Run root `npm install` once first so hooks exist.
+- Run npm commands from `app/`. Run root `npm install` once so hooks exist.
 - UI changes need an outcome-based e2e test with platform tags and `data-testid` on new interactive elements.
 - Only one `npm run test:e2e` per working tree.
 - Device e2e (iOS, Android, Tauri) is manual-only; agents never auto-run it.
 - Labels must fit 320px; prefer concise translations.
 - Flex text uses `min-w-0`, `truncate`, and a `title`; multi-line text uses `line-clamp-N`.
 - Do not commit incidental native build-number bumps. Commit intended bumps alone as `chore:`.
-- GitHub comments identify Claude assisting @pliablepixels, with that exact attribution line. Commits do not.
-- Test builds use a matching existing GitHub workflow; add one only when none fits.
+- GitHub comments identify Claude assisting @pliablepixels, with that exact line. Commits do not.
+- Test builds use a matching GitHub workflow; add one only when none fits.
 - Developer docs teach React where they first rely on it.
 
 ## Verification
@@ -104,9 +104,10 @@ npm run lint:ratchet
 npm run test:e2e -- <feature>.feature
 ```
 
-The three lint commands are the blocking ones; `npm run lint` itself stays
+The three lint commands are the blocking ones; `npm run lint` stays
 advisory. The last command applies to UI, navigation, and workflow changes.
-State completed checks in handoff.
+The ratchet baseline lives at `app/.lint-baseline.json`; lower it with
+`npm run lint:ratchet -- --update`. State completed checks in handoff.
 
 ## Playbooks
 

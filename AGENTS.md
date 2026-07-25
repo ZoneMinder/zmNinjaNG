@@ -3,8 +3,7 @@
 Portable core. This file contains no project-specific names and copies
 verbatim into any project. Load order: this file, then
 `AGENTS.project.md` (architecture contracts, project rules, verification
-commands, playbooks), then the playbook it lists for your work area. Read
-`AGENTS.project.md` before any work.
+commands, playbooks), then the playbook it lists for your work area.
 
 Adopting this core in another project: copy this file unchanged, then write
 your own `AGENTS.project.md` and the gates it names. Project facts never
@@ -13,8 +12,8 @@ belong in this file.
 ## Rule format
 
 Every rule is a statement, a one-clause why, and a gate. A rule a script
-could check but that names no gate is a defect in this file. Rules carry
-stable IDs by tier; docs reference IDs, never copied text.
+could check but names no gate is a defect here. Rules carry stable IDs by
+tier; docs reference IDs, never copied text.
 
 ## Invariants (never simplified away)
 
@@ -29,7 +28,8 @@ stable IDs by tier; docs reference IDs, never copied text.
 
 - P1. Create or use an issue before feature or bug work; land through an
   issue-linked PR. Commits reference the issue; closing keywords only after
-  the user confirms.
+  the user confirms. If instructed to push directly to the default branch,
+  do so and verify the issue timeline.
 - P2. Test first: a failing test precedes the implementation of every
   feature and bugfix. A test that never failed proves nothing.
 - P3. Run the full gate suite before every commit. Never commit after a
@@ -37,8 +37,8 @@ stable IDs by tier; docs reference IDs, never copied text.
 - P4. Read failures and fix the cause. Never blindly retry.
 - P5. One logical change per conventional commit.
 - P6. Verification runs direct commands. Tooling that transforms output,
-  such as wrappers, compressors, or summarizers, is untrusted until its
-  output has been validated against the raw output at least once.
+  such as wrappers, compressors, or summarizers, is untrusted until
+  validated once against raw output.
 - P7. Finish the requested behavior. Materially different UX options need
   approval before choosing.
 - P8. Never merge the default branch without approval.
@@ -59,8 +59,7 @@ stable IDs by tier; docs reference IDs, never copied text.
   modules.
 - C5. New modules live in domain folders. No one-file folders.
 - C6. Test assertions must be able to fail: assert fetched values or
-  user-visible outcomes, never that an element exists or a container has
-  children.
+  user-visible outcomes, never element existence or child count.
 - C7. The lint ratchet baseline shrinks or holds, never grows. Raising a
   number by hand needs a reason in the commit message.
 
@@ -70,7 +69,7 @@ stable IDs by tier; docs reference IDs, never copied text.
   Ungated rules drift; an audit of ungated rules found every one violated
   while every gated rule held.
 - M2. A gate's input needs checking, not just its exit code. Confirm the
-  number a gate reports describes the thing it claims to measure.
+  number a gate reports describes what it claims to measure.
 - M3. Instruction files change only through the self-improvement protocol
   below. One-off facts go to the project file or a playbook, never here.
 - M4. This file owns process rules; other docs link to rule IDs and never
@@ -78,19 +77,17 @@ stable IDs by tier; docs reference IDs, never copied text.
 
 ## Self-improvement protocol
 
-Trigger: a breakage, review finding, or wasted session that an instruction
-or contract would have prevented, or an existing instruction that itself
-caused harm.
+Trigger: a breakage, review finding, or wasted session an instruction or
+contract would have prevented, or an instruction that itself caused harm.
 
 Action: the PR fixing the problem also proposes the instruction edit, with
-the gate M1 requires. The maintainer merges or rejects it like any other
-diff. Agents never edit instruction files outside this protocol.
+the gate M1 requires. The maintainer merges or rejects it like any diff.
+Agents never edit instruction files outside this protocol.
 
 ## Project knowledge
 
 Architecture contracts, project rules, verification commands, and the
-playbook table live in `AGENTS.project.md`. Contracts describe each
-subsystem: what it owns, the sanctioned path, forbidden bypasses, and the
-gate. Trust the contract instead of rediscovering the invariant from code;
-if code and contract disagree, that is a finding for the self-improvement
-protocol.
+playbook table live in `AGENTS.project.md`. Each contract states what it
+owns, the sanctioned path, forbidden bypasses, and the gate. Trust the
+contract over rediscovering the invariant from code; a code/contract
+mismatch is a finding for the self-improvement protocol.
