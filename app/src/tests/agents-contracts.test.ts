@@ -101,13 +101,14 @@ describe('AGENTS.md stays portable', () => {
   });
 
   it('instruction files stay inside the token budget', () => {
-    // Both files load into every agent session. Raising this budget is a
-    // deliberate act that needs a reason in the commit message, like the
-    // lint ratchet (C7). Lowering it is always welcome.
-    const WORD_BUDGET = 1400;
+    // These files load into every agent session (CLAUDE.md is the
+    // Claude-only shim). Raising this budget is a deliberate act that needs
+    // a reason in the commit message, like the lint ratchet (C7). Lowering
+    // it is always welcome.
+    const WORD_BUDGET = 1450;
     const words = (f: string) =>
       fs.readFileSync(path.join(repoRoot, f), 'utf8').split(/\s+/).filter(Boolean).length;
-    const total = words('AGENTS.md') + words('AGENTS.project.md');
+    const total = words('AGENTS.md') + words('AGENTS.project.md') + words('CLAUDE.md');
     expect(total, `combined ${total} words > budget ${WORD_BUDGET}`).toBeLessThanOrEqual(WORD_BUDGET);
   });
 });
