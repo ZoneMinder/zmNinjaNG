@@ -24,13 +24,20 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
+      // Only the app source counts. Without an explicit include, v8 also
+      // instruments the native Android build tree (android/app/build/**,
+      // the llama.cpp sources vendored under .cxx/_deps) and the dev
+      // mock server, which inflated the reported total to 83% of 1.9M
+      // statements and made the thresholds below meaningless.
+      include: ['src/**/*.{ts,tsx}'],
       exclude: [
-        'node_modules/',
         'src/tests/',
+        '**/__tests__/**',
+        '**/*.test.{ts,tsx}',
         '**/*.d.ts',
         '**/*.config.*',
         '**/mockData',
-        'dist/',
+        'src/lib/vendor/',
       ],
       // Coverage thresholds - fail tests if coverage drops below these values
       thresholds: {
