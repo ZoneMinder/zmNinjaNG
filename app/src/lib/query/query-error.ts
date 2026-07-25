@@ -22,7 +22,9 @@ export function resolveQueryError(
   options: ResolveQueryErrorOptions = {}
 ): string {
   const message = (err as Error)?.message || t('common.unknown_error');
-  const status = (err as { response?: { status?: number } })?.response?.status;
+  // `createHttpError` (lib/http/types.ts) puts the code on a flat `status`.
+  // Nothing here produces an axios-shaped `.response.status` envelope.
+  const status = (err as { status?: number })?.status;
   if (status === 401 || /unauthorized/i.test(message)) {
     return t('common.auth_required');
   }

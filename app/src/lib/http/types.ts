@@ -63,7 +63,10 @@ export function createHttpError(
   data: unknown,
   headers: Record<string, string>
 ): HttpError {
-  const error = new Error(`HTTP ${status}: ${statusText}`) as HttpError;
+  // The native adapter has no status text to report (CapacitorHttp does not
+  // expose one), and this message reaches the user through the error banner.
+  // Leave off the separator rather than render a dangling "HTTP 401: ".
+  const error = new Error(statusText ? `HTTP ${status}: ${statusText}` : `HTTP ${status}`) as HttpError;
   error.status = status;
   error.statusText = statusText;
   error.data = data;
