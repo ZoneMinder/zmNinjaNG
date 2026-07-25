@@ -11,6 +11,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          # Full history: agents-contracts.test.ts verifies commit hashes
+          # cited in agents/project/domain-context.md.
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
