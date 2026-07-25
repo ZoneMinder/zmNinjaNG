@@ -9,7 +9,7 @@ function walk(dir: string, acc: string[] = []): string[] {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      if (entry.name === 'node_modules') continue;
+      if (entry.name === 'node_modules' || entry.name === 'tests') continue;
       walk(full, acc);
     } else if (/\.(ts|tsx)$/.test(entry.name)) {
       acc.push(full);
@@ -69,8 +69,9 @@ describe('AGENTS.project.md architecture contracts', () => {
             `${c.name}: path ${token} missing`,
           ).toBe(true);
         } else {
+          const symbolPattern = new RegExp(`\\b${token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
           expect(
-            sourceText.includes(token),
+            symbolPattern.test(sourceText),
             `${c.name}: symbol ${token} not found in app/src`,
           ).toBe(true);
         }
@@ -81,7 +82,7 @@ describe('AGENTS.project.md architecture contracts', () => {
 
 describe('AGENTS.md stays portable', () => {
   it('contains no project-specific tokens', () => {
-    const core = fs.readFileSync(path.join(repoRoot, 'AGENTS.md'), 'utf8');
+    const core = fs.readFileSync(path.join(repoRoot, 'AGENTS.md'), 'utf8').toLowerCase();
     const forbidden = [
       'zmNinja',
       'ZoneMinder',
@@ -95,7 +96,7 @@ describe('AGENTS.md stays portable', () => {
       'app/src',
     ];
     for (const token of forbidden) {
-      expect(core.includes(token), `AGENTS.md contains "${token}"`).toBe(false);
+      expect(core.includes(token.toLowerCase()), `AGENTS.md contains "${token}"`).toBe(false);
     }
   });
 
@@ -122,7 +123,7 @@ describe('developer docs reference valid rule IDs', () => {
     const guideDir = path.join(repoRoot, 'docs/developer-guide');
     for (const file of fs.readdirSync(guideDir).filter((f) => f.endsWith('.rst'))) {
       const text = fs.readFileSync(path.join(guideDir, file), 'utf8');
-      for (const m of text.matchAll(/\brule ([IPCM]?[0-9]+)\b/gi)) {
+      for (const m of text.matchAll(/\brules? ([IPCM]?[0-9]+)\b/gi)) {
         expect(valid.has(m[1].toUpperCase()), `${file}: unknown rule id "${m[1]}"`).toBe(true);
       }
     }
