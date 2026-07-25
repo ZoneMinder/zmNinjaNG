@@ -15,7 +15,7 @@ import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Checkbox } from '../ui/checkbox';
 import { Label } from '../ui/label';
-import { SectionHeader, SettingsCard, SettingsRow, RowLabel } from './SettingsLayout';
+import { CollapsibleSection, SettingsCard, SettingsRow, RowLabel } from './SettingsLayout';
 import { getBandwidthSettings, type BandwidthMode } from '../../lib/zmninja-ng-constants';
 import type { Profile } from '../../api/types';
 import type { ProfileSettings, WebRTCProtocol } from '../../stores/settings';
@@ -69,8 +69,7 @@ export function LiveStreamingSection({
   };
 
   return (
-    <section>
-      <SectionHeader label={t('settings.section_live_streaming', 'Live Streaming')} />
+    <CollapsibleSection id="live-streaming" label={t('settings.section_live_streaming', 'Live Streaming')}>
       <SettingsCard>
         {/* Bandwidth Mode */}
         <SettingsRow>
@@ -319,6 +318,6 @@ export function LiveStreamingSection({
         </div>
 
       </SettingsCard>
-    </section>
+    </CollapsibleSection>
   );
 }

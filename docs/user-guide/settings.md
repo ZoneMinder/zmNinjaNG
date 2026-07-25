@@ -2,6 +2,8 @@
 
 Settings are stored per profile. Each ZoneMinder server profile has its own independent settings.
 
+Every section heading on this screen collapses. Click or tap a heading to fold that section away, and the app remembers which sections you left closed. Advanced starts closed; the rest start open.
+
 ## Appearance
 
 | Setting | Description |

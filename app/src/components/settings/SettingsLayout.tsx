@@ -5,39 +5,61 @@
  */
 
 import type React from 'react';
+import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
+import { STORAGE_KEYS } from '../../lib/zmninja-ng-constants';
 
-export function SectionHeader({
+/**
+ * A whole settings section behind its own header. The open state is remembered
+ * per section id, so a user who collapses the parts they never touch keeps that
+ * arrangement across visits and app restarts.
+ *
+ * Collapsed content is unmounted rather than hidden, which is what makes
+ * collapsing worth doing here: a closed Assistant section stops probing its
+ * backend, and a closed Advanced section stops rendering the log-level table.
+ */
+export function CollapsibleSection({
+  id,
   label,
-  collapsible,
-  expanded,
-  onToggle,
-  testId,
+  defaultOpen = true,
+  children,
 }: {
+  /** Stable id: it keys the remembered open state, so renaming one forgets it. */
+  id: string;
   label: string;
-  collapsible?: boolean;
-  expanded?: boolean;
-  onToggle?: () => void;
-  testId?: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
 }) {
-  if (collapsible) {
-    return (
+  const storageKey = `${STORAGE_KEYS.settingsSectionOpenPrefix}${id}`;
+  const [open, setOpen] = useState(() => {
+    try {
+      const stored = localStorage.getItem(storageKey);
+      if (stored === 'true') return true;
+      if (stored === 'false') return false;
+    } catch { /* ignore */ }
+    return defaultOpen;
+  });
+
+  const toggle = () => {
+    const next = !open;
+    setOpen(next);
+    try { localStorage.setItem(storageKey, String(next)); } catch { /* ignore */ }
+  };
+
+  return (
+    <section data-testid={`settings-section-${id}`}>
       <button
         type="button"
-        onClick={onToggle}
-        aria-expanded={expanded}
-        data-testid={testId}
+        onClick={toggle}
+        aria-expanded={open}
+        data-testid={`settings-section-${id}-toggle`}
         className="flex w-full items-center gap-1.5 text-sm font-semibold text-primary uppercase tracking-wide mb-2 cursor-pointer"
       >
-        {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         {label}
       </button>
-    );
-  }
-  return (
-    <h2 className="text-sm font-semibold text-primary uppercase tracking-wide mb-2">
-      {label}
-    </h2>
+      {open && children}
+    </section>
   );
 }
 

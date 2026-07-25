@@ -18,7 +18,7 @@ import { queryKeys } from '../../lib/query/query-keys';
 import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
-import { SectionHeader, SettingsCard } from './SettingsLayout';
+import { CollapsibleSection, SettingsCard } from './SettingsLayout';
 import type { Profile } from '../../api/types';
 import type { ProfileSettings } from '../../stores/settings';
 
@@ -70,8 +70,7 @@ export function HiddenMonitorsSection({
   const triggerDisabled = isLoading || !!error || monitors.length === 0;
 
   return (
-    <section>
-      <SectionHeader label={t('settings.hidden_monitors.section')} />
+    <CollapsibleSection id="hidden-monitors" label={t('settings.hidden_monitors.section')}>
       <SettingsCard>
         <div className="px-4 py-3 flex items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground min-w-0">
@@ -162,6 +161,6 @@ export function HiddenMonitorsSection({
           </div>
         )}
       </SettingsCard>
-    </section>
+    </CollapsibleSection>
   );
 }

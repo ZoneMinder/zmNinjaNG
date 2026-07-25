@@ -134,7 +134,7 @@ describe('Settings Page', () => {
     render(<Settings />);
 
     // Advanced is collapsed by default; expand it to reach its controls.
-    await user.click(screen.getByTestId('settings-advanced-toggle'));
+    await user.click(screen.getByTestId('settings-section-advanced-toggle'));
     await user.click(screen.getByTestId('settings-log-redaction-switch'));
     expect(updateProfileSettings).toHaveBeenCalledWith('profile-1', { disableLogRedaction: true });
   });

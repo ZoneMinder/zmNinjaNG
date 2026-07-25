@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from '../ui/select';
 import { Switch } from '../ui/switch';
-import { SectionHeader, SettingsCard, SettingsRow, RowLabel } from './SettingsLayout';
+import { CollapsibleSection, SettingsCard, SettingsRow, RowLabel } from './SettingsLayout';
 import { cn } from '../../lib/utils';
 import { validateFormatString } from '../../lib/format-date-time';
 import { Platform } from '../../lib/platform';
@@ -102,8 +102,7 @@ export function AppearanceSection({ settings, update }: AppearanceSectionProps) 
   const customTimePreview = validateFormatString(customTimeDraft);
 
   return (
-    <section>
-      <SectionHeader label={t('settings.section_appearance', 'Appearance')} />
+    <CollapsibleSection id="appearance" label={t('settings.section_appearance', 'Appearance')}>
       <SettingsCard>
         {/* Language */}
         <SettingsRow>
@@ -241,7 +240,7 @@ export function AppearanceSection({ settings, update }: AppearanceSectionProps) 
           onPlaybackRateChange={(rate) => update('hoverPreviewPlaybackRate', rate)}
         />
       </SettingsCard>
-    </section>
+    </CollapsibleSection>
   );
 }
 

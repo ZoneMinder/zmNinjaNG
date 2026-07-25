@@ -17,7 +17,7 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { API_REQUEST } from '../../lib/zmninja-ng-constants';
 import { CertTrustDialog } from '../CertTrustDialog';
-import { SectionHeader, SettingsCard, SettingsRow, RowLabel } from './SettingsLayout';
+import { CollapsibleSection, SettingsCard, SettingsRow, RowLabel } from './SettingsLayout';
 import { useDeveloperNoticeStore } from '../../stores/developerNotices';
 import { Platform } from '../../lib/platform';
 import { log, LogLevel } from '../../lib/logger';
@@ -62,9 +62,6 @@ export function AdvancedSection({
   // developer notice store directly rather than the profile settings helper.
   const showDeveloperNotices = useDeveloperNoticeStore((s) => s.showNotices);
   const setShowDeveloperNotices = useDeveloperNoticeStore((s) => s.setShowNotices);
-
-  // The whole Advanced section collapses (power-user settings; collapsed by default).
-  const [advancedExpanded, setAdvancedExpanded] = useState(false);
 
   // Connection settings state
   const [certDialogOpen, setCertDialogOpen] = useState(false);
@@ -256,15 +253,11 @@ export function AdvancedSection({
 
   return (
     <>
-      <section>
-        <SectionHeader
-          label={t('settings.section_advanced', 'Advanced')}
-          collapsible
-          expanded={advancedExpanded}
-          onToggle={() => setAdvancedExpanded((v) => !v)}
-          testId="settings-advanced-toggle"
-        />
-        {advancedExpanded && (
+      <CollapsibleSection
+        id="advanced"
+        label={t('settings.section_advanced', 'Advanced')}
+        defaultOpen={false}
+      >
         <>
         <SettingsCard>
           {/* Self-signed certs: only relevant for HTTPS */}
@@ -437,8 +430,7 @@ export function AdvancedSection({
           updateSettings={updateSettings}
         />
         </>
-        )}
-      </section>
+      </CollapsibleSection>
 
       <CertTrustDialog
         open={certDialogOpen}

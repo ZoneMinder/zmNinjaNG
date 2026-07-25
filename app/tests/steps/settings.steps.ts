@@ -296,7 +296,7 @@ Then('I clear logs if available', async ({ page }) => {
 
 // Thumbnail fallback chain steps
 When('I expand the Advanced settings section', async ({ page }) => {
-  const trigger = page.getByTestId('settings-advanced-toggle');
+  const trigger = page.getByTestId('settings-section-advanced-toggle');
   await expect(trigger).toBeVisible({ timeout: testConfig.timeouts.pageLoad });
   if ((await trigger.getAttribute('aria-expanded')) !== 'true') {
     await trigger.click();
@@ -372,4 +372,31 @@ Then('the {string} thumbnail fallback entry should be above the {string} entry',
 Then('the {string} thumbnail fallback entry should be disabled', async ({ page }, type: string) => {
   const toggle = page.getByTestId(`settings-thumbnail-chain-${type}-toggle`);
   await expect(toggle).toHaveAttribute('data-state', 'unchecked');
+});
+
+// Section collapse. The assertion is outcome-based: a collapsed section
+// unmounts its rows, so the section element holds nothing but its own header
+// button, and the remembered state survives leaving and re-entering the page.
+When('I collapse the {string} settings section', async ({ page }, id: string) => {
+  const trigger = page.getByTestId(`settings-section-${id}-toggle`);
+  await expect(trigger).toBeVisible({ timeout: testConfig.timeouts.pageLoad });
+  if ((await trigger.getAttribute('aria-expanded')) === 'true') await trigger.click();
+});
+
+When('I expand the {string} settings section', async ({ page }, id: string) => {
+  const trigger = page.getByTestId(`settings-section-${id}-toggle`);
+  await expect(trigger).toBeVisible({ timeout: testConfig.timeouts.pageLoad });
+  if ((await trigger.getAttribute('aria-expanded')) !== 'true') await trigger.click();
+});
+
+Then('the {string} settings section should be collapsed', async ({ page }, id: string) => {
+  const section = page.getByTestId(`settings-section-${id}`);
+  await expect(section.getByTestId(`settings-section-${id}-toggle`)).toHaveAttribute('aria-expanded', 'false');
+  await expect(section.locator('.rounded-lg.border.bg-card')).toHaveCount(0);
+});
+
+Then('the {string} settings section should be expanded', async ({ page }, id: string) => {
+  const section = page.getByTestId(`settings-section-${id}`);
+  await expect(section.getByTestId(`settings-section-${id}-toggle`)).toHaveAttribute('aria-expanded', 'true');
+  await expect(section.locator('.rounded-lg.border.bg-card').first()).toBeVisible();
 });

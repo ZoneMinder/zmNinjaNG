@@ -82,6 +82,18 @@ Feature: Application Settings
     Then the "snapshot" thumbnail fallback entry should be above the "alarm" entry
     And the "objdetect" thumbnail fallback entry should be disabled
 
+  @all
+  Scenario: Collapsing a settings section hides its rows and is remembered
+    When I navigate to the "Settings" page
+    Then the "live-streaming" settings section should be expanded
+    When I collapse the "live-streaming" settings section
+    Then the "live-streaming" settings section should be collapsed
+    When I navigate to the "Dashboard" page
+    And I navigate to the "Settings" page
+    Then the "live-streaming" settings section should be collapsed
+    When I expand the "live-streaming" settings section
+    Then the "live-streaming" settings section should be expanded
+
   @ios-phone @android
   Scenario: Phone layout makes all settings reachable via scroll
     Given the viewport is mobile size

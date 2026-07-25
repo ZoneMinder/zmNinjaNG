@@ -20,7 +20,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Switch } from '../ui/switch';
 import { Button } from '../ui/button';
-import { SectionHeader, SettingsCard, SettingsRow, RowLabel } from './SettingsLayout';
+import { CollapsibleSection, SettingsCard, SettingsRow, RowLabel } from './SettingsLayout';
 import { AssistantOllamaSection } from './AssistantOllamaSection';
 import { AssistantNativeSection } from './AssistantNativeSection';
 import { AssistantAdvancedSection } from './AssistantAdvancedSection';
@@ -255,8 +255,7 @@ export function AssistantSection({
   }, [modelId, t, toast]);
 
   return (
-    <section>
-      <SectionHeader label={t('settings.assistant.title')} />
+    <CollapsibleSection id="assistant" label={t('settings.assistant.title')}>
       <SettingsCard>
         <SettingsRow>
           <RowLabel label={t('settings.assistant.enable')} desc={t('settings.assistant.subtitle')} />
@@ -487,6 +486,6 @@ export function AssistantSection({
           </>
         )}
       </SettingsCard>
-    </section>
+    </CollapsibleSection>
   );
 }

@@ -9,7 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { Switch } from '../ui/switch';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { SectionHeader, SettingsCard, SettingsRow, RowLabel } from './SettingsLayout';
+import { CollapsibleSection, SettingsCard, SettingsRow, RowLabel } from './SettingsLayout';
 import type { Profile } from '../../api/types';
 import type { ProfileSettings } from '../../stores/settings';
 import { MONITOR_DETAIL_RECENT_EVENTS } from '../../lib/zmninja-ng-constants';
@@ -41,8 +41,7 @@ export function PlaybackSection({
   }, [recentEventsCount]);
 
   return (
-    <section>
-      <SectionHeader label={t('settings.section_playback', 'Playback')} />
+    <CollapsibleSection id="playback" label={t('settings.section_playback', 'Playback')}>
       <SettingsCard>
         {/* Event Autoplay */}
         <SettingsRow>
@@ -180,6 +179,6 @@ export function PlaybackSection({
           </div>
         </div>
       </SettingsCard>
-    </section>
+    </CollapsibleSection>
   );
 }
