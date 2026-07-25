@@ -115,12 +115,11 @@ describe('AGENTS.md stays portable', () => {
 
 describe('developer docs reference valid rule IDs', () => {
   it('every "rule <id>" reference resolves', () => {
-    const valid = new Set([
-      ...['I1', 'I2', 'I3'],
-      ...Array.from({ length: 10 }, (_, i) => `P${i + 1}`),
-      ...Array.from({ length: 7 }, (_, i) => `C${i + 1}`),
-      ...Array.from({ length: 4 }, (_, i) => `M${i + 1}`),
-    ]);
+    // Derived from AGENTS.md so adding or removing a rule cannot desync
+    // this set (it did once, when M5 landed without a matching update).
+    const core = fs.readFileSync(path.join(repoRoot, 'AGENTS.md'), 'utf8');
+    const valid = new Set([...core.matchAll(/^- ([IPCM][0-9]+)\./gm)].map((m) => m[1]));
+    expect(valid.size).toBeGreaterThanOrEqual(20);
     const guideDir = path.join(repoRoot, 'docs/developer-guide');
     for (const file of fs.readdirSync(guideDir).filter((f) => f.endsWith('.rst'))) {
       const text = fs.readFileSync(path.join(guideDir, file), 'utf8');
