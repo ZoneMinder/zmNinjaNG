@@ -73,6 +73,12 @@ tier; docs reference IDs, never copied text.
   below. One-off facts go to the project file or a playbook, never here.
 - M4. This file owns process rules; other docs link to rule IDs and never
   copy the text.
+- M5. Hard-won knowledge is shared, not hoarded: project facts (API
+  quirks, platform behavior, failed approaches) go to the domain playbook,
+  proven workflow practices to the generic playbooks, through the
+  protocol, never only into agent memory. Repo files carry no
+  personal or private data; only such specifics (names, hosts,
+  credentials) and unproven taste stay in agent memory.
 
 ## Self-improvement protocol
 

@@ -223,7 +223,7 @@ Playwright never touches a device. There is no `connectOverCDP()` anywhere in th
 
 Step definitions in `tests/steps/` use Playwright's `page` fixture directly (`page.getByTestId(...)`, `page.click(...)`, etc.). There is no shared driver abstraction layer, because only Playwright reads them.
 
-Steps must assert, not sleep. See the testing playbook, `docs/agent-playbooks/testing.md`.
+Steps must assert, not sleep. See the testing playbook, `agents/project/testing.md`.
 
 ### Config Loader
 

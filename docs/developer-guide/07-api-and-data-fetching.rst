@@ -1201,7 +1201,7 @@ Schema drift tolerance
 ZoneMinder changes what it sends between releases, and the Zod schemas in
 ``api/types.ts`` are the only thing between that and a blank screen. The policy,
 enforced by tests in ``api/__tests__/types.test.ts`` and by the data-integrity
-playbook (``docs/agent-playbooks/data-integrity.md``): a response must never fail because of a field.
+playbook (``agents/project/data-integrity.md``): a response must never fail because of a field.
 
 There are two distinct hazards, and only one is about *new* fields.
 

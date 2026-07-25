@@ -1251,7 +1251,7 @@ from each model's ``mlc-chat-config.json``, fetched from HuggingFace, which the
 registry's overrides merge over. Llama 3.2 already ships -1, so the pin is a
 no-op for it and a guard against the next sliding-window model. Pinning -1 selects full
 KV-cache mode, matching what the registry's own Mistral entries do. Reading the
-bundled registry alone will not show you any of this (the data-integrity playbook, ``docs/agent-playbooks/data-integrity.md``).
+bundled registry alone will not show you any of this (the data-integrity playbook, ``agents/project/data-integrity.md``).
 
 That same merge is why ``gemma3-1b-it-q4f16_1-MLC`` is not in the list. Its
 stock registry entry cannot load on web-llm 0.2.84 at all: the override sets

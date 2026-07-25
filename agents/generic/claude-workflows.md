@@ -48,6 +48,20 @@ review before a PR is the one step never skipped.
 - A reviewer only re-runs tests when the code changed after the last run;
   otherwise the implementer's report carries the evidence.
 
+## Where knowledge goes (M5 in practice)
+
+- Project fact (API quirk, platform behavior, failed approach): the domain
+  playbook in the project playbook directory, via the protocol PR. Check
+  whether an entry already covers it; update rather than duplicate.
+- Workflow practice that proved out (a review pattern, a model-tier choice,
+  a tooling guard): this playbook or a sibling generic playbook, via the
+  same protocol. Personal preference becomes shared practice exactly when
+  it has evidence behind it.
+- Agent private memory holds only what the repo must not: personal and
+  private specifics (names, hosts, credentials, machine paths) and habits
+  with no evidence yet. Memory is a staging area, not an archive; when a
+  memory keeps proving true, promote it and delete the private copy.
+
 ## Known failure modes this playbook exists to prevent
 
 - A compression wrapper garbled test output and hid a failure; the direct

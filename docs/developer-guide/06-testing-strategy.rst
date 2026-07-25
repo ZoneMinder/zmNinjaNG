@@ -404,7 +404,7 @@ Steps live in per-screen files under ``tests/steps/`` and use Playwright's
    });
 
 ``await expect(locator).toBeVisible()`` retries until the timeout expires. That
-is why new steps never call ``waitForTimeout`` (the testing playbook, ``docs/agent-playbooks/testing.md``; one legacy placeholder
+is why new steps never call ``waitForTimeout`` (the testing playbook, ``agents/project/testing.md``; one legacy placeholder
 remains in ``platform.steps.ts``): a fixed sleep either wastes time or
 races the app, and the testing playbook bans it in new steps.
 

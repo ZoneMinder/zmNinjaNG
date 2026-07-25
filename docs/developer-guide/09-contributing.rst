@@ -252,7 +252,7 @@ A maintainer merges. P8: nothing reaches ``main`` without the maintainer's
 approval, and CI has to be green first. Only the web e2e suite runs in CI
 (project rules); the iOS and Android suites are invoked by hand, so a change that
 touches a native path is not done until someone has run it on a real device
-(the native playbook, ``docs/agent-playbooks/native.md``).
+(the native playbook, ``agents/project/native.md``).
 
 What Reviewers Actually Check
 -----------------------------

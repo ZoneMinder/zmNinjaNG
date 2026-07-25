@@ -117,7 +117,11 @@ Read each listed playbook before work in that area.
 
 | Work | Read first |
 |---|---|
-| Tests, UI, navigation, or platform checks | `docs/agent-playbooks/testing.md` |
-| Developer or user documentation | `docs/agent-playbooks/documentation.md` |
-| Capacitor, TLS, Electron, downloads, or native paths | `docs/agent-playbooks/native.md` |
-| Assistant tools, WebLLM, or ZoneMinder schemas | `docs/agent-playbooks/data-integrity.md` |
+| Tests, UI, navigation, or platform checks | `agents/project/testing.md` |
+| Developer or user documentation | `agents/project/documentation.md` |
+| Capacitor, TLS, Electron, downloads, or native paths | `agents/project/native.md` |
+| Assistant tools, WebLLM, or ZoneMinder schemas | `agents/project/data-integrity.md` |
+| ZoneMinder APIs, streaming, or platform quirks | `agents/project/domain-context.md` |
+
+Portable playbooks live in `agents/generic/`; project ones in
+`agents/project/`.
