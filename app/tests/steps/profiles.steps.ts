@@ -30,11 +30,6 @@ Then('I should see the active profile indicator', async ({ page }) => {
   });
 });
 
-Then('I should see profile management buttons', async ({ page }) => {
-  const addButton = page.getByRole('button', { name: /add/i }).first();
-  await expect(addButton).toBeVisible();
-});
-
 When('I open the edit dialog for the first profile', async ({ page }) => {
   const editButton = page.locator('[data-testid^="profile-edit-button-"]').first();
   await editButton.click();
@@ -42,14 +37,6 @@ When('I open the edit dialog for the first profile', async ({ page }) => {
 
 Then('I should see the profile edit dialog', async ({ page }) => {
   await expect(page.getByTestId('profile-edit-dialog')).toBeVisible();
-});
-
-When('I cancel profile edits', async ({ page }) => {
-  await page.getByTestId('profile-edit-cancel').click();
-});
-
-Then('I should see the profiles list', async ({ page }) => {
-  await expect(page.getByTestId('profile-list')).toBeVisible();
 });
 
 Then('I should see the profile delete dialog', async ({ page }) => {

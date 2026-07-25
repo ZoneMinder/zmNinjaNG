@@ -232,22 +232,6 @@ Then('I should see notification interface elements', async ({ page }) => {
   }, { timeout: testConfig.timeouts.transition }).toBeTruthy();
 });
 
-When('I navigate to the notification history', async ({ page }) => {
-  await page.getByTestId('notification-history-button').click();
-  await page.waitForURL(/.*notifications\/history/, { timeout: testConfig.timeouts.transition });
-});
-
-Then('I should see notification history content or empty state', async ({ page }) => {
-  const hasList = await page.getByTestId('notification-history-list').isVisible().catch(() => false);
-  const hasEmpty = await page.getByTestId('notification-history-empty').isVisible().catch(() => false);
-
-  expect(hasList || hasEmpty).toBeTruthy();
-});
-
-Then('I should see notification history page', async ({ page }) => {
-  await expect(page.getByTestId('notification-history')).toBeVisible();
-});
-
 // Logs Steps
 Then('I should see log entries or empty state', async ({ page }) => {
   // Wait for the logs page to load
@@ -278,32 +262,36 @@ Then('I should see log control elements', async ({ page }) => {
   expect(hasLevelFilter || hasComponentFilter || hasClearButton || hasSaveButton || hasAnyButton).toBeTruthy();
 });
 
-Then('I change the log level to {string}', async ({ page }, level: string) => {
+When('I change the log level to {string}', async ({ page }, level: string) => {
+  // The level select always renders on the logs page (Logs.tsx:405). Skipping
+  // the change when it was not found meant a regression that stopped it
+  // rendering read as "nothing to do here".
   const levelSelect = page.getByTestId('log-level-select');
-  if (await levelSelect.isVisible({ timeout: 2000 }).catch(() => false)) {
-    await levelSelect.click();
-    const option = page.getByTestId(`log-level-option-${level}`);
-    if (await option.isVisible({ timeout: 1000 }).catch(() => false)) {
-      await option.click();
-    }
-  } else {
-    log.info('E2E: Log level select not found', { component: 'e2e' });
-  }
+  await expect(levelSelect).toBeVisible({ timeout: testConfig.timeouts.pageLoad });
+  await levelSelect.click();
+  await page.getByTestId(`log-level-option-${level}`).click();
+  await expect(levelSelect).toContainText(level);
 });
 
-Then('I clear logs if available', async ({ page }) => {
-  const clearButton = page.getByTestId('logs-clear-button')
-    .or(page.getByRole('button', { name: /clear/i }));
-  if (await clearButton.first().isVisible({ timeout: 1000 }).catch(() => false)) {
-    if (await clearButton.first().isEnabled()) {
-      await clearButton.first().click();
-      // Confirm the AlertDialog if it appears
-      const confirmButton = page.getByTestId('logs-clear-confirm');
-      if (await confirmButton.isVisible({ timeout: 1000 }).catch(() => false)) {
-        await confirmButton.click();
-      }
-    }
+When('I clear logs if available', async ({ page }) => {
+  // The clear button is present whenever the app-log source is selected and is
+  // disabled only when there is nothing to clear (Logs.tsx:499-507), so both
+  // branches have something to assert: cleared, or empty to begin with.
+  const clearButton = page.getByTestId('logs-clear-button');
+  await expect(clearButton).toBeVisible({ timeout: testConfig.timeouts.pageLoad });
+
+  if (!(await clearButton.isEnabled())) {
+    await expect(page.getByTestId('log-entry')).toHaveCount(0);
+    return;
   }
+
+  await clearButton.click();
+  await page.getByTestId('logs-clear-confirm').click();
+  await expect
+    .poll(() => page.getByTestId('log-entry').count(), {
+      timeout: testConfig.timeouts.element,
+    })
+    .toBe(0);
 });
 
 // Thumbnail fallback chain steps

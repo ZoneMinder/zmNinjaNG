@@ -68,7 +68,9 @@ When('I tap {string}', async ({ page }, label: string) => {
 });
 
 Then('I should be on the events page filtered to that monitor', async ({ page }) => {
-  await page.waitForURL(/\/events\?monitorId=\d+/, { timeout: testConfig.timeouts.transition });
+  await expect(page).toHaveURL(/\/events\?monitorId=\d+/, {
+    timeout: testConfig.timeouts.transition,
+  });
 });
 
 // Bulk delete batch bar (cancel path only, refs #213). This must never click

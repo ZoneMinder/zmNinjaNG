@@ -5,6 +5,7 @@ import { testConfig } from '../helpers/config';
 const { When, Then } = createBdd();
 
 let lastWidgetTitle: string;
+let widgetCountBeforeDelete = 0;
 
 // Dashboard Steps
 When('I open the Add Widget dialog', async ({ page }) => {
@@ -124,9 +125,13 @@ When('I click the widget edit button on the first widget', async ({ page }) => {
 });
 
 When('I click the widget delete button on the first widget', async ({ page }) => {
+  const widgets = page.locator('.react-grid-item');
+  widgetCountBeforeDelete = await widgets.count();
+  expect(widgetCountBeforeDelete).toBeGreaterThan(0);
+
   // In edit mode, there's an X button on each widget
-  const deleteBtn = page.locator('.react-grid-item').first().locator('button[class*="destructive"]')
-    .or(page.locator('.react-grid-item').first().locator('button').filter({ has: page.locator('svg.lucide-x') }));
+  const deleteBtn = widgets.first().locator('button[class*="destructive"]')
+    .or(widgets.first().locator('button').filter({ has: page.locator('svg.lucide-x') }));
   await deleteBtn.first().click();
 });
 
@@ -153,12 +158,11 @@ When('I save the widget changes', async ({ page }) => {
 });
 
 Then('the widget should be removed from the dashboard', async ({ page }) => {
-  // Wait for widget to be removed (grid should have one less item)
-  await page.waitForTimeout(500);
-});
-
-Then('the add widget button should be visible', async ({ page }) => {
-  const addBtn = page.getByRole('button', { name: /add widget/i })
-    .or(page.getByTitle(/add widget/i));
-  await expect(addBtn.first()).toBeVisible({ timeout: testConfig.timeouts.element });
+  // One fewer grid item than before the delete click. Waiting on a timeout and
+  // asserting nothing passed whether or not the widget actually went away.
+  await expect
+    .poll(() => page.locator('.react-grid-item').count(), {
+      timeout: testConfig.timeouts.element,
+    })
+    .toBe(widgetCountBeforeDelete - 1);
 });

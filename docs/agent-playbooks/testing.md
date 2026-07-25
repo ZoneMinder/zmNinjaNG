@@ -11,6 +11,7 @@ Read before tests, UI work, navigation work, or platform checks.
 - New interactive UI needs a kebab-case `data-testid`.
 - Do not use fixed `waitForTimeout`. Use auto-retrying `expect`.
 - Capability-based e2e skips must derive from API or fixture data, never visibility of UI under test. When capability exists, assert the UI.
+- Every `Then` step asserts, through `expect` or an `assert*` helper, and every step definition is referenced by a feature. `app/src/tests/e2e-steps.test.ts` fails the unit suite otherwise, so a step that cannot fail and a step nothing runs both surface without an e2e run.
 
 ## Platforms
 
