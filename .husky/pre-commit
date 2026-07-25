@@ -18,5 +18,11 @@ npx lint-staged || echo "lint reported issues (advisory; see #217 backlog)"
 # against the whole tree (not just staged files) since it's fast enough.
 npx eslint -c eslint.a11y.config.js .
 
+# The two React Compiler correctness rules are also a hard gate (refs #281).
+# purity and immutability were brought to zero, and unlike the rest of the
+# react-hooks backlog they describe behaviour changes rather than performance
+# advice. eslint.correctness.config.js enables only those two.
+npx eslint -c eslint.correctness.config.js .
+
 # tsc -b and the commit-msg native-version guard stay hard gates.
 npx tsc -b

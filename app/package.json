@@ -17,6 +17,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "lint:a11y": "eslint -c eslint.a11y.config.js .",
+    "lint:correctness": "eslint -c eslint.correctness.config.js .",
     "preview": "vite preview",
     "test": "vitest",
     "test:ui": "vitest --ui",

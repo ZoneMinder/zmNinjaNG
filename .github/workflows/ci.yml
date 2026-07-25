@@ -97,6 +97,33 @@ jobs:
         working-directory: ./app
         run: npm run lint:a11y
 
+  lint-react-correctness:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./app
+        run: npm ci
+
+      # Hard gate: react-hooks/purity and react-hooks/immutability are at zero
+      # (refs #281). Unlike the rest of the react-hooks backlog that keeps the
+      # `lint` job advisory, these two describe behaviour that changes under
+      # memoization rather than performance advice, so a regression fails the
+      # PR. eslint.correctness.config.js enables only those two rules.
+      - name: Run React correctness lint
+        working-directory: ./app
+        run: npm run lint:correctness
+
   build:
     runs-on: ubuntu-latest
 
