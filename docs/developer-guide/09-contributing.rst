@@ -190,7 +190,7 @@ Vague subjects (``fixed bug``, ``wip``, ``test``) and batched subjects
 (``fix login bug and add dark mode and update docs``) both get sent back. Split
 the batch into one commit per change.
 
-**Issue references.** P5 is stricter than GitHub's syntax allows. While an
+**Issue references.** P1 is stricter than GitHub's syntax allows. While an
 issue is open for the work, every commit for it carries ``refs #<id>``. The
 closing keyword ``fixes #<id>`` is reserved until the user has confirmed the
 fix actually works, because a commit that says ``fixes`` closes the issue the
@@ -343,7 +343,7 @@ codebase-specific traps with no rule to cite.
 - ☐ HTTP contract: ``lib/http.ts``, no raw ``fetch``
 - ☐ C2: no dead code, no commented-out blocks
 - ☐ Project rules: ``data-testid`` on new interactive elements
-- ☐ P5: conventional subject, ``refs #<id>`` not ``fixes #<id>``
+- ☐ P1: conventional subject, ``refs #<id>`` not ``fixes #<id>``
 - ☐ P5: one logical change per commit
 - ☐ Date and time contract: user-visible dates via ``useDateTimeFormat`` or ``formatApp*``
 - ☐ Constants contract: named constants centralized
@@ -423,7 +423,7 @@ Fixing a Bug
 
 The commit says ``refs #92``, not ``fixes #92``. The maintainer confirms the
 fix on a device, and only then does a commit or the PR close the issue
-(P5). Callback identity and the render loop it feeds are explained in
+(P1). Callback identity and the render loop it feeds are explained in
 :doc:`02-react-fundamentals`; the streaming path itself is traced in
 :doc:`call-flows`.
 

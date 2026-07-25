@@ -162,7 +162,7 @@ Calling the hook with no selector subscribes to everything:
    const { isFavorited, toggleFavorite } = useEventFavoritesStore();
 
 Any write anywhere in the store, to any profile's favorites, re-renders this
-component. The Stores contract in ``AGENTS.md`` bans the form. Three call sites predate
+component. The Stores contract in ``AGENTS.project.md`` bans the form. Three call sites predate
 the rule and are tracked in issue #230; do not add more.
 
 The mirror-image mistake is over-narrowing. Shrink a selector down to just
