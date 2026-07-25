@@ -160,6 +160,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          # agents-contracts.test.ts verifies commit hashes cited as
+          # evidence in agents/project/domain-context.md; a shallow clone
+          # has no history and fails that check.
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

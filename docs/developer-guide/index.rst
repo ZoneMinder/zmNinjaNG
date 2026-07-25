@@ -40,6 +40,7 @@ links into the reference chapters.
    11-application-lifecycle
    12-shared-services-and-components
    13-network-endpoints
+   14-agent-development-model
    go2rtc-integration
 
 

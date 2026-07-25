@@ -64,7 +64,7 @@ arrays rather than mutating the existing ones:
    // array, and skip the re-render. The UI never updates.
    set((state) => { state.selectedIds.push(id); return state; })
 
-This is rule 30 in ``AGENTS.md``: never mutate an object you obtained from
+This is the Stores contract in ``AGENTS.project.md``: never mutate an object you obtained from
 the store, including one you read through ``getState()``.
 
 Initialize every field. ``items: undefined`` looks harmless until an action
@@ -157,12 +157,12 @@ Calling the hook with no selector subscribes to everything:
 
 .. code:: tsx
 
-   // Anti-pattern (rule 30). Re-renders on every store change,
+   // Anti-pattern (Stores contract). Re-renders on every store change,
    // including fields this component never reads.
    const { isFavorited, toggleFavorite } = useEventFavoritesStore();
 
 Any write anywhere in the store, to any profile's favorites, re-renders this
-component. Rule 30 in ``AGENTS.md`` bans the form. Three call sites predate
+component. The Stores contract in ``AGENTS.project.md`` bans the form. Three call sites predate
 the rule and are tracked in issue #230; do not add more.
 
 The mirror-image mistake is over-narrowing. Shrink a selector down to just
@@ -175,7 +175,7 @@ never again: actions never change, so nothing is left to trigger an update.
    const toggleFavorite = useEventFavoritesStore((s) => s.toggleFavorite);
    const favorites = useEventFavoritesStore.getState().getFavorites(profileId);
 
-Rule 30 covers both directions: every field the component reads reactively
+The Stores contract covers both directions: every field the component reads reactively
 must be in the selector.
 
 Store Values as Effect Dependencies
@@ -240,7 +240,7 @@ The ``persist`` middleware writes state to ``localStorage`` after every
 change and reads it back at startup. zmNinjaNg runs on web, Electron, and
 Capacitor, all of which expose ``localStorage``, so no custom storage
 adapter is needed. Persist keys are never string literals at the call site.
-They live in ``STORAGE_KEYS`` in ``lib/zmninja-ng-constants.ts`` (rule 25),
+They live in ``STORAGE_KEYS`` in ``lib/zmninja-ng-constants.ts`` (the Constants contract),
 because the values are on-disk keys: changing one orphans every existing
 user's stored state.
 
@@ -305,7 +305,7 @@ The ``catch`` forces ``isInitialized`` to ``true``. Left unset, ``App``'s
 ``if (!isInitialized)`` gate would hold the loading fallback on screen
 forever, so a rehydration bug would present as a permanently hung splash.
 Note the logging goes through ``log.profileService``, not ``console.error``;
-rule 9 routes every log line through ``lib/logger.ts`` so it lands in the
+the Logging contract routes every log line through ``lib/logger.ts`` so it lands in the
 in-app log viewer.
 
 Calling Stores Outside React
@@ -326,7 +326,7 @@ In the return direction the service imports only *types* from the store,
 ``pushNotifications.ts:14``. TypeScript erases a type-only import at compile
 time, so it is not a module edge at runtime and ``madge`` does not see it. A
 *value* import there would close the cycle, and that is the static
-service-to-store edge rule 31 forbids. The inversion is a gate: the service
+service-to-store edge the Service boundary contract forbids. The inversion is a gate: the service
 declares the shape of the state it needs and exposes a registration function,
 and the store fills it in at module load.
 

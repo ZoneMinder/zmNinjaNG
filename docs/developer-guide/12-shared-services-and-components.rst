@@ -1251,7 +1251,7 @@ from each model's ``mlc-chat-config.json``, fetched from HuggingFace, which the
 registry's overrides merge over. Llama 3.2 already ships -1, so the pin is a
 no-op for it and a guard against the next sliding-window model. Pinning -1 selects full
 KV-cache mode, matching what the registry's own Mistral entries do. Reading the
-bundled registry alone will not show you any of this (rule 41 in ``AGENTS.md``).
+bundled registry alone will not show you any of this (the data-integrity playbook, ``agents/project/data-integrity.md``).
 
 That same merge is why ``gemma3-1b-it-q4f16_1-MLC`` is not in the list. Its
 stock registry entry cannot load on web-llm 0.2.84 at all: the override sets
@@ -2013,10 +2013,11 @@ bridges and long-lived singletons; ``components/ui/`` for primitives,
 import a store: invert it with the gate pattern (``api/store-gates.ts``) and
 keep ``npx madge --circular`` at zero.
 
-The repo's ``AGENTS.md`` is the source for the rest, and this guide does not
-restate it. Rules 25 (constants), 29 (query keys), 33 (``lib/`` placement), 9
-(logging), 10 (HTTP), and 23 (dates) all constrain a new shared module. Write
-the test first, next to the source in ``__tests__/`` (:doc:`06-testing-strategy`).
+The repo's ``AGENTS.md`` and ``AGENTS.project.md`` are the source for the
+rest, and this guide does not restate it. The Constants, Server queries,
+Logging, HTTP, and Date and time contracts, plus C5 (``lib/`` placement), all
+constrain a new shared module. Write the test first, next to the source in
+``__tests__/`` (:doc:`06-testing-strategy`).
 
 Then document it here connected to behavior: say what a user can do because
 this code exists, and give one example taken from a real call site. If the new
