@@ -10,7 +10,9 @@ import {
   type ZMNotificationProviders,
   type ZMAlarmEvent,
   type ConnectionState,
-  type NotificationMode,
+  type NotificationSettings,
+  type MonitorNotificationConfig,
+  type NotificationSource,
 } from '../types/notifications';
 import { log, LogLevel } from '../lib/logger';
 import { Platform } from '../lib/platform';
@@ -24,29 +26,10 @@ import { useSettingsStore } from './settings';
 import { setPushServiceStoreGates } from '../services/pushNotifications';
 import { getBandwidthSettings, NOTIFICATIONS_SERVICE, STORAGE_KEYS, type BandwidthMode } from '../lib/zmninja-ng-constants';
 
-export interface NotificationSettings {
-  enabled: boolean;
-  notificationMode: NotificationMode; // 'es' = Event Server websocket, 'direct' = ZM REST API
-  notificationId: number | null; // Server-side Notifications.Id (direct mode)
-  host: string; // Event server host (e.g., "zm.example.com")
-  port: number; // Event server port (default 9000)
-  ssl: boolean; // Use wss:// instead of ws://
-  allMonitors: boolean; // Receive notifications for all monitors (no filter sent to ES)
-  monitorFilters: MonitorNotificationConfig[]; // Per-monitor settings (used when allMonitors is false)
-  onlyDetectedEvents: boolean; // Only notify for events with object detection results (direct mode)
-  pollingInterval: number; // Seconds between event polls in direct mode (desktop)
-  showToasts: boolean; // Show toast notifications for events
-  playSound: boolean; // Play sound on notification
-  badgeCount: number; // Current unread count
-}
-
-export interface MonitorNotificationConfig {
-  monitorId: number;
-  enabled: boolean;
-  checkInterval: number; // Seconds between checks (60, 120, etc.)
-}
-
-export type NotificationSource = 'websocket' | 'push' | 'poll';
+// The settings shapes live in types/notifications.ts so a service can describe
+// them without importing this store, which would close a cycle (refs #281).
+// Re-exported here for the components that already import them from the store.
+export type { NotificationSettings, MonitorNotificationConfig, NotificationSource };
 
 export interface NotificationEvent extends ZMAlarmEvent {
   receivedAt: number; // Timestamp when received

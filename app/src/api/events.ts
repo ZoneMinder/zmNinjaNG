@@ -6,7 +6,7 @@
  */
 
 import { getApiClient } from './client';
-import type { EventsResponse, EventData } from './types';
+import type { EventsResponse, EventData, EventFilters } from './types';
 import { EventsResponseSchema, EventResponseSchema } from './types';
 import { log, LogLevel } from '../lib/logger';
 import { validateApiResponse } from '../lib/zm/api-validator';
@@ -19,30 +19,10 @@ import { wrapWithImageProxy } from '../lib/zm/proxy-utils';
 import { getExcludedMonitorIdSet } from '../lib/profile/profile-settings';
 import { API_PAGINATION } from '../lib/zmninja-ng-constants';
 
-export interface EventFilters {
-  monitorId?: string;
-  startDateTime?: string;
-  endDateTime?: string;
-  archived?: boolean;
-  minAlarmFrames?: number;
-  notesRegexp?: string; // REGEXP filter on Notes field (e.g., "detected:" for object detection)
-  cause?: string; // Filter by event cause (e.g., "Motion", "Continuous", "Signal", "Forced")
-  // Restrict results to these event IDs via ZM's "Id IN:" filter. Used for the
-  // locally-stored favorites concept, which must compose with pagination:
-  // passing the IDs to the server keeps totalCount and "Load More" accurate
-  // (refs #205). An empty array matches no events (returns an empty list with
-  // no request). undefined means "no Id filter".
-  eventIds?: string[];
-  // Restrict results to events carrying any of these ZM tag IDs, via the
-  // server-side "Tags.Id:" filter (one request per tag, merged). Concrete tag
-  // IDs only; the caller expands the "all tags" option to the full tag list.
-  // ZM cannot combine "Tags.Id:" with "Id IN:" in one query, so callers must
-  // not set both eventIds and tagIds (eventIds wins if they do).
-  tagIds?: string[];
-  limit?: number;
-  sort?: string;
-  direction?: 'asc' | 'desc';
-}
+// EventFilters is declared in ./types alongside the other request and response
+// shapes, because types.ts references it too and importing it back from here
+// closed a cycle (refs #281). Re-exported for the callers that expect it here.
+export type { EventFilters };
 
 /** Drop events belonging to per-profile excluded monitors. */
 function dropExcludedMonitorEvents(events: EventData[]): EventData[] {

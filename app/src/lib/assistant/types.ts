@@ -1,6 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 import type { ProfileId } from '../../api/types';
-import type { ThumbnailFallbackEntry } from '../../stores/settings';
+import type { ThumbnailFallbackEntry } from '../event/thumbnail-chain';
 import type { FormatSettings } from '../format-date-time';
 
 export type AssistantRole = 'user' | 'assistant' | 'tool';

@@ -11,7 +11,7 @@ import type { Notification } from '@capacitor-firebase/messaging';
 import { Platform } from '../lib/platform';
 import { log, LogLevel } from '../lib/logger';
 import { navigationService } from '../lib/navigation';
-import type { NotificationSettings, NotificationSource } from '../stores/notifications';
+import type { NotificationSettings, NotificationSource } from '../types/notifications';
 import type { Profile } from '../api/types';
 import { registerToken, deleteNotification } from '../api/notifications';
 import { getAppVersion } from '../lib/version';
