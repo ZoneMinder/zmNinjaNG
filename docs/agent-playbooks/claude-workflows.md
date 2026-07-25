@@ -6,6 +6,17 @@ state what must hold; this playbook records what has worked. When the two
 disagree, the instruction files win. Harness features churn; check the date
 above before trusting specifics.
 
+## Scale ceremony to risk
+
+Multi-agent process below pays off on multi-task plans, refactors with blast
+radius, and anything touching contracts. It does not pay off on small
+bounded changes: for a one-file fix with a covering test, work inline, run
+the gates, commit. Evidence from the restructure run: reviews of mechanical
+transcription tasks found zero defects; reviews of judgment work (doc
+remapping, whole-branch review) found every real one. Review where judgment
+lives; skip where the gate already proves the result. The final whole-branch
+review before a PR is the one step never skipped.
+
 ## Multi-agent execution
 
 - One subagent per task, fresh context each time. Hand each agent a brief
@@ -16,9 +27,10 @@ above before trusting specifics.
   content to write (transcription plus testing); mid tier for reviews and
   prose judgment; the most capable model only for the final whole-branch
   review.
-- Every task gets an independent review against its brief before the next
-  task starts. Fixes get a scoped re-review that verdicts each finding
-  ADDRESSED or NOT ADDRESSED and looks only at the fix diff.
+- Tasks involving judgment get an independent review against their brief
+  before the next task starts; purely mechanical tasks rely on their gates.
+  Fixes get a scoped re-review that verdicts each finding ADDRESSED or NOT
+  ADDRESSED and looks only at the fix diff.
 - After the final whole-branch review, dispatch one fix wave with the whole
   findings list, then one scoped re-review. Never one fixer per finding.
 - Stop every agent as soon as its report is verified. Idle agents keep

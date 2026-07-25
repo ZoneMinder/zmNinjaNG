@@ -104,8 +104,10 @@ npm run lint:ratchet
 npm run test:e2e -- <feature>.feature
 ```
 
+Per commit, run what the change touches (docs-only edits: the doc gates in
+`src/tests/`; code: its unit tests). The full list runs before push or PR.
 The three lint commands are the blocking ones; `npm run lint` stays
-advisory. The last command applies to UI, navigation, and workflow changes.
+advisory. The e2e command applies to UI, navigation, and workflow changes.
 The ratchet baseline lives at `app/.lint-baseline.json`; lower it with
 `npm run lint:ratchet -- --update`. State completed checks in handoff.
 

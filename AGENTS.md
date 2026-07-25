@@ -32,8 +32,8 @@ tier; docs reference IDs, never copied text.
   do so and verify the issue timeline.
 - P2. Test first: a failing test precedes the implementation of every
   feature and bugfix. A test that never failed proves nothing.
-- P3. Run the full gate suite before every commit. Never commit after a
-  failed or unrun gate.
+- P3. Run the gates covering the change before every commit; run the full
+  suite before push or PR. Never commit after a failed or unrun gate.
 - P4. Read failures and fix the cause. Never blindly retry.
 - P5. One logical change per conventional commit.
 - P6. Verification runs direct commands. Tooling that transforms output,
@@ -42,7 +42,6 @@ tier; docs reference IDs, never copied text.
 - P7. Finish the requested behavior. Materially different UX options need
   approval before choosing.
 - P8. Never merge the default branch without approval.
-- P9. Do not commit plan files.
 - P10. Docs move with behavior: user docs for changed behavior, developer
   docs and call flows for new APIs, components, hooks, and utilities. Doc
   prose stays plain and factual, without marketing language or filler.
