@@ -300,11 +300,13 @@ export const EVENT_SEEK_FLUSH_DELAY_MS = 400;
 
 /**
  * Significant frames ZoneMinder can serve for an event (issue #272), in the
- * order the event frame carousel shows them. ZoneMinder has no API that reports
- * which of these exist for a given event, so the carousel renders each one and
- * drops the ones whose image fails to load.
+ * order the event frame carousel shows them: most informative first, so the
+ * annotated detection image leads, then the frame that triggered the alarm,
+ * then the plain snapshot. ZoneMinder has no API that reports which of these
+ * exist for a given event, so the carousel renders each one and drops the ones
+ * whose image fails to load.
  */
-export const EVENT_FRAME_TYPES = ['alarm', 'snapshot', 'objdetect'] as const;
+export const EVENT_FRAME_TYPES = ['objdetect', 'alarm', 'snapshot'] as const;
 
 /** Width requested for carousel thumbnails, in pixels. */
 export const EVENT_FRAME_THUMB_WIDTH = 240;

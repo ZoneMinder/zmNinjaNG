@@ -49,7 +49,7 @@ Tap an event to open the event detail view, which includes:
 
 ### Event Frames
 
-Above the player is a strip of the significant still frames ZoneMinder keeps for the event: the alarm frame, the snapshot, and the annotated object-detection image if machine learning wrote one. Only the frames the server actually has appear, so an event without object detection shows two entries and an event with no stored stills shows no strip at all.
+Above the player is a strip of the significant still frames ZoneMinder keeps for the event, in order: the annotated object-detection image if machine learning wrote one, the alarm frame, then the snapshot. Only the frames the server actually has appear, so an event without object detection shows two entries and an event with no stored stills shows no strip at all.
 
 Tap a frame to see it full size. Pinch, scroll the mouse wheel, or use the zoom buttons to magnify it, then drag to move around the image, the same as on the live monitor view. Playback stops while the image is open and resumes when you close it, unless you had already paused it.
 
