@@ -5,7 +5,7 @@
  * (no toggle/auto-hide logic needed).
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback } from 'react';
 import { useSettingsStore } from '../../../stores/settings';
 import type { Profile } from '../../../api/types';
 import type { ProfileSettings } from '../../../stores/settings';
@@ -26,18 +26,13 @@ export function useFullscreenMode({
 }: UseFullscreenModeOptions): UseFullscreenModeReturn {
   const updateSettings = useSettingsStore((state) => state.updateProfileSettings);
 
-  const [isFullscreen, setIsFullscreen] = useState(settings.montageIsFullscreen);
-
-  // Update fullscreen state when profile changes
-  useEffect(() => {
-    setIsFullscreen(settings.montageIsFullscreen);
-  }, [currentProfile?.id, settings.montageIsFullscreen]);
-
+  // The profile setting is the state. It was previously mirrored into local
+  // state and resynced by an effect, which only ever restated what the store
+  // already held: the sole writer below updates the store too, and it returns
+  // early without a profile, so the two could not diverge (refs #281).
   const handleToggleFullscreen = useCallback(
     (fullscreen: boolean) => {
       if (!currentProfile) return;
-
-      setIsFullscreen(fullscreen);
       updateSettings(currentProfile.id, {
         montageIsFullscreen: fullscreen,
       });
@@ -46,7 +41,7 @@ export function useFullscreenMode({
   );
 
   return {
-    isFullscreen,
+    isFullscreen: settings.montageIsFullscreen,
     handleToggleFullscreen,
   };
 }

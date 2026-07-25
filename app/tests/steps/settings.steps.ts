@@ -196,16 +196,28 @@ Then('the bandwidth mode label should update', async ({ page }) => {
 
 // Server Steps
 Then('I should see server information displayed', async ({ page }) => {
-  // Poll for any content on the server page (it fetches data from the API)
-  // instead of guessing how long the fetch takes with a fixed sleep.
-  await expect.poll(async () => {
-    const hasHeading = await page.getByRole('heading', { name: /server/i }).isVisible().catch(() => false);
-    const hasVersion = await page.getByText(/version/i).isVisible().catch(() => false);
-    const hasStatus = await page.getByText(/status/i).isVisible().catch(() => false);
-    const hasCards = await page.locator('[role="region"]').count() > 0;
-    const hasAnyContent = await page.locator('main').locator('*').count() > 3;
-    return hasHeading || hasVersion || hasStatus || hasCards || hasAnyContent;
-  }, { timeout: testConfig.timeouts.transition }).toBeTruthy();
+  // The previous version of this step passed whenever <main> had more than
+  // three descendants, so it could not tell a loaded page from an error state.
+  // Assert fetched values instead. Only the unconditional cards are checked:
+  // the server list and storage cards render solely when ZM returns rows, and
+  // a single-server install commonly returns none.
+  const main = page.locator('main');
+
+  // The version card carries a real version from the API rather than the
+  // common.unknown placeholder it falls back to when the request fails. Only
+  // the ZM version is asserted: timezone, load average and disk usage are all
+  // legitimately absent on some installs, and server run state changes between
+  // runs, so none of them are invariants a test can hold.
+  await expect.poll(
+    async () => (await main.textContent()) ?? '',
+    { timeout: testConfig.timeouts.transition },
+  ).toMatch(/ZoneMinder Version\s*\d+\.\d+/);
+
+  // The state control is present and enabled once states have loaded.
+  await expect(page.getByTestId('server-state-select')).toBeVisible({
+    timeout: testConfig.timeouts.transition,
+  });
+  await expect(page.getByTestId('server-refresh-button')).toBeEnabled();
 });
 
 // Notification Steps

@@ -49,14 +49,14 @@ export function ThemeProvider({
         (state) => (currentProfileId ? state.profileSettings[currentProfileId]?.theme : undefined)
     );
     const updateProfileSettings = useSettingsStore((state) => state.updateProfileSettings);
-    const resolvedDefault = useMemo(() => profileTheme || defaultTheme, [defaultTheme, profileTheme]);
-    const [theme, setTheme] = useState<Theme>(resolvedDefault);
-
-    useEffect(() => {
-        if (profileTheme && profileTheme !== theme) {
-            setTheme(profileTheme);
-        }
-    }, [profileTheme, theme]);
+    // The profile's theme is the source of truth whenever there is a profile.
+    // localTheme only holds the choice before one exists (the login screen),
+    // where updateProfileSettings has nowhere to write. Deriving instead of
+    // mirroring the store into state through an effect drops a render pass on
+    // every profile switch, which showed as a flash of the previous theme
+    // (refs #281).
+    const [localTheme, setLocalTheme] = useState<Theme>(defaultTheme);
+    const theme = profileTheme ?? localTheme;
 
     useEffect(() => {
         const root = window.document.documentElement
@@ -83,7 +83,7 @@ export function ThemeProvider({
     }, [theme])
 
     const handleSetTheme = useCallback((newTheme: Theme) => {
-        setTheme(newTheme)
+        setLocalTheme(newTheme)
         if (currentProfileId) {
             updateProfileSettings(currentProfileId, { theme: newTheme });
         }

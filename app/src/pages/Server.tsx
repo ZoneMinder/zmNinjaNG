@@ -29,7 +29,7 @@ import {
   Database,
   MemoryStick,
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getServers, getLoad, getDiskPercent, getDaemonCheck, getStorages } from '../api/server';
 import { getServerTimeZone } from '../api/time';
@@ -115,7 +115,7 @@ export default function Server() {
         description: t('server.state_applied'),
       });
       queryClient.invalidateQueries({ queryKey: queryKeys.states(currentProfile?.id) });
-      log.server('State/action applied', LogLevel.INFO, { action: selectedAction });
+      log.server('State/action applied', LogLevel.INFO, { action: effectiveAction });
     },
     onError: (error) => {
       toast({
@@ -130,16 +130,14 @@ export default function Server() {
   // Find active state
   const activeState = states?.find((s) => s.IsActive === '1');
 
-  // Set default selected action to active state
-  useEffect(() => {
-    if (activeState && !selectedAction) {
-      setSelectedAction(activeState.Name);
-    }
-  }, [activeState, selectedAction]);
+  // The dropdown defaults to the active state until the user picks something.
+  // Derived rather than synced through an effect, which cost a second render
+  // on every states fetch (refs #281).
+  const effectiveAction = selectedAction || activeState?.Name || '';
 
   const handleApply = () => {
-    if (selectedAction) {
-      changeStateMutation.mutate(selectedAction);
+    if (effectiveAction) {
+      changeStateMutation.mutate(effectiveAction);
     }
   };
 
@@ -533,7 +531,7 @@ export default function Server() {
                 {t('server.select_action')}
               </div>
               <div className="flex gap-2">
-                <Select value={selectedAction} onValueChange={setSelectedAction}>
+                <Select value={effectiveAction} onValueChange={setSelectedAction}>
                   <SelectTrigger className="flex-1 [&>span]:!block [&>span]:!overflow-visible" data-testid="server-state-select">
                     <SelectValue placeholder={t('server.select_state_or_action')} />
                   </SelectTrigger>
@@ -572,7 +570,7 @@ export default function Server() {
                 </Select>
                 <Button
                   onClick={handleApply}
-                  disabled={!selectedAction || changeStateMutation.isPending}
+                  disabled={!effectiveAction || changeStateMutation.isPending}
                   className="flex items-center gap-2"
                   data-testid="server-apply-button"
                 >
