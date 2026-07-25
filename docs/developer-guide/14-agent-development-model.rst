@@ -22,6 +22,45 @@ That is the trade. The maintainer states intent ("fix this bug", "add this
 feature", an issue number), the agent does the work, and the gates decide
 whether the work can land.
 
+Rules, gates, and practices
+---------------------------
+
+The system uses three words precisely, and the distinction carries most of
+the design:
+
+**Rules are binding statements.** They live in ``AGENTS.md`` with stable
+tier IDs (I1 to I3 for invariants, P for process, C for code, M for the
+meta rules that govern the instruction files themselves) and in
+``AGENTS.project.md`` as project rules. A rule states what must hold, a
+one-clause why, and where it is enforced. Rules change only through the
+self-improvement protocol: the PR that hit the problem proposes the rule,
+the maintainer merges or rejects it. **Contracts** are rules specialized
+to one subsystem: each names what the subsystem owns, the one sanctioned
+path through it, the bypasses that are always bugs, and its gate.
+
+**Gates are the scripts that enforce rules.** A rule a script can check
+must have a gate, added in the same change (rule M1); this repo learned
+that from an audit in which every ungated rule had been violated and every
+gated rule held. Gates here include the unit suite, the three blocking
+lints, the ratcheted lint baseline, the CI label guard (every PR carries a
+``core`` or ``refactor`` label, auto-assigned from commit types), and
+``agents-contracts.test.ts``, which checks the instruction system itself:
+contract symbols still exist in the code, the core file stays
+project-free, the instruction files stay under a word budget, commit
+hashes cited as evidence in the domain playbook exist in history, the
+knowledge files contain no emails or addresses, and this guide's rule
+references resolve. A gate's own input gets checked too (rule M2): a
+number a gate reports must describe the thing it claims to measure.
+
+**Practices are advisory guidance.** They live in the playbooks under
+``agents/``: how to run multi-agent work, how to scale review ceremony to
+risk, which model tier fits which task, plus the domain facts in
+``domain-context.md``. Practices carry evidence (commit hashes, dated
+validation) instead of IDs, load only when the work touches their area,
+and lose to rules on any conflict. A practice earns promotion into a rule
+when violating it starts breaking things; a rule that turns out to be
+wrong is demoted or deleted the same way it entered.
+
 The layers
 ----------
 
@@ -41,15 +80,9 @@ failed. ``agents/generic/`` holds portable workflow guidance. Playbooks
 load only when the work touches their area, so they can be detailed without
 costing every session context.
 
-**Gates.** ``app/src/tests/`` carries the enforcement: the normal unit
-suite, plus tests that check the instruction system itself
-(``agents-contracts.test.ts`` verifies that every symbol a contract names
-still exists, that the core file stays project-free, that the instruction
-files stay under a word budget, and that this guide's rule references
-resolve). Lint runs in three blocking forms, and the general backlog is
-ratcheted: it may shrink or hold, never grow. Rule M1 is the discipline
-behind all of this: a rule a script can check needs a gate, added in the
-same change.
+**Gates.** ``app/src/tests/`` and the CI workflows carry the enforcement
+described in the section above; the covering gates run on every commit and
+the full battery runs before a push or PR (rule P3).
 
 **Agent-side review.** Review still happens on every change; it is done by
 agents, not the maintainer. The workflow in
