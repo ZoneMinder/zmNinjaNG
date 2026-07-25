@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -110,6 +111,30 @@ describe('AGENTS.md stays portable', () => {
       fs.readFileSync(path.join(repoRoot, f), 'utf8').split(/\s+/).filter(Boolean).length;
     const total = words('AGENTS.md') + words('AGENTS.project.md') + words('CLAUDE.md');
     expect(total, `combined ${total} words > budget ${WORD_BUDGET}`).toBeLessThanOrEqual(WORD_BUDGET);
+  });
+});
+
+describe('knowledge files stay evidence-backed and private-data-free (M5)', () => {
+  const knowledgeFiles = ['agents/project/domain-context.md', 'agents/generic/claude-workflows.md'];
+
+  it('every commit hash cited in domain-context exists in this repo', () => {
+    const md = fs.readFileSync(path.join(repoRoot, 'agents/project/domain-context.md'), 'utf8');
+    const hashes = [...new Set([...md.matchAll(/\b[0-9a-f]{8}\b/g)].map((m) => m[0]))];
+    expect(hashes.length).toBeGreaterThan(0);
+    for (const hash of hashes) {
+      expect(
+        () => execSync(`git cat-file -e ${hash}^{commit}`, { cwd: repoRoot, stdio: 'pipe' }),
+        `cited commit ${hash} not found in history`,
+      ).not.toThrow();
+    }
+  });
+
+  it('agent knowledge files contain no emails or IP addresses', () => {
+    for (const file of knowledgeFiles) {
+      const text = fs.readFileSync(path.join(repoRoot, file), 'utf8');
+      expect(text, `${file} contains an IP address`).not.toMatch(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/);
+      expect(text, `${file} contains an email address`).not.toMatch(/\b[\w.+-]+@[\w-]+\.[\w.]+\b/);
+    }
   });
 });
 
