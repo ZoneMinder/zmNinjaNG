@@ -328,6 +328,36 @@ Then('the force-disable multiport toggle should be enabled', async ({ page }) =>
   await expect(page.getByTestId('settings-force-disable-multiport-switch')).toBeChecked();
 });
 
+// Log redaction: turning it off puts credentials in the log file, so the row
+// warns while it is on. The scenario turns it back off, leaving the profile as
+// it found it.
+When('I enable the log redaction toggle', async ({ page }) => {
+  const toggle = page.getByTestId('settings-log-redaction-switch');
+  await expect(toggle).toBeVisible({ timeout: testConfig.timeouts.pageLoad });
+  if (!(await toggle.isChecked().catch(() => false))) {
+    await toggle.click();
+  }
+  await expect(toggle).toBeChecked();
+});
+
+When('I disable the log redaction toggle', async ({ page }) => {
+  const toggle = page.getByTestId('settings-log-redaction-switch');
+  if (await toggle.isChecked().catch(() => false)) {
+    await toggle.click();
+  }
+  await expect(toggle).not.toBeChecked();
+});
+
+Then('I should see the log redaction warning', async ({ page }) => {
+  const warning = page.getByTestId('settings-log-redaction-warning');
+  await expect(warning).toBeVisible({ timeout: testConfig.timeouts.element });
+  await expect(warning).not.toBeEmpty();
+});
+
+Then('the log redaction warning should be gone', async ({ page }) => {
+  await expect(page.getByTestId('settings-log-redaction-warning')).toHaveCount(0);
+});
+
 // WebRTC STUN toggle (visible only when go2rtc/auto streaming is on, the default)
 When('I enable the WebRTC STUN toggle', async ({ page }) => {
   const toggle = page.getByTestId('settings-webrtc-use-stun-switch');

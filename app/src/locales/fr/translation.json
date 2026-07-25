@@ -499,6 +499,7 @@
     "restart_now": "Redémarrer",
     "minutes": "minutes",
     "disable_log_redaction_desc": "Afficher les mots de passe/jetons dans les journaux",
+    "disable_log_redaction_warning": "Les journaux contiendront mots de passe et jetons. Désactivez ensuite.",
     "force_disable_multiport": "Désactiver le streaming multiport",
     "force_disable_multiport_desc": "Ignorer les ports de flux par moniteur du serveur et utiliser le port par défaut",
     "show_developer_notices": "Afficher avis développeur",

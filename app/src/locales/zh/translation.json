@@ -499,6 +499,7 @@
     "restart_now": "立即重启",
     "minutes": "分钟",
     "disable_log_redaction_desc": "在日志中显示密码/令牌",
+    "disable_log_redaction_warning": "日志将包含密码和令牌。用完请关闭。",
     "force_disable_multiport": "强制禁用多端口流",
     "force_disable_multiport_desc": "忽略服务器的每监视器流端口，使用默认端口",
     "show_developer_notices": "显示开发者通知",
