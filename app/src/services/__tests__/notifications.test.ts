@@ -127,6 +127,9 @@ describe('ZMNotificationService', () => {
     service.disconnect();
     vi.useRealTimers();
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    // Tests that force a hidden document define an own property over jsdom's
+    Reflect.deleteProperty(document, 'visibilityState');
   });
 
   /** Helper: connect and authenticate */
@@ -212,6 +215,45 @@ describe('ZMNotificationService', () => {
       // Might or might not have fired due to jitter, but advance more to be sure
       await vi.advanceTimersByTimeAsync(5000);
       expect(vi.mocked(wsCtor).mock.calls.length).toBeGreaterThanOrEqual(4);
+    });
+
+    // Backoff without jitter: 2s, 4s, 8s, then 15s foregrounded / 16s hidden.
+    async function climbToFourthDelay() {
+      vi.spyOn(Math, 'random').mockReturnValue(0.5); // no jitter
+      await connectAndAuth();
+
+      for (const delay of [2000, 4000, 8000]) {
+        wsCtor.instances[wsCtor.instances.length - 1]._triggerClose(false, 1006);
+        await vi.advanceTimersByTimeAsync(delay);
+      }
+      expect(wsCtor).toHaveBeenCalledTimes(4);
+      wsCtor.instances[3]._triggerClose(false, 1006);
+    }
+
+    // Resume fires one immediate retry. When that one fails, which is normal
+    // right after a wake, nothing else re-triggers while the app stays open,
+    // so the ladder must not climb toward the two minute cap (refs #274).
+    it('caps the reconnect backoff while the app is in the foreground', async () => {
+      await climbToFourthDelay();
+
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(wsCtor).toHaveBeenCalledTimes(5);
+    });
+
+    it('lets the backoff climb past the foreground cap while hidden', async () => {
+      Object.defineProperty(document, 'visibilityState', {
+        configurable: true,
+        get: () => 'hidden',
+      });
+
+      await climbToFourthDelay();
+
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(wsCtor).toHaveBeenCalledTimes(4);
+
+      // The full 16s exponential delay, not the foreground ceiling
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(wsCtor).toHaveBeenCalledTimes(5);
     });
 
     it('reconnectNow triggers immediate reconnect', async () => {
@@ -315,6 +357,50 @@ describe('ZMNotificationService', () => {
       ws._triggerClose(false, 1006);
       await vi.advanceTimersByTimeAsync(3000);
 
+      expect(wsCtor).toHaveBeenCalledTimes(2);
+    });
+
+    // Suspending the app kills the socket while the WebView's timers are
+    // frozen, so this timeout routinely fires on an already-CLOSED socket.
+    // close() on it emits no event, so nothing but the timeout can retry.
+    it('retries when the auth timeout finds the socket already closed', async () => {
+      const connectPromise = service.connect(testConfig);
+      const ws = wsCtor.instances[0];
+      ws._triggerOpen();
+
+      // Peer went away during suspension: closed, with no close event delivered
+      ws.readyState = MockWebSocket.CLOSED;
+
+      await vi.advanceTimersByTimeAsync(20_000);
+      await connectPromise;
+
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(wsCtor).toHaveBeenCalledTimes(2);
+    });
+
+    // reconnectNow drops the socket without routing through _handleClose, so
+    // it must settle the pending auth too: the abandoned 20s timeout would
+    // otherwise close the healthy replacement socket (refs #274).
+    it('does not let an abandoned auth timeout close the replacement socket', async () => {
+      const connectPromise = service.connect(testConfig);
+      wsCtor.instances[0]._triggerOpen();
+
+      // 5s in, a resume forces a fresh attempt that authenticates
+      await vi.advanceTimersByTimeAsync(5000);
+      service.reconnectNow(true);
+      const replacement = wsCtor.instances[1];
+      replacement._triggerOpen();
+      replacement._triggerMessage({ event: 'auth', status: 'Success', version: '1.0' });
+
+      // The abandoned attempt settles without reporting over the live one
+      await connectPromise;
+      expect(service.getState()).toBe('connected');
+
+      // Past the abandoned attempt's 20s auth timeout
+      await vi.advanceTimersByTimeAsync(20_000);
+
+      expect(service.getState()).toBe('connected');
+      expect(replacement.readyState).toBe(MockWebSocket.OPEN);
       expect(wsCtor).toHaveBeenCalledTimes(2);
     });
   });

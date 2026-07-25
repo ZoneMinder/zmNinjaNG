@@ -205,8 +205,11 @@ values are given.
    (``services/notifications.ts``) sends a version-request ping every
    ``wsKeepaliveInterval`` (60s / 120s) to maintain the connection. On
    disconnection, it reconnects automatically using exponential backoff with
-   jitter (2s, 4s, 8s, ... capped at ``maxReconnectDelay``, 2 minutes, plus or
-   minus 25%). An ``intentionalDisconnect`` flag ensures only
+   jitter (2s, 4s, 8s, ... plus or minus 25%). The cap depends on whether the
+   app is on screen: ``maxReconnectDelay`` (2 minutes) while the document is
+   hidden, ``NOTIFICATIONS_SERVICE.foregroundMaxReconnectDelayMs`` (15 seconds)
+   while it is visible, so a user watching a disconnected badge is not left
+   waiting on a two-minute timer. An ``intentionalDisconnect`` flag ensures only
    user-initiated disconnects stop reconnection; network drops always
    retry. On mobile, ``@capacitor/network`` triggers immediate reconnect
    when connectivity is restored. On desktop, a ``visibilitychange``
@@ -260,7 +263,9 @@ When the user re-opens the app:
   as dead and a forced reconnect is triggered: the socket still reads as open,
   so an ordinary ``reconnectNow()`` would decline (refs #274). When the store
   already reads disconnected, resume skips the ping and reconnects immediately
-  rather than waiting on a backoff timer that the suspended WebView froze.
+  rather than waiting on a backoff timer that the suspended WebView froze. That
+  resume nudge is a single attempt: when it fails, the foreground backoff cap
+  above is what retries.
 - **Badge Clear**: ``useNotificationDelivered`` listens for ``appStateChange``,
   ingests any notifications delivered while backgrounded into the history
   store, then clears the native badge via
