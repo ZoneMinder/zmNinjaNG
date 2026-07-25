@@ -60,7 +60,7 @@ jobs:
         working-directory: ./app
         run: npm ci
 
-      # Advisory only: the repo has a pre-existing lint backlog (~196 errors,
+      # Advisory only: the repo has a pre-existing lint backlog (~213 problems,
       # mostly react-hooks/* and no-explicit-any) that is out of scope to fix
       # here. continue-on-error keeps this from blocking PRs. Remove it to make
       # lint a hard gate once the backlog is burned down (tracked in #217).
@@ -68,6 +68,14 @@ jobs:
         working-directory: ./app
         continue-on-error: true
         run: npm run lint
+
+      # Hard gate on the size of that backlog (refs #281). .lint-baseline.json
+      # records the count per rule; this fails when any rule goes above its
+      # number. The backlog can shrink or hold, never grow, which is what the
+      # advisory job above cannot enforce on its own.
+      - name: Lint ratchet
+        working-directory: ./app
+        run: npm run lint:ratchet
 
   lint-a11y:
     runs-on: ubuntu-latest
