@@ -94,6 +94,28 @@ describe('CommandPalette', () => {
     expect(scrollIntoViewMock).toHaveBeenCalled();
   });
 
+  it('keeps row numbering continuous across a group header', () => {
+    render(<CommandPalette />);
+    const input = screen.getByTestId('command-palette-input');
+    // "front" matches one group (Front Cameras) and one monitor (Front Door),
+    // so the list renders two kinds with a header on the first row of each.
+    fireEvent.change(input, { target: { value: 'front' } });
+
+    expect(screen.getByText('command_palette.group_groups')).toBeInTheDocument();
+    expect(screen.getByText('command_palette.group_monitors')).toBeInTheDocument();
+
+    const groupRow = screen.getByTestId('command-item-group-1');
+    const monitorRow = screen.getByTestId('command-item-monitor-1');
+    // Headers must not consume a row number: the two options are 0 and 1.
+    expect(groupRow).toHaveAttribute('id', 'command-option-0');
+    expect(monitorRow).toHaveAttribute('id', 'command-option-1');
+
+    expect(groupRow).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    expect(input).toHaveAttribute('aria-activedescendant', 'command-option-1');
+    expect(screen.getByTestId('command-item-monitor-1')).toHaveAttribute('aria-selected', 'true');
+  });
+
   it('does not show the Ask item when the assistant is disabled', () => {
     render(<CommandPalette />);
     expect(screen.queryByTestId('command-item-ask')).not.toBeInTheDocument();

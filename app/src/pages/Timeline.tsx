@@ -1,3 +1,10 @@
+/* The canvas extent memo below reads Date.now() so the NOW marker is inside the
+ * fitted range. The extent is refitted per filter change, so "now" already means
+ * "now as of that change", and a ticking clock would refit the canvas under the
+ * user. The React Compiler lint rules only honour file-scope disables, so this
+ * covers the whole page; keep any other render-time clock reads out of here. */
+/* eslint-disable react-hooks/purity */
+
 import { useEffect, useMemo, useCallback, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Card, CardContent } from '../components/ui/card';

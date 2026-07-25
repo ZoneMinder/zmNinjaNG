@@ -226,6 +226,7 @@ export default function Events() {
 
   // Pull-to-refresh gesture
   const pullToRefresh = usePullToRefresh({
+    containerRef: parentRef,
     onRefresh: async () => {
       await refetch();
     },
@@ -370,7 +371,6 @@ export default function Events() {
       <div
         ref={(el) => {
           parentRef.current = el;
-          pullToRefresh.containerRef.current = el;
           restoreScrollRef(el);
         }}
         {...pullToRefresh.bind()}

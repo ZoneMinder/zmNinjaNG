@@ -131,11 +131,6 @@ export function CommandPalette() {
     }
   };
 
-  // Walk the (already kind-ordered) results, emitting a header when the kind
-  // changes. flatIndex tracks the active-row position across groups.
-  let flatIndex = -1;
-  let lastKind: CommandItem['kind'] | null = null;
-
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent
@@ -184,11 +179,12 @@ export function CommandPalette() {
               {t('command_palette.empty')}
             </p>
           )}
-          {results.map((item) => {
-            flatIndex += 1;
-            const index = flatIndex;
-            const header = item.kind !== lastKind ? t(GROUP_LABEL_KEY[item.kind]) : null;
-            lastKind = item.kind;
+          {/* Results are already kind-ordered, so a header goes on the first
+              row of each kind. The map index is the flat row position the
+              keyboard navigation uses. */}
+          {results.map((item, index) => {
+            const header =
+              item.kind !== results[index - 1]?.kind ? t(GROUP_LABEL_KEY[item.kind]) : null;
             return (
               <div key={item.id}>
                 {header && (
