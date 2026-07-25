@@ -594,7 +594,8 @@ EventFrameCarousel
 
 Strip of the significant still frames for an event, rendered above the player in
 ``EventDetail`` (refs #272). The candidates are ``EVENT_FRAME_TYPES``
-(``lib/zmninja-ng-constants.ts``): ``alarm``, ``snapshot``, ``objdetect``. Each
+(``lib/zmninja-ng-constants.ts``), rendered in that array's order, most
+informative first: ``objdetect``, ``alarm``, ``snapshot``. Each
 one becomes a thumbnail through ``getEventImageUrl`` at
 ``EVENT_FRAME_THUMB_WIDTH`` (240 px), and the full-size viewer requests the same
 URL without a width.

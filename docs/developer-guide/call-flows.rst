@@ -607,7 +607,7 @@ MJPEG player.
    · → :doc:`05-component-architecture`
 
 #. **The still frames above the player.** ``EventFrameCarousel`` renders the
-   alarm, snapshot, and objdetect frames as thumbnails. ZoneMinder reports no
+   objdetect, alarm, and snapshot frames as thumbnails, in that order. ZoneMinder reports no
    list of which ones exist, so each is requested and any whose image errors
    removes itself; when all of them error the card disappears. Opening one calls
    ``onViewerOpenChange``, and ``EventDetail`` pauses the Video.js player it kept

@@ -37,6 +37,20 @@ describe('EventFrameCarousel', () => {
     expect(objdetect).toContain('eid=4242');
   });
 
+  it('orders the thumbnails objdetect, alarm, snapshot', () => {
+    renderCarousel();
+
+    const order = Array.from(
+      screen.getByTestId('event-frames-card').querySelectorAll('[data-testid^="event-frame-thumb-"]')
+    ).map((el) => el.getAttribute('data-testid'));
+
+    expect(order).toEqual([
+      'event-frame-thumb-objdetect',
+      'event-frame-thumb-alarm',
+      'event-frame-thumb-snapshot',
+    ]);
+  });
+
   it('skips the alarm frame when the event has none', () => {
     renderCarousel({ hasAlarmFrame: false });
 
