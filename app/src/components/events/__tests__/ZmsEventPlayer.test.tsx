@@ -167,6 +167,28 @@ describe('ZmsEventPlayer', () => {
     expect(callsForCommand('2')).toHaveLength(0);
   });
 
+  // The frame carousel above the player owns the alarm-frame thumbnail now
+  // (refs #272); only the quick-jump button remains here for seeking to it.
+  it('shows no alarm-frame thumbnail, only the quick-jump button', () => {
+    render(
+      <ZmsEventPlayer portalUrl="https://zm.test" eventId="42" token="tok" totalFrames={100}
+        alarmFrames={5} alarmFrameId="10" maxScoreFrameId="20" eventLength={10} />
+    );
+
+    expect(screen.queryByTestId('zms-jump-to-alarm-frame')).toBeNull();
+    expect(screen.getByTestId('zms-quick-jump-alarm-frame')).toBeTruthy();
+    expect(screen.getByTestId('zms-jump-to-max-score-frame')).toBeTruthy();
+  });
+
+  it('drops the max-score card when it is the same frame as the alarm', () => {
+    render(
+      <ZmsEventPlayer portalUrl="https://zm.test" eventId="42" token="tok" totalFrames={100}
+        alarmFrames={5} alarmFrameId="10" maxScoreFrameId="10" eventLength={10} />
+    );
+
+    expect(screen.queryByTestId('zms-jump-to-max-score-frame')).toBeNull();
+  });
+
   it('stops at the event end instead of requesting a ZMS replay loop', () => {
     renderPlayer();
 

@@ -289,7 +289,6 @@
     "playback_speed": "Wiedergabegeschwindigkeit",
     "first_alarm_frame": "Erstes Alarm-Frame",
     "max_score_frame": "Frame mit Höchstwertung",
-    "alarm_frames": "Alarm-Frames",
     "alarm_frames_count": "{{count}} von {{total}} Frames mit Alarm",
     "alarm_frame_marker": "Alarm-Frame {{frameId}}",
     "max_score_marker": "Max Score Frame {{frameId}}",

@@ -625,59 +625,33 @@ export function ZmsEventPlayer({
         )}
       </Card>
 
-      {/* Alarm Frames Timeline */}
-      {alarmFrames > 0 && alarmFrameId && (
+      {/* Max score frame. The first alarm frame is no longer shown here: the
+          event frame carousel above the player already leads with it (refs
+          #272), and the quick-jump button above still seeks to it. */}
+      {maxScoreFrameId && maxScoreFrameId !== alarmFrameId && (
         <Card className="p-4 mt-4">
-          <h3 className="text-sm font-semibold mb-3">{t('event_detail.alarm_frames')}</h3>
-          <div className="flex gap-2 overflow-x-auto pb-2">
-            {/* First alarm frame */}
-            <button
-              type="button"
-              className="flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
-              onClick={jumpToAlarmFrame}
-              data-testid="zms-jump-to-alarm-frame"
-            >
-              <img
-                src={isAccessTokenFresh ? getEventImageUrl(portalUrl, eventId, parseInt(alarmFrameId), {
-                  token,
-                  width: 120,
-                  apiUrl,
-                  minStreamingPort,
-                  monitorId,
-                }) : undefined}
-                alt={t('event_detail.first_alarm_frame')}
-                className="w-30 h-20 object-cover rounded border-2 border-destructive"
-              />
-              <p className="text-xs text-center mt-1 text-muted-foreground">
-                {t('event_detail.frame')} {alarmFrameId}
-              </p>
-            </button>
-
-            {/* Max score frame if different from alarm frame */}
-            {maxScoreFrameId && maxScoreFrameId !== alarmFrameId && (
-              <button
-                type="button"
-                className="flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
-                onClick={jumpToMaxScoreFrame}
-                data-testid="zms-jump-to-max-score-frame"
-              >
-                <img
-                  src={isAccessTokenFresh ? getEventImageUrl(portalUrl, eventId, parseInt(maxScoreFrameId), {
-                    token,
-                    width: 120,
-                    apiUrl,
-                    minStreamingPort,
-                    monitorId,
-                  }) : undefined}
-                  alt={t('event_detail.max_score_frame')}
-                  className="w-30 h-20 object-cover rounded border-2 border-yellow-500"
-                />
-                <p className="text-xs text-center mt-1 text-muted-foreground">
-                  {t('event_detail.frame')} {maxScoreFrameId}
-                </p>
-              </button>
-            )}
-          </div>
+          <h3 className="text-sm font-semibold mb-3">{t('event_detail.max_score_frame')}</h3>
+          <button
+            type="button"
+            className="cursor-pointer hover:opacity-80 transition-opacity"
+            onClick={jumpToMaxScoreFrame}
+            data-testid="zms-jump-to-max-score-frame"
+          >
+            <img
+              src={isAccessTokenFresh ? getEventImageUrl(portalUrl, eventId, parseInt(maxScoreFrameId), {
+                token,
+                width: 120,
+                apiUrl,
+                minStreamingPort,
+                monitorId,
+              }) : undefined}
+              alt={t('event_detail.max_score_frame')}
+              className="w-30 h-20 object-cover rounded border-2 border-yellow-500"
+            />
+            <p className="text-xs text-center mt-1 text-muted-foreground">
+              {t('event_detail.frame')} {maxScoreFrameId}
+            </p>
+          </button>
         </Card>
       )}
     </div>

@@ -555,7 +555,11 @@ dependency would re-run the effect on every ordinary play/pause.
 The player exposes transport controls (start, seek back 5s, play / pause, seek
 forward 5s, end), speed presets (0.25x, 0.5x, 1x, 2x, 4x), a frame-position
 scrubber with alarm-frame markers, and jump buttons for the first alarm frame
-and the max-score frame. Playback position is tracked by polling
+and the max-score frame. Below the player sits a thumbnail for the max-score
+frame, shown only when that frame differs from the alarm frame. The alarm frame
+had a thumbnail here too until ``EventFrameCarousel`` began leading with it
+above the player (refs #272); the quick-jump button still seeks to it, so
+nothing was lost with the picture. Playback position is tracked by polling
 ``ZMS_COMMANDS.cmdQuery`` (``lib/zm/zm-constants.ts``) through
 ``getZmsControlUrl`` at the bandwidth-aware ``zmsStatusInterval``; the poll
 shares an ``AbortController`` with its in-flight ``httpGet`` calls so unmount

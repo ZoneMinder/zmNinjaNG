@@ -289,7 +289,6 @@
     "playback_speed": "Vitesse de Lecture",
     "first_alarm_frame": "Première Image d'Alarme",
     "max_score_frame": "Image Score Maximum",
-    "alarm_frames": "Images d'Alarme",
     "alarm_frames_count": "{{count}} sur {{total}} images avec alarme",
     "alarm_frame_marker": "Image d'Alarme {{frameId}}",
     "max_score_marker": "Image Score Maximum {{frameId}}",
