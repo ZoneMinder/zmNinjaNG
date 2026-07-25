@@ -8,7 +8,7 @@
  */
 
 import { log, LogLevel } from '../lib/logger';
-import { getBandwidthSettings } from '../lib/zmninja-ng-constants';
+import { getBandwidthSettings, NOTIFICATIONS_SERVICE } from '../lib/zmninja-ng-constants';
 
 import type {
   ZMEventServerConfig,
@@ -48,6 +48,8 @@ export class ZMNotificationService {
   private pingInterval: ReturnType<typeof setInterval> | null = null;
   private pendingAuth: PendingAuth | null = null;
   private intentionalDisconnect = false;
+  /** Bumped per connect attempt so an abandoned attempt's async tail can bail. */
+  private connectGeneration = 0;
 
   // Event listeners
   private eventCallbacks: Set<NotificationEventCallback> = new Set();
@@ -89,13 +91,7 @@ export class ZMNotificationService {
     log.notifications('Disconnecting from notification server', LogLevel.INFO);
     this.intentionalDisconnect = true;
     this._clearTimers();
-
-    // Reject pending auth
-    if (this.pendingAuth) {
-      clearTimeout(this.pendingAuth.timeout);
-      this.pendingAuth.reject(new Error('Connection closed'));
-      this.pendingAuth = null;
-    }
+    this._rejectPendingAuth(new Error('Connection closed'));
 
     // Close WebSocket
     if (this.ws) {
@@ -327,6 +323,7 @@ export class ZMNotificationService {
       throw new Error('No configuration provided');
     }
 
+    const generation = ++this.connectGeneration;
     this._setState('connecting');
 
     const protocol = this.config.ssl ? 'wss' : 'ws';
@@ -377,6 +374,14 @@ export class ZMNotificationService {
       // Wait for authentication to complete
       await this._waitForAuth();
     } catch (error) {
+      // A newer attempt already took over (reconnectNow settles the abandoned
+      // one so its auth timeout cannot outlive it). Its socket owns the state
+      // now, so this tail must not report an error over it (refs #274).
+      if (generation !== this.connectGeneration) {
+        log.notifications('Abandoned connection attempt failed, newer attempt in progress', LogLevel.INFO, { error });
+        return;
+      }
+
       log.notifications('Failed to connect to notification server', LogLevel.ERROR, error);
       this._setState('error');
       // Don't throw: let _handleClose schedule reconnect for transport failures.
@@ -438,12 +443,7 @@ export class ZMNotificationService {
           const error = new Error(`Authentication failed: ${message.reason || 'Unknown'}`);
           log.notifications('Authentication failed', LogLevel.ERROR, error);
           this._setState('error');
-
-          if (this.pendingAuth) {
-            clearTimeout(this.pendingAuth.timeout);
-            this.pendingAuth.reject(error);
-            this.pendingAuth = null;
-          }
+          this._rejectPendingAuth(error);
 
           this.disconnect();
         }
@@ -506,13 +506,7 @@ export class ZMNotificationService {
 
     this.ws = null;
     this._clearTimers();
-
-    // Reject pending auth if still waiting
-    if (this.pendingAuth) {
-      clearTimeout(this.pendingAuth.timeout);
-      this.pendingAuth.reject(new Error('Connection closed during authentication'));
-      this.pendingAuth = null;
-    }
+    this._rejectPendingAuth(new Error('Connection closed during authentication'));
 
     this._setState('disconnected');
 
@@ -528,9 +522,17 @@ export class ZMNotificationService {
 
     this.reconnectAttempts++;
 
-    // Exponential backoff: 2s, 4s, 8s, 16s, ... capped at maxReconnectDelay
+    // Exponential backoff: 2s, 4s, 8s, 16s, ... capped at maxReconnectDelay.
+    // A foregrounded app uses a much lower ceiling: the resume handler fires a
+    // single immediate retry, and when that one fails (common right after a
+    // wake, while the network is still coming back) nothing re-triggers it, so
+    // the user watched a disconnected badge for up to two minutes and tapped
+    // Connect instead (refs #274).
     const exponentialDelay = this.baseReconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
-    const cappedDelay = Math.min(exponentialDelay, this.maxReconnectDelay);
+    const maxDelay = this._isForeground()
+      ? NOTIFICATIONS_SERVICE.foregroundMaxReconnectDelayMs
+      : this.maxReconnectDelay;
+    const cappedDelay = Math.min(exponentialDelay, maxDelay);
     // Add jitter: ±25% to prevent thundering herd
     const jitter = cappedDelay * 0.25 * (Math.random() * 2 - 1);
     const delay = Math.round(cappedDelay + jitter);
@@ -570,12 +572,16 @@ export class ZMNotificationService {
 
     // Drop the stale socket before reconnecting. `this.ws` is cleared first so
     // the close event fails the handler's identity guard: _handleClose must not
-    // schedule a competing reconnect on top of the one starting here.
+    // schedule a competing reconnect on top of the one starting here. That guard
+    // also skips the pending-auth cleanup _handleClose would have done, so do it
+    // here: _waitForAuth overwrites `pendingAuth`, and an orphaned timeout would
+    // later close the healthy socket this call is about to open (refs #274).
     if (this.ws) {
       const stale = this.ws;
       this.ws = null;
       stale.close();
     }
+    this._rejectPendingAuth(new Error('Connection replaced by reconnect'));
 
     // Cancel any pending scheduled reconnect and the keepalive of the old socket
     this._clearTimers();
@@ -586,6 +592,26 @@ export class ZMNotificationService {
     this._connect().catch((error) => {
       log.notifications('Immediate reconnect failed', LogLevel.ERROR, error);
     });
+  }
+
+  /**
+   * Settle a connect() promise still waiting on auth and drop its timeout.
+   * Every path that abandons a socket must call this: a surviving timeout
+   * fires against whatever socket is current 20 seconds later.
+   */
+  private _rejectPendingAuth(error: Error): void {
+    if (!this.pendingAuth) return;
+    clearTimeout(this.pendingAuth.timeout);
+    this.pendingAuth.reject(error);
+    this.pendingAuth = null;
+  }
+
+  /**
+   * Whether the app is on screen. Mobile resume and tab focus both surface
+   * here: a hidden WebView reports 'hidden' and has its timers throttled.
+   */
+  private _isForeground(): boolean {
+    return typeof document === 'undefined' || document.visibilityState !== 'hidden';
   }
 
   private _clearTimers(): void {
@@ -660,7 +686,18 @@ export class ZMNotificationService {
         // guarded by `this.ws !== ws`, so nulling it here would make the close
         // event skip _handleClose and no reconnect would ever be scheduled
         // (refs #274). _handleClose nulls it.
-        this.ws?.close();
+        //
+        // Unless the socket is already gone. Suspending the app kills the
+        // connection while the WebView's timers are frozen, so this timeout
+        // routinely fires on a socket that is already CLOSED, and close() on it
+        // emits no event: _handleClose never runs, and the catch in _connect
+        // sees a non-null `this.ws` and does not retry either. Nulling it here
+        // hands that catch the retry (refs #274).
+        if (this.ws && this.ws.readyState === WebSocket.CLOSED) {
+          this.ws = null;
+        } else {
+          this.ws?.close();
+        }
 
         reject(new Error('Authentication timeout (20 seconds)'));
       }, 20000);

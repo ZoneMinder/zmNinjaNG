@@ -198,6 +198,12 @@ export const NOTIFICATIONS_SERVICE = {
   // Delay before the first ES-mode auto-connect attempt, to let profile/auth
   // store rehydration finish (ms)
   autoConnectInitDelayMs: 500,
+
+  // Ceiling for the reconnect backoff while the app is in the foreground (ms).
+  // Backgrounded, the backoff is free to climb to its 2 minute cap; in the
+  // foreground the user is watching a disconnected badge, so retries stay
+  // frequent enough to recover on their own (refs #274).
+  foregroundMaxReconnectDelayMs: 15000,
 } as const;
 
 /**
