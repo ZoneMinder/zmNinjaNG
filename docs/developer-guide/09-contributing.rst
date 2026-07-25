@@ -21,7 +21,7 @@ Before You Start
      button press through to the ZoneMinder API and back, naming the exact
      file and symbol at each hop. It is the fastest way to build a map of the
      codebase, and the chapters make more sense once you have one.
-   - ``AGENTS.md`` at the repo root. The numbered rules are binding on
+   - ``AGENTS.md`` at the repo root. Its tiered rule IDs are binding on
      human and agent contributions alike.
    - ``app/tests/README.md`` for the test harness.
 
