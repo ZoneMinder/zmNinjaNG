@@ -380,7 +380,7 @@ which by the order of calls within a render:
 2. **Call hooks only from React components or other hooks** (custom
    hooks). Plain helper functions can't use them.
 
-If you break rule 1, React's tracking gets out of sync and your state
+If you break the first one, React's tracking gets out of sync and your state
 gets shuffled into the wrong slots. The ESLint plugin catches it.
 
 How this goes wrong: a hook behind an ``if``
@@ -824,7 +824,7 @@ Query keys come from a factory
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ``queryKeys.monitors(profileId)`` returns ``['monitors', profileId]``.
-Never write that array inline. It is AGENTS.md rule 29, and both halves
+Never write that array inline. It is the Server queries contract in AGENTS.project.md, and both halves
 of the reason are things that have broken before.
 
 **Profile isolation.** zmNinjaNg talks to more than one ZoneMinder
@@ -977,7 +977,7 @@ refetchInterval
 interval in this app comes from ``useBandwidthSettings()``, which
 returns roughly twice-as-slow values in low-bandwidth mode
 (``monitorStatusInterval`` is 20000 ms normal, 40000 ms low). That is
-AGENTS.md rule 8, and it is why ``useMonitors`` reads
+the Polling contract in AGENTS.project.md, and it is why ``useMonitors`` reads
 ``bandwidth.monitorStatusInterval`` rather than writing ``20000``.
 
 Passing ``false`` stops the polling, which is how a hidden or
@@ -987,7 +987,7 @@ in ``hooks/useMonitorRecentEvents.ts``.
 
 Loading and error states get shared UI, not hand-rolled markup:
 ``ErrorBanner`` with ``resolveQueryError(err, t)`` and the skeletons in
-``components/ui/query-state.tsx`` (rule 32). :doc:`07-api-and-data-fetching`
+``components/ui/query-state.tsx`` (the Query UI states contract). :doc:`07-api-and-data-fetching`
 covers the query layer in depth.
 
 Component communication

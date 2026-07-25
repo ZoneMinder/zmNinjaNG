@@ -442,7 +442,7 @@ Query keys come from a factory
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Never write a key array inline. Every key comes from ``queryKeys`` in
-``lib/query/query-keys.ts`` (rule 29), and every key in a domain puts the
+``lib/query/query-keys.ts`` (the Server queries contract), and every key in a domain puts the
 profile id in the same position, immediately after the domain name:
 
 .. code:: tsx
@@ -599,13 +599,13 @@ change.
 Error walls always go through ``ErrorBanner`` (``components/ui/query-state.tsx``)
 with ``resolveQueryError(err, t)`` (``lib/query/query-error.ts``), which folds a
 401 into the localized auth prompt and everything else into a translated
-fallback (rule 32). Never render ``error.message`` directly.
+fallback (the Query UI states contract). Never render ``error.message`` directly.
 
 Refetch intervals come from bandwidth settings
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Any query that polls reads its interval from ``useBandwidthSettings()``, never
-a literal (rule 8). The user's Normal/Low choice is the single lever that
+a literal (the Polling contract). The user's Normal/Low choice is the single lever that
 changes network usage across every screen:
 
 .. code:: tsx
@@ -870,7 +870,7 @@ Dashboard widget timers
   in snapshot mode; no timer in streaming mode.
 
 The token and stream constants live in ``ZM_INTEGRATION`` in
-``lib/zmninja-ng-constants.ts`` (rule 25), alongside ``httpTimeout`` (10 s),
+``lib/zmninja-ng-constants.ts`` (the Constants contract), alongside ``httpTimeout`` (10 s),
 ``largeHttpTimeout`` (30 s for event responses), and ``loginInterval``
 (30 min); the polling intervals above live in ``BANDWIDTH_SETTINGS`` in the
 same file, as the next section covers. Import them; do not redeclare a
@@ -982,7 +982,7 @@ HTTP Client Architecture
 
 ``src/lib/http.ts`` is the single HTTP entry point across Web, iOS, Android,
 and Electron. Always use ``httpGet``, ``httpPost``, ``httpPut``, ``httpDelete``
-from it. Never raw ``fetch()`` or a third-party HTTP library (rule 10).
+from it. Never raw ``fetch()`` or a third-party HTTP library (the HTTP contract).
 
 The transport is ``lib/http.ts``, its shared shapes are ``lib/http/types.ts``,
 and it reads ``lib/platform.ts`` to pick an adapter. Above it:
@@ -1094,7 +1094,7 @@ Native (iOS/Android)
 .. code:: tsx
 
    // Used when Platform.isNative is true. Dynamic import: a static one
-   // breaks the web bundle (rule 14).
+   // breaks the web bundle (the Native contract).
    const { CapacitorHttp } = await import('@capacitor/core');
    const response = await CapacitorHttp.request({
      method: 'GET',
@@ -1149,7 +1149,7 @@ Type               Description           Use Case
    // Mobile: base64, written straight to the filesystem
    const response = await httpGet<string>(url, { responseType: 'base64' });
 
-On mobile, never convert to a Blob (rule 15). A large MP4 held as a Blob in the
+On mobile, never convert to a Blob (the Native contract). A large MP4 held as a Blob in the
 WebView heap will OOM the app.
 
 Error Handling
@@ -1182,7 +1182,7 @@ rather than ``instanceof``:
    }
 
 Inside React, do not hand-roll this branch. Let the error reach React Query and
-render it through ``ErrorBanner`` + ``resolveQueryError`` (rule 32).
+render it through ``ErrorBanner`` + ``resolveQueryError`` (the Query UI states contract).
 
 The client logs every non-2xx response at ERROR before the caller sees it. For
 endpoints where a status is expected and handled, pass ``expectedStatuses`` so
@@ -1200,8 +1200,8 @@ Schema drift tolerance
 
 ZoneMinder changes what it sends between releases, and the Zod schemas in
 ``api/types.ts`` are the only thing between that and a blank screen. The policy,
-enforced by tests in ``api/__tests__/types.test.ts`` and by rule 43 in
-``AGENTS.md``: a response must never fail because of a field.
+enforced by tests in ``api/__tests__/types.test.ts`` and by the data-integrity
+playbook (``docs/agent-playbooks/data-integrity.md``): a response must never fail because of a field.
 
 There are two distinct hazards, and only one is about *new* fields.
 

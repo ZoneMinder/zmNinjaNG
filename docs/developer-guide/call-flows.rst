@@ -1813,7 +1813,7 @@ camera has a pad waiting for you here. The stream underneath the pad is Flow 2.
 #. **The invalidated key comes from the factory.** ``queryKeys.states`` returns
    ``['states', profileId]``, the same array the query in step 2 was keyed with.
    Invalidation matches by key prefix, so this reaches that entry and any future
-   longer key under it. Rule 29 forbids writing the array inline precisely here:
+   longer key under it. The Server queries contract forbids writing the array inline precisely here:
    an invalidator that spells its own key drifts away from the query that reads
    it, and the symptom is a page that silently stops updating. The ``profileId``
    is a branded ``ProfileId``, minted once by ``asProfileId`` when ``addProfile``
@@ -2136,7 +2136,7 @@ property of the registry (``TOOLS`` holds no mutating tool and
 #. **The native backend's settings gate is a device probe, not a toggle.**
    ``useNativeLlmSupported`` (``hooks/useNativeLlmSupported.ts``) probes the
    Capacitor ``NativeLlm`` plugin's ``isSupported()`` once on mount, imported
-   only behind ``Platform.isNative`` (rule 13, since the plugin package only
+   only behind ``Platform.isNative`` (the Native contract, since the plugin package only
    ships native implementations and would otherwise pull llama.cpp glue into
    the web/Electron bundle for a backend those platforms can never run). On
    iOS, ``LlamaPlugin.isSupported`` answers ``false`` below a 5.5GB

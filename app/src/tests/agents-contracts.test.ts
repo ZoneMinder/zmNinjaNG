@@ -110,3 +110,21 @@ describe('AGENTS.md stays portable', () => {
     expect(total, `combined ${total} words > budget ${WORD_BUDGET}`).toBeLessThanOrEqual(WORD_BUDGET);
   });
 });
+
+describe('developer docs reference valid rule IDs', () => {
+  it('every "rule <id>" reference resolves', () => {
+    const valid = new Set([
+      ...['I1', 'I2', 'I3'],
+      ...Array.from({ length: 10 }, (_, i) => `P${i + 1}`),
+      ...Array.from({ length: 7 }, (_, i) => `C${i + 1}`),
+      ...Array.from({ length: 4 }, (_, i) => `M${i + 1}`),
+    ]);
+    const guideDir = path.join(repoRoot, 'docs/developer-guide');
+    for (const file of fs.readdirSync(guideDir).filter((f) => f.endsWith('.rst'))) {
+      const text = fs.readFileSync(path.join(guideDir, file), 'utf8');
+      for (const m of text.matchAll(/\brule ([IPCM]?[0-9]+)\b/gi)) {
+        expect(valid.has(m[1].toUpperCase()), `${file}: unknown rule id "${m[1]}"`).toBe(true);
+      }
+    }
+  });
+});

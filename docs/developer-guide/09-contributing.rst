@@ -4,7 +4,7 @@ Contributing to zmNinjaNg
 The process rules for this project live in one place: ``AGENTS.md`` at the
 repo root. They are numbered, and this chapter cites them by number rather
 than repeating them. A restated rule drifts the moment the original changes,
-and this chapter is the proof: it copied out rule 3's verification commands,
+and this chapter is the proof: it copied out P3's verification commands,
 and went on printing a typecheck flag the rule had already replaced, in four
 separate places. When a rule number below sounds relevant, read the rule.
 
@@ -44,7 +44,7 @@ Before You Start
 
       npm run dev
 
-   Then run the verification sequence in ``AGENTS.md`` (rule 3) once against a
+   Then run the verification sequence in ``AGENTS.md`` (P3) once against a
    clean checkout. If it passes before you have changed anything, your
    toolchain is good and any later failure is yours.
 
@@ -60,13 +60,13 @@ Development Workflow
 1. Pick or Create an Issue
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Rule 2: an issue exists before the code does. Search the tracker first; if
+P1: an issue exists before the code does. Search the tracker first; if
 nothing covers your change, open one. Blank issues are disabled, so bug reports
 go through the bug report template and questions go to
 `Discussions <https://github.com/ZoneMinder/zmNinjaNg/discussions>`__.
 
 For anything larger than a bug fix, agree on the approach in the issue before
-writing code. Rule 17 makes this concrete: when more than one design is viable,
+writing code. P7 makes this concrete: when more than one design is viable,
 present the options and get a decision rather than picking one and building it.
 
 2. Create a Branch
@@ -80,7 +80,7 @@ present the options and get a decision rather than picking one and building it.
 
 Branch prefixes: ``feature/``, ``fix/``, ``refactor/``, ``docs/``, ``test/``.
 
-Rule 36 governs how the branch gets back to ``main``: land issue-tracked work
+P1 governs how the branch gets back to ``main``: land issue-tracked work
 through a pull request that references the issue, so GitHub links the commits
 itself. Pushing to a scratch branch and fast-forwarding it onto ``main`` can
 consume that auto-reference and leave the issue with no linked commits.
@@ -88,7 +88,7 @@ consume that auto-reference and leave the issue with no linked commits.
 3. Write the Failing Test First
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Rule 3 puts the test before the implementation. Write a test that reproduces
+P2 puts the test before the implementation. Write a test that reproduces
 the bug or asserts the missing behavior, watch it fail, then make it pass. A
 test written after the fix proves only that the code you just wrote runs; it
 does not prove it fixed anything.
@@ -103,19 +103,19 @@ interaction changes also need a Gherkin scenario in
 Each rule below is stated in full in ``AGENTS.md``; the one-liners here are
 signposts, not the rule.
 
-- Rule 5: no hardcoded user-facing strings, and every locale directory under
+- Localization contract: no hardcoded user-facing strings, and every locale directory under
   ``app/src/locales/`` gets the key.
-- Rule 9: ``log.*`` helpers with an explicit ``LogLevel``, never ``console``.
-- Rule 10: ``httpGet`` / ``httpPost`` and friends from ``lib/http.ts``, never
+- Logging contract: ``log.*`` helpers with an explicit ``LogLevel``, never ``console``.
+- HTTP contract: ``httpGet`` / ``httpPost`` and friends from ``lib/http.ts``, never
   raw ``fetch``.
-- Rule 12: files stay near 400 lines, and replaced code is deleted rather than
+- C2: files stay near 400 lines, and replaced code is deleted rather than
   commented out.
-- Rule 13: ``data-testid="kebab-case-name"`` on every interactive element.
-- Rule 25: named constants live in ``lib/zmninja-ng-constants.ts`` or
+- Project rules: ``data-testid="kebab-case-name"`` on every interactive element.
+- Constants contract: named constants live in ``lib/zmninja-ng-constants.ts`` or
   ``lib/zm-constants.ts``, not inline.
-- Rule 29: React Query keys and invalidations come from the ``queryKeys``
+- Server queries contract: React Query keys and invalidations come from the ``queryKeys``
   factory in ``lib/query/query-keys.ts``.
-- Rule 33: new ``lib/`` modules go in a domain subfolder.
+- C5: new ``lib/`` modules go in a domain subfolder.
 
 5. Git Hooks
 ~~~~~~~~~~~~
@@ -129,12 +129,12 @@ signposts, not the rule.
   you did not touch would otherwise stop every commit. It then runs the
   ``jsx-a11y`` ruleset (``app/eslint.a11y.config.js``) across the ``app/``
   tree as a hard gate: that ruleset is clean today and a new accessibility
-  violation should fail here, not in review (rule 35). Finally it runs
+  violation should fail here, not in review (I3). Finally it runs
   ``tsc -b`` over the whole project.
 - **commit-msg** rejects a commit whose staged diff touches a native build
   number (``versionCode`` in ``app/android/app/build.gradle``, or
   ``CURRENT_PROJECT_VERSION`` in ``app/ios/App/App.xcodeproj/project.pbxproj``)
-  unless the message is a ``chore:`` commit (rule 28). ``npm run android:sync``
+  unless the message is a ``chore:`` commit (project rules). ``npm run android:sync``
   and ``npm run ios:sync`` bump both as a side effect (via
   ``scripts/sync-version.js``; ``npm run build`` alone does not), and the guard
   (``scripts/check-native-version-bump.mjs``) keeps that bump from riding along
@@ -146,22 +146,22 @@ signposts, not the rule.
        app/ios/App/App.xcodeproj/project.pbxproj
 
 The hooks are only wired up if you ran ``npm install`` at the repo root. CI
-re-checks rule 28 in the ``native-version-guard`` job, so a skipped root
+re-checks the project rules in the ``native-version-guard`` job, so a skipped root
 install cannot get a stray bump past review, but it will let you waste a push
 finding out.
 
 6. Verify
 ~~~~~~~~~
 
-Run the verification sequence in ``AGENTS.md`` (rule 3) before every commit,
+Run the verification sequence in ``AGENTS.md`` (P3) before every commit,
 and state in the commit body which steps you ran. If a step fails, read the
-output and fix the cause (rule 21). Re-running a failing test unchanged is not
+output and fix the cause (P4). Re-running a failing test unchanged is not
 a debugging strategy.
 
 7. Commit
 ~~~~~~~~~
 
-Conventional format, one logical change per commit (rules 19 and 20):
+Conventional format, one logical change per commit (P5):
 
 ::
 
@@ -190,7 +190,7 @@ Vague subjects (``fixed bug``, ``wip``, ``test``) and batched subjects
 (``fix login bug and add dark mode and update docs``) both get sent back. Split
 the batch into one commit per change.
 
-**Issue references.** Rule 19 is stricter than GitHub's syntax allows. While an
+**Issue references.** P5 is stricter than GitHub's syntax allows. While an
 issue is open for the work, every commit for it carries ``refs #<id>``. The
 closing keyword ``fixes #<id>`` is reserved until the user has confirmed the
 fix actually works, because a commit that says ``fixes`` closes the issue the
@@ -243,14 +243,14 @@ review without a round trip:
 ~~~~~~~~~~~~~~~~~~~
 
 Address feedback in new commits rather than force-pushing, so the reviewer can
-read the delta. Re-run the rule 3 sequence after every round of changes, and
+read the delta. Re-run the P3 sequence after every round of changes, and
 update the PR description if the scope moved.
 
-A maintainer merges. Rule 18: nothing reaches ``main`` without the maintainer's
+A maintainer merges. P8: nothing reaches ``main`` without the maintainer's
 approval, and CI has to be green first. Only the web e2e suite runs in CI
-(rule 6); the iOS and Android suites are invoked by hand, so a change that
+(project rules); the iOS and Android suites are invoked by hand, so a change that
 touches a native path is not done until someone has run it on a real device
-(rule 27).
+(the native playbook, ``docs/agent-playbooks/native.md``).
 
 What Reviewers Actually Check
 -----------------------------
@@ -258,12 +258,12 @@ What Reviewers Actually Check
 The rules are the review. These are the ones new contributors trip on most,
 in the order they tend to come up:
 
-- **Rule 29, query keys.** An inline key array (``['monitors', profileId]``)
+- **Server queries contract, query keys.** An inline key array (``['monitors', profileId]``)
   compiles, fetches, and caches. It also never gets invalidated, because the
   invalidator elsewhere uses the factory key and the two arrays are not equal.
   Use ``queryKeys`` from ``lib/query/query-keys.ts``, with a ``ProfileId``
   minted through ``asProfileId()`` (``api/types.ts``).
-- **Rule 30, Zustand selectors.** Subscribe to fields, not to the whole store.
+- **Stores contract, Zustand selectors.** Subscribe to fields, not to the whole store.
   Zustand re-renders a component when the value its selector returns changes,
   so a selector returning the whole store re-renders on every unrelated write.
   The failure mode that gets missed in review is subtler: if you narrow a
@@ -271,27 +271,27 @@ in the order they tend to come up:
   once, and then never re-renders when the data changes. Keep every field the
   component reads inside the selector, and use ``useShallow`` for object
   returns (see ``components/monitors/MontageMonitor.tsx``).
-- **Rule 32, error and loading UI.** Error walls use ``ErrorBanner`` with
+- **Query UI states contract, error and loading UI.** Error walls use ``ErrorBanner`` with
   ``resolveQueryError(err, t)``, which folds a 401 into the localized
   reauthentication prompt. Loading states use the shared skeletons in
   ``components/ui/query-state.tsx``. A hand-rolled error div renders the raw
   ``error.message`` in English and tells a logged-out user nothing useful.
-- **Rule 5, all five locales.** Covered below; it has a specific failure mode
+- **Localization contract, all five locales.** Covered below; it has a specific failure mode
   worth understanding.
-- **Rule 13, ``data-testid``.** Without it the e2e step definitions have
+- **Project rules, ``data-testid``.** Without it the e2e step definitions have
   nothing stable to select, and the next contributor writes a selector against
   a CSS class you are about to rename.
-- **Rule 34, e2e guards.** A conditional step must derive its guard from the
+- **Testing playbook, e2e guards.** A conditional step must derive its guard from the
   API or the fixture data, never from whether the element under test is
   visible. A guard keyed on the element under test turns that element's
   regression into a green pass. ``tests/steps/ptz.steps.ts`` derives its guard
   the right way: it asks the ZoneMinder API whether the monitor is controllable
   (``isMonitorControllable``) instead of peeking at the DOM.
-- **Rule 28, native build numbers.** ``npm run android:sync`` / ``ios:sync``
+- **Project rules, native build numbers.** ``npm run android:sync`` / ``ios:sync``
   bump ``versionCode`` and ``CURRENT_PROJECT_VERSION`` as a side effect
   (``npm run build`` alone does not). Revert them before committing anything
   that is not a version-bump ``chore:``.
-- **Rule 37, docs teach.** A new hook or component is not documented by an
+- **Project rules, docs teach.** A new hook or component is not documented by an
   entry listing its location and props. Say what user-visible behavior it
   serves, and if it changes a path that :doc:`call-flows` traces, update the
   trace.
@@ -299,7 +299,7 @@ in the order they tend to come up:
 Internationalization
 --------------------
 
-Rule 5 covers this. Two things about how it fails are worth knowing before you
+The Localization contract covers this. Two things about how it fails are worth knowing before you
 hit them.
 
 **Hardcoded strings are invisible to the linter.** Nothing in the toolchain
@@ -326,7 +326,7 @@ the middle of a German screen, and nobody notices until a German speaker files
 an issue. There is no CI check for locale-key parity. Add the key to all five
 files in the same commit, or it will not get added at all.
 
-Rule 22 constrains the translations themselves: button, tab, and action labels
+The project rules constrain the translations themselves: button, tab, and action labels
 have to stay short in every language, because they share a 320 pixel wide
 screen. Prefer the single-word synonym (ES "Ajustes", not "Configuración").
 
@@ -336,23 +336,23 @@ Before You Ask for Review
 Each item names the rule that owns it. Items without a rule number are
 codebase-specific traps with no rule to cite.
 
-- ☐ Rule 2: issue exists and is referenced
-- ☐ Rule 3: failing test written first; verification sequence run and passing
-- ☐ Rule 5: all five locale files updated
-- ☐ Rule 9: ``log.*`` helpers, no ``console``
-- ☐ Rule 10: ``lib/http.ts``, no raw ``fetch``
-- ☐ Rule 12: no dead code, no commented-out blocks
-- ☐ Rule 13: ``data-testid`` on new interactive elements
-- ☐ Rule 19: conventional subject, ``refs #<id>`` not ``fixes #<id>``
-- ☐ Rule 20: one logical change per commit
-- ☐ Rule 23: user-visible dates via ``useDateTimeFormat`` or ``formatApp*``
-- ☐ Rule 25: named constants centralized
-- ☐ Rule 28: native build-number bumps reverted
-- ☐ Rule 29: query keys from the factory
-- ☐ Rule 30: selective, immutable store subscriptions
-- ☐ Rule 32: ``ErrorBanner`` and shared skeletons
-- ☐ Rule 34: e2e guards derive from API or fixture data
-- ☐ Rule 37: developer docs updated where behavior changed
+- ☐ P1: issue exists and is referenced
+- ☐ P2/P3: failing test written first; verification sequence run and passing
+- ☐ Localization contract: all five locale files updated
+- ☐ Logging contract: ``log.*`` helpers, no ``console``
+- ☐ HTTP contract: ``lib/http.ts``, no raw ``fetch``
+- ☐ C2: no dead code, no commented-out blocks
+- ☐ Project rules: ``data-testid`` on new interactive elements
+- ☐ P5: conventional subject, ``refs #<id>`` not ``fixes #<id>``
+- ☐ P5: one logical change per commit
+- ☐ Date and time contract: user-visible dates via ``useDateTimeFormat`` or ``formatApp*``
+- ☐ Constants contract: named constants centralized
+- ☐ Project rules: native build-number bumps reverted
+- ☐ Server queries contract: query keys from the factory
+- ☐ Stores contract: selective, immutable store subscriptions
+- ☐ Query UI states contract: ``ErrorBanner`` and shared skeletons
+- ☐ Testing playbook: e2e guards derive from API or fixture data
+- ☐ P10: developer docs updated where behavior changed
 - ☐ No secrets, tokens, or passwords in log payloads
 - ☐ ``opacity-0`` overlays over interactive content carry
   ``pointer-events-none`` (they still swallow taps on iOS)
@@ -370,19 +370,19 @@ Adding a "favorites" star to monitors, as it would actually be sequenced:
 
    git checkout -b feature/monitor-favorites
 
-   # 1. Failing tests first (rule 3):
+   # 1. Failing tests first (P2):
    #    - unit: favorites actions on the settings store
    #    - e2e:  scenario in tests/features/monitors.feature
    #
    # 2. Implement:
    #    - add the favorites array to ProfileSettings (src/stores/settings.ts)
    #    - read and write it through getProfileSettings/updateProfileSettings
-   #      (rule 7: profile-scoped, never a global singleton)
+   #      (Settings contract: profile-scoped, never a global singleton)
    #    - add the star control to MonitorCard
    #      (src/components/monitors/MonitorCard.tsx), with a data-testid
    #    - add the i18n keys to all five locale files
    #
-   # 3. Verify: the rule 3 sequence, plus
+   # 3. Verify: the P3 sequence, plus
    npm run test:e2e -- monitors.feature
 
    git commit -m "feat: add monitor favorites
@@ -396,7 +396,7 @@ Adding a "favorites" star to monitors, as it would actually be sequenced:
    refs #78"
 
    git push origin feature/monitor-favorites
-   # then open a PR referencing #78 (rule 36)
+   # then open a PR referencing #78 (P1)
 
 Fixing a Bug
 ~~~~~~~~~~~~
@@ -407,7 +407,7 @@ Fixing a Bug
 
    # 1. Reproduce it in a test and watch it fail.
    # 2. Fix the cause, not the symptom.
-   # 3. Verify: the rule 3 sequence.
+   # 3. Verify: the P3 sequence.
 
    git commit -m "fix: prevent infinite connkey regeneration loop
 
@@ -423,7 +423,7 @@ Fixing a Bug
 
 The commit says ``refs #92``, not ``fixes #92``. The maintainer confirms the
 fix on a device, and only then does a commit or the PR close the issue
-(rule 19). Callback identity and the render loop it feeds are explained in
+(P5). Callback identity and the render loop it feeds are explained in
 :doc:`02-react-fundamentals`; the streaming path itself is traced in
 :doc:`call-flows`.
 
@@ -440,10 +440,10 @@ Updating Documentation
 
    refs #<id>"
 
-Rule 37 sets the bar: the developer guide is written for a competent programmer
+The project rules set the bar: the developer guide is written for a competent programmer
 with no React experience, so a doc change that introduces a React mechanism has
 to explain it at the point of use or link the section of
-:doc:`02-react-fundamentals` that does. Rule 4 decides where the change lands:
+:doc:`02-react-fundamentals` that does. P10 decides where the change lands:
 if it alters a path :doc:`call-flows` traces, the trace is the primary edit and
 the chapter entry is secondary. Every code example must grep-hit in
 ``app/src/``.
@@ -465,7 +465,7 @@ What is specific to this repo:
   greppable and marks them as test surface rather than app code.
 - Constants are ``UPPER_SNAKE_CASE`` and live in
   ``lib/zmninja-ng-constants.ts`` (app-level) or ``lib/zm-constants.ts``
-  (ZoneMinder protocol-level), per rule 25.
+  (ZoneMinder protocol-level), per the Constants contract.
 - Comments explain why, not what. The line above already says what.
 
 Mobile Development
@@ -522,8 +522,8 @@ Workflow
 4. Run/Debug via Android Studio or Xcode.
 
 Note that step 3 bumps the native build numbers (the ``sync`` scripts run
-``scripts/sync-version.js`` first; step 2 alone writes nothing native). Rule 28
-applies: revert the bump before committing.
+``scripts/sync-version.js`` first; step 2 alone writes nothing native). The project rules
+apply: revert the bump before committing.
 
 .. tip::
 

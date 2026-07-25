@@ -97,7 +97,7 @@ and ``differenceInDays``.
   ``formatAppTime`` / ``formatAppDateTime`` from ``lib/format-date-time.ts``
   outside React. Those wrappers are the only place that calls date-fns
   ``format()``, and they read the user's chosen date and time format from
-  profile settings before doing so. This is rule 23 in ``AGENTS.md``, and it
+  profile settings before doing so. This is the Date and time contract in ``AGENTS.project.md``, and it
   covers canvas rendering, tooltips, and scrubber overlays as much as it covers
   JSX.
 - **Why**: Lightweight and immutable compared to Moment.js.
@@ -144,7 +144,7 @@ succeeded, whether it needs refetching. Two components asking for the same key
 share one network request and one cache entry. Every key in this codebase comes
 from the ``queryKeys`` factory in ``lib/query/query-keys.ts`` rather than an
 inline array, so that a mutation invalidating a key cannot drift out of sync
-with the queries reading it (rule 29 in ``AGENTS.md``).
+with the queries reading it (the Server queries contract in ``AGENTS.project.md``).
 
 - **Usage**: Caching API responses, handling loading and error states, and
   backing the Events page's endless list. That list is not ``useInfiniteQuery``:
@@ -154,7 +154,7 @@ with the queries reading it (rule 29 in ``AGENTS.md``).
   the visible rows do not blank out while the larger page is in flight.
 - **Key Config**: ``staleTime`` and ``refetchInterval``. Never hardcode the
   interval: read it from ``useBandwidthSettings()`` so that low-bandwidth mode
-  slows every poller at once (rule 8).
+  slows every poller at once (the Polling contract).
 
 React Query's model (queries, keys, the cache, and why a component re-renders
 when the cache entry changes) is taught in :doc:`02-react-fundamentals`. How
@@ -199,7 +199,7 @@ Biometric unlock uses ``@aparajita/capacitor-biometric-auth``.
 - **Why**: Build iOS/Android apps from the same web codebase. Drop into
   native plugins only for hardware access the web API doesn't provide.
 
-Per rule 14 in ``AGENTS.md``, Capacitor plugins are loaded with dynamic
+Per the Native contract in ``AGENTS.project.md``, Capacitor plugins are loaded with dynamic
 ``import()`` behind a platform check, never a static import, because a static
 import of a native-only plugin breaks the web and Electron builds at bundle
 time.
@@ -215,7 +215,7 @@ Translations and localization.
 - **Usage**: ``const { t } = useTranslation();``
 - **Files**: ``src/locales/`` contains JSON files for each language.
 - **Rule**: No hardcoded strings in UI components. All five languages (en, de,
-  es, fr, zh) are updated together (rule 5).
+  es, fr, zh) are updated together (the Localization contract).
 
 Constants Organization
 ----------------------
@@ -269,7 +269,7 @@ parameters.
 **When to use**: Configuring application behavior, performance tuning,
 UI layout.
 
-Rule 25 in ``AGENTS.md`` makes this the only home for named constants. If you
+The Constants contract in ``AGENTS.project.md`` makes this the only home for named constants. If you
 find yourself typing a timeout, threshold, storage key, or animation duration
 inline, it belongs in one of these two files instead.
 
