@@ -24,7 +24,7 @@ android {
         applicationId "com.zoneminder.zmNinjaNG"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 102112
+        versionCode 102214
         versionName "2.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         // Native LLM engine (llama.cpp CPU). arm64 only; no Vulkan/OpenCL (issue #270).
