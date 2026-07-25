@@ -100,6 +100,27 @@ review finds a class of problem, the fix turns it into a gate, and the
 gates guard it from then on so the next month's review can look for
 something new.
 
+The history mining review
+-------------------------
+
+The per-PR protocol captures lessons one fix at a time, but it only fires
+when someone notices a lesson was learned. The ``mine-history`` skill
+(``.claude/skills/mine-history/``) is the periodic sweep for what slipped
+through: it walks the commit history looking at reverts (each one a paid
+experiment), fix-after-fix chains on the same subsystem, and fixes that an
+existing gate should have caught, then reports candidate entries for
+``domain-context.md`` and candidate contracts, every one backed by commit
+hashes. Its first run over this repo's 2254 commits produced two contracts
+(auth tokens and the assistant tool loop, the latter distilled from a
+63-commit fix saga) and twenty domain-context entries.
+
+Both reviews are worth running about once a month, but neither is
+mandatory; run them when they earn their time, such as after a heavy fix
+period. If scheduling suits you better, anything that can invoke the CLI
+works (``claude -p "/mine-history"`` from cron or a calendar automation),
+and Claude Code users can create a routine with the ``/schedule`` command,
+for example "run /mine-history on the first of each month".
+
 What this asks of a contributor
 -------------------------------
 
