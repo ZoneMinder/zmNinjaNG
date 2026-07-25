@@ -101,6 +101,7 @@ Gate: `app/src/tests/agents-contracts.test.ts`; review.
 - Flex text uses `min-w-0`, `truncate`, and a `title`; multi-line text uses `line-clamp-N`.
 - Do not commit incidental native build-number bumps. Commit intended bumps alone as `chore:`.
 - GitHub comments identify Claude assisting @pliablepixels, with that exact line. Commits do not.
+- Label issues and PRs `core` (behavior changes) or `refactor` (behavior-preserving); periodic reviews slice by these.
 - Test builds use a matching GitHub workflow; add one only when none fits.
 - Developer docs teach React where they first rely on it.
 
