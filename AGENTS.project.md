@@ -47,7 +47,7 @@ Gate: `app/src/tests/agents-contracts.test.ts`; review.
 Owns: the dependency direction between services and stores.
 Path: services reach stores only through gates; the module graph stays acyclic.
 Never: a service statically importing a store.
-Gate: `app/src/tests/agents-contracts.test.ts`; review.
+Gate: `app/src/tests/no-circular-deps.test.ts`.
 
 ### Query UI states
 Owns: what users see while data loads or fails.
