@@ -1840,9 +1840,7 @@ camera has a pad waiting for you here. The stream underneath the pad is Flow 2.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Server.tsx#L112>`__
    · → :doc:`05-component-architecture`
 
-``pages/States.tsx`` wraps the same ``changeState`` in its own mutation, but
-nothing routes to it and nothing imports it, so no user ever walks that code
-(issue #231). The Server page holds the app's only ``useMutation`` and its only
+The Server page holds the app's only ``useMutation`` and its only
 write to the ZoneMinder run state; other writes (PTZ, event delete, push
 registration) go through plain handlers, not mutations. Steps 8
 and 9 lean on the client behavior traced in Flow 6: if the access token lapsed

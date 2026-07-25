@@ -310,7 +310,7 @@ Callsites render a ``VideoOff`` placeholder while ``isFresh`` is
 The hook is used by ``useMonitorStream``, ``MonitorHoverPreview``,
 ``MonitorRecentEvents``, ``EventThumbnailHoverPreview``,
 ``EventPreviewPopover``, ``TimelineScrubber``, ``ZmsEventPlayer``,
-``NotificationHandler``, ``EventMontage``, ``Events``, ``EventDetail``,
+``NotificationHandler``, ``AskPanel``, ``Events``, ``EventDetail``,
 and ``NotificationHistory``. Anything that builds a token-bearing URL the
 runtime fetches directly should go through it (stores, which cannot call
 hooks, read ``getFreshAccessToken()`` from the auth store instead).
@@ -588,8 +588,8 @@ already on screen falls through to the normal view instead of an error wall.
 The ``OfflineBanner`` covers telling the user why. A cold start with no cached
 data still hits the error wall.
 
-Applied in ``pages/Monitors.tsx``, ``Montage.tsx``, ``States.tsx``,
-``Events.tsx``, and ``EventMontage.tsx``. ``MonitorDetail.tsx`` and
+Applied in ``pages/Monitors.tsx``, ``Montage.tsx``, and ``Events.tsx``.
+``MonitorDetail.tsx`` and
 ``EventDetail.tsx`` keep the plain error wall: their guard already combines the
 query error with other required values (``!monitor || !currentProfile``,
 ``!event``), and dropping the error term there changes what a falsy value
@@ -623,9 +623,9 @@ See "Bandwidth Mode Settings" below for the property table.
 Mutations invalidate; they do not write the cache
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-There are exactly two ``useMutation`` call sites in the app, both wrapping
-``changeState`` (``pages/Server.tsx`` and ``pages/States.tsx``). Everything
-else mutates through a plain async handler and then invalidates.
+There is exactly one ``useMutation`` call site in the app, wrapping
+``changeState`` (``pages/Server.tsx``). Everything else mutates through a
+plain async handler and then invalidates.
 
 No mutation in zmNinjaNg does an optimistic update. There is no ``onMutate``
 anywhere in ``app/src``: nothing writes a predicted value into the cache and
@@ -634,15 +634,17 @@ and lets the refetch supply the truth.
 
 .. code:: tsx
 
-   // pages/States.tsx
-   const changeMutation = useMutation({
-     mutationFn: changeState,
+   // pages/Server.tsx
+   const changeStateMutation = useMutation({
+     mutationFn: (stateName: string) => changeState(stateName),
      onSuccess: () => {
+       toast({ title: t('common.success'), description: t('server.state_applied') });
        queryClient.invalidateQueries({ queryKey: queryKeys.states(currentProfile?.id) });
-       toast.success(t('states.change_success'));
      },
-     onError: (error: Error) => {
-       toast.error(t('states.change_error', { error: error.message }));
+     onError: (error) => {
+       toast({ title: t('common.error'), description: t('server.state_apply_failed'),
+               variant: 'destructive' });
+       log.server('Failed to apply state/action', LogLevel.ERROR, error);
      },
    });
 

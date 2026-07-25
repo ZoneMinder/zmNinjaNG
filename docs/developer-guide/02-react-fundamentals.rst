@@ -892,17 +892,18 @@ write affected. You tell it, by invalidating them.
 
 .. code:: tsx
 
-   // app/src/pages/States.tsx
+   // app/src/pages/Server.tsx
    const queryClient = useQueryClient();
 
-   const changeMutation = useMutation({
-     mutationFn: changeState,
+   const changeStateMutation = useMutation({
+     mutationFn: (stateName: string) => changeState(stateName),
      onSuccess: () => {
+       toast({ title: t('common.success'), description: t('server.state_applied') });
        queryClient.invalidateQueries({ queryKey: queryKeys.states(currentProfile?.id) });
-       toast.success(t('states.change_success'));
      },
-     onError: (error: Error) => {
-       toast.error(t('states.change_error', { error: error.message }));
+     onError: (error) => {
+       toast({ title: t('common.error'), description: t('server.state_apply_failed'),
+               variant: 'destructive' });
      },
    });
 

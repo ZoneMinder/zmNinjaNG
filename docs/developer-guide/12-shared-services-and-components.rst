@@ -968,18 +968,21 @@ message. ``resolveQueryError`` is that logic extracted once.
    resolveQueryError(error, t);   // fallback: `${t('common.error')}: ${message}`
    resolveQueryError(error, t, { fallbackKey: 'monitors.failed_to_load' });
 
-Seven pages route their error text through it. Monitors, EventMontage, States,
-Timeline, and DeveloperNotice pass a ``fallbackKey`` naming what failed to
-load; Events and Montage take the generic fallback. Six of them hand the result
-to ``ErrorBanner``, while DeveloperNotice renders the string in its own layout.
+Five pages and two assistant components route their error text through it.
+Monitors, Timeline, DeveloperNotice, ``AskPanel``, and
+``AssistantOllamaSection`` pass a ``fallbackKey`` naming what failed to load;
+Events and Montage take the generic fallback. Monitors, Timeline, Events,
+Montage, and ``AskPanel`` hand the result to ``ErrorBanner``; DeveloperNotice
+renders the string in its own layout and ``AssistantOllamaSection`` puts it in
+a toast.
 
 MonitorDetail and EventDetail are the exceptions. Both show a fixed translated
 message with no interpolated error text, so they pass that string straight to
 ``ErrorBanner`` and never call this function: a detail page that could not load
 its one record has nothing to interpolate.
 
-**Used by:** Events, Monitors, EventMontage, Montage, States, Timeline,
-DeveloperNotice.
+**Used by:** Events, Monitors, Montage, Timeline, DeveloperNotice, AskPanel,
+AssistantOllamaSection.
 
 Navigation Service (``lib/navigation.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1608,8 +1611,8 @@ component itself, not a rendered element.
      action={{ label: t('events.clear_filters'), onClick: clearFilters }}
    />
 
-**Used by:** Events, EventMontage, Monitors, Montage, NotificationHistory,
-States, Timeline, and the Dashboard when no widgets are configured.
+**Used by:** Events, Monitors, Montage, NotificationHistory, Timeline, the
+HeatmapWidget, and the Dashboard when no widgets are configured.
 
 ErrorBanner and DetailPageSkeleton (``components/ui/query-state.tsx``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1633,9 +1636,9 @@ both defined inline: a title bar plus one aspect-video placeholder.
 nothing to interpolate can hand it a fixed translated string instead of a
 ``resolveQueryError`` result, which is what those two detail pages do.
 
-**Used by:** Events, Monitors, EventMontage, Montage, States, Timeline,
-MonitorDetail, EventDetail. ``DetailPageSkeleton`` has only the two detail
-pages as callers.
+**Used by:** Events, Monitors, Montage, Timeline, MonitorDetail, EventDetail,
+and AskPanel. ``DetailPageSkeleton`` has only the two detail pages as
+callers.
 
 PasswordInput (``components/ui/password-input.tsx``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
