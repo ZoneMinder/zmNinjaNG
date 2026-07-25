@@ -78,3 +78,35 @@ describe('AGENTS.project.md architecture contracts', () => {
     }
   });
 });
+
+describe('AGENTS.md stays portable', () => {
+  it('contains no project-specific tokens', () => {
+    const core = fs.readFileSync(path.join(repoRoot, 'AGENTS.md'), 'utf8');
+    const forbidden = [
+      'zmNinja',
+      'ZoneMinder',
+      'zoneminder',
+      'getProfileSettings',
+      'useBandwidthSettings',
+      'ErrorBanner',
+      'agent-playbooks',
+      'Capacitor',
+      'Zustand',
+      'app/src',
+    ];
+    for (const token of forbidden) {
+      expect(core.includes(token), `AGENTS.md contains "${token}"`).toBe(false);
+    }
+  });
+
+  it('instruction files stay inside the token budget', () => {
+    // Both files load into every agent session. Raising this budget is a
+    // deliberate act that needs a reason in the commit message, like the
+    // lint ratchet (C7). Lowering it is always welcome.
+    const WORD_BUDGET = 1400;
+    const words = (f: string) =>
+      fs.readFileSync(path.join(repoRoot, f), 'utf8').split(/\s+/).filter(Boolean).length;
+    const total = words('AGENTS.md') + words('AGENTS.project.md');
+    expect(total, `combined ${total} words > budget ${WORD_BUDGET}`).toBeLessThanOrEqual(WORD_BUDGET);
+  });
+});
