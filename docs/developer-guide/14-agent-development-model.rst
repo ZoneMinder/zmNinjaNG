@@ -58,39 +58,51 @@ Moving from code review to constraint enforcement and design review
 
 Reading every generated diff stopped scaling early, and it was never good
 review to begin with: a person skimming a few hundred generated lines
-misses more than a failing test does. The effort went into constraints
-instead. Every rule an agent has to follow is written down; every rule a
-script can check has a script checking it; when something breaks that no
-rule covered, the fix has to include the rule that would have covered it.
-The maintainer states what should happen (a bug, a feature, an issue
-number), an agent does the work, and the gates decide whether it lands.
+misses more than a failing test does. The principles that replaced it:
 
-A related decision: project knowledge stays in the repository, not in an
-agent's session memory. Session memory cannot be seen by other agents,
-other contributors, or CI, and it disappears with the machine it lives on.
-Commit history has a similar problem: a revert or a string of fixes to the
-same file is something the project already paid to learn, and it stays
-buried unless someone writes the lesson down. The facts in
-`domain-context.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/agents/project/domain-context.md>`__
-came from doing exactly that, once across agent memory and once across the
-full commit history; rule M5 requires the same of every future session.
-
-Rules organize by concern, not by layer. There is no frontend or backend
-rulebook: a contract owns its subsystem's invariant whichever layer it
-sits in (Stores and Query UI states are frontend concerns, HTTP and Auth
-tokens cross into native code, the ZoneMinder API belongs to the server),
-platform divergence lives in the native playbook and domain-context, and
-the dev guide teaches the frameworks. Layer playbooks would mostly
-re-shelve that content, so one gets created only when a recurring failure
-class arrives that has no home in the current cut.
-
-Multi-agent ceremony is treated as a cost, not as evidence of rigor.
-Dispatching ten agents at a change looks thorough, but every dispatch
-re-reads the same context, and in practice, agent reviews of mechanical
-work here found nothing that the gates had not already proven. What scales
-with a change's risk is review ceremony, not delegation: independent agent
-review is reserved for work that needs judgment, plus one whole-branch
-review before every PR, while a small bounded change relies on its gates.
+- **Constraints instead of inspection.** Every rule an agent has to
+  follow is written down; every rule a script can check has a script
+  checking it; when something breaks that no rule covered, the fix has to
+  include the rule that would have covered it. The maintainer states what
+  should happen (a bug, a feature, an issue number), an agent does the
+  work, and the gates decide whether it lands.
+- **Design gets the human attention that diffs used to.** Feature work
+  starts as a short design doc saying what is being built and why, and
+  the maintainer approves that before implementation; the approved specs
+  and plans are committed under
+  `docs/superpowers/ <https://github.com/ZoneMinder/zmNinjaNg/tree/main/docs/superpowers>`__.
+  Reviewing a half-page of intent catches wrong-direction work earlier
+  and cheaper than reviewing the thousand lines it would have become.
+- **Code review happens offline, at milestones.** Instead of per-diff
+  review, the scorecard and history-mining skills run against the whole
+  codebase roughly monthly (both described below), and their findings
+  become issues, gates, and playbook entries.
+- **Models check each other.** Reviews are dispatched to an agent that
+  did not write the code, and at milestones different frontier models
+  re-verify each other's claims, gates re-run included.
+  `Issue #217 <https://github.com/ZoneMinder/zmNinjaNg/issues/217#issuecomment-4882243836>`__
+  has a worked example: Fable re-reviewing a 15-commit delta that Opus
+  had reviewed, four verification agents plus a fresh gate run, the two
+  models addressing each other directly.
+- **Knowledge stays in the repository.** Session memory cannot be seen by
+  other agents, other contributors, or CI, and dies with the machine.
+  A revert or a string of fixes to one file is a lesson already paid for.
+  The facts in
+  `domain-context.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/agents/project/domain-context.md>`__
+  came from sweeping agent memory and the full commit history once; rule
+  M5 requires the same of every future session.
+- **Rules organize by concern, not by layer.** No frontend or backend
+  rulebook: a contract owns its subsystem's invariant whichever layer it
+  sits in, platform divergence lives in the native playbook and
+  domain-context, and the dev guide teaches the frameworks. A layer
+  playbook gets created only when a recurring failure class arrives with
+  no home in the current cut.
+- **Agent count is a cost, not evidence of rigor.** Every dispatch
+  re-reads context, and reviews of mechanical work here found nothing the
+  gates had not already proven. Review ceremony scales with a change's
+  risk, delegation does not: independent review is reserved for judgment
+  work plus one whole-branch review before every PR, while a small
+  bounded change relies on its gates.
 
 Rules, gates, and practices
 ---------------------------
