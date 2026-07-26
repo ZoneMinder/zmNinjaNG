@@ -19,6 +19,7 @@
     "lint:a11y": "eslint -c eslint.a11y.config.js .",
     "lint:correctness": "eslint -c eslint.correctness.config.js .",
     "lint:ratchet": "node scripts/lint-ratchet.mjs",
+    "gates": "vitest run && npm run build && npm run lint:a11y && npm run lint:correctness && npm run lint:ratchet",
     "preview": "vite preview",
     "test": "vitest",
     "test:ui": "vitest --ui",

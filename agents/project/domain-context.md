@@ -16,9 +16,6 @@ matching reality, fixing it is a protocol change like any rule edit.
 - Event Server v7.0.22 and later always sends a real `eid` in pushes. The
   historical fake-eid bug (a `Date.now()` value where an event id belongs)
   was app-side tray handling, not the ES.
-- Native TLS trust is trust-on-first-use: with no stored fingerprint,
-  accept any certificate. Fail-closed here breaks onboarding against the
-  self-signed certificates most ZoneMinder servers run.
 
 ## Streaming and media
 
@@ -61,15 +58,12 @@ matching reality, fixing it is a protocol change like any rule edit.
 
 ## Auth and tokens
 
-- Token refresh and login dedupe concurrent callers through the single
-  in-flight promise in the auth store (`getFreshAccessToken` / `login`);
-  independent triggers double-POST, and a double refresh 401s the rotated
-  token and force-logs-out the user (26b9e6a9, 19fb60e1).
-- Credentials never ride URL query strings; a refresh token in `?token=`
-  leaked into server logs (e1393724). Request body only.
-- Refresh tokens live in platform secure storage (Keychain, Keystore,
-  `safeStorage`, web AES-GCM). On secure-store failure, drop the token and
-  force re-auth; never fall back to plaintext (a2cc647d). Web at-rest
+- Dedupe, no-credentials-in-URLs, and secure-storage rules live in the
+  Auth tokens contract. Incidents behind them: independent refresh
+  triggers double-POSTed and the second 401ed the rotated token,
+  force-logging the user out (26b9e6a9, 19fb60e1); a refresh token in
+  `?token=` leaked into server logs (e1393724); plaintext fallback on
+  secure-store failure became drop-and-re-auth (a2cc647d). Web at-rest
   crypto is obfuscation, not confidentiality.
 - A ZoneMinder server with auth disabled returns login success with no
   tokens: track `requiresAuth` explicitly instead of deriving freshness
@@ -112,50 +106,22 @@ matching reality, fixing it is a protocol change like any rule edit.
 
 ## Assistant and LLM backends
 
-- The Ollama tag `qwen3:4b` resolves to the Thinking-2507 build whose
-  reasoning cannot be disabled; use `qwen3:4b-instruct` when reasoning is
-  unwanted. WebLLM disables thinking via `extra_body: { enable_thinking:
-  false }`.
-- The Apple Foundation Models backend invents tool arguments; validate
-  tool-call args from it before use. It also calls real tools on greeting
-  turns that need no data: first tool call on a tool-less turn gets a
-  no-tools pushback, and the registry unlocks only if the model insists
-  with a second call (578787dc).
-- On small and on-device models, prompt instructions alone do not stop
-  fabricated answers: the turn schema itself must make the answer branch
-  unreachable until a real tool result exists (4ee2bbbf, 0a720c01). See
-  the Assistant tool loop contract.
-- A schema-rejected or thrown tool call must not feed raw error text back
-  to the model; it fabricates an answer from the error. Failure paths
-  append an explicit correct-and-retry-or-admit guard (0a720c01).
+Model choice, backends, reasoning switches, measured behavior patterns,
+and the eval harness live in `agents/project/llm-models.md`; tool-loop
+conduct (grounding, error feedback) lives in the Assistant tool loop
+contract. Remaining code-path facts:
+
 - Tool-call markup the parser does not recognize (Hermes XML, bare
   name/arguments JSON) is a parse failure that triggers self-repair retry;
   it never renders verbatim as the chat answer (2e28e5fc).
 - Regex "call a tool" nudges are English-only by construction; gate them on
   `ToolContext.locale` and give other locales a language-neutral reminder
   (e74bcb84).
-- Measure assistant prompt changes with `app/scripts/prompt-eval.mts`,
-  which imports the production `buildSystemPrompt`. A hand-copied prompt in
-  the harness drifted once and measured phantom failures; never fork the
-  prompt text into an eval. Two prompt rewrites shipped unmeasured, scored
-  worse, and were reverted (refs #259): baseline before, rerun after, both
-  numbers in the PR.
-- Plain `npx tsx` scripts cannot import app modules that read
-  `import.meta.env`; use vitest with `// @vitest-environment node` and
-  stub `Platform.shouldUseProxy` false, or `lib/http.ts` rewrites absolute
-  URLs to the dev proxy. Run vitest from `app/`, never the repo root (the
-  root run resolves a different config and reports phantom failures).
-- Qwen3 `/no_think` is a placebo on Ollama (hides the tag, still reasons);
-  `reasoning_effort: "none"` on the /v1 endpoint is the real switch, sent
-  only to confirmed-Ollama servers.
 - Time windows use copy-interpret-compute (refs #265): the model copies
   the user's phrase verbatim, `window-interpreter.ts` maps it to fields,
-  `resolveWindow` does arithmetic. Small models copy perfectly but fail
-  direct field-filling; never regress to direct fills or app-side phrase
-  regexes (deleted twice).
-- Prompt classification rules teach dimensions (intent by subject), never
-  instance lists; an instance-based triage misclassified every combination
-  outside its examples, four times.
+  `resolveWindow` does arithmetic. Never regress to direct fills or
+  app-side phrase regexes (deleted twice); the measured why lives in
+  `llm-models.md`.
 
 ## CI runners
 

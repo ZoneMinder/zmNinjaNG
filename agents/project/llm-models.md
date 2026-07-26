@@ -49,7 +49,19 @@ after any prompt or provider change and put both scores in the PR.
   calls real tools on greeting turns; the first tool call on a tool-less
   turn gets a no-tools pushback (578787dc).
 
-The code-path conduct rules behind several of these entries (tool-loop
-gating, markup parse failures, locale-gated nudges) live in
-`domain-context.md` and the Assistant tool loop contract; this file is for
-choosing and configuring models.
+## Eval harness
+
+- `app/scripts/prompt-eval.mts` imports the production `buildSystemPrompt`;
+  never fork the prompt text into an eval. A hand-copied prompt drifted
+  once and measured phantom failures. Two prompt rewrites shipped
+  unmeasured, scored worse, and were reverted (refs #259).
+- Plain `npx tsx` scripts cannot import app modules that read
+  `import.meta.env`; use vitest with `// @vitest-environment node` and
+  stub `Platform.shouldUseProxy` false, or `lib/http.ts` rewrites absolute
+  URLs to the dev proxy. Run vitest from `app/`, never the repo root (the
+  root run resolves a different config and reports phantom failures).
+
+This file owns model-selection, model-behavior, and eval facts. Tool-loop
+conduct (grounding, error feedback) lives in the Assistant tool loop
+contract; the remaining assistant code-path facts (markup parse failures,
+locale-gated nudges) live in `domain-context.md`.

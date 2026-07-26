@@ -145,8 +145,9 @@ misses more than a failing test does. The principles that replaced it:
 - **Agent count is a cost, not evidence of rigor.** Every dispatch
   re-reads context, and reviews of mechanical work here found nothing the
   gates had not already proven. Review ceremony scales with a change's
-  risk, delegation does not: independent review is reserved for judgment
-  work plus one whole-branch review before every PR, while a small
+  risk, and delegation has a floor: a trivial gate-covered edit is made
+  directly instead of dispatched, independent review is reserved for
+  judgment work plus one whole-branch review before every PR, and a small
   bounded change relies on its gates.
 
 Rules, gates, and practices
@@ -240,7 +241,7 @@ always-loaded files cannot.
 
 Enforcement lives in ``app/src/tests/`` and the CI workflows. Covering
 gates run before every commit; the full battery runs before a push or PR
-(rule P3).
+(rule P3), as one command: ``npm run gates``.
 
 Review still happens on every change, done by agents rather than the
 maintainer. The workflow in
@@ -375,9 +376,10 @@ here are structural rather than tooling:
   trims before the change could land, and the one raise to 2000 was a
   recorded maintainer decision, not a silent bump.
 - Ceremony is priced: implementation delegates to subagents on the
-  cheapest model that fits the task, independent review runs only where
-  judgment is involved, and the label guard classifies PRs from commit
-  types instead of spending a model call on it.
+  cheapest model that fits the task, trivial gate-covered edits skip the
+  dispatch entirely, independent review runs only where judgment is
+  involved, and the label guard classifies PRs from commit types instead
+  of spending a model call on it.
 
 The maintainer additionally runs
 `tokless <https://github.com/HoangP8/tokless>`__, a local toolkit that

@@ -183,7 +183,7 @@ Types: ``feat:``, ``fix:``, ``docs:``, ``test:``, ``refactor:``, ``chore:``.
    - Added API integration for preset recall
    - Updated MonitorDetail component tests
 
-   Tests verified: npm test, npx tsc -b, npm run build,
+   Tests verified: npm run gates,
    npm run test:e2e -- monitor-detail.feature
 
    refs #123"
@@ -230,7 +230,7 @@ review without a round trip:
 
    ## Testing
 
-   Tests verified: npm test, npx tsc -b, npm run build,
+   Tests verified: npm run gates,
    npm run test:e2e -- <feature>.feature
 
    ## Screenshots (if UI changed)
@@ -392,7 +392,7 @@ Adding a "favorites" star to monitors, as it would actually be sequenced:
    Starred monitors sort to the top of the monitors list. The favorites
    array is stored per profile, so two servers keep separate stars.
 
-   Tests verified: npm test, npx tsc -b, npm run build,
+   Tests verified: npm run gates,
    npm run test:e2e -- monitors.feature
 
    refs #78"
@@ -418,7 +418,7 @@ Fixing a Bug
    which resized the stream. Held the profile and the regeneration
    callback in refs so neither identity changes per render.
 
-   Tests verified: npm test, npx tsc -b, npm run build,
+   Tests verified: npm run gates,
    npm run test:e2e -- monitors.feature
 
    refs #92"

@@ -29,10 +29,12 @@ tier; docs reference IDs, never copied text.
 - P1. Create or use an issue before feature or bug work; land through an
   issue-linked PR. Commits reference the issue; closing keywords only after
   the user confirms. If instructed to push directly to the default branch,
-  do so and verify the issue timeline.
+  do so and verify the issue timeline. Typo-level fixes and doc
+  corrections with no behavior change need no issue.
 - P2. Test first: a failing test precedes the implementation of every
   feature and bugfix. A test that has never failed does not demonstrate it
-  can catch the bug.
+  can catch the bug. Changes an existing gate already covers fully rely on
+  that gate instead of a bespoke new test.
 - P3. Run the gates covering the change before every commit; run the full
   suite before push or PR. Never commit after a failed or unrun gate.
 - P4. Read failures and fix the cause. Never blindly retry.

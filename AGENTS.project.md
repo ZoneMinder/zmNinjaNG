@@ -92,7 +92,7 @@ Gate: `app/src/tests/agents-contracts.test.ts`; review.
 ## Project rules
 
 - Run npm commands from `app/`. Run root `npm install` once so hooks exist.
-- UI changes need an outcome-based e2e test with platform tags and `data-testid` on new interactive elements.
+- UI changes that alter behavior or navigation need an outcome-based e2e test with platform tags and `data-testid` on new interactive elements. Cosmetic changes (spacing, styling, label wording) rely on existing gates.
 - Only one `npm run test:e2e` per working tree.
 - Device e2e (iOS, Android, Tauri) is manual-only; agents never auto-run it.
 - Labels must fit 320px; prefer concise translations.
@@ -106,19 +106,17 @@ Gate: `app/src/tests/agents-contracts.test.ts`; review.
 ## Verification
 
 ```
-npm test
-npx tsc -b
-npm run build
-npm run lint:a11y
-npm run lint:correctness
-npm run lint:ratchet
+npm run gates            # vitest run, build (includes tsc -b), three lints
 npm run test:e2e -- <feature>.feature
 ```
 
 Per commit, run what the change touches (docs-only edits: the doc gates in
-`src/tests/`; code: its unit tests). The full list runs before push or PR.
-The three lint commands are the blocking ones; `npm run lint` stays
-advisory. The e2e command applies to UI, navigation, and workflow changes.
+`src/tests/`; code: its unit tests). `npm run gates` runs the full set
+before push or PR; `npm run build` already type-checks, so no separate
+`tsc -b` pass. The three lint configs (`lint:a11y`, `lint:correctness`,
+`lint:ratchet`) are the blocking ones; `npm run lint` stays advisory. The
+e2e command applies to behavior-changing UI, navigation, and workflow
+changes.
 The ratchet baseline lives at `app/.lint-baseline.json`; lower it with
 `npm run lint:ratchet -- --update`. State completed checks in handoff.
 

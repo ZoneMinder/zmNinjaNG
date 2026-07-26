@@ -36,6 +36,6 @@ Connect each artifact to its user-visible behavior and relevant flow. Examples m
   Link file mentions in body text to the repository on first use.
 - No top-level TOC, next-step section, recap, em-dash, or padded rewrite.
 - RST links use `:doc:`; Markdown links use `{doc}`.
-- Before committing a new or rewritten chapter, run banned-word and em-dash checks from the previous version of this guidance.
+- Em-dashes and headline-style headings are gated by the unit suite (`app/src/tests/no-em-dash.test.ts`, `app/src/tests/agents-contracts.test.ts`); run `npm test` before committing a new or rewritten chapter.
 - Developer docs cite AGENTS.md rule IDs or AGENTS.project.md contract names instead of copying process rules.
 

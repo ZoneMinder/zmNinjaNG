@@ -8,10 +8,10 @@ above before trusting specifics.
 
 ## Scale ceremony to risk
 
-What scales with risk is review ceremony, not delegation: implementation
-goes through a subagent either way, but a one-file fix with a covering
+What scales with risk is review ceremony: a one-file fix with a covering
 test needs no independent reviewer, while multi-task plans, refactors with
-blast radius, and contract changes do. Evidence from the restructure run:
+blast radius, and contract changes do. Delegation has a floor too; see
+Orchestration. Evidence from the restructure run:
 reviews of mechanical
 transcription tasks found zero defects; reviews of judgment work (doc
 remapping, whole-branch review) found every real one. Review where judgment
@@ -30,10 +30,12 @@ named fleet.
   file cannot switch a running session's model, so the repo pins the
   default in `.claude/settings.json` (`"model": "opus"`); if your session
   runs on something smaller anyway, say so and suggest `/model`.
-- Implementation always delegates to subagents, even for small changes.
-  The orchestrator's context stays clean for briefs, report verdicts, and
-  review decisions; an orchestrator that edits files skips its own review
-  structure.
+- Implementation delegates to subagents by default: the orchestrator's
+  context stays clean for briefs, report verdicts, and review decisions,
+  and an orchestrator that edits files skips its own review structure.
+  Exception: a trivial gate-covered edit (single file, no judgment, a gate
+  proves the result) costs more to brief than to make; edit it directly
+  and run its gate.
 - Let the harness decide how many agents run and when they parallelize.
   Choose what each dispatch is for; do not choreograph counts.
 
