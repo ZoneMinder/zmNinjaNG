@@ -83,6 +83,15 @@ misses more than a failing test does. The principles that replaced it:
   `Issue #217 <https://github.com/ZoneMinder/zmNinjaNg/issues/217#issuecomment-4882243836>`__
   has a worked example: Fable re-reviewing a 15-commit delta that Opus
   had reviewed, four verification agents plus a fresh gate run.
+- **Forced documentation is how the human keeps learning.** Rule P10
+  makes every new API, component, hook, or utility update the developer
+  docs and call flows, and the documentation playbook requires that
+  writing to teach (React explained where a chapter first relies on it,
+  flows traced through real user actions). This is not bureaucracy; it is
+  the maintainer's replacement for reading diffs. In a codebase agents
+  write, understanding comes from reviewing designs before the code
+  exists and reading the docs the code is forced to produce after, which
+  is why this guide exists at all (see :doc:`01-introduction`).
 - **Knowledge stays in the repository.** Session memory cannot be seen by
   other agents, other contributors, or CI, and dies with the machine.
   A revert or a string of fixes to one file is a lesson already paid for.
