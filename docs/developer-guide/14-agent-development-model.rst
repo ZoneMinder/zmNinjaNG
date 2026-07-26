@@ -10,7 +10,7 @@ reviews deliberately.
 Scope, platforms, and release guardrails
 ----------------------------------------
 
-One ships everywhere zmNinjaNg runs: iOS and
+One codebase ships everywhere zmNinjaNg runs: iOS and
 Android through Capacitor, macOS, Windows, and Linux through Electron, and
 the browser directly. 
 
