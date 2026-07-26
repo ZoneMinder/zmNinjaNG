@@ -237,6 +237,43 @@ suits you, anything that can invoke the CLI works
 (``claude -p "/mine-history"`` from cron or a calendar automation), and
 Claude Code users can create a routine with the ``/schedule`` command.
 
+Token economics
+---------------
+
+Token spend is treated as a design constraint, and most of the savings
+here are structural rather than tooling:
+
+- Always-loaded context is capped: the instruction files sit under a
+  word budget enforced by the gate (currently 2000 words, about 2.6k
+  tokens per session), while detailed knowledge lives in playbooks that
+  load only when the work touches their area.
+- Ceremony is priced: implementation delegates to subagents on the
+  cheapest model that fits the task, independent review runs only where
+  judgment is involved, and the label guard classifies PRs from commit
+  types instead of spending a model call on it.
+
+The maintainer additionally runs
+`tokless <https://github.com/HoangP8/tokless>`__, a local toolkit that
+bundles several token-reduction tools: caveman (terse response style for
+chat output), ponytail (a bias toward the smallest working change),
+rtk (a CLI wrapper that compresses command output before it reaches the
+model), codegraph (pre-indexed code structure queried instead of grepping
+and reading files), and context-mode (runs analysis in a sandbox so raw
+bytes stay out of the context window). None of it is required to work on
+this repo; it shapes the maintainer's sessions, not the repository.
+
+Two honest observations from using the stack on this project. Ponytail's
+bias shows up in decisions that are visible in the history: two
+instruction files instead of a template hierarchy, one gate file instead
+of a test per rule, a shell heuristic instead of a model call in the
+label guard. And output compression is the reason rule P6 exists: in one
+working session the rtk wrapper capped a commit count at 50 on a
+2254-commit repo, hid a failing test behind a log-file path, and masked a
+red gate's exit status through a pipeline, each caught only by rerunning
+the bare command. Compression tools save tokens on reads; they never wrap
+a gate, and published savings claims deserve the same M2 skepticism as
+any other number a tool reports about itself.
+
 Using this in your own project
 ------------------------------
 
