@@ -7,8 +7,8 @@ first time. Written in roughly the order you need to know things.
 zmNinjaNg renders to the DOM on every platform (web, Electron desktop,
 Capacitor mobile webview). Examples below use plain HTML tags.
 
-The mental shift
-----------------
+Mental shift
+------------
 
 In a typical web stack you tell the DOM what to change:
 

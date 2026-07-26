@@ -78,8 +78,8 @@ demotes every tile to MJPEG on the next profile bootstrap. See
 :doc:`07-api-and-data-fetching` for the config-fetch layer and
 :doc:`11-application-lifecycle` for when bootstrap runs.
 
-The WebSocket URL and the stream name
--------------------------------------
+WebSocket URL and stream name
+-----------------------------
 
 ``getGo2RTCWebSocketUrl`` in ``lib/zm/url-builder.ts`` turns the configured path
 into a signaling URL. It takes the path, the monitor id, and a channel:
@@ -387,8 +387,8 @@ and read through the settings store. See
 ``bypassGo2rtcFailureCache`` is not a setting. It is a prop, and only
 ``MonitorDetail`` passes it.
 
-The video element
------------------
+Video element
+-------------
 
 The hook wraps ``video-rtc``'s ``oninit`` to configure the ``<video>`` the moment
 the element creates it, and wraps ``onpcvideo`` to re-apply muting after the

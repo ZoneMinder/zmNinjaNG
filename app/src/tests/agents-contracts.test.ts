@@ -138,6 +138,32 @@ describe('knowledge files stay evidence-backed and private-data-free (M5)', () =
   });
 });
 
+describe('prose stays in developer voice (P10)', () => {
+  it('no rst or agent-playbook heading starts with "The "', () => {
+    const offenders: string[] = [];
+    const guideDir = path.join(repoRoot, 'docs/developer-guide');
+    for (const file of fs.readdirSync(guideDir).filter((f) => f.endsWith('.rst'))) {
+      const lines = fs.readFileSync(path.join(guideDir, file), 'utf8').split('\n');
+      lines.forEach((line, i) => {
+        const next = lines[i + 1] ?? '';
+        const isHeading = /^[=\-~^"]{3,}\s*$/.test(next) && next.trim().length >= line.trim().length - 2;
+        if (isHeading && /^The /.test(line)) offenders.push(`${file}:${i + 1} ${line}`);
+      });
+    }
+    for (const dir of ['agents/generic', 'agents/project']) {
+      const full = path.join(repoRoot, dir);
+      for (const file of fs.readdirSync(full).filter((f) => f.endsWith('.md'))) {
+        fs.readFileSync(path.join(full, file), 'utf8')
+          .split('\n')
+          .forEach((line, i) => {
+            if (/^#+ The /.test(line)) offenders.push(`${dir}/${file}:${i + 1} ${line}`);
+          });
+      }
+    }
+    expect(offenders, offenders.join('; ')).toEqual([]);
+  });
+});
+
 describe('developer docs reference valid rule IDs', () => {
   it('every "rule <id>" reference resolves', () => {
     // Derived from AGENTS.md so adding or removing a rule cannot desync

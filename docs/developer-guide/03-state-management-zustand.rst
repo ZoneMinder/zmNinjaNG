@@ -48,8 +48,8 @@ That is the whole store. ``useDeleteSelectionStore`` is both a React hook
 and an object with ``.getState()`` / ``.setState()`` on it, which is what
 makes the same store usable from non-React code later in this chapter.
 
-The ``set`` Function
-~~~~~~~~~~~~~~~~~~~~
+Writing state with ``set``
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ``set`` takes either an object, which merges into state, or a function
 receiving the current state. Both forms must return *new* objects and

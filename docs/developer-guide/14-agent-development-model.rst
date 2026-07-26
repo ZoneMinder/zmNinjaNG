@@ -85,6 +85,26 @@ arrived, through a PR.
 How the pieces fit
 ------------------
 
+.. mermaid::
+
+   graph TD
+     CL["CLAUDE.md<br/>(Claude Code shim)"] --> AG["AGENTS.md<br/>rules I / P / C / M"]
+     CL --> AP["AGENTS.project.md<br/>14 contracts + project rules"]
+     AG -. "read before any work" .-> AP
+     AP -- "table: read for your area" --> PP["agents/project/<br/>testing, docs, native,<br/>data-integrity, domain-context"]
+     CL -- "multi-agent work" --> GP["agents/generic/<br/>claude-workflows.md"]
+     AG === GATE["agents-contracts.test.ts<br/>symbols exist, purity, word budget,<br/>evidence hashes, privacy, doc refs, headings"]
+     AP === GATE
+     PP === GATE
+     PR["every PR"] === LG["label-guard.yml<br/>core / refactor label"]
+     PR === CI["ci.yml<br/>tests, lints, build"]
+     GATE --> CI
+     FAIL["breakage or review finding"] -- "fix PR proposes rule + gate<br/>(self-improvement protocol)" --> AG
+     FAIL -- "durable fact (M5)" --> PP
+
+Solid arrows are load order in a session; the double lines are
+enforcement; the bottom edges are the feedback loop that grows the files.
+
 `AGENTS.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/AGENTS.md>`__
 at the repo root is the portable core; it contains nothing specific to
 zmNinjaNg.
@@ -123,6 +143,49 @@ would have prevented the break (with its gate, per M1), and any durable
 fact learned along the way goes into ``domain-context.md`` (per M5). The
 maintainer ends up reviewing small instruction diffs instead of large code
 diffs, and each failure gets absorbed once.
+
+A contract, end to end
+----------------------
+
+A concrete walk-through, using the Polling contract. In
+`AGENTS.project.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/AGENTS.project.md>`__
+it reads:
+
+.. code-block:: markdown
+
+   ### Polling
+   Owns: every recurring refresh interval.
+   Path: `useBandwidthSettings` / `getBandwidthSettings` (`app/src/hooks/useBandwidthSettings.ts`).
+   Never: literal interval values; users tune bandwidth globally.
+   Gate: `app/src/tests/agents-contracts.test.ts`; review.
+
+That block is the *instruction*. An agent asked to add, say, a
+refresh-every-30-seconds feature reads it and knows three things without
+opening any source: recurring intervals belong to this subsystem, the only
+sanctioned way to get one is the two named functions, and hardcoding
+``30000`` is a bug even if it works.
+
+The *gate* is one TypeScript test file,
+`agents-contracts.test.ts <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/tests/agents-contracts.test.ts>`__,
+which runs with the normal unit suite. For this contract it parses the
+block, pulls every backticked token out of the ``Path:`` and ``Gate:``
+lines, and checks each one against reality: tokens containing a slash must
+exist as files (``app/src/hooks/useBandwidthSettings.ts``), bare tokens
+must appear as words somewhere in ``app/src``
+(``useBandwidthSettings``, ``getBandwidthSettings``). Rename or delete the
+hook without updating the contract and the suite fails with
+``Polling: symbol useBandwidthSettings not found in app/src`` until the
+contract matches the code again. That is the property the contracts
+depend on: they cannot silently rot, so an agent can trust them instead of
+re-deriving the design.
+
+What the gate cannot check, review covers: nothing mechanical proves a new
+``setInterval(30000)`` violates the ``Never:`` line, which is why the
+``Gate:`` field says ``review`` too, and why review ceremony concentrates
+on judgment. The same file carries the checks on the instruction system
+itself (core purity, word budget, evidence hashes, privacy, doc
+references, headings), so the files this chapter describes are gated by
+the same mechanism they document.
 
 Monthly scorecard review
 ------------------------
