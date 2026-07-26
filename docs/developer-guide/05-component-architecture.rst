@@ -856,8 +856,8 @@ reads ``isLoading``, when ``hidden`` is ``false``.
 ``monitor-recent-events-toggle``, refresh ``monitor-recent-events-refresh``,
 "All events" ``monitor-recent-events-all``, body ``monitor-recent-events-body``.
 
-The dashboard
--------------
+Dashboard
+---------
 
 DashboardWidget
 ~~~~~~~~~~~~~~~
@@ -1289,8 +1289,8 @@ on first run so a backlog present at mount does not fire a burst of invalidation
 :doc:`call-flows` traces both halves: "A push notification, from registration to
 tap" and "Live notifications over the Event Server websocket".
 
-The in-app assistant (Ask)
----------------------------
+In-app assistant (Ask)
+-----------------------
 
 Pressing ``?`` (or typing a leading ``?`` in the command palette, or its "Ask"
 item) swaps the command palette into a chat, ``AskPanel``
