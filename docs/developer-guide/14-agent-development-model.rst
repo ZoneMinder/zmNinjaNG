@@ -31,10 +31,10 @@ full commit history; rule M5 requires the same of every future session.
 Multi-agent ceremony is treated as a cost, not as evidence of rigor.
 Dispatching ten agents at a change looks thorough, but every dispatch
 re-reads the same context, and in practice, agent reviews of mechanical
-work here found nothing that the gates had not already proven. Independent
-agent review is reserved for work that needs judgment, plus one
-whole-branch review before every PR. For a small bounded change, working
-inline and letting the gates run is the normal path.
+work here found nothing that the gates had not already proven. What scales
+with a change's risk is review ceremony, not delegation: independent agent
+review is reserved for work that needs judgment, plus one whole-branch
+review before every PR, while a small bounded change relies on its gates.
 
 Rules, gates, and practices
 ---------------------------
