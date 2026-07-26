@@ -14,35 +14,45 @@ Android through Capacitor, macOS, Windows, and Linux through Electron, and
 the browser directly. There is no backend of our own; everything talks to
 a ZoneMinder server the user configures.
 
-zmNinjaNg is also the front end of a larger ecosystem the maintainer
-develops the same way. On the server side,
-`zmesNg <https://zmeventnotificationng.readthedocs.io/en/latest/>`__ (the
-event notification server, successor to zmeventnotification) watches
-ZoneMinder for new events, runs AI/ML inferencing on them through pyzmNg
-(the Python ZoneMinder library that wraps the API and the detection
-pipeline), and pushes the results out. zmNinjaNg is the receiving end:
-``services/notifications.ts`` holds the WebSocket connection to the event
-server and ``services/pushNotifications.ts`` handles the FCM push path, so
-a camera event flows from detection on the server to an alert with
-detection results on the user's device. Front end and back end are
-separate repos with the same development model; what this chapter
-describes for zmNinjaNg applies across that ecosystem. The app also ships an AI
-assistant (Ask) that answers questions about the user's cameras and
-events by calling tools against that server, on the user's choice of
-backend: their own Ollama server, on-device WebLLM, or Apple Foundation
-Models. That subsystem gets its own guardrails, because language models
-fabricate where code merely crashes: the Assistant tool loop contract
-gates whether a turn may answer at all, and two playbooks
-(`data-integrity <https://github.com/ZoneMinder/zmNinjaNg/blob/main/agents/project/data-integrity.md>`__
-and
-`llm-models <https://github.com/ZoneMinder/zmNinjaNg/blob/main/agents/project/llm-models.md>`__)
-carry the schema rules and the measured model-behavior facts. That breadth is the reason the
-guardrails exist: a change to a shared component can misbehave on five
-platforms at once, and no single machine can verify all of them. Platform
-divergence is therefore written down where agents will find it (the Native
-contract, the native playbook, the platform quirks in domain-context), web
-e2e runs in CI, and device e2e (Android emulator, iOS simulator and
-tablet) is run manually from scripts, never by agents.
+.. admonition:: Ecosystem: AI/ML on cameras, front end to back end
+
+   zmNinjaNg is the front end of a three-part ecosystem, all developed
+   under the model this chapter describes:
+
+   - **ZoneMinder** records from the cameras and exposes the API and
+     streaming daemon everything else talks to.
+   - **zmesNg** (`docs <https://zmeventnotificationng.readthedocs.io/en/latest/>`__),
+     successor to zmeventnotification, watches ZoneMinder for new events,
+     runs AI/ML inferencing on them, and pushes the results out.
+   - **pyzmNg** is the Python ZoneMinder library zmesNg builds on,
+     wrapping the API and the detection pipeline.
+
+   This repo is the receiving end: ``services/notifications.ts`` holds
+   the WebSocket connection to the event server, and
+   ``services/pushNotifications.ts`` the FCM push path. One camera event
+   flows from **detection on the server** to **an alert with detection
+   results on the user's device**.
+
+.. admonition:: In-app AI assistant (Ask)
+
+   The app ships an assistant that answers questions about the user's
+   cameras and events by calling tools against their server, on the
+   user's choice of backend: their own **Ollama** server, on-device
+   **WebLLM**, or **Apple Foundation Models**. Language models fabricate
+   where code merely crashes, so this subsystem carries extra guardrails:
+   the **Assistant tool loop contract** gates whether a turn may answer
+   at all, and two playbooks
+   (`data-integrity <https://github.com/ZoneMinder/zmNinjaNg/blob/main/agents/project/data-integrity.md>`__,
+   `llm-models <https://github.com/ZoneMinder/zmNinjaNg/blob/main/agents/project/llm-models.md>`__)
+   carry the schema rules and the measured model-behavior facts.
+
+That breadth is the reason the guardrails exist: a change to a shared
+component can misbehave on **five platforms at once**, and no single
+machine can verify all of them. Platform divergence is therefore written
+down where agents will find it (the Native contract, the native playbook,
+the platform quirks in domain-context), web e2e runs in CI, and device
+e2e (Android emulator, iOS simulator and tablet) is run manually from
+scripts, never by agents.
 
 Releases follow the same posture. Binaries are built only by the GitHub
 workflows, one per platform, never on a laptop; pushing a
