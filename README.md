@@ -53,9 +53,9 @@ zmNinjaNg, esNg and pyzmNg heavily use Agentic UI (Claude) for development. Than
 
 I am happy to accept PRs, but I don't want [AI slop](https://en.wikipedia.org/wiki/AI_slop). Funny I am saying this, given this repo is largely AI agent(s) generated. The difference is I understand the system and do my best to ensure it follows good principles. Remember these tools are capable but love to write a lot of code doing custom things when simpler/better means are available. They also make mistakes. So here are the rules:
 
-- If you have not read and understood the design of the code you generated, please don't PR it to my repo. Please continue to extend it yourself
-- See my agent rules for [CLAUDE](AGENTS.md) here - please make sure to use it in your agent
-- Before you PR, please do a code review
+- PRs are judged by this repo's rules and gates, not by who or what wrote the code. Point your agent at [AGENTS.md](AGENTS.md) and [AGENTS.project.md](AGENTS.project.md); the contracts there describe the sanctioned path through every subsystem, and the gates fail anything that bypasses them
+- Every gate must pass before you PR: the unit suite, the blocking lints, and the instruction-system checks. [docs/developer-guide/14-agent-development-model.rst](docs/developer-guide/14-agent-development-model.rst) explains how the whole system works
+- Before you PR, run a code review (agent-driven is fine; that is how this repo works). If a rule seems wrong, propose a rule change in the PR instead of working around it
 
 ###  Notes
 - Self-signed certificates are supported on mobile (iOS/Android) via Settings > Connection. On desktop, add your CA to the system trust store. Using proper certificates (e.g. [LetsEncrypt](https://letsencrypt.org/)) is still recommended.
