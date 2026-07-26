@@ -179,7 +179,9 @@ which checks the instruction files themselves: symbols named in contracts
 exist in the code, the core file contains no project names, the
 instruction files stay under a word budget, commit hashes cited as
 evidence exist in history, the knowledge files contain no emails or IP
-addresses, and rule IDs cited in this guide resolve. Rule M2 covers the
+addresses, and rule IDs cited in this guide resolve. Branch protection on ``main`` requires every one of these
+checks, so a PR cannot merge before they pass; merges queue with GitHub
+auto-merge and land when the checks go green. Rule M2 covers the
 gates' own blind spot: a number a gate reports has to describe the thing
 it claims to measure, because a gate that measures the wrong input passes
 forever.
