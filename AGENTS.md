@@ -18,7 +18,7 @@ tier; docs reference IDs, never copied text.
 ## Invariants (never simplified away)
 
 - I1. Validate at trust boundaries: server responses, user input, IPC.
-  Malformed input is expected input.
+  Malformed input is routine, not rare.
 - I2. Destructive operations need error handling and a recovery path. Lost
   user data cannot be patched later.
 - I3. Security and accessibility are never traded for simplicity or speed.
@@ -31,7 +31,8 @@ tier; docs reference IDs, never copied text.
   the user confirms. If instructed to push directly to the default branch,
   do so and verify the issue timeline.
 - P2. Test first: a failing test precedes the implementation of every
-  feature and bugfix. A test that never failed proves nothing.
+  feature and bugfix. A test that has never failed does not demonstrate it
+  can catch the bug.
 - P3. Run the gates covering the change before every commit; run the full
   suite before push or PR. Never commit after a failed or unrun gate.
 - P4. Read failures and fix the cause. Never blindly retry.
@@ -43,8 +44,9 @@ tier; docs reference IDs, never copied text.
   approval before choosing.
 - P8. Never merge the default branch without approval.
 - P10. Docs move with behavior: user docs for changed behavior, developer
-  docs and call flows for new APIs, components, hooks, and utilities. Doc
-  prose stays plain and factual, without marketing language or filler.
+  docs and call flows for new APIs, components, hooks, and utilities. All
+  prose reads like a developer explaining to a colleague: no marketing
+  language, filler, headline headings, aphorisms, or news cadence.
 
 ## Code
 
@@ -73,10 +75,10 @@ tier; docs reference IDs, never copied text.
   below. One-off facts go to the project file or a playbook, never here.
 - M4. This file owns process rules; other docs link to rule IDs and never
   copy the text.
-- M5. Hard-won knowledge is shared, not hoarded: project facts (API
-  quirks, platform behavior, failed approaches) go to the domain playbook,
-  proven workflow practices to the generic playbooks, through the
-  protocol, never only into agent memory. Repo files carry no
+- M5. Project facts (API quirks, platform behavior, failed approaches) go
+  to the domain playbook, proven workflow practices to the generic
+  playbooks, through the protocol, never only into agent memory, which no
+  other agent sees. Repo files carry no
   personal or private data; only such specifics (names, hosts,
   credentials) and unproven taste stay in agent memory.
 

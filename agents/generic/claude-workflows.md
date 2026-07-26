@@ -52,6 +52,10 @@ named fleet.
   otherwise the implementer's report carries the evidence.
 - Repo-wide greps run from the repo root or with absolute paths; a cwd of
   a subdirectory silently misses everything above it.
+- Never gate a commit on a piped command (`npm test | grep ...`): the
+  pipeline exits with the last command's status and a failing suite reads
+  as success. Run the gate bare, check its exit, then filter output
+  separately. This shipped a red commit here once.
 
 ## Where knowledge goes (M5 in practice)
 
