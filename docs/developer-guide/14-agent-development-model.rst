@@ -10,13 +10,11 @@ reviews deliberately.
 Scope, platforms, and release guardrails
 ----------------------------------------
 
-One React/TypeScript codebase ships everywhere zmNinjaNg runs: iOS and
+One ships everywhere zmNinjaNg runs: iOS and
 Android through Capacitor, macOS, Windows, and Linux through Electron, and
-the browser directly. There is no backend of our own; everything talks to
-a ZoneMinder server the user configures.
+the browser directly. 
 
-
-zmNinjaNg is the front end of a three-part ecosystem, all developed
+zmNinjaNg is the front of of a three-part ecosystem, all developed
 under the model this chapter describes:
 
 - **ZoneMinder** records from the cameras and exposes the API and
@@ -24,7 +22,7 @@ under the model this chapter describes:
 - **zmesNg** (`docs <https://zmeventnotificationng.readthedocs.io/en/latest/>`__),
   successor to zmeventnotification, watches ZoneMinder for new events,
   runs AI/ML inferencing on them, and pushes the results out.
-- **pyzmNg** is the Python ZoneMinder library zmesNg builds on,
+- **pyzmNg** (`docs <https://pyzmng.readthedocs.io/en/latest/>`__) is the Python ZoneMinder library zmesNg builds on,
   wrapping the API and the detection pipeline.
 
 The app ships an assistant that answers questions about the user's
@@ -84,8 +82,7 @@ misses more than a failing test does. The principles that replaced it:
   re-verify each other's claims, gates re-run included.
   `Issue #217 <https://github.com/ZoneMinder/zmNinjaNg/issues/217#issuecomment-4882243836>`__
   has a worked example: Fable re-reviewing a 15-commit delta that Opus
-  had reviewed, four verification agents plus a fresh gate run, the two
-  models addressing each other directly.
+  had reviewed, four verification agents plus a fresh gate run.
 - **Knowledge stays in the repository.** Session memory cannot be seen by
   other agents, other contributors, or CI, and dies with the machine.
   A revert or a string of fixes to one file is a lesson already paid for.
@@ -264,7 +261,9 @@ Gates only catch what they were built to catch. Drift is whatever nobody
 wrote a gate for yet: duplication spreading across files, tests that pass
 without asserting much, a convention the code quietly stopped following.
 The first of the two deliberate human reviews covers this: roughly once a
-month, a scorecard review of the whole codebase.
+month, a scorecard review of the whole codebase. Also, models tend to forget 
+over long sessions. There have been many situations where gates are clear but 
+the model forgot.
 
 The scorecard scores twelve weighted pillars (architecture, test quality,
 code quality, DRY, type safety, error handling, security, convention
