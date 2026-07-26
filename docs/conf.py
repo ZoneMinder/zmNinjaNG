@@ -40,7 +40,9 @@ autosectionlabel_maxdepth = 3
 suppress_warnings = ['autosectionlabel.*', 'misc.highlighting_failure']
 
 templates_path = ['_templates']
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
+# superpowers/ holds internal design specs and implementation plans; they
+# are versioned for the repo, not rendered on the docs site.
+exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', 'superpowers']
 
 # Source file suffixes
 source_suffix = {
