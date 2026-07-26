@@ -8,10 +8,11 @@ above before trusting specifics.
 
 ## Scale ceremony to risk
 
-Multi-agent process below pays off on multi-task plans, refactors with blast
-radius, and anything touching contracts. It does not pay off on small
-bounded changes: for a one-file fix with a covering test, work inline, run
-the gates, commit. Evidence from the restructure run: reviews of mechanical
+What scales with risk is review ceremony, not delegation: implementation
+goes through a subagent either way, but a one-file fix with a covering
+test needs no independent reviewer, while multi-task plans, refactors with
+blast radius, and contract changes do. Evidence from the restructure run:
+reviews of mechanical
 transcription tasks found zero defects; reviews of judgment work (doc
 remapping, whole-branch review) found every real one. Review where judgment
 lives; skip where the gate already proves the result. The final whole-branch
@@ -19,6 +20,19 @@ review before a PR is the one step never skipped. Agent count is a cost,
 never a quality signal: prefer the fewest dispatches that produce the
 evidence, and let the harness parallelize instead of choreographing a
 named fleet.
+
+## Orchestration
+
+- The orchestrator (the main session, or a team lead coordinating others)
+  runs on Opus 4.8 or newer; never a smaller model. Coordination quality
+  bounds everything downstream: a weak orchestrator writes weak briefs,
+  misreads reports, and wastes every strong agent under it.
+- Implementation always delegates to subagents, even for small changes.
+  The orchestrator's context stays clean for briefs, report verdicts, and
+  review decisions; an orchestrator that edits files skips its own review
+  structure.
+- Let the harness decide how many agents run and when they parallelize.
+  Choose what each dispatch is for; do not choreograph counts.
 
 ## Multi-agent execution
 
