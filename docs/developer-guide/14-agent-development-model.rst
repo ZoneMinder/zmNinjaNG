@@ -6,8 +6,8 @@ line-reviewed by a person. This chapter explains why that works here, what
 enforces correctness instead, and the two places where a human still
 reviews deliberately.
 
-Why diffs are not line-reviewed
--------------------------------
+Moving from code review to constraint enforcement and design review
+-------------------------------------------------------------------
 
 Reading every generated diff stopped scaling early, and it was never good
 review to begin with: a person skimming a few hundred generated lines
