@@ -45,13 +45,49 @@ e2e (Android emulator, iOS simulator and tablet) is run manually from
 scripts, never by agents.
 
 Releases follow the same posture. Binaries are built only by the GitHub
-workflows, one per platform, never on a laptop; pushing a
-``zmNinjaNg-*`` tag drives the release workflow, and the published
-binaries come from those runs. Native build numbers change only in a
-deliberate ``chore:`` commit, enforced by the version guard in CI, and
-test builds reuse the existing workflows rather than growing new ones.
-Contributions are held to the same standard as the maintainer's own work:
-the rules and gates in this chapter, plus a code review before the PR.
+workflows, one per platform, never on a laptop: the ``build-*`` workflows
+are dispatched manually with a version number, and pushing a
+``zmNinjaNg-*`` tag drives the release workflow that publishes from those
+artifacts. Native build numbers change only in a deliberate ``chore:``
+commit, enforced by the version guard in CI, and test builds reuse the
+existing workflows rather than growing new ones. Contributions are held
+to the same standard as the maintainer's own work: the rules and gates in
+this chapter, plus a code review before the PR.
+
+Every workflow, and what fires it:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 28 30 42
+
+   * - Workflow
+     - Fires on
+     - Purpose
+   * - ``ci.yml``
+     - every PR, push to main
+     - version guard, lints, build, unit tests (full-history checkout for
+       the evidence gate), web e2e
+   * - ``label-guard.yml``
+     - PR open/sync/label events
+     - requires or auto-assigns the ``core``/``refactor`` label
+   * - ``claude.yml``
+     - @claude mention on issues and PRs
+     - summons an agent into the thread
+   * - ``build-android/-macos/-windows/-linux-*.yml``, ``build-all.yml``
+     - manual dispatch with a version
+     - per-platform release binaries
+   * - ``create-release.yml``
+     - ``zmNinjaNg-*`` tag push
+     - publishes the GitHub release from built artifacts
+   * - ``test.yml``
+     - release published
+     - re-runs unit tests with coverage against the released code
+   * - ``deploy-pages.yml``
+     - push to main touching ``site/**``
+     - deploys the project site
+   * - ``auto-close-low-quality-issues.yml``, ``moderate-issue-spam.yml``
+     - issue events
+     - agent-based issue triage
 
 Moving from code review to constraint enforcement and design review
 -------------------------------------------------------------------
