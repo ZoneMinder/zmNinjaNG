@@ -73,6 +73,12 @@ named fleet.
   pipeline exits with the last command's status and a failing suite reads
   as success. Run the gate bare, check its exit, then filter output
   separately. This shipped a red commit here once.
+- Merging waits for green CI, but never by polling: queue it with
+  `gh pr merge --auto` at PR creation and GitHub merges when checks pass.
+  Caution: if the repo's auto-merge setting is off, `--auto` silently
+  falls back to an immediate merge; that landed one PR here before its
+  checks finished. Confirm `allow_auto_merge` is true before relying on
+  it.
 
 ## Where knowledge goes (M5 in practice)
 
