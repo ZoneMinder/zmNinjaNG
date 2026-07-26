@@ -26,9 +26,8 @@ workflows, one per platform, never on a laptop; pushing a
 binaries come from those runs. Native build numbers change only in a
 deliberate ``chore:`` commit, enforced by the version guard in CI, and
 test builds reuse the existing workflows rather than growing new ones.
-Contributions carry one more expectation, stated in the README: if you
-have not read and understood the code your agent generated, do not PR it
-here, and run a code review before you do.
+Contributions are held to the same standard as the maintainer's own work:
+the rules and gates in this chapter, plus a code review before the PR.
 
 Moving from code review to constraint enforcement and design review
 -------------------------------------------------------------------
