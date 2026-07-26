@@ -6,6 +6,30 @@ line-reviewed by a person. This chapter explains why that works here, what
 enforces correctness instead, and the two places where a human still
 reviews deliberately.
 
+Scope, platforms, and release guardrails
+----------------------------------------
+
+One React/TypeScript codebase ships everywhere zmNinjaNg runs: iOS and
+Android through Capacitor, macOS, Windows, and Linux through Electron, and
+the browser directly. There is no backend of our own; everything talks to
+a ZoneMinder server the user configures. That breadth is the reason the
+guardrails exist: a change to a shared component can misbehave on five
+platforms at once, and no single machine can verify all of them. Platform
+divergence is therefore written down where agents will find it (the Native
+contract, the native playbook, the platform quirks in domain-context), web
+e2e runs in CI, and device e2e (Android emulator, iOS simulator and
+tablet) is run manually from scripts, never by agents.
+
+Releases follow the same posture. Binaries are built only by the GitHub
+workflows, one per platform, never on a laptop; pushing a
+``zmNinjaNg-*`` tag drives the release workflow, and the published
+binaries come from those runs. Native build numbers change only in a
+deliberate ``chore:`` commit, enforced by the version guard in CI, and
+test builds reuse the existing workflows rather than growing new ones.
+Contributions carry one more expectation, stated in the README: if you
+have not read and understood the code your agent generated, do not PR it
+here, and run a code review before you do.
+
 Moving from code review to constraint enforcement and design review
 -------------------------------------------------------------------
 
@@ -27,6 +51,15 @@ buried unless someone writes the lesson down. The facts in
 `domain-context.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/agents/project/domain-context.md>`__
 came from doing exactly that, once across agent memory and once across the
 full commit history; rule M5 requires the same of every future session.
+
+Rules organize by concern, not by layer. There is no frontend or backend
+rulebook: a contract owns its subsystem's invariant whichever layer it
+sits in (Stores and Query UI states are frontend concerns, HTTP and Auth
+tokens cross into native code, the ZoneMinder API belongs to the server),
+platform divergence lives in the native playbook and domain-context, and
+the dev guide teaches the frameworks. Layer playbooks would mostly
+re-shelve that content, so one gets created only when a recurring failure
+class arrives that has no home in the current cut.
 
 Multi-agent ceremony is treated as a cost, not as evidence of rigor.
 Dispatching ten agents at a change looks thorough, but every dispatch
