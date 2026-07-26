@@ -26,7 +26,10 @@ named fleet.
 - The orchestrator (the main session, or a team lead coordinating others)
   runs on Opus 4.8 or newer; never a smaller model. Coordination quality
   bounds everything downstream: a weak orchestrator writes weak briefs,
-  misreads reports, and wastes every strong agent under it.
+  misreads reports, and wastes every strong agent under it. An instruction
+  file cannot switch a running session's model, so the repo pins the
+  default in `.claude/settings.json` (`"model": "opus"`); if your session
+  runs on something smaller anyway, say so and suggest `/model`.
 - Implementation always delegates to subagents, even for small changes.
   The orchestrator's context stays clean for briefs, report verdicts, and
   review decisions; an orchestrator that edits files skips its own review
