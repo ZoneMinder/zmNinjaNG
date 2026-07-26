@@ -18,7 +18,7 @@ tier; docs reference IDs, never copied text.
 ## Invariants (never simplified away)
 
 - I1. Validate at trust boundaries: server responses, user input, IPC.
-  Malformed input arrives in normal operation, not just in attacks.
+  Malformed input is routine, not rare.
 - I2. Destructive operations need error handling and a recovery path. Lost
   user data cannot be patched later.
 - I3. Security and accessibility are never traded for simplicity or speed.
@@ -45,9 +45,8 @@ tier; docs reference IDs, never copied text.
 - P8. Never merge the default branch without approval.
 - P10. Docs move with behavior: user docs for changed behavior, developer
   docs and call flows for new APIs, components, hooks, and utilities. All
-  prose reads like a developer explaining to a colleague: plain and
-  factual, no marketing language, filler, headline-style headings,
-  aphorisms, or news cadence.
+  prose reads like a developer explaining to a colleague: no marketing
+  language, filler, headline headings, aphorisms, or news cadence.
 
 ## Code
 
@@ -78,8 +77,8 @@ tier; docs reference IDs, never copied text.
   copy the text.
 - M5. Project facts (API quirks, platform behavior, failed approaches) go
   to the domain playbook, proven workflow practices to the generic
-  playbooks, through the protocol, never only into agent memory. Knowledge
-  left in one agent's memory is invisible to every other agent. Repo files carry no
+  playbooks, through the protocol, never only into agent memory, which no
+  other agent sees. Repo files carry no
   personal or private data; only such specifics (names, hosts,
   credentials) and unproven taste stay in agent memory.
 
