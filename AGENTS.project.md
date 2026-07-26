@@ -132,6 +132,7 @@ Read each listed playbook before work in that area.
 | Developer or user documentation | `agents/project/documentation.md` |
 | Capacitor, TLS, Electron, downloads, or native paths | `agents/project/native.md` |
 | Assistant tools, WebLLM, or ZoneMinder schemas | `agents/project/data-integrity.md` |
+| Prompts, providers, or LLM model choices | `agents/project/llm-models.md` |
 | ZoneMinder APIs, streaming, or platform quirks | `agents/project/domain-context.md` |
 
 Portable playbooks live in `agents/generic/`; project ones in

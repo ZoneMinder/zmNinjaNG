@@ -12,7 +12,17 @@ Scope, platforms, and release guardrails
 One React/TypeScript codebase ships everywhere zmNinjaNg runs: iOS and
 Android through Capacitor, macOS, Windows, and Linux through Electron, and
 the browser directly. There is no backend of our own; everything talks to
-a ZoneMinder server the user configures. That breadth is the reason the
+a ZoneMinder server the user configures. The app also ships an AI
+assistant (Ask) that answers questions about the user's cameras and
+events by calling tools against that server, on the user's choice of
+backend: their own Ollama server, on-device WebLLM, or Apple Foundation
+Models. That subsystem gets its own guardrails, because language models
+fabricate where code merely crashes: the Assistant tool loop contract
+gates whether a turn may answer at all, and two playbooks
+(`data-integrity <https://github.com/ZoneMinder/zmNinjaNg/blob/main/agents/project/data-integrity.md>`__
+and
+`llm-models <https://github.com/ZoneMinder/zmNinjaNg/blob/main/agents/project/llm-models.md>`__)
+carry the schema rules and the measured model-behavior facts. That breadth is the reason the
 guardrails exist: a change to a shared component can misbehave on five
 platforms at once, and no single machine can verify all of them. Platform
 divergence is therefore written down where agents will find it (the Native
