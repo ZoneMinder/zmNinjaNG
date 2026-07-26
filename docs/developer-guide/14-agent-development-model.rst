@@ -211,27 +211,6 @@ rely on existing tests. The full pipeline is for work where being wrong
 is expensive; the floor exists so the pipeline's cost never exceeds the
 change's risk.
 
-What the history shows
-----------------------
-
-The commit history is the honest record of how much of this was always
-true. Out of 2,313 commits, only 41 are PR merge commits, and nearly all
-of those are recent: for most of the project's life the maintainer
-pushed agent work straight to main, and the branch protection, required
-checks, and auto-merge queue arrived in July 2026 after the gate suite
-had proven itself. The model grew in the order constraint-first
-development predicts: write rules, gate them, and only then bolt the
-ceremony of protected branches on top, because by then the checks being
-required were already the checks being run.
-
-The fourteen reverts are the other useful signal. Each one is a paid-for
-lesson, and the test of the knowledge loop is whether a lesson gets
-re-learned: virtualization of the event and log lists was attempted twice
-before the domain-context entry forbidding it without a new approach, which is
-exactly the failure M5 exists to close. A revert that produces only a
-cleaner git tree was wasted; a revert that produces a playbook line is
-capital.
-
 Rules, gates, and practices
 ---------------------------
 
