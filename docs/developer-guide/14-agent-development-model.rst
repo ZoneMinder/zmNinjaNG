@@ -1,40 +1,44 @@
 Agent development model
 =======================
 
-
-Most code in this repository is written by AI agents, and the diffs are not
-line-reviewed by a person. This chapter explains why that works here, what
-enforces correctness instead, and where a human still
-reviews deliberately.
+Most code in this repository is written by AI agents, and the diffs are
+not line-reviewed by a person. Between 2025-11-27 and 2026-07-26 the repo
+accumulated 2,313 commits from one maintainer directing agents, 485 of
+them carrying issue references, with fourteen reverts along the way, and
+every one of those reverts is now written down somewhere an agent will
+read before trying the same thing again. This chapter explains why that
+works here, what enforces correctness instead of eyeballs on diffs, and
+where a human still reviews deliberately.
 
 Scope, platforms, and release guardrails
 ----------------------------------------
 
-One codebase ships everywhere zmNinjaNg runs: iOS and
-Android through Capacitor, macOS, Windows, and Linux through Electron, and
-the browser directly. 
+One codebase ships everywhere zmNinjaNg runs: iOS and Android through
+Capacitor, macOS, Windows, and Linux through Electron, and the browser
+directly.
 
-zmNinjaNg is the front of of a three-part ecosystem, all developed
-under the model this chapter describes:
+zmNinjaNg is the front end of a three-part ecosystem, all developed under
+the model this chapter describes:
 
 - **ZoneMinder** records from the cameras and exposes the API and
   streaming daemon everything else talks to.
 - **zmesNg** (`docs <https://zmeventnotificationng.readthedocs.io/en/latest/>`__),
   successor to zmeventnotification, watches ZoneMinder for new events,
   runs AI/ML inferencing on them, and pushes the results out.
-- **pyzmNg** (`docs <https://pyzmng.readthedocs.io/en/latest/>`__) is the Python ZoneMinder library zmesNg builds on,
-  wrapping the API and the detection pipeline.
+- **pyzmNg** (`docs <https://pyzmng.readthedocs.io/en/latest/>`__) is the
+  Python ZoneMinder library zmesNg builds on, wrapping the API and the
+  detection pipeline.
 
 The app ships an assistant that answers questions about the user's
-cameras and events by calling tools against their server, on the
-user's choice of backend: their own **Ollama** server, on-device
-**WebLLM**, or **Apple Foundation Models**. Language models fabricate
-where code merely crashes, so this subsystem carries extra guardrails:
-the **Assistant tool loop contract** gates whether a turn may answer
-at all, and two playbooks
-(`data-integrity <https://github.com/ZoneMinder/zmNinjaNg/blob/main/agents/project/data-integrity.md>`__,
-`llm-models <https://github.com/ZoneMinder/zmNinjaNg/blob/main/agents/project/llm-models.md>`__)
-carry the schema rules and the measured model-behavior facts.
+cameras and events by calling tools against their server, on the user's
+choice of backend: their own **Ollama** server, on-device **WebLLM**, or
+**Apple Foundation Models**. Language models fabricate where code merely
+crashes, so this subsystem carries extra guardrails: the **Assistant tool
+loop contract** gates whether a turn may answer at all, prompt changes
+are measured with a scored eval harness before and after
+(`llm-models <https://github.com/ZoneMinder/zmNinjaNg/blob/main/agents/project/llm-models.md>`__
+carries the numbers), and the schema rules live in
+`data-integrity <https://github.com/ZoneMinder/zmNinjaNg/blob/main/agents/project/data-integrity.md>`__.
 
 That breadth is the reason the guardrails exist: a change to a shared
 component can misbehave on **five platforms at once**, and no single
@@ -49,11 +53,12 @@ by the GitHub workflows, not on a laptop: the ``build-*`` workflows are
 dispatched manually with a version number, and pushing a ``zmNinjaNg-*``
 tag drives the release workflow that publishes from those artifacts. iOS
 is the exception: it builds locally through Xcode because of signing and
-App Store submission, and there is no iOS build workflow. Native build numbers change only in a deliberate ``chore:``
-commit, enforced by the version guard in CI, and test builds reuse the
-existing workflows rather than growing new ones. Contributions are held
-to the same standard as the maintainer's own work: the rules and gates in
-this chapter, plus a code review before the PR.
+App Store submission, and there is no iOS build workflow. Native build
+numbers change only in a deliberate ``chore:`` commit, enforced by the
+version guard in CI, and test builds reuse the existing workflows rather
+than growing new ones. Contributions are held to the same standard as the
+maintainer's own work: the rules and gates in this chapter, plus a code
+review before the PR.
 
 Every workflow, and what fires it:
 
@@ -105,13 +110,12 @@ misses more than a failing test does. The principles that replaced it:
   work, and the gates decide whether it lands.
 - **Design gets the human attention that diffs used to.** Feature work
   starts as a short design doc saying what is being built and why, and
-  the maintainer approves that before implementation; the approved specs
-  and plans are committed under
-  `docs/superpowers/ <https://github.com/ZoneMinder/zmNinjaNg/tree/main/docs/superpowers>`__.
-  Reviewing a half-page of intent catches wrong-direction work earlier
-  and cheaper than reviewing the thousand lines it would have become.
+  the maintainer approves that before implementation. Reviewing a
+  half-page of intent catches wrong-direction work earlier and cheaper
+  than reviewing the thousand lines it would have become. How those
+  designs become code is walked through below.
 - **Code review happens offline, at milestones.** Instead of per-diff
-  review, the scorecard and history-mining skills run against the whole
+  review, the scorecard and history-mining reviews run against the whole
   codebase roughly monthly (both described below), and their findings
   become issues, gates, and playbook entries.
 - **Models check each other.** Reviews are dispatched to an agent that
@@ -150,6 +154,84 @@ misses more than a failing test does. The principles that replaced it:
   judgment work plus one whole-branch review before every PR, and a small
   bounded change relies on its gates.
 
+How a feature actually lands
+----------------------------
+
+The abstractions above are easier to trust after watching one change go
+through them. Bulk event deletion
+(`issue #213 <https://github.com/ZoneMinder/zmNinjaNg/issues/213>`__,
+shipped 2026-07) is a representative walk.
+
+It starts as a conversation, not code. A brainstorming pass turns "I want
+to delete events in bulk" into a design doc in
+`docs/superpowers/specs/ <https://github.com/ZoneMinder/zmNinjaNg/tree/main/docs/superpowers/specs>`__:
+what the user sees, what is out of scope, which existing pieces get
+reused. The maintainer reads and approves that half page. This is the
+moment human judgment is cheapest, and the only moment the direction can
+be wrong for free; fourteen specs live there now.
+
+An approved spec becomes an implementation plan in
+`docs/superpowers/plans/ <https://github.com/ZoneMinder/zmNinjaNg/tree/main/docs/superpowers/plans>`__.
+Plans are written for a different reader than specs: an agent with no
+conversation history. The
+`bulk-delete plan <https://github.com/ZoneMinder/zmNinjaNg/blob/main/docs/superpowers/plans/2026-07-02-bulk-delete-events.md>`__
+opens with the goal, the architecture in five sentences, and a global
+constraints block (which directory npm runs from, which existing API
+helper is the only sanctioned delete path), then breaks the work into
+checkbox tasks where **the failing tests are embedded verbatim in the
+plan**. A task is "make this exact test pass", not "add a selection
+store". That choice is deliberate economics: when the task text contains
+the complete content to write, a cheap model can execute it, and rule P2
+is satisfied by construction because the test exists before the
+implementation by the plan's own structure.
+
+Execution is subagent-driven: one agent per task with fresh context, the
+orchestrating session staying clean to judge reports. Each task ends with
+the covering gates (``npm run gates`` scoped to what changed), each
+judgment-heavy task gets an independent review against its brief, and one
+whole-branch review runs before the PR. The
+`workflow playbook <https://github.com/ZoneMinder/zmNinjaNg/blob/main/agents/generic/claude-workflows.md>`__
+records the practices that make this reliable, down to the trap that a
+piped gate command hides a red exit status.
+
+The PR itself is mostly ceremony by this point: the label guard derives
+``core`` or ``refactor`` from the commit types, branch protection holds
+the merge until every required check passes, and the merge is queued with
+GitHub auto-merge rather than polled for. What the gates cannot prove,
+the maintainer checks by hand where it matters: UI work gets a real
+device pass (PiP, biometrics, rotation, and their friends never trust a
+simulator), and anything native waits for that verification before merge.
+Then rule P10 collects the toll: the user guide gains the feature, this
+guide gains the components, and the call flow gets traced. The docs are
+how the maintainer finds out what actually got built.
+
+Not every change earns this ceremony. A typo-level fix needs no issue,
+a gate-covered edit needs no dispatched agent, and cosmetic UI tweaks
+rely on existing tests. The full pipeline is for work where being wrong
+is expensive; the floor exists so the pipeline's cost never exceeds the
+change's risk.
+
+What the history shows
+----------------------
+
+The commit history is the honest record of how much of this was always
+true. Out of 2,313 commits, only 41 are PR merge commits, and nearly all
+of those are recent: for most of the project's life the maintainer
+pushed agent work straight to main, and the branch protection, required
+checks, and auto-merge queue arrived in July 2026 after the gate suite
+had proven itself. The model grew in the order constraint-first
+development predicts: write rules, gate them, and only then bolt the
+ceremony of protected branches on top, because by then the checks being
+required were already the checks being run.
+
+The fourteen reverts are the other useful signal. Each one is a paid-for
+lesson, and the test of the knowledge loop is whether a lesson gets
+re-learned: virtualization of the event and log lists was attempted twice
+before the domain-context entry forbidding it without a new approach, which is
+exactly the failure M5 exists to close. A revert that produces only a
+cleaner git tree was wasted; a revert that produces a playbook line is
+capital.
+
 Rules, gates, and practices
 ---------------------------
 
@@ -181,12 +263,12 @@ which checks the instruction files themselves: symbols named in contracts
 exist in the code, the core file contains no project names, the
 instruction files stay under a word budget, commit hashes cited as
 evidence exist in history, the knowledge files contain no emails or IP
-addresses, and rule IDs cited in this guide resolve. Branch protection on ``main`` requires every one of these
-checks, so a PR cannot merge before they pass; merges queue with GitHub
-auto-merge and land when the checks go green. Rule M2 covers the
-gates' own blind spot: a number a gate reports has to describe the thing
-it claims to measure, because a gate that measures the wrong input passes
-forever.
+addresses, and rule IDs cited in this guide resolve. Branch protection on
+``main`` requires every one of these checks, so a PR cannot merge before
+they pass; merges queue with GitHub auto-merge and land when the checks
+go green. Rule M2 covers the gates' own blind spot: a number a gate
+reports has to describe the thing it claims to measure, because a gate
+that measures the wrong input passes forever.
 
 A **practice** is advisory guidance in the playbooks under
 `agents/ <https://github.com/ZoneMinder/zmNinjaNg/tree/main/agents>`__:
@@ -195,8 +277,16 @@ model tier fits which kind of task, and the accumulated domain facts.
 Practices cite evidence (commit hashes, a validation date) instead of
 carrying IDs, load only when the work touches their area, and lose to
 rules on any conflict. A practice becomes a rule when ignoring it starts
-breaking things. A rule that turns out to be wrong leaves the same way it
-arrived, through a PR.
+breaking things.
+
+Rules also leave. Instructions are audited for cost the way code is
+audited for bugs, because every rule taxes every future session whether
+or not it earns anything back. A July 2026 friction audit (abb96c79) is
+the worked example: it found a verification step that duplicated what the
+build already did, an e2e requirement with no size floor, and the same
+facts copied into three files, and the fix deleted more instruction text
+than it added. A rule that turns out to be wrong or merely expensive
+leaves the same way it arrived, through a maintainer-approved diff.
 
 How the pieces fit
 ------------------
@@ -207,7 +297,7 @@ How the pieces fit
      CL["CLAUDE.md<br/>(Claude Code shim)"] --> AG["AGENTS.md<br/>rules I / P / C / M"]
      CL --> AP["AGENTS.project.md<br/>14 contracts + project rules"]
      AG -. "read before any work" .-> AP
-     AP -- "table: read for your area" --> PP["agents/project/<br/>testing, docs, native,<br/>data-integrity, domain-context"]
+     AP -- "table: read for your area" --> PP["agents/project/<br/>testing, docs, native,<br/>data-integrity, llm-models,<br/>domain-context"]
      CL -- "multi-agent work" --> GP["agents/generic/<br/>claude-workflows.md"]
      AG === GATE["agents-contracts.test.ts<br/>symbols exist, purity, word budget,<br/>evidence hashes, privacy, doc refs, headings"]
      AP === GATE
@@ -231,13 +321,15 @@ reads the Settings contract instead of rediscovering the design from
 source.
 
 `agents/project/ <https://github.com/ZoneMinder/zmNinjaNg/tree/main/agents/project>`__
-holds the area playbooks (testing, documentation, native, data integrity)
-and ``domain-context.md``, the verified project facts: API quirks,
-platform behavior, approaches that were tried and reverted.
+holds the area playbooks (testing, documentation, native, data integrity,
+LLM models) and ``domain-context.md``, the verified project facts: API
+quirks, platform behavior, approaches that were tried and reverted.
 `agents/generic/ <https://github.com/ZoneMinder/zmNinjaNg/tree/main/agents/generic>`__
 holds workflow guidance that is not project-specific. Playbooks are read
 when the work touches their area, so they can afford detail that the
-always-loaded files cannot.
+always-loaded files cannot, and each fact has exactly one home: the
+playbooks point at contracts rather than restating them, so a rule
+changed in one place cannot drift in another.
 
 Enforcement lives in ``app/src/tests/`` and the CI workflows. Covering
 gates run before every commit; the full battery runs before a push or PR
@@ -310,9 +402,9 @@ Gates only catch what they were built to catch. Drift is whatever nobody
 wrote a gate for yet: duplication spreading across files, tests that pass
 without asserting much, a convention the code quietly stopped following.
 The first of the two deliberate human reviews covers this: roughly once a
-month, a scorecard review of the whole codebase. Also, models tend to forget 
-over long sessions. There have been many situations where gates are clear but 
-the model forgot.
+month, a scorecard review of the whole codebase. Also, models tend to
+forget over long sessions. There have been many situations where gates
+are clear but the model forgot.
 
 The scorecard scores twelve weighted pillars (architecture, test quality,
 code quality, DRY, type safety, error handling, security, convention
@@ -345,8 +437,8 @@ down), repeated fixes to the same subsystem (one misunderstanding
 surfacing over and over), and fixes that an existing gate should have
 caught. It reports candidate ``domain-context.md`` entries and candidate
 contracts, each with the commit hashes that justify it. Its first run over
-this repo's 2254 commits produced two contracts (auth tokens, and an
-assistant tool-loop contract distilled from 63 fix commits on the same
+this repo's first 2,254 commits produced two contracts (auth tokens, and
+an assistant tool-loop contract distilled from 63 fix commits on the same
 failure class) and twenty domain-context entries.
 
 Neither review is mandatory, and about once a month is plenty. Running
@@ -379,7 +471,9 @@ here are structural rather than tooling:
   cheapest model that fits the task, trivial gate-covered edits skip the
   dispatch entirely, independent review runs only where judgment is
   involved, and the label guard classifies PRs from commit types instead
-  of spending a model call on it.
+  of spending a model call on it. Plans that embed their tests verbatim
+  are part of the same economics: transcription is the cheapest work a
+  model does, so the expensive thinking happens once, at planning time.
 
 The maintainer additionally runs
 `tokless <https://github.com/HoangP8/tokless>`__, a local toolkit that
@@ -399,9 +493,11 @@ label guard. And output compression is the reason rule P6 exists: in one
 working session the rtk wrapper capped a commit count at 50 on a
 2254-commit repo, hid a failing test behind a log-file path, and masked a
 red gate's exit status through a pipeline, each caught only by rerunning
-the bare command. Compression tools save tokens on reads; they never wrap
-a gate, and published savings claims deserve the same M2 skepticism as
-any other number a tool reports about itself.
+the bare command. That failure mode recurs: a later session found bare
+``git log`` silently capped at 50 again in a wrapped shell, detected only
+because ``git rev-list --count`` disagreed. Compression tools save tokens
+on reads; they never wrap a gate, and published savings claims deserve
+the same M2 skepticism as any other number a tool reports about itself.
 
 Using this in your own project
 ------------------------------
@@ -445,6 +541,7 @@ Where everything lives
 - `CLAUDE.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/CLAUDE.md>`__, the Claude Code shim
 - `agents/generic/claude-workflows.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/agents/generic/claude-workflows.md>`__, the portable workflow playbook
 - `agents/project/ <https://github.com/ZoneMinder/zmNinjaNg/tree/main/agents/project>`__, area playbooks and `domain-context.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/agents/project/domain-context.md>`__
+- `docs/superpowers/ <https://github.com/ZoneMinder/zmNinjaNg/tree/main/docs/superpowers>`__, approved specs and implementation plans
 - `agents-contracts.test.ts <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/tests/agents-contracts.test.ts>`__, the instruction-system gate
 - `label-guard.yml <https://github.com/ZoneMinder/zmNinjaNg/blob/main/.github/workflows/label-guard.yml>`__, the PR label gate
 - `mine-history <https://github.com/ZoneMinder/zmNinjaNg/tree/main/.claude/skills/mine-history>`__, the history mining skill
