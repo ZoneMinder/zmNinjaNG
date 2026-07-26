@@ -44,11 +44,12 @@ the platform quirks in domain-context), web e2e runs in CI, and device
 e2e (Android emulator, iOS simulator and tablet) is run manually from
 scripts, never by agents.
 
-Releases follow the same posture. Binaries are built only by the GitHub
-workflows, one per platform, never on a laptop: the ``build-*`` workflows
-are dispatched manually with a version number, and pushing a
-``zmNinjaNg-*`` tag drives the release workflow that publishes from those
-artifacts. Native build numbers change only in a deliberate ``chore:``
+Releases follow the same posture. Android and desktop binaries are built
+by the GitHub workflows, not on a laptop: the ``build-*`` workflows are
+dispatched manually with a version number, and pushing a ``zmNinjaNg-*``
+tag drives the release workflow that publishes from those artifacts. iOS
+is the exception: it builds locally through Xcode because of signing and
+App Store submission, and there is no iOS build workflow. Native build numbers change only in a deliberate ``chore:``
 commit, enforced by the version guard in CI, and test builds reuse the
 existing workflows rather than growing new ones. Contributions are held
 to the same standard as the maintainer's own work: the rules and gates in
