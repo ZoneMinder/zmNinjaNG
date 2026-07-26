@@ -12,7 +12,21 @@ Scope, platforms, and release guardrails
 One React/TypeScript codebase ships everywhere zmNinjaNg runs: iOS and
 Android through Capacitor, macOS, Windows, and Linux through Electron, and
 the browser directly. There is no backend of our own; everything talks to
-a ZoneMinder server the user configures. The app also ships an AI
+a ZoneMinder server the user configures.
+
+zmNinjaNg is also the front end of a larger ecosystem the maintainer
+develops the same way. On the server side,
+`zmesNg <https://zmeventnotificationng.readthedocs.io/en/latest/>`__ (the
+event notification server, successor to zmeventnotification) watches
+ZoneMinder for new events, runs AI/ML inferencing on them through pyzmNg
+(the Python ZoneMinder library that wraps the API and the detection
+pipeline), and pushes the results out. zmNinjaNg is the receiving end:
+``services/notifications.ts`` holds the WebSocket connection to the event
+server and ``services/pushNotifications.ts`` handles the FCM push path, so
+a camera event flows from detection on the server to an alert with
+detection results on the user's device. Front end and back end are
+separate repos with the same development model; what this chapter
+describes for zmNinjaNg applies across that ecosystem. The app also ships an AI
 assistant (Ask) that answers questions about the user's cameras and
 events by calling tools against that server, on the user's choice of
 backend: their own Ollama server, on-device WebLLM, or Apple Foundation
