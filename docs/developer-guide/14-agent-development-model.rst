@@ -1,9 +1,10 @@
 Agent development model
 =======================
 
+
 Most code in this repository is written by AI agents, and the diffs are not
 line-reviewed by a person. This chapter explains why that works here, what
-enforces correctness instead, and the two places where a human still
+enforces correctness instead, and where a human still
 reviews deliberately.
 
 Scope, platforms, and release guardrails
@@ -14,37 +15,28 @@ Android through Capacitor, macOS, Windows, and Linux through Electron, and
 the browser directly. There is no backend of our own; everything talks to
 a ZoneMinder server the user configures.
 
-.. admonition:: Ecosystem: AI/ML on cameras, front end to back end
 
-   zmNinjaNg is the front end of a three-part ecosystem, all developed
-   under the model this chapter describes:
+zmNinjaNg is the front end of a three-part ecosystem, all developed
+under the model this chapter describes:
 
-   - **ZoneMinder** records from the cameras and exposes the API and
-     streaming daemon everything else talks to.
-   - **zmesNg** (`docs <https://zmeventnotificationng.readthedocs.io/en/latest/>`__),
-     successor to zmeventnotification, watches ZoneMinder for new events,
-     runs AI/ML inferencing on them, and pushes the results out.
-   - **pyzmNg** is the Python ZoneMinder library zmesNg builds on,
-     wrapping the API and the detection pipeline.
+- **ZoneMinder** records from the cameras and exposes the API and
+  streaming daemon everything else talks to.
+- **zmesNg** (`docs <https://zmeventnotificationng.readthedocs.io/en/latest/>`__),
+  successor to zmeventnotification, watches ZoneMinder for new events,
+  runs AI/ML inferencing on them, and pushes the results out.
+- **pyzmNg** is the Python ZoneMinder library zmesNg builds on,
+  wrapping the API and the detection pipeline.
 
-   This repo is the receiving end: ``services/notifications.ts`` holds
-   the WebSocket connection to the event server, and
-   ``services/pushNotifications.ts`` the FCM push path. One camera event
-   flows from **detection on the server** to **an alert with detection
-   results on the user's device**.
-
-.. admonition:: In-app AI assistant (Ask)
-
-   The app ships an assistant that answers questions about the user's
-   cameras and events by calling tools against their server, on the
-   user's choice of backend: their own **Ollama** server, on-device
-   **WebLLM**, or **Apple Foundation Models**. Language models fabricate
-   where code merely crashes, so this subsystem carries extra guardrails:
-   the **Assistant tool loop contract** gates whether a turn may answer
-   at all, and two playbooks
-   (`data-integrity <https://github.com/ZoneMinder/zmNinjaNg/blob/main/agents/project/data-integrity.md>`__,
-   `llm-models <https://github.com/ZoneMinder/zmNinjaNg/blob/main/agents/project/llm-models.md>`__)
-   carry the schema rules and the measured model-behavior facts.
+The app ships an assistant that answers questions about the user's
+cameras and events by calling tools against their server, on the
+user's choice of backend: their own **Ollama** server, on-device
+**WebLLM**, or **Apple Foundation Models**. Language models fabricate
+where code merely crashes, so this subsystem carries extra guardrails:
+the **Assistant tool loop contract** gates whether a turn may answer
+at all, and two playbooks
+(`data-integrity <https://github.com/ZoneMinder/zmNinjaNg/blob/main/agents/project/data-integrity.md>`__,
+`llm-models <https://github.com/ZoneMinder/zmNinjaNg/blob/main/agents/project/llm-models.md>`__)
+carry the schema rules and the measured model-behavior facts.
 
 That breadth is the reason the guardrails exist: a change to a shared
 component can misbehave on **five platforms at once**, and no single
