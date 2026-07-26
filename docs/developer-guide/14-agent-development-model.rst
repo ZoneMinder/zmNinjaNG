@@ -325,6 +325,16 @@ here are structural rather than tooling:
   word budget enforced by the gate (currently 2000 words, about 2.6k
   tokens per session), while detailed knowledge lives in playbooks that
   load only when the work touches their area.
+
+  The budget works like the lint ratchet. The number is a constant in
+  ``agents-contracts.test.ts``; every instruction-file edit that pushes
+  the combined count over it fails the suite, and the choice is to trim
+  wording or raise the constant, where a raise is a deliberate edit to
+  the gate with the reason in the commit message. Lowering is always
+  welcome. This is not hypothetical: the gate has tripped mid-edit twice
+  (1504 against a 1500 budget, then 1664 against 1650) and forced real
+  trims before the change could land, and the one raise to 2000 was a
+  recorded maintainer decision, not a silent bump.
 - Ceremony is priced: implementation delegates to subagents on the
   cheapest model that fits the task, independent review runs only where
   judgment is involved, and the label guard classifies PRs from commit
