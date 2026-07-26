@@ -115,7 +115,11 @@ describe('AGENTS.md stays portable', () => {
 });
 
 describe('knowledge files stay evidence-backed and private-data-free (M5)', () => {
-  const knowledgeFiles = ['agents/project/domain-context.md', 'agents/generic/claude-workflows.md'];
+  const knowledgeFiles = [
+    'agents/project/domain-context.md',
+    'agents/project/llm-models.md',
+    'agents/generic/claude-workflows.md',
+  ];
 
   it('every commit hash cited in domain-context exists in this repo', () => {
     const md = fs.readFileSync(path.join(repoRoot, 'agents/project/domain-context.md'), 'utf8');
