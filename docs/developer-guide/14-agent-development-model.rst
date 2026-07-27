@@ -294,11 +294,14 @@ How the pieces fit
      AG === GATE["agents-contracts.test.ts<br/>symbols exist, purity, word budget,<br/>evidence hashes, privacy, doc refs, headings"]
      AP === GATE
      PP === GATE
+     GP === GATE
+     CL === GATE
      PR["every PR"] === LG["label-guard.yml<br/>core / refactor label"]
-     PR === CI["ci.yml<br/>tests, lints, build"]
+     PR === CI["ci.yml<br/>tests, lints, build, web e2e"]
      GATE --> CI
      FAIL["breakage or review finding"] -- "fix PR proposes rule + gate<br/>(self-improvement protocol)" --> AG
      FAIL -- "durable fact (M5)" --> PP
+     FAIL -- "proven practice (M5)" --> GP
 
 Solid arrows are load order in a session; the double lines are
 enforcement; the bottom edges are the feedback loop that grows the files.
