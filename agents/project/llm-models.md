@@ -18,10 +18,12 @@ after any prompt or provider change and put both scores in the PR.
   Kit structured output is compile-time KSP codegen with no union type, so
   no per-tool turn schema and no removable answer branch. It is driven with
   the llama.cpp text contract instead. No native tool calling either.
-- Gemini Nano is UNMEASURED: `prompt-eval.mts` has not been run against it.
-  Three device spot checks held the turn contract (tool call on a data
-  question, grounded answer after the result, no tool on a greeting), which
-  is not a score.
+- Gemini Nano `nano-v3` on a Pixel 10 scores 48/52 on the time eval
+  (interpret 33/36, extract 15/16, ~97s), reproduced twice via the settings
+  eval row. Remaining failures: "past 5 days" as `daysAgo` not rolling,
+  "this weekend" as last, "this month" as the wrong month, and a German
+  extract falling back to today. Apple Foundation Models has no score on
+  these cases yet, so the two system models are NOT yet comparable.
 
 ## Measured model floor (prompt-eval, temp 0, 2026-07)
 
@@ -68,11 +70,18 @@ after any prompt or provider change and put both scores in the PR.
   their own messages; "try again" is wrong advice for either.
 - A dozing or locked screen counts as background, which silently invalidates
   any batch run on this backend. A first Gemini Nano eval scored 27/52 with
-  whole classes at zero; all 32 of those failures were
-  `BACKGROUND_USE_BLOCKED`, not wrong answers. Before trusting an on-device
-  number, confirm the run has no such error in the log
+  whole classes at zero; all of those failures were `BACKGROUND_USE_BLOCKED`,
+  not wrong answers, and the same eval scored 48/52 unlocked. Before trusting
+  an on-device number, confirm the run has no such error in the log
   (`ON_LOCKED` in `dumpsys nfc`, `mWakefulness=Dozing` in `dumpsys power`)
-  and keep the phone unlocked with the app in front for the whole run.
+  and keep the phone unlocked with the app in front for the whole run. A run
+  that took far less wall-clock than the case count implies is the tell.
+- Never cancel an ML Kit GenAI call. genai-prompt 1.0.0-beta4 is compiled
+  against kotlinx-coroutines 1.7.3, where `Job.cancel$default` lives in
+  `Job$DefaultImpls`; the app resolves 1.10.2, which dropped that class, so
+  ML Kit's cancellation path throws `NoSuchMethodError` on its own thread
+  pool and kills the process. `GeminiNanoPlugin.cancelChat` abandons the
+  call instead of cancelling it.
 
 ## Eval harness
 

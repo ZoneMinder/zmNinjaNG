@@ -1,67 +1,54 @@
 /**
  * Gemini Nano weight download (refs #270).
  *
- * The one control the Android system backend needs that the Apple one does not. Apple
- * Foundation Models ships with iOS, so `AssistantSection` renders nothing for it beyond the
- * eval row; AICore downloads Gemini Nano on request, so the normal first-run state of this
- * backend is `reason: 'notReady'` and this row is what resolves it.
+ * The one control the Android system backend needs that the Apple one does not.
+ * Apple Foundation Models ships with iOS, so `AssistantSection` renders nothing for
+ * it beyond the eval row; AICore downloads Gemini Nano on request, so the normal
+ * first-run state of this backend is `reason: 'notReady'` and this row resolves it.
  *
- * Deliberately not a copy of `AssistantNativeSection`: there is no model to choose, no size
- * to show before the fact (AICore reports the total only once the download starts) and no
- * delete, because the weights are the system's and shared with every other app that uses
- * them. Download progress reuses that section's locale keys rather than adding parallel
- * copy for the same three words.
+ * Like the two model-download rows before it, this holds no progress state of its
+ * own: the download reports through `backgroundTasks` (see `gemini-nano-download.ts`)
+ * so it survives this screen unmounting and keeps reporting in the app-level drawer.
+ * The row reads its own task back to disable the button and show a failure.
+ *
+ * Deliberately not a copy of `AssistantNativeSection`: there is no model to choose,
+ * no size to show before the fact (AICore reports the total only once the transfer
+ * starts) and no delete, because the weights are the system's and shared with every
+ * other app that uses them. The download-progress copy is reused rather than
+ * duplicated for the same three words.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { PluginListenerHandle } from '@capacitor/core';
-import { log, LogLevel } from '../../lib/logger';
+import { useBackgroundTasks } from '../../stores/backgroundTasks';
+import { downloadGeminiNanoModel, findGeminiNanoDownloadTask } from '../../lib/assistant/gemini-nano-download';
 
 interface Props {
-  /** Re-probes `isSupported()` so the backend becomes selectable once the weights land,
-   *  without an app restart. */
+  /** Re-probes `isSupported()` so the backend becomes selectable once the weights
+   *  land, without an app restart. */
   onDownloaded: () => void;
 }
 
 export function AssistantGeminiNanoSection({ onDownloaded }: Props) {
   const { t } = useTranslation();
-  const [downloading, setDownloading] = useState(false);
-  const [progress, setProgress] = useState<number | undefined>(undefined);
-  const [error, setError] = useState<string | undefined>(undefined);
-  const listener = useRef<PluginListenerHandle | null>(null);
+  const task = useBackgroundTasks((state) => findGeminiNanoDownloadTask(state.tasks));
+  const downloading = task?.status === 'pending' || task?.status === 'in_progress';
 
-  // The listener outlives a single render but not the row: a download left running when the
-  // user navigates away would otherwise keep calling setState on an unmounted component.
+  // Re-probe when the download finishes, including one that completed while this
+  // row was unmounted: the row may mount straight into a completed task, and the
+  // ref keeps that from re-firing on every later render.
+  const notified = useRef<string | undefined>(undefined);
   useEffect(() => {
-    return () => {
-      void listener.current?.remove();
-      listener.current = null;
-    };
-  }, []);
-
-  const startDownload = async () => {
-    setError(undefined);
-    setDownloading(true);
-    setProgress(undefined);
-    try {
-      const { GeminiNano } = await import('../../plugins/gemini-nano');
-      listener.current = await GeminiNano.addListener('downloadProgress', (p) => {
-        // AICore reports the total only after the download starts, so guard the divide
-        // rather than rendering NaN% for the first tick.
-        if (p.totalBytes > 0) setProgress(p.bytesDownloaded / p.totalBytes);
-      });
-      await GeminiNano.download();
+    if (task?.status === 'completed' && notified.current !== task.id) {
+      notified.current = task.id;
       onDownloaded();
-    } catch (e) {
-      log.assistant('Gemini Nano download failed', LogLevel.ERROR, { error: e });
-      const reason = e instanceof Error ? e.message : String(e);
-      setError(reason ? t('settings.assistant.download_failed_reason', { reason }) : t('settings.assistant.download_failed'));
-    } finally {
-      await listener.current?.remove();
-      listener.current = null;
-      setDownloading(false);
     }
-  };
+  }, [task?.status, task?.id, onDownloaded]);
+
+  const startDownload = useCallback(() => {
+    // Not awaited: the download outlives this component and the task carries its
+    // outcome. The rejection is already logged and reported as a failed task.
+    void downloadGeminiNanoModel(t('settings.assistant.gemini_nano_not_ready')).catch(() => {});
+  }, [t]);
 
   return (
     <div className="px-4 py-3 space-y-2" data-testid="assistant-gemini-nano-download">
@@ -69,19 +56,19 @@ export function AssistantGeminiNanoSection({ onDownloaded }: Props) {
       <button
         type="button"
         className="text-sm border rounded px-3 py-1.5 disabled:opacity-50"
-        onClick={() => void startDownload()}
+        onClick={startDownload}
         disabled={downloading}
         data-testid="assistant-gemini-nano-download-button"
       >
         {downloading
-          ? progress === undefined
-            ? t('settings.assistant.downloading')
-            : `${t('settings.assistant.downloading')} ${Math.round(progress * 100)}%`
+          ? `${t('settings.assistant.downloading')} ${task?.progress ?? 0}%`
           : t('settings.assistant.download')}
       </button>
-      {error && (
+      {task?.status === 'failed' && (
         <p className="text-xs text-destructive" data-testid="assistant-gemini-nano-download-error">
-          {error}
+          {task.error
+            ? t('settings.assistant.download_failed_reason', { reason: task.error.message })
+            : t('settings.assistant.download_failed')}
         </p>
       )}
     </div>

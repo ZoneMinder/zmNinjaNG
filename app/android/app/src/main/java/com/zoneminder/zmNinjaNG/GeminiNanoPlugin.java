@@ -267,16 +267,29 @@ public class GeminiNanoPlugin extends Plugin {
         }, () -> slot.set(null));
     }
 
+    /**
+     * Abandons the in-flight generations without cancelling them natively.
+     *
+     * Cancelling the future is what you would expect here, and it crashes the app.
+     * genai-prompt 1.0.0-beta4 is compiled against kotlinx-coroutines 1.7.3, where
+     * `Job.cancel$default` lives in `Job$DefaultImpls`; this app resolves coroutines
+     * 1.10.2 (forced by a BOM elsewhere in the graph), which dropped that class. So
+     * ML Kit's cancellation path throws `NoSuchMethodError` on its own thread pool,
+     * uncaught, and takes the process down. Observed on a Pixel 10 the moment a
+     * screen holding a running generation unmounted.
+     *
+     * Clearing the slot is enough for everything the JS side needs: it turns an
+     * aborted call into an AbortError on its own, and the abandoned generation's
+     * result is simply discarded. The cost is that the model keeps computing for
+     * the second or so it had left, which is not worth crashing to avoid.
+     * ponytail: call `future.cancel(true)` again once ML Kit ships a build compiled
+     * against coroutines 1.10+, which makes a cancelled turn stop burning the NPU.
+     */
     @PluginMethod
     public void cancelChat(PluginCall call) {
-        cancel(chatCall);
-        cancel(utilityCall);
+        chatCall.set(null);
+        utilityCall.set(null);
         call.resolve();
-    }
-
-    private void cancel(AtomicReference<ListenableFuture<GenerateContentResponse>> slot) {
-        ListenableFuture<GenerateContentResponse> future = slot.getAndSet(null);
-        if (future != null) future.cancel(true);
     }
 
     // MARK: - Prompt assembly
