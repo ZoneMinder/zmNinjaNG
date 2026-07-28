@@ -532,6 +532,23 @@ describe('AppleIntelligenceProvider instructions', () => {
     return sentInstructions();
   }
 
+  /** The same turn AFTER a tool returned data, which is where the window has to be
+   *  shared and the prompt is therefore trimmed (refs #270). */
+  async function runGroundedTurn(tools: ToolDefinition[] = readOnlyTools): Promise<string> {
+    const provider = new AppleIntelligenceProvider();
+    await provider.chat(
+      [
+        { role: 'user', text: 'how many events today?' },
+        { role: 'assistant', toolCalls: [{ id: 'c1', name: 'list_events', input: {} }] },
+        { role: 'tool', toolResults: [{ callId: 'c1', output: '{"matchCount":5}' }] },
+      ],
+      tools,
+      FIXTURE_SYSTEM,
+      new AbortController().signal,
+    );
+    return sentInstructions();
+  }
+
   it('opens with the persona and who the person is, and closes on the grounding rule', async () => {
     const instructions = await runFixtureTurn();
 
@@ -565,8 +582,8 @@ describe('AppleIntelligenceProvider instructions', () => {
     expect(instructions).toContain('Detected object labels seen recently on this installation: person, car, truck.');
   });
 
-  it('states each tool as its name plus the first sentence of its description only', async () => {
-    const instructions = await runFixtureTurn();
+  it('states each tool as its name plus the first sentence of its description only, once a result shares the window', async () => {
+    const instructions = await runGroundedTurn();
 
     expect(instructions).toContain(
       '- list_monitors: List all monitors visible in the current profile: id, name, type, function, enabled/controllable flags, and live status (connection state, capture/analysis fps when available).',
@@ -580,11 +597,31 @@ describe('AppleIntelligenceProvider instructions', () => {
     expect(instructions).not.toContain('Use this for "how many events in the last N hours/days"');
   });
 
-  it('is far shorter than the shared prompt plus the full tool catalog it replaces', async () => {
+  // The trim is now paid ONLY when it has to be. On the planning turn nothing else
+  // is in the window, and the sentences the trim drops are the ones that decide
+  // between count_events and list_events: measured planning was 21/38 without them.
+  it('keeps the whole tool descriptions on the planning turn, before any result', async () => {
     const instructions = await runFixtureTurn();
+
+    expect(instructions).toContain('Use this for "how many events in the last N hours/days"');
+    expect(instructions).toContain('Call this first when the user refers to a monitor by name');
+  });
+
+  it('is far shorter than the shared prompt once a tool result has to share the window', async () => {
+    const instructions = await runGroundedTurn();
     const previous = String(buildWebLlmMessages(FIXTURE_SYSTEM, [], readOnlyTools, 'apple', false, true, false)[0].content);
 
     expect(instructions.length).toBeLessThan(previous.length * 0.7);
+  });
+
+  // The whole point of the switch: the planning turn is allowed to be big, the
+  // grounded turn is not. If these two ever converge the trim has stopped working.
+  it('sends a bigger prompt while planning than after a result', async () => {
+    const planning = await runFixtureTurn();
+    chatMock.mockClear();
+    const grounded = await runGroundedTurn();
+
+    expect(planning.length).toBeGreaterThan(grounded.length);
   });
 
   // The tool-less turn's policy text is the whole routing decision triage made,

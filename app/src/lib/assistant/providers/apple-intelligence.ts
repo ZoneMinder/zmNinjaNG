@@ -171,8 +171,23 @@ const TOOL_TURN_RULES = [
  *  example answer carrying plausible counts was repeated verbatim as this
  *  installation's data on the WebLLM path (see `buildFewShotExamples`), and the
  *  EXAMPLE_ prefix keeps the one placeholder id unmistakable. */
-function buildAppleInstructions(system: string, tools: ToolDefinition[], nativeTools = false): string {
-  const facts = system.split('\n').filter((line) => DYNAMIC_FACT_MARKERS.some((marker) => line.includes(marker)));
+function buildAppleInstructions(system: string, tools: ToolDefinition[], nativeTools = false, full = false): string {
+  // `full`: keep the WHOLE shared system prompt and the WHOLE tool descriptions
+  // instead of the four extracted fact lines and their first sentences.
+  //
+  // The trimming exists because the window is 3072 usable tokens and the untrimmed
+  // prompt is ~2766, which leaves no room for a tool result to come back. But that
+  // only binds once a result HAS to fit: on the turn that is still deciding what to
+  // fetch, nothing else is in the window and the full prompt fits with room to
+  // spare. Measured planning on the trimmed prompt was 21/38, and its failures were
+  // exactly what the trim removes: `count_events` chosen for calendar windows (the
+  // rolling-vs-calendar distinction lives past the first sentence of those two
+  // descriptions) and a blanket `when: "yesterday"` (the copy-the-user's-words rule
+  // and its examples live in the body of the shared prompt). See the caller for
+  // where the switch is made.
+  const facts = full && tools.length > 0
+    ? [system]
+    : system.split('\n').filter((line) => DYNAMIC_FACT_MARKERS.some((marker) => line.includes(marker)));
   // The tool-less turn's whole routing decision (triage said chat or action),
   // carried over verbatim rather than restated: without it a CHAT turn lost the
   // scope refusal and an ACTION turn lost the "name the screen that can do it"
@@ -190,7 +205,7 @@ function buildAppleInstructions(system: string, tools: ToolDefinition[], nativeT
             ? 'Call a tool whenever the answer needs data from this system, then answer in plain sentences.'
             : [
                 'Call ONE tool per turn until you have the data, then answer. Tools:',
-                tools.map((tool) => `- ${tool.name}: ${firstSentence(tool.description)}`).join('\n'),
+                tools.map((tool) => `- ${tool.name}: ${full ? tool.description : firstSentence(tool.description)}`).join('\n'),
               ].join('\n'),
           '',
           ...TOOL_TURN_RULES,
@@ -215,6 +230,18 @@ function buildAppleInstructions(system: string, tools: ToolDefinition[], nativeT
   ]
     .filter((block) => block !== '')
     .join('\n\n');
+}
+
+/** Whether any tool has already returned real data in this thread. Only a
+ *  SUCCESSFUL result counts: a failed call's error feedback is also a `role: 'tool'`
+ *  message, but it is a correction, not data.
+ *
+ *  Two things hang off this. The turn schema unlocks its answer branch (see
+ *  `buildTurnSchema`), and the prompt switches from full to trimmed (see
+ *  `buildAppleInstructions`'s `full`): before a result there is nothing else in the
+ *  window, so the whole prompt fits; after one, it must not. */
+function hasSuccessfulToolResult(messages: AssistantMessage[]): boolean {
+  return messages.some((m) => m.role === 'tool' && (m.toolResults ?? []).some((r) => !r.isError));
 }
 
 /** The retry correction for this backend, in place of WebLLM's
@@ -397,13 +424,33 @@ export class AppleIntelligenceProvider implements AssistantProvider {
     signal: AbortSignal,
     runTool: (name: string, input: Record<string, unknown>) => Promise<ExecutedToolCall>,
   ): Promise<AssistantTurn> {
-    const chatMessages = buildWebLlmMessages(buildAppleInstructions(system, tools, true), messages, tools, this.modelId, false, true, false, false);
+    // Full prompt while still deciding what to fetch, trimmed once a result has to
+    // share the window with it (see `buildAppleInstructions`'s `full`).
+    const planning = !hasSuccessfulToolResult(messages);
+    const chatMessages = buildWebLlmMessages(
+      buildAppleInstructions(system, tools, true, planning),
+      messages,
+      tools,
+      this.modelId,
+      false,
+      true,
+      false,
+      false,
+    );
     const toolsJson = JSON.stringify(
       // Short descriptions, the same first-sentence trim the catalog used
-      // (see `firstSentence`): the framework injects these into the window
-      // itself, so the registry's full prose would cost what removing the
-      // catalog just saved.
-      tools.map((tool) => ({ name: tool.name, description: firstSentence(tool.description), schemaJson: JSON.stringify(tool.schema) })),
+      // (see `firstSentence`) once a tool result has to share the window. On the
+      // PLANNING turn nothing else is in it, so the framework gets the registry's
+      // full prose instead: measured planning was 21/38 with the first sentence
+      // alone, and four of those failures were count_events chosen for a calendar
+      // window, a distinction that lives past that first sentence. The descriptions
+      // go here rather than into a catalog in the prompt, because the framework
+      // already injects these and a catalog would be a second, drifting copy.
+      tools.map((tool) => ({
+        name: tool.name,
+        description: planning ? tool.description : firstSentence(tool.description),
+        schemaJson: JSON.stringify(tool.schema),
+      })),
     );
     const executed: ExecutedToolCall[] = [];
     /** Every call the framework emitted this turn, budgeted or not. */
@@ -526,7 +573,17 @@ export class AppleIntelligenceProvider implements AssistantProvider {
     // persona, the caller's dynamic facts, short tool lines, short examples, and
     // the one rule that matters repeated last. The shared catalog is switched
     // off with it, since those instructions carry their own.
-    const chatMessages = buildWebLlmMessages(buildAppleInstructions(system, tools), messages, tools, this.modelId, false, true, false, false);
+    const hasToolResult = hasSuccessfulToolResult(messages);
+    const chatMessages = buildWebLlmMessages(
+      buildAppleInstructions(system, tools, false, !hasToolResult),
+      messages,
+      tools,
+      this.modelId,
+      false,
+      true,
+      false,
+      false,
+    );
     // Whether any data has been fetched, which decides if the answer branch is
     // offered at all (see buildTurnSchema). `messages` is the caller's whole
     // trimmed thread, not just this turn, so a conversation whose EARLIER turns
@@ -541,7 +598,6 @@ export class AppleIntelligenceProvider implements AssistantProvider {
     // instead of fixing the call. The branch stays locked until a tool actually
     // returned something (refs #270).
     // Built once, so every retry attempt below re-sends the same schema.
-    const hasToolResult = messages.some((m) => m.role === 'tool' && (m.toolResults ?? []).some((r) => !r.isError));
     const schemaJson = buildTurnSchema(tools, hasToolResult);
 
     // Same retry shape as NativeLlmProvider.chat / WebLlmProvider.chat: the
