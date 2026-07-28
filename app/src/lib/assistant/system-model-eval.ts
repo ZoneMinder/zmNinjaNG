@@ -17,7 +17,6 @@
 import { useBackgroundTasks, type BackgroundTask } from '../../stores/backgroundTasks';
 import { runFmTimeEval, FM_EVAL_NOW, FM_EVAL_TZ, TIME_EVAL_CASE_COUNT } from './fm-eval';
 import { runContractEval, CONTRACT_EVAL_CASE_COUNT } from './contract-eval';
-import { runAnswerEval, ANSWER_EVAL_CASE_COUNT } from './answer-eval';
 import type { AssistantBackend, AssistantProvider } from './types';
 import { log, LogLevel } from '../logger';
 
@@ -58,7 +57,7 @@ export async function runSystemModelEvalTask(
     const signal = new AbortController().signal;
     // One progress bar over two stages, so the combined total has to be known
     // before either starts; both stages export their case counts for that.
-    const total = TIME_EVAL_CASE_COUNT + CONTRACT_EVAL_CASE_COUNT + ANSWER_EVAL_CASE_COUNT;
+    const total = TIME_EVAL_CASE_COUNT + CONTRACT_EVAL_CASE_COUNT;
     const tick = (done: number) => {
       useBackgroundTasks.getState().updateProgress(taskId, Math.round((done / total) * 100));
       useBackgroundTasks.getState().updateTaskMetadata(taskId, { evalDone: done, evalTotal: total });
@@ -68,26 +67,19 @@ export async function runSystemModelEvalTask(
     const contract = await runContractEval(provider, FM_EVAL_NOW, FM_EVAL_TZ, signal, (done) =>
       tick(TIME_EVAL_CASE_COUNT + done),
     );
-    const answer = await runAnswerEval(provider, FM_EVAL_NOW, FM_EVAL_TZ, signal, (done) =>
-      tick(TIME_EVAL_CASE_COUNT + CONTRACT_EVAL_CASE_COUNT + done),
-    );
-
-    const pass = time.total.pass + contract.pass + answer.pass;
+    const pass = time.total.pass + contract.pass;
     // One line, so the whole report survives in the device log file for pulling;
     // the prefix makes it greppable, and the backend makes two runs comparable.
     log.assistant(
       `SYSTEM_MODEL_EVAL_REPORT ${JSON.stringify({
         backend,
-        total: { pass, total: time.total.total + contract.total + answer.total },
+        total: { pass, total: time.total.total + contract.total },
         time,
         contract,
-        answer,
       })}`,
       LogLevel.INFO,
     );
-    useBackgroundTasks
-      .getState()
-      .updateTaskMetadata(taskId, { evalPass: pass, evalTotal: time.total.total + contract.total + answer.total });
+    useBackgroundTasks.getState().updateTaskMetadata(taskId, { evalPass: pass, evalTotal: time.total.total + contract.total });
     useBackgroundTasks.getState().completeTask(taskId);
   } catch (e) {
     const error = e instanceof Error ? e : new Error(String(e));

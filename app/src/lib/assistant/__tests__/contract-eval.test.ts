@@ -51,8 +51,9 @@ function caseFor(q: string) {
 }
 
 /** A tool call that satisfies whatever the case for `q` expects. */
-function passingCall(q: string): { name: string; input: Record<string, unknown> } {
+function passingCall(q: string): { name: string; input: Record<string, unknown> } | null {
   const c = caseFor(q);
+  if (c.tool === null) return null;
   const inputs: Record<string, Record<string, unknown>> = {
     'summarize today': { when: 'today' },
     'what happened yesterday': { when: 'yesterday' },
@@ -68,8 +69,24 @@ function passingCall(q: string): { name: string; input: Record<string, unknown> 
     'what cameras do I have': {},
     'how many events in the last 24 hours': { lastUnit: 'hour', lastCount: 24 },
     'what tags are available': {},
+    'how many events in the past hour': { lastUnit: 'hour', lastCount: 1 },
+    'how many events in the last 7 days': { lastUnit: 'day', lastCount: 7 },
+    'anything on the front door camera today': { when: 'today' },
+    'show me events from last night': { when: 'last night' },
+    'what happened between 2pm and 6pm yesterday': { when: 'yesterday' },
+    'what happened on the 21st': { when: 'the 21st' },
+    'events since july 1': { when: 'since july 1' },
+    'were there any cars yesterday': { when: 'yesterday', objectType: ['car'] },
+    'any packages delivered today': { when: 'today' },
+    'what was the quietest day this week': { when: 'this week' },
+    'what tags do I have': {},
+    'show me events tagged important': { tag: 'important' },
+    'which cameras are recording right now': {},
+    'what camera groups exist': {},
+    'is everything healthy': {},
+    'is the backyard camera alarmed': {},
   };
-  return { name: c.tool as string, input: inputs[q] ?? {} };
+  return { name: c.tool, input: inputs[q] ?? {} };
 }
 
 const signal = () => new AbortController().signal;
@@ -77,19 +94,24 @@ const NOW = new Date('2026-07-19T18:00:00Z');
 
 describe('runContractEval', () => {
   it('scores a perfect run from a backend that returns tool calls', async () => {
-    const provider = providerFrom((q) => ({ text: undefined, toolCalls: [{ ...passingCall(q), id: 'c1' }] }) as AssistantTurn);
+    const provider = providerFrom((q) => (passingCall(q) ? { text: undefined, toolCalls: [{ ...passingCall(q)!, id: 'c1' }] } : { text: 'No lookup needed.', toolCalls: [] }) as AssistantTurn);
     const report = await runContractEval(provider, NOW, 'America/New_York', signal());
 
     expect(report.pass).toBe(CONTRACT_EVAL_CASE_COUNT);
     expect(report.failures).toEqual([]);
-    // Triage cases are reported, never scored, exactly as prompt-eval treats them.
-    expect(report.skippedTriaged).toBe(TOOL_CASES.filter((c) => c.triaged).length);
+    // The no-tool cases are SCORED, not skipped: deciding that nothing needs
+    // fetching is half of the planning this benchmark measures.
+    expect(report.noToolCases).toBe(TOOL_CASES.filter((c) => c.tool === null).length);
+    expect(report.noToolCases).toBeGreaterThan(0);
   });
 
   it('scores a backend that runs its own tool loop, reading the calls it executed', async () => {
     // No toolCalls on the turn at all: without runTool this backend would look
     // like it never called anything, which is the Apple failure mode this guards.
-    const provider = providerFrom((q) => ({ native: [passingCall(q)] }));
+    const provider = providerFrom((q) => {
+      const call = passingCall(q);
+      return call ? { native: [call] } : ({ text: 'No lookup needed.', toolCalls: [] } as AssistantTurn);
+    });
     const report = await runContractEval(provider, NOW, 'America/New_York', signal());
 
     expect(report.pass).toBe(CONTRACT_EVAL_CASE_COUNT);
@@ -99,7 +121,7 @@ describe('runContractEval', () => {
     const provider = providerFrom((q) =>
       q === 'is the server ok'
         ? ({ text: undefined, toolCalls: [{ name: 'list_events', input: { when: 'today' }, id: 'c1' }] } as AssistantTurn)
-        : ({ text: undefined, toolCalls: [{ ...passingCall(q), id: 'c1' }] } as AssistantTurn),
+        : ((passingCall(q) ? { text: undefined, toolCalls: [{ ...passingCall(q)!, id: 'c1' }] } : { text: 'No lookup needed.', toolCalls: [] }) as AssistantTurn),
     );
     const report = await runContractEval(provider, NOW, 'America/New_York', signal());
 
@@ -111,7 +133,7 @@ describe('runContractEval', () => {
     const provider = providerFrom((q) =>
       q === 'summarize april'
         ? ({ text: undefined, toolCalls: [{ name: 'list_events', input: { when: 'april', objectType: ['car', 'person'] }, id: 'c1' }] } as AssistantTurn)
-        : ({ text: undefined, toolCalls: [{ ...passingCall(q), id: 'c1' }] } as AssistantTurn),
+        : ((passingCall(q) ? { text: undefined, toolCalls: [{ ...passingCall(q)!, id: 'c1' }] } : { text: 'No lookup needed.', toolCalls: [] }) as AssistantTurn),
     );
     const report = await runContractEval(provider, NOW, 'America/New_York', signal());
 
@@ -131,7 +153,7 @@ describe('runContractEval', () => {
               { name: 'list_events', input: { when: 'june', objectType: ['car'] }, id: 'c2' },
             ],
           } as AssistantTurn)
-        : ({ text: undefined, toolCalls: [{ ...passingCall(q), id: 'c1' }] } as AssistantTurn),
+        : ((passingCall(q) ? { text: undefined, toolCalls: [{ ...passingCall(q)!, id: 'c1' }] } : { text: 'No lookup needed.', toolCalls: [] }) as AssistantTurn),
     );
     const report = await runContractEval(provider, NOW, 'America/New_York', signal());
 
@@ -143,7 +165,8 @@ describe('runContractEval', () => {
     const provider = providerFrom((q) => {
       calls += 1;
       if (q === 'summarize today') throw new Error('AICore said no');
-      return { text: undefined, toolCalls: [{ ...passingCall(q), id: 'c1' }] } as AssistantTurn;
+      const call = passingCall(q);
+      return (call ? { text: undefined, toolCalls: [{ ...call, id: 'c1' }] } : { text: 'No lookup needed.', toolCalls: [] }) as AssistantTurn;
     });
     const report = await runContractEval(provider, NOW, 'America/New_York', signal());
 
@@ -154,7 +177,7 @@ describe('runContractEval', () => {
   });
 
   it('reports progress once per scored case', async () => {
-    const provider = providerFrom((q) => ({ text: undefined, toolCalls: [{ ...passingCall(q), id: 'c1' }] }) as AssistantTurn);
+    const provider = providerFrom((q) => (passingCall(q) ? { text: undefined, toolCalls: [{ ...passingCall(q)!, id: 'c1' }] } : { text: 'No lookup needed.', toolCalls: [] }) as AssistantTurn);
     const seen: number[] = [];
     await runContractEval(provider, NOW, 'America/New_York', signal(), (done, total) => {
       seen.push(done);
@@ -171,7 +194,8 @@ describe('runContractEval', () => {
       const n = (attempts.get(q) ?? 0) + 1;
       attempts.set(q, n);
       if (n === 1) throw Object.assign(new Error('__i18n:assistant.gemini_rate_limited'), { code: 'RATE_LIMITED' });
-      return { text: undefined, toolCalls: [{ ...passingCall(q), id: 'c1' }] } as AssistantTurn;
+      const call = passingCall(q);
+      return (call ? { text: undefined, toolCalls: [{ ...call, id: 'c1' }] } : { text: 'No lookup needed.', toolCalls: [] }) as AssistantTurn;
     });
 
     vi.useFakeTimers();

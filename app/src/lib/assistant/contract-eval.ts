@@ -27,7 +27,7 @@ import { log, LogLevel } from '../logger';
 /** How many cases this eval actually scores. Exported so a caller running it
  *  alongside another stage knows the combined total BEFORE either starts, and can
  *  show one progress bar that does not reach 100% and then jump back. */
-export const CONTRACT_EVAL_CASE_COUNT = TOOL_CASES.filter((c) => !c.triaged).length;
+export const CONTRACT_EVAL_CASE_COUNT = TOOL_CASES.length;
 
 /** One case that did not meet its expectation, kept compact for the log line. */
 export interface ContractEvalFailure {
@@ -41,9 +41,9 @@ export interface ContractEvalFailure {
 export interface ContractEvalReport {
   pass: number;
   total: number;
-  /** Cases triage answers before the prompt sees them: reported, never scored,
-   *  exactly as `prompt-eval.mts` treats them. */
-  skippedTriaged: number;
+  /** How many scored cases expect NO tool call. Reported so a reader can see the
+   *  benchmark's balance between "fetch the right thing" and "fetch nothing". */
+  noToolCases: number;
   /** How many calls AICore rate-limited and this runner retried. Non-zero means the
    *  run was paced by the platform, which is worth seeing next to the score. */
   rateLimitedRetries: number;
@@ -127,7 +127,10 @@ export async function runContractEval(
     objectLabels: CONTRACT_EVAL_OBJECT_LABELS,
   } as never);
 
-  const scored = TOOL_CASES.filter((c) => !c.triaged);
+  // Every case, including the ones triage would intercept in production: deciding
+  // that NO lookup is needed is half of planning, and skipping those measured only
+  // the half the model finds easier.
+  const scored = TOOL_CASES;
   const failures: ContractEvalFailure[] = [];
   let pass = 0;
   let done = 0;
@@ -171,7 +174,7 @@ export async function runContractEval(
   const report: ContractEvalReport = {
     pass,
     total: scored.length,
-    skippedTriaged: TOOL_CASES.length - scored.length,
+    noToolCases: TOOL_CASES.filter((c) => c.tool === null).length,
     rateLimitedRetries: rateLimited,
     failures,
     durationMs: Date.now() - startedAt,

@@ -18,7 +18,10 @@ export interface ToolCase {
   tool: string | null;
   /** Argument check. Absent means any arguments pass. */
   args?: (a: Record<string, unknown>) => boolean;
-  /** Handled by triage before the prompt sees it; reported, not scored. */
+  /** Handled by triage before the prompt sees it in production. Still SCORED here:
+   *  this benchmark measures the model's own planning, and "recognise that no
+   *  lookup is needed" is half of it. Triage is a safety net in front of that
+   *  judgement, not a substitute for measuring it. */
   triaged?: boolean;
   /** Check `tool` and `args` against EVERY call in the reply, not just the
    *  first. For multi-window questions where a fault on any call corrupts
@@ -65,6 +68,45 @@ export const TOOL_CASES: ToolCase[] = [
   { q: 'what tags are available', tool: 'list_tags' },
   { q: 'hello', tool: null, triaged: true },
   { q: 'what is the capital of France', tool: null, triaged: true },
+
+  // ---- Planning: which tool, and with what window ----------------------------
+  // count_events measures ONE rolling window; list_events answers anything
+  // calendar-aligned. Picking the wrong one silently changes what is counted.
+  { q: 'how many events in the past hour', tool: 'count_events', args: (a) => a.lastUnit === 'hour' && a.lastCount === 1 },
+  { q: 'how many events in the last 7 days', tool: 'count_events', args: (a) => (a.lastUnit === 'day' && a.lastCount === 7) || (a.lastUnit === 'week' && a.lastCount === 1) },
+  { q: 'anything on the front door camera today', tool: 'list_events', args: (a) => String(a.when).toLowerCase().includes('today') },
+  { q: 'show me events from last night', tool: 'list_events', args: (a) => /last night|night/.test(String(a.when).toLowerCase()) },
+  { q: 'what happened between 2pm and 6pm yesterday', tool: 'list_events', args: (a) => String(a.when).toLowerCase().includes('yesterday') },
+  { q: 'what happened on the 21st', tool: 'list_events', args: (a) => /21/.test(String(a.when)) },
+  { q: 'events since july 1', tool: 'list_events', args: (a) => /july 1|since july/.test(String(a.when).toLowerCase()) },
+
+  // ---- Planning: the object vocabulary --------------------------------------
+  // A question naming a thing takes objectType; one that does not must not grow
+  // it, or no-detection events are silently excluded.
+  { q: 'were there any cars yesterday', tool: 'list_events', args: (a) => String(a.when).toLowerCase().includes('yesterday') && String(a.objectType).includes('car') },
+  { q: 'any packages delivered today', tool: 'list_events', args: (a) => String(a.when).toLowerCase().includes('today') },
+  { q: 'what was the quietest day this week', tool: 'list_events', args: (a) => a.objectType === undefined },
+
+  // ---- Planning: tags --------------------------------------------------------
+  { q: 'what tags do I have', tool: 'list_tags' },
+  { q: 'show me events tagged important', tool: 'list_events', args: (a) => String(a.tag ?? '').toLowerCase().includes('important') },
+
+  // ---- Planning: the non-event surfaces --------------------------------------
+  { q: 'which cameras are recording right now', tool: 'list_monitors' },
+  { q: 'what camera groups exist', tool: 'list_groups' },
+  { q: 'is everything healthy', tool: 'get_server_health' },
+  { q: 'is the backyard camera alarmed', tool: 'get_monitor' },
+
+  // ---- Planning: recognising that NO lookup is needed -------------------------
+  // The other half of the judgement. A model that fetches events to answer
+  // "thanks" is as wrong as one that answers a data question without fetching.
+  { q: 'thanks!', tool: null, triaged: true },
+  { q: 'what can you do', tool: null, triaged: true },
+  { q: 'who won the world cup in 2018', tool: null, triaged: true },
+  { q: 'how do I add a camera', tool: null, triaged: true },
+  // Read-only means the plan for a mutation is to refuse, never to call a tool.
+  { q: 'arm the backyard camera', tool: null, triaged: true },
+  { q: 'delete event 1234', tool: null, triaged: true },
 ];
 
 /** The object vocabulary the cases are written against ("how many vehicles"

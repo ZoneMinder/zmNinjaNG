@@ -14,7 +14,6 @@ import type { AssistantProvider } from '../../../lib/assistant/types';
 import type { FmEvalReport } from '../../../lib/assistant/fm-eval';
 import { TIME_EVAL_CASE_COUNT } from '../../../lib/assistant/fm-eval';
 import { CONTRACT_EVAL_CASE_COUNT } from '../../../lib/assistant/contract-eval';
-import { ANSWER_EVAL_CASE_COUNT } from '../../../lib/assistant/answer-eval';
 
 /** Hand control of the eval to the test: it resolves when the test says so, after
  *  optionally reporting progress. */
@@ -43,13 +42,6 @@ const CONTRACT_REPORT = { pass: 12, total: CONTRACT_EVAL_CASE_COUNT, skippedTria
 vi.mock('../../../lib/assistant/contract-eval', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../lib/assistant/contract-eval')>()),
   runContractEval: vi.fn(async () => CONTRACT_REPORT),
-}));
-
-// The answer stage runs third; stubbed for the same reason the contract one is.
-const ANSWER_REPORT = { pass: 3, total: ANSWER_EVAL_CASE_COUNT, failedChecks: {}, failures: [], durationMs: 4 };
-vi.mock('../../../lib/assistant/answer-eval', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../lib/assistant/answer-eval')>()),
-  runAnswerEval: vi.fn(async () => ANSWER_REPORT),
 }));
 
 vi.mock('react-i18next', () => ({
@@ -91,7 +83,7 @@ describe('AssistantSystemModelEvalRow', () => {
     });
     act(() => reportProgress?.(9, TIME_EVAL_CASE_COUNT));
     expect(screen.getByTestId('system-model-eval-run').textContent).toBe(
-      `settings.assistant.system_model_eval_running:9/${TIME_EVAL_CASE_COUNT + CONTRACT_EVAL_CASE_COUNT + ANSWER_EVAL_CASE_COUNT}`,
+      `settings.assistant.system_model_eval_running:9/${TIME_EVAL_CASE_COUNT + CONTRACT_EVAL_CASE_COUNT}`,
     );
 
     // The user leaves Settings. Nothing may cancel the run.
@@ -101,7 +93,7 @@ describe('AssistantSystemModelEvalRow', () => {
     // ...and comes back to a row that picks the same run up where it is.
     renderRow();
     expect(screen.getByTestId('system-model-eval-run').textContent).toBe(
-      `settings.assistant.system_model_eval_running:20/${TIME_EVAL_CASE_COUNT + CONTRACT_EVAL_CASE_COUNT + ANSWER_EVAL_CASE_COUNT}`,
+      `settings.assistant.system_model_eval_running:20/${TIME_EVAL_CASE_COUNT + CONTRACT_EVAL_CASE_COUNT}`,
     );
     // Still ONE run: the remount must not have started a second.
     expect(runFmTimeEvalMock).toHaveBeenCalledTimes(1);
@@ -124,7 +116,7 @@ describe('AssistantSystemModelEvalRow', () => {
     renderRow();
     // The headline score is both stages together.
     expect(screen.getByTestId('system-model-eval-score').textContent).toBe(
-      `settings.assistant.system_model_eval_score:${45 + CONTRACT_REPORT.pass + ANSWER_REPORT.pass}/${52 + CONTRACT_EVAL_CASE_COUNT + ANSWER_EVAL_CASE_COUNT}`,
+      `settings.assistant.system_model_eval_score:${45 + CONTRACT_REPORT.pass}/${52 + CONTRACT_EVAL_CASE_COUNT}`,
     );
   });
 
