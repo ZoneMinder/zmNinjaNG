@@ -66,6 +66,13 @@ after any prompt or provider change and put both scores in the PR.
   (`BACKGROUND_USE_BLOCKED`) and meters each app daily
   (`PER_APP_BATTERY_USE_QUOTA_EXCEEDED`). Both are user-recoverable and need
   their own messages; "try again" is wrong advice for either.
+- A dozing or locked screen counts as background, which silently invalidates
+  any batch run on this backend. A first Gemini Nano eval scored 27/52 with
+  whole classes at zero; all 32 of those failures were
+  `BACKGROUND_USE_BLOCKED`, not wrong answers. Before trusting an on-device
+  number, confirm the run has no such error in the log
+  (`ON_LOCKED` in `dumpsys nfc`, `mWakefulness=Dozing` in `dumpsys power`)
+  and keep the phone unlocked with the app in front for the whole run.
 
 ## Eval harness
 

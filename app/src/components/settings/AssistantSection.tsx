@@ -24,7 +24,9 @@ import { CollapsibleSection, SettingsCard, SettingsRow, RowLabel } from './Setti
 import { AssistantOllamaSection } from './AssistantOllamaSection';
 import { AssistantNativeSection } from './AssistantNativeSection';
 import { AssistantAdvancedSection } from './AssistantAdvancedSection';
-import { AssistantFmEvalRow } from './AssistantFmEvalRow';
+import { AssistantSystemModelEvalRow } from './AssistantSystemModelEvalRow';
+import { AppleIntelligenceProvider } from '../../lib/assistant/providers/apple-intelligence';
+import { GeminiNanoProvider } from '../../lib/assistant/providers/gemini-nano';
 import { ASSISTANT } from '../../lib/zmninja-ng-constants';
 import { NINJII_LOGO_URL } from '../../lib/assistant/ninjii-logo';
 import { Platform } from '../../lib/platform';
@@ -382,14 +384,26 @@ export function AssistantSection({
               // no KV-cache slot, no token counts. The only control here is the
               // developer on-device eval, shown when this supported backend is
               // the selected one (refs #270).
-              appleSupported === true ? <AssistantFmEvalRow /> : null
+              appleSupported === true ? (
+                <AssistantSystemModelEvalRow
+                  createProvider={() => new AppleIntelligenceProvider(0)}
+                  backend="apple"
+                  modelLabel="Apple Intelligence"
+                />
+              ) : null
             ) : settings.assistantBackend === 'gemini-nano' ? (
-              // AICore-hosted, and by this point already downloaded: no model to select, no
-              // delete (the weights are the system's, shared with every app that uses them),
-              // and no eval row, which exists only for the Apple backend. The explicit branch
-              // is load-bearing all the same: without it the `Platform.isNative` fallback
-              // below would render the Ollama server settings under an on-device backend.
-              null
+              // AICore-hosted, and by this point already downloaded: no model to select and no
+              // delete (the weights are the system's, shared with every app that uses them).
+              // The eval row is the one control it does get, and for the reason it exists at
+              // all: the prompt-eval harness reaches a backend over HTTP, and neither system
+              // model has an HTTP surface, so this is the only way either gets a score.
+              geminiSupported === true ? (
+                <AssistantSystemModelEvalRow
+                  createProvider={() => new GeminiNanoProvider(0)}
+                  backend="gemini-nano"
+                  modelLabel="Gemini Nano"
+                />
+              ) : null
             ) : settings.assistantBackend === 'ollama' || Platform.isNative ? (
               <AssistantOllamaSection settings={settings} update={update} currentProfile={currentProfile} />
             ) : (

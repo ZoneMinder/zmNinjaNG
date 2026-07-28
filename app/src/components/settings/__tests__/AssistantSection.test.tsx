@@ -45,6 +45,16 @@ vi.mock('../../../hooks/useAppleIntelligenceSupported', () => ({
   useAppleIntelligenceSupported: () => ({ supported: appleSupported, reason: appleUnsupportedReason }),
 }));
 
+// And the same seam for Android's system model. Unlike the other two, its
+// 'notReady' is a state the UI can act on rather than just report, so the reason
+// is exercised as well as the boolean.
+let geminiSupported: boolean | undefined = false;
+let geminiUnsupportedReason: 'platform' | 'notReady' | undefined;
+const geminiRefresh = vi.fn();
+vi.mock('../../../hooks/useGeminiNanoSupported', () => ({
+  useGeminiNanoSupported: () => ({ supported: geminiSupported, reason: geminiUnsupportedReason, refresh: geminiRefresh }),
+}));
+
 const isNativeModelDownloadedMock = vi.fn().mockResolvedValue({ downloaded: false });
 vi.mock('../../../lib/assistant/native-model-download', () => ({
   isNativeModelDownloaded: () => isNativeModelDownloadedMock(),
@@ -129,6 +139,9 @@ describe('AssistantSection backend picker and gating', () => {
     nativeUnsupportedReason = undefined;
     appleSupported = false;
     appleUnsupportedReason = undefined;
+    geminiSupported = false;
+    geminiUnsupportedReason = undefined;
+    geminiRefresh.mockClear();
   });
 
   // On-device was removed on phones and tablets. The picker must not offer a
@@ -346,7 +359,7 @@ describe('AssistantSection backend picker and gating', () => {
         />,
       );
 
-      expect(await screen.findByTestId('fm-eval-run')).toBeInTheDocument();
+      expect(await screen.findByTestId('system-model-eval-run')).toBeInTheDocument();
     });
 
     it('does not show the eval row for a non-apple backend even when apple is supported', async () => {
@@ -363,7 +376,84 @@ describe('AssistantSection backend picker and gating', () => {
       );
 
       await screen.findByTestId('assistant-backend-select');
-      expect(screen.queryByTestId('fm-eval-run')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('system-model-eval-run')).not.toBeInTheDocument();
+    });
+
+    // The Android system model (refs #270). Gated on its own probe, so it can be
+    // the only on-device backend a phone offers.
+    it('offers the Gemini Nano option when only its probe reports supported', async () => {
+      isNative = true;
+      isAndroid = true;
+      geminiSupported = true;
+      render(
+        <AssistantSection
+          settings={enabledSettings}
+          update={vi.fn()}
+          currentProfile={profile}
+          updateSettings={vi.fn()}
+        />,
+      );
+
+      const select = await screen.findByTestId('assistant-backend-select');
+      expect(select.querySelector('option[value="gemini-nano"]')).toBeInTheDocument();
+    });
+
+    it('shows the eval row, and no Ollama settings, when the Gemini Nano backend is selected', async () => {
+      isNative = true;
+      isAndroid = true;
+      geminiSupported = true;
+      render(
+        <AssistantSection
+          settings={{ ...enabledSettings, assistantBackend: 'gemini-nano' }}
+          update={vi.fn()}
+          currentProfile={profile}
+          updateSettings={vi.fn()}
+        />,
+      );
+
+      expect(await screen.findByTestId('system-model-eval-run')).toBeInTheDocument();
+      // The branch exists so the Platform.isNative fallback cannot render the
+      // remote-server settings underneath an on-device backend.
+      expect(screen.queryByTestId('assistant-ollama-url')).not.toBeInTheDocument();
+    });
+
+    it('offers the download instead of the option while Gemini Nano is not downloaded', async () => {
+      isNative = true;
+      isAndroid = true;
+      geminiSupported = false;
+      geminiUnsupportedReason = 'notReady';
+      nativeSupported = true; // so the picker renders at all
+      render(
+        <AssistantSection
+          settings={enabledSettings}
+          update={vi.fn()}
+          currentProfile={profile}
+          updateSettings={vi.fn()}
+        />,
+      );
+
+      const select = await screen.findByTestId('assistant-backend-select');
+      expect(select.querySelector('option[value="gemini-nano"]')).toBeNull();
+      expect(screen.getByTestId('assistant-gemini-nano-download-button')).toBeInTheDocument();
+    });
+
+    it('shows no download row when Gemini Nano is unsupported outright', async () => {
+      isNative = true;
+      isAndroid = true;
+      geminiSupported = false;
+      geminiUnsupportedReason = 'platform';
+      nativeSupported = true;
+      render(
+        <AssistantSection
+          settings={enabledSettings}
+          update={vi.fn()}
+          currentProfile={profile}
+          updateSettings={vi.fn()}
+        />,
+      );
+
+      await screen.findByTestId('assistant-backend-select');
+      expect(screen.queryByTestId('assistant-gemini-nano-download-button')).not.toBeInTheDocument();
     });
 
     it('shows the enable-Apple-Intelligence hint when the probe reports reason "disabled"', async () => {
