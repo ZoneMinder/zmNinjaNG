@@ -110,6 +110,8 @@ This backend is separate from **On-device (native)** above and does not share it
 
 Unlike the other on-device backends, there is nothing to download and no **Model** picker: Apple manages the model as part of iOS, and it uses none of the app's memory for model weights. The model, and therefore how well it answers and which languages it replies in, is Apple's, not something zmNinjaNg selects or tunes. Everything else about the assistant works the same way.
 
+Which to choose on an iPhone: Ollama first if you have a server, then **On-device (native)**, then this. Apple Intelligence is the least accurate of the three, and measurably so. Asked to plan thirty-eight camera questions it chose the right lookup twenty-one times, against thirty-three for Android's system model on the same questions; its usual mistakes are looking up the wrong period and searching your events to answer questions that have nothing to do with your cameras. Pick it when you want an answer without downloading a model and without a server, and accept that it will more often go and fetch the wrong thing.
+
 This is fully on-device: your questions, the assistant's answers, and anything it looks up on your ZoneMinder server never leave your phone except to reach that server itself. No conversation data goes to Apple, to Ollama, to zmNinjaNg, or to any AI company.
 
 ## The on-device model with Gemini Nano (Android)
@@ -121,6 +123,8 @@ The download belongs to Android, not to zmNinjaNg. Other apps that use Gemini Na
 Two limits are worth knowing. Android only runs this model while zmNinjaNg is on screen, so a question left running as you switch apps comes back asking you to reopen the app and try again. Android also meters how much each app may use the model in a day; if you reach that limit the assistant says so and you can either wait or switch to Ollama.
 
 Gemini Nano is the only on-device backend on Android. The app used to also run Qwen3 4B Instruct here the way it does on iPhone, and that was removed: without a GPU path on Android it produced about seven words a second, against roughly a second and a half for a whole Gemini Nano reply, and it cost 76MB of app download plus a 2.5GB model download to be the slower option.
+
+Which to choose on an Android phone: Ollama first if you have a server, then this. Gemini Nano is the only on-device option, and it is a capable one: asked to plan thirty-eight camera questions it chose the right lookup thirty-three times, and it correctly answered all eight questions that needed no lookup at all. A server-backed qwen3:8b is still the recommended choice where you have one, though the two have not been scored against each other on the same questions, so use Gemini Nano when you have no server or want the conversation to stay on the phone.
 
 This is fully on-device: your questions, the assistant's answers, and anything it looks up on your ZoneMinder server never leave your phone except to reach that server itself. No conversation data goes to Google, to Ollama, to zmNinjaNg, or to any AI company.
 
@@ -134,7 +138,7 @@ The model list fills in automatically from the server, and you can also type a m
 
 ## Performance and accuracy
 
-Which model you pick matters more than any other assistant setting. zmNinjaNg carries a test suite for exactly this: fourteen camera-and-events questions ("summarize today", "how many people came today", "compare may to june", "is the server ok", and so on), each asked three times against known data, scored on whether the model looked the right thing up with usable filters and whether its answer quoted the data correctly. Every claim below comes from that suite, measured in July 2026 against Ollama 0.32 on a GPU server. Your hardware changes the times, not the accuracy.
+Which model you pick matters more than any other assistant setting. zmNinjaNg carries a test suite for exactly this: camera-and-events questions ("summarize today", "how many people came today", "compare may to june", "is the server ok", and so on) asked against known data, scored on whether the model looked the right thing up with usable filters and whether its answer quoted the data correctly. The table below comes from that suite as it stood in July 2026, fourteen questions asked three times each, measured against Ollama 0.32 on a GPU server. Your hardware changes the times, not the accuracy. The suite has since grown to thirty-eight planning questions, which is what the on-device figures further down were measured on.
 
 | Ollama model | Accuracy | Typical reply |
 |---|---|---|
@@ -154,6 +158,15 @@ Two things to know about the qwen3 family:
 Some models cannot drive the assistant at all: gemma2 has no tool support and qwen2.5-coder never uses one, so with either the assistant can only guess. The **Test model** button catches both cases before you commit to a model.
 
 The on-device Llama 3.2 3B passed 21 of 24 lookup checks in an equivalent test. Its misses were answering from memory instead of looking things up, which the app detects and corrects by insisting on a lookup, at the cost of a slower reply. The on-device Qwen3 4B option scored between Llama 3.2 and the server-backed qwen3:8b in the same suite, at the cost of a larger download and more GPU memory. A server-backed qwen3:8b answers noticeably better and faster than either; on-device remains the choice when the conversation must not leave your machine.
+
+The two system models were measured in July 2026 on the larger suite, thirty-eight questions asked once each on the phone itself, scored only on whether the model planned the right lookup. They ran a different, harder set of questions than the Ollama table above, so read them against each other rather than against that table:
+
+| System model | Planned the right lookup | Knew when no lookup was needed |
+|---|---|---|
+| Gemini Nano (Android) | 33 of 38 | 8 of 8 |
+| Apple Intelligence (iOS) | 21 of 38 | 4 of 8 |
+
+The second column is the one to read. Both models were asked eight questions that needed no camera lookup at all, such as "who won the world cup in 2018" and "how do I add a camera". Gemini Nano answered all eight without searching; Apple Intelligence went looking through your events for half of them, which wastes a few seconds and can produce an answer built on cameras that had nothing to do with the question. A server-backed qwen3:8b remains the recommendation on every platform.
 
 ## Long conversations
 
