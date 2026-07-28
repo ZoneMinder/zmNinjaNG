@@ -22,14 +22,26 @@ after any prompt or provider change and put both scores in the PR.
   Kit structured output is compile-time KSP codegen with no union type, so
   no per-tool turn schema and no removable answer branch. It is driven with
   the llama.cpp text contract instead. No native tool calling either.
-- Gemini Nano `nano-v3` on a Pixel 10: time 48/52 (interpret 33/36, extract
-  15/16, ~97s), reproduced three times; tool contract 12/14 (~97s). Combined
-  60/66. Time failures: "past 5 days" as `daysAgo` not rolling, "this weekend"
-  as last, "this month" as the wrong month, a German extract falling back to
-  today. Both contract failures are the same fault, answering without calling
-  a tool: "summarize today" and "was war gestern bei mir los". Apple
-  Foundation Models has no score on either eval yet, so the two system models
-  are NOT yet comparable.
+- The two system models, measured 2026-07-28 on the same 90 cases through each
+  backend's real production path: Gemini Nano (Pixel 10) plans 33/38 and reads
+  time 48/52; Apple Foundation Models (iPhone 17 Pro Max, iOS 26.5.2) plans
+  21/38 and reads time 47-51/52. Nano is far better at planning; they are level
+  on time. The no-tool half is the sharpest split: Nano 8/8, Apple 4/8, with
+  Apple calling `list_events` three times for "who won the world cup in 2018"
+  and `get_event` for "delete event 1234".
+- Apple's planning deficit is NOT a prompt problem, and the trimmed prompt is
+  not what causes it. Giving it the whole shared system prompt plus whole tool
+  descriptions on the planning turn moved 21/38 to 23/38, inside its own
+  run-to-run spread, and introduced failures that were not there before:
+  arguments leaking between cases (a German window on two English questions)
+  and junk in `objectType` ("NO", a tag name). Both attempts were reverted.
+  What the extra text did fix is narrow and real: `count_events` chosen for a
+  calendar window went from four failures to one, because that distinction
+  lives past the first sentence of those two descriptions. Whether the rest is
+  the model or the 4096-token window is unseparated.
+- Apple's output SHAPE is flawless and its judgement is not: every one of its
+  planning failures was a well-formed, schema-valid tool call that was simply
+  the wrong call. Constrained decoding fixes shape and buys nothing else.
 - AICore rate-limits a burst (`ErrorCode.BUSY`), which is NOT the plugin's own
   concurrency guard and must not share its code: running the contract eval
   straight after the time eval got every case rejected and reported 0/14 as if
@@ -80,6 +92,12 @@ after any prompt or provider change and put both scores in the PR.
   (`BACKGROUND_USE_BLOCKED`) and meters each app daily
   (`PER_APP_BATTERY_USE_QUOTA_EXCEEDED`). Both are user-recoverable and need
   their own messages; "try again" is wrong advice for either.
+- A locked screen kills an on-device eval on BOTH platforms, and silently. On
+  Android it is `BACKGROUND_USE_BLOCKED` per call; on iOS the app is suspended
+  and the run simply stops with no report. Set Auto-Lock to Never (iOS) or rely
+  on `svc power stayon true` (Android) before starting, and treat a run that
+  produced no report, or far less wall-clock than the case count implies, as
+  void rather than as a result.
 - A dozing or locked screen counts as background, which silently invalidates
   any batch run on this backend. A first Gemini Nano eval scored 27/52 with
   whole classes at zero; all of those failures were `BACKGROUND_USE_BLOCKED`,
