@@ -396,7 +396,9 @@
       "timeout_hint": "How long to wait for one answer.",
       "history_turns": "Remembered exchanges",
       "history_turns_hint": "How many earlier questions and answers the model sees.",
-      "advanced_note": "Temperature 0 was measured most accurate for reading your camera data. Higher values make the assistant more likely to state a count, a time, or a camera name that is not in the results. Raise the timeout if your server is slow to answer. Remembering more exchanges helps follow-up questions but makes every answer slower."
+      "advanced_note": "Temperature 0 was measured most accurate for reading your camera data. Higher values make the assistant more likely to state a count, a time, or a camera name that is not in the results. Raise the timeout if your server is slow to answer. Remembering more exchanges helps follow-up questions but makes every answer slower.",
+      "backend_gemini_nano": "On-device (Gemini Nano)",
+      "gemini_nano_not_ready": "Gemini Nano is available on this device but not downloaded yet."
     },
     "language": "Language",
     "select_language": "Select Language",
@@ -1358,6 +1360,8 @@
     "model_unavailable_native": "This model cannot run on your device. Choose an on-device model in Settings.",
     "english_only_notice": "The assistant is tested in English only; answers in other languages may be less reliable.",
     "system_model_note": "You are using {{backend}}. For better accuracy, consider switching to On-device (llama.cpp) in Settings.",
-    "timeframe_unclear": "I could not work out the time period you mean. Tell me the period, like \"today\" or \"July 21\"."
+    "timeframe_unclear": "I could not work out the time period you mean. Tell me the period, like \"today\" or \"July 21\".",
+    "gemini_background_blocked": "Gemini Nano only runs while zmNinja is on screen. Reopen the app and try again.",
+    "gemini_quota_exceeded": "Gemini Nano has reached today's on-device usage limit. Try again later, or use an Ollama server."
   }
 }

@@ -396,7 +396,9 @@
       "timeout_hint": "Durée d'attente pour une réponse.",
       "history_turns": "Échanges mémorisés",
       "history_turns_hint": "Combien de questions et réponses précédentes le modèle voit.",
-      "advanced_note": "La température 0 s'est révélée la plus fiable pour lire les données de vos caméras. Des valeurs plus élevées augmentent le risque que l'assistant cite un nombre, une heure ou un nom de caméra absent des résultats. Augmentez le délai si votre serveur répond lentement. Mémoriser plus d'échanges aide pour les questions de suivi, mais ralentit chaque réponse."
+      "advanced_note": "La température 0 s'est révélée la plus fiable pour lire les données de vos caméras. Des valeurs plus élevées augmentent le risque que l'assistant cite un nombre, une heure ou un nom de caméra absent des résultats. Augmentez le délai si votre serveur répond lentement. Mémoriser plus d'échanges aide pour les questions de suivi, mais ralentit chaque réponse.",
+      "backend_gemini_nano": "Sur l’appareil (Gemini Nano)",
+      "gemini_nano_not_ready": "Gemini Nano est disponible sur cet appareil mais n’est pas encore téléchargé."
     },
     "language": "Langue",
     "select_language": "Sélectionner la langue",
@@ -1358,6 +1360,8 @@
     "model_unavailable_native": "Ce modèle ne fonctionne pas sur votre appareil. Choisissez un modèle sur l'appareil dans les Réglages.",
     "english_only_notice": "L'assistant est testé uniquement en anglais ; les réponses dans d'autres langues peuvent être moins fiables.",
     "system_model_note": "Vous utilisez {{backend}}. Pour une meilleure précision, passez à Sur l'appareil (llama.cpp) dans les Réglages.",
-    "timeframe_unclear": "Je n'ai pas pu déterminer la période que vous visez. Indiquez la période, par exemple « aujourd'hui » ou « 21 juillet »."
+    "timeframe_unclear": "Je n'ai pas pu déterminer la période que vous visez. Indiquez la période, par exemple « aujourd'hui » ou « 21 juillet ».",
+    "gemini_background_blocked": "Gemini Nano ne fonctionne que si zmNinja est à l’écran. Rouvrez l’application et réessayez.",
+    "gemini_quota_exceeded": "Gemini Nano a atteint la limite d’utilisation du jour sur l’appareil. Réessayez plus tard ou utilisez un serveur Ollama."
   }
 }

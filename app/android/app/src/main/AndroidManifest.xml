@@ -1,5 +1,13 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <!-- ML Kit GenAI (GeminiNanoPlugin, issue #270) declares minSdk 26 while this app
+         supports 24. Overridden rather than raising the app's floor: that would drop
+         Android 7 users for a backend they could never run anyway, since AICore does not
+         exist below Android 14. The library contributes no components to the merged
+         manifest, only a permission and a <queries> entry, and GeminiNanoPlugin refuses
+         every call below API 26 so none of its classes are touched there. -->
+    <uses-sdk tools:overrideLibrary="com.google.mlkit.genai.prompt, com.google.mlkit.genai.common" />
     <application
         android:allowBackup="true"
         android:enableOnBackInvokedCallback="false"

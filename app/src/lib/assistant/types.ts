@@ -116,7 +116,7 @@ export interface ToolResult {
  *  native `tools` schemas. Reading a turn is the only way to see which one a
  *  given answer came from. */
 export interface ModelExchange {
-  /** The backend that served this exchange ('webllm' | 'ollama' | 'native' | 'apple'). */
+  /** The backend that served this exchange ('webllm' | 'ollama' | 'native' | 'apple' | 'gemini-nano'). */
   backend: string;
   model: string;
   /** The request body as sent, pretty-printed. Truncated to
@@ -378,9 +378,11 @@ export interface AssistantProvider {
 /** Which chat backend drives the assistant (refs #246): the on-device WebLLM
  *  model (providers/webllm.ts), a remote OpenAI-compatible server such as
  *  Ollama (providers/openai.ts), the native llama.cpp bridge (refs #270,
- *  providers/native-llm.ts), or Apple Foundation Models via the
- *  `AppleIntelligence` bridge (refs #270, providers/apple-intelligence.ts). */
-export type AssistantBackend = 'on-device' | 'ollama' | 'native' | 'apple';
+ *  providers/native-llm.ts), Apple Foundation Models via the
+ *  `AppleIntelligence` bridge (refs #270, providers/apple-intelligence.ts), or
+ *  Gemini Nano via the `GeminiNano` bridge over AICore (refs #270,
+ *  providers/gemini-nano.ts). */
+export type AssistantBackend = 'on-device' | 'ollama' | 'native' | 'apple' | 'gemini-nano';
 
 /** Assembled by the caller (AskPanel) from profile settings plus the
  *  optional secure-stored API key, and handed to `getAssistantProvider`

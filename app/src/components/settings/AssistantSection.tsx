@@ -31,6 +31,8 @@ import { Platform } from '../../lib/platform';
 import { useWebGpuAvailable } from '../../hooks/useWebGpuAvailable';
 import { useNativeLlmSupported } from '../../hooks/useNativeLlmSupported';
 import { useAppleIntelligenceSupported } from '../../hooks/useAppleIntelligenceSupported';
+import { useGeminiNanoSupported } from '../../hooks/useGeminiNanoSupported';
+import { AssistantGeminiNanoSection } from './AssistantGeminiNanoSection';
 import { useToast } from '../../hooks/use-toast';
 import { deleteModel, downloadModel, isModelDownloaded } from '../../lib/assistant/model-download';
 import { getModelStorageInfo, formatStorageBytes, type ModelStorageInfo } from '../../lib/assistant/model-storage';
@@ -76,6 +78,14 @@ export function AssistantSection({
   // (llama.cpp) gate: a phone can have Apple Intelligence while failing the
   // native memory gate, so both options are offered on their own probes.
   const { supported: appleSupported, reason: appleUnsupportedReason } = useAppleIntelligenceSupported();
+  // And again for Android's system model (Gemini Nano over AICore). Its 'notReady' is not
+  // a dead end the way Apple's is: the weights download on request, so that reason gets a
+  // download row below and `refresh` re-probes once they land.
+  const {
+    supported: geminiSupported,
+    reason: geminiUnsupportedReason,
+    refresh: refreshGemini,
+  } = useGeminiNanoSupported();
   const availableModels = useMemo(
     () => ASSISTANT.webllmModels,
     [],
@@ -287,13 +297,14 @@ export function AssistantSection({
                 Equivalent to the old `Platform.isNative &&` gate in
                 production, since the hook itself only ever resolves `true`
                 on a native platform there. */}
-            {/* The picker shows on a native platform as soon as EITHER on-device
-                backend passes its own probe: Apple Foundation Models
-                (`appleSupported`) or the llama.cpp bridge (`nativeSupported`).
-                Options are ordered ollama → native → apple, each gated on its
-                probe; Ollama is always present. When neither on-device backend
+            {/* The picker shows on a native platform as soon as ANY on-device
+                backend passes its own probe: the llama.cpp bridge
+                (`nativeSupported`), Apple Foundation Models (`appleSupported`)
+                or Gemini Nano over AICore (`geminiSupported`). Options are
+                ordered ollama → native → apple → gemini-nano, each gated on its
+                own probe; Ollama is always present. When no on-device backend
                 is supported the note branch below replaces the picker. */}
-            {nativeSupported === true || appleSupported === true ? (
+            {nativeSupported === true || appleSupported === true || geminiSupported === true ? (
               <div className="px-4 py-3 space-y-2">
                 <RowLabel label={t('settings.assistant.backend')} />
                 <select
@@ -308,6 +319,9 @@ export function AssistantSection({
                   )}
                   {appleSupported === true && (
                     <option value="apple">{t('settings.assistant.backend_apple')}</option>
+                  )}
+                  {geminiSupported === true && (
+                    <option value="gemini-nano">{t('settings.assistant.backend_gemini_nano')}</option>
                   )}
                 </select>
                 <p className="text-xs text-muted-foreground" data-testid="assistant-backend-accuracy-hint">
@@ -355,6 +369,12 @@ export function AssistantSection({
               </div>
             )}
 
+            {/* The Android mirror of the block above, and the one case where the reason is
+                fixable right here: Gemini Nano exists on this device but AICore has not
+                downloaded the weights, so the option cannot be offered yet. 'platform'
+                (no Gemini Nano at all) is not actionable and gets nothing. */}
+            {geminiUnsupportedReason === 'notReady' && <AssistantGeminiNanoSection onDownloaded={refreshGemini} />}
+
             {nativeSupported === true && settings.assistantBackend === 'native' ? (
               <AssistantNativeSection />
             ) : settings.assistantBackend === 'apple' ? (
@@ -363,6 +383,13 @@ export function AssistantSection({
               // developer on-device eval, shown when this supported backend is
               // the selected one (refs #270).
               appleSupported === true ? <AssistantFmEvalRow /> : null
+            ) : settings.assistantBackend === 'gemini-nano' ? (
+              // AICore-hosted, and by this point already downloaded: no model to select, no
+              // delete (the weights are the system's, shared with every app that uses them),
+              // and no eval row, which exists only for the Apple backend. The explicit branch
+              // is load-bearing all the same: without it the `Platform.isNative` fallback
+              // below would render the Ollama server settings under an on-device backend.
+              null
             ) : settings.assistantBackend === 'ollama' || Platform.isNative ? (
               <AssistantOllamaSection settings={settings} update={update} currentProfile={currentProfile} />
             ) : (

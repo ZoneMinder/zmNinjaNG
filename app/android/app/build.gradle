@@ -99,6 +99,9 @@ dependencies {
     implementation "androidx.media3:media3-ui:1.5.1"
     implementation "androidx.media3:media3-datasource:1.5.1"
     implementation "androidx.media3:media3-session:1.5.1"
+    // Gemini Nano through AICore (GeminiNanoPlugin, issue #270). Beta API: it carries no
+    // SLA or deprecation policy, so the version is pinned rather than ranged.
+    implementation "com.google.mlkit:genai-prompt:1.0.0-beta4"
 }
 
 apply from: 'capacitor.build.gradle'

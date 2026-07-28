@@ -396,7 +396,9 @@
       "timeout_hint": "等待一次回答的时长。",
       "history_turns": "记住的对话轮数",
       "history_turns_hint": "模型能看到多少条此前的问答。",
-      "advanced_note": "实测温度为 0 时读取摄像机数据最准确。数值越高，助手越可能说出结果中并不存在的数量、时间或摄像机名称。若服务器响应缓慢，请调高超时。记住更多轮对话有助于追问，但会让每次回答变慢。"
+      "advanced_note": "实测温度为 0 时读取摄像机数据最准确。数值越高，助手越可能说出结果中并不存在的数量、时间或摄像机名称。若服务器响应缓慢，请调高超时。记住更多轮对话有助于追问，但会让每次回答变慢。",
+      "backend_gemini_nano": "设备端（Gemini Nano）",
+      "gemini_nano_not_ready": "Gemini Nano 在本设备上可用，但尚未下载。"
     },
     "language": "语言",
     "select_language": "选择语言",
@@ -1358,6 +1360,8 @@
     "model_unavailable_native": "此模型无法在你的设备上运行。请在设置中选择设备端模型。",
     "english_only_notice": "助手仅在英语环境下测试；其他语言的回答可能不够可靠。",
     "system_model_note": "您正在使用 {{backend}}。为提高准确性，请在设置中切换到设备端（llama.cpp）。",
-    "timeframe_unclear": "我无法确定你指的时间段。请说明时间段，例如“今天”或“7月21日”。"
+    "timeframe_unclear": "我无法确定你指的时间段。请说明时间段，例如“今天”或“7月21日”。",
+    "gemini_background_blocked": "Gemini Nano 仅在 zmNinja 位于前台时运行。请重新打开应用后再试。",
+    "gemini_quota_exceeded": "Gemini Nano 已达到今日设备端用量上限。请稍后再试，或改用 Ollama 服务器。"
   }
 }

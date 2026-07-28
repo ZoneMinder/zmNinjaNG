@@ -13,6 +13,15 @@ after any prompt or provider change and put both scores in the PR.
   (WKWebView's ~2GB jetsam limit kills model load), where remote Ollama is
   the supported path. Apple Foundation Models is the native Apple backend;
   a broader native on-device backend is tracked in issue #270.
+- Gemini Nano (Android system model, ML Kit GenAI Prompt API over AICore) is
+  the Android system backend. Unlike Apple's it cannot constrain output: ML
+  Kit structured output is compile-time KSP codegen with no union type, so
+  no per-tool turn schema and no removable answer branch. It is driven with
+  the llama.cpp text contract instead. No native tool calling either.
+- Gemini Nano is UNMEASURED: `prompt-eval.mts` has not been run against it.
+  Three device spot checks held the turn contract (tool call on a data
+  question, grounded answer after the result, no tool on a greeting), which
+  is not a score.
 
 ## Measured model floor (prompt-eval, temp 0, 2026-07)
 
@@ -48,6 +57,15 @@ after any prompt or provider change and put both scores in the PR.
 - Apple Foundation Models invents tool arguments (validate before use) and
   calls real tools on greeting turns; the first tool call on a tool-less
   turn gets a no-tools pushback (578787dc).
+- ML Kit GenAI capability docs are wrong on the device; probe at runtime.
+  `nano-v3` on a Pixel 10 reports `getTokenLimit()` 8192 where the docs say
+  under 4000, and `isSystemPromptAvailable()` false, so a `SystemInstruction`
+  is accepted and ignored, silently dropping the tool catalog. Fold the
+  system text into the prompt when that probe says false.
+- AICore refuses inference unless the app is the foreground app
+  (`BACKGROUND_USE_BLOCKED`) and meters each app daily
+  (`PER_APP_BATTERY_USE_QUOTA_EXCEEDED`). Both are user-recoverable and need
+  their own messages; "try again" is wrong advice for either.
 
 ## Eval harness
 

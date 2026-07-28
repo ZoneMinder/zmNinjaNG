@@ -73,10 +73,10 @@ declare global {
 const I18N_SENTINEL = '__i18n:';
 
 /** Backends whose model is an OS/system service the user did not choose and
- *  cannot swap (least accurate of the offered backends). A future Android
- *  system backend ('aicore') joins the nudge by being added here, not by a new
- *  conditional scattered through the panel. */
-const SYSTEM_MODEL_BACKENDS: AssistantBackend[] = ['apple'];
+ *  cannot swap (least accurate of the offered backends). Joining the nudge is a
+ *  matter of being added here, not a new conditional scattered through the
+ *  panel: 'gemini-nano' (Android's system model, via AICore) did exactly that. */
+const SYSTEM_MODEL_BACKENDS: AssistantBackend[] = ['apple', 'gemini-nano'];
 
 /** Matches `providers/webllm.ts`'s `PARSE_ERROR_TEXT` sentinel key (with the
  *  `__i18n:` prefix already stripped): only this turn ever carries `raw`. */
