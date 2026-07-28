@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import type { Monitor } from '../../api/types';
 import type { MonitorFunction } from '../../pages/hooks/useModeControl';
 import { isZmVersionAtLeast } from '../../lib/zm/zm-version';
+import { maskUrlCredentials, restoreUrlCredentials } from '../../lib/security/url-credentials';
 import { useSettingsStore } from '../../stores/settings';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { toast } from 'sonner';
@@ -88,6 +89,17 @@ export function MonitorSettingsDialog({
   const updateProfileSettings = useSettingsStore((state) => state.updateProfileSettings);
   const profileSettings = currentProfile ? getProfileSettings(currentProfile.id) : null;
 
+  // A camera's password lives in the source URL as userinfo, and on pre-1.38
+  // servers that is the only place it can live. While log redaction is on, the
+  // password segment is masked here and the reveal toggle is dropped from the
+  // Pass field, so a screenshot or a shoulder-surfer gets nothing (refs #307).
+  // Both fields stay editable: the real password is restored on save whenever
+  // the mask survives the edit.
+  const maskCredentials = !profileSettings?.disableLogRedaction;
+  const displayedPath = maskCredentials
+    ? maskUrlCredentials(monitor.Path ?? '')
+    : monitor.Path ?? '';
+
   // Per-monitor Go2RTC override
   const globalStreamingMethod = profileSettings?.streamingMethod ?? 'auto';
   const monitorOverride = profileSettings?.monitorStreamingOverrides?.[monitor.Id];
@@ -123,7 +135,7 @@ export function MonitorSettingsDialog({
   const [localVideoWriter, setLocalVideoWriter] = useState(monitor.VideoWriter ?? '0');
 
   // --- Video tab local state ---
-  const [localPath, setLocalPath] = useState(monitor.Path ?? '');
+  const [localPath, setLocalPath] = useState(displayedPath);
   const [localUser, setLocalUser] = useState(monitor.User ?? '');
   const [localPass, setLocalPass] = useState(monitor.Pass ?? '');
   const [localMethod, setLocalMethod] = useState(monitor.Method ?? 'rtpRtsp');
@@ -145,7 +157,7 @@ export function MonitorSettingsDialog({
     Enabled: (monitor.Enabled === '1' || monitor.Enabled === 'true') ? '1' : '0',
     SaveJPEGs: monitor.SaveJPEGs ?? '0',
     VideoWriter: monitor.VideoWriter ?? '0',
-    Path: monitor.Path ?? '',
+    Path: displayedPath,
     User: monitor.User ?? '',
     Pass: monitor.Pass ?? '',
     Method: monitor.Method ?? 'rtpRtsp',
@@ -154,7 +166,7 @@ export function MonitorSettingsDialog({
     Orientation: monitor.Orientation ?? 'ROTATE_0',
     EventStartCommand: monitor.EventStartCommand ?? '',
     EventEndCommand: monitor.EventEndCommand ?? '',
-  }), [monitor]);
+  }), [monitor, displayedPath]);
 
   // One descriptor per editable field. `key` is the ZM API field name sent in
   // the save payload, `applies` gates version-specific fields, `value` is the
@@ -195,6 +207,11 @@ export function MonitorSettingsDialog({
     fields.forEach((f) => {
       if (f.applies && f.value !== serverValues[f.key]) changes[f.key] = f.value;
     });
+    // The Path on screen may carry a mask where the password is. Put the real
+    // one back, unless the user typed over it (refs #307).
+    if (changes.Path !== undefined) {
+      changes.Path = restoreUrlCredentials(changes.Path, monitor.Path ?? '');
+    }
     await onSave(changes);
   };
 
@@ -427,6 +444,7 @@ export function MonitorSettingsDialog({
                     value={localPass}
                     onChange={(e) => setLocalPass(e.target.value)}
                     disabled={!editable || isSaving}
+                    showToggle={!maskCredentials}
                     className="w-40"
                     inputClassName="h-8 text-xs"
                     data-testid="settings-password-input"
