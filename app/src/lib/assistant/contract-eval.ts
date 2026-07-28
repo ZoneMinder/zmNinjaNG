@@ -44,8 +44,22 @@ export interface ContractEvalReport {
   /** Cases triage answers before the prompt sees them: reported, never scored,
    *  exactly as `prompt-eval.mts` treats them. */
   skippedTriaged: number;
+  /** How many calls AICore rate-limited and this runner retried. Non-zero means the
+   *  run was paced by the platform, which is worth seeing next to the score. */
+  rateLimitedRetries: number;
   failures: ContractEvalFailure[];
   durationMs: number;
+}
+
+/** Waits for AICore's short-window rate limit to clear. Two attempts at widening
+ *  gaps: the limit is a burst limit, not a daily one, so a pause is enough. */
+const RATE_LIMIT_BACKOFF_MS = [3000, 8000];
+
+/** Whether an error is AICore telling us to slow down rather than a real failure.
+ *  `GeminiNanoProvider` tags it (see its `mapPluginError`); every other backend
+ *  has nothing like it, so this is simply never true there. */
+function isRateLimit(error: unknown): boolean {
+  return !!error && typeof error === 'object' && (error as { code?: unknown }).code === 'RATE_LIMITED';
 }
 
 /** A tool result shaped like a real one, handed back to a backend that runs its
@@ -117,23 +131,37 @@ export async function runContractEval(
   const failures: ContractEvalFailure[] = [];
   let pass = 0;
   let done = 0;
+  let rateLimited = 0;
 
   for (const c of scored) {
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
-    const executed: Array<{ name: string; input: Record<string, unknown> }> = [];
     let reason: string | undefined;
-    try {
-      const turn = await provider.chat([{ role: 'user', text: c.q }], TOOLS, system, signal, undefined, async (name, input) => {
-        executed.push({ name, input });
-        return cannedResult(name, input);
-      });
-      // A backend that ran its own loop reports through `executed`; one that
-      // returns calls for the agent to run reports through `toolCalls`.
-      const calls = executed.length > 0 ? executed : turn.toolCalls.map((tc: ToolCall) => ({ name: tc.name, input: tc.input }));
-      reason = scoreCase(c, calls);
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') throw error;
-      reason = `error: ${error instanceof Error ? error.message : String(error)}`;
+    // A rate-limited call is not an answer, so it must not be scored as a wrong
+    // one. Running this eval straight after the time eval did exactly that once:
+    // AICore rate-limited every case and the stage reported 0/14 as if the model
+    // had failed all of them.
+    for (let attempt = 0; ; attempt++) {
+      const executed: Array<{ name: string; input: Record<string, unknown> }> = [];
+      try {
+        const turn = await provider.chat([{ role: 'user', text: c.q }], TOOLS, system, signal, undefined, async (name, input) => {
+          executed.push({ name, input });
+          return cannedResult(name, input);
+        });
+        // A backend that ran its own loop reports through `executed`; one that
+        // returns calls for the agent to run reports through `toolCalls`.
+        const calls = executed.length > 0 ? executed : turn.toolCalls.map((tc: ToolCall) => ({ name: tc.name, input: tc.input }));
+        reason = scoreCase(c, calls);
+        break;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') throw error;
+        if (isRateLimit(error) && attempt < RATE_LIMIT_BACKOFF_MS.length) {
+          rateLimited += 1;
+          await new Promise((resolve) => setTimeout(resolve, RATE_LIMIT_BACKOFF_MS[attempt]));
+          continue;
+        }
+        reason = `error: ${error instanceof Error ? error.message : String(error)}`;
+        break;
+      }
     }
     if (reason === undefined) pass += 1;
     else failures.push({ q: c.q, expected: c.tool ?? 'none', got: reason });
@@ -144,6 +172,7 @@ export async function runContractEval(
     pass,
     total: scored.length,
     skippedTriaged: TOOL_CASES.length - scored.length,
+    rateLimitedRetries: rateLimited,
     failures,
     durationMs: Date.now() - startedAt,
   };

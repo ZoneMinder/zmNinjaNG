@@ -88,6 +88,10 @@ export class GeminiNanoProvider implements AssistantProvider {
     const code = error && typeof error === 'object' && 'code' in error ? (error as { code?: unknown }).code : undefined;
     if (code === 'MODEL_NOT_AVAILABLE') return new Error(GEMINI_NANO_NOT_AVAILABLE_MESSAGE);
     if (code === 'CHAT_BUSY') return new Error('__i18n:assistant.native_busy');
+    // AICore's own short-window rate limit, distinct from the plugin's busy guard.
+    // Tagged with the code so a batch caller (the eval) can back off and retry rather
+    // than recording a zero; a chat turn just shows the message.
+    if (code === 'RATE_LIMITED') return Object.assign(new Error('__i18n:assistant.gemini_rate_limited'), { code });
     if (code === 'BACKGROUND_BLOCKED') return new Error('__i18n:assistant.gemini_background_blocked');
     if (code === 'QUOTA_EXCEEDED') return new Error('__i18n:assistant.gemini_quota_exceeded');
     log.assistant('Gemini Nano chat failed', LogLevel.ERROR, {

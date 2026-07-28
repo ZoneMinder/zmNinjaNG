@@ -376,8 +376,13 @@ public class GeminiNanoPlugin extends Plugin {
         switch (((GenAiException) t).getErrorCode()) {
             case GenAiException.ErrorCode.CANCELLED:
                 return "CANCELLED";
+            // NOT the same as this plugin's own busy guard above, and conflating the two
+            // cost a whole eval run: AICore meters requests over a short window, so a batch
+            // that finishes one stage and immediately starts another gets BUSY for every
+            // call. "A chat is already running" is the wrong thing to tell anyone about it,
+            // and a caller that could back off and retry cannot tell it needs to.
             case GenAiException.ErrorCode.BUSY:
-                return "CHAT_BUSY";
+                return "RATE_LIMITED";
             case GenAiException.ErrorCode.REQUEST_TOO_LARGE:
                 return "CONTEXT_FULL";
             case GenAiException.ErrorCode.NOT_AVAILABLE:

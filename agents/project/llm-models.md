@@ -22,12 +22,20 @@ after any prompt or provider change and put both scores in the PR.
   Kit structured output is compile-time KSP codegen with no union type, so
   no per-tool turn schema and no removable answer branch. It is driven with
   the llama.cpp text contract instead. No native tool calling either.
-- Gemini Nano `nano-v3` on a Pixel 10 scores 48/52 on the time eval
-  (interpret 33/36, extract 15/16, ~97s), reproduced twice via the settings
-  eval row. Remaining failures: "past 5 days" as `daysAgo` not rolling,
-  "this weekend" as last, "this month" as the wrong month, and a German
-  extract falling back to today. Apple Foundation Models has no score on
-  these cases yet, so the two system models are NOT yet comparable.
+- Gemini Nano `nano-v3` on a Pixel 10: time 48/52 (interpret 33/36, extract
+  15/16, ~97s), reproduced three times; tool contract 12/14 (~97s). Combined
+  60/66. Time failures: "past 5 days" as `daysAgo` not rolling, "this weekend"
+  as last, "this month" as the wrong month, a German extract falling back to
+  today. Both contract failures are the same fault, answering without calling
+  a tool: "summarize today" and "was war gestern bei mir los". Apple
+  Foundation Models has no score on either eval yet, so the two system models
+  are NOT yet comparable.
+- AICore rate-limits a burst (`ErrorCode.BUSY`), which is NOT the plugin's own
+  concurrency guard and must not share its code: running the contract eval
+  straight after the time eval got every case rejected and reported 0/14 as if
+  the model had failed them all. `RATE_LIMITED` is its own code now and the
+  contract eval backs off and retries; a run reports how many retries it took
+  (11 on the first clean run).
 
 ## Measured model floor (prompt-eval, temp 0, 2026-07)
 

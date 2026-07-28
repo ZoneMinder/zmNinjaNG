@@ -1364,6 +1364,7 @@
     "system_model_note": "当前使用 {{backend}}。如需更高准确度，请在设置中切换到 {{target}}。",
     "timeframe_unclear": "我无法确定你指的时间段。请说明时间段，例如“今天”或“7月21日”。",
     "gemini_background_blocked": "Gemini Nano 仅在 zmNinja 位于前台时运行。请重新打开应用后再试。",
-    "gemini_quota_exceeded": "Gemini Nano 已达到今日设备端用量上限。请稍后再试，或改用 Ollama 服务器。"
+    "gemini_quota_exceeded": "Gemini Nano 已达到今日设备端用量上限。请稍后再试，或改用 Ollama 服务器。",
+    "gemini_rate_limited": "Gemini Nano 当前繁忙。请稍候再试。"
   }
 }

@@ -1364,6 +1364,7 @@
     "system_model_note": "Estás usando {{backend}}. Para mayor precisión, cambia a {{target}} en Ajustes.",
     "timeframe_unclear": "No pude determinar el período de tiempo al que te refieres. Indica el período, por ejemplo «hoy» o «21 de julio».",
     "gemini_background_blocked": "Gemini Nano solo funciona con zmNinja en pantalla. Vuelve a abrir la app e inténtalo de nuevo.",
-    "gemini_quota_exceeded": "Gemini Nano alcanzó el límite de uso de hoy en el dispositivo. Inténtalo más tarde o usa un servidor Ollama."
+    "gemini_quota_exceeded": "Gemini Nano alcanzó el límite de uso de hoy en el dispositivo. Inténtalo más tarde o usa un servidor Ollama.",
+    "gemini_rate_limited": "Gemini Nano está ocupado ahora mismo. Espera un momento e inténtalo de nuevo."
   }
 }

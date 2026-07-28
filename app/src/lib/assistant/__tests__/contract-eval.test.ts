@@ -162,4 +162,43 @@ describe('runContractEval', () => {
     });
     expect(seen).toEqual(Array.from({ length: CONTRACT_EVAL_CASE_COUNT }, (_, i) => i + 1));
   });
+
+  it('retries a rate-limited call instead of scoring it as a wrong answer', async () => {
+    // AICore meters requests over a short window. A rate-limited call is not an
+    // answer, and scoring it as one reported 0/14 on a real device once.
+    const attempts = new Map<string, number>();
+    const provider = providerFrom((q) => {
+      const n = (attempts.get(q) ?? 0) + 1;
+      attempts.set(q, n);
+      if (n === 1) throw Object.assign(new Error('__i18n:assistant.gemini_rate_limited'), { code: 'RATE_LIMITED' });
+      return { text: undefined, toolCalls: [{ ...passingCall(q), id: 'c1' }] } as AssistantTurn;
+    });
+
+    vi.useFakeTimers();
+    const run = runContractEval(provider, NOW, 'America/New_York', signal());
+    await vi.runAllTimersAsync();
+    const report = await run;
+    vi.useRealTimers();
+
+    expect(report.pass).toBe(CONTRACT_EVAL_CASE_COUNT);
+    expect(report.rateLimitedRetries).toBe(CONTRACT_EVAL_CASE_COUNT);
+    expect(report.failures).toEqual([]);
+  });
+
+  it('gives up on a case that stays rate-limited, and says so', async () => {
+    const provider = providerFrom(() => {
+      throw Object.assign(new Error('__i18n:assistant.gemini_rate_limited'), { code: 'RATE_LIMITED' });
+    });
+
+    vi.useFakeTimers();
+    const run = runContractEval(provider, NOW, 'America/New_York', signal());
+    await vi.runAllTimersAsync();
+    const report = await run;
+    vi.useRealTimers();
+
+    expect(report.pass).toBe(0);
+    // The failure names the rate limit, so a zeroed run is never mistaken for a
+    // model that got every question wrong.
+    expect(report.failures[0].got).toContain('rate_limited');
+  });
 });
