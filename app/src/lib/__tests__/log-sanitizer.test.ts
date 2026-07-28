@@ -463,3 +463,87 @@ describe('sanitizeLogArgs', () => {
     expect(result[3]).toEqual(['item1', 'item2']);
   });
 });
+
+/**
+ * Camera credentials reaching the log pipeline (refs #307).
+ *
+ * A ZoneMinder API response carries every monitor's connection settings, and
+ * the HTTP client logs response bodies. These lock the paths that used to
+ * carry a camera password through redaction untouched.
+ */
+describe('camera credentials (refs #307)', () => {
+  beforeEach(() => {
+    setLogRedactionGate({ isRedactionDisabled: () => false });
+  });
+
+  it('redacts the password inside a monitor Path', () => {
+    const body = {
+      monitors: [
+        {
+          Monitor: {
+            Id: '1',
+            Path: 'rtsp://admin:S3cret@192.168.1.9:554/h264',
+            SecondPath: 'rtsp://admin:S3cret@192.168.1.9:554/low',
+          },
+        },
+      ],
+    };
+    expect(JSON.stringify(sanitizeObject(body))).not.toContain('S3cret');
+  });
+
+  it('keeps the host of a monitor Path readable after redacting the password', () => {
+    const result = sanitizeObject({ Path: 'rtsp://admin:S3cret@cam.lan:554/h264' }) as Record<string, string>;
+    expect(result.Path).toBe('rtsp://admin:[REDACTED]@cam.lan:554/h264');
+  });
+
+  it('redacts a credential embedded in an ffmpeg option list', () => {
+    const result = sanitizeObject({
+      Options: '-rtsp_transport tcp -i rtsp://admin:S3cret@cam/live',
+    }) as Record<string, string>;
+    expect(result.Options).not.toContain('S3cret');
+  });
+
+  it('redacts ONVIF credential fields returned by monitors.json', () => {
+    const result = sanitizeObject({
+      ONVIF_Username: 'admin',
+      ONVIF_Password: 'S3cret',
+      onvif_password: 'S3cret',
+    }) as Record<string, string>;
+    expect(result.ONVIF_Password).toBe('[REDACTED]');
+    expect(result.onvif_password).toBe('[REDACTED]');
+    expect(result.ONVIF_Username).toBe('admin');
+  });
+
+  it('redacts a credential URL in a log message, whatever the scheme', () => {
+    const result = sanitizeLogMessage('capture failed for rtsp://admin:S3cret@10.0.0.5/live');
+    expect(result).not.toContain('S3cret');
+  });
+
+  it('redacts the session cookie in logged headers', () => {
+    const result = sanitizeObject({
+      headers: { Cookie: 'ZMSESSID=abcdef123456', 'set-cookie': 'ZMSESSID=abcdef123456' },
+    }) as { headers: Record<string, string> };
+    expect(result.headers.Cookie).not.toContain('abcdef123456');
+    expect(result.headers['set-cookie']).not.toContain('abcdef123456');
+  });
+
+  it('redacts a key named credential', () => {
+    const result = sanitizeObject({ credential: 'S3cret' }) as Record<string, string>;
+    expect(result.credential).toBe('[REDACTED]');
+  });
+
+  it('redacts a single-field form body, which has no & to key off', () => {
+    expect(sanitizeObject('pass=S3cret')).not.toContain('S3cret');
+    const result = sanitizeObject({ body: 'pass=S3cret' }) as Record<string, string>;
+    expect(result.body).not.toContain('S3cret');
+  });
+
+  it('redacts a streaming URL query without mangling it into form data', () => {
+    const result = sanitizeObject({
+      url: 'https://zm.lan/zm/cgi-bin/nph-zms?user=admin&pass=S3cret&connkey=1',
+    }) as Record<string, string>;
+    expect(result.url).not.toContain('S3cret');
+    expect(result.url).toContain('/zm/cgi-bin/nph-zms');
+    expect(result.url).toContain('connkey=1');
+  });
+});

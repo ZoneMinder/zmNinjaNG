@@ -13,6 +13,17 @@ matching reality, fixing it is a protocol change like any rule edit.
   `Tags.Id` accepts a single value only and cannot combine with `Id IN`.
   Repeating `MonitorId` params ORs them. Filter URLs cap out near 8KB;
   batch long id lists.
+- `monitors.json` returns the full monitor row to any account that can view
+  the monitor: `Path`, `User`, `Pass`, `ONVIF_Password`, `Options`. There is
+  no per-field ACL, so an unprivileged account reads every camera's
+  credentials straight from the API. Nothing app-side can prevent that; the
+  app's job is to not widen it by logging or displaying those values
+  (refs #307).
+- A camera password lives inside `Path` as URL userinfo
+  (`rtsp://user:pass@host/stream`), and pre-1.38 servers have no other field
+  for it. `lib/security/url-credentials.ts` is the only place that knows how
+  to find it; both the log sanitizer and the monitor settings UI go through
+  it.
 - Event Server v7.0.22 and later always sends a real `eid` in pushes. The
   historical fake-eid bug (a `Date.now()` value where an event id belongs)
   was app-side tray handling, not the ES.

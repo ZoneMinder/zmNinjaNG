@@ -45,7 +45,10 @@ describe('installGlobalErrorHandlers', () => {
     expect(logs[0].level).toBe('ERROR');
     expect(logs[0].context).toMatchObject({ component: 'App' });
     expect(logs[0].message).toContain('Uncaught window error');
-    const details = String(logs[0].args?.[0]);
+    // Details reach the sink as the object they were logged as, not
+    // pre-serialized: a flattened string has no keys left for the redaction
+    // rules to match (refs #307).
+    const details = JSON.stringify(logs[0].args?.[0]);
     expect(details).toContain('Uncaught Error: boom');
     expect(details).toContain('app.js:12:5');
     expect(details).toContain('boom');
@@ -61,7 +64,7 @@ describe('installGlobalErrorHandlers', () => {
     expect(logs).toHaveLength(1);
     expect(logs[0].level).toBe('ERROR');
     expect(logs[0].message).toContain('Unhandled promise rejection');
-    const details = String(logs[0].args?.[0]);
+    const details = JSON.stringify(logs[0].args?.[0]);
     expect(details).toContain('async failure');
     expect(event.defaultPrevented).toBe(false);
   });
@@ -75,9 +78,9 @@ describe('installGlobalErrorHandlers', () => {
     // The log store prepends, so logs[0] is the most recent entry.
     const logs = useLogStore.getState().logs;
     expect(logs).toHaveLength(3);
-    expect(String(logs[2].args?.[0])).toContain('42');
-    expect(String(logs[1].args?.[0])).toContain('plain string reason');
-    expect(String(logs[0].args?.[0])).toContain('undefined');
+    expect(JSON.stringify(logs[2].args?.[0])).toContain('42');
+    expect(JSON.stringify(logs[1].args?.[0])).toContain('plain string reason');
+    expect(JSON.stringify(logs[0].args?.[0])).toContain('undefined');
   });
 
   it('truncates long stacks', () => {
@@ -88,7 +91,7 @@ describe('installGlobalErrorHandlers', () => {
 
     const logs = useLogStore.getState().logs;
     expect(logs).toHaveLength(1);
-    const details = String(logs[0].args?.[0]);
+    const details = JSON.stringify(logs[0].args?.[0]);
     expect(details).toContain('truncated');
     // The full untruncated stack must not be present.
     expect(details).not.toContain('x'.repeat(LOGGING.maxStackLength + 500));

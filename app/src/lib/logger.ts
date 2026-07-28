@@ -316,7 +316,9 @@ class Logger {
     if (this.shouldLog(LogLevel.ERROR)) {
       this.formatMessage('ERROR', context, message, error, ...args);
       if (error instanceof Error && error.stack) {
-        console.error(error.stack);
+        // The stack embeds the error message, which is where a URL, and any
+        // credential in it, usually sits (refs #307).
+        console.error(sanitizeLogMessage(error.stack));
       }
     }
   }
@@ -344,9 +346,11 @@ class Logger {
     const levelNames: Record<number, string> = { 0: 'DEBUG', 1: 'INFO', 2: 'WARN', 3: 'ERROR' };
     const levelName = levelNames[level] || 'DEBUG';
 
-    if (level === LogLevel.ERROR && hasDetailsArg && typeof details === 'object') {
-      this.formatMessage(levelName, context, message, JSON.stringify(details, null, 2));
-    } else if (hasDetailsArg) {
+    // Details are passed as the object they are, at every level. Serializing
+    // them first (as the ERROR path once did) leaves the sanitizer a string
+    // with no keys to match, so every secret in it survived redaction
+    // (refs #307). Both sinks pretty-print objects themselves.
+    if (hasDetailsArg) {
       this.formatMessage(levelName, context, message, details);
     } else {
       this.formatMessage(levelName, context, message);

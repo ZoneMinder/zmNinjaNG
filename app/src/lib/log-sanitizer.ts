@@ -2,6 +2,11 @@
  * Utility functions for sanitizing sensitive data in logs
  */
 
+import { maskUrlCredentials } from './security/url-credentials';
+
+/** Matches a bare IP or hostname, as opposed to one inside a URL. */
+const IP_OR_DOMAIN_PATTERN = /^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|[a-zA-Z0-9][\w.-]*\.[a-zA-Z]{2,})$/;
+
 /**
  * Redaction gate, injected instead of importing stores/profile and
  * stores/settings directly. Without this, lib/logger -> lib/log-sanitizer ->
@@ -27,6 +32,11 @@ const SENSITIVE_KEYS = [
     'pass',
     'pwd',
     'secret',
+    'credential',
+    // The ZoneMinder session lives in the ZMSESSID cookie, and the HTTP client
+    // logs request and response headers (refs #307). 'auth' below covers the
+    // Authorization header; nothing covered Cookie/Set-Cookie.
+    'cookie',
     'token',
     'accessToken',
     'refreshToken',
@@ -61,6 +71,16 @@ const WHITELIST_KEYS = [
 ];
 
 /**
+ * Keys whose value is replaced outright rather than previewed. A token's first
+ * few characters help correlate two log lines; a password's help an attacker.
+ */
+const FULL_REDACT_KEYS = ['password', 'pass', 'pwd', 'secret', 'credential'];
+
+function isFullRedactKey(lowerKey: string): boolean {
+    return FULL_REDACT_KEYS.some(k => lowerKey.includes(k));
+}
+
+/**
  * Redacts password fields completely
  */
 function redactPassword(_value: unknown): string {
@@ -87,7 +107,7 @@ function sanitizeFormData(data: string): string {
         params.forEach((value, key) => {
             const lowerKey = key.toLowerCase();
             if (SENSITIVE_KEYS.some(sk => lowerKey.includes(sk))) {
-                if (lowerKey.includes('password') || lowerKey.includes('pass') || lowerKey.includes('pwd')) {
+                if (isFullRedactKey(lowerKey)) {
                     sanitized.set(key, '[REDACTED]');
                 } else {
                     sanitized.set(key, value.length > 5 ? `${value.substring(0, 5)}...` : '[REDACTED]');
@@ -115,8 +135,7 @@ function redactUrlHost(url: string): string {
         return `${urlObj.protocol}//${redactedDomain}`;
     } catch {
         // Not a valid URL, check if it looks like an IP or domain
-        const ipOrDomainPattern = /^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|[a-zA-Z0-9][\w.-]*\.[a-zA-Z]{2,})$/;
-        if (ipOrDomainPattern.test(url)) {
+        if (IP_OR_DOMAIN_PATTERN.test(url)) {
             return url.length > 6 ? `${url.substring(0, 6)}[REDACTED]` : '[REDACTED]';
         }
         return url;
@@ -159,7 +178,7 @@ function sanitizeUrl(url: string): string {
             params.forEach((value, key) => {
                 const lowerKey = key.toLowerCase();
                 if (SENSITIVE_KEYS.some(sk => lowerKey.includes(sk))) {
-                    if (lowerKey.includes('password') || lowerKey.includes('pass') || lowerKey.includes('pwd')) {
+                    if (isFullRedactKey(lowerKey)) {
                         sanitizedParams.set(key, '[REDACTED]');
                     } else {
                         sanitizedParams.set(key, value.length > 5 ? `${value.substring(0, 5)}...` : '[REDACTED]');
@@ -200,6 +219,42 @@ function isRedactionDisabled(): boolean {
 }
 
 /**
+ * Sanitizes one string value, wherever it appears: a bare argument, an object
+ * value, or a nested one. Both callers used to carry their own copy of these
+ * checks, and the copies drifted (refs #307).
+ *
+ * Order matters. Userinfo credentials go first because they are scheme-blind
+ * and can sit anywhere in the string, including inside an ffmpeg option list
+ * that is not a URL at all. The URL check comes before the form-data check so a
+ * query string with a password in it is redacted as a URL and stays readable,
+ * rather than being percent-encoded into one flat blob.
+ */
+function sanitizeString(value: string): string {
+    const text = maskUrlCredentials(value, '[REDACTED]');
+
+    if (text.startsWith('http://') || text.startsWith('https://')) {
+        return sanitizeUrl(text);
+    }
+
+    // URL-encoded form data. A single-field body ('pass=secret') has no '&' to
+    // key off, so the presence of a sensitive key is the whole test.
+    if (text.includes('=')) {
+        const hasSensitive = SENSITIVE_KEYS.some(sk =>
+            new RegExp(`[?&]${sk}=`, 'i').test(text) || text.toLowerCase().startsWith(`${sk}=`)
+        );
+        if (hasSensitive) {
+            return sanitizeFormData(text);
+        }
+    }
+
+    if (IP_OR_DOMAIN_PATTERN.test(text)) {
+        return redactUrlHost(text);
+    }
+
+    return text;
+}
+
+/**
  * Recursively sanitizes an object by redacting sensitive fields
  */
 export function sanitizeObject(obj: unknown): unknown {
@@ -213,28 +268,7 @@ export function sanitizeObject(obj: unknown): unknown {
     }
 
     if (typeof obj === 'string') {
-        // Check if it's URL-encoded form data
-        if (obj.includes('=') && obj.includes('&')) {
-            const hasPassword = SENSITIVE_KEYS.some(key =>
-                new RegExp(`[?&]${key}=`, 'i').test(obj) || obj.toLowerCase().startsWith(`${key}=`)
-            );
-            if (hasPassword) {
-                return sanitizeFormData(obj);
-            }
-        }
-
-        // Check if it looks like a URL
-        if (obj.startsWith('http://') || obj.startsWith('https://')) {
-            return sanitizeUrl(obj);
-        }
-
-        // Check if it looks like an IP or domain
-        const ipOrDomainPattern = /^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|[a-zA-Z0-9][\w.-]*\.[a-zA-Z]{2,})$/;
-        if (ipOrDomainPattern.test(obj)) {
-            return redactUrlHost(obj);
-        }
-
-        return obj;
+        return sanitizeString(obj);
     }
 
     if (typeof obj !== 'object') {
@@ -259,40 +293,17 @@ export function sanitizeObject(obj: unknown): unknown {
 
         const lowerKey = key.toLowerCase();
 
-        // Check if this is a sensitive key
-        const isSensitive = SENSITIVE_KEYS.some(sk => lowerKey.includes(sk));
+        // A sensitive key holding an object is a container, not the secret
+        // itself ('credentials: { password }'), so recurse into it rather than
+        // stringifying it to '[obje...'.
+        const isSensitive =
+            SENSITIVE_KEYS.some(sk => lowerKey.includes(sk)) &&
+            (typeof value !== 'object' || value === null);
 
         if (isSensitive) {
-            // Determine if it's a password or token
-            if (lowerKey.includes('password') || lowerKey.includes('pass') || lowerKey.includes('pwd')) {
-                sanitized[key] = redactPassword(value);
-            } else {
-                // Token-like field
-                sanitized[key] = redactToken(value);
-            }
+            sanitized[key] = isFullRedactKey(lowerKey) ? redactPassword(value) : redactToken(value);
         } else if (typeof value === 'string') {
-            // Check for form data
-            if (value.includes('=') && value.includes('&')) {
-                const hasPassword = SENSITIVE_KEYS.some(sk =>
-                    new RegExp(`[?&]${sk}=`, 'i').test(value) || value.toLowerCase().startsWith(`${sk}=`)
-                );
-                if (hasPassword) {
-                    sanitized[key] = sanitizeFormData(value);
-                } else {
-                    sanitized[key] = value;
-                }
-            } else if (value.startsWith('http://') || value.startsWith('https://')) {
-                // Sanitize URLs
-                sanitized[key] = sanitizeUrl(value);
-            } else {
-                // Check if it looks like an IP or domain
-                const ipOrDomainPattern = /^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|[a-zA-Z0-9][\w.-]*\.[a-zA-Z]{2,})$/;
-                if (ipOrDomainPattern.test(value)) {
-                    sanitized[key] = redactUrlHost(value);
-                } else {
-                    sanitized[key] = value;
-                }
-            }
+            sanitized[key] = sanitizeString(value);
         } else if (typeof value === 'object' && value !== null) {
             // Recursively sanitize nested objects
             sanitized[key] = sanitizeObject(value);
@@ -313,10 +324,15 @@ export function sanitizeLogMessage(message: string): string {
         return message;
     }
 
+    // Userinfo credentials first: they appear under schemes the URL pass below
+    // never looks at (rtsp://, rtmp://), which is how a camera password used to
+    // reach the log intact (refs #307).
+    const withoutCredentials = maskUrlCredentials(message, '[REDACTED]');
+
     // Only sanitize complete URLs in the message
     // Don't try to sanitize standalone IPs/domains as they might be part of paths
     const urlPattern = /(https?:\/\/[^\s]+)/g;
-    return message.replace(urlPattern, (url) => sanitizeUrl(url));
+    return withoutCredentials.replace(urlPattern, (url) => sanitizeUrl(url));
 }
 
 /**
