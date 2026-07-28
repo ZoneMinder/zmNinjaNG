@@ -39,6 +39,18 @@ The on-disk file mirrors the in-memory Logs view, so anything filtered out by yo
 
 Lowering the level (e.g. to DEBUG for a specific component) writes more to disk; raising it writes less.
 
+## What gets redacted
+
+Unless you turn on **Settings → Advanced → Disable log redaction**, entries are scrubbed before they are displayed, written to the file, or shared:
+
+- Passwords, tokens, API keys, session cookies, and `Authorization` headers are replaced by placeholders. Tokens keep their first few characters so two log lines can still be matched up; passwords are removed outright.
+- Credentials embedded in a URL (`rtsp://user:password@camera/stream`) lose the password, whatever the scheme. This is the form a camera password takes in a monitor's source path, and the form ZoneMinder itself writes into its logs when it starts a capture.
+- Hostnames are shortened to their first six characters.
+
+This applies to the **Server** tab as well, which shows ZoneMinder's own logs rather than the app's. Those lines are redacted on the way in, so the file you share carries the same protection.
+
+Redaction is a safety net for logs you share, not a security boundary. Anything the app can display, the ZoneMinder API already handed to your account.
+
 ## Live console output
 
 The Logs page mirrors what the in-app console shows. If you want to watch raw console output as it streams (including stack traces and source-mapped errors that don't make it into the structured logger), open the developer console, see [How do I open the developer console on the desktop app?](faq.md#how-do-i-open-the-developer-console-on-the-desktop-app) in the FAQ.

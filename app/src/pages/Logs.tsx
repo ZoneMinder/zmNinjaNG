@@ -31,6 +31,7 @@ import { Checkbox } from '../components/ui/checkbox';
 import { Label } from '../components/ui/label';
 import type { LogEntry } from '../stores/logs';
 import { getZMLogs, getZMLogLevel, getUniqueZMComponents } from '../api/logs';
+import { sanitizeLogMessage } from '../lib/log-sanitizer';
 import type { ZMLog } from '../api/types';
 import { NotificationBadge } from '../components/NotificationBadge';
 import { formatAppDateTime } from '../lib/format-date-time';
@@ -217,7 +218,11 @@ export default function Logs() {
             rawTimestamp: parseFloat(zmLog.TimeKey) * 1000,
             timestamp: formatAppDateTime(new Date(parseFloat(zmLog.TimeKey) * 1000), settings),
             level: getZMLogLevel(zmLog.Level),
-            message: zmLog.Message,
+            // ZoneMinder's own logs carry the ffmpeg command line, camera
+            // credential and all. They are displayed, saved, and shared through
+            // the same buttons as ours, so they get the same redaction
+            // (refs #307).
+            message: sanitizeLogMessage(zmLog.Message),
             context: {
                 component: zmLog.Component,
                 file: zmLog.File,
