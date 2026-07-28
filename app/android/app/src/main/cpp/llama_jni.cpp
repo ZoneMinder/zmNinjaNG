@@ -8,11 +8,11 @@
 #include <atomic>
 #include <string>
 #include <vector>
-#include <thread>
 #include <algorithm>
 
 #include "llama.h"
 #include "ggml-backend.h"
+#include "cpu_topology.h"
 
 #define LOG_TAG "NativeLlm"
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
@@ -257,15 +257,11 @@ Java_com_zoneminder_zmNinjaNG_NativeLlmPlugin_nativeChat(
         throw_engine_failed(env, "Failed to apply chat template"); return nullptr;
     }
 
-    // Thread count = performance cores only. Big.LITTLE Android SoCs pair the big cluster with
-    // ~4 little (A5xx) cores that straggle on prefill; on-device llama-bench (Pixel 8 / Tensor G3,
-    // 1 X3 + 4 A715 + 4 A510 = 9 hw threads) pp512 peaked at 5 threads (16.19 t/s) and REGRESSED
-    // at 7 (15.78) — the 4 little cores hurt. hw-4 drops the little cluster (9-4=5 here); clamped
-    // [4,6] so odd core counts stay sane. Device-derived from hw count, assuming the common
-    // ~4-efficiency-core big.LITTLE layout; not a per-core cpufreq topology parse (fiddly, and the
-    // clamp covers the spread) — ponytail: parse cpufreq max per core if a device is mis-served.
-    int hw = (int) std::thread::hardware_concurrency();
-    int n_threads = std::max(4, std::min(6, hw - 4));
+    // Thread count = performance cores only, counted from cpufreq (see cpu_topology.h). This
+    // used to assume every big.LITTLE arm64 phone had exactly 4 efficiency cores and derive the
+    // count as hw-4; Tensor G5 (2 little + 5 mid + 1 big) has 2, so a Pixel 10 ran 4 threads
+    // instead of 6 and gave up 32% of its prefill rate.
+    int n_threads = zmninja::inference_thread_count();
 
     // Persistent context, sized by the caller (recreated only if contextSize changed).
     // Serial execution (Java chatInFlight gate + single-thread executor) makes the ctx a
