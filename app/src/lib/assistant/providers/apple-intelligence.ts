@@ -171,23 +171,19 @@ const TOOL_TURN_RULES = [
  *  example answer carrying plausible counts was repeated verbatim as this
  *  installation's data on the WebLLM path (see `buildFewShotExamples`), and the
  *  EXAMPLE_ prefix keeps the one placeholder id unmistakable. */
-function buildAppleInstructions(system: string, tools: ToolDefinition[], nativeTools = false, full = false): string {
-  // `full`: keep the WHOLE shared system prompt and the WHOLE tool descriptions
-  // instead of the four extracted fact lines and their first sentences.
+function buildAppleInstructions(system: string, tools: ToolDefinition[], nativeTools = false, fullToolDescriptions = false): string {
+  // `fullToolDescriptions`: state each tool's WHOLE description rather than its
+  // first sentence, on the turn that is still choosing between them.
   //
-  // The trimming exists because the window is 3072 usable tokens and the untrimmed
-  // prompt is ~2766, which leaves no room for a tool result to come back. But that
-  // only binds once a result HAS to fit: on the turn that is still deciding what to
-  // fetch, nothing else is in the window and the full prompt fits with room to
-  // spare. Measured planning on the trimmed prompt was 21/38, and its failures were
-  // exactly what the trim removes: `count_events` chosen for calendar windows (the
-  // rolling-vs-calendar distinction lives past the first sentence of those two
-  // descriptions) and a blanket `when: "yesterday"` (the copy-the-user's-words rule
-  // and its examples live in the body of the shared prompt). See the caller for
-  // where the switch is made.
-  const facts = full && tools.length > 0
-    ? [system]
-    : system.split('\n').filter((line) => DYNAMIC_FACT_MARKERS.some((marker) => line.includes(marker)));
+  // Measured, and deliberately narrow. Trimmed planning scored 21/38, and four of
+  // those failures chose count_events for a calendar window, a distinction that
+  // lives past the first sentence of those two descriptions. Handing the model the
+  // whole shared system prompt as well was tried and rejected: planning moved only
+  // to 23/38, inside this model's own run-to-run spread, while new failures appeared
+  // that had not been there before (arguments leaking between cases, junk in
+  // objectType), which is the signature of a model pushed nearer its context limit. So
+  // descriptions grow and the system prompt stays trimmed to its dynamic facts.
+  const facts = system.split('\n').filter((line) => DYNAMIC_FACT_MARKERS.some((marker) => line.includes(marker)));
   // The tool-less turn's whole routing decision (triage said chat or action),
   // carried over verbatim rather than restated: without it a CHAT turn lost the
   // scope refusal and an ACTION turn lost the "name the screen that can do it"
@@ -205,7 +201,7 @@ function buildAppleInstructions(system: string, tools: ToolDefinition[], nativeT
             ? 'Call a tool whenever the answer needs data from this system, then answer in plain sentences.'
             : [
                 'Call ONE tool per turn until you have the data, then answer. Tools:',
-                tools.map((tool) => `- ${tool.name}: ${full ? tool.description : firstSentence(tool.description)}`).join('\n'),
+                tools.map((tool) => `- ${tool.name}: ${fullToolDescriptions ? tool.description : firstSentence(tool.description)}`).join('\n'),
               ].join('\n'),
           '',
           ...TOOL_TURN_RULES,
@@ -424,8 +420,8 @@ export class AppleIntelligenceProvider implements AssistantProvider {
     signal: AbortSignal,
     runTool: (name: string, input: Record<string, unknown>) => Promise<ExecutedToolCall>,
   ): Promise<AssistantTurn> {
-    // Full prompt while still deciding what to fetch, trimmed once a result has to
-    // share the window with it (see `buildAppleInstructions`'s `full`).
+    // Whole tool descriptions while still deciding which to call, first sentences
+    // once a result has to share the window (see `buildAppleInstructions`).
     const planning = !hasSuccessfulToolResult(messages);
     const chatMessages = buildWebLlmMessages(
       buildAppleInstructions(system, tools, true, planning),
