@@ -88,6 +88,16 @@ export function AssistantSection({
     reason: geminiUnsupportedReason,
     refresh: refreshGemini,
   } = useGeminiNanoSupported();
+  // The accuracy ranking differs per platform because the backends do: iOS offers
+  // three (Ollama, llama.cpp on Metal, Apple Intelligence), Android two since
+  // llama.cpp was removed from that build (issue #270), and web two. Each string
+  // names the model its tier actually runs, because "on-device" alone does not tell
+  // anyone what is answering them.
+  const accuracyHintKey = Platform.isIOS
+    ? 'settings.assistant.backend_accuracy_hint_ios'
+    : Platform.isAndroid
+      ? 'settings.assistant.backend_accuracy_hint_android'
+      : 'settings.assistant.backend_accuracy_hint_web';
   const availableModels = useMemo(
     () => ASSISTANT.webllmModels,
     [],
@@ -327,7 +337,7 @@ export function AssistantSection({
                   )}
                 </select>
                 <p className="text-xs text-muted-foreground" data-testid="assistant-backend-accuracy-hint">
-                  {t('settings.assistant.backend_accuracy_hint')}
+                  {t(accuracyHintKey, { ollama: ASSISTANT.recommendedOllamaModel, native: ASSISTANT.nativeLlmModel.label })}
                 </p>
               </div>
             ) : Platform.isNative ? (
@@ -355,7 +365,7 @@ export function AssistantSection({
                   <option value="ollama">{t('settings.assistant.backend_ollama')}</option>
                 </select>
                 <p className="text-xs text-muted-foreground" data-testid="assistant-backend-accuracy-hint">
-                  {t('settings.assistant.backend_accuracy_hint')}
+                  {t(accuracyHintKey, { ollama: ASSISTANT.recommendedOllamaModel })}
                 </p>
               </div>
             )}

@@ -10,13 +10,19 @@ Underneath, **Backend** picks where the model runs:
 
 - **Ollama**: the model runs on an [Ollama](https://ollama.com) server (or anything else speaking the OpenAI-compatible chat API) that you point the app at.
 - **On-device**: the model runs inside the app on your computer's GPU, using WebGPU. Nothing leaves your device. **Desktop and web only** (see below).
-- **On-device (native)**: on a supported iPhone, iPad, or Android phone, the model runs inside the app itself instead of a browser engine, using the device's GPU (Metal) on iPhone and iPad, or the CPU on Android. Nothing leaves your device. Only on a device with enough memory (see below); Android has no GPU path yet, so replies there are slower than on an iPhone.
+- **On-device (native)**: on a supported iPhone or iPad, the model (Qwen3 4B Instruct) runs inside the app itself instead of a browser engine, on the device's GPU through Metal. Nothing leaves your device. Only on a device with enough memory (see below). Android does not offer this: with no GPU path there the same model decoded several times slower than the phone's own system model, so Android uses Gemini Nano instead.
 - **On-device (Apple Intelligence)**: on an iPhone 15 Pro or newer running iOS 26 with Apple Intelligence turned on, the assistant uses Apple's own on-device system model. There is nothing to download: Apple ships and runs the model as part of iOS, so it uses none of the app's memory for model weights. Nothing leaves your device (see below).
 - **On-device (Gemini Nano)**: the Android counterpart, on a phone whose system provides Gemini Nano. Android downloads the model once, and after that it belongs to the system rather than the app, so it uses none of the app's memory for model weights and other apps share the same copy. Nothing leaves your device (see below).
 
-The backends differ in how accurate their answers are, and a note under the picker says so: Ollama is the most accurate, the on-device backends (native on a phone, WebGPU on a desktop) come next, and system models such as Apple Intelligence and Gemini Nano are the least accurate. When the assistant is running on a system model, the chat window keeps a note suggesting the switch to **On-device (native)**.
+The backends differ in how accurate their answers are, and a note under the picker says so, naming the model each one runs. The ranking depends on the platform:
 
-The WebGPU on-device backend is not offered on phones or tablets: those models need more memory than a mobile browser engine is allowed to use, and answers take minutes on phone hardware. An iPhone or iPad with roughly 6GB of RAM or more gets the native on-device backend instead (see below). Android needs more: only a 12GB-class phone (for example a Pixel 8 Pro or a Galaxy S Ultra) qualifies, because the model runs on the CPU and its working set has to fit alongside everything else the phone is doing. An 8GB Android phone such as the Pixel 8 uses Ollama instead. Below the threshold there is no on-device choice, just a note saying so and the Ollama settings. On a desktop or in a browser, WebGPU on-device is available whenever your GPU supports WebGPU.
+- **iPhone and iPad**: Ollama (qwen3:8b recommended), then Qwen3 4B Instruct on the device, then Apple Intelligence.
+- **Android**: Ollama (qwen3:8b recommended), then Gemini Nano on the device.
+- **Desktop and web**: Ollama (qwen3:8b recommended), then whichever WebGPU model you pick.
+
+When the assistant is running on a system model it cannot swap (Apple Intelligence or Gemini Nano), the chat window keeps a note pointing at the better backend for that platform: the on-device model on an iPhone, and your own Ollama server on Android.
+
+The WebGPU on-device backend is not offered on phones or tablets: those models need more memory than a mobile browser engine is allowed to use, and answers take minutes on phone hardware. An iPhone or iPad with roughly 6GB of RAM or more gets the native on-device backend instead (see below). An Android phone gets Gemini Nano where the system provides it, and Ollama otherwise. Below those thresholds there is no on-device choice, just a note saying so and the Ollama settings. On a desktop or in a browser, WebGPU on-device is available whenever your GPU supports WebGPU.
 
 The chat window's header always names the model that is answering and where it runs, for example "Llama 3.2 3B · On-device" or "llama3.2:latest · Ollama", so you never have to open Settings to check which one you are talking to. On the Ollama backend a coloured dot next to that label shows whether the server is reachable: green means connected, red means it cannot be reached (check the address, or that the server is running), and a pulsing amber dot means the app is still checking. The dot rechecks periodically while the window is open. On-device has no server to reach, so no dot appears.
 
@@ -65,7 +71,7 @@ Ask for one of these and the assistant will say it cannot do it and point you to
 
 ## The on-device model (desktop and web)
 
-On a desktop or in a browser, the model runs inside the app using your GPU (WebGPU), the same way a game or video effect uses the GPU, rather than sending your conversation to a company's servers over the internet. This is not available on phones or tablets; a supported iPhone, iPad, or Android phone gets its own on-device backend instead (see below), and Ollama remains the alternative everywhere.
+On a desktop or in a browser, the model runs inside the app using your GPU (WebGPU), the same way a game or video effect uses the GPU, rather than sending your conversation to a company's servers over the internet. This is not available on phones or tablets; a supported iPhone or iPad runs Qwen3 4B Instruct on-device instead, and an Android phone runs Gemini Nano (both below). Ollama remains the alternative everywhere.
 
 **Settings > Ninjii > Model** shows which model runs, then **Download** fetches it. The download runs as a background task you can watch or cancel, and the model is stored on your device until you tap **Delete**.
 
@@ -82,15 +88,15 @@ The download size is a floor, not the total: running a model needs additional me
 Local models run in your computer's memory. If the app crashes or the model never finishes loading, the machine does not have enough memory for it. Switch to the Ollama backend to run the model on a server instead. This is the same note shown next to the model picker in Settings.
 :::
 
-## The on-device model on iPhone, iPad, and Android
+## The on-device model on iPhone and iPad
 
-WebGPU on-device does not run in a mobile browser engine, but a recent iPhone, iPad, or Android phone can still run the model itself, inside the app, instead of talking to a server. **Settings > Ninjii > Backend** offers **On-device (native)** only when your device qualifies; on a device that does not, the option simply does not appear, and Ollama is the only backend shown.
+WebGPU on-device does not run in a mobile browser engine, but a recent iPhone or iPad can still run the model itself, inside the app, instead of talking to a server. **Settings > Ninjii > Backend** offers **On-device (native)** only when your device qualifies; on a device that does not, the option simply does not appear, and Ollama is the only backend shown. On Android this option does not exist at all (see Gemini Nano below).
 
-Qualifying takes memory, not a particular device generation: the app checks your device's physical memory at startup. On iPhone and iPad it offers the native backend above roughly 6GB. On Android it requires a 12GB-class phone (for example a Pixel 8 Pro or a Galaxy S Ultra); 8GB Android phones, including the Pixel 8, do not qualify and use Ollama, because on Android the model runs on the CPU and its memory footprint repeatedly ran an 8GB phone out of memory during a reply. A device below the threshold never sees the option, so there is nothing to turn off if the app decides not to offer it.
+Qualifying takes memory, not a particular device generation: the app checks your device's physical memory at startup and offers the native backend above roughly 6GB. A device below the threshold never sees the option, so there is nothing to turn off if the app decides not to offer it.
 
-iPhone and iPad run the model on the device's GPU (Metal); Android has no equivalent GPU path yet, so it runs on the CPU instead, which is noticeably slower. Set expectations accordingly: a reply that takes a couple of seconds on an iPhone can take much longer on an Android phone. Ollama stays the recommended way to run the assistant on Android when reply speed matters more than keeping the conversation fully on-device.
+iPhone and iPad run the model on the device's GPU through Metal, which is what makes it usable: replies take a couple of seconds. Ollama is still the more accurate backend when you have a server to point at.
 
-The model is a single fixed choice (Qwen3 4B Instruct), unlike the desktop and web picker above. **Settings > Ninjii > Model** shows its download size, about 2.5GB on both iOS and Android, and **Download** fetches it once, the same background task you can watch or cancel that other downloads use. It stays on your device until you tap **Delete**, and nothing about it changes on later app updates unless you delete and download it again.
+The model is a single fixed choice (Qwen3 4B Instruct), unlike the desktop and web picker above. **Settings > Ninjii > Model** shows its download size, about 2.5GB, and **Download** fetches it once, the same background task you can watch or cancel that other downloads use. It stays on your device until you tap **Delete**, and nothing about it changes on later app updates unless you delete and download it again.
 
 As with WebGPU on-device, this is fully on-device: your questions, the assistant's answers, and anything it looks up on your ZoneMinder server never leave your phone or tablet except to reach that server itself. No conversation data goes to Ollama, to zmNinjaNg, or to any AI company.
 
@@ -114,7 +120,7 @@ The download belongs to Android, not to zmNinjaNg. Other apps that use Gemini Na
 
 Two limits are worth knowing. Android only runs this model while zmNinjaNg is on screen, so a question left running as you switch apps comes back asking you to reopen the app and try again. Android also meters how much each app may use the model in a day; if you reach that limit the assistant says so and you can either wait or switch to Ollama.
 
-This backend is separate from **On-device (native)** above and shares none of its requirements: a phone can offer Gemini Nano while having too little memory for the native backend, so each option appears on its own. On the phones that offer both, Gemini Nano answers noticeably faster, because the native backend has no GPU path on Android and runs on the CPU.
+Gemini Nano is the only on-device backend on Android. The app used to also run Qwen3 4B Instruct here the way it does on iPhone, and that was removed: without a GPU path on Android it produced about seven words a second, against roughly a second and a half for a whole Gemini Nano reply, and it cost 76MB of app download plus a 2.5GB model download to be the slower option.
 
 This is fully on-device: your questions, the assistant's answers, and anything it looks up on your ZoneMinder server never leave your phone except to reach that server itself. No conversation data goes to Google, to Ollama, to zmNinjaNg, or to any AI company.
 
@@ -175,14 +181,14 @@ The assistant now understands questions in other languages: the model itself int
 
 No third-party AI service ever sees your cameras, events, or questions. Which machines do see them depends on the backend:
 
-- **On-device** (desktop and web, the native backend on iPhone, iPad, or Android, Apple Intelligence on iOS 26, or Gemini Nano on Android): your questions, the answers, and anything the assistant looks up stay on your device. The only network requests are to your own ZoneMinder server, the same requests every other screen in the app makes.
+- **On-device** (desktop and web, the native backend on iPhone or iPad, Apple Intelligence on iOS 26, or Gemini Nano on Android): your questions, the answers, and anything the assistant looks up stay on your device. The only network requests are to your own ZoneMinder server, the same requests every other screen in the app makes.
 - **Ollama**: the same data, plus your questions and the assistant's answers, also go to the Ollama server you configured. That server is yours; the app never sends the conversation anywhere else.
 
 Either way the conversation is not saved. Closing zmNinjaNg clears it.
 
 ## Platform support
 
-The WebGPU on-device backend runs on desktop and in the browser, where there is enough memory to hold a model, and it needs a GPU with WebGPU support. It is not offered on phones or tablets: a mobile browser engine is capped at far less memory than a model needs, so loading one crashes the app. An iPhone, iPad, or Android phone with enough physical memory gets its own native on-device backend instead (see above), with no browser engine or WebGPU involved; below that memory there is no on-device choice at all. An iPhone 15 Pro or newer on iOS 26 with Apple Intelligence turned on can additionally use Apple's on-device system model, which needs no memory of its own because iOS hosts the model (see above). An Android phone whose system provides Gemini Nano can use that the same way, once it has been downloaded (see above). Ollama has none of these requirements and works anywhere the app runs, so it is the way to use the assistant on a phone or tablet without enough memory for on-device, or on a desktop without WebGPU.
+The WebGPU on-device backend runs on desktop and in the browser, where there is enough memory to hold a model, and it needs a GPU with WebGPU support. It is not offered on phones or tablets: a mobile browser engine is capped at far less memory than a model needs, so loading one crashes the app. An iPhone or iPad with enough physical memory gets its own native on-device backend instead (see above), with no browser engine or WebGPU involved; below that memory there is no on-device choice at all. An iPhone 15 Pro or newer on iOS 26 with Apple Intelligence turned on can additionally use Apple's on-device system model, which needs no memory of its own because iOS hosts the model (see above). An Android phone whose system provides Gemini Nano can use that the same way, once it has been downloaded (see above). Ollama has none of these requirements and works anywhere the app runs, so it is the way to use the assistant on a phone or tablet without enough memory for on-device, or on a desktop without WebGPU.
 
 On the Linux desktop app, picking the on-device backend usually shows a "no WebGPU" note. That is not a missing GPU: Chromium ships with WebGPU turned off on Linux because Vulkan driver support there is uneven, and the app inherits that default. You can turn it on by launching the app with Chromium's own flags:
 

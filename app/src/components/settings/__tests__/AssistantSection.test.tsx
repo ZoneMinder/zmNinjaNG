@@ -305,6 +305,7 @@ describe('AssistantSection backend picker and gating', () => {
 
     it('shows the backend accuracy hint under the picker', async () => {
       isNative = true;
+      isIOS = true; // the hint is per-platform; this is the three-backend ranking
       appleSupported = true;
       nativeSupported = true;
       render(
@@ -312,7 +313,8 @@ describe('AssistantSection backend picker and gating', () => {
       );
 
       const hint = await screen.findByTestId('assistant-backend-accuracy-hint');
-      expect(hint).toHaveTextContent('settings.assistant.backend_accuracy_hint');
+      // Per-platform now: iOS ranks three backends, Android two (issue #270).
+      expect(hint).toHaveTextContent('settings.assistant.backend_accuracy_hint_ios');
     });
 
     it('omits the Apple Intelligence option when the probe does not report support', async () => {
@@ -510,7 +512,7 @@ describe('AssistantSection backend picker and gating', () => {
     await waitFor(() => expect(isModelDownloadedMock).toHaveBeenCalled());
 
     expect(screen.getByTestId('assistant-backend-accuracy-hint')).toHaveTextContent(
-      'settings.assistant.backend_accuracy_hint',
+      'settings.assistant.backend_accuracy_hint_web',
     );
   });
 

@@ -5,8 +5,9 @@
  * caches the result as render state, mirroring `useWebGpuAvailable`'s
  * undefined-while-probing / boolean-once-resolved shape so `AssistantSection`
  * gates the native backend option the same way it gates on-device WebGPU.
- * Resolves straight to `false` off a native platform, where the plugin does
- * not exist at all (dynamic import behind `Platform.isNative`, rule 13).
+ * Resolves straight to `false` off iOS: the bridge is an iOS build artifact now
+ * (see the platform check below), and the dynamic import stays behind that check
+ * so no native bridge code reaches the web or Android bundle (Native contract).
  *
  * Test seam: in test mode (`isAssistantTestMode()`), `window.__nativeLlmMockSupported`
  * (set by e2e steps) short-circuits the real Capacitor probe when defined,
@@ -49,7 +50,11 @@ export function useNativeLlmSupported(): NativeLlmSupport {
       return;
     }
 
-    if (!Platform.isNative) {
+    // iOS only. The llama.cpp bridge was removed from the Android build (issue #270):
+    // with no GPU path there it decoded at ~6.6 tok/s against Gemini Nano's ~1.5s
+    // turns, and it cost 76MB of native libraries plus a 2.5GB model download to do
+    // it. Android's on-device backend is Gemini Nano; iOS keeps llama.cpp on Metal.
+    if (!Platform.isIOS) {
       setSupport({ supported: false });
       return;
     }

@@ -8,11 +8,15 @@ after any prompt or provider change and put both scores in the PR.
 
 ## Backends
 
-- Ollama (user's own server): the recommended remote path. WebLLM runs the
-  on-device path in the browser and on Android; it is gated off on iOS
-  (WKWebView's ~2GB jetsam limit kills model load), where remote Ollama is
-  the supported path. Apple Foundation Models is the native Apple backend;
-  a broader native on-device backend is tracked in issue #270.
+- Ollama (user's own server) is the most accurate everywhere and the head of
+  every platform's ranking; `qwen3:8b` is the recommended model. Below it:
+  iOS runs llama.cpp (Qwen3 4B Instruct) on Metal then Apple Foundation
+  Models; Android runs Gemini Nano; web runs WebLLM on WebGPU. WebLLM is
+  gated off on iOS (WKWebView's ~2GB jetsam limit kills model load).
+- llama.cpp is iOS-only. It was removed from the Android build (issue #270):
+  no GPU path there meant ~6.6 tok/s decode against Gemini Nano's ~1.5s
+  replies, for 76MB of native libraries and a 2.5GB model download. Do not
+  reintroduce it without a working Vulkan/NPU path and a measured win.
 - Gemini Nano (Android system model, ML Kit GenAI Prompt API over AICore) is
   the Android system backend. Unlike Apple's it cannot constrain output: ML
   Kit structured output is compile-time KSP codegen with no union type, so

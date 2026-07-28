@@ -46,6 +46,7 @@ import type { AssistantBackend, AssistantMessage, AssistantTurn, ProviderConfig,
 import { log, LogLevel } from '../../lib/logger';
 import { getSecureValue } from '../../lib/security/secureStorage';
 import { Markdown } from '../../lib/markdown';
+import { Platform } from '../../lib/platform';
 import { resolveQueryError } from '../../lib/query/query-error';
 import { cn } from '../../lib/utils';
 import { ASSISTANT } from '../../lib/zmninja-ng-constants';
@@ -310,6 +311,12 @@ export function AskPanel() {
   // llama.cpp on-device backend. `assistantBackendLabel` names the backend so
   // the string never hardcodes one (refs #270).
   const usingSystemModel = SYSTEM_MODEL_BACKENDS.includes(settings.assistantBackend);
+  // Where to send them instead. iOS still has llama.cpp on Metal, which outranks
+  // Apple Intelligence; Android no longer has it at all, so there the better
+  // backend is the user's own Ollama server.
+  const systemModelSuggestion = Platform.isIOS
+    ? t('settings.assistant.backend_native')
+    : t('settings.assistant.backend_ollama');
 
   const [input, setInput] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -692,13 +699,17 @@ export function AskPanel() {
           </p>
         )}
 
-        {/* The active backend is an OS/system model (Apple Intelligence today):
-            least accurate of the offered backends, so nudge toward the
-            llama.cpp on-device backend. The backend name is interpolated, never
-            hardcoded (refs #270). */}
+        {/* The active backend is an OS/system model, the least accurate of the
+            offered backends, so nudge toward the better one ON THIS PLATFORM.
+            Both names are interpolated, never hardcoded: the note used to send
+            everyone to llama.cpp, which stopped being an option at all once the
+            Android build dropped it (issue #270). */}
         {usingSystemModel && (
           <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground" data-testid="assistant-system-model-note">
-            {t('assistant.system_model_note', { backend: assistantBackendLabel(settings, t) })}
+            {t('assistant.system_model_note', {
+              backend: assistantBackendLabel(settings, t),
+              target: systemModelSuggestion,
+            })}
           </p>
         )}
 
