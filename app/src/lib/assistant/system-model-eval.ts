@@ -15,7 +15,8 @@
  * for the caller by finding an existing active task.
  */
 import { useBackgroundTasks, type BackgroundTask } from '../../stores/backgroundTasks';
-import { runFmTimeEval, FM_EVAL_NOW, FM_EVAL_TZ } from './fm-eval';
+import { runFmTimeEval, FM_EVAL_NOW, FM_EVAL_TZ, TIME_EVAL_CASE_COUNT } from './fm-eval';
+import { runContractEval, CONTRACT_EVAL_CASE_COUNT } from './contract-eval';
 import type { AssistantBackend, AssistantProvider } from './types';
 import { log, LogLevel } from '../logger';
 
@@ -53,17 +54,28 @@ export async function runSystemModelEvalTask(
   try {
     // Not aborted from here: the run owns its lifetime now, so the signal exists
     // only to satisfy the provider contract and is never fired.
-    const report = await runFmTimeEval(provider, FM_EVAL_NOW, FM_EVAL_TZ, new AbortController().signal, (done, total) => {
+    const signal = new AbortController().signal;
+    // One progress bar over two stages, so the combined total has to be known
+    // before either starts; both stages export their case counts for that.
+    const total = TIME_EVAL_CASE_COUNT + CONTRACT_EVAL_CASE_COUNT;
+    const tick = (done: number) => {
       useBackgroundTasks.getState().updateProgress(taskId, Math.round((done / total) * 100));
       useBackgroundTasks.getState().updateTaskMetadata(taskId, { evalDone: done, evalTotal: total });
-    });
+    };
+
+    const time = await runFmTimeEval(provider, FM_EVAL_NOW, FM_EVAL_TZ, signal, (done) => tick(done));
+    const contract = await runContractEval(provider, FM_EVAL_NOW, FM_EVAL_TZ, signal, (done) =>
+      tick(TIME_EVAL_CASE_COUNT + done),
+    );
+
+    const pass = time.total.pass + contract.pass;
     // One line, so the whole report survives in the device log file for pulling;
     // the prefix makes it greppable, and the backend makes two runs comparable.
-    log.assistant(`SYSTEM_MODEL_EVAL_REPORT ${JSON.stringify({ backend, ...report })}`, LogLevel.INFO);
-    useBackgroundTasks.getState().updateTaskMetadata(taskId, {
-      evalPass: report.total.pass,
-      evalTotal: report.total.total,
-    });
+    log.assistant(
+      `SYSTEM_MODEL_EVAL_REPORT ${JSON.stringify({ backend, total: { pass, total: time.total.total + contract.total }, time, contract })}`,
+      LogLevel.INFO,
+    );
+    useBackgroundTasks.getState().updateTaskMetadata(taskId, { evalPass: pass, evalTotal: time.total.total + contract.total });
     useBackgroundTasks.getState().completeTask(taskId);
   } catch (e) {
     const error = e instanceof Error ? e : new Error(String(e));

@@ -89,6 +89,18 @@ after any prompt or provider change and put both scores in the PR.
 
 ## Eval harness
 
+- Two harnesses, one set of cases. `app/scripts/prompt-eval.mts` scores a
+  backend over HTTP and so reaches only Ollama. The settings eval row
+  (`system-model-eval.ts`) scores any `AssistantProvider` on-device, which is
+  the only way a system model gets a number: neither Apple Foundation Models
+  nor Gemini Nano has an HTTP surface. It runs both stages, time
+  (`fm-eval.ts`) and tool contract (`contract-eval.ts`).
+- The contract cases live in `contract-eval-cases.ts` and the time cases in
+  `time-eval-cases.ts`, imported by BOTH harnesses. Never re-declare a case
+  list in one of them.
+- The contract eval passes a recording `runTool`. A backend that owns its tool
+  loop (Apple) only reveals its calls by executing them, so without it the run
+  silently scores that backend's fallback path instead of the production one.
 - `app/scripts/prompt-eval.mts` imports the production `buildSystemPrompt`;
   never fork the prompt text into an eval. A hand-copied prompt drifted
   once and measured phantom failures. Two prompt rewrites shipped

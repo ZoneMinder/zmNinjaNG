@@ -12,6 +12,8 @@ import { AssistantSystemModelEvalRow } from '../AssistantSystemModelEvalRow';
 import { useBackgroundTasks } from '../../../stores/backgroundTasks';
 import type { AssistantProvider } from '../../../lib/assistant/types';
 import type { FmEvalReport } from '../../../lib/assistant/fm-eval';
+import { TIME_EVAL_CASE_COUNT } from '../../../lib/assistant/fm-eval';
+import { CONTRACT_EVAL_CASE_COUNT } from '../../../lib/assistant/contract-eval';
 
 /** Hand control of the eval to the test: it resolves when the test says so, after
  *  optionally reporting progress. */
@@ -32,6 +34,14 @@ vi.mock('../../../lib/assistant/fm-eval', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../lib/assistant/fm-eval')>()),
   runFmTimeEval: (...args: unknown[]) =>
     runFmTimeEvalMock(args[0], args[1], args[2], args[3], args[4] as (done: number, total: number) => void),
+}));
+
+// The contract stage runs after the time stage; it is stubbed so these tests stay
+// about the row's state surviving a remount, not about either eval's scoring.
+const CONTRACT_REPORT = { pass: 12, total: CONTRACT_EVAL_CASE_COUNT, skippedTriaged: 2, failures: [], durationMs: 5 };
+vi.mock('../../../lib/assistant/contract-eval', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../lib/assistant/contract-eval')>()),
+  runContractEval: vi.fn(async () => CONTRACT_REPORT),
 }));
 
 vi.mock('react-i18next', () => ({
@@ -71,16 +81,20 @@ describe('AssistantSystemModelEvalRow', () => {
     act(() => {
       screen.getByTestId('system-model-eval-run').click();
     });
-    act(() => reportProgress?.(9, 52));
-    expect(screen.getByTestId('system-model-eval-run').textContent).toBe('settings.assistant.system_model_eval_running:9/52');
+    act(() => reportProgress?.(9, TIME_EVAL_CASE_COUNT));
+    expect(screen.getByTestId('system-model-eval-run').textContent).toBe(
+      `settings.assistant.system_model_eval_running:9/${TIME_EVAL_CASE_COUNT + CONTRACT_EVAL_CASE_COUNT}`,
+    );
 
     // The user leaves Settings. Nothing may cancel the run.
     first.unmount();
-    act(() => reportProgress?.(20, 52));
+    act(() => reportProgress?.(20, TIME_EVAL_CASE_COUNT));
 
     // ...and comes back to a row that picks the same run up where it is.
     renderRow();
-    expect(screen.getByTestId('system-model-eval-run').textContent).toBe('settings.assistant.system_model_eval_running:20/52');
+    expect(screen.getByTestId('system-model-eval-run').textContent).toBe(
+      `settings.assistant.system_model_eval_running:20/${TIME_EVAL_CASE_COUNT + CONTRACT_EVAL_CASE_COUNT}`,
+    );
     // Still ONE run: the remount must not have started a second.
     expect(runFmTimeEvalMock).toHaveBeenCalledTimes(1);
   });
@@ -94,11 +108,17 @@ describe('AssistantSystemModelEvalRow', () => {
 
     await act(async () => {
       settle?.(REPORT);
+      // Two awaits: the contract stage runs after the time stage settles.
+      await Promise.resolve();
+      await Promise.resolve();
       await Promise.resolve();
     });
 
     renderRow();
-    expect(screen.getByTestId('system-model-eval-score').textContent).toBe('settings.assistant.system_model_eval_score:45/52');
+    // The headline score is both stages together.
+    expect(screen.getByTestId('system-model-eval-score').textContent).toBe(
+      `settings.assistant.system_model_eval_score:${45 + CONTRACT_REPORT.pass}/${52 + CONTRACT_EVAL_CASE_COUNT}`,
+    );
   });
 
   it('reports a failed run through the task rather than throwing at the click handler', async () => {
