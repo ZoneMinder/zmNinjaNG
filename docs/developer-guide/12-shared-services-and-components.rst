@@ -1159,9 +1159,9 @@ when the profile's backend is Ollama, ``NativeLlmProvider`` when it is
 ``'native'`` (refs #270), ``AppleIntelligenceProvider`` when it is ``'apple'``
 (refs #270), and ``WebLlmProvider`` otherwise. The on-device
 WebLLM provider runs on ``@mlc-ai/web-llm`` in the browser via WebGPU, and
-the native provider (iPhone, iPad, and Android, gated by
-``useNativeLlmSupported`` on a physical-memory floor: 5.5GB on iOS, 9.5GB on
-Android, which admits 12GB-class phones regardless of vendor RAM carveout; see
+the native provider (iPhone and iPad only, gated by ``useNativeLlmSupported``
+on a 5.5GB physical-memory floor; Android dropped this backend in issue #270 and
+uses Gemini Nano instead; see
 :doc:`call-flows`'s "Asking the assistant a question") runs a llama.cpp
 model in-process through the Capacitor ``NativeLlm`` bridge instead of a
 browser engine; on either on-device path no message or tool result is ever
@@ -1227,6 +1227,59 @@ option only when supported and a "turn it on in iOS Settings" hint only for
 no streaming, and ``cancelChat`` cancels the in-flight ``Task``; the two on-device
 gates (``'apple'`` and ``'native'``) are independent probes, so a phone can offer
 one without the other.
+
+``GeminiNanoProvider`` (``providers/gemini-nano.ts``, refs #270) is the Android
+system model, Gemini Nano over AICore, reached through the ML Kit GenAI Prompt
+API. It is worth being precise about which provider it copies, because the
+obvious guess is wrong: it is a trimmed ``NativeLlmProvider``, not a port of
+``AppleIntelligenceProvider``, even though both back a model the OS owns. The
+difference is what the decoder can be told. Foundation Models takes a
+``GenerationSchema`` built per turn, which is how the Apple provider constrains
+the reply to the turn contract and removes the answer branch until a tool result
+exists. ML Kit's structured output is compile-time Kotlin codegen (a
+``@Generable`` data class processed by KSP) with no union type, so no per-tool
+schema can be built at runtime and no branch can be removed. This backend
+therefore runs the same prompt-plus-parser, self-repair loop llama.cpp does, and
+leans on the code-level grounding checks in ``agent.ts`` rather than a decoder
+constraint.
+
+Two device facts shape the bridge, and both contradict what the ML Kit
+documentation says, which is why they are measured at runtime rather than
+assumed. The Prompt API is documented with an input limit under 4000 tokens; a
+Pixel 10 running ``nano-v3`` reports 8192 from ``getTokenLimit()``, so
+``isSupported`` reads the real number and advertises it minus a 1024-token reply
+reserve, the same reserve the Apple plugin applies for the same reason. And
+``isSystemPromptAvailable()`` returns ``false`` on that model, so a
+``SystemInstruction`` would be accepted and ignored, silently dropping the tool
+catalog and the install-specific facts; the plugin probes that capability once
+and folds the system text into the prompt when it is unsupported.
+
+The bridge (``android/app/src/main/java/com/zoneminder/zmNinjaNG/GeminiNanoPlugin.java``,
+jsName ``GeminiNano``, TS wrapper ``app/src/plugins/gemini-nano/``) exposes
+``isSupported``/``download``/``chat``/``cancelChat``. The ``download`` method is
+the surface Apple's bridge has no need for: AICore fetches the weights on
+request rather than shipping them with the OS, so ``isSupported`` reports
+``reason: 'notReady'`` on a supported phone that has not downloaded them, and
+``useGeminiNanoSupported`` (``hooks/useGeminiNanoSupported.ts``) turns that into
+the download row in ``AssistantGeminiNanoSection`` rather than a dead end. That
+hook carries a ``refresh`` the other two do not, so a completed download makes
+the backend selectable without an app restart. Two rejection codes are specific
+to AICore and neither may collapse into the generic engine failure, because
+"try again" is wrong advice for both: ``BACKGROUND_BLOCKED`` (AICore refuses to
+infer for an app that is not in the foreground) and ``QUOTA_EXCEEDED`` (each app
+is metered per day). ``chat`` also takes a ``utility`` flag rather than the
+native provider's ``cacheSlot``: ML Kit exposes no KV cache, but the second slot
+is still needed for the same reason, since the window interpreter nests a
+one-shot completion inside a tool call and would otherwise collide with the
+tool-loop chat.
+
+One more Android-only wrinkle sits in the manifest. ML Kit GenAI declares
+``minSdk 26`` while the app ships to 24, so ``AndroidManifest.xml`` carries a
+``tools:overrideLibrary`` for it rather than raising the app's floor, which would
+drop Android 7 users for a backend they could never run (AICore does not exist
+below Android 14). ``GeminiNanoPlugin`` guards every entry point on
+``SDK_INT >= O`` so no ML Kit class is loaded where the runtime could not verify
+it.
 
 Each entry in ``ASSISTANT.webllmModels`` (``lib/zmninja-ng-constants.ts``)
 carries its id, its approximate download size, and its own

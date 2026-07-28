@@ -7,6 +7,7 @@ import { WebLlmProvider } from './webllm';
 import { OpenAiProvider } from './openai';
 import { NativeLlmProvider } from './native-llm';
 import { AppleIntelligenceProvider } from './apple-intelligence';
+import { GeminiNanoProvider } from './gemini-nano';
 import { MODEL_NOT_AVAILABLE_MESSAGE } from '../model-download';
 
 /** `getAssistantProvider` itself never throws this outside test mode (it
@@ -32,7 +33,8 @@ export function isAssistantTestMode(): boolean {
  *  the on-device WebLLM provider (`config.modelId`), the OpenAI-compatible
  *  remote adapter (`config.ollamaBaseUrl`/`config.ollamaModel`/`config.apiKey`)
  *  for Ollama, the native llama.cpp bridge (refs #270) for 'native', or Apple
- *  Foundation Models (refs #270) for 'apple'. `config` is ignored in test mode:
+ *  Foundation Models (refs #270) for 'apple', or Gemini Nano over AICore (refs
+ *  #270) for 'gemini-nano'. `config` is ignored in test mode:
  *  the shared mock is scripted by the caller (e.g. e2e steps), not tied to any
  *  backend or model. */
 export function getAssistantProvider(config: ProviderConfig): AssistantProvider {
@@ -48,6 +50,7 @@ export function getAssistantProvider(config: ProviderConfig): AssistantProvider 
   }
   if (config.backend === 'native') return new NativeLlmProvider(config.temperature);
   if (config.backend === 'apple') return new AppleIntelligenceProvider(config.temperature);
+  if (config.backend === 'gemini-nano') return new GeminiNanoProvider(config.temperature);
   return new WebLlmProvider(config.modelId, config.temperature);
 }
 
@@ -90,6 +93,11 @@ export function assistantBackendLabel(
     case 'apple':
       // OS-owned model, no id to select; brand name, deliberately untranslated.
       model = 'Apple Intelligence';
+      mode = t('settings.assistant.backend_on_device');
+      break;
+    case 'gemini-nano':
+      // Same as Apple's: AICore owns the model, so the brand name is the label, untranslated.
+      model = 'Gemini Nano';
       mode = t('settings.assistant.backend_on_device');
       break;
     default: {

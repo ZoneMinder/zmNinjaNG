@@ -855,6 +855,11 @@ export const ASSISTANT = {
   // there is no id to download or select. This fixed label is only the `model` field stamped onto
   // captured exchanges so a transcript names which backend answered.
   appleIntelligenceModelId: 'apple-intelligence',
+  // Gemini Nano through AICore (`GeminiNano` bridge, refs #270). Same reasoning as the Apple id
+  // above: AICore owns the model, so this fixed label only stamps captured exchanges. The name
+  // is the family, not the build; `getBaseModelName()` reports the build (nano-v3 on a Pixel 10)
+  // and it changes under the app with a system update, so pinning it here would go stale.
+  geminiNanoModelId: 'gemini-nano',
   // Ollama's default local HTTP address, OpenAI-compatible endpoint (refs #246).
   // On a phone this must be replaced with the Ollama server's LAN address:
   // "localhost" from the app's own process never reaches a server on another

@@ -53,7 +53,10 @@ by the GitHub workflows, not on a laptop: the ``build-*`` workflows are
 dispatched manually with a version number, and pushing a ``zmNinjaNg-*``
 tag drives the release workflow that publishes from those artifacts. iOS
 is the exception: it builds locally through Xcode because of signing and
-App Store submission, and there is no iOS build workflow. Native build
+App Store submission, and there is no iOS build workflow. Nothing about
+iOS prevents that: signing certificates, provisioning profiles, and App
+Store submission all automate on a macOS runner the same way Android does
+on Linux. It simply has not been set up yet. Native build
 numbers change only in a deliberate ``chore:`` commit, enforced by the
 version guard in CI, and test builds reuse the existing workflows rather
 than growing new ones. Contributions are held to the same standard as the

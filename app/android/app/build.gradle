@@ -3,7 +3,6 @@ apply plugin: 'com.android.application'
 android {
     namespace "com.zoneminder.zmNinjaNG"
     compileSdk rootProject.ext.compileSdkVersion
-    ndkVersion "27.0.12077973"
 
     signingConfigs {
         release {
@@ -27,33 +26,10 @@ android {
         versionCode 102214
         versionName "2.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        // Native LLM engine (llama.cpp CPU). arm64 only; no Vulkan/OpenCL (issue #270).
-        ndk {
-            abiFilters "arm64-v8a"
-        }
-        externalNativeBuild {
-            cmake {
-                // FLEXIBLE_PAGE_SIZES: 16KB-page ELF alignment for every .so this
-                // cmake build links (nativellm + fetched llama/ggml). Required on
-                // 16KB-page devices (Pixel 8+ era); default only from NDK r28,
-                // explicit on the pinned r27.
-                arguments "-DANDROID_STL=c++_shared", "-DCMAKE_BUILD_TYPE=Release", "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"
-            }
-        }
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
-        }
-    }
-    packagingOptions {
-        jniLibs {
-            // Extract native libs to disk (pre-AGP-8 behavior). Required: ggml's
-            // runtime CPU-variant dispatch scans nativeLibraryDir with opendir
-            // (ggml_backend_load_all_from_path), which cannot see libs packed
-            // inside the APK - with the AGP 8 default the scan finds zero
-            // backends and every model load fails instantly (refs #270).
-            useLegacyPackaging = true
         }
     }
     buildTypes {
@@ -70,12 +46,6 @@ android {
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
-    }
-    externalNativeBuild {
-        cmake {
-            path "src/main/cpp/CMakeLists.txt"
-            version "3.22.1"
-        }
     }
 }
 
@@ -99,6 +69,9 @@ dependencies {
     implementation "androidx.media3:media3-ui:1.5.1"
     implementation "androidx.media3:media3-datasource:1.5.1"
     implementation "androidx.media3:media3-session:1.5.1"
+    // Gemini Nano through AICore (GeminiNanoPlugin, issue #270). Beta API: it carries no
+    // SLA or deprecation policy, so the version is pinned rather than ranged.
+    implementation "com.google.mlkit:genai-prompt:1.0.0-beta4"
 }
 
 apply from: 'capacitor.build.gradle'

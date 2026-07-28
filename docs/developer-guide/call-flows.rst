@@ -2025,10 +2025,10 @@ Flow 19: Asking the assistant a question
 -----------------------------------------
 
 Pressing ``?`` (or picking the Ask command in the palette) opens a floating
-chat window backed by one of four providers: an on-device WebLLM model, the
-on-device native llama.cpp bridge (iPhone, iPad, and Android, refs #270), Apple's
-OS-hosted Foundation Models system model (iOS 26, refs #270), or an
-OpenAI-compatible server such as Ollama. The question is classified before any tool is offered,
+chat window backed by one of five providers: an on-device WebLLM model, the
+on-device native llama.cpp bridge (iPhone and iPad, refs #270), Apple's
+OS-hosted Foundation Models system model (iOS 26, refs #270), Android's Gemini
+Nano over AICore (refs #270), or an OpenAI-compatible server such as Ollama. The question is classified before any tool is offered,
 then a tool-use loop decides which ZoneMinder API calls answer it. The
 counterintuitive part is that there is no confirmation gate anywhere in this
 flow: every tool the loop can reach is read-only, so "is this call safe" is a
@@ -2140,13 +2140,11 @@ property of the registry (``TOOLS`` holds no mutating tool and
    ships native implementations and would otherwise pull llama.cpp glue into
    the web/Electron bundle for a backend those platforms can never run). On
    iOS, ``LlamaPlugin.isSupported`` answers ``false`` below a 5.5GB
-   physical-memory floor (``LlamaPlugin.swift``). On Android,
-   ``NativeLlmPlugin.isSupported`` (``NativeLlmPlugin.java``) requires a 9.5GB
-   floor against ``ActivityManager.MemoryInfo.totalMem``. That admits 12GB-class
-   phones and excludes the 8GB class: ``totalMem`` reports nominal RAM minus a
-   vendor-varying carveout (an 8GB Pixel 8 reports ~7.4GB, a 12GB Pixel 9 can
-   report just under 11GB, which a tighter 11GB floor wrongly excluded), and an
-   8GB Pixel 8 was OOM-killed mid-reply even with a quantized KV cache and also refuses a
+   physical-memory floor (``LlamaPlugin.swift``). The hook short-circuits to
+   ``false`` off iOS entirely: the llama.cpp bridge was removed from the Android
+   build (issue #270), where it had no GPU path and decoded at ~6.6 tok/s against
+   Gemini Nano's ~1.5s replies, at a cost of 76MB of native libraries and a 2.5GB
+   model download. Android's on-device backend is Gemini Nano, and also refuses a
    device where ``ActivityManager.isLowRamDevice()`` is true, since that flag
    catches devices a raw memory number alone misses. A device that
    fails either platform's check never sees **On-device (native)** in
@@ -2165,7 +2163,14 @@ property of the registry (``TOOLS`` holds no mutating tool and
    provisioning). Because the two on-device gates are independent, a phone can
    qualify for one and not the other, and ``settings.assistantBackend`` of
    ``'apple'`` makes ``getAssistantProvider`` return an
-   ``AppleIntelligenceProvider`` (next step).
+   ``AppleIntelligenceProvider`` (next step). Android's system model is gated
+   by a third independent probe, ``useGeminiNanoSupported``
+   (``hooks/useGeminiNanoSupported.ts``), which differs from the other two in
+   one way that matters here: its ``notReady`` reason is fixable in place,
+   because AICore downloads Gemini Nano on request rather than shipping it with
+   the OS, so that reason renders ``AssistantGeminiNanoSection``'s download row
+   and the hook's ``refresh`` re-probes once the weights land, without an app
+   restart.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useNativeLlmSupported.ts>`__
    · → :doc:`12-shared-services-and-components`
 
@@ -2182,13 +2187,12 @@ property of the registry (``TOOLS`` holds no mutating tool and
    platform branch of its own. Swift's ``LlamaPlugin`` hands the request to
    ``LlamaEngine``, a llama.cpp context loaded with ``n_gpu_layers`` set high
    enough to run on Metal on a real device (0 in the simulator, where Metal
-   is unavailable). Android's ``NativeLlmPlugin`` (Java) hands the same
-   request to a JNI engine (``llama_jni.cpp``) built CPU-only for
-   ``arm64-v8a``; Vulkan is deferred (issue #270), so there is no GPU path
-   on Android and replies run correspondingly slower than iPhone's Metal
-   path. Both engines render the messages through the model's own built-in
-   chat template (``llama_model_chat_template``) rather than a template the
-   app supplies, and return one ``{content, promptTokens, completionTokens}``
+   is unavailable). This is an iOS-only path now; the Android JNI engine that
+   used to answer the same call was removed with the rest of that build's
+   llama.cpp integration (issue #270). The engine renders the messages through
+   the model's own built-in chat template (``llama_model_chat_template``) rather
+   than a template the app supplies, and returns one
+   ``{content, promptTokens, completionTokens}``
    reply with no streaming. An unparseable reply retries through the same
    self-repair loop (``SELF_REPAIR_PROMPT``, ``ASSISTANT.maxParseAttempts``)
    the other two providers use, because ``parseWebLlmTurn`` and the retry

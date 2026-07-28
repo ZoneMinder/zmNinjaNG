@@ -327,14 +327,16 @@
       "backend_ollama": "Ollama (remote)",
       "backend_native": "On-device (native)",
       "backend_apple": "On-device (Apple Intelligence)",
-      "backend_accuracy_hint": "Ollama (remote) is most accurate. On-device llama.cpp (mobile) or WebGPU (desktop) is next. Apple Intelligence and Android system models are least accurate.",
+      "backend_accuracy_hint_ios": "Ollama (remote) is the most accurate; {{ollama}} is the recommended model. {{native}} runs on this device and comes next. Apple Intelligence is the least accurate.",
+      "backend_accuracy_hint_android": "Ollama (remote) is the most accurate; {{ollama}} is the recommended model. Gemini Nano runs on this device and is less accurate.",
+      "backend_accuracy_hint_web": "Ollama (remote) is the most accurate; {{ollama}} is the recommended model. The on-device WebGPU model you pick below is less accurate.",
       "apple_disabled_hint": "Enable Apple Intelligence in iOS Settings to use this backend.",
-      "fm_eval": "On-device eval",
-      "fm_eval_hint": "Developer check: scores the time cases against Apple Intelligence on this device. The full report is written to the app log.",
-      "fm_eval_run": "Run on-device eval",
-      "fm_eval_running": "Running… {{done}}/{{total}}",
-      "fm_eval_score": "Score {{pass}}/{{total}}",
-      "fm_eval_failed": "Eval failed",
+      "system_model_eval": "On-device eval",
+      "system_model_eval_hint": "Developer check: scores the time cases against {{model}} on this device. The full report is written to the app log.",
+      "system_model_eval_run": "Run on-device eval",
+      "system_model_eval_running": "Running… {{done}}/{{total}}",
+      "system_model_eval_score": "Score {{pass}}/{{total}}",
+      "system_model_eval_failed": "Eval failed",
       "native_unsupported_memory": "On-device models are not supported on this device: it does not have enough memory to run them. Use an Ollama server instead, set up below.",
       "on_device_mobile_disabled": "On-device models are not available on phones and tablets: they need more memory than a mobile app is allowed to use, and answers take minutes. Use an Ollama server instead, set up below.",
       "no_webgpu": "Requires WebGPU, not available on this device.",
@@ -396,7 +398,9 @@
       "timeout_hint": "How long to wait for one answer.",
       "history_turns": "Remembered exchanges",
       "history_turns_hint": "How many earlier questions and answers the model sees.",
-      "advanced_note": "Temperature 0 was measured most accurate for reading your camera data. Higher values make the assistant more likely to state a count, a time, or a camera name that is not in the results. Raise the timeout if your server is slow to answer. Remembering more exchanges helps follow-up questions but makes every answer slower."
+      "advanced_note": "Temperature 0 was measured most accurate for reading your camera data. Higher values make the assistant more likely to state a count, a time, or a camera name that is not in the results. Raise the timeout if your server is slow to answer. Remembering more exchanges helps follow-up questions but makes every answer slower.",
+      "backend_gemini_nano": "On-device (Gemini Nano)",
+      "gemini_nano_not_ready": "Gemini Nano is available on this device but not downloaded yet."
     },
     "language": "Language",
     "select_language": "Select Language",
@@ -1357,7 +1361,10 @@
     "context_cleared_manual_remote": "Conversation cleared.",
     "model_unavailable_native": "This model cannot run on your device. Choose an on-device model in Settings.",
     "english_only_notice": "The assistant is tested in English only; answers in other languages may be less reliable.",
-    "system_model_note": "You are using {{backend}}. For better accuracy, consider switching to On-device (llama.cpp) in Settings.",
-    "timeframe_unclear": "I could not work out the time period you mean. Tell me the period, like \"today\" or \"July 21\"."
+    "system_model_note": "You are using {{backend}}. For better accuracy, consider switching to {{target}} in Settings.",
+    "timeframe_unclear": "I could not work out the time period you mean. Tell me the period, like \"today\" or \"July 21\".",
+    "gemini_background_blocked": "Gemini Nano only runs while zmNinja is on screen. Reopen the app and try again.",
+    "gemini_quota_exceeded": "Gemini Nano has reached today's on-device usage limit. Try again later, or use an Ollama server.",
+    "gemini_rate_limited": "Gemini Nano is busy right now. Wait a moment and try again."
   }
 }

@@ -23,10 +23,27 @@ vi.mock('react-i18next', () => ({
       if (opts && 'tool' in opts) return `${key}:${opts.tool}`;
       if (opts && 'tools' in opts) return `${key}:${opts.tools}`;
       if (opts && 'chunk' in opts) return `${key}:${opts.chunk}/${opts.chunks}:${opts.percent}`;
+      if (opts && 'target' in opts) return `${key}:${opts.target}`;
       return key;
     },
     i18n: { get language() { return mockLanguage.current; } },
   }),
+}));
+// The system-model note points at a different backend per platform, so the
+// platform has to be steerable here.
+const mockIsIOS = { current: false };
+vi.mock('../../../lib/platform', () => ({
+  Platform: {
+    get isIOS() {
+      return mockIsIOS.current;
+    },
+    get isNative() {
+      return mockIsIOS.current;
+    },
+    get isAndroid() {
+      return !mockIsIOS.current;
+    },
+  },
 }));
 vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({ getQueryData: () => undefined }),
@@ -386,6 +403,26 @@ describe('AskPanel', () => {
       mockBackend.current = 'apple';
       render(<AskPanel />);
       expect(screen.getByTestId('assistant-system-model-note')).toHaveTextContent('assistant.system_model_note');
+    });
+
+    // The note used to hardcode llama.cpp. Android's build no longer has it
+    // (issue #270), so sending an Android user there is advice they cannot take.
+    it('points an Android system-model user at Ollama, never llama.cpp', () => {
+      mockIsIOS.current = false;
+      mockBackend.current = 'gemini-nano';
+      render(<AskPanel />);
+      expect(screen.getByTestId('assistant-system-model-note')).toHaveTextContent(
+        'assistant.system_model_note:settings.assistant.backend_ollama',
+      );
+    });
+
+    it('still points an iOS system-model user at the on-device llama.cpp backend', () => {
+      mockIsIOS.current = true;
+      mockBackend.current = 'apple';
+      render(<AskPanel />);
+      expect(screen.getByTestId('assistant-system-model-note')).toHaveTextContent(
+        'assistant.system_model_note:settings.assistant.backend_native',
+      );
     });
 
     it('stays hidden on the Ollama backend', () => {

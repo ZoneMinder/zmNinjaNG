@@ -13,10 +13,14 @@ import { NativeLlm } from '../../plugins/native-llm';
 import { STORAGE_KEYS } from '../../lib/zmninja-ng-constants';
 
 let isNative = true;
+let isIOS = true;
 vi.mock('../../lib/platform', () => ({
   Platform: {
     get isNative() {
       return isNative;
+    },
+    get isIOS() {
+      return isIOS;
     },
   },
 }));
@@ -24,6 +28,7 @@ vi.mock('../../lib/platform', () => ({
 describe('useNativeLlmSupported', () => {
   beforeEach(() => {
     isNative = true;
+    isIOS = true;
     vi.mocked(NativeLlm.isSupported).mockReset();
     localStorage.removeItem(STORAGE_KEYS.assistantTestMode);
     delete window.__nativeLlmMockSupported;
@@ -53,6 +58,7 @@ describe('useNativeLlmSupported', () => {
 
   it('resolves to false without probing the plugin off a native platform', async () => {
     isNative = false;
+    isIOS = false;
     const { result } = renderHook(() => useNativeLlmSupported());
 
     await waitFor(() => expect(result.current.supported).toBe(false));
@@ -90,6 +96,7 @@ describe('useNativeLlmSupported', () => {
     localStorage.setItem(STORAGE_KEYS.assistantTestMode, '1');
     window.__nativeLlmMockSupported = true;
     isNative = false;
+    isIOS = false;
     const { result } = renderHook(() => useNativeLlmSupported());
 
     await waitFor(() => expect(result.current.supported).toBe(true));
@@ -103,5 +110,19 @@ describe('useNativeLlmSupported', () => {
 
     await waitFor(() => expect(result.current.supported).toBe(false));
     expect(NativeLlm.isSupported).toHaveBeenCalled();
+  });
+
+  // The llama.cpp bridge was removed from the Android build (issue #270): with no
+  // GPU path there it decoded at ~6.6 tok/s, and it cost 76MB of native libraries
+  // plus a 2.5GB download. Android's on-device backend is Gemini Nano instead, so
+  // this probe must resolve false on Android WITHOUT touching the plugin, which no
+  // longer exists in that build.
+  it('resolves unsupported on Android without calling the plugin', async () => {
+    isNative = true;
+    isIOS = false;
+    const { result } = renderHook(() => useNativeLlmSupported());
+
+    await waitFor(() => expect(result.current.supported).toBe(false));
+    expect(NativeLlm.isSupported).not.toHaveBeenCalled();
   });
 });

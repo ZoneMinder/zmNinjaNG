@@ -29,6 +29,9 @@ import { TOOLS } from '../src/lib/assistant/tools';
 import { toOpenAiTools } from '../src/lib/assistant/providers/openai';
 import { coerceLabelList, stripOmittedArgs } from '../src/lib/assistant/tool-helpers';
 import { buildWebLlmMessages, parseWebLlmTurn } from '../src/lib/assistant/providers/webllm';
+// Cases live in src/ so the on-device eval runner scores the same list (refs #270).
+import { TOOL_CASES, CONTRACT_EVAL_OBJECT_LABELS } from '../src/lib/assistant/contract-eval-cases';
+import { ANSWER_CASES } from '../src/lib/assistant/answer-eval-cases';
 
 const LONG = 'Never count rows yourself. When a result carries a summary line, it is the counts already written out: START your answer with it, using its numbers and wording exactly. Add detail from the rows after it. When a result carries matchCount or countsByMonitor, those numbers ARE the counts: quote them exactly and never add up the rows to get your own.';
 
@@ -49,136 +52,7 @@ const TEMP = process.env.TEMP === undefined ? undefined : Number(process.env.TEM
 const NOTHINK = process.env.NOTHINK ? '\n\n/no_think' : '';
 const REASONING = process.env.REASONING ? { reasoning_effort: process.env.REASONING } : {};
 
-const OBJECT_LABELS = ['car', 'carrot', 'person', 'truck'];
-
-// Verbatim from a live transcript.
-const TODAY_RESULT =
-  '{"summary":"5 events between 2026-07-20 00:00:00 and 2026-07-20 09:31:51. By monitor: FrontDoor 2, Front Yard 2, Garage Outdoor 1. Detected: person 4, car 1.","window":{"from":"2026-07-20 00:00:00","to":"2026-07-20 09:31:51"},"matchCount":5,"countsByMonitor":{"FrontDoor":2,"Front Yard":2,"Garage Outdoor":1},"objectCounts":{"person":4,"car":1},"events":[{"id":"253363","monitor":"FrontDoor","start":"2026-07-20 08:36:33","durationSec":30.02,"objects":["person"]},{"id":"253362","monitor":"Front Yard","start":"2026-07-20 08:36:21","durationSec":30.06,"objects":["person"]},{"id":"253361","monitor":"Front Yard","start":"2026-07-20 08:35:45","durationSec":30.03,"objects":["person"]},{"id":"253360","monitor":"FrontDoor","start":"2026-07-20 08:35:19","durationSec":30,"objects":["person"]},{"id":"253359","monitor":"Garage Outdoor","start":"2026-07-20 08:20:59","durationSec":30,"objects":["car"]}]}';
-
-// TODAY_RESULT with the busiestHour/countsByHour fields list_events now
-// reports (refs #264), and one row moved out of the busy hour so the SHOW
-// directive has a real subset to select: four rows in 08:00, one in 09:00.
-const BUSIEST_RESULT = TODAY_RESULT.replace(
-  '"matchCount":5,',
-  '"matchCount":5,"busiestHour":{"label":"2026-07-20 08:00:00","count":4},"countsByHour":{"2026-07-20 08:00:00":4,"2026-07-20 09:00:00":1},',
-).replace('"start":"2026-07-20 08:20:59"', '"start":"2026-07-20 09:31:00"');
-
-const EMPTY_RESULT =
-  '{"summary":"No events between 2026-07-20 00:00:00 and 2026-07-20 09:31:51.","window":{"from":"2026-07-20 00:00:00","to":"2026-07-20 09:31:51"},"matchCount":0,"countsByMonitor":{},"objectCounts":{},"events":[]}';
-
-interface ToolCase {
-  q: string;
-  /** Tool that answers it. `null` means no tool should be called at all. */
-  tool: string | null;
-  /** Argument check. Absent means any arguments pass. */
-  args?: (a: Record<string, unknown>) => boolean;
-  /** Handled by triage before the prompt sees it; reported, not scored. */
-  triaged?: boolean;
-  /** Check `tool` and `args` against EVERY call in the reply, not just the
-   *  first. For multi-window questions where a fault on any call corrupts
-   *  the answer ("compare X to Y" creeping objectType onto both calls). */
-  allCalls?: boolean;
-}
-
-const TOOL_CASES: ToolCase[] = [
-  { q: 'summarize today', tool: 'list_events', args: (a) => String(a.when).toLowerCase().includes('today') && a.objectType === undefined },
-  { q: 'what happened yesterday', tool: 'list_events', args: (a) => String(a.when).toLowerCase().includes('yesterday') && a.objectType === undefined },
-  // The phrasings the old English phrase grammar could not read (refs #265):
-  // the model interprets them into structured fields, in any language.
-  { q: 'summarize last week', tool: 'list_events', args: (a) => String(a.when).toLowerCase().includes('last week') },
-  { q: 'what happened in the past 2 weeks', tool: 'list_events', args: (a) => /past 2 weeks|2 weeks/.test(String(a.when).toLowerCase()) },
-  { q: 'was war gestern bei mir los', tool: 'list_events', args: (a) => String(a.when).toLowerCase().includes('gestern') },
-  // A summary must not grow an objectType: observed live on "summarize april",
-  // which attached every known label and silently excluded no-detection events.
-  { q: 'summarize april', tool: 'list_events', args: (a) => String(a.when).toLowerCase().includes('april') && a.objectType === undefined },
-  // Observed live (refs #246): "compare may to june" attached the whole known
-  // vocabulary to BOTH calls, silently excluding no-detection events.
-  {
-    q: 'compare may to june',
-    tool: 'list_events',
-    allCalls: true,
-    args: (a) => /may|june/.test(String(a.when).toLowerCase()) && a.objectType === undefined,
-  },
-  { q: 'how many people came today', tool: 'list_events', args: (a) => String(a.when).toLowerCase().includes('today') && String(a.objectType).includes('person') },
-  // Triage answers these with NO tools in production (see triage.ts), so the
-  // prompt is not what decides them. Kept visible, scored separately.
-  {
-    q: 'how many vehicles came yesterday',
-    tool: 'list_events',
-    args: (a) => {
-      const t = (a.objectType ?? []) as string[];
-      return String(a.when).toLowerCase().includes('yesterday') && t.includes('car') && t.includes('truck');
-    },
-  },
-  // count_events measures ONE rolling window and cannot rank hours; the
-  // list_events result carries the app-computed busiest-hour clause (refs #264).
-  { q: 'what was my busiest hour yesterday', tool: 'list_events', args: (a) => String(a.when).toLowerCase().includes('yesterday') },
-  { q: 'is the server ok', tool: 'get_server_health' },
-  { q: 'what cameras do I have', tool: 'list_monitors' },
-  { q: 'how many events in the last 24 hours', tool: 'count_events', args: (a) => (a.lastUnit === 'hour' && a.lastCount === 24) || (a.lastUnit === 'day' && a.lastCount === 1) },
-  { q: 'what tags are available', tool: 'list_tags' },
-  { q: 'hello', tool: null, triaged: true },
-  { q: 'what is the capital of France', tool: null, triaged: true },
-];
-
-interface AnswerCase {
-  q: string;
-  result: string;
-  /** Every one must hold for the answer to score. */
-  checks: { name: string; ok: (a: string) => boolean }[];
-}
-
-const lower = (s: string) => s.toLowerCase();
-const deniesData = (a: string) =>
-  /\b(none|no events|nothing (was )?found|not found|no matches)\b/i.test(a);
-
-const ANSWER_CASES: AnswerCase[] = [
-  {
-    q: 'summarize today',
-    result: TODAY_RESULT,
-    checks: [
-      { name: 'total', ok: (a) => /\b5\b/.test(a) },
-      { name: 'per-monitor', ok: (a) => /\b2\b/.test(a) && /\b1\b/.test(a) },
-      { name: 'names-real', ok: (a) => !/EXAMPLE_|Backyard|Front Gate|Driveway/i.test(a) },
-      { name: 'no-denial', ok: (a) => !deniesData(a) },
-      { name: 'objects', ok: (a) => lower(a).includes('person') || lower(a).includes('people') },
-      { name: 'not-json', ok: (a) => !a.trim().startsWith('{') },
-    ],
-  },
-  {
-    q: 'how many people came today',
-    result: TODAY_RESULT,
-    checks: [
-      { name: 'person-count', ok: (a) => /\b4\b/.test(a) },
-      { name: 'no-denial', ok: (a) => !deniesData(a) },
-      { name: 'not-json', ok: (a) => !a.trim().startsWith('{') },
-    ],
-  },
-  {
-    q: 'what was my busiest hour today',
-    result: BUSIEST_RESULT,
-    checks: [
-      // The hour itself, however phrased: card narrowing is id-driven (SHOW),
-      // so exact label quoting stopped being load-bearing.
-      { name: 'names-hour', ok: (a) => /8:00|08:00|8 ?am/i.test(a) },
-      { name: 'count', ok: (a) => /\b4\b/.test(a) },
-      { name: 'no-denial', ok: (a) => !deniesData(a) },
-      { name: 'not-json', ok: (a) => !a.trim().startsWith('{') },
-      // The SHOW directive (refs #264): the busy hour's ids selected, the
-      // 09:00 stray excluded, so only the answer's cards render.
-      { name: 'show-subset', ok: (a) => /SHOW: ?events=/.test(a) && a.includes('253363') && !/SHOW:[^\n]*253359/.test(a) },
-    ],
-  },
-  {
-    q: 'summarize today',
-    result: EMPTY_RESULT,
-    checks: [
-      // The honest empty answer: it MUST say nothing was found.
-      { name: 'says-empty', ok: (a) => deniesData(a) },
-      { name: 'no-invented-rows', ok: (a) => !/FrontDoor|Garage|person|car\b/i.test(a) },
-    ],
-  },
-];
+const OBJECT_LABELS = CONTRACT_EVAL_OBJECT_LABELS;
 
 async function chat(body: unknown): Promise<any> {
   const res = await fetch(`${BASE}/chat/completions`, {

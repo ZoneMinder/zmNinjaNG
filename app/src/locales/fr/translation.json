@@ -327,14 +327,16 @@
       "backend_ollama": "Ollama (distant)",
       "backend_native": "Sur l'appareil (natif)",
       "backend_apple": "Sur l'appareil (Apple Intelligence)",
-      "backend_accuracy_hint": "Ollama (distant) est le plus précis. Sur l'appareil llama.cpp (mobile) ou WebGPU (bureau) vient ensuite. Apple Intelligence et les modèles système Android sont les moins précis.",
+      "backend_accuracy_hint_ios": "Ollama (distant) est le plus précis ; le modèle recommandé est {{ollama}}. {{native}} tourne sur cet appareil et vient ensuite. Apple Intelligence est le moins précis.",
+      "backend_accuracy_hint_android": "Ollama (distant) est le plus précis ; le modèle recommandé est {{ollama}}. Gemini Nano tourne sur cet appareil et est moins précis.",
+      "backend_accuracy_hint_web": "Ollama (distant) est le plus précis ; le modèle recommandé est {{ollama}}. Le modèle WebGPU sur l’appareil choisi ci-dessous est moins précis.",
       "apple_disabled_hint": "Activez Apple Intelligence dans les Réglages iOS pour utiliser ce backend.",
-      "fm_eval": "Éval sur l'appareil",
-      "fm_eval_hint": "Vérification développeur : évalue les cas temporels avec Apple Intelligence sur cet appareil. Le rapport complet est écrit dans le journal de l'app.",
-      "fm_eval_run": "Lancer l'éval sur l'appareil",
-      "fm_eval_running": "En cours… {{done}}/{{total}}",
-      "fm_eval_score": "Score {{pass}}/{{total}}",
-      "fm_eval_failed": "Échec de l'éval",
+      "system_model_eval": "Éval sur l'appareil",
+      "system_model_eval_hint": "Vérification développeur : évalue les cas temporels avec {{model}} sur cet appareil. Le rapport complet est écrit dans le journal de l’application.",
+      "system_model_eval_run": "Lancer l'éval sur l'appareil",
+      "system_model_eval_running": "En cours… {{done}}/{{total}}",
+      "system_model_eval_score": "Score {{pass}}/{{total}}",
+      "system_model_eval_failed": "Échec de l'éval",
       "native_unsupported_memory": "Les modèles sur l'appareil ne sont pas pris en charge sur cet appareil : mémoire insuffisante pour les exécuter. Utilisez plutôt un serveur Ollama, configuré ci-dessous.",
       "on_device_mobile_disabled": "Les modèles sur l'appareil ne sont pas disponibles sur téléphone ou tablette : ils demandent plus de mémoire qu'une application mobile ne peut utiliser, et les réponses prennent des minutes. Utilisez plutôt un serveur Ollama, configuré ci-dessous.",
       "no_webgpu": "Nécessite WebGPU, indisponible sur cet appareil.",
@@ -396,7 +398,9 @@
       "timeout_hint": "Durée d'attente pour une réponse.",
       "history_turns": "Échanges mémorisés",
       "history_turns_hint": "Combien de questions et réponses précédentes le modèle voit.",
-      "advanced_note": "La température 0 s'est révélée la plus fiable pour lire les données de vos caméras. Des valeurs plus élevées augmentent le risque que l'assistant cite un nombre, une heure ou un nom de caméra absent des résultats. Augmentez le délai si votre serveur répond lentement. Mémoriser plus d'échanges aide pour les questions de suivi, mais ralentit chaque réponse."
+      "advanced_note": "La température 0 s'est révélée la plus fiable pour lire les données de vos caméras. Des valeurs plus élevées augmentent le risque que l'assistant cite un nombre, une heure ou un nom de caméra absent des résultats. Augmentez le délai si votre serveur répond lentement. Mémoriser plus d'échanges aide pour les questions de suivi, mais ralentit chaque réponse.",
+      "backend_gemini_nano": "Sur l’appareil (Gemini Nano)",
+      "gemini_nano_not_ready": "Gemini Nano est disponible sur cet appareil mais n’est pas encore téléchargé."
     },
     "language": "Langue",
     "select_language": "Sélectionner la langue",
@@ -1357,7 +1361,10 @@
     "context_cleared_manual_remote": "Conversation effacée.",
     "model_unavailable_native": "Ce modèle ne fonctionne pas sur votre appareil. Choisissez un modèle sur l'appareil dans les Réglages.",
     "english_only_notice": "L'assistant est testé uniquement en anglais ; les réponses dans d'autres langues peuvent être moins fiables.",
-    "system_model_note": "Vous utilisez {{backend}}. Pour une meilleure précision, passez à Sur l'appareil (llama.cpp) dans les Réglages.",
-    "timeframe_unclear": "Je n'ai pas pu déterminer la période que vous visez. Indiquez la période, par exemple « aujourd'hui » ou « 21 juillet »."
+    "system_model_note": "Vous utilisez {{backend}}. Pour plus de précision, passez à {{target}} dans les Réglages.",
+    "timeframe_unclear": "Je n'ai pas pu déterminer la période que vous visez. Indiquez la période, par exemple « aujourd'hui » ou « 21 juillet ».",
+    "gemini_background_blocked": "Gemini Nano ne fonctionne que si zmNinja est à l’écran. Rouvrez l’application et réessayez.",
+    "gemini_quota_exceeded": "Gemini Nano a atteint la limite d’utilisation du jour sur l’appareil. Réessayez plus tard ou utilisez un serveur Ollama.",
+    "gemini_rate_limited": "Gemini Nano est occupé pour le moment. Patientez un instant et réessayez."
   }
 }

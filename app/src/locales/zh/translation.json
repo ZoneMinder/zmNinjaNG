@@ -327,14 +327,16 @@
       "backend_ollama": "Ollama（远程）",
       "backend_native": "设备端（原生）",
       "backend_apple": "设备端（Apple Intelligence）",
-      "backend_accuracy_hint": "Ollama（远程）最准确。设备端 llama.cpp（移动端）或 WebGPU（桌面端）次之。Apple Intelligence 和 Android 系统模型最不准确。",
+      "backend_accuracy_hint_ios": "Ollama（远程）最准确，推荐模型为 {{ollama}}。{{native}} 在本设备上运行，准确度次之。Apple Intelligence 最不准确。",
+      "backend_accuracy_hint_android": "Ollama（远程）最准确，推荐模型为 {{ollama}}。Gemini Nano 在本设备上运行，准确度较低。",
+      "backend_accuracy_hint_web": "Ollama（远程）最准确，推荐模型为 {{ollama}}。下方选择的设备端 WebGPU 模型准确度较低。",
       "apple_disabled_hint": "在 iOS 设置中开启 Apple Intelligence 以使用此后端。",
-      "fm_eval": "设备端评测",
-      "fm_eval_hint": "开发者检查：在本设备上用 Apple Intelligence 对时间用例评分。完整报告写入应用日志。",
-      "fm_eval_run": "运行设备端评测",
-      "fm_eval_running": "运行中… {{done}}/{{total}}",
-      "fm_eval_score": "得分 {{pass}}/{{total}}",
-      "fm_eval_failed": "评测失败",
+      "system_model_eval": "设备端评测",
+      "system_model_eval_hint": "开发者检查：在本设备上用 {{model}} 为时间用例评分。完整报告会写入应用日志。",
+      "system_model_eval_run": "运行设备端评测",
+      "system_model_eval_running": "运行中… {{done}}/{{total}}",
+      "system_model_eval_score": "得分 {{pass}}/{{total}}",
+      "system_model_eval_failed": "评测失败",
       "native_unsupported_memory": "此设备不支持设备端模型：内存不足，无法运行。请改用 Ollama 服务器，在下方设置。",
       "on_device_mobile_disabled": "手机和平板不支持设备端模型：所需内存超出移动应用的限制，且回答需要数分钟。请改用下方配置的 Ollama 服务器。",
       "no_webgpu": "需要 WebGPU，此设备不支持。",
@@ -396,7 +398,9 @@
       "timeout_hint": "等待一次回答的时长。",
       "history_turns": "记住的对话轮数",
       "history_turns_hint": "模型能看到多少条此前的问答。",
-      "advanced_note": "实测温度为 0 时读取摄像机数据最准确。数值越高，助手越可能说出结果中并不存在的数量、时间或摄像机名称。若服务器响应缓慢，请调高超时。记住更多轮对话有助于追问，但会让每次回答变慢。"
+      "advanced_note": "实测温度为 0 时读取摄像机数据最准确。数值越高，助手越可能说出结果中并不存在的数量、时间或摄像机名称。若服务器响应缓慢，请调高超时。记住更多轮对话有助于追问，但会让每次回答变慢。",
+      "backend_gemini_nano": "设备端（Gemini Nano）",
+      "gemini_nano_not_ready": "Gemini Nano 在本设备上可用，但尚未下载。"
     },
     "language": "语言",
     "select_language": "选择语言",
@@ -1357,7 +1361,10 @@
     "context_cleared_manual_remote": "对话已清除。",
     "model_unavailable_native": "此模型无法在你的设备上运行。请在设置中选择设备端模型。",
     "english_only_notice": "助手仅在英语环境下测试；其他语言的回答可能不够可靠。",
-    "system_model_note": "您正在使用 {{backend}}。为提高准确性，请在设置中切换到设备端（llama.cpp）。",
-    "timeframe_unclear": "我无法确定你指的时间段。请说明时间段，例如“今天”或“7月21日”。"
+    "system_model_note": "当前使用 {{backend}}。如需更高准确度，请在设置中切换到 {{target}}。",
+    "timeframe_unclear": "我无法确定你指的时间段。请说明时间段，例如“今天”或“7月21日”。",
+    "gemini_background_blocked": "Gemini Nano 仅在 zmNinja 位于前台时运行。请重新打开应用后再试。",
+    "gemini_quota_exceeded": "Gemini Nano 已达到今日设备端用量上限。请稍后再试，或改用 Ollama 服务器。",
+    "gemini_rate_limited": "Gemini Nano 当前繁忙。请稍候再试。"
   }
 }

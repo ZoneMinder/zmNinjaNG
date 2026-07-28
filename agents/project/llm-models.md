@@ -8,11 +8,46 @@ after any prompt or provider change and put both scores in the PR.
 
 ## Backends
 
-- Ollama (user's own server): the recommended remote path. WebLLM runs the
-  on-device path in the browser and on Android; it is gated off on iOS
-  (WKWebView's ~2GB jetsam limit kills model load), where remote Ollama is
-  the supported path. Apple Foundation Models is the native Apple backend;
-  a broader native on-device backend is tracked in issue #270.
+- Ollama (user's own server) is the most accurate everywhere and the head of
+  every platform's ranking; `qwen3:8b` is the recommended model. Below it:
+  iOS runs llama.cpp (Qwen3 4B Instruct) on Metal then Apple Foundation
+  Models; Android runs Gemini Nano; web runs WebLLM on WebGPU. WebLLM is
+  gated off on iOS (WKWebView's ~2GB jetsam limit kills model load).
+- llama.cpp is iOS-only. It was removed from the Android build (issue #270):
+  no GPU path there meant ~6.6 tok/s decode against Gemini Nano's ~1.5s
+  replies, for 76MB of native libraries and a 2.5GB model download. Do not
+  reintroduce it without a working Vulkan/NPU path and a measured win.
+- Gemini Nano (Android system model, ML Kit GenAI Prompt API over AICore) is
+  the Android system backend. Unlike Apple's it cannot constrain output: ML
+  Kit structured output is compile-time KSP codegen with no union type, so
+  no per-tool turn schema and no removable answer branch. It is driven with
+  the llama.cpp text contract instead. No native tool calling either.
+- The two system models, measured 2026-07-28 on the same 90 cases through each
+  backend's real production path: Gemini Nano (Pixel 10) plans 33/38 and reads
+  time 48/52; Apple Foundation Models (iPhone 17 Pro Max, iOS 26.5.2) plans
+  21/38 and reads time 47-51/52. Nano is far better at planning; they are level
+  on time. The no-tool half is the sharpest split: Nano 8/8, Apple 4/8, with
+  Apple calling `list_events` three times for "who won the world cup in 2018"
+  and `get_event` for "delete event 1234".
+- Apple's planning deficit is NOT a prompt problem, and the trimmed prompt is
+  not what causes it. Giving it the whole shared system prompt plus whole tool
+  descriptions on the planning turn moved 21/38 to 23/38, inside its own
+  run-to-run spread, and introduced failures that were not there before:
+  arguments leaking between cases (a German window on two English questions)
+  and junk in `objectType` ("NO", a tag name). Both attempts were reverted.
+  What the extra text did fix is narrow and real: `count_events` chosen for a
+  calendar window went from four failures to one, because that distinction
+  lives past the first sentence of those two descriptions. Whether the rest is
+  the model or the 4096-token window is unseparated.
+- Apple's output SHAPE is flawless and its judgement is not: every one of its
+  planning failures was a well-formed, schema-valid tool call that was simply
+  the wrong call. Constrained decoding fixes shape and buys nothing else.
+- AICore rate-limits a burst (`ErrorCode.BUSY`), which is NOT the plugin's own
+  concurrency guard and must not share its code: running the contract eval
+  straight after the time eval got every case rejected and reported 0/14 as if
+  the model had failed them all. `RATE_LIMITED` is its own code now and the
+  contract eval backs off and retries; a run reports how many retries it took
+  (11 on the first clean run).
 
 ## Measured model floor (prompt-eval, temp 0, 2026-07)
 
@@ -48,9 +83,50 @@ after any prompt or provider change and put both scores in the PR.
 - Apple Foundation Models invents tool arguments (validate before use) and
   calls real tools on greeting turns; the first tool call on a tool-less
   turn gets a no-tools pushback (578787dc).
+- ML Kit GenAI capability docs are wrong on the device; probe at runtime.
+  `nano-v3` on a Pixel 10 reports `getTokenLimit()` 8192 where the docs say
+  under 4000, and `isSystemPromptAvailable()` false, so a `SystemInstruction`
+  is accepted and ignored, silently dropping the tool catalog. Fold the
+  system text into the prompt when that probe says false.
+- AICore refuses inference unless the app is the foreground app
+  (`BACKGROUND_USE_BLOCKED`) and meters each app daily
+  (`PER_APP_BATTERY_USE_QUOTA_EXCEEDED`). Both are user-recoverable and need
+  their own messages; "try again" is wrong advice for either.
+- A locked screen kills an on-device eval on BOTH platforms, and silently. On
+  Android it is `BACKGROUND_USE_BLOCKED` per call; on iOS the app is suspended
+  and the run simply stops with no report. Set Auto-Lock to Never (iOS) or rely
+  on `svc power stayon true` (Android) before starting, and treat a run that
+  produced no report, or far less wall-clock than the case count implies, as
+  void rather than as a result.
+- A dozing or locked screen counts as background, which silently invalidates
+  any batch run on this backend. A first Gemini Nano eval scored 27/52 with
+  whole classes at zero; all of those failures were `BACKGROUND_USE_BLOCKED`,
+  not wrong answers, and the same eval scored 48/52 unlocked. Before trusting
+  an on-device number, confirm the run has no such error in the log
+  (`ON_LOCKED` in `dumpsys nfc`, `mWakefulness=Dozing` in `dumpsys power`)
+  and keep the phone unlocked with the app in front for the whole run. A run
+  that took far less wall-clock than the case count implies is the tell.
+- Never cancel an ML Kit GenAI call. genai-prompt 1.0.0-beta4 is compiled
+  against kotlinx-coroutines 1.7.3, where `Job.cancel$default` lives in
+  `Job$DefaultImpls`; the app resolves 1.10.2, which dropped that class, so
+  ML Kit's cancellation path throws `NoSuchMethodError` on its own thread
+  pool and kills the process. `GeminiNanoPlugin.cancelChat` abandons the
+  call instead of cancelling it.
 
 ## Eval harness
 
+- Two harnesses, one set of cases. `app/scripts/prompt-eval.mts` scores a
+  backend over HTTP and so reaches only Ollama. The settings eval row
+  (`system-model-eval.ts`) scores any `AssistantProvider` on-device, which is
+  the only way a system model gets a number: neither Apple Foundation Models
+  nor Gemini Nano has an HTTP surface. It runs both stages, time
+  (`fm-eval.ts`) and tool contract (`contract-eval.ts`).
+- The contract cases live in `contract-eval-cases.ts` and the time cases in
+  `time-eval-cases.ts`, imported by BOTH harnesses. Never re-declare a case
+  list in one of them.
+- The contract eval passes a recording `runTool`. A backend that owns its tool
+  loop (Apple) only reveals its calls by executing them, so without it the run
+  silently scores that backend's fallback path instead of the production one.
 - `app/scripts/prompt-eval.mts` imports the production `buildSystemPrompt`;
   never fork the prompt text into an eval. A hand-copied prompt drifted
   once and measured phantom failures. Two prompt rewrites shipped

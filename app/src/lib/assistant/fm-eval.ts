@@ -31,6 +31,10 @@ import { TIME_INTERPRET_CASES, TIME_EXTRACT_CASES } from './time-eval-cases';
 export const FM_EVAL_NOW = new Date('2026-07-19T18:00:00Z');
 export const FM_EVAL_TZ = 'America/New_York';
 
+/** How many cases this eval scores. Exported so a caller running it alongside the
+ *  contract eval can size one progress bar over both (see `system-model-eval.ts`). */
+export const TIME_EVAL_CASE_COUNT = TIME_INTERPRET_CASES.length + TIME_EXTRACT_CASES.length;
+
 /** One class's running tally. */
 export interface FmEvalTally {
   pass: number;
