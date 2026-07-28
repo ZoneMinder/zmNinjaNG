@@ -31,6 +31,7 @@ import { coerceLabelList, stripOmittedArgs } from '../src/lib/assistant/tool-hel
 import { buildWebLlmMessages, parseWebLlmTurn } from '../src/lib/assistant/providers/webllm';
 // Cases live in src/ so the on-device eval runner scores the same list (refs #270).
 import { TOOL_CASES, CONTRACT_EVAL_OBJECT_LABELS } from '../src/lib/assistant/contract-eval-cases';
+import { ANSWER_CASES } from '../src/lib/assistant/answer-eval-cases';
 
 const LONG = 'Never count rows yourself. When a result carries a summary line, it is the counts already written out: START your answer with it, using its numbers and wording exactly. Add detail from the rows after it. When a result carries matchCount or countsByMonitor, those numbers ARE the counts: quote them exactly and never add up the rows to get your own.';
 
@@ -52,80 +53,6 @@ const NOTHINK = process.env.NOTHINK ? '\n\n/no_think' : '';
 const REASONING = process.env.REASONING ? { reasoning_effort: process.env.REASONING } : {};
 
 const OBJECT_LABELS = CONTRACT_EVAL_OBJECT_LABELS;
-
-// Verbatim from a live transcript.
-const TODAY_RESULT =
-  '{"summary":"5 events between 2026-07-20 00:00:00 and 2026-07-20 09:31:51. By monitor: FrontDoor 2, Front Yard 2, Garage Outdoor 1. Detected: person 4, car 1.","window":{"from":"2026-07-20 00:00:00","to":"2026-07-20 09:31:51"},"matchCount":5,"countsByMonitor":{"FrontDoor":2,"Front Yard":2,"Garage Outdoor":1},"objectCounts":{"person":4,"car":1},"events":[{"id":"253363","monitor":"FrontDoor","start":"2026-07-20 08:36:33","durationSec":30.02,"objects":["person"]},{"id":"253362","monitor":"Front Yard","start":"2026-07-20 08:36:21","durationSec":30.06,"objects":["person"]},{"id":"253361","monitor":"Front Yard","start":"2026-07-20 08:35:45","durationSec":30.03,"objects":["person"]},{"id":"253360","monitor":"FrontDoor","start":"2026-07-20 08:35:19","durationSec":30,"objects":["person"]},{"id":"253359","monitor":"Garage Outdoor","start":"2026-07-20 08:20:59","durationSec":30,"objects":["car"]}]}';
-
-// TODAY_RESULT with the busiestHour/countsByHour fields list_events now
-// reports (refs #264), and one row moved out of the busy hour so the SHOW
-// directive has a real subset to select: four rows in 08:00, one in 09:00.
-const BUSIEST_RESULT = TODAY_RESULT.replace(
-  '"matchCount":5,',
-  '"matchCount":5,"busiestHour":{"label":"2026-07-20 08:00:00","count":4},"countsByHour":{"2026-07-20 08:00:00":4,"2026-07-20 09:00:00":1},',
-).replace('"start":"2026-07-20 08:20:59"', '"start":"2026-07-20 09:31:00"');
-
-const EMPTY_RESULT =
-  '{"summary":"No events between 2026-07-20 00:00:00 and 2026-07-20 09:31:51.","window":{"from":"2026-07-20 00:00:00","to":"2026-07-20 09:31:51"},"matchCount":0,"countsByMonitor":{},"objectCounts":{},"events":[]}';
-
-interface AnswerCase {
-  q: string;
-  result: string;
-  /** Every one must hold for the answer to score. */
-  checks: { name: string; ok: (a: string) => boolean }[];
-}
-
-const lower = (s: string) => s.toLowerCase();
-const deniesData = (a: string) =>
-  /\b(none|no events|nothing (was )?found|not found|no matches)\b/i.test(a);
-
-const ANSWER_CASES: AnswerCase[] = [
-  {
-    q: 'summarize today',
-    result: TODAY_RESULT,
-    checks: [
-      { name: 'total', ok: (a) => /\b5\b/.test(a) },
-      { name: 'per-monitor', ok: (a) => /\b2\b/.test(a) && /\b1\b/.test(a) },
-      { name: 'names-real', ok: (a) => !/EXAMPLE_|Backyard|Front Gate|Driveway/i.test(a) },
-      { name: 'no-denial', ok: (a) => !deniesData(a) },
-      { name: 'objects', ok: (a) => lower(a).includes('person') || lower(a).includes('people') },
-      { name: 'not-json', ok: (a) => !a.trim().startsWith('{') },
-    ],
-  },
-  {
-    q: 'how many people came today',
-    result: TODAY_RESULT,
-    checks: [
-      { name: 'person-count', ok: (a) => /\b4\b/.test(a) },
-      { name: 'no-denial', ok: (a) => !deniesData(a) },
-      { name: 'not-json', ok: (a) => !a.trim().startsWith('{') },
-    ],
-  },
-  {
-    q: 'what was my busiest hour today',
-    result: BUSIEST_RESULT,
-    checks: [
-      // The hour itself, however phrased: card narrowing is id-driven (SHOW),
-      // so exact label quoting stopped being load-bearing.
-      { name: 'names-hour', ok: (a) => /8:00|08:00|8 ?am/i.test(a) },
-      { name: 'count', ok: (a) => /\b4\b/.test(a) },
-      { name: 'no-denial', ok: (a) => !deniesData(a) },
-      { name: 'not-json', ok: (a) => !a.trim().startsWith('{') },
-      // The SHOW directive (refs #264): the busy hour's ids selected, the
-      // 09:00 stray excluded, so only the answer's cards render.
-      { name: 'show-subset', ok: (a) => /SHOW: ?events=/.test(a) && a.includes('253363') && !/SHOW:[^\n]*253359/.test(a) },
-    ],
-  },
-  {
-    q: 'summarize today',
-    result: EMPTY_RESULT,
-    checks: [
-      // The honest empty answer: it MUST say nothing was found.
-      { name: 'says-empty', ok: (a) => deniesData(a) },
-      { name: 'no-invented-rows', ok: (a) => !/FrontDoor|Garage|person|car\b/i.test(a) },
-    ],
-  },
-];
 
 async function chat(body: unknown): Promise<any> {
   const res = await fetch(`${BASE}/chat/completions`, {
