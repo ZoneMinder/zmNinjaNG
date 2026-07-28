@@ -21,6 +21,12 @@ public class PipActivity extends Activity {
 
     private static final String TAG = "PipActivity";
 
+    /** Drops the query string from any URL in the text. ZoneMinder puts the
+     *  access token in the query, and logcat is readable by anyone with adb. */
+    private static String stripQuery(String text) {
+        return text == null ? "null" : text.replaceAll("\\?\\S*", "");
+    }
+
     private ExoPlayer player;
     private PlayerView playerView;
     private MediaSession mediaSession;
@@ -43,7 +49,10 @@ public class PipActivity extends Activity {
         long position = getIntent().getLongExtra("position", 0);
         String aspectRatioStr = getIntent().getStringExtra("aspectRatio");
 
-        Log.d(TAG, "onCreate url=" + url + " position=" + position);
+        // The URL is deliberately not logged. ZoneMinder stream URLs carry the
+        // access token as a query parameter, and logcat is readable by anyone
+        // with adb, so this line handed out a live session token (refs #307).
+        Log.d(TAG, "onCreate hasUrl=" + (url != null) + " position=" + position);
 
         if (url == null) {
             Log.e(TAG, "No URL provided");
@@ -86,7 +95,11 @@ public class PipActivity extends Activity {
 
             @Override
             public void onPlayerError(@NonNull androidx.media3.common.PlaybackException error) {
-                Log.e(TAG, "Player error: " + error.getMessage(), error);
+                // Neither the message nor the throwable is logged raw: a media3
+                // HTTP failure quotes the URL it failed on, token and all, and
+                // the cause chain repeats it (refs #307). The error code name
+                // is the part that identifies the failure anyway.
+                Log.e(TAG, "Player error " + error.getErrorCodeName() + ": " + stripQuery(error.getMessage()));
                 finishWithPosition();
             }
         });
