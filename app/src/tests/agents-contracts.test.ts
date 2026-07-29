@@ -184,6 +184,27 @@ describe('developer docs cite symbols, not line numbers', () => {
     }
     expect(offenders, `line-number citations found:\n${offenders.join('\n')}`).toEqual([]);
   });
+
+  it('no mermaid block contains a semicolon', () => {
+    // Mermaid parses ";" as a statement separator, so a semicolon inside a
+    // message label truncates the statement and the whole diagram renders as
+    // "Syntax error in text" on readthedocs.
+    const offenders: string[] = [];
+    const guideDir = path.join(repoRoot, 'docs/developer-guide');
+    for (const file of fs.readdirSync(guideDir).filter((f) => f.endsWith('.rst'))) {
+      const lines = fs.readFileSync(path.join(guideDir, file), 'utf8').split('\n');
+      let inMermaid = false;
+      lines.forEach((line, i) => {
+        if (/^\s*\.\. mermaid::/.test(line)) {
+          inMermaid = true;
+          return;
+        }
+        if (inMermaid && line.trim() && !/^\s/.test(line)) inMermaid = false;
+        if (inMermaid && line.includes(';')) offenders.push(`${file}:${i + 1} ${line.trim()}`);
+      });
+    }
+    expect(offenders, `semicolons inside mermaid blocks:\n${offenders.join('\n')}`).toEqual([]);
+  });
 });
 
 describe('developer docs reference valid rule IDs', () => {

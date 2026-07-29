@@ -2096,7 +2096,7 @@ tool and ``ToolDefinition`` cannot express one), never a runtime decision.
        ZM-->>Tool: rows
        Agent->>Agent: grounding and live-data checks
        Agent-->>Panel: this turn's messages
-       Panel->>Panel: render; append context boundary if nearly full
+       Panel->>Panel: render, append context boundary if nearly full
 
 #. **The `?` key opens the assistant window.** ``components/KeyboardShortcuts.tsx``'s
    ``onKeyDown`` treats ``?`` as dual-purpose: when the assistant is enabled
