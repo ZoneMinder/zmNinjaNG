@@ -87,6 +87,10 @@ const CLOCK_TOKEN = String.raw`\d{1,2}(?::\d{2})?\s*(?:am|pm)|\d{1,2}:\d{2}`;
 /** Unit words a rolling span counts in, reusing the interpreter's own unit list
  *  plus "year" (which the interpreter cannot resolve but the scan still surfaces). */
 const ROLLING_UNITS = `${WINDOW_UNITS.join('|')}|year`;
+/** How a count can be written in front of a unit: digits, the small numbers
+ *  spelled out, or the article forms of one ("an hour ago"). Shared by the
+ *  rolling-span and "<n> <unit> ago" classes so both accept both spellings. */
+const COUNT_TOKEN = String.raw`\d+|an?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve`;
 
 /** Deterministic, question-order, deduped scan for EVERY time expression whose
  *  class code can decide, returning each as a VERBATIM substring of the question.
@@ -121,7 +125,11 @@ export function scanTimeExpressions(question: string): string[] {
     new RegExp(String.raw`\bbetween\s+(?:${CLOCK_TOKEN})\s+and\s+(?:${CLOCK_TOKEN})`, 'gi'),
     new RegExp(String.raw`\b\d{1,2}(?::\d{2})?(?:\s*(?:am|pm))?\s*[-–]\s*\d{1,2}(?::\d{2})?(?:\s*(?:am|pm))?\b`, 'gi'),
     new RegExp(String.raw`\b(?:${months})\s+\d{1,2}(?:st|nd|rd|th)?\b`, 'gi'),
-    new RegExp(String.raw`\b(?:past|last|previous)\s+\d+\s+(?:${ROLLING_UNITS})s?\b`, 'gi'),
+    new RegExp(String.raw`\b(?:past|last|previous)\s+(?:${COUNT_TOKEN})\s+(?:${ROLLING_UNITS})s?\b`, 'gi'),
+    // "2 days ago", "two days ago", "an hour ago". Without this the whole
+    // family scanned empty and the turn fell through to the today default,
+    // so the prompt told the model to answer about the wrong day (refs #310).
+    new RegExp(String.raw`\b(?:${COUNT_TOKEN})\s+(?:${ROLLING_UNITS})s?\s+ago\b`, 'gi'),
     new RegExp(String.raw`\b(?:last|this|next)\s+(?:month|week|weekend|year)\b`, 'gi'),
     new RegExp(String.raw`\b(?:(?:this|last|yesterday)\s+)?(?:${PART_OF_DAY_WORDS.join('|')})\b`, 'gi'),
     new RegExp(String.raw`\b(?:today|tonight|yesterday)\b`, 'gi'),

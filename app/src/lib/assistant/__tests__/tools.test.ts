@@ -789,6 +789,15 @@ describe('whenNotFromQuestion', () => {
     expect(whenNotFromQuestion('  Last   Week ', 'events from last week please')).toBeUndefined();
   });
 
+  // Digits were dropped from the tokens and number words were not, so the two
+  // spellings of the same phrase disagreed and the spelled-out form was
+  // rejected, killing the turn (refs #310).
+  it('treats a spelled-out number as the digit the question used', () => {
+    expect(whenNotFromQuestion('two days ago', 'what was the busiest hour 2 days ago?')).toBeUndefined();
+    expect(whenNotFromQuestion('2 days ago', 'what was the busiest hour two days ago?')).toBeUndefined();
+    expect(whenNotFromQuestion('last three weeks', 'summarize the last 3 weeks')).toBeUndefined();
+  });
+
   // The substring test carries no language assumptions, which is the whole
   // reason a verbatim copy is the contract.
   it('passes a copied phrase in any language', () => {

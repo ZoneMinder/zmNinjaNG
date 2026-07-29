@@ -144,6 +144,12 @@ export const TIME_EXTRACT_CASES: TimeExtractCase[] = [
   { question: 'what happened today', expect: ['today'] },
   { question: 'compare today and yesterday', expect: ['today', 'yesterday'] },
   { question: 'summarize the past 2 weeks', expect: ['past 2 weeks'] },
+  // The "<n> <unit> ago" family: the interpret cases below have carried
+  // "3 days ago" all along, but nothing checked that the scan FINDS it in a
+  // question, so the whole family fell through to the today default (refs #310).
+  { question: 'what was the busiest hour 2 days ago?', expect: ['2 days ago'] },
+  { question: 'anything two days ago', expect: ['two days ago'] },
+  { question: 'what happened 3 hours ago', expect: ['3 hours ago'] },
   { question: 'how many people came this morning and this evening', expect: ['this morning', 'this evening'] },
   { question: 'show me events from july 15 and july 21', expect: ['july 15', 'july 21'] },
   { question: 'anything between june 1 and june 15', expect: ['june 1', 'june 15'] },

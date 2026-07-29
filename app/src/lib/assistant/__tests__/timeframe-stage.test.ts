@@ -44,6 +44,17 @@ describe('scanTimeExpressions', () => {
     expect(scanTimeExpressions('anything in the evening')).toEqual(['evening']);
   });
 
+  // The whole "<n> <unit> ago" family was invisible to the scan, so a question
+  // naming one fell through to the today default and the prompt told the model
+  // to answer about today (refs #310).
+  it('finds "<n> <unit> ago", in digits and spelled out', () => {
+    expect(scanTimeExpressions('what was the busiest hour 2 days ago?')).toEqual(['2 days ago']);
+    expect(scanTimeExpressions('anything two days ago')).toEqual(['two days ago']);
+    expect(scanTimeExpressions('what happened 3 hours ago')).toEqual(['3 hours ago']);
+    expect(scanTimeExpressions('cars 1 week ago')).toEqual(['1 week ago']);
+    expect(scanTimeExpressions('anything an hour ago')).toEqual(['an hour ago']);
+  });
+
   it('finds weekday references including "last <weekday>"', () => {
     expect(scanTimeExpressions('what happened on sunday')).toEqual(['on sunday']);
     expect(scanTimeExpressions('anything last tuesday')).toEqual(['last tuesday']);

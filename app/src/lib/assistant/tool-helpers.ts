@@ -359,6 +359,25 @@ export function calendarTimeframeMismatch(resolvedTimeframes: ResolvedTimeframe[
  *  too. Kept small on purpose: only English structural glue, never content. */
 const WHEN_STOPWORDS = new Set(['to', 'from', 'and', 'between', 'at', 'the', 'am', 'pm']);
 
+/** Spelled-out counts, folded to digits before tokenizing.
+ *
+ *  Splitting on non-letters drops digits but keeps number WORDS, so "2 days
+ *  ago" and "two days ago" tokenized differently and the spelled-out form was
+ *  rejected against a question that used the digit. Observed live: the model
+ *  answered "two days ago" to a question asking about "2 days ago", the guard
+ *  refused it, and the turn died asking the user to restate the date (#310).
+ *  Folding first makes both spellings collapse to the same dropped digit.
+ *
+ *  ponytail: the count itself is still not compared, here or before this
+ *  change, so "three days ago" also passes for a question about 2 days ago.
+ *  Comparing digits needs the clock tokens excluded first ("18:00:00 PM" for
+ *  "6pm" would fail); do that if a wrong count is ever observed. */
+const NUMBER_WORDS: Record<string, number> = {
+  one: 1, two: 2, three: 3, four: 4, five: 5, six: 6,
+  seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12,
+};
+const NUMBER_WORD_RE = new RegExp(`\\b(?:${Object.keys(NUMBER_WORDS).join('|')})\\b`, 'g');
+
 /** The alphabetic, non-stopword tokens of a phrase, lowercased.
  *
  *  Splitting on non-letters drops digits and colons, so a time like "10:00" or
@@ -369,6 +388,7 @@ const WHEN_STOPWORDS = new Set(['to', 'from', 'and', 'between', 'at', 'the', 'am
 function whenWordTokens(text: string): string[] {
   return text
     .toLowerCase()
+    .replace(NUMBER_WORD_RE, (word) => String(NUMBER_WORDS[word]))
     .split(/[^\p{L}]+/u)
     .filter((token) => token.length > 0 && !WHEN_STOPWORDS.has(token));
 }
