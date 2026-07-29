@@ -128,19 +128,33 @@ gate below).
 Auth Gates
 ^^^^^^^^^^
 
-``createApiClient`` (``src/api/client.ts``) does not import the zustand
-stores. It receives ``ApiClientGates``, two narrow interfaces:
-``AuthGate`` (token reads, ``getFreshAccessToken``, ``proactiveLogin``,
+``createApiClient`` (``src/api/client.ts``) needs the access token and the
+profile's request timeout, and both live in zustand stores. It cannot import
+them. ``stores/auth.ts`` imports ``api/auth.ts`` for the login and refresh
+calls, and ``api/auth.ts`` imports ``api/client.ts`` for ``getApiClient()``,
+so an import from the client back to the store closes the loop:
+``api/client.ts`` -> ``stores/auth.ts`` -> ``api/auth.ts`` ->
+``api/client.ts``.
+
+What the client takes instead is ``ApiClientGates``, a pair of narrow
+interfaces: ``AuthGate`` (``getAccessToken``, ``getAccessTokenExpires``,
+``isAuthenticated``, ``getFreshAccessToken``, ``proactiveLogin``,
 ``recoverFromAuthFailure``) and ``SettingsGate``
-(``getApiTimeoutSeconds``). ``api/store-gates.ts`` builds the gates from
-the real stores and exports ``createStoreApiClient(baseURL, reLogin?,
+(``getApiTimeoutSeconds``). ``api/store-gates.ts`` is the one module that
+imports both the stores and the client; it assembles ``storeGates`` from
+``getState()`` calls and exports ``createStoreApiClient(baseURL, reLogin?,
 profileId?)``, which every production call site uses. Tests inject plain
-mock gates instead of mocking zustand. All single-flight deduplication
-(login, token refresh, 401 recovery) lives behind the gates in
-``stores/auth.ts`` as module-level pending promises; ``resetAuthGates()``
-clears them all and runs from ``resetApiClient()`` on profile switch so a
-new profile never attaches to a login, refresh, or recovery started for
-the old one.
+object literals with the same method names, so no test mocks zustand to
+exercise the client.
+
+Single-flight state sits behind the gates rather than in the client. The
+pending ``login``, ``getFreshAccessToken``, ``refreshAccessToken``,
+``proactiveLogin``, and ``recoverFromAuthFailure`` promises are module-level
+variables in ``stores/auth.ts``, and ``resetAuthGates()`` clears all five.
+``createStoreApiClient`` registers that function through
+``registerApiClientResetHook``, and ``resetApiClient()`` runs every
+registered hook, so a profile switch cannot leave the new profile attached
+to a login, refresh, or recovery started for the old one.
 
 The same DI-gate shape (module defines a narrow gate interface and a
 setter, a store assembles the real implementation from ``getState()`` and
@@ -162,7 +176,9 @@ original request:
 
 .. code:: typescript
 
-   // Before making HTTP request
+   // api/client.ts, inside request(method, url, data, config, hasRetried),
+   // before the httpRequest call. hasRetried is the recursion guard: the
+   // retry below passes true, so this branch runs at most once per request.
    if (!gates.auth.isAuthenticated() && !skipAuth && !isLoginRequest && reLogin && !hasRetried) {
      // Single-flight in the auth store: concurrent requests share one reLogin.
      const loginSuccess = await gates.auth.proactiveLogin(reLogin);
@@ -186,14 +202,21 @@ retries once:
 
 .. code:: typescript
 
-   catch (error) {
+   // api/client.ts, inside request(...), around the httpRequest call
+   try {
+     const response = await httpRequest<T>(fullUrl, { method, headers, params, /* ... */ });
+     return response;
+   } catch (error) {
      const httpError = error as HttpError;
      if (httpError.status === 401 && !hasRetried && !skipAuth && !isLoginRequest) {
        const recovered = await gates.auth.recoverFromAuthFailure(reLogin);
        if (recovered) {
          return request(method, url, data, config, true); // hasRetried=true prevents loops
        }
+       // Recovery failed (logout already ran inside it). Fall through, log,
+       // and propagate the original 401.
      }
+     // ... error logging, then: throw error;
    }
 
 ``recoverFromAuthFailure`` in ``stores/auth.ts`` is single-flight: when a
@@ -218,7 +241,8 @@ push-notification image backfills. Once a stale token is baked into a
 ``<img>`` or ``<video>`` ``src``, the request fires with no interceptor
 in front of it. A 401 there shows up as a broken image, not a retry.
 
-Three things keep stale tokens in play between refresh ticks:
+Stale tokens stay in play between refresh ticks for reasons the refresher
+cannot fix on its own:
 
 - ``setInterval`` is throttled or suspended when the tab is hidden or the
   device sleeps, so a token can be well past its leeway by the time the app
@@ -370,18 +394,15 @@ Connection keys are stored in the Zustand monitors store, persisted to
 ``localStorage`` under ``STORAGE_KEYS.monitorStore``. ``getConnKey(monitorId)``
 returns the existing key if one is already stored, or generates a new one.
 ``regenerateConnKey`` always creates a fresh key (used on stream failure).
-``clearConnKey`` removes the stored key; ``useStreamLifecycle`` calls it on
-unmount, deliberately clearing the store *before* awaiting the ``CMD_QUIT``
-request (the source comment says why: a fast remount must get a fresh key
-instead of reusing one tied to a quitting stream). The cleanup only clears the
-key it quit: if the store already holds a newer key (another mount regenerated
-it), the newer key is left intact.
+``clearConnKey`` removes the stored key, and the order in which
+``useStreamLifecycle`` clears it relative to sending ``CMD_QUIT`` matters;
+"Stream Lifecycle" below has the code and the reason.
 
-Streaming Mechanics
-~~~~~~~~~~~~~~~~~~~
+Why stream URLs carry a cache buster, a port, and a mode
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-1. Cache busting (``_t``)
-^^^^^^^^^^^^^^^^^^^^^^^^^
+Cache busting (``_t``)
+^^^^^^^^^^^^^^^^^^^^^^
 
 Browsers cache image URLs aggressively. In ``mode=single`` (snapshot)
 or after a stream reconnects, the same URL would yield a stale frame.
@@ -391,8 +412,8 @@ or after a stream reconnects, the same URL would yield a stale frame.
 
    /cgi-bin/nph-zms?mode=jpeg&monitor=1&token=xyz&_t=1704358000000
 
-2. Multi-port streaming
-^^^^^^^^^^^^^^^^^^^^^^^
+Multi-port streaming
+^^^^^^^^^^^^^^^^^^^^
 
 Browsers cap concurrent connections per origin (typically 6). With
 ``minStreamingPort`` set (e.g. 30000) in the profile, each monitor
@@ -400,8 +421,8 @@ loads from a different port, monitor 1 from 30001, monitor 2 from
 30002, and so on. Different ports are treated as different origins, so
 the per-origin limit doesn't apply.
 
-3. Streaming vs snapshot
-^^^^^^^^^^^^^^^^^^^^^^^^
+Streaming vs snapshot
+^^^^^^^^^^^^^^^^^^^^^
 
 - **Streaming** (``mode=jpeg``), long-lived MJPEG connection. Low
   latency, high bandwidth, holds an HTTP slot.
@@ -684,7 +705,8 @@ spinner without unmounting the rows.
 How this goes wrong
 ~~~~~~~~~~~~~~~~~~~
 
-Three failure modes recur, and the factory only prevents part of the third.
+The same failure modes recur, and the key factory only prevents part of the
+last one.
 
 **Forgetting the ``enabled`` gate.** A query runs on mount whether or not its
 inputs exist. Without ``enabled``, a monitor-detail query fires with
@@ -723,8 +745,8 @@ a hand-built array, which will silently miss the real entry (``['monitors',
 profileId]``) and create a phantom one. Use the factory for reads and writes
 alike.
 
-Timers and Polling
-------------------
+Every recurring timer, and who owns it
+--------------------------------------
 
 App-level timers
 ~~~~~~~~~~~~~~~~
@@ -784,9 +806,9 @@ App-level timers
      }, [isAuthenticated, accessTokenExpires, getFreshAccessToken]);
    }
 
-Two details are load-bearing. There is no ``timeUntilExpiry > 0`` guard: an
-already-expired token must still be refreshed, and that is the exact state the
-app wakes up in after the device sleeps. And ``isRefreshingRef`` is a ``ref``,
+There is no ``timeUntilExpiry > 0`` guard, and that omission is deliberate:
+an already-expired token must still be refreshed, and that is the exact
+state the app wakes up in after the device sleeps. ``isRefreshingRef`` is a ``ref``,
 not state: a ref holds a mutable value across renders without triggering one,
 so flipping it cannot re-run the effect that owns it.
 
@@ -1121,8 +1143,8 @@ The client rewrites ``https://server.com/api`` to
 https://server.com`` header (``lib/http.ts``). The proxy forwards and returns
 the response.
 
-Response Types
-~~~~~~~~~~~~~~
+Pick a response type by platform
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ================== ===================== ====================
 Type               Description           Use Case
@@ -1308,7 +1330,7 @@ dev proxy applies on web.
 Event URL helpers (``api/events.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Three URL builders, all taking ``portalUrl`` and ``eventId`` as positional
+Every event URL builder takes ``portalUrl`` and ``eventId`` as positional
 arguments (not an event object), with multi-port and HLS support in options:
 
 .. code:: typescript
@@ -1627,7 +1649,7 @@ user-scoped: the server only returns the current user's tokens.
 Notification Delivery Services
 ------------------------------
 
-Three services deliver events to the user, chosen by notification mode and
+Which service delivers an event to the user depends on notification mode and
 platform. ``components/NotificationHandler.tsx`` is the headless component that
 turns delivered events into toasts; it mounts
 ``hooks/useNotificationAutoConnect.ts``, which owns the choice of service and
@@ -1787,8 +1809,8 @@ per-monitor and persisted, never a component-local counter.
        })
      : '';
 
-Three conditions gate the URL: a profile, a nonzero connkey, and a fresh token.
-Any one of them missing produces an empty string, and the consumer renders a
+A profile, a nonzero connkey, and a fresh token all have to be present. Any
+one of them missing produces an empty string, and the consumer renders a
 placeholder instead of an ``<img>`` pointed at a broken URL.
 
 **3. Cleanup with CMD_QUIT**
@@ -1797,7 +1819,10 @@ When a stream is no longer needed, ``useStreamLifecycle`` builds the quit URL
 for the *old* connkey, clears that key from the store, and only then awaits
 the ``CMD_QUIT`` (17) request. The order is deliberate (the source comment
 says so): a fast remount must find the store empty and mint a fresh key, not
-reuse one attached to a stream that is mid-quit.
+reuse one attached to a stream that is mid-quit. The clear is conditional on
+the stored key still being the one this teardown quit, read through
+``useMonitorStore.getState()`` rather than a subscription: if a concurrent
+mount already regenerated the key, that newer key survives.
 
 .. code:: tsx
 

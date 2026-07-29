@@ -4,11 +4,10 @@ Go2RTC WebRTC Streaming
 ZoneMinder can publish a `go2rtc <https://github.com/AlexxIT/go2rtc>`__ endpoint
 alongside its own MJPEG streamer (ZMS). When it does, zmNinjaNg plays live video
 through go2rtc as an H.264/H.265 stream over MSE or WebRTC instead of a
-JPEG-per-frame MJPEG stream. The user gets live video that runs closer to real
-time, and montage tiles that decode in hardware instead of repainting a full
-JPEG per frame.
+JPEG-per-frame MJPEG stream. That cuts latency and moves decode to hardware, so
+a montage tile no longer repaints a full JPEG per frame.
 
-MJPEG is never abandoned. It is the fallback for every way go2rtc can fail, and
+MJPEG stays on every path: it is the fallback for every way go2rtc can fail, and
 it is the picture on screen while go2rtc is still connecting. The whole feature
 hangs off one per-profile toggle (Settings, Live Streaming, "Enable
 WebRTC/HLS/MSE"); everything below is what happens once that toggle is on.
@@ -33,9 +32,9 @@ all render it rather than an ``<img>`` of their own, so the choice is made once.
 
    const method = canUseWebRTC ? 'webrtc' : 'mjpeg';
 
-Three things must all hold. The profile setting (or a per-monitor override) must
-not force MJPEG, the monitor must have ``Go2RTCEnabled`` set in ZoneMinder, and
-the profile must carry a ``go2rtcUrl``. There is no separate availability
+The profile setting (or a per-monitor override) must not force MJPEG, the
+monitor must have ``Go2RTCEnabled`` set in ZoneMinder, and the profile must
+carry a ``go2rtcUrl``; all three have to hold. There is no separate availability
 boolean: the truthiness of ``go2rtcUrl`` is the check.
 
 This runs inside ``useMemo``, a React hook that recomputes a value only when its
@@ -44,8 +43,7 @@ an unrelated re-render does not. The decision is logged once per
 monitor-and-method pair (``log.videoPlayer('Streaming: WebRTC' | 'Streaming: MJPEG')``),
 which is the first line to grep for when a monitor plays the wrong way.
 
-The component name in the codebase carries no special meaning. It is an ordinary
-component that owns the streaming decision and its watchdogs; see
+``LiveMonitorPlayer`` owns the streaming decision and its watchdogs; see
 :doc:`05-component-architecture` for how it sits among the other monitor
 components.
 
@@ -99,10 +97,10 @@ into a signaling URL. It takes the path, the monitor id, and a channel:
    getGo2RTCWebSocketUrl('http://zm.example.com:1984/go2rtc', '5', 1)
    // 'ws://zm.example.com:1984/go2rtc/ws?src=5_1'
 
-Three details matter. ``http`` becomes ``ws`` and ``https`` becomes ``wss``.
-``/ws`` is appended to whatever pathname ``ZM_GO2RTC_PATH`` already has, so a
-reverse-proxied go2rtc at ``/go2rtc`` keeps its prefix. And the stream name is
-always ``{monitorId}_{channel}``, matching ZoneMinder's own go2rtc naming.
+``http`` becomes ``ws`` and ``https`` becomes ``wss``. ``/ws`` is appended to
+whatever pathname ``ZM_GO2RTC_PATH`` already has, so a reverse-proxied go2rtc at
+``/go2rtc`` keeps its prefix. And the stream name is always
+``{monitorId}_{channel}``, matching ZoneMinder's own go2rtc naming.
 
 The channel comes straight from the monitor:
 
@@ -209,8 +207,8 @@ a server-reflexive candidate.
 Starting and stopping the connection
 ------------------------------------
 
-``useGo2RTCStream`` owns the element's lifetime. Two React mechanisms carry the
-weight here.
+``useGo2RTCStream`` owns the element's lifetime, using two React mechanisms: a
+ref and an effect.
 
 A **ref** is a mutable box React hands back on every render, and writing to it
 does not re-render anything. The hook uses ``containerRef`` to reach the real
@@ -260,7 +258,7 @@ Falling back to MJPEG
 Everything in this section lives in ``LiveMonitorPlayer``, not in the hook. The
 hook reports state; the component decides when go2rtc has lost.
 
-**MJPEG shows first.** While go2rtc is selected but has produced no decoded
+MJPEG shows first. While go2rtc is selected but has produced no decoded
 frames yet, the component renders the MJPEG ``<img>`` as the visible picture with
 a blinking ellipsis badge over it (``data-testid="mse-connecting-badge"``):
 
@@ -275,7 +273,7 @@ arrive rather than at the timeout deadline. ``derivePlayerViewState()`` folds
 these signals into one named state (``connecting``, ``mjpeg-placeholder``,
 ``mse-playing``, ``mjpeg``, ``no-video``) that the render branches read.
 
-**Three ways go2rtc loses.** Each latches ``go2rtcFailed``, which flips
+go2rtc loses in three ways, and each latches ``go2rtcFailed``, which flips
 ``effectiveStreamingMethod`` to ``mjpeg`` for this player:
 
 1. **The hook reported an error.** Any ``state === 'error'`` demotes on the next
@@ -298,9 +296,12 @@ these signals into one named state (``connecting``, ``mjpeg-placeholder``,
    counter, so one hiccup an hour does not permanently cost a monitor its
    hardware-decoded stream.
 
-**The failure cache.** A monitor that fails go2rtc is recorded in a module-level
-``Map`` and skipped for ``GO2RTC_RETRY_INTERVAL_MIN`` (5 minutes, declared at the
-top of ``LiveMonitorPlayer.tsx``). Being module-level, it is shared by every
+Failure cache
+~~~~~~~~~~~~~
+
+A monitor that fails go2rtc is recorded in a module-level ``Map`` and skipped for
+``GO2RTC_RETRY_INTERVAL_MIN`` (5 minutes, declared at the top of
+``LiveMonitorPlayer.tsx``). Being module-level, it is shared by every
 ``LiveMonitorPlayer`` instance and survives in-app navigation. An entry goes away
 when ``isGo2rtcCachedFailure`` next reads it past its five-minute TTL and deletes
 it, when the recovery paths below delete it, or on a full reload. This is what
@@ -315,12 +316,15 @@ With the bypass the detail view always attempts go2rtc (a single connection
 succeeds), and a failure there falls back to MJPEG locally without poisoning the
 montage cache.
 
-**Recovery.** Two things clear a latched failure. Toggling a monitor back to
-go2rtc deletes its cache entry and retries at once. And ``useVisibilityResume``,
-when the page returns from the background, resets the freeze counters, clears the
-latch, and nudges a retry: the browser suspends video in a backgrounded tab, and
-the freeze watchdog would otherwise have spent its retry budget on a stream that
-was never actually broken.
+Recovery
+~~~~~~~~
+
+Two things clear a latched failure. Toggling a monitor back to go2rtc deletes its
+cache entry and retries at once. And ``useVisibilityResume``, when the page
+returns from the background, resets the freeze counters, clears the latch, and
+nudges a retry: the browser suspends video in a backgrounded tab, and the freeze
+watchdog would otherwise have spent its retry budget on a stream that was never
+actually broken.
 
 Tearing the stream down
 -----------------------
@@ -330,10 +334,12 @@ Leaving a live view (montage or single monitor) must stop the stream.
 the page is hidden: the flag makes ``oninit`` skip the ``visibilitychange``
 listener that would otherwise disconnect a backgrounded tab. But the same flag
 short-circuits the element's own ``disconnectedCallback``, so teardown is the
-hook's job. (Scroll-out pausing is a separate flag, ``visibilityThreshold``, which
-defaults to ``0`` and the app never sets, so tiles keep streaming off-screen too.) WebRTC needs extra care:
-once it wins negotiation, media flows over the ``RTCPeerConnection`` and the
-WebSocket is already closed, so closing the socket alone does nothing.
+hook's job. WebRTC needs extra care: once it wins negotiation, media flows over
+the ``RTCPeerConnection`` and the WebSocket is already closed, so closing the
+socket alone does nothing.
+
+Scroll-out pausing is a separate flag. ``visibilityThreshold`` defaults to ``0``
+and the app never sets it, so tiles keep streaming off-screen too.
 
 ``cleanup()`` calls ``destroyVideoRtc()``, which:
 
@@ -459,10 +465,11 @@ Security
 --------
 
 **Authentication.** ``getGo2RTCWebSocketUrl`` accepts a ``token`` option and
-appends it as a query parameter, but ``LiveMonitorPlayer`` does not pass one. ZoneMinder authenticates the go2rtc WebSocket through
-credentials embedded in ``ZM_GO2RTC_PATH`` itself (``https://user:pass@host/...``),
-which the URL builder deliberately preserves rather than stripping. Stripping them
-breaks WebRTC streaming on setups that rely on them.
+appends it as a query parameter, but ``LiveMonitorPlayer`` does not pass one.
+ZoneMinder authenticates the go2rtc WebSocket through credentials embedded in
+``ZM_GO2RTC_PATH`` itself, in the form ``https://user:pass@host/...``. The URL
+builder deliberately preserves those rather than stripping them, because
+stripping them breaks WebRTC streaming on setups that rely on them.
 
 **Host guard.** ``hardenGo2RTCUrl`` logs a warning via ``log.http`` when a token
 *is* attached and the go2rtc hostname differs from the configured portal

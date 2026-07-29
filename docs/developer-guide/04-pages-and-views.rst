@@ -208,80 +208,20 @@ selectors build a fresh value on every call: ``find()`` produces a result and
 would re-render on every unrelated store write. See
 :doc:`03-state-management-zustand`.
 
-DashboardLayout: keeping the grid and the store in step
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Everything else the dashboard does belongs to ``DashboardLayout``
+(``src/components/dashboard/DashboardLayout.tsx``), which owns the
+``react-grid-layout`` grid and keeps the grid's own layout state and the
+dashboard store from writing to each other forever. That sync is where the
+feature's real complexity sits, and it is documented once, in
+:doc:`05-component-architecture`. The page component is thin enough that
+there is nothing else to read here.
 
-**Location**: ``src/components/dashboard/DashboardLayout.tsx``
-
-``react-grid-layout`` owns the drag-and-drop grid. It wants the layout as a
-prop and reports every change back through ``onLayoutChange``. The widget
-positions also live in the Zustand dashboard store so they survive a reload.
-Two sources of truth pointed at each other is exactly the shape that loops
-forever, and the component spends most of its code not looping.
-
-The store-to-local direction runs in an effect. An effect is a function React
-runs after it has painted, re-running whenever one of the values in its
-dependency array changed since the last run:
-
-.. code:: tsx
-
-   const isSyncingFromStoreRef = useRef(false);
-
-   useEffect(() => {
-       isSyncingFromStoreRef.current = true;
-       setLayout((prev) => (areLayoutsEqual(prev, layouts) ? prev : layouts));
-       requestAnimationFrame(() => {
-           isSyncingFromStoreRef.current = false;
-       });
-   }, [layouts, areLayoutsEqual]);
-
-``useRef`` returns a mutable box whose ``.current`` survives re-renders and,
-unlike state, does not trigger one when written. That property is what makes
-it usable as a flag inside a render cycle.
-
-The local-to-store direction is the grid's own callback:
-
-.. code:: tsx
-
-   const handleLayoutChange = useCallback((nextLayout: Layout[]) => {
-       setLayout((prev) => (areLayoutsEqual(prev, nextLayout) ? prev : nextLayout));
-
-       if (!isEditing || isSyncingFromStoreRef.current) return;
-
-       updateLayouts(profileIdRef.current, { lg: nextLayout });
-   }, [areLayoutsEqual, isEditing]);
-
-Trace the loop the flag prevents. The store's widget layouts change, the
-effect copies them into local state, ``react-grid-layout`` re-renders and
-calls ``onLayoutChange`` with the layout it was just handed,
-``handleLayoutChange`` writes that layout back to the store, and the store's
-layouts change again. ``isSyncingFromStoreRef`` makes the write a no-op for
-the frames in which the change originated in the store.
-``requestAnimationFrame`` clears it once React has painted; the code comment
-records that this timed more predictably than ``queueMicrotask``.
-
-Two smaller guards do the rest. ``areLayoutsEqual`` returns the previous
-array when nothing moved, so an equal update does not create a new reference
-and does not re-render. And ``profileIdRef`` keeps ``profileId`` out of
-``handleLayoutChange``'s dependency array: without it the callback would get
-a new identity on every profile switch, and ``react-grid-layout`` would see a
-changed prop.
-
-The profile id itself is minted, not passed through as a raw string:
-
-.. code:: tsx
-
-   // src/components/dashboard/DashboardLayout.tsx
-   const profileId = currentProfile?.id || asProfileId('default');
-
-``'default'`` is a placeholder key for the no-profile-selected case. Widget
-storage still needs a key, and ``ProfileId`` is a branded type, so the
-placeholder has to be branded explicitly rather than smuggled in. The
-Dashboard snippet above writes the same fallback as a bare ``'default'``,
-which is not an inconsistency: ``src/pages/Dashboard.tsx`` only indexes
-``state.widgets``, a ``Record<string, ...>``, whereas
-``src/components/dashboard/DashboardLayout.tsx`` also hands the id to
-``DashboardWidget``, whose ``profileId`` prop is typed ``ProfileId``.
+One difference between the two files is worth not misreading:
+``src/pages/Dashboard.tsx`` writes the no-profile fallback as a bare
+``'default'`` because it only uses it to index ``state.widgets``, a
+``Record<string, ...>``, while ``DashboardLayout`` hands the same fallback to
+``DashboardWidget``'s ``profileId`` prop, typed ``ProfileId``, so it has to
+brand it with ``asProfileId('default')``.
 
 Montage
 -------
@@ -487,10 +427,15 @@ Monitors
 **Location**: ``src/pages/Monitors.tsx``
 
 The user sees every enabled monitor for the current profile, as a vertical
-list of wide cards or as a column grid, each card showing a live feed and a
-badge counting events recorded since the user last looked at that monitor. The toolbar carries a group filter, a
-list/grid toggle, a column-count control (grid mode only), a Fit/Crop
-selector, and refresh. Tapping a card opens ``MonitorDetail``.
+list of wide cards or as a column grid. A card carries the live feed, a
+status dot, the monitor's id, its frame rate and resolution, its capture,
+analysis, and recording states, and buttons for that monitor's events, its
+settings, and a snapshot download. The events button wears a badge counting
+what the monitor recorded since the user last looked at it.
+
+Above the cards, the toolbar carries a group filter, a list/grid toggle, a
+column-count control that appears in grid mode only, a Fit/Crop selector, and
+refresh. Tapping a card opens ``MonitorDetail``.
 
 .. code:: tsx
 
@@ -672,6 +617,37 @@ was attempted twice and produced blank rows and stale text in the recycled
 row components both times. Do not re-attempt it without a plan for those two
 failures.
 
+Timeline
+--------
+
+**Location**: ``src/pages/Timeline.tsx``
+
+Events drawn on a hand-rolled HTML5 ``<canvas>`` (``TimelineCanvas.tsx``).
+Rows group by monitor and take their color from ``getMonitorColor(rowIdx)``
+in ``timeline-layout.ts``, so the color tracks a monitor's row position, not
+its id. Zoom, pan, quick-range buttons, and an interactive scrubber sit on
+top. The renderer
+(``timeline-renderer.ts``), viewport (``useTimelineViewport.ts``), gestures
+(``useTimelineGestures.ts``), and hit-testing (``timeline-hit-test.ts``) are
+separate modules so each can be tested without a canvas.
+
+The page itself is composition. ``src/hooks/useTimelineData.ts`` owns the
+events query (with per-monitor fan-out when a cause filter is active), the
+live-mode notification subscription that injects synthetic events, and the
+debounced refetch that follows one (``TIMELINE.liveRefetchDebounceMs``,
+2000 ms, long enough for ZoneMinder to index the event). Detection category
+state and filtering live in
+``src/components/timeline/useDetectionCategories.ts``. The filter card
+(``TimelineFiltersPanel.tsx``), control row (``TimelineToolbar.tsx``), and
+statistics row (``TimelineStats.tsx``) are separate components.
+
+Toolbar buttons and TV d-pad commands reach the canvas through a single
+``ViewportAction`` prop shaped ``{ type, seq }``. The canvas runs the named
+action (reset, zoomIn, zoomOut, goToNow, panLeft, panRight, followNow) once
+per ``seq`` change. Passing the action as a plain prop rather than calling a
+method on the canvas keeps the parent free of a ref into the child, and the
+counter is what makes two identical actions in a row distinguishable.
+
 ProfileForm
 -----------
 
@@ -728,37 +704,6 @@ Streaming and Playback, Advanced) delegating to components under
 **DeveloperNotice** (``src/pages/DeveloperNotice.tsx``) lists notices fetched
 from a feed, unread first.
 
-Timeline
---------
-
-**Location**: ``src/pages/Timeline.tsx``
-
-Events drawn on a hand-rolled HTML5 ``<canvas>`` (``TimelineCanvas.tsx``).
-Rows group by monitor and take their color from ``getMonitorColor(rowIdx)``
-in ``timeline-layout.ts``, so the color tracks a monitor's row position, not
-its id. Zoom, pan, quick-range buttons, and an interactive scrubber sit on
-top. The renderer
-(``timeline-renderer.ts``), viewport (``useTimelineViewport.ts``), gestures
-(``useTimelineGestures.ts``), and hit-testing (``timeline-hit-test.ts``) are
-separate modules so each can be tested without a canvas.
-
-The page itself is composition. ``src/hooks/useTimelineData.ts`` owns the
-events query (with per-monitor fan-out when a cause filter is active), the
-live-mode notification subscription that injects synthetic events, and the
-debounced refetch that follows one (``TIMELINE.liveRefetchDebounceMs``,
-2000 ms, long enough for ZoneMinder to index the event). Detection category
-state and filtering live in
-``src/components/timeline/useDetectionCategories.ts``. The filter card
-(``TimelineFiltersPanel.tsx``), control row (``TimelineToolbar.tsx``), and
-statistics row (``TimelineStats.tsx``) are separate components.
-
-Toolbar buttons and TV d-pad commands reach the canvas through a single
-``ViewportAction`` prop shaped ``{ type, seq }``. The canvas runs the named
-action (reset, zoomIn, zoomOut, goToNow, panLeft, panRight, followNow) once
-per ``seq`` change. Passing the action as a plain prop rather than calling a
-method on the canvas keeps the parent free of a ref into the child, and the
-counter is what makes two identical actions in a row distinguishable.
-
 Common page patterns
 --------------------
 
@@ -782,18 +727,6 @@ profile:
 
    const currentProfileId = useProfileStore((state) => state.currentProfileId);
 
-Data fetching
-~~~~~~~~~~~~~
-
-.. code:: tsx
-
-   const { data, isLoading, error } = useQuery({
-     queryKey: queryKeys.monitors(currentProfile?.id),
-     queryFn: () => getMonitors(),
-     enabled: !!currentProfile && isAuthenticated,
-     refetchInterval: bandwidth.monitorStatusInterval,
-   });
-
 Loading and error states
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -809,13 +742,3 @@ Loading and error states
 ``src/components/ui/empty-state.tsx``. The ``&& !data`` on the error branch is
 the pattern from Monitors and Events: a failed background refetch should not
 discard data the user is already looking at.
-
-Navigation
-~~~~~~~~~~
-
-.. code:: tsx
-
-   const navigate = useNavigate();
-   navigate(`/monitors/${monitorId}`);
-   navigate('/profiles', { replace: true });
-   navigate(-1);

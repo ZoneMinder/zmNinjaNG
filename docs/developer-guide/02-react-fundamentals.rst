@@ -59,15 +59,13 @@ render's elements and uses the difference to decide which DOM nodes to
 create, update, or remove. Everything React does with your components
 operates on those objects, not on the browser's DOM.
 
-Three things to know:
+JSX adds exactly three rules on top of JavaScript:
 
 1. **Embed JS expressions in ``{}``**: ``<span>Hello, {name}</span>``,
    ``<button disabled={isLoading}>``, ``<ul>{items.map(...)}</ul>``.
 2. **Return one root element**, or wrap multiple in a fragment ``<>...</>``.
 3. **HTML attributes get JS-style names**: ``className`` (not ``class``),
    ``onClick`` (not ``onclick``), ``htmlFor`` (not ``for``).
-
-That's it. The rest of "JSX" is just JavaScript.
 
 Components
 ----------
@@ -119,11 +117,11 @@ covered later in this chapter; take them on faith for now:
 of the shadcn/ui primitives in ``app/src/components/ui/``. The pattern
 is the same as ``Welcome``: a function that returns JSX.
 
-Two habits visible here are house rules rather than React ones. Every
-interactive element carries a ``data-testid`` because the e2e suite
-selects on it, and no user-facing string is written inline: ``t()``
-looks it up in the five translation files. Neither is React; both are
-non-negotiable in this codebase.
+Not everything in that snippet is React. Every interactive element
+carries a ``data-testid`` because the e2e suite selects on it, and no
+user-facing string is written inline: ``t()`` looks it up in the five
+translation files. Both are house rules, and both are non-negotiable in
+this codebase.
 
 Props: data flowing in
 ----------------------
@@ -334,9 +332,12 @@ never moves, so the match is always right.
 Each render is a snapshot
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-This is the part that trips up newcomers. Functions defined *during* a
-render (event handlers, effect callbacks) capture the values from that
-render via closure. They do not see future updates.
+Functions defined *during* a render (event handlers, effect callbacks)
+capture that render's values through closure. The variable they read
+belongs to a call of the component function that has already returned,
+so it can never be updated: a later render produces a different call,
+with different variables, and a different set of functions closing over
+them.
 
 .. code:: tsx
 
@@ -361,9 +362,12 @@ After the click:
 - React then re-renders the component, which creates a *new*
   ``handleClick`` whose closure sees ``'Goodbye'``.
 
-Ninety percent of the time this is exactly what you want. The other
-ten percent (typically inside long-lived effects or cleanup callbacks),
-you need to escape the snapshot. That's what refs are for (see below).
+For an event handler this is the behavior you want: the handler acts on
+the data the user was looking at when they pressed the button, not on
+whatever arrived while the click was in flight. It stops being right in
+long-lived effects and cleanup callbacks, which are created once and
+called much later, by which time the values they captured describe a
+state the app has left. Refs are the escape hatch there (see below).
 
 Hooks
 -----
@@ -372,8 +376,8 @@ A "hook" is a function whose name starts with ``use`` (``useState``,
 ``useEffect``, ``useRef``, ``useNavigate``...). Hooks are how a
 component opts into React features.
 
-There are two rules. Both exist because React tracks which hook is
-which by the order of calls within a render:
+Both rules below exist because React tracks which hook is which by the
+order of calls within a render:
 
 1. **Call hooks at the top level**, never inside loops, conditions,
    or nested functions.
@@ -411,8 +415,8 @@ third one's value.
 Early ``return`` statements are the same trap seen from the other side:
 every hook the component uses must be called before any conditional
 return. For data fetching, the hook that must not be skipped has a
-built-in way to sit idle, the ``enabled`` option covered under React
-Query below.
+built-in way to sit idle instead, the ``enabled`` option described in
+:doc:`07-api-and-data-fetching`.
 
 The next sections cover the hooks you'll use constantly:
 ``useEffect``, ``useRef``, ``useMemo``, ``useCallback``.
@@ -498,6 +502,15 @@ opens a WebSocket, or starts a ZoneMinder stream, the cleanup removes
 the listener, closes the socket, or quits the stream. React calls the
 cleanup before each re-run of the effect and once at unmount.
 
+``main.tsx`` renders ``<App />`` inside ``<StrictMode>``, which changes
+what you see while developing. On a development build React mounts each
+component, runs its effects, runs every cleanup, and mounts again. An
+effect that logs on setup therefore logs twice in ``npm run dev`` and
+once in a production build, and that is not a bug. What the double mount
+is there to expose is the opposite case: if the thing your effect
+started is still running twice afterwards (two intervals ticking, two
+streams open), the cleanup is not undoing everything the setup did.
+
 useRef: a value that survives renders without triggering one
 ------------------------------------------------------------
 
@@ -519,8 +532,6 @@ That's a ref:
 
 The ``ref`` attribute is a special prop: React sets ``playerRef.current``
 to the DOM node after mount.
-
-Two common uses:
 
 **1. DOM access** (above): grab a real element to call imperative
 methods like ``.play()``, ``.focus()``, ``.scrollIntoView()``.
@@ -820,175 +831,27 @@ flight the second one attaches to it instead of issuing another. Both
 re-render when the data lands. Nothing had to be lifted into a shared
 parent or a store to make that happen.
 
-Query keys come from a factory
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-``queryKeys.monitors(profileId)`` returns ``['monitors', profileId]``.
-Never write that array inline. It is the Server queries contract in AGENTS.project.md, and both halves
-of the reason are things that have broken before.
-
-**Profile isolation.** zmNinjaNg talks to more than one ZoneMinder
-server. A key of ``['monitors']`` would make profile A's monitor list
-and profile B's monitor list the same cache entry, and switching
-profiles would show you the previous server's cameras. The profile id
-sits in the key so the two can never collide. The factory takes a
-branded ``ProfileId`` (``api/types.ts``), minted by ``asProfileId()``
-where a profile id is created (``stores/profile.ts``) or a ``'default'``
-fallback is synthesized (the dashboard components), so a bare string
-does not typecheck into a key position.
-
-**Prefix invalidation.** React Query matches keys by array prefix.
-``['monitors', profileId]`` is a prefix of
-``['monitors', profileId, 'all-including-excluded']``, so invalidating
-the short key invalidates the long one too. That is why the factory
-puts the profile id immediately after the domain name in every key, and
-why the comment at the top of ``lib/query/query-keys.ts`` warns against
-inserting an optional parameter before it. An inline array written by
-hand at a call site drifts out of that shape, and the invalidator that
-was supposed to refresh it silently stops matching. The failure is
-invisible: no error, just data that never updates.
-
-staleTime: what "stale" actually means
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Cached data is *fresh* or *stale*. Fresh data is served from cache and
-nothing else happens. Stale data is **still served from cache**, and a
-refetch is triggered in the background; when it returns, the component
-re-renders with the new data.
-
-Stale does not mean hidden, missing, or loading. This is the single
-most misread word in React Query. A stale query still hands you
-``data``.
-
-``staleTime`` is how long a result stays fresh. zmNinjaNg sets it once,
-app-wide:
-
-.. code:: tsx
-
-   // app/src/App.tsx
-   const queryClient = new QueryClient({
-     defaultOptions: {
-       queries: {
-         retry: shouldRetryQuery,
-         refetchOnWindowFocus: false,
-         staleTime: DEFAULT_QUERY_STALE_TIME_MS,
-       },
-     },
-   });
-
-``DEFAULT_QUERY_STALE_TIME_MS`` is 15000 ms
-(``lib/zmninja-ng-constants.ts``). It does not interact with polling:
-a query with its own ``refetchInterval`` refetches on that schedule
-regardless of freshness (the constant's own comment says so). Its job
-is to stop a query from re-fetching and error-walling the instant a
-component mounts during a network blip.
-
-Writes: useMutation and invalidateQueries
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-``useQuery`` reads. ``useMutation`` writes. A mutation does not update
-the cache by itself, because it has no idea which cached queries its
-write affected. You tell it, by invalidating them.
-
-.. code:: tsx
-
-   // app/src/pages/Server.tsx
-   const queryClient = useQueryClient();
-
-   const changeStateMutation = useMutation({
-     mutationFn: (stateName: string) => changeState(stateName),
-     onSuccess: () => {
-       toast({ title: t('common.success'), description: t('server.state_applied') });
-       queryClient.invalidateQueries({ queryKey: queryKeys.states(currentProfile?.id) });
-     },
-     onError: (error) => {
-       toast({ title: t('common.error'), description: t('server.state_apply_failed'),
-               variant: 'destructive' });
-     },
-   });
-
-``invalidateQueries`` marks the matching entries stale, which by the
-rule above means they refetch while continuing to show their old value.
-The user sees the current run state, then sees the new one, and never
-sees a spinner.
-
-Prefix matching is what makes this bearable. When the user hides a
-monitor, five different query domains hold data that is now wrong:
-
-.. code:: tsx
-
-   // app/src/components/settings/HiddenMonitorsSection.tsx
-   queryClient.invalidateQueries({ queryKey: queryKeys.monitors(currentProfile?.id) });
-   queryClient.invalidateQueries({ queryKey: queryKeys.events(currentProfile?.id) });
-   queryClient.invalidateQueries({ queryKey: queryKeys.monitorEventsSinceAll(currentProfile?.id) });
-   queryClient.invalidateQueries({ queryKey: queryKeys.timelineEvents(currentProfile?.id) });
-   queryClient.invalidateQueries({ queryKey: queryKeys.eventMontage(currentProfile?.id) });
-
-``queryKeys.events(profileId)`` is ``['events', profileId]``, a
-two-element prefix. The events list on the Events page is cached under
-``['events', profileId, filters, limit, monitorId, ...]``, one entry per
-filter combination the user has visited. The single line above
-invalidates all of them without knowing what any of them are.
-
-How this goes wrong: forgetting to invalidate. The write succeeds, the
-toast says it worked, and the list still shows the old data until
-something else happens to refetch it. Users report it as "I have to
-restart the app". Any ``useMutation`` that changes server state needs
-an ``onSuccess`` that invalidates every domain the write touched.
-
-enabled: a query that isn't ready yet
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-A query cannot be called conditionally (rules of hooks, above), but it
-often has nothing to fetch yet: no profile is selected, the user isn't
-authenticated, the monitor id hasn't arrived from the router. Setting
-``enabled: false`` calls the hook and keeps it idle. That is why
-``useMonitors`` guards on ``!!currentProfile?.id && isAuthenticated``.
-
-The gotcha, and this codebase has been bitten by it: **React Query v5
-reports** ``isLoading: false`` **for a disabled query.** A disabled
-query isn't loading, it simply isn't running, and its ``data`` is
-``undefined``. Code that reads "not loading, no data" as "the server
-returned nothing" will act on an empty list that never came from the
-server.
-
-.. code:: tsx
-
-   // app/src/hooks/useGroupFilter.ts
-   // Self-heal a dangling selection: if the selected group was deleted on the
-   // server, reset to the All-monitors bucket. Gate on a confirmed successful
-   // fetch (isSuccess), not isLoading.
-   useEffect(() => {
-     if (!isSuccess) return;
-     if (!selectedGroupId) return;
-     const exists = groups.some((g) => g.Group.Id === selectedGroupId);
-     if (!exists) setSelectedGroup(null);
-   }, [isSuccess, selectedGroupId, groups, setSelectedGroup]);
-
-Without the ``isSuccess`` gate, cold start ran this effect while the
-groups query was still disabled, found the user's persisted group
-missing from an empty list, and wiped a perfectly valid selection. Gate
-self-healing and reset effects on ``isSuccess``, never on ``!isLoading``.
-
-refetchInterval
+Fresh and stale
 ~~~~~~~~~~~~~~~
 
-``refetchInterval`` polls. Never hardcode the number. Every polling
-interval in this app comes from ``useBandwidthSettings()``, which
-returns roughly twice-as-slow values in low-bandwidth mode
-(``monitorStatusInterval`` is 20000 ms normal, 40000 ms low). That is
-the Polling contract in AGENTS.project.md, and it is why ``useMonitors`` reads
-``bandwidth.monitorStatusInterval`` rather than writing ``20000``.
+One word is worth pinning down before you read any query code. A cache
+entry is *fresh* or *stale*. Fresh means React Query serves it and does
+nothing else. Stale means React Query **still serves it** and starts a
+background refetch, then re-renders the component when the new data
+lands.
 
-Passing ``false`` stops the polling, which is how a hidden or
-backgrounded view stops costing the user battery and bandwidth:
-``refetchInterval: hidden ? false : bandwidth.monitorRecentEventsInterval``
-in ``hooks/useMonitorRecentEvents.ts``.
+Stale does not mean hidden, missing, or loading. A stale query still
+hands you ``data``. Misreading it as "no data yet" is how code ends up
+treating a perfectly good cached list as an empty one.
 
-Loading and error states get shared UI, not hand-rolled markup:
-``ErrorBanner`` with ``resolveQueryError(err, t)`` and the skeletons in
-``components/ui/query-state.tsx`` (the Query UI states contract). :doc:`07-api-and-data-fetching`
-covers the query layer in depth.
+Beyond those two ideas, what is left is this app's use of the library
+rather than React itself, and it lives in
+:doc:`07-api-and-data-fetching`: where query keys come from and why
+they are never written inline, what
+``staleTime`` is set to and why, how writes invalidate the reads they
+affect, how ``enabled`` keeps a hook alive but idle, and where polling
+intervals come from. Loading and error states get shared UI rather than
+hand-rolled markup, covered there too.
 
 Component communication
 -----------------------

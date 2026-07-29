@@ -16,38 +16,30 @@ zmNinjaNg is a client for that server. It views live camera streams, browses
 recorded footage, and receives push notifications when new recordings arrive.
 Everything it displays comes from a ZoneMinder server that the user configures.
 
-Three nouns recur through the whole guide, and they are ZoneMinder's, not ours:
+These nouns recur through the whole guide, and they are ZoneMinder's, not ours:
 
 - **Monitor**: one camera.
 - **Event**: one motion-triggered recording on a monitor.
 - **Profile**: one configured ZoneMinder server, with its URL, credentials, and
   settings. Settings are scoped to a profile, never global.
 
+Profile scoping reaches further than the settings screen. Every React Query
+cache key carries the profile id (``queryKeys.monitors(profileId)`` in
+``lib/query/query-keys.ts``), and per-profile client state such as favorited
+events is keyed the same way (``profileFavorites`` in
+``stores/eventFavorites.ts``), so switching servers cannot show you the
+previous server's cameras or starred events.
+
 Who This Guide Is For
 ---------------------
 
 Programmers who are comfortable in some language but have not written React.
-The guide explains React fundamentals as they come up. This was primarily to
-educate me as I did not have React experience and only limited TypeScript
-experience. Where the guide slows down to explain a hook or a rendering rule,
-that is why.
+The guide explains React fundamentals as they come up, and it slows down
+wherever a hook or a rendering rule has caused a real bug in this codebase.
 
-Where to Start
---------------
-
-**New to React?** Read :doc:`02-react-fundamentals`, then
-:doc:`03-state-management-zustand`. Together they cover how React decides to
-re-render and how this app holds state across components.
-
-**Returning to the codebase, or out of touch?** Read :doc:`call-flows`. It
-traces real user actions through the actual code, step by step, and links into
-the reference chapter for each layer it passes through.
-
-**Adding a feature?** :doc:`09-contributing` has the workflow.
-:doc:`06-testing-strategy` has what you must test before committing.
-
-**Debugging?** Find the flow your bug sits on in :doc:`call-flows`, then read
-the chapter covering the layer where it breaks.
+The front page of the guide routes you to the right starting chapter for what
+you are doing. This chapter covers the vocabulary the rest of the guide
+assumes.
 
 Code examples come from the codebase. File paths are written relative to
 ``app/``, so ``src/api/auth.ts`` means ``app/src/api/auth.ts``.
@@ -124,6 +116,34 @@ automatically requires it here, which a hand-written second interface would not.
 ``Record<K, V>`` types an object whose keys are ``K`` and whose values are
 ``V``. Here it maps a monitor id to that monitor's ZMS connection key.
 
+A ``Map`` would be the more natural structure, and this store cannot use one.
+``useMonitorStore`` wraps its state in Zustand's ``persist`` middleware, which
+serializes through ``JSON.stringify``, and ``JSON.stringify(new Map())`` is
+``{}``: the entries vanish and the user's connection keys are gone after a
+reload. A lookup table that has to survive a restart is a ``Record``.
+
+``ProfileId``: a string the compiler keeps separate
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: typescript
+
+   // src/api/types.ts
+   export type ProfileId = string & { readonly __brand: 'ProfileId' };
+
+   export function asProfileId(id: string): ProfileId {
+     return id as ProfileId;
+   }
+
+``__brand`` is a phantom field. No runtime value ever carries it, and the
+intersection exists only so the compiler stops treating ``ProfileId`` and
+``string`` as the same type in one direction: a ``ProfileId`` is assignable
+anywhere a ``string`` is expected, but a bare ``string`` does not typecheck
+into a ``ProfileId`` position without going through ``asProfileId``. That is
+what keeps an arbitrary id (a monitor id, an event id, a hand-written literal)
+out of a profile-scoped query key, where it would silently collide two
+servers' caches. Call ``asProfileId`` only where a profile id is minted or
+parsed, never to quiet a type error somewhere else.
+
 ``?.`` and ``??``: reaching into values that might be absent
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -146,4 +166,3 @@ Getting Help
   those IDs rather than restating them. :doc:`14-agent-development-model`
   explains the whole system.
 - Read ``app/tests/README.md`` for how the test suites are laid out and run.
-- Look at existing code for patterns before inventing one.

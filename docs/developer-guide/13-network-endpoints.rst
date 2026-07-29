@@ -4,8 +4,8 @@ External Network Endpoints
 zmNinjaNg talks to your own ZoneMinder server using the URLs configured in each
 profile (portal, API, CGI/ZMS, go2rtc). Beyond those, the app reaches out to a
 small, fixed set of external endpoints. This chapter lists every external
-endpoint, why it is contacted, on which platforms, how often, what triggers it,
-and how to turn it off.
+endpoint, why it is contacted, what leaves the device when it is, on which
+platforms, how often, what triggers it, and how to turn it off.
 
 Profile and ZoneMinder server URLs are intentionally excluded here, since those
 are servers you configure and control.
@@ -15,16 +15,17 @@ Endpoints
 
 .. list-table::
    :header-rows: 1
-   :widths: 22 20 14 12 16 16
+   :widths: 18 24 13 11 16 18
 
    * - Endpoint
-     - Why
+     - Why, and what is sent
      - Platforms
      - How often
      - Trigger
      - How to disable
-   * - ``raw.githubusercontent.com/ZoneMinder/zmNinjaNg/main/docs/notices.json``
-     - Maintainer notices shown in-app. Read-only fetch; nothing is sent.
+   * - ``raw.githubusercontent.com``
+     - Maintainer notices shown in-app. A plain GET of a static JSON file.
+       Nothing app-specific is sent: no version, no profile, no identifier.
      - Web, Desktop (Electron), iOS, Android
      - Every 24 hours
      - App launch, the 24-hour poll, and window focus when the cached copy is
@@ -32,39 +33,51 @@ Endpoints
      - No in-app toggle. Can only be blocked at the network level.
    * - Google FCM (``fcm.googleapis.com``, ``firebaseinstallations.googleapis.com``)
      - Acquire and refresh the push token so the ZoneMinder server can send push
-       notifications.
+       notifications. ``services/pushNotifications.ts`` calls
+       ``FirebaseMessaging.getToken()``; the Firebase SDK registers the app
+       installation with Google, so device and app identifiers leave the device.
+       No ZoneMinder data goes with them.
      - iOS, Android only
      - Not polled
      - App init, Firebase token refresh, and profile change.
      - Turn off notifications in the profile's Notification settings
        (``enabled = false``). Never runs on Web or Desktop.
    * - Google FCM push channel (OS-maintained)
-     - Inbound push message delivery.
+     - Inbound push message delivery over the socket the OS already holds open.
+       The app sends nothing on it; the payload arrives from your ZoneMinder
+       server by way of Google.
      - iOS, Android only
-     - Event-driven
+     - Not polled
      - An incoming push message.
      - Same as above, plus the OS-level notification permission.
    * - ``stun:stun.cloudflare.com:3478``, ``stun:stun.l.google.com:19302``
-     - WebRTC ICE / NAT traversal when viewing a go2rtc live stream over WebRTC.
-     - Web, Desktop, iOS, Android (only when WebRTC is the active method)
+     - WebRTC ICE and NAT traversal for a go2rtc live stream. A STUN binding
+       request exposes the device's public IP address and port to the STUN
+       provider, which is the whole point of asking. No stream data crosses it.
+     - Web, Desktop, iOS, Android, and only when the profile opts in
      - Not polled
-     - Starting a go2rtc WebRTC live stream.
-     - Set the streaming method to MJPEG, or remove WebRTC from the WebRTC
-       protocols list (leaving MSE/HLS), or view a monitor that has no go2rtc
-       source. MSE, HLS, and MJPEG never contact STUN.
+     - Starting a go2rtc WebRTC live stream while **STUN Servers** is on.
+     - Off by default. ``webrtcUseStun`` is ``false`` in profile settings, and
+       ``useGo2RTCStream`` then applies an empty ICE list. Setting the streaming
+       method to MJPEG, dropping ``webrtc`` from the protocol list, or viewing a
+       monitor with no go2rtc source also prevents it.
    * - ``zmninjang.readthedocs.io``
-     - This documentation.
+     - This documentation. An ordinary browser request that sends nothing about
+       the app.
      - All
      - On demand
-     - Tapping "Help Docs", which opens the system browser.
-     - Do not tap it.
+     - Tapping "Help Docs".
+     - The request happens only on that tap, and it opens in the system browser
+       rather than in the app, so there is nothing to switch off.
 
 Notes
 -----
 
-- Only the notices feed runs on a fixed timer (24 hours, set by
+- The notices feed is ``https://raw.githubusercontent.com/ZoneMinder/zmNinjaNg/main/docs/notices.json``.
+- Only that feed runs on a fixed timer (24 hours, set by
   ``DEVELOPER_NOTICES.pollIntervalMs`` in ``lib/zmninja-ng-constants.ts``). FCM
-  and STUN are demand- or event-driven.
+  and STUN are not polled at all: each is reached only when something triggers
+  it.
 - The push token is registered with your own ZoneMinder server, not with any
   third party.
 - There are no analytics or telemetry endpoints. The Firebase Analytics SDK is
@@ -73,13 +86,14 @@ Notes
   ``FIREBASE_ANALYTICS_COLLECTION_ENABLED`` (iOS) flags.
 - STUN is reached only through the WebRTC path. ``lib/vendor/go2rtc/video-rtc.js``
   creates the ``RTCPeerConnection`` (and uses the STUN ``iceServers``) only when
-  the active protocol list includes ``webrtc``.
+  the active protocol list includes ``webrtc``. The server list itself is
+  ``GO2RTC_STUN_SERVERS`` in ``lib/zmninja-ng-constants.ts``.
 
 Developer Notice Feed
 ---------------------
 
-``docs/notices.json`` is a JSON array of notice objects. Each object is
-validated on load against this schema:
+``docs/notices.json`` is a JSON array of notice objects, validated on load, and
+each object carries these fields:
 
 .. list-table::
    :header-rows: 1
@@ -121,63 +135,5 @@ filters those ids out of the fetched feed on every refetch. The Developer
 Notice page offers a per-row delete button, a confirmed Clear all action, and
 a Restore action that clears ``deletedIds`` and refetches.
 
-Generating a release notice
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-``scripts/generate_notice.mjs`` drafts a notice and upserts it into
-``docs/notices.json``. Run it from the repo root:
-
-.. code-block:: bash
-
-   npm run notice            # prompts for version, defaulting to app/package.json
-   npm run notice 1.8.0     # pass version directly
-   node scripts/generate_notice.mjs 1.8.0
-
-If no version is passed, the script prompts for one and defaults to the version
-in ``app/package.json``. The tag is always derived as ``zmNinjaNg-<version>``.
-
-The script:
-
-1. Runs ``bundle exec github_changelog_generator --future-release zmNinjaNg-<version>``
-   into a temporary file to collect the closed issues since the last tag (the
-   repo's ``.github_changelog_generator`` sets ``pulls=false``, matching
-   ``CHANGELOG.md``). ``CHANGELOG.md`` is not modified.
-2. Calls ``claude -p`` with the relevant changelog section and asks for
-   ``{"title": "...", "body": "..."}``.
-3. Prints the proposed notice and asks:
-
-.. code-block:: text
-
-   Add this notice? [y/N/e(dit)]
-
-- ``y``: upserts the notice into ``docs/notices.json`` (overwrites an existing
-  entry with the same ``id``, or prepends if new). No git commit or push.
-- ``e``: opens the draft in ``$EDITOR``; the edited version is written after
-  the editor closes.
-- ``N`` (or anything else): exits 0 without writing.
-
-There are no fallbacks. If ``gh``, ``bundle``/``github_changelog_generator``,
-or ``claude`` is missing or fails, if the output is not parseable JSON, or if
-``docs/notices.json`` is corrupt, the script prints a clear error and exits
-non-zero.
-
-To test without keeping the result: run the script, verify in the app, then
-``git checkout -- docs/notices.json`` to discard.
-
-Integration with make_release.sh
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-On minor and major releases (patch = 0) that do not already have a notice in
-``docs/notices.json``, ``scripts/make_release.sh`` asks:
-
-.. code-block:: text
-
-   Generate a developer notice for <version>? [y/N]
-
-Answering ``y`` runs ``node scripts/generate_notice.mjs <version>`` with no
-error guard. Any failure halts the release (``set -e``). After a successful
-generation, ``make_release.sh`` commits and pushes ``docs/notices.json`` so
-the notice ships with the release.
-
-If the version already has a notice in ``docs/notices.json``, or if the
-release is a patch release, the prompt is skipped.
+Authoring a notice, including ``scripts/generate_notice.mjs`` and how
+``make_release.sh`` calls it, is in :doc:`../building/release-notices`.

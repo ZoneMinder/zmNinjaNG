@@ -1,7 +1,7 @@
 Testing Strategy
 ================
 
-Three tiers:
+Tests are layered:
 
 1. **Unit tests**: functions, stores, and components, in isolation, in Node.
 2. **Web E2E**: user journeys in a real browser against a real ZoneMinder server.
@@ -50,7 +50,7 @@ somewhere to put those nodes. ``app/vitest.config.ts`` sets
 ``environment: 'jsdom'``, which gives each test file a fake ``document`` and
 ``window`` implemented in JavaScript. No browser process is started.
 
-Here are two of the eleven tests in
+Here are two tests from
 ``components/common/__tests__/RefreshButton.test.tsx`` (the file also
 mocks ``react-i18next``, which the component imports; trimmed here):
 
@@ -76,7 +76,8 @@ mocks ``react-i18next``, which the component imports; trimmed here):
      });
    });
 
-Four things are happening.
+Four pieces carry that test: ``render()``, ``screen``, ``vi.fn()``, and the
+awaited ``user.click()``.
 
 ``render()`` mounts the component into that jsdom document, exactly as the app
 mounts it into a real one at startup.
@@ -303,6 +304,9 @@ All commands run from ``app/``.
    npm test -- dashboard               # every file matching the pattern
    npm test -- --coverage              # with a coverage report
 
+Before every commit, run the verification sequence P3 in ``AGENTS.md`` names.
+The commands above are what that sequence runs for the unit tier.
+
 Coverage
 ~~~~~~~~
 
@@ -311,8 +315,8 @@ lines, functions, branches, and statements, using the v8 provider. Drop below
 any of them and ``npm test -- --coverage`` fails. ``src/tests/``, config files,
 and mock data are excluded from the measurement.
 
-There is no per-directory target. Raise the number in that file rather than
-adding a rule here.
+There is no per-directory target. Raise the four numbers in the ``thresholds``
+block of ``app/vitest.config.ts`` rather than adding a rule here.
 
 End-to-End Tests
 ----------------
@@ -325,7 +329,7 @@ the feature files at run time (``bddgen``, in the ``test:e2e`` script).
 ::
 
    app/tests/
-   ├── features/               # 16 Gherkin feature files
+   ├── features/               # 19 Gherkin feature files
    │   ├── dashboard.feature
    │   ├── monitors.feature
    │   ├── events.feature
@@ -373,11 +377,12 @@ that says ``When I select "Front Door" monitor`` or ``Then I should see 5
 events`` passes on one server and fails on every other one. Use ``.first()``,
 ``.nth(n)``, and "at least N" instead of hardcoding names, IDs, or counts.
 
-Tags mark which platforms a scenario is meant for: ``@all``, ``@web``,
-``@android``, ``@ios-phone``, ``@ios-tablet``, ``@tauri``, and ``@visual``.
-``AGENTS.md`` is the canonical list. Today the Playwright config defines a
-single ``chromium`` project and no runner filters on tags, so the tags document
-intent rather than select a device.
+Tags mark which platforms a scenario is meant for. The tags in use are
+``@all``, ``@web``, ``@android``, ``@ios-phone``, ``@ios-tablet``, ``@tauri``,
+and ``@native``; the feature files are the only list, since nothing validates
+the set. Today the Playwright config defines a single ``chromium`` project and
+no runner filters on tags, so the tags document intent rather than select a
+device.
 
 Step Definitions
 ~~~~~~~~~~~~~~~~
@@ -404,9 +409,10 @@ Steps live in per-screen files under ``tests/steps/`` and use Playwright's
    });
 
 ``await expect(locator).toBeVisible()`` retries until the timeout expires. That
-is why new steps never call ``waitForTimeout`` (the testing playbook, ``agents/project/testing.md``; one legacy placeholder
-remains in ``platform.steps.ts``): a fixed sleep either wastes time or
-races the app, and the testing playbook bans it in new steps.
+is why new steps never call ``waitForTimeout``: a fixed sleep either wastes time
+or races the app. The testing playbook (``agents/project/testing.md``) bans it
+outright. Calls that predate the rule still sit in several step files, so
+copying a neighbouring step is not a safe way to learn the convention.
 
 Selectors come from ``data-testid``, never from visible text. Text is
 translated into five languages, so ``getByText('Delete')`` fails the moment the
@@ -418,15 +424,15 @@ locale changes, and it is not unique. Every interactive element gets one:
      {t('common.delete')}
    </Button>
 
-Gate on Capability, Never on the UI Under Test
-----------------------------------------------
+Capability Guards
+^^^^^^^^^^^^^^^^^
 
-Some features exist only when the server or device supports them. PTZ controls
-render only for a controllable monitor. The tempting guard is to check whether
-the panel is on screen and skip if not. That guard is self-defeating: if the
-panel regresses and stops rendering, the guard goes false and every assertion
-below it silently no-ops. The test turns green precisely when the feature
-breaks.
+Gate on capability, never on the UI under test. Some features exist only when
+the server or device supports them: PTZ controls render only for a controllable
+monitor. The tempting guard is to check whether the panel is on screen and skip
+if not. That guard is self-defeating: if the panel regresses and stops
+rendering, the guard goes false and every assertion below it silently no-ops.
+The test turns green precisely when the feature breaks.
 
 The testing playbook requires the capability to come from an independent
 source, API or fixture data. ``tests/steps/ptz.steps.ts`` asks ZoneMinder:
@@ -550,13 +556,13 @@ capture screenshots against an already-synced app, skip the sync:
 Visual Baselines
 ~~~~~~~~~~~~~~~~
 
-The ``@visual`` tag and the ``Then the page should match the visual baseline``
-step both exist, but the step in ``tests/steps/platform.steps.ts`` is a
-placeholder that waits and returns. ``DEFAULT_THRESHOLD = 0.002`` is exported
-from ``tests/helpers/visual-regression.ts`` and nothing consumes it. There is no
-pixel comparison and no per-platform baseline directory today, so
-``npm run test:e2e:visual-update`` has nothing to update. Treat ``@visual`` as a
-marker for scenarios that should get comparison once it is wired up.
+There are none. Nothing in this repo diffs a screenshot against a baseline: the
+device harness captures PNGs and stops there, and no step, helper, or npm
+script performs a pixel comparison. The one layout assertion that does run is
+``Then no element should overflow the viewport horizontally`` in
+``tests/steps/platform.steps.ts``, which walks the DOM for elements extending
+past ``window.innerWidth`` outside a scroll container. Screenshots are for a
+human to look at.
 
 Device Setup
 ------------
@@ -634,8 +640,8 @@ Verify everything
 
 ``scripts/verify-platform-setup.ts`` runs twelve checks: Xcode, the iOS
 runtime, both simulators, the Android SDK, the AVD, ``adb``, Appium, both
-drivers, ports 4723 and 9222, and whether you have a local config override.
-Each failure prints its own fix.
+drivers, port 4723, and whether you have a local config override. Each failure
+prints its own fix.
 
 Platform Config
 ~~~~~~~~~~~~~~~
@@ -664,14 +670,6 @@ Finding the exact names your machine uses:
 
    xcrun simctl list devices     # iOS
    emulator -list-avds           # Android
-
-Before You Commit
------------------
-
-P3 in ``AGENTS.md`` at the repo root fixes the verification sequence every
-change must pass, and the project rules cover cross-platform coverage. Read them there,
-not from a copy: this chapter used to carry one, and it sat a command out of
-date until the #223 audit caught it.
 
 Debugging Tests
 ---------------

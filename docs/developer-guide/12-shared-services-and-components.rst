@@ -1,13 +1,31 @@
 Shared Services and Reusable Components
 =======================================
 
-Code that more than one page needs lives in four places: ``lib/`` for pure
+Code that more than one page needs lives in five places: ``lib/`` for pure
 utilities with no React and no store imports, ``services/`` for platform
-bridges, ``hooks/`` for React-specific logic, and ``components/ui`` plus
-``components/common`` for shared components. This chapter walks the pieces
-that carry behavior worth explaining. Feature components that belong to one
-screen are in :doc:`05-component-architecture`; the API layer is in
+bridges, ``stores/`` for the client state several features share, ``hooks/``
+for React-specific logic, and ``components/ui`` plus ``components/common``
+for shared components. This chapter walks the pieces that carry behavior
+worth explaining. Feature components that belong to one screen are in
+:doc:`05-component-architecture`; the API layer is in
 :doc:`07-api-and-data-fetching`.
+
+Start from what you are trying to do:
+
+==============================================  ===============================================================
+Question                                        Section
+==============================================  ===============================================================
+Build any ZoneMinder URL                        URL Builder (``lib/zm/url-builder.ts``)
+Route a monitor to the server that records it   Server Resolver (``lib/zm/server-resolver.ts``)
+Close a ZMS stream without leaving a zombie     Delayed CMD_QUIT (``lib/zm/zms-quit.ts``)
+Store a password or a PIN                       Secure Storage, Crypto Utilities
+Give a monitor its own streaming port           Multi-port Resolution (``lib/monitor/multiport.ts``)
+Show a query error to the user                  Query Error Resolution (``lib/query/query-error.ts``)
+Navigate from outside a React component         Navigation Service (``lib/navigation.ts``)
+Save a montage layout per monitor group         Group-Keyed Montage Settings (``stores/settings.ts``)
+Count events the user has not seen yet          Monitor Seen Watermarks (``stores/monitorSeen.ts``)
+Read a profile setting from a non-React module  Profile Settings Accessor (``lib/profile/profile-settings.ts``)
+==============================================  ===============================================================
 
 Shared Services (lib/ and services/)
 ------------------------------------
@@ -204,8 +222,7 @@ extension's declare one today.
 Never log or store secrets
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Two rules the security layer exists to enforce. Passwords and PINs never
-touch ``localStorage`` directly:
+Passwords and PINs never touch ``localStorage`` directly:
 
 .. code:: typescript
 
@@ -568,16 +585,22 @@ Secure Storage (``lib/security/secureStorage.ts``)
 One API over the iOS Keychain, the Android Keystore
 (``@aparajita/capacitor-secure-storage``), and encrypted localStorage on web.
 
+Keys are namespaced by the caller. ``ProfileService`` (``services/profile.ts``)
+scopes a profile's password by id:
+
 .. code:: typescript
 
-   import { setSecureValue, getSecureValue, removeSecureValue } from '../lib/security/secureStorage';
+   // services/profile.ts
+   await setSecureValue(`password_${profileId}`, password);
 
-   await setSecureValue('password_profile_123', 'my-secure-password');
-   const password = await getSecureValue('password_profile_123');  // string | null
-   await removeSecureValue('password_profile_123');
+   // getSecureValue resolves to null when nothing is stored under the key,
+   // which is why the read maps it to undefined for its own callers.
+   const password = await getSecureValue(`password_${profileId}`);
+   return password || undefined;
 
-``hasSecureValue(key)`` tests presence, ``clearSecureStorage()`` wipes every
-key, and ``getStorageInfo()`` reports which backend is active.
+``removeSecureValue(key)`` deletes one entry, ``hasSecureValue(key)`` tests
+presence, ``clearSecureStorage()`` wipes every key, and ``getStorageInfo()``
+reports which backend is active.
 
 **Used by:** ProfileService (passwords), ``lib/kioskPin.ts`` (PIN hash and
 salt).
@@ -585,18 +608,12 @@ salt).
 Platform Detection (``lib/platform.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. code:: typescript
-
-   import { Platform } from '../lib/platform';
-
-   if (Platform.isElectron) { /* desktop */ }
-   if (Platform.isNative) { /* iOS or Android */ }
-   if (Platform.isDesktopOrWeb) { /* not Capacitor */ }
-   if (Platform.shouldUseProxy) { /* web dev server */ }
-
-These guards gate every dynamic Capacitor import. A static import of a
-Capacitor plugin breaks the web build, so the pattern is always a platform
-check followed by ``await import(...)``.
+``Platform`` exposes the booleans the rest of the app branches on:
+``isElectron``, ``isNative``, ``isDesktopOrWeb``, ``shouldUseProxy``, and the
+per-OS flags. What matters is not the shape of the object but where the
+guards are mandatory. They gate every dynamic Capacitor import: a static
+import of a Capacitor plugin breaks the web build, so the pattern is always
+a platform check followed by ``await import(...)`` (the Native contract).
 
 **Used by:** the HTTP client, download utilities, proxy utilities, and every
 platform-specific branch.
@@ -806,136 +823,6 @@ to an empty array.
 
 **Used by:** ``api/monitors.ts`` and ``api/events.ts``.
 
-Group-Keyed Montage Settings (``stores/settings.ts``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-A profile can show all monitors or one selected monitor group, and each group
-keeps its own grid columns, hidden monitors, and saved layouts. Two
-``ProfileSettings`` fields hold that:
-
-.. code:: typescript
-
-   montageByGroup: Record<string, MontageGroupLayout>;
-   eventMontageByGroup: Record<string, EventMontageGroupLayout>;
-
-The map key is the group ID, or a sentinel when no group is selected:
-
-.. code:: typescript
-
-   export const ALL_GROUPS_KEY = '__all__';
-
-The active key is ``selectedGroupId ?? ALL_GROUPS_KEY``, where
-``selectedGroupId`` is the profile's current group filter (``null`` for all
-monitors).
-
-.. code:: typescript
-
-   interface MontageGroupLayout {
-     workingLayout: Layout[];
-     savedLayouts: MontageSavedLayout[];
-     activeLayoutName: string | null;
-     gridCols: number;
-     hiddenMonitorIds: string[];
-   }
-
-   // Event montage is a uniform grid, so only the column count is scoped.
-   interface EventMontageGroupLayout {
-     gridCols: number;
-   }
-
-``DEFAULT_MONTAGE_GROUP_LAYOUT`` and ``DEFAULT_EVENT_MONTAGE_GROUP_LAYOUT``
-supply the values used when a group has no stored bucket. Both default
-``gridCols`` to ``2``; the montage default also carries an empty
-``workingLayout``, empty ``savedLayouts``, ``activeLayoutName: null``, and
-empty ``hiddenMonitorIds``. ``DEFAULT_SETTINGS`` starts both maps empty, so a
-group's bucket is created lazily on first write.
-
-**Reading and writing.** Montage components use ``useMontageGroupState()``
-rather than touching ``montageByGroup``:
-
-.. code:: typescript
-
-   import { useMontageGroupState } from '../hooks/useMontageGroupState';
-
-   const { groupKey, bucket, update } = useMontageGroupState();
-   update({ gridCols: 3, hiddenMonitorIds: ['12'] });
-
-The hook resolves ``groupKey`` from ``useGroupFilter``, reads the matching
-bucket (falling back to ``DEFAULT_MONTAGE_GROUP_LAYOUT``), and exposes
-``update`` as a partial patch that calls the store action
-``updateMontageGroupLayout(profileId, groupKey, patch)``. Event montage
-columns go through the matching ``updateEventMontageGroupLayout`` action.
-
-**Persist migration.** The store is at ``version: 1`` with ``migrateSettings``
-as its ``migrate`` callback. Persisted v0 state held flat montage fields
-(``montageLayouts``, ``montageSavedLayouts``, ``montageActiveLayoutName``,
-``montageGridCols``, ``montageGridRows``, ``montageHiddenMonitorIds``,
-``eventMontageGridCols``, ``eventMontageLayouts``). The migration removes those
-from each profile and seeds the ``ALL_GROUPS_KEY`` bucket from them; the old
-``montageLayouts.lg`` array becomes ``workingLayout``, and absent values fall
-back to the defaults. Profiles created after v1 skip it and start empty.
-
-**Dangling group filter self-heal.** A persisted ``selectedGroupId`` can point
-at a group that no longer exists on the server. ``useGroupFilter`` resets it to
-``null`` after a successful groups load when the stored ID is missing from the
-returned list. The reset is gated on the groups query's ``isSuccess`` flag, not
-``isLoading``: React Query v5 reports ``isLoading: false`` for a *disabled*
-query, and the groups query stays disabled until the profile is loaded and
-authenticated. Gating on ``isLoading`` let the empty disabled-state list wipe a
-valid selection during cold start, which dropped the montage back to the
-All-monitors bucket and streamed every monitor. ``isSuccess`` is false while a
-query is disabled, loading, or errored, so the reset fires only once a real
-fetch has returned. :doc:`02-react-fundamentals` covers the query-state flags.
-
-**Render gate (``isFilterReady``).** Monitors and groups load from two separate
-queries, and the monitors query usually returns first. A page that rendered as
-soon as monitors arrived would mount a tile per monitor before it knew the
-group membership, and mounting a tile starts its stream: that one frame opens a
-stream for every monitor on the server before the group narrows the list back
-down. ``useGroupFilter`` therefore exposes ``isFilterReady``, true when no
-filter is active or when an active filter's groups query has settled
-(``isSuccess`` or ``error``). Montage and Monitors hold their loading skeleton
-until ``isLoading`` is false and ``isFilterReady`` is true, so tiles first mount
-against the final filtered set. Both also render an empty list, not all
-monitors, when a filter is active but ``filteredMonitorIds`` is empty.
-
-**Used by:** ``useMontageGroupState`` (montage pages and the grid hook), the
-Montage and Monitors render gates, the event montage column control, and the
-persist layer of ``useSettingsStore``.
-
-Monitor Seen Watermarks (``stores/monitorSeen.ts``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-This store holds the "you have seen up to here" mark that the monitor card's
-new-event badge counts from. Per profile, per monitor, it stores the
-``StartDateTime`` of the newest event the user had seen the last time they
-opened that monitor. It persists under ``zmng-monitor-seen`` in local storage,
-so watermarks are per device and do not sync across installs.
-
-.. code:: typescript
-
-   // stores/monitorSeen.ts
-   profileWatermarks: Record<string, Record<string, string | null>>;
-
-An absent key and a stored ``null`` mean different things, and the difference
-drives the badge. An **absent** entry means the monitor has never been seeded:
-``seed`` writes its newest event on the first response and the card shows no
-badge, so a fresh install does not open on a week of backlog. A stored **null**
-means the monitor had no events at all when it was seeded, so every event since
-counts and the count query runs unfiltered. ``seed`` is idempotent (it returns
-early if a watermark already exists), and ``markSeen(p, m, null)`` is a no-op, so
-opening a monitor that has never recorded an event cannot overwrite a real
-watermark with nothing.
-
-The value is always a server ``StartDateTime``, never a local ``Date.now()``:
-clock skew between the app and the ZoneMinder server would hide or duplicate
-events. :doc:`call-flows` Flow 18 walks the absent-versus-null decision through
-the seeding effect that makes it.
-
-**Used by:** ``useMonitorNewEvents`` (the count queries and the seeding effect),
-``useOpenMonitorEvents`` (stamps on opening the events, shared by ``MonitorCard``
-and ``MontageMonitor``), and ``MonitorRecentEvents`` (stamps when the
-recent-events list is on screen).
 
 Watermark date math (``lib/event/watermark.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -947,7 +834,10 @@ the watermark straight through would put the already-seen boundary event back at
 the top of the filtered list. Adding one second to the watermark makes the two
 operators agree on the same set. Input and output are ZM second-granularity
 local-time strings; a value that does not match the ``YYYY-MM-DD HH:mm:ss`` shape
-is returned unchanged. ``useOpenMonitorEvents`` is the only caller.
+is returned unchanged. The watermark it reads comes from the store described
+under Monitor Seen Watermarks below.
+
+**Used by:** ``hooks/useOpenMonitorEvents.ts`` only.
 
 Zone Utilities (``lib/monitor/zone-utils.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1104,254 +994,152 @@ the refresh-then-relogin fallthrough.
 Assistant Agent and Providers (``lib/assistant/``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The store-free core behind the "Ask" panel: the component side is in
-:doc:`05-component-architecture`, and :doc:`call-flows`'s "Asking the
-assistant a question" traces one send end to end. Everything under
-``lib/assistant/`` is a plain function, no React import, no Zustand import:
-``agent.ts`` takes an ``AssistantHost`` interface instead, so the same loop
-runs against the real app and against tests without a DOM.
+The store-free core behind the "Ask" panel: a bounded tool loop in
+``agent.ts`` plus one adapter per backend under ``providers/``, none of
+which imports React or Zustand. :doc:`15-assistant` covers the loop, the
+tool gates, token accounting, and each backend's device quirks. The React
+surface that drives it (``AskPanel`` and its two shells) is in
+:doc:`16-platform-surfaces`.
 
-``runAssistantTurn`` (``agent.ts``) is a bounded loop
-(``ASSISTANT.maxToolIterations``, 6) that calls
-``provider.chat(history, tools, system, signal)`` with the turn's own tool
-list (``opts.tools``, defaulting to ``TOOLS``) and executes each returned
-``ToolCall`` against a definition found in that same list. The list is the
-execution authority: a turn triage routed here with no tools must treat an
-invented call as unavailable, so the registry's ``getToolByName`` and
-``isWithheldToolName`` (``tools.ts``) are consulted only to phrase the
-refusal, distinguishing a withheld action from a known tool on a tool-less
-turn and from a plain typo. It resolves
-with only the messages that turn produced, never the history it was handed:
-what it sends the model is a trimmed view of the caller's thread (the boundary
-slice below, then ``ASSISTANT.maxHistoryMessages``), so returning a "history"
-would hand the caller an array of a different length than its own and invite
-off-by-N arithmetic against it.
+Shared Stores (stores/)
+-----------------------
 
-Two mechanisms keep a long conversation inside a finite context window.
-``sliceAfterContextBoundary`` drops everything up to and including the last
-message flagged ``contextBoundary`` before the loop runs, so an auto-clear
-(decided in ``AskPanel``, see :doc:`call-flows`'s "Asking the assistant a
-question") hides history from the model while the thread in
-``stores/assistant.ts`` keeps rendering it for the user. ``isContextNearlyFull``
-is the decision itself: it compares the ``promptTokens`` a backend reported
-against that backend's ``contextWindow``, and returns false whenever either is
-unknown. Both are measured rather than estimated: the app never counts tokens
-itself, it reads ``usage`` off the response (``providers/usage.ts`` maps the
-OpenAI-shaped block the WebLLM, native, and Ollama backends answer with; the
-Apple backend reports no usage, so its counts stay undefined), and
-``contextWindow`` is per-backend: the WebLLM provider knows it exactly because
-``model-download.ts`` passed it to ``CreateMLCEngine``, ``AppleIntelligenceProvider``
-learns it from the plugin's ``isSupported().contextSize`` on its first native
-call (see its own section below), and ``OpenAiProvider``
-learns it after a chat turn by asking Ollama's native ``/api/ps`` what window
-the loaded model actually runs with (``refreshContextWindow``, cached per
-``baseUrl::model`` in ``CONTEXT_WINDOWS``; the OpenAI-compatible API never
-reports ``num_ctx``), so auto-clear works on that backend from the next turn
-on. A server without the endpoint records 0 and is never asked again.
+Montage layout and monitor-seen watermarks are Zustand stores rather than
+``lib/`` utilities, and both are read by more than one feature.
+:doc:`03-state-management-zustand` covers how a store is built and
+subscribed to; what follows is what each one holds and why its shape is what
+it is.
 
-``TOOLS`` is the registry, and it holds only ``readOnlyTools``
-(``tools-readonly.ts``: monitor/event lookups, server health, navigation).
-There are no destructive tools and no confirmation gate: the actions the
-assistant used to offer behind a confirm dialog (arm/disarm, run state,
-monitor function, alarms, deleting or archiving an event) were removed
-outright, so nothing in ``lib/assistant/`` imports a mutating API and
-``ToolDefinition`` (``types.ts``) cannot express one. ``WITHHELD_TOOL_NAMES``
-(``tools.ts``) keeps those old names only as strings, so the loop can explain
-why such a call will not run instead of reporting an unknown tool, which
-reads to a model like a typo worth retrying.
+Group-Keyed Montage Settings (``stores/settings.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Before a call executes, the loop runs its gates in order: availability in the
-turn's tool list, a duplicate-signature check (``toolCallSignature`` over
-``stripOmittedArgs``-normalized input, so a repeat spelled with placeholder
-arguments is still refused), ``objectQuestionMismatch`` (``count_events``
-cannot answer an object-type question), and ``validateToolInput`` against the
-tool's own schema. Each failure returns as an ordinary error tool result the
-model corrects from within the same turn; what passes runs through
-``captureApiCalls`` so the transcript records the ZoneMinder requests the
-tool actually made.
+A profile can show all monitors or one selected monitor group, and each group
+keeps its own grid columns, hidden monitors, and saved layouts. These
+``ProfileSettings`` fields hold that:
 
-``providers/provider.ts``'s ``getAssistantProvider`` decides which model
-answers: the deterministic ``sharedMockProvider`` (``providers/mock.ts``) in
-non-production e2e mode behind ``isAssistantTestMode()``, ``OpenAiProvider``
-when the profile's backend is Ollama, ``NativeLlmProvider`` when it is
-``'native'`` (refs #270), ``AppleIntelligenceProvider`` when it is ``'apple'``
-(refs #270), and ``WebLlmProvider`` otherwise. The on-device
-WebLLM provider runs on ``@mlc-ai/web-llm`` in the browser via WebGPU, and
-the native provider (iPhone and iPad only, gated by ``useNativeLlmSupported``
-on a 5.5GB physical-memory floor; Android dropped this backend in issue #270 and
-uses Gemini Nano instead; see
-:doc:`call-flows`'s "Asking the assistant a question") runs a llama.cpp
-model in-process through the Capacitor ``NativeLlm`` bridge instead of a
-browser engine; on either on-device path no message or tool result is ever
-sent to a server other than the ZoneMinder server the tool call itself
-targets. iOS runs that model on Metal through ``LlamaEngine`` (Swift);
-Android has no GPU backend for it yet, so its JNI engine
-(``llama_jni.cpp``) builds CPU-only for ``arm64-v8a``, with Vulkan out of
-scope for now (issue #270), and answers correspondingly slower than on
-iPhone. The native model is fixed, not user-chosen: ``ASSISTANT.nativeLlmModel``
-(``lib/zmninja-ng-constants.ts``) is the source of truth, naming
-Qwen3-4B-Instruct-2507 at a Q4_K_M GGUF quantization pulled from unsloth's
-HuggingFace repo rather than Qwen's own, since Qwen publishes no official
-GGUF conversion of this model. The llama.cpp build it runs on is pinned
-rather than floating, to the same tag on both platforms: ``binaryTarget`` in
-``app/ios/App/LlamaKit/Package.swift`` fetches release ``b10087``'s prebuilt
-XCFramework by URL and checksum, while
-``app/android/app/src/main/cpp/CMakeLists.txt`` pins the same ``b10087``
-tag through CMake's ``FetchContent`` and builds it from source at compile
-time. All three adapters
-constrain generation where their backend can enforce it: ``WebLlmProvider``
-compiles its two-shape JSON envelope (``ENVELOPE_SCHEMA``) through the
-engine's grammar via ``response_format``, falling back to prompt-plus-parser
-for the session if the engine rejects it, and ``OpenAiProvider`` maps
-``complete``'s ``jsonSchema`` to ``response_format: json_schema``.
-``NativeLlmProvider`` has no grammar-constrained decoding to reach for, so it
-always runs the same prompt-plus-parser path WebLLM falls back to, reusing
-``buildWebLlmMessages``/``parseWebLlmTurn`` from ``providers/webllm.ts``
-directly rather than a native-specific copy. All three also retry an
-unparseable reply up to ``ASSISTANT.maxParseAttempts`` as a self-repair: the
-failed reply plus a correction naming the fault are appended, and the
-temperature is raised only on the final attempt.
+.. code:: typescript
 
-``AppleIntelligenceProvider`` (``providers/apple-intelligence.ts``, refs #270)
-is a fourth backend and structurally a trimmed ``NativeLlmProvider``: the
-``'apple'`` backend runs Apple's OS-hosted Foundation Models system model over
-the Capacitor ``AppleIntelligence`` bridge (iOS only), reusing the same
-``buildWebLlmMessages``/``parseWebLlmTurn``/``SELF_REPAIR_PROMPT`` stack and the
-same prompt-plus-parser, self-repair loop the native provider does, because the
-bridge has no grammar-constrained decoding either. What the native provider
-carries but this one drops follows from the OS owning the model: there is no
-download, no model file, no KV-cache slot, and the Foundation Models API reports
-no token counts, so ``turn.usage`` stays undefined and ``providers/usage.ts`` is
-never consulted for this backend. Its ``contextWindow`` is not passed in at load
-time (there is no load): the provider learns it from the plugin's
-``isSupported().contextSize`` (4096) on the first native call of a turn and
-caches it per instance, so ``isContextNearlyFull`` can auto-clear from the next
-turn on, the same measured-not-estimated rule the other backends follow. It maps
-the plugin's stable rejection ``code`` the way ``NativeLlmProvider`` does:
-``CHAT_BUSY`` becomes ``__i18n:assistant.native_busy`` and everything else
-``__i18n:assistant.native_engine_failed`` (both strings shared with the native
-backend, since both are on-device engines), never the native side's untranslated
-``localizedDescription``, which is only logged. The bridge itself
-(``ios/App/App/AppleIntelligencePlugin.swift``, jsName ``AppleIntelligence``,
-TS wrapper ``app/src/plugins/apple-intelligence/``) exposes only
-``isSupported``/``chat``/``cancelChat``: ``isSupported`` returns
-``supported: false`` with a ``reason`` of ``platform`` (ineligible device or
-pre-iOS-26), ``disabled`` (Apple Intelligence switched off), or ``notReady``
-(still provisioning), which ``useAppleIntelligenceSupported``
-(``hooks/useAppleIntelligenceSupported.ts``, mirroring ``useNativeLlmSupported``)
-surfaces so ``AssistantSection`` shows the **On-device (Apple Intelligence)**
-option only when supported and a "turn it on in iOS Settings" hint only for
-``disabled``. ``chat`` drives one ``LanguageModelSession.respond`` per call with
-no streaming, and ``cancelChat`` cancels the in-flight ``Task``; the two on-device
-gates (``'apple'`` and ``'native'``) are independent probes, so a phone can offer
-one without the other.
+   montageByGroup: Record<string, MontageGroupLayout>;
+   eventMontageByGroup: Record<string, EventMontageGroupLayout>;
 
-``GeminiNanoProvider`` (``providers/gemini-nano.ts``, refs #270) is the Android
-system model, Gemini Nano over AICore, reached through the ML Kit GenAI Prompt
-API. It is worth being precise about which provider it copies, because the
-obvious guess is wrong: it is a trimmed ``NativeLlmProvider``, not a port of
-``AppleIntelligenceProvider``, even though both back a model the OS owns. The
-difference is what the decoder can be told. Foundation Models takes a
-``GenerationSchema`` built per turn, which is how the Apple provider constrains
-the reply to the turn contract and removes the answer branch until a tool result
-exists. ML Kit's structured output is compile-time Kotlin codegen (a
-``@Generable`` data class processed by KSP) with no union type, so no per-tool
-schema can be built at runtime and no branch can be removed. This backend
-therefore runs the same prompt-plus-parser, self-repair loop llama.cpp does, and
-leans on the code-level grounding checks in ``agent.ts`` rather than a decoder
-constraint.
+The map key is the group ID, or a sentinel when no group is selected:
 
-Two device facts shape the bridge, and both contradict what the ML Kit
-documentation says, which is why they are measured at runtime rather than
-assumed. The Prompt API is documented with an input limit under 4000 tokens; a
-Pixel 10 running ``nano-v3`` reports 8192 from ``getTokenLimit()``, so
-``isSupported`` reads the real number and advertises it minus a 1024-token reply
-reserve, the same reserve the Apple plugin applies for the same reason. And
-``isSystemPromptAvailable()`` returns ``false`` on that model, so a
-``SystemInstruction`` would be accepted and ignored, silently dropping the tool
-catalog and the install-specific facts; the plugin probes that capability once
-and folds the system text into the prompt when it is unsupported.
+.. code:: typescript
 
-The bridge (``android/app/src/main/java/com/zoneminder/zmNinjaNG/GeminiNanoPlugin.java``,
-jsName ``GeminiNano``, TS wrapper ``app/src/plugins/gemini-nano/``) exposes
-``isSupported``/``download``/``chat``/``cancelChat``. The ``download`` method is
-the surface Apple's bridge has no need for: AICore fetches the weights on
-request rather than shipping them with the OS, so ``isSupported`` reports
-``reason: 'notReady'`` on a supported phone that has not downloaded them, and
-``useGeminiNanoSupported`` (``hooks/useGeminiNanoSupported.ts``) turns that into
-the download row in ``AssistantGeminiNanoSection`` rather than a dead end. That
-hook carries a ``refresh`` the other two do not, so a completed download makes
-the backend selectable without an app restart. Two rejection codes are specific
-to AICore and neither may collapse into the generic engine failure, because
-"try again" is wrong advice for both: ``BACKGROUND_BLOCKED`` (AICore refuses to
-infer for an app that is not in the foreground) and ``QUOTA_EXCEEDED`` (each app
-is metered per day). ``chat`` also takes a ``utility`` flag rather than the
-native provider's ``cacheSlot``: ML Kit exposes no KV cache, but the second slot
-is still needed for the same reason, since the window interpreter nests a
-one-shot completion inside a tool call and would otherwise collide with the
-tool-loop chat.
+   export const ALL_GROUPS_KEY = '__all__';
 
-One more Android-only wrinkle sits in the manifest. ML Kit GenAI declares
-``minSdk 26`` while the app ships to 24, so ``AndroidManifest.xml`` carries a
-``tools:overrideLibrary`` for it rather than raising the app's floor, which would
-drop Android 7 users for a backend they could never run (AICore does not exist
-below Android 14). ``GeminiNanoPlugin`` guards every entry point on
-``SDK_INT >= O`` so no ML Kit class is loaded where the runtime could not verify
-it.
+The active key is ``selectedGroupId ?? ALL_GROUPS_KEY``, where
+``selectedGroupId`` is the profile's current group filter (``null`` for all
+monitors).
 
-Each entry in ``ASSISTANT.webllmModels`` (``lib/zmninja-ng-constants.ts``)
-carries its id, its approximate download size, and its own
-``contextWindowSize``, which ``chatOptsFor`` (``model-download.ts``) passes to
-``CreateMLCEngine``. The window is per model rather than one global value for
-two reasons. web-llm's prebuilt registry caps every model it ships at 4096,
-below what any of them were trained for, and our prompt (system rules, tool
-schemas, monitor table, history, tool results) overflows that, so each entry
-has to raise it. But raising it is not free and not uniform: the KV cache is
-allocated up front and grows linearly with the window, on top of the weights,
-so Llama 3.2's native 128K would need gigabytes by itself. Each value is
-therefore ``min(the model's native window, ASSISTANT.contextWindowCap)``, which
-is why the Llama 3.2 3B entry sits at the cap rather than its native 128K. A
-model id absent from the list gets no override at all rather than a guessed
-window.
+.. code:: typescript
 
-``chatOptsFor`` always sends ``sliding_window_size: -1`` alongside the window,
-and that pairing is load-bearing. web-llm throws
-``WindowSizeConfigurationError`` when both windows resolve positive, and
-``sliding_window_size`` does not come from the bundled registry at all: it comes
-from each model's ``mlc-chat-config.json``, fetched from HuggingFace, which the
-registry's overrides merge over. Llama 3.2 already ships -1, so the pin is a
-no-op for it and a guard against the next sliding-window model. Pinning -1 selects full
-KV-cache mode, matching what the registry's own Mistral entries do. Reading the
-bundled registry alone will not show you any of this (the data-integrity playbook, ``agents/project/data-integrity.md``).
+   interface MontageGroupLayout {
+     workingLayout: Layout[];
+     savedLayouts: MontageSavedLayout[];
+     activeLayoutName: string | null;
+     gridCols: number;
+     hiddenMonitorIds: string[];
+   }
 
-That same merge is why ``gemma3-1b-it-q4f16_1-MLC`` is not in the list. Its
-stock registry entry cannot load on web-llm 0.2.84 at all: the override sets
-``context_window_size: 4096`` while its fetched config supplies
-``sliding_window_size: 512``, so both resolve positive and the load throws
-before a token is generated. The ``-1`` pin loads it, but then forces full-KV
-attention on a wasm compiled for sliding-window attention, and it answers with
-corrupted output (empty at 16384, token soup at 8192). Its native 512-token
-window is the only untried mode and is smaller than this app's system prompt, so
-the model would never see the tool contract.
+   // Event montage is a uniform grid, so only the column count is scoped.
+   interface EventMontageGroupLayout {
+     gridCols: number;
+   }
 
-``webllmModels`` lists two models: ``Llama-3.2-3B-Instruct-q4f16_1-MLC`` and
-``Qwen3-4B-q4f16_1-MLC``, with Qwen3 4B as ``ASSISTANT.defaultModelId`` for
-fresh installs after it beat the llama class across the eval suite. The picker
-used to offer six, and the six differed in the one behaviour that matters:
-whether the model calls a tool at all rather than answering from nothing; the
-short list keeps every entry measured against the same question suite. Qwen3
-is a reasoning model, so ``WebLlmProvider`` sends web-llm's
-``extra_body: { enable_thinking: false }`` for Qwen3 model ids: the engine
-pre-closes an empty think block so the model cannot reason, unlike the
-``/no_think`` text directive, which only hides the tag. This list only ever
-serves desktop and web: the on-device backend is not offered on phones or
-tablets at all. ``ASSISTANT.retiredModelIds`` maps every id the list used to
-carry onto Llama 3.2 3B, and ``SETTINGS_VERSION`` moves with it so the
-rewrite reaches installs already persisted at the previous version.
+``DEFAULT_MONTAGE_GROUP_LAYOUT`` and ``DEFAULT_EVENT_MONTAGE_GROUP_LAYOUT``
+supply the values used when a group has no stored bucket. Both default
+``gridCols`` to ``2``; the montage default also carries an empty
+``workingLayout``, empty ``savedLayouts``, ``activeLayoutName: null``, and
+empty ``hiddenMonitorIds``. ``DEFAULT_SETTINGS`` starts both maps empty, so a
+group's bucket is created lazily on first write.
 
-**Used by:** ``components/assistant/AskPanel.tsx`` (drives one turn per
-send), ``components/assistant/useAssistantHost.ts`` (implements the
-``AssistantHost`` the loop calls into).
+**Reading and writing.** Montage components use ``useMontageGroupState()``
+rather than touching ``montageByGroup``:
+
+.. code:: typescript
+
+   import { useMontageGroupState } from '../hooks/useMontageGroupState';
+
+   const { groupKey, bucket, update } = useMontageGroupState();
+   update({ gridCols: 3, hiddenMonitorIds: ['12'] });
+
+The hook resolves ``groupKey`` from ``useGroupFilter``, reads the matching
+bucket (falling back to ``DEFAULT_MONTAGE_GROUP_LAYOUT``), and exposes
+``update`` as a partial patch that calls the store action
+``updateMontageGroupLayout(profileId, groupKey, patch)``. Event montage
+columns go through the matching ``updateEventMontageGroupLayout`` action.
+
+**Persist migration.** The store is at ``version: 1`` with ``migrateSettings``
+as its ``migrate`` callback. Persisted v0 state held flat montage fields
+(``montageLayouts``, ``montageSavedLayouts``, ``montageActiveLayoutName``,
+``montageGridCols``, ``montageGridRows``, ``montageHiddenMonitorIds``,
+``eventMontageGridCols``, ``eventMontageLayouts``). The migration removes those
+from each profile and seeds the ``ALL_GROUPS_KEY`` bucket from them; the old
+``montageLayouts.lg`` array becomes ``workingLayout``, and absent values fall
+back to the defaults. Profiles created after v1 skip it and start empty.
+
+**Dangling group filter self-heal.** A persisted ``selectedGroupId`` can point
+at a group that no longer exists on the server. ``useGroupFilter`` resets it to
+``null`` after a successful groups load when the stored ID is missing from the
+returned list. The reset is gated on the groups query's ``isSuccess`` flag, not
+``isLoading``: React Query v5 reports ``isLoading: false`` for a *disabled*
+query, and the groups query stays disabled until the profile is loaded and
+authenticated. Gating on ``isLoading`` let the empty disabled-state list wipe a
+valid selection during cold start, which dropped the montage back to the
+All-monitors bucket and streamed every monitor. ``isSuccess`` is false while a
+query is disabled, loading, or errored, so the reset fires only once a real
+fetch has returned. :doc:`02-react-fundamentals` covers the query-state flags.
+
+**Render gate (``isFilterReady``).** Monitors and groups load from two separate
+queries, and the monitors query usually returns first. A page that rendered as
+soon as monitors arrived would mount a tile per monitor before it knew the
+group membership, and mounting a tile starts its stream: that one frame opens a
+stream for every monitor on the server before the group narrows the list back
+down. ``useGroupFilter`` therefore exposes ``isFilterReady``, true when no
+filter is active or when an active filter's groups query has settled
+(``isSuccess`` or ``error``). Montage and Monitors hold their loading skeleton
+until ``isLoading`` is false and ``isFilterReady`` is true, so tiles first mount
+against the final filtered set. Both also render an empty list, not all
+monitors, when a filter is active but ``filteredMonitorIds`` is empty.
+
+**Used by:** ``useMontageGroupState`` (montage pages and the grid hook), the
+Montage and Monitors render gates, the event montage column control, and the
+persist layer of ``useSettingsStore``.
+
+Monitor Seen Watermarks (``stores/monitorSeen.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This store holds the "you have seen up to here" mark that the monitor card's
+new-event badge counts from. Per profile, per monitor, it stores the
+``StartDateTime`` of the newest event the user had seen the last time they
+opened that monitor. It persists under ``zmng-monitor-seen`` in local storage,
+so watermarks are per device and do not sync across installs.
+
+.. code:: typescript
+
+   // stores/monitorSeen.ts
+   profileWatermarks: Record<string, Record<string, string | null>>;
+
+An absent key and a stored ``null`` mean different things, and the difference
+drives the badge. An **absent** entry means the monitor has never been seeded:
+``seed`` writes its newest event on the first response and the card shows no
+badge, so a fresh install does not open on a week of backlog. A stored **null**
+means the monitor had no events at all when it was seeded, so every event since
+counts and the count query runs unfiltered. ``seed`` is idempotent (it returns
+early if a watermark already exists), and ``markSeen(p, m, null)`` is a no-op, so
+opening a monitor that has never recorded an event cannot overwrite a real
+watermark with nothing.
+
+The value is always a server ``StartDateTime``, never a local ``Date.now()``:
+clock skew between the app and the ZoneMinder server would hide or duplicate
+events. :doc:`call-flows` Flow 18 walks the absent-versus-null decision through
+the seeding effect that makes it.
+
+**Used by:** ``useMonitorNewEvents`` (the count queries and the seeding effect),
+``useOpenMonitorEvents`` (stamps on opening the events, shared by ``MonitorCard``
+and ``MontageMonitor``), and ``MonitorRecentEvents`` (stamps when the
+recent-events list is on screen).
 
 Shared Hooks (hooks/)
 ---------------------
@@ -1656,10 +1444,10 @@ A bell with an unread count, placed beside page titles. It renders nothing
 when there are no unread notifications, and rings (a CSS animation) when a new
 one arrives.
 
-Two details. The last known count lives in a module-level variable rather than
-component state, so navigating between pages (which unmounts and remounts the
-badge) does not replay the ring for notifications the user has already seen.
-And the ring works by incrementing a ``ringKey`` used as the Bell's ``key``
+The last known count lives in a module-level variable rather than component
+state, so navigating between pages (which unmounts and remounts the badge)
+does not replay the ring for notifications the user has already seen. The
+ring works by incrementing a ``ringKey`` used as the Bell's ``key``
 prop: React treats a changed ``key`` as a different element and remounts it,
 which restarts the CSS animation. Re-adding the class to an existing element
 would not.
@@ -1715,9 +1503,10 @@ PasswordInput (``components/ui/password-input.tsx``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 A text input with an eye-icon toggle between ``type="password"`` and
-``type="text"``. Accepts every standard input prop. Its one caller is
-``components/monitor-detail/MonitorSettingsDialog.tsx``, for the camera's
-source password.
+``type="text"``. Accepts every standard input prop.
+
+**Used by:** ``components/monitor-detail/MonitorSettingsDialog.tsx`` only,
+for the camera's source password.
 
 SecureImage (``components/ui/secure-image.tsx``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1740,6 +1529,12 @@ back to ``fallbackSrc``, and only then delegates to the caller's ``onError``.
 
 A ``mountedRef`` guards the state update, because the base64 fetch can resolve
 after the component unmounted.
+
+**Used by:** nothing today. Every image surface currently renders a plain
+``<img>`` or goes through ``EventThumbnail``; this is the primitive to reach
+for when one of them starts failing against a self-signed server. It keeps
+its own logger channel (``log.secureImage``), so a caller that adopts it can
+be traced from the Logs page without adding one.
 
 HoverPreview (``components/ui/hover-preview.tsx``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1781,10 +1576,10 @@ and dismissal fires on ``click`` rather than ``pointerdown``. Closing on
 pointerdown would restore ``#root``'s pointer events before the synthetic click
 arrived, and the tap would fall through to whatever sat underneath.
 
-Wrappers: ``components/monitors/MonitorHoverPreview.tsx`` (a live monitor
-stream) and ``components/events/EventThumbnailHoverPreview.tsx``. The second
-one is not a bigger thumbnail: hovering an event card plays the recorded event
-back. Its inner ``EventZmsHoverPlayer`` mints a random connkey, builds a
+``components/monitors/MonitorHoverPreview.tsx`` wraps it around a live
+monitor stream. ``components/events/EventThumbnailHoverPreview.tsx`` is not
+a bigger thumbnail: hovering an event card plays the recorded event back.
+Its inner ``EventZmsHoverPlayer`` mints a random connkey, builds a
 ``getEventZmsUrl`` with ``replay: 'single'``, ``maxfps: 30``, and the
 per-profile ``hoverPreviewPlaybackRate``, and renders it in an ``<img>``. On
 unmount it sends ``ZMS_COMMANDS.cmdQuit`` through ``sendDelayedCmdQuit``, and
@@ -1800,6 +1595,12 @@ assistant event card carries ``monitorId`` on its ``DisplayEntity``: the ZMS
 URL cannot resolve a multi-port stream without it. Each surface is gated on its
 own ``hoverPreview`` key, so reuse means one player and one teardown path
 rather than one per screen.
+
+**Used by:** ``components/monitors/MonitorHoverPreview.tsx``,
+``components/events/EventThumbnailHoverPreview.tsx``,
+``pages/NotificationHistory.tsx``, and
+``components/assistant/AssistantResultCards.tsx`` (the last two pair
+``EventZmsHoverPlayer`` with it directly).
 
 EventThumbnail (``components/events/EventThumbnail.tsx``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2078,11 +1879,21 @@ Adding a New Shared Service
 Pick the directory by what the code depends on, not by what it is about.
 ``lib/<domain>/`` is for pure utilities with no React and no store imports;
 ``hooks/`` for anything that calls a React hook; ``services/`` for platform
-bridges and long-lived singletons; ``components/ui/`` for primitives,
-``components/common/`` for shared app-level components, and
+bridges and long-lived singletons; ``stores/`` for client state that outlives
+a component and is read by more than one feature; ``components/ui/`` for
+primitives, ``components/common/`` for shared app-level components, and
 ``components/<domain>/`` for domain components. A service must never statically
 import a store: invert it with the gate pattern (``api/store-gates.ts``) and
 keep ``npx madge --circular`` at zero.
+
+A new store carries obligations the other directories do not. Profile-scoped
+preferences belong on ``ProfileSettings`` behind ``getProfileSettings`` and
+``updateProfileSettings`` rather than in a store of their own (the Settings
+contract), every coercion and default goes in ``mergeProfileSettings``, and a
+persisted shape change needs a ``migrate`` callback plus a bumped persist
+``version`` or the rewrite never runs for anyone already installed.
+Subscribers select every reactive field they read, with ``useShallow`` for a
+multi-field select (the Stores contract).
 
 The repo's ``AGENTS.md`` and ``AGENTS.project.md`` are the source for the
 rest, and this guide does not restate it. The Constants, Server queries,

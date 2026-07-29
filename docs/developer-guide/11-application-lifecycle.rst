@@ -3,16 +3,13 @@ Application Lifecycle
 
 How the app runs from launch to shutdown, a runtime map of zmNinjaNg.
 
-1. The Entry Point (``index.html`` → ``main.tsx``)
---------------------------------------------------
+Entry Point (``index.html`` to ``main.tsx``)
+--------------------------------------------
 
-Everything starts at ``app/index.html``, the container for the React app.
-
-1. **Load**: The browser, Electron Chromium (desktop), or Capacitor
-   WebView (mobile) loads ``index.html``.
-2. **Script**: It loads ``src/main.tsx`` (the TypeScript entry point).
-3. **Mount**: ``main.tsx`` finds the ``<div id="root">`` element and
-   "mounts" the React application into it.
+Everything starts at ``app/index.html``, the container for the React app. The
+browser, Electron's Chromium (desktop), or the Capacitor WebView (mobile) loads
+it; the page loads ``src/main.tsx``; and ``main.tsx`` finds the
+``<div id="root">`` element and mounts the React application into it.
 
 .. code:: tsx
 
@@ -32,8 +29,8 @@ connects on mount has to survive being torn down and reconnected immediately, so
 several hooks guard or delay their connect for exactly this reason.
 ``StrictMode`` has no effect in a production build.
 
-2. Bootstrapping Phase (``App.tsx``)
-------------------------------------
+Bootstrapping Phase (``App.tsx``)
+---------------------------------
 
 When ``<App />`` renders, the app is not yet ready to use. It must
 rehydrate its state from storage and bootstrap the active profile.
@@ -49,29 +46,52 @@ through ``lib/security/secureStorage.ts``, which delegates to the Capacitor
 secure-storage plugin on iOS/Android and to encrypted localStorage on
 web/Electron.
 
-- **State**: ``isInitialized`` starts as ``false``.
-- **Visual**: User sees ``<RouteLoadingFallback />`` (a spinner).
-- **Mechanism**: ``zustand/persist`` triggers ``onRehydrateStorage``.
+``isInitialized`` starts as ``false``, so the user sees
+``<RouteLoadingFallback />``, a spinner, while ``zustand/persist`` runs
+``onRehydrateStorage`` and ``services/profile-initialization.ts`` picks up from
+there.
 
 Profile Bootstrap
 ~~~~~~~~~~~~~~~~~
 
-Once storage is rehydrated and a profile exists, the app bootstraps the
-profile:
+Once storage is rehydrated and a profile exists, ``isBootstrapping`` becomes
+``true`` and a bootstrap overlay covers the app, showing progress steps and a
+**Cancel** button.
 
-1. **State**: ``isBootstrapping`` becomes ``true``.
-2. **Visual**: User sees a bootstrap overlay with progress steps and a
-   **Cancel** button.
-3. **Steps**:
+Two steps run before the overlay goes up, and they are the only ones that can
+abort. ``handleProfileRehydration`` clears stale auth and the query cache from
+the previous session, then installs the API client for the profile's
+``apiUrl``. If either throws, the whole bootstrap is abandoned:
+``isInitialized`` is set to ``true`` so the UI is not stuck on a spinner, and
+no server calls are attempted.
 
-   - Clear stale auth/cache from previous session
-   - Initialize API client with profile's ``apiUrl``
-   - Authenticate with stored credentials
-   - Fetch server timezone
-   - Fetch ZMS path from server config
-   - Fetch Go2RTC path (if configured)
-   - Check multi-port streaming configuration
-   - Bootstrap server map (``bootstrapServerMap()``)
+Everything after that is ``performBootstrap`` in
+``services/profile-bootstrap.ts``, launched without ``await`` so the UI stays
+responsive. It runs in order:
+
+1. ``bootstrapSSLTrust`` applies the profile's self-signed-certificate setting.
+   This has to be first, because it decides whether any later HTTPS call can
+   connect at all.
+2. ``bootstrapAuth`` logs in with the stored credentials.
+3. ``bootstrapServerMap`` fetches ``/servers.json``.
+4. ``bootstrapTimezone`` fetches the server's timezone.
+5. ``bootstrapZmsPath`` derives the CGI URL from the server's ZMS path.
+6. ``bootstrapGo2RTCPath`` picks up the go2rtc path if the server publishes one.
+7. ``bootstrapMultiPortStreaming`` reads ``MIN_STREAMING_PORT``.
+
+Every one of those seven wraps its own body in ``try``/``catch`` and logs a
+warning on failure. None of them rethrows, so a step that fails does not stop
+the next one, and the app finishes bootstrapping in a degraded state rather
+than not at all. That includes authentication: a login failure is logged as
+"this might be OK if server does not require auth" and the sequence continues,
+because a public ZoneMinder server is a real configuration. What that buys is
+also what it costs, since a wrong password and a public server look identical
+from here until the first authenticated query returns 401.
+
+Two timers bound the whole thing, both from ``BOOTSTRAP_TIMEOUTS``:
+``performBootstrap`` is raced against ``totalTimeoutMs``, and a separate timer
+of the same length flips ``isBootstrapping`` to ``false`` so the overlay cannot
+outlive it.
 
 Bootstrap Server Map
 ~~~~~~~~~~~~~~~~~~~~
@@ -95,14 +115,10 @@ Bootstrap Cancellation
 If the server is unreachable or bootstrap takes too long, users can
 cancel:
 
-- **Action**: Click "Cancel" button on bootstrap overlay
-- **Effect**: Calls ``cancelBootstrap()`` which clears
-  ``currentProfileId``
-- **Navigation**:
-
-  - If other profiles exist → redirects to ``/profiles`` (profile
-    selection)
-  - If no profiles exist → redirects to ``/profiles/new`` (add profile)
+The **Cancel** button on the bootstrap overlay calls ``cancelBootstrap()``,
+which clears ``currentProfileId``. With no active profile the router sends the
+user to ``/profiles`` to pick another one, or to ``/profiles/new`` when none
+exist.
 
 Initialization Complete
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -118,20 +134,24 @@ Once bootstrap completes (or is cancelled):
   - **Profiles exist, none active**: Redirects to ``/profiles`` to pick one.
   - **No profiles at all**: Redirects to ``/profiles/new``.
 
-3. The Authentication Flow
---------------------------
+Authentication Flow
+-------------------
 
 zmNinjaNg handles authentication differently than a typical SaaS app because
 it connects to potentially *any* ZoneMinder server, each with different
 auth requirements.
 
-A. Token Exchange
-~~~~~~~~~~~~~~~~~
+Token Exchange
+~~~~~~~~~~~~~~
 
-When you log in or the app wakes up:
+On login, or when the app wakes up:
 
-1. **Credentials**: We retrieve the username/password (decrypted from
-   SecureStorage).
+1. **Credentials**: ``bootstrapAuth`` asks the profile store for the decrypted
+   password (``getDecryptedPassword``) and passes it with the profile's
+   username to the auth store's ``login()``. The refresh token itself never
+   sits in the persisted blob: ``stores/auth.ts`` reads and writes it through
+   ``lib/security/secureStorage.ts``, and drops it rather than falling back to
+   plaintext when secure storage is unavailable.
 2. **Login API**: ``login()`` in ``api/auth.ts`` posts form-encoded credentials
    to ``/host/login.json``. ZoneMinder wants a form body here, not JSON, so the
    call goes through ``client.postForm`` rather than the usual JSON path.
@@ -144,8 +164,8 @@ When you log in or the app wakes up:
 sending the refresh token instead of the credentials. There is one login
 endpoint, not two.
 
-B. The Refresh Loop
-~~~~~~~~~~~~~~~~~~~
+Refresh Loop
+~~~~~~~~~~~~
 
 Access tokens expire on a schedule the ZoneMinder server chooses. The app has to
 replace one before it lapses, without the user noticing.
@@ -173,8 +193,8 @@ replace one before it lapses, without the user noticing.
   they were on, and the next query needing auth fails with a 401 that
   ``resolveQueryError`` turns into a localized prompt to re-authenticate.
 
-4. The "Main Loop" (Runtime)
-----------------------------
+Steady State
+------------
 
 Once logged in and on the Dashboard, several background processes keep
 the app alive.
@@ -225,8 +245,8 @@ values are given.
 For a reference of all timers, polling intervals, and scheduled
 actions across the application, see :doc:`07-api-and-data-fetching`.
 
-5. Mobile Lifecycle (Capacitor)
--------------------------------
+Mobile Lifecycle (Capacitor)
+----------------------------
 
 On iOS and Android, the app has unique lifecycle states handled by the
 OS.
@@ -236,15 +256,16 @@ Backgrounding
 
 When the user swipes the app away (but doesn't close it):
 
-- **State**: App goes to Background, and Capacitor fires ``pause`` and
-  ``appStateChange``.
-- **Limit**: JS execution pauses (mostly). Intervals stop firing, so anything
-  that depends on a timer is stale on return.
-- **Streams**: Nothing explicitly pauses the MJPEG streams. The OS suspends the
-  webview, the socket goes quiet, and the stream is simply dead when the app
-  comes back. Recovery happens on resume, not on the way out.
-- **Logs**: ``App.tsx`` flushes the log buffer on ``pause`` so entries are not
-  lost if the OS kills the process while it is backgrounded.
+Capacitor fires ``pause`` and ``appStateChange``, and JavaScript execution
+mostly stops. Intervals stop firing, so anything that depends on a timer is
+stale on return.
+
+Nothing explicitly pauses the MJPEG streams. The OS suspends the webview, the
+socket goes quiet, and the stream is simply dead when the app comes back.
+Recovery happens on resume, not on the way out.
+
+``App.tsx`` flushes the log buffer on ``pause``, so entries are not lost if the
+OS kills the process while it is backgrounded.
 
 Resuming
 ~~~~~~~~
@@ -279,20 +300,26 @@ controls), and ``KioskOverlay`` offers biometrics only as a way to dismiss a
 lock the user already set. ``useKioskStore`` is ephemeral and resets to
 unlocked on app restart.
 
-6. Navigation Lifecycle
------------------------
+Navigation Lifecycle
+--------------------
 
-We use ``react-router-dom`` for navigation, inside a ``HashRouter``.
+Navigation is ``react-router-dom``, and ``App.tsx`` mounts it as a
+``HashRouter`` rather than a ``BrowserRouter``. That is a deployment
+constraint, not a preference. Electron and the Capacitor WebViews load the app
+from ``file://`` or from a static server with no rewrite rule, and a
+``BrowserRouter`` puts the route in the URL path, so reloading on
+``/monitors`` asks for a ``/monitors`` document that does not exist and returns
+a 404. A hash fragment is never sent to the server at all, so
+``index.html#/monitors`` reloads correctly everywhere the app ships.
 
-- **Routes**: Defined in ``AppRoutes`` (``App.tsx``). Every page is a
-  ``lazy()`` import, so its code is fetched the first time the route is
-  visited, not at startup.
-- **Behavior**: When you navigate from ``/monitors`` to ``/events``:
+Routes are defined in ``AppRoutes`` (``App.tsx``). Every page is a ``lazy()``
+import, so its code is fetched the first time the route is visited rather than
+at startup.
 
-  1. ``pages/Monitors.tsx`` **unmounts**. React runs the cleanup function
-     returned by each of its effects, which is what closes the live streams.
-  2. ``pages/Events.tsx`` **mounts**. Its effects run for the first time and
-     its queries start fetching.
+Navigating from ``/monitors`` to ``/events`` unmounts ``pages/Monitors.tsx``,
+which runs the cleanup function returned by each of its effects, and that is
+what closes the live streams. Then ``pages/Events.tsx`` mounts, its effects run
+for the first time, and its queries start fetching.
 
 Unmounting is not a pause. React discards the component instance and every
 ``useState`` value in it. Anything that must outlive navigation has to be stored

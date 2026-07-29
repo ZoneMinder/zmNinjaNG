@@ -2,13 +2,13 @@ Agent development model
 =======================
 
 Most code in this repository is written by AI agents, and the diffs are
-not line-reviewed by a person. Between 2025-11-27 and 2026-07-26 the repo
-accumulated 2,313 commits from one maintainer directing agents, 485 of
-them carrying issue references, with fourteen reverts along the way, and
-every one of those reverts is now written down somewhere an agent will
-read before trying the same thing again. This chapter explains why that
-works here, what enforces correctness instead of eyeballs on diffs, and
-where a human still reviews deliberately.
+not line-reviewed by a person. In eight months one maintainer directing
+agents landed 2,313 commits and fourteen reverts, and each of those
+reverts is now written down where an agent reads it first.
+
+This chapter explains why that works here, what enforces correctness
+instead of eyeballs on diffs, and where a human still reviews
+deliberately.
 
 Scope, platforms, and release guardrails
 ----------------------------------------
@@ -52,14 +52,11 @@ Releases follow the same posture. Android and desktop binaries are built
 by the GitHub workflows, not on a laptop: the ``build-*`` workflows are
 dispatched manually with a version number, and pushing a ``zmNinjaNg-*``
 tag drives the release workflow that publishes from those artifacts. iOS
-is the exception: it builds locally through Xcode because of signing and
-App Store submission, and there is no iOS build workflow. Nothing about
-iOS prevents that: signing certificates, provisioning profiles, and App
-Store submission all automate on a macOS runner the same way Android does
-on Linux. It simply has not been set up yet. Native build
-numbers change only in a deliberate ``chore:`` commit, enforced by the
-version guard in CI, and test builds reuse the existing workflows rather
-than growing new ones. Contributions are held to the same standard as the
+builds locally through Xcode for signing and App Store submission; a
+macOS runner could automate it the way Linux automates Android, and that
+has not been set up. Native build numbers change only in a deliberate
+``chore:`` commit, enforced by the version guard in CI, and test builds
+reuse the existing workflows rather than growing new ones. Contributions are held to the same standard as the
 maintainer's own work: the rules and gates in this chapter, plus a code
 review before the PR.
 
@@ -111,31 +108,12 @@ misses more than a failing test does. The principles that replaced it:
   include the rule that would have covered it. The maintainer states what
   should happen (a bug, a feature, an issue number), an agent does the
   work, and the gates decide whether it lands.
-- **Design gets the human attention that diffs used to.** Feature work
-  starts as a short design doc saying what is being built and why, and
-  the maintainer approves that before implementation. Reviewing a
-  half-page of intent catches wrong-direction work earlier and cheaper
-  than reviewing the thousand lines it would have become. How those
-  designs become code is walked through below.
-- **Code review happens offline, at milestones.** Instead of per-diff
-  review, the scorecard and history-mining reviews run against the whole
-  codebase roughly monthly (both described below), and their findings
-  become issues, gates, and playbook entries.
 - **Models check each other.** Reviews are dispatched to an agent that
   did not write the code, and at milestones different frontier models
   re-verify each other's claims, gates re-run included.
   `Issue #217 <https://github.com/ZoneMinder/zmNinjaNg/issues/217#issuecomment-4882243836>`__
   has a worked example: Fable re-reviewing a 15-commit delta that Opus
   had reviewed, four verification agents plus a fresh gate run.
-- **Forced documentation is how the human keeps learning.** Rule P10
-  makes every new API, component, hook, or utility update the developer
-  docs and call flows, and the documentation playbook requires that
-  writing to teach (React explained where a chapter first relies on it,
-  flows traced through real user actions). This is not bureaucracy; it is
-  the maintainer's replacement for reading diffs. In a codebase agents
-  write, understanding comes from reviewing designs before the code
-  exists and reading the docs the code is forced to produce after, which
-  is why this guide exists at all (see :doc:`01-introduction`).
 - **Knowledge stays in the repository.** Session memory cannot be seen by
   other agents, other contributors, or CI, and dies with the machine.
   A revert or a string of fixes to one file is a lesson already paid for.
@@ -156,6 +134,24 @@ misses more than a failing test does. The principles that replaced it:
   directly instead of dispatched, independent review is reserved for
   judgment work plus one whole-branch review before every PR, and a small
   bounded change relies on its gates.
+
+Human attention moved rather than disappeared. Feature work starts as a
+short design doc saying what is being built and why, and the maintainer
+approves that before implementation, because reviewing a half-page of
+intent catches wrong-direction work earlier and cheaper than reviewing
+the thousand lines it would have become. Code review then happens
+offline, at milestones: the scorecard and history-mining reviews run
+against the whole codebase roughly monthly (both described below), and
+their findings become issues, gates, and playbook entries.
+
+Documentation is the other half of that trade. Rule P10 makes every new
+API, component, hook, or utility update the developer docs and call
+flows, and the documentation playbook requires that writing to teach,
+with React explained where a chapter first relies on it and flows traced
+through real user actions. In a codebase agents write, the maintainer's
+understanding comes from approving designs before the code exists and
+reading the docs the code is forced to produce after, which is why this
+guide exists at all (see :doc:`01-introduction`).
 
 How a feature actually lands
 ----------------------------
@@ -400,9 +396,9 @@ Gates only catch what they were built to catch. Drift is whatever nobody
 wrote a gate for yet: duplication spreading across files, tests that pass
 without asserting much, a convention the code quietly stopped following.
 The first of the two deliberate human reviews covers this: roughly once a
-month, a scorecard review of the whole codebase. Also, models tend to
-forget over long sessions. There have been many situations where gates
-are clear but the model forgot.
+month, a scorecard review of the whole codebase. Long sessions degrade
+too, with a gate that was clear at the start of a session ignored by the
+end of it; the scorecard re-runs those checks from a clean context.
 
 The scorecard scores twelve weighted pillars (architecture, test quality,
 code quality, DRY, type safety, error handling, security, convention
@@ -527,9 +523,8 @@ directly. The labels, the label-guard workflow, and the two periodic
 reviews are all optional.
 
 Do not start with thirty rules. A handful of contracts plus the core is
-enough, and the protocol grows the rest one incident at a time. A rule
-added because something actually happened gets followed; a rule written
-speculatively is the kind that drifts.
+enough, and the protocol grows the rest one incident at a time. Rules
+added after a real incident get followed, and speculative ones drift.
 
 Where everything lives
 ----------------------

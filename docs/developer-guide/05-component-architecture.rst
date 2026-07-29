@@ -3,14 +3,16 @@ Component Architecture
 
 This chapter follows the app's components through the features they build:
 watching a live camera, playing back a recording, deleting a batch of events,
-laying out a dashboard, locking the screen. Each section starts from something
+laying out a dashboard, hiding a monitor. Each section starts from something
 the user does and works inward to the code.
 
 Reference material for the shared building blocks (``components/ui/``,
 ``components/common/``, ``lib/``, ``services/``) lives in
 :doc:`12-shared-services-and-components`. Generic React mechanisms are taught
 once in :doc:`02-react-fundamentals` and linked from here at the point where
-this app first depends on them.
+this app first depends on them. The surfaces that wrap the whole app rather
+than a page (kiosk lock, TV mode, notifications, the assistant panel) are in
+:doc:`16-platform-surfaces`.
 
 How ``components/`` is organized
 --------------------------------
@@ -76,9 +78,10 @@ without it, a wide row with the picture on the left at 40% width.
      <MonitorHoverPreview monitor={monitor}>{videoPlayer}</MonitorHoverPreview>
    ) : videoPlayer;
 
-Two things travel back out of the player. ``onProtocolChange`` reports the
-protocol that actually connected, which the card shows as a small label in the
-corner when ``settings.showProtocolLabel`` is on. ``externalMediaRef`` is a ref
+Information travels back out of the player as well. ``onProtocolChange``
+reports the protocol that actually connected, which the card shows as a small
+label in the corner when ``settings.showProtocolLabel`` is on.
+``externalMediaRef`` is a ref
 that the player attaches to whichever element it ended up rendering, an
 ``<img>`` for MJPEG or a ``<video>`` for go2rtc. A *ref* is React's escape hatch
 to a real DOM node: a mutable box whose ``.current`` React fills in after it
@@ -354,7 +357,7 @@ runs".
 Video playback
 --------------
 
-Three players exist because there are three distinct delivery protocols. Live
+Each delivery protocol gets its own player component. Live
 monitor streams negotiate go2rtc (WebRTC / MSE / HLS) and fall back to MJPEG.
 Recorded events come in two shapes: either ZoneMinder produced an MP4
 (``Videoed === '1'``), in which case Video.js handles it as MP4 or HLS, or only
@@ -362,7 +365,7 @@ JPEG frames are stored and the only way to play them back is the ZMS streaming
 endpoint. EventDetail also exposes a user toggle (TV mode defaults to on) that
 forces the ZMS path even when an MP4 is available.
 
-The three player files sit next to their consumers. Live playback lives under
+The player files sit next to their consumers. Live playback lives under
 ``components/monitors/``; event playback lives under ``components/events/``. The
 file name carries the protocol so the selection at each call site is
 self-evident from the import.
@@ -377,22 +380,12 @@ capabilities and user preference. Consumed by ``MonitorCard``,
 ``MontageMonitor``, the dashboard ``MonitorWidget``, and the ``MonitorDetail``
 page.
 
-**Props (from ``LiveMonitorPlayerProps``):**
-
-.. code:: tsx
-
-   export interface LiveMonitorPlayerProps {
-     monitor: Monitor;
-     profile: Profile | null;
-     className?: string;
-     objectFit?: 'contain' | 'cover' | 'fill' | 'none' | 'scale-down';
-     showControls?: boolean;
-     externalMediaRef?: React.RefObject<HTMLImageElement | HTMLVideoElement | null>;
-     muted?: boolean;
-     onLoad?: () => void;
-     onProtocolChange?: (protocol: string) => void;
-     forceViewMode?: 'streaming' | 'snapshot';
-   }
+Its props are declared as ``LiveMonitorPlayerProps`` in the same file. Three of
+them carry the behavior described here and elsewhere in this chapter:
+``externalMediaRef`` lets a parent reach the element the player ended up
+rendering, ``onProtocolChange`` reports which protocol actually connected, and
+``bypassGo2rtcFailureCache`` opts a call site out of the shared failure cache
+below.
 
 **Protocol selection.** go2rtc is used when the user's ``streamingMethod`` is
 not ``'mjpeg'``, ``monitor.Go2RTCEnabled`` is true, and the profile has a
@@ -408,7 +401,10 @@ failure timestamp per ``monitor.Id``. While that entry is younger than
 MJPEG. This avoids montage grids re-attempting WebRTC on every tile every
 render. The cache is cleared immediately when the user explicitly switches a
 monitor's preference back to go2rtc, so a manual retry does not have to wait
-out the window.
+out the window. ``MonitorDetail`` passes ``bypassGo2rtcFailureCache`` and so
+neither reads nor writes the cache: a failure recorded under montage's
+many-connections-at-once load should not condemn the detail view, where a
+single connection usually succeeds.
 
 **No-frame fallback.** After go2rtc reports ``connected``, the player arms a
 timer for ``GO2RTC_VIDEO_TIMEOUT_S`` (15 seconds, in
@@ -434,47 +430,44 @@ Mp4EventPlayer
 **Location**: ``src/components/events/Mp4EventPlayer.tsx``
 
 Video.js wrapper for recorded event playback. Consumed only by ``EventDetail``,
-on the MP4 / HLS branch.
+on the MP4 / HLS branch. Its props (declared as ``Mp4EventPlayerProps`` at the
+top of the file) are the usual media inputs (``src``, ``type``, ``poster``,
+``autoplay``, ``muted``, ``aspectRatio``), the marker pair discussed below,
+``onReady`` and ``onError``, the continuous-playback callbacks
+(``onEnded``, ``playbackRate``, ``onRateChange``, refs #250), and ``eventId``,
+which is what enables Picture-in-Picture survival across navigation.
 
-**Props:**
+Markers are rendered by ``videojs-markers``: the ``markers`` array maps to the
+alarm and max-score frames on the event timeline, and ``onMarkerClick`` seeks
+to a frame. Getting them onto the player is fussier than it looks, and getting
+it wrong produced a recurring "Failed to update video markers" error on every
+event that had markers.
 
-.. code:: tsx
+The cause is ``this``-binding. ``videojs-markers`` (v1.x) is a Video.js *basic*
+plugin registered with ``videojs.plugin()``, and the first thing its plugin
+function does is read ``this`` as the player
+(``S = this; S.on('loadedmetadata', ...)``). It therefore only works when
+invoked as a method: ``player.markers(opts)``. Pull the function off the player
+first (``const f = player.markers; f(opts)``) and ``this`` is undefined, the
+``.on`` call throws, and no markers appear. Initialization also happens exactly
+once, because on init the plugin overwrites ``player.markers`` with an API
+object; a function value sitting there means "not initialized yet".
 
-   interface Mp4EventPlayerProps {
-     src: string;
-     type?: string;
-     poster?: string;
-     className?: string;
-     autoplay?: boolean | 'muted' | 'play' | 'any';
-     controls?: boolean;
-     muted?: boolean;
-     aspectRatio?: string;
-     markers?: VideoMarker[];
-     onMarkerClick?: (marker: VideoMarker) => void;
-     onReady?: (player: Player) => void;
-     onError?: (error: unknown) => void;
-     eventId?: string;
-   }
+``applyVideoJsMarkers`` (``lib/event/video-markers.ts``) is the one place that
+knows all of that. It initializes through a method call, holds that first call
+back until there is at least one marker so the tooltip and click options are
+wired up alongside real markers, and switches to ``removeAll()`` / ``add()``
+for every later update.
 
-Markers are rendered via ``videojs-markers``; the ``markers`` array maps to
-alarm / max-score frames on the event timeline and ``onMarkerClick`` seeks to a
-frame. ``videojs-markers`` (v1.x) is a Video.js basic plugin registered with
-``videojs.plugin()``; its plugin function reads ``this`` as the player
-(``S = this; S.on('loadedmetadata', ...)``), so it must be invoked as a method
-(``player.markers(opts)``). Calling it detached
-(``const f = player.markers; f(opts)``) leaves ``this`` undefined and throws,
-which is what produced the recurring "Failed to update video markers" errors on
-events that have markers. On init the plugin replaces ``player.markers`` with an
-API object, so a function value means "not initialized". The
-``applyVideoJsMarkers`` helper in ``lib/event/video-markers.ts`` initializes once
-via a method call and uses ``removeAll()`` / ``add()`` for later updates. Marker
-updates are gated on the player's ready callback (the plugin reads the player
-DOM), ``onMarkerClick`` is read through a ref inside a stable click handler so a
-changing callback identity does not force a re-init, and a value signature skips
-redundant re-applies when a react-query refetch hands back a fresh ``markers``
-array with unchanged values. Source, poster, and autoplay changes propagate
-through a separate update effect that diffs against ``player.currentSrc()``
-before reassigning, so token refresh does not restart playback on iOS WKWebView.
+``Mp4EventPlayer`` adds the guards that keep the helper from being called at a
+bad moment. Marker updates wait for the player's ready callback, because the
+plugin reads the player's DOM. ``onMarkerClick`` is read through a ref inside a
+stable click handler, so a changing callback identity does not force a re-init.
+A value signature skips redundant re-applies when a react-query refetch hands
+back a fresh ``markers`` array holding the same values. Source, poster, and
+autoplay changes propagate through a separate update effect that diffs against
+``player.currentSrc()`` before reassigning, so a token refresh does not restart
+playback on iOS WKWebView.
 
 Picture-in-Picture, and why it uses Context
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -541,9 +534,10 @@ commands (PAUSE, PLAY, SEEK, FASTFWD, etc.) over a separate URL keyed by
 ``connkey``. Consumed only by ``EventDetail``, on the JPEG-only branch and on
 the user-forced-ZMS branch.
 
-**Props:** ``portalUrl``, ``eventId``, ``token``, ``apiUrl``, ``totalFrames``,
-``alarmFrames``, ``alarmFrameId``, ``maxScoreFrameId``, ``eventLength``,
-``minStreamingPort``, ``monitorId``, ``className``, ``suspended``.
+Its props (``ZmsEventPlayerProps``, top of the file) are the stream
+coordinates, the frame counts the scrubber needs, and three behavior flags:
+``suspended``, plus ``playbackRate`` / ``onRateChange``, which carry the
+chosen speed across events during continuous playback.
 
 ``suspended`` pauses the stream while something covers it, currently the
 full-size viewer in ``EventFrameCarousel``. The effect remembers whether the
@@ -698,7 +692,8 @@ Return highlight
 ``src/components/events/ReturnFlashArrow.tsx``
 
 Open an event from a list, then navigate back. The row you came from blinks for
-four seconds so you can find your place again. Three pieces implement it.
+four seconds so you can find your place again. A store, a hook, and an icon
+component do the work.
 
 ``useReturnHighlightStore`` is a Zustand store holding
 ``lastViewedEventId: string | null``, with ``markViewed(eventId)`` and ``clear()``
@@ -742,7 +737,8 @@ Bulk event delete
 
 Deleting events is a batch operation (refs #213): clicking the trash icon on a
 row queues it rather than opening a per-event confirm dialog. A bar floats up
-from the bottom with the count and a Delete button. Four pieces implement this.
+from the bottom with the count and a Delete button. A selection store, the
+row-level toggle, the floating bar, and the delete hook implement that.
 
 ``useDeleteSelectionStore`` (``src/stores/deleteSelection.ts``) holds
 ``selectedIds: string[]`` with ``toggle(eventId)`` and ``clear()``. It is
@@ -1011,377 +1007,12 @@ profile, so every dependent view refetches with the new exclusion applied.
 **Test ids**: ``hidden-monitors-list``, ``hidden-monitors-count``,
 ``hidden-monitor-row-<id>``, ``hidden-monitor-toggle-<id>``.
 
-Kiosk mode
-----------
-
-Kiosk mode locks the UI so the current view stays visible and live-updating
-while navigation and interaction are blocked. It is activated from the sidebar
-lock icon or the fullscreen montage controls.
-
-KioskOverlay
-~~~~~~~~~~~~
-
-**Location**: ``src/components/kiosk/KioskOverlay.tsx``
-
-A full-screen transparent overlay rendered on top of the app when
-``kioskStore.isLocked`` is ``true``, and ``null`` otherwise. The view underneath
-keeps updating (streams, event counts); only interaction is blocked.
-
-- Covers the viewport at ``Z_INDEX.overlay`` (9999) with ``pointer-events: auto``
-- Intercepts browser back navigation (pushState trick) so the user cannot leave
-  the locked view
-- On Android, swallows the hardware back button via an ``@capacitor/app``
-  listener (dynamic import, native platforms only)
-- Blocks keyboard shortcuts while locked, except when the PIN pad is open, so
-  keyboard input still reaches ``PinPad``
-- Shows a small unlock button (bottom-right). On tap it tries biometrics first
-  and falls through to the PIN pad on failure or cancellation
-- Calls the ``onUnlock`` prop after a successful unlock
-- Watches ``unlockRequested`` in the kiosk store. When another element (the
-  sidebar lock button) calls ``requestUnlock()``, the overlay picks it up, clears
-  the flag via ``clearUnlockRequest()``, and starts the unlock flow itself
-
-**Test ids**: ``kiosk-overlay``, ``kiosk-unlock-button``, ``kiosk-pin-pad``.
-
-PinPad
-~~~~~~
-
-**Location**: ``src/components/kiosk/PinPad.tsx``
-
-A 4-digit numeric keypad in a modal, used for both first-time setup and unlock.
-``PinPadMode`` is ``'set'`` (choose a PIN), ``'confirm'`` (re-enter to verify), or
-``'unlock'``. It auto-submits on the 4th digit after a 100 ms delay
-(``KIOSK.pinAutoSubmitDelayMs``) so the filled dot renders first. PIN state
-resets when ``mode`` or ``error`` changes.
-
-``PinPad`` listens for ``keydown`` on ``window`` in the capture phase. Digits add,
-Backspace deletes, Escape cancels; all three call ``preventDefault`` and
-``stopPropagation`` so they never reach ``KioskOverlay``'s keyboard blocker.
-Keyboard input is disabled during cooldown.
-
-**Props**: ``mode``, ``onSubmit(pin)``, ``onCancel``, ``error``,
-``cooldownSeconds`` (when > 0, shows a countdown and disables the digits).
-
-**Test ids**: ``kiosk-pin-pad``, ``kiosk-pin-input``, ``kiosk-pin-digit-{0-9}``,
-``kiosk-pin-cancel``, ``kiosk-pin-delete``.
-
-useKioskLock
-~~~~~~~~~~~~
-
-**Location**: ``src/hooks/useKioskLock.ts``
-
-Shared lock-activation logic for the sidebar and the fullscreen montage
-controls, so neither call site duplicates the first-time PIN setup flow.
-
-1. ``handleLockToggle`` checks whether a PIN is stored (``hasPinStored()``).
-2. If not, it opens ``PinPad`` in ``'set'`` then ``'confirm'`` mode, stores the
-   PIN via ``storePin()``, then activates kiosk mode.
-3. If a PIN exists, it activates kiosk mode immediately.
-4. On lock it enables insomnia (keep-screen-on) if it was off.
-
-**Returns**: ``isLocked``, ``showSetPin``, ``setPinMode``, ``pinError``,
-``handleLockToggle``, ``handleChangePin`` (replaces the PIN without locking),
-``handleSetPinSubmit(pin)``, ``handleSetPinCancel``.
-
-.. code:: tsx
-
-   const {
-     isLocked,
-     showSetPin,
-     setPinMode,
-     pinError,
-     handleLockToggle,
-     handleChangePin,
-     handleSetPinSubmit,
-     handleSetPinCancel,
-   } = useKioskLock({ onLocked: () => closeSidebar() });
-
-useBiometricAuth
-~~~~~~~~~~~~~~~~
-
-**Location**: ``src/hooks/useBiometricAuth.ts``
-
-Despite the name, two async functions rather than a React hook:
-
-- ``checkBiometricAvailability(): Promise<boolean>`` returns ``true`` if the
-  device has enrolled biometrics and the plugin is available.
-- ``authenticateWithBiometrics(reason): Promise<{ success, error? }>`` prompts
-  the system biometric UI.
-
-On iOS and Android it uses ``@aparajita/capacitor-biometric-auth`` (Touch ID,
-Face ID). On Electron and web it returns ``false`` / ``{ success: false }``. Both
-functions catch every error and return a safe value, so callers never need their
-own try/catch.
-
-PIN set, change, and clear live in the Settings page (Advanced section), which
-renders a "Kiosk PIN" row (``settings-kiosk-change-pin``,
-``settings-kiosk-clear-pin``). Change and Clear verify identity first, with
-biometrics if available and the current PIN otherwise; Clear then calls
-``clearPin()`` from ``lib/kioskPin.ts``.
-
-TV mode
--------
-
-Best-effort d-pad support for Android TV and Fire TV. It layers a couple of
-page-specific keymaps on top of the WebView's own spatial navigation. It is not
-an app-wide focus-management system.
-
-TvDetector (native plugin)
-~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-**Location**:
-``android/app/src/main/java/com/zoneminder/zmNinjaNG/TvDetectorPlugin.java``
-
-A Capacitor plugin registered as ``TvDetector``, called from
-``lib/tv/tv-spatial-nav.ts``. Two methods:
-
-- ``isTV()``: true if ``UiModeManager.getCurrentModeType()`` equals
-  ``UI_MODE_TYPE_TELEVISION``.
-- ``enableSpatialNavigation()``: turns on the WebView's built-in spatial
-  navigation by calling the hidden
-  ``WebSettings.setSpatialNavigationEnabled(true)`` API via reflection, then
-  makes the WebView focusable and requests focus.
-
-lib/tv/tv-spatial-nav.ts
-~~~~~~~~~~~~~~~~~~~~~~~~
-
-- ``checkIsTV()``: checks ``Platform.isTVDevice`` first (a native-injected flag,
-  or a user-agent match against ``tv``/``aft``/``stb``/``fire tv`` in
-  ``lib/platform.ts``), then falls back to the plugin's ``isTV()`` on native
-  platforms. Always ``false`` on web.
-- ``enableSpatialNavigation()``: a no-op outside native platforms; swallows
-  errors when the plugin is unavailable.
-
-Wiring (AppLayout.tsx)
-~~~~~~~~~~~~~~~~~~~~~~
-
-- ``useTvMode()`` reads ``settings.tvMode``, a profile-scoped setting with a
-  manual toggle in Settings > Appearance (``settings-tv-mode``).
-- On mount, ``checkIsTV()`` runs once per profile switch. If the device is a TV
-  and ``tvMode`` is off, ``updateProfileSettings`` turns it on.
-- While TV mode is active, a ``tv-mode`` class is toggled on ``<html>``
-  (``index.css`` raises the base font size to 20px and gives ``:focus-visible``
-  elements a heavier ring, for 10-foot viewing), and ``enableSpatialNavigation()``
-  is called once.
-
-useTvKeyHandler
-~~~~~~~~~~~~~~~
-
-**Location**: ``src/hooks/useTvKeyHandler.ts``
-
-Registers a ``window`` ``keydown`` listener, active only while ``isTvMode`` is
-true. Pages pass a ``TvKeyMap``
-(``{ ArrowLeft?, ArrowRight?, ArrowUp?, ArrowDown?, Enter? }``):
-
-- A key with a handler in the map calls ``preventDefault()`` and runs the
-  handler; a key without one falls through to the WebView's native spatial
-  navigation.
-- ``Enter`` has a built-in fallback even with no map entry: if the focused
-  element is not natively clickable (``BUTTON``, ``A``, ``INPUT``, ``SELECT``,
-  ``TEXTAREA``), it synthesizes a ``.click()`` on it. Combined with
-  ``lib/tv/tv-a11y.ts``'s ``clickableProps()`` / ``handleKeyClick()``
-  (``tabIndex={0}`` + ``role="button"`` + Enter/Space ``onKeyDown``), that lets
-  ``div``/``span`` "buttons" such as monitor tiles respond to Enter.
-
-``useTvMode`` (``src/hooks/useTvMode.ts``) returns ``{ isTvMode }`` from
-``settings.tvMode``. It is a thin read of the profile-scoped setting, nothing
-more.
-
-Per-page keymaps
-~~~~~~~~~~~~~~~~
-
-- **Montage** (``src/pages/Montage.tsx``): arrow keys move a focused-tile index
-  (``handleDpadNav``) through the grid; Enter navigates to that monitor's detail
-  page. A separate effect calls ``.focus()`` on the tile's DOM node
-  (``data-testid="montage-monitor-<id>"``) whenever the index changes, since the
-  index is plain state, not real DOM focus.
-- **Timeline** (``src/pages/Timeline.tsx``): arrow keys pan and zoom the canvas
-  viewport (``panLeft``, ``panRight``, ``zoomIn``, ``zoomOut``) instead of moving
-  between DOM elements. No ``Enter`` handler is registered, so Enter falls
-  through to the synthesize-click default.
-- **EventDetail** (``src/pages/EventDetail.tsx``) registers no keymap. It only
-  reads ``isTvMode`` to force ZMS playback.
-
-What this does not do
-~~~~~~~~~~~~~~~~~~~~~
-
-Pages without a ``TvKeyMap`` (Dashboard, Events, Settings) rely entirely on the
-WebView's native spatial navigation moving focus between focusable elements. An
-earlier, fuller d-pad/cursor implementation was removed as dead code; nothing in
-the current tree depends on it.
-
-Notifications
--------------
-
-A camera trips an alarm and a toast slides in, or, if the app is closed, a
-system notification arrives and tapping it opens that event. Two delivery modes
-sit behind that, and ``src/components/NotificationHandler.tsx`` is the component
-that turns either one into UI.
-
-**The two modes.** In **ES (Event Server)** mode the app holds a WebSocket to
-the zmeventnotification server and receives events in real time, with FCM push
-on iOS and Android. It is the default. In **Direct** mode there is no Event
-Server: ZoneMinder's own Notifications REST API registers the FCM token and
-pushes directly, and desktop and web fall back to polling ``/api/events.json``.
-
-**The stack.**
-
-- Native layer: Firebase Cloud Messaging via ``@capacitor-firebase/messaging``
-- WebSocket service: ``src/services/notifications.ts`` (ES mode)
-- Push service: ``src/services/pushNotifications.ts``, class ``MobilePushService``
-- Event poller: ``src/services/eventPoller.ts`` (Direct mode, desktop and web)
-- REST client: ``src/api/notifications.ts`` (Direct mode token registration)
-- Store: ``src/stores/notifications.ts``
-- Orchestrator: ``src/components/NotificationHandler.tsx``, which delegates to
-  ``useNotificationAutoConnect``, ``useNotificationPushSetup``,
-  ``useNotificationDelivered``, and ``useNotificationBadgeNudge``
-- Settings UI: ``src/pages/NotificationSettings.tsx``, composing
-  ``NotificationModeSection``, ``ServerConfigSection``, and
-  ``MonitorFilterSection`` from ``components/notifications/``
-
-**Registration.** In ES mode the app connects to the Event Server over the
-WebSocket and authenticates; on mobile ``MobilePushService`` then requests FCM
-permission, obtains a token, and sends it to the Event Server via the WebSocket
-``push`` command. In Direct mode ``MobilePushService`` gets the same token but
-registers it with ZoneMinder through ``POST /api/notifications.json`` (platform,
-monitor list, push state); on desktop and web the event poller starts instead.
-
-**Delivery.** Every path converges on one store action:
-
-- Foreground, ES mode: the event arrives on the WebSocket.
-  ``NotificationHandler`` watches the store and raises the toast. FCM duplicates
-  are suppressed by a guard on ``isConnected``.
-- Foreground, Direct mode on mobile: FCM's ``notificationReceived`` fires,
-  ``MobilePushService`` parses the payload (it accepts both the ES and the ZM
-  field shapes) and calls ``addEvent``. The store update raises the toast.
-- Foreground, Direct mode on desktop: the poller calls ``addEvent``.
-- Background or closed: tapping the system notification fires
-  ``notificationActionPerformed``, and the handler calls
-  ``navigationService.navigateToEvent()`` with state
-  ``{ from: '/monitors', fromNotification: true }``. The ``from`` gives the back
-  button somewhere to go when the history stack is empty, and
-  ``fromNotification`` keeps the route out of ``lastRoute``.
-
-Because four sources can report the same alarm, ``addEvent`` in the store
-deduplicates on ``EventId``, dropping any existing entry before unshifting the
-new one:
-
-.. code:: tsx
-
-   // Remove any existing event with the same ID to avoid duplicates
-   // This prevents duplicate entries when receiving the same event from both WebSocket and FCM
-   const otherEvents = current.filter((e) => e.EventId !== event.EventId);
-   return [notificationEvent, ...otherEvents].slice(0, NOTIFICATIONS_SERVICE.maxEvents);
-
-Events are stored per profile, and the list is capped at the newest 100
-(``NOTIFICATIONS_SERVICE.maxEvents``). ``MontageMonitor``'s alarm pulse, above,
-reads this same store.
-
-``useNotificationBadgeNudge`` bridges this store to the new-events badge. It
-watches ``events[0].EventId`` and, when a new one appears, invalidates
-``queryKeys.monitorEventsSinceMonitor`` for that monitor, so its badge count
-refetches within a second instead of at the 60000 ms poll. It runs independent of
-the toast effect above (which is gated on ``settings.showToasts``) so the badge
-moves with the bell whatever the toast setting, and it seeds its own last-seen id
-on first run so a backlog present at mount does not fire a burst of invalidations.
-:doc:`call-flows` Flow 18 places it in the badge's refetch path.
-
-:doc:`call-flows` traces both halves: "A push notification, from registration to
-tap" and "Live notifications over the Event Server websocket".
-
-In-app assistant (Ask)
------------------------
-
-Pressing ``?`` (or typing a leading ``?`` in the command palette, or its "Ask"
-item) swaps the command palette into a chat, ``AskPanel``
-(``components/assistant/AskPanel.tsx``), that answers questions about your
-ZoneMinder server and, when you ask for a change, asks you to confirm it
-first. :doc:`call-flows`'s "Asking the assistant a question" traces one send
-end to end through ``lib/assistant/``; this section covers the component
-pieces on the React side of that trace.
-
-**Entry point.** ``KeyboardShortcuts.tsx``'s global ``?`` handler and
-``CommandPalette.tsx``'s leading-``?`` input both call
-``useCommandPaletteStore``'s ``openAsk()``, which flips the palette's ``mode``
-to ``'ask'``; the palette then renders ``<AskPanel/>`` in place of its normal
-results list, inside the same dialog shell. Neither entry point does anything
-when the assistant is disabled in Settings (``settings.assistantEnabled``):
-the ``?`` key falls back to the keyboard-shortcuts help overlay instead.
-
-**Two shells around one body.** ``AskPanel`` is only the conversation body
-(messages, input, cards). The window around it is one of two shells chosen at
-runtime by viewport, because they need genuinely different JavaScript, not just
-different CSS. ``AssistantWidget.tsx`` is a thin switch over
-``useAssistantPanelStore``'s ``closed | minimized | open`` state: nothing,
-a floating button, or a shell. ``useIsMobile`` (a ``matchMedia`` hook at the
-``sm`` breakpoint) picks ``AssistantDesktopPanel`` (a resizable card pinned
-bottom-right) or ``AssistantMobileSheet`` (a bottom sheet that shares the screen
-with the app). The mobile sheet stores its height as a fraction of the visible
-viewport so a rotation keeps its proportion, and uses ``useKeyboardViewport``
-(a ``window.visualViewport`` wrapper, no Capacitor plugin) to hold the input
-above the on-screen keyboard. Both shells embed the same ``<AskPanel/>`` and
-share ``useAssistantChrome`` for the clear/minimize/close controls, so they
-differ only in layout. The shell stays mounted (hidden) while minimized, so a
-running turn survives collapsing to the button.
-
-**Empty state and connection dot.** With an empty thread ``AskPanel`` renders
-``AssistantIntro``: Ninjii's greeting plus a row of clickable example prompts
-(``assistant.intro_example_1..4``, one of them "Summarize my day") that teach
-the kind of question the assistant answers. A chip click fills the input rather
-than sending, so the user can edit before the turn starts. Next to the backend
-label in both shells sits ``OllamaStatusDot``, which renders nothing unless the
-Ollama backend is selected. When it is, ``useOllamaHealth`` runs the same
-``GET /models`` reachability probe as the Settings Test-connection button on the
-bandwidth-scoped ``assistantHealthInterval`` (30s normal, 60s low) and the dot
-shows green (reachable), red (unreachable), or a pulsing amber for the first
-probe. The query is mounted only with the header, so it stops polling when the
-panel closes; on-device WebLLM has no connection to report, so no dot appears
-for it.
-
-**Driving a turn.** ``AskPanel``'s ``handleSend`` appends the typed message to
-the per-profile thread in ``useAssistantStore``, builds a system prompt from
-the current profile's monitor list and ZM version (``buildSystemPrompt``),
-and calls ``runAssistantTurn`` with an ``AbortController`` it owns. That same
-controller's ``signal`` is what an abort or an unmount cancels, so the agent
-loop never keeps generating for a panel that is gone.
-
-**Rendering the model's answer.** ``agent.ts`` never renders user-facing text
-itself; the only text it emits outside a normal reply is the sentinel
-``__i18n:assistant.iteration_cap_reached`` when the tool-loop cap is hit.
-``AskPanel`` is the one place that resolves that contract:
-
-.. code:: tsx
-
-   function renderAssistantText(text: string | undefined, t: TFunction) {
-     if (!text) return null;
-     if (text.startsWith(I18N_SENTINEL)) {
-       return <p className="text-sm">{t(text.slice(I18N_SENTINEL.length))}</p>;
-     }
-     return <Markdown source={text} />;
-   }
-
-Every other assistant message renders as Markdown directly: the model writes
-in the user's language already (the system prompt tells it to), so there is
-no translation lookup for a normal reply, only for this one fixed sentinel
-(the Localization contract's "never hardcode user-facing strings" still holds, it just applies
-to the sentinel's key, not to arbitrary model output).
-
-**The host has no confirm flow.** ``useAssistantHost``
-(``components/assistant/useAssistantHost.ts``) is the ``AssistantHost``
-implementation ``AskPanel`` hands to ``runAssistantTurn``. The assistant is
-read-only: there are no destructive tools, so the confirmation flow an
-earlier revision carried (``confirm``/``resolveConfirm`` and a confirm card)
-no longer exists; a request to change something gets a plain refusal that
-points at the right screen instead. ``navigate`` on the host minimizes the
-assistant panel (``stores/assistantPanel.ts``) before routing, so an "Open"
-click on an event or monitor result card collapses the panel to the FAB
-instead of leaving a chat window open behind the page it just opened. The
-assistant itself never routes the app: result cards are the only navigation
-affordance.
-
-**Used by:** ``CommandPalette.tsx`` (the only mount point). ``useAssistantStore``
-holds the per-profile conversation thread and is not persisted, closing the
-app clears it.
+Whole-app surfaces
+------------------
+
+Kiosk mode, TV d-pad support, the notification pipeline, and the in-app
+assistant are not page components: each one sits over or beside the entire
+app. They are documented together in :doc:`16-platform-surfaces`.
 
 Test attributes
 ---------------

@@ -168,6 +168,24 @@ describe('prose stays in developer voice (P10)', () => {
   });
 });
 
+describe('developer docs cite symbols, not line numbers', () => {
+  it('no rst file carries a file.ts:NN citation', () => {
+    // Line numbers rot silently as code moves; symbol names are greppable
+    // and survive edits. GitHub source links pin lines with #LNN, which
+    // this pattern does not match.
+    const offenders: string[] = [];
+    const guideDir = path.join(repoRoot, 'docs/developer-guide');
+    for (const file of fs.readdirSync(guideDir).filter((f) => f.endsWith('.rst'))) {
+      fs.readFileSync(path.join(guideDir, file), 'utf8')
+        .split('\n')
+        .forEach((line, i) => {
+          if (/\.(ts|tsx):\d+/.test(line)) offenders.push(`${file}:${i + 1} ${line.trim()}`);
+        });
+    }
+    expect(offenders, `line-number citations found:\n${offenders.join('\n')}`).toEqual([]);
+  });
+});
+
 describe('developer docs reference valid rule IDs', () => {
   it('every "rule <id>" reference resolves', () => {
     // Derived from AGENTS.md so adding or removing a rule cannot desync

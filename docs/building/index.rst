@@ -64,6 +64,14 @@ Mobile Builds
    ANDROID
    IOS
 
+Release Notices
+---------------
+
+.. toctree::
+   :maxdepth: 2
+
+   release-notices
+
 Versioning
 ----------
 
@@ -131,7 +139,8 @@ patch) plus the developer-notice draft. The recommended version is pre-selected
 in the menu; you confirm or override it. If ``claude``, ``gh``, or the changelog
 tool is unavailable, the suggestion falls back to a patch bump and the release
 still proceeds. For a minor or major release the same draft is reused to write
-the in-app notice (``docs/notices.json``), so Claude runs at most once per release.
+the in-app notice (``docs/notices.json``), so Claude runs at most once per
+release. See :doc:`release-notices` for that half on its own.
 
 To enable automated builds on your fork:
 

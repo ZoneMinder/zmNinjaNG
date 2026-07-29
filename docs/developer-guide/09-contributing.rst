@@ -15,7 +15,8 @@ Before You Start
 
 1. **Read the documentation**
 
-   - The numbered chapters of this guide (1 through 13).
+   - The numbered chapters of this guide. See :doc:`index` for the current
+     list; the numbering has gaps where chapters were merged away.
    - :doc:`call-flows`. Start here if you are new. It traces real user
      actions (logging in, arming a monitor, opening a live stream) from the
      button press through to the ZoneMinder API and back, naming the exact
@@ -102,22 +103,10 @@ interaction changes also need a Gherkin scenario in
 4. Write the Code
 ~~~~~~~~~~~~~~~~~
 
-Each rule below is stated in full in ``AGENTS.md``; the one-liners here are
-signposts, not the rule.
-
-- Localization contract: no hardcoded user-facing strings, and every locale directory under
-  ``app/src/locales/`` gets the key.
-- Logging contract: ``log.*`` helpers with an explicit ``LogLevel``, never ``console``.
-- HTTP contract: ``httpGet`` / ``httpPost`` and friends from ``lib/http.ts``, never
-  raw ``fetch``.
-- C2: files stay near 400 lines, and replaced code is deleted rather than
-  commented out.
-- Project rules: ``data-testid="kebab-case-name"`` on every interactive element.
-- Constants contract: named constants live in ``lib/zmninja-ng-constants.ts`` or
-  ``lib/zm-constants.ts``, not inline.
-- Server queries contract: React Query keys and invalidations come from the ``queryKeys``
-  factory in ``lib/query/query-keys.ts``.
-- C5: new ``lib/`` modules go in a domain subfolder.
+The architecture contracts in ``AGENTS.project.md`` decide what the code is
+allowed to do, and each names its own sanctioned path and its gate. Read them
+there. "What Reviewers Actually Check" below covers the ones new contributors
+trip on, and the checklist at the end of this chapter is the short form.
 
 5. Git Hooks
 ~~~~~~~~~~~~
@@ -136,7 +125,9 @@ signposts, not the rule.
 - **commit-msg** rejects a commit whose staged diff touches a native build
   number (``versionCode`` in ``app/android/app/build.gradle``, or
   ``CURRENT_PROJECT_VERSION`` in ``app/ios/App/App.xcodeproj/project.pbxproj``)
-  unless the message is a ``chore:`` commit (project rules). ``npm run android:sync``
+  unless the message is a ``chore:`` commit. The project rule in
+  ``AGENTS.project.md`` reads "Do not commit incidental native build-number
+  bumps. Commit intended bumps alone as ``chore:``." ``npm run android:sync``
   and ``npm run ios:sync`` bump both as a side effect (via
   ``scripts/sync-version.js``; ``npm run build`` alone does not), and the guard
   (``scripts/check-native-version-bump.mjs``) keeps that bump from riding along
@@ -148,7 +139,7 @@ signposts, not the rule.
        app/ios/App/App.xcodeproj/project.pbxproj
 
 The hooks are only wired up if you ran ``npm install`` at the repo root. CI
-re-checks the project rules in the ``native-version-guard`` job, so a skipped root
+re-checks that same rule in the ``native-version-guard`` job, so a skipped root
 install cannot get a stray bump past review, but it will let you waste a push
 finding out.
 
@@ -249,8 +240,9 @@ read the delta. Re-run the P3 sequence after every round of changes, and
 update the PR description if the scope moved.
 
 A maintainer merges. P8: nothing reaches ``main`` without the maintainer's
-approval, and CI has to be green first. Only the web e2e suite runs in CI
-(project rules); the iOS and Android suites are invoked by hand, so a change that
+approval, and CI has to be green first. Only the web e2e suite runs in CI: the
+project rule reads "Device e2e (iOS, Android, Tauri) is manual-only; agents
+never auto-run it." The iOS and Android suites are invoked by hand, so a change that
 touches a native path is not done until someone has run it on a real device
 (the native playbook, ``agents/project/native.md``).
 
@@ -280,7 +272,10 @@ in the order they tend to come up:
   ``error.message`` in English and tells a logged-out user nothing useful.
 - **Localization contract, all five locales.** Covered below; it has a specific failure mode
   worth understanding.
-- **Project rules, ``data-testid``.** Without it the e2e step definitions have
+- **Project rules, ``data-testid``.** The rule requires ``data-testid`` on new
+  interactive elements, and the testing playbook fixes the shape: kebab-case,
+  repeated elements suffixed with the entity id (``monitor-card-${monitor.Id}``),
+  variants suffixed with kind or role. Without it the e2e step definitions have
   nothing stable to select, and the next contributor writes a selector against
   a CSS class you are about to rename.
 - **Testing playbook, e2e guards.** A conditional step must derive its guard from the
@@ -289,14 +284,15 @@ in the order they tend to come up:
   regression into a green pass. ``tests/steps/ptz.steps.ts`` derives its guard
   the right way: it asks the ZoneMinder API whether the monitor is controllable
   (``isMonitorControllable``) instead of peeking at the DOM.
-- **Project rules, native build numbers.** ``npm run android:sync`` / ``ios:sync``
-  bump ``versionCode`` and ``CURRENT_PROJECT_VERSION`` as a side effect
+- **Project rules, native build numbers.** "Do not commit incidental native
+  build-number bumps." ``npm run android:sync`` / ``ios:sync`` bump
+  ``versionCode`` and ``CURRENT_PROJECT_VERSION`` as a side effect
   (``npm run build`` alone does not). Revert them before committing anything
   that is not a version-bump ``chore:``.
-- **Project rules, docs teach.** A new hook or component is not documented by an
-  entry listing its location and props. Say what user-visible behavior it
-  serves, and if it changes a path that :doc:`call-flows` traces, update the
-  trace.
+- **Project rules, docs teach.** "Developer docs teach React where they first
+  rely on it." A new hook or component is not documented by an entry listing
+  its location and props. Say what user-visible behavior it serves, and if it
+  changes a path that :doc:`call-flows` traces, update the trace.
 
 Internationalization
 --------------------
@@ -317,9 +313,12 @@ catches ``<Button>Delete</Button>``. Route every user-facing string through
      return <EmptyState title={t('monitors.no_cameras')} />;
    }
 
-That key is real: ``app/src/pages/Monitors.tsx:231``, defined in all five
+That key is real. ``Monitors()`` in ``app/src/pages/Monitors.tsx`` renders it
+through ``EmptyState`` inside the ``monitors-empty-state`` div, on the branch
+where ``allMonitors.length === 0``, and it is defined in all five
 ``app/src/locales/<lang>/translation.json`` files. The snippet is simplified
-from that call site, which also passes ``EmptyState``'s required ``icon`` prop.
+from that call site, which also passes ``EmptyState``'s required ``icon`` prop
+(``Video``).
 
 **A missing translation does not look like a bug.** ``app/src/i18n.ts`` sets
 ``fallbackLng: 'en'``, so a key you added to ``en`` and forgot in ``de`` does
@@ -328,15 +327,26 @@ the middle of a German screen, and nobody notices until a German speaker files
 an issue. There is no CI check for locale-key parity. Add the key to all five
 files in the same commit, or it will not get added at all.
 
-The project rules constrain the translations themselves: button, tab, and action labels
-have to stay short in every language, because they share a 320 pixel wide
-screen. Prefer the single-word synonym (ES "Ajustes", not "Configuración").
+A project rule constrains the translations themselves: "Labels must fit 320px;
+prefer concise translations." Button, tab, and action labels have to stay short
+in every language, because they share a 320 pixel wide screen. Prefer the
+single-word synonym (ES "Ajustes", not "Configuración").
+
+Two Traps Nothing Catches For You
+---------------------------------
+
+An ``opacity-0`` overlay sitting over interactive content still swallows taps
+on iOS unless it also carries ``pointer-events-none``; the element is invisible
+and the button underneath it stops working, on one platform only. And every
+``useEffect`` that starts something has to stop it in the cleanup it returns,
+because React reruns the effect on every dependency change and again on unmount,
+and in development ``StrictMode`` mounts twice on purpose. Neither has a lint
+rule, a test, or a review gate behind it.
 
 Before You Ask for Review
 -------------------------
 
-Each item names the rule or contract that owns it. Items without one are
-codebase-specific traps with nothing to cite.
+Each item names the rule or contract that owns it.
 
 - ☐ P1: issue exists and is referenced
 - ☐ P2/P3: failing test written first; verification sequence run and passing
@@ -355,10 +365,8 @@ codebase-specific traps with nothing to cite.
 - ☐ Query UI states contract: ``ErrorBanner`` and shared skeletons
 - ☐ Testing playbook: e2e guards derive from API or fixture data
 - ☐ P10: developer docs updated where behavior changed
-- ☐ No secrets, tokens, or passwords in log payloads
-- ☐ ``opacity-0`` overlays over interactive content carry
-  ``pointer-events-none`` (they still swallow taps on iOS)
-- ☐ Every ``useEffect`` that starts something stops it in its cleanup
+- ☐ Logging contract: no secrets, tokens, or passwords in log payloads
+- ☐ Both traps above
 
 Worked Examples
 ---------------
@@ -442,7 +450,8 @@ Updating Documentation
 
    refs #<id>"
 
-The project rules set the bar: the developer guide is written for a competent programmer
+A project rule sets the bar: "Developer docs teach React where they first rely
+on it." The guide is written for a competent programmer
 with no React experience, so a doc change that introduces a React mechanism has
 to explain it at the point of use or link the section of
 :doc:`02-react-fundamentals` that does. P10 decides where the change lands:
@@ -488,44 +497,51 @@ Prerequisites
 Running on Device/Emulator
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The project includes helper scripts in ``package.json`` to streamline
-the mobile workflow.
+Three ``app/package.json`` scripts cover the loop, and the difference between
+them is where they stop. ``:sync`` stamps the version
+(``scripts/sync-version.js``), runs ``npm run build``, and hands the bundle to
+``npx cap sync``. The bare name adds ``npx cap run``, which installs and
+launches the app on a connected device or a running emulator. ``:open`` opens
+the platform IDE instead and leaves the build to you.
 
 **Android:**
 
 .. code:: bash
 
-   # Sync web assets to Android project and open Android Studio
+   # Stamp version, build, copy into android/, then install and launch
    npm run android
 
-   # Just sync (if you already have Android Studio open)
+   # Stop after the copy
    npm run android:sync
 
-   # View logs from connected Android device
+   # Open Android Studio on the existing native project
+   npm run android:open
+
+   # Tail Capacitor and Chromium logs from the connected device
    npm run android:logs
 
 **iOS:**
 
 .. code:: bash
 
-   # Sync web assets to iOS project and open Xcode
-   npm run ios
-
-   # Just sync
-   npm run ios:sync
+   npm run ios        # stamp, build, copy, then install and launch
+   npm run ios:sync   # stop after the copy
+   npm run ios:open   # open Xcode on the existing native project
 
 Workflow
 ~~~~~~~~
 
 1. Make changes to the web code (``src/``).
-2. Run ``npm run build`` to compile the web assets.
-3. Run ``npm run android:sync`` or ``npm run ios:sync`` to copy the
-   built assets to the native projects.
-4. Run/Debug via Android Studio or Xcode.
+2. Run ``npm run android:sync`` or ``npm run ios:sync``. Each builds the web
+   assets and copies them into the native project, so a separate
+   ``npm run build`` is redundant.
+3. Run or debug via Android Studio or Xcode, or let ``npm run android`` /
+   ``npm run ios`` install and launch it for you.
 
-Note that step 3 bumps the native build numbers (the ``sync`` scripts run
-``scripts/sync-version.js`` first; step 2 alone writes nothing native). The project rules
-apply: revert the bump before committing.
+Step 2 bumps the native build numbers, because the ``sync`` scripts run
+``scripts/sync-version.js`` first; ``npm run build`` on its own writes nothing
+native. The project rule applies: "Do not commit incidental native build-number
+bumps." Revert the bump before committing.
 
 .. tip::
 
@@ -553,9 +569,11 @@ Getting Help
 - **Feature requests**: there is no feature-request template yet; open an issue
   via ``gh issue create --label enhancement`` (the web UI only offers the bug
   template).
-- **Security issues**: contact the maintainers privately. Do not open a public
-  issue and do not describe the vulnerability in a discussion. The repository
-  has no ``SECURITY.md`` yet.
+- **Security issues**: the repository has no ``SECURITY.md`` and no private
+  vulnerability reporting enabled on its Security tab, so there is no dedicated
+  intake channel. Contact the maintainers privately, using the addresses on
+  their GitHub profiles. Do not open a public issue and do not describe the
+  vulnerability in a discussion.
 
 There is no service-level agreement on responses. This is a project maintained
 in spare time.

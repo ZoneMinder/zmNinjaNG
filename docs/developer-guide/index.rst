@@ -5,20 +5,27 @@ This guide teaches you how to work on the zmNinjaNg codebase. It is written for
 developers who may not have React experience, explaining concepts from first
 principles with real examples from the code.
 
-**New to React?** Start with Chapter 2 (React Fundamentals), then Chapter 3 (Zustand).
+**New to React?** Start with :doc:`02-react-fundamentals`, then
+:doc:`03-state-management-zustand`.
 
-**Adding a feature?** Read Chapter 9 (Contributing) for the workflow, then
-Chapter 6 (Testing).
+**Adding a feature?** Read :doc:`09-contributing` for the workflow, then
+:doc:`06-testing-strategy`.
 
 **Debugging?** Find the flow your bug sits on in **Call Flows** below, then read
-the chapter for the layer where it breaks: Chapter 3 (Zustand) when state does
-not update, Chapter 7 (API and Data Fetching) when server data is stale or
-missing, Chapter 11 (Application Lifecycle) when the problem only appears at
-startup, on resume, or after backgrounding.
+the chapter for the layer where it breaks: :doc:`03-state-management-zustand`
+when state does not update, :doc:`07-api-and-data-fetching` when server data is
+stale or missing, :doc:`11-application-lifecycle` when the problem only appears
+at startup, on resume, or after backgrounding.
 
-**Understanding the architecture?** Chapter 5 (Component Architecture) explains
-how components are organized, and Chapter 11 (Application Lifecycle) explains
-the runtime flow.
+**Understanding the architecture?** :doc:`05-component-architecture` explains
+how components are organized, and :doc:`11-application-lifecycle` explains the
+runtime flow.
+
+**Working on the assistant?** :doc:`15-assistant` covers the agent loop, the
+tool registry, and the provider backends.
+
+**Working on kiosk, TV mode, or the notification and assistant screens?**
+:doc:`16-platform-surfaces` covers those surfaces.
 
 **Returning to the codebase, or out of touch?** Start with **Call Flows** below.
 It traces a few real user actions scene by scene through the actual code and
@@ -41,14 +48,13 @@ links into the reference chapters.
    12-shared-services-and-components
    13-network-endpoints
    14-agent-development-model
+   15-assistant
+   16-platform-surfaces
    go2rtc-integration
 
 
-Quick Reference
----------------
-
 State Types
-^^^^^^^^^^^
+-----------
 
 .. list-table::
    :header-rows: 1
@@ -56,19 +62,21 @@ State Types
    * - Type
      - Where
      - Example
-     - When to Use
+     - Pick it when
    * - **Local**
      - ``useState``
      - Form inputs, UI toggles
-     - Component-specific, temporary
+     - Only one component reads the value, and throwing it away on unmount
+       loses nothing
    * - **Global**
      - Zustand stores
      - Current profile, settings
-     - Shared across components
+     - Two unrelated subtrees read it, or non-React code has to write it
    * - **Server**
      - React Query
      - Monitor list, events
-     - Data from ZoneMinder API
+     - The ZoneMinder server is the authority, and the app holds a copy that
+       can go out of date
 
 The three are not interchangeable, and picking the wrong one is the most common
 structural mistake in this codebase. ``useState`` and Zustand are taught in
@@ -78,7 +86,7 @@ also introduced in :doc:`02-react-fundamentals`; this app's use of it is in
 :doc:`07-api-and-data-fetching`.
 
 File Organization
-^^^^^^^^^^^^^^^^^
+-----------------
 
 ::
 
@@ -108,19 +116,20 @@ next to the code they cover, so ``lib/security/crypto.ts`` is tested by
 setup file and the plugin mocks it registers.
 
 Development Quick Start
-^^^^^^^^^^^^^^^^^^^^^^^
+-----------------------
+
+Run the first ``npm install`` at the repository root, not in ``app/``. That is
+the one that wires the husky git hooks. Skipping it silently disables every
+hook; CI re-checks what the hooks enforce, but only after you push.
 
 .. code-block:: bash
 
-   npm install      # Once, at the repo root: wires the husky git hooks
+   npm install
    cd app
    npm install
-   npm run dev      # Start development server
-   npm test         # Run unit tests
-   npm run build    # Build for production
-
-Skipping the root install silently disables every git hook; CI re-checks
-what the hooks enforce, but only after you push.
+   npm run dev
+   npm test
+   npm run build
 
 Also see the `AGENTS.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/AGENTS.md>`_
 file for the full development guidelines and checklists.

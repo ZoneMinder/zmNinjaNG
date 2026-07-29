@@ -2,8 +2,12 @@ State Management with Zustand
 =============================
 
 zmNinjaNg uses `Zustand <https://github.com/pmndrs/zustand>`_ for global
-state. This chapter covers how stores are structured, how components
-subscribe, and the reference-equality pitfalls that caused us trouble.
+state, and nearly everything that has gone wrong with it traces back to
+one mechanism: Zustand decides whether to re-render by comparing a
+selector's previous result against its next one by reference. Structuring
+stores and selectors around that comparison is most of what this chapter
+is about; the rest is how stores get written, persisted, and reached from
+outside React.
 
 Why Global State
 ----------------
@@ -64,8 +68,8 @@ arrays rather than mutating the existing ones:
    // array, and skip the re-render. The UI never updates.
    set((state) => { state.selectedIds.push(id); return state; })
 
-This is the Stores contract in ``AGENTS.project.md``: never mutate an object you obtained from
-the store, including one you read through ``getState()``.
+This is the Stores contract (``AGENTS.project.md``): never mutate an object
+you obtained from the store, including one you read through ``getState()``.
 
 Initialize every field. ``items: undefined`` looks harmless until an action
 spreads it (``[...state.items, item]``) and crashes. Arrays start as ``[]``,
@@ -77,12 +81,13 @@ Reading State in Components
 A component subscribes by calling the store hook with a *selector*, a
 function that picks one field out of the state. Zustand re-runs the
 selector whenever any part of the store changes and re-renders the
-component only when the selector's result changes. ``App`` re-renders when
-``isInitialized`` flips and ignores every profile add, rename, and switch:
+component only when the selector's result changes. ``AppRoutes`` re-renders
+when ``isInitialized`` flips and ignores every profile add, rename, and
+switch:
 
 .. code:: tsx
 
-   // src/App.tsx:82, 189
+   // AppRoutes in src/App.tsx
    const isInitialized = useProfileStore((state) => state.isInitialized);
 
    if (!isInitialized) {
@@ -94,7 +99,7 @@ store is created and never replaced, so their reference is already stable:
 
 .. code:: tsx
 
-   // src/components/events/EventCard.tsx:54
+   // EventCardComponent in src/components/events/EventCard.tsx
    const toggleFavorite = useEventFavoritesStore((state) => state.toggleFavorite);
 
 Computed selectors are fine as long as the result is a primitive. Zustand
@@ -103,7 +108,7 @@ booleans stay equal no matter how many times you recompute them:
 
 .. code:: tsx
 
-   // src/components/events/EventCard.tsx:58
+   // EventCardComponent in src/components/events/EventCard.tsx
    const isFav = useEventFavoritesStore((state) =>
      currentProfile ? state.isFavorited(currentProfile.id, event.Id) : false
    );
@@ -123,7 +128,7 @@ because of the ``?? []`` fallback:
 
 .. code:: tsx
 
-   // src/components/dashboard/DashboardLayout.tsx:45
+   // DashboardLayout in src/components/dashboard/DashboardLayout.tsx
    import { useShallow } from 'zustand/react/shallow';
 
    const widgets = useDashboardStore(
@@ -135,9 +140,10 @@ mints a brand new empty array on every selector run. Without ``useShallow``
 that empty dashboard would render forever. With it, every ``[]`` compares
 equal to the last ``[]`` and the component settles.
 
-``profile-switcher.tsx:36`` reaches for ``useShallow`` for a different
-reason. Its selector returns ``profiles.find((p) => p.id ===
-currentProfileId) || null``, an object that already lives in the store, so
+``ProfileSwitcher`` (``components/profile-switcher.tsx``) reaches for
+``useShallow`` for a different reason. Its selector returns
+``profiles.find((p) => p.id === currentProfileId) || null``, an object that
+already lives in the store, so
 the selector mints nothing fresh. What shallow comparison buys there is the
 field-by-field check on that profile: ``setDefaultProfile`` rebuilds every
 element of ``profiles`` with a spread, and without ``useShallow`` the
@@ -162,8 +168,8 @@ Calling the hook with no selector subscribes to everything:
    const { isFavorited, toggleFavorite } = useEventFavoritesStore();
 
 Any write anywhere in the store, to any profile's favorites, re-renders this
-component. The Stores contract in ``AGENTS.project.md`` bans the form. Three call sites predate
-the rule and are tracked in issue #230; do not add more.
+component. The Stores contract bans the form. Three call sites predate the
+rule and are tracked in issue #230; do not add more.
 
 The mirror-image mistake is over-narrowing. Shrink a selector down to just
 the actions and the component reads its data once, on the first render, and
@@ -175,8 +181,8 @@ never again: actions never change, so nothing is left to trigger an update.
    const toggleFavorite = useEventFavoritesStore((s) => s.toggleFavorite);
    const favorites = useEventFavoritesStore.getState().getFavorites(profileId);
 
-The Stores contract covers both directions: every field the component reads reactively
-must be in the selector.
+The Stores contract covers both directions: every field the component reads
+reactively must be in the selector.
 
 Store Values as Effect Dependencies
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -211,7 +217,7 @@ Actions
 Actions encapsulate multi-field updates so callers cannot leave the store in
 a half-updated state. Where an action needs to read current state without
 subscribing, ``get`` (the second argument to ``create``) returns it;
-``profileExists`` in ``stores/profile.ts:84`` is the smallest example.
+``profileExists`` in ``stores/profile.ts`` is the smallest example.
 
 .. code:: tsx
 
@@ -240,9 +246,9 @@ The ``persist`` middleware writes state to ``localStorage`` after every
 change and reads it back at startup. zmNinjaNg runs on web, Electron, and
 Capacitor, all of which expose ``localStorage``, so no custom storage
 adapter is needed. Persist keys are never string literals at the call site.
-They live in ``STORAGE_KEYS`` in ``lib/zmninja-ng-constants.ts`` (the Constants contract),
-because the values are on-disk keys: changing one orphans every existing
-user's stored state.
+They live in ``STORAGE_KEYS`` in ``lib/zmninja-ng-constants.ts``, per the
+Constants contract (``AGENTS.project.md``), because the values are on-disk
+keys: changing one orphans every existing user's stored state.
 
 .. code:: tsx
 
@@ -281,7 +287,8 @@ and set ``isInitialized``:
 
 .. code:: tsx
 
-   // Simplified from src/stores/profile.ts:437 (log message shortened here)
+   // Simplified from the persist config in src/stores/profile.ts
+   // (log message shortened here)
    persist(
      (set, get) => ({ /* ... */ }),
      {
@@ -301,45 +308,51 @@ and set ``isInitialized``:
      }
    )
 
-The ``catch`` forces ``isInitialized`` to ``true``. Left unset, ``App``'s
-``if (!isInitialized)`` gate would hold the loading fallback on screen
-forever, so a rehydration bug would present as a permanently hung splash.
-Note the logging goes through ``log.profileService``, not ``console.error``;
-the Logging contract routes every log line through ``lib/logger.ts`` so it lands in the
-in-app log viewer.
+The ``catch`` forces ``isInitialized`` to ``true``. Left unset,
+``AppRoutes``'s ``if (!isInitialized)`` gate would hold the loading
+fallback on screen forever, so a rehydration bug would present as a
+permanently hung splash. Note the logging goes through
+``log.profileService``, not ``console.error``; the Logging contract
+(``AGENTS.project.md``) routes every log line through ``lib/logger.ts`` so
+it lands in the in-app log viewer.
 
 Calling Stores Outside React
 ----------------------------
 
-``useProfileStore`` is a hook, but ``useProfileStore.getState()`` is a plain
-function call that reads current state from anywhere: services, API clients,
-event handlers. There is no subscription and no re-render; you get a
-snapshot of the values as of that instant.
+Start from the rule, because it decides how the code below is shaped. The
+Service boundary contract (``AGENTS.project.md``) says a service never
+statically imports a store, and the module graph under ``src/`` stays
+acyclic. The gate is ``src/tests/no-circular-deps.test.ts``, which walks
+every static import in the tree and fails with the cycle path if it finds
+one.
 
-Which module performs that call matters. ``stores/notifications.ts:24``
-statically imports ``services/pushNotifications.ts`` for exactly one reason:
-to call ``setPushServiceStoreGates`` at module load and hand the service the
-state accessors it needs. When the store later wants a runtime function out of
-that service it uses a dynamic ``import()`` instead (``notifications.ts:630``).
-In the return direction the service imports only *types* from the store,
-``NotificationSettings`` and ``NotificationSource`` at
-``pushNotifications.ts:14``. TypeScript erases a type-only import at compile
-time, so it is not a module edge at runtime and ``madge`` does not see it. A
-*value* import there would close the cycle, and that is the static
-service-to-store edge the Service boundary contract forbids. The inversion is a gate: the service
-declares the shape of the state it needs and exposes a registration function,
-and the store fills it in at module load.
+The mechanism itself is ordinary: ``useProfileStore`` is a hook, but
+``useProfileStore.getState()`` is a plain function call that reads current
+state from anywhere. There is no subscription and no re-render; you get a
+snapshot of the values as of that instant. What the contract constrains is
+which module is allowed to make that call.
+
+The answer is dependency inversion, and it runs store-to-service. The
+service declares the shape of the state it needs and exposes a registration
+function; the store statically imports that one function, and at module load
+hands over accessors closed over ``getState()``. ``stores/notifications.ts``
+imports ``setPushServiceStoreGates`` from ``services/pushNotifications.ts``
+for exactly that. The service imports nothing from any store: the types in
+its gate interface come from ``types/notifications.ts`` and ``api/types.ts``.
+When the store later needs a runtime function out of the service, it uses a
+dynamic ``import()`` (``await import('../services/pushNotifications')``),
+which is not a static edge.
 
 .. code:: tsx
 
-   // src/services/pushNotifications.ts:52, the service declares what it needs
+   // src/services/pushNotifications.ts, the service declares what it needs
    let storeGates: PushServiceStoreGates | null = null;
 
    export function setPushServiceStoreGates(gates: PushServiceStoreGates): void {
      storeGates = gates;
    }
 
-   // src/stores/notifications.ts:717, the store supplies it, using getState
+   // src/stores/notifications.ts, the store supplies it, using getState
    setPushServiceStoreGates({
      notifications: {
        getCurrentProfileId: () => useNotificationStore.getState().currentProfileId,
@@ -351,9 +364,22 @@ and the store fills it in at module load.
      },
    });
 
-``api/store-gates.ts`` does the same for the API client, which needs the
-access token and the per-profile request timeout without importing either
-store. Keep ``npx madge --circular`` at zero.
+``api/store-gates.ts`` is the same pattern one layer over. ``api/client.ts``
+needs an access token and the per-profile request timeout, and takes narrow
+``AuthGate`` and ``SettingsGate`` interfaces instead of importing the stores
+that hold them. ``store-gates.ts`` is the wiring module that builds those
+gates out of ``stores/auth.ts`` and ``stores/settings.ts`` and registers
+them, which is what breaks the client to auth-store to ``api/auth`` to
+client cycle.
+
+One subtlety about ``import type``. TypeScript erases it, so a type-only
+import is not a module edge at runtime and nothing would break if it closed
+a cycle today. This repo's gate counts it as an edge anyway. The comment at
+the top of ``no-circular-deps.test.ts`` says why: the four cycles that
+existed before the check landed were all type-only, so nothing failed, and
+turning any one of those ``import type`` statements into a value import
+would have made the cycle real. Treat a type-only import from a service to
+a store as the same violation as a value import.
 
 An End-to-End Switch
 ~~~~~~~~~~~~~~~~~~~~
@@ -396,8 +422,31 @@ Two things that look like stores are not: ``services/profile-bootstrap.ts``
 and ``services/profile-initialization.ts`` hold the login/timezone/rehydration
 logic that ``profile.ts`` calls, and live under ``services/`` for that reason.
 
-Three of these come up often enough to be worth a sentence each. Deep
-reference lives in :doc:`12-shared-services-and-components`.
+Three of them turn up in almost any change you make.
+
+**Profiles** (``stores/profile.ts``) owns the list of configured ZoneMinder
+servers and which one is active: ``profiles`` and ``currentProfileId``,
+plus the actions that add, update, delete, and switch them. Almost every
+profile-scoped thing in the app (query keys, favorites, settings) is keyed
+off the id this store holds.
+
+**Settings** (``stores/settings.ts``) owns profile-scoped user preferences.
+Read them through ``getProfileSettings`` and write them through
+``updateProfileSettings``; every default and coercion lives in one place,
+``mergeProfileSettings``, which ``getProfileSettings`` runs on each read.
+Adding a per-getter fix somewhere else is the recurring violation of the
+Settings contract (``AGENTS.project.md``), because reactive readers such as
+``useCurrentProfile`` bypass it.
+
+**Auth** (``stores/auth.ts``) owns access and refresh tokens, under the Auth
+tokens contract (``AGENTS.project.md``). Its concurrency story is the part
+worth remembering: a module-level ``pendingLogin`` promise
+means several callers racing a fresh-start login (profile bootstrap and the
+API client's proactive auth, typically) attach to one ``/login.json`` POST
+instead of issuing two. ``getFreshAccessToken`` and the refresh POST are
+deduped the same way, each behind its own shared promise.
+
+The next three are smaller, and this is the only place they are written up.
 
 **Kiosk** (``stores/kioskStore.ts``) holds lock state, the insomnia setting
 captured at lock time so unlocking can restore it, and the PIN cooldown.
@@ -417,6 +466,63 @@ are functions, not fields, so they must be called.
 array of event ids and is persisted. Scoping by profile is what stops a
 favorite on one ZoneMinder server from showing up as a starred event on
 another.
+
+Testing a Store
+---------------
+
+A store is a module singleton. It is created the first time the module is
+imported and then shared by every test in the file, so whatever one test
+writes is still there when the next one runs. Reset it in ``beforeEach`` or
+the suite passes in isolation and fails in order.
+
+.. code:: tsx
+
+   // src/stores/__tests__/monitors.test.ts
+   describe('Monitor Store', () => {
+     beforeEach(() => {
+       useMonitorStore.setState({ connKeys: {} });
+       vi.spyOn(Math, 'random').mockReturnValue(0.12345);
+     });
+
+     it('creates a new connection key when missing', () => {
+       const key = useMonitorStore.getState().getConnKey('2');
+
+       expect(key).toBe(12345);
+       expect(useMonitorStore.getState().connKeys['2']).toBe(12345);
+     });
+   });
+
+Reset the *data* fields only. ``setState`` merges by default, so passing
+``{ connKeys: {} }`` restores the initial data and leaves the actions that
+``create`` built untouched. ``setState`` takes a second argument that
+replaces the state object instead of merging into it, and passing ``true``
+there wipes the actions along with the data: the next
+``getState().getConnKey(...)`` is a call on ``undefined``.
+
+Drive the store through ``getState()`` rather than rendering a component.
+Actions come off it directly, as in ``eventFavorites.test.ts``:
+
+.. code:: tsx
+
+   // src/stores/__tests__/eventFavorites.test.ts
+   beforeEach(() => {
+     useEventFavoritesStore.setState({ profileFavorites: {} });
+     localStorage.clear();
+   });
+
+   const { addFavorite, getFavorites } = useEventFavoritesStore.getState();
+   addFavorite('profile-1', 'event-123');
+   expect(getFavorites('profile-1')).toEqual(['event-123']);
+
+Note the ``localStorage.clear()``. A persisted store writes to
+``localStorage`` on every ``set``, including the reset, so a suite that
+skips the clear can find one test's state rehydrated into another.
+
+Destructuring works there because ``addFavorite`` and ``getFavorites`` are
+both actions, and an action reads through ``get()`` at call time. A
+destructured *data* field is a snapshot of the moment you destructured it
+and will not reflect the write, which is why the monitors test above asserts
+against a fresh ``useMonitorStore.getState().connKeys``.
 
 Reference Equality and Infinite Loops
 -------------------------------------
@@ -439,7 +545,7 @@ you need to *read* but do not want to *react* to:
 
 .. code:: tsx
 
-   // src/components/dashboard/DashboardLayout.tsx:55
+   // DashboardLayout in src/components/dashboard/DashboardLayout.tsx
    const profileIdRef = useRef(profileId);
    const isSyncingFromStoreRef = useRef(false);
 

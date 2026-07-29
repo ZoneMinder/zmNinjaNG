@@ -31,6 +31,43 @@ The layers a request moves through, top to bottom:
    lib/          pure helpers (http, url-builder, crypto, ...)
    <native>      Capacitor plugins (iOS/Android/Electron)
 
+If you already know the symptom, jump straight to its flow:
+
+1. Cold start to an authenticated session: the app opens on the wrong screen,
+   or network setup runs at the wrong moment.
+2. Montage and a live MJPEG stream: tiles stay blank, or leave ``nph-zms``
+   processes behind.
+3. A push notification, registration to tap: a push never arrives, or tapping
+   one lands nowhere.
+4. Adding a server profile: onboarding, credential storage, first contact with
+   a server.
+5. Browse events and play a video: the event list filters wrong, or the player
+   picks the wrong source.
+6. Access-token lifecycle: 401s, refresh storms, a token that lapsed
+   mid-request.
+7. Live notifications over the Event Server websocket: the bell stops updating,
+   or the socket will not reconnect.
+8. A go2rtc WebRTC live stream: a monitor plays MJPEG when it should not.
+9. Timeline view: the timeline lands on the wrong span, or fetches too much.
+10. Downloading an event: a download fails, or fails only on mobile.
+11. A bandwidth setting becomes polling cadence: you need a new recurring
+    refresh.
+12. A Dashboard widget: widgets lose their layout, or fetch on their own
+    schedule.
+13. Kiosk lock and biometric unlock: the lock will not engage, or will not
+    release.
+14. Capturing a snapshot: a saved still is black, or saves as a stream.
+15. Changing the ZoneMinder run state: the app's one write path, and how its
+    cache is invalidated.
+16. Editing and deleting a server profile: an edit does not take effect until
+    a reload.
+17. Aiming a PTZ camera: the pad is missing, or a camera keeps moving after
+    release.
+18. Seeing what happened while you were away: the new-events badge counts
+    wrong.
+19. Asking the assistant a question: a turn answers without data, or a backend
+    is missing from settings.
+
 Flow 1: Cold start to an authenticated session
 ----------------------------------------------
 
@@ -249,8 +286,8 @@ collide on the server and never leak a zombie process when they go away.
    token is fresh, ``useMonitorStream`` builds the URL via ``getStreamUrl``
    (``api/monitors.ts`` then ``lib/zm/url-builder.ts`` to ``/cgi-bin/nph-zms``) and
    mirrors it into ``imageSrc``. The double gate prevents minting a zombie stream
-   before a key exists. The reference treatment of this trap, and of the connkey
-   lifecycle it protects, lives in :doc:`05-component-architecture`.
+   before a key exists. :doc:`05-component-architecture` walks the connkey
+   lifecycle this gate protects.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/monitors.ts#L296>`__
    · → :doc:`07-api-and-data-fetching`
 
@@ -322,7 +359,7 @@ a token on startup, and reacting when a push arrives.
    cross-profile switch dialog) and exists purely to wire the notification side
    effects through three hooks.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/NotificationHandler.tsx#L43>`__
-   · → :doc:`05-component-architecture`
+   · → :doc:`16-platform-surfaces`
 
 #. **Set up push for the active profile.** ``useNotificationPushSetup`` runs an
    effect gated on ``Platform.isNative && settings.enabled``. It registers the
@@ -337,13 +374,13 @@ a token on startup, and reacting when a push arrives.
    and init state, so token state survives re-renders and profile switches
    instead of being recreated.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L629>`__
-   · → :doc:`12-shared-services-and-components`
+   · → :doc:`16-platform-surfaces`
 
 #. **Ask permission.** ``initialize`` imports ``FirebaseMessaging`` and calls
    ``requestPermissions()``, continuing only if granted. No token can be obtained
    without OS push permission.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L104>`__
-   · → :doc:`12-shared-services-and-components`
+   · → :doc:`16-platform-surfaces`
 
 #. **Create the Android channel.** ``_createNotificationChannel`` (Android only)
    creates the FCM channel ``id: 'zmninja-ng'`` at ``importance: 4`` (HIGH).
@@ -351,7 +388,7 @@ a token on startup, and reacting when a push arrives.
    manifest's ``default_notification_channel_id`` routes channel-less server
    pushes here so they alert instead of landing silently.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L354>`__
-   · → :doc:`12-shared-services-and-components`
+   · → :doc:`16-platform-surfaces`
 
 #. **Listen before fetching the token.** ``_setupListeners`` registers
    ``tokenReceived``, ``notificationReceived``, and ``notificationActionPerformed``
@@ -364,7 +401,7 @@ a token on startup, and reacting when a push arrives.
    a transient failure. The service's own ``getToken()`` is only an accessor for
    that stored value.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L127>`__
-   · → :doc:`12-shared-services-and-components`
+   · → :doc:`16-platform-surfaces`
 
 #. **Register the token with the server.** ``_registerWithServer`` forks on
    ``settings.notificationMode``: direct mode calls ``api/notifications``
@@ -392,14 +429,14 @@ a token on startup, and reacting when a push arrives.
    ``_handleNotificationAction`` resolves the target profile and stores the event
    under it.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L545>`__
-   · → :doc:`12-shared-services-and-components`
+   · → :doc:`16-platform-surfaces`
 
 #. **Same profile or switch?** ``resolveProfileForNotification`` matches the
    payload's profile name to a stored profile. Same profile navigates directly; a
    different one calls ``requestProfileSwitch`` to ask first (the dialog lives in
    ``NotificationHandler``).
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/profile/notification-profile.ts#L32>`__
-   · → :doc:`12-shared-services-and-components`
+   · → :doc:`16-platform-surfaces`
 
 #. **Navigate to the event.** A service cannot use React Router's hook, so it
    calls ``navigationService.navigateToEvent``; ``NotificationHandler``'s listener
@@ -732,7 +769,7 @@ alive, and turns each live alarm into an event in the store and a toast on scree
    ``connect``/``disconnect``/``reconnect`` and the current profile to
    ``useNotificationAutoConnect``.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/NotificationHandler.tsx#L43>`__
-   · → :doc:`05-component-architecture`
+   · → :doc:`16-platform-surfaces`
 
 #. **Choose the ES path.** The auto-connect effect reads ``notificationMode``; for
    ``es`` it proceeds only when a host is set and nothing is connected, guarded
@@ -756,13 +793,13 @@ alive, and turns each live alarm into an event in the store and a toast on scree
    import-free service its token getter, image-URL builder, and bandwidth-derived
    keepalive interval.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts#L674>`__
-   · → :doc:`12-shared-services-and-components`
+   · → :doc:`16-platform-surfaces`
 
 #. **Open the socket.** The service ``connect`` builds the ``ws(s)://host:port``
    URL, opens the websocket with stale-socket guards on every handler, and waits
    for auth.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/notifications.ts#L68>`__
-   · → :doc:`12-shared-services-and-components`
+   · → :doc:`16-platform-surfaces`
 
 #. **Send credentials on open.** ``_handleOpen`` sends the ``auth`` message and a
    20-second timer rejects (and reconnects) if no response comes back.
@@ -778,7 +815,7 @@ alive, and turns each live alarm into an event in the store and a toast on scree
 #. **Keep it alive.** ``_startPingInterval`` sends a periodic version request at the
    bandwidth-derived interval; the same request backs the liveness check on resume.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/notifications.ts#L583>`__
-   · → :doc:`12-shared-services-and-components`
+   · → :doc:`16-platform-surfaces`
 
 #. **Reconnect with backoff.** On an unintended close, ``_scheduleReconnect`` waits
    an exponential, jittered delay, capped at two minutes while the document is
@@ -790,7 +827,7 @@ alive, and turns each live alarm into an event in the store and a toast on scree
    resume; ``reconnectNow(true)`` additionally replaces a socket that still reads
    as open but failed its liveness ping.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/notifications.ts#L518>`__
-   · → :doc:`12-shared-services-and-components`
+   · → :doc:`16-platform-surfaces`
 
 #. **Bridge events into the store.** ``_initialize`` subscribes to the service's
    state and event streams, mirroring connection state and calling ``addEvent`` per
@@ -1196,9 +1233,8 @@ id, and each widget fetches its own live data.
 
 #. **Drag and resize persist.** ``handleLayoutChange`` fires on every move, and only
    while editing (guarded against a store→state→store feedback loop) writes the new
-   geometry back. The reference treatment of that feedback loop, and of the
-   subscription rules that keep it from re-arming, lives in
-   :doc:`05-component-architecture`.
+   geometry back. For the subscription rules that keep that loop from re-arming,
+   see :doc:`05-component-architecture`.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/dashboard/DashboardLayout.tsx#L97>`__
    · → :doc:`05-component-architecture`
 
@@ -1260,38 +1296,38 @@ idle timeout and no auto-lock on backgrounding.
    buttons: with no PIN it opens first-time setup, otherwise it locks and force-enables
    screen keep-awake (restoring the prior value on unlock).
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useKioskLock.ts#L22>`__
-   · → :doc:`05-component-architecture`
+   · → :doc:`16-platform-surfaces`
 
 #. **The trigger.** The sidebar lock button calls that hook to lock, or signals the
    overlay to begin unlock when already locked. The fullscreen montage controls
    expose the same button.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/layout/SidebarContent.tsx#L406>`__
-   · → :doc:`05-component-architecture`
+   · → :doc:`16-platform-surfaces`
 
 #. **The gate.** ``KioskOverlay`` renders nothing until locked, then mounts a
    full-screen overlay that captures pointer events, swallows keyboard shortcuts, and
    blocks browser and Android hardware back. The live view keeps updating underneath.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/kiosk/KioskOverlay.tsx#L26>`__
-   · → :doc:`05-component-architecture`
+   · → :doc:`16-platform-surfaces`
 
 #. **Unlock: biometric first.** ``handleUnlockTap`` checks the cooldown, tries
    biometrics, and unlocks on success; if biometrics are unavailable or cancelled it
    falls through to the PIN pad.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/kiosk/KioskOverlay.tsx#L99>`__
-   · → :doc:`05-component-architecture`
+   · → :doc:`16-platform-surfaces`
 
 #. **The native prompt and its web fallback.** ``useBiometricAuth`` dynamically
    imports the biometric plugin inside try/catch, so on web or desktop the import
    throws and the flow degrades to PIN. Cancelling routes to the PIN pad, not the OS
    passcode.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useBiometricAuth.ts#L19>`__
-   · → :doc:`12-shared-services-and-components`
+   · → :doc:`16-platform-surfaces`
 
 #. **PIN entry.** ``PinPad`` (in unlock mode) verifies the entry; a miss records a
    failed attempt and, after five, surfaces a 30-second cooldown. The same component
    serves first-time set and PIN change.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/kiosk/PinPad.tsx#L26>`__
-   · → :doc:`05-component-architecture`
+   · → :doc:`16-platform-surfaces`
 
 #. **Mount and restore.** ``AppLayout`` mounts the overlay and, on unlock, restores
    the pre-lock keep-awake state, closing the lock lifecycle.
@@ -1345,9 +1381,9 @@ platform, base64 on mobile and an anchor download on web.
 
 #. **Rewriting a stream to one frame.** ``convertToSnapshotUrl`` unwraps any image
    proxy, then sets ``mode=single`` and strips the streaming params so ZoneMinder
-   returns a single still instead of a live multipart stream. The reference
-   treatment of this trap, and of what happens when the stream URL is handed to a
-   downloader unrewritten, lives in :doc:`12-shared-services-and-components`.
+   returns a single still instead of a live multipart stream. What happens when a
+   stream URL reaches the downloader unrewritten is covered in
+   :doc:`12-shared-services-and-components`.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L51>`__
    · → :doc:`12-shared-services-and-components`
 
@@ -1381,8 +1417,9 @@ Flow 15: Changing the ZoneMinder run state
 Every flow above is built around reads. This one is a write. ZoneMinder run
 states are named sets of monitor capture functions: the server ships one,
 ``default``, and users add their own, commonly a Home and an Away. Picking one
-on the Server page is how you arm or disarm the system from the app. The counterintuitive part is what happens once the POST succeeds:
-the app never touches the cached state list. It invalidates the key and lets the
+on the Server page is how you arm or disarm the system from the app. The
+counterintuitive part is what happens once the POST succeeds: the app never
+touches the cached state list. It invalidates the key and lets the
 query fetch the answer back, because the server, not the app, decides what a
 state change actually did. Sometimes it cannot decide even in principle, since
 the same control also sends ``start``, ``stop`` and ``restart``, which are not
@@ -1477,6 +1514,63 @@ states at all.
    therefore refreshes and re-sends the POST rather than failing the state change.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/client.ts#L289>`__
    · → :doc:`07-api-and-data-fetching`
+
+#. **A failed write is never retried.** ``App.tsx`` passes ``retry:
+   shouldRetryQuery`` under ``defaultOptions.queries`` and gives ``mutations`` no
+   entry at all, so mutations fall back to React Query's default of zero retries.
+   That asymmetry is deliberate. Re-issuing a GET is free; silently re-issuing
+   ``restart`` means the app bounces a server the user already watched fail to
+   bounce.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/App.tsx#L63>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **Success invalidates the key rather than editing the cache.** ``onSuccess``
+   toasts, then calls
+   ``queryClient.invalidateQueries({ queryKey: queryKeys.states(currentProfile?.id) })``.
+   Writing ``IsActive: '1'`` into the cached array by hand would be faster and
+   would be a lie. ZoneMinder may normalize the name or refuse the change, and
+   when the user picked ``start`` there is no matching entry in that array to
+   patch at all: the daemon verbs are not states. Refetching is the only answer
+   the app can actually justify.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Server.tsx#L117>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **The invalidated key comes from the factory.** ``queryKeys.states`` returns
+   ``['states', profileId]``, the same array the query in step 2 was keyed with.
+   Invalidation matches by key prefix, so this reaches that entry and any future
+   longer key under it. The Server queries contract forbids writing the array
+   inline precisely here: an invalidator that spells its own key drifts away from
+   the query that reads it, and the symptom is a page that silently stops
+   updating. The ``profileId`` is a branded ``ProfileId``, minted once by
+   ``asProfileId`` when ``addProfile`` generates the UUID back in Flow 4, and it
+   is what keeps one profile's states out of another's cache.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/query/query-keys.ts#L138>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **The refetch is the only thing that can update the badge.** Invalidating marks
+   the entry stale and immediately refetches it if a mounted component is still
+   observing it, and the states query from step 2 is. That query has no
+   ``refetchInterval``, so without this invalidation the Current State badge would
+   keep showing the old state until the page remounted. The 15-second
+   ``staleTime`` from Flow 2 does not hold the refetch back either: freshness
+   governs whether a refetch is *needed*, invalidation declares that it is.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Server.tsx#L89>`__
+   · → :doc:`02-react-fundamentals`
+
+#. **The user hears about it through a toast.** ``onSuccess`` and ``onError`` raise
+   ``toast({ title, description })`` from ``hooks/use-toast``, the error variant
+   being ``destructive``, and each writes a ``log.server`` line. There is no
+   navigation and no modal; the page you changed the state from is the page you
+   stay on.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Server.tsx#L112>`__
+   · → :doc:`05-component-architecture`
+
+The Server page holds the app's only ``useMutation`` and its only write to the
+ZoneMinder run state; other writes (PTZ, event delete, push registration) go
+through plain handlers, not mutations. Steps 8 and 9 lean on the client behavior
+traced in Flow 6: if the access token lapsed while the page sat open, the 401
+recovery there runs and re-sends this POST before the mutation ever reports a
+failure.
 
 Flow 16: Editing and deleting a server profile
 -----------------------------------------------
@@ -1790,63 +1884,6 @@ This page is the only place in the app that sends a control command. The PTZ bad
 on ``MonitorCard`` reads the same ``Controllable`` field but only to tell you the
 camera has a pad waiting for you here. The stream underneath the pad is Flow 2.
 
-#. **A failed write is never retried.** ``App.tsx`` passes ``retry:
-   shouldRetryQuery`` under ``defaultOptions.queries`` and gives ``mutations`` no
-   entry at all, so mutations fall back to React Query's default of zero retries.
-   That asymmetry is deliberate. Re-issuing a GET is free; silently re-issuing
-   ``restart`` means the app bounces a server the user already watched fail to
-   bounce.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/App.tsx#L63>`__
-   · → :doc:`07-api-and-data-fetching`
-
-#. **Success invalidates the key rather than editing the cache.** ``onSuccess``
-   toasts, then calls
-   ``queryClient.invalidateQueries({ queryKey: queryKeys.states(currentProfile?.id) })``.
-   Writing ``IsActive: '1'`` into the cached array by hand would be faster and
-   would be a lie. ZoneMinder may normalize the name or refuse the change, and
-   when the user picked ``start`` there is no matching entry in that array to
-   patch at all: the daemon verbs are not states. Refetching is the only answer
-   the app can actually justify.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Server.tsx#L117>`__
-   · → :doc:`07-api-and-data-fetching`
-
-#. **The invalidated key comes from the factory.** ``queryKeys.states`` returns
-   ``['states', profileId]``, the same array the query in step 2 was keyed with.
-   Invalidation matches by key prefix, so this reaches that entry and any future
-   longer key under it. The Server queries contract forbids writing the array inline precisely here:
-   an invalidator that spells its own key drifts away from the query that reads
-   it, and the symptom is a page that silently stops updating. The ``profileId``
-   is a branded ``ProfileId``, minted once by ``asProfileId`` when ``addProfile``
-   generates the UUID back in Flow 4, and it is what keeps one profile's states
-   out of another's cache.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/query/query-keys.ts#L138>`__
-   · → :doc:`07-api-and-data-fetching`
-
-#. **The refetch is the only thing that can update the badge.** Invalidating marks
-   the entry stale and immediately refetches it if a mounted component is still
-   observing it, and the states query from step 2 is. That query has no
-   ``refetchInterval``, so without this invalidation the Current State badge would
-   keep showing the old state until the page remounted. The 15-second
-   ``staleTime`` from Flow 2 does not hold the refetch back either: freshness
-   governs whether a refetch is *needed*, invalidation declares that it is.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Server.tsx#L89>`__
-   · → :doc:`02-react-fundamentals`
-
-#. **The user hears about it through a toast.** ``onSuccess`` and ``onError`` raise
-   ``toast({ title, description })`` from ``hooks/use-toast``, the error variant
-   being ``destructive``, and each writes a ``log.server`` line. There is no
-   navigation and no modal; the page you changed the state from is the page you
-   stay on.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Server.tsx#L112>`__
-   · → :doc:`05-component-architecture`
-
-The Server page holds the app's only ``useMutation`` and its only
-write to the ZoneMinder run state; other writes (PTZ, event delete, push
-registration) go through plain handlers, not mutations. Steps 8
-and 9 lean on the client behavior traced in Flow 6: if the access token lapsed
-while the page sat open, the 401 recovery there runs and re-sends this POST before
-the mutation ever reports a failure.
-
 Flow 18: Seeing what happened while you were away
 -------------------------------------------------
 
@@ -2028,12 +2065,12 @@ Pressing ``?`` (or picking the Ask command in the palette) opens a floating
 chat window backed by one of five providers: an on-device WebLLM model, the
 on-device native llama.cpp bridge (iPhone and iPad, refs #270), Apple's
 OS-hosted Foundation Models system model (iOS 26, refs #270), Android's Gemini
-Nano over AICore (refs #270), or an OpenAI-compatible server such as Ollama. The question is classified before any tool is offered,
-then a tool-use loop decides which ZoneMinder API calls answer it. The
-counterintuitive part is that there is no confirmation gate anywhere in this
-flow: every tool the loop can reach is read-only, so "is this call safe" is a
-property of the registry (``TOOLS`` holds no mutating tool and
-``ToolDefinition`` cannot express one), never a runtime decision.
+Nano over AICore (refs #270), or an OpenAI-compatible server such as Ollama.
+The question is classified before any tool is offered, then a tool-use loop
+decides which ZoneMinder API calls answer it. No step in this flow asks for
+confirmation, and none needs to: every tool the loop can reach is read-only, so
+"is this call safe" is a property of the registry (``TOOLS`` holds no mutating
+tool and ``ToolDefinition`` cannot express one), never a runtime decision.
 
 .. mermaid::
 
@@ -2069,7 +2106,7 @@ property of the registry (``TOOLS`` holds no mutating tool and
    point, same store call. This branch has to be checked first: everything
    after it assumes the assistant, not the help overlay.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/KeyboardShortcuts.tsx#L134>`__
-   · → :doc:`05-component-architecture`
+   · → :doc:`16-platform-surfaces`
 
 #. **One widget owns the window states.** ``AssistantWidget``
    (``components/assistant/AssistantWidget.tsx``) switches on
@@ -2080,7 +2117,7 @@ property of the registry (``TOOLS`` holds no mutating tool and
    minimized, so the conversation and any in-flight turn survive collapsing
    to the button.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/assistant/AssistantWidget.tsx>`__
-   · → :doc:`05-component-architecture`
+   · → :doc:`16-platform-surfaces`
 
 #. **Sending a message assembles the turn's context.** ``AskPanel``'s
    ``handleSend`` appends the user's text to the per-profile thread, reads the
@@ -2092,7 +2129,7 @@ property of the registry (``TOOLS`` holds no mutating tool and
    monitor list is not copied into every prompt because ``list_monitors``
    resolves names when needed.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/assistant/AskPanel.tsx#L349>`__
-   · → :doc:`05-component-architecture`
+   · → :doc:`16-platform-surfaces`
 
 #. **Triage classifies the request, and its verdict is advisory.**
    ``classifyRequest`` (``triage.ts``) runs ``provider.complete`` with
@@ -2105,7 +2142,7 @@ property of the registry (``TOOLS`` holds no mutating tool and
    old English keyword overrule (``requiresLiveData``) is deleted rather
    than maintained as a vocabulary.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/triage.ts>`__
-   · → :doc:`12-shared-services-and-components`
+   · → :doc:`15-assistant`
 
 #. **The tool-use loop.** ``runAssistantTurn`` (``lib/assistant/agent.ts``)
    slices the history at the last context boundary, trims it to the message,
@@ -2117,7 +2154,7 @@ property of the registry (``TOOLS`` holds no mutating tool and
    the file's own header explains that the read-only guarantee is structural,
    not a runtime decision.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/agent.ts#L253>`__
-   · → :doc:`12-shared-services-and-components`
+   · → :doc:`15-assistant`
 
 #. **The on-device provider constrains generation to the envelope.**
    ``WebLlmProvider.chat`` never uses WebLLM's native function calling: every
@@ -2131,48 +2168,45 @@ property of the registry (``TOOLS`` holds no mutating tool and
    ``engine.interruptGenerate()``, the only way to actually stop an in-flight
    on-device generation.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/providers/webllm.ts>`__
-   · → :doc:`12-shared-services-and-components`
+   · → :doc:`15-assistant`
 
 #. **The native backend's settings gate is a device probe, not a toggle.**
    ``useNativeLlmSupported`` (``hooks/useNativeLlmSupported.ts``) probes the
-   Capacitor ``NativeLlm`` plugin's ``isSupported()`` once on mount, imported
-   only behind ``Platform.isNative`` (the Native contract, since the plugin package only
-   ships native implementations and would otherwise pull llama.cpp glue into
-   the web/Electron bundle for a backend those platforms can never run). On
-   iOS, ``LlamaPlugin.isSupported`` answers ``false`` below a 5.5GB
-   physical-memory floor (``LlamaPlugin.swift``). The hook short-circuits to
-   ``false`` off iOS entirely: the llama.cpp bridge was removed from the Android
-   build (issue #270), where it had no GPU path and decoded at ~6.6 tok/s against
-   Gemini Nano's ~1.5s replies, at a cost of 76MB of native libraries and a 2.5GB
-   model download. Android's on-device backend is Gemini Nano, and also refuses a
-   device where ``ActivityManager.isLowRamDevice()`` is true, since that flag
-   catches devices a raw memory number alone misses. A device that
-   fails either platform's check never sees **On-device (native)** in
-   ``AssistantSection``'s backend ``<select>`` at all, not a disabled option
-   the user has to interpret. Once ``settings.assistantBackend`` is
-   ``'native'``, ``getAssistantProvider`` (``providers/provider.ts``) returns
-   a ``NativeLlmProvider`` in place of ``WebLlmProvider`` or
-   ``OpenAiProvider``, the same one-field switch the other two backends
-   already go through. The Apple Intelligence backend has its own independent
-   probe, ``useAppleIntelligenceSupported`` (``hooks/useAppleIntelligenceSupported.ts``),
-   which calls the ``AppleIntelligence`` plugin's ``isSupported()`` the same
-   way: ``AssistantSection`` shows the **On-device (Apple Intelligence)**
-   option only when it resolves supported, and a "turn it on in iOS Settings"
-   hint only when the reason is ``disabled`` (Apple Intelligence off), not for
-   ``platform`` (ineligible device or pre-iOS-26) or ``notReady`` (still
-   provisioning). Because the two on-device gates are independent, a phone can
-   qualify for one and not the other, and ``settings.assistantBackend`` of
-   ``'apple'`` makes ``getAssistantProvider`` return an
-   ``AppleIntelligenceProvider`` (next step). Android's system model is gated
-   by a third independent probe, ``useGeminiNanoSupported``
-   (``hooks/useGeminiNanoSupported.ts``), which differs from the other two in
-   one way that matters here: its ``notReady`` reason is fixable in place,
-   because AICore downloads Gemini Nano on request rather than shipping it with
-   the OS, so that reason renders ``AssistantGeminiNanoSection``'s download row
-   and the hook's ``refresh`` re-probes once the weights land, without an app
-   restart.
+   Capacitor ``NativeLlm`` plugin's ``isSupported()`` once on mount, behind
+   ``Platform.isNative`` (the Native contract: the plugin ships native
+   implementations only). On iOS, ``LlamaPlugin.isSupported`` answers ``false``
+   below a 5.5GiB physical-memory floor (``LlamaPlugin.swift``), and a device
+   that fails never sees **On-device (native)** in ``AssistantSection``'s
+   backend ``<select>`` at all, rather than a disabled option to interpret.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useNativeLlmSupported.ts>`__
-   · → :doc:`12-shared-services-and-components`
+   · → :doc:`15-assistant`
+
+#. **Android is gated separately, and its "not ready" is fixable in place.**
+   That hook short-circuits to ``false`` off iOS: the llama.cpp bridge was
+   removed from the Android build (issue #270), where it had no GPU path,
+   decoded at ~6.6 tok/s against Gemini Nano's ~1.5s replies, and cost 76MB of
+   native libraries plus a 2.5GB model download. Android's on-device backend is
+   Gemini Nano, probed by ``useGeminiNanoSupported``. ``GeminiNanoPlugin``
+   reports ``platform`` below API 26 (ML Kit GenAI's floor) and ``notReady``
+   while AICore still has the weights to fetch, which renders
+   ``AssistantGeminiNanoSection``'s download row so the hook's ``refresh`` can
+   re-probe once they land, without an app restart.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useGeminiNanoSupported.ts>`__
+   · → :doc:`15-assistant`
+
+#. **Apple Intelligence is a third, independent probe.**
+   ``useAppleIntelligenceSupported`` calls the ``AppleIntelligence`` plugin's
+   ``isSupported()`` the same way: ``AssistantSection`` shows the **On-device
+   (Apple Intelligence)** option only when it resolves supported, and a "turn it
+   on in iOS Settings" hint only when the reason is ``disabled``, never for
+   ``platform`` (ineligible device or pre-iOS-26) or ``notReady`` (still
+   provisioning). The three gates are independent, so a phone can qualify for
+   one and not the others. Whichever passes, ``settings.assistantBackend``
+   decides: ``getAssistantProvider`` (``providers/provider.ts``) returns the
+   matching provider in place of ``WebLlmProvider`` or ``OpenAiProvider``, the
+   same one-field switch every backend goes through.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useAppleIntelligenceSupported.ts>`__
+   · → :doc:`15-assistant`
 
 #. **The native provider reuses WebLLM's prompt and parser.** Only the
    transport is native: ``NativeLlmProvider.chat`` (``providers/native-llm.ts``)
@@ -2200,13 +2234,10 @@ property of the registry (``TOOLS`` holds no mutating tool and
    the engine it runs on are both pinned, not chosen at runtime:
    ``ASSISTANT.nativeLlmModel`` (``lib/zmninja-ng-constants.ts``) names
    Qwen3-4B-Instruct-2507 at a Q4_K_M GGUF quantization from unsloth's
-   HuggingFace repo. On iOS, ``app/ios/App/LlamaKit/Package.swift``'s
-   ``binaryTarget`` fetches llama.cpp release ``b10087``'s XCFramework by
-   URL and checksum; on Android, ``app/android/app/src/main/cpp/CMakeLists.txt``
-   pins the same tag through CMake's ``FetchContent`` and builds the CPU
-   backend from source at build time instead of fetching a prebuilt binary.
+   HuggingFace repo, and the llama.cpp release it runs on is pinned in the
+   platform build files, covered in :doc:`15-assistant`.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/providers/native-llm.ts>`__
-   · → :doc:`12-shared-services-and-components`
+   · → :doc:`15-assistant`
 
 #. **The Apple Intelligence provider lets Foundation Models run the tool loop
    itself.** For the ``'apple'`` backend ``AppleIntelligenceProvider.chat``
@@ -2215,8 +2246,8 @@ property of the registry (``TOOLS`` holds no mutating tool and
    (``buildAppleInstructions``: the persona, the caller's dynamic facts, the
    tool-less policy text triage appended, and the behavioural rules), never the
    shared prompt with its tool catalog, few-shot block and ``OUTPUT_CONTRACT``.
-   A turn that has tools takes the NATIVE path: the tool schemas cross the
-   bridge as ``plugin.chat({messagesJson, temperature, maxTokens, toolsJson})``,
+   A turn that has tools crosses into the framework rather than staying in JS:
+   the tool schemas cross the bridge as ``plugin.chat({messagesJson, temperature, maxTokens, toolsJson})``,
    ``AppleIntelligencePlugin.swift`` (iOS only) registers them as Foundation
    Models tools on the ``LanguageModelSession``, and the framework decides and
    sequences the calls itself. Each call comes back to JS as a ``toolCall``
@@ -2226,9 +2257,9 @@ property of the registry (``TOOLS`` holds no mutating tool and
    agent's own, shared with every other backend), and answers the waiting
    session with ``plugin.resolveToolCall({callId, output})``; a failed tool
    resolves with its error text, which is what the model has to read to correct
-   itself. The chat promise then resolves with PROSE, and the provider returns
-   it with ``nativeToolResults`` set, which tells ``runAssistantTurn`` the turn
-   is already finished. A tool-less turn (triage said chat or action) instead
+   itself. The chat promise then resolves with the finished prose rather than
+   another tool call, and the provider returns it with ``nativeToolResults``
+   set, which tells ``runAssistantTurn`` the turn is already finished. A tool-less turn (triage said chat or action) instead
    takes the guided fallback path: ``schemaJson`` constrains the reply to the
    answer-only shape, ``parseWebLlmTurn`` reads it, and an empty or unusable
    reply retries with ``APPLE_RETRY_PROMPT`` (never WebLLM's contract-restating
@@ -2249,7 +2280,7 @@ property of the registry (``TOOLS`` holds no mutating tool and
    on-device engines), never the Swift ``localizedDescription``, which is only
    logged.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/providers/apple-intelligence.ts>`__
-   · → :doc:`12-shared-services-and-components`
+   · → :doc:`15-assistant`
 
 #. **A stable code, not a screen-scraped message, decides how a native
    failure surfaces.** ``LlamaPlugin.chat`` (Swift) and ``NativeLlmPlugin.chat``
@@ -2271,7 +2302,7 @@ property of the registry (``TOOLS`` holds no mutating tool and
    is a use-after-free, so both reject with ``CHAT_BUSY`` while a reply is
    still generating instead of tearing down the model underneath it.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/providers/native-llm.ts#L92>`__
-   · → :doc:`12-shared-services-and-components`
+   · → :doc:`15-assistant`
 
 #. **A download failure carries its native reason into the settings toast.**
    Unlike a chat failure, a download failure is not coded: Swift's
@@ -2288,7 +2319,7 @@ property of the registry (``TOOLS`` holds no mutating tool and
    writes the final destination on success, so an interrupted re-download
    leaves the previously downloaded model in place.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/settings/AssistantNativeSection.tsx#L129>`__
-   · → :doc:`12-shared-services-and-components`
+   · → :doc:`15-assistant`
 
 #. **The remote provider uses native tools and stops teaching the fallback.**
    ``OpenAiProvider.chat`` sends each ``ToolDefinition`` as a native ``tools``
@@ -2301,7 +2332,7 @@ property of the registry (``TOOLS`` holds no mutating tool and
    ``response_format: json_schema``, which Ollama compiles into a grammar
    constraint, so triage gets the same constrained decoding on this backend.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/providers/openai.ts>`__
-   · → :doc:`12-shared-services-and-components`
+   · → :doc:`15-assistant`
 
 #. **Both providers self-repair an unparseable reply.** A reply that parses to
    neither a tool call nor an answer is retried up to
@@ -2312,7 +2343,7 @@ property of the registry (``TOOLS`` holds no mutating tool and
    temperature is raised (to ``ASSISTANT.assistantRetryTemperature``) only on
    the final attempt, in case the model is stuck regardless of the correction.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/providers/webllm.ts>`__
-   · → :doc:`12-shared-services-and-components`
+   · → :doc:`15-assistant`
 
 #. **Four gates run before any tool executes.** The turn's own ``opts.tools``
    list is the execution authority, not the registry: the definition must come
@@ -2330,12 +2361,12 @@ property of the registry (``TOOLS`` holds no mutating tool and
    cheaper than a request that succeeds against the wrong data and gets
    answered confidently.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/agent.ts#L430>`__
-   · → :doc:`12-shared-services-and-components`
+   · → :doc:`15-assistant`
 
 #. **Three jobs, three owners: copy, interpret, compute.** The assistant
-   model COPIES the user's time words into ``list_events``' ``when``
-   verbatim, in whatever language (measured perfect on both reference
-   models). A dedicated interpreter call (``interpretWhen``,
+   model copies the user's time words into ``list_events``' ``when``
+   verbatim and unmodified, in whatever language (measured perfect on both
+   reference models). A dedicated interpreter call (``interpretWhen``,
    ``window-interpreter.ts``) then maps the phrase onto structured fields
    (``lastCount``+``lastUnit``, ``daysAgo``, ``weekday``, ``date``,
    ``fromDate``/``toDate`` calendar spans, ``fromTime``/``toTime``) under a
@@ -2350,12 +2381,12 @@ property of the registry (``TOOLS`` holds no mutating tool and
    own model call after measurement showed the assistant models copy phrases
    perfectly but fill the fields directly at 27/36 and 15/36. Any failure
    along the way returns a corrective error the calling model retries from.
-   Row and window timestamps in the OUTPUT are re-rendered through the
+   Row and window timestamps in the tool output are re-rendered through the
    profile's date/time format (``formatTimestamp``, ``tools-readonly.ts``):
    the model echoes whatever format the rows carry, so formatting the data
    is formatting the answer.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/window-interpreter.ts>`__
-   · → :doc:`12-shared-services-and-components`
+   · → :doc:`15-assistant`
 
 #. **Results feed back into history.** ``captureApiCalls`` wraps
    ``def.execute`` so the transcript records the actual ZoneMinder requests
@@ -2371,16 +2402,17 @@ property of the registry (``TOOLS`` holds no mutating tool and
 #. **The result does the arithmetic, the model does the reading.**
    ``list_events`` output leads with a code-built ``summary`` sentence
    (``buildResultSummary``, ``result-summary.ts``) the model is told to quote
-   as its first sentence. ``matchCount`` is the server's TRUE total from ZM
-   pagination, not the page: two capped results both used to say 25 and the
+   as its first sentence. ``matchCount`` is the server's whole-query total from
+   ZM pagination, not the page: two capped results both used to say 25 and the
    model compared the caps as totals, so the sentence now leads with the real
    count ("142 events ... The 25 most recent are listed.") and the
    per-monitor and per-object tallies say "(listed rows)" whenever rows were
    capped. ``busiestHour``/``countsByHour`` are tallied app-side from the
-   listed rows and ride OUTSIDE the summary, so quoting the summary never
+   listed rows and ride outside the summary rather than inside it, so quoting
+   the summary never
    narrows the result cards to one hour unless the question asked for it.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/result-summary.ts>`__
-   · → :doc:`12-shared-services-and-components`
+   · → :doc:`15-assistant`
 
 #. **Grounding is checked by code, not by a judge model.** When a turn that
    fetched data answers, ``retryIsUnusable`` (``grounding.ts``) checks two
@@ -2394,8 +2426,9 @@ property of the registry (``TOOLS`` holds no mutating tool and
    file used to hold never caught a fabrication and rejected accurate answers.
    Separately, two language-neutral nets replace the old English live-data
    regexes (refs #265): a tool-less turn whose model calls a real registry
-   read tool fails OPEN (``activeTools`` flips to the registry and the call
-   runs, since the model's own attempt outranks the classifier), and a
+   read tool is allowed through rather than blocked (``activeTools`` flips to
+   the registry and the call runs, since the model's own attempt outranks the
+   classifier), and a
    tools-available turn answered without any tool attempt gets one generic
    reminder, with the second answer accepted rather than replaced. The
    fail-open path pushes back once first (refs #270): the first tool-less
@@ -2404,7 +2437,7 @@ property of the registry (``TOOLS`` holds no mutating tool and
    on the next call opens the registry, so a greeting that reflexively calls
    a tool does not come back as an event report.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/grounding.ts>`__
-   · → :doc:`12-shared-services-and-components`
+   · → :doc:`15-assistant`
 
 #. **Render the reply.** ``runAssistantTurn`` resolves with only the messages
    this turn produced, never the history it was handed: what it sends the
@@ -2423,7 +2456,7 @@ property of the registry (``TOOLS`` holds no mutating tool and
    card. Monitor cards render live previews (``LiveMonitorPlayer``), capped
    at ``ASSISTANT.maxLiveMonitorCards``.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/assistant/AskPanel.tsx#L180>`__
-   · → :doc:`05-component-architecture`
+   · → :doc:`16-platform-surfaces`
 
 #. **Clear the context before it overflows.** ``AskPanel`` checks
    ``isContextNearlyFull(provider.contextWindow, usage)`` against the
@@ -2441,12 +2474,12 @@ property of the registry (``TOOLS`` holds no mutating tool and
    ``stores/assistant.ts`` keeps rendering it: the user keeps their
    scrollback, the model gets its window back.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/agent.ts#L189>`__
-   · → :doc:`12-shared-services-and-components`
+   · → :doc:`15-assistant`
 
 Typing text into the command palette without choosing the Ask item skips all
 of this and stays plain command-palette navigation: a direct ``navigate()``
 call with no model and no tools, documented alongside this entry point in
-:doc:`05-component-architecture`.
+:doc:`16-platform-surfaces`.
 
 These flows touch most of the moving parts of the app. When you need to change
 something, find the nearest scene, open its ``source`` link to land on the exact
