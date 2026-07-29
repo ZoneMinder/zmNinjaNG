@@ -40,12 +40,36 @@ vi.mock('../../lib/logger', () => ({
     getLevel: () => 1,
     setLevel: vi.fn(),
   },
+  log: { server: vi.fn() },
   LogLevel: {
     DEBUG: 1,
     INFO: 2,
     WARN: 3,
     ERROR: 4,
   },
+}));
+
+// One ZoneMinder server log line of the shape zmc writes: the ffmpeg command
+// with the camera credential in it (refs #307).
+vi.mock('../../api/logs', () => ({
+  getZMLogs: vi.fn().mockResolvedValue({
+    logs: [
+      {
+        Log: {
+          Id: 1,
+          TimeKey: '1700000000.0',
+          Component: 'zmc_m1',
+          Level: 0,
+          Message: "Starting capture: ffmpeg -i rtsp://admin:S3cret@cam.lan:554/h264",
+          File: 'zmc.cpp',
+          Line: '42',
+          Pid: '123',
+        },
+      },
+    ],
+  }),
+  getZMLogLevel: () => 'INFO',
+  getUniqueZMComponents: () => ['zmc_m1'],
 }));
 
 vi.mock('../../hooks/use-toast', () => ({
@@ -139,5 +163,16 @@ describe('Logs Page', () => {
     await user.click(screen.getByTestId('log-component-filter-checkbox-auth'));
 
     expect(screen.getAllByTestId('log-entry')).toHaveLength(1);
+  });
+
+  it('redacts the camera credential in a ZoneMinder server log line', async () => {
+    const user = userEvent.setup();
+    render(<Logs />);
+
+    await user.click(screen.getByTestId('log-source-server'));
+
+    const entry = await screen.findByText(/Starting capture/);
+    expect(entry.textContent).not.toContain('S3cret');
+    expect(entry.textContent).toContain('cam.lan');
   });
 });

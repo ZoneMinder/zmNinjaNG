@@ -34,8 +34,26 @@ the matching ``Logger`` class field. Levels are DEBUG, INFO, WARN, ERROR,
 NONE.
 
 ``lib/log-sanitizer.ts`` strips passwords and tokens before an entry is
-stored. It recognizes field names, not free text, which is why values belong
-in the context object rather than interpolated into the message.
+stored. It works mostly by field name, which is why values belong in the
+context object rather than interpolated into the message: a key named
+``password`` is redacted wherever it appears, while the same secret pasted
+into a sentence is only found if it happens to match one of the string
+rules.
+
+Pass details as the object they are. Serializing them yourself flattens away
+the keys the sanitizer matches on, and the secrets inside survive redaction.
+The ERROR path used to do exactly that, which is how camera passwords
+reached shared log files (refs #307).
+
+``lib/security/url-credentials.ts`` is the one string rule worth knowing
+about. ZoneMinder stores a camera's password as URL userinfo
+(``rtsp://admin:secret@cam/live``) in ``Monitor.Path``, repeats it in
+``Monitor.Options``, and writes the same string into its own logs. No key
+name marks it and ``URL`` parsing never looked at ``rtsp://``, so one regex
+handles every scheme. ``maskUrlCredentials`` replaces the password segment
+and keeps the user and host; ``restoreUrlCredentials`` puts the real value
+back when a masked field is saved. The monitor settings dialog uses the same
+pair, so what the UI hides and what the logs hide cannot drift apart.
 
 **Used by:** the whole app. Never call ``console.*`` directly.
 

@@ -79,6 +79,16 @@ A list of recent events for this specific monitor, with thumbnails and timestamp
 
 Technical details about the monitor configuration (resolution, source type, function, etc.).
 
+### Camera Credentials
+
+The monitor's Settings dialog (Video tab) shows the camera's source path, and on ZoneMinder 1.38+ a separate username and password. On older servers the password has nowhere else to live, so it sits inside the source path itself as `rtsp://user:password@camera/stream`.
+
+While **Disable log redaction** is off (the default), the app hides those passwords: the source path renders with the password segment replaced by dots, and the password field has no reveal button. The hostname, port, and stream path stay readable so you can still tell which camera you are looking at.
+
+Both fields remain editable. Changing the camera's hostname while the password is masked keeps the stored password: the app puts the real value back when it saves, as long as you leave the dots alone. Type over the dots and what you typed becomes the new password.
+
+To read a stored password, turn on **Settings → Advanced → Disable log redaction**, then turn it off again when you are done. Note that ZoneMinder's API returns these credentials to any account that can view the monitor, so hiding them in the app is not a substitute for restricting who has an account on your server.
+
 ## Monitor Status Indicators
 
 | Status | Meaning |
