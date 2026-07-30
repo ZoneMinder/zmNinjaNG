@@ -585,7 +585,15 @@ The pipeline, in the order it runs:
   settings.liveActivityPollSeconds, 'alarmStatusInterval')``, the per-page poll
   setting folded against the bandwidth-mode floor.
 - Each raw response is parsed into a ``MonitorAlarmState`` by
-  ``parseAlarmState`` (``src/lib/monitor/alarm-state.ts``).
+  ``parseAlarmState`` (``src/lib/monitor/alarm-state.ts``), inside the
+  ``combine`` option of ``useQueries`` rather than in a downstream
+  ``useMemo``. That placement is load-bearing, not stylistic: without
+  ``combine``, ``useQueries`` re-maps its results array on every render, so a
+  ``useMemo`` listing it never hits and the state map gets a new identity per
+  render. Since the effect below stamps ``Date.now()`` into the list, a new
+  identity per render is a render loop, not a wasted comparison. TanStack
+  applies ``replaceEqualDeep`` to whatever ``combine`` returns, so an
+  unchanged poll yields the very same object.
 - A push notification received inside the current dwell window overlays an
   early ``'alarm'`` onto that monitor's state through ``applyLiveAlarmHints``,
   so a push promotes a tile before the next poll confirms it.

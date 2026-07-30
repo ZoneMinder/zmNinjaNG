@@ -2536,7 +2536,10 @@ thrash ``nph-zms`` on the server, not just the display.
    accepts a single monitor. Every requested id gets an entry in the
    returned map even before its query resolves: a missing key reads
    downstream as "no longer watched", which would drop a monitor before its
-   dwell window ever ran.
+   dwell window ever ran. The map is built in the ``combine`` option so the
+   returned object is identity-stable across renders; step 5 stamps
+   ``Date.now()`` into its output, so a per-render identity here would loop
+   the page forever.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useAlarmStates.ts#L64>`__
    · → :doc:`07-api-and-data-fetching`
 

@@ -17,8 +17,14 @@ Tiles are added in the order their monitors start alarming and never reorder whi
 Open the gear icon at the top of the page to configure:
 
 - **Check every**: how often, in seconds, the page checks each watched monitor's alarm state. Low bandwidth mode raises the minimum you can set here.
-- **Keep on screen for**: the dwell window described above, in seconds. Raise it if tiles disappear and reappear too often; lower it to clear tiles faster once an alarm ends.
+- **Keep on screen for**: the dwell window described above, in seconds. Raise it if tiles disappear and reappear too often; lower it to clear tiles faster once an alarm ends. The minimum is 5 seconds, because a zero-second window is what the dwell window exists to prevent.
 - **Maximum tiles**: how many tiles the grid shows at once before the rest collapse into the overflow count.
 - **Monitors to watch**: a per-monitor switch that keeps a monitor off this page only. It stays visible everywhere else in the app. This is separate from the hidden monitors list in {doc}`settings`, which hides a monitor from the whole app.
 
 A push notification for a monitor promotes it onto the page immediately, rather than waiting for the next scheduled check.
+
+## When the server cannot be reached
+
+While the page is waiting for its first answer it shows placeholder tiles, and if it cannot reach the server it shows the error instead of the "All quiet" message. "All quiet" means the server was asked and said nothing is alarming, so the page never shows it on a guess.
+
+A monitor whose check fails keeps the last alarm state the server reported, rather than dropping off the page. A single dropped request on a weak connection therefore does not end an alarm and restart it as a new one.
