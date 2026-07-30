@@ -56,7 +56,11 @@ function resolveEn(key: string): string {
 }
 
 function translate(key: string, params?: Record<string, unknown>): string {
-  const template = resolveEn(key);
+  // A key called with a count resolves against its `_one` / `_other` family,
+  // the way i18next does, so assertions still read the real English copy.
+  const count = params?.count;
+  const suffix = typeof count === 'number' ? (count === 1 ? '_one' : '_other') : '';
+  const template = resolveEn(`${key}${suffix}`) ?? resolveEn(key);
   if (typeof template !== 'string') return key;
   if (!params) return template;
   return template.replace(/{{\s*(\w+)\s*}}/g, (_, name: string) => String(params[name] ?? ''));
@@ -128,6 +132,21 @@ describe('LiveActivity', () => {
     await waitFor(() => {
       expect(screen.getByTestId('live-activity-empty')).toHaveTextContent('All quiet');
     });
+    expect(screen.getByTestId('live-activity-empty')).toHaveTextContent('Watching 2 monitors');
+  });
+
+  it('uses the singular form when watching a single monitor', async () => {
+    // Regression: watching_count passed i18next a count with no plural family
+    // behind it, so one monitor read "Watching 1 monitors".
+    mockMonitors.mockResolvedValue({ monitors: [MONITORS.monitors[0]] } as never);
+    mockStatus.mockResolvedValue({ status: 0 } as never);
+
+    render(<LiveActivity />, { wrapper });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('live-activity-empty')).toHaveTextContent('Watching 1 monitor');
+    });
+    expect(screen.getByTestId('live-activity-empty')).not.toHaveTextContent('1 monitors');
   });
 
   it('stops re-rendering once an alarming monitor has settled', async () => {
