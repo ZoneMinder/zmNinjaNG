@@ -150,6 +150,32 @@ describe('useAlarmStates', () => {
     expect(settledStates).toEqual({ '1': 'alarm', '2': 'idle' });
   });
 
+  it('holds a monitor at its last known state when a poll fails', async () => {
+    // A dropped request must not read as "the alarm ended": that starts the
+    // dwell countdown, and the next success then counts a fresh alarm, so one
+    // continuous alarm displays as a repeat count on flaky wifi.
+    let shouldFail = false;
+    mockStatus.mockImplementation(async () => {
+      if (shouldFail) throw new Error('boom');
+      return { status: 2 };
+    });
+
+    const { result } = renderHook(
+      () => useAlarmStates(['1'], { enabled: true, pollIntervalMs: 20 }),
+      { wrapper }
+    );
+
+    await waitFor(() => {
+      expect(result.current.states['1']).toBe('alarm');
+    });
+
+    shouldFail = true;
+    await waitFor(() => {
+      expect(result.current.error).toBeInstanceOf(Error);
+    });
+    expect(result.current.states['1']).toBe('alarm');
+  });
+
   it('returns an empty map for an empty monitor list', async () => {
     const { result } = renderHook(
       () => useAlarmStates([], { enabled: true, pollIntervalMs: 5000 }),

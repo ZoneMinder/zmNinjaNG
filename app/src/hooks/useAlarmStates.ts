@@ -87,9 +87,15 @@ export function useAlarmStates(
       if (enabled) {
         results.forEach((result, i) => {
           if (result.isLoading) isLoading = true;
-          // A monitor whose request failed reads as unknown, which the reducer
-          // treats as not alarming. A transient error must not strand a tile.
-          states[monitorIds[i]] = result.isError ? 'unknown' : parseAlarmState(result.data);
+          // A failed poll reports the monitor's last known state, not
+          // `unknown`. `unknown` is not alarming, so one dropped request on
+          // flaky wifi would end the alarm, start the dwell countdown, and let
+          // the next success count a *fresh* alarm: a single continuous alarm
+          // displayed as "x7". React Query keeps the previous payload in
+          // `data` across a failed refetch, so this holds steady instead. A
+          // monitor that has never succeeded has no `data` and parses to
+          // `unknown`, which keeps the map total.
+          states[monitorIds[i]] = parseAlarmState(result.data);
           if (result.error && !error) error = result.error as Error;
         });
       }
