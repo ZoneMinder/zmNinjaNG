@@ -325,7 +325,7 @@
       "backend": "Backend",
       "backend_on_device": "Auf dem Gerät",
       "backend_ollama": "Ollama (extern)",
-      "backend_native": "Auf dem Gerät (nativ)",
+      "backend_download_model": "Auf dem Gerät (Modell-Download)",
       "backend_apple": "Auf dem Gerät (Apple Intelligence)",
       "backend_accuracy_hint_ios": "Ollama (remote) ist am genauesten; empfohlenes Modell ist {{ollama}}. {{native}} läuft auf diesem Gerät und folgt danach. Apple Intelligence ist am ungenauesten.",
       "backend_accuracy_hint_android": "Ollama (remote) ist am genauesten; empfohlenes Modell ist {{ollama}}. Gemini Nano läuft auf diesem Gerät und ist ungenauer.",
@@ -399,7 +399,7 @@
       "history_turns": "Gemerkte Wortwechsel",
       "history_turns_hint": "Wie viele frühere Fragen und Antworten das Modell sieht.",
       "advanced_note": "Temperatur 0 war beim Auswerten Ihrer Kameradaten messbar am genauesten. Höhere Werte führen eher dazu, dass der Assistent eine Anzahl, eine Uhrzeit oder einen Kameranamen nennt, der nicht in den Ergebnissen steht. Erhöhen Sie das Zeitlimit, wenn Ihr Server langsam antwortet. Mehr gemerkte Wortwechsel helfen bei Rückfragen, machen aber jede Antwort langsamer.",
-      "backend_gemini_nano": "Auf dem Gerät (Gemini Nano)",
+      "backend_gemini_nano": "Auf dem Gerät (AICore)",
       "gemini_nano_not_ready": "Gemini Nano ist auf diesem Gerät verfügbar, aber noch nicht heruntergeladen."
     },
     "language": "Sprache",

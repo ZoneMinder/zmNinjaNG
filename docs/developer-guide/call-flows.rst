@@ -2176,7 +2176,7 @@ tool and ``ToolDefinition`` cannot express one), never a runtime decision.
    ``Platform.isNative`` (the Native contract: the plugin ships native
    implementations only). On iOS, ``LlamaPlugin.isSupported`` answers ``false``
    below a 5.5GiB physical-memory floor (``LlamaPlugin.swift``), and a device
-   that fails never sees **On-device (native)** in ``AssistantSection``'s
+   that fails never sees **On-device (Download model)** in ``AssistantSection``'s
    backend ``<select>`` at all, rather than a disabled option to interpret.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useNativeLlmSupported.ts>`__
    · → :doc:`15-assistant`

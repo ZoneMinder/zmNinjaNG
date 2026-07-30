@@ -113,6 +113,23 @@ and ``WebLlmProvider`` otherwise.
 On either on-device path no message and no tool result is ever sent to a
 server other than the ZoneMinder server the tool call itself targets.
 
+Note that the five backend VALUES do not map one-to-one onto the four labels
+the picker shows. ``'on-device'`` and ``'native'`` share a single label,
+``settings.assistant.backend_download_model`` ("On-device (Download model)"),
+because the difference between them is which engine the platform happens to
+have (WebGPU on desktop and web, llama.cpp on Metal on iOS) and not anything
+a user chooses. ``AssistantSection`` therefore emits the same label from two
+branches with two different ``value`` attributes. The labels name the model's
+SUPPLIER, since that is the decision being made: the OS already has one
+(``'apple'`` -> Apple Intelligence, ``'gemini-nano'`` -> AICore), the app
+downloads one, or your own server runs one. Do not "fix" the duplicate label
+by splitting it back into two options; the engine is not a user-facing
+choice. ``settings.assistant.backend_on_device`` is a separate string and is
+NOT a picker label: ``assistantBackendLabel`` uses it as the generic mode
+suffix in the chat header ("Qwen3 4B · On-device") for all four on-device
+backends, which is why repurposing it for the picker would have mislabelled
+Apple Intelligence and AICore.
+
 Each adapter constrains generation where its backend can enforce it.
 ``WebLlmProvider`` compiles its two-shape JSON envelope (``ENVELOPE_SCHEMA``)
 through the engine's grammar via ``response_format``, falling back to

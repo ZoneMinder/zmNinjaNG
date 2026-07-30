@@ -326,14 +326,24 @@ export function AssistantSection({
                   data-testid="assistant-backend-select"
                 >
                   <option value="ollama">{t('settings.assistant.backend_ollama')}</option>
-                  {nativeSupported === true && (
-                    <option value="native">{t('settings.assistant.backend_native')}</option>
+                  {geminiSupported === true && (
+                    <option value="gemini-nano">{t('settings.assistant.backend_gemini_nano')}</option>
                   )}
                   {appleSupported === true && (
                     <option value="apple">{t('settings.assistant.backend_apple')}</option>
                   )}
-                  {geminiSupported === true && (
-                    <option value="gemini-nano">{t('settings.assistant.backend_gemini_nano')}</option>
+                  {/* One user-facing "download a model" option across every
+                      platform, even though two backends implement it: WebGPU
+                      weights on web/desktop ('on-device'), llama.cpp on Metal
+                      here ('native'). The engine is a platform fact, not a
+                      choice, so the picker names what the user decides (whether
+                      to download a model) and the platform picks how. Android
+                      reaches neither: llama.cpp was removed from that build
+                      (issue #270) and WebLLM is gated off on mobile, so
+                      `nativeSupported` is false there and this option is
+                      absent. */}
+                  {nativeSupported === true && (
+                    <option value="native">{t('settings.assistant.backend_download_model')}</option>
                   )}
                 </select>
                 <p className="text-xs text-muted-foreground" data-testid="assistant-backend-accuracy-hint">
@@ -361,8 +371,10 @@ export function AssistantSection({
                   onChange={(e) => update('assistantBackend', e.target.value as AssistantBackend)}
                   data-testid="assistant-backend-select"
                 >
-                  <option value="on-device">{t('settings.assistant.backend_on_device')}</option>
                   <option value="ollama">{t('settings.assistant.backend_ollama')}</option>
+                  {/* Same label as the native branch above; here it is WebGPU
+                      weights rather than llama.cpp. See that comment. */}
+                  <option value="on-device">{t('settings.assistant.backend_download_model')}</option>
                 </select>
                 <p className="text-xs text-muted-foreground" data-testid="assistant-backend-accuracy-hint">
                   {t(accuracyHintKey, { ollama: ASSISTANT.recommendedOllamaModel })}

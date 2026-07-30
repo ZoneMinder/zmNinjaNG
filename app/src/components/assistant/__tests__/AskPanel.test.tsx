@@ -421,7 +421,7 @@ describe('AskPanel', () => {
       mockBackend.current = 'apple';
       render(<AskPanel />);
       expect(screen.getByTestId('assistant-system-model-note')).toHaveTextContent(
-        'assistant.system_model_note:settings.assistant.backend_native',
+        'assistant.system_model_note:settings.assistant.backend_download_model',
       );
     });
 

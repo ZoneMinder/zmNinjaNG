@@ -239,7 +239,7 @@ describe('AssistantSection backend picker and gating', () => {
       const select = await screen.findByTestId('assistant-backend-select');
       expect(screen.queryByTestId('assistant-on-device-unavailable')).not.toBeInTheDocument();
       expect(within(select).getByText('settings.assistant.backend_ollama')).toBeInTheDocument();
-      expect(within(select).getByText('settings.assistant.backend_native')).toBeInTheDocument();
+      expect(within(select).getByText('settings.assistant.backend_download_model')).toBeInTheDocument();
       expect(within(select).queryByText('settings.assistant.backend_on_device')).not.toBeInTheDocument();
       expect(screen.getByTestId('assistant-ollama-url')).toBeInTheDocument();
     });
@@ -285,10 +285,13 @@ describe('AssistantSection backend picker and gating', () => {
       expect(screen.queryByTestId('assistant-on-device-unavailable')).not.toBeInTheDocument();
       expect(within(select).getByText('settings.assistant.backend_apple')).toBeInTheDocument();
       expect(within(select).getByText('settings.assistant.backend_ollama')).toBeInTheDocument();
-      expect(within(select).queryByText('settings.assistant.backend_native')).not.toBeInTheDocument();
+      expect(within(select).queryByText('settings.assistant.backend_download_model')).not.toBeInTheDocument();
     });
 
-    it('lists ollama before native before apple when both on-device backends are supported', async () => {
+    // Order is the user-facing one: your own server, then the OS-supplied
+    // models, then the one that costs a download. `native` is last because it
+    // is presented as "Download model", not as an engine.
+    it('lists ollama, then the OS model, then the downloaded model', async () => {
       isNative = true;
       appleSupported = true;
       nativeSupported = true;
@@ -300,7 +303,27 @@ describe('AssistantSection backend picker and gating', () => {
       const values = within(select)
         .getAllByRole('option')
         .map((o) => (o as HTMLOptionElement).value);
-      expect(values).toEqual(['ollama', 'native', 'apple']);
+      expect(values).toEqual(['ollama', 'apple', 'native']);
+    });
+
+    // The requested four-label scheme in one assertion: Android reaches only
+    // two of them, because llama.cpp was removed from that build (issue #270)
+    // and WebLLM is gated off on mobile, so there is nothing to download.
+    it('offers Ollama and AICore only on Android, with no download option', async () => {
+      isNative = true;
+      isAndroid = true;
+      geminiSupported = true;
+      nativeSupported = false;
+      appleSupported = false;
+      render(
+        <AssistantSection settings={enabledSettings} update={vi.fn()} currentProfile={profile} updateSettings={vi.fn()} />,
+      );
+
+      const select = await screen.findByTestId('assistant-backend-select');
+      const values = within(select)
+        .getAllByRole('option')
+        .map((o) => (o as HTMLOptionElement).value);
+      expect(values).toEqual(['ollama', 'gemini-nano']);
     });
 
     it('shows the backend accuracy hint under the picker', async () => {

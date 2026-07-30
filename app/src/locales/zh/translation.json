@@ -325,7 +325,7 @@
       "backend": "后端",
       "backend_on_device": "设备端",
       "backend_ollama": "Ollama（远程）",
-      "backend_native": "设备端（原生）",
+      "backend_download_model": "设备端（下载模型）",
       "backend_apple": "设备端（Apple Intelligence）",
       "backend_accuracy_hint_ios": "Ollama（远程）最准确，推荐模型为 {{ollama}}。{{native}} 在本设备上运行，准确度次之。Apple Intelligence 最不准确。",
       "backend_accuracy_hint_android": "Ollama（远程）最准确，推荐模型为 {{ollama}}。Gemini Nano 在本设备上运行，准确度较低。",
@@ -399,7 +399,7 @@
       "history_turns": "记住的对话轮数",
       "history_turns_hint": "模型能看到多少条此前的问答。",
       "advanced_note": "实测温度为 0 时读取摄像机数据最准确。数值越高，助手越可能说出结果中并不存在的数量、时间或摄像机名称。若服务器响应缓慢，请调高超时。记住更多轮对话有助于追问，但会让每次回答变慢。",
-      "backend_gemini_nano": "设备端（Gemini Nano）",
+      "backend_gemini_nano": "设备端（AICore）",
       "gemini_nano_not_ready": "Gemini Nano 在本设备上可用，但尚未下载。"
     },
     "language": "语言",

@@ -85,8 +85,10 @@ export function assistantBackendLabel(
       mode = t('settings.assistant.backend_ollama');
       break;
     case 'native':
-      // Fixed single native model, so no catalog lookup; its label already says
-      // "(native)", making the on-device mode suffix enough.
+      // Fixed single downloaded model, so no catalog lookup. Shares the generic
+      // on-device mode suffix with every other on-device backend; which engine
+      // runs it (llama.cpp here, WebGPU for 'on-device') is not something the
+      // header needs to say.
       model = ASSISTANT.nativeLlmModel.label;
       mode = t('settings.assistant.backend_on_device');
       break;

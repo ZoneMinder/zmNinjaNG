@@ -315,7 +315,7 @@ export function AskPanel() {
   // Apple Intelligence; Android no longer has it at all, so there the better
   // backend is the user's own Ollama server.
   const systemModelSuggestion = Platform.isIOS
-    ? t('settings.assistant.backend_native')
+    ? t('settings.assistant.backend_download_model')
     : t('settings.assistant.backend_ollama');
 
   const [input, setInput] = useState('');

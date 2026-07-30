@@ -847,7 +847,10 @@ export const ASSISTANT = {
     // Nominal max window JS asks for; native (NativeLlmPlugin.isSupported/chat) derives the real
     // window from device RAM and caps down to it, reporting the adopted value back via isSupported.
     contextSize: 8192,
-    label: 'Qwen 3 4B Instruct (native)',
+    // No "(native)" suffix: the backend picker calls this option "On-device
+    // (Download model)" and the chat header already appends the on-device mode,
+    // so the engine name only ever read as jargon here.
+    label: 'Qwen 3 4B Instruct',
     url: 'https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/main/Qwen3-4B-Instruct-2507-Q4_K_M.gguf',
     approxSizeMb: 2500,
   },
