@@ -28,6 +28,7 @@ a file named ``/monitors/3``.
    monitors                Monitors
    /monitors/:id           MonitorDetail
    /montage                Montage
+   /live-activity          LiveActivity
    /events                 Events
    /events/:id             EventDetail
    /event-montage          redirect to /events?view=montage
@@ -150,6 +151,7 @@ Pages live in ``src/pages/``:
    ├── DeveloperNotice.tsx       # Notices fetched from a feed
    ├── EventDetail.tsx           # Event playback
    ├── Events.tsx                # Event list / montage
+   ├── LiveActivity.tsx          # Currently-alarming monitors only
    ├── Logs.tsx                  # App and ZM server logs
    ├── MonitorDetail.tsx         # Single monitor + live stream
    ├── Monitors.tsx              # Monitor list / grid
@@ -564,6 +566,67 @@ Event thumbnails go through ``src/lib/event/thumbnail-chain.ts``, which
 chooses among ``zms``, cached, or API sources. Non-stream HTTP traffic uses
 ``httpGet`` / ``httpPost`` / ``httpPut`` / ``httpDelete`` from
 ``src/lib/http.ts``, never raw ``fetch()`` or ``axios``.
+
+Live Activity
+-------------
+
+**Location**: ``src/pages/LiveActivity.tsx``
+
+Only the monitors ZoneMinder currently reports as alarming, as live tiles. The
+page itself is a small state pipeline (poll, parse, reduce, render) sitting on
+top of the same tile Montage uses; almost none of the actual rendering logic
+belongs to this page.
+
+The pipeline, in the order it runs:
+
+- ``useAlarmStates`` (``src/hooks/useAlarmStates.ts``) fans out one query per
+  watched monitor id, keyed by ``queryKeys.monitorAlarmStatus``, polling at an
+  interval from ``resolvePollIntervalMs(bandwidthMode,
+  settings.liveActivityPollSeconds, 'alarmStatusInterval')``, the per-page poll
+  setting folded against the bandwidth-mode floor.
+- Each raw response is parsed into a ``MonitorAlarmState`` by
+  ``parseAlarmState`` (``src/lib/monitor/alarm-state.ts``).
+- A push notification received inside the current dwell window overlays an
+  early ``'alarm'`` onto that monitor's state through ``applyLiveAlarmHints``,
+  so a push promotes a tile before the next poll confirms it.
+- ``reduceActiveMonitors`` (``src/lib/monitor/live-activity.ts``) turns the
+  state map into the ordered list actually rendered: a monitor joins on
+  ``alarm``/``alert``, stays resident (cooling) until
+  ``liveActivityDwellSeconds`` after its last alarm, and only then drops.
+  Order is first-entered and never re-sorted, so a tile never moves under a
+  tap in progress. ``capActiveMonitors`` then slices the result to
+  ``liveActivityMaxTiles`` and reports the remainder as an overflow count.
+
+.. code:: tsx
+
+   // src/pages/LiveActivity.tsx, trimmed
+   const { states } = useAlarmStates(watchedIds, { enabled: true, pollIntervalMs });
+   const hintedStates = useMemo(
+     () => applyLiveAlarmHints(states, hintedMonitorIds),
+     [states, hintedMonitorIds]
+   );
+
+   useEffect(() => {
+     setActive((prev) => reduceActiveMonitors(prev, hintedStates, Date.now(), dwellMs));
+   }, [hintedStates, dwellMs]);
+
+   const { visible, overflowCount } = capActiveMonitors(active, settings.liveActivityMaxTiles);
+
+The dwell window is not a display nicety. Each visible entry renders a
+``MontageMonitor``, the tile Montage documents above, so mounting one mints a
+ZMS connection key and unmounting it sends CMD_QUIT. A reducer that let a
+monitor flicker in and out of the list would mint and quit a fresh
+``nph-zms`` process on almost every poll; the dwell window exists to stop
+that, not just to smooth the display. :doc:`call-flows` Flow 20 traces one
+poll tick through this whole pipeline, from the fetch to that CMD_QUIT.
+
+The page's settings (poll interval, dwell window, tile cap, and a per-page
+monitor ignore list) live in ``LiveActivitySettingsDialog``
+(``src/components/live-activity/``), writing through the same
+``updateProfileSettings`` every other page uses. Its ignore list is
+deliberately separate from the profile-wide hidden-monitors setting in
+Settings: turning a monitor off here only removes it from this page, not from
+Monitors, Montage, or Events.
 
 Events
 ------
