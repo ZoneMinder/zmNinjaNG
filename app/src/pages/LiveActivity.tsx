@@ -34,6 +34,7 @@ import { LiveActivitySettingsDialog } from '../components/live-activity/LiveActi
 import { Button } from '../components/ui/button';
 import { EmptyState } from '../components/ui/empty-state';
 import { ErrorBanner } from '../components/ui/query-state';
+import { Skeleton } from '../components/ui/skeleton';
 import { resolveQueryError } from '../lib/query/query-error';
 import { PageContainer } from '../components/common/PageContainer';
 import type { MonitorAlarmState } from '../lib/monitor/alarm-state';
@@ -86,7 +87,7 @@ export default function LiveActivity() {
   // disabled, and feeding that into reduceActiveMonitors below would drop
   // every resident monitor instantly with no dwell window, the exact tile
   // churn the dwell window exists to prevent (refs #313).
-  const { states, error: alarmError } = useAlarmStates(watchedIds, {
+  const { states, isLoading: alarmsLoading, error: alarmError } = useAlarmStates(watchedIds, {
     enabled: true,
     pollIntervalMs,
   });
@@ -171,6 +172,16 @@ export default function LiveActivity() {
 
   const error = monitorsError ?? alarmError;
 
+  // "All quiet" is a claim about the server, so it is only honest once the
+  // page has heard from it. An unreachable server leaves visible empty and
+  // monitorsLoading false, and a failing alarm fanout dwells every tile out,
+  // so without this gate an outage reads as a confident "nothing is
+  // alarming" next to the error banner: the worst possible false negative
+  // for a page whose whole job is answering that question.
+  const isEmpty = visible.length === 0;
+  const showSkeleton = isEmpty && (monitorsLoading || alarmsLoading);
+  const showEmptyState = isEmpty && !showSkeleton && !error;
+
   return (
     <PageContainer>
       <div className="flex items-center justify-between gap-2 mb-3">
@@ -211,7 +222,19 @@ export default function LiveActivity() {
 
       {error && <ErrorBanner message={resolveQueryError(error, t)} />}
 
-      {visible.length === 0 && !monitorsLoading ? (
+      {showSkeleton && (
+        <div
+          className="grid gap-2"
+          style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}
+          data-testid="live-activity-loading"
+        >
+          {Array.from({ length: gridCols * 2 }, (_, i) => (
+            <Skeleton key={i} className="aspect-video rounded-xl" />
+          ))}
+        </div>
+      )}
+
+      {showEmptyState && (
         <div data-testid="live-activity-empty">
           <EmptyState
             icon={Activity}
@@ -219,7 +242,9 @@ export default function LiveActivity() {
             description={t('live_activity.watching_count', { count: watchedIds.length })}
           />
         </div>
-      ) : (
+      )}
+
+      {!isEmpty && (
         <div
           ref={gridContainerRef}
           className="grid gap-2"

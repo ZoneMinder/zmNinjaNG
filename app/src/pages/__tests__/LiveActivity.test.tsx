@@ -170,6 +170,33 @@ describe('LiveActivity', () => {
     expect(screen.getByText('Front Door(3):Alarmed')).toBeInTheDocument();
   });
 
+  it('shows the error instead of claiming all quiet when the server is unreachable', async () => {
+    // A false "nothing is alarming" during an outage is the worst reading
+    // this page can give, so the quiet state is gated on having heard back.
+    mockMonitors.mockRejectedValue(new Error('Network Error'));
+    mockStatus.mockRejectedValue(new Error('Network Error'));
+
+    render(<LiveActivity />, { wrapper });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Network Error/)).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('live-activity-empty')).not.toBeInTheDocument();
+  });
+
+  it('shows a loading skeleton before the first alarm poll answers', async () => {
+    // A cold open used to paint the quiet empty state, so the page asserted
+    // "all quiet" before it had asked anything.
+    mockStatus.mockImplementation(() => new Promise(() => {}) as never);
+
+    render(<LiveActivity />, { wrapper });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('live-activity-loading')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('live-activity-empty')).not.toBeInTheDocument();
+  });
+
   it('never polls a monitor on the ignore list', async () => {
     mockStatus.mockResolvedValue({ status: 0 } as never);
 
