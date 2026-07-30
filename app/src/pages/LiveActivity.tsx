@@ -11,6 +11,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
+import { useShallow } from 'zustand/react/shallow';
 import { Activity } from 'lucide-react';
 import { getMonitors } from '../api/monitors';
 import { queryKeys } from '../lib/query/query-keys';
@@ -19,10 +20,11 @@ import { useAuthStore } from '../stores/auth';
 import { useBandwidthSettings } from '../hooks/useBandwidthSettings';
 import { useAlarmStates } from '../hooks/useAlarmStates';
 import { useEventMontageGrid } from '../hooks/useEventMontageGrid';
-import { resolvePollIntervalMs } from '../stores/notifications';
+import { resolvePollIntervalMs, useNotificationStore } from '../stores/notifications';
 import {
   reduceActiveMonitors,
   capActiveMonitors,
+  applyLiveAlarmHints,
   type ActiveMonitorEntry,
 } from '../lib/monitor/live-activity';
 import { MontageMonitor } from '../components/monitors/MontageMonitor';
@@ -89,19 +91,48 @@ export default function LiveActivity() {
   const [active, setActive] = useState<ActiveMonitorEntry[]>([]);
   const dwellMs = settings.liveActivityDwellSeconds * 1000;
 
+  // Websocket/push accelerant: a notification received in the last dwell
+  // window promotes its monitor into the current poll snapshot immediately,
+  // rather than waiting up to one poll interval for ZoneMinder to confirm it.
+  // applyLiveAlarmHints only ever promotes a monitor already present in
+  // `states`, so a hint for a page-ignored or profile-excluded monitor id is
+  // dropped, not resurrected.
+  //
+  // ponytail: this selector rebuilds the Set on every evaluation, so useShallow
+  // still re-runs the filter/map on unrelated notification-store writes (it
+  // just avoids a re-render when the resulting Set is contents-equal). If that
+  // shows up as a real cost, memoize the profile's event list with a
+  // reference-stable selector and build the Set in a separate useMemo keyed
+  // off that list.
+  const hintedMonitorIds = useNotificationStore(
+    useShallow((state) => {
+      const events = currentProfile ? state.profileEvents[currentProfile.id] : undefined;
+      if (!events?.length) return new Set<string>();
+      const cutoff = Date.now() - dwellMs;
+      return new Set(
+        events.filter((e) => e.receivedAt >= cutoff).map((e) => String(e.MonitorId))
+      );
+    })
+  );
+
+  const hintedStates = useMemo(
+    () => applyLiveAlarmHints(states, hintedMonitorIds),
+    [states, hintedMonitorIds]
+  );
+
   useEffect(() => {
-    setActive((prev) => reduceActiveMonitors(prev, states, Date.now(), dwellMs));
-  }, [states, dwellMs]);
+    setActive((prev) => reduceActiveMonitors(prev, hintedStates, Date.now(), dwellMs));
+  }, [hintedStates, dwellMs]);
 
   // A cooling monitor expires on a timer, not on a poll response, so the list
   // still empties when every monitor has gone quiet and nothing is changing.
   useEffect(() => {
     if (active.length === 0) return;
     const timer = setInterval(() => {
-      setActive((prev) => reduceActiveMonitors(prev, states, Date.now(), dwellMs));
+      setActive((prev) => reduceActiveMonitors(prev, hintedStates, Date.now(), dwellMs));
     }, 1000);
     return () => clearInterval(timer);
-  }, [active.length, states, dwellMs]);
+  }, [active.length, hintedStates, dwellMs]);
 
   const { visible, overflowCount } = capActiveMonitors(active, settings.liveActivityMaxTiles);
 
@@ -169,7 +200,11 @@ export default function LiveActivity() {
             return (
               <div
                 key={entry.monitorId}
-                className={entry.isCooling ? 'opacity-60 transition-opacity' : 'transition-opacity'}
+                className={
+                  entry.isCooling
+                    ? 'relative opacity-60 transition-opacity'
+                    : 'relative transition-opacity'
+                }
                 data-testid="live-activity-tile"
               >
                 <MontageMonitor
@@ -180,6 +215,14 @@ export default function LiveActivity() {
                   navigate={navigate}
                   titleOverride={title}
                 />
+                {entry.alarmCount > 1 && (
+                  <span
+                    className="absolute top-1 right-1 z-30 text-[10px] px-1.5 py-0.5 rounded bg-black/60 text-white"
+                    data-testid={`live-activity-count-${entry.monitorId}`}
+                  >
+                    {t('live_activity.alarm_count', { count: entry.alarmCount })}
+                  </span>
+                )}
               </div>
             );
           })}

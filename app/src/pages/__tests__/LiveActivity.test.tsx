@@ -37,6 +37,10 @@ vi.mock('../../stores/auth', () => ({
 // page only needs a poll interval to exist.
 vi.mock('../../stores/notifications', () => ({
   resolvePollIntervalMs: () => 1000,
+  // No events for any profile: the accelerant selector always sees an empty
+  // hint set, so these tests exercise the plain poll path.
+  useNotificationStore: (selector: (s: { profileEvents: Record<string, unknown[]> }) => unknown) =>
+    selector({ profileEvents: {} }),
 }));
 
 // No i18next instance is initialized in this test file, and the live_activity.*

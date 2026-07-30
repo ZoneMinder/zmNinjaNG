@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   reduceActiveMonitors,
   capActiveMonitors,
+  applyLiveAlarmHints,
   type ActiveMonitorEntry,
 } from '../live-activity';
 
@@ -118,5 +119,29 @@ describe('capActiveMonitors', () => {
     const { visible, overflowCount } = capActiveMonitors(entries, 3);
     expect(visible.map((e) => e.monitorId)).toEqual(['1', '2', '3']);
     expect(overflowCount).toBe(2);
+  });
+});
+
+describe('applyLiveAlarmHints', () => {
+  it('promotes a watched idle monitor to alarming when a hint names it', () => {
+    const result = applyLiveAlarmHints({ '1': 'idle' }, new Set(['1']));
+    expect(result['1']).toBe('alarm');
+  });
+
+  it('ignores hints for monitors that are not being watched', () => {
+    // An ignored or excluded monitor must not be resurrected by a hint.
+    const result = applyLiveAlarmHints({ '1': 'idle' }, new Set(['2']));
+    expect(result).toEqual({ '1': 'idle' });
+  });
+
+  it('leaves an already-alarming state alone rather than downgrading it', () => {
+    const result = applyLiveAlarmHints({ '1': 'alert' }, new Set(['1']));
+    expect(result['1']).toBe('alert');
+  });
+
+  it('returns the same reference when no hint changes anything', () => {
+    const states = { '1': 'alarm' as const };
+    expect(applyLiveAlarmHints(states, new Set(['1']))).toBe(states);
+    expect(applyLiveAlarmHints(states, new Set())).toBe(states);
   });
 });

@@ -110,6 +110,37 @@ export function reduceActiveMonitors(
   return next;
 }
 
+/**
+ * Overlay websocket/push alarm hints onto polled state.
+ *
+ * A push event arrives seconds before the next poll tick would notice, so a
+ * hinted monitor is treated as alarming immediately; the next poll either
+ * confirms it or lets the dwell window expire it normally.
+ *
+ * Hints only ever promote a monitor that is already being polled: this only
+ * iterates the existing keys of `states`, so a hint for a monitor the page is
+ * not watching (page-ignored, or excluded profile-wide) is dropped rather
+ * than resurrecting it and leaking the ignore list.
+ */
+export function applyLiveAlarmHints(
+  states: Record<string, MonitorAlarmState>,
+  hintedMonitorIds: Set<string>
+): Record<string, MonitorAlarmState> {
+  let changed = false;
+  const next: Record<string, MonitorAlarmState> = {};
+
+  for (const [monitorId, state] of Object.entries(states)) {
+    if (hintedMonitorIds.has(monitorId) && !isAlarmingState(state)) {
+      next[monitorId] = 'alarm';
+      changed = true;
+    } else {
+      next[monitorId] = state;
+    }
+  }
+
+  return changed ? next : states;
+}
+
 export function capActiveMonitors(
   entries: ActiveMonitorEntry[],
   maxTiles: number
