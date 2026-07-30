@@ -13,7 +13,7 @@ describe('LiveActivitySettingsDialog', () => {
     useSettingsStore.setState({ profileSettings: {} });
   });
 
-  it('persists a changed dwell value to the profile settings', () => {
+  it('persists a changed dwell value to the profile settings on blur', () => {
     render(
       <LiveActivitySettingsDialog
         open
@@ -23,9 +23,9 @@ describe('LiveActivitySettingsDialog', () => {
       />
     );
 
-    fireEvent.change(screen.getByTestId('live-activity-dwell-input'), {
-      target: { value: '60' },
-    });
+    const input = screen.getByTestId('live-activity-dwell-input');
+    fireEvent.change(input, { target: { value: '60' } });
+    fireEvent.blur(input);
 
     expect(
       useSettingsStore.getState().getProfileSettings('p1').liveActivityDwellSeconds
@@ -70,7 +70,7 @@ describe('LiveActivitySettingsDialog', () => {
     ).toEqual([]);
   });
 
-  it('clamps an out-of-range poll interval instead of storing it', () => {
+  it('does not commit on change alone; the store only updates once the field blurs', () => {
     render(
       <LiveActivitySettingsDialog
         open
@@ -80,13 +80,36 @@ describe('LiveActivitySettingsDialog', () => {
       />
     );
 
-    fireEvent.change(screen.getByTestId('live-activity-poll-input'), {
-      target: { value: '9999' },
-    });
+    const input = screen.getByTestId('live-activity-poll-input');
+    fireEvent.change(input, { target: { value: '15' } });
+    expect(
+      useSettingsStore.getState().getProfileSettings('p1').liveActivityPollSeconds
+    ).toBe(5);
+
+    fireEvent.blur(input);
+    expect(
+      useSettingsStore.getState().getProfileSettings('p1').liveActivityPollSeconds
+    ).toBe(15);
+  });
+
+  it('clamps an out-of-range poll interval to the nearest bound and shows the clamped value', () => {
+    render(
+      <LiveActivitySettingsDialog
+        open
+        onOpenChange={() => {}}
+        profileId="p1"
+        monitors={MONITORS as never}
+      />
+    );
+
+    const input = screen.getByTestId('live-activity-poll-input');
+    fireEvent.change(input, { target: { value: '9999' } });
+    fireEvent.blur(input);
 
     expect(
       useSettingsStore.getState().getProfileSettings('p1').liveActivityPollSeconds
     ).toBe(60);
+    expect(input).toHaveValue(60);
   });
 
   it('clamps the dwell input at both its lower and upper bound', () => {
@@ -101,11 +124,13 @@ describe('LiveActivitySettingsDialog', () => {
     const input = screen.getByTestId('live-activity-dwell-input');
 
     fireEvent.change(input, { target: { value: '-5' } });
+    fireEvent.blur(input);
     expect(
       useSettingsStore.getState().getProfileSettings('p1').liveActivityDwellSeconds
     ).toBe(0);
 
     fireEvent.change(input, { target: { value: '9999' } });
+    fireEvent.blur(input);
     expect(
       useSettingsStore.getState().getProfileSettings('p1').liveActivityDwellSeconds
     ).toBe(300);
@@ -123,17 +148,19 @@ describe('LiveActivitySettingsDialog', () => {
     const input = screen.getByTestId('live-activity-tiles-input');
 
     fireEvent.change(input, { target: { value: '0' } });
+    fireEvent.blur(input);
     expect(
       useSettingsStore.getState().getProfileSettings('p1').liveActivityMaxTiles
     ).toBe(1);
 
     fireEvent.change(input, { target: { value: '9999' } });
+    fireEvent.blur(input);
     expect(
       useSettingsStore.getState().getProfileSettings('p1').liveActivityMaxTiles
     ).toBe(40);
   });
 
-  it('does not write a garbage value when a field is emptied', () => {
+  it('does not write a garbage value when a field is emptied and left blank on blur', () => {
     render(
       <LiveActivitySettingsDialog
         open
@@ -143,16 +170,17 @@ describe('LiveActivitySettingsDialog', () => {
       />
     );
 
-    fireEvent.change(screen.getByTestId('live-activity-poll-input'), {
-      target: { value: '' },
-    });
+    const input = screen.getByTestId('live-activity-poll-input');
+    fireEvent.change(input, { target: { value: '' } });
+    fireEvent.blur(input);
 
     expect(
       useSettingsStore.getState().getProfileSettings('p1').liveActivityPollSeconds
     ).toBe(5);
+    expect(input).toHaveValue(5);
   });
 
-  it('does not write NaN when a non-numeric value is entered', () => {
+  it('does not write NaN when a non-numeric value is entered and left on blur', () => {
     render(
       <LiveActivitySettingsDialog
         open
@@ -162,13 +190,14 @@ describe('LiveActivitySettingsDialog', () => {
       />
     );
 
-    fireEvent.change(screen.getByTestId('live-activity-poll-input'), {
-      target: { value: 'abc' },
-    });
+    const input = screen.getByTestId('live-activity-poll-input');
+    fireEvent.change(input, { target: { value: 'abc' } });
+    fireEvent.blur(input);
 
     expect(
       useSettingsStore.getState().getProfileSettings('p1').liveActivityPollSeconds
     ).toBe(5);
+    expect(input).toHaveValue(5);
   });
 
   it('lets a field be cleared and retyped without clobbering the store mid-edit', () => {
@@ -183,15 +212,73 @@ describe('LiveActivitySettingsDialog', () => {
     const input = screen.getByTestId('live-activity-poll-input');
 
     fireEvent.change(input, { target: { value: '' } });
+    expect(input).toHaveValue(null);
     expect(
       useSettingsStore.getState().getProfileSettings('p1').liveActivityPollSeconds
     ).toBe(5);
-    expect(input).toHaveValue(null);
 
     fireEvent.change(input, { target: { value: '15' } });
+    expect(input).toHaveValue(15);
+    expect(
+      useSettingsStore.getState().getProfileSettings('p1').liveActivityPollSeconds
+    ).toBe(5);
+
+    fireEvent.blur(input);
     expect(
       useSettingsStore.getState().getProfileSettings('p1').liveActivityPollSeconds
     ).toBe(15);
-    expect(input).toHaveValue(15);
+  });
+
+  it('commits typed digits one at a time without the resync effect corrupting them', () => {
+    // Regression test: a resync-on-every-commit design clamps "1" to the
+    // minimum (2) and redraws the draft, so the next keystroke appends to
+    // "2" and produces "22" instead of "12". Firing one change event per
+    // character (as real typing does) plus a final blur must still land on
+    // 12, not 22 and not some other corrupted value.
+    render(
+      <LiveActivitySettingsDialog
+        open
+        onOpenChange={() => {}}
+        profileId="p1"
+        monitors={MONITORS as never}
+      />
+    );
+    const input = screen.getByTestId('live-activity-poll-input');
+
+    fireEvent.change(input, { target: { value: '1' } });
+    expect(input).toHaveValue(1);
+    expect(
+      useSettingsStore.getState().getProfileSettings('p1').liveActivityPollSeconds
+    ).toBe(5);
+
+    fireEvent.change(input, { target: { value: '12' } });
+    expect(input).toHaveValue(12);
+    expect(
+      useSettingsStore.getState().getProfileSettings('p1').liveActivityPollSeconds
+    ).toBe(5);
+
+    fireEvent.blur(input);
+    expect(
+      useSettingsStore.getState().getProfileSettings('p1').liveActivityPollSeconds
+    ).toBe(12);
+  });
+
+  it('commits on Enter without requiring a blur', () => {
+    render(
+      <LiveActivitySettingsDialog
+        open
+        onOpenChange={() => {}}
+        profileId="p1"
+        monitors={MONITORS as never}
+      />
+    );
+    const input = screen.getByTestId('live-activity-poll-input');
+
+    fireEvent.change(input, { target: { value: '20' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(
+      useSettingsStore.getState().getProfileSettings('p1').liveActivityPollSeconds
+    ).toBe(20);
   });
 });

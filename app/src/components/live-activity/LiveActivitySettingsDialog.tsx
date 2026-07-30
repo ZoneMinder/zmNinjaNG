@@ -8,7 +8,7 @@
  * everywhere.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
@@ -33,14 +33,34 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 /**
- * Local text draft for a store-backed numeric field. Binding an <input>
- * straight to the committed store number makes it impossible to clear the
- * field: `Number('')` is 0, so every keystroke that passes through an empty
- * or partial value would clamp to the minimum and get redrawn into the input
- * mid-edit. This keeps the visible value as free-typed text and only commits
- * to the store once it parses to a real, finite number, clamped to bounds.
- * An empty or non-numeric draft is left uncommitted rather than clamped, so
- * the user can keep typing without the field snapping back.
+ * Local text draft for a store-backed numeric field, committed on blur (or
+ * Enter) instead of on every keystroke.
+ *
+ * Committing on every `onChange` has two problems. Binding the input straight
+ * to the committed store number makes it impossible to clear: `Number('')` is
+ * 0, so an empty or partial value would clamp to the minimum and redraw into
+ * the input mid-edit. Committing a clamped value on every keystroke is also
+ * self-defeating even with a local draft: the commit changes `storedValue`,
+ * which resyncs the draft to the clamped string, so the NEXT keystroke
+ * appends to that clamped string instead of what the user actually typed
+ * (typing "12" one digit at a time: "1" commits and clamps to the minimum
+ * "2", the draft resyncs to "2", and the next keystroke produces "22").
+ *
+ * Committing only on blur/Enter removes the loop entirely: `onChange` only
+ * ever touches local state, so `storedValue` cannot change mid-edit and the
+ * resync below cannot fire while the user is still typing. `isFocused`
+ * additionally blocks the resync while the field has focus, so an external
+ * change elsewhere (profile switch, dialog reopened) cannot clobber an
+ * in-progress edit either.
+ *
+ * The resync itself runs during render rather than in a `useEffect`, per
+ * React's documented pattern for "adjusting state when a prop changes"
+ * (comparing against the last-seen prop value in state and calling
+ * `setState` inline): it updates the draft before the browser paints the
+ * stale value, where an effect-based resync would paint once with the old
+ * draft and then again with the corrected one. Focus tracking uses state
+ * rather than a ref for the same reason: the render-time guard above needs
+ * to read it, and reading a ref during render is unsafe.
  */
 function useClampedNumberField(
   storedValue: number,
@@ -49,22 +69,43 @@ function useClampedNumberField(
   onCommit: (clamped: number) => void
 ) {
   const [draft, setDraft] = useState(() => String(storedValue));
+  const [lastStoredValue, setLastStoredValue] = useState(storedValue);
+  const [isFocused, setIsFocused] = useState(false);
 
-  // Resyncs the draft only when the committed store value actually changes
-  // (our own commits below, or an external update), never on every render.
-  useEffect(() => {
-    setDraft(String(storedValue));
-  }, [storedValue]);
+  if (storedValue !== lastStoredValue) {
+    setLastStoredValue(storedValue);
+    if (!isFocused) {
+      setDraft(String(storedValue));
+    }
+  }
 
   const onChange = (raw: string) => {
     setDraft(raw);
-    if (raw.trim() === '') return;
-    const parsed = Number(raw);
-    if (!Number.isFinite(parsed)) return;
-    onCommit(clamp(parsed, min, max));
   };
 
-  return { draft, onChange };
+  const onFocus = () => {
+    setIsFocused(true);
+  };
+
+  const commit = () => {
+    const trimmed = draft.trim();
+    const parsed = Number(trimmed);
+    const clamped =
+      trimmed === '' || !Number.isFinite(parsed) ? storedValue : clamp(parsed, min, max);
+    setDraft(String(clamped));
+    if (clamped !== storedValue) onCommit(clamped);
+  };
+
+  const onBlur = () => {
+    setIsFocused(false);
+    commit();
+  };
+
+  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') commit();
+  };
+
+  return { draft, onChange, onFocus, onBlur, onKeyDown };
 }
 
 export function LiveActivitySettingsDialog({
@@ -138,6 +179,9 @@ export function LiveActivitySettingsDialog({
                 max={LIVE_ACTIVITY.maxPollSeconds}
                 value={pollField.draft}
                 onChange={(e) => pollField.onChange(e.target.value)}
+                onFocus={pollField.onFocus}
+                onBlur={pollField.onBlur}
+                onKeyDown={pollField.onKeyDown}
                 className="w-24"
                 data-testid="live-activity-poll-input"
               />
@@ -158,6 +202,9 @@ export function LiveActivitySettingsDialog({
                 max={LIVE_ACTIVITY.maxDwellSeconds}
                 value={dwellField.draft}
                 onChange={(e) => dwellField.onChange(e.target.value)}
+                onFocus={dwellField.onFocus}
+                onBlur={dwellField.onBlur}
+                onKeyDown={dwellField.onKeyDown}
                 className="w-24"
                 data-testid="live-activity-dwell-input"
               />
@@ -177,6 +224,9 @@ export function LiveActivitySettingsDialog({
                 max={LIVE_ACTIVITY.maxTiles}
                 value={tilesField.draft}
                 onChange={(e) => tilesField.onChange(e.target.value)}
+                onFocus={tilesField.onFocus}
+                onBlur={tilesField.onBlur}
+                onKeyDown={tilesField.onKeyDown}
                 className="w-24"
                 data-testid="live-activity-tiles-input"
               />
