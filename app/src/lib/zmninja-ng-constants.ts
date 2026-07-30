@@ -1159,7 +1159,11 @@ export const LIVE_ACTIVITY = {
   defaultMaxTiles: 12,
   minPollSeconds: 2,
   maxPollSeconds: 60,
-  minDwellSeconds: 0,
+  // Not 0: the dwell window is what stops a monitor flickering in and out of
+  // the grid, and every entry and exit mints or quits a ZMS connection. A
+  // floor of zero lets a user turn off the exact damping that protects the
+  // nph-zms processes on their own server.
+  minDwellSeconds: 5,
   maxDwellSeconds: 300,
   minTiles: 1,
   maxTiles: 40,

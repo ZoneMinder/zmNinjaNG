@@ -123,11 +123,13 @@ describe('LiveActivitySettingsDialog', () => {
     );
     const input = screen.getByTestId('live-activity-dwell-input');
 
-    fireEvent.change(input, { target: { value: '-5' } });
+    // The floor is deliberately non-zero: a zero dwell disables the damping
+    // that keeps tiles from thrashing nph-zms connections.
+    fireEvent.change(input, { target: { value: '0' } });
     fireEvent.blur(input);
     expect(
       useSettingsStore.getState().getProfileSettings('p1').liveActivityDwellSeconds
-    ).toBe(0);
+    ).toBe(5);
 
     fireEvent.change(input, { target: { value: '9999' } });
     fireEvent.blur(input);
