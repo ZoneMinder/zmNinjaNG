@@ -48,10 +48,22 @@ function clamp(value: number, min: number, max: number): number {
  *
  * Committing only on blur/Enter removes the loop entirely: `onChange` only
  * ever touches local state, so `storedValue` cannot change mid-edit and the
- * resync below cannot fire while the user is still typing. `isFocused`
- * additionally blocks the resync while the field has focus, so an external
- * change elsewhere (profile switch, dialog reopened) cannot clobber an
- * in-progress edit either.
+ * resync below cannot fire while the user is still typing.
+ *
+ * Deliberate policy for a genuine conflict, an external write landing while
+ * the field has focus: the user's in-progress edit wins. `lastStoredValue`
+ * (the last external value actually applied to the draft) is only advanced
+ * together with applying it, never on its own, so a `storedValue` change
+ * that arrives while focused leaves `lastStoredValue` stale rather than
+ * marking that value as seen without ever showing it. On blur, `commit()`
+ * writes whatever the user typed, superseding the value that arrived
+ * mid-edit; the render right after that commit then sees its own new
+ * `storedValue` differ from the still-stale `lastStoredValue` and applies
+ * it (a no-op here, since it already matches the just-typed draft). Because
+ * the two pieces of state always advance together, a field can never end up
+ * permanently desynced: any external write that arrived mid-edit and was
+ * superseded, or one that lands after the field is unfocused, is picked up
+ * the next time this runs unfocused.
  *
  * The resync itself runs during render rather than in a `useEffect`, per
  * React's documented pattern for "adjusting state when a prop changes"
@@ -59,7 +71,7 @@ function clamp(value: number, min: number, max: number): number {
  * `setState` inline): it updates the draft before the browser paints the
  * stale value, where an effect-based resync would paint once with the old
  * draft and then again with the corrected one. Focus tracking uses state
- * rather than a ref for the same reason: the render-time guard above needs
+ * rather than a ref for the same reason: the render-time guard below needs
  * to read it, and reading a ref during render is unsafe.
  */
 function useClampedNumberField(
@@ -72,11 +84,11 @@ function useClampedNumberField(
   const [lastStoredValue, setLastStoredValue] = useState(storedValue);
   const [isFocused, setIsFocused] = useState(false);
 
-  if (storedValue !== lastStoredValue) {
+  // Both pieces of state advance together, and only while unfocused: never
+  // mark a value as seen (lastStoredValue) without also applying it (draft).
+  if (storedValue !== lastStoredValue && !isFocused) {
     setLastStoredValue(storedValue);
-    if (!isFocused) {
-      setDraft(String(storedValue));
-    }
+    setDraft(String(storedValue));
   }
 
   const onChange = (raw: string) => {

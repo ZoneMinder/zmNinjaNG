@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { LiveActivitySettingsDialog } from '../LiveActivitySettingsDialog';
 import { useSettingsStore } from '../../../stores/settings';
 
@@ -280,5 +280,46 @@ describe('LiveActivitySettingsDialog', () => {
     expect(
       useSettingsStore.getState().getProfileSettings('p1').liveActivityPollSeconds
     ).toBe(20);
+  });
+
+  it('lets an in-progress edit win over an external write, then still syncs the next external change', () => {
+    render(
+      <LiveActivitySettingsDialog
+        open
+        onOpenChange={() => {}}
+        profileId="p1"
+        monitors={MONITORS as never}
+      />
+    );
+    const input = screen.getByTestId('live-activity-poll-input');
+
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: '20' } });
+
+    // Something else writes this profile's settings while the field is
+    // still focused. The in-progress edit must not be yanked out from
+    // under the user.
+    act(() => {
+      useSettingsStore.getState().updateProfileSettings('p1', { liveActivityPollSeconds: 45 });
+    });
+    expect(input).toHaveValue(20);
+
+    // Blurring commits the user's own typed value, superseding the write
+    // that landed mid-edit (deliberate policy: the in-progress edit wins).
+    fireEvent.blur(input);
+    expect(
+      useSettingsStore.getState().getProfileSettings('p1').liveActivityPollSeconds
+    ).toBe(20);
+    expect(input).toHaveValue(20);
+
+    // A later external change, with the field no longer focused, must still
+    // sync normally rather than being permanently stuck.
+    act(() => {
+      useSettingsStore.getState().updateProfileSettings('p1', { liveActivityPollSeconds: 33 });
+    });
+    expect(input).toHaveValue(33);
+    expect(
+      useSettingsStore.getState().getProfileSettings('p1').liveActivityPollSeconds
+    ).toBe(33);
   });
 });
