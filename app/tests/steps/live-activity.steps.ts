@@ -47,7 +47,9 @@ Then('I should see the all-quiet message', async ({ page }) => {
 // renders fine.
 Then('the all-quiet message should name how many monitors are being watched', async ({ page }) => {
   const text = await page.getByTestId('live-activity-empty').innerText();
-  const match = text.match(/Watching (\d+) monitors/i);
-  expect(match, `expected a "Watching N monitors" count in: ${text}`).not.toBeNull();
+  // "monitors?" because the string is a plural family: a server with exactly
+  // one watched monitor renders "Watching 1 monitor".
+  const match = text.match(/Watching (\d+) monitors?/i);
+  expect(match, `expected a "Watching N monitor(s)" count in: ${text}`).not.toBeNull();
   expect(Number(match![1])).toBeGreaterThan(0);
 });
