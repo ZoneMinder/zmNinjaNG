@@ -19,7 +19,7 @@ this page when to remove a tile. Beyond that:
   (`services/eventPoller.ts:140`), so one busy camera starves the rest. Direct
   mode on native mobile has no in-app poller at all, only FCM
   (`hooks/useNotificationAutoConnect.ts:104`).
-- The stream is already narrowed by notification preferences — `allMonitors`,
+- The stream is already narrowed by notification preferences: `allMonitors`,
   `monitorFilters`, `onlyDetectedEvents`. A monitor muted so a phone stops
   buzzing overnight would silently vanish from the live wall. Those are
   different intents and should not share a filter.
@@ -34,9 +34,17 @@ The stream is still useful as an accelerant. See "Data sources" below.
 
 ## Data sources
 
-**Truth: per-monitor alarm status.** `getAlarmStatus(monitorId)` already exists
-(`api/monitors.ts:244`) and calls
-`/monitors/alarm/id:{id}/command:status.json`. It reports the live alarm state
+**Truth: per-monitor alarm status.** Most of this already exists.
+`getAlarmStatus(monitorId)` (`api/monitors.ts:244`) calls
+`/monitors/alarm/id:{id}/command:status.json`; `queryKeys.monitorAlarmStatus`
+is already defined; and `BANDWIDTH_SETTINGS` already carries an
+`alarmStatusInterval` (5s normal, 10s low). `useAlarmControl`
+(`pages/hooks/useAlarmControl.ts`) already polls that endpoint for a single
+monitor and parses its response, including the fallback between the `status`
+and `output` fields that ZoneMinder varies between versions. This page needs a
+fanout across monitors and a state classification on top, not new plumbing.
+
+The response reports the live alarm state
 and therefore gives both entry and exit, which is the whole requirement. It is
 also immune to recording-mode confusion: a `Mocord` monitor always has an open
 event, so an events-based query would show it permanently active, and a
@@ -68,7 +76,10 @@ the parse function is finalized:
    are 0 IDLE, 1 PREALARM, 2 ALARM, 3 ALERT, 4 TAPE.
 2. Whether ALERT (3) counts as active. Assumed yes: it is the post-alarm state
    and treating it as active smooths the tail. PREALARM (1) and TAPE (4) are
-   assumed not active.
+   assumed not active. Note that `useAlarmControl` currently disagrees about
+   TAPE, giving states 3 and 4 the same red ring. That code answers a different
+   question (is this monitor force-armed) so it is not necessarily wrong, but
+   the two readings should be reconciled once the real values are known.
 3. Whether monitors already excluded per profile
    (`lib/profile/profile-settings.ts:45`) are dropped by `getMonitors()` or
    only at the events API boundary. If only the latter, this page applies the
@@ -136,8 +147,8 @@ column-count grid the Monitors and Events pages use. Not `useMontageGrid`:
 that one persists drag positions keyed by monitor id, which is meaningless for
 a set that changes every few seconds.
 
-**Query states.** `EmptyState` for the quiet case — "All quiet, N monitors
-watching" — which is the *common* state and must not read as a failure.
+**Query states.** `EmptyState` for the quiet case, "All quiet, N monitors
+watching", which is the *common* state and must not read as a failure.
 `ErrorBanner` with `resolveQueryError` for errors, and the shared query-state
 skeleton for loading.
 
@@ -164,8 +175,7 @@ value is accepted, but in low-bandwidth mode it is clamped up to the bandwidth
 floor, so bandwidth stays authoritative. This page copies that pattern. Rather
 than write a second copy, `resolvePollIntervalMs` is generalized to take the
 bandwidth key it should floor against, since today it hardcodes
-`eventPollerInterval`. The new floor is a new `alarmStatusInterval` key in
-`getBandwidthSettings`.
+`eventPollerInterval`. The floor here is the existing `alarmStatusInterval`.
 
 **Ignored monitors** is deliberately separate from the existing per-profile
 monitor exclusion (`lib/profile/profile-settings.ts`). That one hides a monitor
@@ -203,12 +213,12 @@ locale parity, the absence of literal poll intervals, and inline query keys.
 
 1. Open an issue (P1) and branch from it.
 2. Verify the three server assumptions against a live ZoneMinder.
-3. `alarmStatusInterval` bandwidth key; generalize `resolvePollIntervalMs`.
-4. Alarm-state parse plus its tests.
-5. The dwell reducer plus its tests. This is the core.
-6. `useAlarmStates` fanout hook.
+3. Extract the alarm-state parse out of `useAlarmControl` into a shared pure
+   function, with tests, leaving that hook's behavior unchanged.
+4. The dwell reducer plus its tests. This is the core.
+5. `useAlarmStates` fanout hook.
+6. Settings keys and defaults; generalize `resolvePollIntervalMs`.
 7. The page, reusing `MontageMonitor` and `useEventMontageGrid`.
-8. Settings keys, defaults, and the gear dialog.
-9. Locale keys across all five locales.
-10. Sidebar entry and badge.
-11. e2e feature, user docs, call-flow doc entry (P10).
+8. The gear dialog.
+9. Locale keys across all five locales; sidebar entry and badge.
+10. e2e feature, user docs, call-flow doc entry (P10).
