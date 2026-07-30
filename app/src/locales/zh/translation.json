@@ -1008,6 +1008,29 @@
     "cgi_url_hint": "https://server.com/zm/cgi-bin",
     "protocol_mismatch": "协议不匹配！门户使用 {{portalProtocol}}://，但 API 使用 {{apiProtocol}}://。两者必须使用相同的协议（HTTP 或 HTTPS）。"
   },
+  "live_activity": {
+    "title": "实时动态",
+    "all_quiet": "一切正常",
+    "watching_count": "正在监看 {{count}} 个监控",
+    "tile_title": "{{name}}({{id}}):{{state}}",
+    "state_alarm": "报警",
+    "state_alert": "警报",
+    "state_cooling": "冷却中",
+    "alarm_count": "×{{count}}",
+    "overflow": "+{{count}} 个活动中",
+    "settings_title": "实时动态设置",
+    "settings_desc": "选择此页面监看的监控，以及响应速度。",
+    "poll_interval_label": "检查间隔",
+    "poll_interval_desc": "检查报警状态的频率，单位为秒。",
+    "poll_bandwidth_note": "低流量模式会提高此下限。",
+    "dwell_label": "画面保留时长",
+    "dwell_desc": "监控在报警解除后保留的秒数，数值越大画面越不易闪烁。",
+    "max_tiles_label": "最大画面数",
+    "max_tiles_desc": "超出的监控将合并为一个数字，不再显示。",
+    "ignore_list_label": "要监看的监控",
+    "ignore_list_desc": "关闭某个监控可使其不在本页显示，它仍会在其他页面可见。",
+    "ignore_list_empty": "没有可用的监控。"
+  },
   "languages": {
     "en": "English",
     "es": "Español",
@@ -1034,7 +1057,8 @@
     "developer_notice": "开发者通知",
     "help": "帮助",
     "switch_language": "切换语言",
-    "tv_mode": "TV模式"
+    "tv_mode": "TV模式",
+    "live_activity": "实时动态"
   },
   "developer_notice": {
     "page_title": "开发者通知",

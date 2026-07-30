@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import LiveActivity from '../LiveActivity';
 import { getMonitors, getAlarmStatus } from '../../api/monitors';
+import enTranslation from '../../locales/en/translation.json';
 
 vi.mock('../../api/monitors', () => ({
   getMonitors: vi.fn(),
@@ -43,18 +44,26 @@ vi.mock('../../stores/notifications', () => ({
     selector({ profileEvents: {} }),
 }));
 
-// No i18next instance is initialized in this test file, and the live_activity.*
-// locale keys don't exist until Task 7 lands, so the real hook would just echo
-// the raw key back with no interpolation (every tile would render identical
-// text). Mocking `t` with a deterministic, param-aware stub -- the same
-// convention MontageMonitor.test.tsx already uses -- keeps these assertions
-// able to fail on the actual name/id/state values instead of asserting on a
-// constant string.
+// Initializing the real i18next instance drags in its LanguageDetector setup;
+// instead this stub does the same lookup + interpolation i18next does, but
+// against the real English strings bundled in translation.json. That keeps
+// assertions able to fail on the actual rendered copy (e.g. a changed
+// tile_title format) rather than on a fabricated key/params string.
+function resolveEn(key: string): string {
+  return key.split('.').reduce<unknown>((node, part) => {
+    return typeof node === 'object' && node !== null ? (node as Record<string, unknown>)[part] : undefined;
+  }, enTranslation) as string;
+}
+
+function translate(key: string, params?: Record<string, unknown>): string {
+  const template = resolveEn(key);
+  if (typeof template !== 'string') return key;
+  if (!params) return template;
+  return template.replace(/{{\s*(\w+)\s*}}/g, (_, name: string) => String(params[name] ?? ''));
+}
+
 vi.mock('react-i18next', () => ({
-  useTranslation: () => ({
-    t: (key: string, params?: Record<string, unknown>) =>
-      params ? `${key}_${JSON.stringify(params)}` : key,
-  }),
+  useTranslation: () => ({ t: translate }),
 }));
 
 // The tile mounts a real video stream otherwise.
@@ -98,16 +107,8 @@ describe('LiveActivity', () => {
 
     render(<LiveActivity />, { wrapper });
 
-    // TODO(Task 7): once live_activity.* locale keys land, tighten this to the
-    // real translated string instead of the deterministic test-mock format.
-    const expectedTitle = `live_activity.tile_title_${JSON.stringify({
-      name: 'Front Door',
-      id: '3',
-      state: 'live_activity.state_alarm',
-    })}`;
-
     await waitFor(() => {
-      expect(screen.getByText(expectedTitle)).toBeInTheDocument();
+      expect(screen.getByText('Front Door(3):Alarmed')).toBeInTheDocument();
     });
     expect(screen.queryByText(/Backyard/)).not.toBeInTheDocument();
   });
@@ -117,9 +118,8 @@ describe('LiveActivity', () => {
 
     render(<LiveActivity />, { wrapper });
 
-    // TODO(Task 7): tighten to the real "All quiet" copy once locale keys land.
     await waitFor(() => {
-      expect(screen.getByTestId('live-activity-empty')).toHaveTextContent('live_activity.all_quiet');
+      expect(screen.getByTestId('live-activity-empty')).toHaveTextContent('All quiet');
     });
   });
 

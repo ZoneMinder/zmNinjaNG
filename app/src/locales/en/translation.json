@@ -1008,6 +1008,29 @@
     "cgi_url_hint": "https://server.com/zm/cgi-bin",
     "protocol_mismatch": "Protocol mismatch! Portal uses {{portalProtocol}}:// but API uses {{apiProtocol}}://. Both must use the same protocol (either both HTTP or both HTTPS)."
   },
+  "live_activity": {
+    "title": "Live Activity",
+    "all_quiet": "All quiet",
+    "watching_count": "Watching {{count}} monitors",
+    "tile_title": "{{name}}({{id}}):{{state}}",
+    "state_alarm": "Alarmed",
+    "state_alert": "Alert",
+    "state_cooling": "Clearing",
+    "alarm_count": "×{{count}}",
+    "overflow": "+{{count}} more active",
+    "settings_title": "Live Activity settings",
+    "settings_desc": "Choose which monitors this page watches and how quickly it reacts.",
+    "poll_interval_label": "Check every",
+    "poll_interval_desc": "How often alarm state is checked, in seconds.",
+    "poll_bandwidth_note": "Low bandwidth mode raises this floor.",
+    "dwell_label": "Keep on screen for",
+    "dwell_desc": "Seconds a monitor stays after its alarm clears. Higher values reduce flicker.",
+    "max_tiles_label": "Maximum tiles",
+    "max_tiles_desc": "Extra monitors collapse into a count instead of rendering.",
+    "ignore_list_label": "Monitors to watch",
+    "ignore_list_desc": "Turn a monitor off to keep it off this page only; it stays visible everywhere else.",
+    "ignore_list_empty": "No monitors available."
+  },
   "languages": {
     "en": "English",
     "es": "Español",
@@ -1034,7 +1057,8 @@
     "developer_notice": "Developer Notice",
     "help": "Help",
     "switch_language": "Switch Language",
-    "tv_mode": "TV Mode"
+    "tv_mode": "TV Mode",
+    "live_activity": "Live Activity"
   },
   "developer_notice": {
     "page_title": "Developer Notice",

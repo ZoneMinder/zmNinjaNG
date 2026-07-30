@@ -35,10 +35,12 @@ import {
   HelpCircle,
   Megaphone,
   Command,
+  Activity,
 } from 'lucide-react';
 import { useCommandPaletteStore } from '../../stores/commandPalette';
 import { useDeveloperNotices } from '../../hooks/useDeveloperNotices';
 import { useDeveloperNoticeStore } from '../../stores/developerNotices';
+import { LIVE_ACTIVITY } from '../../lib/zmninja-ng-constants';
 
 const HELP_DOCS_URL = 'https://zmninjang.readthedocs.io/en/latest/';
 
@@ -79,6 +81,28 @@ export function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentPro
   const getSettings = useSettingsStore((state) => state.getProfileSettings);
   const updateProfileSettings = useSettingsStore((state) => state.updateProfileSettings);
 
+  // Live Activity nav badge: monitors with an event inside the last dwell
+  // window. Reuses events the websocket already delivered (no extra
+  // polling); renders nothing when notifications are off, since none arrive
+  // to count.
+  //
+  // ponytail: this selector rebuilds the Set on every evaluation, so useShallow
+  // still re-runs the filter/map on unrelated notification-store writes (it
+  // just avoids a re-render when the resulting size is unchanged). If that
+  // shows up as a real cost, memoize the profile's event list with a
+  // reference-stable selector and build the Set in a separate useMemo keyed
+  // off that list.
+  const recentAlarmMonitorCount = useNotificationStore(
+    useShallow((state) => {
+      const events = currentProfile ? state.profileEvents[currentProfile.id] : undefined;
+      if (!events?.length) return 0;
+      const cutoff = Date.now() - LIVE_ACTIVITY.defaultDwellSeconds * 1000;
+      return new Set(
+        events.filter((e) => e.receivedAt >= cutoff).map((e) => String(e.MonitorId))
+      ).size;
+    })
+  );
+
   // Get notification data for current profile
   const settings = currentProfile ? getProfileSettings(currentProfile.id) : null;
   const profileSettings = currentProfile ? getSettings(currentProfile.id) : null;
@@ -106,6 +130,7 @@ export function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentPro
     { path: '/dashboard', label: t('sidebar.dashboard'), icon: LayoutDashboard },
     { path: '/monitors', label: t('sidebar.monitors'), icon: Video },
     { path: '/montage', label: t('sidebar.montage'), icon: LayoutGrid },
+    { path: '/live-activity', label: t('sidebar.live_activity'), icon: Activity },
     { path: '/events', label: t('sidebar.events'), icon: Clock },
     { path: '/timeline', label: t('sidebar.timeline'), icon: ChartGantt },
     { path: '/notifications', label: t('sidebar.notifications'), icon: Bell },
@@ -314,6 +339,14 @@ export function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentPro
                       aria-label={t('developer_notice.unread')}
                       data-testid="developer-notice-unread-dot"
                     />
+                  )}
+                  {item.path === '/live-activity' && recentAlarmMonitorCount > 0 && (
+                    <span
+                      className="absolute -top-1 -right-1 h-4 min-w-4 px-0.5 flex items-center justify-center text-[9px] font-bold rounded-full bg-destructive text-destructive-foreground"
+                      data-testid="live-activity-nav-badge"
+                    >
+                      {recentAlarmMonitorCount > 99 ? '99+' : recentAlarmMonitorCount}
+                    </span>
                   )}
                 </span>
                 {!isCollapsed && (

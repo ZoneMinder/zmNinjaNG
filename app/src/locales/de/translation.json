@@ -1008,6 +1008,29 @@
     "cgi_url_hint": "https://server.com/zm/cgi-bin",
     "protocol_mismatch": "Protokollkonflikt! Portal verwendet {{portalProtocol}}://, aber API verwendet {{apiProtocol}}://. Beide müssen dasselbe Protokoll verwenden (entweder HTTP oder HTTPS)."
   },
+  "live_activity": {
+    "title": "Live-Aktivität",
+    "all_quiet": "Alles ruhig",
+    "watching_count": "{{count}} Monitore beobachtet",
+    "tile_title": "{{name}}({{id}}):{{state}}",
+    "state_alarm": "Alarm",
+    "state_alert": "Warnung",
+    "state_cooling": "Abklingend",
+    "alarm_count": "×{{count}}",
+    "overflow": "+{{count}} weitere aktiv",
+    "settings_title": "Live-Aktivität Einstellungen",
+    "settings_desc": "Legt fest, welche Monitore beobachtet werden und wie schnell reagiert wird.",
+    "poll_interval_label": "Prüfintervall",
+    "poll_interval_desc": "Wie oft der Alarmstatus geprüft wird, in Sekunden.",
+    "poll_bandwidth_note": "Der Sparmodus hebt diese Untergrenze an.",
+    "dwell_label": "Anzeigedauer",
+    "dwell_desc": "Sekunden, die ein Monitor nach Alarmende sichtbar bleibt. Höhere Werte verringern Flackern.",
+    "max_tiles_label": "Maximale Kacheln",
+    "max_tiles_desc": "Weitere Monitore werden als Zähler zusammengefasst statt angezeigt.",
+    "ignore_list_label": "Zu beobachtende Monitore",
+    "ignore_list_desc": "Monitor ausschalten, um ihn nur auf dieser Seite zu verbergen; er bleibt überall sonst sichtbar.",
+    "ignore_list_empty": "Keine Monitore verfügbar."
+  },
   "languages": {
     "en": "English",
     "es": "Español",
@@ -1034,7 +1057,8 @@
     "developer_notice": "Entwicklerhinweise",
     "help": "Hilfe",
     "switch_language": "Sprache wechseln",
-    "tv_mode": "TV-Modus"
+    "tv_mode": "TV-Modus",
+    "live_activity": "Live-Aktivität"
   },
   "developer_notice": {
     "page_title": "Entwicklerhinweise",

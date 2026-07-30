@@ -1008,6 +1008,29 @@
     "cgi_url_hint": "https://servidor.com/zm/cgi-bin",
     "protocol_mismatch": "¡Conflicto de protocolo! El portal usa {{portalProtocol}}:// pero la API usa {{apiProtocol}}://. Ambos deben usar el mismo protocolo (HTTP o HTTPS)."
   },
+  "live_activity": {
+    "title": "Actividad en vivo",
+    "all_quiet": "Todo tranquilo",
+    "watching_count": "Observando {{count}} monitores",
+    "tile_title": "{{name}}({{id}}):{{state}}",
+    "state_alarm": "Alarma",
+    "state_alert": "Alerta",
+    "state_cooling": "Enfriando",
+    "alarm_count": "×{{count}}",
+    "overflow": "+{{count}} más activos",
+    "settings_title": "Ajustes de Actividad en vivo",
+    "settings_desc": "Elige qué monitores observa esta página y con qué rapidez reacciona.",
+    "poll_interval_label": "Comprobar cada",
+    "poll_interval_desc": "Frecuencia de comprobación del estado de alarma, en segundos.",
+    "poll_bandwidth_note": "El modo de bajo consumo eleva este mínimo.",
+    "dwell_label": "Mantener en pantalla",
+    "dwell_desc": "Segundos que un monitor permanece tras finalizar la alarma. Valores altos reducen el parpadeo.",
+    "max_tiles_label": "Máximo de mosaicos",
+    "max_tiles_desc": "Los monitores adicionales se agrupan en un contador en vez de mostrarse.",
+    "ignore_list_label": "Monitores a observar",
+    "ignore_list_desc": "Desactiva un monitor para ocultarlo solo en esta página; sigue visible en el resto.",
+    "ignore_list_empty": "No hay monitores disponibles."
+  },
   "languages": {
     "en": "English",
     "es": "Español",
@@ -1034,7 +1057,8 @@
     "developer_notice": "Aviso del desarrollador",
     "help": "Ayuda",
     "switch_language": "Cambiar Idioma",
-    "tv_mode": "Modo TV"
+    "tv_mode": "Modo TV",
+    "live_activity": "Actividad en vivo"
   },
   "developer_notice": {
     "page_title": "Aviso del desarrollador",
