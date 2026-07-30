@@ -59,6 +59,11 @@ interface MontageMonitorProps {
   /** Events recorded since the user last looked at this monitor (refs #239). */
   newEventCount?: number;
   newestEventAt?: string | null;
+  /**
+   * Replaces the monitor name in the tile header. The Live Activity page uses
+   * it to show name, id, and alarm state together.
+   */
+  titleOverride?: string;
 }
 
 function MontageMonitorComponent({
@@ -75,6 +80,7 @@ function MontageMonitorComponent({
   showOverlay = false,
   newEventCount,
   newestEventAt,
+  titleOverride,
 }: MontageMonitorProps) {
   const { t } = useTranslation();
   const zmVersion = useAuthStore((s) => s.version);
@@ -194,8 +200,8 @@ function MontageMonitorComponent({
           <span className={cn(
             "text-xs font-medium truncate",
             isFullscreen && "text-white"
-          )} title={monitor.Name}>
-            {monitor.Name}
+          )} title={titleOverride ?? monitor.Name}>
+            {titleOverride ?? monitor.Name}
           </span>
         </div>
 
