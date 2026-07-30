@@ -7,16 +7,17 @@
  * window exists (it protects nph-zms, not just the eye).
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { useShallow } from 'zustand/react/shallow';
-import { Activity } from 'lucide-react';
+import { Activity, Settings } from 'lucide-react';
 import { getMonitors } from '../api/monitors';
 import { queryKeys } from '../lib/query/query-keys';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useAuthStore } from '../stores/auth';
+import { useSettingsStore } from '../stores/settings';
 import { useBandwidthSettings } from '../hooks/useBandwidthSettings';
 import { useAlarmStates } from '../hooks/useAlarmStates';
 import { useEventMontageGrid } from '../hooks/useEventMontageGrid';
@@ -29,6 +30,8 @@ import {
 } from '../lib/monitor/live-activity';
 import { MontageMonitor } from '../components/monitors/MontageMonitor';
 import { EventMontageGridControls } from '../components/events/EventMontageGridControls';
+import { LiveActivitySettingsDialog } from '../components/live-activity/LiveActivitySettingsDialog';
+import { Button } from '../components/ui/button';
 import { EmptyState } from '../components/ui/empty-state';
 import { ErrorBanner } from '../components/ui/query-state';
 import { resolveQueryError } from '../lib/query/query-error';
@@ -51,8 +54,10 @@ export default function LiveActivity() {
   const { currentProfile, settings } = useCurrentProfile();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const accessToken = useAuthStore((s) => s.accessToken);
+  const updateSettings = useSettingsStore((s) => s.updateProfileSettings);
   const bandwidth = useBandwidthSettings();
   const gridContainerRef = useRef<HTMLDivElement>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const { data, isLoading: monitorsLoading, error: monitorsError } = useQuery({
     queryKey: queryKeys.monitors(currentProfile?.id),
@@ -141,6 +146,15 @@ export default function LiveActivity() {
     [data?.monitors]
   );
 
+  // Shares monitorGridCols with the Monitors page rather than a dedicated
+  // liveActivityGridCols setting: one grid-density preference per user is
+  // simpler than two, and there is nothing page-specific about column count
+  // the way there is for poll/dwell/tiles/ignore list.
+  const handleGridChange = useCallback((cols: number) => {
+    if (!currentProfile) return;
+    updateSettings(currentProfile.id, { monitorGridCols: cols });
+  }, [currentProfile, updateSettings]);
+
   const {
     gridCols,
     isCustomGridDialogOpen,
@@ -152,6 +166,7 @@ export default function LiveActivity() {
   } = useEventMontageGrid({
     initialCols: settings.monitorGridCols,
     containerRef: gridContainerRef,
+    onGridChange: handleGridChange,
   });
 
   const error = monitorsError ?? alarmError;
@@ -162,16 +177,37 @@ export default function LiveActivity() {
         <h1 className="text-lg font-semibold min-w-0 truncate" title={t('live_activity.title')}>
           {t('live_activity.title')}
         </h1>
-        <EventMontageGridControls
-          gridCols={gridCols}
-          customCols={customCols}
-          isCustomGridDialogOpen={isCustomGridDialogOpen}
-          onApplyGridLayout={handleApplyGridLayout}
-          onCustomColsChange={setCustomCols}
-          onCustomGridDialogOpenChange={setIsCustomGridDialogOpen}
-          onCustomGridSubmit={handleCustomGridSubmit}
-        />
+        <div className="flex items-center gap-1">
+          <EventMontageGridControls
+            gridCols={gridCols}
+            customCols={customCols}
+            isCustomGridDialogOpen={isCustomGridDialogOpen}
+            onApplyGridLayout={handleApplyGridLayout}
+            onCustomColsChange={setCustomCols}
+            onCustomGridDialogOpenChange={setIsCustomGridDialogOpen}
+            onCustomGridSubmit={handleCustomGridSubmit}
+          />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setIsSettingsOpen(true)}
+            title={t('live_activity.settings_title')}
+            aria-label={t('live_activity.settings_title')}
+            data-testid="live-activity-settings-btn"
+          >
+            <Settings className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
+
+      {currentProfile && (
+        <LiveActivitySettingsDialog
+          open={isSettingsOpen}
+          onOpenChange={setIsSettingsOpen}
+          profileId={currentProfile.id}
+          monitors={data?.monitors ?? []}
+        />
+      )}
 
       {error && <ErrorBanner message={resolveQueryError(error, t)} />}
 
