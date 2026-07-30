@@ -1144,3 +1144,23 @@ export const BANDWIDTH_SETTINGS: Record<BandwidthMode, BandwidthSettings> = {
 export function getBandwidthSettings(mode: BandwidthMode): BandwidthSettings {
   return BANDWIDTH_SETTINGS[mode];
 }
+
+/**
+ * Live Activity page.
+ *
+ * A monitor stays on the page for `dwellSeconds` after its alarm clears. That
+ * is not cosmetic: every tile that enters or leaves mounts or unmounts a
+ * MontageMonitor, which mints a ZMS connection key and sends CMD_QUIT, so a
+ * flickering monitor thrashes nph-zms processes on the server.
+ */
+export const LIVE_ACTIVITY = {
+  defaultPollSeconds: 5,
+  defaultDwellSeconds: 30,
+  defaultMaxTiles: 12,
+  minPollSeconds: 2,
+  maxPollSeconds: 60,
+  minDwellSeconds: 0,
+  maxDwellSeconds: 300,
+  minTiles: 1,
+  maxTiles: 40,
+} as const;
