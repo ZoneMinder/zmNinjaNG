@@ -1,0 +1,24 @@
+# Live Activity
+
+Live Activity shows only the cameras that ZoneMinder currently reports as alarming, as live video tiles. Instead of scanning a full grid of quiet monitors, you see just the ones that need attention right now.
+
+## Why a monitor lingers after its alarm clears
+
+A monitor does not disappear the instant its alarm clears. It stays on screen for a short dwell window (30 seconds by default) after its last alarm, then leaves. This is not just to avoid a jarring flicker: each tile that appears or disappears opens or closes a live video connection to the server. A monitor that flickered in and out of alarm every few seconds would open and close that connection just as fast, which is unnecessary load on the server. The dwell window smooths that out.
+
+Any new alarm during the dwell window resets the timer and keeps the tile on screen. A tile also shows a small count in its corner (for example `×2`) when a monitor has alarmed more than once while it has stayed on screen.
+
+## Order and overflow
+
+Tiles are added in the order their monitors start alarming and never reorder while they are on screen, so a tile never moves out from under you while you are looking at it. If more monitors are alarming than the page can show, the extra ones collapse into a "+N more active" line instead of overcrowding the grid.
+
+## Settings
+
+Open the gear icon at the top of the page to configure:
+
+- **Check every**: how often, in seconds, the page checks each watched monitor's alarm state. Low bandwidth mode raises the minimum you can set here.
+- **Keep on screen for**: the dwell window described above, in seconds. Raise it if tiles disappear and reappear too often; lower it to clear tiles faster once an alarm ends.
+- **Maximum tiles**: how many tiles the grid shows at once before the rest collapse into the overflow count.
+- **Monitors to watch**: a per-monitor switch that keeps a monitor off this page only. It stays visible everywhere else in the app. This is separate from the hidden monitors list in {doc}`settings`, which hides a monitor from the whole app.
+
+A push notification for a monitor promotes it onto the page immediately, rather than waiting for the next scheduled check.
