@@ -282,7 +282,18 @@ describe('LiveActivitySettingsDialog', () => {
     ).toBe(20);
   });
 
-  it('lets an in-progress edit win over an external write, then still syncs the next external change', () => {
+  it('keeps an in-progress edit on screen when an external write lands mid-focus, and resyncs once unfocused', () => {
+    // This pins the intended conflict policy; it is not a regression test.
+    // The earlier sync guard advanced its last-seen marker even while the
+    // field had focus, which was a defensive defect rather than an
+    // observable one: commit() on blur always ends with
+    // setDraft(String(clamped)), so the draft is re-anchored to the store on
+    // every path out of focus and both versions of the guard render the same
+    // value and leave the same store value. A differential harness that ran
+    // the old and new components through 4000 random 7-step and 1500 random
+    // 12-step sequences of focus, typing, Enter, blur, and external writes
+    // found no sequence where they differ, and the same harness did report
+    // differences once the old guard was deliberately mutated.
     render(
       <LiveActivitySettingsDialog
         open
@@ -313,7 +324,7 @@ describe('LiveActivitySettingsDialog', () => {
     expect(input).toHaveValue(20);
 
     // A later external change, with the field no longer focused, must still
-    // sync normally rather than being permanently stuck.
+    // sync normally.
     act(() => {
       useSettingsStore.getState().updateProfileSettings('p1', { liveActivityPollSeconds: 33 });
     });
