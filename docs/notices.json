@@ -1,5 +1,14 @@
 [
   {
+    "id": "release-2.1.0",
+    "title": "Event frame views, on-device assistant, fixes",
+    "body": "- Added a way to view objdetect, alarm, and snapshot frames for an event, like the older zmNinja.\n- Added an on-device assistant backend on iOS and Android, so the assistant can run models locally without a server.\n- Assistant backend choices are now named by who supplies the model, so it is clearer what you are picking.\n- The assistant now understands phrases like \"3 days ago\" instead of falling back to today.\n- The assistant no longer fails with an error when a local model lacks tool support; it now works with those models over Ollama.\n- Fixed the event server connection dropping after the app was in the background and reopened.\n- Connection failures now name the server that could not be reached instead of showing raw error text.\n- Passwords and tokens are now stripped from logs, including ones sent back by ZoneMinder.\n\n[Full changelog](https://github.com/ZoneMinder/zmNinjaNg/releases/tag/zmNinjaNg-2.1.0)",
+    "publishedAt": "2026-07-30T19:25:31.784Z",
+    "severity": "info",
+    "link": "https://github.com/ZoneMinder/zmNinjaNg/releases/tag/zmNinjaNg-2.1.0",
+    "minAppVersion": "2.1.0"
+  },
+  {
     "id": "release-2.0.0",
     "title": "New in-app assistant and continuous event playback",
     "body": "- Added an in-app assistant that can answer questions about your cameras and events, using either a remote server or a model that runs on your device.\n- The assistant shows a suggested question to get started and a status dot indicating whether its server is reachable.\n- The assistant understands everyday time phrases like \"yesterday afternoon\" and shows times in your chosen time format.\n- The assistant answers its first question faster and no longer shows raw tool text in the chat.\n- Events can now play back continuously, moving on to the next event automatically.\n- Fixed the event player looping the same event after continuous playback.\n- Fixed a connection error when validating against ZoneMinder 1.38.3.\n- Fixed on-device assistant model downloads being lost before they finished installing.\n\n[Full changelog](https://github.com/ZoneMinder/zmNinjaNg/releases/tag/zmNinjaNg-2.0.0)",
