@@ -1,5 +1,33 @@
 # Changelog
 
+## [zmNinjaNg-2.1.0](https://github.com/ZoneMinder/zmNinjaNg/tree/zmNinjaNg-2.1.0) (2026-07-30)
+
+[Full Changelog](https://github.com/ZoneMinder/zmNinjaNg/compare/zmNinjaNg-2.0.0...zmNinjaNg-2.1.0)
+
+**Implemented enhancements:**
+
+- Feature Request: ability to view objdetect,alarm,snapshot frames as legacy zmNinja [\#272](https://github.com/ZoneMinder/zmNinjaNg/issues/272)
+
+**Fixed bugs:**
+
+- WebSocket disconnects from zmeventserver after app is backgrounded and resumed [\#274](https://github.com/ZoneMinder/zmNinjaNg/issues/274)
+
+**Refactoring:**
+
+- Restructure AGENTS.md: portable core, architecture contracts, self-improvement protocol [\#283](https://github.com/ZoneMinder/zmNinjaNg/issues/283)
+
+**Closed issues:**
+
+- Connection failures show raw platform error text with formatting artifacts [\#312](https://github.com/ZoneMinder/zmNinjaNg/issues/312)
+- Assistant: backend labels name implementation details instead of what the user is choosing [\#311](https://github.com/ZoneMinder/zmNinjaNg/issues/311)
+- Assistant: "N days ago" is invisible to the timeframe scanner, so the turn defaults to today [\#310](https://github.com/ZoneMinder/zmNinjaNg/issues/310)
+- Assistant: models without a tool template 400 on every data question over Ollama [\#309](https://github.com/ZoneMinder/zmNinjaNg/issues/309)
+- Extra checks to remove credentials in logs including those that come from ZM [\#307](https://github.com/ZoneMinder/zmNinjaNg/issues/307)
+- Remap stale AGENTS.md rule-number citations in code comments [\#285](https://github.com/ZoneMinder/zmNinjaNg/issues/285)
+- code quality hardening from the 12-pillar review \(React correctness rules, coverage scoping, cycles\) [\#281](https://github.com/ZoneMinder/zmNinjaNg/issues/281)
+- feat\(assistant\): native on-device LLM backend for iOS and Android \(llama.cpp bridge\) [\#270](https://github.com/ZoneMinder/zmNinjaNg/issues/270)
+- Spam moderation false positive: redacts maintainer links quoted by first-time contributors [\#268](https://github.com/ZoneMinder/zmNinjaNg/issues/268)
+
 ## [zmNinjaNg-2.0.0](https://github.com/ZoneMinder/zmNinjaNg/tree/zmNinjaNg-2.0.0) (2026-07-22)
 
 [Full Changelog](https://github.com/ZoneMinder/zmNinjaNg/compare/zmNinjaNg-1.4.0...zmNinjaNg-2.0.0)
