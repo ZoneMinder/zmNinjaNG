@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import type { ReactNode } from 'react';
@@ -66,11 +66,17 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: translate }),
 }));
 
+// Counts how many times a tile has been rendered, so a test can tell a
+// settled page from one re-rendering in a loop. vi.hoisted because the mock
+// factory below is hoisted above ordinary module scope.
+const tileRenders = vi.hoisted(() => ({ count: 0 }));
+
 // The tile mounts a real video stream otherwise.
 vi.mock('../../components/monitors/MontageMonitor', () => ({
-  MontageMonitor: ({ titleOverride }: { titleOverride?: string }) => (
-    <div data-testid="live-activity-tile-mock">{titleOverride}</div>
-  ),
+  MontageMonitor: ({ titleOverride }: { titleOverride?: string }) => {
+    tileRenders.count += 1;
+    return <div data-testid="live-activity-tile-mock">{titleOverride}</div>;
+  },
 }));
 
 const mockMonitors = vi.mocked(getMonitors);
@@ -97,6 +103,7 @@ const MONITORS = {
 describe('LiveActivity', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    tileRenders.count = 0;
     mockMonitors.mockResolvedValue(MONITORS as never);
   });
 
@@ -121,6 +128,46 @@ describe('LiveActivity', () => {
     await waitFor(() => {
       expect(screen.getByTestId('live-activity-empty')).toHaveTextContent('All quiet');
     });
+  });
+
+  it('stops re-rendering once an alarming monitor has settled', async () => {
+    // Regression: useAlarmStates handed back a fresh `states` object on every
+    // render, the dwell effect listed it as a dependency, and the reducer
+    // stamps Date.now() into every alarming entry. So each render produced a
+    // new list, which set state, which rendered again, forever; the wall clock
+    // advancing between iterations meant it never converged. The observable
+    // symptom is render count, so that is what this measures.
+    //
+    // The window is real time rather than a render count taken immediately:
+    // a single jsdom render is sub-millisecond, so Date.now() often does not
+    // advance between two adjacent iterations and the loop stalls for a tick
+    // before resuming. Over 300ms the clock advances ~300 times, so the loop
+    // is guaranteed to show itself rather than depending on that timing luck.
+    // The mocked poll interval is 1000ms and the cooling timer fires at 1000ms,
+    // so a settled page has no legitimate reason to render at all in the
+    // window.
+    mockStatus.mockImplementation(async (id: string) =>
+      (id === '3' ? { status: 2 } : { status: 0 }) as never
+    );
+
+    render(<LiveActivity />, { wrapper });
+
+    await waitFor(() => {
+      expect(screen.getByText('Front Door(3):Alarmed')).toBeInTheDocument();
+    });
+
+    const settled = tileRenders.count;
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    });
+
+    // Measured at 471 renders in this window before the fix, 0 after. Ten
+    // leaves room for an unlucky poll or timer landing inside the window
+    // without letting a loop through.
+    expect(tileRenders.count - settled).toBeLessThan(10);
+    // The tile is still on screen, so the bound above is not passing because
+    // the page went blank.
+    expect(screen.getByText('Front Door(3):Alarmed')).toBeInTheDocument();
   });
 
   it('never polls a monitor on the ignore list', async () => {

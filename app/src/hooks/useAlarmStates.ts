@@ -11,7 +11,6 @@
  * else in the app.
  */
 
-import { useMemo } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import { getAlarmStatus } from '../api/monitors';
 import { queryKeys } from '../lib/query/query-keys';
@@ -32,8 +31,12 @@ interface UseAlarmStatesReturn {
    * its query has ever resolved. The downstream dwell reducer reads a
    * missing key as "the caller stopped watching this monitor" and drops it
    * without waiting out the dwell window, so a transiently-loading or
-   * transiently-failed query must still report a value (`unknown`) rather
-   * than being left out of the map.
+   * transiently-failed query must still report a value rather than being
+   * left out of the map.
+   *
+   * Identity-stable: the same object comes back across renders while
+   * nothing has changed. Consumers derive from it in effects, so a fresh
+   * object per render is a render loop, not a wasted comparison.
    */
   states: Record<string, MonitorAlarmState>;
   isLoading: boolean;
@@ -48,7 +51,7 @@ export function useAlarmStates(
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const profileId = currentProfile?.id;
 
-  const results = useQueries({
+  return useQueries({
     queries: monitorIds.map((monitorId) => ({
       queryKey: queryKeys.monitorAlarmStatus(profileId, monitorId),
       queryFn: () => getAlarmStatus(monitorId),
@@ -59,34 +62,39 @@ export function useAlarmStates(
       refetchIntervalInBackground: false,
       refetchOnWindowFocus: true,
     })),
+    // Reducing here rather than in a downstream useMemo is what keeps the
+    // return value identity-stable. Without `combine`, useQueries re-maps its
+    // results array on every render, so a useMemo listing it never hits and
+    // every consumer sees a new `states` object each render. On the Live
+    // Activity page that fed an effect which stamps Date.now() into the dwell
+    // list, so the wall clock alone kept producing a new list: render, effect,
+    // setState, render, forever (measured at 471 renders in 300ms with one
+    // alarming monitor). TanStack runs replaceEqualDeep over whatever
+    // `combine` returns, so an unchanged poll yields the very same object and
+    // the loop never starts.
+    combine: (results) => {
+      const states: Record<string, MonitorAlarmState> = {};
+      let isLoading = false;
+      let error: Error | null = null;
+
+      // Disabled means the caller is not watching any of these monitors right
+      // now (page off screen), so the map is genuinely empty rather than
+      // total. Once enabled, every requested id must get an entry: TanStack
+      // still returns one result per query even for a per-query-disabled
+      // fetch (e.g. no profile yet), so leaving that case out here would read
+      // downstream as "no longer watched" and drop the monitor without its
+      // dwell window.
+      if (enabled) {
+        results.forEach((result, i) => {
+          if (result.isLoading) isLoading = true;
+          // A monitor whose request failed reads as unknown, which the reducer
+          // treats as not alarming. A transient error must not strand a tile.
+          states[monitorIds[i]] = result.isError ? 'unknown' : parseAlarmState(result.data);
+          if (result.error && !error) error = result.error as Error;
+        });
+      }
+
+      return { states, isLoading, error };
+    },
   });
-
-  return useMemo(() => {
-    const states: Record<string, MonitorAlarmState> = {};
-    let isLoading = false;
-    let error: Error | null = null;
-
-    // Disabled means the caller is not watching any of these monitors right
-    // now (page off screen), so the map is genuinely empty rather than total.
-    // Once enabled, every requested id must get an entry: TanStack still
-    // returns one result per query even for a per-query-disabled fetch (e.g.
-    // no profile yet), so leaving that case out here would read downstream
-    // as "no longer watched" and drop the monitor without its dwell window.
-    if (enabled) {
-      monitorIds.forEach((monitorId, i) => {
-        const result = results[i];
-        if (!result) {
-          states[monitorId] = 'unknown';
-          return;
-        }
-        if (result.isLoading) isLoading = true;
-        // A monitor whose request failed reads as unknown, which the reducer
-        // treats as not alarming. A transient error must not strand a tile.
-        states[monitorId] = result.isError ? 'unknown' : parseAlarmState(result.data);
-        if (result.error && !error) error = result.error as Error;
-      });
-    }
-
-    return { states, isLoading, error };
-  }, [enabled, monitorIds, results]);
 }

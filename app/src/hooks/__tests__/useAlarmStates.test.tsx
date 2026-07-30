@@ -119,6 +119,37 @@ describe('useAlarmStates', () => {
     });
   });
 
+  it('returns the same states object across renders while nothing changes', async () => {
+    // Regression: useQueries without `combine` re-maps its results array every
+    // render, so anything derived from it downstream gets a new identity per
+    // render. The Live Activity page derives its dwell list in an effect that
+    // stamps Date.now(), so a per-render identity meant render -> effect ->
+    // setState -> render without end. Reference equality here is the property
+    // that stops it, and it does not depend on how fast jsdom renders.
+    mockStatus.mockImplementation(async (id: string) =>
+      id === '1' ? { status: 2 } : { status: 0 }
+    );
+
+    const { result, rerender } = renderHook(
+      () => useAlarmStates(['1', '2'], { enabled: true, pollIntervalMs: 5000 }),
+      { wrapper }
+    );
+
+    await waitFor(() => {
+      expect(result.current.states['2']).toBe('idle');
+    });
+
+    const settledStates = result.current.states;
+    const settledReturn = result.current;
+    rerender();
+    rerender();
+
+    expect(result.current.states).toBe(settledStates);
+    expect(result.current).toBe(settledReturn);
+    // Guards against the assertion passing on an empty map.
+    expect(settledStates).toEqual({ '1': 'alarm', '2': 'idle' });
+  });
+
   it('returns an empty map for an empty monitor list', async () => {
     const { result } = renderHook(
       () => useAlarmStates([], { enabled: true, pollIntervalMs: 5000 }),
