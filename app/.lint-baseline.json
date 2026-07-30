@@ -7,7 +7,7 @@
   "react-hooks/globals": 1,
   "react-hooks/preserve-manual-memoization": 12,
   "react-hooks/refs": 22,
-  "react-hooks/set-state-in-effect": 14,
+  "react-hooks/set-state-in-effect": 15,
   "react-hooks/static-components": 9,
   "react-refresh/only-export-components": 8,
   "unused-eslint-disable-directive": 1
