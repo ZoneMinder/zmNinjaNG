@@ -8,7 +8,7 @@
  * everywhere.
  */
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
@@ -32,6 +32,41 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+/**
+ * Local text draft for a store-backed numeric field. Binding an <input>
+ * straight to the committed store number makes it impossible to clear the
+ * field: `Number('')` is 0, so every keystroke that passes through an empty
+ * or partial value would clamp to the minimum and get redrawn into the input
+ * mid-edit. This keeps the visible value as free-typed text and only commits
+ * to the store once it parses to a real, finite number, clamped to bounds.
+ * An empty or non-numeric draft is left uncommitted rather than clamped, so
+ * the user can keep typing without the field snapping back.
+ */
+function useClampedNumberField(
+  storedValue: number,
+  min: number,
+  max: number,
+  onCommit: (clamped: number) => void
+) {
+  const [draft, setDraft] = useState(() => String(storedValue));
+
+  // Resyncs the draft only when the committed store value actually changes
+  // (our own commits below, or an external update), never on every render.
+  useEffect(() => {
+    setDraft(String(storedValue));
+  }, [storedValue]);
+
+  const onChange = (raw: string) => {
+    setDraft(raw);
+    if (raw.trim() === '') return;
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) return;
+    onCommit(clamp(parsed, min, max));
+  };
+
+  return { draft, onChange };
+}
+
 export function LiveActivitySettingsDialog({
   open,
   onOpenChange,
@@ -50,20 +85,29 @@ export function LiveActivitySettingsDialog({
     [settings.liveActivityIgnoredMonitorIds]
   );
 
-  const handlePollChange = (value: string) => {
-    const clamped = clamp(Number(value), LIVE_ACTIVITY.minPollSeconds, LIVE_ACTIVITY.maxPollSeconds);
-    useSettingsStore.getState().updateProfileSettings(profileId, { liveActivityPollSeconds: clamped });
-  };
+  const pollField = useClampedNumberField(
+    settings.liveActivityPollSeconds,
+    LIVE_ACTIVITY.minPollSeconds,
+    LIVE_ACTIVITY.maxPollSeconds,
+    (clamped) =>
+      useSettingsStore.getState().updateProfileSettings(profileId, { liveActivityPollSeconds: clamped })
+  );
 
-  const handleDwellChange = (value: string) => {
-    const clamped = clamp(Number(value), LIVE_ACTIVITY.minDwellSeconds, LIVE_ACTIVITY.maxDwellSeconds);
-    useSettingsStore.getState().updateProfileSettings(profileId, { liveActivityDwellSeconds: clamped });
-  };
+  const dwellField = useClampedNumberField(
+    settings.liveActivityDwellSeconds,
+    LIVE_ACTIVITY.minDwellSeconds,
+    LIVE_ACTIVITY.maxDwellSeconds,
+    (clamped) =>
+      useSettingsStore.getState().updateProfileSettings(profileId, { liveActivityDwellSeconds: clamped })
+  );
 
-  const handleTilesChange = (value: string) => {
-    const clamped = clamp(Number(value), LIVE_ACTIVITY.minTiles, LIVE_ACTIVITY.maxTiles);
-    useSettingsStore.getState().updateProfileSettings(profileId, { liveActivityMaxTiles: clamped });
-  };
+  const tilesField = useClampedNumberField(
+    settings.liveActivityMaxTiles,
+    LIVE_ACTIVITY.minTiles,
+    LIVE_ACTIVITY.maxTiles,
+    (clamped) =>
+      useSettingsStore.getState().updateProfileSettings(profileId, { liveActivityMaxTiles: clamped })
+  );
 
   const handleIgnoreToggle = (monitorId: string, watched: boolean) => {
     const current = settings.liveActivityIgnoredMonitorIds;
@@ -92,8 +136,8 @@ export function LiveActivitySettingsDialog({
                 type="number"
                 min={LIVE_ACTIVITY.minPollSeconds}
                 max={LIVE_ACTIVITY.maxPollSeconds}
-                value={settings.liveActivityPollSeconds}
-                onChange={(e) => handlePollChange(e.target.value)}
+                value={pollField.draft}
+                onChange={(e) => pollField.onChange(e.target.value)}
                 className="w-24"
                 data-testid="live-activity-poll-input"
               />
@@ -112,8 +156,8 @@ export function LiveActivitySettingsDialog({
                 type="number"
                 min={LIVE_ACTIVITY.minDwellSeconds}
                 max={LIVE_ACTIVITY.maxDwellSeconds}
-                value={settings.liveActivityDwellSeconds}
-                onChange={(e) => handleDwellChange(e.target.value)}
+                value={dwellField.draft}
+                onChange={(e) => dwellField.onChange(e.target.value)}
                 className="w-24"
                 data-testid="live-activity-dwell-input"
               />
@@ -131,8 +175,8 @@ export function LiveActivitySettingsDialog({
                 type="number"
                 min={LIVE_ACTIVITY.minTiles}
                 max={LIVE_ACTIVITY.maxTiles}
-                value={settings.liveActivityMaxTiles}
-                onChange={(e) => handleTilesChange(e.target.value)}
+                value={tilesField.draft}
+                onChange={(e) => tilesField.onChange(e.target.value)}
                 className="w-24"
                 data-testid="live-activity-tiles-input"
               />

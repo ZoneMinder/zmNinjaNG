@@ -88,4 +88,110 @@ describe('LiveActivitySettingsDialog', () => {
       useSettingsStore.getState().getProfileSettings('p1').liveActivityPollSeconds
     ).toBe(60);
   });
+
+  it('clamps the dwell input at both its lower and upper bound', () => {
+    render(
+      <LiveActivitySettingsDialog
+        open
+        onOpenChange={() => {}}
+        profileId="p1"
+        monitors={MONITORS as never}
+      />
+    );
+    const input = screen.getByTestId('live-activity-dwell-input');
+
+    fireEvent.change(input, { target: { value: '-5' } });
+    expect(
+      useSettingsStore.getState().getProfileSettings('p1').liveActivityDwellSeconds
+    ).toBe(0);
+
+    fireEvent.change(input, { target: { value: '9999' } });
+    expect(
+      useSettingsStore.getState().getProfileSettings('p1').liveActivityDwellSeconds
+    ).toBe(300);
+  });
+
+  it('clamps the max-tiles input at both its lower and upper bound', () => {
+    render(
+      <LiveActivitySettingsDialog
+        open
+        onOpenChange={() => {}}
+        profileId="p1"
+        monitors={MONITORS as never}
+      />
+    );
+    const input = screen.getByTestId('live-activity-tiles-input');
+
+    fireEvent.change(input, { target: { value: '0' } });
+    expect(
+      useSettingsStore.getState().getProfileSettings('p1').liveActivityMaxTiles
+    ).toBe(1);
+
+    fireEvent.change(input, { target: { value: '9999' } });
+    expect(
+      useSettingsStore.getState().getProfileSettings('p1').liveActivityMaxTiles
+    ).toBe(40);
+  });
+
+  it('does not write a garbage value when a field is emptied', () => {
+    render(
+      <LiveActivitySettingsDialog
+        open
+        onOpenChange={() => {}}
+        profileId="p1"
+        monitors={MONITORS as never}
+      />
+    );
+
+    fireEvent.change(screen.getByTestId('live-activity-poll-input'), {
+      target: { value: '' },
+    });
+
+    expect(
+      useSettingsStore.getState().getProfileSettings('p1').liveActivityPollSeconds
+    ).toBe(5);
+  });
+
+  it('does not write NaN when a non-numeric value is entered', () => {
+    render(
+      <LiveActivitySettingsDialog
+        open
+        onOpenChange={() => {}}
+        profileId="p1"
+        monitors={MONITORS as never}
+      />
+    );
+
+    fireEvent.change(screen.getByTestId('live-activity-poll-input'), {
+      target: { value: 'abc' },
+    });
+
+    expect(
+      useSettingsStore.getState().getProfileSettings('p1').liveActivityPollSeconds
+    ).toBe(5);
+  });
+
+  it('lets a field be cleared and retyped without clobbering the store mid-edit', () => {
+    render(
+      <LiveActivitySettingsDialog
+        open
+        onOpenChange={() => {}}
+        profileId="p1"
+        monitors={MONITORS as never}
+      />
+    );
+    const input = screen.getByTestId('live-activity-poll-input');
+
+    fireEvent.change(input, { target: { value: '' } });
+    expect(
+      useSettingsStore.getState().getProfileSettings('p1').liveActivityPollSeconds
+    ).toBe(5);
+    expect(input).toHaveValue(null);
+
+    fireEvent.change(input, { target: { value: '15' } });
+    expect(
+      useSettingsStore.getState().getProfileSettings('p1').liveActivityPollSeconds
+    ).toBe(15);
+    expect(input).toHaveValue(15);
+  });
 });
