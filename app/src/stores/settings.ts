@@ -4,7 +4,7 @@ import type { Layout, Layouts } from 'react-grid-layout';
 import { LogLevel } from '../lib/log-level';
 import { Platform } from '../lib/platform';
 import type { BandwidthMode } from '../lib/zmninja-ng-constants';
-import { API_REQUEST, ASSISTANT, DEFAULT_EVENT_PLAYBACK_RATE, STORAGE_KEYS } from '../lib/zmninja-ng-constants';
+import { API_REQUEST, ASSISTANT, DEFAULT_EVENT_PLAYBACK_RATE, LIVE_ACTIVITY, STORAGE_KEYS } from '../lib/zmninja-ng-constants';
 import type { AssistantBackend } from '../lib/assistant/types';
 import type { DateFormatPreset, TimeFormatPreset } from '../lib/format-date-time';
 import type { ThumbnailFallbackType, ThumbnailFallbackEntry } from '../lib/event/thumbnail-chain';
@@ -156,6 +156,15 @@ export interface ProfileSettings {
   webrtcUseStun: boolean;
   // Bandwidth mode: 'normal' for default intervals, 'low' for reduced bandwidth usage
   bandwidthMode: BandwidthMode;
+  /** Live Activity: alarm-status poll interval in seconds, floored by bandwidth mode. */
+  liveActivityPollSeconds: number;
+  /** Live Activity: how long a monitor stays listed after its alarm clears, in seconds. */
+  liveActivityDwellSeconds: number;
+  /** Live Activity: how many tiles render before the rest collapse into an overflow row. */
+  liveActivityMaxTiles: number;
+  /** Live Activity: monitors that never appear on that page. Separate from the
+   *  profile-wide monitor exclusion, which hides a monitor everywhere. */
+  liveActivityIgnoredMonitorIds: string[];
   // Selected group ID for filtering monitors (null = show all monitors)
   selectedGroupId: string | null;
   // Monitor IDs excluded from this profile. Excluded monitors and their events
@@ -326,6 +335,10 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   webrtcUseStun: false,
   // Normal bandwidth mode by default
   bandwidthMode: 'normal',
+  liveActivityPollSeconds: LIVE_ACTIVITY.defaultPollSeconds,
+  liveActivityDwellSeconds: LIVE_ACTIVITY.defaultDwellSeconds,
+  liveActivityMaxTiles: LIVE_ACTIVITY.defaultMaxTiles,
+  liveActivityIgnoredMonitorIds: [],
   // No group filter by default (show all monitors)
   selectedGroupId: null,
   // No monitors excluded by default

@@ -371,4 +371,14 @@ describe('resolvePollIntervalMs', () => {
     expect(resolvePollIntervalMs('normal', NaN)).toBe(normalDefault);
     expect(resolvePollIntervalMs('low', -5)).toBe(lowDefault);
   });
+
+  it('floors against the named bandwidth key when one is given', () => {
+    // alarmStatusInterval is 10000 in low mode, 5000 in normal.
+    expect(resolvePollIntervalMs('low', 2, 'alarmStatusInterval')).toBe(10_000);
+    expect(resolvePollIntervalMs('normal', 2, 'alarmStatusInterval')).toBe(2000);
+  });
+
+  it('still defaults to the event-poller interval when no key is given', () => {
+    expect(resolvePollIntervalMs('normal', 0)).toBe(30_000);
+  });
 });
