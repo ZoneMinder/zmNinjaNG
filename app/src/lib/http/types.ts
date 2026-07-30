@@ -55,6 +55,20 @@ export interface HttpError extends Error {
   statusText: string;
   data: unknown;
   headers: Record<string, string>;
+  /**
+   * `host:port` of the URL the request dialled, stamped by `lib/http.ts` on
+   * every failure. Optional because a relative URL has no host to report.
+   *
+   * Here so a caller can name the address WITHOUT parsing it out of the
+   * platform's error message, which is different on all four adapters and
+   * carries formatting artifacts: Android's libcore says "failed to connect to
+   * /192.168.50.11 (port 11434)" (the leading slash is
+   * `InetSocketAddress.toString()` printing an empty hostname before the
+   * literal address), Node says "connect ECONNREFUSED 192.168.50.11:11434",
+   * iOS `URLSession` says "Could not connect to the server", and browser
+   * `fetch` says "Failed to fetch" with no address at all (refs #312).
+   */
+  host?: string;
 }
 
 export function createHttpError(

@@ -40,6 +40,7 @@
     "selected": "Selected",
     "unknown_error": "Unknown error",
     "auth_required": "Authentication required",
+    "cannot_reach_host": "Can't reach {{host}}. Check the address in Settings, or that the server is running.",
     "done": "Done",
     "default": "Default",
     "server": "Server",

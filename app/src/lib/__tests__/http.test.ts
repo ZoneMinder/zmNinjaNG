@@ -405,6 +405,35 @@ describe('HTTP Client - Web Platform', () => {
         httpRequest('https://example.com/api/data')
       ).rejects.toThrow('Network error');
     });
+
+    // The address the request DIALLED, so it is identical on every adapter and
+    // present even when the platform message hides it (browser fetch says only
+    // "Failed to fetch"). Host and port, no scheme and no path, so nothing
+    // downstream has to parse Java's "hostname/address" formatting out of a
+    // message (refs #312).
+    it('stamps the dialled host onto a connection failure', async () => {
+      vi.mocked(global.fetch).mockRejectedValue(new Error('Failed to fetch'));
+
+      await expect(httpRequest('http://192.168.50.11:11434/v1/chat/completions')).rejects.toMatchObject({
+        host: '192.168.50.11:11434',
+      });
+    });
+
+    it('stamps the host onto a non-2xx error too', async () => {
+      vi.mocked(global.fetch).mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: 'Server Error',
+        headers: new Headers(),
+        text: async () => '',
+        json: async () => ({}),
+      } as unknown as Response);
+
+      await expect(httpRequest('http://192.168.50.11:11434/v1/models')).rejects.toMatchObject({
+        status: 500,
+        host: '192.168.50.11:11434',
+      });
+    });
   });
 
   describe('Custom Headers', () => {

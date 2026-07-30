@@ -54,4 +54,76 @@ describe('resolveQueryError', () => {
     const err = { message: 'Server error', status: 500 };
     expect(resolveQueryError(err, t)).toBe('common.error: Server error');
   });
+
+  // A connection failure never got a response, so it carries no status. The
+  // host comes off the error (stamped by lib/http.ts from the URL it dialled),
+  // never out of the platform's own prose: Android says "failed to connect to
+  // /192.168.50.11 (port 11434)", Electron "connect ECONNREFUSED ...", iOS
+  // "Could not connect to the server", and browser fetch "Failed to fetch"
+  // with no address at all (refs #312).
+  describe('unreachable host', () => {
+    it('names the host instead of echoing the platform message', () => {
+      const err = Object.assign(new Error('failed to connect to /192.168.50.11 (port 11434)'), {
+        host: '192.168.50.11:11434',
+      });
+      expect(resolveQueryError(err, t)).toBe(
+        'common.cannot_reach_host:{"host":"192.168.50.11:11434"}'
+      );
+    });
+
+    // Same verdict whatever the platform said, because the check is structural.
+    it('gives the same answer for every platform wording', () => {
+      for (const message of [
+        'failed to connect to /192.168.50.11 (port 11434)',
+        'connect ECONNREFUSED 192.168.50.11:11434',
+        'Could not connect to the server.',
+        'Failed to fetch',
+      ]) {
+        const err = Object.assign(new Error(message), { host: '192.168.50.11:11434' });
+        expect(resolveQueryError(err, t)).toBe(
+          'common.cannot_reach_host:{"host":"192.168.50.11:11434"}'
+        );
+      }
+    });
+
+    // The fallbackKey must not win over it: "Ninjii error: failed to connect
+    // to /..." is exactly the string this replaces.
+    it('outranks the caller fallbackKey', () => {
+      const err = Object.assign(new Error('failed to connect to /192.168.50.11 (port 11434)'), {
+        host: '192.168.50.11:11434',
+      });
+      expect(resolveQueryError(err, t, { fallbackKey: 'assistant.error_generic' })).toBe(
+        'common.cannot_reach_host:{"host":"192.168.50.11:11434"}'
+      );
+    });
+
+    // A user-initiated cancellation also carries no status. It is not a
+    // connection failure and must not be reported as one; `isTimeoutError`
+    // folds aborts in, which is why it is the wrong helper here.
+    it('leaves an aborted request alone', () => {
+      const err = Object.assign(new Error('The operation was aborted'), {
+        name: 'AbortError',
+        host: '192.168.50.11:11434',
+      });
+      expect(resolveQueryError(err, t, { fallbackKey: 'assistant.error_generic' })).toBe(
+        'assistant.error_generic:{"error":"The operation was aborted"}'
+      );
+    });
+
+    // Without a host there is nothing better to say than before, so the
+    // existing behaviour stands rather than inventing a vaguer message.
+    it('falls back unchanged when no host was stamped', () => {
+      const err = new Error('Something else broke');
+      expect(resolveQueryError(err, t)).toBe('common.error: Something else broke');
+    });
+
+    // An HTTP error DID get a response, so it is not an unreachable host even
+    // though its message may mention connections.
+    it('does not fire for a real HTTP status', () => {
+      const err = Object.assign(createHttpError(500, 'Server Error', null, {}), {
+        host: '192.168.50.11:11434',
+      });
+      expect(resolveQueryError(err, t)).toBe('common.error: HTTP 500: Server Error');
+    });
+  });
 });

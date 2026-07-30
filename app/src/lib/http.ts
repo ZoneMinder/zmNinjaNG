@@ -198,6 +198,19 @@ export async function httpRequest<T = unknown>(
     const httpError = error as HttpError;
     const status = httpError.status ?? 'ERR';
 
+    // The address this request actually dialled, recorded before the error
+    // leaves the one place that knows it. Every adapter's own message words a
+    // connection failure differently (and browser `fetch` omits the address
+    // entirely), so anything downstream that wants to name the host must get it
+    // from here rather than by parsing prose. See `HttpError.host` (refs #312).
+    if (httpError && typeof httpError === 'object' && httpError.host === undefined) {
+      try {
+        httpError.host = new URL(fullUrl).host;
+      } catch {
+        // A relative URL has no host to report; leave it unset.
+      }
+    }
+
     // A caller-initiated cancellation (a superseded snapshot frame, a cancelled
     // download) is expected, not a failure. Log it quietly so it does not
     // surface as a red HTTP error, but still rethrow so callers can handle it.

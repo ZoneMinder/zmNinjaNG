@@ -40,6 +40,7 @@
     "selected": "Sélectionné",
     "unknown_error": "Erreur inconnue",
     "auth_required": "Authentification requise",
+    "cannot_reach_host": "Impossible de joindre {{host}}. Vérifiez l’adresse dans les Réglages ou que le serveur est démarré.",
     "running": "En cours d'exécution",
     "stopped": "Arrêté",
     "done": "Terminé",

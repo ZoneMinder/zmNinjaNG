@@ -622,6 +622,45 @@ with ``resolveQueryError(err, t)`` (``lib/query/query-error.ts``), which folds a
 401 into the localized auth prompt and everything else into a translated
 fallback (the Query UI states contract). Never render ``error.message`` directly.
 
+A request that never reached the server is resolved separately, and the test
+for it is structural: it carries no ``status``, because there was no response
+to take one from, while an HTTP error always has one. Do NOT match on the
+message. The four adapters word this failure four different ways, and one of
+them omits the address entirely:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Adapter
+     - Message
+   * - Android (``CapacitorHttpUrlConnection``)
+     - ``failed to connect to /192.168.50.11 (port 11434) ...``
+   * - Electron (Node)
+     - ``connect ECONNREFUSED 192.168.50.11:11434``
+   * - iOS (``URLSession``)
+     - ``Could not connect to the server.``
+   * - Browser (``fetch``)
+     - ``Failed to fetch``
+
+The leading slash in the Android form is ``InetSocketAddress.toString()``,
+which prints ``hostname/literal-address``; a raw IP has no hostname, so the
+hostname half comes out empty. That artifact used to reach users verbatim
+through ``assistant.error_generic`` ("Ninjii error: {{error}}"), untranslated
+in all five locales (refs #312).
+
+The address therefore comes from the REQUEST, not the message. ``lib/http.ts``
+stamps ``HttpError.host`` with ``new URL(fullUrl).host`` in its catch, the one
+place that knows what was dialled, so the value is identical on every adapter
+and exists even where the platform hides it. ``resolveQueryError`` renders
+``common.cannot_reach_host`` with that host, which translates because its only
+variable is an address rather than English platform prose.
+
+Aborts are excluded: a cancelled request also has no ``status``, and a user
+cancelling must not be told the server is unreachable. Use ``isAbortError``
+here, not ``isTimeoutError`` -- the latter deliberately folds aborts into
+timeouts for the assistant's retry logic, which is the opposite of what this
+branch needs.
+
 Refetch intervals come from bandwidth settings
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
