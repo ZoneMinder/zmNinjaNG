@@ -12,6 +12,8 @@ Any new alarm during the dwell window resets the timer and keeps the tile on scr
 
 Each tile header shows an icon for the monitor's current state next to the camera name: a siren while it is alarming, a warning triangle just after, and an hourglass while it is cooling down toward leaving the page. Hover the icon, or read it with a screen reader, to get the state in words.
 
+The counter in the bottom corner of each tile says how long the current alarm episode has been running, as minutes and seconds (hours appear once there are any). It counts from the start of the episode rather than from the last alarming moment, so a camera whose event flickers through its tail keeps counting up instead of resetting.
+
 ## Fullscreen
 
 The fullscreen button next to the gear hides the heading, the grid controls and the gear, leaving the tiles and a thin bar with the way back out. This is what you want on a wall display or a TV stick. The page remembers the choice per profile, and it is remembered separately from the Montage page's own fullscreen state, so putting one in fullscreen does not move the other.

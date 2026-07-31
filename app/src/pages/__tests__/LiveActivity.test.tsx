@@ -313,6 +313,20 @@ describe('LiveActivity', () => {
     expect(screen.getByText('Front Door')).toBeInTheDocument();
   });
 
+  it('labels a tile with how long its alarm episode has run', async () => {
+    mockStatus.mockImplementation(async (id: string) =>
+      (id === '3' ? { status: 2 } : { status: 0 }) as never
+    );
+
+    render(<LiveActivity />, { wrapper });
+
+    const elapsed = await screen.findByTestId('live-activity-elapsed-3');
+    // A tile that just entered reads as a stopwatch just started, and the
+    // quiet monitor has no label at all.
+    expect(elapsed.textContent).toMatch(/^0:0\d$/);
+    expect(screen.queryByTestId('live-activity-elapsed-4')).not.toBeInTheDocument();
+  });
+
   it('keeps the page chrome out of the way in fullscreen', async () => {
     // A wall display should show tiles, not the heading, the grid controls and
     // the gear. The tiles themselves still render, so the assertion below is

@@ -1019,6 +1019,7 @@
     "overflow_one": "+{{count}} autre active",
     "overflow_other": "+{{count}} autres actives",
     "fullscreen": "Plein écran",
+    "elapsed_title": "Temps écoulé depuis le début de cette alarme",
     "exit_fullscreen": "Quitter le plein écran",
     "settings_title": "Paramètres Activité en direct",
     "settings_desc": "Choisissez les caméras surveillées par cette page et sa réactivité.",

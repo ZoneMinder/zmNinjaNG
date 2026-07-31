@@ -105,6 +105,25 @@ export function formatAppDateTimeShort(date: Date, settings: FormatSettings): st
 }
 
 /**
+ * How long something has been running, as a stopwatch reading: `0:42`,
+ * `4:07`, `1:02:33`.
+ *
+ * Digits and colons only, so it needs no translation and stays narrow enough
+ * for a 320px live tile, which is what rules out date-fns' `formatDuration`
+ * ("about 4 minutes"). The hours field appears only once there are hours, so
+ * the common case is three characters wide.
+ */
+export function formatElapsedShort(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const seconds = totalSeconds % 60;
+  const minutes = Math.floor(totalSeconds / 60) % 60;
+  const hours = Math.floor(totalSeconds / 3600);
+  const paddedSeconds = String(seconds).padStart(2, '0');
+  if (hours === 0) return `${minutes}:${paddedSeconds}`;
+  return `${hours}:${String(minutes).padStart(2, '0')}:${paddedSeconds}`;
+}
+
+/**
  * Validate a custom format string.
  * Returns the formatted preview string, or null if invalid.
  */

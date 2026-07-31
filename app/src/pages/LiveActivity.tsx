@@ -32,11 +32,10 @@ import {
 import { isContinuousRecording } from '../lib/monitor/monitor-status';
 import { runViewTransition } from '../lib/view-transition';
 import type { MonitorAlarmState } from '../lib/monitor/alarm-state';
-import { MontageMonitor } from '../components/monitors/MontageMonitor';
 import { useFullscreenMode } from '../hooks/useFullscreenMode';
 import { EventMontageGridControls } from '../components/events/EventMontageGridControls';
 import { LiveActivitySettingsDialog } from '../components/live-activity/LiveActivitySettingsDialog';
-import { LiveActivityStateIcon } from '../components/live-activity/LiveActivityStateIcon';
+import { LiveActivityTile } from '../components/live-activity/LiveActivityTile';
 import { Button } from '../components/ui/button';
 import { EmptyState } from '../components/ui/empty-state';
 import { ErrorBanner } from '../components/ui/query-state';
@@ -112,6 +111,10 @@ export default function LiveActivity() {
   // monitor's entry restamps Date.now() on each pass, that never settles.
   const activeRef = useRef<ActiveMonitorEntry[]>(active);
   const dwellMs = settings.liveActivityDwellSeconds * 1000;
+  // Clock for the per-tile elapsed labels. A plain number rather than a Date
+  // so an unchanged tick cannot produce a new reference, and advanced by the
+  // cooling interval below rather than by a second timer of its own.
+  const [now, setNow] = useState(() => Date.now());
 
   // Websocket/push accelerant: a notification received in the last dwell
   // window promotes its monitor into the current poll snapshot immediately,
@@ -171,9 +174,16 @@ export default function LiveActivity() {
 
   // A cooling monitor expires on a timer, not on a poll response, so the list
   // still empties when every monitor has gone quiet and nothing is changing.
+  // The same tick advances the clock the elapsed labels read: a second
+  // interval for those would run alongside this one for the same reason and
+  // at the same rate, and this one is already scoped to exactly when tiles
+  // exist.
   useEffect(() => {
     if (active.length === 0) return;
-    const timer = setInterval(() => applyStates(hintedStates, dwellMs), 1000);
+    const timer = setInterval(() => {
+      setNow(Date.now());
+      applyStates(hintedStates, dwellMs);
+    }, 1000);
     return () => clearInterval(timer);
   }, [active.length, hintedStates, dwellMs, applyStates]);
 
@@ -265,49 +275,16 @@ export default function LiveActivity() {
             const monitorData = monitorsById.get(entry.monitorId);
             if (!monitorData) return null;
             return (
-              <div
+              <LiveActivityTile
                 key={entry.monitorId}
-                // Enter: a tile fades and scales up over 200ms instead of
-                // popping into the grid. tailwindcss-animate, the same
-                // utilities the dialogs and popovers use.
-                //
-                // A cooling tile is styled exactly like an alarming one. It
-                // used to dim to `opacity-60 saturate-50` over 700ms, and that
-                // was a rendering bug as much as a taste one: this element
-                // carries the `view-transition-name`, so it is the element the
-                // browser snapshots, and a captured image is generated with
-                // the element's own visual effects already applied while
-                // `::view-transition-new` is the live element partway through
-                // the same 700ms animation. The user-agent stylesheet
-                // composites that pair with `mix-blend-mode: plus-lighter`,
-                // which only cross-fades correctly when both halves are the
-                // same image, so a dimmed tile rendered wrong for the whole
-                // transition. Nothing on this element may animate opacity or
-                // filter for that reason. Winding down now reads only as the
-                // state icon dropping out of the tile header. refs #313
-                //
-                // The enter duration stays an arbitrary-value class rather
-                // than `duration-200`: tailwindcss-animate maps `duration-*`
-                // onto animationDuration as well as transitionDuration, so a
-                // transition duration added here later would silently win the
-                // twMerge conflict and stretch the enter animation.
-                className="relative animate-in fade-in-0 zoom-in-95 [animation-duration:200ms]"
-                // Pairs this tile's before and after positions across a view
-                // transition, which is what lets it slide to its new row.
-                // Ignored by browsers without the API.
-                style={{ viewTransitionName: `live-activity-tile-${entry.monitorId}` }}
-                data-testid="live-activity-tile"
-              >
-                <MontageMonitor
-                  monitor={monitorData.Monitor}
-                  status={monitorData.Monitor_Status}
-                  currentProfile={currentProfile}
-                  accessToken={accessToken}
-                  navigate={navigate}
-                  titleIcon={<LiveActivityStateIcon state={entry.state} />}
-                  fromRoute="/live-activity"
-                />
-              </div>
+                entry={entry}
+                monitor={monitorData.Monitor}
+                status={monitorData.Monitor_Status}
+                currentProfile={currentProfile}
+                accessToken={accessToken}
+                navigate={navigate}
+                now={now}
+              />
             );
           })}
         </div>
