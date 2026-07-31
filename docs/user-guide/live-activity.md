@@ -12,6 +12,8 @@ Any new alarm during the dwell window resets the timer and keeps the tile on scr
 
 Each tile header shows an icon for the monitor's current state next to the camera name: a siren while it is alarming, a warning triangle just after, and an hourglass while it is cooling down toward leaving the page. Hover the icon, or read it with a screen reader, to get the state in words.
 
+Next to the counter, a tile may also say what ZoneMinder gave as the cause of the alarm, such as "Motion: All" or "Forced Web". That wording only reaches the app through a notification, so a monitor the page found by checking alarm state alone shows no cause. Nothing else about the tile depends on it.
+
 The counter in the bottom corner of each tile says how long the current alarm episode has been running, as minutes and seconds (hours appear once there are any). It counts from the start of the episode rather than from the last alarming moment, so a camera whose event flickers through its tail keeps counting up instead of resetting.
 
 ## Fullscreen

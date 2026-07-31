@@ -95,6 +95,22 @@ describe('LiveActivityTile', () => {
     }
   });
 
+  it('shows what ZoneMinder said triggered the alarm, when it said anything', () => {
+    renderTile(EPISODE_START, { ...ENTRY, cause: 'Motion: All' });
+
+    const cause = screen.getByTestId('live-activity-cause-3');
+    expect(cause).toHaveTextContent('Motion: All');
+    // Truncated on a narrow tile, so the full text has to stay reachable.
+    expect(cause).toHaveAttribute('title', 'Motion: All');
+  });
+
+  it('reads correctly with no cause reported at all', () => {
+    renderTile(EPISODE_START);
+
+    expect(screen.queryByTestId('live-activity-cause-3')).not.toBeInTheDocument();
+    expect(screen.getByTestId('live-activity-elapsed-3')).toBeInTheDocument();
+  });
+
   it('rebuilds the state icon when the state actually changes', () => {
     const { rerender } = renderTile(EPISODE_START);
 

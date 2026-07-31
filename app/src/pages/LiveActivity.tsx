@@ -123,22 +123,35 @@ export default function LiveActivity() {
   // `states`, so a hint for a page-ignored or profile-excluded monitor id is
   // dropped, not resurrected.
   //
-  // ponytail: this selector rebuilds the Set on every evaluation, so useShallow
+  // The same pass also collects what ZoneMinder said triggered each of those
+  // events, which is the only place a cause is available: the alarm poll
+  // reports a state and nothing more. Values stay plain strings so useShallow
+  // can compare the map entry by entry; an object per monitor would compare
+  // by identity and defeat it.
+  //
+  // ponytail: this selector rebuilds the Map on every evaluation, so useShallow
   // still re-runs the filter/map on unrelated notification-store writes (it
-  // just avoids a re-render when the resulting Set is contents-equal). If that
+  // just avoids a re-render when the resulting Map is contents-equal). If that
   // shows up as a real cost, memoize the profile's event list with a
-  // reference-stable selector and build the Set in a separate useMemo keyed
+  // reference-stable selector and build the Map in a separate useMemo keyed
   // off that list.
-  const hintedMonitorIds = useNotificationStore(
+  const recentCauses = useNotificationStore(
     useShallow((state) => {
+      const causes = new Map<string, string>();
       const events = currentProfile ? state.profileEvents[currentProfile.id] : undefined;
-      if (!events?.length) return new Set<string>();
+      if (!events?.length) return causes;
       const cutoff = Date.now() - dwellMs;
-      return new Set(
-        events.filter((e) => e.receivedAt >= cutoff).map((e) => String(e.MonitorId))
-      );
+      // Newest first, so the first entry seen for a monitor is its latest.
+      for (const event of events) {
+        if (event.receivedAt < cutoff) continue;
+        const monitorId = String(event.MonitorId);
+        if (!causes.has(monitorId)) causes.set(monitorId, event.Cause ?? '');
+      }
+      return causes;
     })
   );
+
+  const hintedMonitorIds = useMemo(() => new Set(recentCauses.keys()), [recentCauses]);
 
   const hintedStates = useMemo(
     () => applyLiveAlarmHints(states, hintedMonitorIds),
@@ -149,9 +162,13 @@ export default function LiveActivity() {
   // both effects below list it, and an identity that changed per render would
   // tear the one-second interval down before its 1000ms ever elapsed.
   const applyStates = useCallback(
-    (statesNow: Record<string, MonitorAlarmState>, dwell: number) => {
+    (
+      statesNow: Record<string, MonitorAlarmState>,
+      dwell: number,
+      causes: ReadonlyMap<string, string>
+    ) => {
       const prev = activeRef.current;
-      const next = reduceActiveMonitors(prev, statesNow, Date.now(), dwell);
+      const next = reduceActiveMonitors(prev, statesNow, Date.now(), dwell, { causes });
       // reduceActiveMonitors hands back the same array when nothing moved, so
       // a poll tick that changed nothing costs no render at all.
       if (next === prev) return;
@@ -169,8 +186,8 @@ export default function LiveActivity() {
   );
 
   useEffect(() => {
-    applyStates(hintedStates, dwellMs);
-  }, [hintedStates, dwellMs, applyStates]);
+    applyStates(hintedStates, dwellMs, recentCauses);
+  }, [hintedStates, dwellMs, recentCauses, applyStates]);
 
   // A cooling monitor expires on a timer, not on a poll response, so the list
   // still empties when every monitor has gone quiet and nothing is changing.
@@ -182,10 +199,10 @@ export default function LiveActivity() {
     if (active.length === 0) return;
     const timer = setInterval(() => {
       setNow(Date.now());
-      applyStates(hintedStates, dwellMs);
+      applyStates(hintedStates, dwellMs, recentCauses);
     }, 1000);
     return () => clearInterval(timer);
-  }, [active.length, hintedStates, dwellMs, applyStates]);
+  }, [active.length, hintedStates, dwellMs, recentCauses, applyStates]);
 
   const { visible, overflowCount } = capActiveMonitors(active, settings.liveActivityMaxTiles);
 

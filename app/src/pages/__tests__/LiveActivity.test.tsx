@@ -327,6 +327,42 @@ describe('LiveActivity', () => {
     expect(screen.queryByTestId('live-activity-elapsed-4')).not.toBeInTheDocument();
   });
 
+  it('labels a tile with the cause the notification stream reported', async () => {
+    // The alarm poll never carries a cause, so the notification store is the
+    // only source. Its event also promotes the monitor onto the page, which is
+    // the accelerant path this fixture exercises at the same time.
+    vi.resetModules();
+    vi.doMock('../../stores/notifications', () => ({
+      resolvePollIntervalMs: () => 1000,
+      useNotificationStore: (
+        selector: (s: {
+          profileEvents: Record<
+            string,
+            { MonitorId: number; Cause: string; receivedAt: number }[]
+          >;
+        }) => unknown
+      ) =>
+        selector({
+          profileEvents: {
+            p1: [{ MonitorId: 3, Cause: 'Motion: All', receivedAt: Date.now() }],
+          },
+        }),
+    }));
+
+    const { default: LiveActivityWithEvent } = await import('../LiveActivity');
+    const { getMonitors: reimportedGetMonitors, getAlarmStatus: reimportedGetAlarmStatus } =
+      await import('../../api/monitors');
+    vi.mocked(reimportedGetMonitors).mockResolvedValue(MONITORS as never);
+    vi.mocked(reimportedGetAlarmStatus).mockResolvedValue({ status: 0 } as never);
+
+    render(<LiveActivityWithEvent />, { wrapper });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('live-activity-cause-3')).toHaveTextContent('Motion: All');
+    });
+    expect(screen.queryByTestId('live-activity-cause-4')).not.toBeInTheDocument();
+  });
+
   it('keeps the page chrome out of the way in fullscreen', async () => {
     // A wall display should show tiles, not the heading, the grid controls and
     // the gear. The tiles themselves still render, so the assertion below is

@@ -177,6 +177,73 @@ describe('reduceActiveMonitors', () => {
     expect(next).toEqual([]);
   });
 
+  it('records the cause an entering monitor was reported with', () => {
+    const next = reduceActiveMonitors([], { '1': 'alarm' }, 1000, DWELL, {
+      causes: new Map([['1', 'Motion: All']]),
+    });
+    expect(next[0].cause).toBe('Motion: All');
+  });
+
+  it('leaves the cause unset when the notification stream has said nothing', () => {
+    // The cause is present-when-known: alarm state comes from polling, which
+    // never carries one.
+    const next = reduceActiveMonitors([], { '1': 'alarm' }, 1000, DWELL);
+    expect(next[0].cause).toBeUndefined();
+  });
+
+  it('adopts a cause that arrives after the alarm was already polled', () => {
+    const polled = reduceActiveMonitors([], { '1': 'alarm' }, 1000, DWELL);
+    const withCause = reduceActiveMonitors(polled, { '1': 'alarm' }, 2000, DWELL, {
+      causes: new Map([['1', 'Forced Web']]),
+    });
+    expect(withCause[0].cause).toBe('Forced Web');
+  });
+
+  it('keeps the cause after the notification has aged out of the hint window', () => {
+    // The events feeding the cause map expire on their own schedule; a tile
+    // that keeps alarming must not lose its label halfway through.
+    const first = reduceActiveMonitors([], { '1': 'alarm' }, 1000, DWELL, {
+      causes: new Map([['1', 'Motion: All']]),
+    });
+    const later = reduceActiveMonitors(first, { '1': 'alarm' }, 2000, DWELL);
+    const cooling = reduceActiveMonitors(later, { '1': 'idle' }, 3000, DWELL);
+    expect(later[0].cause).toBe('Motion: All');
+    expect(cooling[0].cause).toBe('Motion: All');
+  });
+
+  it('takes the new cause when a genuinely new episode starts', () => {
+    const first = reduceActiveMonitors([], { '1': 'alarm' }, 1000, DWELL, {
+      causes: new Map([['1', 'Motion: All']]),
+    });
+    const cooling = reduceActiveMonitors(first, { '1': 'idle' }, 2000, DWELL);
+    const newEpisode = reduceActiveMonitors(
+      cooling,
+      { '1': 'alarm' },
+      2000 + GRACE + 1,
+      DWELL,
+      { causes: new Map([['1', 'Forced Web']]) }
+    );
+    expect(newEpisode[0].cause).toBe('Forced Web');
+    expect(newEpisode[0].episodeStartedAt).toBe(2000 + GRACE + 1);
+  });
+
+  it('treats a blank cause as no cause at all', () => {
+    const next = reduceActiveMonitors([], { '1': 'alarm' }, 1000, DWELL, {
+      causes: new Map([['1', '  ']]),
+    });
+    expect(next[0].cause).toBeUndefined();
+  });
+
+  it('returns the same array reference when the cause map is rebuilt unchanged', () => {
+    const first = reduceActiveMonitors([], { '1': 'alarm' }, 1000, DWELL, {
+      causes: new Map([['1', 'Motion: All']]),
+    });
+    const again = reduceActiveMonitors(first, { '1': 'alarm' }, 1000, DWELL, {
+      causes: new Map([['1', 'Motion: All']]),
+    });
+    expect(again).toBe(first);
+  });
+
   it('returns the same array reference when nothing changed', () => {
     const first = reduceActiveMonitors([], { '1': 'alarm' }, 1000, DWELL);
     const again = reduceActiveMonitors(first, { '1': 'alarm' }, 1000, DWELL);

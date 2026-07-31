@@ -86,15 +86,28 @@ export function LiveActivityTile({
         titleIcon={titleIcon}
         fromRoute="/live-activity"
       />
-      {/* A sibling of the tile rather than one of its props, so the value
-          that changes every second never reaches the memo'd component. */}
-      <span
-        className="absolute bottom-1 left-1 z-30 pointer-events-none text-[10px] tabular-nums px-1.5 py-0.5 rounded bg-black/60 text-white"
-        title={t('live_activity.elapsed_title')}
-        data-testid={`live-activity-elapsed-${entry.monitorId}`}
-      >
-        {formatElapsedShort(now - entry.episodeStartedAt)}
-      </span>
+      {/* Siblings of the tile rather than props of it, so the value that
+          changes every second never reaches the memo'd component. */}
+      <div className="absolute bottom-1 left-1 right-1 z-30 pointer-events-none flex items-end gap-1">
+        <span
+          className="shrink-0 text-[10px] tabular-nums px-1.5 py-0.5 rounded bg-black/60 text-white"
+          title={t('live_activity.elapsed_title')}
+          data-testid={`live-activity-elapsed-${entry.monitorId}`}
+        >
+          {formatElapsedShort(now - entry.episodeStartedAt)}
+        </span>
+        {/* Only the notification stream reports a cause, so most tiles never
+            show this one. */}
+        {entry.cause && (
+          <span
+            className="min-w-0 truncate text-[10px] px-1.5 py-0.5 rounded bg-black/60 text-white"
+            title={entry.cause}
+            data-testid={`live-activity-cause-${entry.monitorId}`}
+          >
+            {entry.cause}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

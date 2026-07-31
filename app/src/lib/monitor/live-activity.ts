@@ -59,6 +59,28 @@ export interface ActiveMonitorEntry {
   episodeStartedAt: number;
   /** True while it is resident but no longer alarming. */
   isCooling: boolean;
+  /**
+   * What ZoneMinder said triggered this episode, when anything said so at
+   * all. Only the notification stream carries a cause, so a monitor found by
+   * polling alone has none and the tile has to read correctly without it.
+   */
+  cause?: string;
+}
+
+interface ReduceOptions {
+  /**
+   * Monitor id to the cause of its most recent notification. Consulted when
+   * an episode begins and while an entry still has no cause; never used to
+   * clear one, because these entries expire on the notification store's
+   * schedule rather than the episode's.
+   */
+  causes?: ReadonlyMap<string, string>;
+}
+
+/** Blank and whitespace-only causes read as "not reported". */
+function normalizeCause(cause: string | undefined): string | undefined {
+  const trimmed = cause?.trim();
+  return trimmed ? trimmed : undefined;
 }
 
 function sameEntry(a: ActiveMonitorEntry, b: ActiveMonitorEntry): boolean {
@@ -68,7 +90,8 @@ function sameEntry(a: ActiveMonitorEntry, b: ActiveMonitorEntry): boolean {
     a.enteredAt === b.enteredAt &&
     a.lastAlarmingAt === b.lastAlarmingAt &&
     a.episodeStartedAt === b.episodeStartedAt &&
-    a.isCooling === b.isCooling
+    a.isCooling === b.isCooling &&
+    a.cause === b.cause
   );
 }
 
@@ -76,7 +99,8 @@ export function reduceActiveMonitors(
   previous: ActiveMonitorEntry[],
   states: Record<string, MonitorAlarmState>,
   now: number,
-  dwellMs: number
+  dwellMs: number,
+  { causes }: ReduceOptions = {}
 ): ActiveMonitorEntry[] {
   const next: ActiveMonitorEntry[] = [];
 
@@ -97,12 +121,17 @@ export function reduceActiveMonitors(
       // to `tape` is the same episode and must not move the tile.
       const startsNewEpisode =
         entry.isCooling && now - entry.lastAlarmingAt > EPISODE_GRACE_MS;
+      const reported = normalizeCause(causes?.get(entry.monitorId));
       next.push({
         ...entry,
         state,
         lastAlarmingAt: now,
         episodeStartedAt: startsNewEpisode ? now : entry.episodeStartedAt,
         isCooling: false,
+        // A new episode takes whatever cause is current, even none. An
+        // ongoing one keeps what it has, and picks up a cause that arrived
+        // after the poll had already found the alarm.
+        cause: startsNewEpisode ? reported : (entry.cause ?? reported),
       });
       continue;
     }
@@ -125,6 +154,7 @@ export function reduceActiveMonitors(
       lastAlarmingAt: now,
       episodeStartedAt: now,
       isCooling: false,
+      cause: normalizeCause(causes?.get(monitorId)),
     });
   }
 
