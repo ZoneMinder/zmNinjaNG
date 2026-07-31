@@ -114,6 +114,46 @@ describe('LiveActivitySettingsDialog', () => {
       ).toEqual([]);
     });
 
+    // Reachable by anyone who ignored a continuous monitor before it started
+    // being skipped by default. Both lists exclude it and the ignore list
+    // wins, so a row that showed "on" while the page still excluded it, and
+    // that no longer wrote the ignore list, would be a control with no effect
+    // and no way back.
+    it('clears the ignore entry when an ignored continuous recorder is switched on', () => {
+      useSettingsStore.getState().updateProfileSettings('p1', {
+        liveActivityIgnoredMonitorIds: ['5'],
+      });
+
+      renderDialog();
+      expect(screen.getByTestId('live-activity-ignore-5')).toHaveAttribute(
+        'data-state',
+        'unchecked'
+      );
+
+      fireEvent.click(screen.getByTestId('live-activity-ignore-5'));
+
+      // Both lists agree the monitor is watched, so the page really shows it.
+      const settings = useSettingsStore.getState().getProfileSettings('p1');
+      expect(settings.liveActivityWatchContinuousIds).toEqual(['5']);
+      expect(settings.liveActivityIgnoredMonitorIds).toEqual([]);
+      expect(screen.getByTestId('live-activity-ignore-5')).toHaveAttribute('data-state', 'checked');
+    });
+
+    it('shows an ignored continuous recorder as off even when it is opted in', () => {
+      useSettingsStore.getState().updateProfileSettings('p1', {
+        liveActivityIgnoredMonitorIds: ['5'],
+        liveActivityWatchContinuousIds: ['5'],
+      });
+
+      renderDialog();
+
+      // The page excludes it, so the switch must not claim otherwise.
+      expect(screen.getByTestId('live-activity-ignore-5')).toHaveAttribute(
+        'data-state',
+        'unchecked'
+      );
+    });
+
     it('treats an alarm-only monitor normally on ZM 1.38+', () => {
       useAuthStore.setState({ version: '1.38.0' });
       render(

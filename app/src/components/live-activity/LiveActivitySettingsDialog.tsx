@@ -186,6 +186,13 @@ export function LiveActivitySettingsDialog({
 
   // A continuous recorder is off by default, so its toggle drives the opt-in
   // list instead: on means watched, which is the inverse of the ignore list.
+  //
+  // Turning one on also clears any ignore entry for it. Both lists exclude the
+  // monitor and the ignore list wins, so without this the switch would flip on
+  // while the page kept excluding it, and the row would be a dead control: it
+  // no longer writes the ignore list, so nothing left in the UI could clear
+  // that entry. Reachable in one click by anyone who ignored a continuous
+  // monitor before it started being skipped by default.
   const handleContinuousToggle = (monitorId: string, watched: boolean) => {
     const current = settings.liveActivityWatchContinuousIds;
     const next = watched
@@ -193,7 +200,14 @@ export function LiveActivitySettingsDialog({
         ? current
         : [...current, monitorId]
       : current.filter((id) => id !== monitorId);
-    useSettingsStore.getState().updateProfileSettings(profileId, { liveActivityWatchContinuousIds: next });
+    useSettingsStore.getState().updateProfileSettings(profileId, {
+      liveActivityWatchContinuousIds: next,
+      ...(watched && {
+        liveActivityIgnoredMonitorIds: settings.liveActivityIgnoredMonitorIds.filter(
+          (id) => id !== monitorId
+        ),
+      }),
+    });
   };
 
   return (
@@ -302,9 +316,11 @@ export function LiveActivitySettingsDialog({
                       </div>
                       <Switch
                         id={`live-activity-ignore-${Monitor.Id}`}
+                        // Either list excluding it means the page excludes it,
+                        // so the switch only reads as on when neither does.
                         checked={
                           continuous
-                            ? watchContinuousSet.has(Monitor.Id)
+                            ? watchContinuousSet.has(Monitor.Id) && !ignoredSet.has(Monitor.Id)
                             : !ignoredSet.has(Monitor.Id)
                         }
                         onCheckedChange={(checked) =>
