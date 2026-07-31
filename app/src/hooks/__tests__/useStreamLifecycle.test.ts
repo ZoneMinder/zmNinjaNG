@@ -596,10 +596,14 @@ describe('useStreamLifecycle', () => {
   });
 
   describe('disable teardown', () => {
-    /** How many CMD_QUIT requests were sent for a specific connkey. */
+    /**
+     * How many CMD_QUIT requests were sent for a specific connkey. Matches the
+     * whole value so a key that is a prefix of another is not over-counted.
+     */
     function quitCountFor(key: number): number {
+      const pattern = new RegExp(`connkey=${key}(?![0-9])`);
       return mockHttpGet.mock.calls.filter(
-        (call) => typeof call[0] === 'string' && (call[0] as string).includes(`connkey=${key}`),
+        (call) => typeof call[0] === 'string' && pattern.test(call[0] as string),
       ).length;
     }
 
@@ -707,6 +711,32 @@ describe('useStreamLifecycle', () => {
 
       expect(quitCountFor(firstKey)).toBe(1);
       expect(mockHttpGet).toHaveBeenCalledTimes(1);
+    });
+
+    it('quits the key it minted when monitorId changes in the same commit as the disable', async () => {
+      const mediaRef = makeMediaRef();
+      const { result, rerender } = renderHook(
+        ({ enabled, monitorId }: { enabled: boolean; monitorId: string }) =>
+          useStreamLifecycle({ ...baseOptions, monitorId, mediaRef, enabled }),
+        { initialProps: { enabled: true, monitorId: '1' } },
+      );
+
+      await waitFor(() => {
+        expect(result.current.connKey).not.toBe(0);
+      });
+      const firstKey = result.current.connKey;
+      mockHttpGet.mockClear();
+
+      // The tile is disabled and repointed at another monitor in one commit.
+      // The teardown owns the stream it minted, so it must quit that key under
+      // monitor 1 and clear monitor 1's stored key, not monitor 2's.
+      rerender({ enabled: false, monitorId: '2' });
+
+      await waitFor(() => {
+        expect(quitCountFor(firstKey)).toBe(1);
+      });
+      expect(mockClearConnKey).toHaveBeenCalledWith('1');
+      expect(mockConnKeys['1']).toBeUndefined();
     });
 
     it('sends no request when disabling a hook that never minted a key', async () => {

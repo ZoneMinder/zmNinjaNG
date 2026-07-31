@@ -116,6 +116,21 @@ export function useMonitorStream({
     apiTimeoutSeconds: settings.apiTimeoutSeconds,
   });
 
+  // An armed backoff must not survive a disable. The disable teardown quits the
+  // connkey and zeroes it, so a timer firing afterwards would forceRegenerate a
+  // key while disabled: nothing can stream on it (streamUrl is gated on
+  // enabled), and re-enabling would reuse that dead key instead of minting a
+  // fresh one. Resetting the counter too means the next enable starts on a clean
+  // backoff rather than partway up the old stream's ladder.
+  useEffect(() => {
+    if (enabled) return;
+    reconnectAttemptRef.current = 0;
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+  }, [enabled]);
+
   // Reset cacheBuster when connKey changes (new connection)
   useEffect(() => {
     if (connKey !== 0) {

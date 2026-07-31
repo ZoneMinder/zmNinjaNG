@@ -12,7 +12,7 @@
  * - cleanupParamsRef pattern to capture latest values for the unmount effect
  */
 
-import { useState, useEffect, useRef, useId } from 'react';
+import { useState, useEffect, useRef, useId, useCallback } from 'react';
 import { getZmsControlUrl } from '../lib/zm/url-builder';
 import { ZMS_COMMANDS } from '../lib/zm/zm-constants';
 import { httpGet } from '../lib/http';
@@ -171,6 +171,26 @@ export function useStreamLifecycle({
   const prevConnKeyRef = useRef<number>(0);
   const isInitialMountRef = useRef(true);
 
+  // Snapshot of the values a teardown needs, for a given key. Callers outside
+  // render capture one of these; nothing reads props directly at teardown time.
+  const buildCleanupParams = useCallback(
+    (key: number): StreamCleanupParams => ({
+      monitorId: monitorId || '',
+      monitorName: monitorName || '',
+      connKey: key,
+      portalUrl,
+      token: accessToken,
+      viewMode,
+      minStreamingPort,
+      cmdQuitTimeoutMs,
+    }),
+    [monitorId, monitorName, portalUrl, accessToken, viewMode, minStreamingPort, cmdQuitTimeoutMs],
+  );
+
+  // Store cleanup parameters in a ref so the teardowns, which run outside
+  // render, see the stream this hook currently owns.
+  const cleanupParamsRef = useRef<StreamCleanupParams>(buildCleanupParams(0));
+
   // Regenerate connKey on mount or when monitorId changes
   useEffect(() => {
     if (!enabled || !monitorId) return;
@@ -218,37 +238,24 @@ export function useStreamLifecycle({
     const newKey = regenerateConnKey(monitorId);
     setConnKey(newKey);
     prevConnKeyRef.current = newKey;
+    // Bind the key to the identity that minted it, here rather than waiting for
+    // the params effect below. A commit that mints and disables together never
+    // reaches that effect, and the teardown must still know which monitor and
+    // port this key belongs to.
+    cleanupParamsRef.current = buildCleanupParams(newKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [monitorId, enabled]);
 
-  // Store cleanup parameters in ref to access latest values on unmount
-  const cleanupParamsRef = useRef({
-    monitorId: monitorId || '',
-    monitorName: monitorName || '',
-    connKey: 0,
-    portalUrl,
-    token: accessToken,
-    viewMode,
-    minStreamingPort,
-    cmdQuitTimeoutMs,
-  });
-
-  // Update cleanup params whenever they change. This tracks while disabled too:
-  // the disable teardown below reads the ref in the same commit that `enabled`
-  // flips false, and it needs the connkey that is still live at that moment,
-  // not a frozen older one.
+  // Refresh the cleanup params as the profile's values change, but only while
+  // enabled. Once disabled the hook owns no stream, so the ref must keep the
+  // identity of the one it minted (monitorId, viewMode, port) instead of
+  // adopting whatever the props now say: a commit that disables and repoints
+  // the tile at another monitor would otherwise quit the old key against the
+  // new monitor's port and leave the old stored key behind.
   useEffect(() => {
-    cleanupParamsRef.current = {
-      monitorId: monitorId || '',
-      monitorName: monitorName || '',
-      connKey,
-      portalUrl,
-      token: accessToken,
-      viewMode,
-      minStreamingPort,
-      cmdQuitTimeoutMs,
-    };
-  }, [enabled, monitorId, monitorName, connKey, portalUrl, accessToken, viewMode, minStreamingPort, cmdQuitTimeoutMs]);
+    if (!enabled) return;
+    cleanupParamsRef.current = buildCleanupParams(connKey);
+  }, [enabled, connKey, buildCleanupParams]);
 
   // Disable teardown. A connkey is never left alive on the server when its hook
   // goes disabled: going enabled -> disabled sends CMD_QUIT for the current key
