@@ -28,6 +28,13 @@ interface LiveActivityTileProps {
   navigate: NavigateFunction;
   /** The page's one-second clock. Drives the elapsed label and nothing else. */
   now: number;
+  /**
+   * Grid row units this tile occupies, from getLiveActivityRowSpan. Undefined
+   * until the grid has been measured, which leaves the tile on plain
+   * auto-placement for that first frame rather than squashing it into a
+   * one pixel row.
+   */
+  rowSpan: number | undefined;
   /** Clears this monitor off the page for the rest of its current alarm. */
   onDismiss: (monitorId: string) => void;
 }
@@ -40,6 +47,7 @@ export function LiveActivityTile({
   accessToken,
   navigate,
   now,
+  rowSpan,
   onDismiss,
 }: LiveActivityTileProps) {
   const { t } = useTranslation();
@@ -96,7 +104,13 @@ export function LiveActivityTile({
       // Pairs this tile's before and after positions across a view
       // transition, which is what lets it slide to its new row. Ignored by
       // browsers without the API.
-      style={{ viewTransitionName: `live-activity-tile-${entry.monitorId}` }}
+      //
+      // gridRowEnd is placement, not a visual effect, so it is safe next to
+      // the view-transition name the note above is about.
+      style={{
+        viewTransitionName: `live-activity-tile-${entry.monitorId}`,
+        gridRowEnd: rowSpan ? `span ${rowSpan}` : undefined,
+      }}
       data-testid="live-activity-tile"
     >
       <MontageMonitor

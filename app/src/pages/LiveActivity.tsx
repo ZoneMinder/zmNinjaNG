@@ -21,6 +21,9 @@ import { useSettingsStore } from '../stores/settings';
 import { useBandwidthSettings } from '../hooks/useBandwidthSettings';
 import { useAlarmStates } from '../hooks/useAlarmStates';
 import { useEventMontageGrid } from '../hooks/useEventMontageGrid';
+import { useMeasuredWidth } from '../hooks/useMeasuredWidth';
+import { getLiveActivityRowSpan } from '../lib/monitor/live-activity-layout';
+import { LIVE_ACTIVITY } from '../lib/zmninja-ng-constants';
 import { resolvePollIntervalMs, useNotificationStore } from '../stores/notifications';
 import {
   reduceActiveMonitors,
@@ -262,6 +265,13 @@ export default function LiveActivity() {
     onGridChange: handleGridChange,
   });
 
+  // Tile heights are computed in pixels (see lib/monitor/live-activity-layout
+  // .ts), so the grid has to be measured. useEventMontageGrid reads the same
+  // element, but only to decide whether a column count fits, and never reports
+  // the width, so this measures it and keeps that hook's ref pointed at the
+  // same element.
+  const { width: gridWidth, setElement: setGridElement } = useMeasuredWidth(gridContainerRef);
+
   // Its own settings key, not montageIsFullscreen: a shared flag would make
   // going fullscreen here put the Montage page in fullscreen too.
   const { isFullscreen, handleToggleFullscreen } = useFullscreenMode({
@@ -290,6 +300,10 @@ export default function LiveActivity() {
 
       {showSkeleton && (
         <div
+          // Same element ref as the real grid, so the width is already
+          // measured when the first tiles arrive and they are packed on their
+          // first frame rather than laying out once and then again.
+          ref={setGridElement}
           className="grid"
           style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}
           data-testid="live-activity-loading"
@@ -312,15 +326,24 @@ export default function LiveActivity() {
 
       {!isEmpty && (
         <div
-          ref={gridContainerRef}
+          ref={setGridElement}
           // items-start, so each tile keeps the height its camera's aspect
-          // ratio gives it and a row ends up as ragged as the cameras in it.
-          // The default stretch would pull every tile in a row up to the
-          // tallest one, and since the video area inside a tile is pinned to
-          // its own ratio, the extra height would arrive as dead black space
-          // under the picture along with the elapsed label floating in it.
+          // ratio gives it and never stretches to fill the rows it spans.
+          // The default stretch would pull a tile up to the rounded-up span
+          // below, and since the video area inside a tile is pinned to its own
+          // ratio, that extra height would arrive as dead black space under
+          // the picture along with the elapsed label floating in it.
+          //
+          // Rows are one pixel tall and each tile spans its own height, so
+          // tiles never share a row and a short camera beside a tall one no
+          // longer leaves a hole under itself. Until the grid has been
+          // measured there are no spans to honour, so the row unit stays off
+          // and tiles keep their natural heights for that one frame.
           className="grid items-start"
-          style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}
+          style={{
+            gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))`,
+            gridAutoRows: gridWidth > 0 ? `${LIVE_ACTIVITY.rowUnitPx}px` : undefined,
+          }}
         >
           {visible.map((entry) => {
             const monitorData = monitorsById.get(entry.monitorId);
@@ -335,6 +358,14 @@ export default function LiveActivity() {
                 accessToken={accessToken}
                 navigate={navigate}
                 now={now}
+                // Recomputed per render, but it only ever changes with the
+                // grid width, the column count or the camera's own shape, so
+                // the one-second clock never moves it.
+                rowSpan={
+                  gridWidth > 0
+                    ? getLiveActivityRowSpan(monitorData.Monitor, gridWidth, gridCols)
+                    : undefined
+                }
                 onDismiss={handleDismiss}
               />
             );

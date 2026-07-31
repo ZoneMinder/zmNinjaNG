@@ -745,12 +745,37 @@ own. Montage passes no ratio at all and keeps sizing its tiles through
 react-grid-layout. ``getMonitorAspectRatio`` returns ``undefined`` for
 dimensions it cannot use, and the tile falls back to
 ``MONITOR_UI.fallbackAspectRatio`` rather than rendering a camera with no
-height. The grid itself is ``items-start``: cameras of different shapes give a
-row tiles of different heights, and the default stretch would pull the short
-ones up to the tallest, which cannot stretch the video (that is pinned to its
-ratio) and would instead add dead space under the picture with the elapsed
-label floating in it. A ragged bottom edge is the cost of every tile being
-the shape of its own camera.
+height. The grid then packs those tiles by row span rather than laying them into
+shared rows. A CSS grid row is as tall as the tallest item in it, so a 16:9
+camera beside a portrait fisheye left a hole under the short tile the height
+of its neighbour, and the next row started below the tall one;
+``items-start`` only stopped the short tile stretching, it never shortened
+the row. The grid therefore gets a one pixel row unit
+(``LIVE_ACTIVITY.rowUnitPx``) and each tile a ``grid-row-end: span N`` from
+``getLiveActivityRowSpan`` (``src/lib/monitor/live-activity-layout.ts``),
+which computes the same header-plus-video sum again in pixels, from the
+measured grid width, the column count and the camera's ratio, and rounds it
+up so a tile can never overflow the rows it claims. Tiles no longer share a
+row, so auto-placement drops each one into the first free slot and the holes
+disappear. CSS multi-column masonry would also close them, and is not used:
+it flows content down column one before column two, which would quietly
+reverse the most-recent-first reading order the tile sort exists to produce.
+
+That needs the grid measured, which is ``useMeasuredWidth``
+(``src/hooks/useMeasuredWidth.ts``). It wraps montage's
+``useContainerResize``, so the first measurement lands immediately and every
+one after it is debounced by ``GRID_LAYOUT.resizeDebounceMs``, and it rounds
+the width into state on top of that: a drag reports sub-pixel widths, and an
+unrounded value would re-render every tile on the page for a change no tile
+can render. Its callback ref also mirrors the element into the ref
+``useEventMontageGrid`` reads, so one element serves both hooks and the
+observer is not rebuilt on the page's one-second render. Before the first
+measurement there are no spans to honour, so the row unit stays off and tiles
+keep their natural heights for that frame; the loading skeleton carries the
+same ref, so in practice the width is already known when the first tiles
+arrive. ``items-start`` stays, for the rounding: a span is rounded up, so a
+stretched tile would gain up to a pixel of dead space under the picture,
+which is what the ratio on the video area was there to avoid.
 
 Dismissal (the cross on a tile) is a reducer input, not a render-time filter.
 ``reduceActiveMonitors`` skips a dismissed monitor both as a resident and as

@@ -1191,6 +1191,11 @@ export const LIVE_ACTIVITY = {
   episodeGraceSeconds: 15,
   minTiles: 1,
   maxTiles: 40,
+  // Height of one row of the tile grid. The grid packs tiles by row span
+  // rather than by shared rows (see lib/monitor/live-activity-layout.ts), so
+  // this is a measuring unit, not a gap: one pixel is the finest a tile's
+  // computed height can be expressed in.
+  rowUnitPx: 1,
   // purpose: it exists so activity does not vanish without trace, not to
   // become a second, unbounded list competing with the grid for the page. A
   // few minutes covers "what did I just miss" and nothing longer.

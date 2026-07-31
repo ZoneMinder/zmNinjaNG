@@ -512,6 +512,54 @@ describe('LiveActivity', () => {
     expect(screen.queryByTestId('live-activity-empty')).not.toBeInTheDocument();
   });
 
+  // Tiles are packed by row span rather than laid into shared rows, so a 16:9
+  // camera beside a portrait one no longer leaves a hole the height of its
+  // taller neighbour underneath itself.
+  it('spans each tile by its own height once the grid has been measured', async () => {
+    mockMonitors.mockResolvedValue({
+      monitors: [
+        { Monitor: { ...MONITORS.monitors[0].Monitor, Width: '1920', Height: '1080' } },
+        { Monitor: { ...MONITORS.monitors[1].Monitor, Width: '1080', Height: '1920' } },
+      ],
+    } as never);
+    mockStatus.mockResolvedValue({ status: 2 } as never);
+
+    // jsdom lays nothing out, so every element measures zero. This stub
+    // reports the width the page cannot measure for itself; the two-column
+    // setting above makes that a 400px column.
+    const RealResizeObserver = global.ResizeObserver;
+    global.ResizeObserver = class {
+      callback: ResizeObserverCallback;
+      constructor(callback: ResizeObserverCallback) {
+        this.callback = callback;
+      }
+      observe(element: Element) {
+        this.callback(
+          [{ target: element, contentRect: { width: 800 } } as unknown as ResizeObserverEntry],
+          this as unknown as ResizeObserver
+        );
+      }
+      unobserve() {}
+      disconnect() {}
+    } as unknown as typeof ResizeObserver;
+
+    try {
+      render(<LiveActivity />, { wrapper });
+
+      const landscape = await screen.findByText('Front Door');
+      const portrait = screen.getByText('Backyard');
+      const tileOf = (node: HTMLElement) =>
+        node.closest('[data-testid="live-activity-tile"]') as HTMLElement;
+
+      // 400 * 9/16 video + a 32px header, and 400 * 16/9 + 32 for the portrait.
+      expect(tileOf(landscape).style.gridRowEnd).toBe('span 257');
+      expect(tileOf(portrait).style.gridRowEnd).toBe('span 744');
+      expect(tileOf(landscape).parentElement?.style.gridAutoRows).toBe('1px');
+    } finally {
+      global.ResizeObserver = RealResizeObserver;
+    }
+  });
+
   it('never polls a monitor on the ignore list', async () => {
     mockStatus.mockResolvedValue({ status: 0 } as never);
 

@@ -48,6 +48,9 @@ const PROFILE = { id: 'p1' } as Profile;
 const navigate = vi.fn();
 const onDismiss = vi.fn();
 
+/** A representative span: a 16:9 tile in a 400px column, header included. */
+const ROW_SPAN = 257;
+
 function renderTile(now: number, entry: ActiveMonitorEntry = ENTRY) {
   return render(
     <LiveActivityTile
@@ -58,6 +61,7 @@ function renderTile(now: number, entry: ActiveMonitorEntry = ENTRY) {
       accessToken="t"
       navigate={navigate}
       now={now}
+      rowSpan={ROW_SPAN}
       onDismiss={onDismiss}
     />
   );
@@ -98,6 +102,7 @@ describe('LiveActivityTile', () => {
         accessToken="t"
         navigate={navigate}
         now={EPISODE_START + 5_000}
+        rowSpan={ROW_SPAN}
         onDismiss={onDismiss}
       />
     );
@@ -112,6 +117,32 @@ describe('LiveActivityTile', () => {
       // though it is equal by value.
       expect(`${key}:${Object.is(first[key], second[key])}`).toBe(`${key}:true`);
     }
+  });
+
+  it('claims its own height in grid rows so it never shares a row', () => {
+    renderTile(EPISODE_START);
+    expect(screen.getByTestId('live-activity-tile')).toHaveStyle({
+      gridRowEnd: `span ${ROW_SPAN}`,
+    });
+  });
+
+  it('leaves placement to the grid until the grid has been measured', () => {
+    // A span of one pixel row would squash the tile, so an unmeasured grid
+    // gets no span at all rather than a guessed one.
+    render(
+      <LiveActivityTile
+        entry={ENTRY}
+        monitor={MONITOR}
+        status={undefined}
+        currentProfile={PROFILE}
+        accessToken="t"
+        navigate={navigate}
+        now={EPISODE_START}
+        rowSpan={undefined}
+        onDismiss={onDismiss}
+      />
+    );
+    expect(screen.getByTestId('live-activity-tile').style.gridRowEnd).toBe('');
   });
 
   it('shows what ZoneMinder said triggered the alarm, when it said anything', () => {
@@ -145,6 +176,7 @@ describe('LiveActivityTile', () => {
         accessToken="t"
         navigate={navigate}
         now={EPISODE_START}
+        rowSpan={ROW_SPAN}
         onDismiss={onDismiss}
       />
     );
@@ -192,6 +224,7 @@ describe('LiveActivityTile', () => {
         accessToken="t"
         navigate={navigate}
         now={EPISODE_START + 1_000}
+        rowSpan={ROW_SPAN}
         onDismiss={onDismiss}
       />
     );
