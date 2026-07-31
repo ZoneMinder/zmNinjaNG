@@ -1031,6 +1031,7 @@
     "max_tiles_desc": "Les caméras en trop sont regroupées en un compteur au lieu d'être affichées.",
     "ignore_list_label": "Caméras à surveiller",
     "ignore_list_desc": "Désactivez une caméra pour la masquer seulement sur cette page; elle reste visible ailleurs.",
+    "continuous_hint": "Enregistre en continu, donc ignoré par défaut.",
     "ignore_list_empty": "Aucune caméra disponible."
   },
   "languages": {

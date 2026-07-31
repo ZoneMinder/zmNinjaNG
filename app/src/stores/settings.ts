@@ -165,6 +165,12 @@ export interface ProfileSettings {
   /** Live Activity: monitors that never appear on that page. Separate from the
    *  profile-wide monitor exclusion, which hides a monitor everywhere. */
   liveActivityIgnoredMonitorIds: string[];
+  /** Live Activity: continuous-recording monitors the user opted back in to.
+   *  They are skipped by default because a monitor that always records is
+   *  always in an event, which says nothing about what is alarming now. An
+   *  explicit opt-in list rather than seeding the ignore list above, so the
+   *  default stays distinguishable from a deliberate choice. */
+  liveActivityWatchContinuousIds: string[];
   // Selected group ID for filtering monitors (null = show all monitors)
   selectedGroupId: string | null;
   // Monitor IDs excluded from this profile. Excluded monitors and their events
@@ -339,6 +345,7 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   liveActivityDwellSeconds: LIVE_ACTIVITY.defaultDwellSeconds,
   liveActivityMaxTiles: LIVE_ACTIVITY.defaultMaxTiles,
   liveActivityIgnoredMonitorIds: [],
+  liveActivityWatchContinuousIds: [],
   // No group filter by default (show all monitors)
   selectedGroupId: null,
   // No monitors excluded by default

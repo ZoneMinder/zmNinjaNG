@@ -1031,6 +1031,7 @@
     "max_tiles_desc": "超出的监控将合并为一个数字，不再显示。",
     "ignore_list_label": "要监看的监控",
     "ignore_list_desc": "关闭某个监控可使其不在本页显示，它仍会在其他页面可见。",
+    "continuous_hint": "持续录像，因此默认跳过。",
     "ignore_list_empty": "没有可用的监控。"
   },
   "languages": {

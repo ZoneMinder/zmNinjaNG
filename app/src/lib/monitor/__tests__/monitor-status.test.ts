@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { getMonitorRunState, isMonitorStreamable, monitorDotColor } from '../monitor-status';
+import {
+  getMonitorRunState,
+  isContinuousRecording,
+  isMonitorStreamable,
+  monitorDotColor,
+} from '../monitor-status';
 import type { Monitor, MonitorStatus } from '../../../api/types';
 
 function makeMonitor(overrides: Partial<Monitor> = {}): Monitor {
@@ -208,6 +213,49 @@ describe('getMonitorRunState', () => {
   it('returns "disabled" when zmVersion is null and Function is None', () => {
     const monitor = makeMonitor({ Function: 'None' });
     expect(getMonitorRunState(monitor, makeStatus(), null)).toBe('disabled');
+  });
+});
+
+describe('isContinuousRecording', () => {
+  describe('ZM 1.38+ reads Recording', () => {
+    const zmVersion = '1.38.0';
+
+    it('is continuous when Recording is Always', () => {
+      expect(isContinuousRecording(makeMonitor({ Recording: 'Always' }), zmVersion)).toBe(true);
+    });
+
+    it.each(['OnMotion', 'None'])('is not continuous when Recording is %s', (Recording) => {
+      expect(isContinuousRecording(makeMonitor({ Recording }), zmVersion)).toBe(false);
+    });
+
+    it('ignores a pre-1.38 Function that a 1.38 server still reports', () => {
+      // A 1.38 upgrade leaves Function populated, but Recording is what the
+      // server actually acts on, so Function must not decide this here.
+      const monitor = makeMonitor({ Function: 'Mocord', Recording: 'OnMotion' });
+      expect(isContinuousRecording(monitor, zmVersion)).toBe(false);
+    });
+
+    it('is not continuous when a 1.38 server omits Recording', () => {
+      expect(isContinuousRecording(makeMonitor({ Recording: undefined }), zmVersion)).toBe(false);
+    });
+  });
+
+  describe('pre-1.38 reads Function', () => {
+    it.each(['Record', 'Mocord'])('is continuous when Function is %s', (Function) => {
+      expect(isContinuousRecording(makeMonitor({ Function }), '1.36.33')).toBe(true);
+    });
+
+    it.each(['Modect', 'Monitor', 'Nodect', 'None'])(
+      'is not continuous when Function is %s',
+      (Function) => {
+        expect(isContinuousRecording(makeMonitor({ Function }), '1.36.33')).toBe(false);
+      }
+    );
+
+    it('reads Function when zmVersion is unknown, ignoring Recording', () => {
+      const monitor = makeMonitor({ Function: 'Record', Recording: 'OnMotion' });
+      expect(isContinuousRecording(monitor, null)).toBe(true);
+    });
   });
 });
 

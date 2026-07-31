@@ -12,23 +12,37 @@ vi.mock('../../api/monitors', () => ({
   getAlarmStatus: vi.fn(),
 }));
 
+// Mutable so a test can set a page preference or the server version before it
+// renders. vi.hoisted because the mock factories below are hoisted above
+// ordinary module scope.
+const env = vi.hoisted(() => ({
+  settings: {
+    liveActivityPollSeconds: 5,
+    liveActivityDwellSeconds: 30,
+    liveActivityMaxTiles: 12,
+    liveActivityIgnoredMonitorIds: [] as string[],
+    liveActivityWatchContinuousIds: [] as string[],
+    bandwidthMode: 'normal',
+    monitorGridCols: 2,
+  },
+  zmVersion: '1.36.33' as string | null,
+}));
+
 vi.mock('../../hooks/useCurrentProfile', () => ({
   useCurrentProfile: () => ({
     currentProfile: { id: 'p1', portalUrl: 'https://zm.test' },
-    settings: {
-      liveActivityPollSeconds: 5,
-      liveActivityDwellSeconds: 30,
-      liveActivityMaxTiles: 12,
-      liveActivityIgnoredMonitorIds: [],
-      bandwidthMode: 'normal',
-      monitorGridCols: 2,
-    },
+    settings: env.settings,
   }),
 }));
 
 vi.mock('../../stores/auth', () => ({
-  useAuthStore: (selector: (s: { isAuthenticated: boolean; accessToken: string | null }) => unknown) =>
-    selector({ isAuthenticated: true, accessToken: 't' }),
+  useAuthStore: (
+    selector: (s: {
+      isAuthenticated: boolean;
+      accessToken: string | null;
+      version: string | null;
+    }) => unknown
+  ) => selector({ isAuthenticated: true, accessToken: 't', version: env.zmVersion }),
 }));
 
 // The real stores/notifications.ts module is heavy: importing it for real
@@ -123,6 +137,9 @@ describe('LiveActivity', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     tileRenders.count = 0;
+    env.settings.liveActivityIgnoredMonitorIds = [];
+    env.settings.liveActivityWatchContinuousIds = [];
+    env.zmVersion = '1.36.33';
     mockMonitors.mockResolvedValue(MONITORS as never);
   });
 
@@ -153,6 +170,80 @@ describe('LiveActivity', () => {
       expect(screen.getByRole('img', { name: 'Alarmed' })).toBeInTheDocument();
     });
     expect(screen.getByRole('img', { name: 'Alarmed' })).toHaveAttribute('title', 'Alarmed');
+  });
+
+  // A monitor that always records is always inside an event, so it would sit
+  // on this page forever and crowd out whatever is genuinely alarming.
+  describe('continuous-recording monitors', () => {
+    const WITH_CONTINUOUS = {
+      monitors: [
+        ...MONITORS.monitors,
+        { Monitor: { Id: '5', Name: 'Driveway', Function: 'Mocord', Capturing: 'Always' } },
+      ],
+    };
+
+    beforeEach(() => {
+      mockMonitors.mockResolvedValue(WITH_CONTINUOUS as never);
+      // Everything alarming, so only the watched set decides what renders.
+      mockStatus.mockResolvedValue({ status: 2 } as never);
+    });
+
+    it('leaves a continuous recorder off the page by default', async () => {
+      render(<LiveActivity />, { wrapper });
+
+      await waitFor(() => {
+        expect(screen.getByText('Front Door')).toBeInTheDocument();
+      });
+      expect(screen.queryByText('Driveway')).not.toBeInTheDocument();
+    });
+
+    it('watches a continuous recorder the user opted back in', async () => {
+      env.settings.liveActivityWatchContinuousIds = ['5'];
+
+      render(<LiveActivity />, { wrapper });
+
+      await waitFor(() => {
+        expect(screen.getByText('Driveway')).toBeInTheDocument();
+      });
+    });
+
+    it('keeps an opted-in continuous recorder out when it is also ignored', async () => {
+      env.settings.liveActivityWatchContinuousIds = ['5'];
+      env.settings.liveActivityIgnoredMonitorIds = ['5'];
+
+      render(<LiveActivity />, { wrapper });
+
+      await waitFor(() => {
+        expect(screen.getByText('Front Door')).toBeInTheDocument();
+      });
+      expect(screen.queryByText('Driveway')).not.toBeInTheDocument();
+    });
+
+    it('reads Recording rather than Function on ZM 1.38+', async () => {
+      // The same monitor: pre-1.38 Function says continuous, 1.38 Recording
+      // says on-motion. The 1.38 field wins, so it is watched.
+      env.zmVersion = '1.38.0';
+      mockMonitors.mockResolvedValue({
+        monitors: [
+          ...MONITORS.monitors,
+          {
+            Monitor: {
+              Id: '5',
+              Name: 'Driveway',
+              Function: 'Mocord',
+              Recording: 'OnMotion',
+              Capturing: 'Always',
+            },
+          },
+        ],
+      } as never);
+
+      render(<LiveActivity />, { wrapper });
+
+      await waitFor(() => {
+        expect(screen.getByText('Driveway')).toBeInTheDocument();
+      });
+    });
   });
 
   it('shows the quiet empty state when nothing is alarming', async () => {

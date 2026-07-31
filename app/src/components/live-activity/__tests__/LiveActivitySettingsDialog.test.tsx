@@ -2,15 +2,23 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { LiveActivitySettingsDialog } from '../LiveActivitySettingsDialog';
 import { useSettingsStore } from '../../../stores/settings';
+import { useAuthStore } from '../../../stores/auth';
 
 const MONITORS = [
-  { Monitor: { Id: '3', Name: 'Front Door' } },
-  { Monitor: { Id: '4', Name: 'Backyard' } },
+  { Monitor: { Id: '3', Name: 'Front Door', Function: 'Modect' } },
+  { Monitor: { Id: '4', Name: 'Backyard', Function: 'Modect' } },
+];
+
+// Mocord records continuously on the pre-1.38 schema the tests below run on.
+const MONITORS_WITH_CONTINUOUS = [
+  ...MONITORS,
+  { Monitor: { Id: '5', Name: 'Driveway', Function: 'Mocord' } },
 ];
 
 describe('LiveActivitySettingsDialog', () => {
   beforeEach(() => {
     useSettingsStore.setState({ profileSettings: {} });
+    useAuthStore.setState({ version: '1.36.33' });
   });
 
   it('persists a changed dwell value to the profile settings on blur', () => {
@@ -47,6 +55,81 @@ describe('LiveActivitySettingsDialog', () => {
     expect(
       useSettingsStore.getState().getProfileSettings('p1').liveActivityIgnoredMonitorIds
     ).toEqual(['4']);
+  });
+
+  // A continuous recorder is skipped by default, so its toggle drives the
+  // opt-in list rather than the ignore list. Seeding the ignore list instead
+  // would make the automatic default indistinguishable from a user's choice.
+  describe('continuous-recording monitors', () => {
+    function renderDialog() {
+      return render(
+        <LiveActivitySettingsDialog
+          open
+          onOpenChange={() => {}}
+          profileId="p1"
+          monitors={MONITORS_WITH_CONTINUOUS as never}
+        />
+      );
+    }
+
+    it('shows a continuous recorder as off, and says why, without ignoring it', () => {
+      renderDialog();
+
+      expect(screen.getByTestId('live-activity-ignore-5')).toHaveAttribute(
+        'data-state',
+        'unchecked'
+      );
+      expect(screen.getByTestId('live-activity-continuous-hint-5')).toBeInTheDocument();
+      expect(screen.queryByTestId('live-activity-continuous-hint-3')).not.toBeInTheDocument();
+      expect(
+        useSettingsStore.getState().getProfileSettings('p1').liveActivityIgnoredMonitorIds
+      ).toEqual([]);
+    });
+
+    it('opts a continuous recorder in without touching the ignore list', () => {
+      renderDialog();
+
+      fireEvent.click(screen.getByTestId('live-activity-ignore-5'));
+
+      const settings = useSettingsStore.getState().getProfileSettings('p1');
+      expect(settings.liveActivityWatchContinuousIds).toEqual(['5']);
+      expect(settings.liveActivityIgnoredMonitorIds).toEqual([]);
+    });
+
+    it('drops a continuous recorder back out when it is toggled off again', () => {
+      useSettingsStore.getState().updateProfileSettings('p1', {
+        liveActivityWatchContinuousIds: ['5'],
+      });
+
+      renderDialog();
+      expect(screen.getByTestId('live-activity-ignore-5')).toHaveAttribute(
+        'data-state',
+        'checked'
+      );
+
+      fireEvent.click(screen.getByTestId('live-activity-ignore-5'));
+
+      expect(
+        useSettingsStore.getState().getProfileSettings('p1').liveActivityWatchContinuousIds
+      ).toEqual([]);
+    });
+
+    it('treats an alarm-only monitor normally on ZM 1.38+', () => {
+      useAuthStore.setState({ version: '1.38.0' });
+      render(
+        <LiveActivitySettingsDialog
+          open
+          onOpenChange={() => {}}
+          profileId="p1"
+          monitors={
+            [...MONITORS, { Monitor: { Id: '5', Name: 'Driveway', Function: 'Mocord', Recording: 'OnMotion' } }] as never
+          }
+        />
+      );
+
+      expect(screen.queryByTestId('live-activity-continuous-hint-5')).not.toBeInTheDocument();
+      expect(screen.getByTestId('live-activity-ignore-5')).toHaveAttribute('data-state', 'checked');
+    });
   });
 
   it('removes a monitor from the ignore list when it is toggled back on', () => {

@@ -29,6 +29,7 @@ import {
   sameMonitorOrder,
   type ActiveMonitorEntry,
 } from '../lib/monitor/live-activity';
+import { isContinuousRecording } from '../lib/monitor/monitor-status';
 import { runViewTransition } from '../lib/view-transition';
 import { cn } from '../lib/utils';
 import type { MonitorAlarmState } from '../lib/monitor/alarm-state';
@@ -49,6 +50,7 @@ export default function LiveActivity() {
   const { currentProfile, settings } = useCurrentProfile();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const accessToken = useAuthStore((s) => s.accessToken);
+  const zmVersion = useAuthStore((s) => s.version);
   const updateSettings = useSettingsStore((s) => s.updateProfileSettings);
   const bandwidth = useBandwidthSettings();
   const gridContainerRef = useRef<HTMLDivElement>(null);
@@ -62,13 +64,28 @@ export default function LiveActivity() {
   });
 
   // Monitors this page is allowed to watch. The profile-wide exclusion is
-  // already applied inside getMonitors; this drops the page-specific ignores.
+  // already applied inside getMonitors; this drops the page-specific ignores
+  // and, unless the user opted them back in, the continuous recorders. A
+  // monitor that always records is always in an event, so it would sit on this
+  // page permanently and crowd out the monitors that are actually alarming.
+  // The ignore list applies on top: an explicitly ignored monitor stays out
+  // whether or not it is also opted in here.
   const watchedIds = useMemo(() => {
     const ignored = new Set(settings.liveActivityIgnoredMonitorIds);
+    const watchContinuous = new Set(settings.liveActivityWatchContinuousIds);
     return (data?.monitors ?? [])
-      .map(({ Monitor }) => Monitor.Id)
-      .filter((id) => !ignored.has(id));
-  }, [data?.monitors, settings.liveActivityIgnoredMonitorIds]);
+      .filter(
+        ({ Monitor }) =>
+          !ignored.has(Monitor.Id) &&
+          (watchContinuous.has(Monitor.Id) || !isContinuousRecording(Monitor, zmVersion))
+      )
+      .map(({ Monitor }) => Monitor.Id);
+  }, [
+    data?.monitors,
+    settings.liveActivityIgnoredMonitorIds,
+    settings.liveActivityWatchContinuousIds,
+    zmVersion,
+  ]);
 
   const pollIntervalMs = resolvePollIntervalMs(
     settings.bandwidthMode,

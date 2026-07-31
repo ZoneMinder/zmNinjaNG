@@ -1031,6 +1031,7 @@
     "max_tiles_desc": "Extra monitors collapse into a count instead of rendering.",
     "ignore_list_label": "Monitors to watch",
     "ignore_list_desc": "Turn a monitor off to keep it off this page only; it stays visible everywhere else.",
+    "continuous_hint": "Records continuously, so it is skipped by default.",
     "ignore_list_empty": "No monitors available."
   },
   "languages": {

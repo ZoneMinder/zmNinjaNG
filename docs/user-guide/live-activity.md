@@ -25,6 +25,8 @@ Open the gear icon at the top of the page to configure:
 - **Maximum tiles**: how many tiles the grid shows at once before the rest collapse into the overflow count.
 - **Monitors to watch**: a per-monitor switch that keeps a monitor off this page only. It stays visible everywhere else in the app. This is separate from the hidden monitors list in {doc}`settings`, which hides a monitor from the whole app.
 
+A monitor set to record continuously starts switched off here, and its row says so. A camera that always records is always inside an event, so it would sit on this page permanently and push out whatever is actually alarming. Switch one back on if you do want to watch it; that choice is remembered separately from the monitors you turned off yourself.
+
 A push notification for a monitor promotes it onto the page immediately, rather than waiting for the next scheduled check.
 
 ## When the server cannot be reached
