@@ -10,19 +10,38 @@
  * and sends CMD_QUIT on unmount, so a monitor that flickers in and out
  * thrashes nph-zms processes on the server.
  *
- * Order is most-recent-alarm first, tiebroken by monitor id: the tile a user
- * most likely wants is the camera that just went off, so it belongs at the top
- * of the grid rather than below whatever alarmed earlier. Under the tile cap
- * that also means the newest activity is what survives truncation. Tiles do
- * move when the order changes, which the page softens with a view transition.
- * The id tiebreak keeps two monitors that alarmed in the same poll from
- * swapping places on later renders for no reason.
+ * Order is newest-alarm-episode first, tiebroken by monitor id: the tile a
+ * user most likely wants is the camera that just went off, so it belongs at
+ * the top of the grid rather than below whatever alarmed earlier. Under the
+ * tile cap that also means the newest activity is what survives truncation.
+ * Tiles do move when the order changes, which the page softens with a view
+ * transition. The id tiebreak keeps two monitors that alarmed in the same poll
+ * from swapping places on later renders for no reason.
+ *
+ * The sort key is the episode start, not the last alarming moment, and that
+ * distinction is the whole point. ZoneMinder's own state machine walks a
+ * winding-down event through `alarm` -> `alert` -> `tape`/`idle` and back
+ * again, so across one event's tail a monitor leaves and rejoins the alarming
+ * set every second or two. Sorting on a key restamped from the clock on every
+ * pass turned that into a reorder per tick, and every reorder starts a view
+ * transition that stops all the tiles painting their live stream for a few
+ * hundred milliseconds. Measured over a realistic two-monitor tail driven once
+ * a second: 13 reorders in 66 seconds, 11 of them inside a 13-second window.
+ * The episode key holds a monitor's slot for as long as it keeps alarming, and
+ * `LIVE_ACTIVITY.episodeGraceSeconds` decides how long it has to stay quiet
+ * before its next alarm counts as a new episode and moves it back to the top.
+ *
+ * `lastAlarmingAt` is still restamped on every alarming pass, because the
+ * dwell window runs from it; it just no longer decides position.
  *
  * Pure on (previous, states, now, dwellMs) so the whole policy is testable
  * without React, fake timers, or a query client.
  */
 
+import { LIVE_ACTIVITY } from '../zmninja-ng-constants';
 import { isAlarmingState, type MonitorAlarmState } from './alarm-state';
+
+const EPISODE_GRACE_MS = LIVE_ACTIVITY.episodeGraceSeconds * 1000;
 
 export interface ActiveMonitorEntry {
   monitorId: string;
@@ -30,11 +49,14 @@ export interface ActiveMonitorEntry {
   state: MonitorAlarmState;
   /** When this monitor first entered the list. */
   enteredAt: number;
-  /**
-   * When it was last actually alarming. The dwell window runs from here, and
-   * so does the sort order.
-   */
+  /** When it was last actually alarming. The dwell window runs from here. */
   lastAlarmingAt: number;
+  /**
+   * When its current alarm episode began. The sort order runs from here, and
+   * it is deliberately not restamped while an alarm is ongoing or flapping
+   * through an event's tail, so a resident monitor holds its slot.
+   */
+  episodeStartedAt: number;
   /** How many separate alarms it has had while resident. */
   alarmCount: number;
   /** True while it is resident but no longer alarming. */
@@ -47,6 +69,7 @@ function sameEntry(a: ActiveMonitorEntry, b: ActiveMonitorEntry): boolean {
     a.state === b.state &&
     a.enteredAt === b.enteredAt &&
     a.lastAlarmingAt === b.lastAlarmingAt &&
+    a.episodeStartedAt === b.episodeStartedAt &&
     a.alarmCount === b.alarmCount &&
     a.isCooling === b.isCooling
   );
@@ -73,10 +96,16 @@ export function reduceActiveMonitors(
     if (alarming) {
       // A fresh alarm is one that starts while the entry was cooling.
       const isFreshAlarm = entry.isCooling;
+      // It only starts a new episode, and so a new sort position, if the
+      // monitor had been quiet long enough that this is not the same event
+      // still winding down. A blip back into `alarm` a second after dropping
+      // to `tape` is the same episode and must not move the tile.
+      const startsNewEpisode = isFreshAlarm && now - entry.lastAlarmingAt > EPISODE_GRACE_MS;
       next.push({
         ...entry,
         state,
         lastAlarmingAt: now,
+        episodeStartedAt: startsNewEpisode ? now : entry.episodeStartedAt,
         alarmCount: entry.alarmCount + (isFreshAlarm ? 1 : 0),
         isCooling: false,
       });
@@ -99,16 +128,17 @@ export function reduceActiveMonitors(
       state,
       enteredAt: now,
       lastAlarmingAt: now,
+      episodeStartedAt: now,
       alarmCount: 1,
       isCooling: false,
     });
   }
 
-  // Freshest alarm on top. Sorted before the identity check below, so a sort
-  // that changes nothing still hands back the previous array.
+  // Newest alarm episode on top. Sorted before the identity check below, so a
+  // sort that changes nothing still hands back the previous array.
   next.sort(
     (a, b) =>
-      b.lastAlarmingAt - a.lastAlarmingAt ||
+      b.episodeStartedAt - a.episodeStartedAt ||
       (a.monitorId < b.monitorId ? -1 : a.monitorId > b.monitorId ? 1 : 0)
   );
 

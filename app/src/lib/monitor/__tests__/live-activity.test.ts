@@ -6,8 +6,11 @@ import {
   sameMonitorOrder,
   type ActiveMonitorEntry,
 } from '../live-activity';
+import type { MonitorAlarmState } from '../alarm-state';
+import { LIVE_ACTIVITY } from '../../zmninja-ng-constants';
 
 const DWELL = 30_000;
+const GRACE = LIVE_ACTIVITY.episodeGraceSeconds * 1000;
 
 describe('reduceActiveMonitors', () => {
   it('adds a monitor when it starts alarming', () => {
@@ -79,12 +82,74 @@ describe('reduceActiveMonitors', () => {
     expect(third.map((e) => e.monitorId)).toEqual(['1', '2']);
   });
 
-  it('re-sorts a cooling monitor back to the top when it alarms again', () => {
+  it('re-sorts a cooling monitor back to the top when it alarms again after a real lull', () => {
+    // The lull has to clear the episode grace window. A monitor that blips
+    // back into alarm a second after going quiet is the same event winding
+    // down, not a new one, and the next three tests pin that.
     let list = reduceActiveMonitors([], { a: 'alarm', b: 'idle' }, 1000, DWELL);
     list = reduceActiveMonitors(list, { a: 'idle', b: 'alarm' }, 2000, DWELL);
     expect(list.map((e) => e.monitorId)).toEqual(['b', 'a']);
-    list = reduceActiveMonitors(list, { a: 'alarm', b: 'idle' }, 3000, DWELL);
+    list = reduceActiveMonitors(list, { a: 'alarm', b: 'alarm' }, 1000 + GRACE + 1, DWELL);
     expect(list.map((e) => e.monitorId)).toEqual(['a', 'b']);
+    expect(list[0].episodeStartedAt).toBe(1000 + GRACE + 1);
+    // b never stopped alarming, so its episode is still the one that began at
+    // 2000 rather than being restamped to now.
+    expect(list[1].episodeStartedAt).toBe(2000);
+  });
+
+  it('holds the order steady through a sustained alarm', () => {
+    // Both alarm without interruption for a full minute. Nothing about who is
+    // on top has changed, so nothing may move.
+    let list = reduceActiveMonitors([], { a: 'alarm' }, 1000, DWELL);
+    list = reduceActiveMonitors(list, { a: 'alarm', b: 'alarm' }, 2000, DWELL);
+    expect(list.map((e) => e.monitorId)).toEqual(['b', 'a']);
+    for (let t = 3000; t <= 63_000; t += 1000) {
+      list = reduceActiveMonitors(list, { a: 'alarm', b: 'alarm' }, t, DWELL);
+      expect(list.map((e) => e.monitorId)).toEqual(['b', 'a']);
+    }
+  });
+
+  it('holds the order steady while two monitors flap through an event tail', () => {
+    // ZoneMinder walks a winding-down event alarm -> alert -> tape -> alarm,
+    // and only alarm and alert count as alarming, so each monitor drops out of
+    // the alarming set and rejoins it every second or so. Sorting on a key
+    // restamped every pass made the two tiles trade places on almost every
+    // tick; the episode key must leave them where they are.
+    let list = reduceActiveMonitors([], { a: 'alarm', b: 'alarm' }, 1000, DWELL);
+    expect(list.map((e) => e.monitorId)).toEqual(['a', 'b']);
+    const tail: Array<[MonitorAlarmState, MonitorAlarmState]> = [
+      ['tape', 'alert'],
+      ['alert', 'tape'],
+      ['tape', 'alert'],
+      ['alert', 'alert'],
+      ['tape', 'alert'],
+      ['alert', 'tape'],
+      ['alarm', 'alarm'],
+    ];
+    tail.forEach(([a, b], i) => {
+      list = reduceActiveMonitors(list, { a, b }, 2000 + i * 1000, DWELL);
+      expect(list.map((e) => e.monitorId)).toEqual(['a', 'b']);
+    });
+    // The tail must not have bumped either episode start off its original tick.
+    expect(list.map((e) => e.episodeStartedAt)).toEqual([1000, 1000]);
+  });
+
+  it('promotes a long-quiet monitor to the top when it genuinely alarms again', () => {
+    // a alarms, goes quiet for longer than the grace window while b keeps
+    // alarming, then alarms again. That is a new event, so a takes the top
+    // tile even though b has been alarming the whole time.
+    let list = reduceActiveMonitors([], { a: 'alarm', b: 'idle' }, 1000, DWELL);
+    list = reduceActiveMonitors(list, { a: 'idle', b: 'alarm' }, 2000, DWELL);
+    expect(list.map((e) => e.monitorId)).toEqual(['b', 'a']);
+    // Still quiet one tick before the grace window closes: no promotion yet.
+    list = reduceActiveMonitors(list, { a: 'alarm', b: 'alarm' }, 1000 + GRACE, DWELL);
+    expect(list.map((e) => e.monitorId)).toEqual(['b', 'a']);
+    // Quiet again, then a real re-alarm past the window.
+    list = reduceActiveMonitors(list, { a: 'idle', b: 'alarm' }, 1000 + GRACE + 1000, DWELL);
+    const realarmAt = 1000 + GRACE * 2 + 2000;
+    list = reduceActiveMonitors(list, { a: 'alarm', b: 'alarm' }, realarmAt, DWELL);
+    expect(list.map((e) => e.monitorId)).toEqual(['a', 'b']);
+    expect(list[0].episodeStartedAt).toBe(realarmAt);
   });
 
   it('keeps surviving monitors in place when one in the middle expires', () => {
@@ -92,9 +157,11 @@ describe('reduceActiveMonitors', () => {
     list = reduceActiveMonitors(list, { a: 'alarm' }, 1000, DWELL);
     list = reduceActiveMonitors(list, { a: 'alarm', b: 'alarm' }, 2000, DWELL);
     list = reduceActiveMonitors(list, { a: 'alarm', b: 'alarm', c: 'alarm' }, 3000, DWELL);
-    // b goes idle and expires; a and c stay alarming.
+    // Newest episode on top, so the arrival order is reversed.
+    expect(list.map((e) => e.monitorId)).toEqual(['c', 'b', 'a']);
+    // b goes idle and expires; a and c stay alarming and must not swap.
     list = reduceActiveMonitors(list, { a: 'alarm', b: 'idle', c: 'alarm' }, 3000 + DWELL + 1, DWELL);
-    expect(list.map((e) => e.monitorId)).toEqual(['a', 'c']);
+    expect(list.map((e) => e.monitorId)).toEqual(['c', 'a']);
   });
 
   it('drops a monitor that disappears from the states map entirely', () => {
@@ -138,6 +205,7 @@ describe('capActiveMonitors', () => {
     state: 'alarm',
     enteredAt: 0,
     lastAlarmingAt: 0,
+    episodeStartedAt: 0,
     alarmCount: 1,
     isCooling: false,
   });
@@ -177,6 +245,7 @@ describe('sameMonitorOrder', () => {
     state: isCooling ? 'idle' : 'alarm',
     enteredAt: 0,
     lastAlarmingAt: 0,
+    episodeStartedAt: 0,
     alarmCount: 1,
     isCooling,
   });

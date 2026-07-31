@@ -1165,6 +1165,16 @@ export const LIVE_ACTIVITY = {
   // nph-zms processes on their own server.
   minDwellSeconds: 5,
   maxDwellSeconds: 300,
+  // How long a resident monitor must stay quiet before its next alarm counts
+  // as a new episode and re-sorts it to the top. ZoneMinder walks a winding
+  // down event through `alarm` -> `alert` -> `tape`/`idle` and back, so a
+  // monitor drops out of the alarming set and returns to it repeatedly across
+  // one event's tail, a second or two at a time. Without this window every one
+  // of those blips restamps the sort key and the grid reorders once a second
+  // for the length of the tail. Comfortably longer than that flapping and
+  // shorter than the default dwell window, so a real second alarm on a monitor
+  // that had genuinely gone quiet still takes the top tile.
+  episodeGraceSeconds: 15,
   minTiles: 1,
   maxTiles: 40,
 } as const;

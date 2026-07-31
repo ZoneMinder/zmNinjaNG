@@ -2566,11 +2566,17 @@ thrash ``nph-zms`` on the server, not just the display.
    one that stops alarming keeps its slot until ``now - lastAlarmingAt``
    exceeds the dwell window, then drops; a fresh alarm after cooling bumps
    ``alarmCount``, which is what puts the ``×2`` badge on a tile. The result
-   is then sorted by ``lastAlarmingAt`` descending with the monitor id as a
+   is then sorted by ``episodeStartedAt`` descending with the monitor id as a
    tiebreak, so the freshest alarm is the first tile and monitors that
-   alarmed in the same poll hold a fixed order. The sort runs before the
-   identity check, so an order that did not actually change still hands back
-   the previous array rather than re-rendering every tile.
+   alarmed in the same poll hold a fixed order. That key is the start of the
+   current alarm episode, not the last alarming moment: ZoneMinder drops a
+   winding-down monitor out of the alarming set and back into it every second
+   or two, and sorting on ``lastAlarmingAt`` restamped the key on every pass,
+   so the tiles traded places on almost every tick of an event's tail. A
+   monitor has to stay quiet for ``LIVE_ACTIVITY.episodeGraceSeconds`` before
+   its next alarm starts a new episode and moves it back to the top. The sort
+   runs before the identity check, so an order that did not actually change
+   still hands back the previous array rather than re-rendering every tile.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/monitor/live-activity.ts#L48>`__
    · → :doc:`05-component-architecture`
 

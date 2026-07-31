@@ -601,10 +601,28 @@ The pipeline, in the order it runs:
   state map into the ordered list actually rendered: a monitor joins on
   ``alarm``/``alert``, stays resident (cooling) until
   ``liveActivityDwellSeconds`` after its last alarm, and only then drops.
-  Order is ``lastAlarmingAt`` descending, tiebroken by monitor id, so the
+  Order is ``episodeStartedAt`` descending, tiebroken by monitor id, so the
   camera that just went off is the first tile and the tile cap keeps the
   freshest activity. ``capActiveMonitors`` then slices the result to
   ``liveActivityMaxTiles`` and reports the remainder as an overflow count.
+- The sort key is when the alarm episode *began*, not when the monitor was
+  last alarming, and those are different things. ZoneMinder walks a
+  winding-down event through ``alarm`` to ``alert`` to ``tape`` or ``idle``
+  and back, and only ``alarm`` and ``alert`` count as alarming, so across one
+  event's tail a monitor leaves and rejoins the alarming set every second or
+  two. Sorting on ``lastAlarmingAt``, which is restamped from the clock on
+  every alarming pass, turned that into a reorder per tick: driving the real
+  reducer once a second over a realistic two-monitor tail produced 13
+  reorders in 66 seconds, 11 of them inside a 13-second window. Each one
+  starts a view transition, and while a transition runs the captured elements
+  are not painted, so the grid spent a large fraction of an event's tail
+  showing pseudo-elements instead of live video. ``episodeStartedAt`` is not
+  restamped while a monitor keeps alarming, and a monitor that stops alarming
+  has to stay quiet for ``LIVE_ACTIVITY.episodeGraceSeconds`` before its next
+  alarm counts as a new episode and moves it back to the top. The same input
+  now produces 2 reorders, both of them real dwell expiries.
+  ``lastAlarmingAt`` is still restamped every pass, because the dwell window
+  runs from it; it just no longer decides position.
 
 .. code:: tsx
 
@@ -645,11 +663,13 @@ plus-lighter``, which only cross-fades correctly when both halves are the
 same image. A tile that animates its own ``opacity`` or ``filter`` therefore
 hands the browser two halves that do not match, and renders wrong for the
 whole transition. An earlier version faded cooling tiles toward ``opacity-60
-saturate-50`` over 700ms and hit exactly that: the grid reorders roughly once
-a second while ZoneMinder flaps a winding-down monitor between ``alert``
-(alarming) and ``tape`` (not alarming), so the mis-composite repeated for the
-length of an event's tail, which is the window right before a tile dwells
-out. Nothing may animate opacity or filter on this element. A test asserts a
+saturate-50`` over 700ms and hit exactly that. It was especially visible
+because the grid used to reorder roughly once a second while ZoneMinder
+flapped a winding-down monitor between ``alert`` (alarming) and ``tape`` (not
+alarming), so the mis-composite repeated for the length of an event's tail,
+which is the window right before a tile dwells out. The ``episodeStartedAt``
+sort above removes that repetition, but the constraint stands on its own:
+nothing may animate opacity or filter on this element. A test asserts a
 cooling tile's resolved class list is byte-identical to an alarming one's.
 
 The 200ms is written as ``[animation-duration:200ms]`` rather than
