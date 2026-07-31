@@ -1156,7 +1156,7 @@ export function getBandwidthSettings(mode: BandwidthMode): BandwidthSettings {
 export const LIVE_ACTIVITY = {
   defaultPollSeconds: 5,
   defaultDwellSeconds: 30,
-  defaultMaxTiles: 12,
+  defaultMaxTiles: 30,
   minPollSeconds: 2,
   maxPollSeconds: 60,
   // Not 0: the dwell window is what stops a monitor flickering in and out of
