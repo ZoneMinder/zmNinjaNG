@@ -327,6 +327,58 @@ describe('LiveActivity', () => {
     expect(screen.queryByTestId('live-activity-elapsed-4')).not.toBeInTheDocument();
   });
 
+  it('lists a monitor in the cleared strip once its tile has left', async () => {
+    // Activity used to vanish without trace when a dwell window closed. The
+    // strip is a static list, so this also asserts no player came with it.
+    vi.resetModules();
+    vi.doMock('../../hooks/useCurrentProfile', () => ({
+      useCurrentProfile: () => ({
+        currentProfile: { id: 'p1', portalUrl: 'https://zm.test' },
+        settings: {
+          liveActivityPollSeconds: 5,
+          // 10ms of dwell, so the tile leaves between two fast polls.
+          liveActivityDwellSeconds: 0.01,
+          liveActivityMaxTiles: 12,
+          liveActivityIgnoredMonitorIds: [],
+          liveActivityWatchContinuousIds: [],
+          liveActivityIsFullscreen: false,
+          bandwidthMode: 'normal',
+          monitorGridCols: 2,
+        },
+      }),
+    }));
+    vi.doMock('../../stores/notifications', () => ({
+      resolvePollIntervalMs: () => 20,
+      useNotificationStore: (selector: (s: { profileEvents: Record<string, unknown[]> }) => unknown) =>
+        selector({ profileEvents: {} }),
+    }));
+
+    const { default: LiveActivityFast } = await import('../LiveActivity');
+    const { getMonitors: reimportedGetMonitors, getAlarmStatus: reimportedGetAlarmStatus } =
+      await import('../../api/monitors');
+    vi.mocked(reimportedGetMonitors).mockResolvedValue(MONITORS as never);
+
+    let monitorThreeCalls = 0;
+    vi.mocked(reimportedGetAlarmStatus).mockImplementation(async (id: string) => {
+      if (id !== '3') return { status: 0 } as never;
+      monitorThreeCalls += 1;
+      return { status: monitorThreeCalls === 1 ? 2 : 0 } as never;
+    });
+
+    render(<LiveActivityFast />, { wrapper });
+
+    await waitFor(() => expect(screen.getByTestId('live-activity-tile')).toBeInTheDocument());
+    await waitFor(
+      () => {
+        expect(screen.getByTestId('live-activity-cleared-3')).toHaveTextContent('Front Door');
+      },
+      { timeout: 5000 }
+    );
+    expect(screen.getByTestId('live-activity-cleared')).toHaveTextContent('Recently cleared');
+    expect(screen.queryByTestId('live-activity-tile')).not.toBeInTheDocument();
+    expect(screen.queryAllByTestId('live-activity-tile-mock')).toHaveLength(0);
+  }, 10000);
+
   it('keeps a dismissed tile gone while its monitor is still alarming', async () => {
     // The trap this control exists to avoid: the monitor never stops alarming
     // here, so a dismissal that did not suppress re-entry would see the tile

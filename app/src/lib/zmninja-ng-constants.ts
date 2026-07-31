@@ -1185,4 +1185,10 @@ export const LIVE_ACTIVITY = {
   episodeGraceSeconds: 15,
   minTiles: 1,
   maxTiles: 40,
+  // The recently-cleared strip under the grid. Bounded on both axes on
+  // purpose: it exists so activity does not vanish without trace, not to
+  // become a second, unbounded list competing with the grid for the page. A
+  // few minutes covers "what did I just miss" and nothing longer.
+  clearedMaxItems: 6,
+  clearedMaxAgeSeconds: 300,
 } as const;

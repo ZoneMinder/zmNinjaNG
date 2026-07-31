@@ -3,6 +3,7 @@ import {
   reduceActiveMonitors,
   capActiveMonitors,
   applyLiveAlarmHints,
+  recordCleared,
   releaseDismissed,
   sameMonitorOrder,
   type ActiveMonitorEntry,
@@ -348,6 +349,42 @@ describe('sameMonitorOrder', () => {
   it('is false when a monitor joins or leaves', () => {
     expect(sameMonitorOrder([make('1')], [make('1'), make('2')])).toBe(false);
     expect(sameMonitorOrder([make('1'), make('2')], [make('1')])).toBe(false);
+  });
+});
+
+describe('recordCleared', () => {
+  const CLEARED_AGE = LIVE_ACTIVITY.clearedMaxAgeSeconds * 1000;
+
+  it('records what just left, newest first', () => {
+    const first = recordCleared([], ['1'], 1000);
+    const second = recordCleared(first, ['2'], 2000);
+    expect(second.map((c) => c.monitorId)).toEqual(['2', '1']);
+    expect(second[0].clearedAt).toBe(2000);
+  });
+
+  it('hands back the same array when nothing left and nothing expired', () => {
+    // It renders under the grid, so a new array on every poll tick would be a
+    // re-render for a list that did not change.
+    const first = recordCleared([], ['1'], 1000);
+    expect(recordCleared(first, [], 2000)).toBe(first);
+  });
+
+  it('moves a monitor that leaves twice rather than listing it twice', () => {
+    const first = recordCleared([], ['1', '2'], 1000);
+    const again = recordCleared(first, ['1'], 5000);
+    expect(again.map((c) => c.monitorId)).toEqual(['1', '2']);
+    expect(again[0].clearedAt).toBe(5000);
+  });
+
+  it('keeps the strip bounded in count', () => {
+    const ids = Array.from({ length: LIVE_ACTIVITY.clearedMaxItems + 3 }, (_, i) => `m${i}`);
+    const cleared = recordCleared([], ids, 1000);
+    expect(cleared).toHaveLength(LIVE_ACTIVITY.clearedMaxItems);
+  });
+
+  it('drops entries older than the age bound', () => {
+    const first = recordCleared([], ['1'], 1000);
+    expect(recordCleared(first, [], 1000 + CLEARED_AGE + 1)).toEqual([]);
   });
 });
 

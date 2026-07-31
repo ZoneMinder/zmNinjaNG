@@ -12,7 +12,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { useShallow } from 'zustand/react/shallow';
-import { Activity, Maximize, Minimize, Settings } from 'lucide-react';
+import { Activity } from 'lucide-react';
 import { getMonitors } from '../api/monitors';
 import { queryKeys } from '../lib/query/query-keys';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
@@ -26,18 +26,23 @@ import {
   reduceActiveMonitors,
   capActiveMonitors,
   applyLiveAlarmHints,
+  recordCleared,
   releaseDismissed,
   sameMonitorOrder,
   type ActiveMonitorEntry,
+  type ClearedMonitor,
 } from '../lib/monitor/live-activity';
 import { isContinuousRecording } from '../lib/monitor/monitor-status';
 import { runViewTransition } from '../lib/view-transition';
 import type { MonitorAlarmState } from '../lib/monitor/alarm-state';
 import { useFullscreenMode } from '../hooks/useFullscreenMode';
-import { EventMontageGridControls } from '../components/events/EventMontageGridControls';
 import { LiveActivitySettingsDialog } from '../components/live-activity/LiveActivitySettingsDialog';
 import { LiveActivityTile } from '../components/live-activity/LiveActivityTile';
-import { Button } from '../components/ui/button';
+import { LiveActivityClearedStrip } from '../components/live-activity/LiveActivityClearedStrip';
+import {
+  LiveActivityHeader,
+  LiveActivityFullscreenBar,
+} from '../components/live-activity/LiveActivityChrome';
 import { EmptyState } from '../components/ui/empty-state';
 import { ErrorBanner } from '../components/ui/query-state';
 import { Skeleton } from '../components/ui/skeleton';
@@ -122,6 +127,8 @@ export default function LiveActivity() {
   // the list a dismissal actually changes. Held for the page's lifetime only,
   // so a dismissal does not outlive the visit that made it.
   const dismissedRef = useRef<ReadonlySet<string>>(new Set());
+  // Monitors that left the grid recently, for the strip under it.
+  const [cleared, setCleared] = useState<ClearedMonitor[]>([]);
 
   // Websocket/push accelerant: a notification received in the last dwell
   // window promotes its monitor into the current poll snapshot immediately,
@@ -189,6 +196,19 @@ export default function LiveActivity() {
       if (next === prev) return;
       activeRef.current = next;
 
+      // Whatever just left is what the strip under the grid lists. Recorded
+      // here rather than by watching `active` in an effect, because this is
+      // the only place both lists exist side by side. recordCleared returns
+      // the same array when nothing left, so this is not a state write per
+      // tick, and it is queued before the publish below so the strip lands in
+      // the same commit rather than repainting partway through a transition.
+      const departed = prev
+        .filter((entry) => !next.some((e) => e.monitorId === entry.monitorId))
+        .map((entry) => entry.monitorId);
+      if (departed.length > 0) {
+        setCleared((current) => recordCleared(current, departed, Date.now()));
+      }
+
       // Only tiles arriving, leaving, or swapping rows is worth a transition;
       // a state or count change happens in place and animates via CSS.
       if (sameMonitorOrder(prev, next)) {
@@ -221,20 +241,37 @@ export default function LiveActivity() {
   // interval for those would run alongside this one for the same reason and
   // at the same rate, and this one is already scoped to exactly when tiles
   // exist.
+  // It also ages the cleared strip out, which is why it keeps running for a
+  // little while after the last tile has gone: the strip would otherwise
+  // freeze on screen with nothing left to tick it. recordCleared returns the
+  // same array once nothing expires, so the interval stops itself when the
+  // strip empties.
   useEffect(() => {
-    if (active.length === 0) return;
+    if (active.length === 0 && cleared.length === 0) return;
     const timer = setInterval(() => {
       setNow(Date.now());
       applyStates(hintedStates, dwellMs, recentCauses);
+      setCleared((current) => recordCleared(current, [], Date.now()));
     }, 1000);
     return () => clearInterval(timer);
-  }, [active.length, hintedStates, dwellMs, recentCauses, applyStates]);
+  }, [active.length, cleared.length, hintedStates, dwellMs, recentCauses, applyStates]);
 
   const { visible, overflowCount } = capActiveMonitors(active, settings.liveActivityMaxTiles);
 
   const monitorsById = useMemo(
     () => new Map((data?.monitors ?? []).map((m) => [m.Monitor.Id, m])),
     [data?.monitors]
+  );
+
+  // A monitor that has since been deleted or filtered out has no name to
+  // show, so it drops off the strip rather than listing an id.
+  const clearedItems = useMemo(
+    () =>
+      cleared.flatMap((item) => {
+        const name = monitorsById.get(item.monitorId)?.Monitor.Name;
+        return name ? [{ ...item, name }] : [];
+      }),
+    [cleared, monitorsById]
   );
 
   // Shares monitorGridCols with the Monitors page rather than a dedicated
@@ -339,6 +376,8 @@ export default function LiveActivity() {
           {t('live_activity.overflow', { count: overflowCount })}
         </p>
       )}
+
+      <LiveActivityClearedStrip items={clearedItems} now={now} />
     </>
   );
 
@@ -351,25 +390,7 @@ export default function LiveActivity() {
         className="fixed inset-0 z-40 bg-black flex flex-col"
         data-testid="live-activity-fullscreen"
       >
-        {/* Montage's own fullscreen bar is not reused here: it carries the
-            kiosk lock and the label toggle, and importing it would pull the
-            kiosk store and the PIN pad onto a page that offers neither. */}
-        <div className="flex items-center justify-between gap-2 h-9 px-3 pt-[var(--sai-top,env(safe-area-inset-top))] bg-black/50 backdrop-blur-sm shrink-0">
-          <span className="text-white/70 font-medium text-xs min-w-0 truncate">
-            {t('live_activity.title')}
-          </span>
-          <Button
-            onClick={() => handleToggleFullscreen(false)}
-            variant="ghost"
-            size="icon"
-            className="text-white/70 hover:text-white hover:bg-white/10 h-7 w-7"
-            title={t('live_activity.exit_fullscreen')}
-            aria-label={t('live_activity.exit_fullscreen')}
-            data-testid="live-activity-exit-fullscreen-btn"
-          >
-            <Minimize className="h-4 w-4" />
-          </Button>
-        </div>
+        <LiveActivityFullscreenBar onExit={() => handleToggleFullscreen(false)} />
         <div className="flex-1 overflow-auto p-2">
           {body}
         </div>
@@ -379,42 +400,17 @@ export default function LiveActivity() {
 
   return (
     <PageContainer>
-      <div className="flex items-center justify-between gap-2 mb-3">
-        <h1 className="text-lg font-semibold min-w-0 truncate" title={t('live_activity.title')}>
-          {t('live_activity.title')}
-        </h1>
-        <div className="flex items-center gap-1">
-          <EventMontageGridControls
-            gridCols={gridCols}
-            customCols={customCols}
-            isCustomGridDialogOpen={isCustomGridDialogOpen}
-            onApplyGridLayout={handleApplyGridLayout}
-            onCustomColsChange={setCustomCols}
-            onCustomGridDialogOpenChange={setIsCustomGridDialogOpen}
-            onCustomGridSubmit={handleCustomGridSubmit}
-          />
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => handleToggleFullscreen(true)}
-            title={t('live_activity.fullscreen')}
-            aria-label={t('live_activity.fullscreen')}
-            data-testid="live-activity-fullscreen-btn"
-          >
-            <Maximize className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setIsSettingsOpen(true)}
-            title={t('live_activity.settings_title')}
-            aria-label={t('live_activity.settings_title')}
-            data-testid="live-activity-settings-btn"
-          >
-            <Settings className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
+      <LiveActivityHeader
+        gridCols={gridCols}
+        customCols={customCols}
+        isCustomGridDialogOpen={isCustomGridDialogOpen}
+        onApplyGridLayout={handleApplyGridLayout}
+        onCustomColsChange={setCustomCols}
+        onCustomGridDialogOpenChange={setIsCustomGridDialogOpen}
+        onCustomGridSubmit={handleCustomGridSubmit}
+        onEnterFullscreen={() => handleToggleFullscreen(true)}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+      />
 
       {currentProfile && (
         <LiveActivitySettingsDialog
