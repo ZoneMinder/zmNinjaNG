@@ -35,6 +35,46 @@ Then('the dwell window should be {int} seconds', async ({ page }, seconds: numbe
   });
 });
 
+When('I enter Live Activity fullscreen', async ({ page }) => {
+  const trigger = page.getByTestId('live-activity-fullscreen-btn');
+  await expect(trigger).toBeVisible({ timeout: testConfig.timeouts.element });
+  await trigger.click();
+});
+
+When('I exit Live Activity fullscreen', async ({ page }) => {
+  await page.getByTestId('live-activity-exit-fullscreen-btn').click();
+});
+
+Then('the Live Activity page chrome should be hidden', async ({ page }) => {
+  await expect(page.getByTestId('live-activity-fullscreen')).toBeVisible({
+    timeout: testConfig.timeouts.element,
+  });
+  await expect(page.getByTestId('live-activity-settings-btn')).toBeHidden();
+  await expect(page.getByTestId('live-activity-fullscreen-btn')).toBeHidden();
+});
+
+Then('the Live Activity page chrome should be visible', async ({ page }) => {
+  await expect(page.getByTestId('live-activity-settings-btn')).toBeVisible({
+    timeout: testConfig.timeouts.element,
+  });
+  await expect(page.getByTestId('live-activity-fullscreen')).toBeHidden();
+});
+
+Then('the Live Activity page should still be fullscreen', async ({ page }) => {
+  await expect(page.getByTestId('live-activity-fullscreen')).toBeVisible({
+    timeout: testConfig.timeouts.pageLoad,
+  });
+});
+
+// The two pages used to be one setting away from sharing a fullscreen state,
+// so this asserts Montage is where it was left rather than dragged along.
+Then('the Montage page should not be fullscreen', async ({ page }) => {
+  await page.getByTestId('nav-item-montage').click();
+  await expect(page.getByTestId('montage-fullscreen-button')).toBeVisible({
+    timeout: testConfig.timeouts.pageLoad,
+  });
+});
+
 Then('I should see the all-quiet message', async ({ page }) => {
   await expect(page.getByTestId('live-activity-empty')).toContainText(/all quiet/i, {
     timeout: testConfig.timeouts.pageLoad,

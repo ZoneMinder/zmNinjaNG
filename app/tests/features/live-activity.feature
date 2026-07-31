@@ -13,6 +13,16 @@ Feature: Live Activity
     And the all-quiet message should name how many monitors are being watched
 
   @all
+  Scenario: Fullscreen hides the page chrome and is remembered, without moving Montage
+    When I enter Live Activity fullscreen
+    Then the Live Activity page chrome should be hidden
+    When I refresh the page
+    Then the Live Activity page should still be fullscreen
+    When I exit Live Activity fullscreen
+    Then the Live Activity page chrome should be visible
+    And the Montage page should not be fullscreen
+
+  @all
   Scenario: Opening the settings dialog and changing the dwell window persists it
     When I open the Live Activity settings
     And I set the dwell window to 60 seconds
