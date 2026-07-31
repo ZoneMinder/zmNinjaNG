@@ -290,7 +290,7 @@ export default function LiveActivity() {
 
       {showSkeleton && (
         <div
-          className="grid gap-2"
+          className="grid"
           style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}
           data-testid="live-activity-loading"
         >
@@ -319,7 +319,7 @@ export default function LiveActivity() {
           // tallest one, and since the video area inside a tile is pinned to
           // its own ratio, the extra height would arrive as dead black space
           // under the picture along with the elapsed label floating in it.
-          className="grid gap-2 items-start"
+          className="grid items-start"
           style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}
         >
           {visible.map((entry) => {
