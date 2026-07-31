@@ -294,6 +294,59 @@ describe('LiveActivity', () => {
     expect(vi.mocked(reimportedGetAlarmStatus).mock.calls.map((c) => c[0])).toEqual(['3']);
   });
 
+  it('drops a tile once its dwell window closes', async () => {
+    // The list update now runs through a shared callback that may route the
+    // state change through a view transition (absent in jsdom, so it falls
+    // back to a plain update). A tile that stopped alarming still has to
+    // leave, which is what proves the fallback path publishes anything at all.
+    vi.resetModules();
+    vi.doMock('../../hooks/useCurrentProfile', () => ({
+      useCurrentProfile: () => ({
+        currentProfile: { id: 'p1', portalUrl: 'https://zm.test' },
+        settings: {
+          liveActivityPollSeconds: 5,
+          // 10ms of dwell, so the window closes between two fast polls.
+          liveActivityDwellSeconds: 0.01,
+          liveActivityMaxTiles: 12,
+          liveActivityIgnoredMonitorIds: [],
+          bandwidthMode: 'normal',
+          monitorGridCols: 2,
+        },
+      }),
+    }));
+    vi.doMock('../../stores/notifications', () => ({
+      resolvePollIntervalMs: () => 20,
+      useNotificationStore: (selector: (s: { profileEvents: Record<string, unknown[]> }) => unknown) =>
+        selector({ profileEvents: {} }),
+    }));
+
+    const { default: LiveActivityFast } = await import('../LiveActivity');
+    const { getMonitors: reimportedGetMonitors, getAlarmStatus: reimportedGetAlarmStatus } =
+      await import('../../api/monitors');
+    vi.mocked(reimportedGetMonitors).mockResolvedValue(MONITORS as never);
+
+    let monitorThreeCalls = 0;
+    vi.mocked(reimportedGetAlarmStatus).mockImplementation(async (id: string) => {
+      if (id !== '3') return { status: 0 } as never;
+      monitorThreeCalls += 1;
+      // Alarming on the first poll only, quiet from then on.
+      return { status: monitorThreeCalls === 1 ? 2 : 0 } as never;
+    });
+
+    render(<LiveActivityFast />, { wrapper });
+
+    await waitFor(() => {
+      expect(screen.getByText('Front Door')).toBeInTheDocument();
+    });
+    await waitFor(
+      () => {
+        expect(screen.queryByTestId('live-activity-tile')).not.toBeInTheDocument();
+      },
+      { timeout: 5000 }
+    );
+    expect(screen.getByTestId('live-activity-empty')).toBeInTheDocument();
+  }, 10000);
+
   // Carried gap (Task 8): the repeat-alarm count badge (entry.alarmCount > 1)
   // has reducer-level unit coverage (lib/monitor/__tests__/live-activity.test.ts)
   // but no page-level coverage of it actually reaching the DOM. Driving this

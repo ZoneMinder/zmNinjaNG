@@ -3,6 +3,7 @@ import {
   reduceActiveMonitors,
   capActiveMonitors,
   applyLiveAlarmHints,
+  sameMonitorOrder,
   type ActiveMonitorEntry,
 } from '../live-activity';
 
@@ -167,6 +168,32 @@ describe('capActiveMonitors', () => {
     const { visible, overflowCount } = capActiveMonitors(list, 1);
     expect(visible.map((e) => e.monitorId)).toEqual(['fresh']);
     expect(overflowCount).toBe(1);
+  });
+});
+
+describe('sameMonitorOrder', () => {
+  const make = (id: string, isCooling = false): ActiveMonitorEntry => ({
+    monitorId: id,
+    state: isCooling ? 'idle' : 'alarm',
+    enteredAt: 0,
+    lastAlarmingAt: 0,
+    alarmCount: 1,
+    isCooling,
+  });
+
+  it('is true when the same monitors sit in the same slots', () => {
+    // What the page uses to decide whether a change is worth animating: a
+    // state change in place must not trigger a reorder transition.
+    expect(sameMonitorOrder([make('1'), make('2')], [make('1'), make('2', true)])).toBe(true);
+  });
+
+  it('is false when two monitors swap places', () => {
+    expect(sameMonitorOrder([make('1'), make('2')], [make('2'), make('1')])).toBe(false);
+  });
+
+  it('is false when a monitor joins or leaves', () => {
+    expect(sameMonitorOrder([make('1')], [make('1'), make('2')])).toBe(false);
+    expect(sameMonitorOrder([make('1'), make('2')], [make('1')])).toBe(false);
   });
 });
 

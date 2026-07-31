@@ -220,6 +220,17 @@
   animation: alarm-pulse 2s ease-in-out infinite;
 }
 
+/* View transitions (Live Activity reorder, refs #313). Only the tiles carry a
+   view-transition-name, and the browser would otherwise cross-fade a snapshot
+   of the whole page around them, which over live video reads as a flash. The
+   root snapshot therefore swaps instantly and only the named tiles animate.
+   A reduced-motion user never reaches this: lib/view-transition.ts applies the
+   change without starting a transition at all. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;

@@ -2578,7 +2578,11 @@ thrash ``nph-zms`` on the server, not just the display.
    arms a one-second interval, only while the list is non-empty, and re-runs
    the same reducer against the same states. The dwell window is measured in
    wall-clock time, not poll ticks, so a tile that stopped alarming between
-   polls does not wait for the next network response to leave.
+   polls does not wait for the next network response to leave. Both effects
+   call one ``useCallback`` with no dependencies, which reads the previous
+   list from a ref rather than from ``active``: a per-render identity, or
+   ``active`` in this effect's deps, would clear and rearm the interval
+   before its 1000ms ever elapsed and cooling tiles would never expire.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/LiveActivity.tsx#L134>`__
    · → :doc:`04-pages-and-views`
 

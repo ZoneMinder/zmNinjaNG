@@ -155,6 +155,16 @@ export function applyLiveAlarmHints(
   return changed ? next : states;
 }
 
+/**
+ * Whether two lists show the same monitors in the same slots.
+ *
+ * The page animates a reorder and does not animate anything else, so it needs
+ * to tell "these tiles moved" from "a tile changed state where it stands".
+ */
+export function sameMonitorOrder(a: ActiveMonitorEntry[], b: ActiveMonitorEntry[]): boolean {
+  return a.length === b.length && a.every((entry, i) => entry.monitorId === b[i].monitorId);
+}
+
 export function capActiveMonitors(
   entries: ActiveMonitorEntry[],
   maxTiles: number

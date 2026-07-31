@@ -26,8 +26,12 @@ import {
   reduceActiveMonitors,
   capActiveMonitors,
   applyLiveAlarmHints,
+  sameMonitorOrder,
   type ActiveMonitorEntry,
 } from '../lib/monitor/live-activity';
+import { runViewTransition } from '../lib/view-transition';
+import { cn } from '../lib/utils';
+import type { MonitorAlarmState } from '../lib/monitor/alarm-state';
 import { MontageMonitor } from '../components/monitors/MontageMonitor';
 import { EventMontageGridControls } from '../components/events/EventMontageGridControls';
 import { LiveActivitySettingsDialog } from '../components/live-activity/LiveActivitySettingsDialog';
@@ -85,6 +89,11 @@ export default function LiveActivity() {
   // The damped display list. Held in state rather than derived during render
   // because it depends on the previous list and on the current time.
   const [active, setActive] = useState<ActiveMonitorEntry[]>([]);
+  // Mirrors `active` so the updater below can read the previous list without
+  // listing it as an effect dependency. `active` in the cooling effect's deps
+  // would rearm the interval on every list change, and since an alarming
+  // monitor's entry restamps Date.now() on each pass, that never settles.
+  const activeRef = useRef<ActiveMonitorEntry[]>(active);
   const dwellMs = settings.liveActivityDwellSeconds * 1000;
 
   // Websocket/push accelerant: a notification received in the last dwell
@@ -116,19 +125,40 @@ export default function LiveActivity() {
     [states, hintedMonitorIds]
   );
 
+  // Runs the dwell policy and publishes the result. Identity-stable (no deps):
+  // both effects below list it, and an identity that changed per render would
+  // tear the one-second interval down before its 1000ms ever elapsed.
+  const applyStates = useCallback(
+    (statesNow: Record<string, MonitorAlarmState>, dwell: number) => {
+      const prev = activeRef.current;
+      const next = reduceActiveMonitors(prev, statesNow, Date.now(), dwell);
+      // reduceActiveMonitors hands back the same array when nothing moved, so
+      // a poll tick that changed nothing costs no render at all.
+      if (next === prev) return;
+      activeRef.current = next;
+
+      // Only tiles arriving, leaving, or swapping rows is worth a transition;
+      // a state or count change happens in place and animates via CSS.
+      if (sameMonitorOrder(prev, next)) {
+        setActive(next);
+        return;
+      }
+      runViewTransition(() => setActive(next));
+    },
+    []
+  );
+
   useEffect(() => {
-    setActive((prev) => reduceActiveMonitors(prev, hintedStates, Date.now(), dwellMs));
-  }, [hintedStates, dwellMs]);
+    applyStates(hintedStates, dwellMs);
+  }, [hintedStates, dwellMs, applyStates]);
 
   // A cooling monitor expires on a timer, not on a poll response, so the list
   // still empties when every monitor has gone quiet and nothing is changing.
   useEffect(() => {
     if (active.length === 0) return;
-    const timer = setInterval(() => {
-      setActive((prev) => reduceActiveMonitors(prev, hintedStates, Date.now(), dwellMs));
-    }, 1000);
+    const timer = setInterval(() => applyStates(hintedStates, dwellMs), 1000);
     return () => clearInterval(timer);
-  }, [active.length, hintedStates, dwellMs]);
+  }, [active.length, hintedStates, dwellMs, applyStates]);
 
   const { visible, overflowCount } = capActiveMonitors(active, settings.liveActivityMaxTiles);
 
@@ -246,11 +276,20 @@ export default function LiveActivity() {
             return (
               <div
                 key={entry.monitorId}
-                className={
-                  entry.isCooling
-                    ? 'relative opacity-60 transition-opacity'
-                    : 'relative transition-opacity'
-                }
+                className={cn(
+                  // Enter: a tile fades and scales up over 200ms instead of
+                  // popping into the grid. tailwindcss-animate, the same
+                  // utilities the dialogs and popovers use.
+                  'relative animate-in fade-in-0 zoom-in-95 duration-200',
+                  // Cooling: winding down reads as a slow fade and a drain of
+                  // color over 700ms, not an instant step to 60%.
+                  'transition-[opacity,filter] duration-700 ease-out',
+                  entry.isCooling && 'opacity-60 saturate-50'
+                )}
+                // Pairs this tile's before and after positions across a view
+                // transition, which is what lets it slide to its new row.
+                // Ignored by browsers without the API.
+                style={{ viewTransitionName: `live-activity-tile-${entry.monitorId}` }}
                 data-testid="live-activity-tile"
               >
                 <MontageMonitor

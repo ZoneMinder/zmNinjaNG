@@ -615,11 +615,37 @@ The pipeline, in the order it runs:
      [states, hintedMonitorIds]
    );
 
-   useEffect(() => {
-     setActive((prev) => reduceActiveMonitors(prev, hintedStates, Date.now(), dwellMs));
-   }, [hintedStates, dwellMs]);
+   // Identity-stable, because the one-second cooling interval below lists it
+   // as a dependency and would otherwise be rearmed before it ever fires.
+   const applyStates = useCallback((statesNow, dwell) => {
+     const prev = activeRef.current;              // a ref, so `active` stays out of the deps
+     const next = reduceActiveMonitors(prev, statesNow, Date.now(), dwell);
+     if (next === prev) return;                   // unchanged poll: no render at all
+     activeRef.current = next;
+     if (sameMonitorOrder(prev, next)) { setActive(next); return; }
+     runViewTransition(() => setActive(next));    // tiles moved: animate the reorder
+   }, []);
+
+   useEffect(() => { applyStates(hintedStates, dwellMs); }, [hintedStates, dwellMs, applyStates]);
 
    const { visible, overflowCount } = capActiveMonitors(active, settings.liveActivityMaxTiles);
+
+Motion is deliberately cheap. A tile enters with ``animate-in fade-in-0
+zoom-in-95`` (tailwindcss-animate, the same utilities the dialogs use) and
+fades toward ``opacity-60 saturate-50`` over 700ms while it cools. Reordering
+goes through ``runViewTransition`` (``src/lib/view-transition.ts``), which
+wraps the state update in ``document.startViewTransition`` when the browser
+has it and applies it directly when it does not, since Electron's Chromium
+and some Capacitor webviews do not. Each tile carries a
+``view-transition-name`` so the browser can pair its old and new positions,
+and ``::view-transition-old(root)`` is pinned to ``animation: none`` in
+``index.css`` so only the tiles animate rather than the whole page
+cross-fading over live video. A tile leaving is animated by the same
+mechanism where the API exists; React alone cannot animate an unmounting
+child, and no animation library was added for it. Everything here is skipped
+outright under ``prefers-reduced-motion``: the CSS transitions through the
+global rule in ``index.css``, and the view transition because
+``runViewTransition`` checks the media query before starting one.
 
 The dwell window is not a display nicety. Each visible entry renders a
 ``MontageMonitor``, the tile Montage documents above, so mounting one mints a
