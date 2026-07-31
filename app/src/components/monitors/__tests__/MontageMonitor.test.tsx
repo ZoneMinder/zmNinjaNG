@@ -174,6 +174,44 @@ describe('MontageMonitor', () => {
     });
   });
 
+  it('sizes the video area from the ratio it is given, header on top', () => {
+    render(
+      <MontageMonitor
+        monitor={mockMonitor}
+        status={mockStatus}
+        currentProfile={mockProfile}
+        accessToken="test-token"
+        navigate={mockNavigate}
+        mediaAspectRatio="4 / 3"
+      />
+    );
+
+    const media = screen.getByTestId('montage-monitor-media');
+    // On the media area, not the card: on the card the h-8 header would eat
+    // into the camera's shape and the picture would crop (refs #313).
+    expect(media.style.aspectRatio).toBe('4 / 3');
+    // flex-1 sets a zero flex basis, which collapses a ratio box whose
+    // container has no height of its own.
+    expect(media.className).not.toContain('flex-1');
+  });
+
+  it('leaves the video area filling the tile when no ratio is given', () => {
+    render(
+      <MontageMonitor
+        monitor={mockMonitor}
+        status={mockStatus}
+        currentProfile={mockProfile}
+        accessToken="test-token"
+        navigate={mockNavigate}
+      />
+    );
+
+    // Montage sizes its tiles through react-grid-layout and must keep doing so.
+    const media = screen.getByTestId('montage-monitor-media');
+    expect(media.style.aspectRatio).toBe('');
+    expect(media.className).toContain('flex-1');
+  });
+
   it('displays running status badge for connected monitor', async () => {
     render(
       <MontageMonitor

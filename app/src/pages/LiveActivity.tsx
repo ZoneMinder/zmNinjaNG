@@ -313,7 +313,13 @@ export default function LiveActivity() {
       {!isEmpty && (
         <div
           ref={gridContainerRef}
-          className="grid gap-2"
+          // items-start, so each tile keeps the height its camera's aspect
+          // ratio gives it and a row ends up as ragged as the cameras in it.
+          // The default stretch would pull every tile in a row up to the
+          // tallest one, and since the video area inside a tile is pinned to
+          // its own ratio, the extra height would arrive as dead black space
+          // under the picture along with the elapsed label floating in it.
+          className="grid gap-2 items-start"
           style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}
         >
           {visible.map((entry) => {

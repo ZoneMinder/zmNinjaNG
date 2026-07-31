@@ -725,6 +725,33 @@ it up at render time is deliberate, since those notification events expire on
 their own schedule and a tile that lost its label halfway through would be
 worse than one that never had it.
 
+Tile height comes from the camera, not from the grid. The page lays tiles out
+in a plain CSS grid, which fixes their width and says nothing about their
+height, so every tile used to be the same box and a 4:3 camera, a 16:9 camera
+and a rotated portrait camera were all cropped or letterboxed into it.
+``LiveActivityTile`` reads ``getMonitorAspectRatio(Width, Height,
+Orientation)`` (``src/lib/monitor/monitor-rotation.ts``, which swaps the axes
+for a 90 or 270 degree rotation) and passes the result to ``MontageMonitor``
+as ``mediaAspectRatio``. The tile then puts that ratio on its video area and
+drops the ``flex-1`` that area otherwise carries, so the card's height is the
+``h-8`` header plus the video, which is the same
+``videoPx + MONTAGE_GRID.cardHeaderHeightPx`` sum ``useMontageGrid`` computes
+for a Montage tile. Two details are load-bearing. The ratio goes on the video
+area rather than on the card or the wrapper, because on either of those the
+header would be counted inside the camera's shape and the picture would crop
+by the header's height. And ``flex-1`` has to go, since it sets a zero flex
+basis, which collapses a ratio box whose flex container has no height of its
+own. Montage passes no ratio at all and keeps sizing its tiles through
+react-grid-layout. ``getMonitorAspectRatio`` returns ``undefined`` for
+dimensions it cannot use, and the tile falls back to
+``MONITOR_UI.fallbackAspectRatio`` rather than rendering a camera with no
+height. The grid itself is ``items-start``: cameras of different shapes give a
+row tiles of different heights, and the default stretch would pull the short
+ones up to the tallest, which cannot stretch the video (that is pinned to its
+ratio) and would instead add dead space under the picture with the elapsed
+label floating in it. A ragged bottom edge is the cost of every tile being
+the shape of its own camera.
+
 Dismissal (the cross on a tile) is a reducer input, not a render-time filter.
 ``reduceActiveMonitors`` skips a dismissed monitor both as a resident and as
 a new arrival, so the tile really unmounts and its stream is quit. The

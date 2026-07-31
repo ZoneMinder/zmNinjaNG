@@ -14,6 +14,8 @@ import type { NavigateFunction } from 'react-router-dom';
 import type { Monitor, MonitorStatus, Profile } from '../../api/types';
 import type { ActiveMonitorEntry } from '../../lib/monitor/live-activity';
 import { formatElapsedShort } from '../../lib/format-date-time';
+import { getMonitorAspectRatio } from '../../lib/monitor/monitor-rotation';
+import { MONITOR_UI } from '../../lib/zmninja-ng-constants';
 import { MontageMonitor } from '../monitors/MontageMonitor';
 import { LiveActivityStateIcon } from './LiveActivityStateIcon';
 
@@ -48,6 +50,22 @@ export function LiveActivityTile({
   // every render, which is exactly that bug; this rebuilds only on a real
   // state change.
   const titleIcon = useMemo(() => <LiveActivityStateIcon state={entry.state} />, [entry.state]);
+
+  // The page's grid gives every column the same width and no height, so
+  // without this a 4:3 camera, a 16:9 camera and a rotated portrait camera all
+  // land in the same box and their video crops or letterboxes. Handing the
+  // ratio to the media area rather than to this wrapper is what keeps the
+  // header out of the camera's shape, and it makes the resulting tile height
+  // the same header-plus-video sum Montage computes in useMontageGrid.
+  // getMonitorAspectRatio has already swapped the axes for a 90 or 270 degree
+  // rotation; it returns undefined when ZoneMinder's dimensions are unusable,
+  // and a tile with no ratio at all would have no height.
+  //
+  // A plain string, so the memo'd MontageMonitor below still sees an identical
+  // prop on every tick of `now`.
+  const mediaAspectRatio =
+    getMonitorAspectRatio(monitor.Width, monitor.Height, monitor.Orientation) ??
+    MONITOR_UI.fallbackAspectRatio;
 
   return (
     <div
@@ -88,6 +106,7 @@ export function LiveActivityTile({
         accessToken={accessToken}
         navigate={navigate}
         titleIcon={titleIcon}
+        mediaAspectRatio={mediaAspectRatio}
         fromRoute="/live-activity"
       />
       {/* Sits where the alarm-count badge used to, clear of the tile header's

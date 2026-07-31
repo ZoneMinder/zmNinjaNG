@@ -130,6 +130,56 @@ describe('LiveActivityTile', () => {
     expect(screen.getByTestId('live-activity-elapsed-3')).toBeInTheDocument();
   });
 
+  // The grid gives every tile the same width, so the ratio handed down here is
+  // the only thing that makes one tile taller than another. A ratio of w/h
+  // renders at height = width / (w/h), so a smaller ratio value is a taller
+  // tile; the assertions compare that number rather than the string.
+  const renderedRatio = (monitor: Partial<Monitor>): number => {
+    propCalls.length = 0;
+    render(
+      <LiveActivityTile
+        entry={ENTRY}
+        monitor={{ ...MONITOR, ...monitor } as Monitor}
+        status={undefined}
+        currentProfile={PROFILE}
+        accessToken="t"
+        navigate={navigate}
+        now={EPISODE_START}
+        onDismiss={onDismiss}
+      />
+    );
+    const [w, h] = String(propCalls[0].mediaAspectRatio).split('/').map(Number);
+    return w / h;
+  };
+
+  it('gives a 4:3 camera a taller tile than a 16:9 one', () => {
+    const fourThree = renderedRatio({ Width: '640', Height: '480' });
+    const sixteenNine = renderedRatio({ Width: '1920', Height: '1080' });
+
+    expect(fourThree).toBeCloseTo(4 / 3);
+    expect(sixteenNine).toBeCloseTo(16 / 9);
+    expect(fourThree).toBeLessThan(sixteenNine);
+  });
+
+  it('turns a rotated camera on its side, tile and all', () => {
+    const upright = renderedRatio({ Width: '1920', Height: '1080' });
+    const rotated = renderedRatio({
+      Width: '1920',
+      Height: '1080',
+      Orientation: 'ROTATE_90',
+    });
+
+    expect(rotated).toBeCloseTo(1080 / 1920);
+    expect(rotated).toBeLessThan(upright);
+  });
+
+  it('falls back to a shaped tile when the camera reports no usable size', () => {
+    // Zero-height would be a zero-height tile: an invisible camera on the one
+    // page whose job is showing what is alarming right now.
+    expect(renderedRatio({ Width: '0', Height: '0' })).toBeCloseTo(16 / 9);
+    expect(renderedRatio({ Width: undefined, Height: undefined })).toBeCloseTo(16 / 9);
+  });
+
   it('rebuilds the state icon when the state actually changes', () => {
     const { rerender } = renderTile(EPISODE_START);
 

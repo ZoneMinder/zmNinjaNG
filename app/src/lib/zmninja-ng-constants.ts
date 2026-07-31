@@ -532,6 +532,12 @@ export const NOTIFICATION_UI = {
 export const MONITOR_UI = {
   // Alarm pulse duration on a monitor tile after a new event (ms)
   alarmPulseMs: 6000,
+
+  // Shape a tile falls back to when ZoneMinder reports dimensions nothing can
+  // be derived from (zero, blank, or non-numeric). A tile sized from an
+  // unusable ratio would have no height at all, so it is better to be wrong
+  // about the shape than to render an invisible camera.
+  fallbackAspectRatio: '16 / 9',
 } as const;
 
 /**

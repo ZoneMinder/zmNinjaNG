@@ -68,6 +68,19 @@ interface MontageMonitorProps {
    */
   titleIcon?: ReactNode;
   /**
+   * CSS aspect ratio for the video area, as `"width / height"`.
+   *
+   * Left unset the tile is sized by whatever contains it and the video takes
+   * the height left over below the header, which is what Montage needs: its
+   * react-grid-layout items already carry a computed pixel height. A page that
+   * lays tiles out in a plain grid has no such height, so it passes the
+   * camera's own ratio and the card grows to the header plus the video. The
+   * ratio lands on the video area rather than the card for that reason: on the
+   * card the header would eat into the camera's shape and the picture would
+   * crop (refs #313).
+   */
+  mediaAspectRatio?: string;
+  /**
    * Route this tile is rendered from. Travels as navigation state to the
    * events list and the timeline so both can offer a back link that returns
    * here. Defaults to the montage route, which is where tiles came from
@@ -92,6 +105,7 @@ function MontageMonitorComponent({
   newestEventAt,
   titleOverride,
   titleIcon,
+  mediaAspectRatio,
   fromRoute = '/montage',
 }: MontageMonitorProps) {
   const { t } = useTranslation();
@@ -310,10 +324,17 @@ function MontageMonitorComponent({
           this div just needs the pointer cursor hint. refs #217. */}
       <div
         className={cn(
-          "flex-1 relative overflow-hidden",
+          "relative overflow-hidden",
+          // With a ratio the video area sizes itself and the card's height is
+          // the header plus it; `flex-1` would set a zero flex basis and
+          // collapse the ratio box in a container that has no height of its
+          // own. Without one nothing changes for Montage.
+          mediaAspectRatio ? "w-full shrink-0" : "flex-1",
           isFullscreen ? "bg-black" : "bg-black/90",
           !isFullscreen && "cursor-pointer"
         )}
+        style={mediaAspectRatio ? { aspectRatio: mediaAspectRatio } : undefined}
+        data-testid="montage-monitor-media"
       >
         <LiveMonitorPlayer
           monitor={monitor}

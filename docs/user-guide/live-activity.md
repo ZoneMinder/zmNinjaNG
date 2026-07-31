@@ -14,6 +14,8 @@ Each tile header shows an icon for the monitor's current state next to the camer
 
 Next to the counter, a tile may also say what ZoneMinder gave as the cause of the alarm, such as "Motion: All" or "Forced Web". That wording only reaches the app through a notification, so a monitor the page found by checking alarm state alone shows no cause. Nothing else about the tile depends on it.
 
+Each tile is the shape of its own camera. A widescreen camera gets a wide tile, a 4:3 camera a taller one, and a camera mounted sideways gets a portrait tile, so the picture is never squeezed or cut off to fit a shared box. Cameras of different shapes therefore make a row of tiles of different heights, and the bottom edge of a row is uneven.
+
 The counter in the bottom corner of each tile says how long the current alarm episode has been running, as minutes and seconds (hours appear once there are any). It counts from the start of the episode rather than from the last alarming moment, so a camera whose event flickers through its tail keeps counting up instead of resetting.
 
 ## Fullscreen
