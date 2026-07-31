@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
-import { Pencil, Zap } from 'lucide-react';
+import { Pencil } from 'lucide-react';
 import { Switch } from '../ui/switch';
 import { Input } from '../ui/input';
 import { PasswordInput } from '../ui/password-input';
@@ -23,7 +23,8 @@ import { isZmVersionAtLeast } from '../../lib/zm/zm-version';
 import { maskUrlCredentials, restoreUrlCredentials } from '../../lib/security/url-credentials';
 import { useSettingsStore } from '../../stores/settings';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
-import { toast } from 'sonner';
+import { SettingsRow } from './SettingsRow';
+import { MonitorAppPreferences } from './MonitorAppPreferences';
 
 interface MonitorSettingsDialogProps {
   open: boolean;
@@ -43,32 +44,6 @@ interface MonitorSettingsDialogProps {
   monitorNames?: Record<string, string>;
 }
 
-/** Shared row layout for label + value/control pairs. */
-function SettingsRow({
-  label,
-  children,
-  testId,
-  editable,
-}: {
-  label: string;
-  children: React.ReactNode;
-  testId?: string;
-  editable?: boolean;
-}) {
-  return (
-    <div
-      className="flex items-center justify-between py-2.5 border-b border-border/40 last:border-b-0"
-      data-testid={testId}
-    >
-      <span className="text-sm text-muted-foreground flex items-center gap-1">
-        {label}
-        {editable && <Pencil className="h-2 w-2 shrink-0 opacity-50" />}
-      </span>
-      <div className="text-sm font-medium">{children}</div>
-    </div>
-  );
-}
-
 export function MonitorSettingsDialog({
   open,
   onOpenChange,
@@ -86,7 +61,6 @@ export function MonitorSettingsDialog({
   const is138Plus = isZmVersionAtLeast(zmVersion, '1.38.0');
   const { currentProfile } = useCurrentProfile();
   const getProfileSettings = useSettingsStore((state) => state.getProfileSettings);
-  const updateProfileSettings = useSettingsStore((state) => state.updateProfileSettings);
   const profileSettings = currentProfile ? getProfileSettings(currentProfile.id) : null;
 
   // A camera's password lives in the source URL as userinfo, and on pre-1.38
@@ -99,31 +73,6 @@ export function MonitorSettingsDialog({
   const displayedPath = maskCredentials
     ? maskUrlCredentials(monitor.Path ?? '')
     : monitor.Path ?? '';
-
-  // Per-monitor Go2RTC override
-  const globalStreamingMethod = profileSettings?.streamingMethod ?? 'auto';
-  const monitorOverride = profileSettings?.monitorStreamingOverrides?.[monitor.Id];
-  const effectiveGo2rtc = (monitorOverride ?? globalStreamingMethod) === 'auto';
-  const monitorSupportsGo2rtc = monitor.Go2RTCEnabled === true;
-
-  const handleGo2rtcToggle = (enabled: boolean) => {
-    if (!currentProfile || !profileSettings) return;
-
-    if (!enabled && globalStreamingMethod === 'auto' && !monitorOverride) {
-      // Turning off Go2RTC for this monitor while global is 'auto':
-      // Set global to 'auto' (keep it), store per-monitor override to 'mjpeg'
-      toast.info(t('monitor_detail.go2rtc_override_note'));
-    }
-
-    const overrides = { ...(profileSettings.monitorStreamingOverrides ?? {}) };
-    if (enabled) {
-      // Remove override: inherit global
-      delete overrides[monitor.Id];
-    } else {
-      overrides[monitor.Id] = 'mjpeg';
-    }
-    updateProfileSettings(currentProfile.id, { monitorStreamingOverrides: overrides });
-  };
 
   // --- Capture tab local state ---
   const [localCapturing, setLocalCapturing] = useState<string>(monitor.Capturing ?? 'Always');
@@ -395,24 +344,9 @@ export function MonitorSettingsDialog({
 
           {/* Tab: Video */}
           <TabsContent value="video" className="mt-4 space-y-0 overflow-y-auto">
-            {/* Per-monitor Go2RTC toggle: only shown when monitor supports it */}
-            {monitorSupportsGo2rtc && (
-              <SettingsRow label={t('monitor_detail.go2rtc_label')} testId="settings-go2rtc-row">
-                <div className="flex items-center gap-1.5">
-                  <Zap className="h-3.5 w-3.5 text-yellow-500" />
-                  <Switch
-                    checked={effectiveGo2rtc}
-                    onCheckedChange={handleGo2rtcToggle}
-                    data-testid="settings-monitor-go2rtc-switch"
-                  />
-                  {monitorOverride === 'mjpeg' && (
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
-                      MJPEG
-                    </Badge>
-                  )}
-                </div>
-              </SettingsRow>
-            )}
+            {/* App-local per-monitor preferences. Applied on toggle, never part
+                of the ZM save payload below. */}
+            <MonitorAppPreferences monitor={monitor} />
 
             {/* Source Path: stacked layout for long value */}
             <div className="py-2.5 border-b border-border/40 " data-testid="settings-source-row">

@@ -6,4 +6,3 @@
 
 export { useMontageGrid } from './useMontageGrid';
 export { useContainerResize } from './useContainerResize';
-export { useFullscreenMode } from './useFullscreenMode';

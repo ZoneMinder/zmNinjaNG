@@ -338,6 +338,7 @@ a ref on every change and reading the ref at unmount:
    // Cleanup: send CMD_QUIT and abort image loading on unmount ONLY
    useEffect(() => {
      return () => {
+       if (mediaElRef.current?.isConnected) return;
        const params = cleanupParamsRef.current;
        void quitStreamForParams(params, logFn, 'unmount');
        if (mediaElRef.current) {
@@ -350,6 +351,20 @@ A ref is the same box on every render, so reading ``.current`` in the cleanup
 sees the latest connkey rather than the one captured when the cleanup was
 created. ``removeAttribute('src')`` rather than ``src = ''`` because an empty
 ``src`` resolves to the page URL on some engines and fires a spurious request.
+
+The ``isConnected`` guard is there because the comment on the dependency array
+is a wish, not a guarantee. React runs the cleanup of an ``[]`` effect against a
+live, still-committed tree in three situations: the StrictMode mount
+double-invoke, revealing a Suspense subtree that was hidden while something else
+in the boundary loaded, and a Fast Refresh update in dev. None of them is an
+unmount, and none is followed by a re-render, so a teardown there quits a stream
+the user is still watching and strips a ``src`` React will never put back: its
+virtual DOM still holds the same URL, so the next diff writes nothing and the
+tile shows the browser's broken-image glyph forever. React detaches a real
+unmount's DOM during the mutation phase, well before this passive cleanup runs,
+so an element still connected to the document means the component is staying.
+Any imperative DOM teardown in a cleanup needs this check; do not treat empty
+deps as proof of an unmount.
 
 :doc:`call-flows` walks this same code in "Montage opens and a live MJPEG stream
 runs".

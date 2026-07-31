@@ -663,6 +663,7 @@
     "alarm_disarm_action": "Désarmer le moniteur",
     "alarm_updating": "Mise à jour de l'état d'alarme...",
     "alarm_help": "Armez pour forcer un état d'alarme sur ce moniteur.",
+    "force_zms_label": "Toujours utiliser ZMS pour les événements",
     "go2rtc_label": "Go2RTC",
     "go2rtc_override_note": "Go2RTC désactivé pour ce moniteur",
     "alarm_failed": "Échec de la mise à jour de l'état d'alarme",
@@ -1008,6 +1009,35 @@
     "cgi_url_hint": "https://serveur.com/zm/cgi-bin",
     "protocol_mismatch": "Conflit de protocole ! Le portail utilise {{portalProtocol}}:// mais l'API utilise {{apiProtocol}}://. Les deux doivent utiliser le même protocole (HTTP ou HTTPS)."
   },
+  "live_activity": {
+    "title": "Activité en direct",
+    "all_quiet": "Tout est calme",
+    "watching_count_one": "{{count}} caméra surveillée",
+    "watching_count_other": "{{count}} caméras surveillées",
+    "state_alarm": "Alarme",
+    "state_alert": "Alerte",
+    "state_cooling": "Apaisement",
+    "overflow_one": "+{{count}} autre active",
+    "overflow_other": "+{{count}} autres actives",
+    "fullscreen": "Plein écran",
+    "dismiss": "Retirer {{name}} de cette page",
+    "elapsed_title": "Temps écoulé depuis le début de cette alarme",
+    "exit_fullscreen": "Quitter le plein écran",
+    "settings_title": "Paramètres Activité en direct",
+    "settings_desc": "Choisissez les caméras surveillées par cette page et sa réactivité.",
+    "poll_interval_label": "Vérifier toutes les",
+    "unit_seconds": "s",
+    "poll_interval_desc": "Fréquence de vérification de l'état d'alarme, en secondes.",
+    "poll_bandwidth_note": "Le mode économie de données relève ce minimum.",
+    "dwell_label": "Garder à l'écran",
+    "dwell_desc": "Secondes qu'une caméra reste affichée après la fin de l'alarme. Des valeurs plus hautes réduisent le scintillement.",
+    "max_tiles_label": "Nombre maximal de vignettes",
+    "max_tiles_desc": "Les caméras en trop sont regroupées en un compteur au lieu d'être affichées.",
+    "ignore_list_label": "Caméras à surveiller",
+    "ignore_list_desc": "Désactivez une caméra pour la masquer seulement sur cette page; elle reste visible ailleurs.",
+    "continuous_hint": "Enregistre en continu, donc ignoré par défaut.",
+    "ignore_list_empty": "Aucune caméra disponible."
+  },
   "languages": {
     "en": "English",
     "es": "Español",
@@ -1034,7 +1064,8 @@
     "developer_notice": "Avis du développeur",
     "help": "Aide",
     "switch_language": "Changer de Langue",
-    "tv_mode": "Mode TV"
+    "tv_mode": "Mode TV",
+    "live_activity": "Activité en direct"
   },
   "developer_notice": {
     "page_title": "Avis du développeur",

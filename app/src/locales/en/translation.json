@@ -663,6 +663,7 @@
     "alarm_disarm_action": "Disarm monitor",
     "alarm_updating": "Updating alarm state...",
     "alarm_help": "Arm to force an alarm state on this monitor.",
+    "force_zms_label": "Always use ZMS for events",
     "go2rtc_label": "Go2RTC",
     "go2rtc_override_note": "Go2RTC disabled for this monitor",
     "alarm_failed": "Failed to update alarm state",
@@ -1008,6 +1009,35 @@
     "cgi_url_hint": "https://server.com/zm/cgi-bin",
     "protocol_mismatch": "Protocol mismatch! Portal uses {{portalProtocol}}:// but API uses {{apiProtocol}}://. Both must use the same protocol (either both HTTP or both HTTPS)."
   },
+  "live_activity": {
+    "title": "Live Activity",
+    "all_quiet": "All quiet",
+    "watching_count_one": "Watching {{count}} monitor",
+    "watching_count_other": "Watching {{count}} monitors",
+    "state_alarm": "Alarmed",
+    "state_alert": "Alert",
+    "state_cooling": "Clearing",
+    "overflow_one": "+{{count}} more active",
+    "overflow_other": "+{{count}} more active",
+    "fullscreen": "Fullscreen",
+    "dismiss": "Clear {{name}} from this page",
+    "elapsed_title": "Time since this alarm started",
+    "exit_fullscreen": "Exit Fullscreen",
+    "settings_title": "Live Activity settings",
+    "settings_desc": "Choose which monitors this page watches and how quickly it reacts.",
+    "poll_interval_label": "Check every",
+    "unit_seconds": "s",
+    "poll_interval_desc": "How often alarm state is checked, in seconds.",
+    "poll_bandwidth_note": "Low bandwidth mode raises this floor.",
+    "dwell_label": "Keep on screen for",
+    "dwell_desc": "Seconds a monitor stays after its alarm clears. Higher values reduce flicker.",
+    "max_tiles_label": "Maximum tiles",
+    "max_tiles_desc": "Extra monitors collapse into a count instead of rendering.",
+    "ignore_list_label": "Monitors to watch",
+    "ignore_list_desc": "Turn a monitor off to keep it off this page only; it stays visible everywhere else.",
+    "continuous_hint": "Records continuously, so it is skipped by default.",
+    "ignore_list_empty": "No monitors available."
+  },
   "languages": {
     "en": "English",
     "es": "Español",
@@ -1034,7 +1064,8 @@
     "developer_notice": "Developer Notice",
     "help": "Help",
     "switch_language": "Switch Language",
-    "tv_mode": "TV Mode"
+    "tv_mode": "TV Mode",
+    "live_activity": "Live Activity"
   },
   "developer_notice": {
     "page_title": "Developer Notice",

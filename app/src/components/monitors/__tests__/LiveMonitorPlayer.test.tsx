@@ -23,8 +23,13 @@ let mockMjpegReturn: {
   reportStreamLoad: () => void;
 };
 
+// A fresh object per call, the way the real hook does it: useMonitorStream
+// returns a bare object literal, so its result is a new reference on every
+// render. Returning the same object here hid a bug where a hook dependency on
+// that result re-ran an effect every render. imgRef is deliberately shared
+// across the copies, because the real hook's useRef object is stable.
 vi.mock('../../../hooks/useMonitorStream', () => ({
-  useMonitorStream: () => mockMjpegReturn,
+  useMonitorStream: () => ({ ...mockMjpegReturn }),
 }));
 
 const go2rtc = vi.hoisted(() => ({
@@ -115,10 +120,68 @@ describe('LiveMonitorPlayer MJPEG recovery', () => {
     );
   });
 
+  // The error latch is what holds the tile on the VideoOff placeholder until a
+  // genuinely new connkey arrives. If anything unlatches it early, the <img>
+  // remounts against the same dead URL and errors again, and each error
+  // clears the pending reconnect timer and bumps the attempt counter, so the
+  // backoff burns at error-loop speed until the stream is released for good.
+  // Every page that streams is affected, not only Live Activity.
+  it('keeps the MJPEG error latched across re-renders that bring no new connkey', () => {
+    const { rerender } = render(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+
+    fireEvent.error(screen.getByTestId('video-player-mjpeg'));
+    expect(screen.queryByTestId('video-player-mjpeg')).not.toBeInTheDocument();
+
+    // Unrelated re-renders: imageSrc is unchanged, so the connection is still
+    // the dead one and the <img> must stay unmounted.
+    rerender(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+    rerender(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+
+    expect(screen.queryByTestId('video-player-mjpeg')).not.toBeInTheDocument();
+    expect(screen.getByTestId('video-player-loading')).toBeInTheDocument();
+    // One error, so one reconnect request: a relatch loop would report more.
+    expect(mockMjpegReturn.reportStreamError).toHaveBeenCalledTimes(1);
+  });
+
   it('asks the stream hook to auto-reconnect when the MJPEG <img> errors', () => {
     render(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
     fireEvent.error(screen.getByTestId('video-player-mjpeg'));
     expect(mockMjpegReturn.reportStreamError).toHaveBeenCalledTimes(1);
+  });
+
+  // refs #313: the browser paints its broken-image glyph as soon as the load
+  // fails, and React's error event is default priority, so the commit that
+  // unmounts the <img> lands a frame or more later. On Live Activity the exit
+  // view transition snapshots the page in that gap and freezes the glyph for
+  // the length of the fade. The element itself has to stop presenting the
+  // broken image inside the handler.
+  it('leaves the errored MJPEG <img> unpaintable rather than showing a broken image', () => {
+    render(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+    const img = screen.getByTestId('video-player-mjpeg');
+
+    fireEvent.error(img);
+
+    // Asserted on the element the browser would have painted, not on a flag.
+    expect(img.style.visibility).toBe('hidden');
+  });
+
+  it('restores a visible MJPEG <img> across repeated reconnects', () => {
+    const { rerender } = render(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+
+    for (const connkey of ['2', '3']) {
+      fireEvent.error(screen.getByTestId('video-player-mjpeg'));
+
+      mockMjpegReturn = {
+        ...mockMjpegReturn,
+        streamUrl: `https://t/stream?connkey=${connkey}`,
+        imageSrc: `https://t/stream?connkey=${connkey}`,
+      };
+      rerender(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+
+      const recovered = screen.getByTestId('video-player-mjpeg');
+      expect(recovered).toBeVisible();
+      expect(recovered).toHaveAttribute('src', `https://t/stream?connkey=${connkey}`);
+    }
   });
 });
 

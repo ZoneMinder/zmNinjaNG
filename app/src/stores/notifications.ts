@@ -679,13 +679,16 @@ function _buildServiceProviders(profileId: string, portalUrl: string): ZMNotific
  * (Notification settings) is their explicit choice and wins, but low-bandwidth
  * mode floors it so the mode can never be made faster than its own interval
  * (rule 8). A missing or nonsensical stored value falls back to the bandwidth
- * default rather than polling in a tight loop.
+ * default rather than polling in a tight loop. `floorKey` names which
+ * bandwidth interval acts as the floor, because bandwidth mode stays
+ * authoritative regardless of which feature is polling.
  */
 export function resolvePollIntervalMs(
   bandwidthMode: BandwidthMode,
-  pollingIntervalSeconds: number | undefined
+  pollingIntervalSeconds: number | undefined,
+  floorKey: 'eventPollerInterval' | 'alarmStatusInterval' = 'eventPollerInterval'
 ): number {
-  const bandwidthMs = getBandwidthSettings(bandwidthMode).eventPollerInterval;
+  const bandwidthMs = getBandwidthSettings(bandwidthMode)[floorKey];
   const userMs = (pollingIntervalSeconds ?? 0) * 1000;
   if (!Number.isFinite(userMs) || userMs <= 0) return bandwidthMs;
   return bandwidthMode === 'low' ? Math.max(userMs, bandwidthMs) : userMs;

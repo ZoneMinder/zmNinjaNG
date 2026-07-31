@@ -76,6 +76,7 @@ When('I navigate to the {string} page', async ({ page }, pageName: string) => {
     'Settings': 'settings',
     'Server': 'server',
     'Logs': 'logs',
+    'Live Activity': 'live-activity',
   };
 
   const route = pageRoutes[pageName];

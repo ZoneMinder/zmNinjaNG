@@ -174,6 +174,44 @@ describe('MontageMonitor', () => {
     });
   });
 
+  it('sizes the video area from the ratio it is given, header on top', () => {
+    render(
+      <MontageMonitor
+        monitor={mockMonitor}
+        status={mockStatus}
+        currentProfile={mockProfile}
+        accessToken="test-token"
+        navigate={mockNavigate}
+        mediaAspectRatio="4 / 3"
+      />
+    );
+
+    const media = screen.getByTestId('montage-monitor-media');
+    // On the media area, not the card: on the card the h-8 header would eat
+    // into the camera's shape and the picture would crop (refs #313).
+    expect(media.style.aspectRatio).toBe('4 / 3');
+    // flex-1 sets a zero flex basis, which collapses a ratio box whose
+    // container has no height of its own.
+    expect(media.className).not.toContain('flex-1');
+  });
+
+  it('leaves the video area filling the tile when no ratio is given', () => {
+    render(
+      <MontageMonitor
+        monitor={mockMonitor}
+        status={mockStatus}
+        currentProfile={mockProfile}
+        accessToken="test-token"
+        navigate={mockNavigate}
+      />
+    );
+
+    // Montage sizes its tiles through react-grid-layout and must keep doing so.
+    const media = screen.getByTestId('montage-monitor-media');
+    expect(media.style.aspectRatio).toBe('');
+    expect(media.className).toContain('flex-1');
+  });
+
   it('displays running status badge for connected monitor', async () => {
     render(
       <MontageMonitor
@@ -292,5 +330,71 @@ describe('MontageMonitor', () => {
     expect(params.get('monitorId')).toBe('1');
     expect(params.get('startDateTime')).toBe('2026-07-10T08:49:38');
     expect(options).toEqual({ state: { from: '/montage' } });
+  });
+
+  // refs #313: a tile rendered by Live Activity has to send the user back to
+  // Live Activity, not to Montage, so the route it was rendered from is a prop
+  // rather than a hardcoded string.
+  it('sends the caller-supplied route as the events back link', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MontageMonitor
+        monitor={mockMonitor}
+        status={mockStatus}
+        currentProfile={mockProfile}
+        accessToken="test-token"
+        navigate={mockNavigate}
+        fromRoute="/live-activity"
+      />
+    );
+
+    await user.click(screen.getByTestId('montage-events-btn'));
+
+    const [, options] = mockRouterNavigate.mock.calls[0];
+    expect(options).toEqual({ state: { from: '/live-activity' } });
+  });
+
+  it('passes the route it was rendered from to the timeline as navigation state', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MontageMonitor
+        monitor={mockMonitor}
+        status={mockStatus}
+        currentProfile={mockProfile}
+        accessToken="test-token"
+        navigate={mockNavigate}
+        fromRoute="/live-activity"
+      />
+    );
+
+    await user.click(screen.getByTestId('montage-more-btn'));
+    await user.click(await screen.findByTestId('montage-timeline-btn'));
+
+    expect(mockNavigate).toHaveBeenCalledWith('/timeline?monitorId=1', {
+      state: { from: '/live-activity' },
+    });
+  });
+
+  it('defaults the timeline back link to the montage route when no route is given', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MontageMonitor
+        monitor={mockMonitor}
+        status={mockStatus}
+        currentProfile={mockProfile}
+        accessToken="test-token"
+        navigate={mockNavigate}
+      />
+    );
+
+    await user.click(screen.getByTestId('montage-more-btn'));
+    await user.click(await screen.findByTestId('montage-timeline-btn'));
+
+    expect(mockNavigate).toHaveBeenCalledWith('/timeline?monitorId=1', {
+      state: { from: '/montage' },
+    });
   });
 });

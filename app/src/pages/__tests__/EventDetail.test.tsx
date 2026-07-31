@@ -26,10 +26,14 @@ const h = vi.hoisted(() => ({
     eventVideoAutoplay: false,
     eventContinuousPlay: false,
     eventPlaybackRate: 1,
+    forceZmsMonitorIds: [] as string[],
   } as Record<string, unknown>,
   goToNextEvent: vi.fn(),
   locationState: {} as Record<string, unknown>,
   translate: vi.fn((key: string) => key),
+  logEventDetail: vi.fn(),
+  logOther: vi.fn(),
+  toastError: vi.fn(),
 }));
 
 vi.mock('@tanstack/react-query', () => ({
@@ -40,7 +44,7 @@ vi.mock('@tanstack/react-query', () => ({
 vi.mock('sonner', () => ({
   toast: {
     success: (message: string) => toastSuccess(message),
-    error: vi.fn(),
+    error: (message: string) => h.toastError(message),
     info: (message: string) => toastInfo(message),
   },
 }));
@@ -56,9 +60,12 @@ vi.mock('react-i18next', () => ({
 }));
 
 // EventDetail pulls in modules that each use their own log.* helper; a Proxy answers
-// every component name with a no-op instead of listing them.
+// every component name with a no-op instead of listing them. `eventDetail` gets a
+// stable spy so the forced-ZMS diagnostic can be asserted.
 vi.mock('../../lib/logger', () => ({
-  log: new Proxy({}, { get: () => vi.fn() }),
+  log: new Proxy({}, {
+    get: (_target, prop: string) => (prop === 'eventDetail' ? h.logEventDetail : h.logOther),
+  }),
   LogLevel: { DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3, NONE: 4 },
 }));
 
@@ -137,9 +144,10 @@ vi.mock('../../components/ui/zoom-controls', () => ({
 }));
 
 vi.mock('../../components/events/Mp4EventPlayer', () => ({
-  Mp4EventPlayer: ({ onEnded }: { onEnded?: () => void }) => (
+  Mp4EventPlayer: ({ onEnded, onError }: { onEnded?: () => void; onError?: () => void }) => (
     <div data-testid="mp4-player">
       <button data-testid="mp4-fire-ended" onClick={() => onEnded?.()} />
+      <button data-testid="mp4-fire-error" onClick={() => onError?.()} />
     </div>
   ),
 }));
@@ -307,5 +315,82 @@ describe('EventDetail continuous playback (#250)', () => {
     fireEvent.click(screen.getByTestId('zms-fire-ended'));
 
     expect(h.goToNextEvent).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Per-monitor "always use ZMS for events" (#313).
+ *
+ * Monitors on the list skip MP4 entirely, so there is no failed request and no
+ * error toast on any visit. The log has to say the setting is the reason, since
+ * that is the only trace of why MP4 was never tried.
+ */
+describe('EventDetail forced ZMS playback (#313)', () => {
+  const mp4Event = {
+    Event: { ...event.Event, DefaultVideo: '101-video.mp4', Videoed: '1' },
+  };
+
+  beforeEach(() => {
+    h.settings.forceZmsMonitorIds = [];
+    h.settings.eventContinuousPlay = false;
+    h.locationState = {};
+    h.logEventDetail.mockClear();
+    h.toastError.mockClear();
+    useQueryMock.mockReset();
+    useQueryMock.mockImplementation(({ queryKey }: { queryKey: readonly unknown[] }) => {
+      if (queryKey[0] === 'event') return { data: mp4Event, isLoading: false, error: null };
+      if (queryKey[0] === 'monitor') return { data: monitorData, isLoading: false, error: null };
+      return { data: null, isLoading: false, error: null };
+    });
+  });
+
+  it('plays a video event through MP4 when the monitor is not on the list', () => {
+    render(<EventDetail />);
+
+    expect(screen.getByTestId('mp4-player')).toBeTruthy();
+    expect(screen.queryByTestId('zms-player')).toBeNull();
+  });
+
+  it('still falls back to ZMS with a toast when MP4 fails on an unlisted monitor', () => {
+    render(<EventDetail />);
+
+    fireEvent.click(screen.getByTestId('mp4-fire-error'));
+
+    expect(screen.getByTestId('zms-player')).toBeTruthy();
+    expect(h.toastError).toHaveBeenCalledWith('event_detail.video_playback_failed');
+  });
+
+  it('never mounts the MP4 player for a monitor on the list', () => {
+    h.settings.forceZmsMonitorIds = ['1'];
+    render(<EventDetail />);
+
+    expect(screen.getByTestId('zms-player')).toBeTruthy();
+    expect(screen.queryByTestId('mp4-player')).toBeNull();
+    expect(h.toastError).not.toHaveBeenCalled();
+  });
+
+  it('logs that the setting is why MP4 was skipped, naming the monitor', () => {
+    h.settings.forceZmsMonitorIds = ['1'];
+    render(<EventDetail />);
+
+    const forcedCall = h.logEventDetail.mock.calls.find(
+      ([message]) => typeof message === 'string' && message.includes('always use ZMS'),
+    );
+    expect(forcedCall).toBeDefined();
+    expect(forcedCall![0]).toBe(
+      'Monitor 1 is set to always use ZMS for events, so MP4 playback was not attempted',
+    );
+    expect(forcedCall![1]).toBe(1); // LogLevel.INFO
+    expect(forcedCall![2]).toEqual({ monitorId: '1', eventId: '101' });
+  });
+
+  it('leaves other monitors on MP4 while one monitor is forced', () => {
+    h.settings.forceZmsMonitorIds = ['7'];
+    render(<EventDetail />);
+
+    expect(screen.getByTestId('mp4-player')).toBeTruthy();
+    expect(h.logEventDetail.mock.calls.some(
+      ([message]) => typeof message === 'string' && message.includes('always use ZMS'),
+    )).toBe(false);
   });
 });

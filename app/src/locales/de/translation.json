@@ -663,6 +663,7 @@
     "alarm_disarm_action": "Monitor unscharf schalten",
     "alarm_updating": "Alarmstatus wird aktualisiert...",
     "alarm_help": "Scharf schalten, um einen Alarmzustand zu erzwingen.",
+    "force_zms_label": "Ereignisse immer über ZMS abspielen",
     "go2rtc_label": "Go2RTC",
     "go2rtc_override_note": "Go2RTC für diesen Monitor deaktiviert",
     "alarm_failed": "Aktualisierung des Alarmstatus fehlgeschlagen",
@@ -1008,6 +1009,35 @@
     "cgi_url_hint": "https://server.com/zm/cgi-bin",
     "protocol_mismatch": "Protokollkonflikt! Portal verwendet {{portalProtocol}}://, aber API verwendet {{apiProtocol}}://. Beide müssen dasselbe Protokoll verwenden (entweder HTTP oder HTTPS)."
   },
+  "live_activity": {
+    "title": "Live-Aktivität",
+    "all_quiet": "Alles ruhig",
+    "watching_count_one": "{{count}} Monitor beobachtet",
+    "watching_count_other": "{{count}} Monitore beobachtet",
+    "state_alarm": "Alarm",
+    "state_alert": "Warnung",
+    "state_cooling": "Abklingend",
+    "overflow_one": "+{{count}} weiterer aktiv",
+    "overflow_other": "+{{count}} weitere aktiv",
+    "fullscreen": "Vollbild",
+    "dismiss": "{{name}} von dieser Seite entfernen",
+    "elapsed_title": "Zeit seit Beginn dieses Alarms",
+    "exit_fullscreen": "Vollbild beenden",
+    "settings_title": "Live-Aktivität-Einstellungen",
+    "settings_desc": "Legt fest, welche Monitore beobachtet werden und wie schnell reagiert wird.",
+    "poll_interval_label": "Prüfintervall",
+    "unit_seconds": "s",
+    "poll_interval_desc": "Wie oft der Alarmstatus geprüft wird, in Sekunden.",
+    "poll_bandwidth_note": "Der Sparmodus hebt diese Untergrenze an.",
+    "dwell_label": "Anzeigedauer",
+    "dwell_desc": "Sekunden, die ein Monitor nach Alarmende sichtbar bleibt. Höhere Werte verringern Flackern.",
+    "max_tiles_label": "Maximale Kacheln",
+    "max_tiles_desc": "Weitere Monitore werden als Zähler zusammengefasst statt angezeigt.",
+    "ignore_list_label": "Zu beobachtende Monitore",
+    "ignore_list_desc": "Monitor ausschalten, um ihn nur auf dieser Seite zu verbergen; er bleibt überall sonst sichtbar.",
+    "continuous_hint": "Nimmt durchgehend auf und wird daher standardmäßig übersprungen.",
+    "ignore_list_empty": "Keine Monitore verfügbar."
+  },
   "languages": {
     "en": "English",
     "es": "Español",
@@ -1034,7 +1064,8 @@
     "developer_notice": "Entwicklerhinweise",
     "help": "Hilfe",
     "switch_language": "Sprache wechseln",
-    "tv_mode": "TV-Modus"
+    "tv_mode": "TV-Modus",
+    "live_activity": "Live-Aktivität"
   },
   "developer_notice": {
     "page_title": "Entwicklerhinweise",

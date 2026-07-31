@@ -63,6 +63,12 @@ Press the reset button to return to the full, unzoomed image.
 
 You can force MJPEG for individual monitors via the monitor's Settings dialog (Video tab). When Go2RTC is enabled for a monitor, a toggle appears to turn it off for that monitor only. See {doc}`settings` for details.
 
+#### Always Use ZMS For Events
+
+Some cameras record events in a video container the app cannot play. Opening one of those events loads the video, fails, shows an error, and only then switches to ZMS playback, every time.
+
+The **Always use ZMS for events** toggle at the top of the Video tab in the monitor's Settings dialog skips that. Every event for the monitor plays through ZMS straight away, with no failed load and no error message. The toggle applies as soon as you flip it; you do not need to press Save. It is stored in the app for the current profile and changes nothing on the ZoneMinder server.
+
 #### Show Zones
 
 The Layers button in the live view toolbar toggles the zone overlay. When active, each detection zone is drawn as a semi-transparent polygon colored by its type: Active (green), Inclusive (blue), Exclusive (red), Preclusive (amber), Inactive (gray), Privacy (purple). A legend in the bottom-left of the player lists the types present on that monitor. Hovering a zone shows its name and type. Inactive zones appear gray.

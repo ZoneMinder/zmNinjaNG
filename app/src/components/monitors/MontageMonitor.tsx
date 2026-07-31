@@ -12,7 +12,7 @@
  * - Fullscreen mode: header slides in on hover from top edge
  */
 
-import { useState, useRef, memo, useEffect } from 'react';
+import { useState, useRef, memo, useEffect, type ReactNode } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
 import type { Monitor, MonitorStatus, Profile } from '../../api/types';
@@ -59,6 +59,34 @@ interface MontageMonitorProps {
   /** Events recorded since the user last looked at this monitor (refs #239). */
   newEventCount?: number;
   newestEventAt?: string | null;
+  /** Replaces the monitor name in the tile header. */
+  titleOverride?: string;
+  /**
+   * Rendered ahead of the title in the header. A separate slot rather than a
+   * widened `titleOverride` because that string is also the truncation
+   * tooltip and has to stay a string (refs #313).
+   */
+  titleIcon?: ReactNode;
+  /**
+   * CSS aspect ratio for the video area, as `"width / height"`.
+   *
+   * Left unset the tile is sized by whatever contains it and the video takes
+   * the height left over below the header, which is what Montage needs: its
+   * react-grid-layout items already carry a computed pixel height. A page that
+   * lays tiles out in a plain grid has no such height, so it passes the
+   * camera's own ratio and the card grows to the header plus the video. The
+   * ratio lands on the video area rather than the card for that reason: on the
+   * card the header would eat into the camera's shape and the picture would
+   * crop (refs #313).
+   */
+  mediaAspectRatio?: string;
+  /**
+   * Route this tile is rendered from. Travels as navigation state to the
+   * events list and the timeline so both can offer a back link that returns
+   * here. Defaults to the montage route, which is where tiles came from
+   * before any other page reused them (refs #313).
+   */
+  fromRoute?: string;
 }
 
 function MontageMonitorComponent({
@@ -75,6 +103,10 @@ function MontageMonitorComponent({
   showOverlay = false,
   newEventCount,
   newestEventAt,
+  titleOverride,
+  titleIcon,
+  mediaAspectRatio,
+  fromRoute = '/montage',
 }: MontageMonitorProps) {
   const { t } = useTranslation();
   const zmVersion = useAuthStore((s) => s.version);
@@ -191,11 +223,12 @@ function MontageMonitorComponent({
               monitorDotColor(runState)
             )}
           />
+          {titleIcon}
           <span className={cn(
             "text-xs font-medium truncate",
             isFullscreen && "text-white"
-          )} title={monitor.Name}>
-            {monitor.Name}
+          )} title={titleOverride ?? monitor.Name}>
+            {titleOverride ?? monitor.Name}
           </span>
         </div>
 
@@ -210,7 +243,7 @@ function MontageMonitorComponent({
             )}
             onClick={(e) => {
               e.stopPropagation();
-              openMonitorEvents({ monitorId: monitor.Id, newEventCount, newestEventAt, from: '/montage' });
+              openMonitorEvents({ monitorId: monitor.Id, newEventCount, newestEventAt, from: fromRoute });
             }}
             title={t('common.events')}
             aria-label={t('monitors.view_events')}
@@ -272,7 +305,10 @@ function MontageMonitorComponent({
                 {t('montage.save_snapshot')}
               </DropdownMenuItem>
               <DropdownMenuItem
-                onClick={(e) => { e.stopPropagation(); navigate(`/timeline?monitorId=${monitor.Id}`); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/timeline?monitorId=${monitor.Id}`, { state: { from: fromRoute } });
+                }}
                 data-testid="montage-timeline-btn"
               >
                 <ChartGantt className="h-3.5 w-3.5 mr-2" />
@@ -288,10 +324,17 @@ function MontageMonitorComponent({
           this div just needs the pointer cursor hint. refs #217. */}
       <div
         className={cn(
-          "flex-1 relative overflow-hidden",
+          "relative overflow-hidden",
+          // With a ratio the video area sizes itself and the card's height is
+          // the header plus it; `flex-1` would set a zero flex basis and
+          // collapse the ratio box in a container that has no height of its
+          // own. Without one nothing changes for Montage.
+          mediaAspectRatio ? "w-full shrink-0" : "flex-1",
           isFullscreen ? "bg-black" : "bg-black/90",
           !isFullscreen && "cursor-pointer"
         )}
+        style={mediaAspectRatio ? { aspectRatio: mediaAspectRatio } : undefined}
+        data-testid="montage-monitor-media"
       >
         <LiveMonitorPlayer
           monitor={monitor}

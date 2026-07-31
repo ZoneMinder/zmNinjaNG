@@ -49,8 +49,8 @@ import {
   MontageTileErrorBoundary,
   useMontageGrid,
   useContainerResize,
-  useFullscreenMode,
 } from '../components/montage';
+import { useFullscreenMode } from '../hooks/useFullscreenMode';
 import { internalColsForCols } from '../components/montage/hooks/useMontageGrid';
 
 const WrappedGridLayout = WidthProvider(GridLayout);
@@ -131,6 +131,7 @@ export default function Montage() {
     useFullscreenMode({
       currentProfile,
       settings,
+      settingKey: 'montageIsFullscreen',
     });
 
 

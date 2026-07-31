@@ -5,8 +5,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, act, waitFor } from '@testing-library/react';
-import { StrictMode } from 'react';
+import { render, renderHook, act, waitFor } from '@testing-library/react';
+import { StrictMode, createElement } from 'react';
 import { useStreamLifecycle } from '../useStreamLifecycle';
 import { quitAllActiveStreams } from '../../lib/monitor/active-streams';
 
@@ -83,6 +83,9 @@ const mockLogFn = vi.fn();
 function makeMediaRef(element: HTMLImageElement | null = null) {
   return { current: element };
 }
+
+/** Stands in for the nph-zms URL a live tile's <img> carries. */
+const STREAM_SRC = 'http://zm.local/cgi-bin/nph-zms?mode=jpeg&connkey=9999';
 
 const baseOptions = {
   monitorId: '1',
@@ -402,6 +405,57 @@ describe('useStreamLifecycle', () => {
       expect(imgElement.hasAttribute('src')).toBe(false);
     });
 
+    // The two tests below pin the difference between a cleanup that means
+    // "this component is going away" and one that does not. React runs the
+    // cleanup of an empty-dependency effect against a live tree whenever it
+    // remounts effects without unmounting: the StrictMode mount double-invoke
+    // here, and in the app also a revealed Suspense subtree or a Fast Refresh
+    // update. Tearing down there leaves a mounted <img> with no src that React
+    // never restores, because its virtual DOM still holds the same URL and the
+    // next diff writes nothing. The element being connected to the document is
+    // what separates the two: React detaches the subtree in the mutation
+    // phase, before this passive cleanup runs.
+    it('keeps the src when the cleanup runs against a still-connected element', () => {
+      const mediaRef: { current: HTMLImageElement | null } = { current: null };
+
+      render(
+        createElement(
+          StrictMode,
+          null,
+          createElement(function Tile() {
+            useStreamLifecycle({ ...baseOptions, mediaRef });
+            return createElement('img', { ref: mediaRef, src: STREAM_SRC, alt: 'Cam 1' });
+          }),
+        ),
+      );
+
+      const img = document.querySelector('img');
+      expect(img?.isConnected).toBe(true);
+      expect(img?.getAttribute('src')).toBe(STREAM_SRC);
+    });
+
+    it('still aborts a rendered element on a real unmount', async () => {
+      const mediaRef: { current: HTMLImageElement | null } = { current: null };
+
+      const { unmount } = render(
+        createElement(function Tile() {
+          useStreamLifecycle({ ...baseOptions, mediaRef });
+          return createElement('img', { ref: mediaRef, src: STREAM_SRC, alt: 'Cam 1' });
+        }),
+      );
+
+      await waitFor(() => {
+        expect(mockRegenerateConnKey).toHaveBeenCalled();
+      });
+      // React nulls the ref during unmount, so hold the element to assert on.
+      const img = mediaRef.current;
+
+      unmount();
+
+      expect(img?.isConnected).toBe(false);
+      expect(img?.hasAttribute('src')).toBe(false);
+    });
+
     it('clears the stored connkey on unmount in streaming mode', async () => {
       const mediaRef = makeMediaRef();
 
@@ -592,6 +646,214 @@ describe('useStreamLifecycle', () => {
       await waitFor(() => {
         expect(result.current.connKey).not.toBe(0);
       });
+    });
+  });
+
+  describe('disable teardown', () => {
+    /**
+     * How many CMD_QUIT requests were sent for a specific connkey. Matches the
+     * whole value so a key that is a prefix of another is not over-counted.
+     */
+    function quitCountFor(key: number): number {
+      const pattern = new RegExp(`connkey=${key}(?![0-9])`);
+      return mockHttpGet.mock.calls.filter(
+        (call) => typeof call[0] === 'string' && pattern.test(call[0] as string),
+      ).length;
+    }
+
+    it('sends CMD_QUIT for the held connkey and clears it when disabled', async () => {
+      const mediaRef = makeMediaRef();
+      const { result, rerender } = renderHook(
+        ({ enabled }: { enabled: boolean }) =>
+          useStreamLifecycle({ ...baseOptions, mediaRef, enabled }),
+        { initialProps: { enabled: true } },
+      );
+
+      await waitFor(() => {
+        expect(result.current.connKey).not.toBe(0);
+      });
+      const firstKey = result.current.connKey;
+      mockHttpGet.mockClear();
+
+      rerender({ enabled: false });
+
+      await waitFor(() => {
+        expect(quitCountFor(firstKey)).toBe(1);
+      });
+      expect(mockClearConnKey).toHaveBeenCalledWith('1');
+      expect(mockConnKeys['1']).toBeUndefined();
+      expect(result.current.connKey).toBe(0);
+    });
+
+    it('mints a connkey different from the pre-disable one when re-enabled', async () => {
+      const mediaRef = makeMediaRef();
+      const { result, rerender } = renderHook(
+        ({ enabled }: { enabled: boolean }) =>
+          useStreamLifecycle({ ...baseOptions, mediaRef, enabled }),
+        { initialProps: { enabled: true } },
+      );
+
+      await waitFor(() => {
+        expect(result.current.connKey).not.toBe(0);
+      });
+      const firstKey = result.current.connKey;
+
+      rerender({ enabled: false });
+      rerender({ enabled: true });
+
+      await waitFor(() => {
+        expect(result.current.connKey).not.toBe(0);
+      });
+      expect(result.current.connKey).not.toBe(firstKey);
+      expect(mockConnKeys['1']).toBe(result.current.connKey);
+    });
+
+    it('enable, disable, enable quits the first key exactly once and ends on a live key', async () => {
+      // The Go2RTC fallback case: MJPEG placeholder mints a key, WebRTC takes
+      // over and disables it, WebRTC drops and MJPEG comes back.
+      const mediaRef = makeMediaRef();
+      const { result, rerender } = renderHook(
+        ({ enabled }: { enabled: boolean }) =>
+          useStreamLifecycle({ ...baseOptions, mediaRef, enabled }),
+        { initialProps: { enabled: true } },
+      );
+
+      await waitFor(() => {
+        expect(result.current.connKey).not.toBe(0);
+      });
+      const firstKey = result.current.connKey;
+
+      rerender({ enabled: false });
+      await waitFor(() => {
+        expect(result.current.connKey).toBe(0);
+      });
+
+      rerender({ enabled: true });
+      await waitFor(() => {
+        expect(result.current.connKey).not.toBe(0);
+      });
+
+      const secondKey = result.current.connKey;
+      expect(secondKey).not.toBe(firstKey);
+      // Exactly one quit for the orphan-prone first key, none for the live one.
+      expect(quitCountFor(firstKey)).toBe(1);
+      expect(quitCountFor(secondKey)).toBe(0);
+      // The live key is the one the store holds, so the <img> mounts on a
+      // connkey whose nph-zms process is actually running.
+      expect(mockConnKeys['1']).toBe(secondKey);
+    });
+
+    it('does not quit twice when a disabled hook is then unmounted', async () => {
+      const mediaRef = makeMediaRef();
+      const { result, rerender, unmount } = renderHook(
+        ({ enabled }: { enabled: boolean }) =>
+          useStreamLifecycle({ ...baseOptions, mediaRef, enabled }),
+        { initialProps: { enabled: true } },
+      );
+
+      await waitFor(() => {
+        expect(result.current.connKey).not.toBe(0);
+      });
+      const firstKey = result.current.connKey;
+
+      rerender({ enabled: false });
+      await waitFor(() => {
+        expect(quitCountFor(firstKey)).toBe(1);
+      });
+
+      unmount();
+
+      expect(quitCountFor(firstKey)).toBe(1);
+      expect(mockHttpGet).toHaveBeenCalledTimes(1);
+    });
+
+    it('quits the key it minted when monitorId changes in the same commit as the disable', async () => {
+      const mediaRef = makeMediaRef();
+      const { result, rerender } = renderHook(
+        ({ enabled, monitorId }: { enabled: boolean; monitorId: string }) =>
+          useStreamLifecycle({ ...baseOptions, monitorId, mediaRef, enabled }),
+        { initialProps: { enabled: true, monitorId: '1' } },
+      );
+
+      await waitFor(() => {
+        expect(result.current.connKey).not.toBe(0);
+      });
+      const firstKey = result.current.connKey;
+      mockHttpGet.mockClear();
+
+      // The tile is disabled and repointed at another monitor in one commit.
+      // The teardown owns the stream it minted, so it must quit that key under
+      // monitor 1 and clear monitor 1's stored key, not monitor 2's.
+      rerender({ enabled: false, monitorId: '2' });
+
+      await waitFor(() => {
+        expect(quitCountFor(firstKey)).toBe(1);
+      });
+      expect(mockClearConnKey).toHaveBeenCalledWith('1');
+      expect(mockConnKeys['1']).toBeUndefined();
+    });
+
+    it('sends no request when disabling a hook that never minted a key', async () => {
+      const mediaRef = makeMediaRef();
+      const { rerender } = renderHook(
+        ({ enabled }: { enabled: boolean }) =>
+          useStreamLifecycle({ ...baseOptions, monitorId: undefined, mediaRef, enabled }),
+        { initialProps: { enabled: true } },
+      );
+
+      rerender({ enabled: false });
+
+      expect(mockHttpGet).not.toHaveBeenCalled();
+      expect(mockClearConnKey).not.toHaveBeenCalled();
+    });
+
+    it('sends no request when disabling a snapshot-mode hook', async () => {
+      const mediaRef = makeMediaRef();
+      const { result, rerender } = renderHook(
+        ({ enabled }: { enabled: boolean }) =>
+          useStreamLifecycle({ ...baseOptions, viewMode: 'snapshot', mediaRef, enabled }),
+        { initialProps: { enabled: true } },
+      );
+
+      await waitFor(() => {
+        expect(result.current.connKey).not.toBe(0);
+      });
+      mockHttpGet.mockClear();
+
+      rerender({ enabled: false });
+
+      // Hovering off a snapshot tile must not add a pointless request.
+      expect(mockHttpGet).not.toHaveBeenCalled();
+      expect(mockClearConnKey).not.toHaveBeenCalled();
+    });
+
+    it('a hook enabled for its whole lifetime mints one key and quits once on unmount', async () => {
+      const mediaRef = makeMediaRef();
+      const { result, rerender, unmount } = renderHook(
+        ({ enabled }: { enabled: boolean }) =>
+          useStreamLifecycle({ ...baseOptions, mediaRef, enabled }),
+        { initialProps: { enabled: true } },
+      );
+
+      await waitFor(() => {
+        expect(result.current.connKey).not.toBe(0);
+      });
+      const onlyKey = result.current.connKey;
+
+      // Unrelated re-renders must not churn the key or add requests.
+      rerender({ enabled: true });
+      rerender({ enabled: true });
+
+      expect(mockRegenerateConnKey).toHaveBeenCalledTimes(1);
+      expect(result.current.connKey).toBe(onlyKey);
+      expect(mockHttpGet).not.toHaveBeenCalled();
+
+      unmount();
+
+      await waitFor(() => {
+        expect(quitCountFor(onlyKey)).toBe(1);
+      });
+      expect(mockHttpGet).toHaveBeenCalledTimes(1);
     });
   });
 

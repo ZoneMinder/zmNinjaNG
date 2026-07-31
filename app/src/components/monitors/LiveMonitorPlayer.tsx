@@ -465,23 +465,57 @@ export function LiveMonitorPlayer({
   // in the deps the error stayed latched and the tile never recovered until a
   // full remount (route change). refs #150
   const [mjpegError, setMjpegError] = useState(false);
+
+  // Undoes the inline hide handleMjpegError applies below. React never clears
+  // an imperatively set style key on its own (it only diffs the keys its own
+  // style prop carried), so every path that can put a usable frame back on
+  // this element clears it explicitly. That matters most when the element is
+  // never unmounted in between: a multipart stream can fire error and then
+  // load in the same task, and React batches both, so the load handler runs on
+  // the still-mounted, still-hidden element and its setMjpegError(false) keeps
+  // it mounted. Without this the tile would go permanently blank.
+  //
+  // Depends on mjpegStream.imgRef, not mjpegStream: useMonitorStream returns a
+  // bare object literal, so the hook result is a new reference every render.
+  // Depending on it would make this callback new every render too, and the
+  // reset effect below lists it, so that effect would re-run after every
+  // render and clear the error latch immediately. The <img> would then remount
+  // against the same dead connkey and error again, burning the reconnect
+  // backoff at error-loop speed on every page that streams. The ref object
+  // itself is stable.
+  const imgRef = mjpegStream.imgRef;
+  const showMjpegImg = useCallback(() => {
+    const img = imgRef.current;
+    if (img) img.style.visibility = '';
+  }, [imgRef]);
+
   useEffect(() => {
     if (effectiveStreamingMethod === 'mjpeg' || showMjpegPlaceholder) {
+      showMjpegImg();
       setMjpegError(false);
     }
-  }, [effectiveStreamingMethod, showMjpegPlaceholder, monitor.Id, mjpegStream.imageSrc]);
+  }, [effectiveStreamingMethod, showMjpegPlaceholder, monitor.Id, mjpegStream.imageSrc, showMjpegImg]);
 
   const handleMjpegLoad = useCallback(() => {
+    showMjpegImg();
     setMjpegError(false);
     // A good frame resets the reconnect backoff so a later drop starts fresh.
     mjpegStream.reportStreamLoad();
     onLoad?.();
-  }, [onLoad, mjpegStream]);
+  }, [onLoad, mjpegStream, showMjpegImg]);
 
   const handleMjpegError = useCallback(() => {
     // Log so an occlusion-induced drop is visible. The <img> onError is
     // otherwise silent, which made this look like "0 logs". refs #150
     log.videoPlayer('MJPEG stream error', LogLevel.WARN, { monitorId: monitor.Id });
+    // Chromium paints its broken-image glyph the moment the load fails. React's
+    // error event is default priority, not discrete, so the commit that swaps
+    // in the VideoOff placeholder lands a frame or more later, and anything
+    // that snapshots the page in between freezes that glyph on screen. Hiding
+    // the element here, synchronously, means the next paint is already clean;
+    // the React commit below still does the real state change.
+    const img = mjpegStream.imgRef.current;
+    if (img) img.style.visibility = 'hidden';
     setMjpegError(true);
     // Schedule an auto-reconnect with backoff. This releases the errored
     // connkey before minting a new one, so a dropped feed recovers without a

@@ -11,6 +11,7 @@ profiles
 dashboard
 monitors
 montage
+live-activity
 events
 timeline
 settings

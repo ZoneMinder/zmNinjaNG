@@ -35,6 +35,7 @@ import {
   HelpCircle,
   Megaphone,
   Command,
+  Activity,
 } from 'lucide-react';
 import { useCommandPaletteStore } from '../../stores/commandPalette';
 import { useDeveloperNotices } from '../../hooks/useDeveloperNotices';
@@ -106,6 +107,7 @@ export function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentPro
     { path: '/dashboard', label: t('sidebar.dashboard'), icon: LayoutDashboard },
     { path: '/monitors', label: t('sidebar.monitors'), icon: Video },
     { path: '/montage', label: t('sidebar.montage'), icon: LayoutGrid },
+    { path: '/live-activity', label: t('sidebar.live_activity'), icon: Activity },
     { path: '/events', label: t('sidebar.events'), icon: Clock },
     { path: '/timeline', label: t('sidebar.timeline'), icon: ChartGantt },
     { path: '/notifications', label: t('sidebar.notifications'), icon: Bell },

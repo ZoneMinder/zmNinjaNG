@@ -13,6 +13,7 @@ import { log, LogLevel } from '../../lib/logger';
 import { useBandwidthSettings } from '../../hooks/useBandwidthSettings';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { queryKeys } from '../../lib/query/query-keys';
+import { parseAlarmState, isArmedState } from '../../lib/monitor/alarm-state';
 
 interface UseAlarmControlOptions {
   monitorId: string | undefined;
@@ -52,31 +53,21 @@ export function useAlarmControl({ monitorId, apiBaseUrl }: UseAlarmControlOption
   });
 
   // Parse alarm status
-  const { isAlarmArmed, hasAlarmStatus, parsedAlarmStatus } = useMemo(() => {
-    const alarmStatusNumeric = alarmStatus?.status ?? alarmStatus?.output;
-    const alarmStatusValue = alarmStatusNumeric?.toString().toLowerCase();
-    const has = alarmStatusNumeric !== undefined && alarmStatusNumeric !== null;
-    const parsed =
-      alarmStatusNumeric !== undefined && alarmStatusNumeric !== null
-        ? Number(alarmStatusNumeric)
-        : Number.NaN;
-    const armed = Number.isFinite(parsed)
-      ? parsed !== 0
-      : alarmStatusValue === 'on' ||
-        alarmStatusValue === '1' ||
-        alarmStatusValue === 'armed' ||
-        alarmStatusValue === 'true';
-
-    return { isAlarmArmed: armed, hasAlarmStatus: has, parsedAlarmStatus: parsed };
+  const { isAlarmArmed, hasAlarmStatus, alarmState } = useMemo(() => {
+    const state = parseAlarmState(alarmStatus);
+    return {
+      isAlarmArmed: isArmedState(state),
+      hasAlarmStatus: state !== 'unknown',
+      alarmState: state,
+    };
   }, [alarmStatus]);
 
   // Border class based on alarm state
   const alarmBorderClass = useMemo(() => {
-    if (!Number.isFinite(parsedAlarmStatus)) return 'ring-0';
-    if (parsedAlarmStatus === 2) return 'ring-4 ring-orange-500/70';
-    if (parsedAlarmStatus === 3 || parsedAlarmStatus === 4) return 'ring-4 ring-red-500/70';
+    if (alarmState === 'alarm') return 'ring-4 ring-orange-500/70';
+    if (alarmState === 'alert' || alarmState === 'tape') return 'ring-4 ring-red-500/70';
     return 'ring-0';
-  }, [parsedAlarmStatus]);
+  }, [alarmState]);
 
   const displayAlarmArmed =
     alarmPendingValue ?? (isAlarmUpdating ? alarmToggleValue : isAlarmArmed);

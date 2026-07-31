@@ -195,6 +195,14 @@ export const NOTIFICATIONS_SERVICE = {
   // Width (px) requested for event snapshot images in notifications
   snapshotImageWidth: 600,
 
+  // Minimum gap between event-poller reloads of the monitor name map, after an
+  // event names a monitor the map does not know. The startup load can lose a
+  // race with authentication and leave the map empty, which used to strand
+  // every notification title on "Monitor 4" for the session. An unknown id can
+  // also just be a deleted monitor, so the retry is rate limited rather than
+  // firing on every poll.
+  monitorNamesReloadMs: 60000, // 60 sec
+
   // Delay before the first ES-mode auto-connect attempt, to let profile/auth
   // store rehydration finish (ms)
   autoConnectInitDelayMs: 500,
@@ -524,6 +532,12 @@ export const NOTIFICATION_UI = {
 export const MONITOR_UI = {
   // Alarm pulse duration on a monitor tile after a new event (ms)
   alarmPulseMs: 6000,
+
+  // Shape a tile falls back to when ZoneMinder reports dimensions nothing can
+  // be derived from (zero, blank, or non-numeric). A tile sized from an
+  // unusable ratio would have no height at all, so it is better to be wrong
+  // about the shape than to render an invisible camera.
+  fallbackAspectRatio: '16 / 9',
 } as const;
 
 /**
@@ -1144,3 +1158,45 @@ export const BANDWIDTH_SETTINGS: Record<BandwidthMode, BandwidthSettings> = {
 export function getBandwidthSettings(mode: BandwidthMode): BandwidthSettings {
   return BANDWIDTH_SETTINGS[mode];
 }
+
+/**
+ * Live Activity page.
+ *
+ * A monitor stays on the page for `dwellSeconds` after its alarm clears. That
+ * is not cosmetic: every tile that enters or leaves mounts or unmounts a
+ * MontageMonitor, which mints a ZMS connection key and sends CMD_QUIT, so a
+ * flickering monitor thrashes nph-zms processes on the server.
+ */
+export const LIVE_ACTIVITY = {
+  defaultPollSeconds: 5,
+  defaultDwellSeconds: 30,
+  defaultMaxTiles: 30,
+  minPollSeconds: 2,
+  maxPollSeconds: 60,
+  // Not 0: the dwell window is what stops a monitor flickering in and out of
+  // the grid, and every entry and exit mints or quits a ZMS connection. A
+  // floor of zero lets a user turn off the exact damping that protects the
+  // nph-zms processes on their own server.
+  minDwellSeconds: 5,
+  maxDwellSeconds: 300,
+  // How long a resident monitor must stay quiet before its next alarm counts
+  // as a new episode and re-sorts it to the top. ZoneMinder walks a winding
+  // down event through `alarm` -> `alert` -> `tape`/`idle` and back, so a
+  // monitor drops out of the alarming set and returns to it repeatedly across
+  // one event's tail, a second or two at a time. Without this window every one
+  // of those blips restamps the sort key and the grid reorders once a second
+  // for the length of the tail. Comfortably longer than that flapping and
+  // shorter than the default dwell window, so a real second alarm on a monitor
+  // that had genuinely gone quiet still takes the top tile.
+  episodeGraceSeconds: 15,
+  minTiles: 1,
+  maxTiles: 40,
+  // Height of one row of the tile grid. The grid packs tiles by row span
+  // rather than by shared rows (see lib/monitor/live-activity-layout.ts), so
+  // this is a measuring unit, not a gap: one pixel is the finest a tile's
+  // computed height can be expressed in.
+  rowUnitPx: 1,
+  // purpose: it exists so activity does not vanish without trace, not to
+  // become a second, unbounded list competing with the grid for the page. A
+  // few minutes covers "what did I just miss" and nothing longer.
+} as const;

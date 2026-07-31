@@ -67,6 +67,8 @@ If you already know the symptom, jump straight to its flow:
     wrong.
 19. Asking the assistant a question: a turn answers without data, or a backend
     is missing from settings.
+20. A Live Activity poll tick: a tile will not leave, or a monitor never
+    appears.
 
 Flow 1: Cold start to an authenticated session
 ----------------------------------------------
@@ -2480,6 +2482,143 @@ Typing text into the command palette without choosing the Ask item skips all
 of this and stays plain command-palette navigation: a direct ``navigate()``
 call with no model and no tools, documented alongside this entry point in
 :doc:`16-platform-surfaces`.
+
+Flow 20: A Live Activity poll tick
+-----------------------------------
+
+The Live Activity page shows only monitors ZoneMinder currently reports as
+alarming. Every poll tick fans out one status request per watched monitor,
+parses the response into a state, and runs that state through a dwell policy
+that decides whether each monitor's tile should exist. The reducer is the
+part that matters: mounting or unmounting a tile mints or quits a ZMS
+connection (Flow 2), so a policy that flickered a monitor in and out would
+thrash ``nph-zms`` on the server, not just the display.
+
+.. mermaid::
+
+   sequenceDiagram
+       autonumber
+       participant Page as LiveActivity page
+       participant Hook as useAlarmStates
+       participant ZM as ZoneMinder
+       participant Parse as parseAlarmState
+       participant Reduce as reduceActiveMonitors
+       participant Tile as MontageMonitor tile
+       participant Life as useStreamLifecycle
+
+       Page->>Hook: watched monitor ids, pollIntervalMs
+       Hook->>ZM: GET alarm status, one query per id
+       ZM-->>Hook: raw status per monitor
+       Hook->>Parse: parseAlarmState(raw)
+       Parse-->>Hook: alarm / alert / idle / ...
+       Page->>Reduce: reduceActiveMonitors(prev, states, now, dwellMs)
+       Reduce-->>Page: next active list (newest alarm first)
+       Page->>Tile: render capActiveMonitors(active, maxTiles).visible
+       Tile->>Life: mount mints a connkey
+       Note over Reduce,Tile: dwell expires, or overflow drops a tile
+       Tile->>Life: unmount sends CMD_QUIT
+
+#. **The poll interval respects the bandwidth floor.** ``LiveActivity``
+   builds ``pollIntervalMs`` with ``resolvePollIntervalMs(bandwidthMode,
+   settings.liveActivityPollSeconds, 'alarmStatusInterval')``, the same
+   function notification polling already uses to fold a per-feature user
+   value against the bandwidth-mode floor. A per-page interval looks like
+   it contradicts the Polling contract's "users tune bandwidth globally";
+   routing it through this shared resolver instead of a raw literal is what
+   keeps it inside that contract.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/LiveActivity.tsx#L78>`__
+   · → :doc:`11-application-lifecycle`
+
+#. **One query per watched monitor.** ``useAlarmStates`` calls
+   ``useQueries`` with one ``getAlarmStatus(monitorId)`` query per id, keyed
+   by ``queryKeys.monitorAlarmStatus``, the same per-id fanout
+   ``useMonitorNewEvents`` uses because ZoneMinder's alarm endpoint only
+   accepts a single monitor. Every requested id gets an entry in the
+   returned map even before its query resolves: a missing key reads
+   downstream as "no longer watched", which would drop a monitor before its
+   dwell window ever ran. The map is built in the ``combine`` option so the
+   returned object is identity-stable across renders; step 5 stamps
+   ``Date.now()`` into its output, so a per-render identity here would loop
+   the page forever.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useAlarmStates.ts#L64>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **Parse whatever ZoneMinder sent back.** ``parseAlarmState`` reads
+   ``status`` or ``output``, accepts both a numeric code and an older
+   word-based value, and falls back to ``'unknown'`` for anything it does
+   not recognize (including the API's own ``status: 'false'`` error
+   marker) rather than guessing alarming.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/monitor/alarm-state.ts#L52>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **A push notification promotes a monitor early.** Before the states
+   reach the reducer, ``applyLiveAlarmHints`` overlays any monitor with a
+   notification received inside the current dwell window, forcing it to
+   ``'alarm'`` even though the last poll has not confirmed it yet. It only
+   ever touches a monitor id already present in ``states``, so a hint for a
+   page-ignored or profile-excluded monitor cannot resurrect it.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/monitor/live-activity.ts#L125>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **The dwell reducer decides who stays.** ``reduceActiveMonitors`` runs in
+   an effect, not during render, because it depends on the previous list and
+   on ``Date.now()``. A monitor entering ``alarm``/``alert`` joins or stays;
+   one that stops alarming keeps its slot until ``now - lastAlarmingAt``
+   exceeds the dwell window, then drops. The result
+   is then sorted by ``episodeStartedAt`` descending with the monitor id as a
+   tiebreak, so the freshest alarm is the first tile and monitors that
+   alarmed in the same poll hold a fixed order. That key is the start of the
+   current alarm episode, not the last alarming moment: ZoneMinder drops a
+   winding-down monitor out of the alarming set and back into it every second
+   or two, and sorting on ``lastAlarmingAt`` restamped the key on every pass,
+   so the tiles traded places on almost every tick of an event's tail. A
+   monitor has to stay quiet for ``LIVE_ACTIVITY.episodeGraceSeconds`` before
+   its next alarm starts a new episode and moves it back to the top. The sort
+   runs before the identity check, so an order that did not actually change
+   still hands back the previous array rather than re-rendering every tile.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/monitor/live-activity.ts#L48>`__
+   · → :doc:`05-component-architecture`
+
+#. **A cooling tile still expires with no new poll data.** A second effect
+   arms a one-second interval, only while the list is non-empty, and re-runs
+   the same reducer against the same states. The dwell window is measured in
+   wall-clock time, not poll ticks, so a tile that stopped alarming between
+   polls does not wait for the next network response to leave. Both effects
+   call one ``useCallback`` with no dependencies, which reads the previous
+   list from a ref rather than from ``active``: a per-render identity, or
+   ``active`` in this effect's deps, would clear and rearm the interval
+   before its 1000ms ever elapsed and cooling tiles would never expire.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/LiveActivity.tsx#L134>`__
+   · → :doc:`04-pages-and-views`
+
+#. **A dismissed monitor is held out, not filtered at render time.** The
+   page hands the reducer the set of monitors the user cleared by hand, and
+   the reducer skips them as residents and as new arrivals alike, so the
+   tile unmounts for real and step 9 quits its stream. Suppression is the
+   point: a dismissed monitor is usually still alarming, so without it the
+   next poll would readmit the tile immediately. ``releaseDismissed`` then
+   drops a dismissal once that monitor has genuinely gone quiet, and the
+   page calls it after the reduce rather than before, or a tile dismissed
+   while already cooling would survive its own dismissal.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/monitor/live-activity.ts#L215>`__
+   · → :doc:`04-pages-and-views`
+
+#. **Cap the grid, and say what got hidden.** ``capActiveMonitors`` slices
+   the reduced list to ``liveActivityMaxTiles`` and reports the remainder as
+   ``overflowCount``, rendered as the "+N more active" line rather than
+   silently dropped.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/monitor/live-activity.ts#L144>`__
+   · → :doc:`04-pages-and-views`
+
+#. **A tile mount or exit is a real connection, not a repaint.** Each
+   visible entry renders a ``MontageMonitor``, the same tile Montage uses,
+   so mounting it mints a ZMS connkey exactly as Flow 2 describes. When the
+   reducer drops a monitor, its tile unmounts and ``useStreamLifecycle``'s
+   cleanup sends ``CMD_QUIT`` for that connkey. This is the fact the dwell
+   window exists to protect: without it, a monitor alarming in short bursts
+   would mint and quit a fresh ``nph-zms`` process on almost every poll.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/LiveActivity.tsx#L246>`__
+   · → :doc:`12-shared-services-and-components`
 
 These flows touch most of the moving parts of the app. When you need to change
 something, find the nearest scene, open its ``source`` link to land on the exact

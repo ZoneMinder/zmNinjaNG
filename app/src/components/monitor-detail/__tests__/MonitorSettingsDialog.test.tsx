@@ -17,11 +17,13 @@ vi.mock('react-i18next', () => ({
 }));
 
 let disableLogRedaction = false;
+let forceZmsMonitorIds: string[] = [];
 
 const settingsState = {
   getProfileSettings: () => ({
     streamingMethod: 'auto',
     monitorStreamingOverrides: {},
+    forceZmsMonitorIds,
     disableLogRedaction,
   }),
   updateProfileSettings: vi.fn(),
@@ -68,6 +70,7 @@ describe('MonitorSettingsDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     disableLogRedaction = false;
+    forceZmsMonitorIds = [];
   });
 
   it('keeps Save disabled until a field changes', () => {
@@ -102,6 +105,84 @@ describe('MonitorSettingsDialog', () => {
     const saveButton = screen.getByTestId('settings-video-save-button');
     expect(saveButton).toBeEnabled();
     fireEvent.click(saveButton);
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect(onSave).toHaveBeenCalledWith({ Path: 'rtsp://cam/new-stream' });
+  });
+});
+
+/**
+ * "Always use ZMS for events" (#313).
+ *
+ * An app-local preference keyed by monitor id, not a ZoneMinder monitor column.
+ * It applies the moment it is toggled, so it must never enter the dialog's
+ * change detection nor its save payload: sending it would ask ZM to write a
+ * field it does not have.
+ */
+describe('MonitorSettingsDialog force-ZMS toggle', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    disableLogRedaction = false;
+    forceZmsMonitorIds = [];
+  });
+
+  const renderDialog = (onSave = vi.fn().mockResolvedValue(undefined)) => {
+    render(
+      <MonitorSettingsDialog
+        open
+        onOpenChange={vi.fn()}
+        monitor={baseMonitor}
+        zmVersion="1.38.0"
+        onSave={onSave}
+      />
+    );
+    return onSave;
+  };
+
+  const toggle = () => screen.getByTestId('settings-monitor-force-zms-switch');
+
+  it('is off for a monitor that is not on the list', () => {
+    renderDialog();
+    expect(toggle()).toHaveAttribute('aria-checked', 'false');
+  });
+
+  it('is on for a monitor already on the list', () => {
+    forceZmsMonitorIds = ['1'];
+    renderDialog();
+    expect(toggle()).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('adds the monitor to the setting the moment it is switched on', () => {
+    renderDialog();
+
+    fireEvent.click(toggle());
+
+    expect(settingsState.updateProfileSettings).toHaveBeenCalledWith('p1', {
+      forceZmsMonitorIds: ['1'],
+    });
+  });
+
+  it('removes only this monitor when switched off', () => {
+    forceZmsMonitorIds = ['1', '4'];
+    renderDialog();
+
+    fireEvent.click(toggle());
+
+    expect(settingsState.updateProfileSettings).toHaveBeenCalledWith('p1', {
+      forceZmsMonitorIds: ['4'],
+    });
+  });
+
+  it('leaves Save disabled and keeps the setting out of the ZM payload', async () => {
+    const onSave = renderDialog();
+
+    fireEvent.click(toggle());
+    expect(screen.getByTestId('settings-video-save-button')).toBeDisabled();
+
+    fireEvent.change(screen.getByTestId('settings-source-input'), {
+      target: { value: 'rtsp://cam/new-stream' },
+    });
+    fireEvent.click(screen.getByTestId('settings-video-save-button'));
 
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
     expect(onSave).toHaveBeenCalledWith({ Path: 'rtsp://cam/new-stream' });

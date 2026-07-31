@@ -4,7 +4,7 @@ import type { Layout, Layouts } from 'react-grid-layout';
 import { LogLevel } from '../lib/log-level';
 import { Platform } from '../lib/platform';
 import type { BandwidthMode } from '../lib/zmninja-ng-constants';
-import { API_REQUEST, ASSISTANT, DEFAULT_EVENT_PLAYBACK_RATE, STORAGE_KEYS } from '../lib/zmninja-ng-constants';
+import { API_REQUEST, ASSISTANT, DEFAULT_EVENT_PLAYBACK_RATE, LIVE_ACTIVITY, STORAGE_KEYS } from '../lib/zmninja-ng-constants';
 import type { AssistantBackend } from '../lib/assistant/types';
 import type { DateFormatPreset, TimeFormatPreset } from '../lib/format-date-time';
 import type { ThumbnailFallbackType, ThumbnailFallbackEntry } from '../lib/event/thumbnail-chain';
@@ -156,6 +156,24 @@ export interface ProfileSettings {
   webrtcUseStun: boolean;
   // Bandwidth mode: 'normal' for default intervals, 'low' for reduced bandwidth usage
   bandwidthMode: BandwidthMode;
+  /** Live Activity: alarm-status poll interval in seconds, floored by bandwidth mode. */
+  liveActivityPollSeconds: number;
+  /** Live Activity: how long a monitor stays listed after its alarm clears, in seconds. */
+  liveActivityDwellSeconds: number;
+  /** Live Activity: how many tiles render before the rest collapse into an overflow row. */
+  liveActivityMaxTiles: number;
+  /** Live Activity: monitors that never appear on that page. Separate from the
+   *  profile-wide monitor exclusion, which hides a monitor everywhere. */
+  liveActivityIgnoredMonitorIds: string[];
+  /** Live Activity: continuous-recording monitors the user opted back in to.
+   *  They are skipped by default because a monitor that always records is
+   *  always in an event, which says nothing about what is alarming now. An
+   *  explicit opt-in list rather than seeding the ignore list above, so the
+   *  default stays distinguishable from a deliberate choice. */
+  liveActivityWatchContinuousIds: string[];
+  /** Live Activity: fullscreen state for that page. Separate from
+   *  montageIsFullscreen so the two pages do not share one fullscreen flag. */
+  liveActivityIsFullscreen: boolean;
   // Selected group ID for filtering monitors (null = show all monitors)
   selectedGroupId: string | null;
   // Monitor IDs excluded from this profile. Excluded monitors and their events
@@ -199,6 +217,11 @@ export interface ProfileSettings {
   // Per-monitor streaming method overrides (monitorId → 'auto' | 'mjpeg')
   // When absent, the monitor uses the profile-level streamingMethod.
   monitorStreamingOverrides: Record<string, StreamingMethod>;
+  /** Monitors whose events always play through ZMS. Some cameras record in a
+   *  container the app cannot play, and the reactive recovery costs a failed
+   *  request and an error toast on every visit. Listing the monitor here skips
+   *  the MP4 attempt entirely. App-local, not a ZoneMinder monitor field. */
+  forceZmsMonitorIds: string[];
   // Force-disable multi-port streaming. When true, the app ignores the server's
   // ZM_MIN_STREAMING_PORT and uses the portal's default port for all streams.
   // Default false = auto (use the server config when present).
@@ -326,6 +349,12 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   webrtcUseStun: false,
   // Normal bandwidth mode by default
   bandwidthMode: 'normal',
+  liveActivityPollSeconds: LIVE_ACTIVITY.defaultPollSeconds,
+  liveActivityDwellSeconds: LIVE_ACTIVITY.defaultDwellSeconds,
+  liveActivityMaxTiles: LIVE_ACTIVITY.defaultMaxTiles,
+  liveActivityIgnoredMonitorIds: [],
+  liveActivityWatchContinuousIds: [],
+  liveActivityIsFullscreen: false,
   // No group filter by default (show all monitors)
   selectedGroupId: null,
   // No monitors excluded by default
@@ -355,6 +384,7 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   tvMode: false,
   showProtocolLabel: true,
   monitorStreamingOverrides: {},
+  forceZmsMonitorIds: [],
   // Auto by default: honor the server's ZM_MIN_STREAMING_PORT when present
   forceDisableMultiPort: false,
   apiTimeoutSeconds: API_REQUEST.defaultTimeoutSeconds,
