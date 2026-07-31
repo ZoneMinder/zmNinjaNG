@@ -195,6 +195,14 @@ export const NOTIFICATIONS_SERVICE = {
   // Width (px) requested for event snapshot images in notifications
   snapshotImageWidth: 600,
 
+  // Minimum gap between event-poller reloads of the monitor name map, after an
+  // event names a monitor the map does not know. The startup load can lose a
+  // race with authentication and leave the map empty, which used to strand
+  // every notification title on "Monitor 4" for the session. An unknown id can
+  // also just be a deleted monitor, so the retry is rate limited rather than
+  // firing on every poll.
+  monitorNamesReloadMs: 60000, // 60 sec
+
   // Delay before the first ES-mode auto-connect attempt, to let profile/auth
   // store rehydration finish (ms)
   autoConnectInitDelayMs: 500,

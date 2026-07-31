@@ -262,4 +262,46 @@ describe('EventPollerService', () => {
       expect.objectContaining({ EventId: 0 }),
     );
   });
+
+  // The startup load runs while the profile is still bootstrapping and can
+  // lose a race with authentication, which used to leave the name map empty
+  // for the whole session and strand every notification on "Monitor 1".
+  it('recovers the monitor name when the startup load failed', async () => {
+    mockGetMonitors.mockRejectedValueOnce(new Error('401 during profile switch'));
+
+    const poller = getEventPoller();
+    await poller.start('profile-1', deps);
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Names are gone, so a name lookup would miss.
+    mockGetEvents.mockResolvedValueOnce({ events: [makeEvent(200)] });
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    expect(deps.onEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ EventId: 200, MonitorName: 'Front Door' }),
+    );
+  });
+
+  it('does not refetch names on every poll for a monitor that stays unknown', async () => {
+    // Poll faster than the reload window so several polls fall inside it.
+    deps.getPollIntervalMs.mockReturnValue(10_000);
+
+    const poller = getEventPoller();
+    await poller.start('profile-1', deps);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mockGetMonitors).toHaveBeenCalledTimes(1);
+
+    // Monitor 99 is absent from the list and always will be, so the retry has
+    // to be rate limited rather than firing once per poll.
+    for (let i = 0; i < 4; i += 1) {
+      mockGetEvents.mockResolvedValueOnce({ events: [makeEvent(300 + i, '99')] });
+      await vi.advanceTimersByTimeAsync(10_000);
+    }
+
+    // One startup load plus exactly one retry across four polls.
+    expect(mockGetMonitors).toHaveBeenCalledTimes(2);
+    expect(deps.onEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ MonitorName: 'Monitor 99' }),
+    );
+  });
 });

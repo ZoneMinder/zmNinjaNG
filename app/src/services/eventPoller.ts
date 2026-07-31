@@ -48,6 +48,10 @@ class EventPollerService {
   private isFirstPoll = true;
   private monitorNames = new Map<string, string>();
   private monitorData: Array<{ Monitor: { Id: string; ServerId: string | null } }> = [];
+  /** In-flight name reload, so a burst of unknown ids triggers one fetch. */
+  private namesReloadPromise: Promise<void> | null = null;
+  /** Earliest epoch ms at which another reload may run. */
+  private namesReloadAfter = 0;
 
   /**
    * Start polling for new events.
@@ -91,6 +95,8 @@ class EventPollerService {
     this.isFirstPoll = true;
     this.monitorNames.clear();
     this.monitorData = [];
+    this.namesReloadPromise = null;
+    this.namesReloadAfter = 0;
 
     log.notifications('Stopped event poller', LogLevel.INFO);
   }
@@ -118,6 +124,35 @@ class EventPollerService {
     } catch (error) {
       log.notifications('Event poller failed to load monitor names', LogLevel.WARN, error);
     }
+  }
+
+  /**
+   * Reload the name map when an event names a monitor we have never heard of.
+   *
+   * The initial load runs while the profile is still bootstrapping and can
+   * lose a race with authentication: a profile switch deliberately suppresses
+   * re-login while it is in flight, so `getMonitors` fails and the map is left
+   * empty. Nothing retried it, so every notification for the rest of the
+   * session fell back to "Monitor 4" instead of the camera's name.
+   *
+   * Debounced, because an unknown id is not always a stale map: a monitor
+   * deleted since the last load will never resolve, and that must not refetch
+   * the whole monitor list on every poll. A miss also leaves the existing
+   * names intact, since `_loadMonitorNames` only clears the map once the new
+   * response is in hand.
+   */
+  private async _ensureMonitorName(monitorId: string): Promise<void> {
+    if (this.monitorNames.has(monitorId)) return;
+
+    const now = Date.now();
+    if (!this.namesReloadPromise) {
+      if (now < this.namesReloadAfter) return;
+      this.namesReloadAfter = now + NOTIFICATIONS_SERVICE.monitorNamesReloadMs;
+      this.namesReloadPromise = this._loadMonitorNames().finally(() => {
+        this.namesReloadPromise = null;
+      });
+    }
+    await this.namesReloadPromise;
   }
 
   private _pollAndSchedule(): void {
@@ -170,6 +205,10 @@ class EventPollerService {
         this.seenEventIds.add(eventId);
 
         const monitorId = parseEventId(event.Event.MonitorId);
+        // A name we have never seen usually means the startup load lost its
+        // race with auth, not that the monitor is unknown. Try once more
+        // before falling back to a bare id in the notification title.
+        await this._ensureMonitorName(String(event.Event.MonitorId));
         const monitorName = this.monitorNames.get(String(event.Event.MonitorId)) || `Monitor ${monitorId}`;
         const cause = event.Event.Cause || 'Motion';
 
