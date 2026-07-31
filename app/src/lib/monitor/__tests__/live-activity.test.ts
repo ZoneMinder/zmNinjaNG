@@ -57,10 +57,33 @@ describe('reduceActiveMonitors', () => {
     expect(still[0].alarmCount).toBe(1);
   });
 
-  it('appends new monitors after existing ones rather than re-sorting', () => {
+  it('puts the most recently alarmed monitor first', () => {
+    // a alarms first, then stops; b alarms later. b is the fresher alarm, so
+    // it takes the top slot and a sinks below it while it cools.
+    const first = reduceActiveMonitors([], { a: 'alarm', b: 'idle' }, 1000, DWELL);
+    const second = reduceActiveMonitors(first, { a: 'idle', b: 'alarm' }, 2000, DWELL);
+    expect(second.map((e) => e.monitorId)).toEqual(['b', 'a']);
+    expect(second[0].lastAlarmingAt).toBe(2000);
+    expect(second[1].lastAlarmingAt).toBe(1000);
+  });
+
+  it('breaks a same-tick tie by monitor id rather than by arrival order', () => {
+    // Both alarm in the same poll, so neither is more recent. Without the
+    // tiebreak their positions would depend on states-map iteration order and
+    // could swap on a later render for no reason.
     const first = reduceActiveMonitors([], { '2': 'alarm' }, 1000, DWELL);
     const second = reduceActiveMonitors(first, { '2': 'alarm', '1': 'alarm' }, 2000, DWELL);
-    expect(second.map((e) => e.monitorId)).toEqual(['2', '1']);
+    expect(second.map((e) => e.monitorId)).toEqual(['1', '2']);
+    const third = reduceActiveMonitors(second, { '1': 'alarm', '2': 'alarm' }, 3000, DWELL);
+    expect(third.map((e) => e.monitorId)).toEqual(['1', '2']);
+  });
+
+  it('re-sorts a cooling monitor back to the top when it alarms again', () => {
+    let list = reduceActiveMonitors([], { a: 'alarm', b: 'idle' }, 1000, DWELL);
+    list = reduceActiveMonitors(list, { a: 'idle', b: 'alarm' }, 2000, DWELL);
+    expect(list.map((e) => e.monitorId)).toEqual(['b', 'a']);
+    list = reduceActiveMonitors(list, { a: 'alarm', b: 'idle' }, 3000, DWELL);
+    expect(list.map((e) => e.monitorId)).toEqual(['a', 'b']);
   });
 
   it('keeps surviving monitors in place when one in the middle expires', () => {
@@ -96,6 +119,16 @@ describe('reduceActiveMonitors', () => {
     const again = reduceActiveMonitors(first, { '1': 'alarm' }, 1000, DWELL);
     expect(again).toBe(first);
   });
+
+  it('returns the same array reference when the sort leaves the order alone', () => {
+    // Sorting must not manufacture a new array: every tile re-renders when
+    // this reference changes, and a poll tick that changed nothing must not
+    // cost that.
+    const first = reduceActiveMonitors([], { a: 'alarm', b: 'alarm', c: 'alarm' }, 1000, DWELL);
+    expect(first.map((e) => e.monitorId)).toEqual(['a', 'b', 'c']);
+    const again = reduceActiveMonitors(first, { a: 'alarm', b: 'alarm', c: 'alarm' }, 1000, DWELL);
+    expect(again).toBe(first);
+  });
 });
 
 describe('capActiveMonitors', () => {
@@ -119,6 +152,21 @@ describe('capActiveMonitors', () => {
     const { visible, overflowCount } = capActiveMonitors(entries, 3);
     expect(visible.map((e) => e.monitorId)).toEqual(['1', '2', '3']);
     expect(overflowCount).toBe(2);
+  });
+
+  it('keeps the most recently alarmed monitors when it truncates', () => {
+    // The cap takes the head of the list, and the reducer sorts newest alarm
+    // first, so what survives is the freshest activity rather than whatever
+    // arrived first.
+    const list = reduceActiveMonitors(
+      reduceActiveMonitors([], { old: 'alarm', fresh: 'idle' }, 1000, DWELL),
+      { old: 'idle', fresh: 'alarm' },
+      2000,
+      DWELL
+    );
+    const { visible, overflowCount } = capActiveMonitors(list, 1);
+    expect(visible.map((e) => e.monitorId)).toEqual(['fresh']);
+    expect(overflowCount).toBe(1);
   });
 });
 

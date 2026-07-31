@@ -601,8 +601,9 @@ The pipeline, in the order it runs:
   state map into the ordered list actually rendered: a monitor joins on
   ``alarm``/``alert``, stays resident (cooling) until
   ``liveActivityDwellSeconds`` after its last alarm, and only then drops.
-  Order is first-entered and never re-sorted, so a tile never moves under a
-  tap in progress. ``capActiveMonitors`` then slices the result to
+  Order is ``lastAlarmingAt`` descending, tiebroken by monitor id, so the
+  camera that just went off is the first tile and the tile cap keeps the
+  freshest activity. ``capActiveMonitors`` then slices the result to
   ``liveActivityMaxTiles`` and reports the remainder as an overflow count.
 
 .. code:: tsx

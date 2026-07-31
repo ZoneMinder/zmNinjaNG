@@ -2512,7 +2512,7 @@ thrash ``nph-zms`` on the server, not just the display.
        Hook->>Parse: parseAlarmState(raw)
        Parse-->>Hook: alarm / alert / idle / ...
        Page->>Reduce: reduceActiveMonitors(prev, states, now, dwellMs)
-       Reduce-->>Page: next active list (order preserved)
+       Reduce-->>Page: next active list (newest alarm first)
        Page->>Tile: render capActiveMonitors(active, maxTiles).visible
        Tile->>Life: mount mints a connkey
        Note over Reduce,Tile: dwell expires, or overflow drops a tile
@@ -2565,9 +2565,12 @@ thrash ``nph-zms`` on the server, not just the display.
    on ``Date.now()``. A monitor entering ``alarm``/``alert`` joins or stays;
    one that stops alarming keeps its slot until ``now - lastAlarmingAt``
    exceeds the dwell window, then drops; a fresh alarm after cooling bumps
-   ``alarmCount``, which is what puts the ``×2`` badge on a tile. Existing
-   entries are always emitted first, in their existing order, so a tile
-   never moves out from under a tap in progress.
+   ``alarmCount``, which is what puts the ``×2`` badge on a tile. The result
+   is then sorted by ``lastAlarmingAt`` descending with the monitor id as a
+   tiebreak, so the freshest alarm is the first tile and monitors that
+   alarmed in the same poll hold a fixed order. The sort runs before the
+   identity check, so an order that did not actually change still hands back
+   the previous array rather than re-rendering every tile.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/monitor/live-activity.ts#L48>`__
    · → :doc:`05-component-architecture`
 

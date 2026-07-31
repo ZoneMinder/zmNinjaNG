@@ -10,7 +10,7 @@ Any new alarm during the dwell window resets the timer and keeps the tile on scr
 
 ## Order and overflow
 
-Tiles are added in the order their monitors start alarming and never reorder while they are on screen, so a tile never moves out from under you while you are looking at it. If more monitors are alarming than the page can show, the extra ones collapse into a "+N more active" line instead of overcrowding the grid.
+The camera that alarmed most recently sits at the top, and the ones that have gone quiet sink toward the bottom as they cool. Two cameras that alarm in the same check keep a fixed order between them rather than swapping around. Tiles slide to their new positions where your browser supports it, so a reorder is visible rather than an instant jump. If more monitors are alarming than the page can show, the extra ones collapse into a "+N more active" line instead of overcrowding the grid, which means the tiles you keep are the most recent activity.
 
 ## Settings
 

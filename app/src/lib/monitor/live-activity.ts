@@ -10,9 +10,13 @@
  * and sends CMD_QUIT on unmount, so a monitor that flickers in and out
  * thrashes nph-zms processes on the server.
  *
- * Order is first-entered ascending and is never re-sorted while the list is
- * non-empty: a list that reorders under a user's finger loses them the tile
- * they were about to tap.
+ * Order is most-recent-alarm first, tiebroken by monitor id: the tile a user
+ * most likely wants is the camera that just went off, so it belongs at the top
+ * of the grid rather than below whatever alarmed earlier. Under the tile cap
+ * that also means the newest activity is what survives truncation. Tiles do
+ * move when the order changes, which the page softens with a view transition.
+ * The id tiebreak keeps two monitors that alarmed in the same poll from
+ * swapping places on later renders for no reason.
  *
  * Pure on (previous, states, now, dwellMs) so the whole policy is testable
  * without React, fake timers, or a query client.
@@ -24,9 +28,12 @@ export interface ActiveMonitorEntry {
   monitorId: string;
   /** Latest reported state, used for the tile label. */
   state: MonitorAlarmState;
-  /** When this monitor first entered the list. Fixes its position. */
+  /** When this monitor first entered the list. */
   enteredAt: number;
-  /** When it was last actually alarming. The dwell window runs from here. */
+  /**
+   * When it was last actually alarming. The dwell window runs from here, and
+   * so does the sort order.
+   */
   lastAlarmingAt: number;
   /** How many separate alarms it has had while resident. */
   alarmCount: number;
@@ -53,7 +60,7 @@ export function reduceActiveMonitors(
 ): ActiveMonitorEntry[] {
   const next: ActiveMonitorEntry[] = [];
 
-  // Existing entries first, in their existing order, so positions never shift.
+  // Existing entries first; the sort below decides where they end up.
   for (const entry of previous) {
     const state = states[entry.monitorId];
 
@@ -82,8 +89,7 @@ export function reduceActiveMonitors(
     next.push({ ...entry, state, isCooling: true });
   }
 
-  // Then monitors that are newly alarming, appended in the order the states
-  // map presents them.
+  // Then monitors that are newly alarming.
   const resident = new Set(next.map((e) => e.monitorId));
   for (const [monitorId, state] of Object.entries(states)) {
     if (resident.has(monitorId)) continue;
@@ -97,6 +103,14 @@ export function reduceActiveMonitors(
       isCooling: false,
     });
   }
+
+  // Freshest alarm on top. Sorted before the identity check below, so a sort
+  // that changes nothing still hands back the previous array.
+  next.sort(
+    (a, b) =>
+      b.lastAlarmingAt - a.lastAlarmingAt ||
+      (a.monitorId < b.monitorId ? -1 : a.monitorId > b.monitorId ? 1 : 0)
+  );
 
   // Preserve reference identity when nothing moved, so React Query poll ticks
   // that change nothing do not re-render every tile.
