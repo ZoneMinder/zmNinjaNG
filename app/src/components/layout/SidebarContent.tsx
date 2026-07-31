@@ -40,7 +40,6 @@ import {
 import { useCommandPaletteStore } from '../../stores/commandPalette';
 import { useDeveloperNotices } from '../../hooks/useDeveloperNotices';
 import { useDeveloperNoticeStore } from '../../stores/developerNotices';
-import { LIVE_ACTIVITY } from '../../lib/zmninja-ng-constants';
 
 const HELP_DOCS_URL = 'https://zmninjang.readthedocs.io/en/latest/';
 
@@ -84,38 +83,6 @@ export function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentPro
   // Get notification data for current profile
   const settings = currentProfile ? getProfileSettings(currentProfile.id) : null;
   const profileSettings = currentProfile ? getSettings(currentProfile.id) : null;
-
-  // Live Activity nav badge: monitors with an event inside the last dwell
-  // window. Reuses events the websocket already delivered (no extra
-  // polling); renders nothing when notifications are off, since none arrive
-  // to count. The window is the profile's own dwell setting, so the badge
-  // and the page agree on how long an alarm stays interesting.
-  //
-  // ponytail: this selector rebuilds the Set on every evaluation, so useShallow
-  // still re-runs the filter/map on unrelated notification-store writes (it
-  // just avoids a re-render when the resulting size is unchanged). If that
-  // shows up as a real cost, memoize the profile's event list with a
-  // reference-stable selector and build the Set in a separate useMemo keyed
-  // off that list.
-  //
-  // ponytail: it also only re-evaluates on a store write or a sidebar render,
-  // so the last event aging out of the window leaves the badge lit until the
-  // next one of those (usually the next navigation). Ceiling: a badge up to
-  // one dwell window stale. Upgrade path is a setInterval here that forces a
-  // re-evaluation, at the cost of a sidebar render on every tick forever,
-  // which is not worth paying for a count that is only ever slightly high.
-  const badgeDwellMs =
-    (profileSettings?.liveActivityDwellSeconds ?? LIVE_ACTIVITY.defaultDwellSeconds) * 1000;
-  const recentAlarmMonitorCount = useNotificationStore(
-    useShallow((state) => {
-      const events = currentProfile ? state.profileEvents[currentProfile.id] : undefined;
-      if (!events?.length) return 0;
-      const cutoff = Date.now() - badgeDwellMs;
-      return new Set(
-        events.filter((e) => e.receivedAt >= cutoff).map((e) => String(e.MonitorId))
-      ).size;
-    })
-  );
 
   const { t } = useTranslation();
   const { toast } = useToast();
@@ -349,14 +316,6 @@ export function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentPro
                       aria-label={t('developer_notice.unread')}
                       data-testid="developer-notice-unread-dot"
                     />
-                  )}
-                  {item.path === '/live-activity' && recentAlarmMonitorCount > 0 && (
-                    <span
-                      className="absolute -top-1 -right-1 h-4 min-w-4 px-0.5 flex items-center justify-center text-[9px] font-bold rounded-full bg-destructive text-destructive-foreground"
-                      data-testid="live-activity-nav-badge"
-                    >
-                      {recentAlarmMonitorCount > 99 ? '99+' : recentAlarmMonitorCount}
-                    </span>
                   )}
                 </span>
                 {!isCollapsed && (
