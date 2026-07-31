@@ -57,8 +57,6 @@ export interface ActiveMonitorEntry {
    * through an event's tail, so a resident monitor holds its slot.
    */
   episodeStartedAt: number;
-  /** How many separate alarms it has had while resident. */
-  alarmCount: number;
   /** True while it is resident but no longer alarming. */
   isCooling: boolean;
 }
@@ -70,7 +68,6 @@ function sameEntry(a: ActiveMonitorEntry, b: ActiveMonitorEntry): boolean {
     a.enteredAt === b.enteredAt &&
     a.lastAlarmingAt === b.lastAlarmingAt &&
     a.episodeStartedAt === b.episodeStartedAt &&
-    a.alarmCount === b.alarmCount &&
     a.isCooling === b.isCooling
   );
 }
@@ -94,19 +91,17 @@ export function reduceActiveMonitors(
     const alarming = isAlarmingState(state);
 
     if (alarming) {
-      // A fresh alarm is one that starts while the entry was cooling.
-      const isFreshAlarm = entry.isCooling;
-      // It only starts a new episode, and so a new sort position, if the
-      // monitor had been quiet long enough that this is not the same event
+      // A re-alarm only starts a new episode, and so a new sort position, if
+      // the monitor had been quiet long enough that this is not the same event
       // still winding down. A blip back into `alarm` a second after dropping
       // to `tape` is the same episode and must not move the tile.
-      const startsNewEpisode = isFreshAlarm && now - entry.lastAlarmingAt > EPISODE_GRACE_MS;
+      const startsNewEpisode =
+        entry.isCooling && now - entry.lastAlarmingAt > EPISODE_GRACE_MS;
       next.push({
         ...entry,
         state,
         lastAlarmingAt: now,
         episodeStartedAt: startsNewEpisode ? now : entry.episodeStartedAt,
-        alarmCount: entry.alarmCount + (isFreshAlarm ? 1 : 0),
         isCooling: false,
       });
       continue;
@@ -129,7 +124,6 @@ export function reduceActiveMonitors(
       enteredAt: now,
       lastAlarmingAt: now,
       episodeStartedAt: now,
-      alarmCount: 1,
       isCooling: false,
     });
   }

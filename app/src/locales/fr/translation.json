@@ -1016,8 +1016,6 @@
     "state_alarm": "Alarme",
     "state_alert": "Alerte",
     "state_cooling": "Apaisement",
-    "alarm_count_one": "×{{count}}",
-    "alarm_count_other": "×{{count}}",
     "overflow_one": "+{{count}} autre active",
     "overflow_other": "+{{count}} autres actives",
     "settings_title": "Paramètres Activité en direct",

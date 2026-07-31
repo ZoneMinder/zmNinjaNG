@@ -1016,8 +1016,6 @@
     "state_alarm": "Alarmed",
     "state_alert": "Alert",
     "state_cooling": "Clearing",
-    "alarm_count_one": "×{{count}}",
-    "alarm_count_other": "×{{count}}",
     "overflow_one": "+{{count}} more active",
     "overflow_other": "+{{count}} more active",
     "settings_title": "Live Activity settings",

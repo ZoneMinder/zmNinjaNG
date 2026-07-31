@@ -1016,8 +1016,6 @@
     "state_alarm": "报警",
     "state_alert": "警报",
     "state_cooling": "冷却中",
-    "alarm_count_one": "×{{count}}",
-    "alarm_count_other": "×{{count}}",
     "overflow_one": "+{{count}} 个活动中",
     "overflow_other": "+{{count}} 个活动中",
     "settings_title": "实时动态设置",

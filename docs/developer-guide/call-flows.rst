@@ -2564,8 +2564,7 @@ thrash ``nph-zms`` on the server, not just the display.
    an effect, not during render, because it depends on the previous list and
    on ``Date.now()``. A monitor entering ``alarm``/``alert`` joins or stays;
    one that stops alarming keeps its slot until ``now - lastAlarmingAt``
-   exceeds the dwell window, then drops; a fresh alarm after cooling bumps
-   ``alarmCount``, which is what puts the ``×2`` badge on a tile. The result
+   exceeds the dwell window, then drops. The result
    is then sorted by ``episodeStartedAt`` descending with the monitor id as a
    tiebreak, so the freshest alarm is the first tile and monitors that
    alarmed in the same poll hold a fixed order. That key is the start of the

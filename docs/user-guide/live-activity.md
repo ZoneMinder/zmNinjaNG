@@ -6,7 +6,7 @@ Live Activity shows only the cameras that ZoneMinder currently reports as alarmi
 
 A monitor does not disappear the instant its alarm clears. It stays on screen for a short dwell window (30 seconds by default) after its last alarm, then leaves. This is not just to avoid a jarring flicker: each tile that appears or disappears opens or closes a live video connection to the server. A monitor that flickered in and out of alarm every few seconds would open and close that connection just as fast, which is unnecessary load on the server. The dwell window smooths that out.
 
-Any new alarm during the dwell window resets the timer and keeps the tile on screen. A tile also shows a small count in its corner (for example `×2`) when a monitor has alarmed more than once while it has stayed on screen.
+Any new alarm during the dwell window resets the timer and keeps the tile on screen.
 
 ## Reading a tile
 

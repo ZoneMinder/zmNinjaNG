@@ -47,18 +47,13 @@ describe('reduceActiveMonitors', () => {
     expect(later.map((e) => e.monitorId)).toEqual(['1']);
   });
 
-  it('counts each fresh alarm rather than re-entering the monitor', () => {
+  it('re-alarms in place rather than re-entering the monitor', () => {
     const first = reduceActiveMonitors([], { '1': 'alarm' }, 1000, DWELL);
     const cooling = reduceActiveMonitors(first, { '1': 'idle' }, 5000, DWELL);
     const reArmed = reduceActiveMonitors(cooling, { '1': 'alarm' }, 9000, DWELL);
-    expect(reArmed[0].alarmCount).toBe(2);
+    expect(reArmed.map((e) => e.monitorId)).toEqual(['1']);
     expect(reArmed[0].enteredAt).toBe(1000);
-  });
-
-  it('does not count a sustained alarm as a second alarm', () => {
-    const first = reduceActiveMonitors([], { '1': 'alarm' }, 1000, DWELL);
-    const still = reduceActiveMonitors(first, { '1': 'alarm' }, 3000, DWELL);
-    expect(still[0].alarmCount).toBe(1);
+    expect(reArmed[0].isCooling).toBe(false);
   });
 
   it('puts the most recently alarmed monitor first', () => {
@@ -206,7 +201,6 @@ describe('capActiveMonitors', () => {
     enteredAt: 0,
     lastAlarmingAt: 0,
     episodeStartedAt: 0,
-    alarmCount: 1,
     isCooling: false,
   });
 
@@ -246,7 +240,6 @@ describe('sameMonitorOrder', () => {
     enteredAt: 0,
     lastAlarmingAt: 0,
     episodeStartedAt: 0,
-    alarmCount: 1,
     isCooling,
   });
 

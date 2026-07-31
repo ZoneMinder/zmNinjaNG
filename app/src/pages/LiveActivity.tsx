@@ -332,14 +332,6 @@ export default function LiveActivity() {
                   titleIcon={<LiveActivityStateIcon state={entry.state} />}
                   fromRoute="/live-activity"
                 />
-                {entry.alarmCount > 1 && (
-                  <span
-                    className="absolute top-1 right-1 z-30 text-[10px] px-1.5 py-0.5 rounded bg-black/60 text-white"
-                    data-testid={`live-activity-count-${entry.monitorId}`}
-                  >
-                    {t('live_activity.alarm_count', { count: entry.alarmCount })}
-                  </span>
-                )}
               </div>
             );
           })}
