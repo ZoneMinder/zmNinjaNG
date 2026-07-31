@@ -6,6 +6,8 @@
  * - connKey state generation via the monitor store
  * - CMD_QUIT before connKey regeneration (skips initial mount)
  * - CMD_QUIT on unmount (streaming mode only)
+ * - CMD_QUIT when `enabled` goes false, so a disabled hook never leaves a live
+ *   nph-zms process behind, and re-enabling mints a fresh key
  * - Image/media element abort on unmount to release browser connections
  * - cleanupParamsRef pattern to capture latest values for the unmount effect
  */
@@ -43,7 +45,7 @@ interface StreamCleanupParams {
 async function quitStreamForParams(
   params: StreamCleanupParams,
   logFn: ComponentLogger,
-  reason: 'unmount' | 'profile-switch',
+  reason: 'unmount' | 'profile-switch' | 'disable',
 ): Promise<void> {
   if (
     params.viewMode !== 'streaming' ||
@@ -102,8 +104,9 @@ export interface UseStreamLifecycleOptions {
   /** Component-scoped log function (e.g. log.monitor, log.montageMonitor). */
   logFn: ComponentLogger;
   /**
-   * When true the hook is fully enabled. When false the hook skips connKey
-   * generation and cleanup param tracking. Defaults to true.
+   * When true the hook is fully enabled. When false the hook holds no connKey:
+   * going from enabled to disabled quits the current key on the server, and
+   * re-enabling mints a fresh one. Defaults to true.
    */
   enabled?: boolean;
   /** Base port for multi-port streaming (port = minStreamingPort + monitorId). */
@@ -230,9 +233,11 @@ export function useStreamLifecycle({
     cmdQuitTimeoutMs,
   });
 
-  // Update cleanup params whenever they change
+  // Update cleanup params whenever they change. This tracks while disabled too:
+  // the disable teardown below reads the ref in the same commit that `enabled`
+  // flips false, and it needs the connkey that is still live at that moment,
+  // not a frozen older one.
   useEffect(() => {
-    if (!enabled) return;
     cleanupParamsRef.current = {
       monitorId: monitorId || '',
       monitorName: monitorName || '',
@@ -244,6 +249,33 @@ export function useStreamLifecycle({
       cmdQuitTimeoutMs,
     };
   }, [enabled, monitorId, monitorName, connKey, portalUrl, accessToken, viewMode, minStreamingPort, cmdQuitTimeoutMs]);
+
+  // Disable teardown. A connkey is never left alive on the server when its hook
+  // goes disabled: going enabled -> disabled sends CMD_QUIT for the current key
+  // and clears it, exactly as an unmount does, and zeroing connKey makes the
+  // regeneration effect above mint a *fresh* key when the hook is re-enabled
+  // (the pre-disable key's nph-zms process is gone, so reusing it would mount an
+  // <img> on a dead stream). A Go2RTC monitor flipping between WebRTC and MJPEG
+  // fallback therefore orphans nothing, however many times it flips.
+  //
+  // This effect deliberately has no cleanup function, so it cannot race the
+  // unmount teardown into quitting the same key twice: an unmount runs only the
+  // unmount cleanup, which by then sees connKey 0 and no-ops. quitStreamForParams
+  // is the single quit path (it already skips snapshot mode, a missing portal
+  // URL, and connKey 0, so hovering off a snapshot tile costs no request), and
+  // its store comparison keeps a concurrent re-enable's newer key intact.
+  const wasEnabledRef = useRef(enabled);
+  useEffect(() => {
+    if (wasEnabledRef.current === enabled) return;
+    wasEnabledRef.current = enabled;
+    if (enabled) return;
+
+    const params = cleanupParamsRef.current;
+    void quitStreamForParams(params, logFn, 'disable');
+    cleanupParamsRef.current = { ...params, connKey: 0 };
+    prevConnKeyRef.current = 0;
+    setConnKey(0);
+  }, [enabled, logFn]);
 
   // Capture the live media element on every render. The unmount cleanup runs as
   // a passive effect, by which point React has already nulled mediaRef, so we

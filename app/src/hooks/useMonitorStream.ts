@@ -134,8 +134,10 @@ export function useMonitorStream({
     return () => clearInterval(interval);
   }, [enabled, effectiveViewMode, settings.snapshotRefreshInterval]);
 
-  // Build stream URL - ONLY when we have a valid connKey to prevent zombie streams
-  const streamUrl = currentProfile && connKey !== 0 && isAccessTokenFresh
+  // Build stream URL - ONLY when we have a valid connKey to prevent zombie
+  // streams, and only while enabled: a disabled hook exposes no URL, so nothing
+  // can mount an <img> on a connkey the disable teardown has already quit.
+  const streamUrl = enabled && currentProfile && connKey !== 0 && isAccessTokenFresh
     ? getStreamUrl(recordingUrl || currentProfile.cgiUrl, monitorId, {
       mode: effectiveViewMode === 'snapshot' ? 'single' : 'jpeg',
       scale: bandwidth.imageScale,

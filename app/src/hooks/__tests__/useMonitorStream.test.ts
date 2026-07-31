@@ -350,6 +350,50 @@ describe('useMonitorStream', () => {
     expect(useMonitorStore.getState().connKeys['1']).toBeUndefined();
   });
 
+  it('empties streamUrl and imageSrc while disabled, and mints a fresh connkey on re-enable', async () => {
+    // The Go2RTC fallback case: the MJPEG placeholder streams while WebRTC
+    // negotiates, gets disabled once video frames arrive, and comes back when
+    // WebRTC drops. Nothing may mount an <img> on the dead first connkey.
+    let key = 200;
+    const regenerateConnKey = vi.fn((monitorId: string) => {
+      const k = ++key;
+      useMonitorStore.setState((s) => ({ connKeys: { ...s.connKeys, [monitorId]: k } }));
+      return k;
+    });
+    useMonitorStore.setState({ connKeys: {}, regenerateConnKey });
+
+    const { result, rerender } = renderHook(
+      ({ enabled }: { enabled: boolean }) => useMonitorStream({ monitorId: '1', enabled }),
+      { initialProps: { enabled: true } },
+    );
+
+    await waitFor(() => {
+      expect(result.current.streamUrl).toContain('connkey=201');
+    });
+
+    rerender({ enabled: false });
+
+    await waitFor(() => {
+      expect(result.current.imageSrc).toBe('');
+    });
+    expect(result.current.streamUrl).toBe('');
+    // The first key was quit, not orphaned.
+    expect(mockHttpGet).toHaveBeenCalledWith(
+      expect.stringContaining('connkey=201'),
+      expect.anything(),
+    );
+
+    rerender({ enabled: true });
+
+    await waitFor(() => {
+      expect(result.current.streamUrl).toContain('connkey=202');
+    });
+    expect(result.current.streamUrl).not.toContain('connkey=201');
+    await waitFor(() => {
+      expect(result.current.imageSrc).toContain('connkey=202');
+    });
+  });
+
   it('viewModeOverride forces streaming when settings say snapshot', async () => {
     useSettingsStore.setState({
       profileSettings: {
