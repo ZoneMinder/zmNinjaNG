@@ -663,6 +663,7 @@
     "alarm_disarm_action": "Monitor unscharf schalten",
     "alarm_updating": "Alarmstatus wird aktualisiert...",
     "alarm_help": "Scharf schalten, um einen Alarmzustand zu erzwingen.",
+    "force_zms_label": "Ereignisse immer über ZMS abspielen",
     "go2rtc_label": "Go2RTC",
     "go2rtc_override_note": "Go2RTC für diesen Monitor deaktiviert",
     "alarm_failed": "Aktualisierung des Alarmstatus fehlgeschlagen",

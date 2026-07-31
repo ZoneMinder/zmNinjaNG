@@ -663,6 +663,7 @@
     "alarm_disarm_action": "Disarm monitor",
     "alarm_updating": "Updating alarm state...",
     "alarm_help": "Arm to force an alarm state on this monitor.",
+    "force_zms_label": "Always use ZMS for events",
     "go2rtc_label": "Go2RTC",
     "go2rtc_override_note": "Go2RTC disabled for this monitor",
     "alarm_failed": "Failed to update alarm state",

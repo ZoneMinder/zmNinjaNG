@@ -217,6 +217,11 @@ export interface ProfileSettings {
   // Per-monitor streaming method overrides (monitorId → 'auto' | 'mjpeg')
   // When absent, the monitor uses the profile-level streamingMethod.
   monitorStreamingOverrides: Record<string, StreamingMethod>;
+  /** Monitors whose events always play through ZMS. Some cameras record in a
+   *  container the app cannot play, and the reactive recovery costs a failed
+   *  request and an error toast on every visit. Listing the monitor here skips
+   *  the MP4 attempt entirely. App-local, not a ZoneMinder monitor field. */
+  forceZmsMonitorIds: string[];
   // Force-disable multi-port streaming. When true, the app ignores the server's
   // ZM_MIN_STREAMING_PORT and uses the portal's default port for all streams.
   // Default false = auto (use the server config when present).
@@ -379,6 +384,7 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   tvMode: false,
   showProtocolLabel: true,
   monitorStreamingOverrides: {},
+  forceZmsMonitorIds: [],
   // Auto by default: honor the server's ZM_MIN_STREAMING_PORT when present
   forceDisableMultiPort: false,
   apiTimeoutSeconds: API_REQUEST.defaultTimeoutSeconds,

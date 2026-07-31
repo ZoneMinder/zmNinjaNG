@@ -304,6 +304,16 @@ export default function EventDetail() {
     [currentProfile, isAccessTokenFresh, resolvedPortalUrl, eventIdForUrls, posterFid, accessToken, effectiveMinStreamingPort, monitorIdForUrls]
   );
 
+  // Per-monitor "always use ZMS" preference. Read from the event rather than
+  // seeded into `useZmsFallback`: that state is created before the event query
+  // resolves, so seeding it would show one MP4 frame before the monitor id is
+  // known. Gating the branch here means the MP4 player is never mounted for a
+  // forced monitor, so `handleVideoError` and its toast are unreachable.
+  const forcedZmsMonitorId = monitorIdForUrls && settings.forceZmsMonitorIds.includes(monitorIdForUrls)
+    ? monitorIdForUrls
+    : null;
+  const playThroughZms = useZmsFallback || forcedZmsMonitorId !== null;
+
   // Stable callback so Mp4EventPlayer's effect doesn't re-run on every parent render.
   const handleVideoError = useCallback(() => {
     log.eventDetail('Video playback failed, falling back to ZMS stream', LogLevel.INFO);
@@ -354,6 +364,14 @@ export default function EventDetail() {
     hasVideo,
     hasJPEGs
   });
+
+  if (forcedZmsMonitorId) {
+    log.eventDetail(
+      `Monitor ${forcedZmsMonitorId} is set to always use ZMS for events, so MP4 playback was not attempted`,
+      LogLevel.INFO,
+      { monitorId: forcedZmsMonitorId, eventId: event.Event.Id },
+    );
+  }
 
   const startTime = new Date(event.Event.StartDateTime.replace(' ', 'T'));
   const incomingSlide = location.state?.slideDirection as 'left' | 'right' | undefined;
@@ -500,7 +518,7 @@ export default function EventDetail() {
         <div className="w-full max-w-5xl space-y-3 sm:space-y-4 md:space-y-6">
           {/* Video Player or ZMS Playback */}
           {hasVideo ? (
-            useZmsFallback ? (
+            playThroughZms ? (
               // ZMS playback with controls
               currentProfile && (
                 <ZmsEventPlayer
