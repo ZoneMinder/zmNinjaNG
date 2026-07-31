@@ -385,15 +385,16 @@ describe('LiveActivity', () => {
     expect(vi.mocked(reimportedGetAlarmStatus).mock.calls.map((c) => c[0])).toEqual(['3']);
   });
 
-  it('keeps the short enter duration and the slow cooling duration on the tile', async () => {
+  it('keeps the short enter duration on the tile', async () => {
     // Regression: the tile carried `duration-200` for the enter animation and
-    // `duration-700` for the cooling transition. cn() is twMerge(clsx(...)),
+    // `duration-700` for a cooling transition. cn() is twMerge(clsx(...)),
     // tailwindcss-animate maps `duration-*` onto animationDuration as well as
     // core Tailwind's transitionDuration, so twMerge saw one conflict group
     // and dropped `duration-200` outright. Tiles entered over 700ms. The
-    // enter duration is now an arbitrary-value class, which twMerge cannot
-    // fold into the transition group. Asserting the resolved class list is
-    // the point: this collision is invisible by reading the source.
+    // cooling transition is gone now, but the enter duration stays an
+    // arbitrary-value class so that re-adding any transition duration here
+    // cannot silently swallow it again. The collision is invisible by reading
+    // the source, so the resolved class list is what gets asserted.
     mockStatus.mockImplementation(async (id: string) =>
       (id === '3' ? { status: 2 } : { status: 0 }) as never
     );
@@ -402,23 +403,21 @@ describe('LiveActivity', () => {
 
     const tile = await screen.findByTestId('live-activity-tile');
     expect(tile.className).toMatch(/\[animation-duration:200ms\]/);
-    expect(screen.getByTestId('live-activity-tile-body').className).toMatch(
-      /(^|\s)duration-700(\s|$)/
-    );
   });
 
-  it('keeps the cooling dim off the element the view transition captures', async () => {
-    // The tile carrying `view-transition-name` is what the browser snapshots,
-    // and a captured image is generated with the element's own opacity and
-    // filter already applied, while ::view-transition-new is the live element
-    // partway through the same 700ms animation. The pair is composited with
-    // mix-blend-mode: plus-lighter, which only cross-fades correctly when both
-    // halves are the same image, so a dimmed captured box composites wrong for
-    // the whole transition. The Live Activity grid reorders roughly once a
-    // second while ZoneMinder flaps a winding-down monitor between `alert` and
-    // `tape`, so that mis-composite repeats for the length of the alarm tail:
-    // exactly the window before a tile dwells out. Keeping opacity and filter
-    // on an inner element leaves the captured box effect-free. refs #313
+  it('renders a cooling tile exactly like an alarming one', async () => {
+    // Two reasons, and the rendering one is the load-bearing one. The tile
+    // carries `view-transition-name`, so it is the element the browser
+    // snapshots, and a captured image is generated with the element's own
+    // opacity and filter already applied while ::view-transition-new is the
+    // live element. The pair is composited with mix-blend-mode: plus-lighter,
+    // which only cross-fades correctly when both halves are the same image, so
+    // an element animating its own opacity or filter composites wrong for the
+    // whole transition. The grid reorders roughly once a second while
+    // ZoneMinder flaps a winding-down monitor between `alert` (alarming) and
+    // `tape` (not alarming), so that repeated for the length of an event's
+    // tail: exactly the window before a tile dwells out. Winding down is
+    // signalled by the state icon dropping out of the header instead. refs #313
     vi.resetModules();
     vi.doMock('../../hooks/useCurrentProfile', () => ({
       useCurrentProfile: () => ({
@@ -450,25 +449,24 @@ describe('LiveActivity', () => {
       if (id !== '3') return { status: 0 } as never;
       monitorThreeCalls += 1;
       // Alarms once to enter the list, then stays quiet inside the 30s dwell,
-      // which is the cooling state this asserts on.
+      // so every later poll leaves it resident and cooling.
       return { status: monitorThreeCalls === 1 ? 2 : 0 } as never;
     });
 
     render(<LiveActivityFast />, { wrapper });
 
-    const body = await screen.findByTestId('live-activity-tile-body');
-    await waitFor(
-      () => {
-        expect(body.className).toMatch(/(^|\s)saturate-50(\s|$)/);
-      },
-      { timeout: 5000 }
-    );
-    expect(body.className).toMatch(/(^|\s)opacity-60(\s|$)/);
-
-    const tile = screen.getByTestId('live-activity-tile');
+    // The tile is keyed by monitor id, so this is the same DOM node throughout;
+    // capture how it looks while the monitor is still alarming.
+    const tile = await screen.findByTestId('live-activity-tile');
+    const whileAlarming = tile.className;
     expect(tile.style.viewTransitionName).toBe('live-activity-tile-3');
-    expect(tile.className).not.toMatch(/opacity-60|saturate-50/);
-    expect(body.style.viewTransitionName).toBe('');
+
+    // Let several idle polls land, which puts the entry into its cooling state.
+    await waitFor(() => expect(monitorThreeCalls).toBeGreaterThanOrEqual(4), { timeout: 5000 });
+
+    expect(tile.className).toBe(whileAlarming);
+    expect(tile.className).not.toMatch(/opacity-\d|saturate-|transition-/);
+    expect(tile.style.viewTransitionName).toBe('live-activity-tile-3');
   }, 10000);
 
   it('drops a tile once its dwell window closes', async () => {
