@@ -91,6 +91,7 @@ export function viewNameForPath(pathname: string): string | null {
     '/dashboard': 'Dashboard',
     '/monitors': 'Monitors',
     '/montage': 'Montage',
+    '/live-activity': 'Live Activity',
     '/events': 'Events',
     '/event-montage': 'Event Montage',
     '/timeline': 'Timeline',

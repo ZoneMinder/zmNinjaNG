@@ -275,6 +275,7 @@ export default function LiveActivity() {
                   accessToken={accessToken}
                   navigate={navigate}
                   titleOverride={title}
+                  fromRoute="/live-activity"
                 />
                 {entry.alarmCount > 1 && (
                   <span

@@ -64,6 +64,13 @@ interface MontageMonitorProps {
    * it to show name, id, and alarm state together.
    */
   titleOverride?: string;
+  /**
+   * Route this tile is rendered from. Travels as navigation state to the
+   * events list and the timeline so both can offer a back link that returns
+   * here. Defaults to the montage route, which is where tiles came from
+   * before any other page reused them (refs #313).
+   */
+  fromRoute?: string;
 }
 
 function MontageMonitorComponent({
@@ -81,6 +88,7 @@ function MontageMonitorComponent({
   newEventCount,
   newestEventAt,
   titleOverride,
+  fromRoute = '/montage',
 }: MontageMonitorProps) {
   const { t } = useTranslation();
   const zmVersion = useAuthStore((s) => s.version);
@@ -216,7 +224,7 @@ function MontageMonitorComponent({
             )}
             onClick={(e) => {
               e.stopPropagation();
-              openMonitorEvents({ monitorId: monitor.Id, newEventCount, newestEventAt, from: '/montage' });
+              openMonitorEvents({ monitorId: monitor.Id, newEventCount, newestEventAt, from: fromRoute });
             }}
             title={t('common.events')}
             aria-label={t('monitors.view_events')}
@@ -278,7 +286,10 @@ function MontageMonitorComponent({
                 {t('montage.save_snapshot')}
               </DropdownMenuItem>
               <DropdownMenuItem
-                onClick={(e) => { e.stopPropagation(); navigate(`/timeline?monitorId=${monitor.Id}`); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/timeline?monitorId=${monitor.Id}`, { state: { from: fromRoute } });
+                }}
                 data-testid="montage-timeline-btn"
               >
                 <ChartGantt className="h-3.5 w-3.5 mr-2" />

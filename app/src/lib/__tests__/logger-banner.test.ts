@@ -49,6 +49,7 @@ describe('viewNameForPath', () => {
     expect(viewNameForPath('/timeline')).toBe('Timeline');
     expect(viewNameForPath('/dashboard')).toBe('Dashboard');
     expect(viewNameForPath('/montage')).toBe('Montage');
+    expect(viewNameForPath('/live-activity')).toBe('Live Activity');
   });
 
   it('strips trailing slashes', () => {

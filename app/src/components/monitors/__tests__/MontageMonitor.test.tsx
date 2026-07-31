@@ -293,4 +293,70 @@ describe('MontageMonitor', () => {
     expect(params.get('startDateTime')).toBe('2026-07-10T08:49:38');
     expect(options).toEqual({ state: { from: '/montage' } });
   });
+
+  // refs #313: a tile rendered by Live Activity has to send the user back to
+  // Live Activity, not to Montage, so the route it was rendered from is a prop
+  // rather than a hardcoded string.
+  it('sends the caller-supplied route as the events back link', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MontageMonitor
+        monitor={mockMonitor}
+        status={mockStatus}
+        currentProfile={mockProfile}
+        accessToken="test-token"
+        navigate={mockNavigate}
+        fromRoute="/live-activity"
+      />
+    );
+
+    await user.click(screen.getByTestId('montage-events-btn'));
+
+    const [, options] = mockRouterNavigate.mock.calls[0];
+    expect(options).toEqual({ state: { from: '/live-activity' } });
+  });
+
+  it('passes the route it was rendered from to the timeline as navigation state', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MontageMonitor
+        monitor={mockMonitor}
+        status={mockStatus}
+        currentProfile={mockProfile}
+        accessToken="test-token"
+        navigate={mockNavigate}
+        fromRoute="/live-activity"
+      />
+    );
+
+    await user.click(screen.getByTestId('montage-more-btn'));
+    await user.click(await screen.findByTestId('montage-timeline-btn'));
+
+    expect(mockNavigate).toHaveBeenCalledWith('/timeline?monitorId=1', {
+      state: { from: '/live-activity' },
+    });
+  });
+
+  it('defaults the timeline back link to the montage route when no route is given', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MontageMonitor
+        monitor={mockMonitor}
+        status={mockStatus}
+        currentProfile={mockProfile}
+        accessToken="test-token"
+        navigate={mockNavigate}
+      />
+    );
+
+    await user.click(screen.getByTestId('montage-more-btn'));
+    await user.click(await screen.findByTestId('montage-timeline-btn'));
+
+    expect(mockNavigate).toHaveBeenCalledWith('/timeline?monitorId=1', {
+      state: { from: '/montage' },
+    });
+  });
 });
