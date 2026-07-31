@@ -16,6 +16,7 @@ export interface NavShortcut {
 /** Single-key navigation shortcuts, one per top-level menu destination. */
 export const NAV_SHORTCUTS: NavShortcut[] = [
   { key: 'd', route: '/dashboard', labelKey: 'sidebar.dashboard' },
+  { key: 'a', route: '/live-activity', labelKey: 'sidebar.live_activity' },
   { key: 'm', route: '/montage', labelKey: 'sidebar.montage' },
   { key: 'e', route: '/events', labelKey: 'sidebar.events' },
   { key: 'v', route: '/monitors', labelKey: 'sidebar.monitors' },

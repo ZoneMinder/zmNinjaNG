@@ -13,6 +13,7 @@ import {
 describe('routeForKey', () => {
   it('maps each nav key to its route', () => {
     expect(routeForKey('d')).toBe('/dashboard');
+    expect(routeForKey('a')).toBe('/live-activity');
     expect(routeForKey('m')).toBe('/montage');
     expect(routeForKey('e')).toBe('/events');
     expect(routeForKey('v')).toBe('/monitors');

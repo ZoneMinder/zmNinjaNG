@@ -16,6 +16,7 @@ Press a single key to jump to a section:
 | Key | Goes to |
 |-----|---------|
 | `d` | Dashboard |
+| `a` | Live Activity |
 | `m` | Montage |
 | `e` | Events |
 | `v` | Monitors |
