@@ -30,10 +30,6 @@ A camera that is still alarming would normally be put straight back on the next 
 
 The camera that alarmed most recently sits at the top, and the ones that have gone quiet sink toward the bottom as they cool. Two cameras that alarm in the same check keep a fixed order between them rather than swapping around. Tiles slide to their new positions where your browser supports it, so a reorder is visible rather than an instant jump. If more monitors are alarming than the page can show, the extra ones collapse into a "+N more active" line instead of overcrowding the grid, which means the tiles you keep are the most recent activity.
 
-## Recently cleared
-
-Under the grid, a thin row names the cameras that left the page in the last few minutes and how long ago each one went. It is there so activity does not vanish without trace when you look up a moment too late. It is a plain list of names, not a second grid: nothing in it is live, and it holds a handful of entries for a few minutes before it empties itself.
-
 ## Settings
 
 Open the gear icon at the top of the page to configure:

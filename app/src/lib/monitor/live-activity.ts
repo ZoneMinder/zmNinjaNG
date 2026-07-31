@@ -218,39 +218,6 @@ export function applyLiveAlarmHints(
   return changed ? next : states;
 }
 
-/** A monitor that has left the grid, for the recently-cleared strip. */
-export interface ClearedMonitor {
-  monitorId: string;
-  clearedAt: number;
-}
-
-const CLEARED_MAX_AGE_MS = LIVE_ACTIVITY.clearedMaxAgeSeconds * 1000;
-
-/**
- * The recently-cleared list after `departed` monitors left at `now`.
- *
- * Bounded by both age and count, so it stays a footnote under the grid rather
- * than a second list growing without limit. A monitor that leaves twice moves
- * to the front instead of appearing twice, since the strip answers "what has
- * just been going on", not "how many times".
- *
- * Returns the same array when nothing left and nothing expired: it renders, so
- * a fresh array per poll tick would be a re-render for an unchanged list.
- */
-export function recordCleared(
-  previous: ClearedMonitor[],
-  departed: string[],
-  now: number
-): ClearedMonitor[] {
-  const cutoff = now - CLEARED_MAX_AGE_MS;
-  const departedSet = new Set(departed);
-  const kept = previous.filter((c) => c.clearedAt >= cutoff && !departedSet.has(c.monitorId));
-  if (departed.length === 0 && kept.length === previous.length) return previous;
-
-  const next = [...departed.map((monitorId) => ({ monitorId, clearedAt: now })), ...kept];
-  return next.slice(0, LIVE_ACTIVITY.clearedMaxItems);
-}
-
 /**
  * Drop the dismissals that have served their purpose.
  *

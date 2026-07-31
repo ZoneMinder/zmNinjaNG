@@ -736,15 +736,6 @@ tile dismissed while already cooling would survive its own dismissal. The set
 lives in a page-local ref: it is not a preference, nothing renders it, and
 every read happens inside ``applyStates``.
 
-``LiveActivityClearedStrip`` lists what left in the last few minutes,
-bounded in count and age by ``LIVE_ACTIVITY.clearedMaxItems`` and
-``clearedMaxAgeSeconds``. It is a static list of names, never players:
-mounting tiles there would reopen the streams the dwell window just closed.
-Departures are recorded inside ``applyStates``, the only place the old and
-new lists exist together, and queued before the list is published so the
-strip lands in the same commit instead of repainting partway through a view
-transition.
-
 Fullscreen uses ``useFullscreenMode`` (``src/hooks/useFullscreenMode.ts``),
 shared with Montage. The hook takes the settings key it writes; it used to
 hardcode ``montageIsFullscreen``, which would have made the two pages share

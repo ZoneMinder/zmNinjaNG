@@ -1022,7 +1022,6 @@
     "dismiss": "Clear {{name}} from this page",
     "elapsed_title": "Time since this alarm started",
     "exit_fullscreen": "Exit Fullscreen",
-    "recently_cleared": "Recently cleared",
     "settings_title": "Live Activity settings",
     "settings_desc": "Choose which monitors this page watches and how quickly it reacts.",
     "poll_interval_label": "Check every",

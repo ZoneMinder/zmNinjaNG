@@ -1022,7 +1022,6 @@
     "dismiss": "从此页面移除 {{name}}",
     "elapsed_title": "自本次报警开始以来的时间",
     "exit_fullscreen": "退出全屏",
-    "recently_cleared": "最近结束",
     "settings_title": "实时动态设置",
     "settings_desc": "选择此页面监看的监控，以及响应速度。",
     "poll_interval_label": "检查间隔",

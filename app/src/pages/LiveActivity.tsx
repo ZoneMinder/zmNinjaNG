@@ -26,11 +26,9 @@ import {
   reduceActiveMonitors,
   capActiveMonitors,
   applyLiveAlarmHints,
-  recordCleared,
   releaseDismissed,
   sameMonitorOrder,
   type ActiveMonitorEntry,
-  type ClearedMonitor,
 } from '../lib/monitor/live-activity';
 import { isContinuousRecording } from '../lib/monitor/monitor-status';
 import { runViewTransition } from '../lib/view-transition';
@@ -38,7 +36,6 @@ import type { MonitorAlarmState } from '../lib/monitor/alarm-state';
 import { useFullscreenMode } from '../hooks/useFullscreenMode';
 import { LiveActivitySettingsDialog } from '../components/live-activity/LiveActivitySettingsDialog';
 import { LiveActivityTile } from '../components/live-activity/LiveActivityTile';
-import { LiveActivityClearedStrip } from '../components/live-activity/LiveActivityClearedStrip';
 import {
   LiveActivityHeader,
   LiveActivityFullscreenBar,
@@ -127,8 +124,6 @@ export default function LiveActivity() {
   // the list a dismissal actually changes. Held for the page's lifetime only,
   // so a dismissal does not outlive the visit that made it.
   const dismissedRef = useRef<ReadonlySet<string>>(new Set());
-  // Monitors that left the grid recently, for the strip under it.
-  const [cleared, setCleared] = useState<ClearedMonitor[]>([]);
 
   // Websocket/push accelerant: a notification received in the last dwell
   // window promotes its monitor into the current poll snapshot immediately,
@@ -196,19 +191,6 @@ export default function LiveActivity() {
       if (next === prev) return;
       activeRef.current = next;
 
-      // Whatever just left is what the strip under the grid lists. Recorded
-      // here rather than by watching `active` in an effect, because this is
-      // the only place both lists exist side by side. recordCleared returns
-      // the same array when nothing left, so this is not a state write per
-      // tick, and it is queued before the publish below so the strip lands in
-      // the same commit rather than repainting partway through a transition.
-      const departed = prev
-        .filter((entry) => !next.some((e) => e.monitorId === entry.monitorId))
-        .map((entry) => entry.monitorId);
-      if (departed.length > 0) {
-        setCleared((current) => recordCleared(current, departed, Date.now()));
-      }
-
       // Only tiles arriving, leaving, or swapping rows is worth a transition;
       // a state or count change happens in place and animates via CSS.
       if (sameMonitorOrder(prev, next)) {
@@ -241,37 +223,20 @@ export default function LiveActivity() {
   // interval for those would run alongside this one for the same reason and
   // at the same rate, and this one is already scoped to exactly when tiles
   // exist.
-  // It also ages the cleared strip out, which is why it keeps running for a
-  // little while after the last tile has gone: the strip would otherwise
-  // freeze on screen with nothing left to tick it. recordCleared returns the
-  // same array once nothing expires, so the interval stops itself when the
-  // strip empties.
   useEffect(() => {
-    if (active.length === 0 && cleared.length === 0) return;
+    if (active.length === 0) return;
     const timer = setInterval(() => {
       setNow(Date.now());
       applyStates(hintedStates, dwellMs, recentCauses);
-      setCleared((current) => recordCleared(current, [], Date.now()));
     }, 1000);
     return () => clearInterval(timer);
-  }, [active.length, cleared.length, hintedStates, dwellMs, recentCauses, applyStates]);
+  }, [active.length, hintedStates, dwellMs, recentCauses, applyStates]);
 
   const { visible, overflowCount } = capActiveMonitors(active, settings.liveActivityMaxTiles);
 
   const monitorsById = useMemo(
     () => new Map((data?.monitors ?? []).map((m) => [m.Monitor.Id, m])),
     [data?.monitors]
-  );
-
-  // A monitor that has since been deleted or filtered out has no name to
-  // show, so it drops off the strip rather than listing an id.
-  const clearedItems = useMemo(
-    () =>
-      cleared.flatMap((item) => {
-        const name = monitorsById.get(item.monitorId)?.Monitor.Name;
-        return name ? [{ ...item, name }] : [];
-      }),
-    [cleared, monitorsById]
   );
 
   // Shares monitorGridCols with the Monitors page rather than a dedicated
@@ -377,7 +342,6 @@ export default function LiveActivity() {
         </p>
       )}
 
-      <LiveActivityClearedStrip items={clearedItems} now={now} />
     </>
   );
 
