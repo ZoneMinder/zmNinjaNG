@@ -12,7 +12,7 @@
  * - Fullscreen mode: header slides in on hover from top edge
  */
 
-import { useState, useRef, memo, useEffect } from 'react';
+import { useState, useRef, memo, useEffect, type ReactNode } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
 import type { Monitor, MonitorStatus, Profile } from '../../api/types';
@@ -59,11 +59,14 @@ interface MontageMonitorProps {
   /** Events recorded since the user last looked at this monitor (refs #239). */
   newEventCount?: number;
   newestEventAt?: string | null;
-  /**
-   * Replaces the monitor name in the tile header. The Live Activity page uses
-   * it to show name, id, and alarm state together.
-   */
+  /** Replaces the monitor name in the tile header. */
   titleOverride?: string;
+  /**
+   * Rendered ahead of the title in the header. A separate slot rather than a
+   * widened `titleOverride` because that string is also the truncation
+   * tooltip and has to stay a string (refs #313).
+   */
+  titleIcon?: ReactNode;
   /**
    * Route this tile is rendered from. Travels as navigation state to the
    * events list and the timeline so both can offer a back link that returns
@@ -88,6 +91,7 @@ function MontageMonitorComponent({
   newEventCount,
   newestEventAt,
   titleOverride,
+  titleIcon,
   fromRoute = '/montage',
 }: MontageMonitorProps) {
   const { t } = useTranslation();
@@ -205,6 +209,7 @@ function MontageMonitorComponent({
               monitorDotColor(runState)
             )}
           />
+          {titleIcon}
           <span className={cn(
             "text-xs font-medium truncate",
             isFullscreen && "text-white"

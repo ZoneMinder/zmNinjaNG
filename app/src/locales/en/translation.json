@@ -1013,7 +1013,6 @@
     "all_quiet": "All quiet",
     "watching_count_one": "Watching {{count}} monitor",
     "watching_count_other": "Watching {{count}} monitors",
-    "tile_title": "{{name}}({{id}}):{{state}}",
     "state_alarm": "Alarmed",
     "state_alert": "Alert",
     "state_cooling": "Clearing",

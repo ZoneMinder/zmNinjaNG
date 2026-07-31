@@ -47,8 +47,8 @@ vi.mock('../../stores/notifications', () => ({
 // Initializing the real i18next instance drags in its LanguageDetector setup;
 // instead this stub does the same lookup + interpolation i18next does, but
 // against the real English strings bundled in translation.json. That keeps
-// assertions able to fail on the actual rendered copy (e.g. a changed
-// tile_title format) rather than on a fabricated key/params string.
+// assertions able to fail on the actual rendered copy (e.g. a changed state
+// label) rather than on a fabricated key/params string.
 function resolveEn(key: string): string {
   return key.split('.').reduce<unknown>((node, part) => {
     return typeof node === 'object' && node !== null ? (node as Record<string, unknown>)[part] : undefined;
@@ -75,11 +75,26 @@ vi.mock('react-i18next', () => ({
 // factory below is hoisted above ordinary module scope.
 const tileRenders = vi.hoisted(() => ({ count: 0 }));
 
-// The tile mounts a real video stream otherwise.
+// The tile mounts a real video stream otherwise. The header is reproduced as
+// icon-then-name, the same shape the real component renders, so assertions
+// about what the header says still mean something.
 vi.mock('../../components/monitors/MontageMonitor', () => ({
-  MontageMonitor: ({ titleOverride }: { titleOverride?: string }) => {
+  MontageMonitor: ({
+    monitor,
+    titleOverride,
+    titleIcon,
+  }: {
+    monitor: { Name: string };
+    titleOverride?: string;
+    titleIcon?: ReactNode;
+  }) => {
     tileRenders.count += 1;
-    return <div data-testid="live-activity-tile-mock">{titleOverride}</div>;
+    return (
+      <div data-testid="live-activity-tile-mock">
+        {titleIcon}
+        {titleOverride ?? monitor.Name}
+      </div>
+    );
   },
 }));
 
@@ -111,7 +126,7 @@ describe('LiveActivity', () => {
     mockMonitors.mockResolvedValue(MONITORS as never);
   });
 
-  it('shows only the alarming monitor, labelled with name, id, and state', async () => {
+  it('shows only the alarming monitor, named without its id', async () => {
     mockStatus.mockImplementation(async (id: string) =>
       (id === '3' ? { status: 2 } : { status: 0 }) as never
     );
@@ -119,9 +134,25 @@ describe('LiveActivity', () => {
     render(<LiveActivity />, { wrapper });
 
     await waitFor(() => {
-      expect(screen.getByText('Front Door(3):Alarmed')).toBeInTheDocument();
+      expect(screen.getByText('Front Door')).toBeInTheDocument();
     });
     expect(screen.queryByText(/Backyard/)).not.toBeInTheDocument();
+    // The header used to read "Front Door(3):Alarmed"; the id is gone and the
+    // state word is now the icon's accessible name instead of body text.
+    expect(screen.getByTestId('live-activity-tile-mock')).toHaveTextContent(/^Front Door$/);
+  });
+
+  it('announces the alarm state through the header icon', async () => {
+    mockStatus.mockImplementation(async (id: string) =>
+      (id === '3' ? { status: 2 } : { status: 0 }) as never
+    );
+
+    render(<LiveActivity />, { wrapper });
+
+    await waitFor(() => {
+      expect(screen.getByRole('img', { name: 'Alarmed' })).toBeInTheDocument();
+    });
+    expect(screen.getByRole('img', { name: 'Alarmed' })).toHaveAttribute('title', 'Alarmed');
   });
 
   it('shows the quiet empty state when nothing is alarming', async () => {
@@ -172,7 +203,7 @@ describe('LiveActivity', () => {
     render(<LiveActivity />, { wrapper });
 
     await waitFor(() => {
-      expect(screen.getByText('Front Door(3):Alarmed')).toBeInTheDocument();
+      expect(screen.getByText('Front Door')).toBeInTheDocument();
     });
 
     const settled = tileRenders.count;
@@ -186,7 +217,7 @@ describe('LiveActivity', () => {
     expect(tileRenders.count - settled).toBeLessThan(10);
     // The tile is still on screen, so the bound above is not passing because
     // the page went blank.
-    expect(screen.getByText('Front Door(3):Alarmed')).toBeInTheDocument();
+    expect(screen.getByText('Front Door')).toBeInTheDocument();
   });
 
   it('shows the error instead of claiming all quiet when the server is unreachable', async () => {

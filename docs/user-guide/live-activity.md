@@ -8,6 +8,10 @@ A monitor does not disappear the instant its alarm clears. It stays on screen fo
 
 Any new alarm during the dwell window resets the timer and keeps the tile on screen. A tile also shows a small count in its corner (for example `×2`) when a monitor has alarmed more than once while it has stayed on screen.
 
+## Reading a tile
+
+Each tile header shows an icon for the monitor's current state next to the camera name: a siren while it is alarming, a warning triangle just after, and an hourglass while it is cooling down toward leaving the page. Hover the icon, or read it with a screen reader, to get the state in words. A tile that has stopped alarming also dims while its dwell window runs out.
+
 ## Order and overflow
 
 The camera that alarmed most recently sits at the top, and the ones that have gone quiet sink toward the bottom as they cool. Two cameras that alarm in the same check keep a fixed order between them rather than swapping around. Tiles slide to their new positions where your browser supports it, so a reorder is visible rather than an instant jump. If more monitors are alarming than the page can show, the extra ones collapse into a "+N more active" line instead of overcrowding the grid, which means the tiles you keep are the most recent activity.

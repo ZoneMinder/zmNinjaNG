@@ -1013,7 +1013,6 @@
     "all_quiet": "Tout est calme",
     "watching_count_one": "{{count}} caméra surveillée",
     "watching_count_other": "{{count}} caméras surveillées",
-    "tile_title": "{{name}}({{id}}):{{state}}",
     "state_alarm": "Alarme",
     "state_alert": "Alerte",
     "state_cooling": "Apaisement",

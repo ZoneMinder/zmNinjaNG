@@ -1013,7 +1013,6 @@
     "all_quiet": "Alles ruhig",
     "watching_count_one": "{{count}} Monitor beobachtet",
     "watching_count_other": "{{count}} Monitore beobachtet",
-    "tile_title": "{{name}}({{id}}):{{state}}",
     "state_alarm": "Alarm",
     "state_alert": "Warnung",
     "state_cooling": "Abklingend",

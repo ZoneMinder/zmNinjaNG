@@ -31,23 +31,13 @@ import {
 import { MontageMonitor } from '../components/monitors/MontageMonitor';
 import { EventMontageGridControls } from '../components/events/EventMontageGridControls';
 import { LiveActivitySettingsDialog } from '../components/live-activity/LiveActivitySettingsDialog';
+import { LiveActivityStateIcon } from '../components/live-activity/LiveActivityStateIcon';
 import { Button } from '../components/ui/button';
 import { EmptyState } from '../components/ui/empty-state';
 import { ErrorBanner } from '../components/ui/query-state';
 import { Skeleton } from '../components/ui/skeleton';
 import { resolveQueryError } from '../lib/query/query-error';
 import { PageContainer } from '../components/common/PageContainer';
-import type { MonitorAlarmState } from '../lib/monitor/alarm-state';
-
-/** Locale key for each state that can appear in a tile title. */
-const STATE_LABEL_KEYS: Record<MonitorAlarmState, string> = {
-  alarm: 'live_activity.state_alarm',
-  alert: 'live_activity.state_alert',
-  idle: 'live_activity.state_cooling',
-  prealarm: 'live_activity.state_cooling',
-  tape: 'live_activity.state_cooling',
-  unknown: 'live_activity.state_cooling',
-};
 
 export default function LiveActivity() {
   const { t } = useTranslation();
@@ -253,11 +243,6 @@ export default function LiveActivity() {
           {visible.map((entry) => {
             const monitorData = monitorsById.get(entry.monitorId);
             if (!monitorData) return null;
-            const title = t('live_activity.tile_title', {
-              name: monitorData.Monitor.Name,
-              id: entry.monitorId,
-              state: t(STATE_LABEL_KEYS[entry.state]),
-            });
             return (
               <div
                 key={entry.monitorId}
@@ -274,7 +259,7 @@ export default function LiveActivity() {
                   currentProfile={currentProfile}
                   accessToken={accessToken}
                   navigate={navigate}
-                  titleOverride={title}
+                  titleIcon={<LiveActivityStateIcon state={entry.state} />}
                   fromRoute="/live-activity"
                 />
                 {entry.alarmCount > 1 && (
