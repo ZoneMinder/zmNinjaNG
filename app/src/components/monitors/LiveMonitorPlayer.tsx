@@ -474,10 +474,20 @@ export function LiveMonitorPlayer({
   // load in the same task, and React batches both, so the load handler runs on
   // the still-mounted, still-hidden element and its setMjpegError(false) keeps
   // it mounted. Without this the tile would go permanently blank.
+  //
+  // Depends on mjpegStream.imgRef, not mjpegStream: useMonitorStream returns a
+  // bare object literal, so the hook result is a new reference every render.
+  // Depending on it would make this callback new every render too, and the
+  // reset effect below lists it, so that effect would re-run after every
+  // render and clear the error latch immediately. The <img> would then remount
+  // against the same dead connkey and error again, burning the reconnect
+  // backoff at error-loop speed on every page that streams. The ref object
+  // itself is stable.
+  const imgRef = mjpegStream.imgRef;
   const showMjpegImg = useCallback(() => {
-    const img = mjpegStream.imgRef.current;
+    const img = imgRef.current;
     if (img) img.style.visibility = '';
-  }, [mjpegStream]);
+  }, [imgRef]);
 
   useEffect(() => {
     if (effectiveStreamingMethod === 'mjpeg' || showMjpegPlaceholder) {
