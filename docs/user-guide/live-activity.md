@@ -10,7 +10,7 @@ Any new alarm during the dwell window resets the timer and keeps the tile on scr
 
 ## Reading a tile
 
-Each tile header shows an icon for the monitor's current state next to the camera name: a siren while it is alarming, a warning triangle just after, and an hourglass while it is cooling down toward leaving the page. Hover the icon, or read it with a screen reader, to get the state in words.
+Each tile header shows an icon for the monitor's current state next to the camera name: a bell while it is alarming, a raised shield while ZoneMinder is part way into an alarm decision, and a struck-out shield while it is cooling down toward leaving the page. Hover the icon, or read it with a screen reader, to get the state in words. Cooling tiles are drawn at full colour like any other, so this icon is the only sign that a tile is on its way out.
 
 Next to the counter, a tile may also say what ZoneMinder gave as the cause of the alarm, such as "Motion: All" or "Forced Web". That wording only reaches the app through a notification, so a monitor the page found by checking alarm state alone shows no cause. Nothing else about the tile depends on it.
 
