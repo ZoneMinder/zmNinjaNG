@@ -385,7 +385,7 @@ describe('LiveActivity', () => {
     expect(vi.mocked(reimportedGetAlarmStatus).mock.calls.map((c) => c[0])).toEqual(['3']);
   });
 
-  it('keeps the short enter duration and the slow cooling duration on the same tile', async () => {
+  it('keeps the short enter duration and the slow cooling duration on the tile', async () => {
     // Regression: the tile carried `duration-200` for the enter animation and
     // `duration-700` for the cooling transition. cn() is twMerge(clsx(...)),
     // tailwindcss-animate maps `duration-*` onto animationDuration as well as
@@ -402,8 +402,74 @@ describe('LiveActivity', () => {
 
     const tile = await screen.findByTestId('live-activity-tile');
     expect(tile.className).toMatch(/\[animation-duration:200ms\]/);
-    expect(tile.className).toMatch(/(^|\s)duration-700(\s|$)/);
+    expect(screen.getByTestId('live-activity-tile-body').className).toMatch(
+      /(^|\s)duration-700(\s|$)/
+    );
   });
+
+  it('keeps the cooling dim off the element the view transition captures', async () => {
+    // The tile carrying `view-transition-name` is what the browser snapshots,
+    // and a captured image is generated with the element's own opacity and
+    // filter already applied, while ::view-transition-new is the live element
+    // partway through the same 700ms animation. The pair is composited with
+    // mix-blend-mode: plus-lighter, which only cross-fades correctly when both
+    // halves are the same image, so a dimmed captured box composites wrong for
+    // the whole transition. The Live Activity grid reorders roughly once a
+    // second while ZoneMinder flaps a winding-down monitor between `alert` and
+    // `tape`, so that mis-composite repeats for the length of the alarm tail:
+    // exactly the window before a tile dwells out. Keeping opacity and filter
+    // on an inner element leaves the captured box effect-free. refs #313
+    vi.resetModules();
+    vi.doMock('../../hooks/useCurrentProfile', () => ({
+      useCurrentProfile: () => ({
+        currentProfile: { id: 'p1', portalUrl: 'https://zm.test' },
+        settings: {
+          liveActivityPollSeconds: 5,
+          liveActivityDwellSeconds: 30,
+          liveActivityMaxTiles: 12,
+          liveActivityIgnoredMonitorIds: [],
+          liveActivityWatchContinuousIds: [],
+          bandwidthMode: 'normal',
+          monitorGridCols: 2,
+        },
+      }),
+    }));
+    vi.doMock('../../stores/notifications', () => ({
+      resolvePollIntervalMs: () => 20,
+      useNotificationStore: (selector: (s: { profileEvents: Record<string, unknown[]> }) => unknown) =>
+        selector({ profileEvents: {} }),
+    }));
+
+    const { default: LiveActivityFast } = await import('../LiveActivity');
+    const { getMonitors: reimportedGetMonitors, getAlarmStatus: reimportedGetAlarmStatus } =
+      await import('../../api/monitors');
+    vi.mocked(reimportedGetMonitors).mockResolvedValue(MONITORS as never);
+
+    let monitorThreeCalls = 0;
+    vi.mocked(reimportedGetAlarmStatus).mockImplementation(async (id: string) => {
+      if (id !== '3') return { status: 0 } as never;
+      monitorThreeCalls += 1;
+      // Alarms once to enter the list, then stays quiet inside the 30s dwell,
+      // which is the cooling state this asserts on.
+      return { status: monitorThreeCalls === 1 ? 2 : 0 } as never;
+    });
+
+    render(<LiveActivityFast />, { wrapper });
+
+    const body = await screen.findByTestId('live-activity-tile-body');
+    await waitFor(
+      () => {
+        expect(body.className).toMatch(/(^|\s)saturate-50(\s|$)/);
+      },
+      { timeout: 5000 }
+    );
+    expect(body.className).toMatch(/(^|\s)opacity-60(\s|$)/);
+
+    const tile = screen.getByTestId('live-activity-tile');
+    expect(tile.style.viewTransitionName).toBe('live-activity-tile-3');
+    expect(tile.className).not.toMatch(/opacity-60|saturate-50/);
+    expect(body.style.viewTransitionName).toBe('');
+  }, 10000);
 
   it('drops a tile once its dwell window closes', async () => {
     // The list update now runs through a shared callback that may route the

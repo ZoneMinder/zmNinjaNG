@@ -293,43 +293,60 @@ export default function LiveActivity() {
             return (
               <div
                 key={entry.monitorId}
-                className={cn(
-                  // Enter: a tile fades and scales up over 200ms instead of
-                  // popping into the grid. tailwindcss-animate, the same
-                  // utilities the dialogs and popovers use. The duration is
-                  // an arbitrary-value class, not `duration-200`: cn() is
-                  // twMerge, tailwindcss-animate maps `duration-*` onto
-                  // animationDuration as well as transitionDuration, and
-                  // twMerge would drop it in favor of the 700ms below.
-                  'relative animate-in fade-in-0 zoom-in-95 [animation-duration:200ms]',
-                  // Cooling: winding down reads as a slow fade and a drain of
-                  // color over 700ms, not an instant step to 60%.
-                  'transition-[opacity,filter] duration-700 ease-out',
-                  entry.isCooling && 'opacity-60 saturate-50'
-                )}
+                // Enter: a tile fades and scales up over 200ms instead of
+                // popping into the grid. tailwindcss-animate, the same
+                // utilities the dialogs and popovers use. The duration is an
+                // arbitrary-value class rather than `duration-200` because
+                // tailwindcss-animate maps `duration-*` onto animationDuration
+                // as well as transitionDuration, and any transition duration
+                // landing on this element would win the twMerge conflict.
+                className="animate-in fade-in-0 zoom-in-95 [animation-duration:200ms]"
                 // Pairs this tile's before and after positions across a view
                 // transition, which is what lets it slide to its new row.
                 // Ignored by browsers without the API.
+                //
+                // This element is therefore the one the browser snapshots, and
+                // it deliberately carries no opacity or filter of its own. A
+                // captured image is generated with the element's own visual
+                // effects already applied, while ::view-transition-new is the
+                // live element, so a dimmed captured box hands the browser two
+                // halves that differ; composited with the UA's plus-lighter
+                // blend, which only cross-fades correctly when both halves are
+                // the same image, the tile renders wrong for the whole
+                // transition. The grid reorders about once a second while
+                // ZoneMinder flaps a winding-down monitor between `alert` and
+                // `tape`, so that repeats for the length of the alarm tail:
+                // the window right before the tile dwells out. refs #313
                 style={{ viewTransitionName: `live-activity-tile-${entry.monitorId}` }}
                 data-testid="live-activity-tile"
               >
-                <MontageMonitor
-                  monitor={monitorData.Monitor}
-                  status={monitorData.Monitor_Status}
-                  currentProfile={currentProfile}
-                  accessToken={accessToken}
-                  navigate={navigate}
-                  titleIcon={<LiveActivityStateIcon state={entry.state} />}
-                  fromRoute="/live-activity"
-                />
-                {entry.alarmCount > 1 && (
-                  <span
-                    className="absolute top-1 right-1 z-30 text-[10px] px-1.5 py-0.5 rounded bg-black/60 text-white"
-                    data-testid={`live-activity-count-${entry.monitorId}`}
-                  >
-                    {t('live_activity.alarm_count', { count: entry.alarmCount })}
-                  </span>
-                )}
+                <div
+                  className={cn(
+                    // Cooling: winding down reads as a slow fade and a drain of
+                    // color over 700ms, not an instant step to 60%.
+                    'relative transition-[opacity,filter] duration-700 ease-out',
+                    entry.isCooling && 'opacity-60 saturate-50'
+                  )}
+                  data-testid="live-activity-tile-body"
+                >
+                  <MontageMonitor
+                    monitor={monitorData.Monitor}
+                    status={monitorData.Monitor_Status}
+                    currentProfile={currentProfile}
+                    accessToken={accessToken}
+                    navigate={navigate}
+                    titleIcon={<LiveActivityStateIcon state={entry.state} />}
+                    fromRoute="/live-activity"
+                  />
+                  {entry.alarmCount > 1 && (
+                    <span
+                      className="absolute top-1 right-1 z-30 text-[10px] px-1.5 py-0.5 rounded bg-black/60 text-white"
+                      data-testid={`live-activity-count-${entry.monitorId}`}
+                    >
+                      {t('live_activity.alarm_count', { count: entry.alarmCount })}
+                    </span>
+                  )}
+                </div>
               </div>
             );
           })}

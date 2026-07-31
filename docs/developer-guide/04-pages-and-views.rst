@@ -633,15 +633,30 @@ The pipeline, in the order it runs:
 Motion is deliberately cheap. A tile enters with ``animate-in fade-in-0
 zoom-in-95`` over 200ms (tailwindcss-animate, the same utilities the dialogs
 use) and fades toward ``opacity-60 saturate-50`` over 700ms while it cools.
-That 200ms is written as ``[animation-duration:200ms]`` rather than
+Those two live on different elements, and which one is which matters. The
+outer element is the one that carries ``view-transition-name``, so it is the
+one the browser snapshots, and it deliberately holds nothing but the enter
+animation. A captured image is generated with the element's own visual
+effects already applied, while ``::view-transition-new`` is the live element,
+so a captured box that is itself dimmed hands the browser two halves that do
+not match; the pair is composited with the user-agent stylesheet's
+``mix-blend-mode: plus-lighter``, which only cross-fades correctly when both
+halves are the same image. The cooling ``opacity`` and ``filter`` therefore
+sit on an inner element instead. This is not a rare edge: the grid reorders
+roughly once a second while ZoneMinder flaps a winding-down monitor between
+``alert`` (alarming) and ``tape`` (not alarming), so the mis-composite
+repeated for the length of an event's tail, which is exactly the window
+before a tile dwells out.
+
+The 200ms is written as ``[animation-duration:200ms]`` rather than
 ``duration-200``, and that is not cosmetic: ``cn()`` is
 ``twMerge(clsx(...))``, tailwindcss-animate maps ``duration-*`` onto
 ``animationDuration`` as well as core Tailwind's ``transitionDuration``, so
-twMerge reads the two durations on this element as one conflict group and
-keeps only the last. Written the obvious way, the enter animation silently
-ran at the cooling transition's 700ms. A test asserts both durations survive
-in the tile's resolved class list, because the collision is invisible in the
-source. Reordering
+twMerge would read a transition duration landing on the same element as one
+conflict group with the animation duration and keep only the last. Written
+the obvious way, the enter animation silently ran at the cooling transition's
+700ms. Tests assert both durations survive in the resolved class lists,
+because the collision is invisible in the source. Reordering
 goes through ``runViewTransition`` (``src/lib/view-transition.ts``), which
 wraps the state update in ``document.startViewTransition`` when the browser
 has it and applies it directly when it does not, since Electron's Chromium
