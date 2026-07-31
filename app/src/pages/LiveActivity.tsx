@@ -279,8 +279,12 @@ export default function LiveActivity() {
                 className={cn(
                   // Enter: a tile fades and scales up over 200ms instead of
                   // popping into the grid. tailwindcss-animate, the same
-                  // utilities the dialogs and popovers use.
-                  'relative animate-in fade-in-0 zoom-in-95 duration-200',
+                  // utilities the dialogs and popovers use. The duration is
+                  // an arbitrary-value class, not `duration-200`: cn() is
+                  // twMerge, tailwindcss-animate maps `duration-*` onto
+                  // animationDuration as well as transitionDuration, and
+                  // twMerge would drop it in favor of the 700ms below.
+                  'relative animate-in fade-in-0 zoom-in-95 [animation-duration:200ms]',
                   // Cooling: winding down reads as a slow fade and a drain of
                   // color over 700ms, not an instant step to 60%.
                   'transition-[opacity,filter] duration-700 ease-out',

@@ -631,8 +631,17 @@ The pipeline, in the order it runs:
    const { visible, overflowCount } = capActiveMonitors(active, settings.liveActivityMaxTiles);
 
 Motion is deliberately cheap. A tile enters with ``animate-in fade-in-0
-zoom-in-95`` (tailwindcss-animate, the same utilities the dialogs use) and
-fades toward ``opacity-60 saturate-50`` over 700ms while it cools. Reordering
+zoom-in-95`` over 200ms (tailwindcss-animate, the same utilities the dialogs
+use) and fades toward ``opacity-60 saturate-50`` over 700ms while it cools.
+That 200ms is written as ``[animation-duration:200ms]`` rather than
+``duration-200``, and that is not cosmetic: ``cn()`` is
+``twMerge(clsx(...))``, tailwindcss-animate maps ``duration-*`` onto
+``animationDuration`` as well as core Tailwind's ``transitionDuration``, so
+twMerge reads the two durations on this element as one conflict group and
+keeps only the last. Written the obvious way, the enter animation silently
+ran at the cooling transition's 700ms. A test asserts both durations survive
+in the tile's resolved class list, because the collision is invisible in the
+source. Reordering
 goes through ``runViewTransition`` (``src/lib/view-transition.ts``), which
 wraps the state update in ``document.startViewTransition`` when the browser
 has it and applies it directly when it does not, since Electron's Chromium

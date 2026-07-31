@@ -294,6 +294,26 @@ describe('LiveActivity', () => {
     expect(vi.mocked(reimportedGetAlarmStatus).mock.calls.map((c) => c[0])).toEqual(['3']);
   });
 
+  it('keeps the short enter duration and the slow cooling duration on the same tile', async () => {
+    // Regression: the tile carried `duration-200` for the enter animation and
+    // `duration-700` for the cooling transition. cn() is twMerge(clsx(...)),
+    // tailwindcss-animate maps `duration-*` onto animationDuration as well as
+    // core Tailwind's transitionDuration, so twMerge saw one conflict group
+    // and dropped `duration-200` outright. Tiles entered over 700ms. The
+    // enter duration is now an arbitrary-value class, which twMerge cannot
+    // fold into the transition group. Asserting the resolved class list is
+    // the point: this collision is invisible by reading the source.
+    mockStatus.mockImplementation(async (id: string) =>
+      (id === '3' ? { status: 2 } : { status: 0 }) as never
+    );
+
+    render(<LiveActivity />, { wrapper });
+
+    const tile = await screen.findByTestId('live-activity-tile');
+    expect(tile.className).toMatch(/\[animation-duration:200ms\]/);
+    expect(tile.className).toMatch(/(^|\s)duration-700(\s|$)/);
+  });
+
   it('drops a tile once its dwell window closes', async () => {
     // The list update now runs through a shared callback that may route the
     // state change through a view transition (absent in jsdom, so it falls
