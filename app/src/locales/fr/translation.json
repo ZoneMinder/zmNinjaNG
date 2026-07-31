@@ -1018,6 +1018,8 @@
     "state_cooling": "Apaisement",
     "overflow_one": "+{{count}} autre active",
     "overflow_other": "+{{count}} autres actives",
+    "fullscreen": "Plein écran",
+    "exit_fullscreen": "Quitter le plein écran",
     "settings_title": "Paramètres Activité en direct",
     "settings_desc": "Choisissez les caméras surveillées par cette page et sa réactivité.",
     "poll_interval_label": "Vérifier toutes les",

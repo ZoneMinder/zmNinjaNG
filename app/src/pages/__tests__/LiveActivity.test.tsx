@@ -22,6 +22,7 @@ const env = vi.hoisted(() => ({
     liveActivityMaxTiles: 12,
     liveActivityIgnoredMonitorIds: [] as string[],
     liveActivityWatchContinuousIds: [] as string[],
+    liveActivityIsFullscreen: false,
     bandwidthMode: 'normal',
     monitorGridCols: 2,
   },
@@ -139,6 +140,7 @@ describe('LiveActivity', () => {
     tileRenders.count = 0;
     env.settings.liveActivityIgnoredMonitorIds = [];
     env.settings.liveActivityWatchContinuousIds = [];
+    env.settings.liveActivityIsFullscreen = false;
     env.zmVersion = '1.36.33';
     mockMonitors.mockResolvedValue(MONITORS as never);
   });
@@ -309,6 +311,40 @@ describe('LiveActivity', () => {
     // The tile is still on screen, so the bound above is not passing because
     // the page went blank.
     expect(screen.getByText('Front Door')).toBeInTheDocument();
+  });
+
+  it('keeps the page chrome out of the way in fullscreen', async () => {
+    // A wall display should show tiles, not the heading, the grid controls and
+    // the gear. The tiles themselves still render, so the assertion below is
+    // about the chrome rather than about the page having gone blank.
+    env.settings.liveActivityIsFullscreen = true;
+    mockStatus.mockImplementation(async (id: string) =>
+      (id === '3' ? { status: 2 } : { status: 0 }) as never
+    );
+
+    render(<LiveActivity />, { wrapper });
+
+    await waitFor(() => {
+      expect(screen.getByText('Front Door')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('live-activity-fullscreen')).toBeInTheDocument();
+    expect(screen.queryByTestId('live-activity-settings-btn')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('live-activity-fullscreen-btn')).not.toBeInTheDocument();
+    // The only control left is the way back out.
+    expect(screen.getByTestId('live-activity-exit-fullscreen-btn')).toHaveAttribute(
+      'aria-label',
+      'Exit Fullscreen'
+    );
+  });
+
+  it('offers a fullscreen control while the page chrome is showing', async () => {
+    mockStatus.mockResolvedValue({ status: 0 } as never);
+
+    render(<LiveActivity />, { wrapper });
+
+    const button = await screen.findByTestId('live-activity-fullscreen-btn');
+    expect(button).toHaveAttribute('aria-label', 'Fullscreen');
+    expect(screen.queryByTestId('live-activity-fullscreen')).not.toBeInTheDocument();
   });
 
   it('shows the error instead of claiming all quiet when the server is unreachable', async () => {

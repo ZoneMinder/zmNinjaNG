@@ -171,6 +171,9 @@ export interface ProfileSettings {
    *  explicit opt-in list rather than seeding the ignore list above, so the
    *  default stays distinguishable from a deliberate choice. */
   liveActivityWatchContinuousIds: string[];
+  /** Live Activity: fullscreen state for that page. Separate from
+   *  montageIsFullscreen so the two pages do not share one fullscreen flag. */
+  liveActivityIsFullscreen: boolean;
   // Selected group ID for filtering monitors (null = show all monitors)
   selectedGroupId: string | null;
   // Monitor IDs excluded from this profile. Excluded monitors and their events
@@ -346,6 +349,7 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   liveActivityMaxTiles: LIVE_ACTIVITY.defaultMaxTiles,
   liveActivityIgnoredMonitorIds: [],
   liveActivityWatchContinuousIds: [],
+  liveActivityIsFullscreen: false,
   // No group filter by default (show all monitors)
   selectedGroupId: null,
   // No monitors excluded by default

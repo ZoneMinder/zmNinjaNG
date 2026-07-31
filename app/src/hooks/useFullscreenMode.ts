@@ -1,18 +1,26 @@
 /**
- * Hook for fullscreen mode management
+ * Fullscreen state for a page, persisted in that page's own profile setting.
  *
- * Handles fullscreen state and persistence. Controls are always visible
- * (no toggle/auto-hide logic needed).
+ * The key is a parameter rather than a constant because more than one page
+ * has a fullscreen mode and each needs its own memory of it. A shared key
+ * would mean going fullscreen on one page silently put the other one in
+ * fullscreen as well (refs #313).
+ *
+ * Controls stay visible in fullscreen; there is no auto-hide logic here.
  */
 
 import { useCallback } from 'react';
-import { useSettingsStore } from '../../../stores/settings';
-import type { Profile } from '../../../api/types';
-import type { ProfileSettings } from '../../../stores/settings';
+import { useSettingsStore } from '../stores/settings';
+import type { Profile } from '../api/types';
+import type { ProfileSettings } from '../stores/settings';
+
+/** The profile settings that record a page's fullscreen state. */
+export type FullscreenSettingKey = 'montageIsFullscreen' | 'liveActivityIsFullscreen';
 
 interface UseFullscreenModeOptions {
   currentProfile: Profile | null;
   settings: ProfileSettings;
+  settingKey: FullscreenSettingKey;
 }
 
 interface UseFullscreenModeReturn {
@@ -23,6 +31,7 @@ interface UseFullscreenModeReturn {
 export function useFullscreenMode({
   currentProfile,
   settings,
+  settingKey,
 }: UseFullscreenModeOptions): UseFullscreenModeReturn {
   const updateSettings = useSettingsStore((state) => state.updateProfileSettings);
 
@@ -33,15 +42,13 @@ export function useFullscreenMode({
   const handleToggleFullscreen = useCallback(
     (fullscreen: boolean) => {
       if (!currentProfile) return;
-      updateSettings(currentProfile.id, {
-        montageIsFullscreen: fullscreen,
-      });
+      updateSettings(currentProfile.id, { [settingKey]: fullscreen });
     },
-    [currentProfile, updateSettings]
+    [currentProfile, updateSettings, settingKey]
   );
 
   return {
-    isFullscreen: settings.montageIsFullscreen,
+    isFullscreen: settings[settingKey],
     handleToggleFullscreen,
   };
 }

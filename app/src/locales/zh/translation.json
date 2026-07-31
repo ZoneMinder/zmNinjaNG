@@ -1018,6 +1018,8 @@
     "state_cooling": "冷却中",
     "overflow_one": "+{{count}} 个活动中",
     "overflow_other": "+{{count}} 个活动中",
+    "fullscreen": "全屏",
+    "exit_fullscreen": "退出全屏",
     "settings_title": "实时动态设置",
     "settings_desc": "选择此页面监看的监控，以及响应速度。",
     "poll_interval_label": "检查间隔",

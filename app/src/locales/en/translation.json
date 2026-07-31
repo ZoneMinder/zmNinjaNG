@@ -1018,6 +1018,8 @@
     "state_cooling": "Clearing",
     "overflow_one": "+{{count}} more active",
     "overflow_other": "+{{count}} more active",
+    "fullscreen": "Fullscreen",
+    "exit_fullscreen": "Exit Fullscreen",
     "settings_title": "Live Activity settings",
     "settings_desc": "Choose which monitors this page watches and how quickly it reacts.",
     "poll_interval_label": "Check every",

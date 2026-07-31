@@ -1018,6 +1018,8 @@
     "state_cooling": "Abklingend",
     "overflow_one": "+{{count}} weiterer aktiv",
     "overflow_other": "+{{count}} weitere aktiv",
+    "fullscreen": "Vollbild",
+    "exit_fullscreen": "Vollbild beenden",
     "settings_title": "Live-Aktivität-Einstellungen",
     "settings_desc": "Legt fest, welche Monitore beobachtet werden und wie schnell reagiert wird.",
     "poll_interval_label": "Prüfintervall",

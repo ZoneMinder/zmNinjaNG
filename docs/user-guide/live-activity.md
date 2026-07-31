@@ -10,7 +10,11 @@ Any new alarm during the dwell window resets the timer and keeps the tile on scr
 
 ## Reading a tile
 
-Each tile header shows an icon for the monitor's current state next to the camera name: a siren while it is alarming, a warning triangle just after, and an hourglass while it is cooling down toward leaving the page. Hover the icon, or read it with a screen reader, to get the state in words. A tile that has stopped alarming also dims while its dwell window runs out.
+Each tile header shows an icon for the monitor's current state next to the camera name: a siren while it is alarming, a warning triangle just after, and an hourglass while it is cooling down toward leaving the page. Hover the icon, or read it with a screen reader, to get the state in words.
+
+## Fullscreen
+
+The fullscreen button next to the gear hides the heading, the grid controls and the gear, leaving the tiles and a thin bar with the way back out. This is what you want on a wall display or a TV stick. The page remembers the choice per profile, and it is remembered separately from the Montage page's own fullscreen state, so putting one in fullscreen does not move the other.
 
 ## Order and overflow
 

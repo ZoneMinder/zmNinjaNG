@@ -12,7 +12,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { useShallow } from 'zustand/react/shallow';
-import { Activity, Settings } from 'lucide-react';
+import { Activity, Maximize, Minimize, Settings } from 'lucide-react';
 import { getMonitors } from '../api/monitors';
 import { queryKeys } from '../lib/query/query-keys';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
@@ -33,6 +33,7 @@ import { isContinuousRecording } from '../lib/monitor/monitor-status';
 import { runViewTransition } from '../lib/view-transition';
 import type { MonitorAlarmState } from '../lib/monitor/alarm-state';
 import { MontageMonitor } from '../components/monitors/MontageMonitor';
+import { useFullscreenMode } from '../hooks/useFullscreenMode';
 import { EventMontageGridControls } from '../components/events/EventMontageGridControls';
 import { LiveActivitySettingsDialog } from '../components/live-activity/LiveActivitySettingsDialog';
 import { LiveActivityStateIcon } from '../components/live-activity/LiveActivityStateIcon';
@@ -206,6 +207,14 @@ export default function LiveActivity() {
     onGridChange: handleGridChange,
   });
 
+  // Its own settings key, not montageIsFullscreen: a shared flag would make
+  // going fullscreen here put the Montage page in fullscreen too.
+  const { isFullscreen, handleToggleFullscreen } = useFullscreenMode({
+    currentProfile,
+    settings,
+    settingKey: 'liveActivityIsFullscreen',
+  });
+
   const error = monitorsError ?? alarmError;
 
   // "All quiet" is a claim about the server, so it is only honest once the
@@ -218,44 +227,10 @@ export default function LiveActivity() {
   const showSkeleton = isEmpty && (monitorsLoading || alarmsLoading);
   const showEmptyState = isEmpty && !showSkeleton && !error;
 
-  return (
-    <PageContainer>
-      <div className="flex items-center justify-between gap-2 mb-3">
-        <h1 className="text-lg font-semibold min-w-0 truncate" title={t('live_activity.title')}>
-          {t('live_activity.title')}
-        </h1>
-        <div className="flex items-center gap-1">
-          <EventMontageGridControls
-            gridCols={gridCols}
-            customCols={customCols}
-            isCustomGridDialogOpen={isCustomGridDialogOpen}
-            onApplyGridLayout={handleApplyGridLayout}
-            onCustomColsChange={setCustomCols}
-            onCustomGridDialogOpenChange={setIsCustomGridDialogOpen}
-            onCustomGridSubmit={handleCustomGridSubmit}
-          />
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setIsSettingsOpen(true)}
-            title={t('live_activity.settings_title')}
-            aria-label={t('live_activity.settings_title')}
-            data-testid="live-activity-settings-btn"
-          >
-            <Settings className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-
-      {currentProfile && (
-        <LiveActivitySettingsDialog
-          open={isSettingsOpen}
-          onOpenChange={setIsSettingsOpen}
-          profileId={currentProfile.id}
-          monitors={data?.monitors ?? []}
-        />
-      )}
-
+  // The grid and everything that stands in for it, shared by both chrome
+  // treatments below so fullscreen cannot drift from the normal page.
+  const body = (
+    <>
       {error && <ErrorBanner message={resolveQueryError(error, t)} />}
 
       {showSkeleton && (
@@ -343,6 +318,93 @@ export default function LiveActivity() {
           {t('live_activity.overflow', { count: overflowCount })}
         </p>
       )}
+    </>
+  );
+
+  // Fullscreen drops the page chrome the way Montage does: the app frame is
+  // covered edge to edge and the only control left is the thin translucent
+  // bar, so a wall display shows tiles and nothing else.
+  if (isFullscreen) {
+    return (
+      <div
+        className="fixed inset-0 z-40 bg-black flex flex-col"
+        data-testid="live-activity-fullscreen"
+      >
+        {/* Montage's own fullscreen bar is not reused here: it carries the
+            kiosk lock and the label toggle, and importing it would pull the
+            kiosk store and the PIN pad onto a page that offers neither. */}
+        <div className="flex items-center justify-between gap-2 h-9 px-3 pt-[var(--sai-top,env(safe-area-inset-top))] bg-black/50 backdrop-blur-sm shrink-0">
+          <span className="text-white/70 font-medium text-xs min-w-0 truncate">
+            {t('live_activity.title')}
+          </span>
+          <Button
+            onClick={() => handleToggleFullscreen(false)}
+            variant="ghost"
+            size="icon"
+            className="text-white/70 hover:text-white hover:bg-white/10 h-7 w-7"
+            title={t('live_activity.exit_fullscreen')}
+            aria-label={t('live_activity.exit_fullscreen')}
+            data-testid="live-activity-exit-fullscreen-btn"
+          >
+            <Minimize className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="flex-1 overflow-auto p-2">
+          {body}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <PageContainer>
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <h1 className="text-lg font-semibold min-w-0 truncate" title={t('live_activity.title')}>
+          {t('live_activity.title')}
+        </h1>
+        <div className="flex items-center gap-1">
+          <EventMontageGridControls
+            gridCols={gridCols}
+            customCols={customCols}
+            isCustomGridDialogOpen={isCustomGridDialogOpen}
+            onApplyGridLayout={handleApplyGridLayout}
+            onCustomColsChange={setCustomCols}
+            onCustomGridDialogOpenChange={setIsCustomGridDialogOpen}
+            onCustomGridSubmit={handleCustomGridSubmit}
+          />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => handleToggleFullscreen(true)}
+            title={t('live_activity.fullscreen')}
+            aria-label={t('live_activity.fullscreen')}
+            data-testid="live-activity-fullscreen-btn"
+          >
+            <Maximize className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setIsSettingsOpen(true)}
+            title={t('live_activity.settings_title')}
+            aria-label={t('live_activity.settings_title')}
+            data-testid="live-activity-settings-btn"
+          >
+            <Settings className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      {currentProfile && (
+        <LiveActivitySettingsDialog
+          open={isSettingsOpen}
+          onOpenChange={setIsSettingsOpen}
+          profileId={currentProfile.id}
+          monitors={data?.monitors ?? []}
+        />
+      )}
+
+      {body}
     </PageContainer>
   );
 }

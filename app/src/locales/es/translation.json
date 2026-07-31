@@ -1018,6 +1018,8 @@
     "state_cooling": "Enfriando",
     "overflow_one": "+{{count}} más activo",
     "overflow_other": "+{{count}} más activos",
+    "fullscreen": "Pantalla completa",
+    "exit_fullscreen": "Salir de pantalla completa",
     "settings_title": "Ajustes de Actividad en vivo",
     "settings_desc": "Elige qué monitores observa esta página y con qué rapidez reacciona.",
     "poll_interval_label": "Comprobar cada",
