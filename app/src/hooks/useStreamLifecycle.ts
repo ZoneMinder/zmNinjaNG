@@ -309,6 +309,20 @@ export function useStreamLifecycle({
   // Cleanup: send CMD_QUIT and abort image loading on unmount ONLY
   useEffect(() => {
     return () => {
+      // A cleanup on an empty-dependency effect is NOT proof of an unmount.
+      // React re-runs `[]` effects against a live, still-committed tree in
+      // three situations: the StrictMode mount double-invoke, revealing a
+      // Suspense/Offscreen subtree that was hidden, and a Fast Refresh update.
+      // In all three the DOM node survives and no re-render follows, so a
+      // teardown here would quit a stream the user is still watching and strip
+      // a `src` React can never put back (its virtual DOM still carries the
+      // same URL, so the next diff writes nothing). React detaches the subtree
+      // in the mutation phase, well before this passive cleanup runs, so a
+      // media element still connected to the document means the component is
+      // staying. Nothing is orphaned by skipping: the real unmount still runs
+      // this cleanup with the same cleanupParamsRef.
+      if (mediaElRef.current?.isConnected) return;
+
       const params = cleanupParamsRef.current;
 
       // Send CMD_QUIT to properly close the stream connection (streaming mode

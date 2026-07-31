@@ -5,8 +5,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, act, waitFor } from '@testing-library/react';
-import { StrictMode } from 'react';
+import { render, renderHook, act, waitFor } from '@testing-library/react';
+import { StrictMode, createElement } from 'react';
 import { useStreamLifecycle } from '../useStreamLifecycle';
 import { quitAllActiveStreams } from '../../lib/monitor/active-streams';
 
@@ -83,6 +83,9 @@ const mockLogFn = vi.fn();
 function makeMediaRef(element: HTMLImageElement | null = null) {
   return { current: element };
 }
+
+/** Stands in for the nph-zms URL a live tile's <img> carries. */
+const STREAM_SRC = 'http://zm.local/cgi-bin/nph-zms?mode=jpeg&connkey=9999';
 
 const baseOptions = {
   monitorId: '1',
@@ -400,6 +403,57 @@ describe('useStreamLifecycle', () => {
       // src attribute is removed (not set to ''), which aborts the in-flight
       // nph-zms connection and frees the browser connection slot.
       expect(imgElement.hasAttribute('src')).toBe(false);
+    });
+
+    // The two tests below pin the difference between a cleanup that means
+    // "this component is going away" and one that does not. React runs the
+    // cleanup of an empty-dependency effect against a live tree whenever it
+    // remounts effects without unmounting: the StrictMode mount double-invoke
+    // here, and in the app also a revealed Suspense subtree or a Fast Refresh
+    // update. Tearing down there leaves a mounted <img> with no src that React
+    // never restores, because its virtual DOM still holds the same URL and the
+    // next diff writes nothing. The element being connected to the document is
+    // what separates the two: React detaches the subtree in the mutation
+    // phase, before this passive cleanup runs.
+    it('keeps the src when the cleanup runs against a still-connected element', () => {
+      const mediaRef: { current: HTMLImageElement | null } = { current: null };
+
+      render(
+        createElement(
+          StrictMode,
+          null,
+          createElement(function Tile() {
+            useStreamLifecycle({ ...baseOptions, mediaRef });
+            return createElement('img', { ref: mediaRef, src: STREAM_SRC, alt: 'Cam 1' });
+          }),
+        ),
+      );
+
+      const img = document.querySelector('img');
+      expect(img?.isConnected).toBe(true);
+      expect(img?.getAttribute('src')).toBe(STREAM_SRC);
+    });
+
+    it('still aborts a rendered element on a real unmount', async () => {
+      const mediaRef: { current: HTMLImageElement | null } = { current: null };
+
+      const { unmount } = render(
+        createElement(function Tile() {
+          useStreamLifecycle({ ...baseOptions, mediaRef });
+          return createElement('img', { ref: mediaRef, src: STREAM_SRC, alt: 'Cam 1' });
+        }),
+      );
+
+      await waitFor(() => {
+        expect(mockRegenerateConnKey).toHaveBeenCalled();
+      });
+      // React nulls the ref during unmount, so hold the element to assert on.
+      const img = mediaRef.current;
+
+      unmount();
+
+      expect(img?.isConnected).toBe(false);
+      expect(img?.hasAttribute('src')).toBe(false);
     });
 
     it('clears the stored connkey on unmount in streaming mode', async () => {
