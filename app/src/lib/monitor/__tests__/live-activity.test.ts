@@ -3,6 +3,7 @@ import {
   reduceActiveMonitors,
   capActiveMonitors,
   applyLiveAlarmHints,
+  releaseDismissed,
   sameMonitorOrder,
   type ActiveMonitorEntry,
 } from '../live-activity';
@@ -244,6 +245,30 @@ describe('reduceActiveMonitors', () => {
     expect(again).toBe(first);
   });
 
+  it('drops a dismissed monitor and keeps it out while it is still alarming', () => {
+    // The whole point of the dismissed set: without it the reducer readmits a
+    // still-alarming monitor on the very next poll and the control reads as
+    // broken on the first click.
+    const first = reduceActiveMonitors([], { '1': 'alarm' }, 1000, DWELL);
+    const dismissed = new Set(['1']);
+    const gone = reduceActiveMonitors(first, { '1': 'alarm' }, 2000, DWELL, { dismissed });
+    expect(gone).toEqual([]);
+    const stillGone = reduceActiveMonitors(gone, { '1': 'alarm' }, 3000, DWELL, { dismissed });
+    expect(stillGone).toEqual([]);
+  });
+
+  it('lets a dismissed monitor back in once the dismissal has been released', () => {
+    const first = reduceActiveMonitors([], { '1': 'alarm' }, 1000, DWELL);
+    const gone = reduceActiveMonitors(first, { '1': 'alarm' }, 2000, DWELL, {
+      dismissed: new Set(['1']),
+    });
+    const backLater = reduceActiveMonitors(gone, { '1': 'alarm' }, 90_000, DWELL);
+    expect(backLater.map((e) => e.monitorId)).toEqual(['1']);
+    // A separate later alarm, so it enters as a fresh episode rather than
+    // resuming the dismissed one.
+    expect(backLater[0].episodeStartedAt).toBe(90_000);
+  });
+
   it('returns the same array reference when nothing changed', () => {
     const first = reduceActiveMonitors([], { '1': 'alarm' }, 1000, DWELL);
     const again = reduceActiveMonitors(first, { '1': 'alarm' }, 1000, DWELL);
@@ -323,6 +348,30 @@ describe('sameMonitorOrder', () => {
   it('is false when a monitor joins or leaves', () => {
     expect(sameMonitorOrder([make('1')], [make('1'), make('2')])).toBe(false);
     expect(sameMonitorOrder([make('1'), make('2')], [make('1')])).toBe(false);
+  });
+});
+
+describe('releaseDismissed', () => {
+  it('holds a dismissal while its monitor is still alarming', () => {
+    const dismissed = new Set(['1']);
+    expect(releaseDismissed(dismissed, { '1': 'alarm' })).toBe(dismissed);
+    expect(releaseDismissed(dismissed, { '1': 'alert' })).toBe(dismissed);
+  });
+
+  it('releases a dismissal once its monitor has genuinely gone quiet', () => {
+    // Otherwise a monitor dismissed today would never show its next alarm.
+    expect(releaseDismissed(new Set(['1']), { '1': 'idle' }).size).toBe(0);
+  });
+
+  it('releases a dismissal for a monitor the page has stopped watching', () => {
+    expect(releaseDismissed(new Set(['1']), {}).size).toBe(0);
+  });
+
+  it('hands back the same set when nothing was released', () => {
+    // The caller keeps this in a ref and feeds it to the reducer; a fresh set
+    // per pass would be a new reducer input on every poll tick.
+    const empty = new Set<string>();
+    expect(releaseDismissed(empty, { '1': 'alarm' })).toBe(empty);
   });
 });
 

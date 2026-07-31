@@ -1019,6 +1019,7 @@
     "overflow_one": "+{{count}} más activo",
     "overflow_other": "+{{count}} más activos",
     "fullscreen": "Pantalla completa",
+    "dismiss": "Quitar {{name}} de esta página",
     "elapsed_title": "Tiempo desde que empezó esta alarma",
     "exit_fullscreen": "Salir de pantalla completa",
     "settings_title": "Ajustes de Actividad en vivo",

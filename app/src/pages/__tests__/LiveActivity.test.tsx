@@ -327,6 +327,94 @@ describe('LiveActivity', () => {
     expect(screen.queryByTestId('live-activity-elapsed-4')).not.toBeInTheDocument();
   });
 
+  it('keeps a dismissed tile gone while its monitor is still alarming', async () => {
+    // The trap this control exists to avoid: the monitor never stops alarming
+    // here, so a dismissal that did not suppress re-entry would see the tile
+    // pop straight back on the next poll and the button would read as broken.
+    vi.resetModules();
+    vi.doMock('../../stores/notifications', () => ({
+      resolvePollIntervalMs: () => 20,
+      useNotificationStore: (selector: (s: { profileEvents: Record<string, unknown[]> }) => unknown) =>
+        selector({ profileEvents: {} }),
+    }));
+
+    const { default: LiveActivityFast } = await import('../LiveActivity');
+    const { getMonitors: reimportedGetMonitors, getAlarmStatus: reimportedGetAlarmStatus } =
+      await import('../../api/monitors');
+    vi.mocked(reimportedGetMonitors).mockResolvedValue(MONITORS as never);
+
+    let monitorThreeCalls = 0;
+    vi.mocked(reimportedGetAlarmStatus).mockImplementation(async (id: string) => {
+      if (id !== '3') return { status: 0 } as never;
+      monitorThreeCalls += 1;
+      return { status: 2 } as never;
+    });
+
+    render(<LiveActivityFast />, { wrapper });
+
+    const dismiss = await screen.findByTestId('live-activity-dismiss-3');
+    const callsAtDismiss = monitorThreeCalls;
+    act(() => {
+      dismiss.click();
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('live-activity-tile')).not.toBeInTheDocument();
+    });
+    // Several further polls all report the same alarm.
+    await waitFor(() => expect(monitorThreeCalls).toBeGreaterThanOrEqual(callsAtDismiss + 3), {
+      timeout: 5000,
+    });
+    expect(screen.queryByTestId('live-activity-tile')).not.toBeInTheDocument();
+    expect(screen.getByTestId('live-activity-empty')).toBeInTheDocument();
+  }, 10000);
+
+  it('shows a monitor again when it alarms after a dismissal was released', async () => {
+    vi.resetModules();
+    vi.doMock('../../stores/notifications', () => ({
+      resolvePollIntervalMs: () => 20,
+      useNotificationStore: (selector: (s: { profileEvents: Record<string, unknown[]> }) => unknown) =>
+        selector({ profileEvents: {} }),
+    }));
+
+    const { default: LiveActivityFast } = await import('../LiveActivity');
+    const { getMonitors: reimportedGetMonitors, getAlarmStatus: reimportedGetAlarmStatus } =
+      await import('../../api/monitors');
+    vi.mocked(reimportedGetMonitors).mockResolvedValue(MONITORS as never);
+
+    // Alarming, then quiet once dismissed, then alarming again: the second
+    // alarm is new information and has to show.
+    let quiet = false;
+    let alarmAgain = false;
+    vi.mocked(reimportedGetAlarmStatus).mockImplementation(async (id: string) => {
+      if (id !== '3') return { status: 0 } as never;
+      if (alarmAgain) return { status: 2 } as never;
+      return { status: quiet ? 0 : 2 } as never;
+    });
+
+    render(<LiveActivityFast />, { wrapper });
+
+    const dismiss = await screen.findByTestId('live-activity-dismiss-3');
+    act(() => {
+      dismiss.click();
+    });
+    await waitFor(() => {
+      expect(screen.queryByTestId('live-activity-tile')).not.toBeInTheDocument();
+    });
+
+    quiet = true;
+    await waitFor(() => expect(screen.getByTestId('live-activity-empty')).toBeInTheDocument());
+    // Give the quiet polls time to release the dismissal before it re-alarms.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+    alarmAgain = true;
+
+    await waitFor(() => expect(screen.getByText('Front Door')).toBeInTheDocument(), {
+      timeout: 5000,
+    });
+  }, 10000);
+
   it('labels a tile with the cause the notification stream reported', async () => {
     // The alarm poll never carries a cause, so the notification store is the
     // only source. Its event also promotes the monitor onto the page, which is

@@ -69,6 +69,13 @@ export interface ActiveMonitorEntry {
 
 interface ReduceOptions {
   /**
+   * Monitors the user has cleared by hand. They are skipped both as residents
+   * and as new arrivals: a monitor that is still alarming would otherwise be
+   * readmitted on the very next poll, so the control would look broken on the
+   * first click. `releaseDismissed` decides when one stops applying.
+   */
+  dismissed?: ReadonlySet<string>;
+  /**
    * Monitor id to the cause of its most recent notification. Consulted when
    * an episode begins and while an entry still has no cause; never used to
    * clear one, because these entries expire on the notification store's
@@ -100,12 +107,13 @@ export function reduceActiveMonitors(
   states: Record<string, MonitorAlarmState>,
   now: number,
   dwellMs: number,
-  { causes }: ReduceOptions = {}
+  { causes, dismissed }: ReduceOptions = {}
 ): ActiveMonitorEntry[] {
   const next: ActiveMonitorEntry[] = [];
 
   // Existing entries first; the sort below decides where they end up.
   for (const entry of previous) {
+    if (dismissed?.has(entry.monitorId)) continue;
     const state = states[entry.monitorId];
 
     // A monitor that vanished from the poll set (ignored, deleted, filtered
@@ -146,6 +154,7 @@ export function reduceActiveMonitors(
   const resident = new Set(next.map((e) => e.monitorId));
   for (const [monitorId, state] of Object.entries(states)) {
     if (resident.has(monitorId)) continue;
+    if (dismissed?.has(monitorId)) continue;
     if (!isAlarmingState(state)) continue;
     next.push({
       monitorId,
@@ -207,6 +216,31 @@ export function applyLiveAlarmHints(
   }
 
   return changed ? next : states;
+}
+
+/**
+ * Drop the dismissals that have served their purpose.
+ *
+ * A dismissal exists to stop a monitor that is still alarming from being
+ * readmitted the moment it is cleared. Once that monitor has genuinely gone
+ * quiet, or the page has stopped watching it, the dismissal has to go: a
+ * later, separate alarm on the same camera is new information and has to show
+ * normally. Nothing here readmits anything by itself, because the reducer only
+ * ever admits a monitor that is alarming right now.
+ *
+ * Returns the same set when nothing was released, so the caller can hold it in
+ * a ref without handing the reducer a new input on every poll tick.
+ */
+export function releaseDismissed(
+  dismissed: ReadonlySet<string>,
+  states: Record<string, MonitorAlarmState>
+): ReadonlySet<string> {
+  const held = [...dismissed].filter((monitorId) => {
+    const state = states[monitorId];
+    return state !== undefined && isAlarmingState(state);
+  });
+  if (held.length === dismissed.size) return dismissed;
+  return new Set(held);
 }
 
 /**

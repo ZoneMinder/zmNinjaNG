@@ -26,6 +26,7 @@ import {
   reduceActiveMonitors,
   capActiveMonitors,
   applyLiveAlarmHints,
+  releaseDismissed,
   sameMonitorOrder,
   type ActiveMonitorEntry,
 } from '../lib/monitor/live-activity';
@@ -115,6 +116,12 @@ export default function LiveActivity() {
   // so an unchanged tick cannot produce a new reference, and advanced by the
   // cooling interval below rather than by a second timer of its own.
   const [now, setNow] = useState(() => Date.now());
+  // Monitors the user cleared by hand. A ref rather than state, and page-local
+  // rather than a profile setting: it is not a preference, nothing renders it
+  // directly, and every read of it happens inside applyStates, which publishes
+  // the list a dismissal actually changes. Held for the page's lifetime only,
+  // so a dismissal does not outlive the visit that made it.
+  const dismissedRef = useRef<ReadonlySet<string>>(new Set());
 
   // Websocket/push accelerant: a notification received in the last dwell
   // window promotes its monitor into the current poll snapshot immediately,
@@ -168,7 +175,15 @@ export default function LiveActivity() {
       causes: ReadonlyMap<string, string>
     ) => {
       const prev = activeRef.current;
-      const next = reduceActiveMonitors(prev, statesNow, Date.now(), dwell, { causes });
+      const next = reduceActiveMonitors(prev, statesNow, Date.now(), dwell, {
+        causes,
+        dismissed: dismissedRef.current,
+      });
+      // Released after the reduce, never before it: a tile dismissed while it
+      // was already cooling is not alarming, so releasing first would clear
+      // the dismissal in the same pass that was supposed to honour it and the
+      // tile would survive its own dismissal.
+      dismissedRef.current = releaseDismissed(dismissedRef.current, statesNow);
       // reduceActiveMonitors hands back the same array when nothing moved, so
       // a poll tick that changed nothing costs no render at all.
       if (next === prev) return;
@@ -188,6 +203,17 @@ export default function LiveActivity() {
   useEffect(() => {
     applyStates(hintedStates, dwellMs, recentCauses);
   }, [hintedStates, dwellMs, recentCauses, applyStates]);
+
+  // Removal goes back through the reducer rather than being filtered out at
+  // render time, so a dismissed tile unmounts for real and its stream is quit
+  // instead of being left running behind a hidden element.
+  const handleDismiss = useCallback(
+    (monitorId: string) => {
+      dismissedRef.current = new Set(dismissedRef.current).add(monitorId);
+      applyStates(hintedStates, dwellMs, recentCauses);
+    },
+    [hintedStates, dwellMs, recentCauses, applyStates]
+  );
 
   // A cooling monitor expires on a timer, not on a poll response, so the list
   // still empties when every monitor has gone quiet and nothing is changing.
@@ -301,6 +327,7 @@ export default function LiveActivity() {
                 accessToken={accessToken}
                 navigate={navigate}
                 now={now}
+                onDismiss={handleDismiss}
               />
             );
           })}

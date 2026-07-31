@@ -1019,6 +1019,7 @@
     "overflow_one": "+{{count}} weiterer aktiv",
     "overflow_other": "+{{count}} weitere aktiv",
     "fullscreen": "Vollbild",
+    "dismiss": "{{name}} von dieser Seite entfernen",
     "elapsed_title": "Zeit seit Beginn dieses Alarms",
     "exit_fullscreen": "Vollbild beenden",
     "settings_title": "Live-Aktivität-Einstellungen",

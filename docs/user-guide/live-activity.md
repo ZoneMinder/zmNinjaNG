@@ -20,6 +20,12 @@ The counter in the bottom corner of each tile says how long the current alarm ep
 
 The fullscreen button next to the gear hides the heading, the grid controls and the gear, leaving the tiles and a thin bar with the way back out. This is what you want on a wall display or a TV stick. The page remembers the choice per profile, and it is remembered separately from the Montage page's own fullscreen state, so putting one in fullscreen does not move the other.
 
+## Clearing a tile you have already looked at
+
+The small cross in a tile's top corner removes that camera from the page now, instead of waiting out its dwell window and holding a slot you no longer need. Clearing it closes its video connection like any other tile leaving.
+
+A camera that is still alarming would normally be put straight back on the next check, so a cleared tile stays cleared until that camera genuinely stops alarming. Its next alarm after that appears as usual. Clearing is per visit: leave the page and come back, and nothing is remembered.
+
 ## Order and overflow
 
 The camera that alarmed most recently sits at the top, and the ones that have gone quiet sink toward the bottom as they cool. Two cameras that alarm in the same check keep a fixed order between them rather than swapping around. Tiles slide to their new positions where your browser supports it, so a reorder is visible rather than an instant jump. If more monitors are alarming than the page can show, the extra ones collapse into a "+N more active" line instead of overcrowding the grid, which means the tiles you keep are the most recent activity.

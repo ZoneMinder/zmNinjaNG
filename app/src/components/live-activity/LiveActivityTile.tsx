@@ -9,6 +9,7 @@
 
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { X } from 'lucide-react';
 import type { NavigateFunction } from 'react-router-dom';
 import type { Monitor, MonitorStatus, Profile } from '../../api/types';
 import type { ActiveMonitorEntry } from '../../lib/monitor/live-activity';
@@ -25,6 +26,8 @@ interface LiveActivityTileProps {
   navigate: NavigateFunction;
   /** The page's one-second clock. Drives the elapsed label and nothing else. */
   now: number;
+  /** Clears this monitor off the page for the rest of its current alarm. */
+  onDismiss: (monitorId: string) => void;
 }
 
 export function LiveActivityTile({
@@ -35,6 +38,7 @@ export function LiveActivityTile({
   accessToken,
   navigate,
   now,
+  onDismiss,
 }: LiveActivityTileProps) {
   const { t } = useTranslation();
 
@@ -86,6 +90,23 @@ export function LiveActivityTile({
         titleIcon={titleIcon}
         fromRoute="/live-activity"
       />
+      {/* Sits where the alarm-count badge used to, clear of the tile header's
+          own buttons. stopPropagation so clearing a tile never doubles as a
+          click through to the monitor underneath. */}
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          onDismiss(entry.monitorId);
+        }}
+        className="absolute top-1 right-1 z-30 rounded bg-black/60 p-1 text-white/80 hover:bg-black/80 hover:text-white focus-visible:ring-2 focus-visible:ring-primary"
+        title={t('live_activity.dismiss', { name: monitor.Name })}
+        aria-label={t('live_activity.dismiss', { name: monitor.Name })}
+        data-testid={`live-activity-dismiss-${entry.monitorId}`}
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
+
       {/* Siblings of the tile rather than props of it, so the value that
           changes every second never reaches the memo'd component. */}
       <div className="absolute bottom-1 left-1 right-1 z-30 pointer-events-none flex items-end gap-1">

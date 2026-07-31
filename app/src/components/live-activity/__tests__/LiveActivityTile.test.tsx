@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { LiveActivityTile } from '../LiveActivityTile';
 import type { ActiveMonitorEntry } from '../../../lib/monitor/live-activity';
 import type { Monitor, Profile } from '../../../api/types';
@@ -24,7 +24,12 @@ vi.mock('../../monitors/MontageMonitor', () => ({
 }));
 
 vi.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  // Echoes the interpolation so an assertion can tell a label that names its
+  // monitor from one that does not.
+  useTranslation: () => ({
+    t: (key: string, params?: Record<string, unknown>) =>
+      params ? `${key}|${Object.values(params).join(',')}` : key,
+  }),
 }));
 
 const EPISODE_START = 1_700_000_000_000;
@@ -41,6 +46,7 @@ const ENTRY: ActiveMonitorEntry = {
 const MONITOR = { Id: '3', Name: 'Front Door' } as Monitor;
 const PROFILE = { id: 'p1' } as Profile;
 const navigate = vi.fn();
+const onDismiss = vi.fn();
 
 function renderTile(now: number, entry: ActiveMonitorEntry = ENTRY) {
   return render(
@@ -52,6 +58,7 @@ function renderTile(now: number, entry: ActiveMonitorEntry = ENTRY) {
       accessToken="t"
       navigate={navigate}
       now={now}
+      onDismiss={onDismiss}
     />
   );
 }
@@ -59,6 +66,17 @@ function renderTile(now: number, entry: ActiveMonitorEntry = ENTRY) {
 describe('LiveActivityTile', () => {
   beforeEach(() => {
     propCalls.length = 0;
+    onDismiss.mockClear();
+  });
+
+  it('hands the page the monitor to clear, naming it for a screen reader', () => {
+    renderTile(EPISODE_START);
+
+    const button = screen.getByTestId('live-activity-dismiss-3');
+    expect(button).toHaveAttribute('aria-label', 'live_activity.dismiss|Front Door');
+    fireEvent.click(button);
+
+    expect(onDismiss).toHaveBeenCalledWith('3');
   });
 
   it('reads how long the alarm episode has been running', () => {
@@ -80,6 +98,7 @@ describe('LiveActivityTile', () => {
         accessToken="t"
         navigate={navigate}
         now={EPISODE_START + 5_000}
+        onDismiss={onDismiss}
       />
     );
 
@@ -123,6 +142,7 @@ describe('LiveActivityTile', () => {
         accessToken="t"
         navigate={navigate}
         now={EPISODE_START + 1_000}
+        onDismiss={onDismiss}
       />
     );
 
