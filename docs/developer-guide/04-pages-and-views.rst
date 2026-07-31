@@ -703,6 +703,57 @@ monitor flicker in and out of the list would mint and quit a fresh
 that, not just to smooth the display. :doc:`call-flows` Flow 20 traces one
 poll tick through this whole pipeline, from the fetch to that CMD_QUIT.
 
+A tile is ``LiveActivityTile`` (``src/components/live-activity/``): the
+wrapper element described above, a ``MontageMonitor``, and two overlays. The
+overlays are siblings of the tile rather than props of it, and that placement
+is the whole design. ``MontageMonitor`` is ``memo``-wrapped with the default
+comparator, so any prop that changes every second re-renders every live video
+tile on screen at once. The elapsed counter, formatted by
+``formatElapsedShort`` (``src/lib/format-date-time.ts``) from
+``episodeStartedAt`` and the page's one-second clock, therefore never touches
+the component's props, and the state icon is memoized on ``entry.state`` for
+the same reason: a JSX element built inline is a new object per render and
+defeats the same comparison. There is one clock, advanced by the cooling
+interval the page already runs, not a second timer.
+
+The second overlay is the cause, when there is one. Only the notification
+stream reports what triggered an alarm, so it is present-when-known: the
+page's notification selector collects ``Cause`` per monitor in the same pass
+that builds the push hints, and ``reduceActiveMonitors`` records it on the
+entry when an episode begins. Storing it on the episode rather than looking
+it up at render time is deliberate, since those notification events expire on
+their own schedule and a tile that lost its label halfway through would be
+worse than one that never had it.
+
+Dismissal (the cross on a tile) is a reducer input, not a render-time filter.
+``reduceActiveMonitors`` skips a dismissed monitor both as a resident and as
+a new arrival, so the tile really unmounts and its stream is quit. The
+suppression is the point: the monitor is usually still alarming, so without
+it the reducer would readmit the tile on the very next poll.
+``releaseDismissed`` drops a dismissal once its monitor has genuinely stopped
+alarming, and the page calls it after the reduce rather than before, or a
+tile dismissed while already cooling would survive its own dismissal. The set
+lives in a page-local ref: it is not a preference, nothing renders it, and
+every read happens inside ``applyStates``.
+
+``LiveActivityClearedStrip`` lists what left in the last few minutes,
+bounded in count and age by ``LIVE_ACTIVITY.clearedMaxItems`` and
+``clearedMaxAgeSeconds``. It is a static list of names, never players:
+mounting tiles there would reopen the streams the dwell window just closed.
+Departures are recorded inside ``applyStates``, the only place the old and
+new lists exist together, and queued before the list is published so the
+strip lands in the same commit instead of repainting partway through a view
+transition.
+
+Fullscreen uses ``useFullscreenMode`` (``src/hooks/useFullscreenMode.ts``),
+shared with Montage. The hook takes the settings key it writes; it used to
+hardcode ``montageIsFullscreen``, which would have made the two pages share
+one flag, so entering fullscreen here would have put Montage in fullscreen
+too. Montage's ``FullscreenControls`` bar is not reused, because it carries
+the kiosk lock and the tile-label toggle and would pull the kiosk store and
+the PIN pad onto a page that offers neither; ``LiveActivityChrome`` holds
+this page's own heading row and its thin fullscreen bar.
+
 The page's settings (poll interval, dwell window, tile cap, and a per-page
 monitor ignore list) live in ``LiveActivitySettingsDialog``
 (``src/components/live-activity/``), writing through the same

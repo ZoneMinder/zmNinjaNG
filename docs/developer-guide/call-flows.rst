@@ -2591,6 +2591,18 @@ thrash ``nph-zms`` on the server, not just the display.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/LiveActivity.tsx#L134>`__
    · → :doc:`04-pages-and-views`
 
+#. **A dismissed monitor is held out, not filtered at render time.** The
+   page hands the reducer the set of monitors the user cleared by hand, and
+   the reducer skips them as residents and as new arrivals alike, so the
+   tile unmounts for real and step 9 quits its stream. Suppression is the
+   point: a dismissed monitor is usually still alarming, so without it the
+   next poll would readmit the tile immediately. ``releaseDismissed`` then
+   drops a dismissal once that monitor has genuinely gone quiet, and the
+   page calls it after the reduce rather than before, or a tile dismissed
+   while already cooling would survive its own dismissal.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/monitor/live-activity.ts#L215>`__
+   · → :doc:`04-pages-and-views`
+
 #. **Cap the grid, and say what got hidden.** ``capActiveMonitors`` slices
    the reduced list to ``liveActivityMaxTiles`` and reports the remainder as
    ``overflowCount``, rendered as the "+N more active" line rather than
