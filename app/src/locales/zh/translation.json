@@ -1025,6 +1025,7 @@
     "settings_title": "实时动态设置",
     "settings_desc": "选择此页面监看的监控，以及响应速度。",
     "poll_interval_label": "检查间隔",
+    "unit_seconds": "秒",
     "poll_interval_desc": "检查报警状态的频率，单位为秒。",
     "poll_bandwidth_note": "低流量模式会提高此下限。",
     "dwell_label": "画面保留时长",

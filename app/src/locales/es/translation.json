@@ -1025,6 +1025,7 @@
     "settings_title": "Ajustes de Actividad en vivo",
     "settings_desc": "Elige qué monitores observa esta página y con qué rapidez reacciona.",
     "poll_interval_label": "Comprobar cada",
+    "unit_seconds": "s",
     "poll_interval_desc": "Frecuencia de comprobación del estado de alarma, en segundos.",
     "poll_bandwidth_note": "El modo de bajo consumo eleva este mínimo.",
     "dwell_label": "Mantener en pantalla",

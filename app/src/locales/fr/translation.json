@@ -1025,6 +1025,7 @@
     "settings_title": "Paramètres Activité en direct",
     "settings_desc": "Choisissez les caméras surveillées par cette page et sa réactivité.",
     "poll_interval_label": "Vérifier toutes les",
+    "unit_seconds": "s",
     "poll_interval_desc": "Fréquence de vérification de l'état d'alarme, en secondes.",
     "poll_bandwidth_note": "Le mode économie de données relève ce minimum.",
     "dwell_label": "Garder à l'écran",

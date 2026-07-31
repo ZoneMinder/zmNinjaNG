@@ -222,19 +222,28 @@ export function LiveActivitySettingsDialog({
           <div className="space-y-1">
             <div className="flex items-center justify-between gap-3">
               <Label htmlFor="live-activity-poll">{t('live_activity.poll_interval_label')}</Label>
-              <Input
-                id="live-activity-poll"
-                type="number"
-                min={LIVE_ACTIVITY.minPollSeconds}
-                max={LIVE_ACTIVITY.maxPollSeconds}
-                value={pollField.draft}
-                onChange={(e) => pollField.onChange(e.target.value)}
-                onFocus={pollField.onFocus}
-                onBlur={pollField.onBlur}
-                onKeyDown={pollField.onKeyDown}
-                className="w-24"
-                data-testid="live-activity-poll-input"
-              />
+              {/* The unit rides beside the box because a number input cannot
+                  hold text. aria-hidden: the field's own description already
+                  says the value is in seconds, so announcing it again here
+                  would only repeat it mid-value. */}
+              <div className="flex items-center gap-1.5">
+                <Input
+                  id="live-activity-poll"
+                  type="number"
+                  min={LIVE_ACTIVITY.minPollSeconds}
+                  max={LIVE_ACTIVITY.maxPollSeconds}
+                  value={pollField.draft}
+                  onChange={(e) => pollField.onChange(e.target.value)}
+                  onFocus={pollField.onFocus}
+                  onBlur={pollField.onBlur}
+                  onKeyDown={pollField.onKeyDown}
+                  className="w-24"
+                  data-testid="live-activity-poll-input"
+                />
+                <span className="text-sm text-muted-foreground" aria-hidden="true">
+                  {t('live_activity.unit_seconds')}
+                </span>
+              </div>
             </div>
             <p className="text-xs text-muted-foreground">{t('live_activity.poll_interval_desc')}</p>
             <p className="text-xs text-muted-foreground">{t('live_activity.poll_bandwidth_note')}</p>
@@ -245,19 +254,24 @@ export function LiveActivitySettingsDialog({
           <div className="space-y-1">
             <div className="flex items-center justify-between gap-3">
               <Label htmlFor="live-activity-dwell">{t('live_activity.dwell_label')}</Label>
-              <Input
-                id="live-activity-dwell"
-                type="number"
-                min={LIVE_ACTIVITY.minDwellSeconds}
-                max={LIVE_ACTIVITY.maxDwellSeconds}
-                value={dwellField.draft}
-                onChange={(e) => dwellField.onChange(e.target.value)}
-                onFocus={dwellField.onFocus}
-                onBlur={dwellField.onBlur}
-                onKeyDown={dwellField.onKeyDown}
-                className="w-24"
-                data-testid="live-activity-dwell-input"
-              />
+              <div className="flex items-center gap-1.5">
+                <Input
+                  id="live-activity-dwell"
+                  type="number"
+                  min={LIVE_ACTIVITY.minDwellSeconds}
+                  max={LIVE_ACTIVITY.maxDwellSeconds}
+                  value={dwellField.draft}
+                  onChange={(e) => dwellField.onChange(e.target.value)}
+                  onFocus={dwellField.onFocus}
+                  onBlur={dwellField.onBlur}
+                  onKeyDown={dwellField.onKeyDown}
+                  className="w-24"
+                  data-testid="live-activity-dwell-input"
+                />
+                <span className="text-sm text-muted-foreground" aria-hidden="true">
+                  {t('live_activity.unit_seconds')}
+                </span>
+              </div>
             </div>
             <p className="text-xs text-muted-foreground">{t('live_activity.dwell_desc')}</p>
           </div>

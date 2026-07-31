@@ -1025,6 +1025,7 @@
     "settings_title": "Live Activity settings",
     "settings_desc": "Choose which monitors this page watches and how quickly it reacts.",
     "poll_interval_label": "Check every",
+    "unit_seconds": "s",
     "poll_interval_desc": "How often alarm state is checked, in seconds.",
     "poll_bandwidth_note": "Low bandwidth mode raises this floor.",
     "dwell_label": "Keep on screen for",

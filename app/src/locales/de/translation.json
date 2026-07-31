@@ -1025,6 +1025,7 @@
     "settings_title": "Live-Aktivität-Einstellungen",
     "settings_desc": "Legt fest, welche Monitore beobachtet werden und wie schnell reagiert wird.",
     "poll_interval_label": "Prüfintervall",
+    "unit_seconds": "s",
     "poll_interval_desc": "Wie oft der Alarmstatus geprüft wird, in Sekunden.",
     "poll_bandwidth_note": "Der Sparmodus hebt diese Untergrenze an.",
     "dwell_label": "Anzeigedauer",
