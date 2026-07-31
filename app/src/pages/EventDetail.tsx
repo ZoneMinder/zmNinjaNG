@@ -498,21 +498,6 @@ export default function EventDetail() {
         )}
       >
         <div className="w-full max-w-5xl space-y-3 sm:space-y-4 md:space-y-6">
-          {/* Significant frames for this event (#272). Gated on a fresh token so
-              the thumbnails are not all dropped as failures during a refresh. */}
-          {currentProfile && isAccessTokenFresh && (
-            <EventFrameCarousel
-              portalUrl={resolvedPortalUrl}
-              eventId={event.Event.Id}
-              token={accessToken || undefined}
-              apiUrl={currentProfile.apiUrl}
-              minStreamingPort={effectiveMinStreamingPort}
-              monitorId={event.Event.MonitorId}
-              hasAlarmFrame={!!event.Event.AlarmFrameId}
-              onViewerOpenChange={handleFrameViewerOpenChange}
-            />
-          )}
-
           {/* Video Player or ZMS Playback */}
           {hasVideo ? (
             useZmsFallback ? (
@@ -605,6 +590,24 @@ export default function EventDetail() {
                 </div>
               </div>
             </Card>
+          )}
+
+          {/* Significant frames for this event (#272). Sits between the player
+              and the metadata so the frames read as a detail of what is on
+              screen above, rather than pushing the player itself below the
+              fold. Gated on a fresh token so the thumbnails are not all
+              dropped as failures during a refresh. */}
+          {currentProfile && isAccessTokenFresh && (
+            <EventFrameCarousel
+              portalUrl={resolvedPortalUrl}
+              eventId={event.Event.Id}
+              token={accessToken || undefined}
+              apiUrl={currentProfile.apiUrl}
+              minStreamingPort={effectiveMinStreamingPort}
+              monitorId={event.Event.MonitorId}
+              hasAlarmFrame={!!event.Event.AlarmFrameId}
+              onViewerOpenChange={handleFrameViewerOpenChange}
+            />
           )}
 
           {/* Metadata Grid */}
