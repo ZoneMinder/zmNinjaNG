@@ -25,18 +25,27 @@ describe('LiveActivityStateIcon', () => {
     expect(screen.getByRole('img', { name: 'Alarmed' })).toBeInTheDocument();
   });
 
-  it('announces a post-alarm monitor', () => {
-    render(<LiveActivityStateIcon state="alert" />);
+  // prealarm rides with alert, not with the quiet states: both mean ZoneMinder
+  // is part way into an alarm decision.
+  it.each(['alert', 'prealarm'] as const)('announces %s as a part-way alarm', (state) => {
+    render(<LiveActivityStateIcon state={state} />);
     expect(screen.getByRole('img', { name: 'Alert' })).toBeInTheDocument();
   });
 
-  it.each(['idle', 'prealarm', 'tape', 'unknown'] as const)(
-    'announces %s as winding down',
-    (state) => {
-      render(<LiveActivityStateIcon state={state} />);
-      expect(screen.getByRole('img', { name: 'Clearing' })).toBeInTheDocument();
-    }
-  );
+  it.each(['idle', 'tape', 'unknown'] as const)('announces %s as winding down', (state) => {
+    render(<LiveActivityStateIcon state={state} />);
+    expect(screen.getByRole('img', { name: 'Clearing' })).toBeInTheDocument();
+  });
+
+  // Cooling tiles are drawn at full colour now, so this glyph is the only
+  // thing telling a user the tile is on its way out.
+  it('uses a different glyph for a part-way alarm than for cooling', () => {
+    const { container: partway } = render(<LiveActivityStateIcon state="alert" />);
+    const { container: cooling } = render(<LiveActivityStateIcon state="idle" />);
+    expect(partway.querySelector('svg')?.innerHTML).not.toBe(
+      cooling.querySelector('svg')?.innerHTML
+    );
+  });
 
   it('repeats the state as a hover title, since the word is otherwise gone', () => {
     render(<LiveActivityStateIcon state="alarm" />);
