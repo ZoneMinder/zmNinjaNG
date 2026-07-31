@@ -12,7 +12,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { useShallow } from 'zustand/react/shallow';
-import { Activity } from 'lucide-react';
+import { EyeClosed } from 'lucide-react';
 import { getMonitors } from '../api/monitors';
 import { queryKeys } from '../lib/query/query-keys';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
@@ -303,7 +303,7 @@ export default function LiveActivity() {
       {showEmptyState && (
         <div data-testid="live-activity-empty">
           <EmptyState
-            icon={Activity}
+            icon={EyeClosed}
             title={t('live_activity.all_quiet')}
             description={t('live_activity.watching_count', { count: watchedIds.length })}
           />
