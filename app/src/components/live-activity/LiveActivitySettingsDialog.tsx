@@ -237,7 +237,7 @@ export function LiveActivitySettingsDialog({
                   onFocus={pollField.onFocus}
                   onBlur={pollField.onBlur}
                   onKeyDown={pollField.onKeyDown}
-                  className="w-24"
+                  className="w-20"
                   data-testid="live-activity-poll-input"
                 />
                 <span className="text-sm text-muted-foreground" aria-hidden="true">
@@ -265,7 +265,7 @@ export function LiveActivitySettingsDialog({
                   onFocus={dwellField.onFocus}
                   onBlur={dwellField.onBlur}
                   onKeyDown={dwellField.onKeyDown}
-                  className="w-24"
+                  className="w-20"
                   data-testid="live-activity-dwell-input"
                 />
                 <span className="text-sm text-muted-foreground" aria-hidden="true">
@@ -291,7 +291,7 @@ export function LiveActivitySettingsDialog({
                 onFocus={tilesField.onFocus}
                 onBlur={tilesField.onBlur}
                 onKeyDown={tilesField.onKeyDown}
-                className="w-24"
+                className="w-20"
                 data-testid="live-activity-tiles-input"
               />
             </div>
