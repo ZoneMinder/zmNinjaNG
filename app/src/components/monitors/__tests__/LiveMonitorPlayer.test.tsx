@@ -120,6 +120,41 @@ describe('LiveMonitorPlayer MJPEG recovery', () => {
     fireEvent.error(screen.getByTestId('video-player-mjpeg'));
     expect(mockMjpegReturn.reportStreamError).toHaveBeenCalledTimes(1);
   });
+
+  // refs #313: the browser paints its broken-image glyph as soon as the load
+  // fails, and React's error event is default priority, so the commit that
+  // unmounts the <img> lands a frame or more later. On Live Activity the exit
+  // view transition snapshots the page in that gap and freezes the glyph for
+  // the length of the fade. The element itself has to stop presenting the
+  // broken image inside the handler.
+  it('leaves the errored MJPEG <img> unpaintable rather than showing a broken image', () => {
+    render(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+    const img = screen.getByTestId('video-player-mjpeg');
+
+    fireEvent.error(img);
+
+    // Asserted on the element the browser would have painted, not on a flag.
+    expect(img.style.visibility).toBe('hidden');
+  });
+
+  it('restores a visible MJPEG <img> across repeated reconnects', () => {
+    const { rerender } = render(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+
+    for (const connkey of ['2', '3']) {
+      fireEvent.error(screen.getByTestId('video-player-mjpeg'));
+
+      mockMjpegReturn = {
+        ...mockMjpegReturn,
+        streamUrl: `https://t/stream?connkey=${connkey}`,
+        imageSrc: `https://t/stream?connkey=${connkey}`,
+      };
+      rerender(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+
+      const recovered = screen.getByTestId('video-player-mjpeg');
+      expect(recovered).toBeVisible();
+      expect(recovered).toHaveAttribute('src', `https://t/stream?connkey=${connkey}`);
+    }
+  });
 });
 
 describe('LiveMonitorPlayer Go2RTC failure cache scoping', () => {
