@@ -208,6 +208,10 @@ export interface ProfileSettings {
   tvMode: boolean;
   // Show protocol label (MJPEG/MSE/WebRTC) on video streams
   showProtocolLabel: boolean;
+  /** Serve ZoneMinder's analysis image (motion overlay, zone boxes) on live
+   *  views instead of the captured frame. MJPEG streaming only: go2rtc has no
+   *  command socket and zms ignores the frame type for single images. */
+  showAnalysisFrames: boolean;
   // Per-monitor streaming method overrides (monitorId → 'auto' | 'mjpeg')
   // When absent, the monitor uses the profile-level streamingMethod.
   monitorStreamingOverrides: Record<string, StreamingMethod>;
@@ -376,6 +380,7 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   sidebarWidth: 256,
   tvMode: false,
   showProtocolLabel: true,
+  showAnalysisFrames: false,
   monitorStreamingOverrides: {},
   forceZmsMonitorIds: [],
   // Auto by default: honor the server's ZM_MIN_STREAMING_PORT when present

@@ -1265,7 +1265,10 @@
     "connection_error": "连接错误",
     "connection_failed": "流媒体连接失败",
     "fallback_to_mjpeg": "切换至 MJPEG",
-    "retry_connection": "重试连接"
+    "retry_connection": "重试连接",
+    "analysis_frames": "分析画面",
+    "analysis_frames_hint": "显示 ZoneMinder 的移动分析叠加层。仅适用于 MJPEG 实时流。",
+    "analysis_needs_streaming": "分析画面需要将串流模式设为实时"
   },
   "groups": {
     "all_monitors": "全部",

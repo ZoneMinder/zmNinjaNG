@@ -77,6 +77,12 @@ export const ZMS_COMMANDS = {
   /** Set maximum FPS */
   cmdMaxFps: 18,
 
+  /** Serve analysis frames (motion overlay) instead of the captured image */
+  cmdAnalyzeOn: 19,
+
+  /** Go back to the captured image */
+  cmdAnalyzeOff: 20,
+
   /** Query stream status */
   cmdQuery: 99,
 } as const;

@@ -23,6 +23,8 @@ describe('ZMS_COMMANDS', () => {
       cmdGetImage: 16,
       cmdQuit: 17,
       cmdMaxFps: 18,
+      cmdAnalyzeOn: 19,
+      cmdAnalyzeOff: 20,
       cmdQuery: 99,
     });
   });

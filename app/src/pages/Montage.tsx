@@ -23,6 +23,7 @@ import { MontageMonitor } from '../components/monitors/MontageMonitor';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Video, Maximize, Pencil, ArrowLeftRight } from 'lucide-react';
 import { RefreshButton } from '../components/common/RefreshButton';
+import { AnalysisFramesToggle } from '../components/monitors/AnalysisFramesToggle';
 import { ErrorBanner } from '../components/ui/query-state';
 import { resolveQueryError } from '../lib/query/query-error';
 import { EmptyState } from '../components/ui/empty-state';
@@ -404,6 +405,7 @@ export default function Montage() {
                   <span className="hidden sm:inline">{t('montage.fill_width', 'Fill')}</span>
                 </Button>
               )}
+              <AnalysisFramesToggle className="h-8 w-8 sm:h-9 sm:w-9" />
               <Button
                 onClick={() => handleToggleFullscreen(true)}
                 variant="default"

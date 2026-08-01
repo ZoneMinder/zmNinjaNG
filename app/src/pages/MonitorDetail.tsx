@@ -27,6 +27,7 @@ import { useTranslation } from 'react-i18next';
 import { useInsomnia } from '../hooks/useInsomnia';
 import { PTZControls } from '../components/monitors/PTZControls';
 import { LiveMonitorPlayer } from '../components/monitors/LiveMonitorPlayer';
+import { AnalysisFramesToggle } from '../components/monitors/AnalysisFramesToggle';
 import { ZoneOverlay } from '../components/monitors/ZoneOverlay';
 import { ZoneLegend } from '../components/monitors/ZoneLegend';
 import { log, LogLevel } from '../lib/logger';
@@ -302,6 +303,7 @@ export default function MonitorDetail() {
               </SelectItem>
             </SelectContent>
           </Select>
+          <AnalysisFramesToggle className="h-8 w-8 sm:h-9 sm:w-9" alwaysStreaming />
           <Button
             variant="ghost"
             size="icon"

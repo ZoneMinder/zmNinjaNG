@@ -1265,7 +1265,10 @@
     "connection_error": "Connection Error",
     "connection_failed": "Stream connection failed",
     "fallback_to_mjpeg": "Falling back to MJPEG",
-    "retry_connection": "Retry Connection"
+    "retry_connection": "Retry Connection",
+    "analysis_frames": "Analysis frames",
+    "analysis_frames_hint": "Show ZoneMinder's motion analysis overlay. MJPEG live streams only.",
+    "analysis_needs_streaming": "Analysis frames need Streaming Mode set to Live"
   },
   "groups": {
     "all_monitors": "All",

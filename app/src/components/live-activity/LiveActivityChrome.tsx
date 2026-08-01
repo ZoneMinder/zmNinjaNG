@@ -11,6 +11,7 @@
 import { useTranslation } from 'react-i18next';
 import { Maximize, Minimize, Settings } from 'lucide-react';
 import { EventMontageGridControls } from '../events/EventMontageGridControls';
+import { AnalysisFramesToggle } from '../monitors/AnalysisFramesToggle';
 import { Button } from '../ui/button';
 
 interface LiveActivityHeaderProps {
@@ -53,6 +54,7 @@ export function LiveActivityHeader({
           onCustomGridDialogOpenChange={onCustomGridDialogOpenChange}
           onCustomGridSubmit={onCustomGridSubmit}
         />
+        <AnalysisFramesToggle />
         <Button
           variant="ghost"
           size="icon"

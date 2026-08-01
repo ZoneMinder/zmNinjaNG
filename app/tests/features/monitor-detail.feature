@@ -146,3 +146,17 @@ Feature: Monitor Detail Page
     Then the delete batch bar should show 2 events
     When I cancel the delete batch
     Then the delete batch bar should be gone
+
+  @web @all
+  Scenario: Analysis frames toggle switches the running stream and is remembered
+    Then I should see the monitor player
+    When I turn analysis frames on
+    Then the analysis-on command should be sent for the live stream
+    And the analysis frames toggle should be active
+    When I navigate to the "Monitors" page
+    And I click into the first monitor detail page
+    Then the analysis frames toggle should be active
+    And the analysis-on command should be re-sent for the new stream
+    When I turn analysis frames off
+    Then the analysis-off command should be sent for the live stream
+    And the analysis frames toggle should be inactive
