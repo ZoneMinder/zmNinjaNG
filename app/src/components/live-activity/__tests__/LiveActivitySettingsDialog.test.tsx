@@ -2,14 +2,13 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { LiveActivitySettingsDialog } from '../LiveActivitySettingsDialog';
 import { useSettingsStore } from '../../../stores/settings';
-import { useAuthStore } from '../../../stores/auth';
 
 const MONITORS = [
   { Monitor: { Id: '3', Name: 'Front Door', Function: 'Modect' } },
   { Monitor: { Id: '4', Name: 'Backyard', Function: 'Modect' } },
 ];
 
-// Mocord records continuously on the pre-1.38 schema the tests below run on.
+// Mocord records continuously on the pre-1.38 schema.
 const MONITORS_WITH_CONTINUOUS = [
   ...MONITORS,
   { Monitor: { Id: '5', Name: 'Driveway', Function: 'Mocord' } },
@@ -18,7 +17,6 @@ const MONITORS_WITH_CONTINUOUS = [
 describe('LiveActivitySettingsDialog', () => {
   beforeEach(() => {
     useSettingsStore.setState({ profileSettings: {} });
-    useAuthStore.setState({ version: '1.36.33' });
   });
 
   it('persists a changed dwell value to the profile settings on blur', () => {
@@ -57,119 +55,21 @@ describe('LiveActivitySettingsDialog', () => {
     ).toEqual(['4']);
   });
 
-  // A continuous recorder is skipped by default, so its toggle drives the
-  // opt-in list rather than the ignore list. Seeding the ignore list instead
-  // would make the automatic default indistinguishable from a user's choice.
-  describe('continuous-recording monitors', () => {
-    function renderDialog() {
-      return render(
-        <LiveActivitySettingsDialog
-          open
-          onOpenChange={() => {}}
-          profileId="p1"
-          monitors={MONITORS_WITH_CONTINUOUS as never}
-        />
-      );
-    }
+  // A continuous recorder is treated like any other monitor: recording mode
+  // says nothing about what is alarming, so the row carries no special hint
+  // and no separate opt-in list (#313).
+  it('shows a continuous recorder as watched, with no hint of its own', () => {
+    render(
+      <LiveActivitySettingsDialog
+        open
+        onOpenChange={() => {}}
+        profileId="p1"
+        monitors={MONITORS_WITH_CONTINUOUS as never}
+      />
+    );
 
-    it('shows a continuous recorder as off, and says why, without ignoring it', () => {
-      renderDialog();
-
-      expect(screen.getByTestId('live-activity-ignore-5')).toHaveAttribute(
-        'data-state',
-        'unchecked'
-      );
-      expect(screen.getByTestId('live-activity-continuous-hint-5')).toBeInTheDocument();
-      expect(screen.queryByTestId('live-activity-continuous-hint-3')).not.toBeInTheDocument();
-      expect(
-        useSettingsStore.getState().getProfileSettings('p1').liveActivityIgnoredMonitorIds
-      ).toEqual([]);
-    });
-
-    it('opts a continuous recorder in without touching the ignore list', () => {
-      renderDialog();
-
-      fireEvent.click(screen.getByTestId('live-activity-ignore-5'));
-
-      const settings = useSettingsStore.getState().getProfileSettings('p1');
-      expect(settings.liveActivityWatchContinuousIds).toEqual(['5']);
-      expect(settings.liveActivityIgnoredMonitorIds).toEqual([]);
-    });
-
-    it('drops a continuous recorder back out when it is toggled off again', () => {
-      useSettingsStore.getState().updateProfileSettings('p1', {
-        liveActivityWatchContinuousIds: ['5'],
-      });
-
-      renderDialog();
-      expect(screen.getByTestId('live-activity-ignore-5')).toHaveAttribute(
-        'data-state',
-        'checked'
-      );
-
-      fireEvent.click(screen.getByTestId('live-activity-ignore-5'));
-
-      expect(
-        useSettingsStore.getState().getProfileSettings('p1').liveActivityWatchContinuousIds
-      ).toEqual([]);
-    });
-
-    // Reachable by anyone who ignored a continuous monitor before it started
-    // being skipped by default. Both lists exclude it and the ignore list
-    // wins, so a row that showed "on" while the page still excluded it, and
-    // that no longer wrote the ignore list, would be a control with no effect
-    // and no way back.
-    it('clears the ignore entry when an ignored continuous recorder is switched on', () => {
-      useSettingsStore.getState().updateProfileSettings('p1', {
-        liveActivityIgnoredMonitorIds: ['5'],
-      });
-
-      renderDialog();
-      expect(screen.getByTestId('live-activity-ignore-5')).toHaveAttribute(
-        'data-state',
-        'unchecked'
-      );
-
-      fireEvent.click(screen.getByTestId('live-activity-ignore-5'));
-
-      // Both lists agree the monitor is watched, so the page really shows it.
-      const settings = useSettingsStore.getState().getProfileSettings('p1');
-      expect(settings.liveActivityWatchContinuousIds).toEqual(['5']);
-      expect(settings.liveActivityIgnoredMonitorIds).toEqual([]);
-      expect(screen.getByTestId('live-activity-ignore-5')).toHaveAttribute('data-state', 'checked');
-    });
-
-    it('shows an ignored continuous recorder as off even when it is opted in', () => {
-      useSettingsStore.getState().updateProfileSettings('p1', {
-        liveActivityIgnoredMonitorIds: ['5'],
-        liveActivityWatchContinuousIds: ['5'],
-      });
-
-      renderDialog();
-
-      // The page excludes it, so the switch must not claim otherwise.
-      expect(screen.getByTestId('live-activity-ignore-5')).toHaveAttribute(
-        'data-state',
-        'unchecked'
-      );
-    });
-
-    it('treats an alarm-only monitor normally on ZM 1.38+', () => {
-      useAuthStore.setState({ version: '1.38.0' });
-      render(
-        <LiveActivitySettingsDialog
-          open
-          onOpenChange={() => {}}
-          profileId="p1"
-          monitors={
-            [...MONITORS, { Monitor: { Id: '5', Name: 'Driveway', Function: 'Mocord', Recording: 'OnMotion' } }] as never
-          }
-        />
-      );
-
-      expect(screen.queryByTestId('live-activity-continuous-hint-5')).not.toBeInTheDocument();
-      expect(screen.getByTestId('live-activity-ignore-5')).toHaveAttribute('data-state', 'checked');
-    });
+    expect(screen.getByTestId('live-activity-ignore-5')).toHaveAttribute('data-state', 'checked');
+    expect(screen.queryByText(/continuously/i)).not.toBeInTheDocument();
   });
 
   it('removes a monitor from the ignore list when it is toggled back on', () => {

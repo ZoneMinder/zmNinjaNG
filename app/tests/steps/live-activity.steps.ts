@@ -93,3 +93,25 @@ Then('the all-quiet message should name how many monitors are being watched', as
   expect(match, `expected a "Watching N monitor(s)" count in: ${text}`).not.toBeNull();
   expect(Number(match![1])).toBeGreaterThan(0);
 });
+
+// Recording mode does not decide what this page watches (#313): a continuously
+// recording camera reports idle until motion, so it belongs here like any
+// other. These two steps together fail if any monitor is excluded without the
+// user asking, because the count and the switches would disagree with the list.
+Then('every listed monitor should be switched on', async ({ page }) => {
+  const switches = page.getByTestId(/^live-activity-ignore-/);
+  const count = await switches.count();
+  expect(count, 'expected the settings dialog to list at least one monitor').toBeGreaterThan(0);
+  for (let i = 0; i < count; i += 1) {
+    await expect(switches.nth(i)).toHaveAttribute('data-state', 'checked');
+  }
+});
+
+Then('the number of listed monitors should match the watched count', async ({ page }) => {
+  const listed = await page.getByTestId(/^live-activity-ignore-/).count();
+  await page.getByTestId('dialog-close-button').click();
+  const text = await page.getByTestId('live-activity-empty').innerText();
+  const match = text.match(/Watching (\d+) monitors?/i);
+  expect(match, `expected a "Watching N monitor(s)" count in: ${text}`).not.toBeNull();
+  expect(Number(match![1])).toBe(listed);
+});

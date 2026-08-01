@@ -1039,7 +1039,6 @@
     "max_tiles_desc": "Los monitores adicionales se agrupan en un contador en vez de mostrarse.",
     "ignore_list_label": "Monitores a observar",
     "ignore_list_desc": "Desactiva un monitor para ocultarlo solo en esta página; sigue visible en el resto.",
-    "continuous_hint": "Graba de forma continua, por lo que se omite de forma predeterminada.",
     "ignore_list_empty": "No hay monitores disponibles."
   },
   "languages": {

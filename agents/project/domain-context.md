@@ -24,6 +24,13 @@ matching reality, fixing it is a protocol change like any rule edit.
   for it. `lib/security/url-credentials.ts` is the only place that knows how
   to find it; both the log sanitizer and the monitor settings UI go through
   it.
+- Alarm state (`monitors/alarm/id:{id}/command:status`) comes from the motion
+  score alone, never from recording mode. A `Recording=Always` monitor with an
+  open `cause: Continuous` event still reports `0` (IDLE), verified against
+  1.39.18; it reports ALARM/ALERT on motion like any other monitor. `TAPE` (4)
+  existed only before its removal in 1.37 dev, where a continuous recorder sat
+  in it while quiet. So "always recording" never means "always alarming", and
+  `isAlarmingState` covers the legacy case already.
 - Event Server v7.0.22 and later always sends a real `eid` in pushes. The
   historical fake-eid bug (a `Date.now()` value where an event id belongs)
   was app-side tray handling, not the ES.
