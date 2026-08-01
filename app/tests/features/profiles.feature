@@ -34,6 +34,13 @@ Feature: Profile Management
     Then the profile edit save button should be within the viewport
     And the dialog close button should be within the viewport
 
+  @web
+  Scenario: A confirmation dialog stays reachable on a screen shorter than it is
+    Given the viewport is shorter than a dialog
+    When I open the delete all profiles dialog
+    Then the delete all profiles dialog should fit within the viewport
+    And the delete all profiles buttons should be reachable
+
   @all
   Scenario: Add profile with connection details
     When I click the add profile button

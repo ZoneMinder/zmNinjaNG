@@ -153,6 +153,15 @@ Given('the viewport is phone landscape size', async ({ page }) => {
   await page.setViewportSize({ width: 812, height: 375 });
 });
 
+// Shorter than the tallest confirmation the app renders (158px measured).
+// Contrived as a window size, but a confirmation is a title, one sentence and
+// two buttons, so nothing else makes one overflow. The overflow it produces is
+// the real thing: what a phone in landscape hits with a longer translation, and
+// what Dialog was fixed for in #322 while AlertDialog was not.
+Given('the viewport is shorter than a dialog', async ({ page }) => {
+  await page.setViewportSize({ width: 812, height: 140 });
+});
+
 // Generic dialog steps used across multiple features
 When('I click outside the dialog', async ({ page }) => {
   await page.locator('body').click({ position: { x: 10, y: 10 } });

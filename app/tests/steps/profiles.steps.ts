@@ -243,3 +243,29 @@ Then('the dialog close button should be within the viewport', async ({ page }) =
   await expect(close).toBeVisible();
   expect(await isWithinViewport(close)).toBe(true);
 });
+
+// AlertDialog is a separate component from Dialog and needs its own height cap
+// (refs #322).
+When('I open the delete all profiles dialog', async ({ page }) => {
+  await page.getByTestId('profiles-delete-all-button').click();
+  await expect(page.getByTestId('profiles-delete-all-dialog')).toBeVisible({
+    timeout: testConfig.timeouts.transition,
+  });
+});
+
+Then('the delete all profiles dialog should fit within the viewport', async ({ page }) => {
+  expect(await isWithinViewport(page.getByTestId('profiles-delete-all-dialog'))).toBe(true);
+});
+
+Then('the delete all profiles buttons should be reachable', async ({ page }) => {
+  const dialog = page.getByTestId('profiles-delete-all-dialog');
+  await dialog.evaluate((el) => {
+    el.scrollTop = el.scrollHeight;
+  });
+  for (const testId of ['profiles-delete-all-cancel', 'profiles-delete-all-confirm']) {
+    const button = page.getByTestId(testId);
+    await expect(button).toBeVisible();
+    expect(await isWithinViewport(button), `${testId} is off screen`).toBe(true);
+  }
+  await page.getByTestId('profiles-delete-all-cancel').click();
+});
