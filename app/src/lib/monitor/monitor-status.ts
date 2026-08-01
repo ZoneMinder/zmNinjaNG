@@ -13,13 +13,6 @@ export type MonitorRunState = 'live' | 'warning' | 'offline' | 'disabled';
 
 const ANALYSIS_FUNCTIONS = new Set(['Modect', 'Mocord', 'Nodect']);
 
-/**
- * Pre-1.38 Functions that write every captured frame to an event, not just the
- * alarmed ones. Mocord is in both this set and ANALYSIS_FUNCTIONS: it records
- * continuously *and* runs motion detection.
- */
-const CONTINUOUS_FUNCTIONS = new Set(['Record', 'Mocord']);
-
 function parseFps(fps: string | null | undefined): number {
   return parseFloat(fps ?? '0') || 0;
 }
@@ -57,21 +50,6 @@ export function getMonitorRunState(
   if (analysisEnabled && parseFps(status?.AnalysisFPS) === 0) return 'warning';
 
   return 'live';
-}
-
-/**
- * True when the monitor records continuously rather than only on alarm.
- *
- * ZoneMinder 1.38 split Function into independent controls, so the answer
- * lives in a different field either side of that line: `Recording` from 1.38
- * on, `Function` before it. A monitor that is always recording is always
- * "in an event", which is why callers such as Live Activity treat it as noise
- * rather than as something happening right now.
- */
-export function isContinuousRecording(monitor: Monitor, zmVersion: string | null): boolean {
-  return isZmVersionAtLeast(zmVersion, '1.38.0')
-    ? monitor.Recording === 'Always'
-    : CONTINUOUS_FUNCTIONS.has(monitor.Function);
 }
 
 /** True when the monitor should be showing a video stream. */

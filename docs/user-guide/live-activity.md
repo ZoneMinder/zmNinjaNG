@@ -41,7 +41,7 @@ Open the gear icon at the top of the page to configure:
 - **Maximum tiles**: how many tiles the grid shows at once before the rest collapse into the overflow count.
 - **Monitors to watch**: a per-monitor switch that keeps a monitor off this page only. It stays visible everywhere else in the app. This is separate from the hidden monitors list in {doc}`settings`, which hides a monitor from the whole app.
 
-A monitor set to record continuously starts switched off here, and its row says so. A camera that always records is always inside an event, so it would sit on this page permanently and push out whatever is actually alarming. Switch one back on if you do want to watch it; that choice is remembered separately from the monitors you turned off yourself.
+Every monitor is watched by default, including cameras set to record continuously. A camera that always records is always inside an event, but an event is not an alarm: ZoneMinder still reports such a camera as idle until motion is detected, so it appears here only when something actually happens. Turn one off with the switch if you would rather not see it on this page.
 
 A push notification for a monitor promotes it onto the page immediately, rather than waiting for the next scheduled check.
 

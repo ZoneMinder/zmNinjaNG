@@ -6,10 +6,6 @@
  * stays visible everywhere else. That is separate from the profile-wide
  * monitor exclusion (Settings > hidden monitors), which hides a monitor
  * everywhere.
- *
- * A monitor that records continuously is skipped by default, so its toggle
- * drives a separate opt-in list instead of the ignore list: that keeps the
- * automatic default distinguishable from a monitor the user turned off.
  */
 
 import { useMemo, useState, type KeyboardEvent } from 'react';
@@ -21,8 +17,6 @@ import { Label } from '../ui/label';
 import { Separator } from '../ui/separator';
 import { Switch } from '../ui/switch';
 import { useSettingsStore, mergeProfileSettings } from '../../stores/settings';
-import { useAuthStore } from '../../stores/auth';
-import { isContinuousRecording } from '../../lib/monitor/monitor-status';
 import { LIVE_ACTIVITY } from '../../lib/zmninja-ng-constants';
 import type { MonitorData } from '../../api/types';
 
@@ -133,7 +127,6 @@ export function LiveActivitySettingsDialog({
   monitors,
 }: LiveActivitySettingsDialogProps) {
   const { t } = useTranslation();
-  const zmVersion = useAuthStore((s) => s.version);
 
   const rawSettings = useSettingsStore(
     useShallow((state) => state.profileSettings?.[profileId])
@@ -143,11 +136,6 @@ export function LiveActivitySettingsDialog({
   const ignoredSet = useMemo(
     () => new Set(settings.liveActivityIgnoredMonitorIds),
     [settings.liveActivityIgnoredMonitorIds]
-  );
-
-  const watchContinuousSet = useMemo(
-    () => new Set(settings.liveActivityWatchContinuousIds),
-    [settings.liveActivityWatchContinuousIds]
   );
 
   const pollField = useClampedNumberField(
@@ -182,32 +170,6 @@ export function LiveActivitySettingsDialog({
         ? current
         : [...current, monitorId];
     useSettingsStore.getState().updateProfileSettings(profileId, { liveActivityIgnoredMonitorIds: next });
-  };
-
-  // A continuous recorder is off by default, so its toggle drives the opt-in
-  // list instead: on means watched, which is the inverse of the ignore list.
-  //
-  // Turning one on also clears any ignore entry for it. Both lists exclude the
-  // monitor and the ignore list wins, so without this the switch would flip on
-  // while the page kept excluding it, and the row would be a dead control: it
-  // no longer writes the ignore list, so nothing left in the UI could clear
-  // that entry. Reachable in one click by anyone who ignored a continuous
-  // monitor before it started being skipped by default.
-  const handleContinuousToggle = (monitorId: string, watched: boolean) => {
-    const current = settings.liveActivityWatchContinuousIds;
-    const next = watched
-      ? current.includes(monitorId)
-        ? current
-        : [...current, monitorId]
-      : current.filter((id) => id !== monitorId);
-    useSettingsStore.getState().updateProfileSettings(profileId, {
-      liveActivityWatchContinuousIds: next,
-      ...(watched && {
-        liveActivityIgnoredMonitorIds: settings.liveActivityIgnoredMonitorIds.filter(
-          (id) => id !== monitorId
-        ),
-      }),
-    });
   };
 
   return (
@@ -307,46 +269,23 @@ export function LiveActivitySettingsDialog({
               <p className="text-xs text-muted-foreground">{t('live_activity.ignore_list_empty')}</p>
             ) : (
               <div className="space-y-2 max-h-48 overflow-y-auto">
-                {monitors.map(({ Monitor }) => {
-                  const continuous = isContinuousRecording(Monitor, zmVersion);
-                  return (
-                    <div key={Monitor.Id} className="flex items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <Label
-                          htmlFor={`live-activity-ignore-${Monitor.Id}`}
-                          className="text-sm font-normal truncate min-w-0 block"
-                          title={Monitor.Name}
-                        >
-                          {Monitor.Name}
-                        </Label>
-                        {continuous && (
-                          <p
-                            className="text-xs text-muted-foreground"
-                            data-testid={`live-activity-continuous-hint-${Monitor.Id}`}
-                          >
-                            {t('live_activity.continuous_hint')}
-                          </p>
-                        )}
-                      </div>
-                      <Switch
-                        id={`live-activity-ignore-${Monitor.Id}`}
-                        // Either list excluding it means the page excludes it,
-                        // so the switch only reads as on when neither does.
-                        checked={
-                          continuous
-                            ? watchContinuousSet.has(Monitor.Id) && !ignoredSet.has(Monitor.Id)
-                            : !ignoredSet.has(Monitor.Id)
-                        }
-                        onCheckedChange={(checked) =>
-                          continuous
-                            ? handleContinuousToggle(Monitor.Id, checked)
-                            : handleIgnoreToggle(Monitor.Id, checked)
-                        }
-                        data-testid={`live-activity-ignore-${Monitor.Id}`}
-                      />
-                    </div>
-                  );
-                })}
+                {monitors.map(({ Monitor }) => (
+                  <div key={Monitor.Id} className="flex items-center justify-between gap-2">
+                    <Label
+                      htmlFor={`live-activity-ignore-${Monitor.Id}`}
+                      className="text-sm font-normal truncate min-w-0"
+                      title={Monitor.Name}
+                    >
+                      {Monitor.Name}
+                    </Label>
+                    <Switch
+                      id={`live-activity-ignore-${Monitor.Id}`}
+                      checked={!ignoredSet.has(Monitor.Id)}
+                      onCheckedChange={(checked) => handleIgnoreToggle(Monitor.Id, checked)}
+                      data-testid={`live-activity-ignore-${Monitor.Id}`}
+                    />
+                  </div>
+                ))}
               </div>
             )}
           </div>

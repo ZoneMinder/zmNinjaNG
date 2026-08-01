@@ -1039,7 +1039,6 @@
     "max_tiles_desc": "Weitere Monitore werden als Zähler zusammengefasst statt angezeigt.",
     "ignore_list_label": "Zu beobachtende Monitore",
     "ignore_list_desc": "Monitor ausschalten, um ihn nur auf dieser Seite zu verbergen; er bleibt überall sonst sichtbar.",
-    "continuous_hint": "Nimmt durchgehend auf und wird daher standardmäßig übersprungen.",
     "ignore_list_empty": "Keine Monitore verfügbar."
   },
   "languages": {

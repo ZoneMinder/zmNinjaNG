@@ -13,6 +13,13 @@ Feature: Live Activity
     And the all-quiet message should name how many monitors are being watched
 
   @all
+  Scenario: Every monitor the server offers is watched, whatever its recording mode
+    Then the all-quiet message should name how many monitors are being watched
+    When I open the Live Activity settings
+    Then every listed monitor should be switched on
+    And the number of listed monitors should match the watched count
+
+  @all
   Scenario: Fullscreen hides the page chrome and is remembered, without moving Montage
     When I enter Live Activity fullscreen
     Then the Live Activity page chrome should be hidden

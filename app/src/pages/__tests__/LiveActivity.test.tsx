@@ -21,7 +21,6 @@ const env = vi.hoisted(() => ({
     liveActivityDwellSeconds: 30,
     liveActivityMaxTiles: 12,
     liveActivityIgnoredMonitorIds: [] as string[],
-    liveActivityWatchContinuousIds: [] as string[],
     liveActivityIsFullscreen: false,
     bandwidthMode: 'normal',
     monitorGridCols: 2,
@@ -139,7 +138,6 @@ describe('LiveActivity', () => {
     vi.clearAllMocks();
     tileRenders.count = 0;
     env.settings.liveActivityIgnoredMonitorIds = [];
-    env.settings.liveActivityWatchContinuousIds = [];
     env.settings.liveActivityIsFullscreen = false;
     env.zmVersion = '1.36.33';
     mockMonitors.mockResolvedValue(MONITORS as never);
@@ -174,8 +172,11 @@ describe('LiveActivity', () => {
     expect(screen.getByRole('img', { name: 'Alarmed' })).toHaveAttribute('title', 'Alarmed');
   });
 
-  // A monitor that always records is always inside an event, so it would sit
-  // on this page forever and crowd out whatever is genuinely alarming.
+  // Recording mode says nothing about what is alarming, so this page does not
+  // read it. Verified against ZoneMinder 1.39.18 (#313): a monitor with an
+  // open `Continuous` event still reports IDLE, because state comes from the
+  // motion score alone. Servers before the 1.37 removal of TAPE report TAPE
+  // while continuously recording, which isAlarmingState already rejects.
   describe('continuous-recording monitors', () => {
     const WITH_CONTINUOUS = {
       monitors: [
@@ -190,18 +191,7 @@ describe('LiveActivity', () => {
       mockStatus.mockResolvedValue({ status: 2 } as never);
     });
 
-    it('leaves a continuous recorder off the page by default', async () => {
-      render(<LiveActivity />, { wrapper });
-
-      await waitFor(() => {
-        expect(screen.getByText('Front Door')).toBeInTheDocument();
-      });
-      expect(screen.queryByText('Driveway')).not.toBeInTheDocument();
-    });
-
-    it('watches a continuous recorder the user opted back in', async () => {
-      env.settings.liveActivityWatchContinuousIds = ['5'];
-
+    it('watches a continuous recorder like any other monitor', async () => {
       render(<LiveActivity />, { wrapper });
 
       await waitFor(() => {
@@ -209,21 +199,7 @@ describe('LiveActivity', () => {
       });
     });
 
-    it('keeps an opted-in continuous recorder out when it is also ignored', async () => {
-      env.settings.liveActivityWatchContinuousIds = ['5'];
-      env.settings.liveActivityIgnoredMonitorIds = ['5'];
-
-      render(<LiveActivity />, { wrapper });
-
-      await waitFor(() => {
-        expect(screen.getByText('Front Door')).toBeInTheDocument();
-      });
-      expect(screen.queryByText('Driveway')).not.toBeInTheDocument();
-    });
-
-    it('reads Recording rather than Function on ZM 1.38+', async () => {
-      // The same monitor: pre-1.38 Function says continuous, 1.38 Recording
-      // says on-motion. The 1.38 field wins, so it is watched.
+    it('watches one reported through the 1.38 Recording field', async () => {
       env.zmVersion = '1.38.0';
       mockMonitors.mockResolvedValue({
         monitors: [
@@ -232,8 +208,8 @@ describe('LiveActivity', () => {
             Monitor: {
               Id: '5',
               Name: 'Driveway',
-              Function: 'Mocord',
-              Recording: 'OnMotion',
+              Recording: 'Always',
+              Analysing: 'Always',
               Capturing: 'Always',
             },
           },
@@ -245,6 +221,17 @@ describe('LiveActivity', () => {
       await waitFor(() => {
         expect(screen.getByText('Driveway')).toBeInTheDocument();
       });
+    });
+
+    it('keeps a continuous recorder out when it is ignored', async () => {
+      env.settings.liveActivityIgnoredMonitorIds = ['5'];
+
+      render(<LiveActivity />, { wrapper });
+
+      await waitFor(() => {
+        expect(screen.getByText('Front Door')).toBeInTheDocument();
+      });
+      expect(screen.queryByText('Driveway')).not.toBeInTheDocument();
     });
   });
 
@@ -649,7 +636,6 @@ describe('LiveActivity', () => {
           liveActivityDwellSeconds: 30,
           liveActivityMaxTiles: 12,
           liveActivityIgnoredMonitorIds: [],
-          liveActivityWatchContinuousIds: [],
           bandwidthMode: 'normal',
           monitorGridCols: 2,
         },
