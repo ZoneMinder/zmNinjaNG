@@ -23,7 +23,7 @@ function attachPtzRequestCapture(page: import('@playwright/test').Page): void {
   if (ptzListenerPages.has(page)) return;
   ptzListenerPages.add(page);
   page.on('request', (req) => {
-    const url = req.url();
+    const url = decodeURIComponent(req.url());
     if (url.includes('request=control')) {
       ptzRequestUrls.push(url);
     }
