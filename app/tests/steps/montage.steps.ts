@@ -3,6 +3,7 @@ import { expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { testConfig } from '../helpers/config';
 import { getMonitorCount, getMonitorEventCountSince } from '../helpers/zm-api';
+import { MONTAGE_SCROLL_PAD } from '../../src/lib/zmninja-ng-constants';
 
 const { When, Then } = createBdd();
 
@@ -235,4 +236,97 @@ Then('the events page should open filtered to that monitor since the watermark',
   const params = new URLSearchParams(hash.split('?')[1] ?? '');
   expect(params.get('monitorId')).toBe(badgedMontageMonitorId);
   expect(params.get('startDateTime')).toBeTruthy();
+});
+
+// Edit-mode scroll pad (refs #321). In edit mode every tile is a drag surface,
+// so a touch swipe reorders monitors instead of scrolling; the pad is the only
+// way to move the viewport without moving a monitor.
+let scrollPadScrollTop = 0;
+let scrollPadStep = 0;
+let scrollPadTileOrder: string[] = [];
+
+// The montage grid's own container is as tall as its content, so the element
+// that scrolls is the app's <main>, the same one monitor detail restores.
+function readGridScroll(page: Page): Promise<{ top: number; overflow: number; visible: number }> {
+  return page.locator('[data-tv-region="main"]').evaluate((el) => ({
+    top: el.scrollTop,
+    overflow: el.scrollHeight - el.clientHeight,
+    visible: el.clientHeight,
+  }));
+}
+
+// Tile order as laid out, not as mounted: react-grid-layout keeps the DOM
+// order fixed and positions tiles with transforms, so a reorder only shows up
+// in geometry.
+async function readTileOrder(page: Page): Promise<string[]> {
+  const tiles = page.locator('[data-testid^="montage-monitor-"]');
+  const placed: { id: string; top: number; left: number }[] = [];
+  for (const tile of await tiles.all()) {
+    const id = (await tile.getAttribute('data-testid')) ?? '';
+    const box = await tile.boundingBox();
+    if (box) placed.push({ id, top: box.y, left: box.x });
+  }
+  placed.sort((a, b) => a.top - b.top || a.left - b.left);
+  return placed.map((p) => p.id);
+}
+
+When('I enter montage edit mode', async ({ page }) => {
+  await page.getByTestId('montage-edit-toggle').click();
+});
+
+When('I leave montage edit mode', async ({ page }) => {
+  await page.getByTestId('montage-edit-toggle').click();
+});
+
+Then('the montage scroll pad should be visible', async ({ page }) => {
+  await expect(page.getByTestId('montage-scroll-pad')).toBeVisible({
+    timeout: testConfig.timeouts.element,
+  });
+});
+
+Then('the montage scroll pad should be hidden', async ({ page }) => {
+  await expect(page.getByTestId('montage-scroll-pad')).toHaveCount(0);
+});
+
+When('I record the montage grid scroll position and tile order', async ({ page }) => {
+  const { top, overflow, visible } = await readGridScroll(page);
+  scrollPadStep = visible * MONTAGE_SCROLL_PAD.stepFraction;
+  // One column of tiles has to be taller than the viewport for scrolling to
+  // mean anything. That is a property of the grid under test, so assert it
+  // rather than skipping on it.
+  expect(overflow).toBeGreaterThan(0);
+  scrollPadScrollTop = top;
+  scrollPadTileOrder = await readTileOrder(page);
+  expect(scrollPadTileOrder.length).toBeGreaterThan(0);
+});
+
+When('I tap the montage scroll pad down button', async ({ page }) => {
+  await page.getByTestId('montage-scroll-down').click();
+});
+
+When('I tap the montage scroll pad top button', async ({ page }) => {
+  await page.getByTestId('montage-scroll-top').click();
+});
+
+Then('the montage grid should have scrolled down', async ({ page }) => {
+  // A full step, not merely "moved": Playwright scrolls a button into view
+  // before clicking it, so any weaker assertion passes even when the pad does
+  // nothing at all.
+  await expect
+    .poll(async () => (await readGridScroll(page)).top, {
+      timeout: testConfig.timeouts.transition,
+    })
+    .toBeGreaterThanOrEqual(scrollPadScrollTop + scrollPadStep);
+});
+
+Then('the montage grid should be scrolled to the top', async ({ page }) => {
+  await expect
+    .poll(async () => (await readGridScroll(page)).top, {
+      timeout: testConfig.timeouts.transition,
+    })
+    .toBe(0);
+});
+
+Then('the montage tile order should be unchanged', async ({ page }) => {
+  expect(await readTileOrder(page)).toEqual(scrollPadTileOrder);
 });

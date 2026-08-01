@@ -130,6 +130,18 @@ export const GRID_LAYOUT = {
 } as const;
 
 /**
+ * Montage Scroll Pad
+ *
+ * The edit-mode pad that scrolls the grid when every tile is a drag surface
+ * (refs #321).
+ */
+export const MONTAGE_SCROLL_PAD = {
+  // Fraction of the visible height one up/down tap moves. Short of a full page
+  // so a row stays on screen as a reference point.
+  stepFraction: 0.8,
+} as const;
+
+/**
  * Sidebar Navigation Constants
  *
  * Dimensions and behavior for the collapsible sidebar navigation.

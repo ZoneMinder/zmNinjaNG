@@ -14,7 +14,7 @@ import { useBandwidthSettings } from '../hooks/useBandwidthSettings';
 import { useMonitorNewEvents } from '../hooks/useMonitorNewEvents';
 import { useAuthStore } from '../stores/auth';
 import { useSettingsStore } from '../stores/settings';
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTvKeyHandler } from '../hooks/useTvKeyHandler';
 import { useTvMode } from '../hooks/useTvMode';
@@ -47,6 +47,7 @@ import {
   FullscreenControls,
   MontageKebabMenu,
   MontageTileErrorBoundary,
+  MontageScrollPad,
   useMontageGrid,
   useContainerResize,
 } from '../components/montage';
@@ -162,6 +163,18 @@ export default function Montage() {
     onWidthChange: handleWidthChange,
     currentWidthRef,
   });
+
+  // The same element also scrolls, and the scroll pad needs to reach it.
+  // Composed in a stable callback so the resize observer is not torn down and
+  // re-attached on every render.
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const setScrollContainer = useCallback(
+    (element: HTMLDivElement | null) => {
+      scrollContainerRef.current = element;
+      containerRef(element);
+    },
+    [containerRef]
+  );
 
   // TV mode D-pad grid navigation
   const { isTvMode } = useTvMode();
@@ -425,7 +438,7 @@ export default function Montage() {
 
       {/* Grid Content */}
       <div
-        ref={containerRef}
+        ref={setScrollContainer}
         {...pinchZoom.bind()}
         className={cn(
           'flex-1 overflow-auto bg-muted/10',
@@ -502,6 +515,8 @@ export default function Montage() {
           </div>
         </div>
       </div>
+
+      {isEditMode && !isFullscreen && <MontageScrollPad targetRef={scrollContainerRef} />}
     </div>
   );
 }
