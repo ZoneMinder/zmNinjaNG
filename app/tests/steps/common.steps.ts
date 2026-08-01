@@ -147,6 +147,12 @@ Given('the viewport is tablet size', async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 768 });
 });
 
+// Phone held sideways: the shortest screen the app has to work on, and where
+// a dialog that cannot scroll hides its own buttons (refs #322).
+Given('the viewport is phone landscape size', async ({ page }) => {
+  await page.setViewportSize({ width: 812, height: 375 });
+});
+
 // Generic dialog steps used across multiple features
 When('I click outside the dialog', async ({ page }) => {
   await page.locator('body').click({ position: { x: 10, y: 10 } });

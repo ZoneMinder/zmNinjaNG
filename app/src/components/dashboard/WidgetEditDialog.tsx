@@ -179,7 +179,7 @@ export function WidgetEditDialog({ open, onOpenChange, widget, profileId }: Widg
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto" data-testid="widget-edit-dialog">
+            <DialogContent className="sm:max-w-md" data-testid="widget-edit-dialog">
                 <DialogHeader>
                     <DialogTitle>{t('dashboard.edit_layout')}</DialogTitle>
                     <DialogDescription className="sr-only">

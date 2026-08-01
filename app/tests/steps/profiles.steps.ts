@@ -200,3 +200,46 @@ Then('the newly added profile should still appear in the list', async ({ page })
   const card = page.locator('[data-testid="profile-card"]').filter({ hasText: newProfileName });
   await expect(card).toBeVisible({ timeout: testConfig.timeouts.element });
 });
+
+// The edit dialog is the tallest in the app, so it is where a dialog that
+// cannot scroll first hides its own Save and Cancel buttons (refs #322).
+function dialogBody(page: import('@playwright/test').Page) {
+  return page.getByTestId('profile-edit-dialog').getByTestId('dialog-body');
+}
+
+async function isWithinViewport(locator: import('@playwright/test').Locator) {
+  const box = await locator.boundingBox();
+  if (!box) return false;
+  const viewport = locator.page().viewportSize();
+  if (!viewport) throw new Error('E2E: no viewport size set');
+  return box.y >= 0 && box.y + box.height <= viewport.height;
+}
+
+Then('the profile edit dialog should fit within the viewport', async ({ page }) => {
+  expect(await isWithinViewport(page.getByTestId('profile-edit-dialog'))).toBe(true);
+});
+
+Then('the profile edit dialog body should be scrollable', async ({ page }) => {
+  const overflow = await dialogBody(page).evaluate((el) => el.scrollHeight - el.clientHeight);
+  // The fixture profile's fields are what make this dialog overflow a 375px
+  // tall screen; if they ever stop doing so the scenario is vacuous, so this
+  // is an assertion rather than a skip.
+  expect(overflow).toBeGreaterThan(0);
+});
+
+When('I scroll the profile edit dialog to the bottom', async ({ page }) => {
+  await dialogBody(page).evaluate((el) => {
+    el.scrollTop = el.scrollHeight;
+  });
+});
+
+Then('the profile edit save button should be within the viewport', async ({ page }) => {
+  await expect(page.getByTestId('profile-edit-save')).toBeVisible();
+  expect(await isWithinViewport(page.getByTestId('profile-edit-save'))).toBe(true);
+});
+
+Then('the dialog close button should be within the viewport', async ({ page }) => {
+  const close = page.getByTestId('profile-edit-dialog').getByTestId('dialog-close-button');
+  await expect(close).toBeVisible();
+  expect(await isWithinViewport(close)).toBe(true);
+});
