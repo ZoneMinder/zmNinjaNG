@@ -11,7 +11,7 @@ zmNinjaNg is a client application for [ZoneMinder](https://zoneminder.com/), an 
 - Manage multiple ZoneMinder servers via profiles
 - Customize your dashboard with widgets
 
-zmNinjaNg runs on Android, iOS, Windows, macOS, Linux, and the web from a single codebase. It is a rewrite of [zmNinja](https://zmninja.zoneminder.com/) using React, TypeScript, Capacitor, and Electron.
+zmNinjaNg runs on Android, iOS, Windows, macOS, Linux, and the web from a single codebase. It is a rewrite of zmNinja using React, TypeScript, Capacitor, and Electron.
 
 ## Requirements
 
