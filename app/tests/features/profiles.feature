@@ -23,6 +23,17 @@ Feature: Profile Management
     And I save profile edits
     Then the updated profile name should appear in the list
 
+  @web
+  Scenario: Edit profile dialog scrolls when it is taller than a short screen
+    Given the viewport is phone landscape size
+    When I open the edit dialog for the first profile
+    Then I should see the profile edit dialog
+    And the profile edit dialog should fit within the viewport
+    And the profile edit dialog body should be scrollable
+    When I scroll the profile edit dialog to the bottom
+    Then the profile edit save button should be within the viewport
+    And the dialog close button should be within the viewport
+
   @all
   Scenario: Add profile with connection details
     When I click the add profile button

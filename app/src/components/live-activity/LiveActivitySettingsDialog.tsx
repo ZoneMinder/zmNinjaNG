@@ -212,7 +212,7 @@ export function LiveActivitySettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto" data-testid="live-activity-settings-dialog">
+      <DialogContent data-testid="live-activity-settings-dialog">
         <DialogHeader>
           <DialogTitle>{t('live_activity.settings_title')}</DialogTitle>
           <DialogDescription>{t('live_activity.settings_desc')}</DialogDescription>
