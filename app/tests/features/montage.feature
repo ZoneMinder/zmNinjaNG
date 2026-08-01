@@ -86,9 +86,8 @@ Feature: Montage Live Grid
   Scenario: The edit-mode scroll pad scrolls the grid without reordering monitors
     Then I should see at least 1 monitor in montage grid
     When I set the montage column count to 1
-    And I enter montage edit mode
     Then the montage scroll pad should be hidden
-    When I toggle the montage scroll pad
+    When I enter montage edit mode
     Then the montage scroll pad should be visible
     When I record the montage grid scroll position and tile order
     And I tap the montage scroll pad down button
@@ -96,7 +95,7 @@ Feature: Montage Live Grid
     And the montage tile order should be unchanged
     When I tap the montage scroll pad top button
     Then the montage grid should be scrolled to the top
-    When I toggle the montage scroll pad
+    When I leave montage edit mode
     Then the montage scroll pad should be hidden
 
   @web

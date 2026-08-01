@@ -272,13 +272,10 @@ async function readTileOrder(page: Page): Promise<string[]> {
 
 When('I enter montage edit mode', async ({ page }) => {
   await page.getByTestId('montage-edit-toggle').click();
-  await expect(page.getByTestId('montage-scroll-pad-toggle')).toBeVisible({
-    timeout: testConfig.timeouts.element,
-  });
 });
 
-When('I toggle the montage scroll pad', async ({ page }) => {
-  await page.getByTestId('montage-scroll-pad-toggle').click();
+When('I leave montage edit mode', async ({ page }) => {
+  await page.getByTestId('montage-edit-toggle').click();
 });
 
 Then('the montage scroll pad should be visible', async ({ page }) => {

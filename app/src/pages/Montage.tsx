@@ -21,7 +21,7 @@ import { useTvMode } from '../hooks/useTvMode';
 import { Button } from '../components/ui/button';
 import { MontageMonitor } from '../components/monitors/MontageMonitor';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { Video, Maximize, Pencil, ArrowLeftRight, MoveVertical } from 'lucide-react';
+import { Video, Maximize, Pencil, ArrowLeftRight } from 'lucide-react';
 import { RefreshButton } from '../components/common/RefreshButton';
 import { ErrorBanner } from '../components/ui/query-state';
 import { resolveQueryError } from '../lib/query/query-error';
@@ -117,9 +117,6 @@ export default function Montage() {
 
   // Edit mode state lifted to page level
   const [isEditMode, setIsEditMode] = useState(false);
-
-  // Edit-mode scroll pad, off until the user asks for it (refs #321)
-  const [showScrollPad, setShowScrollPad] = useState(false);
 
   // Active saved layout name (persisted in settings)
   const activeLayoutName = bucket.activeLayoutName;
@@ -407,21 +404,6 @@ export default function Montage() {
                   <span className="hidden sm:inline">{t('montage.fill_width', 'Fill')}</span>
                 </Button>
               )}
-              {isEditMode && (
-                <Button
-                  onClick={() => setShowScrollPad((prev) => !prev)}
-                  variant={showScrollPad ? 'default' : 'outline'}
-                  size="sm"
-                  className="h-8 sm:h-9"
-                  title={t('montage.scroll_pad')}
-                  aria-label={t('montage.scroll_pad')}
-                  aria-pressed={showScrollPad}
-                  data-testid="montage-scroll-pad-toggle"
-                >
-                  <MoveVertical className="h-4 w-4 sm:mr-2" />
-                  <span className="hidden sm:inline">{t('montage.scroll_pad')}</span>
-                </Button>
-              )}
               <Button
                 onClick={() => handleToggleFullscreen(true)}
                 variant="default"
@@ -534,9 +516,7 @@ export default function Montage() {
         </div>
       </div>
 
-      {isEditMode && !isFullscreen && showScrollPad && (
-        <MontageScrollPad targetRef={scrollContainerRef} />
-      )}
+      {isEditMode && !isFullscreen && <MontageScrollPad targetRef={scrollContainerRef} />}
     </div>
   );
 }
