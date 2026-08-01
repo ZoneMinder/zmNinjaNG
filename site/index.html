@@ -7,7 +7,7 @@
   <meta name="theme-color" content="hsl(220, 20%, 12%)">
   <title>zmNinjaNg — ZoneMinder Client for iOS, Android, Windows, macOS &amp; Linux</title>
   <link rel="canonical" href="https://zmninjang.zoneminder.com/">
-  <link rel="icon" href="logo.png" type="image/png">
+  <link rel="icon" href="logo-icon.png" type="image/png">
   <meta name="google-site-verification" content="e7a5FCuCpw6Go_L5XpMDMnerC3x_NGsE3Nl1NboPi5o">
 
   <meta property="og:type" content="website">
@@ -43,7 +43,6 @@
   }
   </script>
 
-  <script src="https://unpkg.com/lucide@1.7.0"></script>
   <style>
     /* === Reset & Base === */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -283,7 +282,10 @@
       display: block;
     }
 
+    /* The video does not load until play, so the spinner stays hidden
+       behind the poster until playDemo() asks for it. */
     .phone-screen .loader {
+      display: none;
       position: absolute;
       top: 50%;
       left: 50%;
@@ -581,13 +583,13 @@
   <nav class="top-nav">
     <div class="top-nav-inner">
       <div class="top-nav-brand">
-        <img src="logo.png" alt="zmNinjaNg">
+        <img src="logo.webp" alt="zmNinjaNg" width="28" height="28">
         <span>zmNinjaNg</span>
       </div>
       <div class="top-nav-links">
-        <a href="https://zmninjang.readthedocs.io/en/latest/"><i data-lucide="book-open"></i> Documentation</a>
-        <a href="https://github.com/ZoneMinder/zmNinjaNg"><i data-lucide="github"></i> GitHub</a>
-        <a href="https://github.com/ZoneMinder/zmNinjaNg/releases"><i data-lucide="download"></i> Releases</a>
+        <a href="https://zmninjang.readthedocs.io/en/latest/"><svg class="lucide lucide-book-open" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M12 7v14" /><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z" /></svg> Documentation</a>
+        <a href="https://github.com/ZoneMinder/zmNinjaNg"><svg class="lucide lucide-github" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4" /><path d="M9 18c-4.51 2-5-2-7-2" /></svg> GitHub</a>
+        <a href="https://github.com/ZoneMinder/zmNinjaNg/releases"><svg class="lucide lucide-download" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M12 15V3" /><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="m7 10 5 5 5-5" /></svg> Releases</a>
       </div>
     </div>
   </nav>
@@ -596,27 +598,27 @@
     <div class="hero-inner">
       <div class="hero-text">
         <div class="hero-brand">
-          <img src="logo.png" alt="zmNinjaNg" class="hero-logo">
+          <img src="logo.webp" alt="zmNinjaNg" class="hero-logo" width="140" height="140" fetchpriority="high">
           <h1 class="hero-title">Monitor smarter,<br>not harder</h1>
         </div>
         <p class="hero-subtitle">zmNinjaNg: The modern ZoneMinder client that runs on every platform</p>
         <div class="hero-ctas">
           <a href="#platforms" class="btn btn-dark btn-lg" data-testid="hero-download-cta">
-            <i data-lucide="download"></i>
+            <svg class="lucide lucide-download" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M12 15V3" /><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="m7 10 5 5 5-5" /></svg>
             Download Now
           </a>
         </div>
         <div class="zmes-callout">
-          <img src="zmES7plus.png" alt="zmesNg" class="zmes-logo">
+          <img src="zmES7plus.webp" alt="zmesNg" class="zmes-logo" width="40" height="40" loading="lazy" decoding="async">
           <span>Pair with <a href="https://zmeventnotificationng.readthedocs.io/en/latest/" target="_blank" rel="noopener" class="zmes-link"><strong>zmesNg</strong></a> for object detection, face recognition, license plates, bird songs, or even <a href="https://pyzmng.readthedocs.io/en/latest/guide/training.html" target="_blank" rel="noopener" class="zmes-link">train</a> your own models and more &mdash; then just ask <a href="https://zmninjang.readthedocs.io/en/latest/user-guide/assistant.html" target="_blank" rel="noopener" class="zmes-link"><strong>Ninjii</strong></a>, the built-in assistant, what happened while you were out...</span>
         </div>
       </div>
       <div class="hero-screenshot" id="heroMedia">
         <div class="phone-frame-wrap">
-          <img src="iphone-frame.png" alt="" class="phone-frame-img">
+          <img src="iphone-frame.webp" alt="" class="phone-frame-img" width="600" height="1225">
           <div class="phone-screen" id="phoneScreen">
             <div class="loader" id="videoLoader"></div>
-            <video id="heroVideo" preload="metadata" playsinline muted src="demo.mp4#t=25" onloadeddata="document.getElementById('videoLoader').style.display='none'"></video>
+            <video id="heroVideo" preload="none" poster="demo-poster.webp" playsinline muted src="demo.mp4#t=25" onloadeddata="document.getElementById('videoLoader').style.display='none'"></video>
           </div>
           <button class="play-overlay" id="playBtn" aria-label="Play demo video" onclick="playDemo()">
             <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><polygon points="5,3 19,12 5,21"></polygon></svg>
@@ -637,7 +639,7 @@
         <div class="platform-item">
           <a href="https://github.com/ZoneMinder/zmNinjaNg/releases" target="_blank" rel="noopener">
             <div class="platform-icon">
-              <img src="icons/apple.svg" alt="macOS">
+              <img src="icons/apple.svg" alt="macOS" width="24" height="24" loading="lazy" decoding="async">
             </div>
             <span class="platform-name">macOS</span>
             <span class="platform-badge">Available</span>
@@ -647,7 +649,7 @@
         <div class="platform-item">
           <a href="https://github.com/ZoneMinder/zmNinjaNg/releases" target="_blank" rel="noopener">
             <div class="platform-icon">
-              <img src="icons/windows.svg" alt="Windows">
+              <img src="icons/windows.svg" alt="Windows" width="24" height="24" loading="lazy" decoding="async">
             </div>
             <span class="platform-name">Windows</span>
             <span class="platform-badge">Available</span>
@@ -657,7 +659,7 @@
         <div class="platform-item">
           <a href="https://github.com/ZoneMinder/zmNinjaNg/releases" target="_blank" rel="noopener">
             <div class="platform-icon">
-              <img src="icons/linux.svg" alt="Linux">
+              <img src="icons/linux.svg" alt="Linux" width="24" height="24" loading="lazy" decoding="async">
             </div>
             <span class="platform-name">Linux</span>
             <span class="platform-badge">Available</span>
@@ -667,7 +669,7 @@
         <div class="platform-item">
           <a href="https://apps.apple.com/app/id6759469535" target="_blank" rel="noopener">
             <div class="platform-icon">
-              <img src="icons/apple.svg" alt="iOS">
+              <img src="icons/apple.svg" alt="iOS" width="24" height="24" loading="lazy" decoding="async">
             </div>
             <span class="platform-name">iOS</span>
             <span class="platform-badge">Available</span>
@@ -677,7 +679,7 @@
         <div class="platform-item">
           <a href="https://play.google.com/store/apps/details?id=com.zoneminder.zmNinjaNG" target="_blank" rel="noopener">
             <div class="platform-icon">
-              <img src="icons/android.svg" alt="Android">
+              <img src="icons/android.svg" alt="Android" width="24" height="24" loading="lazy" decoding="async">
             </div>
             <span class="platform-name">Android</span>
             <span class="platform-badge">Available</span>
@@ -697,85 +699,85 @@
     </div>
     <div class="features-container">
       <button class="features-nav prev" onclick="scrollFeatures(-1)" aria-label="Previous feature">
-        <i data-lucide="chevron-left"></i>
+        <svg class="lucide lucide-chevron-left" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="m15 18-6-6 6-6" /></svg>
       </button>
       <div class="features-track" id="featuresTrack">
         <div class="feature-card">
           <div class="feature-image">
-            <img src="images/4.png" alt="Monitors list showing live and offline cameras with status details">
+            <img src="images/4.webp" alt="Monitors list showing live and offline cameras with status details" width="600" height="1225" loading="lazy" decoding="async">
           </div>
           <div class="feature-content">
-            <div class="feature-icon"><i data-lucide="video"></i></div>
+            <div class="feature-icon"><svg class="lucide lucide-video" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5" /><rect x="2" y="6" width="14" height="12" rx="2" /></svg></div>
             <h3 class="feature-title">Live Monitoring</h3>
             <p class="feature-desc">Watch all your cameras in real-time with adaptive streaming — see live status, FPS, resolution, and function mode at a glance</p>
           </div>
         </div>
         <div class="feature-card">
           <div class="feature-image">
-            <img src="images/12.png" alt="Event detail with video playback, timing, and metadata">
+            <img src="images/12.webp" alt="Event detail with video playback, timing, and metadata" width="600" height="1225" loading="lazy" decoding="async">
           </div>
           <div class="feature-content">
-            <div class="feature-icon"><i data-lucide="clock"></i></div>
+            <div class="feature-icon"><svg class="lucide lucide-clock" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M12 6v6l4 2" /><circle cx="12" cy="12" r="10" /></svg></div>
             <h3 class="feature-title">Event Playback</h3>
             <p class="feature-desc">Review recorded events with video playback, frame counts, alarm scores, and storage details — scrub through footage with precision</p>
           </div>
         </div>
         <div class="feature-card">
           <div class="feature-image">
-            <img src="images/7.png" alt="Montage grid showing four camera feeds simultaneously">
+            <img src="images/7.webp" alt="Montage grid showing four camera feeds simultaneously" width="600" height="1225" loading="lazy" decoding="async">
           </div>
           <div class="feature-content">
-            <div class="feature-icon"><i data-lucide="layout-grid"></i></div>
+            <div class="feature-icon"><svg class="lucide lucide-layout-grid" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect width="7" height="7" x="3" y="3" rx="1" /><rect width="7" height="7" x="14" y="3" rx="1" /><rect width="7" height="7" x="14" y="14" rx="1" /><rect width="7" height="7" x="3" y="14" rx="1" /></svg></div>
             <h3 class="feature-title">Montage View</h3>
             <p class="feature-desc">Multi-camera grid with customizable layouts — view all your cameras simultaneously with live streaming and per-monitor controls</p>
           </div>
         </div>
         <div class="feature-card">
           <div class="feature-image">
-            <img src="images/11.png" alt="Timeline view with color-coded event blocks across monitors">
+            <img src="images/11.webp" alt="Timeline view with color-coded event blocks across monitors" width="600" height="1225" loading="lazy" decoding="async">
           </div>
           <div class="feature-content">
-            <div class="feature-icon"><i data-lucide="gantt-chart"></i></div>
+            <div class="feature-icon"><svg class="lucide lucide-gantt-chart" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M6 5h12" /><path d="M4 12h10" /><path d="M12 19h8" /></svg></div>
             <h3 class="feature-title">Event Timeline</h3>
             <p class="feature-desc">Visual timeline of events across all monitors — filter by date range, monitor, or detected objects and pan and zoom to find what matters</p>
           </div>
         </div>
         <div class="feature-card">
           <div class="feature-image">
-            <img src="images/6.png" alt="Notification settings with direct mode and monitor filters">
+            <img src="images/6.webp" alt="Notification settings with direct mode and monitor filters" width="600" height="1225" loading="lazy" decoding="async">
           </div>
           <div class="feature-content">
-            <div class="feature-icon"><i data-lucide="bell"></i></div>
+            <div class="feature-icon"><svg class="lucide lucide-bell" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M10.268 21a2 2 0 0 0 3.464 0" /><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326" /></svg></div>
             <h3 class="feature-title">Push Notifications</h3>
             <p class="feature-desc">Get instant alerts on motion detection events — supports Event Server and direct polling modes with per-monitor filtering</p>
           </div>
         </div>
         <div class="feature-card">
           <div class="feature-image">
-            <img src="images/1.png" alt="Sidebar showing theme picker with light, cream, dark, slate, and amber options">
+            <img src="images/1.webp" alt="Sidebar showing theme picker with light, cream, dark, slate, and amber options" width="600" height="1225" loading="lazy" decoding="async">
           </div>
           <div class="feature-content">
-            <div class="feature-icon"><i data-lucide="palette"></i></div>
+            <div class="feature-icon"><svg class="lucide lucide-palette" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z" /><circle cx="13.5" cy="6.5" r=".5" fill="currentColor" /><circle cx="17.5" cy="10.5" r=".5" fill="currentColor" /><circle cx="6.5" cy="12.5" r=".5" fill="currentColor" /><circle cx="8.5" cy="7.5" r=".5" fill="currentColor" /></svg></div>
             <h3 class="feature-title">Themes & Languages</h3>
             <p class="feature-desc">Five built-in themes including light, cream, dark, slate, and amber — available in multiple languages</p>
           </div>
         </div>
       </div>
       <button class="features-nav next" onclick="scrollFeatures(1)" aria-label="Next feature">
-        <i data-lucide="chevron-right"></i>
+        <svg class="lucide lucide-chevron-right" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="m9 18 6-6-6-6" /></svg>
       </button>
     </div>
   </section>
 
   <!-- Scroll hint -->
   <div class="scroll-hint" id="scrollHint" onclick="window.scrollBy({top: window.innerHeight * 0.8, behavior: 'smooth'})">
-    <i data-lucide="chevron-down"></i>
+    <svg class="lucide lucide-chevron-down" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="m6 9 6 6 6-6" /></svg>
   </div>
 
   <!-- Footer -->
   <footer>
     <div class="footer-inner">
-      <img src="logo.png" alt="zmNinjaNg" class="footer-logo">
+      <img src="logo.webp" alt="zmNinjaNg" class="footer-logo" width="48" height="48" loading="lazy" decoding="async">
       <p class="footer-copy">&copy; 2026 zmNinjaNg — a modern client for ZoneMinder</p>
     </div>
   </footer>
@@ -784,6 +786,7 @@
     function playDemo() {
       var video = document.getElementById('heroVideo');
       var playBtn = document.getElementById('playBtn');
+      document.getElementById('videoLoader').style.display = 'block';
       video.muted = false;
       video.currentTime = 0;
       video.play();
@@ -801,8 +804,6 @@
       var atBottom = (window.innerHeight + window.scrollY) >= (document.body.scrollHeight - 100);
       scrollHint.classList.toggle('hidden', atBottom);
     });
-
-    lucide.createIcons();
   </script>
 </body>
 </html>
