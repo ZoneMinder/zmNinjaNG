@@ -38,6 +38,7 @@ import { KioskOverlay } from '../kiosk/KioskOverlay';
 import { SidebarContent } from './SidebarContent';
 import { DeveloperNoticeBanner } from './DeveloperNoticeBanner';
 import { OfflineBanner } from './OfflineBanner';
+import { useReconcileDeletedMonitors } from '../../hooks/useReconcileDeletedMonitors';
 import { CertTrustBanner } from '../CertTrustBanner';
 import { DeleteBatchBar } from '../events/DeleteBatchBar';
 import { AssistantWidget } from '../assistant/AssistantWidget';
@@ -104,6 +105,9 @@ export default function AppLayout() {
 
   // Apply global insomnia setting
   useInsomnia({ enabled: settings.insomnia });
+
+  // Forget monitors ZoneMinder no longer has (refs #323, #324)
+  useReconcileDeletedMonitors();
 
   const { isLocked, previousInsomniaState } = useKioskStore(
     useShallow((state) => ({

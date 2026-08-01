@@ -1022,6 +1022,36 @@ profile, so every dependent view refetches with the new exclusion applied.
 **Test ids**: ``hidden-monitors-list``, ``hidden-monitors-count``,
 ``hidden-monitor-row-<id>``, ``hidden-monitor-toggle-<id>``.
 
+Forgetting deleted monitors
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**Location**: ``src/hooks/useReconcileDeletedMonitors.ts``,
+``src/lib/monitor/prune-deleted-monitors.ts``
+
+Monitor ids are persisted in four places: ``excludedMonitorIds``, each montage
+group's ``hiddenMonitorIds`` and ``workingLayout``, and dashboard widget
+settings. Deleting a monitor in ZoneMinder removes it from the API but from
+none of those, so it lingers as a ghost. A hidden monitor that no longer exists
+was the worst case: still counted in the hidden total, absent from the list
+that would let you un-hide it, and therefore permanently stuck.
+
+``AppLayout`` mounts ``useReconcileDeletedMonitors`` once. It reads the same
+``monitorsAllIncludingExcluded`` query the section above uses, so it adds no
+second fetch, and drops any stored id the response does not contain.
+
+Two things about it are deliberate and easy to get wrong when editing it:
+
+- It must read the list that **includes** excluded monitors. The ordinary
+  monitors query has already removed the hidden ones, and reconciling the
+  hidden list against a list built by removing it would delete every entry.
+- It prunes nothing unless the query succeeded and returned at least one
+  monitor. An empty or failed response looks exactly like "every monitor was
+  deleted", and acting on it would destroy the user's configuration.
+
+Named montage ``savedLayouts`` are left alone. They are arrangements the user
+saved and may reload later; an entry for a monitor that is gone renders
+nothing, which is a better trade than editing saved work.
+
 Whole-app surfaces
 ------------------
 
