@@ -22,6 +22,12 @@ Tap **Edit Layout** to rearrange the grid:
 - **Fill Width**: stretch all cells to use the full grid width
 - **Pin**: pin a cell to prevent it from being moved accidentally
 - **Save Layout**: save the current arrangement under a name so you can reload it later
+- **Scroll**: show a pad of scroll buttons on the right edge of the screen
+
+In edit mode a drag anywhere on a cell moves that cell, so on a touch screen
+there is nothing left to swipe when the cells fill the display. The **Scroll**
+button turns on a pad with four buttons: jump to the top, up one screen, down
+one screen, and jump to the bottom. Tap **Scroll** again to hide it.
 
 Tap **Done** to leave edit mode.
 

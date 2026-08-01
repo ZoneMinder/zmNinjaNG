@@ -14,14 +14,14 @@ import { useBandwidthSettings } from '../hooks/useBandwidthSettings';
 import { useMonitorNewEvents } from '../hooks/useMonitorNewEvents';
 import { useAuthStore } from '../stores/auth';
 import { useSettingsStore } from '../stores/settings';
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTvKeyHandler } from '../hooks/useTvKeyHandler';
 import { useTvMode } from '../hooks/useTvMode';
 import { Button } from '../components/ui/button';
 import { MontageMonitor } from '../components/monitors/MontageMonitor';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { Video, Maximize, Pencil, ArrowLeftRight } from 'lucide-react';
+import { Video, Maximize, Pencil, ArrowLeftRight, MoveVertical } from 'lucide-react';
 import { RefreshButton } from '../components/common/RefreshButton';
 import { ErrorBanner } from '../components/ui/query-state';
 import { resolveQueryError } from '../lib/query/query-error';
@@ -47,6 +47,7 @@ import {
   FullscreenControls,
   MontageKebabMenu,
   MontageTileErrorBoundary,
+  MontageScrollPad,
   useMontageGrid,
   useContainerResize,
 } from '../components/montage';
@@ -117,6 +118,9 @@ export default function Montage() {
   // Edit mode state lifted to page level
   const [isEditMode, setIsEditMode] = useState(false);
 
+  // Edit-mode scroll pad, off until the user asks for it (refs #321)
+  const [showScrollPad, setShowScrollPad] = useState(false);
+
   // Active saved layout name (persisted in settings)
   const activeLayoutName = bucket.activeLayoutName;
 
@@ -162,6 +166,18 @@ export default function Montage() {
     onWidthChange: handleWidthChange,
     currentWidthRef,
   });
+
+  // The same element also scrolls, and the scroll pad needs to reach it.
+  // Composed in a stable callback so the resize observer is not torn down and
+  // re-attached on every render.
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const setScrollContainer = useCallback(
+    (element: HTMLDivElement | null) => {
+      scrollContainerRef.current = element;
+      containerRef(element);
+    },
+    [containerRef]
+  );
 
   // TV mode D-pad grid navigation
   const { isTvMode } = useTvMode();
@@ -391,6 +407,21 @@ export default function Montage() {
                   <span className="hidden sm:inline">{t('montage.fill_width', 'Fill')}</span>
                 </Button>
               )}
+              {isEditMode && (
+                <Button
+                  onClick={() => setShowScrollPad((prev) => !prev)}
+                  variant={showScrollPad ? 'default' : 'outline'}
+                  size="sm"
+                  className="h-8 sm:h-9"
+                  title={t('montage.scroll_pad')}
+                  aria-label={t('montage.scroll_pad')}
+                  aria-pressed={showScrollPad}
+                  data-testid="montage-scroll-pad-toggle"
+                >
+                  <MoveVertical className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">{t('montage.scroll_pad')}</span>
+                </Button>
+              )}
               <Button
                 onClick={() => handleToggleFullscreen(true)}
                 variant="default"
@@ -425,7 +456,7 @@ export default function Montage() {
 
       {/* Grid Content */}
       <div
-        ref={containerRef}
+        ref={setScrollContainer}
         {...pinchZoom.bind()}
         className={cn(
           'flex-1 overflow-auto bg-muted/10',
@@ -502,6 +533,10 @@ export default function Montage() {
           </div>
         </div>
       </div>
+
+      {isEditMode && !isFullscreen && showScrollPad && (
+        <MontageScrollPad targetRef={scrollContainerRef} />
+      )}
     </div>
   );
 }

@@ -83,6 +83,23 @@ Feature: Montage Live Grid
     Then the montage layout should show 2 columns for group A
 
   @web
+  Scenario: The edit-mode scroll pad scrolls the grid without reordering monitors
+    Then I should see at least 1 monitor in montage grid
+    When I set the montage column count to 1
+    And I enter montage edit mode
+    Then the montage scroll pad should be hidden
+    When I toggle the montage scroll pad
+    Then the montage scroll pad should be visible
+    When I record the montage grid scroll position and tile order
+    And I tap the montage scroll pad down button
+    Then the montage grid should have scrolled down
+    And the montage tile order should be unchanged
+    When I tap the montage scroll pad top button
+    Then the montage grid should be scrolled to the top
+    When I toggle the montage scroll pad
+    Then the montage scroll pad should be hidden
+
+  @web
   Scenario: Montage tile shows the new-events badge and opens filtered events
     Then I should see at least 1 monitor in montage grid
     When I seed old watermarks for montage monitors with events
