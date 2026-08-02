@@ -40,13 +40,13 @@
 - Test: `app/src/lib/security/__tests__/ssl-trust.test.ts` (exists — extend)
 
 **Interfaces:**
-- Consumes: `Profile` (`api/types.ts:590`), `getProfileSettings` (settings store), fields `trustSelfSignedCerts` / `trustedCertFingerprint` (`stores/settings.ts:179`).
+- Consumes: `Profile` (`api/types.ts:590`), `getProfileSettings` (settings store), fields `allowSelfSignedCerts` / `trustedCertFingerprint` (`stores/settings.ts:179`).
 - Produces (later tasks and Phase 1 rely on these exact names):
   - `SSLTrustPlugin.setTrustedFingerprints(options: { entries: Array<{ host: string; fingerprint: string }> }): Promise<void>` — replaces `setTrustedFingerprint`, which is DELETED (no dual API).
   - `applyTrustedCertificates(): Promise<void>` in `lib/security/ssl-trust.ts` — computes the union over ALL profiles and applies it (native: enable + entries; Electron: boolean; web: no-op).
   - `collectTrustEntries(profiles: Profile[], getSettings: (id: ProfileId) => ProfileSettings): { enabled: boolean; entries: Array<{ host: string; fingerprint: string }> }` — pure, exported for tests.
 
-**Semantics of `collectTrustEntries`:** for each profile whose settings have `trustSelfSignedCerts` enabled and a non-null `trustedCertFingerprint`, emit one entry per distinct hostname among that profile's `portalUrl`, `apiUrl`, `cgiUrl`, `go2rtcUrl` (skip unparseable/empty URLs — today's single fingerprint applies to all of a profile's hosts, so this preserves per-profile semantics). `enabled` is true when ANY profile has `trustSelfSignedCerts` on. Duplicate host from two profiles: last write wins, log a WARN via `log.sslTrust` (two ZM servers behind one host is a misconfiguration).
+**Semantics of `collectTrustEntries`:** for each profile whose settings have `allowSelfSignedCerts` enabled and a non-null `trustedCertFingerprint`, emit one entry per distinct hostname among that profile's `portalUrl`, `apiUrl`, `cgiUrl`, `go2rtcUrl` (skip unparseable/empty URLs — today's single fingerprint applies to all of a profile's hosts, so this preserves per-profile semantics). `enabled` is true when ANY profile has `allowSelfSignedCerts` on. Duplicate host from two profiles: last write wins, log a WARN via `log.sslTrust` (two ZM servers behind one host is a misconfiguration).
 
 - [ ] **Step 1: Write the failing test** (extend `ssl-trust.test.ts`)
 
@@ -66,7 +66,7 @@ describe('collectTrustEntries', () => {
       profile('b', { portalUrl: 'https://cam-b.local:8443', apiUrl: 'https://api-b.local/zm/api', cgiUrl: 'https://cam-b.local:8443/cgi-bin' }),
     ];
     const settings = (id: ProfileId) => ({
-      trustSelfSignedCerts: true,
+      allowSelfSignedCerts: true,
       trustedCertFingerprint: id === asProfileId('a') ? 'AA:11' : 'BB:22',
     }) as ProfileSettings;
     const { enabled, entries } = collectTrustEntries(profiles, settings);
@@ -78,7 +78,7 @@ describe('collectTrustEntries', () => {
   });
   it('excludes profiles with trust off or no stored fingerprint, disabled when none trust', () => {
     const profiles = [profile('a', { portalUrl: 'https://cam-a.local' })];
-    const off = () => ({ trustSelfSignedCerts: false, trustedCertFingerprint: 'AA:11' }) as ProfileSettings;
+    const off = () => ({ allowSelfSignedCerts: false, trustedCertFingerprint: 'AA:11' }) as ProfileSettings;
     expect(collectTrustEntries(profiles, off)).toEqual({ enabled: false, entries: [] });
   });
 });
@@ -89,7 +89,7 @@ describe('collectTrustEntries', () => {
   - `definitions.ts`: replace `setTrustedFingerprint(options: { fingerprint: string | null })` with `setTrustedFingerprints(options: { entries: Array<{ host: string; fingerprint: string }> })`. Keep `CertInfo`, `enable/disable/isEnabled/getServerCertFingerprint` unchanged.
   - `web.ts`: no-op `setTrustedFingerprints`.
   - `tests/setup.ts`: update the SSLTrust mock method name/signature.
-  - `ssl-trust.ts`: implement `collectTrustEntries` (pure; hostname via `new URL(u).hostname` in try/catch); implement `applyTrustedCertificates()` which reads all profiles from the profile store state and their settings, calls `collectTrustEntries`, then per platform: native → `SSLTrust.enable()/disable()` + `setTrustedFingerprints({ entries })`; Electron → `window.electronSsl.setTrustSelfSigned(enabled)`; web → no-op. Delete the old `applySSLTrustSetting(enabled, fingerprint)` and `setTrustedFingerprint` helper; migrate its 6 callers (`components/settings/AdvancedSection.tsx`, `components/layout/AppLayout.tsx`, `hooks/useCertTrustPrompt.ts`, `pages/ProfileForm.tsx`, `pages/Profiles.tsx`, `services/profile-bootstrap.ts`) to call `applyTrustedCertificates()` — they no longer pass per-profile args; the union recomputes from state. (`ssl-trust.ts` is in `lib/`, not `services/`, so reading stores directly is allowed, matching `useCertTrustPrompt`'s existing pattern.)
+  - `ssl-trust.ts`: implement `collectTrustEntries` (pure; hostname via `new URL(u).hostname` in try/catch); implement `applyTrustedCertificates()` which reads all profiles from the profile store state and their settings, calls `collectTrustEntries`, then per platform: native → `SSLTrust.enable()/disable()` + `setTrustedFingerprints({ entries })`; Electron → `window.electronSsl.setTrustSelfSigned(enabled)`; web → no-op. Delete the old `applySSLTrustSetting(enabled, fingerprint)` and `setTrustedFingerprint` helper; migrate its 6 callers (`components/settings/AdvancedSection.tsx`, `components/layout/AppLayout.tsx`, `hooks/useCertTrustPrompt.ts`, `pages/ProfileForm.tsx`, `pages/Profiles.tsx`, `services/profile-bootstrap.ts`) to call `applyTrustedCertificates()` — the union recomputes from state. EXCEPTION (review ruling, fix round 1): pre-save flows (`ProfileForm.tsx` test-connection/TOFU-accept, `Profiles.tsx` edit test) pass a candidate override — `applyTrustedCertificates(candidate?: { urls: string[]; fingerprint: string | null; enabled: boolean })` — because the draft profile is not yet in the store; a null-fingerprint candidate with `enabled` contributes TOFU accept-any for its hosts, and both pages re-apply with no args after the save commits. (`ssl-trust.ts` is in `lib/`, not `services/`, so reading stores directly is allowed, matching `useCertTrustPrompt`'s existing pattern.)
 - [ ] **Step 4: Run tests** — `npx vitest run src/lib/security/ src/tests/` → PASS; `npm run build` → clean.
 - [ ] **Step 5: Commit** — `git commit -m "feat: multi-host TLS trust entries in JS layer (refs #<issue>)"`
 
