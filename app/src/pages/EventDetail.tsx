@@ -9,6 +9,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../lib/query/query-keys';
 import { getEvent, getEventVideoUrl, getEventImageUrl, setEventArchived } from '../api/events';
+import { eventHasAlarmFrame } from '../lib/event/thumbnail-chain';
 import { resolveFallbackFids } from '../lib/event/thumbnail-chain';
 import { resolveBackNavigation } from '../lib/back-navigation';
 import { getMonitor } from '../api/monitors';
@@ -626,7 +627,7 @@ export default function EventDetail() {
               apiUrl={currentProfile.apiUrl}
               minStreamingPort={effectiveMinStreamingPort}
               monitorId={event.Event.MonitorId}
-              hasAlarmFrame={!!event.Event.AlarmFrameId}
+              hasAlarmFrame={eventHasAlarmFrame(event.Event)}
               onViewerOpenChange={handleFrameViewerOpenChange}
             />
           )}

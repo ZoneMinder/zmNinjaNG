@@ -101,6 +101,9 @@ function ScrubberThumbnail({
     token: isAccessTokenFresh ? accessToken ?? undefined : undefined,
     minStreamingPort: resolveMinStreamingPort(currentProfile?.minStreamingPort, settings.forceDisableMultiPort),
     monitorId: event.monitorId,
+    // A timeline row carries the ratio rather than the raw count, but zero
+    // still means no alarm frame to ask for (refs #331).
+    hasAlarmFrame: event.alarmRatio > 0,
   });
 
   const button = (

@@ -16,7 +16,7 @@ import { useMonitorSeenStore } from '../../stores/monitorSeen';
 import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
 import { resolveMinStreamingPort } from '../../lib/monitor/multiport';
 import { getPortalUrlForEvent } from '../../lib/zm/server-resolver';
-import { buildThumbnailChain } from '../../lib/event/thumbnail-chain';
+import { buildThumbnailChain, eventHasAlarmFrame } from '../../lib/event/thumbnail-chain';
 import {
   calculateThumbnailDimensions,
   getMonitorDimensions,
@@ -70,6 +70,7 @@ export function MonitorRecentEvents({ monitor }: MonitorRecentEventsProps) {
       height: th,
       minStreamingPort,
       monitorId: ev.MonitorId,
+      hasAlarmFrame: eventHasAlarmFrame(ev),
     });
     return { urls, aspectRatio: tw / th };
   };

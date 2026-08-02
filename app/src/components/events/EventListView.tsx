@@ -11,7 +11,7 @@ import { Button } from '../ui/button';
 import { EventCard } from './EventCard';
 import { type EventFilters } from '../../api/events';
 import { getPortalUrlForMonitor, getServerMapVersion, subscribeServerMap } from '../../lib/zm/server-resolver';
-import { buildThumbnailChain } from '../../lib/event/thumbnail-chain';
+import { buildThumbnailChain, eventHasAlarmFrame } from '../../lib/event/thumbnail-chain';
 import { calculateThumbnailDimensions, EVENT_GRID_CONSTANTS, getMonitorDimensions } from '../../lib/event/event-utils';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import type { EventData, Monitor, Tag } from '../../api/types';
@@ -80,6 +80,7 @@ const EventItem = memo(function EventItem({
     height: thumbnailHeight,
     minStreamingPort,
     monitorId: Event.MonitorId,
+    hasAlarmFrame: eventHasAlarmFrame(Event),
   });
 
   // Full-size image chain used by the desktop hover preview. No width/height
@@ -88,6 +89,7 @@ const EventItem = memo(function EventItem({
     token: accessToken,
     minStreamingPort,
     monitorId: Event.MonitorId,
+    hasAlarmFrame: eventHasAlarmFrame(Event),
   });
 
   const monitorName = monitorData?.Name || `Camera ${Event.MonitorId}`;

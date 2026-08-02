@@ -15,12 +15,12 @@
  */
 import type { Event, MonitorData } from '../../api/types';
 import { getPortalUrlForEvent } from '../zm/server-resolver';
-import { buildThumbnailChain } from '../event/thumbnail-chain';
+import { buildThumbnailChain, eventHasAlarmFrame } from '../event/thumbnail-chain';
 import { parseDetectedObjects } from '../event/event-detection';
 import { formatAppDateTimeShort } from '../format-date-time';
 import type { DisplayEntity, ToolContext } from './types';
 
-type EventLike = Pick<Event, 'Id' | 'MonitorId' | 'StartDateTime' | 'Notes' | 'Cause'>;
+type EventLike = Pick<Event, 'Id' | 'MonitorId' | 'StartDateTime' | 'Notes' | 'Cause' | 'AlarmFrames'>;
 
 /** Builds one event result card. `monitorName` is already resolved by the
  *  caller (list_events/get_event both build a monitor id -> name map for the
@@ -44,6 +44,7 @@ export function buildEventDisplayEntity(
       token: ctx.accessToken ?? undefined,
       minStreamingPort: ctx.minStreamingPort,
       monitorId: e.MonitorId,
+      hasAlarmFrame: eventHasAlarmFrame(e),
     });
   }
 

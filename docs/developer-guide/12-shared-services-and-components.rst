@@ -1679,6 +1679,19 @@ a chain that already resolved.
 ``thumbnailFallbackChain`` setting into ordered frame IDs and full URLs,
 skipping disabled entries and empty custom rows.
 
+Walking the chain costs a real failed request per candidate, which is why
+callers that hold an event record pass ``hasAlarmFrame`` (refs #331). The
+default chain starts at ``alarm``, and ZoneMinder answers 404 for an alarm
+frame it never recorded, so a list of such events spends one 404 each before
+falling through to ``snapshot``. A reverse proxy reads that as an attack; one
+reporter's proxy banned them for it. ``eventHasAlarmFrame`` answers from
+``AlarmFrames``, a required field on ``EventSchema`` that every list response
+already carries, so the check costs no request of its own. Branch on that count
+rather than ``AlarmFrameId``, which is optional on the schema and absent from
+some servers' list responses, and would drop the alarm frame of events that
+have one. Omitting the option keeps the alarm candidate, which is what callers
+with no event record to consult, such as push notifications, want.
+
 **Used by:** EventCard (via EventListView and EventMontageView), the
 TimelineScrubber thumbnails, NotificationHistory. The EventDetail hero poster
 and EventPreviewPopover take the first frame ID from the resolved chain rather
