@@ -58,7 +58,7 @@ export function useTimelineData({
   // Fetch monitors
   const { data: monitorsData } = useQuery({
     queryKey: queryKeys.monitors(currentProfileId),
-    queryFn: () => getMonitors(getCurrentSession().client),
+    queryFn: () => getMonitors(getCurrentSession().client, getCurrentSession().profileId),
   });
 
   // Get enabled monitors
@@ -96,7 +96,7 @@ export function useTimelineData({
           monitorsToQuery,
           TIMELINE.fanoutConcurrency,
           (id) =>
-            getEvents(getCurrentSession().client, {
+            getEvents(getCurrentSession().client, getCurrentSession().profileId, {
               startDateTime,
               endDateTime,
               monitorId: id,
@@ -115,7 +115,7 @@ export function useTimelineData({
         return { events, pagination: base ? { ...base, count } : undefined };
       }
 
-      return getEvents(getCurrentSession().client, {
+      return getEvents(getCurrentSession().client, getCurrentSession().profileId, {
         startDateTime,
         endDateTime,
         monitorId: monitorFilter,

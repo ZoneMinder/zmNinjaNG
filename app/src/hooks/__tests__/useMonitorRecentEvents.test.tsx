@@ -6,7 +6,7 @@ import { useMonitorRecentEvents } from '../useMonitorRecentEvents';
 import { getEvents } from '../../api/events';
 
 vi.mock('../../api/events', () => ({ getEvents: vi.fn() }));
-vi.mock('../../services/sessions', () => ({ getCurrentSession: vi.fn(() => ({ client: {} })) }));
+vi.mock('../../services/sessions', () => ({ getCurrentSession: vi.fn(() => ({ client: {}, profileId: 'p1' })) }));
 
 const updateProfileSettings = vi.fn();
 let hiddenList: string[] = [];
@@ -47,7 +47,7 @@ describe('useMonitorRecentEvents', () => {
     });
     const { result } = renderHook(() => useMonitorRecentEvents('4'), { wrapper });
     await waitFor(() => expect(result.current.events.length).toBe(2));
-    expect(getEvents).toHaveBeenCalledWith(expect.anything(), {
+    expect(getEvents).toHaveBeenCalledWith(expect.anything(), expect.anything(), {
       monitorId: '4', limit: 5, sort: 'StartDateTime', direction: 'desc',
     });
   });

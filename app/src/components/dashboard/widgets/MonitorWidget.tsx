@@ -115,7 +115,7 @@ export const MonitorWidget = memo(function MonitorWidget({ monitorIds, objectFit
     // Fetch all monitors to check which ones are deleted
     const { data: monitorsData } = useQuery({
         queryKey: queryKeys.monitors(currentProfile?.id),
-        queryFn: () => getMonitors(getCurrentSession().client),
+        queryFn: () => getMonitors(getCurrentSession().client, getCurrentSession().profileId),
     });
 
     // Filter out deleted monitors

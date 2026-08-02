@@ -44,7 +44,7 @@ export function HiddenMonitorsSection({
   // filtered ['monitors', ...] cache the rest of the app relies on.
   const { data, isLoading, error } = useQuery({
     queryKey: queryKeys.monitorsAllIncludingExcluded(currentProfile?.id),
-    queryFn: () => getMonitors(getCurrentSession().client, { includeExcluded: true }),
+    queryFn: () => getMonitors(getCurrentSession().client, getCurrentSession().profileId, { includeExcluded: true }),
     enabled: !!currentProfile && isAuthenticated,
   });
 

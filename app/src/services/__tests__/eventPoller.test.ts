@@ -233,6 +233,7 @@ describe('EventPollerService', () => {
 
     expect(mockGetEvents).toHaveBeenCalledWith(
       expect.anything(),
+      expect.anything(),
       expect.objectContaining({
         notesRegexp: 'detected:',
       }),

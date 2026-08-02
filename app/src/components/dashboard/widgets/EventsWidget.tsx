@@ -57,7 +57,7 @@ export const EventsWidget = memo(function EventsWidget({
     const monitorIdFilter = monitorIds?.length ? monitorIds.join(',') : undefined;
     const { data: eventsData, isLoading } = useQuery({
         queryKey: queryKeys.eventsWidget(currentProfile?.id, monitorIdFilter, limit, onlyDetectedObjects),
-        queryFn: () => getEvents(getCurrentSession().client, {
+        queryFn: () => getEvents(getCurrentSession().client, getCurrentSession().profileId, {
             monitorId: monitorIdFilter,
             limit,
             sort: 'StartTime',

@@ -44,7 +44,7 @@ export function useMonitorNavigation({
   // Fetch all monitors for navigation
   const { data: monitorsData } = useQuery({
     queryKey: queryKeys.monitors(currentProfile?.id),
-    queryFn: () => getMonitors(getCurrentSession().client),
+    queryFn: () => getMonitors(getCurrentSession().client, getCurrentSession().profileId),
   });
 
   // Get enabled monitors list and find current monitor index

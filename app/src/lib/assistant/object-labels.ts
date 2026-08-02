@@ -50,7 +50,7 @@ export async function getObjectLabels(profileId: string): Promise<string[]> {
   if (hit && Date.now() - hit.at < ASSISTANT.objectLabelCacheMs) return hit.labels;
 
   try {
-    const res = await getEvents(getSession(asProfileId(profileId)).client, {
+    const res = await getEvents(getSession(asProfileId(profileId)).client, asProfileId(profileId), {
       limit: ASSISTANT.objectLabelSampleSize,
       sort: 'StartDateTime',
       direction: 'desc',

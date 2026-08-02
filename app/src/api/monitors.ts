@@ -6,7 +6,7 @@
  */
 
 import type { ApiClient } from './client';
-import type { MonitorsResponse, MonitorData, ControlData, AlarmStatusResponse, DaemonStatusResponse } from './types';
+import type { MonitorsResponse, MonitorData, ControlData, AlarmStatusResponse, DaemonStatusResponse, ProfileId } from './types';
 import { MonitorsResponseSchema, MonitorDataSchema, ControlDataSchema, AlarmStatusResponseSchema, DaemonStatusResponseSchema } from './types';
 import { validateApiResponse } from '../lib/zm/api-validator';
 import {
@@ -23,6 +23,7 @@ import { getExcludedMonitorIds } from '../lib/profile/profile-settings';
  *
  * Fetches the list of all monitors from /monitors.json.
  *
+ * @param profileId - The profile whose exclusion list filters the result.
  * @param options.includeExcluded - When true, skip the per-profile exclusion
  *   filter so callers (e.g. the exclusion Settings UI) can still list excluded
  *   monitors. Deleted monitors are always dropped.
@@ -30,6 +31,7 @@ import { getExcludedMonitorIds } from '../lib/profile/profile-settings';
  */
 export async function getMonitors(
   client: ApiClient,
+  profileId: ProfileId,
   options?: { includeExcluded?: boolean }
 ): Promise<MonitorsResponse> {
   const response = await client.get<MonitorsResponse>('/monitors.json', {
@@ -49,7 +51,7 @@ export async function getMonitors(
 
   // Drop per-profile excluded monitors unless the caller opts out
   if (!options?.includeExcluded) {
-    validated.monitors = filterExcludedMonitors(validated.monitors, getExcludedMonitorIds());
+    validated.monitors = filterExcludedMonitors(validated.monitors, getExcludedMonitorIds(profileId));
   }
 
   return validated;

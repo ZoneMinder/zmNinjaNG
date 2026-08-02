@@ -125,7 +125,7 @@ export default function Events() {
   // Fetch monitors for display in filter UI
   const { data: monitorsData } = useQuery({
     queryKey: queryKeys.monitors(currentProfile?.id),
-    queryFn: () => getMonitors(getCurrentSession().client),
+    queryFn: () => getMonitors(getCurrentSession().client, getCurrentSession().profileId),
     enabled: !!currentProfile && isAuthenticated,
   });
 
@@ -209,7 +209,7 @@ export default function Events() {
   const { data: eventsData, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: queryKeys.eventsList(currentProfile?.id, filters, eventLimit, effectiveMonitorId, isGroupFilterActive, eventIdFilter, tagIdFilter),
     queryFn: () =>
-      getEvents(getCurrentSession().client, {
+      getEvents(getCurrentSession().client, getCurrentSession().profileId, {
         ...filters,
         // Use effective monitor ID (user filter or group filter)
         monitorId: effectiveMonitorId,

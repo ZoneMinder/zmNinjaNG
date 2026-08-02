@@ -61,7 +61,7 @@ export function CommandPalette() {
 
   const { data: monitorsData } = useQuery({
     queryKey: queryKeys.monitors(currentProfile?.id),
-    queryFn: () => getMonitors(getCurrentSession().client),
+    queryFn: () => getMonitors(getCurrentSession().client, getCurrentSession().profileId),
     enabled: !!currentProfile && isAuthenticated,
   });
 
@@ -79,12 +79,12 @@ export function CommandPalette() {
       label: g.Group.Name,
       groupId: g.Group.Id,
     }));
-    const excluded = getExcludedMonitorIdSet();
+    const excluded = currentProfile ? getExcludedMonitorIdSet(currentProfile.id) : new Set<string>();
     const monitorItems: CommandItem[] = (monitorsData?.monitors || [])
       .filter((m) => !excluded.has(m.Monitor.Id))
       .map((m) => ({ kind: 'monitor', id: `m-${m.Monitor.Id}`, label: m.Monitor.Name, monitorId: m.Monitor.Id }));
     return [...pages, ...groupItems, ...monitorItems];
-  }, [t, groups, monitorsData]);
+  }, [t, groups, monitorsData, currentProfile]);
 
   const results = useMemo(() => filterCommandItems(items, query), [items, query]);
 

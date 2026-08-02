@@ -15,11 +15,13 @@ import {
 import { validateApiResponse } from '../../lib/zm/api-validator';
 import { getMonitorStreamUrl } from '../../lib/zm/url-builder';
 import { getExcludedMonitorIds } from '../../lib/profile/profile-settings';
+import { asProfileId } from '../types';
 import type { ApiClient } from '../client';
 
 const mockGet = vi.fn();
 const mockPost = vi.fn();
 const mockClient = { get: mockGet, postForm: mockPost } as unknown as ApiClient;
+const pid = asProfileId('p1');
 
 vi.mock('../../lib/zm/api-validator', () => ({
   validateApiResponse: vi.fn((_, data) => data),
@@ -49,7 +51,7 @@ describe('Monitors API', () => {
   it('fetches monitors list', async () => {
     mockGet.mockResolvedValue({ data: { monitors: [{ Monitor: { Id: '1' } }] } });
 
-    const response = await getMonitors(mockClient);
+    const response = await getMonitors(mockClient, pid);
 
     expect(mockGet).toHaveBeenCalledWith('/monitors.json', expect.objectContaining({ intent: expect.any(String) }));
     expect(response.monitors).toHaveLength(1);
@@ -67,7 +69,7 @@ describe('Monitors API', () => {
       },
     });
 
-    const response = await getMonitors(mockClient);
+    const response = await getMonitors(mockClient, pid);
 
     expect(response.monitors.map((m) => m.Monitor.Id)).toEqual(['1', '3']);
   });
@@ -84,7 +86,7 @@ describe('Monitors API', () => {
       },
     });
 
-    const response = await getMonitors(mockClient, { includeExcluded: true });
+    const response = await getMonitors(mockClient, pid, { includeExcluded: true });
 
     expect(response.monitors.map((m) => m.Monitor.Id)).toEqual(['1', '2', '3']);
   });
@@ -100,7 +102,7 @@ describe('Monitors API', () => {
       },
     });
 
-    const response = await getMonitors(mockClient, { includeExcluded: true });
+    const response = await getMonitors(mockClient, pid, { includeExcluded: true });
 
     expect(response.monitors.map((m) => m.Monitor.Id)).toEqual(['1']);
   });

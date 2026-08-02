@@ -74,7 +74,7 @@ export const HeatmapWidget = memo(function HeatmapWidget({ title }: HeatmapWidge
   const { data: eventsData, isLoading, error } = useQuery({
     queryKey: queryKeys.eventsHeatmap(currentProfile?.id, timeRange),
     queryFn: () =>
-      getEvents(getCurrentSession().client, {
+      getEvents(getCurrentSession().client, getCurrentSession().profileId, {
         startDateTime: formatForServer(startDate),
         endDateTime: formatForServer(endDate),
         limit: 1000,

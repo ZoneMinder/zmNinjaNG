@@ -15,7 +15,7 @@ import { getVersion } from '../../api/auth';
 import { getGroups } from '../../api/groups';
 import { getSession } from '../../services/sessions';
 import { getTags, getEventTags, extractUniqueTags } from '../../api/tags';
-import type { MonitorData } from '../../api/types';
+import type { MonitorData, ProfileId } from '../../api/types';
 import { ASSISTANT } from '../zmninja-ng-constants';
 import { log, LogLevel } from '../logger';
 import { buildResultSummary, countObjects } from './result-summary';
@@ -73,14 +73,14 @@ function mapMonitor(m: MonitorData): Record<string, unknown> {
  * an empty result set. `list_events` cannot take that shortcut, since a wrong
  * id there returns zero events and reads exactly like "nothing happened".
  */
-async function resolveMonitorArg(client: ApiClient, raw: unknown): Promise<string> {
+async function resolveMonitorArg(client: ApiClient, profileId: ProfileId, raw: unknown): Promise<string> {
   // A placeholder ("null"/"none") on a REQUIRED monitor arg is a missing value,
   // not a monitor to look up: fail with the clear "required" message rather
   // than "no monitor named null".
   if (isOmittedArg(raw)) throw new Error('monitorId is required');
   const ref = String(raw).trim();
   if (/^\d+$/.test(ref)) return ref;
-  const { monitors } = await getMonitors(client);
+  const { monitors } = await getMonitors(client, profileId);
   const resolution = resolveMonitorRef(ref, monitors);
   if ('error' in resolution) throw new Error(resolution.error);
   return resolution.id;
@@ -108,7 +108,7 @@ const listMonitorsTool: ToolDefinition = {
   schema: { type: 'object', properties: {}, additionalProperties: false },
   execute: (_input, ctx) =>
     safeExecute('list_monitors', async () => {
-      const { monitors } = await getMonitors(getSession(ctx.profileId).client);
+      const { monitors } = await getMonitors(getSession(ctx.profileId).client, ctx.profileId);
       return { output: JSON.stringify(monitors.map(mapMonitor)), display: monitors.map(buildMonitorDisplayEntity) };
     }),
 };
@@ -132,7 +132,7 @@ const getMonitorTool: ToolDefinition = {
   execute: (input, ctx) =>
     safeExecute('get_monitor', async () => {
       const client = getSession(ctx.profileId).client;
-      const monitorId = await resolveMonitorArg(client, input.monitorId);
+      const monitorId = await resolveMonitorArg(client, ctx.profileId, input.monitorId);
       const [monitor, alarm] = await Promise.all([getMonitor(client, monitorId), getAlarmStatus(client, monitorId)]);
       return {
         output: JSON.stringify({
@@ -184,7 +184,7 @@ const countEventsTool: ToolDefinition = {
       // singular unit is valid for any count ("2 week").
       const interval = `${Math.floor(count)} ${unit}`;
       const client = getSession(ctx.profileId).client;
-      const [counts, { monitors }] = await Promise.all([getConsoleEvents(client, interval), getMonitors(client)]);
+      const [counts, { monitors }] = await Promise.all([getConsoleEvents(client, interval), getMonitors(client, ctx.profileId)]);
       const nameById = new Map(monitors.map((m) => [m.Monitor.Id, m.Monitor.Name]));
       const rows = counts
         .filter((c) => nameById.has(c.monitorId))
@@ -328,7 +328,7 @@ const listEventsTool: ToolDefinition = {
       // events query cannot be built until the model's `monitorId` (often a
       // NAME) resolves to a real id. The extra round trip buys the difference
       // between "no events" and "no such query" (see monitor-ref.ts).
-      const { monitors } = await getMonitors(getSession(ctx.profileId).client);
+      const { monitors } = await getMonitors(getSession(ctx.profileId).client, ctx.profileId);
       let monitorId: string | undefined;
       // isOmittedArg, not just an empty check: the model sends the string
       // "null"/"all" to mean "every monitor", which must not be resolved as a
@@ -423,7 +423,7 @@ const listEventsTool: ToolDefinition = {
         sort: 'StartDateTime',
         direction: 'desc',
       };
-      const res = await getEvents(getSession(ctx.profileId).client, filters);
+      const res = await getEvents(getSession(ctx.profileId).client, ctx.profileId, filters);
 
       // A zero-row objectType query is ambiguous, and answering it as "nothing
       // happened" is the dangerous reading: the label may simply not be the one
@@ -435,7 +435,7 @@ const listEventsTool: ToolDefinition = {
       // objectType "people" against events labelled "person", got nothing, and
       // told the user nobody had come (refs #246).
       if (objectType && res.events.length === 0) {
-        const probe = await getEvents(getSession(ctx.profileId).client, { ...filters, notesRegexp: undefined });
+        const probe = await getEvents(getSession(ctx.profileId).client, ctx.profileId, { ...filters, notesRegexp: undefined });
         // Sampled from one page of the window, not the whole window: enough to
         // name the labels in use, and it costs one request only on this path.
         const available = [...new Set(probe.events.flatMap(({ Event: e }) => parseDetectedObjects(e.Notes)))];
@@ -599,7 +599,7 @@ const getEventTool: ToolDefinition = {
       const eventId = String(input.eventId ?? '');
       if (!eventId) throw new Error('eventId is required');
       const client = getSession(ctx.profileId).client;
-      const [event, { monitors }] = await Promise.all([getEvent(client, eventId), getMonitors(client)]);
+      const [event, { monitors }] = await Promise.all([getEvent(client, eventId), getMonitors(client, ctx.profileId)]);
       const e = event.Event;
       const nameById = new Map(monitors.map((m) => [m.Monitor.Id, m.Monitor.Name]));
       const monitorName = nameById.get(e.MonitorId) ?? e.MonitorId;

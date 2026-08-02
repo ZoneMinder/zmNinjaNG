@@ -41,7 +41,7 @@ export function useReconcileDeletedMonitors(): void {
   // than adding a second full monitor fetch.
   const { data, isSuccess } = useQuery({
     queryKey: queryKeys.monitorsAllIncludingExcluded(profileId),
-    queryFn: () => getMonitors(getCurrentSession().client, { includeExcluded: true }),
+    queryFn: () => getMonitors(getCurrentSession().client, getCurrentSession().profileId, { includeExcluded: true }),
     enabled: !!profileId && isAuthenticated,
   });
 

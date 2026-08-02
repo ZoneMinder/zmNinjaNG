@@ -9,12 +9,14 @@ import {
 import { validateApiResponse } from '../../lib/zm/api-validator';
 import { getExcludedMonitorIds } from '../../lib/profile/profile-settings';
 import { API_PAGINATION } from '../../lib/zmninja-ng-constants';
+import { asProfileId } from '../types';
 import type { ApiClient } from '../client';
 
 const mockGet = vi.fn();
 const mockPut = vi.fn();
 const mockDelete = vi.fn();
 const mockClient = { get: mockGet, putForm: mockPut, delete: mockDelete } as unknown as ApiClient;
+const pid = asProfileId('p1');
 
 vi.mock('../../lib/zm/api-validator', () => ({
   validateApiResponse: vi.fn((_, data) => data),
@@ -115,7 +117,7 @@ describe('Events API', () => {
         },
       });
 
-    const response = await getEvents(mockClient, { limit: 3 });
+    const response = await getEvents(mockClient, pid, { limit: 3 });
 
     expect(mockGet).toHaveBeenCalledWith('/events/index.json', expect.objectContaining({ params: { page: 1, limit: 100 } }));
     expect(mockGet).toHaveBeenCalledWith('/events/index.json', expect.objectContaining({ params: { page: 2, limit: 100 } }));
@@ -140,7 +142,7 @@ describe('Events API', () => {
       },
     });
 
-    const response = await getEvents(mockClient, { limit: 10 });
+    const response = await getEvents(mockClient, pid, { limit: 10 });
 
     expect(response.events.map((e) => e.Event.Id)).toEqual(['1', '3']);
     expect(response.events.every((e) => e.Event.MonitorId !== '2')).toBe(true);
@@ -162,7 +164,7 @@ describe('Events API', () => {
       },
     });
 
-    await getEvents(mockClient, {
+    await getEvents(mockClient, pid, {
       monitorId: '1,2',
       startDateTime: '2024-01-01T00:00:00',
       endDateTime: '2024-01-02T00:00:00',
@@ -233,7 +235,7 @@ describe('Events API', () => {
       },
     });
 
-    await getEvents(mockClient, { notesRegexp: 'detected:' });
+    await getEvents(mockClient, pid, { notesRegexp: 'detected:' });
 
     const call = mockGet.mock.calls[0][0] as string;
     expect(call).toContain('Notes%20REGEXP%3Adetected%3A');
@@ -250,7 +252,7 @@ describe('Events API', () => {
       },
     });
 
-    await getEvents(mockClient, { cause: 'Continuous' });
+    await getEvents(mockClient, pid, { cause: 'Continuous' });
 
     const call = mockGet.mock.calls[0][0] as string;
     expect(call).toContain('Cause%20REGEXP%3AContinuous');
@@ -264,7 +266,7 @@ describe('Events API', () => {
       },
     });
 
-    await getEvents(mockClient, { archived: true, monitorId: '1' });
+    await getEvents(mockClient, pid, { archived: true, monitorId: '1' });
 
     const call = mockGet.mock.calls[0][0] as string;
     expect(call).toContain('Archived%3A1');
@@ -279,7 +281,7 @@ describe('Events API', () => {
       },
     });
 
-    await getEvents(mockClient, { archived: false });
+    await getEvents(mockClient, pid, { archived: false });
 
     const call = mockGet.mock.calls[0][0] as string;
     expect(call).not.toContain('Archived');
@@ -287,7 +289,7 @@ describe('Events API', () => {
 
   describe('eventIds (Id IN: filter)', () => {
     it('returns empty without any request when eventIds is empty', async () => {
-      const response = await getEvents(mockClient, { eventIds: [], limit: 100 });
+      const response = await getEvents(mockClient, pid, { eventIds: [], limit: 100 });
 
       expect(mockGet).not.toHaveBeenCalled();
       expect(response.events).toEqual([]);
@@ -306,7 +308,7 @@ describe('Events API', () => {
         },
       });
 
-      const response = await getEvents(mockClient, { eventIds: ['201134', '201150'], limit: 100 });
+      const response = await getEvents(mockClient, pid, { eventIds: ['201134', '201150'], limit: 100 });
 
       const call = mockGet.mock.calls[0][0] as string;
       expect(call).toContain('Id%20IN%3A201134%2C201150');
@@ -326,7 +328,7 @@ describe('Events API', () => {
         },
       });
 
-      await getEvents(mockClient, { eventIds: ['201134'], monitorId: '7', limit: 100 });
+      await getEvents(mockClient, pid, { eventIds: ['201134'], monitorId: '7', limit: 100 });
 
       const call = mockGet.mock.calls[0][0] as string;
       expect(call).toContain('MonitorId%3A7');
@@ -348,7 +350,7 @@ describe('Events API', () => {
         },
       });
 
-      const response = await getEvents(mockClient, { eventIds: ['1', '2', '3'], limit: 100, direction: 'desc' });
+      const response = await getEvents(mockClient, pid, { eventIds: ['1', '2', '3'], limit: 100, direction: 'desc' });
 
       expect(response.events.map((e) => e.Event.Id)).toEqual(['2', '3', '1']);
     });
@@ -377,7 +379,7 @@ describe('Events API', () => {
           },
         });
 
-      const response = await getEvents(mockClient, { eventIds: ids, limit: chunkSize + 1 });
+      const response = await getEvents(mockClient, pid, { eventIds: ids, limit: chunkSize + 1 });
 
       // Two chunks => two distinct id-filter requests
       expect(mockGet).toHaveBeenCalledTimes(2);
@@ -408,7 +410,7 @@ describe('Events API', () => {
           },
         });
 
-      const response = await getEvents(mockClient, { tagIds: ['1', '2'], limit: 100 });
+      const response = await getEvents(mockClient, pid, { tagIds: ['1', '2'], limit: 100 });
 
       // One request per tag.
       expect(mockGet).toHaveBeenCalledTimes(2);
@@ -430,7 +432,7 @@ describe('Events API', () => {
         },
       });
 
-      await getEvents(mockClient, { tagIds: ['1'], monitorId: '2', limit: 100 });
+      await getEvents(mockClient, pid, { tagIds: ['1'], monitorId: '2', limit: 100 });
 
       const call = mockGet.mock.calls[0][0] as string;
       expect(call).toContain('MonitorId%3A2');
@@ -448,7 +450,7 @@ describe('Events API', () => {
         },
       });
 
-      await getEvents(mockClient, { tagIds: [], limit: 100 });
+      await getEvents(mockClient, pid, { tagIds: [], limit: 100 });
 
       const call = mockGet.mock.calls[0][0] as string;
       expect(call).not.toContain('Tags.Id');
@@ -531,7 +533,7 @@ describe('Events API', () => {
       },
     });
 
-    await getEvents(mockClient, { limit: 1 });
+    await getEvents(mockClient, pid, { limit: 1 });
 
     expect(validateApiResponse).toHaveBeenCalled();
   });

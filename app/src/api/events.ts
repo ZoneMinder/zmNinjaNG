@@ -6,7 +6,7 @@
  */
 
 import type { ApiClient } from './client';
-import type { EventsResponse, EventData, EventFilters } from './types';
+import type { EventsResponse, EventData, EventFilters, ProfileId } from './types';
 import { EventsResponseSchema, EventResponseSchema } from './types';
 import { log, LogLevel } from '../lib/logger';
 import { validateApiResponse } from '../lib/zm/api-validator';
@@ -24,9 +24,9 @@ import { API_PAGINATION } from '../lib/zmninja-ng-constants';
 // closed a cycle (refs #281). Re-exported for the callers that expect it here.
 export type { EventFilters };
 
-/** Drop events belonging to per-profile excluded monitors. */
-function dropExcludedMonitorEvents(events: EventData[]): EventData[] {
-  const excludedIds = getExcludedMonitorIdSet();
+/** Drop events belonging to profileId's excluded monitors. */
+function dropExcludedMonitorEvents(events: EventData[], profileId: ProfileId): EventData[] {
+  const excludedIds = getExcludedMonitorIdSet(profileId);
   if (excludedIds.size === 0) return events;
   return events.filter(event => !excludedIds.has(event.Event.MonitorId));
 }
@@ -66,6 +66,7 @@ function buildEventsResponse(
  */
 async function fetchEventsByVariants(
   client: ApiClient,
+  profileId: ProfileId,
   baseSegments: string[],
   variantSegments: string[],
   filters: EventFilters
@@ -108,7 +109,7 @@ async function fetchEventsByVariants(
   const uniqueEvents = Array.from(
     new Map(collected.map(event => [event.Event.Id, event])).values()
   );
-  const visibleEvents = dropExcludedMonitorEvents(uniqueEvents);
+  const visibleEvents = dropExcludedMonitorEvents(uniqueEvents, profileId);
 
   // Order by StartDateTime (lexicographic on 'YYYY-MM-DD HH:MM:SS' is chronological).
   const sortDir = filters.direction === 'asc' ? 1 : -1;
@@ -129,10 +130,11 @@ async function fetchEventsByVariants(
  * Handles ZM API pagination logic internally.
  *
  * @param client - API client for the target profile
+ * @param profileId - The profile whose exclusion list filters the result
  * @param filters - Object containing filter criteria (monitor, date, etc.)
  * @returns Promise resolving to EventsResponse with list of events and pagination info
  */
-export async function getEvents(client: ApiClient, filters: EventFilters = {}): Promise<EventsResponse> {
+export async function getEvents(client: ApiClient, profileId: ProfileId, filters: EventFilters = {}): Promise<EventsResponse> {
   // Build filter path for ZM API
   const filterSegments: string[] = [];
   const addFilterSegment = (segment: string) => {
@@ -184,14 +186,14 @@ export async function getEvents(client: ApiClient, filters: EventFilters = {}): 
       const chunk = filters.eventIds.slice(i, i + API_PAGINATION.eventIdFilterChunkSize);
       variants.push(`Id IN:${chunk.join(',')}`);
     }
-    return fetchEventsByVariants(client, filterSegments, variants, filters);
+    return fetchEventsByVariants(client, profileId, filterSegments, variants, filters);
   }
 
   // Tags filter server-side via one "Tags.Id:" query per selected tag (ZM
   // rejects "Tags.Id IN:"), merged so it composes with pagination (refs #205).
   if (filters.tagIds && filters.tagIds.length > 0) {
     const variants = filters.tagIds.map(tagId => `Tags.Id:${tagId}`);
-    return fetchEventsByVariants(client, filterSegments, variants, filters);
+    return fetchEventsByVariants(client, profileId, filterSegments, variants, filters);
   }
 
   const filterPath = filterSegments.join('');
@@ -246,7 +248,7 @@ export async function getEvents(client: ApiClient, filters: EventFilters = {}): 
   );
 
   // Drop events belonging to per-profile excluded monitors at the API boundary
-  const visibleEvents = dropExcludedMonitorEvents(uniqueEvents);
+  const visibleEvents = dropExcludedMonitorEvents(uniqueEvents, profileId);
 
   // Warn if we hit the max pages limit
   if (currentPage > maxPages && allEvents.length < desiredLimit) {
@@ -319,6 +321,7 @@ export async function getMonitorEventsSince(
  */
 export async function getAdjacentEvent(
   client: ApiClient,
+  profileId: ProfileId,
   direction: 'next' | 'prev',
   currentStartDateTime: string,
   filters: EventFilters = {}
@@ -357,7 +360,7 @@ export async function getAdjacentEvent(
 
   // Fetch a small batch (not just 1) so we can skip over excluded monitors
   // and still land on the nearest visible adjacent event.
-  const excludedIds = getExcludedMonitorIdSet();
+  const excludedIds = getExcludedMonitorIdSet(profileId);
   const params: Record<string, string | number> = {
     page: 1,
     limit: excludedIds.size === 0 ? 1 : 25,

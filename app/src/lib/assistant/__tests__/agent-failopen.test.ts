@@ -77,6 +77,7 @@ describe('fail-open tool routing', () => {
     // the #265 recovery still works through one pushback.
     expect(vi.mocked(getEvents)).toHaveBeenCalledWith(
       expect.anything(),
+      expect.anything(),
       expect.objectContaining({ startDateTime: expect.any(String), endDateTime: expect.any(String) }),
     );
     expect(out[out.length - 1].text).toBe('No events in the last week.');

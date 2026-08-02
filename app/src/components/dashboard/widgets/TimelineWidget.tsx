@@ -85,7 +85,7 @@ export const TimelineWidget = memo(function TimelineWidget() {
 
     const { data: events } = useQuery({
         queryKey: queryKeys.eventsTimelineWidget(currentProfile?.id, start.getTime()),
-        queryFn: () => getEvents(getCurrentSession().client, {
+        queryFn: () => getEvents(getCurrentSession().client, getCurrentSession().profileId, {
             startDateTime: formatForServer(start),
             limit: 1000,
         }),

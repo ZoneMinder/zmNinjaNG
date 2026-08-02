@@ -64,7 +64,7 @@ export function KeyboardShortcuts() {
 
   const { data: monitorsData } = useQuery({
     queryKey: queryKeys.monitors(currentProfile?.id),
-    queryFn: () => getMonitors(getCurrentSession().client),
+    queryFn: () => getMonitors(getCurrentSession().client, getCurrentSession().profileId),
     enabled: !!currentProfile && isAuthenticated,
   });
 
@@ -74,9 +74,9 @@ export function KeyboardShortcuts() {
   // ignored so a number maps to the same monitor regardless of the active group.
   const monitors = useMemo(() => {
     const all = monitorsData?.monitors || [];
-    const excluded = getExcludedMonitorIdSet();
+    const excluded = currentProfile ? getExcludedMonitorIdSet(currentProfile.id) : new Set<string>();
     return excluded.size ? all.filter((m) => !excluded.has(m.Monitor.Id)) : all;
-  }, [monitorsData]);
+  }, [monitorsData, currentProfile]);
 
   const clearBuffer = useCallback(() => {
     bufferRef.current = '';
