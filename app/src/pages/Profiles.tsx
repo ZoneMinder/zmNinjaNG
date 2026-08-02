@@ -39,7 +39,6 @@ import { Badge } from '../components/ui/badge';
 import type { Profile } from '../api/types';
 import { useToast } from '../hooks/use-toast';
 import { toast as sonnerToast } from 'sonner';
-import { setApiClient } from '../api/client';
 import { discoverUrls } from '../services/discovery';
 import { useTranslation } from 'react-i18next';
 import { NotificationBadge } from '../components/NotificationBadge';
@@ -159,9 +158,6 @@ export default function Profiles() {
         const discovered = await discoverUrls(portalUrl, {
           profileId: selectedProfile.id,
           credentials,
-          onClientCreated: (client) => {
-            setApiClient(client);
-          },
         });
         apiUrl = discovered.apiUrl;
         cgiUrl = discovered.cgiUrl;

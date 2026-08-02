@@ -13,7 +13,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../components/ui/card';
 import { useProfileStore } from '../stores/profile';
-import { setApiClient, type ApiClient } from '../api/client';
+import type { ApiClient } from '../api/client';
 import { createStoreApiClient } from '../api/store-gates';
 import { asProfileId } from '../api/types';
 import { discoverUrls, DiscoveryError } from '../services/discovery';
@@ -207,9 +207,8 @@ export default function ProfileForm() {
         cgiUrl = manualCgiUrl;
         log.profileForm('Manual URLs set', LogLevel.INFO, { portalUrl: confirmedPortalUrl, apiUrl, cgiUrl });
 
-        // Initialize API client with manual URL
+        // Build the API client for the manual URL
         const client = createStoreApiClient(apiUrl, undefined, profileId);
-        setApiClient(client);
         profileClient = client;
       } else {
         // Discover URLs from portal URL
@@ -221,7 +220,6 @@ export default function ProfileForm() {
           credentials,
           signal,
           onClientCreated: (client) => {
-            setApiClient(client);
             profileClient = client;
           },
         });

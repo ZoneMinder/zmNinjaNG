@@ -28,13 +28,9 @@ vi.mock('../../api/auth', () => ({
   fetchZmsPath,
 }));
 
-vi.mock('../../api/client', () => ({
-  setApiClient: vi.fn(),
-  resetApiClient: vi.fn(),
-}));
-
 vi.mock('../../api/store-gates', () => ({
   createStoreApiClient: vi.fn(() => ({})),
+  resetAuthGates: vi.fn(),
 }));
 
 vi.mock('../../lib/security/secureStorage', () => ({

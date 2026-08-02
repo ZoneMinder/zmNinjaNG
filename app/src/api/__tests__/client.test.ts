@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createApiClient, resetApiClient, type ApiClientGates, type AuthGate, type SettingsGate } from '../client';
+import { createApiClient, type ApiClientGates, type AuthGate, type SettingsGate } from '../client';
 import { createStoreApiClient } from '../store-gates';
 import { httpRequest } from '../../lib/http';
 import { log, LogLevel } from '../../lib/logger';
@@ -57,7 +57,6 @@ function mockGates(overrides: { auth?: Partial<AuthGate>; settings?: Partial<Set
 describe('API Client', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    resetApiClient();
     useAuthStore.setState({ slices: {} });
   });
 
@@ -417,10 +416,8 @@ describe('API Client', () => {
     });
 
     it('resetAuthGates(profileId) clears an in-flight recovery so later requests start a new one', async () => {
-      // Per-profile gates mean a bare resetApiClient() (profile-switch reset)
-      // no longer needs to touch auth gates - each profile's gate is already
-      // isolated by id. The explicit successor is resetAuthGates(profileId),
-      // called by logout(profileId)/dropSession directly (refs #337).
+      // Per-profile gates: dropSession/logout(profileId) call resetAuthGates
+      // directly to clear a profile's pending single-flight auth ops (refs #337).
       authedState();
       const refreshResolvers: Array<() => void> = [];
       const refreshAccessToken = vi.fn(
@@ -435,13 +432,6 @@ describe('API Client', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(refreshAccessToken).toHaveBeenCalledTimes(1);
 
-      // A bare client reset does NOT clear the pending recovery: the second
-      // request attaches to the same gate instead of starting a new one.
-      resetApiClient();
-      const stillPending = client.get('/still-pending.json').then(() => 'resolved', (e: unknown) => e);
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      expect(refreshAccessToken).toHaveBeenCalledTimes(1);
-
       resetAuthGates(pid);
 
       const second = client.get('/b.json').then(() => 'resolved', (e: unknown) => e);
@@ -450,9 +440,8 @@ describe('API Client', () => {
       expect(refreshAccessToken).toHaveBeenCalledTimes(2);
 
       refreshResolvers.forEach((resolve) => resolve());
-      // All three retries hit the always-401 mock and reject without looping.
+      // Both retries hit the always-401 mock and reject without looping.
       expect(await first).toMatchObject({ status: 401 });
-      expect(await stillPending).toMatchObject({ status: 401 });
       expect(await second).toMatchObject({ status: 401 });
     });
   });

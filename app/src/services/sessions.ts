@@ -15,7 +15,7 @@
  * setProfileSettingsGate registration. Refs #337.
  */
 
-import { ALL_PROFILES_ID, type Profile, type ProfileId } from '../api/types';
+import { ALL_PROFILES_ID, PROBE_PROFILE_ID, type Profile, type ProfileId } from '../api/types';
 import type { ApiClient } from '../api/client';
 import { createStoreApiClient, resetAuthGates } from '../api/store-gates';
 import { markSessionActive, markSessionInactive, markAllSessionsInactive } from './session-flags';
@@ -54,13 +54,18 @@ const sessions = new Map<ProfileId, ServerSession>();
 /**
  * Get (lazily building and caching) the session for a profile.
  *
- * ALL_PROFILES_ID is the virtual aggregate profile and never a real server,
- * so it has no session. An id with no matching profile is also rejected
- * rather than silently building a broken client.
+ * ALL_PROFILES_ID is the virtual aggregate profile and PROBE_PROFILE_ID is
+ * the anonymous pre-profile discovery id - neither is ever a real server, so
+ * neither has a session (probe flows build their own client directly via
+ * createStoreApiClient instead). An id with no matching profile is also
+ * rejected rather than silently building a broken client.
  */
 export function getSession(profileId: ProfileId): ServerSession {
   if (profileId === ALL_PROFILES_ID) {
     throw new Error('getSession: ALL_PROFILES_ID has no session');
+  }
+  if (profileId === PROBE_PROFILE_ID) {
+    throw new Error('getSession: PROBE_PROFILE_ID has no session');
   }
 
   const cached = sessions.get(profileId);

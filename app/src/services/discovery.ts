@@ -1,5 +1,5 @@
 
-import { setApiClient, type ApiClient } from '../api/client';
+import type { ApiClient } from '../api/client';
 import { createStoreApiClient } from '../api/store-gates';
 import { PROBE_PROFILE_ID, type ProfileId } from '../api/types';
 import type { HttpError } from '../lib/http';
@@ -195,9 +195,8 @@ async function fetchCgiUrl(apiUrl: string, portalUrl: string, options: Discovery
     }
 
     try {
-        // Create and set API client for this API URL
+        // Create the API client for this API URL
         const client = createStoreApiClient(apiUrl, undefined, profileId);
-        setApiClient(client);
 
         // Authenticate using direct POST to avoid circular dependency with auth store
         log.discovery('Authenticating to fetch ZMS path', LogLevel.DEBUG);

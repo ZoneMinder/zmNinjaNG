@@ -5,8 +5,7 @@
  * Kept in its own leaf module with no imports, so stores/auth.ts can read it
  * synchronously without forming an auth <-> services/sessions.ts load cycle
  * (sessions.ts imports api/store-gates.ts, which imports the auth store, so
- * auth must not import sessions.ts at module scope). Mirrors the same
- * problem api/client-ready.ts solves for the API client singleton. Refs #337.
+ * auth must not import sessions.ts at module scope). Refs #337.
  */
 
 const activeSessionIds = new Set<string>();

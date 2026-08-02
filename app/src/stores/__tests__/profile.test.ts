@@ -2,19 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useProfileStore } from '../profile';
 import { useAuthStore, getAuthSlice } from '../auth';
 import { useMonitorSeenStore } from '../monitorSeen';
-import { setApiClient } from '../../api/client';
 import { createStoreApiClient } from '../../api/store-gates';
 import { getServerTimeZone } from '../../api/time';
 import { setSecureValue, removeSecureValue } from '../../lib/security/secureStorage';
 import { asProfileId } from '../../api/types';
-
-vi.mock('../../api/client', () => ({
-  setApiClient: vi.fn(),
-  resetApiClient: vi.fn(),
-}));
+import { getSession, hasSession, dropAllSessions } from '../../services/sessions';
 
 vi.mock('../../api/store-gates', () => ({
   createStoreApiClient: vi.fn(() => ({ mock: true })),
+  resetAuthGates: vi.fn(),
 }));
 
 vi.mock('../../api/time', () => ({
@@ -54,6 +50,7 @@ describe('Profile Store', () => {
     });
     useMonitorSeenStore.setState({ profileWatermarks: {} });
     useAuthStore.setState({ slices: {} });
+    dropAllSessions();
     vi.clearAllMocks();
     vi.stubGlobal('crypto', { randomUUID: () => 'profile-1' });
   });
@@ -93,8 +90,8 @@ describe('Profile Store', () => {
 
     expect(id).toBe('profile-1');
     expect(setSecureValue).toHaveBeenCalledWith('password_profile-1', 'secret');
-    expect(createStoreApiClient).toHaveBeenCalledWith('https://example.test', undefined, 'profile-1');
-    expect(setApiClient).toHaveBeenCalled();
+    expect(createStoreApiClient).toHaveBeenCalledWith('https://example.test', expect.any(Function), 'profile-1');
+    expect(hasSession(asProfileId('profile-1'))).toBe(true);
 
     const { profiles, currentProfileId } = useProfileStore.getState();
     const profile = profiles.find(p => p.id === currentProfileId);
@@ -246,5 +243,54 @@ describe('Profile Store', () => {
 
     expect(getAuthSlice(asProfileId('p1')).isAuthenticated).toBe(false);
     expect(getAuthSlice(asProfileId('p2')).isAuthenticated).toBe(false);
+  });
+
+  it('drops the deleted profile\'s session (refs #337)', async () => {
+    useProfileStore.setState({
+      profiles: [
+        { id: asProfileId('p1'), name: 'Home', apiUrl: 'http://a', portalUrl: 'http://a', cgiUrl: 'http://a/cgi-bin', isDefault: true, createdAt: 1 },
+      ],
+      currentProfileId: asProfileId('p1'),
+    });
+    getSession(asProfileId('p1'));
+    expect(hasSession(asProfileId('p1'))).toBe(true);
+
+    await useProfileStore.getState().deleteProfile('p1');
+
+    expect(hasSession(asProfileId('p1'))).toBe(false);
+  });
+
+  it('drops the session when connection details change (refs #337)', async () => {
+    useProfileStore.setState({
+      profiles: [
+        { id: asProfileId('p1'), name: 'Home', apiUrl: 'http://a', portalUrl: 'http://a', cgiUrl: 'http://a/cgi-bin', isDefault: true, createdAt: 1 },
+      ],
+      currentProfileId: asProfileId('p1'),
+    });
+    getSession(asProfileId('p1'));
+    expect(hasSession(asProfileId('p1'))).toBe(true);
+
+    await useProfileStore.getState().updateProfile('p1', { apiUrl: 'http://b' });
+
+    expect(hasSession(asProfileId('p1'))).toBe(false);
+  });
+
+  it('deleteAllProfiles drops every cached session (refs #337)', async () => {
+    useProfileStore.setState({
+      profiles: [
+        { id: asProfileId('p1'), name: 'Home', apiUrl: 'http://a', portalUrl: 'http://a', cgiUrl: 'http://a/cgi-bin', isDefault: true, createdAt: 1 },
+        { id: asProfileId('p2'), name: 'Away', apiUrl: 'http://b', portalUrl: 'http://b', cgiUrl: 'http://b/cgi-bin', isDefault: false, createdAt: 2 },
+      ],
+      currentProfileId: asProfileId('p1'),
+    });
+    getSession(asProfileId('p1'));
+    getSession(asProfileId('p2'));
+    expect(hasSession(asProfileId('p1'))).toBe(true);
+    expect(hasSession(asProfileId('p2'))).toBe(true);
+
+    await useProfileStore.getState().deleteAllProfiles();
+
+    expect(hasSession(asProfileId('p1'))).toBe(false);
+    expect(hasSession(asProfileId('p2'))).toBe(false);
   });
 });

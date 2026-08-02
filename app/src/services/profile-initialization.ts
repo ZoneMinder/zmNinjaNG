@@ -13,9 +13,7 @@
  */
 
 import type { Profile, ProfileId } from '../api/types';
-import { setApiClient } from '../api/client';
-import { createStoreApiClient } from '../api/store-gates';
-import { markSessionActive } from './session-flags';
+import { getSession } from './sessions';
 import { log, LogLevel } from '../lib/logger';
 import { BOOTSTRAP_TIMEOUTS } from '../lib/zmninja-ng-constants';
 import { performBootstrap, type BootstrapContext } from './profile-bootstrap';
@@ -104,30 +102,25 @@ async function clearStaleState(profileId: ProfileId): Promise<void> {
 }
 
 /**
- * Initializes API client for the given profile
+ * Ensures the given profile's session exists.
  */
 async function initializeApiClient(
   profile: Profile,
   reLogin: () => Promise<boolean>
 ): Promise<void> {
   const apiClientStart = Date.now();
-  log.profileService('Initializing API client', LogLevel.INFO, {
+  log.profileService('Ensuring session', LogLevel.INFO, {
     apiUrl: profile.apiUrl,
   });
 
-  setApiClient(createStoreApiClient(profile.apiUrl, reLogin, profile.id));
-  // Stopgap until Task 8 builds real per-profile sessions via
-  // services/sessions.ts's getSession: mark this profile's session live here
-  // so stores/auth.ts's getFreshAccessToken guard (hasActiveSession) doesn't
-  // block proactive refresh for it. Refs #337.
-  markSessionActive(profile.id);
+  getSession(profile.id);
 
   // Wire the same credentials reLogin into the auth store so
   // getFreshAccessToken can fall through to it when refresh fails.
   const { useAuthStore } = await import('../stores/auth');
   useAuthStore.getState().setReLoginCallback(profile.id, reLogin);
 
-  logDuration('Bootstrap step: API client ready', apiClientStart, {
+  logDuration('Bootstrap step: session ready', apiClientStart, {
     apiUrl: profile.apiUrl,
   });
 }
