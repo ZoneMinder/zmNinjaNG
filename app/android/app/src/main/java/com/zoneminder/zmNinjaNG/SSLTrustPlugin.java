@@ -27,6 +27,7 @@ import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 import javax.net.ssl.HostnameVerifier;
@@ -91,7 +92,7 @@ public class SSLTrustPlugin extends Plugin {
             for (int i = 0; i < entries.length(); i++) {
                 try {
                     JSONObject entry = entries.getJSONObject(i);
-                    updated.put(entry.getString("host"), entry.getString("fingerprint"));
+                    updated.put(normalizeHost(entry.getString("host")), entry.getString("fingerprint"));
                 } catch (JSONException e) {
                     // Skip malformed entry
                 }
@@ -281,7 +282,7 @@ public class SSLTrustPlugin extends Plugin {
                 // fingerprint check below.
             }
         }
-        String fp = (host != null) ? trustedFingerprints.get(host) : null;
+        String fp = (host != null) ? trustedFingerprints.get(normalizeHost(host)) : null;
         if (fp == null || fp.isEmpty()) {
             // No fingerprint stored for this host yet — allow connection so the
             // app can fetch the cert and show the TOFU dialog
@@ -333,7 +334,7 @@ public class SSLTrustPlugin extends Plugin {
                             return;
                         }
                         String host = Uri.parse(error.getUrl()).getHost();
-                        String fp = (host != null) ? trustedFingerprints.get(host) : null;
+                        String fp = (host != null) ? trustedFingerprints.get(normalizeHost(host)) : null;
                         if (fp == null || fp.isEmpty()) {
                             // No fingerprint stored for this host yet — allow so the
                             // app can fetch the cert and show the TOFU dialog
@@ -374,6 +375,20 @@ public class SSLTrustPlugin extends Plugin {
                 // Ignore
             }
         });
+    }
+
+    /**
+     * Normalize a host string for use as a trust-map key: lowercase (platform-
+     * reported hosts may differ in case from the JS side's `new URL().hostname`),
+     * and strip surrounding "[ ]" from IPv6 literals (JS stores them bracket-free).
+     */
+    private static String normalizeHost(String host) {
+        if (host == null) return null;
+        String normalized = host.toLowerCase(Locale.ROOT);
+        if (normalized.startsWith("[") && normalized.endsWith("]")) {
+            normalized = normalized.substring(1, normalized.length() - 1);
+        }
+        return normalized;
     }
 
     /**

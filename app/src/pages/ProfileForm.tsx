@@ -237,6 +237,8 @@ export default function ProfileForm() {
         if (info) {
           const trusted = await requestCertTrust(info);
           if (!trusted) {
+            // This return precedes any login attempt below, so there are no
+            // tokens to clean up here.
             await applyTrustedCertificates();
             setTesting(false);
             return;
@@ -337,9 +339,12 @@ export default function ProfileForm() {
     } catch (err: unknown) {
       // The failed/cancelled attempt may have landed real tokens under this
       // profile's minted id (a successful login before a later step, e.g.
-      // addProfile, threw). This profile is never saved on this path, so
-      // nothing else will ever clear that slice or its persisted refresh
-      // token - clear it here. Refs #337.
+      // addProfile, threw). addProfile may have already saved the profile
+      // by the time a later step throws (e.g. switchProfile below); logout
+      // here is self-healing in that case, since bootstrap re-auths saved
+      // profiles from their stored credentials on next launch. When
+      // addProfile itself never ran, this clears the only trace of that
+      // login attempt's tokens - nothing else would. Refs #337.
       const { useAuthStore } = await import('../stores/auth');
       useAuthStore.getState().logout(profileId);
 

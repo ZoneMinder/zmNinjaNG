@@ -48,7 +48,7 @@ public class SSLTrustPlugin: CAPPlugin, CAPBridgedPlugin {
         for entry in entries {
             guard let host = entry["host"] as? String,
                   let fingerprint = entry["fingerprint"] as? String else { continue }
-            updated[host] = fingerprint
+            updated[normalizeHost(host)] = fingerprint
         }
         // Rebuild atomically: a single assignment swaps the whole map at once
         SSLTrustPlugin.trustedFingerprints = updated
@@ -187,6 +187,17 @@ class CertFetchDelegate: NSObject, URLSessionDelegate {
 
 // MARK: - SHA-256 fingerprint helper
 
+/// Normalize a host string for use as a trust-map key: lowercase (native
+/// challenge hosts may differ in case from the JS side's `new URL().hostname`),
+/// and strip surrounding `[ ]` from IPv6 literals (JS stores them bracket-free).
+func normalizeHost(_ host: String) -> String {
+    var normalized = host.lowercased()
+    if normalized.hasPrefix("[") && normalized.hasSuffix("]") {
+        normalized = String(normalized.dropFirst().dropLast())
+    }
+    return normalized
+}
+
 func sha256Fingerprint(_ certificate: SecCertificate) -> String {
     let data = SecCertificateCopyData(certificate) as Data
     var hash = [UInt8](repeating: 0, count: Int(CC_SHA256_DIGEST_LENGTH))
@@ -200,7 +211,7 @@ func sha256Fingerprint(_ certificate: SecCertificate) -> String {
 /// Used by URLProtocol (HTTP requests) — allows when no fingerprint is stored for
 /// the host (TOFU cert-fetch).
 func isCertTrustedForHTTP(_ certificate: SecCertificate, host: String) -> Bool {
-    guard let trusted = SSLTrustPlugin.trustedFingerprints[host], !trusted.isEmpty else {
+    guard let trusted = SSLTrustPlugin.trustedFingerprints[normalizeHost(host)], !trusted.isEmpty else {
         // No fingerprint stored for this host yet — allow for TOFU cert-fetch flow
         return true
     }
@@ -212,7 +223,7 @@ func isCertTrustedForHTTP(_ certificate: SecCertificate, host: String) -> Bool {
 /// Used by WKNavigationDelegate (WebView) — allows when no fingerprint is stored for
 /// the host (TOFU: a profile mid-onboarding has no pinned fingerprint yet).
 func isCertTrustedForWebView(_ certificate: SecCertificate, host: String) -> Bool {
-    guard let trusted = SSLTrustPlugin.trustedFingerprints[host], !trusted.isEmpty else {
+    guard let trusted = SSLTrustPlugin.trustedFingerprints[normalizeHost(host)], !trusted.isEmpty else {
         return true
     }
     let actual = sha256Fingerprint(certificate)

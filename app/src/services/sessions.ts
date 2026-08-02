@@ -118,4 +118,5 @@ export function dropSession(profileId: ProfileId): void {
 export function dropAllSessions(): void {
   sessions.clear();
   markAllSessionsInactive();
+  resetAuthGates();
 }

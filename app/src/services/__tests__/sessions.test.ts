@@ -30,7 +30,7 @@ vi.mock('../../lib/logger', () => ({
   },
 }));
 
-import { createStoreApiClient } from '../../api/store-gates';
+import { createStoreApiClient, resetAuthGates } from '../../api/store-gates';
 
 const aId = asProfileId('profile-a');
 const bId = asProfileId('profile-b');
@@ -107,6 +107,25 @@ describe('sessions', () => {
 
     expect(hasSession(aId)).toBe(false);
     expect(getSession(aId)).not.toBe(s1);
+  });
+
+  it('dropSession resets that profile\'s pending auth gates', () => {
+    getSession(aId);
+    vi.clearAllMocks();
+
+    dropSession(aId);
+
+    expect(resetAuthGates).toHaveBeenCalledWith(aId);
+  });
+
+  it('dropAllSessions resets every profile\'s pending auth gates', () => {
+    getSession(aId);
+    getSession(bId);
+    vi.clearAllMocks();
+
+    dropAllSessions();
+
+    expect(resetAuthGates).toHaveBeenCalledWith();
   });
 
   it('getCurrentSession returns the session for the current profile', () => {

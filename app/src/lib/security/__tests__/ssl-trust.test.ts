@@ -114,6 +114,16 @@ describe('collectTrustEntries', () => {
     expect(mockLogSslTrust).toHaveBeenCalledWith(expect.stringContaining('shared.local'), 2);
   });
 
+  it('normalizes mixed-case hosts and strips IPv6 brackets so they match native lookups', () => {
+    const profiles = [
+      profile('a', { portalUrl: 'https://CAM-A.Local', apiUrl: 'https://[::1]:8443/zm/api' }),
+    ];
+    const settings = () => ({ allowSelfSignedCerts: true, trustedCertFingerprint: 'AA:11' }) as ProfileSettings;
+    const { entries } = collectTrustEntries(profiles, settings);
+    expect(entries).toContainEqual({ host: 'cam-a.local', fingerprint: 'AA:11' });
+    expect(entries).toContainEqual({ host: '::1', fingerprint: 'AA:11' });
+  });
+
   it('candidate enables trust when no saved profile does', () => {
     const off = () => ({ allowSelfSignedCerts: false, trustedCertFingerprint: null }) as ProfileSettings;
     const { enabled, entries } = collectTrustEntries([], off, {

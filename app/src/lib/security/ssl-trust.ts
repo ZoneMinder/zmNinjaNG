@@ -29,7 +29,15 @@ function hostnamesOf(urls: Array<string | undefined>): Set<string> {
   for (const url of urls) {
     if (!url) continue;
     try {
-      hosts.add(new URL(url).hostname);
+      // hostname is already lowercase per the URL spec; lowercase explicitly
+      // so this stays true even if that ever changes. IPv6 literals keep
+      // their brackets (e.g. "[::1]") - strip them so the host matches the
+      // bracket-free form native lookups normalize to.
+      let host = new URL(url).hostname.toLowerCase();
+      if (host.startsWith('[') && host.endsWith(']')) {
+        host = host.slice(1, -1);
+      }
+      hosts.add(host);
     } catch {
       // skip unparseable URL
     }
