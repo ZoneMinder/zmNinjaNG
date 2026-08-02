@@ -43,6 +43,7 @@ function setupMocks(filterOverrides?: Partial<typeof defaultTimelineFilters>) {
     currentProfile: mockCurrentProfile,
     settings: settings as never,
     hasProfile: true,
+    isAllMode: false,
   });
 
   mockGetProfileSettings.mockReturnValue(settings);

@@ -29,6 +29,7 @@ describe('useGroupFilter', () => {
       currentProfile: { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
       settings: { selectedGroupId: null } as never,
       hasProfile: true,
+      isAllMode: false,
     });
 
     vi.mocked(useGroups).mockReturnValue({
@@ -75,6 +76,7 @@ describe('useGroupFilter', () => {
       currentProfile: { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
       settings: { selectedGroupId: '1' } as never,
       hasProfile: true,
+      isAllMode: false,
     });
 
     const { result } = renderHook(() => useGroupFilter());
@@ -100,6 +102,7 @@ describe('useGroupFilter', () => {
       currentProfile: { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
       settings: { selectedGroupId: '1' } as never,
       hasProfile: true,
+      isAllMode: false,
     });
 
     const { result } = renderHook(() => useGroupFilter());
@@ -128,6 +131,7 @@ describe('useGroupFilter', () => {
       currentProfile: { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
       settings: { selectedGroupId: '1' } as never,
       hasProfile: true,
+      isAllMode: false,
     });
 
     const { result } = renderHook(() => useGroupFilter());
@@ -140,6 +144,7 @@ describe('useGroupFilter', () => {
       currentProfile: { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
       settings: { selectedGroupId: '1' } as never,
       hasProfile: true,
+      isAllMode: false,
     });
     vi.mocked(useGroups).mockReturnValue({
       groups: [],
@@ -161,6 +166,7 @@ describe('useGroupFilter', () => {
       currentProfile: { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
       settings: { selectedGroupId: '1' } as never,
       hasProfile: true,
+      isAllMode: false,
     });
     vi.mocked(useGroups).mockReturnValue({
       groups: [],
@@ -182,6 +188,7 @@ describe('useGroupFilter', () => {
       currentProfile: { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
       settings: { selectedGroupId: '999' } as never,
       hasProfile: true,
+      isAllMode: false,
     });
 
     const { result } = renderHook(() => useGroupFilter());
@@ -194,6 +201,7 @@ describe('useGroupFilter', () => {
       currentProfile: null,
       settings: { selectedGroupId: null } as never,
       hasProfile: false,
+      isAllMode: false,
     });
 
     const { result } = renderHook(() => useGroupFilter());
@@ -210,6 +218,7 @@ describe('useGroupFilter', () => {
       currentProfile: { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
       settings: { selectedGroupId: '999' } as never,
       hasProfile: true,
+      isAllMode: false,
     });
     vi.mocked(useGroups).mockReturnValue({
       groups: [{ Group: { Id: '1', Name: 'Front', ParentId: null }, Monitor: [] }],
@@ -233,6 +242,7 @@ describe('useGroupFilter', () => {
       currentProfile: { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
       settings: { selectedGroupId: '999' } as never,
       hasProfile: true,
+      isAllMode: false,
     });
     vi.mocked(useGroups).mockReturnValue({
       groups: [],
@@ -252,6 +262,7 @@ describe('useGroupFilter', () => {
       currentProfile: { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
       settings: { selectedGroupId: '999' } as never,
       hasProfile: true,
+      isAllMode: false,
     });
     vi.mocked(useGroups).mockReturnValue({
       groups: [],
@@ -275,6 +286,7 @@ describe('useGroupFilter', () => {
       currentProfile: { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
       settings: { selectedGroupId: '1' } as never,
       hasProfile: true,
+      isAllMode: false,
     });
     vi.mocked(useGroups).mockReturnValue({
       groups: [],

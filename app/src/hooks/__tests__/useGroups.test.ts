@@ -62,6 +62,7 @@ describe('useGroups', () => {
       currentProfile: { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
       settings: {} as never,
       hasProfile: true,
+      isAllMode: false,
     });
   });
 
@@ -156,6 +157,7 @@ describe('useGroups', () => {
       currentProfile: null,
       settings: {} as never,
       hasProfile: false,
+      isAllMode: false,
     });
 
     const { result } = renderHook(() => useGroups(), { wrapper: createWrapper() });

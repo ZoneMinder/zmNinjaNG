@@ -72,6 +72,7 @@ function setupMocks(overrides?: Partial<typeof mockProfileSettings>) {
     currentProfile: mockCurrentProfile,
     settings: settings as never,
     hasProfile: true,
+    isAllMode: false,
   });
 
   mockGetProfileSettings.mockReturnValue(settings);
@@ -656,6 +657,7 @@ describe('useEventFilters', () => {
         currentProfile: null,
         settings: mockProfileSettings as never,
         hasProfile: false,
+        isAllMode: false,
       });
 
       const { result } = renderHook(() => useEventFilters());

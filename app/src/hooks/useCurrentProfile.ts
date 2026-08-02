@@ -18,16 +18,19 @@ import { useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useProfileStore } from '../stores/profile';
 import { useSettingsStore, mergeProfileSettings } from '../stores/settings';
+import { ALL_PROFILES_ID } from '../api/types';
 import type { Profile } from '../api/types';
 import type { ProfileSettings } from '../stores/settings';
 
 export interface UseCurrentProfileReturn {
-  /** Current active profile (null if no profile selected) */
+  /** Current active profile (null if no profile selected, and null in All mode) */
   currentProfile: Profile | null;
   /** Settings for the current profile */
   settings: ProfileSettings;
   /** Helper to check if profile exists */
   hasProfile: boolean;
+  /** True when the virtual "all profiles" sentinel is the active selection */
+  isAllMode: boolean;
 }
 
 /**
@@ -47,6 +50,11 @@ export interface UseCurrentProfileReturn {
 export function useCurrentProfile(): UseCurrentProfileReturn {
   // Select currentProfileId as a stable primitive
   const currentProfileId = useProfileStore((state) => state.currentProfileId);
+
+  // True when the ALL_PROFILES_ID sentinel is selected. currentProfile stays
+  // null and hasProfile stays false in this case (no real profile matches
+  // the sentinel), keeping single-mode-only surfaces unchanged.
+  const isAllMode = currentProfileId === ALL_PROFILES_ID;
   
   // Use useShallow for the profiles array to prevent re-renders when
   // unrelated parts of the profile store change
@@ -78,5 +86,6 @@ export function useCurrentProfile(): UseCurrentProfileReturn {
     currentProfile,
     settings,
     hasProfile: currentProfile !== null,
+    isAllMode,
   };
 }
