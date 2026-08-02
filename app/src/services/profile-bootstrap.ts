@@ -87,7 +87,7 @@ export async function bootstrapZmsPath(
 ): Promise<void> {
   try {
     log.profileService('Fetching ZMS path from server config', LogLevel.INFO);
-    const zmsPath = await fetchZmsPath();
+    const zmsPath = await fetchZmsPath(getSession(profile.id).client);
 
     if (!zmsPath || !profile.portalUrl) {
       log.profileService('ZMS path not available, keeping current CGI URL', LogLevel.INFO, {
@@ -135,7 +135,7 @@ export async function bootstrapGo2RTCPath(
 ): Promise<void> {
   try {
     log.profileService('Fetching Go2RTC path from server config', LogLevel.INFO);
-    const go2rtcPath = await fetchGo2RTCPath();
+    const go2rtcPath = await fetchGo2RTCPath(getSession(profile.id).client);
 
     if (!go2rtcPath) {
       log.profileService('Go2RTC not configured on server', LogLevel.INFO);

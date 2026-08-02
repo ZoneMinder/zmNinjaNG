@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
-import { resetAuthGates, useAuthStore, getAuthSlice } from '../auth';
+import { resetAuthGates, useAuthStore, getAuthSlice, registerAuthClientResolver } from '../auth';
 import { login as apiLogin, refreshToken as apiRefreshToken } from '../../api/auth';
+import type { ApiClient } from '../../api/client';
 import type { LoginResponse } from '../../api/types';
 import { asProfileId } from '../../api/types';
 import { log } from '../../lib/logger';
@@ -35,9 +36,14 @@ vi.mock('../../lib/logger', () => ({
 
 const aId = asProfileId('profile-a');
 const bId = asProfileId('profile-b');
+const mockClient = {} as ApiClient;
 
 describe('Auth Store', () => {
   beforeEach(() => {
+    // login/refreshAccessToken resolve their client through this gate
+    // (services/sessions.ts's getSession, normally wired by stores/profile.ts
+    // - not loaded here). Refs #337.
+    registerAuthClientResolver(() => mockClient);
     localStorage.clear();
     useAuthStore.setState({ slices: {} });
     sessionState.hasSession = true;
@@ -65,7 +71,7 @@ describe('Auth Store', () => {
 
     await useAuthStore.getState().login(aId, 'user', 'pass');
 
-    expect(apiLogin).toHaveBeenCalledWith({ user: 'user', pass: 'pass' });
+    expect(apiLogin).toHaveBeenCalledWith(expect.anything(), { user: 'user', pass: 'pass' });
     const state = getAuthSlice(aId);
     expect(state.accessToken).toBe('access-123');
     expect(state.refreshToken).toBe('refresh-456');
@@ -128,7 +134,7 @@ describe('Auth Store', () => {
 
     await useAuthStore.getState().refreshAccessToken(aId);
 
-    expect(apiRefreshToken).toHaveBeenCalledWith('refresh-xyz');
+    expect(apiRefreshToken).toHaveBeenCalledWith(expect.anything(), 'refresh-xyz');
     expect(getAuthSlice(aId).accessToken).toBe('new-access');
   });
 
@@ -284,7 +290,7 @@ describe('Auth Store', () => {
       });
       const result = await useAuthStore.getState().getFreshAccessToken(aId);
       expect(result).toBe('new-token');
-      expect(apiRefreshToken).toHaveBeenCalledWith('rt');
+      expect(apiRefreshToken).toHaveBeenCalledWith(expect.anything(), 'rt');
     });
 
     it('falls through to reLoginCallback when refresh rejects', async () => {
@@ -422,7 +428,7 @@ describe('Auth Store', () => {
         },
       });
       const posts: string[] = [];
-      vi.mocked(apiRefreshToken).mockImplementation(async (token: string) => {
+      vi.mocked(apiRefreshToken).mockImplementation(async (_client, token: string) => {
         posts.push(token);
         return { access_token: `new-${token}`, access_token_expires: 7200 };
       });
@@ -488,7 +494,7 @@ describe('Auth Store', () => {
         },
       });
       const posts: string[] = [];
-      vi.mocked(apiRefreshToken).mockImplementation(async (token: string) => {
+      vi.mocked(apiRefreshToken).mockImplementation(async (_client, token: string) => {
         posts.push(token);
         return { access_token: 'new', access_token_expires: 7200 };
       });

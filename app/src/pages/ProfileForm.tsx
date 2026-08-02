@@ -13,7 +13,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../components/ui/card';
 import { useProfileStore } from '../stores/profile';
-import { setApiClient } from '../api/client';
+import { setApiClient, type ApiClient } from '../api/client';
 import { createStoreApiClient } from '../api/store-gates';
 import { asProfileId } from '../api/types';
 import { discoverUrls, DiscoveryError } from '../services/discovery';
@@ -170,6 +170,10 @@ export default function ProfileForm() {
       let cgiUrl: string;
       let go2rtcPath: string | null = null;
       let acceptedFingerprint: string | null = null;
+      // The profile isn't saved yet (addProfile runs at the end of this flow),
+      // so there's no session to pull a client from; both branches below build
+      // one directly for this candidate profileId. Refs #337.
+      let profileClient: ApiClient | undefined;
 
       if (showManualUrls) {
         // Manual URL entry mode
@@ -206,6 +210,7 @@ export default function ProfileForm() {
         // Initialize API client with manual URL
         const client = createStoreApiClient(apiUrl, undefined, profileId);
         setApiClient(client);
+        profileClient = client;
       } else {
         // Discover URLs from portal URL
         // Pass credentials if provided to fetch accurate ZM_PATH_ZMS from server
@@ -217,6 +222,7 @@ export default function ProfileForm() {
           signal,
           onClientCreated: (client) => {
             setApiClient(client);
+            profileClient = client;
           },
         });
         log.profileForm('Successfully connected', LogLevel.INFO, { apiUrl: discovered.apiUrl });
@@ -261,14 +267,14 @@ export default function ProfileForm() {
           useAuthStore.getState().logout(profileId);
           log.profileForm('Cleared existing auth state for fresh login', LogLevel.DEBUG);
 
-          await useAuthStore.getState().login(profileId, normalizedUsername, password);
+          await useAuthStore.getState().login(profileId, normalizedUsername, password, profileClient);
           log.profileForm('Login successful', LogLevel.INFO);
 
           // Note: ZMS path is already fetched during discovery when credentials are provided,
           // so cgiUrl is already set correctly. We just need to fetch Go2RTC path here.
 
           // Fetch Go2RTC path if configured (optional, not all servers have it)
-          go2rtcPath = await fetchGo2RTCPath();
+          go2rtcPath = await fetchGo2RTCPath(profileClient!);
           if (go2rtcPath) {
             log.profileForm('Go2RTC path fetched from server config', LogLevel.INFO, {
               go2rtcPath

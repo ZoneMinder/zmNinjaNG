@@ -18,6 +18,7 @@ import { persist } from 'zustand/middleware';
 import type { PersistStorage, StorageValue } from 'zustand/middleware';
 import { useShallow } from 'zustand/react/shallow';
 import { login as apiLogin, refreshToken as apiRefreshToken } from '../api/auth';
+import type { ApiClient } from '../api/client';
 import { hasActiveSession } from '../services/session-flags';
 import { PROBE_PROFILE_ID, type LoginResponse, type ProfileId } from '../api/types';
 import { log, LogLevel } from '../lib/logger';
@@ -56,7 +57,14 @@ export interface AuthState {
   slices: Record<ProfileId, AuthSlice>;
 
   // Actions
-  login: (profileId: ProfileId, username: string, password: string) => Promise<void>;
+  /**
+   * `client` is required only for a profile that doesn't exist in the
+   * profile store yet (ProfileForm's connection test, before addProfile
+   * saves it): services/sessions.ts's getSession can't resolve a session for
+   * an unknown profile. Omitted for every other caller, which already has a
+   * real session (existing profile, post-bootstrap reLogin).
+   */
+  login: (profileId: ProfileId, username: string, password: string, client?: ApiClient) => Promise<void>;
   logout: (profileId: ProfileId, opts?: { keepGates?: boolean }) => void;
   logoutAll: () => void;
   refreshAccessToken: (profileId: ProfileId) => Promise<void>;
@@ -276,6 +284,27 @@ export function resetAuthGates(profileId?: ProfileId): void {
  */
 const reLoginCallbacks = new Map<ProfileId, () => Promise<boolean>>();
 
+/**
+ * Resolves a profile's API client for apiLogin/apiRefreshToken. Late-bound
+ * the same way as reLoginCallbacks above: services/sessions.ts's getSession
+ * can't be imported here directly (sessions -> api/store-gates -> this store
+ * would cycle), so stores/profile.ts - which already imports both this store
+ * and services/sessions.ts - registers the real implementation at app init.
+ * Refs #337.
+ */
+let authClientResolver: ((profileId: ProfileId) => ApiClient) | null = null;
+
+export function registerAuthClientResolver(resolver: (profileId: ProfileId) => ApiClient): void {
+  authClientResolver = resolver;
+}
+
+function resolveAuthClient(profileId: ProfileId): ApiClient {
+  if (!authClientResolver) {
+    throw new Error('registerAuthClientResolver: no resolver registered');
+  }
+  return authClientResolver(profileId);
+}
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => {
@@ -296,7 +325,7 @@ export const useAuthStore = create<AuthState>()(
          * @param username - The username
          * @param password - The password
          */
-        login: async (profileId: ProfileId, username: string, password: string) => {
+        login: async (profileId: ProfileId, username: string, password: string, client?: ApiClient) => {
           // If a login is already in flight for this profile, attach to it
           // instead of starting a new one.
           const existing = pendingLogin.get(profileId);
@@ -307,7 +336,8 @@ export const useAuthStore = create<AuthState>()(
           log.auth(`Login attempt for user: ${username}`);
           const attempt = (async () => {
             try {
-              const response = await apiLogin({ user: username, pass: password });
+              const resolvedClient = client ?? resolveAuthClient(profileId);
+              const response = await apiLogin(resolvedClient, { user: username, pass: password });
               get().setTokens(profileId, response);
               const state = getSlice(profileId);
               log.auth('Login successful', LogLevel.INFO, {
@@ -395,7 +425,7 @@ export const useAuthStore = create<AuthState>()(
             }
 
             try {
-              const response = await apiRefreshToken(refreshToken);
+              const response = await apiRefreshToken(resolveAuthClient(profileId), refreshToken);
               get().setTokens(profileId, response);
             } catch (error) {
               log.auth('Token refresh failed', LogLevel.ERROR, error);

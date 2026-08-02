@@ -24,6 +24,7 @@ import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import { Check, Copy, Loader2, Send, Square } from 'lucide-react';
 import { getVersion } from '../../api/auth';
+import { getCurrentSession } from '../../services/sessions';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
 import { resolveMinStreamingPort } from '../../lib/monitor/multiport';
@@ -488,7 +489,7 @@ export function AskPanel() {
 
       let zmVersion = '';
       try {
-        zmVersion = (await getVersion()).version;
+        zmVersion = (await getVersion(getCurrentSession().client)).version;
       } catch (e) {
         log.assistant('Failed to fetch ZM version for the assistant system prompt', LogLevel.WARN, { error: e });
       }

@@ -636,13 +636,13 @@ const getServerHealthTool: ToolDefinition = {
     'running, the server version, per-storage disk usage, and the configured server count. Call this for ' +
     '"is the server ok" / "is zmninja / zoneminder up" questions.',
   schema: { type: 'object', properties: {}, additionalProperties: false },
-  execute: (_input, _ctx) =>
+  execute: (_input, ctx) =>
     safeExecute('get_server_health', async () => {
       const [load, disk, daemonRunning, version] = await Promise.all([
         getLoad(),
         getDiskPercent(),
         getDaemonCheck(),
-        getVersion(),
+        getVersion(getSession(ctx.profileId).client),
       ]);
       const result: {
         load: number | number[];

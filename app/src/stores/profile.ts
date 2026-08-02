@@ -25,7 +25,7 @@ import { setProfileSettingsGate } from '../lib/profile/profile-settings';
 import { getSession, registerSessionsGate } from '../services/sessions';
 import { markSessionActive } from '../services/session-flags';
 import { STORAGE_KEYS } from '../lib/zmninja-ng-constants';
-import { useAuthStore, getAuthSlice } from './auth';
+import { useAuthStore, getAuthSlice, registerAuthClientResolver } from './auth';
 import { useSettingsStore } from './settings';
 import { useMonitorSeenStore } from './monitorSeen';
 import { performBootstrap } from '../services/profile-bootstrap';
@@ -534,6 +534,12 @@ registerSessionsGate({
   getCurrentProfileId: () => useProfileStore.getState().currentProfileId,
   reLoginFor: () => () => useProfileStore.getState().reLogin(),
 });
+
+// stores/auth.ts's login/refreshAccessToken resolve their API client through
+// this late-bound gate: getSession can't be imported there directly without
+// cycling (services/sessions -> api/store-gates -> stores/auth). This module
+// already imports both, so it wires them together. Refs #337.
+registerAuthClientResolver((profileId) => getSession(profileId).client);
 
 // Subscribe to auth store to update refresh token in profile
 useAuthStore.subscribe((state) => {

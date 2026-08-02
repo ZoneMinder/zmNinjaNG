@@ -17,6 +17,8 @@ vi.mock('../auth', () => ({
     getState: () => ({ logout: vi.fn(), login: loginSpy, setTokens: vi.fn() }),
     subscribe: vi.fn(() => () => {}),
   },
+  getAuthSlice: vi.fn(() => ({ accessToken: null })),
+  registerAuthClientResolver: vi.fn(),
 }));
 vi.mock('../query-cache', () => ({ clearQueryCache: vi.fn() }));
 vi.mock('../../api/client', () => ({ setApiClient: vi.fn(), resetApiClient: vi.fn() }));

@@ -12,8 +12,9 @@
  * Refs #337.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useAuthStore } from '../auth';
+import { useAuthStore, registerAuthClientResolver } from '../auth';
 import { login as apiLogin, refreshToken as apiRefreshToken } from '../../api/auth';
+import type { ApiClient } from '../../api/client';
 import { asProfileId } from '../../api/types';
 import { markAllSessionsInactive, markSessionActive } from '../../services/session-flags';
 
@@ -21,6 +22,8 @@ vi.mock('../../api/auth', () => ({
   login: vi.fn(),
   refreshToken: vi.fn(),
 }));
+
+const mockClient = {} as ApiClient;
 
 vi.mock('../../lib/logger', () => ({
   log: { auth: vi.fn() },
@@ -35,6 +38,7 @@ describe('getFreshAccessToken <-> session-flags wiring (unmocked)', () => {
     useAuthStore.setState({ slices: {} });
     markAllSessionsInactive();
     vi.clearAllMocks();
+    registerAuthClientResolver(() => mockClient);
   });
 
   it('returns null before markSessionActive has ever run for the profile', async () => {
@@ -86,7 +90,7 @@ describe('getFreshAccessToken <-> session-flags wiring (unmocked)', () => {
     const result = await useAuthStore.getState().getFreshAccessToken(pid);
 
     expect(result).toBe('fresh-token');
-    expect(apiRefreshToken).toHaveBeenCalledWith('rt');
+    expect(apiRefreshToken).toHaveBeenCalledWith(expect.anything(), 'rt');
   });
 
   it('never calls login through this path when there is no session (no false proactive attempts)', async () => {

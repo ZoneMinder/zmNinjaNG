@@ -1,14 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchGo2RTCPath, fetchZmsPath, getVersion, login, refreshToken, testConnection } from '../auth';
-import { getApiClient } from '../client';
 import type { ApiClient } from '../client';
 
 const mockPost = vi.fn();
 const mockGet = vi.fn();
-
-vi.mock('../client', () => ({
-  getApiClient: vi.fn(),
-}));
+const mockClient = { postForm: mockPost, get: mockGet } as unknown as ApiClient;
 
 vi.mock('../../lib/logger', () => ({
   log: {
@@ -30,10 +26,6 @@ vi.mock('../../lib/logger', () => ({
 describe('Auth API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(getApiClient).mockReturnValue({
-      postForm: mockPost,
-      get: mockGet,
-    } as unknown as ApiClient);
   });
 
   it('logs in with form-encoded credentials', async () => {
@@ -50,7 +42,7 @@ describe('Auth API', () => {
       },
     });
 
-    const response = await login({ user: 'admin', pass: 'secret' });
+    const response = await login(mockClient, { user: 'admin', pass: 'secret' });
 
     expect(mockPost).toHaveBeenCalledTimes(1);
     const [loginUrl, loginBody] = mockPost.mock.calls[0];
@@ -71,7 +63,7 @@ describe('Auth API', () => {
       },
     });
 
-    const response = await refreshToken('refresh-2');
+    const response = await refreshToken(mockClient, 'refresh-2');
 
     const [refreshUrl, refreshBody] = mockPost.mock.calls[0];
     expect(refreshUrl).toBe('/host/login.json');
@@ -82,7 +74,7 @@ describe('Auth API', () => {
   it('gets version info', async () => {
     mockGet.mockResolvedValue({ data: { version: '1.2.3', apiversion: '2.3.4' } });
 
-    const response = await getVersion();
+    const response = await getVersion(mockClient);
 
     expect(mockGet).toHaveBeenCalledWith('/host/getVersion.json');
     expect(response).toEqual({ version: '1.2.3', apiversion: '2.3.4' });
@@ -91,7 +83,7 @@ describe('Auth API', () => {
   it('tests connection with override base URL', async () => {
     mockGet.mockResolvedValue({});
 
-    const ok = await testConnection('https://example.test');
+    const ok = await testConnection(mockClient, 'https://example.test');
 
     expect(mockGet).toHaveBeenCalledWith('/host/getVersion.json', { baseURL: 'https://example.test' });
     expect(ok).toBe(true);
@@ -100,7 +92,7 @@ describe('Auth API', () => {
   it('returns false when connection test fails', async () => {
     mockGet.mockRejectedValue(new Error('offline'));
 
-    const ok = await testConnection('https://example.test');
+    const ok = await testConnection(mockClient, 'https://example.test');
 
     expect(ok).toBe(false);
   });
@@ -126,7 +118,7 @@ describe('Auth API', () => {
       },
     });
 
-    const path = await fetchZmsPath();
+    const path = await fetchZmsPath(mockClient);
 
     expect(mockGet).toHaveBeenCalledWith('/configs/viewByName/ZM_PATH_ZMS.json');
     expect(path).toBe('/cgi-bin/nph-zms');
@@ -135,7 +127,7 @@ describe('Auth API', () => {
   it('returns null when ZMS path fetch fails', async () => {
     mockGet.mockRejectedValue(new Error('bad response'));
 
-    const path = await fetchZmsPath();
+    const path = await fetchZmsPath(mockClient);
 
     expect(path).toBeNull();
   });
@@ -161,7 +153,7 @@ describe('Auth API', () => {
       },
     });
 
-    const path = await fetchGo2RTCPath();
+    const path = await fetchGo2RTCPath(mockClient);
 
     expect(mockGet).toHaveBeenCalledWith('/configs/viewByName/ZM_GO2RTC_PATH.json');
     expect(path).toBe('http://zm.example.com:1984');
@@ -188,7 +180,7 @@ describe('Auth API', () => {
       },
     });
 
-    const path = await fetchGo2RTCPath();
+    const path = await fetchGo2RTCPath(mockClient);
 
     expect(path).toBeNull();
   });
@@ -196,7 +188,7 @@ describe('Auth API', () => {
   it('returns null when Go2RTC path fetch fails', async () => {
     mockGet.mockRejectedValue(new Error('bad response'));
 
-    const path = await fetchGo2RTCPath();
+    const path = await fetchGo2RTCPath(mockClient);
 
     expect(path).toBeNull();
   });

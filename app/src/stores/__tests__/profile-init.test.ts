@@ -16,6 +16,8 @@ vi.mock('../auth', () => ({
     })),
     subscribe: mockSubscribe,
   },
+  getAuthSlice: vi.fn(() => ({ accessToken: 'access-token' })),
+  registerAuthClientResolver: vi.fn(),
 }));
 
 vi.mock('../../api/time', () => ({
