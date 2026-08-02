@@ -74,6 +74,13 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Local network access is implicitly granted through INTERNET while we target
+         API 36. From Android 17 (API 37) it becomes a mandatory runtime permission in
+         the NEARBY_DEVICES group, and without it every LAN ZoneMinder server becomes
+         unreachable. Declared now so the bump does not silently break local servers;
+         the matching runtime request must land in the same change that raises
+         targetSdkVersion to 37 (refs #333). -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
     <!-- @capacitor-community/media saves downloads to the app's own gallery album
          via MediaStore. In basic (non-gallery) mode it requests no storage/media
          permissions, so READ_MEDIA_IMAGES/READ_MEDIA_VIDEO and the legacy
