@@ -6,7 +6,7 @@
  * Not all ZoneMinder instances support tags - this module handles graceful degradation.
  */
 
-import { getApiClient } from './client';
+import type { ApiClient } from './client';
 import type { TagsResponse, EventTagsResponse, Tag } from './types';
 import { TagsResponseSchema, EventTagsResponseSchema } from './types';
 import { safeValidateApiResponse, validateApiResponse } from '../lib/zm/api-validator';
@@ -20,12 +20,11 @@ import type { HttpError } from '../lib/http';
  * The API returns each tag-event association as a separate entry,
  * so we need to deduplicate tags by ID.
  *
+ * @param client - API client for the target profile
  * @returns Promise resolving to TagsResponse, or null if tags are not supported
  */
-export async function getTags(): Promise<TagsResponse | null> {
+export async function getTags(client: ApiClient): Promise<TagsResponse | null> {
   log.api('Fetching tags list', LogLevel.INFO);
-
-  const client = getApiClient();
 
   try {
     const response = await client.get<TagsResponse>('/tags.json');
@@ -97,10 +96,12 @@ export function extractUniqueTags(response: TagsResponse): Tag[] {
  * Automatically batches requests to avoid URL length limits.
  * Returns a Map of eventId -> Tag[] for efficient lookup.
  *
+ * @param client - API client for the target profile
  * @param eventIds - Array of event IDs to fetch tags for
  * @returns Promise resolving to Map of eventId -> Tag[], or null if tags not supported
  */
 export async function getEventTags(
+  client: ApiClient,
   eventIds: string[]
 ): Promise<Map<string, Tag[]> | null> {
   if (eventIds.length === 0) {
@@ -109,7 +110,6 @@ export async function getEventTags(
 
   log.api('Fetching event tags', LogLevel.INFO, { eventCount: eventIds.length });
 
-  const client = getApiClient();
   const eventTagMap = new Map<string, Tag[]>();
 
   // Split event IDs into batches to avoid URL length limits

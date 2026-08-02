@@ -601,7 +601,7 @@ const getEventTool: ToolDefinition = {
       const monitorName = nameById.get(e.MonitorId) ?? e.MonitorId;
       let tags: string[] = [];
       try {
-        const tagMap = await getEventTags([eventId]);
+        const tagMap = await getEventTags(getSession(ctx.profileId).client, [eventId]);
         tags = tagMap?.get(eventId)?.map((t) => t.Name) ?? [];
       } catch {
         // Tags are an optional ZM feature (refs api/tags.ts); absence is not an error here.
@@ -699,9 +699,9 @@ const listTagsTool: ToolDefinition = {
     'List available event tags (id and name). Returns an empty list on ZoneMinder servers older than 1.37, ' +
     'which do not support tags.',
   schema: { type: 'object', properties: {}, additionalProperties: false },
-  execute: (_input, _ctx) =>
+  execute: (_input, ctx) =>
     safeExecute('list_tags', async () => {
-      const res = await getTags();
+      const res = await getTags(getSession(ctx.profileId).client);
       const tags = res ? extractUniqueTags(res) : [];
       return JSON.stringify(tags.map((t) => ({ id: t.Id, name: t.Name })));
     }),

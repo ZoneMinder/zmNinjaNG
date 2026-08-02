@@ -14,6 +14,7 @@
 import { useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getTags, getEventTags, extractUniqueTags } from '../api/tags';
+import { getCurrentSession } from '../services/sessions';
 import { useCurrentProfile } from './useCurrentProfile';
 import { useAuthSlice } from '../stores/auth';
 import { queryKeys } from '../lib/query/query-keys';
@@ -54,7 +55,7 @@ export function useEventTags(): UseEventTagsReturn {
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: queryKeys.tags(currentProfile?.id),
-    queryFn: getTags,
+    queryFn: () => getTags(getCurrentSession().client),
     enabled: !!currentProfile?.id && isAuthenticated,
     // Tags list rarely changes, use longer stale time
     staleTime: 5 * 60 * 1000, // 5 minutes
@@ -130,7 +131,7 @@ export function useEventTagMapping(options: UseEventTagMappingOptions): UseEvent
   const { data, isLoading, error, refetch } = useQuery({
     // Include sorted event IDs in query key for proper caching
     queryKey: queryKeys.eventTags(currentProfile?.id, sortedEventIds),
-    queryFn: () => getEventTags(eventIds),
+    queryFn: () => getEventTags(getCurrentSession().client, eventIds),
     enabled: enabled && !!currentProfile?.id && isAuthenticated && eventIds.length > 0,
     // Event tags can change when tags are assigned, use moderate stale time
     staleTime: 2 * 60 * 1000, // 2 minutes
