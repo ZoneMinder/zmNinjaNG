@@ -23,7 +23,7 @@ import { EventThumbnail } from './EventThumbnail';
 import { downloadEventVideo } from '../../services/download';
 import { type EventFilters } from '../../api/events';
 import { getPortalUrlForEvent } from '../../lib/zm/server-resolver';
-import { buildThumbnailChain } from '../../lib/event/thumbnail-chain';
+import { buildThumbnailChain, eventHasAlarmFrame } from '../../lib/event/thumbnail-chain';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { EventThumbnailHoverPreview } from './EventThumbnailHoverPreview';
 import { calculateThumbnailDimensions, getMonitorDimensions } from '../../lib/event/event-utils';
@@ -104,6 +104,7 @@ const EventMontageTile = memo(function EventMontageTile({
     height: thumbnailHeight,
     minStreamingPort,
     monitorId: event.MonitorId,
+    hasAlarmFrame: eventHasAlarmFrame(event),
   });
 
   const hasVideo = event.Videoed === '1';

@@ -174,3 +174,17 @@ Feature: Event Browsing and Management
     Then I should see the full-size event frame if events exist
     When I close the full-size event frame if events exist
     Then the full-size event frame is gone if events exist
+
+  @all
+  Scenario: Collapsed frame carousel fetches no frame images
+    When I click into the first event if events exist
+    Then I should see the event frames carousel if events exist
+    When I toggle the event frames carousel
+    Then the event frames carousel should be collapsed
+    When I start recording event thumbnail requests
+    And I refresh the page
+    Then the event frames carousel should be collapsed
+    When I give the app its chance to fetch thumbnails
+    Then no event frame thumbnails should have been requested
+    When I toggle the event frames carousel
+    Then event frame thumbnails should be requested

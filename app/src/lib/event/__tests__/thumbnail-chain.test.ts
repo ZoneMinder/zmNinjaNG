@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveFallbackFids, buildThumbnailChain } from '../thumbnail-chain';
+import { resolveFallbackFids, buildThumbnailChain, eventHasAlarmFrame } from '../thumbnail-chain';
 import type { ThumbnailFallbackEntry } from '../../../stores/settings';
 
 describe('resolveFallbackFids', () => {
@@ -94,5 +94,47 @@ describe('buildThumbnailChain', () => {
       { type: 'snapshot', enabled: false },
     ];
     expect(buildThumbnailChain('https://zm.example.com/zm', '42', chain)).toEqual([]);
+  });
+});
+
+describe('skipping the alarm frame an event does not have', () => {
+  const chain: ThumbnailFallbackEntry[] = [
+    { type: 'alarm', enabled: true },
+    { type: 'snapshot', enabled: true },
+  ];
+
+  it('drops the alarm fid when the event recorded no alarm frames', () => {
+    expect(resolveFallbackFids(chain, { hasAlarmFrame: false })).toEqual(['snapshot']);
+  });
+
+  it('keeps the alarm fid when the event recorded alarm frames', () => {
+    expect(resolveFallbackFids(chain, { hasAlarmFrame: true })).toEqual(['alarm', 'snapshot']);
+  });
+
+  it('keeps the alarm fid when the caller cannot say, so nothing regresses', () => {
+    expect(resolveFallbackFids(chain)).toEqual(['alarm', 'snapshot']);
+  });
+
+  it('builds no alarm URL for an event with no alarm frames', () => {
+    // Decoded first: under dev the real URL is nested percent-encoded inside
+    // the image proxy, so a raw substring check would never match.
+    const urls = buildThumbnailChain('https://zm.example/zm', '42', chain, {
+      hasAlarmFrame: false,
+    }).map(decodeURIComponent);
+    expect(urls.some((url) => url.includes('fid=alarm'))).toBe(false);
+    expect(urls.some((url) => url.includes('fid=snapshot'))).toBe(true);
+  });
+});
+
+describe('eventHasAlarmFrame', () => {
+  it('reads the recorded alarm frame count', () => {
+    expect(eventHasAlarmFrame({ AlarmFrames: '3' })).toBe(true);
+    expect(eventHasAlarmFrame({ AlarmFrames: '0' })).toBe(false);
+  });
+
+  it('assumes an alarm frame when the count is missing or unparsable', () => {
+    // Better one wasted request than a silently missing alarm thumbnail.
+    expect(eventHasAlarmFrame({})).toBe(true);
+    expect(eventHasAlarmFrame({ AlarmFrames: '' })).toBe(true);
   });
 });

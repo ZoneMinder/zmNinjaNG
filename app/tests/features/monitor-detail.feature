@@ -117,6 +117,22 @@ Feature: Monitor Detail Page
     When I tap "All events"
     Then I should be on the events page filtered to that monitor
 
+  @all
+  Scenario: Collapsed recent events fetch no event thumbnails
+    Given I am logged into zmNinjaNg
+    When I open the first monitor's detail view
+    Then the recent events list should be visible
+    When I tap the recent events collapse toggle
+    Then the recent events body should be hidden
+    When I start recording event thumbnail requests
+    And I refresh the page
+    Then the recent events body should still be hidden
+    When I give the app its chance to fetch thumbnails
+    Then no event thumbnails should have been requested
+    When I tap the recent events collapse toggle
+    Then the recent events body should be visible
+    And event thumbnails should be requested
+
   @web
   Scenario: Scroll position on monitor detail is restored after returning from an event
     Given I am logged into zmNinjaNg

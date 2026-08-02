@@ -55,7 +55,10 @@ export function CollapsibleCard({
     <Card data-testid={props['data-testid']}>
       <Collapsible open={open} onOpenChange={handleOpenChange}>
         <CollapsibleTrigger asChild>
-          <CardHeader className="cursor-pointer select-none">
+          <CardHeader
+            className="cursor-pointer select-none"
+            data-testid={props['data-testid'] ? `${props['data-testid']}-toggle` : undefined}
+          >
             <div className="flex items-center justify-between">
               <div className="flex-1">{header}</div>
               <ChevronDown
