@@ -209,14 +209,14 @@ describe('read-only tools', () => {
       const tool = getToolByName('list_events')!;
       const r = await tool.execute({ monitorId: 'Front Door' }, ctx());
       expect(r.isError).toBeFalsy();
-      expect(vi.mocked(getEvents)).toHaveBeenCalledWith(expect.objectContaining({ monitorId: '1' }));
+      expect(vi.mocked(getEvents)).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ monitorId: '1' }));
     });
 
     it('resolves a name ignoring case and surrounding space', async () => {
       const tool = getToolByName('list_events')!;
       const r = await tool.execute({ monitorId: '  front door ' }, ctx());
       expect(r.isError).toBeFalsy();
-      expect(vi.mocked(getEvents)).toHaveBeenCalledWith(expect.objectContaining({ monitorId: '1' }));
+      expect(vi.mocked(getEvents)).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ monitorId: '1' }));
     });
 
     // "FrontDoor" is exactly what the model sent in the real failure.
@@ -224,14 +224,14 @@ describe('read-only tools', () => {
       const tool = getToolByName('list_events')!;
       const r = await tool.execute({ monitorId: 'FrontDoor' }, ctx());
       expect(r.isError).toBeFalsy();
-      expect(vi.mocked(getEvents)).toHaveBeenCalledWith(expect.objectContaining({ monitorId: '1' }));
+      expect(vi.mocked(getEvents)).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ monitorId: '1' }));
     });
 
     it('passes a valid numeric id straight through', async () => {
       const tool = getToolByName('list_events')!;
       const r = await tool.execute({ monitorId: '1' }, ctx());
       expect(r.isError).toBeFalsy();
-      expect(vi.mocked(getEvents)).toHaveBeenCalledWith(expect.objectContaining({ monitorId: '1' }));
+      expect(vi.mocked(getEvents)).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ monitorId: '1' }));
     });
 
     it('errors, and never queries, for a monitor that does not exist', async () => {
@@ -254,7 +254,7 @@ describe('read-only tools', () => {
       const tool = getToolByName('list_events')!;
       const r = await tool.execute({}, ctx());
       expect(r.isError).toBeFalsy();
-      expect(vi.mocked(getEvents)).toHaveBeenCalledWith(expect.objectContaining({ monitorId: undefined }));
+      expect(vi.mocked(getEvents)).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ monitorId: undefined }));
     });
 
     // Small models emit the literal string "null" (or "undefined"/"none"/"all")
@@ -267,7 +267,7 @@ describe('read-only tools', () => {
         const tool = getToolByName('list_events')!;
         const r = await tool.execute({ monitorId: placeholder, when: 'today' }, ctx());
         expect(r.isError).toBeFalsy();
-        expect(vi.mocked(getEvents)).toHaveBeenCalledWith(expect.objectContaining({ monitorId: undefined }));
+        expect(vi.mocked(getEvents)).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ monitorId: undefined }));
       },
     );
 
@@ -275,7 +275,7 @@ describe('read-only tools', () => {
       const tool = getToolByName('list_events')!;
       const r = await tool.execute({ objectType: 'null' }, ctx());
       expect(r.isError).toBeFalsy();
-      expect(vi.mocked(getEvents)).toHaveBeenCalledWith(expect.objectContaining({ notesRegexp: undefined }));
+      expect(vi.mocked(getEvents)).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ notesRegexp: undefined }));
     });
   });
 
@@ -366,7 +366,7 @@ describe('read-only tools', () => {
     const tool = getToolByName('list_events')!;
     const r = await tool.execute({ objectType: ['person'] }, { ...ctx(), question: 'summarize today' });
     expect(r.isError).toBeFalsy();
-    expect(vi.mocked(getEvents)).toHaveBeenCalledWith(expect.objectContaining({ notesRegexp: undefined }));
+    expect(vi.mocked(getEvents)).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ notesRegexp: undefined }));
     expect(warn).toHaveBeenCalledWith(
       'list_events objectType dropped: the question names no object',
       expect.anything(),
@@ -380,7 +380,7 @@ describe('read-only tools', () => {
     const r = await tool.execute({ objectType: ['person'] }, { ...ctx(), question: 'how many people came today' });
     expect(r.isError).toBeFalsy();
     expect(vi.mocked(getEvents)).toHaveBeenCalledWith(
-      expect.objectContaining({ notesRegexp: 'detected:.*person' }),
+      expect.anything(), expect.objectContaining({ notesRegexp: 'detected:.*person' }),
     );
   });
 
@@ -689,7 +689,7 @@ describe('read-only tools', () => {
     const nonNumeric = await tool.execute({ limit: 'banana' }, ctx());
     expect(nonNumeric.isError).toBeFalsy();
     // Both fall back to the max clamp rather than producing NaN/negative EventFilters.limit.
-    expect(getEvents).toHaveBeenLastCalledWith(expect.objectContaining({ limit: ASSISTANT.maxListEventsLimit }));
+    expect(getEvents).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ limit: ASSISTANT.maxListEventsLimit }));
   });
 });
 
@@ -1093,7 +1093,7 @@ describe('list_events when resolution (refs #246)', () => {
     const tool = getToolByName('list_events')!;
     await tool.execute({ when: 'today' }, { ...ctx(), timezone: 'America/New_York' });
     expect(getEvents).toHaveBeenCalledWith(
-      expect.objectContaining({ startDateTime: '2026-07-16 00:00:00', endDateTime: '2026-07-16 10:30:00' }),
+      expect.anything(), expect.objectContaining({ startDateTime: '2026-07-16 00:00:00', endDateTime: '2026-07-16 10:30:00' }),
     );
   });
 
@@ -1102,7 +1102,7 @@ describe('list_events when resolution (refs #246)', () => {
     const r = await tool.execute({ when: 'last hour' }, ctx());
     expect(r.isError).toBeFalsy();
     expect(getEvents).toHaveBeenCalledWith(
-      expect.objectContaining({ startDateTime: expect.any(String), endDateTime: expect.any(String) }),
+      expect.anything(), expect.objectContaining({ startDateTime: expect.any(String), endDateTime: expect.any(String) }),
     );
   });
 
@@ -1117,7 +1117,7 @@ describe('list_events when resolution (refs #246)', () => {
     );
     expect(r.isError).toBeFalsy();
     expect(getEvents).toHaveBeenCalledWith(
-      expect.objectContaining({
+      expect.anything(), expect.objectContaining({
         startDateTime: '2026-07-15 16:00:00',
         endDateTime: '2026-07-15 22:00:00',
         notesRegexp: 'detected:.*person',
@@ -1151,7 +1151,7 @@ describe('list_events when resolution (refs #246)', () => {
     expect(parsed.events[0].start).toBe('Jul 15, 2026, 4:05:00 PM');
     expect(parsed.window.from).toBe('Jul 15, 2026, 12:00:00 AM');
     // The QUERY still uses raw ZM timestamps; only the presentation formats.
-    expect(getEvents).toHaveBeenCalledWith(expect.objectContaining({ startDateTime: '2026-07-15 00:00:00' }));
+    expect(getEvents).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ startDateTime: '2026-07-15 00:00:00' }));
   });
 
   // "Busiest hour" is timestamp arithmetic, so the tool computes the tally
@@ -1225,7 +1225,7 @@ describe('list_events when resolution (refs #246)', () => {
     );
 
     expect(r.isError).toBeFalsy();
-    expect(getEvents).toHaveBeenCalledWith(expect.objectContaining({ notesRegexp: 'detected:.*(car|truck)' }));
+    expect(getEvents).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ notesRegexp: 'detected:.*(car|truck)' }));
   });
 
   it('accepts a list the model stringified rather than rejecting it as one label', async () => {
@@ -1239,7 +1239,7 @@ describe('list_events when resolution (refs #246)', () => {
     );
 
     expect(r.isError).toBeFalsy();
-    expect(getEvents).toHaveBeenCalledWith(expect.objectContaining({ notesRegexp: 'detected:.*(car|truck)' }));
+    expect(getEvents).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ notesRegexp: 'detected:.*(car|truck)' }));
   });
 
   it('treats an empty JSON literal as no filter at all', async () => {
@@ -1250,7 +1250,7 @@ describe('list_events when resolution (refs #246)', () => {
     );
 
     expect(r.isError).toBeFalsy();
-    expect(getEvents).toHaveBeenCalledWith(expect.objectContaining({ notesRegexp: undefined }));
+    expect(getEvents).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ notesRegexp: undefined }));
   });
 
   it('accepts labels that are in the vocabulary', async () => {
@@ -1261,7 +1261,7 @@ describe('list_events when resolution (refs #246)', () => {
     );
 
     expect(r.isError).toBeFalsy();
-    expect(getEvents).toHaveBeenCalledWith(expect.objectContaining({ notesRegexp: 'detected:.*(car|truck)' }));
+    expect(getEvents).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ notesRegexp: 'detected:.*(car|truck)' }));
   });
 
   it('hands back an uninterpretable when phrase instead of querying a guessed window', async () => {
@@ -1286,7 +1286,7 @@ describe('list_events when resolution (refs #246)', () => {
     const tool = getToolByName('list_events')!;
     await tool.execute({ when: 'today', objectType: 'person' }, { ...ctx(), timezone: 'America/New_York' });
     expect(getEvents).toHaveBeenCalledWith(
-      expect.objectContaining({ startDateTime: '2026-07-16 00:00:00', notesRegexp: 'detected:.*person' }),
+      expect.anything(), expect.objectContaining({ startDateTime: '2026-07-16 00:00:00', notesRegexp: 'detected:.*person' }),
     );
   });
 
@@ -1320,7 +1320,7 @@ describe('list_events when resolution (refs #246)', () => {
     /** `filtered` answers the objectType query, `probe` the unfiltered re-run. */
     const respond = (filtered: unknown, probe: unknown) => {
       vi.mocked(getEvents).mockReset();
-      vi.mocked(getEvents).mockImplementation(async (f) =>
+      vi.mocked(getEvents).mockImplementation(async (_client, f) =>
         ((f as { notesRegexp?: string }).notesRegexp ? filtered : probe) as never,
       );
     };
@@ -1346,7 +1346,7 @@ describe('list_events when resolution (refs #246)', () => {
         { ...ctx(), timezone: 'America/New_York' },
       );
 
-      expect((vi.mocked(getEvents).mock.calls[0][0] as { notesRegexp?: string }).notesRegexp).toBe(
+      expect((vi.mocked(getEvents).mock.calls[0][1] as { notesRegexp?: string }).notesRegexp).toBe(
         'detected:.*(car|truck)',
       );
     });

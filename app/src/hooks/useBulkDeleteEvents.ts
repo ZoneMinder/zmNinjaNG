@@ -10,6 +10,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { deleteEvent as apiDeleteEvent } from '../api/events';
+import { getCurrentSession } from '../services/sessions';
 import type { EventData, EventsResponse } from '../api/types';
 import { queryKeys } from '../lib/query/query-keys';
 import { useCurrentProfile } from './useCurrentProfile';
@@ -35,7 +36,8 @@ export function useBulkDeleteEvents(): {
     if (eventIds.length === 0) return;
     setIsDeleting(true);
     try {
-      const results = await Promise.allSettled(eventIds.map((id) => apiDeleteEvent(id)));
+      const client = getCurrentSession().client;
+      const results = await Promise.allSettled(eventIds.map((id) => apiDeleteEvent(client, id)));
       const failed = results.filter((r) => r.status === 'rejected').length;
 
       // Remove the successfully deleted events from cached lists right away so

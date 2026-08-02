@@ -76,6 +76,7 @@ describe('fail-open tool routing', () => {
     // First call is pushed back, the model insists, then the query executes:
     // the #265 recovery still works through one pushback.
     expect(vi.mocked(getEvents)).toHaveBeenCalledWith(
+      expect.anything(),
       expect.objectContaining({ startDateTime: expect.any(String), endDateTime: expect.any(String) }),
     );
     expect(out[out.length - 1].text).toBe('No events in the last week.');

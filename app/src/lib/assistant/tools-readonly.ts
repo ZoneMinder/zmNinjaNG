@@ -181,7 +181,7 @@ const countEventsTool: ToolDefinition = {
       // ZoneMinder's consoleEvents endpoint takes a MySQL INTERVAL phrase; the
       // singular unit is valid for any count ("2 week").
       const interval = `${Math.floor(count)} ${unit}`;
-      const [counts, { monitors }] = await Promise.all([getConsoleEvents(interval), getMonitors()]);
+      const [counts, { monitors }] = await Promise.all([getConsoleEvents(getSession(ctx.profileId).client, interval), getMonitors()]);
       const nameById = new Map(monitors.map((m) => [m.Monitor.Id, m.Monitor.Name]));
       const rows = counts
         .filter((c) => nameById.has(c.monitorId))
@@ -420,7 +420,7 @@ const listEventsTool: ToolDefinition = {
         sort: 'StartDateTime',
         direction: 'desc',
       };
-      const res = await getEvents(filters);
+      const res = await getEvents(getSession(ctx.profileId).client, filters);
 
       // A zero-row objectType query is ambiguous, and answering it as "nothing
       // happened" is the dangerous reading: the label may simply not be the one
@@ -432,7 +432,7 @@ const listEventsTool: ToolDefinition = {
       // objectType "people" against events labelled "person", got nothing, and
       // told the user nobody had come (refs #246).
       if (objectType && res.events.length === 0) {
-        const probe = await getEvents({ ...filters, notesRegexp: undefined });
+        const probe = await getEvents(getSession(ctx.profileId).client, { ...filters, notesRegexp: undefined });
         // Sampled from one page of the window, not the whole window: enough to
         // name the labels in use, and it costs one request only on this path.
         const available = [...new Set(probe.events.flatMap(({ Event: e }) => parseDetectedObjects(e.Notes)))];
@@ -595,7 +595,7 @@ const getEventTool: ToolDefinition = {
     safeExecute('get_event', async () => {
       const eventId = String(input.eventId ?? '');
       if (!eventId) throw new Error('eventId is required');
-      const [event, { monitors }] = await Promise.all([getEvent(eventId), getMonitors()]);
+      const [event, { monitors }] = await Promise.all([getEvent(getSession(ctx.profileId).client, eventId), getMonitors()]);
       const e = event.Event;
       const nameById = new Map(monitors.map((m) => [m.Monitor.Id, m.Monitor.Name]));
       const monitorName = nameById.get(e.MonitorId) ?? e.MonitorId;

@@ -7,6 +7,7 @@ import { useMonitorSeenStore } from '../../stores/monitorSeen';
 import { getMonitorEventsSince } from '../../api/events';
 
 vi.mock('../../api/events', () => ({ getMonitorEventsSince: vi.fn() }));
+vi.mock('../../services/sessions', () => ({ getCurrentSession: vi.fn(() => ({ client: {} })) }));
 vi.mock('../useCurrentProfile', () => ({
   useCurrentProfile: () => ({ currentProfile: { id: 'p1' }, settings: {} }),
 }));
@@ -36,7 +37,7 @@ describe('useMonitorNewEvents', () => {
     // A fresh install must never greet the user with "61 new". The response
     // that seeds a monitor is the same one that would otherwise report its
     // whole history. Observe every render, not just the settled one.
-    mockCount.mockImplementation(async (_monitorId: string, since: string | null) =>
+    mockCount.mockImplementation(async (_client: unknown, _monitorId: string, since: string | null) =>
       since === null
         ? { count: 61, newest: '2026-07-09 14:26:47' }
         : { count: 0, newest: '2026-07-09 14:26:47' }
@@ -70,7 +71,7 @@ describe('useMonitorNewEvents', () => {
 
     await waitFor(() => expect(result.current.counts['1']).toBe(3));
     expect(result.current.newest['1']).toBe('2026-07-09 14:26:47');
-    expect(mockCount).toHaveBeenCalledWith('1', '2026-07-01 00:00:00');
+    expect(mockCount).toHaveBeenCalledWith(expect.anything(), '1', '2026-07-01 00:00:00');
   });
 
   it('seeds a monitor that has never recorded an event with a null watermark', async () => {
@@ -87,7 +88,7 @@ describe('useMonitorNewEvents', () => {
   it('queries each monitor independently', async () => {
     useMonitorSeenStore.getState().seed('p1', '1', '2026-07-01 00:00:00');
     useMonitorSeenStore.getState().seed('p1', '2', '2026-07-02 00:00:00');
-    mockCount.mockImplementation(async (monitorId: string) =>
+    mockCount.mockImplementation(async (_client: unknown, monitorId: string) =>
       monitorId === '1' ? { count: 3, newest: 'a' } : { count: 0, newest: 'b' }
     );
 

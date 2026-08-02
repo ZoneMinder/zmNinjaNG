@@ -9,6 +9,7 @@
 import { useState, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { getAdjacentEvent, type EventFilters } from '../api/events';
+import { getCurrentSession } from '../services/sessions';
 import { log, LogLevel } from '../lib/logger';
 
 interface UseEventNavigationOptions {
@@ -64,7 +65,7 @@ export function useEventNavigation({
     if (!currentStartDateTime || isLoadingPrev) return false;
     setIsLoadingPrev(true);
     try {
-      const prev = await getAdjacentEvent('prev', currentStartDateTime, eventFilters);
+      const prev = await getAdjacentEvent(getCurrentSession().client, 'prev', currentStartDateTime, eventFilters);
       if (prev) {
         navigateToEvent(prev.Event.Id, 'right');
         return true;
@@ -82,7 +83,7 @@ export function useEventNavigation({
     if (!currentStartDateTime || isLoadingNext) return false;
     setIsLoadingNext(true);
     try {
-      const next = await getAdjacentEvent('next', currentStartDateTime, eventFilters);
+      const next = await getAdjacentEvent(getCurrentSession().client, 'next', currentStartDateTime, eventFilters);
       if (next) {
         navigateToEvent(next.Event.Id, 'left', continuousPlayback);
         return true;

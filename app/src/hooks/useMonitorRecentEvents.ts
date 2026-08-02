@@ -6,6 +6,7 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getEvents } from '../api/events';
+import { getCurrentSession } from '../services/sessions';
 import type { EventData } from '../api/types';
 import { useCurrentProfile } from './useCurrentProfile';
 import { useAuthSlice } from '../stores/auth';
@@ -41,7 +42,7 @@ export function useMonitorRecentEvents(monitorId: string): UseMonitorRecentEvent
 
   const { data, isLoading, isError, isFetching, refetch } = useQuery({
     queryKey: queryKeys.monitorRecentEvents(currentProfile?.id, monitorId, count),
-    queryFn: () => getEvents({ monitorId, limit: count, sort: 'StartDateTime', direction: 'desc' }),
+    queryFn: () => getEvents(getCurrentSession().client, { monitorId, limit: count, sort: 'StartDateTime', direction: 'desc' }),
     enabled: !!currentProfile && isAuthenticated && !hidden,
     refetchInterval: hidden ? false : bandwidth.monitorRecentEventsInterval,
   });

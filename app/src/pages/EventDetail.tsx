@@ -9,6 +9,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../lib/query/query-keys';
 import { getEvent, getEventVideoUrl, getEventImageUrl, setEventArchived } from '../api/events';
+import { getCurrentSession } from '../services/sessions';
 import { eventHasAlarmFrame } from '../lib/event/thumbnail-chain';
 import { resolveFallbackFids } from '../lib/event/thumbnail-chain';
 import { resolveBackNavigation } from '../lib/back-navigation';
@@ -76,7 +77,7 @@ export default function EventDetail() {
   const { currentProfile, settings } = useCurrentProfile();
   const { data: event, isLoading, error } = useQuery({
     queryKey: queryKeys.event(currentProfile?.id, id),
-    queryFn: () => getEvent(id!),
+    queryFn: () => getEvent(getCurrentSession().client, id!),
     enabled: !!id,
   });
   const { data: monitorData } = useQuery({
@@ -185,7 +186,7 @@ export default function EventDetail() {
     const next = !isArchived;
     setIsArchiving(true);
     try {
-      await setEventArchived(event.Event.Id, next);
+      await setEventArchived(getCurrentSession().client, event.Event.Id, next);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.event(currentProfile?.id, event.Event.Id) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.events(currentProfile?.id) }),

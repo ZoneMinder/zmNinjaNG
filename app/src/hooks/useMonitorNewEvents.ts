@@ -12,6 +12,7 @@
 import { useEffect, useMemo } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import { getMonitorEventsSince } from '../api/events';
+import { getCurrentSession } from '../services/sessions';
 import { queryKeys } from '../lib/query/query-keys';
 import { useMonitorSeenStore } from '../stores/monitorSeen';
 import { useCurrentProfile } from './useCurrentProfile';
@@ -42,7 +43,7 @@ export function useMonitorNewEvents(monitorIds: string[]): MonitorNewEvents {
       const since = watermarks[monitorId] ?? null;
       return {
         queryKey: queryKeys.monitorEventsSince(profileId, monitorId, since),
-        queryFn: () => getMonitorEventsSince(monitorId, since),
+        queryFn: () => getMonitorEventsSince(getCurrentSession().client, monitorId, since),
         enabled: !!profileId && isAuthenticated,
         refetchInterval: bandwidth.monitorNewEventsInterval,
       };

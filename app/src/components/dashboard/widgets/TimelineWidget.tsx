@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef, useCallback, memo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { getEvents } from '../../../api/events';
+import { getCurrentSession } from '../../../services/sessions';
 import { formatForServer, formatLocalDateTime } from '../../../lib/time';
 import {
     subHours,
@@ -84,7 +85,7 @@ export const TimelineWidget = memo(function TimelineWidget() {
 
     const { data: events } = useQuery({
         queryKey: queryKeys.eventsTimelineWidget(currentProfile?.id, start.getTime()),
-        queryFn: () => getEvents({
+        queryFn: () => getEvents(getCurrentSession().client, {
             startDateTime: formatForServer(start),
             limit: 1000,
         }),

@@ -13,6 +13,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { getEvents } from '../../../api/events';
+import { getCurrentSession } from '../../../services/sessions';
 import { useCurrentProfile } from '../../../hooks/useCurrentProfile';
 import { queryKeys } from '../../../lib/query/query-keys';
 import { useBandwidthSettings } from '../../../hooks/useBandwidthSettings';
@@ -73,7 +74,7 @@ export const HeatmapWidget = memo(function HeatmapWidget({ title }: HeatmapWidge
   const { data: eventsData, isLoading, error } = useQuery({
     queryKey: queryKeys.eventsHeatmap(currentProfile?.id, timeRange),
     queryFn: () =>
-      getEvents({
+      getEvents(getCurrentSession().client, {
         startDateTime: formatForServer(startDate),
         endDateTime: formatForServer(endDate),
         limit: 1000,

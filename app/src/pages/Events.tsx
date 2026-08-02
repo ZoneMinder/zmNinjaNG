@@ -12,6 +12,7 @@ import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
 import { getEvents } from '../api/events';
 import type { EventFilters } from '../api/events';
+import { getCurrentSession } from '../services/sessions';
 import type { EventData } from '../api/types';
 import { getMonitors } from '../api/monitors';
 import { resolveMinStreamingPort } from '../lib/monitor/multiport';
@@ -208,7 +209,7 @@ export default function Events() {
   const { data: eventsData, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: queryKeys.eventsList(currentProfile?.id, filters, eventLimit, effectiveMonitorId, isGroupFilterActive, eventIdFilter, tagIdFilter),
     queryFn: () =>
-      getEvents({
+      getEvents(getCurrentSession().client, {
         ...filters,
         // Use effective monitor ID (user filter or group filter)
         monitorId: effectiveMonitorId,
