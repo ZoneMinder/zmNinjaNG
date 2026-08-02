@@ -11,29 +11,29 @@ public class SSLTrustPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "enable", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "disable", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "isEnabled", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "setTrustedFingerprint", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setTrustedFingerprints", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getServerCertFingerprint", returnType: CAPPluginReturnPromise),
     ]
 
     /// Global flag checked by URLProtocol and WKWebView delegate
     @objc static var sslTrustEnabled = false
 
-    /// Trusted certificate SHA-256 fingerprint (colon-separated uppercase hex)
-    @objc static var trustedFingerprint: String? = nil
+    /// Trusted certificate SHA-256 fingerprints, keyed by host (colon-separated uppercase hex)
+    @objc static var trustedFingerprints: [String: String] = [:]
 
     @objc func enable(_ call: CAPPluginCall) {
         SSLTrustPlugin.sslTrustEnabled = true
         // Register URLProtocol to intercept URLSession.shared HTTPS requests
         // This covers CapacitorHttp which uses URLSession.shared
         URLProtocol.registerClass(SSLTrustURLProtocol.self)
-        // WebView delegate is installed via setTrustedFingerprint() only when
+        // WebView delegate is installed via setTrustedFingerprints() only when
         // a fingerprint is available, so the delegate never accepts without validation
         call.resolve()
     }
 
     @objc func disable(_ call: CAPPluginCall) {
         SSLTrustPlugin.sslTrustEnabled = false
-        SSLTrustPlugin.trustedFingerprint = nil
+        SSLTrustPlugin.trustedFingerprints = [:]
         URLProtocol.unregisterClass(SSLTrustURLProtocol.self)
         call.resolve()
     }
@@ -42,10 +42,18 @@ public class SSLTrustPlugin: CAPPlugin, CAPBridgedPlugin {
         call.resolve(["enabled": SSLTrustPlugin.sslTrustEnabled])
     }
 
-    @objc func setTrustedFingerprint(_ call: CAPPluginCall) {
-        SSLTrustPlugin.trustedFingerprint = call.getString("fingerprint")
-        // Only install WebView delegate when we have a fingerprint to validate against
-        if SSLTrustPlugin.sslTrustEnabled && SSLTrustPlugin.trustedFingerprint != nil {
+    @objc func setTrustedFingerprints(_ call: CAPPluginCall) {
+        let entries = call.getArray("entries", JSObject.self) ?? []
+        var updated: [String: String] = [:]
+        for entry in entries {
+            guard let host = entry["host"] as? String,
+                  let fingerprint = entry["fingerprint"] as? String else { continue }
+            updated[host] = fingerprint
+        }
+        // Rebuild atomically: a single assignment swaps the whole map at once
+        SSLTrustPlugin.trustedFingerprints = updated
+        // Only install WebView delegate when we have fingerprints to validate against
+        if SSLTrustPlugin.sslTrustEnabled && !SSLTrustPlugin.trustedFingerprints.isEmpty {
             installWebViewDelegate()
         }
         call.resolve()
@@ -188,22 +196,24 @@ func sha256Fingerprint(_ certificate: SecCertificate) -> String {
     return hash.map { String(format: "%02X", $0) }.joined(separator: ":")
 }
 
-/// Check if a certificate's fingerprint matches the trusted one.
-/// Used by URLProtocol (HTTP requests) — allows when no fingerprint is set (TOFU cert-fetch).
-func isCertTrustedForHTTP(_ certificate: SecCertificate) -> Bool {
-    guard let trusted = SSLTrustPlugin.trustedFingerprint, !trusted.isEmpty else {
-        // No fingerprint stored yet — allow for TOFU cert-fetch flow
+/// Check if a certificate's fingerprint matches the trusted one for a given host.
+/// Used by URLProtocol (HTTP requests) — allows when no fingerprint is stored for
+/// the host (TOFU cert-fetch).
+func isCertTrustedForHTTP(_ certificate: SecCertificate, host: String) -> Bool {
+    guard let trusted = SSLTrustPlugin.trustedFingerprints[host], !trusted.isEmpty else {
+        // No fingerprint stored for this host yet — allow for TOFU cert-fetch flow
         return true
     }
     let actual = sha256Fingerprint(certificate)
     return actual == trusted
 }
 
-/// Check if a certificate's fingerprint matches the trusted one.
-/// Used by WKNavigationDelegate (WebView) — rejects when no fingerprint is set.
-func isCertTrustedForWebView(_ certificate: SecCertificate) -> Bool {
-    guard let trusted = SSLTrustPlugin.trustedFingerprint, !trusted.isEmpty else {
-        return false
+/// Check if a certificate's fingerprint matches the trusted one for a given host.
+/// Used by WKNavigationDelegate (WebView) — allows when no fingerprint is stored for
+/// the host (TOFU: a profile mid-onboarding has no pinned fingerprint yet).
+func isCertTrustedForWebView(_ certificate: SecCertificate, host: String) -> Bool {
+    guard let trusted = SSLTrustPlugin.trustedFingerprints[host], !trusted.isEmpty else {
+        return true
     }
     let actual = sha256Fingerprint(certificate)
     return actual == trusted
@@ -298,7 +308,8 @@ class SSLTrustURLProtocol: URLProtocol, URLSessionDelegate, URLSessionDataDelega
             // Accept if the cert passes normal system validation (valid CA, the
             // requested host) OR matches the pinned fingerprint, so a pinned
             // self-signed fingerprint does not reject valid-CA servers.
-            let fingerprintTrusted = cert.map { isCertTrustedForHTTP($0) } ?? false
+            let host = challenge.protectionSpace.host
+            let fingerprintTrusted = cert.map { isCertTrustedForHTTP($0, host: host) } ?? false
             if isServerTrustValid(serverTrust) || fingerprintTrusted {
                 completionHandler(.useCredential, URLCredential(trust: serverTrust))
                 return
@@ -389,7 +400,8 @@ class SSLTrustNavigationDelegate: NSObject, WKNavigationDelegate {
             // Accept if the cert passes normal system validation OR matches the
             // pinned fingerprint, so a pinned self-signed fingerprint does not
             // reject valid-CA servers (e.g. image loads from another profile's host).
-            let fingerprintTrusted = cert.map { isCertTrustedForWebView($0) } ?? false
+            let host = challenge.protectionSpace.host
+            let fingerprintTrusted = cert.map { isCertTrustedForWebView($0, host: host) } ?? false
             if isServerTrustValid(serverTrust) || fingerprintTrusted {
                 completionHandler(.useCredential, URLCredential(trust: serverTrust))
                 return
