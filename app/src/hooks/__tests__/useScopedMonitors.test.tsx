@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { renderHook, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
 import { useScopedMonitors } from '../useScopedMonitors';
@@ -213,5 +213,51 @@ describe('useScopedMonitors', () => {
     await waitFor(() => expect(vi.mocked(getMonitors).mock.calls.length).toBeGreaterThan(callsBefore));
     const refetchCallClient = vi.mocked(getMonitors).mock.calls[vi.mocked(getMonitors).mock.calls.length - 1][0];
     expect((refetchCallClient as unknown as { profile: string }).profile).toBe(profileB.id);
+  });
+
+  it('keeps monitors/errors array identity across an unrelated rerender (combine + replaceEqualDeep)', async () => {
+    // Without useQueries' combine option, useQueries reconstructs its
+    // top-level result array from scratch on every render (getOptimisticResult
+    // remaps the observers via .map() unconditionally), so any merge done in
+    // an external useMemo keyed on that array produces brand-new object
+    // identities on every render - even one triggered by something entirely
+    // unrelated (a parent state change, another store tick) where the
+    // monitor data itself hasn't changed at all. Verified empirically: this
+    // exact assertion FAILS (arrays differ by reference) against a plain
+    // useMemo-over-the-raw-array implementation and only holds once the
+    // merge lives inside combine, whose output QueriesObserver deep-diffs
+    // against the previous combined result via replaceEqualDeep, reusing old
+    // references for unchanged data.
+    mockScope([profileA], 'single');
+    mockAuthSlices({ [profileA.id]: AUTHENTICATED_SLICE });
+    vi.mocked(getMonitors).mockResolvedValue({ monitors: [monitor('1', 'Front Door')] });
+
+    const { result, rerender } = renderHook(() => useScopedMonitors(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.monitors).toHaveLength(1));
+
+    const monitorsRef = result.current.monitors;
+    const errorsRef = result.current.errors;
+
+    // Force the hook to re-run with no data change at all - simulates a
+    // rerender caused by something outside this hook's own state.
+    rerender();
+
+    expect(result.current.monitors).toBe(monitorsRef);
+    expect(result.current.errors).toBe(errorsRef);
+  });
+
+  it('refetchProfile still triggers a real network refetch under combine', async () => {
+    mockScope([profileA], 'single');
+    mockAuthSlices({ [profileA.id]: AUTHENTICATED_SLICE });
+    vi.mocked(getMonitors).mockResolvedValue({ monitors: [monitor('1', 'Front Door')] });
+
+    const { result } = renderHook(() => useScopedMonitors(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.monitors).toHaveLength(1));
+
+    const callsBefore = vi.mocked(getMonitors).mock.calls.length;
+    await act(async () => {
+      result.current.refetchProfile(profileA.id);
+      await waitFor(() => expect(vi.mocked(getMonitors).mock.calls.length).toBeGreaterThan(callsBefore));
+    });
   });
 });

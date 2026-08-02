@@ -13,8 +13,8 @@
  * ProfileError entry while the rest of the scope keeps rendering.
  */
 
-import { useMemo } from 'react';
-import { useQueries } from '@tanstack/react-query';
+import { useCallback } from 'react';
+import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { useShallow } from 'zustand/react/shallow';
 import { getMonitors } from '../api/monitors';
 import { getSession } from '../services/sessions';
@@ -45,6 +45,7 @@ export interface UseScopedMonitorsReturn {
 export function useScopedMonitors(options?: UseScopedMonitorsOptions): UseScopedMonitorsReturn {
   const scope = useProfileScope();
   const bandwidth = useBandwidthSettings();
+  const queryClient = useQueryClient();
   const profiles = scope?.profiles ?? [];
 
   // Can't call useAuthSlice in a loop - select the whole slices map once and
@@ -53,7 +54,18 @@ export function useScopedMonitors(options?: UseScopedMonitorsOptions): UseScoped
   // fetch).
   const slices = useAuthStore(useShallow((s) => s.slices));
 
-  const queries = useQueries({
+  // combine is the only useQueries path that gets reference-stable output
+  // (QueriesObserver diffs the combined result with replaceEqualDeep). The
+  // combine callback is a fresh closure every render, but that's fine: the
+  // observer re-invokes it regardless and then deep-diffs the OUTPUT against
+  // the previous combined result, reusing old references for unchanged
+  // sub-trees. Without combine, useQueries hands back a brand-new top-level
+  // array every render, so any merge done in an external useMemo keyed on
+  // that array recomputes - and produces new object identities - on every
+  // poll tick even when the underlying data hasn't changed, which would
+  // re-render every memoized monitor card once an All-mode view consumes
+  // this hook.
+  const { monitors, errors, isLoading } = useQueries({
     queries: profiles.map((p) => {
       const slice = slices[p.id];
       const authOk = !!slice && (slice.isAuthenticated || !slice.requiresAuth);
@@ -67,38 +79,38 @@ export function useScopedMonitors(options?: UseScopedMonitorsOptions): UseScoped
         refetchInterval: bandwidth.monitorStatusInterval,
       };
     }),
+    combine: (results) => {
+      const monitors: Scoped<MonitorData>[] = [];
+      const errors: ProfileError[] = [];
+      let anyHasData = false;
+
+      profiles.forEach((p, i) => {
+        const q = results[i];
+        if (!q) return;
+        if (q.data) {
+          anyHasData = true;
+          for (const item of filterEnabledMonitors(q.data.monitors)) {
+            monitors.push({ profileId: p.id, profileName: p.name, item });
+          }
+        }
+        if (q.error) {
+          errors.push({ profileId: p.id, profileName: p.name, error: q.error });
+        }
+      });
+
+      return { monitors, errors, isLoading: !anyHasData };
+    },
   });
 
-  return useMemo(() => {
-    const monitors: Scoped<MonitorData>[] = [];
-    const errors: ProfileError[] = [];
-    let anyHasData = false;
+  // Keyed refetch instead of indexing into useQueries' per-render array -
+  // exact query key match refetches precisely that profile, independent of
+  // combine's shape.
+  const refetchProfile = useCallback(
+    (id: ProfileId): void => {
+      void queryClient.refetchQueries({ queryKey: queryKeys.monitors(id), exact: true });
+    },
+    [queryClient]
+  );
 
-    profiles.forEach((p, i) => {
-      const q = queries[i];
-      if (!q) return;
-      if (q.data) {
-        anyHasData = true;
-        for (const item of filterEnabledMonitors(q.data.monitors)) {
-          monitors.push({ profileId: p.id, profileName: p.name, item });
-        }
-      }
-      if (q.error) {
-        errors.push({ profileId: p.id, profileName: p.name, error: q.error });
-      }
-    });
-
-    const refetchProfile = (id: ProfileId): void => {
-      const index = profiles.findIndex((p) => p.id === id);
-      if (index === -1) return;
-      queries[index]?.refetch();
-    };
-
-    return {
-      monitors,
-      errors,
-      isLoading: !anyHasData,
-      refetchProfile,
-    };
-  }, [queries, profiles]);
+  return { monitors, errors, isLoading, refetchProfile };
 }
