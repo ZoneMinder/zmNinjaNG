@@ -1,22 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { changeState, getStates } from '../states';
-import { getApiClient } from '../client';
 import type { ApiClient } from '../client';
 
 const mockGet = vi.fn();
 const mockPost = vi.fn();
-
-vi.mock('../client', () => ({
-  getApiClient: vi.fn(),
-}));
+const mockClient = { get: mockGet, post: mockPost } as unknown as ApiClient;
 
 describe('States API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(getApiClient).mockReturnValue({
-      get: mockGet,
-      post: mockPost,
-    } as unknown as ApiClient);
   });
 
   it('unwraps and normalizes state data', async () => {
@@ -29,7 +21,7 @@ describe('States API', () => {
       },
     });
 
-    const states = await getStates();
+    const states = await getStates(mockClient);
 
     expect(mockGet).toHaveBeenCalledWith('/states.json', expect.objectContaining({ intent: expect.any(String) }));
     expect(states).toEqual([
@@ -41,7 +33,7 @@ describe('States API', () => {
   it('changes state by name', async () => {
     mockPost.mockResolvedValue({});
 
-    await changeState('Active');
+    await changeState(mockClient, 'Active');
 
     expect(mockPost).toHaveBeenCalledWith('/states/change/Active.json');
   });

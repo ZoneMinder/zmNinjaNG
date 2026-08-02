@@ -90,7 +90,7 @@ export default function Server() {
   // Fetch states
   const { data: states, isLoading: statesLoading } = useQuery({
     queryKey: queryKeys.states(currentProfile?.id),
-    queryFn: getStates,
+    queryFn: () => getStates(getCurrentSession().client),
     enabled: !!currentProfile && isAuthenticated,
   });
 
@@ -110,7 +110,7 @@ export default function Server() {
 
   // Mutation for state change
   const changeStateMutation = useMutation({
-    mutationFn: (stateName: string) => changeState(stateName),
+    mutationFn: (stateName: string) => changeState(getCurrentSession().client, stateName),
     onSuccess: () => {
       toast({
         title: t('common.success'),
