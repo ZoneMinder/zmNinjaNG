@@ -503,6 +503,10 @@ export const UI_INTERACTIONS = {
 
   // Pointer movement threshold to cancel a long-press (px)
   moveCancelPx: 8,
+
+  // How long a long-press hint toast stays up (ms). Long enough to read a
+  // short label, short enough that it is gone before the next tap.
+  hintDurationMs: 1500,
 } as const;
 
 /**

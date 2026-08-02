@@ -44,7 +44,10 @@
     "running": "En cours d'exécution",
     "stopped": "Arrêté",
     "done": "Terminé",
-    "press_back_again_to_exit": "Appuyez encore pour quitter"
+    "press_back_again_to_exit": "Appuyez encore pour quitter",
+    "expand": "Développer",
+    "collapse": "Réduire",
+    "remove": "Retirer"
   },
   "app": {
     "name": "zmNinjaNg",
@@ -236,7 +239,8 @@
       "loading": "Chargement des tags...",
       "moreCount": "+{{count}} de plus"
     },
-    "now": "maintenant"
+    "now": "maintenant",
+    "remove_tag": "Retirer {{name}}"
   },
   "event_detail": {
     "event_id": "ID Événement",
@@ -835,7 +839,9 @@
     "select_profile_first": "Sélectionnez d'abord un profil",
     "source_websocket": "Temps réel",
     "source_push": "Push",
-    "source_poll": "Interrogé"
+    "source_poll": "Interrogé",
+    "unread_count_one": "{{count}} notification non lue",
+    "unread_count_other": "{{count}} notifications non lues"
   },
   "notification_settings": {
     "title": "Paramètres de notification",
@@ -1316,7 +1322,8 @@
     "pin_changed": "PIN kiosque mis à jour",
     "pin_cleared": "PIN kiosque supprimé",
     "pin_setting_label": "PIN kiosque",
-    "pin_setting_desc": "PIN pour verrouiller et déverrouiller le mode kiosque"
+    "pin_setting_desc": "PIN pour verrouiller et déverrouiller le mode kiosque",
+    "pin_backspace": "Supprimer le dernier chiffre"
   },
   "command_palette": {
     "title": "Aller à",

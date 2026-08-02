@@ -96,6 +96,7 @@ export function DashboardWidget({
                             variant="secondary"
                             size="icon"
                             className="h-6 w-6"
+                            title={t('common.edit')}
                             aria-label={t('common.edit')}
                             onClick={(e) => {
                                 e.stopPropagation(); // Prevent drag start
@@ -109,6 +110,7 @@ export function DashboardWidget({
                             variant="destructive"
                             size="icon"
                             className="h-6 w-6"
+                            title={t('common.delete')}
                             aria-label={t('common.delete')}
                             onClick={(e) => {
                                 e.stopPropagation(); // Prevent drag start

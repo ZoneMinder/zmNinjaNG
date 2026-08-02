@@ -137,6 +137,7 @@ export function AssistantMobileSheet() {
             className="h-7 w-7"
             onClick={clear}
             disabled={!canClear}
+            title={t('assistant.clear')}
             aria-label={t('assistant.clear')}
             data-testid="assistant-mobile-clear"
           >
@@ -148,6 +149,7 @@ export function AssistantMobileSheet() {
             size="icon"
             className="h-7 w-7"
             onClick={minimize}
+            title={t('assistant.minimize')}
             aria-label={t('assistant.minimize')}
             data-testid="assistant-mobile-minimize"
           >
@@ -159,6 +161,7 @@ export function AssistantMobileSheet() {
             size="icon"
             className="h-7 w-7"
             onClick={close}
+            title={t('common.close')}
             aria-label={t('common.close')}
             data-testid="assistant-mobile-close"
           >

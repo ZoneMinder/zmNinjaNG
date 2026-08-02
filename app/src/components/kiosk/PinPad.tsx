@@ -160,6 +160,8 @@ export function PinPad({ mode, onSubmit, onCancel, error, cooldownSeconds }: Pin
             className="h-12"
             onClick={handleDelete}
             disabled={isCooling}
+            title={t('kiosk.pin_backspace')}
+            aria-label={t('kiosk.pin_backspace')}
             data-testid="kiosk-pin-delete"
           >
             <Delete className="h-5 w-5" />

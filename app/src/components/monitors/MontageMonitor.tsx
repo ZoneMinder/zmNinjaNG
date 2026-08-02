@@ -290,6 +290,7 @@ function MontageMonitorComponent({
                   isFullscreen ? "text-white hover:bg-white/20" : "text-muted-foreground hover:text-foreground"
                 )}
                 onClick={(e) => e.stopPropagation()}
+                title={t('montage.menu_more')}
                 aria-label={t('montage.menu_more')}
                 data-testid="montage-more-btn"
               >

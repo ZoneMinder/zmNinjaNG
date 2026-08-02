@@ -51,6 +51,13 @@ Feature: Monitor List and Navigation
     Then I should see at least 1 monitor cards
     And the monitor grid should lay out cards in more than one column
 
+  @web
+  Scenario: Holding an icon button explains it instead of acting on it
+    Then I should see at least 1 monitor cards
+    When I long-press the monitors view toggle
+    Then I should see a hint toast naming the view toggle
+    And the monitors view should not have switched
+
   @all
   Scenario: Opening a monitor's events clears only that monitor's new-event badge
     When I seed old watermarks for monitors with events

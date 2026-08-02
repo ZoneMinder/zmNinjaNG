@@ -7,6 +7,7 @@ import { Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/utils';
 import { useDeleteSelectionStore } from '../../stores/deleteSelection';
+import { HintButton } from '../ui/button';
 
 interface EventDeleteButtonProps {
   eventId: string;
@@ -21,7 +22,7 @@ export function EventDeleteButton({ eventId, size = 'md', className }: EventDele
   const iconSize = size === 'sm' ? 'h-4 w-4' : 'h-4 w-4 sm:h-5 sm:w-5';
 
   return (
-    <button
+    <HintButton
       type="button"
       onClick={(e) => {
         e.stopPropagation();
@@ -44,6 +45,6 @@ export function EventDeleteButton({ eventId, size = 'md', className }: EventDele
           selected ? 'text-destructive' : 'stroke-muted-foreground hover:stroke-destructive'
         )}
       />
-    </button>
+    </HintButton>
   );
 }

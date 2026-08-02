@@ -11,7 +11,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { Button } from '../components/ui/button';
+import { Button, HintButton } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Megaphone, AlertTriangle, AlertCircle, Info, ChevronDown, ChevronUp, ExternalLink, RefreshCw, Eye, EyeOff, CheckCheck, Mail, Trash2, MoreVertical, RotateCcw } from 'lucide-react';
 import { useDeveloperNotices, type DeveloperNoticeView } from '../hooks/useDeveloperNotices';
@@ -96,7 +96,7 @@ function NoticeRow({ notice }: { notice: DeveloperNoticeView }) {
             </div>
           </div>
         </button>
-        <button
+        <HintButton
           type="button"
           onClick={handleReadToggle}
           className="mt-0.5 p-1 rounded hover:bg-accent text-muted-foreground flex-shrink-0"
@@ -105,8 +105,8 @@ function NoticeRow({ notice }: { notice: DeveloperNoticeView }) {
           data-testid={`developer-notice-read-toggle-${notice.id}`}
         >
           {notice.isRead ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-        </button>
-        <button
+        </HintButton>
+        <HintButton
           type="button"
           onClick={(e) => { e.stopPropagation(); deleteNotice(notice.id); }}
           className="mt-0.5 p-1 rounded hover:bg-accent text-muted-foreground flex-shrink-0"
@@ -115,16 +115,17 @@ function NoticeRow({ notice }: { notice: DeveloperNoticeView }) {
           data-testid={`developer-notice-delete-${notice.id}`}
         >
           <Trash2 className="h-3.5 w-3.5" />
-        </button>
-        <button
+        </HintButton>
+        <HintButton
           type="button"
           onClick={handleToggle}
           className="mt-0.5 p-1 rounded hover:bg-accent text-muted-foreground flex-shrink-0"
+          title={expanded ? t('common.close') : t('common.view')}
           aria-label={expanded ? t('common.close') : t('common.view')}
           data-testid={`developer-notice-chevron-${notice.id}`}
         >
           {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-        </button>
+        </HintButton>
       </div>
       {expanded && (
         <div className="px-3 pb-3 pl-10 pt-2 border-t border-border/40 mt-1">
@@ -238,6 +239,7 @@ export default function DeveloperNotice() {
                 variant="outline"
                 size="icon"
                 className="h-9 w-9"
+                title={t('developer_notice.more_actions')}
                 aria-label={t('developer_notice.more_actions')}
                 data-testid="developer-notice-actions-menu"
               >

@@ -25,6 +25,7 @@ Navigate from outside a React component         Navigation Service (``lib/naviga
 Save a montage layout per monitor group         Group-Keyed Montage Settings (``stores/settings.ts``)
 Count events the user has not seen yet          Monitor Seen Watermarks (``stores/monitorSeen.ts``)
 Read a profile setting from a non-React module  Profile Settings Accessor (``lib/profile/profile-settings.ts``)
+Explain an icon-only button on a touch screen   useLongPressHint (``hooks/useLongPressHint.ts``)
 ==============================================  ===============================================================
 
 Shared Services (lib/ and services/)
@@ -1342,14 +1343,62 @@ race.
 
 **Used by:** ``components/layout/OfflineBanner.tsx``.
 
+useLongPressHint (``hooks/useLongPressHint.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+An icon-only button explains itself through ``title``, which browsers reveal on
+hover. A touch screen has no hover, so on a phone those buttons say nothing.
+This hook gives them a touch equivalent: hold the button and its ``title``
+appears as a brief toast, matching what Android does for a view with
+``tooltipText``.
+
+Pass the props you were about to spread on the element and spread the result
+instead:
+
+.. code:: tsx
+
+   <button {...useLongPressHint({ title: t('events.delete'), onClick: remove })} />
+
+Three decisions are worth knowing before you use it.
+
+The hint fires on hold, not on tap. A tap already runs the action, so a toast
+explaining what just happened would be noise on every use forever. The click
+that would follow the release is swallowed in ``onClickCapture``, so a hold
+explains the button instead of pressing it. A short tap is untouched.
+
+A press whose ``pointerType`` is ``'mouse'`` is ignored, because hover already
+shows the title there. Gating on the pointer rather than on the platform means
+a touchscreen laptop gets the hint from its screen and not from its trackpad.
+
+If the caller already passes ``onPointerDown``, the hook disables itself and
+returns the props unchanged. On those elements a hold already means something:
+``components/ui/zoom-controls.tsx`` and ``monitors/PTZControls.tsx`` repeat
+their action while held, and a hint would fight the gesture. This is why
+neither file needed an opt-out prop.
+
+Timings come from ``UI_INTERACTIONS`` in ``lib/zmninja-ng-constants.ts``:
+``longPressMs`` (500) to trigger, ``moveCancelPx`` (8) of drag to cancel so a
+scroll never fires it, and ``hintDurationMs`` (1500) for how long the toast
+stays up.
+
+**Used by:** ``components/ui/button.tsx``, through both ``Button`` and
+``HintButton``.
+
 Shared Components
 -----------------
 
-``components/ui/`` holds the unmodified shadcn/ui primitives (``button``,
-``card``, ``dialog``, ``popover``, ``select``, ``switch``, ``badge``,
-``progress``, and the rest). They behave as the
+``components/ui/`` holds the shadcn/ui primitives (``button``, ``card``,
+``dialog``, ``popover``, ``select``, ``switch``, ``badge``, ``progress``, and
+the rest). They behave as the
 `shadcn/ui documentation <https://ui.shadcn.com/docs/components>`_ describes
 and this guide does not restate it. What follows is what this project wrote.
+
+``button.tsx`` is the one primitive that diverges. ``Button`` runs its own
+props through ``useLongPressHint``, so any button carrying a ``title`` explains
+itself on a long press without its call site changing. ``HintButton``, exported
+from the same file, is a plain ``<button>`` with the same wiring and no
+variants; reach for it where a control styles itself, such as an overlay on a
+video tile, and would lose that styling as a ``Button``.
 
 PageContainer (``components/common/PageContainer.tsx``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -837,6 +837,7 @@ export function AskPanel() {
             variant="outline"
             size="icon"
             onClick={handleAbort}
+            title={t('assistant.abort')}
             aria-label={t('assistant.abort')}
             data-testid="assistant-abort"
           >
@@ -848,6 +849,7 @@ export function AskPanel() {
             size="icon"
             onClick={() => void handleSend()}
             disabled={!input.trim() || !profileId}
+            title={t('assistant.send')}
             aria-label={t('assistant.send')}
             data-testid="assistant-send"
           >

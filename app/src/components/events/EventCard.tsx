@@ -34,6 +34,7 @@ import { ReturnFlashArrow } from './ReturnFlashArrow';
 import { useReturnFlash } from '../../hooks/useReturnFlash';
 import { useReturnHighlightStore } from '../../stores/returnHighlight';
 import { useDeleteSelectionStore } from '../../stores/deleteSelection';
+import { HintButton } from '../ui/button';
 
 /**
  * EventCard component.
@@ -181,12 +182,13 @@ function EventCardComponent({ event, monitorName, thumbnailUrls, largeThumbnailU
                 {event.Name}
               </h3>
               <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-                <button
+                <HintButton
                   onClick={handleFavoriteClick}
                   className={cn(
                     "p-1 rounded-full hover:bg-accent transition-colors",
                     "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                   )}
+                  title={isFav ? t('events.unfavorite') : t('events.favorite')}
                   aria-label={isFav ? t('events.unfavorite') : t('events.favorite')}
                   data-testid="event-favorite-button"
                 >
@@ -198,8 +200,8 @@ function EventCardComponent({ event, monitorName, thumbnailUrls, largeThumbnailU
                         : "stroke-muted-foreground hover:stroke-yellow-500"
                     )}
                   />
-                </button>
-                <button
+                </HintButton>
+                <HintButton
                   onClick={handleArchiveClick}
                   disabled={isArchiving}
                   className={cn(
@@ -219,7 +221,7 @@ function EventCardComponent({ event, monitorName, thumbnailUrls, largeThumbnailU
                         : "stroke-muted-foreground hover:stroke-primary"
                     )}
                   />
-                </button>
+                </HintButton>
                 <EventDeleteButton eventId={event.Id} />
                 {(() => {
                   const CauseIcon = getEventCauseIcon(event.Cause);

@@ -156,6 +156,8 @@ export function EventHeatmap({
             size="sm"
             onClick={() => setIsExpanded(!isExpanded)}
             className="h-8 w-8 p-0"
+            title={isExpanded ? t('common.collapse') : t('common.expand')}
+            aria-label={isExpanded ? t('common.collapse') : t('common.expand')}
           >
             {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </Button>

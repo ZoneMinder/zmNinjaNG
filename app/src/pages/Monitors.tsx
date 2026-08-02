@@ -183,6 +183,7 @@ export default function Monitors() {
               const next = settings.monitorsViewMode === 'list' ? 'grid' : 'list';
               updateSettings(currentProfile.id, { monitorsViewMode: next });
             }}
+            title={settings.monitorsViewMode === 'list' ? t('events.view_montage') : t('events.view_list')}
             aria-label={settings.monitorsViewMode === 'list' ? t('events.view_montage') : t('events.view_list')}
             data-testid="monitors-view-toggle"
           >

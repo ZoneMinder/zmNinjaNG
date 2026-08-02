@@ -414,6 +414,7 @@ export default function Profiles() {
                         variant="ghost"
                         size="icon"
                         onClick={() => handleOpenEditDialog(profile)}
+                        title={t('common.edit')}
                         aria-label={t('common.edit')}
                         data-testid={`profile-edit-button-${profile.id}`}
                       >
@@ -425,6 +426,7 @@ export default function Profiles() {
                           size="icon"
                           onClick={() => handleOpenDeleteDialog(profile)}
                           className="text-destructive hover:text-destructive"
+                          title={t('common.delete')}
                           aria-label={t('common.delete')}
                           data-testid={`profile-delete-button-${profile.id}`}
                         >
@@ -537,6 +539,8 @@ export default function Profiles() {
                     className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
                     onClick={() => setShowPassword(!showPassword)}
                     tabIndex={-1}
+                    title={showPassword ? t('common.hide_password') : t('common.show_password')}
+                    aria-label={showPassword ? t('common.hide_password') : t('common.show_password')}
                     data-testid="profile-edit-password-toggle"
                   >
                     {showPassword ? (

@@ -15,6 +15,7 @@ import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useCertTrustPrompt } from '../hooks/useCertTrustPrompt';
 import { CertTrustDialog } from './CertTrustDialog';
 import { Button } from './ui/button';
+import { HintButton } from './ui/button';
 
 export function CertTrustBanner() {
   const { t } = useTranslation();
@@ -47,15 +48,16 @@ export function CertTrustBanner() {
           >
             {t('ssl.verify_button')}
           </Button>
-          <button
+          <HintButton
             type="button"
+            title={t('common.close')}
             aria-label={t('common.close')}
             className="shrink-0 text-muted-foreground hover:text-foreground"
             onClick={() => setDismissed(true)}
             data-testid="cert-trust-banner-dismiss"
           >
             <X className="h-4 w-4" />
-          </button>
+          </HintButton>
         </div>
       )}
       <CertTrustDialog {...dialogProps} />
