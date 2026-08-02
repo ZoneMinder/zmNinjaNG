@@ -23,6 +23,7 @@ import { log, LogLevel } from '../lib/logger';
 import { setLogRedactionGate } from '../lib/log-sanitizer';
 import { setProfileSettingsGate } from '../lib/profile/profile-settings';
 import { registerSessionsGate } from '../services/sessions';
+import { markSessionActive } from '../services/session-flags';
 import { STORAGE_KEYS } from '../lib/zmninja-ng-constants';
 import { useAuthStore, getAuthSlice } from './auth';
 import { useSettingsStore } from './settings';
@@ -137,6 +138,9 @@ export const useProfileStore = create<ProfileState>()(
           // If this is now the current profile, initialize API client
           if (get().currentProfileId === newProfile.id) {
             setApiClient(createStoreApiClient(newProfile.apiUrl, undefined, newProfile.id));
+            // Stopgap until Task 8's real per-profile sessions; see
+            // services/profile-initialization.ts's initializeApiClient. Refs #337.
+            markSessionActive(newProfile.id);
 
             // Fetch timezone for new profile
             try {
@@ -183,6 +187,7 @@ export const useProfileStore = create<ProfileState>()(
           const currentProfile = profiles.find(p => p.id === currentProfileId);
           if (currentProfile?.id === id && updates.apiUrl) {
             setApiClient(createStoreApiClient(updates.apiUrl, get().reLogin, currentProfile.id));
+            markSessionActive(currentProfile.id);
           }
 
           log.profileService('updateProfile complete', LogLevel.INFO);
@@ -201,6 +206,10 @@ export const useProfileStore = create<ProfileState>()(
           // Drop this profile's per-monitor seen-watermarks (refs #239)
           useMonitorSeenStore.getState().clearProfile(id);
 
+          // Clear this profile's auth slice and persisted refresh token -
+          // otherwise both survive the profile's own deletion. Refs #337.
+          useAuthStore.getState().logout(asProfileId(id));
+
           set((state) => {
             const profiles = state.profiles.filter((p) => p.id !== id);
             const currentProfileId =
@@ -218,6 +227,7 @@ export const useProfileStore = create<ProfileState>()(
           const newCurrentProfile = updatedProfiles.find(p => p.id === newCurrentId);
           if (newCurrentProfile) {
             setApiClient(createStoreApiClient(newCurrentProfile.apiUrl, get().reLogin, newCurrentProfile.id));
+            markSessionActive(newCurrentProfile.id);
           }
         },
 
@@ -239,6 +249,10 @@ export const useProfileStore = create<ProfileState>()(
 
           // Clear all profiles and reset state
           set({ profiles: [], currentProfileId: null });
+
+          // Clear every profile's auth slice and persisted refresh token.
+          // Refs #337.
+          useAuthStore.getState().logoutAll();
 
           // Reset API client
           const { resetApiClient } = await import('../api/client');
@@ -318,6 +332,7 @@ export const useProfileStore = create<ProfileState>()(
             // STEP 3: Initialize API client with new profile
             log.profileService('Step 3: Initializing API client', LogLevel.INFO, { apiUrl: profile.apiUrl });
             setApiClient(createStoreApiClient(profile.apiUrl, get().reLogin, profile.id));
+            markSessionActive(profile.id);
             log.profileService('API client initialized', LogLevel.INFO);
 
             // STEP 4-6: Run bootstrap tasks (auth, timezone, zms path, multi-port)
@@ -357,6 +372,7 @@ export const useProfileStore = create<ProfileState>()(
                 // Re-initialize with previous profile
                 log.profileService('Re-initializing API client', LogLevel.INFO, { apiUrl: previousProfile.apiUrl });
                 setApiClient(createStoreApiClient(previousProfile.apiUrl, get().reLogin, previousProfile.id));
+                markSessionActive(previousProfile.id);
 
                 // Run bootstrap for previous profile
                 log.profileService('Running bootstrap for rollback profile', LogLevel.INFO);

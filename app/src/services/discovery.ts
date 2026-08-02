@@ -1,7 +1,7 @@
 
 import { setApiClient, type ApiClient } from '../api/client';
 import { createStoreApiClient } from '../api/store-gates';
-import { ALL_PROFILES_ID, type ProfileId } from '../api/types';
+import { PROBE_PROFILE_ID, type ProfileId } from '../api/types';
 import type { HttpError } from '../lib/http';
 import { log, LogLevel } from '../lib/logger';
 import { isAbortError } from '../lib/is-abort-error';
@@ -15,10 +15,11 @@ export interface DiscoverUrlsOptions {
    * The profile this discovery/connection-test session belongs to. A caller
    * adding a new profile mints the id before this call (see ProfileForm.tsx)
    * so the same id carries into the saved profile; a caller re-testing an
-   * existing profile passes its real id. Defaults to ALL_PROFILES_ID (never
-   * a real server, so the resulting auth slice stays empty) when the caller
-   * has no profile id yet - this module stays store-free, so it never reads
-   * one for itself.
+   * existing profile passes its real id. Defaults to PROBE_PROFILE_ID (never
+   * a saved profile, and excluded from auth persistence, so the resulting
+   * auth slice stays empty and never survives a reload) when the caller has
+   * no profile id yet - this module stays store-free, so it never reads one
+   * for itself.
    */
   profileId?: ProfileId;
   credentials?: { username: string; password: string };
@@ -262,7 +263,7 @@ async function fetchCgiUrl(apiUrl: string, portalUrl: string, options: Discovery
  */
 export async function discoverZoneminder(inputUrl: string, options: DiscoveryOptions = {}): Promise<DiscoveryResult> {
     const { signal } = options;
-    const profileId = options.profileId ?? ALL_PROFILES_ID;
+    const profileId = options.profileId ?? PROBE_PROFILE_ID;
 
     // Check if already aborted
     if (signal?.aborted) {
@@ -345,7 +346,7 @@ export async function discoverUrls(
     portal: string,
     { credentials, signal, onClientCreated, profileId }: DiscoverUrlsOptions = {}
 ): Promise<DiscoveryResult> {
-    const resolvedProfileId = profileId ?? ALL_PROFILES_ID;
+    const resolvedProfileId = profileId ?? PROBE_PROFILE_ID;
     const attempt = async () => {
         const result = await discoverZoneminder(portal, { ...credentials, signal, profileId: resolvedProfileId });
         const client = createStoreApiClient(result.apiUrl, undefined, resolvedProfileId);

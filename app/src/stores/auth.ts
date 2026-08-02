@@ -19,7 +19,7 @@ import type { PersistStorage, StorageValue } from 'zustand/middleware';
 import { useShallow } from 'zustand/react/shallow';
 import { login as apiLogin, refreshToken as apiRefreshToken } from '../api/auth';
 import { hasActiveSession } from '../services/session-flags';
-import type { LoginResponse, ProfileId } from '../api/types';
+import { PROBE_PROFILE_ID, type LoginResponse, type ProfileId } from '../api/types';
 import { log, LogLevel } from '../lib/logger';
 import { setSecureValue, getSecureValue, removeSecureValue } from '../lib/security/secureStorage';
 import { ZM_INTEGRATION, STORAGE_KEYS } from '../lib/zmninja-ng-constants';
@@ -57,7 +57,7 @@ export interface AuthState {
 
   // Actions
   login: (profileId: ProfileId, username: string, password: string) => Promise<void>;
-  logout: (profileId: ProfileId) => void;
+  logout: (profileId: ProfileId, opts?: { keepGates?: boolean }) => void;
   logoutAll: () => void;
   refreshAccessToken: (profileId: ProfileId) => Promise<void>;
   setTokens: (profileId: ProfileId, response: LoginResponse) => void;
@@ -335,8 +335,18 @@ export const useAuthStore = create<AuthState>()(
         /**
          * Clear a profile's authentication state.
          * Removes its tokens and resets its authentication status.
+         *
+         * `keepGates` is for internal use only: a failure path inside
+         * refreshAccessToken/recoverFromAuthFailure calls this while its own
+         * single-flight gate is still open (the surrounding promise hasn't
+         * settled yet). A full resetAuthGates there would clear that gate
+         * (and every other pending gate for this profile) mid-flight, so a
+         * concurrent caller arriving in that window would see no pending
+         * gate and start a duplicate refresh/login instead of attaching to
+         * the one already in progress. Explicit surfaces (user logout,
+         * dropSession, profile delete) call with the default (full reset).
          */
-        logout: (profileId: ProfileId) => {
+        logout: (profileId: ProfileId, opts?: { keepGates?: boolean }) => {
           setSlice(profileId, {
             accessToken: null,
             refreshToken: null,
@@ -347,7 +357,9 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: false,
             requiresAuth: true,
           });
-          resetAuthGates(profileId);
+          if (!opts?.keepGates) {
+            resetAuthGates(profileId);
+          }
           log.auth('Logged out, auth state cleared', LogLevel.INFO, { profileId });
         },
 
@@ -375,7 +387,10 @@ export const useAuthStore = create<AuthState>()(
             }
             if (!refreshTokenExpires || refreshTokenExpires <= Date.now()) {
               log.auth('Refresh token expired or missing expiry; skipping network call', LogLevel.WARN);
-              get().logout(profileId);
+              // keepGates: this runs while refreshAccessToken's own gate is
+              // still open; a full reset here would let a concurrent caller
+              // slip past it and start a duplicate attempt. See logout's doc.
+              get().logout(profileId, { keepGates: true });
               throw new Error('Refresh token expired');
             }
 
@@ -384,7 +399,7 @@ export const useAuthStore = create<AuthState>()(
               get().setTokens(profileId, response);
             } catch (error) {
               log.auth('Token refresh failed', LogLevel.ERROR, error);
-              get().logout(profileId);
+              get().logout(profileId, { keepGates: true });
               throw error;
             }
           })();
@@ -575,7 +590,8 @@ export const useAuthStore = create<AuthState>()(
                 }
               }
               log.auth('401 recovery failed; logging out', LogLevel.WARN, { error: refreshError });
-              get().logout(profileId);
+              // keepGates: recoverFromAuthFailure's own gate is still open here.
+              get().logout(profileId, { keepGates: true });
               return false;
             }
           })();
@@ -593,16 +609,20 @@ export const useAuthStore = create<AuthState>()(
       name: STORAGE_KEYS.authStore,
       storage: encryptedAuthStorage,
       // Only persist refresh token and server version info per profile.
-      // Access tokens are kept in memory for better security.
+      // Access tokens are kept in memory for better security. PROBE_PROFILE_ID
+      // (anonymous pre-profile discovery) is excluded - it never names a
+      // saved profile, so nothing under it should survive a reload. Refs #337.
       partialize: (state) => ({
         slices: Object.fromEntries(
-          Object.entries(state.slices).map(([id, s]) => [id, {
-            refreshToken: s.refreshToken,
-            refreshTokenExpires: s.refreshTokenExpires,
-            version: s.version,
-            apiVersion: s.apiVersion,
-            requiresAuth: s.requiresAuth,
-          }])
+          Object.entries(state.slices)
+            .filter(([id]) => id !== PROBE_PROFILE_ID)
+            .map(([id, s]) => [id, {
+              refreshToken: s.refreshToken,
+              refreshTokenExpires: s.refreshTokenExpires,
+              version: s.version,
+              apiVersion: s.apiVersion,
+              requiresAuth: s.requiresAuth,
+            }])
         ) as Record<ProfileId, PersistedSlice>,
       }),
       onRehydrateStorage: () => (state) => {

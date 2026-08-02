@@ -595,6 +595,18 @@ export function asProfileId(id: string): ProfileId {
  */
 export const ALL_PROFILES_ID: ProfileId = asProfileId('__all_profiles__');
 
+/**
+ * Sentinel profile id for anonymous pre-profile discovery: services/discovery.ts's
+ * default when a caller (a test, or any future caller that forgets to) doesn't
+ * pass a real id. Real callers (ProfileForm, Profiles edit-and-retest) always
+ * pass a minted or saved ProfileId instead - this id never names a saved
+ * profile. Its auth slice is excluded from persistence (stores/auth.ts's
+ * `partialize`) so nothing under this id survives a reload, and it must stay
+ * distinct from ALL_PROFILES_ID so a probe under this id can never be
+ * mistaken for the aggregate identity Phase 2 reads. Refs #337.
+ */
+export const PROBE_PROFILE_ID: ProfileId = asProfileId('__probe__');
+
 export interface Profile {
   id: ProfileId;
   name: string;

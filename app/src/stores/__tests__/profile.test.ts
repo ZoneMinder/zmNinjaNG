@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useProfileStore } from '../profile';
+import { useAuthStore, getAuthSlice } from '../auth';
 import { useMonitorSeenStore } from '../monitorSeen';
 import { setApiClient } from '../../api/client';
 import { createStoreApiClient } from '../../api/store-gates';
@@ -9,6 +10,7 @@ import { asProfileId } from '../../api/types';
 
 vi.mock('../../api/client', () => ({
   setApiClient: vi.fn(),
+  resetApiClient: vi.fn(),
 }));
 
 vi.mock('../../api/store-gates', () => ({
@@ -29,6 +31,7 @@ vi.mock('../../lib/logger', () => ({
   log: {
     profile: vi.fn(),
     profileService: vi.fn(),
+    auth: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
     info: vi.fn(),
@@ -50,6 +53,7 @@ describe('Profile Store', () => {
       isInitialized: true,
     });
     useMonitorSeenStore.setState({ profileWatermarks: {} });
+    useAuthStore.setState({ slices: {} });
     vi.clearAllMocks();
     vi.stubGlobal('crypto', { randomUUID: () => 'profile-1' });
   });
@@ -199,5 +203,48 @@ describe('Profile Store', () => {
     expect(useMonitorSeenStore.getState().hasWatermark('p1', 'monitor-1')).toBe(false);
     expect(useMonitorSeenStore.getState().hasWatermark('p2', 'monitor-1')).toBe(true);
     expect(useMonitorSeenStore.getState().getWatermark('p2', 'monitor-1')).toBe('2026-07-02 00:00:00');
+  });
+
+  it('clears the deleted profile\'s auth slice but keeps other profiles\' (refs #337)', async () => {
+    useProfileStore.setState({
+      profiles: [
+        { id: asProfileId('p1'), name: 'Home', apiUrl: 'http://a', portalUrl: 'http://a', cgiUrl: 'http://a/cgi-bin', isDefault: true, createdAt: 1 },
+      ],
+      currentProfileId: asProfileId('p1'),
+    });
+    useAuthStore.getState().setTokens(asProfileId('p1'), {
+      access_token: 'p1-at', access_token_expires: 60, refresh_token: 'p1-rt', refresh_token_expires: 120,
+    });
+    useAuthStore.getState().setTokens(asProfileId('p2'), {
+      access_token: 'p2-at', access_token_expires: 60, refresh_token: 'p2-rt', refresh_token_expires: 120,
+    });
+
+    await useProfileStore.getState().deleteProfile('p1');
+
+    expect(getAuthSlice(asProfileId('p1')).isAuthenticated).toBe(false);
+    expect(getAuthSlice(asProfileId('p1')).refreshToken).toBeNull();
+    expect(getAuthSlice(asProfileId('p2')).isAuthenticated).toBe(true);
+    expect(getAuthSlice(asProfileId('p2')).refreshToken).toBe('p2-rt');
+  });
+
+  it('deleteAllProfiles clears every profile\'s auth slice (refs #337)', async () => {
+    useProfileStore.setState({
+      profiles: [
+        { id: asProfileId('p1'), name: 'Home', apiUrl: 'http://a', portalUrl: 'http://a', cgiUrl: 'http://a/cgi-bin', isDefault: true, createdAt: 1 },
+        { id: asProfileId('p2'), name: 'Away', apiUrl: 'http://b', portalUrl: 'http://b', cgiUrl: 'http://b/cgi-bin', isDefault: false, createdAt: 2 },
+      ],
+      currentProfileId: asProfileId('p1'),
+    });
+    useAuthStore.getState().setTokens(asProfileId('p1'), {
+      access_token: 'p1-at', access_token_expires: 60, refresh_token: 'p1-rt', refresh_token_expires: 120,
+    });
+    useAuthStore.getState().setTokens(asProfileId('p2'), {
+      access_token: 'p2-at', access_token_expires: 60, refresh_token: 'p2-rt', refresh_token_expires: 120,
+    });
+
+    await useProfileStore.getState().deleteAllProfiles();
+
+    expect(getAuthSlice(asProfileId('p1')).isAuthenticated).toBe(false);
+    expect(getAuthSlice(asProfileId('p2')).isAuthenticated).toBe(false);
   });
 });

@@ -692,6 +692,114 @@ describe('Auth Store', () => {
     });
   });
 
+  describe('logout keepGates', () => {
+    it('logout(id, { keepGates: true }) clears auth state but leaves a pending gate intact', async () => {
+      useAuthStore.setState({
+        slices: {
+          [aId]: {
+            accessToken: 'at', refreshToken: 'rt', accessTokenExpires: Date.now() + 60 * 60 * 1000,
+            refreshTokenExpires: Date.now() + 24 * 60 * 60 * 1000, version: null, apiVersion: null,
+            isAuthenticated: true, requiresAuth: true,
+          },
+        },
+      });
+      let resolveRefresh!: (value: LoginResponse) => void;
+      vi.mocked(apiRefreshToken).mockImplementation(
+        () => new Promise((resolve) => { resolveRefresh = resolve; }),
+      );
+
+      const pending = useAuthStore.getState().refreshAccessToken(aId);
+      expect(apiRefreshToken).toHaveBeenCalledTimes(1);
+
+      useAuthStore.getState().logout(aId, { keepGates: true });
+      expect(getAuthSlice(aId).isAuthenticated).toBe(false);
+
+      // A concurrent caller attaches to the still-pending gate: no new POST.
+      const second = useAuthStore.getState().refreshAccessToken(aId);
+      expect(apiRefreshToken).toHaveBeenCalledTimes(1);
+
+      resolveRefresh({ access_token: 'new', access_token_expires: 7200 });
+      await Promise.all([pending, second]);
+    });
+
+    it('logout(id) (default) clears the gate too: a concurrent caller starts a fresh POST', async () => {
+      useAuthStore.setState({
+        slices: {
+          [aId]: {
+            accessToken: 'at', refreshToken: 'rt', accessTokenExpires: Date.now() + 60 * 60 * 1000,
+            refreshTokenExpires: Date.now() + 24 * 60 * 60 * 1000, version: null, apiVersion: null,
+            isAuthenticated: true, requiresAuth: true,
+          },
+        },
+      });
+      const resolvers: Array<(value: LoginResponse) => void> = [];
+      vi.mocked(apiRefreshToken).mockImplementation(
+        () => new Promise((resolve) => { resolvers.push(resolve); }),
+      );
+
+      const pending = useAuthStore.getState().refreshAccessToken(aId);
+      expect(apiRefreshToken).toHaveBeenCalledTimes(1);
+
+      useAuthStore.getState().logout(aId);
+
+      // The gate is gone: a concurrent caller can't attach to it, so this
+      // one throws synchronously (no refresh token left after logout) rather
+      // than starting a real second POST.
+      await expect(useAuthStore.getState().refreshAccessToken(aId)).rejects.toThrow(
+        'No refresh token available',
+      );
+      expect(apiRefreshToken).toHaveBeenCalledTimes(1);
+
+      // The original in-flight refresh still settles for its own caller
+      // (its captured refreshToken predates the logout) - it just isn't
+      // shared with the second caller anymore.
+      resolvers.forEach((resolve) => resolve({ access_token: 'new', access_token_expires: 7200 }));
+      await pending;
+    });
+
+    it('a same-profile getFreshAccessToken call arriving exactly as a failing refresh logs out attaches to the same in-flight attempt: one refresh POST, one reLogin call', async () => {
+      // Regression for the review's Important finding: refreshAccessToken's
+      // failure path used to call the default (full-reset) logout() while
+      // its own pendingRefresh/pendingFreshToken gates were still open, so a
+      // concurrent caller arriving in that exact window would see no pending
+      // gate and start a duplicate refresh/reLogin (N login POSTs, possible
+      // server lockout). This test lands a second getFreshAccessToken(aId)
+      // call at that exact moment by hooking the "Logged out, auth state
+      // cleared" log line logout() emits right after its (now
+      // keepGates: true) internal call - deterministic, no reliance on
+      // microtask-count timing. With the fix, pendingFreshToken is still set
+      // at that instant, so the second call attaches to the same gate
+      // instead of starting its own refresh + reLogin.
+      useAuthStore.setState({
+        slices: {
+          [aId]: {
+            accessToken: 'stale', refreshToken: 'rt', accessTokenExpires: Date.now() + 60_000,
+            refreshTokenExpires: Date.now() + 24 * 60 * 60 * 1000, version: null, apiVersion: null,
+            isAuthenticated: true, requiresAuth: true,
+          },
+        },
+      });
+      vi.mocked(apiRefreshToken).mockRejectedValue(new Error('401'));
+      const reLogin = vi.fn().mockResolvedValue(true);
+      useAuthStore.getState().setReLoginCallback(aId, reLogin);
+
+      let secondCall: Promise<string | null> | null = null;
+      vi.mocked(log.auth).mockImplementation(((message: string) => {
+        if (message === 'Logged out, auth state cleared' && !secondCall) {
+          secondCall = useAuthStore.getState().getFreshAccessToken(aId);
+        }
+      }) as typeof log.auth);
+
+      await useAuthStore.getState().getFreshAccessToken(aId);
+
+      expect(secondCall).not.toBeNull();
+      await secondCall;
+
+      expect(apiRefreshToken).toHaveBeenCalledTimes(1);
+      expect(reLogin).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('refreshAccessToken expiry pre-check', () => {
     it('throws synchronously and does not call the network when refresh token is expired', async () => {
       useAuthStore.setState({
@@ -818,6 +926,25 @@ describe('Auth Store', () => {
       const loaded = await encryptedAuthStorage.getItem('zmng-auth');
 
       expect(loaded).toBeNull();
+    });
+
+    it('excludes PROBE_PROFILE_ID from the persisted output', async () => {
+      const { PROBE_PROFILE_ID } = await import('../../api/types');
+
+      useAuthStore.getState().setTokens(PROBE_PROFILE_ID, {
+        access_token: 'probe-at', access_token_expires: 60,
+        refresh_token: 'probe-rt', refresh_token_expires: 120,
+      });
+      useAuthStore.getState().setTokens(aId, {
+        access_token: 'a-at', access_token_expires: 60,
+        refresh_token: 'a-rt', refresh_token_expires: 120,
+      });
+
+      const partialize = useAuthStore.persist.getOptions().partialize;
+      const persisted = partialize!(useAuthStore.getState());
+
+      expect(Object.keys(persisted.slices)).not.toContain(PROBE_PROFILE_ID);
+      expect(Object.keys(persisted.slices)).toContain(aId);
     });
   });
 });

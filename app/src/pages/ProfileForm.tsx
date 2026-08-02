@@ -331,6 +331,14 @@ export default function ProfileForm() {
         navigate(returnTo);
       }, 1000);
     } catch (err: unknown) {
+      // The failed/cancelled attempt may have landed real tokens under this
+      // profile's minted id (a successful login before a later step, e.g.
+      // addProfile, threw). This profile is never saved on this path, so
+      // nothing else will ever clear that slice or its persisted refresh
+      // token - clear it here. Refs #337.
+      const { useAuthStore } = await import('../stores/auth');
+      useAuthStore.getState().logout(profileId);
+
       // Don't show error if cancelled by user
       if (err instanceof DiscoveryError && err.code === 'CANCELLED') {
         log.profileForm('Discovery cancelled by user', LogLevel.INFO);
