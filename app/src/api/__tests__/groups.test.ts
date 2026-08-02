@@ -1,14 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getGroups } from '../groups';
-import { getApiClient } from '../client';
 import { validateApiResponse } from '../../lib/zm/api-validator';
 import type { ApiClient } from '../client';
 
 const mockGet = vi.fn();
-
-vi.mock('../client', () => ({
-  getApiClient: vi.fn(),
-}));
+const mockClient = { get: mockGet } as unknown as ApiClient;
 
 vi.mock('../../lib/zm/api-validator', () => ({
   validateApiResponse: vi.fn((_, data) => data),
@@ -17,9 +13,6 @@ vi.mock('../../lib/zm/api-validator', () => ({
 describe('Groups API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(getApiClient).mockReturnValue({
-      get: mockGet,
-    } as unknown as ApiClient);
   });
 
   it('fetches groups list', async () => {
@@ -37,7 +30,7 @@ describe('Groups API', () => {
     };
     mockGet.mockResolvedValue({ data: mockGroups });
 
-    const response = await getGroups();
+    const response = await getGroups(mockClient);
 
     expect(mockGet).toHaveBeenCalledWith('/groups.json', expect.objectContaining({ intent: expect.any(String) }));
     expect(validateApiResponse).toHaveBeenCalled();
@@ -49,7 +42,7 @@ describe('Groups API', () => {
   it('handles empty groups list', async () => {
     mockGet.mockResolvedValue({ data: { groups: [] } });
 
-    const response = await getGroups();
+    const response = await getGroups(mockClient);
 
     expect(mockGet).toHaveBeenCalledWith('/groups.json', expect.objectContaining({ intent: expect.any(String) }));
     expect(response.groups).toHaveLength(0);
@@ -74,7 +67,7 @@ describe('Groups API', () => {
     };
     mockGet.mockResolvedValue({ data: mockGroups });
 
-    const response = await getGroups();
+    const response = await getGroups(mockClient);
 
     expect(response.groups).toHaveLength(3);
     expect(response.groups[0].Group.ParentId).toBeNull();
@@ -93,7 +86,7 @@ describe('Groups API', () => {
     };
     mockGet.mockResolvedValue({ data: mockGroups });
 
-    const response = await getGroups();
+    const response = await getGroups(mockClient);
 
     expect(response.groups[0].Monitor).toHaveLength(0);
   });

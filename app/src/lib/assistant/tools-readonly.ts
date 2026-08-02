@@ -12,6 +12,7 @@ import { getLoad, getDiskPercent, getDaemonCheck, getStorages, getServers } from
 import type { Storage } from '../../api/server';
 import { getVersion } from '../../api/auth';
 import { getGroups } from '../../api/groups';
+import { getSession } from '../../services/sessions';
 import { getTags, getEventTags, extractUniqueTags } from '../../api/tags';
 import type { MonitorData } from '../../api/types';
 import { ASSISTANT } from '../zmninja-ng-constants';
@@ -678,9 +679,9 @@ const listGroupsTool: ToolDefinition = {
     'List monitor groups: id, name, and member monitor ids when the group carries them. Call this when ' +
     'the user refers to a group of monitors by name.',
   schema: { type: 'object', properties: {}, additionalProperties: false },
-  execute: (_input, _ctx) =>
+  execute: (_input, ctx) =>
     safeExecute('list_groups', async () => {
-      const { groups } = await getGroups();
+      const { groups } = await getGroups(getSession(ctx.profileId).client);
       return JSON.stringify(
         groups.map((g) => {
           const monitorIds = g.Monitor?.map((m) => m.Id) ?? [];

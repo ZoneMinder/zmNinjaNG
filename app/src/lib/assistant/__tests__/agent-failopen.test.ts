@@ -38,6 +38,10 @@ vi.mock('../../../api/server', () => ({
 vi.mock('../../../api/auth', () => ({ getVersion: vi.fn() }));
 vi.mock('../../../api/groups', () => ({ getGroups: vi.fn() }));
 vi.mock('../../../api/tags', () => ({ getTags: vi.fn(), getEventTags: vi.fn(), extractUniqueTags: vi.fn() }));
+vi.mock('../../../services/sessions', () => ({
+  getSession: vi.fn(() => ({ client: {} })),
+  getCurrentSession: vi.fn(() => ({ client: {} })),
+}));
 
 const host: AssistantHost = { navigate: vi.fn(), onActivity: vi.fn() };
 

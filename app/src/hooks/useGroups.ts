@@ -14,6 +14,7 @@
 import { useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getGroups } from '../api/groups';
+import { getCurrentSession } from '../services/sessions';
 import { useCurrentProfile } from './useCurrentProfile';
 import { useAuthSlice } from '../stores/auth';
 import { queryKeys } from '../lib/query/query-keys';
@@ -71,7 +72,7 @@ export function useGroups(): UseGroupsReturn {
 
   const { data, isLoading, isSuccess, error, refetch } = useQuery({
     queryKey: queryKeys.groups(currentProfile?.id),
-    queryFn: getGroups,
+    queryFn: () => getGroups(getCurrentSession().client),
     enabled: !!currentProfile?.id && isAuthenticated,
     // Groups rarely change, so we can use a longer stale time
     staleTime: 5 * 60 * 1000, // 5 minutes

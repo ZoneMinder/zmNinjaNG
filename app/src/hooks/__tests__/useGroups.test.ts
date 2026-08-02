@@ -23,6 +23,10 @@ vi.mock('../../stores/auth', () => ({
   useAuthSlice: () => ({ isAuthenticated: true }),
 }));
 
+vi.mock('../../services/sessions', () => ({
+  getCurrentSession: vi.fn(() => ({ client: {} })),
+}));
+
 const mockGroups: GroupData[] = [
   {
     Group: { Id: '1', Name: 'Inside', ParentId: null },

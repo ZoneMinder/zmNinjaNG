@@ -84,6 +84,11 @@ vi.mock('../../../api/auth', () => ({
   getVersion: vi.fn().mockResolvedValue({ version: '1.37.0', apiversion: '2.0' }),
 }));
 
+vi.mock('../../../services/sessions', () => ({
+  getSession: vi.fn(() => ({ client: {} })),
+  getCurrentSession: vi.fn(() => ({ client: {} })),
+}));
+
 vi.mock('../../../api/groups', () => ({
   getGroups: vi.fn().mockResolvedValue({
     groups: [
