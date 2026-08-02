@@ -22,6 +22,7 @@ import { ProfileService } from '../services/profile';
 import { log, LogLevel } from '../lib/logger';
 import { setLogRedactionGate } from '../lib/log-sanitizer';
 import { setProfileSettingsGate } from '../lib/profile/profile-settings';
+import { registerSessionsGate } from '../services/sessions';
 import { STORAGE_KEYS } from '../lib/zmninja-ng-constants';
 import { useAuthStore } from './auth';
 import { useSettingsStore } from './settings';
@@ -499,6 +500,18 @@ setProfileSettingsGate({
     if (!currentProfileId) return [];
     return useSettingsStore.getState().getProfileSettings(currentProfileId).excludedMonitorIds;
   },
+});
+
+// services/sessions.ts has no store imports for the same reason (breaking a
+// static import cycle back through this store). Phase 1: reLoginFor ignores
+// the given id and reuses today's reLogin, which always targets
+// currentProfileId, exactly like the reLogin passed into createStoreApiClient
+// elsewhere in this file (e.g. switchProfile). It is only ever invoked here
+// for the current profile; Task 8 makes it truly per-profile. Refs #337.
+registerSessionsGate({
+  getProfile: (id) => useProfileStore.getState().profiles.find((p) => p.id === id),
+  getCurrentProfileId: () => useProfileStore.getState().currentProfileId,
+  reLoginFor: () => () => useProfileStore.getState().reLogin(),
 });
 
 // Subscribe to auth store to update refresh token in profile
