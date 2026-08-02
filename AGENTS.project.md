@@ -85,7 +85,7 @@ Gate: `app/src/tests/agents-contracts.test.ts`; review.
 
 ### Native
 Owns: everything touching Capacitor or platform APIs.
-Path: Capacitor plugins import dynamically behind a platform check, with a test mock; mobile downloads use Capacitor HTTP base64; native TLS trust-on-first-use accepts any certificate when no fingerprint is stored.
+Path: Capacitor plugins import dynamically behind a platform check, with a test mock; mobile downloads use Capacitor HTTP base64; native TLS trust-on-first-use accepts any certificate when no fingerprint is stored, and trust is global once any profile enables self-signed (deliberate; see the TLS trust-scope decision in the all-profiles design spec).
 Never: static plugin imports; Blob conversion for mobile downloads; fail-closed TLS without stored fingerprint (breaks self-signed onboarding).
 Gate: `app/src/tests/agents-contracts.test.ts`; review.
 
