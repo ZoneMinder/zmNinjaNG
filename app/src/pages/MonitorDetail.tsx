@@ -11,6 +11,7 @@ import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '../lib/query/query-keys';
 import { getMonitor, getControl, updateMonitor } from '../api/monitors';
 import { getZones } from '../api/zones';
+import { getCurrentSession } from '../services/sessions';
 import { resolveMinStreamingPort } from '../lib/monitor/multiport';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useAuthSlice } from '../stores/auth';
@@ -96,7 +97,7 @@ export default function MonitorDetail() {
   // Fetch zones when showZones is enabled
   const { data: zones = [], isLoading: isZonesLoading } = useQuery({
     queryKey: queryKeys.zones(currentProfile?.id, id),
-    queryFn: () => getZones(id!),
+    queryFn: () => getZones(getCurrentSession().client, id!),
     enabled: !!id && showZones,
   });
 
