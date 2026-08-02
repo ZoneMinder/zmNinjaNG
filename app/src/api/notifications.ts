@@ -6,7 +6,7 @@
  * See ZoneMinder PR #4685 for server-side implementation.
  */
 
-import { getApiClient } from './client';
+import type { ApiClient } from './client';
 import { log, LogLevel } from '../lib/logger';
 
 export interface ZMNotification {
@@ -32,21 +32,23 @@ interface NotificationResponse {
  * Register or upsert an FCM token with the ZM server.
  * If the token already exists, updates the existing row.
  */
-export async function registerToken(params: {
-  token: string;
-  platform: 'android' | 'ios' | 'web';
-  monitorList?: string;
-  interval?: number;
-  pushState?: 'enabled' | 'disabled';
-  appVersion?: string;
-  profile?: string;
-}): Promise<ZMNotification> {
+export async function registerToken(
+  client: ApiClient,
+  params: {
+    token: string;
+    platform: 'android' | 'ios' | 'web';
+    monitorList?: string;
+    interval?: number;
+    pushState?: 'enabled' | 'disabled';
+    appVersion?: string;
+    profile?: string;
+  }
+): Promise<ZMNotification> {
   log.api('Registering notification token via ZM API', LogLevel.INFO, {
     platform: params.platform,
     profile: params.profile,
   });
 
-  const client = getApiClient();
   const formData = new URLSearchParams();
   formData.append('Notification[Token]', params.token);
   formData.append('Notification[Platform]', params.platform);
@@ -65,6 +67,7 @@ export async function registerToken(params: {
  * Only send fields you want to change.
  */
 export async function updateNotification(
+  client: ApiClient,
   id: number,
   params: Partial<{
     monitorList: string;
@@ -75,7 +78,6 @@ export async function updateNotification(
 ): Promise<ZMNotification> {
   log.api('Updating notification via ZM API', LogLevel.INFO, { id });
 
-  const client = getApiClient();
   const formData = new URLSearchParams();
   if (params.monitorList !== undefined) formData.append('Notification[MonitorList]', params.monitorList);
   if (params.interval !== undefined) formData.append('Notification[Interval]', String(params.interval));
@@ -89,10 +91,9 @@ export async function updateNotification(
 /**
  * Delete a notification registration.
  */
-export async function deleteNotification(id: number): Promise<void> {
+export async function deleteNotification(client: ApiClient, id: number): Promise<void> {
   log.api('Deleting notification via ZM API', LogLevel.INFO, { id });
 
-  const client = getApiClient();
   await client.delete(`/notifications/${id}.json`);
 }
 
@@ -100,9 +101,8 @@ export async function deleteNotification(id: number): Promise<void> {
  * Check if the ZM server supports the Notifications API.
  * Returns true on 200 (even if empty list), false on 404.
  */
-export async function checkNotificationsApiSupport(): Promise<boolean> {
+export async function checkNotificationsApiSupport(client: ApiClient): Promise<boolean> {
   try {
-    const client = getApiClient();
     await client.get('/notifications.json');
     return true;
   } catch (e: unknown) {

@@ -20,6 +20,7 @@ import { getAppVersion } from '../lib/version';
 import { getEventImageUrl } from '../lib/zm/url-builder';
 import { getEffectiveMinStreamingPort } from '../lib/monitor/multiport';
 import { updateNotification } from '../api/notifications';
+import { getSession } from '../services/sessions';
 import { useProfileStore } from './profile';
 import { useAuthStore, getAuthSlice } from './auth';
 import { useSettingsStore } from './settings';
@@ -525,7 +526,7 @@ export const useNotificationStore = create<NotificationState>()(
           });
 
           try {
-            await updateNotification(notifId, {
+            await updateNotification(getSession(asProfileId(currentProfileId)).client, notifId, {
               monitorList: monitorList || undefined,
               interval,
             });
@@ -589,7 +590,7 @@ export const useNotificationStore = create<NotificationState>()(
             // Direct mode: update badge count via ZM REST API
             const notifId = settings.notificationId;
             if (notifId) {
-              await updateNotification(notifId, { badgeCount });
+              await updateNotification(getSession(asProfileId(currentProfileId)).client, notifId, { badgeCount });
               log.notifications('Updated badge count via ZM API', LogLevel.DEBUG, { badgeCount, notifId });
             } else {
               log.notifications('Cannot update badge - no notification ID (token not registered)', LogLevel.WARN);

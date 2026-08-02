@@ -35,6 +35,7 @@ import { Platform } from '../lib/platform';
 import { useTranslation } from 'react-i18next';
 import { log, LogLevel } from '../lib/logger';
 import { checkNotificationsApiSupport } from '../api/notifications';
+import { getCurrentSession } from '../services/sessions';
 import { getEventPoller } from '../services/eventPoller';
 import type { NotificationMode } from '../types/notifications';
 import { NotificationBadge } from '../components/NotificationBadge';
@@ -83,7 +84,7 @@ export default function NotificationSettings() {
   useEffect(() => {
     if (!currentProfile || !isAuthenticated) return;
 
-    checkNotificationsApiSupport()
+    checkNotificationsApiSupport(getCurrentSession().client)
       .then((supported) => {
         setDirectModeAvailable(supported);
         log.notificationSettings('ZM Notifications API support check', LogLevel.INFO, { supported });

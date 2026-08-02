@@ -70,6 +70,11 @@ vi.mock('../../api/notifications', () => ({
   updateNotification: vi.fn().mockResolvedValue({}),
 }));
 
+vi.mock('../../services/sessions', () => ({
+  getSession: vi.fn(() => ({ client: {} })),
+  registerSessionsGate: vi.fn(),
+}));
+
 // services/pushNotifications.ts is only reachable dynamically from this store
 // (native-only token registration); mock it so the store test doesn't need
 // to evaluate the real push service module. setPushServiceStoreGates is
