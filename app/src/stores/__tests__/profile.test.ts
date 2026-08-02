@@ -4,7 +4,7 @@ import { useAuthStore, getAuthSlice } from '../auth';
 import { useMonitorSeenStore } from '../monitorSeen';
 import { createStoreApiClient } from '../../api/store-gates';
 import { getServerTimeZone } from '../../api/time';
-import { setSecureValue, removeSecureValue } from '../../lib/security/secureStorage';
+import { setSecureValue, removeSecureValue, getSecureValue } from '../../lib/security/secureStorage';
 import { asProfileId } from '../../api/types';
 import { getSession, hasSession, dropAllSessions } from '../../services/sessions';
 
@@ -292,5 +292,65 @@ describe('Profile Store', () => {
 
     expect(hasSession(asProfileId('p1'))).toBe(false);
     expect(hasSession(asProfileId('p2'))).toBe(false);
+  });
+
+  it('reLoginFor(id) re-authenticates a non-current profile against its own client, leaving the current profile untouched (refs #337)', async () => {
+    const postFormA = vi.fn();
+    const postFormB = vi.fn().mockResolvedValue({
+      data: {
+        access_token: 'b-at',
+        access_token_expires: 60,
+        refresh_token: 'b-rt',
+        refresh_token_expires: 120,
+        version: '1.36.33',
+        apiversion: '2.0',
+      },
+    });
+    vi.mocked(createStoreApiClient).mockImplementation(
+      (_baseURL, _reLogin, profileId) =>
+        (profileId === asProfileId('b') ? { postForm: postFormB } : { postForm: postFormA }) as never
+    );
+    vi.mocked(getSecureValue).mockImplementation(async (key: string) =>
+      key === 'password_b' ? 'b-secret' : null
+    );
+
+    useProfileStore.setState({
+      profiles: [
+        { id: asProfileId('a'), name: 'A', apiUrl: 'https://a.test', portalUrl: 'https://a.test', cgiUrl: 'https://a.test/cgi-bin', isDefault: true, createdAt: 1, username: 'admin-a', password: 'stored-securely' },
+        { id: asProfileId('b'), name: 'B', apiUrl: 'https://b.test', portalUrl: 'https://b.test', cgiUrl: 'https://b.test/cgi-bin', isDefault: false, createdAt: 2, username: 'admin-b', password: 'stored-securely' },
+      ],
+      currentProfileId: asProfileId('a'),
+    });
+
+    // Building B's session registers its client with the sessions gate, which
+    // captures the actual reLoginFor(B.id) closure this store registered.
+    getSession(asProfileId('b'));
+    const reLoginForB = vi.mocked(createStoreApiClient).mock.calls[0][1] as () => Promise<boolean>;
+
+    const result = await reLoginForB();
+
+    expect(result).toBe(true);
+    expect(postFormB).toHaveBeenCalledWith('/host/login.json', expect.any(URLSearchParams));
+    expect(postFormA).not.toHaveBeenCalled();
+    expect(getAuthSlice(asProfileId('b')).isAuthenticated).toBe(true);
+    expect(getAuthSlice(asProfileId('a')).isAuthenticated).toBe(false);
+  });
+
+  it('reLoginFor(id) returns false for a profile that no longer exists (refs #337)', async () => {
+    useProfileStore.setState({
+      profiles: [
+        { id: asProfileId('a'), name: 'A', apiUrl: 'https://a.test', portalUrl: 'https://a.test', cgiUrl: 'https://a.test/cgi-bin', isDefault: true, createdAt: 1 },
+      ],
+      currentProfileId: asProfileId('a'),
+    });
+
+    getSession(asProfileId('a'));
+    const reLoginForA = vi.mocked(createStoreApiClient).mock.calls[0][1] as () => Promise<boolean>;
+
+    await useProfileStore.getState().deleteProfile('a');
+
+    const result = await reLoginForA();
+
+    expect(result).toBe(false);
   });
 });

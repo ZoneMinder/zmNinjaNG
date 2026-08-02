@@ -494,17 +494,37 @@ setProfileSettingsGate({
 });
 
 // services/sessions.ts has no store imports for the same reason (breaking a
-// static import cycle back through this store). reLoginFor ignores the given
-// id and reuses today's reLogin, which always targets currentProfileId. Every
-// getSession call in this file (addProfile, switchProfile, rollback) runs
-// only after currentProfileId has already been set to that same profile, so
-// this stays correct; a caller outside this store (e.g. a background poller)
-// invoking getSession for a non-current profile would get a reLogin that
-// targets the wrong profile on 401 - not exercised today. Refs #337.
+// static import cycle back through this store). reLoginFor(id) looks up
+// profile `id` fresh from state at call time (not the current profile) so a
+// 401 on a non-current profile's session (aggregate readers) re-authenticates
+// that profile against its own server with its own credentials. Refs #337.
 registerSessionsGate({
   getProfile: (id) => useProfileStore.getState().profiles.find((p) => p.id === id),
   getCurrentProfileId: () => useProfileStore.getState().currentProfileId,
-  reLoginFor: () => () => useProfileStore.getState().reLogin(),
+  reLoginFor: (id) => async () => {
+    const profile = useProfileStore.getState().profiles.find((p) => p.id === id);
+    if (!profile) {
+      log.profileService('reLoginFor: profile not found', LogLevel.WARN, { profileId: id });
+      return false;
+    }
+
+    // No credentials means no auth required (public server) - not a failure.
+    if (!profile.username || !profile.password) return true;
+
+    const password = await useProfileStore.getState().getDecryptedPassword(id);
+    if (!password) {
+      log.profileService('reLoginFor: no stored credentials', LogLevel.WARN, { profileId: id });
+      return false;
+    }
+
+    try {
+      await useAuthStore.getState().login(id, profile.username, password);
+      return true;
+    } catch (e) {
+      log.profileService('reLoginFor failed', LogLevel.ERROR, { profileId: id, error: e });
+      return false;
+    }
+  },
 });
 
 // stores/auth.ts's login/refreshAccessToken resolve their API client through
