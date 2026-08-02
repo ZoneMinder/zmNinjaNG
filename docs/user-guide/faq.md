@@ -50,6 +50,14 @@ zmNinjaNg is a rewrite of zmNinja using React, TypeScript, and Capacitor. Same c
 - Ensure the ZoneMinder API is enabled
 - If using HTTPS with a self-signed certificate, make sure the self-signed certificate toggle is enabled in Settings > Advanced
 
+### Android: "Connection failed" on a local server, but a remote URL works
+
+Some Android devices block an app from reaching your local network until you grant a per-app permission by hand. The giveaway is that the same server works over a public hostname or over cellular through a VPN, other apps on the phone reach it fine, and only the LAN address (`http://192.168.x.x/zm` and the like) fails.
+
+Grant it in Android settings, not in zmNinjaNg: **Settings > Apps > zmNinjaNg > Permissions**, then enable the local network entry. The wording differs by vendor, so look for **Local network**, **LAN**, or **Allow access to local network**. On Xiaomi/HyperOS, OPPO/ColorOS, vivo, and Huawei the toggle may instead sit under a vendor privacy or permission manager screen. Reopen zmNinjaNg afterwards and retry the profile.
+
+If your device has no such toggle anywhere in its settings, this is not your problem, work through the checklist above instead.
+
 ### The app connects but shows no monitors
 
 - Check that your ZoneMinder user has permission to view monitors
