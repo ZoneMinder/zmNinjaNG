@@ -7,15 +7,15 @@
  * Key features:
  * - Persists profiles to localStorage (excluding passwords)
  * - Stores passwords in secure storage (native Keychain/Keystore or encrypted in localStorage)
- * - Handles profile switching (query cache reset, session bootstrap); each
- *   profile's session and auth state persist independently across a switch
+ * - Handles profile switching (session bootstrap); each profile's session,
+ *   auth state, and query cache entries persist independently across a switch
  * - Manages app initialization state
  */
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Profile, ProfileId } from '../api/types';
-import { asProfileId } from '../api/types';
+import { asProfileId, ALL_PROFILES_ID } from '../api/types';
 import { getServerTimeZone } from '../api/time';
 import { ProfileService } from '../services/profile';
 import { log, LogLevel } from '../lib/logger';
@@ -209,6 +209,12 @@ export const useProfileStore = create<ProfileState>()(
           dropSession(asProfileId(id));
           useAuthStore.getState().logout(asProfileId(id));
 
+          // Evict its query cache entries. Profile-scoped keys are the sole
+          // cross-profile isolation now that switchProfile no longer clears
+          // the whole cache (refs #337).
+          const { removeProfileQueries } = await import('./query-cache');
+          removeProfileQueries(asProfileId(id));
+
           set((state) => {
             const profiles = state.profiles.filter((p) => p.id !== id);
             const currentProfileId =
@@ -254,16 +260,37 @@ export const useProfileStore = create<ProfileState>()(
          *
          * Performs a context switch:
          * 1. Quits the outgoing profile's active streams
-         * 2. Clears query cache (React Query)
-         * 3. Sets new profile as current
-         * 4. Ensures the new profile's session exists
-         * 5. Runs bootstrap (auth, timezone, zms path, multi-port)
+         * 2. Sets new profile as current
+         * 3. Ensures the new profile's session exists
+         * 4. Runs bootstrap (auth, timezone, zms path, multi-port)
          *
          * Sessions are per-profile and persist across a switch: the outgoing
-         * profile's auth state is left untouched (refs #337). Includes
-         * rollback logic if switching fails.
+         * profile's auth state is left untouched (refs #337). The query
+         * cache also survives a switch - profile-scoped query keys are the
+         * isolation primitive, which keeps other profiles' data warm for
+         * All mode. Includes rollback logic if switching fails.
+         *
+         * ALL_PROFILES_ID is a virtual aggregate, not a real server: it
+         * skips the lookup below along with session/bootstrap/lastUsed.
+         * Leaving ALL mode for a real profile has no single outgoing
+         * profile to target, so it quits every stream via the same no-arg
+         * call (refs #337).
          */
         switchProfile: async (id) => {
+          if (id === ALL_PROFILES_ID) {
+            log.profileService('Switching to All mode', LogLevel.INFO);
+            switchInProgress = true;
+            try {
+              const { quitAllActiveStreams } = await import('../lib/monitor/active-streams');
+              await quitAllActiveStreams();
+              set({ currentProfileId: ALL_PROFILES_ID });
+              log.profileService('Switched to All mode', LogLevel.INFO);
+            } finally {
+              switchInProgress = false;
+            }
+            return;
+          }
+
           const profile = get().profiles.find((p) => p.id === id);
           if (!profile) {
             throw new Error(`Profile ${id} not found`);
@@ -292,28 +319,22 @@ export const useProfileStore = create<ProfileState>()(
             const { quitAllActiveStreams } = await import('../lib/monitor/active-streams');
             await quitAllActiveStreams();
 
-            // STEP 1: Clear the query cache so the new profile doesn't render
-            // stale data left over from the outgoing profile.
-            const { clearQueryCache } = await import('./query-cache');
-            log.profileService('Step 1: Clearing query cache', LogLevel.INFO);
-            clearQueryCache();
-
-            // STEP 2: Update current profile ID
+            // STEP 1: Update current profile ID
             // Use profile.id (already a ProfileId) rather than the raw `id`
             // param so this assignment needs no cast.
-            log.profileService('Step 2: Setting new profile as current', LogLevel.INFO);
+            log.profileService('Step 1: Setting new profile as current', LogLevel.INFO);
             set({ currentProfileId: profile.id });
 
             // Update last used timestamp (don't await this)
             get().updateProfile(id, { lastUsed: Date.now() });
 
-            // STEP 3: Ensure the new profile's session exists
-            log.profileService('Step 3: Ensuring session', LogLevel.INFO, { apiUrl: profile.apiUrl });
+            // STEP 2: Ensure the new profile's session exists
+            log.profileService('Step 2: Ensuring session', LogLevel.INFO, { apiUrl: profile.apiUrl });
             getSession(profile.id);
             log.profileService('Session ready', LogLevel.INFO);
 
-            // STEP 4-6: Run bootstrap tasks (auth, timezone, zms path, multi-port)
-            log.profileService('Step 4-6: Running bootstrap tasks', LogLevel.INFO);
+            // STEP 3-5: Run bootstrap tasks (auth, timezone, zms path, multi-port)
+            log.profileService('Step 3-5: Running bootstrap tasks', LogLevel.INFO);
             await performBootstrap(profile, {
               getDecryptedPassword: get().getDecryptedPassword,
               updateProfile: get().updateProfile,
@@ -335,9 +356,6 @@ export const useProfileStore = create<ProfileState>()(
                 // the profile we're restoring to).
                 const { useAuthStore } = await import('./auth');
                 useAuthStore.getState().logout(profile.id);
-
-                const { clearQueryCache } = await import('./query-cache');
-                clearQueryCache();
 
                 // Restore previous profile
                 log.profileService('Restoring previous profile ID', LogLevel.INFO);

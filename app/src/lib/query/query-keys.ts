@@ -8,9 +8,11 @@
  * profileId in the same position across a domain and never insert an optional
  * parameter before it, or prefix invalidation stops matching.
  *
- * The global `queryClient.clear()` on profile switch (stores/query-cache.ts) is
- * the primary cross-profile safety net. These profile-scoped keys are
- * defense-in-depth so a stale key from another profile can never match.
+ * The query cache survives a profile switch (stores/profile.ts) so other
+ * profiles' data stays warm for All mode; these profile-scoped keys are the
+ * isolation primitive that keeps a stale key from another profile from ever
+ * matching. `removeProfileQueries` (stores/query-cache.ts) evicts a
+ * profile's keys when it is deleted.
  *
  * A handful of keys are genuinely app-level (not tied to a profile/server) and
  * carry no profile id. They are grouped at the bottom.

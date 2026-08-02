@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { QueryClient } from '@tanstack/react-query';
 import { useProfileStore } from '../profile';
 import { useAuthStore, getAuthSlice } from '../auth';
 import { useMonitorSeenStore } from '../monitorSeen';
+import { setQueryClient } from '../query-cache';
 import { createStoreApiClient } from '../../api/store-gates';
 import { getServerTimeZone } from '../../api/time';
 import { setSecureValue, removeSecureValue, getSecureValue } from '../../lib/security/secureStorage';
-import { asProfileId } from '../../api/types';
+import { asProfileId, ALL_PROFILES_ID } from '../../api/types';
 import { getSession, hasSession, dropAllSessions } from '../../services/sessions';
 
 vi.mock('../../api/store-gates', () => ({
@@ -42,6 +44,8 @@ vi.mock('../../lib/logger', () => ({
 }));
 
 describe('Profile Store', () => {
+  let queryClient: QueryClient;
+
   beforeEach(() => {
     useProfileStore.setState({
       profiles: [],
@@ -51,6 +55,8 @@ describe('Profile Store', () => {
     useMonitorSeenStore.setState({ profileWatermarks: {} });
     useAuthStore.setState({ slices: {} });
     dropAllSessions();
+    queryClient = new QueryClient();
+    setQueryClient(queryClient);
     vi.clearAllMocks();
     vi.stubGlobal('crypto', { randomUUID: () => 'profile-1' });
   });
@@ -200,6 +206,22 @@ describe('Profile Store', () => {
     expect(useMonitorSeenStore.getState().hasWatermark('p1', 'monitor-1')).toBe(false);
     expect(useMonitorSeenStore.getState().hasWatermark('p2', 'monitor-1')).toBe(true);
     expect(useMonitorSeenStore.getState().getWatermark('p2', 'monitor-1')).toBe('2026-07-02 00:00:00');
+  });
+
+  it('drops the deleted profile\'s query cache entries but keeps other profiles\' (refs #337)', async () => {
+    useProfileStore.setState({
+      profiles: [
+        { id: asProfileId('p1'), name: 'Home', apiUrl: 'http://a', portalUrl: 'http://a', cgiUrl: 'http://a/cgi-bin', isDefault: true, createdAt: 1 },
+      ],
+      currentProfileId: asProfileId('p1'),
+    });
+    queryClient.setQueryData(['monitors', 'p1'], ['m1']);
+    queryClient.setQueryData(['monitors', 'p2'], ['m2']);
+
+    await useProfileStore.getState().deleteProfile('p1');
+
+    expect(queryClient.getQueryData(['monitors', 'p1'])).toBeUndefined();
+    expect(queryClient.getQueryData(['monitors', 'p2'])).toEqual(['m2']);
   });
 
   it('clears the deleted profile\'s auth slice but keeps other profiles\' (refs #337)', async () => {
@@ -352,5 +374,39 @@ describe('Profile Store', () => {
     const result = await reLoginForA();
 
     expect(result).toBe(false);
+  });
+
+  describe('switchProfile', () => {
+    it('keeps both profiles\' query cache entries warm across a switch (refs #337)', async () => {
+      useProfileStore.setState({
+        profiles: [
+          { id: asProfileId('p1'), name: 'Home', apiUrl: 'http://a', portalUrl: 'http://a', cgiUrl: 'http://a/cgi-bin', isDefault: true, createdAt: 1 },
+          { id: asProfileId('p2'), name: 'Away', apiUrl: 'http://b', portalUrl: 'http://b', cgiUrl: 'http://b/cgi-bin', isDefault: false, createdAt: 2 },
+        ],
+        currentProfileId: asProfileId('p1'),
+      });
+      queryClient.setQueryData(['monitors', 'p1'], ['m1']);
+      queryClient.setQueryData(['monitors', 'p2'], ['m2']);
+
+      await useProfileStore.getState().switchProfile('p2');
+
+      expect(queryClient.getQueryData(['monitors', 'p1'])).toEqual(['m1']);
+      expect(queryClient.getQueryData(['monitors', 'p2'])).toEqual(['m2']);
+    });
+
+    it('switching to ALL_PROFILES_ID sets the sentinel without building a session or running bootstrap (refs #337)', async () => {
+      useProfileStore.setState({
+        profiles: [
+          { id: asProfileId('p1'), name: 'Home', apiUrl: 'http://a', portalUrl: 'http://a', cgiUrl: 'http://a/cgi-bin', isDefault: true, createdAt: 1 },
+        ],
+        currentProfileId: asProfileId('p1'),
+      });
+
+      await useProfileStore.getState().switchProfile(ALL_PROFILES_ID);
+
+      expect(useProfileStore.getState().currentProfileId).toBe(ALL_PROFILES_ID);
+      expect(hasSession(ALL_PROFILES_ID)).toBe(false);
+      expect(createStoreApiClient).not.toHaveBeenCalled();
+    });
   });
 });
