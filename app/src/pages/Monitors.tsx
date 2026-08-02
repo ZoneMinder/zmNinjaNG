@@ -13,7 +13,7 @@ import { getMonitors, updateMonitor } from '../api/monitors';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useBandwidthSettings } from '../hooks/useBandwidthSettings';
 import { useMonitorNewEvents } from '../hooks/useMonitorNewEvents';
-import { useAuthStore } from '../stores/auth';
+import { useAuthSlice } from '../stores/auth';
 import { useSettingsStore } from '../stores/settings';
 import { Button } from '../components/ui/button';
 import { LayoutGrid, List, Video } from 'lucide-react';
@@ -43,8 +43,9 @@ export default function Monitors() {
   const { currentProfile, settings } = useCurrentProfile();
   const bandwidth = useBandwidthSettings();
   const updateSettings = useSettingsStore((state) => state.updateProfileSettings);
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const zmVersion = useAuthStore((s) => s.version);
+  const authSlice = useAuthSlice(currentProfile?.id ?? null);
+  const isAuthenticated = authSlice.isAuthenticated;
+  const zmVersion = authSlice.version;
   const { isFilterActive, filteredMonitorIds, isFilterReady } = useGroupFilter();
   const gridContainerRef = useRef<HTMLDivElement>(null);
 

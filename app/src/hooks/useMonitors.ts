@@ -18,7 +18,7 @@ import { getMonitors } from '../api/monitors';
 import { filterEnabledMonitors } from '../lib/monitor/filters';
 import { useCurrentProfile } from './useCurrentProfile';
 import { useBandwidthSettings } from './useBandwidthSettings';
-import { useAuthStore } from '../stores/auth';
+import { useAuthSlice } from '../stores/auth';
 import { queryKeys } from '../lib/query/query-keys';
 import type { MonitorData } from '../api/types';
 
@@ -58,7 +58,7 @@ export interface UseMonitorsReturn {
 export function useMonitors(options?: UseMonitorsOptions): UseMonitorsReturn {
   const { currentProfile } = useCurrentProfile();
   const bandwidth = useBandwidthSettings();
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isAuthenticated = useAuthSlice(currentProfile?.id ?? null).isAuthenticated;
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: queryKeys.monitors(currentProfile?.id),

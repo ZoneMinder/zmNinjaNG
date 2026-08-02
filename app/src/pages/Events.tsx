@@ -16,7 +16,7 @@ import type { EventData } from '../api/types';
 import { getMonitors } from '../api/monitors';
 import { resolveMinStreamingPort } from '../lib/monitor/multiport';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
-import { useAuthStore } from '../stores/auth';
+import { useAuthSlice } from '../stores/auth';
 import { useFreshAccessToken } from '../hooks/useFreshAccessToken';
 import { useSettingsStore, ALL_GROUPS_KEY, DEFAULT_EVENT_MONTAGE_GROUP_LAYOUT } from '../stores/settings';
 import { useEventFilters, ALL_TAGS_FILTER_ID } from '../hooks/useEventFilters';
@@ -61,7 +61,7 @@ export default function Events() {
     (state) => state.updateEventMontageGroupLayout
   );
   const { token: accessToken, isFresh: isAccessTokenFresh } = useFreshAccessToken();
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isAuthenticated = useAuthSlice(currentProfile?.id ?? null).isAuthenticated;
   const { selectedGroupId, isFilterActive: isGroupFilterActive, filteredMonitorIds: groupMonitorIds } = useGroupFilter();
   const groupKey = selectedGroupId ?? ALL_GROUPS_KEY;
   const eventCols =

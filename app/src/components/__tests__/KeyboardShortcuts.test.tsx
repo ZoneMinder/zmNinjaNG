@@ -30,6 +30,7 @@ vi.mock('@tanstack/react-query', () => ({
 vi.mock('../../api/monitors', () => ({ getMonitors: vi.fn() }));
 vi.mock('../../stores/auth', () => ({
   useAuthStore: (sel: (s: { isAuthenticated: boolean }) => unknown) => sel({ isAuthenticated: true }),
+  useAuthSlice: () => ({ isAuthenticated: true }),
 }));
 vi.mock('../../lib/profile/profile-settings', () => ({ getExcludedMonitorIdSet: () => new Set<string>() }));
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }));

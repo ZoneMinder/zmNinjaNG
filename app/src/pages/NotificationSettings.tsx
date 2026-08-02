@@ -13,7 +13,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useProfileStore } from '../stores/profile';
 import { getMonitors } from '../api/monitors';
-import { useAuthStore } from '../stores/auth';
+import { useAuthSlice } from '../stores/auth';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Label } from '../components/ui/label';
@@ -47,7 +47,7 @@ export default function NotificationSettings() {
   const navigate = useNavigate();
   const { currentProfile } = useCurrentProfile();
   const getDecryptedPassword = useProfileStore((state) => state.getDecryptedPassword);
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isAuthenticated = useAuthSlice(currentProfile?.id ?? null).isAuthenticated;
 
   const updateProfileSettings = useNotificationStore((s) => s.updateProfileSettings);
   const setMonitorFilter = useNotificationStore((s) => s.setMonitorFilter);

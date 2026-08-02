@@ -12,7 +12,7 @@ import { GRID_LAYOUT } from '../lib/zmninja-ng-constants';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useBandwidthSettings } from '../hooks/useBandwidthSettings';
 import { useMonitorNewEvents } from '../hooks/useMonitorNewEvents';
-import { useAuthStore } from '../stores/auth';
+import { useAuthSlice } from '../stores/auth';
 import { useSettingsStore } from '../stores/settings';
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -62,8 +62,9 @@ export default function Montage() {
   const { t } = useTranslation();
   const bandwidth = useBandwidthSettings();
   const { currentProfile, settings } = useCurrentProfile();
-  const accessToken = useAuthStore((state) => state.accessToken);
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const authSlice = useAuthSlice(currentProfile?.id ?? null);
+  const accessToken = authSlice.accessToken;
+  const isAuthenticated = authSlice.isAuthenticated;
 
   const { data, isLoading, error } = useQuery({
     queryKey: queryKeys.monitors(currentProfile?.id),

@@ -13,7 +13,7 @@ import { getMonitor, getControl, updateMonitor } from '../api/monitors';
 import { getZones } from '../api/zones';
 import { resolveMinStreamingPort } from '../lib/monitor/multiport';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
-import { useAuthStore } from '../stores/auth';
+import { useAuthSlice } from '../stores/auth';
 import { useSettingsStore } from '../stores/settings';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
@@ -73,7 +73,7 @@ export default function MonitorDetail() {
 
   // Profile and settings
   const { currentProfile, settings } = useCurrentProfile();
-  const accessToken = useAuthStore((state) => state.accessToken);
+  const accessToken = useAuthSlice(currentProfile?.id ?? null).accessToken;
   const updateSettings = useSettingsStore((state) => state.updateProfileSettings);
 
   // Keep screen awake when Insomnia is enabled
@@ -145,7 +145,7 @@ export default function MonitorDetail() {
   });
 
   // ZM version for feature detection
-  const zmVersion = useAuthStore((s) => s.version);
+  const zmVersion = useAuthSlice(currentProfile?.id ?? null).version;
   const is138Plus = isZmVersionAtLeast(zmVersion, '1.38.0');
 
   // Settings dialog save handler: batches all changes into one or more API calls

@@ -22,7 +22,7 @@ import { queryKeys } from '../lib/query/query-keys';
 import { useGroups } from '../hooks/useGroups';
 import { useGroupFilter } from '../hooks/useGroupFilter';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
-import { useAuthStore } from '../stores/auth';
+import { useAuthSlice } from '../stores/auth';
 import { getExcludedMonitorIdSet } from '../lib/profile/profile-settings';
 import { NAV_SHORTCUTS } from '../lib/keyboard-shortcuts';
 import { filterCommandItems, type CommandItem } from '../lib/command-palette';
@@ -50,7 +50,7 @@ export function CommandPalette() {
   const setOpen = useCommandPaletteStore((s) => s.setOpen);
   const openAssistant = useAssistantPanelStore((s) => s.open);
   const { currentProfile, settings } = useCurrentProfile();
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isAuthenticated = useAuthSlice(currentProfile?.id ?? null).isAuthenticated;
   const { setSelectedGroup } = useGroupFilter();
   const { groups } = useGroups();
   const inputRef = useRef<HTMLInputElement>(null);

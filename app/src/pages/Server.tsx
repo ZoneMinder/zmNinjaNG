@@ -9,7 +9,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../lib/query/query-keys';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useBandwidthSettings } from '../hooks/useBandwidthSettings';
-import { useAuthStore } from '../stores/auth';
+import { useAuthSlice } from '../stores/auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -51,9 +51,10 @@ export default function Server() {
   const queryClient = useQueryClient();
   const { currentProfile } = useCurrentProfile();
   const bandwidth = useBandwidthSettings();
-  const version = useAuthStore((s) => s.version);
-  const apiVersion = useAuthStore((s) => s.apiVersion);
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const authSlice = useAuthSlice(currentProfile?.id ?? null);
+  const version = authSlice.version;
+  const apiVersion = authSlice.apiVersion;
+  const isAuthenticated = authSlice.isAuthenticated;
   const [selectedAction, setSelectedAction] = useState<string>('');
 
   // Fetch server information

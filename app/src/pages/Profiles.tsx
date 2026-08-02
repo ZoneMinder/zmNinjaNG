@@ -157,6 +157,7 @@ export default function Profiles() {
           ? { username: formData.username, password: formData.password }
           : undefined;
         const discovered = await discoverUrls(portalUrl, {
+          profileId: selectedProfile.id,
           credentials,
           onClientCreated: (client) => {
             setApiClient(client);

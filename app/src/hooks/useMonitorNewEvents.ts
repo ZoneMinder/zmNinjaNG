@@ -15,7 +15,7 @@ import { getMonitorEventsSince } from '../api/events';
 import { queryKeys } from '../lib/query/query-keys';
 import { useMonitorSeenStore } from '../stores/monitorSeen';
 import { useCurrentProfile } from './useCurrentProfile';
-import { useAuthStore } from '../stores/auth';
+import { useAuthSlice } from '../stores/auth';
 import { useBandwidthSettings } from './useBandwidthSettings';
 
 interface MonitorNewEvents {
@@ -25,7 +25,7 @@ interface MonitorNewEvents {
 
 export function useMonitorNewEvents(monitorIds: string[]): MonitorNewEvents {
   const { currentProfile } = useCurrentProfile();
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isAuthenticated = useAuthSlice(currentProfile?.id ?? null).isAuthenticated;
   const bandwidth = useBandwidthSettings();
 
   const profileId = currentProfile?.id;

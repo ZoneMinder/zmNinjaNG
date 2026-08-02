@@ -15,6 +15,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { useProfileStore } from '../stores/profile';
 import { setApiClient } from '../api/client';
 import { createStoreApiClient } from '../api/store-gates';
+import { asProfileId } from '../api/types';
 import { discoverUrls, DiscoveryError } from '../services/discovery';
 import { Switch } from '../components/ui/switch';
 import { Video, Server, ShieldCheck, ArrowRight, Loader2, Eye, EyeOff, ArrowLeft, QrCode, X } from 'lucide-react';
@@ -134,6 +135,13 @@ export default function ProfileForm() {
     setSuccess(false);
     setTesting(true);
 
+    // Mint this profile's id up front: the connection test below builds an
+    // auth session (discovery probe, optional credentials login) before the
+    // profile is saved. Minting here means that session, and the profile
+    // addProfile saves at the end of this flow, share the same id instead of
+    // the test session being orphaned under a scratch id. Refs #337.
+    const profileId = asProfileId(crypto.randomUUID());
+
     // Create abort controller for this connection attempt
     abortControllerRef.current = new AbortController();
     const signal = abortControllerRef.current.signal;
@@ -196,7 +204,7 @@ export default function ProfileForm() {
         log.profileForm('Manual URLs set', LogLevel.INFO, { portalUrl: confirmedPortalUrl, apiUrl, cgiUrl });
 
         // Initialize API client with manual URL
-        const client = createStoreApiClient(apiUrl);
+        const client = createStoreApiClient(apiUrl, undefined, profileId);
         setApiClient(client);
       } else {
         // Discover URLs from portal URL
@@ -204,6 +212,7 @@ export default function ProfileForm() {
         log.profileForm('Discovering URLs', LogLevel.INFO);
         const credentials = hasUsername && hasPassword ? { username: normalizedUsername, password } : undefined;
         const discovered = await discoverUrls(portalUrl, {
+          profileId,
           credentials,
           signal,
           onClientCreated: (client) => {
@@ -249,10 +258,10 @@ export default function ProfileForm() {
 
           // Clear any existing auth state to ensure clean login
           // This prevents old tokens from interfering with new profile login
-          useAuthStore.getState().logout();
+          useAuthStore.getState().logout(profileId);
           log.profileForm('Cleared existing auth state for fresh login', LogLevel.DEBUG);
 
-          await useAuthStore.getState().login(normalizedUsername, password);
+          await useAuthStore.getState().login(profileId, normalizedUsername, password);
           log.profileForm('Login successful', LogLevel.INFO);
 
           // Note: ZMS path is already fetched during discovery when credentials are provided,
@@ -286,7 +295,7 @@ export default function ProfileForm() {
       );
 
       log.profileForm('Adding new profile', LogLevel.INFO, { profileName: finalProfileName });
-      const newProfileId = await addProfile({
+      await addProfile({
         name: finalProfileName,
         portalUrl: confirmedPortalUrl,
         apiUrl,
@@ -295,13 +304,13 @@ export default function ProfileForm() {
         password: password || undefined,
         isDefault: isFirstProfile,
         go2rtcUrl: go2rtcPath || undefined,
-      });
-      log.profileForm('Profile created', LogLevel.INFO, { profileName: finalProfileName, profileId: newProfileId });
+      }, profileId);
+      log.profileForm('Profile created', LogLevel.INFO, { profileName: finalProfileName, profileId });
 
       // Save self-signed cert setting and trusted fingerprint to the new profile
       if (allowSelfSignedCerts) {
         const { useSettingsStore } = await import('../stores/settings');
-        useSettingsStore.getState().updateProfileSettings(newProfileId, {
+        useSettingsStore.getState().updateProfileSettings(profileId, {
           allowSelfSignedCerts: true,
           trustedCertFingerprint: acceptedFingerprint,
         });
@@ -313,8 +322,8 @@ export default function ProfileForm() {
       // Switch to the newly created profile (unless it's the first profile, which is auto-set as current)
       if (!isFirstProfile) {
         const switchProfile = useProfileStore.getState().switchProfile;
-        log.profileForm('Switching to newly created profile', LogLevel.INFO, { profileId: newProfileId });
-        await switchProfile(newProfileId);
+        log.profileForm('Switching to newly created profile', LogLevel.INFO, { profileId });
+        await switchProfile(profileId);
       }
 
       // Navigate after a short delay

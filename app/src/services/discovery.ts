@@ -1,6 +1,7 @@
 
 import { setApiClient, type ApiClient } from '../api/client';
 import { createStoreApiClient } from '../api/store-gates';
+import { ALL_PROFILES_ID, type ProfileId } from '../api/types';
 import type { HttpError } from '../lib/http';
 import { log, LogLevel } from '../lib/logger';
 import { isAbortError } from '../lib/is-abort-error';
@@ -10,6 +11,16 @@ import { DISCOVERY_TIMEOUTS } from '../lib/zmninja-ng-constants';
  * Options for the discoverUrls helper used by UI pages.
  */
 export interface DiscoverUrlsOptions {
+  /**
+   * The profile this discovery/connection-test session belongs to. A caller
+   * adding a new profile mints the id before this call (see ProfileForm.tsx)
+   * so the same id carries into the saved profile; a caller re-testing an
+   * existing profile passes its real id. Defaults to ALL_PROFILES_ID (never
+   * a real server, so the resulting auth slice stays empty) when the caller
+   * has no profile id yet - this module stays store-free, so it never reads
+   * one for itself.
+   */
+  profileId?: ProfileId;
   credentials?: { username: string; password: string };
   signal?: AbortSignal;
   /** Called once an API client has been created for the discovered URL. */
@@ -29,6 +40,8 @@ export interface DiscoveryResult {
  * Options for discovery
  */
 export interface DiscoveryOptions {
+    /** See DiscoverUrlsOptions.profileId - same default when omitted. */
+    profileId?: ProfileId;
     username?: string;
     password?: string;
     signal?: AbortSignal;
@@ -78,13 +91,13 @@ function isValidApiStatus(status?: number): boolean {
  * Returns true if the API is found, false otherwise.
  * Throws if signal is aborted.
  */
-async function probeApi(apiUrl: string, signal?: AbortSignal): Promise<boolean> {
+async function probeApi(apiUrl: string, profileId: ProfileId, signal?: AbortSignal): Promise<boolean> {
     // Check if already aborted
     if (signal?.aborted) {
         throw new DiscoveryError('Discovery cancelled', 'CANCELLED');
     }
 
-    const apiClient = createStoreApiClient(apiUrl);
+    const apiClient = createStoreApiClient(apiUrl, undefined, profileId);
 
     // Try getVersion.json first
     let hadHttpError = false; // True if we got an HTTP response (even error), false if connection failed
@@ -167,7 +180,7 @@ async function probeApi(apiUrl: string, signal?: AbortSignal): Promise<boolean> 
  * Returns the full cgiUrl or null if fetch fails.
  * Throws if signal is aborted.
  */
-async function fetchCgiUrl(apiUrl: string, portalUrl: string, options: DiscoveryOptions): Promise<string | null> {
+async function fetchCgiUrl(apiUrl: string, portalUrl: string, options: DiscoveryOptions, profileId: ProfileId): Promise<string | null> {
     const { username, password, signal } = options;
 
     if (!username || !password) {
@@ -182,7 +195,7 @@ async function fetchCgiUrl(apiUrl: string, portalUrl: string, options: Discovery
 
     try {
         // Create and set API client for this API URL
-        const client = createStoreApiClient(apiUrl);
+        const client = createStoreApiClient(apiUrl, undefined, profileId);
         setApiClient(client);
 
         // Authenticate using direct POST to avoid circular dependency with auth store
@@ -249,6 +262,7 @@ async function fetchCgiUrl(apiUrl: string, portalUrl: string, options: Discovery
  */
 export async function discoverZoneminder(inputUrl: string, options: DiscoveryOptions = {}): Promise<DiscoveryResult> {
     const { signal } = options;
+    const profileId = options.profileId ?? ALL_PROFILES_ID;
 
     // Check if already aborted
     if (signal?.aborted) {
@@ -272,7 +286,7 @@ export async function discoverZoneminder(inputUrl: string, options: DiscoveryOpt
             log.discovery(`Probing API: ${fullApiUrl}`, LogLevel.DEBUG);
 
             try {
-                const found = await probeApi(fullApiUrl, signal);
+                const found = await probeApi(fullApiUrl, profileId, signal);
                 if (found) {
                     log.discovery(`API confirmed: ${fullApiUrl}`, LogLevel.INFO);
 
@@ -283,7 +297,7 @@ export async function discoverZoneminder(inputUrl: string, options: DiscoveryOpt
 
                     // Try to fetch actual ZMS path from server (requires auth)
                     // Fall back to inference if auth fails or no credentials
-                    let cgiUrl = await fetchCgiUrl(fullApiUrl, portalUrl, options);
+                    let cgiUrl = await fetchCgiUrl(fullApiUrl, portalUrl, options, profileId);
 
                     if (!cgiUrl) {
                         // Default: derive from portalUrl
@@ -329,11 +343,12 @@ export async function discoverZoneminder(inputUrl: string, options: DiscoveryOpt
  */
 export async function discoverUrls(
     portal: string,
-    { credentials, signal, onClientCreated }: DiscoverUrlsOptions = {}
+    { credentials, signal, onClientCreated, profileId }: DiscoverUrlsOptions = {}
 ): Promise<DiscoveryResult> {
+    const resolvedProfileId = profileId ?? ALL_PROFILES_ID;
     const attempt = async () => {
-        const result = await discoverZoneminder(portal, { ...credentials, signal });
-        const client = createStoreApiClient(result.apiUrl);
+        const result = await discoverZoneminder(portal, { ...credentials, signal, profileId: resolvedProfileId });
+        const client = createStoreApiClient(result.apiUrl, undefined, resolvedProfileId);
         onClientCreated?.(client);
         return result;
     };

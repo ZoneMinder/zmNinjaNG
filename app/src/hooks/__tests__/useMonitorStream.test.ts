@@ -86,10 +86,18 @@ describe('useMonitorStream', () => {
     });
 
     useAuthStore.setState({
-      accessToken: 'test-token',
-      accessTokenExpires: Date.now() + 60 * 60 * 1000,
-      refreshToken: null,
-      isAuthenticated: false,
+      slices: {
+        [mockProfile.id]: {
+          accessToken: 'test-token',
+          accessTokenExpires: Date.now() + 60 * 60 * 1000,
+          refreshToken: null,
+          refreshTokenExpires: null,
+          version: null,
+          apiVersion: null,
+          isAuthenticated: false,
+          requiresAuth: true,
+        },
+      },
     });
 
     useSettingsStore.setState({

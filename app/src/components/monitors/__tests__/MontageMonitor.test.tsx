@@ -86,6 +86,7 @@ vi.mock('../../../hooks/useServerUrls', () => ({
 vi.mock('../../../stores/auth', () => ({
   useAuthStore: (selector: (state: { version: string }) => unknown) =>
     selector({ version: '1.38.0' }),
+  useAuthSlice: () => ({ version: '1.38.0' }),
 }));
 
 vi.mock('../../../stores/notifications', () => {

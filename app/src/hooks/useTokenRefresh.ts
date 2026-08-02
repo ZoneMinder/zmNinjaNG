@@ -15,22 +15,24 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { useAuthStore } from '../stores/auth';
+import { useAuthStore, useAuthSlice } from '../stores/auth';
+import { useCurrentProfile } from './useCurrentProfile';
 import { ZM_INTEGRATION } from '../lib/zmninja-ng-constants';
 import { log, LogLevel } from '../lib/logger';
 
 /**
- * Custom hook to handle automatic token refresh.
+ * Custom hook to handle automatic token refresh for the current profile.
  * Should be mounted once at the root of the application (e.g., in App.tsx).
  */
 export function useTokenRefresh(): void {
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const accessTokenExpires = useAuthStore((state) => state.accessTokenExpires);
+  const { currentProfile } = useCurrentProfile();
+  const profileId = currentProfile?.id ?? null;
+  const { isAuthenticated, accessTokenExpires } = useAuthSlice(profileId);
   const getFreshAccessToken = useAuthStore((state) => state.getFreshAccessToken);
   const isRefreshingRef = useRef(false);
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!profileId || !isAuthenticated) return;
 
     const checkAndRefresh = async () => {
       if (accessTokenExpires && !isRefreshingRef.current) {
@@ -48,7 +50,7 @@ export function useTokenRefresh(): void {
             }
             // Route through getFreshAccessToken so concurrent component-driven
             // refreshes share one network call via the auth-store dedup.
-            await getFreshAccessToken();
+            await getFreshAccessToken(profileId);
             log.auth('Access token refreshed successfully');
           } catch (error) {
             log.auth('Failed to refresh access token', LogLevel.ERROR, error);
@@ -78,5 +80,5 @@ export function useTokenRefresh(): void {
       clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [isAuthenticated, accessTokenExpires, getFreshAccessToken]);
+  }, [profileId, isAuthenticated, accessTokenExpires, getFreshAccessToken]);
 }

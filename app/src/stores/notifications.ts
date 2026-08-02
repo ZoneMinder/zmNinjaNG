@@ -21,8 +21,9 @@ import { getEventImageUrl } from '../lib/zm/url-builder';
 import { getEffectiveMinStreamingPort } from '../lib/monitor/multiport';
 import { updateNotification } from '../api/notifications';
 import { useProfileStore } from './profile';
-import { useAuthStore } from './auth';
+import { useAuthStore, getAuthSlice } from './auth';
 import { useSettingsStore } from './settings';
+import { asProfileId } from '../api/types';
 import { setPushServiceStoreGates } from '../services/pushNotifications';
 import { getBandwidthSettings, NOTIFICATIONS_SERVICE, STORAGE_KEYS, type BandwidthMode } from '../lib/zmninja-ng-constants';
 
@@ -661,7 +662,7 @@ export const useNotificationStore = create<NotificationState>()(
  */
 function _buildServiceProviders(profileId: string, portalUrl: string): ZMNotificationProviders {
   return {
-    getFreshAccessToken: () => useAuthStore.getState().getFreshAccessToken(),
+    getFreshAccessToken: () => useAuthStore.getState().getFreshAccessToken(asProfileId(profileId)),
     buildEventImageUrl: (eventId, token) =>
       getEventImageUrl(portalUrl, String(eventId), 'snapshot', {
         token: token ?? undefined,
@@ -703,7 +704,7 @@ export function startEventPoller(profileId: string): Promise<void> {
     onEvent: (event) => useNotificationStore.getState().addEvent(profileId, event, 'poll'),
     getOnlyDetectedEvents: () =>
       useNotificationStore.getState().getProfileSettings(profileId).onlyDetectedEvents,
-    getFreshAccessToken: () => useAuthStore.getState().getFreshAccessToken(),
+    getFreshAccessToken: () => useAuthStore.getState().getFreshAccessToken(asProfileId(profileId)),
     getPollIntervalMs: () => {
       const { bandwidthMode } = useSettingsStore.getState().getProfileSettings(profileId);
       const { pollingInterval } = useNotificationStore.getState().getProfileSettings(profileId);
@@ -742,6 +743,6 @@ setPushServiceStoreGates({
     getDecryptedPassword: (profileId) => useProfileStore.getState().getDecryptedPassword(profileId),
   },
   auth: {
-    getAccessToken: () => useAuthStore.getState().accessToken,
+    getAccessToken: () => getAuthSlice(useProfileStore.getState().currentProfileId).accessToken,
   },
 });

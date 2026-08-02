@@ -21,7 +21,7 @@ import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getMonitors } from '../api/monitors';
 import { queryKeys } from '../lib/query/query-keys';
-import { useAuthStore } from '../stores/auth';
+import { useAuthSlice } from '../stores/auth';
 import { useCurrentProfile } from './useCurrentProfile';
 import { useSettingsStore } from '../stores/settings';
 import { useDashboardStore } from '../stores/dashboard';
@@ -33,7 +33,7 @@ import {
 
 export function useReconcileDeletedMonitors(): void {
   const { currentProfile } = useCurrentProfile();
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isAuthenticated = useAuthSlice(currentProfile?.id ?? null).isAuthenticated;
   const profileId = currentProfile?.id;
 
   // Same key the hidden-monitors setting uses, so this shares its cache rather

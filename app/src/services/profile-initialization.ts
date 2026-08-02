@@ -89,12 +89,12 @@ function setInitializationState(
 /**
  * Clears stale authentication and cache data
  */
-async function clearStaleState(): Promise<void> {
+async function clearStaleState(profileId: ProfileId): Promise<void> {
   const clearStart = Date.now();
   log.profileService('Clearing stale auth and cache', LogLevel.INFO);
 
   const { useAuthStore } = await import('../stores/auth');
-  useAuthStore.getState().logout();
+  useAuthStore.getState().logout(profileId);
 
   const { clearQueryCache } = await import('../stores/query-cache');
   clearQueryCache();
@@ -114,12 +114,12 @@ async function initializeApiClient(
     apiUrl: profile.apiUrl,
   });
 
-  setApiClient(createStoreApiClient(profile.apiUrl, reLogin));
+  setApiClient(createStoreApiClient(profile.apiUrl, reLogin, profile.id));
 
   // Wire the same credentials reLogin into the auth store so
   // getFreshAccessToken can fall through to it when refresh fails.
   const { useAuthStore } = await import('../stores/auth');
-  useAuthStore.getState().setReLoginCallback(reLogin);
+  useAuthStore.getState().setReLoginCallback(profile.id, reLogin);
 
   logDuration('Bootstrap step: API client ready', apiClientStart, {
     apiUrl: profile.apiUrl,
@@ -229,7 +229,7 @@ export async function handleProfileRehydration(
   // Case 3: Valid profile - perform initialization and bootstrap
   try {
     // Clear stale state from previous session
-    await clearStaleState();
+    await clearStaleState(profile.id);
 
     // Initialize API client
     await initializeApiClient(profile, storeGet().reLogin);

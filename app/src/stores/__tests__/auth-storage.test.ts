@@ -1,9 +1,11 @@
 /**
  * Tests for the auth persistence adapter (encryptedAuthStorage).
  *
- * Verifies the refresh token is kept out of the localStorage blob and routed
- * through secureStorage, that a legacy in-blob token migrates, and that an
- * encryption failure drops the token instead of writing plaintext.
+ * Verifies refresh tokens are kept out of the localStorage blob and routed
+ * through secureStorage as one JSON map keyed by profile id, that an
+ * encryption failure drops the tokens instead of writing plaintext, that
+ * removeItem clears the token map, and that a legacy (pre-per-profile)
+ * persisted blob is discarded rather than converted.
  *
  * Platform.isNative is false in the test env (src/tests/setup.ts), so
  * secureStorage uses the web AES-GCM path with the real Web Crypto API.
@@ -13,10 +15,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StorageValue } from 'zustand/middleware';
 
 vi.mock('../../api/auth', () => ({ login: vi.fn(), refreshToken: vi.fn() }));
-vi.mock('../../api/client-ready', () => ({
-  isApiClientInitialized: () => true,
-  setApiClientInitialized: vi.fn(),
-}));
 // Mock the logger to a no-op. This also severs the auth -> logger ->
 // log-sanitizer -> profile -> auth import cycle during module init.
 vi.mock('../../lib/logger', () => ({
@@ -29,29 +27,29 @@ vi.mock('../../lib/security/crypto', async (importActual) => {
 });
 
 import { encryptedAuthStorage } from '../auth';
-import { encrypt, isCryptoAvailable } from '../../lib/security/crypto';
+import { isCryptoAvailable } from '../../lib/security/crypto';
 import { getSecureValue, clearSecureStorage } from '../../lib/security/secureStorage';
+import { asProfileId } from '../../api/types';
 
 const NAME = 'zmng-auth';
 const SECURE_KEY = 'auth_refresh_token';
+const aId = asProfileId('a');
+const bId = asProfileId('b');
 
-function blob(refreshToken: string | null): StorageValue<{
+interface PersistedSlice {
   refreshToken: string | null;
   refreshTokenExpires: number | null;
   version: string | null;
   apiVersion: string | null;
   requiresAuth: boolean;
-}> {
-  return {
-    state: {
-      refreshToken,
-      refreshTokenExpires: 123,
-      version: '1.0',
-      apiVersion: '2.0',
-      requiresAuth: true,
-    },
-    version: 0,
-  };
+}
+
+function slice(refreshToken: string | null): PersistedSlice {
+  return { refreshToken, refreshTokenExpires: 123, version: '1.0', apiVersion: '2.0', requiresAuth: true };
+}
+
+function blob(slices: Record<string, PersistedSlice>): StorageValue<{ slices: Record<string, PersistedSlice> }> {
+  return { state: { slices }, version: 0 };
 }
 
 describe('encryptedAuthStorage', () => {
@@ -61,46 +59,53 @@ describe('encryptedAuthStorage', () => {
     vi.mocked(isCryptoAvailable).mockReturnValue(true);
   });
 
-  it('keeps the refresh token out of the localStorage blob and round-trips it', async () => {
-    await encryptedAuthStorage.setItem(NAME, blob('refresh-abc'));
+  it('keeps refresh tokens out of the localStorage blob and round-trips them per profile', async () => {
+    await encryptedAuthStorage.setItem(NAME, blob({ [aId]: slice('refresh-abc'), [bId]: slice('refresh-def') }));
 
     const rawBlob = localStorage.getItem(NAME)!;
     expect(rawBlob).not.toContain('refresh-abc');
-    expect(JSON.parse(rawBlob).state.refreshToken).toBeNull();
-    expect(await getSecureValue(SECURE_KEY)).toBe('refresh-abc');
+    expect(rawBlob).not.toContain('refresh-def');
+    expect(JSON.parse(rawBlob).state.slices.a.refreshToken).toBeNull();
+    expect(JSON.parse(rawBlob).state.slices.b.refreshToken).toBeNull();
+
+    const stored = await getSecureValue(SECURE_KEY);
+    expect(JSON.parse(stored!)).toEqual({ a: 'refresh-abc', b: 'refresh-def' });
 
     const loaded = await encryptedAuthStorage.getItem(NAME);
-    expect(loaded?.state.refreshToken).toBe('refresh-abc');
+    expect(loaded?.state.slices[aId].refreshToken).toBe('refresh-abc');
+    expect(loaded?.state.slices[bId].refreshToken).toBe('refresh-def');
   });
 
-  it('migrates a legacy in-blob encrypted refresh token into secure storage', async () => {
-    const legacyEncrypted = await encrypt('legacy-token');
-    localStorage.setItem(NAME, JSON.stringify(blob(legacyEncrypted)));
-
-    const loaded = await encryptedAuthStorage.getItem(NAME);
-    expect(loaded?.state.refreshToken).toBe('legacy-token');
-    expect(await getSecureValue(SECURE_KEY)).toBe('legacy-token');
-  });
-
-  it('drops the token instead of writing plaintext when secure storage is unavailable', async () => {
+  it('drops tokens instead of writing plaintext when secure storage is unavailable', async () => {
     vi.mocked(isCryptoAvailable).mockReturnValue(false);
-    await encryptedAuthStorage.setItem(NAME, blob('should-not-persist'));
+    await encryptedAuthStorage.setItem(NAME, blob({ [aId]: slice('should-not-persist') }));
 
     const rawBlob = localStorage.getItem(NAME)!;
     expect(rawBlob).not.toContain('should-not-persist');
-    expect(JSON.parse(rawBlob).state.refreshToken).toBeNull();
+    expect(JSON.parse(rawBlob).state.slices.a.refreshToken).toBeNull();
 
     vi.mocked(isCryptoAvailable).mockReturnValue(true);
     const loaded = await encryptedAuthStorage.getItem(NAME);
-    expect(loaded?.state.refreshToken).toBeNull();
+    expect(loaded?.state.slices[aId].refreshToken).toBeNull();
   });
 
-  it('clears the secure token on removeItem', async () => {
-    await encryptedAuthStorage.setItem(NAME, blob('tok'));
-    expect(await getSecureValue(SECURE_KEY)).toBe('tok');
+  it('clears the secure token map on removeItem', async () => {
+    await encryptedAuthStorage.setItem(NAME, blob({ [aId]: slice('tok') }));
+    expect(await getSecureValue(SECURE_KEY)).not.toBeNull();
 
     await encryptedAuthStorage.removeItem(NAME);
     expect(localStorage.getItem(NAME)).toBeNull();
     expect(await getSecureValue(SECURE_KEY)).toBeNull();
+  });
+
+  it('discards a legacy pre-per-profile persisted blob rather than converting it', async () => {
+    // Old shape: refreshToken lived at the top of `state`, not nested per profile.
+    localStorage.setItem(NAME, JSON.stringify({
+      state: { refreshToken: null, refreshTokenExpires: 123, version: '1.0', apiVersion: '2.0', requiresAuth: true },
+      version: 0,
+    }));
+
+    const loaded = await encryptedAuthStorage.getItem(NAME);
+    expect(loaded).toBeNull();
   });
 });

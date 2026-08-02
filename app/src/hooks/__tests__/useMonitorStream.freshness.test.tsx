@@ -105,26 +105,40 @@ describe('useMonitorStream: token freshness gate', () => {
     });
 
     // Reset auth state between tests
-    useAuthStore.setState({
-      accessToken: null,
-      accessTokenExpires: null,
-      refreshToken: null,
-      refreshTokenExpires: null,
-      isAuthenticated: false,
-    });
+    useAuthStore.setState({ slices: {} });
 
     vi.clearAllMocks();
   });
 
+  const EMPTY_SLICE = {
+    accessToken: null,
+    refreshToken: null,
+    accessTokenExpires: null,
+    refreshTokenExpires: null,
+    version: null,
+    apiVersion: null,
+    isAuthenticated: false,
+    requiresAuth: true,
+  };
+
+  function setAuthSlice(patch: Record<string, unknown>) {
+    useAuthStore.setState((s) => ({
+      slices: {
+        ...s.slices,
+        [mockProfile.id]: { ...(s.slices[mockProfile.id] ?? EMPTY_SLICE), ...patch },
+      },
+    }));
+  }
+
   it('emits empty streamUrl when the access token has less than the leeway remaining', async () => {
     // Token expires in 5 minutes, under the 30-min leeway, so isFresh = false.
-    useAuthStore.setState({
+    setAuthSlice({
       accessToken: 'STALE-MARKER',
       accessTokenExpires: Date.now() + 5 * 60 * 1000,
       isAuthenticated: true,
-      // Stub getFreshAccessToken so the freshness hook's effect doesn't error.
-      getFreshAccessToken: vi.fn().mockResolvedValue(null),
     });
+    // Stub getFreshAccessToken so the freshness hook's effect doesn't error.
+    useAuthStore.setState({ getFreshAccessToken: vi.fn().mockResolvedValue(null) });
 
     const { result } = renderHook(() => useMonitorStream({ monitorId: '1' }));
 
@@ -136,12 +150,12 @@ describe('useMonitorStream: token freshness gate', () => {
   });
 
   it('emits a streamUrl containing the new token after a refresh lands', async () => {
-    useAuthStore.setState({
+    setAuthSlice({
       accessToken: 'STALE-MARKER',
       accessTokenExpires: Date.now() + 5 * 60 * 1000,
       isAuthenticated: true,
-      getFreshAccessToken: vi.fn().mockResolvedValue(null),
     });
+    useAuthStore.setState({ getFreshAccessToken: vi.fn().mockResolvedValue(null) });
 
     const { result } = renderHook(() => useMonitorStream({ monitorId: '1' }));
 
@@ -151,7 +165,7 @@ describe('useMonitorStream: token freshness gate', () => {
 
     // Simulate the refresh landing.
     act(() => {
-      useAuthStore.setState({
+      setAuthSlice({
         accessToken: 'FRESH-MARKER',
         accessTokenExpires: Date.now() + 60 * 60 * 1000,
       });

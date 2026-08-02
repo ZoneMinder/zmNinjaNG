@@ -22,7 +22,7 @@ import { getMonitors } from '../api/monitors';
 import { queryKeys } from '../lib/query/query-keys';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { Platform } from '../lib/platform';
-import { useAuthStore } from '../stores/auth';
+import { useAuthSlice } from '../stores/auth';
 import { useKioskStore } from '../stores/kioskStore';
 import { useTvMode } from '../hooks/useTvMode';
 import { getExcludedMonitorIdSet } from '../lib/profile/profile-settings';
@@ -49,7 +49,7 @@ export function KeyboardShortcuts() {
   const location = useLocation();
   const { t } = useTranslation();
   const { currentProfile, settings } = useCurrentProfile();
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isAuthenticated = useAuthSlice(currentProfile?.id ?? null).isAuthenticated;
   const isLocked = useKioskStore((state) => state.isLocked);
   const { isTvMode } = useTvMode();
 

@@ -15,7 +15,7 @@ import { useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getTags, getEventTags, extractUniqueTags } from '../api/tags';
 import { useCurrentProfile } from './useCurrentProfile';
-import { useAuthStore } from '../stores/auth';
+import { useAuthSlice } from '../stores/auth';
 import { queryKeys } from '../lib/query/query-keys';
 import type { Tag } from '../api/types';
 
@@ -50,7 +50,7 @@ export interface UseEventTagsReturn {
  */
 export function useEventTags(): UseEventTagsReturn {
   const { currentProfile } = useCurrentProfile();
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isAuthenticated = useAuthSlice(currentProfile?.id ?? null).isAuthenticated;
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: queryKeys.tags(currentProfile?.id),
@@ -119,7 +119,7 @@ export interface UseEventTagMappingReturn {
 export function useEventTagMapping(options: UseEventTagMappingOptions): UseEventTagMappingReturn {
   const { eventIds, enabled = true } = options;
   const { currentProfile } = useCurrentProfile();
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isAuthenticated = useAuthSlice(currentProfile?.id ?? null).isAuthenticated;
 
   // Sort event IDs for consistent cache key
   const sortedEventIds = useMemo(

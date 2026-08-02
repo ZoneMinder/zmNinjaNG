@@ -12,7 +12,7 @@
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown } from 'lucide-react';
-import { useAuthStore } from '../../stores/auth';
+import { useAuthSlice } from '../../stores/auth';
 import { getMonitors } from '../../api/monitors';
 import { queryKeys } from '../../lib/query/query-keys';
 import { Button } from '../ui/button';
@@ -35,7 +35,7 @@ export function HiddenMonitorsSection({
 }: HiddenMonitorsSectionProps) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isAuthenticated = useAuthSlice(currentProfile?.id ?? null).isAuthenticated;
 
   const excludedIds = settings.excludedMonitorIds ?? [];
 

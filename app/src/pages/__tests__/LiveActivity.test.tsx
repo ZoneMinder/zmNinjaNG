@@ -43,6 +43,7 @@ vi.mock('../../stores/auth', () => ({
       version: string | null;
     }) => unknown
   ) => selector({ isAuthenticated: true, accessToken: 't', version: env.zmVersion }),
+  useAuthSlice: () => ({ isAuthenticated: true, accessToken: 't', version: env.zmVersion }),
 }));
 
 // The real stores/notifications.ts module is heavy: importing it for real

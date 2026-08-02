@@ -17,7 +17,8 @@
 
 import { ALL_PROFILES_ID, type Profile, type ProfileId } from '../api/types';
 import type { ApiClient } from '../api/client';
-import { createStoreApiClient } from '../api/store-gates';
+import { createStoreApiClient, resetAuthGates } from '../api/store-gates';
+import { markSessionActive, markSessionInactive, markAllSessionsInactive } from './session-flags';
 import { log, LogLevel } from '../lib/logger';
 
 // Re-exported so consumers of the session registry (this module's real
@@ -76,6 +77,7 @@ export function getSession(profileId: ProfileId): ServerSession {
     timezone: profile.timezone ?? 'UTC',
   };
   sessions.set(profileId, session);
+  markSessionActive(profileId);
   log.profileService('Session created', LogLevel.DEBUG, { profileId });
   return session;
 }
@@ -96,13 +98,19 @@ export function hasSession(profileId: ProfileId): boolean {
 /**
  * Evict a profile's cached session so the next getSession rebuilds it. Must
  * be called whenever a profile's apiUrl or credentials change (wired in
- * Task 8's updateProfile).
+ * Task 8's updateProfile). Also clears the profile's pending auth
+ * single-flight gates (login/refresh/recovery) so a stale in-flight
+ * operation for the dropped session's client never resolves into the next
+ * one built for this profile.
  */
 export function dropSession(profileId: ProfileId): void {
   sessions.delete(profileId);
+  markSessionInactive(profileId);
+  resetAuthGates(profileId);
   log.profileService('Session dropped', LogLevel.DEBUG, { profileId });
 }
 
 export function dropAllSessions(): void {
   sessions.clear();
+  markAllSessionsInactive();
 }

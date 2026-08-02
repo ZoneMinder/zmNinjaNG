@@ -21,6 +21,7 @@ vi.mock('../useCurrentProfile', () => ({
 }));
 vi.mock('../../stores/auth', () => ({
   useAuthStore: (sel: (s: { isAuthenticated: boolean }) => unknown) => sel({ isAuthenticated: true }),
+  useAuthSlice: () => ({ isAuthenticated: true }),
 }));
 vi.mock('../../stores/settings', () => ({
   useSettingsStore: (sel: (s: { updateProfileSettings: typeof updateProfileSettings }) => unknown) =>

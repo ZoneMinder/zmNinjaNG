@@ -14,6 +14,7 @@ vi.mock('../useCurrentProfile', () => ({
 vi.mock('../../stores/auth', () => ({
   useAuthStore: (selector: (s: { isAuthenticated: boolean }) => unknown) =>
     selector({ isAuthenticated: true }),
+  useAuthSlice: () => ({ isAuthenticated: true }),
 }));
 
 const mockGetMonitors = vi.mocked(getMonitors);

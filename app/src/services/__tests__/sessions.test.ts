@@ -14,6 +14,7 @@ vi.mock('../../api/store-gates', () => ({
   createStoreApiClient: vi.fn((baseURL: string, _reLogin?: () => Promise<boolean>, profileId?: string) => ({
     __tag: `client:${profileId}:${baseURL}`,
   })),
+  resetAuthGates: vi.fn(),
 }));
 
 vi.mock('../../lib/logger', () => ({

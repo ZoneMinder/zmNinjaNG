@@ -8,7 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getEvents } from '../api/events';
 import type { EventData } from '../api/types';
 import { useCurrentProfile } from './useCurrentProfile';
-import { useAuthStore } from '../stores/auth';
+import { useAuthSlice } from '../stores/auth';
 import { useSettingsStore } from '../stores/settings';
 import { useBandwidthSettings } from './useBandwidthSettings';
 import { queryKeys } from '../lib/query/query-keys';
@@ -31,7 +31,7 @@ export interface UseMonitorRecentEvents {
 
 export function useMonitorRecentEvents(monitorId: string): UseMonitorRecentEvents {
   const { currentProfile, settings } = useCurrentProfile();
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isAuthenticated = useAuthSlice(currentProfile?.id ?? null).isAuthenticated;
   const updateProfileSettings = useSettingsStore((s) => s.updateProfileSettings);
   const bandwidth = useBandwidthSettings();
 

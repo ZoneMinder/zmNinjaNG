@@ -24,7 +24,7 @@ import { setLogRedactionGate } from '../lib/log-sanitizer';
 import { setProfileSettingsGate } from '../lib/profile/profile-settings';
 import { registerSessionsGate } from '../services/sessions';
 import { STORAGE_KEYS } from '../lib/zmninja-ng-constants';
-import { useAuthStore } from './auth';
+import { useAuthStore, getAuthSlice } from './auth';
 import { useSettingsStore } from './settings';
 import { useMonitorSeenStore } from './monitorSeen';
 import { performBootstrap } from '../services/profile-bootstrap';
@@ -42,7 +42,7 @@ interface ProfileState {
 
 
   // Actions
-  addProfile: (profile: Omit<Profile, 'id' | 'createdAt'>) => Promise<string>;
+  addProfile: (profile: Omit<Profile, 'id' | 'createdAt'>, id?: ProfileId) => Promise<string>;
   updateProfile: (id: string, updates: Partial<Profile>) => Promise<void>;
   deleteProfile: (id: string) => Promise<void>;
   deleteAllProfiles: () => Promise<void>;
@@ -96,16 +96,19 @@ export const useProfileStore = create<ProfileState>()(
          * Generates a UUID, encrypts the password (if provided), and adds to the list.
          * If it's the first profile, it becomes the default and current profile.
          */
-        addProfile: async (profileData) => {
+        addProfile: async (profileData, id) => {
           // Check for duplicate names
           if (!ProfileService.validateNameAvailability(profileData.name, get().profiles)) {
             throw new Error(`Profile "${profileData.name}" already exists`);
           }
 
-          // Boundary: this is where a profile id is minted. Every ProfileId
-          // downstream (currentProfileId, query-key cache scoping) traces
-          // back to this cast. Refs #217.
-          const newProfileId = asProfileId(crypto.randomUUID());
+          // Boundary: this is where a profile id is minted, unless the caller
+          // already minted one (e.g. ProfileForm testing the connection - and
+          // therefore building the auth session - before this profile is
+          // saved). Every ProfileId downstream (currentProfileId, query-key
+          // cache scoping) traces back to this cast or the id passed in.
+          // Refs #217, #337.
+          const newProfileId = id ?? asProfileId(crypto.randomUUID());
 
           // Store password in secure storage (native keystore on mobile, encrypted on web)
           if (profileData.password) {
@@ -138,8 +141,7 @@ export const useProfileStore = create<ProfileState>()(
             // Fetch timezone for new profile
             try {
               // Get token from auth store state
-              const { useAuthStore } = await import('./auth');
-              const { accessToken } = useAuthStore.getState();
+              const { accessToken } = getAuthSlice(newProfile.id);
               const timezone = await getServerTimeZone(accessToken || undefined);
               get().updateProfile(newProfile.id, { timezone });
             } catch (e) {
@@ -180,7 +182,7 @@ export const useProfileStore = create<ProfileState>()(
           const { profiles, currentProfileId } = get();
           const currentProfile = profiles.find(p => p.id === currentProfileId);
           if (currentProfile?.id === id && updates.apiUrl) {
-            setApiClient(createStoreApiClient(updates.apiUrl, get().reLogin, id));
+            setApiClient(createStoreApiClient(updates.apiUrl, get().reLogin, currentProfile.id));
           }
 
           log.profileService('updateProfile complete', LogLevel.INFO);
@@ -292,7 +294,9 @@ export const useProfileStore = create<ProfileState>()(
 
             const { useAuthStore } = await import('./auth');
             log.profileService('Clearing auth state (logout)', LogLevel.INFO);
-            useAuthStore.getState().logout();
+            if (previousProfileId) {
+              useAuthStore.getState().logout(previousProfileId);
+            }
 
             const { clearQueryCache } = await import('./query-cache');
             log.profileService('Clearing query cache', LogLevel.INFO);
@@ -335,9 +339,10 @@ export const useProfileStore = create<ProfileState>()(
               });
 
               try {
-                // Clear state again to ensure clean rollback
+                // Clear state again to ensure clean rollback: the failed
+                // switch target's session, not the profile we're restoring.
                 const { useAuthStore } = await import('./auth');
-                useAuthStore.getState().logout();
+                useAuthStore.getState().logout(profile.id);
 
                 const { clearQueryCache } = await import('./query-cache');
                 clearQueryCache();
@@ -401,7 +406,7 @@ export const useProfileStore = create<ProfileState>()(
             if (!password) return false;
 
             const { useAuthStore } = await import('./auth');
-            await useAuthStore.getState().login(profile.username, password);
+            await useAuthStore.getState().login(currentProfileId, profile.username, password);
             return true;
           } catch (e) {
             log.profileService('Re-login helper failed', LogLevel.ERROR, { error: e });
@@ -516,9 +521,10 @@ registerSessionsGate({
 
 // Subscribe to auth store to update refresh token in profile
 useAuthStore.subscribe((state) => {
-  const { refreshToken } = state;
   const { currentProfileId, updateProfile, profiles } = useProfileStore.getState();
+  if (!currentProfileId) return;
 
+  const refreshToken = state.slices[currentProfileId]?.refreshToken;
   if (currentProfileId && refreshToken) {
     const profile = profiles.find(p => p.id === currentProfileId);
     if (profile && profile.refreshToken !== refreshToken) {

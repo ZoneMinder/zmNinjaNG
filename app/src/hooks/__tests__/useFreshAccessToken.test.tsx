@@ -22,30 +22,41 @@ vi.mock('../../api/auth', () => ({
   refreshToken: vi.fn(),
 }));
 
+const profileId = 'p1';
+vi.mock('../useCurrentProfile', () => ({
+  useCurrentProfile: () => ({ currentProfile: { id: profileId }, settings: {}, hasProfile: true }),
+}));
+
 import { useFreshAccessToken } from '../useFreshAccessToken';
-import { useAuthStore } from '../../stores/auth';
+import { useAuthStore, type AuthSlice } from '../../stores/auth';
+import { asProfileId } from '../../api/types';
+
+const pid = asProfileId(profileId);
+
+const EMPTY_SLICE: AuthSlice = {
+  accessToken: null,
+  refreshToken: null,
+  accessTokenExpires: null,
+  refreshTokenExpires: null,
+  version: null,
+  apiVersion: null,
+  isAuthenticated: false,
+  requiresAuth: true,
+};
+
+function setSlice(patch: Partial<AuthSlice>) {
+  useAuthStore.setState({ slices: { [pid]: { ...EMPTY_SLICE, ...patch } } });
+}
 
 describe('useFreshAccessToken', () => {
   beforeEach(() => {
-    useAuthStore.setState({
-      accessToken: null,
-      accessTokenExpires: null,
-      refreshToken: null,
-      refreshTokenExpires: null,
-      isAuthenticated: false,
-      requiresAuth: true,
-    });
+    useAuthStore.setState({ slices: {} });
   });
 
   it('treats a no-auth server as fresh and does not trigger a token refresh', () => {
     const getFreshAccessToken = vi.fn(async () => null);
-    useAuthStore.setState({
-      requiresAuth: false,
-      accessToken: null,
-      accessTokenExpires: null,
-      isAuthenticated: true,
-      getFreshAccessToken,
-    });
+    setSlice({ requiresAuth: false, isAuthenticated: true });
+    useAuthStore.setState({ getFreshAccessToken });
 
     const { result } = renderHook(() => useFreshAccessToken());
 
@@ -55,7 +66,7 @@ describe('useFreshAccessToken', () => {
   });
 
   it('returns isFresh=true with the token when expiry is comfortably ahead', () => {
-    useAuthStore.setState({
+    setSlice({
       accessToken: 'fresh',
       accessTokenExpires: Date.now() + 60 * 60 * 1000, // 1 hour
       isAuthenticated: true,
@@ -66,7 +77,7 @@ describe('useFreshAccessToken', () => {
   });
 
   it('returns isFresh=false with token=null when expiry is below the leeway', () => {
-    useAuthStore.setState({
+    setSlice({
       accessToken: 'stale',
       accessTokenExpires: Date.now() + 5 * 60 * 1000, // 5 min, under 30-min leeway
       isAuthenticated: true,
@@ -84,24 +95,24 @@ describe('useFreshAccessToken', () => {
 
   it('triggers getFreshAccessToken when not fresh', () => {
     const spy = vi.fn(async () => 'new');
-    useAuthStore.setState({
+    setSlice({
       accessToken: 'stale',
       accessTokenExpires: Date.now() + 5 * 60 * 1000,
       isAuthenticated: true,
-      getFreshAccessToken: spy as never,
     });
+    useAuthStore.setState({ getFreshAccessToken: spy as never });
     renderHook(() => useFreshAccessToken());
-    expect(spy).toHaveBeenCalled();
+    expect(spy).toHaveBeenCalledWith(profileId);
   });
 
   it('does not retrigger refresh while fresh', () => {
     const spy = vi.fn(async () => 'tok');
-    useAuthStore.setState({
+    setSlice({
       accessToken: 'tok',
       accessTokenExpires: Date.now() + 60 * 60 * 1000,
       isAuthenticated: true,
-      getFreshAccessToken: spy as never,
     });
+    useAuthStore.setState({ getFreshAccessToken: spy as never });
     const { rerender } = renderHook(() => useFreshAccessToken());
     rerender();
     rerender();
@@ -109,7 +120,7 @@ describe('useFreshAccessToken', () => {
   });
 
   it('flips to fresh when accessTokenExpires updates', () => {
-    useAuthStore.setState({
+    setSlice({
       accessToken: 'old',
       accessTokenExpires: Date.now() + 5 * 60 * 1000,
       isAuthenticated: true,
@@ -117,9 +128,10 @@ describe('useFreshAccessToken', () => {
     const { result } = renderHook(() => useFreshAccessToken());
     expect(result.current.isFresh).toBe(false);
     act(() => {
-      useAuthStore.setState({
+      setSlice({
         accessToken: 'new',
         accessTokenExpires: Date.now() + 60 * 60 * 1000,
+        isAuthenticated: true,
       });
     });
     expect(result.current.isFresh).toBe(true);

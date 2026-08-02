@@ -56,6 +56,7 @@ vi.mock('sonner', () => ({
 vi.mock('../../../stores/auth', () => ({
   useAuthStore: (selector: (state: { version: string }) => unknown) =>
     selector({ version: '1.38.0' }),
+  useAuthSlice: () => ({ version: '1.38.0' }),
 }));
 
 describe('MonitorCard', () => {

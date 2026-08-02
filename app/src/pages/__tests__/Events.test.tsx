@@ -33,6 +33,11 @@ vi.mock('../../stores/auth', () => ({
       isAuthenticated: true,
       getFreshAccessToken: vi.fn(async () => 'token-1'),
     }),
+  useAuthSlice: () => ({
+    accessToken: 'token-1',
+    accessTokenExpires: Date.now() + 60 * 60 * 1000,
+    isAuthenticated: true,
+  }),
 }));
 
 vi.mock('../../stores/settings', () => {

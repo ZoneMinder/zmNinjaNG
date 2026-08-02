@@ -27,7 +27,7 @@ export async function bootstrapAuth(
     log.profileService('This is normal for public servers', LogLevel.INFO);
     // Mark as authenticated so API client doesn't try to re-login
     const { useAuthStore } = await import('../stores/auth');
-    useAuthStore.getState().setTokens({});
+    useAuthStore.getState().setTokens(profile.id, {});
     return;
   }
 
@@ -42,7 +42,7 @@ export async function bootstrapAuth(
     }
 
     const { useAuthStore } = await import('../stores/auth');
-    await useAuthStore.getState().login(profile.username, decryptedPassword);
+    await useAuthStore.getState().login(profile.id, profile.username, decryptedPassword);
     log.profileService('Authentication successful', LogLevel.INFO);
   } catch (authError: unknown) {
     log.profileService(
@@ -62,8 +62,8 @@ export async function bootstrapTimezone(
 ): Promise<void> {
   try {
     log.profileService('Fetching server timezone', LogLevel.INFO);
-    const { useAuthStore } = await import('../stores/auth');
-    const { accessToken } = useAuthStore.getState();
+    const { getAuthSlice } = await import('../stores/auth');
+    const { accessToken } = getAuthSlice(profile.id);
     const timezone = await getServerTimeZone(accessToken || undefined);
 
     if (timezone !== profile.timezone) {

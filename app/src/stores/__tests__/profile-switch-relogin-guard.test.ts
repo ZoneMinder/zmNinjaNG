@@ -78,6 +78,6 @@ describe('switchProfile reLogin guard', () => {
     // profile's credentials.
     const after = await useProfileStore.getState().reLogin();
     expect(after).toBe(true);
-    expect(loginSpy).toHaveBeenCalledWith('asker', 'decrypted');
+    expect(loginSpy).toHaveBeenCalledWith(asProfileId('p-new'), 'asker', 'decrypted');
   });
 });
