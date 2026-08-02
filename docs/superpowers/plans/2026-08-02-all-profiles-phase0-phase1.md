@@ -137,7 +137,7 @@ Order is dependency-driven; the repo builds and tests green after every task. Th
 **Files:**
 - Create: `app/src/services/sessions.ts`
 - Modify: `app/src/stores/profile.ts` (register the gate at module load, next to `setProfileSettingsGate`)
-- Modify: `app/src/lib/zmninja-ng-constants.ts` (add `ALL_PROFILES_ID`)
+- Modify: `app/src/api/types.ts` (add `ALL_PROFILES_ID` beside `asProfileId`; review ruling round 1: zmninja-ng-constants.ts placement closes an import cycle via logger/stores/logs)
 - Test: `app/src/services/__tests__/sessions.test.ts` (create)
 
 **Interfaces:**
@@ -145,7 +145,7 @@ Order is dependency-driven; the repo builds and tests green after every task. Th
 - Produces (exact, used by every later task):
 
 ```ts
-export const ALL_PROFILES_ID: ProfileId; // = asProfileId('__all_profiles__'), defined in zmninja-ng-constants.ts
+export const ALL_PROFILES_ID: ProfileId; // = asProfileId('__all_profiles__'), defined in api/types.ts, re-exported by sessions.ts
 export interface ServerSession { profileId: ProfileId; client: ApiClient; timezone: string }
 export interface SessionsGate {
   getProfile(id: ProfileId): Profile | undefined;
@@ -336,8 +336,8 @@ describe('Sessions contract', () => {
     const offenders = srcFiles().filter(f => /\b(getApiClient|setApiClient)\b/.test(read(f)));
     expect(offenders).toEqual([]);
   });
-  it('ALL_PROFILES_ID literal lives only in constants', () => {
-    const offenders = srcFiles().filter(f => read(f).includes("'__all_profiles__'") && !f.endsWith('zmninja-ng-constants.ts'));
+  it('ALL_PROFILES_ID literal lives only beside the brand', () => {
+    const offenders = srcFiles().filter(f => read(f).includes("'__all_profiles__'") && !f.endsWith('api/types.ts'));
     expect(offenders).toEqual([]);
   });
 });
