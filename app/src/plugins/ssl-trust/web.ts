@@ -14,7 +14,7 @@ export class SSLTrustWeb extends WebPlugin implements SSLTrustPlugin {
     return { enabled: false };
   }
 
-  async setTrustedFingerprint(_options: { fingerprint: string | null }): Promise<void> {
+  async setTrustedFingerprints(_options: { entries: Array<{ host: string; fingerprint: string }> }): Promise<void> {
     // No-op on web
   }
 

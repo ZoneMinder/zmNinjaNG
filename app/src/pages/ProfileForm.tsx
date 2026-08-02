@@ -141,8 +141,8 @@ export default function ProfileForm() {
     try {
       // Enable trust-all for HTTP before any network calls (needed for discovery)
       if (allowSelfSignedCerts) {
-        const { applySSLTrustSetting } = await import('../lib/security/ssl-trust');
-        await applySSLTrustSetting(true);
+        const { applyTrustedCertificates } = await import('../lib/security/ssl-trust');
+        await applyTrustedCertificates();
       }
 
       const normalizedUsername = username.trim();
@@ -217,12 +217,12 @@ export default function ProfileForm() {
 
       // TOFU: after discovery succeeds, fetch the server cert and ask user to trust it
       if (allowSelfSignedCerts && Platform.isNative) {
-        const { getServerCertFingerprint, applySSLTrustSetting } = await import('../lib/security/ssl-trust');
+        const { getServerCertFingerprint, applyTrustedCertificates } = await import('../lib/security/ssl-trust');
         const info = await getServerCertFingerprint(confirmedPortalUrl);
         if (info) {
           const trusted = await requestCertTrust(info);
           if (!trusted) {
-            await applySSLTrustSetting(false);
+            await applyTrustedCertificates();
             setTesting(false);
             return;
           }
@@ -230,7 +230,7 @@ export default function ProfileForm() {
           // and won't be available until next render)
           acceptedFingerprint = info.fingerprint;
           // Apply fingerprint-based trust (installs WebView handler)
-          await applySSLTrustSetting(true, acceptedFingerprint);
+          await applyTrustedCertificates();
         }
       }
 

@@ -269,7 +269,7 @@ export async function bootstrapSSLTrust(
   try {
     const { useSettingsStore } = await import('../stores/settings');
     const settings = useSettingsStore.getState().getProfileSettings(profile.id);
-    const { applySSLTrustSetting, getServerCertFingerprint } = await import('../lib/security/ssl-trust');
+    const { applyTrustedCertificates, getServerCertFingerprint } = await import('../lib/security/ssl-trust');
 
     log.sslTrust(
       `Profile "${profile.name}" allowSelfSignedCerts=${settings.allowSelfSignedCerts}; setting SSL trust override to ${settings.allowSelfSignedCerts}`,
@@ -277,13 +277,13 @@ export async function bootstrapSSLTrust(
     );
 
     if (!settings.allowSelfSignedCerts) {
-      await applySSLTrustSetting(false);
+      await applyTrustedCertificates();
       return;
     }
 
     // Enable SSL trust (installs TrustManager for HTTP; WebView handler
-    // is only installed when setTrustedFingerprint receives a non-null value)
-    await applySSLTrustSetting(true, settings.trustedCertFingerprint);
+    // is only installed when a fingerprint has been pinned for this host)
+    await applyTrustedCertificates();
 
     // Migration: self-signed certs enabled but no fingerprint stored.
     // Fetch the cert and signal the UI to show the TOFU dialog.
