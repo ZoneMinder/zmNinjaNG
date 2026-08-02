@@ -34,6 +34,7 @@ import { useTranslation } from 'react-i18next';
 import { getServers, getLoad, getDiskPercent, getDaemonCheck, getStorages } from '../api/server';
 import { getServerTimeZone } from '../api/time';
 import { getStates, changeState } from '../api/states';
+import { getCurrentSession } from '../services/sessions';
 import { useToast } from '../hooks/use-toast';
 import { log, LogLevel } from '../lib/logger';
 import {
@@ -96,7 +97,7 @@ export default function Server() {
   // Fetch timezone
   const { data: timezone } = useQuery({
     queryKey: queryKeys.timezone(currentProfile?.id),
-    queryFn: () => getServerTimeZone(),
+    queryFn: () => getServerTimeZone(getCurrentSession().client),
     enabled: !!currentProfile && isAuthenticated,
   });
 

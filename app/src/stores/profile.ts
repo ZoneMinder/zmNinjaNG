@@ -22,7 +22,7 @@ import { ProfileService } from '../services/profile';
 import { log, LogLevel } from '../lib/logger';
 import { setLogRedactionGate } from '../lib/log-sanitizer';
 import { setProfileSettingsGate } from '../lib/profile/profile-settings';
-import { registerSessionsGate } from '../services/sessions';
+import { getSession, registerSessionsGate } from '../services/sessions';
 import { markSessionActive } from '../services/session-flags';
 import { STORAGE_KEYS } from '../lib/zmninja-ng-constants';
 import { useAuthStore, getAuthSlice } from './auth';
@@ -146,7 +146,7 @@ export const useProfileStore = create<ProfileState>()(
             try {
               // Get token from auth store state
               const { accessToken } = getAuthSlice(newProfile.id);
-              const timezone = await getServerTimeZone(accessToken || undefined);
+              const timezone = await getServerTimeZone(getSession(newProfile.id).client, accessToken || undefined);
               get().updateProfile(newProfile.id, { timezone });
             } catch (e) {
               log.profileService('Failed to fetch timezone for new profile', LogLevel.WARN, { error: e });

@@ -42,6 +42,10 @@ vi.mock('../../api/server', () => ({
   fetchMinStreamingPort: vi.fn(),
 }));
 
+vi.mock('../../services/sessions', () => ({
+  getSession: vi.fn(() => ({ client: {} })),
+}));
+
 // Mock stores - these need to be dynamic imports in the actual code
 vi.mock('../auth', () => ({
   useAuthStore: {

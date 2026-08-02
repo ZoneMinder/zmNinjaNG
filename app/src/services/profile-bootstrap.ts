@@ -8,6 +8,7 @@
 import type { Profile } from '../api/types';
 import { getServerTimeZone } from '../api/time';
 import { fetchGo2RTCPath, fetchZmsPath } from '../api/auth';
+import { getSession } from './sessions';
 import { log, LogLevel } from '../lib/logger';
 
 export interface BootstrapContext {
@@ -64,7 +65,7 @@ export async function bootstrapTimezone(
     log.profileService('Fetching server timezone', LogLevel.INFO);
     const { getAuthSlice } = await import('../stores/auth');
     const { accessToken } = getAuthSlice(profile.id);
-    const timezone = await getServerTimeZone(accessToken || undefined);
+    const timezone = await getServerTimeZone(getSession(profile.id).client, accessToken || undefined);
 
     if (timezone !== profile.timezone) {
       log.profileService('Server timezone fetched', LogLevel.INFO, { timezone });

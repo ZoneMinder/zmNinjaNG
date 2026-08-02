@@ -1,13 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getServerTimeZone } from '../time';
-import { getApiClient } from '../client';
 import type { ApiClient } from '../client';
 
 const mockGet = vi.fn();
-
-vi.mock('../client', () => ({
-  getApiClient: vi.fn(),
-}));
+const mockClient = { get: mockGet } as unknown as ApiClient;
 
 vi.mock('../../lib/logger', () => ({
   log: {
@@ -25,9 +21,6 @@ vi.mock('../../lib/logger', () => ({
 describe('Time API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(getApiClient).mockReturnValue({
-      get: mockGet,
-    } as unknown as ApiClient);
   });
 
   it('fetches server time zone without token', async () => {
@@ -39,7 +32,7 @@ describe('Time API', () => {
       },
     });
 
-    const timezone = await getServerTimeZone();
+    const timezone = await getServerTimeZone(mockClient);
 
     expect(mockGet).toHaveBeenCalledWith('/host/getTimeZone.json', {});
     expect(timezone).toBe('America/Chicago');
@@ -54,7 +47,7 @@ describe('Time API', () => {
       },
     });
 
-    const timezone = await getServerTimeZone('token-123');
+    const timezone = await getServerTimeZone(mockClient, 'token-123');
 
     expect(mockGet).toHaveBeenCalledWith('/host/getTimeZone.json', { params: { token: 'token-123' } });
     expect(timezone).toBe('UTC');
