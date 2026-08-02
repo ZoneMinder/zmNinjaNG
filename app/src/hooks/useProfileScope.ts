@@ -45,13 +45,20 @@ export function useProfileScope(): ProfileScope | null {
   // function, which creates a new object on every call. useShallow ensures
   // shallow comparison. The ALL bucket is keyed by ALL_PROFILES_ID in the
   // same profileSettings map - existing machinery, no store changes needed.
-  const settingsKey = isAllMode ? ALL_PROFILES_ID : (currentProfileId ?? '');
-  const rawSettings = useSettingsStore(useShallow((state) => state.profileSettings?.[settingsKey]));
+  // isAllMode implies currentProfileId === ALL_PROFILES_ID, so this key is
+  // just currentProfileId either way.
+  const rawSettings = useSettingsStore(useShallow((state) => state.profileSettings?.[currentProfileId ?? '']));
 
   const settings = useMemo((): ProfileSettings => mergeProfileSettings(rawSettings), [rawSettings]);
 
   return useMemo((): ProfileScope | null => {
     if (isAllMode) {
+      // Deleting profiles one-by-one while in All mode can leave the
+      // sentinel selected with zero real profiles left (deleteProfile only
+      // resets currentProfileId when it equals the deleted id, never for
+      // the sentinel). Collapse to null so it means "nothing to show, route
+      // to setup" uniformly in both modes (refs #337).
+      if (profiles.length === 0) return null;
       return { mode: 'all', profile: null, profiles, settings };
     }
     if (!currentProfile) return null;

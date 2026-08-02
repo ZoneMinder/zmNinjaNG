@@ -115,6 +115,18 @@ describe('useProfileScope', () => {
     expect(result.current).toBeNull();
   });
 
+  it('returns null when the ALL_PROFILES_ID sentinel is selected with no profiles left', () => {
+    // Deleting profiles one-by-one while in All mode leaves the sentinel
+    // selected with an empty profiles list (deleteProfile only resets
+    // currentProfileId when it equals the deleted id, never for the
+    // sentinel). null must mean "route to setup" here too.
+    mockStores({ profiles: [], currentProfileId: ALL_PROFILES_ID }, { profileSettings: {} });
+
+    const { result } = renderHook(() => useProfileScope());
+
+    expect(result.current).toBeNull();
+  });
+
   it('is not in all mode for a single-profile selection', () => {
     mockStores(
       { profiles: [mockProfile], currentProfileId: 'profile-1' },
