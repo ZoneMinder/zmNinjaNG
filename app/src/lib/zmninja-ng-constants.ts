@@ -10,27 +10,6 @@
  */
 
 /**
- * Structural copy of api/types.ts's ProfileId brand (string & { readonly
- * __brand: 'ProfileId' }), used only to type ALL_PROFILES_ID below.
- *
- * This file cannot import api/types.ts: that module imports lib/logger.ts,
- * which imports stores/logs.ts, which imports this file for LOGGING below,
- * so importing ProfileId here (even as a type-only import) would close a
- * cycle (see src/tests/no-circular-deps.test.ts, which also rejects
- * type-only cycles since erasing them at build time still leaves the graph
- * unsound). TypeScript's structural typing makes two independently declared
- * branded types with the identical brand literal mutually assignable, so
- * ALL_PROFILES_ID is still a real ProfileId everywhere one is expected.
- */
-type ProfileId = string & { readonly __brand: 'ProfileId' };
-
-/**
- * Sentinel profile id for the virtual "All Profiles" aggregate view. Never a
- * real server: services/sessions.ts's getSession rejects it. Refs #337.
- */
-export const ALL_PROFILES_ID: ProfileId = '__all_profiles__' as ProfileId;
-
-/**
  * ZoneMinder Integration Constants
  *
  * Configuration values for interacting with ZoneMinder servers.

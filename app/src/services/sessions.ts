@@ -15,15 +15,14 @@
  * setProfileSettingsGate registration. Refs #337.
  */
 
-import type { Profile, ProfileId } from '../api/types';
+import { ALL_PROFILES_ID, type Profile, type ProfileId } from '../api/types';
 import type { ApiClient } from '../api/client';
 import { createStoreApiClient } from '../api/store-gates';
-import { ALL_PROFILES_ID } from '../lib/zmninja-ng-constants';
 import { log, LogLevel } from '../lib/logger';
 
 // Re-exported so consumers of the session registry (this module's real
-// surface) don't need a separate import of the sentinel from the constants
-// module just to compare a ProfileId against it.
+// surface) don't need a separate import of the sentinel from api/types.ts
+// just to compare a ProfileId against it.
 export { ALL_PROFILES_ID };
 
 export interface ServerSession {

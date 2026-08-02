@@ -587,6 +587,14 @@ export function asProfileId(id: string): ProfileId {
   return id as ProfileId;
 }
 
+/**
+ * Sentinel profile id for the virtual "All Profiles" aggregate view. Never a
+ * real server: it names no server, and services/sessions.ts's getSession
+ * rejects it rather than resolving it to a profile. Never sent to a server.
+ * Refs #337.
+ */
+export const ALL_PROFILES_ID: ProfileId = asProfileId('__all_profiles__');
+
 export interface Profile {
   id: ProfileId;
   name: string;
