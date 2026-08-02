@@ -4,7 +4,7 @@
  * Handles fetching ZoneMinder server logs from the ZM API.
  */
 
-import { getApiClient } from './client';
+import type { ApiClient } from './client';
 import type { ZMLogsResponse, ZMLog } from './types';
 import { ZMLogsResponseSchema } from './types';
 import { validateApiResponse } from '../lib/zm/api-validator';
@@ -22,12 +22,11 @@ export interface ZMLogFilters {
  * Fetches logs from the ZoneMinder server API endpoint /logs.json.
  * These are server-side logs from ZM components (zmc, zma, zmdc, etc.).
  *
+ * @param client - API client for the target profile
  * @param filters - Object containing filter criteria
  * @returns Promise resolving to ZMLogsResponse with logs and pagination info
  */
-export async function getZMLogs(filters: ZMLogFilters = {}): Promise<ZMLogsResponse> {
-  const client = getApiClient();
-
+export async function getZMLogs(client: ApiClient, filters: ZMLogFilters = {}): Promise<ZMLogsResponse> {
   const params: Record<string, string | number> = {
     limit: filters.limit || 100,
     page: filters.page || 1,

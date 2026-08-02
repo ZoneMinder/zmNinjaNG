@@ -106,6 +106,10 @@ vi.mock('../../hooks/useCurrentProfile', () => ({
   }),
 }));
 
+vi.mock('../../services/sessions', () => ({
+  getCurrentSession: vi.fn(() => ({ client: {} })),
+}));
+
 vi.mock('../../stores/settings', () => ({
   DEFAULT_SETTINGS: {
     viewMode: 'snapshot',
