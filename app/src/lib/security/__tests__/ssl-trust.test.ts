@@ -113,6 +113,41 @@ describe('collectTrustEntries', () => {
     expect(entries).toEqual([{ host: 'shared.local', fingerprint: 'BB:22' }]);
     expect(mockLogSslTrust).toHaveBeenCalledWith(expect.stringContaining('shared.local'), 2);
   });
+
+  it('candidate enables trust when no saved profile does', () => {
+    const off = () => ({ allowSelfSignedCerts: false, trustedCertFingerprint: null }) as ProfileSettings;
+    const { enabled, entries } = collectTrustEntries([], off, {
+      urls: ['https://new.local'],
+      fingerprint: null,
+      enabled: true,
+    });
+    expect(enabled).toBe(true);
+    expect(entries).toEqual([]);
+  });
+
+  it('candidate with a null fingerprint contributes no entry for its hosts', () => {
+    const off = () => ({ allowSelfSignedCerts: false, trustedCertFingerprint: null }) as ProfileSettings;
+    const { enabled, entries } = collectTrustEntries([], off, {
+      urls: ['https://new.local', 'https://new.local/api'],
+      fingerprint: null,
+      enabled: true,
+    });
+    expect(enabled).toBe(true);
+    expect(entries).toEqual([]);
+  });
+
+  it("candidate overrides a saved profile's fingerprint for the same host", () => {
+    const profiles = [profile('a', { portalUrl: 'https://shared.local' })];
+    const settings = () => ({ allowSelfSignedCerts: true, trustedCertFingerprint: 'AA:11' }) as ProfileSettings;
+    const { enabled, entries } = collectTrustEntries(profiles, settings, {
+      urls: ['https://shared.local'],
+      fingerprint: 'ZZ:99',
+      enabled: true,
+    });
+    expect(enabled).toBe(true);
+    expect(entries).toEqual([{ host: 'shared.local', fingerprint: 'ZZ:99' }]);
+    expect(mockLogSslTrust).toHaveBeenCalledWith(expect.stringContaining('shared.local'), 2);
+  });
 });
 
 describe('applyTrustedCertificates', () => {
@@ -232,6 +267,21 @@ describe('applyTrustedCertificates', () => {
     );
 
     vi.unstubAllGlobals();
+  });
+
+  it('enables native trust from a candidate even when no saved profile trusts yet', async () => {
+    vi.doMock('../../platform', () => ({
+      Platform: { isNative: true },
+    }));
+    mockStores([]);
+    mockGetProfileSettings.mockReturnValue({ allowSelfSignedCerts: false, trustedCertFingerprint: null });
+
+    const { applyTrustedCertificates } = await import('../ssl-trust');
+    await applyTrustedCertificates({ urls: ['https://new.local'], fingerprint: null, enabled: true });
+
+    expect(mockEnable).toHaveBeenCalled();
+    expect(mockSetTrustedFingerprints).toHaveBeenCalledWith({ entries: [] });
+    expect(mockDisable).not.toHaveBeenCalled();
   });
 });
 

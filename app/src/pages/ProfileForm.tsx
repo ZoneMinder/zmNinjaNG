@@ -139,10 +139,12 @@ export default function ProfileForm() {
     const signal = abortControllerRef.current.signal;
 
     try {
-      // Enable trust-all for HTTP before any network calls (needed for discovery)
+      // Enable trust-all for HTTP before any network calls (needed for discovery).
+      // This profile isn't saved yet, so pass it as a candidate: the union
+      // computed from the store alone wouldn't know about it.
       if (allowSelfSignedCerts) {
         const { applyTrustedCertificates } = await import('../lib/security/ssl-trust');
-        await applyTrustedCertificates();
+        await applyTrustedCertificates({ urls: [portalUrl], fingerprint: null, enabled: allowSelfSignedCerts });
       }
 
       const normalizedUsername = username.trim();
@@ -229,8 +231,13 @@ export default function ProfileForm() {
           // Save to local var (React state update from handleCertTrust is batched
           // and won't be available until next render)
           acceptedFingerprint = info.fingerprint;
-          // Apply fingerprint-based trust (installs WebView handler)
-          await applyTrustedCertificates();
+          // Apply fingerprint-based trust (installs WebView handler). Still a
+          // candidate: the profile isn't saved until after login/discovery succeeds.
+          await applyTrustedCertificates({
+            urls: [confirmedPortalUrl, apiUrl, cgiUrl],
+            fingerprint: acceptedFingerprint,
+            enabled: allowSelfSignedCerts,
+          });
         }
       }
 
@@ -298,6 +305,9 @@ export default function ProfileForm() {
           allowSelfSignedCerts: true,
           trustedCertFingerprint: acceptedFingerprint,
         });
+        // Re-apply from committed state now that the profile is saved (no more candidate).
+        const { applyTrustedCertificates } = await import('../lib/security/ssl-trust');
+        await applyTrustedCertificates();
       }
 
       // Switch to the newly created profile (unless it's the first profile, which is auto-set as current)

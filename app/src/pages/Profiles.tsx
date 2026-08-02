@@ -133,8 +133,17 @@ export default function Profiles() {
     setIsSaving(true);
     try {
       // Apply SSL trust before discovery so it works against a self-signed server.
+      // Pass the edited (not-yet-saved) values as a candidate, keeping the
+      // profile's current stored fingerprint since this dialog doesn't re-verify it.
       const { applyTrustedCertificates } = await import('../lib/security/ssl-trust');
-      await applyTrustedCertificates();
+      const existingFingerprint = useSettingsStore.getState().getProfileSettings(
+        selectedProfile.id
+      ).trustedCertFingerprint;
+      await applyTrustedCertificates({
+        urls: [formData.portalUrl, formData.apiUrl, formData.cgiUrl],
+        fingerprint: existingFingerprint,
+        enabled: formData.allowSelfSignedCerts,
+      });
 
       let portalUrl = formData.portalUrl.replace(/\/$/, '');
 
@@ -179,6 +188,9 @@ export default function Profiles() {
       useSettingsStore.getState().updateProfileSettings(selectedProfile.id, {
         allowSelfSignedCerts: formData.allowSelfSignedCerts,
       });
+
+      // Re-apply from committed state now that the profile's URLs/settings are saved.
+      await applyTrustedCertificates();
 
       toast({
         title: t('common.success'),
