@@ -23,6 +23,14 @@ const sourceText = walk(appSrc)
   .map((f) => fs.readFileSync(f, 'utf8'))
   .join('\n');
 
+function srcFiles(): string[] {
+  return walk(appSrc);
+}
+
+function read(f: string): string {
+  return fs.readFileSync(f, 'utf8');
+}
+
 interface Contract {
   name: string;
   body: string;
@@ -204,6 +212,55 @@ describe('developer docs cite symbols, not line numbers', () => {
       });
     }
     expect(offenders, `semicolons inside mermaid blocks:\n${offenders.join('\n')}`).toEqual([]);
+  });
+});
+
+describe('Sessions contract', () => {
+  // ApiClient is built either directly (createApiClient, api/client.ts) or
+  // via its store-wired wrapper (createStoreApiClient, api/store-gates.ts).
+  // Sanctioned callers, per grep evidence (refs #337):
+  //  - api/store-gates.ts    the gate factory; sole caller of createApiClient
+  //  - services/sessions.ts  the live per-profile session registry
+  //  - services/discovery.ts, pages/ProfileForm.tsx
+  //                          pre-save probe flows: build a client for an
+  //                          un-saved profile before it has a session
+  const SANCTIONED = [
+    'api/store-gates.ts',
+    'services/sessions.ts',
+    'services/discovery.ts',
+    'pages/ProfileForm.tsx',
+  ];
+
+  it('ApiClient is constructed only in sanctioned files', () => {
+    const offenders = srcFiles().filter(
+      (f) =>
+        !SANCTIONED.some((ok) => f.endsWith(ok)) &&
+        !f.includes('__tests__') &&
+        !f.endsWith('api/client.ts') &&
+        /\bcreate(?:Store)?ApiClient\s*\(/.test(read(f)),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it('the deleted singleton stays deleted', () => {
+    const offenders = srcFiles().filter((f) => /\b(getApiClient|setApiClient)\b/.test(read(f)));
+    expect(offenders).toEqual([]);
+  });
+
+  it('the ALL_PROFILES_ID and PROBE_PROFILE_ID sentinels live only beside the brand', () => {
+    const offenders = srcFiles().filter(
+      (f) =>
+        (read(f).includes("'__all_profiles__'") || read(f).includes("'__probe__'")) &&
+        !f.endsWith('api/types.ts'),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it('stores/auth.ts never statically imports services/sessions.ts', () => {
+    // sessions.ts injects a gate instead (see its file header) precisely to
+    // avoid this cycle; a static import here would reintroduce it.
+    const authFile = srcFiles().find((f) => f.endsWith('stores/auth.ts'))!;
+    expect(/from\s+['"][^'"]*services\/sessions['"]/.test(read(authFile))).toBe(false);
   });
 });
 
