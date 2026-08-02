@@ -12,7 +12,6 @@ import {
   triggerAlarm,
   updateMonitor,
 } from '../monitors';
-import { getApiClient } from '../client';
 import { validateApiResponse } from '../../lib/zm/api-validator';
 import { getMonitorStreamUrl } from '../../lib/zm/url-builder';
 import { getExcludedMonitorIds } from '../../lib/profile/profile-settings';
@@ -20,10 +19,7 @@ import type { ApiClient } from '../client';
 
 const mockGet = vi.fn();
 const mockPost = vi.fn();
-
-vi.mock('../client', () => ({
-  getApiClient: vi.fn(),
-}));
+const mockClient = { get: mockGet, postForm: mockPost } as unknown as ApiClient;
 
 vi.mock('../../lib/zm/api-validator', () => ({
   validateApiResponse: vi.fn((_, data) => data),
@@ -48,16 +44,12 @@ describe('Monitors API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getExcludedMonitorIds).mockReturnValue([]);
-    vi.mocked(getApiClient).mockReturnValue({
-      get: mockGet,
-      postForm: mockPost,
-    } as unknown as ApiClient);
   });
 
   it('fetches monitors list', async () => {
     mockGet.mockResolvedValue({ data: { monitors: [{ Monitor: { Id: '1' } }] } });
 
-    const response = await getMonitors();
+    const response = await getMonitors(mockClient);
 
     expect(mockGet).toHaveBeenCalledWith('/monitors.json', expect.objectContaining({ intent: expect.any(String) }));
     expect(response.monitors).toHaveLength(1);
@@ -75,7 +67,7 @@ describe('Monitors API', () => {
       },
     });
 
-    const response = await getMonitors();
+    const response = await getMonitors(mockClient);
 
     expect(response.monitors.map((m) => m.Monitor.Id)).toEqual(['1', '3']);
   });
@@ -92,7 +84,7 @@ describe('Monitors API', () => {
       },
     });
 
-    const response = await getMonitors({ includeExcluded: true });
+    const response = await getMonitors(mockClient, { includeExcluded: true });
 
     expect(response.monitors.map((m) => m.Monitor.Id)).toEqual(['1', '2', '3']);
   });
@@ -108,7 +100,7 @@ describe('Monitors API', () => {
       },
     });
 
-    const response = await getMonitors({ includeExcluded: true });
+    const response = await getMonitors(mockClient, { includeExcluded: true });
 
     expect(response.monitors.map((m) => m.Monitor.Id)).toEqual(['1']);
   });
@@ -116,7 +108,7 @@ describe('Monitors API', () => {
   it('fetches a monitor and validates response', async () => {
     mockGet.mockResolvedValue({ data: { monitor: { Monitor: { Id: '1', Name: 'Front Door' } } } });
 
-    const monitor = await getMonitor('1');
+    const monitor = await getMonitor(mockClient, '1');
 
     expect(mockGet).toHaveBeenCalledWith('/monitors/1.json', expect.objectContaining({ intent: expect.any(String) }));
     expect(validateApiResponse).toHaveBeenCalled();
@@ -126,7 +118,7 @@ describe('Monitors API', () => {
   it('fetches control data for a monitor', async () => {
     mockGet.mockResolvedValue({ data: { control: { Control: { Id: '1' } } } });
 
-    const control = await getControl('1');
+    const control = await getControl(mockClient, '1');
 
     expect(mockGet).toHaveBeenCalledWith('/controls/1.json', expect.objectContaining({ intent: expect.any(String) }));
     expect(control.control.Control.Id).toBe('1');
@@ -135,7 +127,7 @@ describe('Monitors API', () => {
   it('updates monitor data', async () => {
     mockPost.mockResolvedValue({ data: { message: 'Saved' } });
 
-    await updateMonitor('2', { 'Monitor[Name]': 'Updated' });
+    await updateMonitor(mockClient, '2', { 'Monitor[Name]': 'Updated' });
 
     expect(mockPost).toHaveBeenCalledWith('/monitors/2.json', expect.any(URLSearchParams));
     const body = mockPost.mock.calls[0][1] as URLSearchParams;
@@ -145,7 +137,7 @@ describe('Monitors API', () => {
   it('changes monitor function', async () => {
     mockPost.mockResolvedValue({ data: { monitor: { Id: '3' } } });
 
-    await changeMonitorFunction('3', 'Monitor');
+    await changeMonitorFunction(mockClient, '3', 'Monitor');
 
     expect(mockPost).toHaveBeenCalledWith('/monitors/3.json', expect.any(URLSearchParams));
     const body = mockPost.mock.calls[0][1] as URLSearchParams;
@@ -155,7 +147,7 @@ describe('Monitors API', () => {
   it('enables or disables a monitor', async () => {
     mockPost.mockResolvedValue({ data: { monitor: { Id: '4' } } });
 
-    await setMonitorEnabled('4', false);
+    await setMonitorEnabled(mockClient, '4', false);
 
     expect(mockPost).toHaveBeenCalledWith('/monitors/4.json', expect.any(URLSearchParams));
     const body = mockPost.mock.calls[0][1] as URLSearchParams;
@@ -170,8 +162,8 @@ describe('Monitors API', () => {
       }
     });
 
-    await triggerAlarm('5');
-    await cancelAlarm('5');
+    await triggerAlarm(mockClient, '5');
+    await cancelAlarm(mockClient, '5');
 
     expect(mockGet).toHaveBeenCalledWith('/monitors/alarm/id:5/command:on.json', undefined);
     expect(mockGet).toHaveBeenCalledWith('/monitors/alarm/id:5/command:off.json', undefined);
@@ -180,7 +172,7 @@ describe('Monitors API', () => {
   it('gets alarm status', async () => {
     mockGet.mockResolvedValue({ data: { status: 'on' } });
 
-    const status = await getAlarmStatus('6');
+    const status = await getAlarmStatus(mockClient, '6');
 
     expect(mockGet).toHaveBeenCalledWith('/monitors/alarm/id:6/command:status.json', expect.objectContaining({ intent: expect.any(String) }));
     expect(status.status).toBe('on');
@@ -194,7 +186,7 @@ describe('Monitors API', () => {
       }
     });
 
-    const status = await getDaemonStatus('7', 'zmc');
+    const status = await getDaemonStatus(mockClient, '7', 'zmc');
 
     expect(mockGet).toHaveBeenCalledWith('/monitors/daemonStatus/id:7/daemon:zmc.json', expect.objectContaining({ intent: expect.any(String) }));
     expect(status.status).toBe('ok');
@@ -206,7 +198,7 @@ describe('Monitors API', () => {
       data: { status: 'ok', output: 'Command sent' },
     });
 
-    await triggerAlarm('5', 'https://pseudo.example.com/api');
+    await triggerAlarm(mockClient, '5', 'https://pseudo.example.com/api');
 
     expect(mockGet).toHaveBeenCalledWith(
       '/monitors/alarm/id:5/command:on.json',
@@ -219,7 +211,7 @@ describe('Monitors API', () => {
       data: { status: 'ok', output: 'Command sent' },
     });
 
-    await cancelAlarm('5', 'https://pseudo.example.com/api');
+    await cancelAlarm(mockClient, '5', 'https://pseudo.example.com/api');
 
     expect(mockGet).toHaveBeenCalledWith(
       '/monitors/alarm/id:5/command:off.json',
@@ -230,7 +222,7 @@ describe('Monitors API', () => {
   it('routes getAlarmStatus to alternate server when apiBaseUrl provided', async () => {
     mockGet.mockResolvedValue({ data: { status: 'on' } });
 
-    await getAlarmStatus('6', 'https://pseudo.example.com/api');
+    await getAlarmStatus(mockClient, '6', 'https://pseudo.example.com/api');
 
     expect(mockGet).toHaveBeenCalledWith(
       '/monitors/alarm/id:6/command:status.json',
@@ -243,7 +235,7 @@ describe('Monitors API', () => {
       data: { status: 'ok', statustext: 'running' },
     });
 
-    await getDaemonStatus('7', 'zmc', 'https://pseudo.example.com/api');
+    await getDaemonStatus(mockClient, '7', 'zmc', 'https://pseudo.example.com/api');
 
     expect(mockGet).toHaveBeenCalledWith(
       '/monitors/daemonStatus/id:7/daemon:zmc.json',
@@ -256,7 +248,7 @@ describe('Monitors API', () => {
       data: { status: 'ok', statustext: 'running' },
     });
 
-    await getDaemonStatus('7', 'zmc');
+    await getDaemonStatus(mockClient, '7', 'zmc');
 
     expect(mockGet).toHaveBeenCalledWith(
       '/monitors/daemonStatus/id:7/daemon:zmc.json',

@@ -6,6 +6,7 @@
  * agent loop.
  */
 import { getMonitors, getMonitor, getAlarmStatus } from '../../api/monitors';
+import type { ApiClient } from '../../api/client';
 import { getEvents, getEvent, getConsoleEvents } from '../../api/events';
 import type { EventFilters } from '../../api/events';
 import { getLoad, getDiskPercent, getDaemonCheck, getStorages, getServers } from '../../api/server';
@@ -72,14 +73,14 @@ function mapMonitor(m: MonitorData): Record<string, unknown> {
  * an empty result set. `list_events` cannot take that shortcut, since a wrong
  * id there returns zero events and reads exactly like "nothing happened".
  */
-async function resolveMonitorArg(raw: unknown): Promise<string> {
+async function resolveMonitorArg(client: ApiClient, raw: unknown): Promise<string> {
   // A placeholder ("null"/"none") on a REQUIRED monitor arg is a missing value,
   // not a monitor to look up: fail with the clear "required" message rather
   // than "no monitor named null".
   if (isOmittedArg(raw)) throw new Error('monitorId is required');
   const ref = String(raw).trim();
   if (/^\d+$/.test(ref)) return ref;
-  const { monitors } = await getMonitors();
+  const { monitors } = await getMonitors(client);
   const resolution = resolveMonitorRef(ref, monitors);
   if ('error' in resolution) throw new Error(resolution.error);
   return resolution.id;
@@ -105,9 +106,9 @@ const listMonitorsTool: ToolDefinition = {
     'flags, and live status (connection state, capture/analysis fps when available). Call this first when ' +
     'the user refers to a monitor by name, or to answer "what monitors are configured".',
   schema: { type: 'object', properties: {}, additionalProperties: false },
-  execute: (_input, _ctx) =>
+  execute: (_input, ctx) =>
     safeExecute('list_monitors', async () => {
-      const { monitors } = await getMonitors();
+      const { monitors } = await getMonitors(getSession(ctx.profileId).client);
       return { output: JSON.stringify(monitors.map(mapMonitor)), display: monitors.map(buildMonitorDisplayEntity) };
     }),
 };
@@ -128,10 +129,11 @@ const getMonitorTool: ToolDefinition = {
     },
     required: ['monitorId'],
   },
-  execute: (input, _ctx) =>
+  execute: (input, ctx) =>
     safeExecute('get_monitor', async () => {
-      const monitorId = await resolveMonitorArg(input.monitorId);
-      const [monitor, alarm] = await Promise.all([getMonitor(monitorId), getAlarmStatus(monitorId)]);
+      const client = getSession(ctx.profileId).client;
+      const monitorId = await resolveMonitorArg(client, input.monitorId);
+      const [monitor, alarm] = await Promise.all([getMonitor(client, monitorId), getAlarmStatus(client, monitorId)]);
       return {
         output: JSON.stringify({
           ...mapMonitor(monitor),
@@ -181,7 +183,8 @@ const countEventsTool: ToolDefinition = {
       // ZoneMinder's consoleEvents endpoint takes a MySQL INTERVAL phrase; the
       // singular unit is valid for any count ("2 week").
       const interval = `${Math.floor(count)} ${unit}`;
-      const [counts, { monitors }] = await Promise.all([getConsoleEvents(getSession(ctx.profileId).client, interval), getMonitors()]);
+      const client = getSession(ctx.profileId).client;
+      const [counts, { monitors }] = await Promise.all([getConsoleEvents(client, interval), getMonitors(client)]);
       const nameById = new Map(monitors.map((m) => [m.Monitor.Id, m.Monitor.Name]));
       const rows = counts
         .filter((c) => nameById.has(c.monitorId))
@@ -325,7 +328,7 @@ const listEventsTool: ToolDefinition = {
       // events query cannot be built until the model's `monitorId` (often a
       // NAME) resolves to a real id. The extra round trip buys the difference
       // between "no events" and "no such query" (see monitor-ref.ts).
-      const { monitors } = await getMonitors();
+      const { monitors } = await getMonitors(getSession(ctx.profileId).client);
       let monitorId: string | undefined;
       // isOmittedArg, not just an empty check: the model sends the string
       // "null"/"all" to mean "every monitor", which must not be resolved as a
@@ -595,7 +598,8 @@ const getEventTool: ToolDefinition = {
     safeExecute('get_event', async () => {
       const eventId = String(input.eventId ?? '');
       if (!eventId) throw new Error('eventId is required');
-      const [event, { monitors }] = await Promise.all([getEvent(getSession(ctx.profileId).client, eventId), getMonitors()]);
+      const client = getSession(ctx.profileId).client;
+      const [event, { monitors }] = await Promise.all([getEvent(client, eventId), getMonitors(client)]);
       const e = event.Event;
       const nameById = new Map(monitors.map((m) => [m.Monitor.Id, m.Monitor.Name]));
       const monitorName = nameById.get(e.MonitorId) ?? e.MonitorId;

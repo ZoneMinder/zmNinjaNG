@@ -27,6 +27,7 @@ import type { MonitorFeedFit } from '../../stores/settings';
 import { useDashboardStore } from '../../stores/dashboard';
 import { useQuery } from '@tanstack/react-query';
 import { getMonitors } from '../../api/monitors';
+import { getCurrentSession } from '../../services/sessions';
 import { Label } from '../ui/label';
 import { Input } from '../ui/input';
 import { Checkbox } from '../ui/checkbox';
@@ -60,7 +61,7 @@ export function WidgetEditDialog({ open, onOpenChange, widget, profileId }: Widg
 
     const { data: monitors } = useQuery({
         queryKey: queryKeys.monitors(profileId),
-        queryFn: () => getMonitors(),
+        queryFn: () => getMonitors(getCurrentSession().client),
     });
 
     const { availableTags, tagsSupported } = useEventTags();

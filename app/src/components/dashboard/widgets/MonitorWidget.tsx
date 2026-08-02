@@ -16,6 +16,7 @@ import { useMemo, memo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { getMonitor, getMonitors } from '../../../api/monitors';
+import { getCurrentSession } from '../../../services/sessions';
 import { queryKeys } from '../../../lib/query/query-keys';
 import type { MonitorFeedFit } from '../../../stores/settings';
 import { LiveMonitorPlayer } from '../../monitors/LiveMonitorPlayer';
@@ -46,7 +47,7 @@ function SingleMonitor({ monitorId, objectFit }: { monitorId: string; objectFit:
     const [protocol, setProtocol] = useState('MJPEG');
     const { data: monitor, isLoading, error } = useQuery({
         queryKey: queryKeys.monitor(currentProfile?.id, monitorId),
-        queryFn: () => getMonitor(monitorId),
+        queryFn: () => getMonitor(getCurrentSession().client, monitorId),
         enabled: !!monitorId,
     });
 
@@ -114,7 +115,7 @@ export const MonitorWidget = memo(function MonitorWidget({ monitorIds, objectFit
     // Fetch all monitors to check which ones are deleted
     const { data: monitorsData } = useQuery({
         queryKey: queryKeys.monitors(currentProfile?.id),
-        queryFn: () => getMonitors(),
+        queryFn: () => getMonitors(getCurrentSession().client),
     });
 
     // Filter out deleted monitors

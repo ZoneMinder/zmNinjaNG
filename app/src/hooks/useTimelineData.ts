@@ -58,7 +58,7 @@ export function useTimelineData({
   // Fetch monitors
   const { data: monitorsData } = useQuery({
     queryKey: queryKeys.monitors(currentProfileId),
-    queryFn: () => getMonitors(),
+    queryFn: () => getMonitors(getCurrentSession().client),
   });
 
   // Get enabled monitors

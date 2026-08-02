@@ -10,6 +10,7 @@ import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '../lib/query/query-keys';
 import { useTranslation } from 'react-i18next';
 import { getMonitors, updateMonitor } from '../api/monitors';
+import { getCurrentSession } from '../services/sessions';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useBandwidthSettings } from '../hooks/useBandwidthSettings';
 import { useMonitorNewEvents } from '../hooks/useMonitorNewEvents';
@@ -70,7 +71,7 @@ export default function Monitors() {
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: queryKeys.monitors(currentProfile?.id),
-    queryFn: () => getMonitors(),
+    queryFn: () => getMonitors(getCurrentSession().client),
     enabled: !!currentProfile && isAuthenticated,
     refetchInterval: bandwidth.monitorStatusInterval,
   });
@@ -112,7 +113,7 @@ export default function Monitors() {
         if (value !== undefined) params[`Monitor[${key}]`] = value;
       }
       if (Object.keys(params).length > 0) {
-        await updateMonitor(selectedMonitor.Id, params);
+        await updateMonitor(getCurrentSession().client, selectedMonitor.Id, params);
       }
       await refetch();
       toast.success(t('monitor_detail.capture_updated'));

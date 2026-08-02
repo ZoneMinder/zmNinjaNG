@@ -15,6 +15,7 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getMonitors } from '../api/monitors';
+import { getCurrentSession } from '../services/sessions';
 import { filterEnabledMonitors } from '../lib/monitor/filters';
 import { useCurrentProfile } from './useCurrentProfile';
 import { useBandwidthSettings } from './useBandwidthSettings';
@@ -62,7 +63,7 @@ export function useMonitors(options?: UseMonitorsOptions): UseMonitorsReturn {
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: queryKeys.monitors(currentProfile?.id),
-    queryFn: () => getMonitors(),
+    queryFn: () => getMonitors(getCurrentSession().client),
     enabled: (options?.enabled ?? true) && !!currentProfile?.id && isAuthenticated,
     refetchInterval: options?.refetchInterval ?? bandwidth.monitorStatusInterval,
   });

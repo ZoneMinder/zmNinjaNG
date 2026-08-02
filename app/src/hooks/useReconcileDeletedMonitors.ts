@@ -20,6 +20,7 @@
 import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getMonitors } from '../api/monitors';
+import { getCurrentSession } from '../services/sessions';
 import { queryKeys } from '../lib/query/query-keys';
 import { useAuthSlice } from '../stores/auth';
 import { useCurrentProfile } from './useCurrentProfile';
@@ -40,7 +41,7 @@ export function useReconcileDeletedMonitors(): void {
   // than adding a second full monitor fetch.
   const { data, isSuccess } = useQuery({
     queryKey: queryKeys.monitorsAllIncludingExcluded(profileId),
-    queryFn: () => getMonitors({ includeExcluded: true }),
+    queryFn: () => getMonitors(getCurrentSession().client, { includeExcluded: true }),
     enabled: !!profileId && isAuthenticated,
   });
 

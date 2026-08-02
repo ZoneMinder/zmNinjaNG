@@ -5,7 +5,7 @@
  * Also provides utility for generating stream URLs.
  */
 
-import { getApiClient } from './client';
+import type { ApiClient } from './client';
 import type { MonitorsResponse, MonitorData, ControlData, AlarmStatusResponse, DaemonStatusResponse } from './types';
 import { MonitorsResponseSchema, MonitorDataSchema, ControlDataSchema, AlarmStatusResponseSchema, DaemonStatusResponseSchema } from './types';
 import { validateApiResponse } from '../lib/zm/api-validator';
@@ -29,9 +29,9 @@ import { getExcludedMonitorIds } from '../lib/profile/profile-settings';
  * @returns Promise resolving to MonitorsResponse containing array of monitors
  */
 export async function getMonitors(
+  client: ApiClient,
   options?: { includeExcluded?: boolean }
 ): Promise<MonitorsResponse> {
-  const client = getApiClient();
   const response = await client.get<MonitorsResponse>('/monitors.json', {
     intent: 'Fetch monitors list',
   });
@@ -61,8 +61,7 @@ export async function getMonitors(
  * @param monitorId - The ID of the monitor to fetch
  * @returns Promise resolving to MonitorData
  */
-export async function getMonitor(monitorId: string): Promise<MonitorData> {
-  const client = getApiClient();
+export async function getMonitor(client: ApiClient, monitorId: string): Promise<MonitorData> {
   const response = await client.get<{ monitor: MonitorData }>(`/monitors/${monitorId}.json`, {
     intent: `Fetch monitor ${monitorId}`,
   });
@@ -79,8 +78,7 @@ export async function getMonitor(monitorId: string): Promise<MonitorData> {
  * @param controlId - The ID of the control profile
  * @returns Promise resolving to ControlData
  */
-export async function getControl(controlId: string): Promise<ControlData> {
-  const client = getApiClient();
+export async function getControl(client: ApiClient, controlId: string): Promise<ControlData> {
   const response = await client.get(`/controls/${controlId}.json`, {
     intent: `Fetch control ${controlId} capabilities`,
   });
@@ -100,12 +98,12 @@ export async function getControl(controlId: string): Promise<ControlData> {
  * @returns Promise resolving to updated MonitorData
  */
 export async function updateMonitor(
+  client: ApiClient,
   monitorId: string,
   updates: Record<string, unknown>
 ): Promise<void> {
   log.api('Updating monitor settings', LogLevel.INFO, { monitorId, updates });
 
-  const client = getApiClient();
   const body = new URLSearchParams();
   Object.entries(updates).forEach(([key, value]) => {
     if (value === undefined || value === null) return;
@@ -125,12 +123,13 @@ export async function updateMonitor(
  * @returns Promise resolving to updated MonitorData
  */
 export async function changeMonitorFunction(
+  client: ApiClient,
   monitorId: string,
   func: 'None' | 'Monitor' | 'Modect' | 'Record' | 'Mocord' | 'Nodect'
 ): Promise<void> {
   log.api('Changing monitor function', LogLevel.INFO, { monitorId, function: func });
 
-  await updateMonitor(monitorId, {
+  await updateMonitor(client, monitorId, {
     'Monitor[Function]': func,
   });
 }
@@ -146,6 +145,7 @@ export async function changeMonitorFunction(
  * @returns Promise resolving to updated MonitorData
  */
 export async function updateMonitorCapture(
+  client: ApiClient,
   monitorId: string,
   settings: {
     Capturing?: 'None' | 'Ondemand' | 'Always';
@@ -159,7 +159,7 @@ export async function updateMonitorCapture(
   if (settings.Capturing !== undefined) params['Monitor[Capturing]'] = settings.Capturing;
   if (settings.Analysing !== undefined) params['Monitor[Analysing]'] = settings.Analysing;
   if (settings.Recording !== undefined) params['Monitor[Recording]'] = settings.Recording;
-  await updateMonitor(monitorId, params);
+  await updateMonitor(client, monitorId, params);
 }
 
 /**
@@ -171,10 +171,10 @@ export async function updateMonitorCapture(
  * @param enabled - True to enable, false to disable
  * @returns Promise resolving to updated MonitorData
  */
-export async function setMonitorEnabled(monitorId: string, enabled: boolean): Promise<void> {
+export async function setMonitorEnabled(client: ApiClient, monitorId: string, enabled: boolean): Promise<void> {
   log.api('Setting monitor enabled state', LogLevel.INFO, { monitorId, enabled });
 
-  await updateMonitor(monitorId, {
+  await updateMonitor(client, monitorId, {
     'Monitor[Enabled]': enabled ? '1' : '0',
   });
 }
@@ -187,10 +187,9 @@ export async function setMonitorEnabled(monitorId: string, enabled: boolean): Pr
  * @param monitorId - The ID of the monitor
  * @throws Error if alarm trigger fails (ZM returns status: 'false' with error)
  */
-export async function triggerAlarm(monitorId: string, apiBaseUrl?: string): Promise<void> {
+export async function triggerAlarm(client: ApiClient, monitorId: string, apiBaseUrl?: string): Promise<void> {
   log.api('Triggering monitor alarm', LogLevel.INFO, { monitorId, apiBaseUrl });
 
-  const client = getApiClient();
   const config = apiBaseUrl ? { baseURL: apiBaseUrl } : undefined;
   const response = await client.get(`/monitors/alarm/id:${monitorId}/command:on.json`, config);
 
@@ -214,10 +213,9 @@ export async function triggerAlarm(monitorId: string, apiBaseUrl?: string): Prom
  * @param monitorId - The ID of the monitor
  * @throws Error if alarm cancel fails (ZM returns status: 'false' with error)
  */
-export async function cancelAlarm(monitorId: string, apiBaseUrl?: string): Promise<void> {
+export async function cancelAlarm(client: ApiClient, monitorId: string, apiBaseUrl?: string): Promise<void> {
   log.api('Cancelling monitor alarm', LogLevel.INFO, { monitorId, apiBaseUrl });
 
-  const client = getApiClient();
   const config = apiBaseUrl ? { baseURL: apiBaseUrl } : undefined;
   const response = await client.get(`/monitors/alarm/id:${monitorId}/command:off.json`, config);
 
@@ -241,8 +239,7 @@ export async function cancelAlarm(monitorId: string, apiBaseUrl?: string): Promi
  * @param monitorId - The ID of the monitor
  * @returns Promise resolving to object with status string
  */
-export async function getAlarmStatus(monitorId: string, apiBaseUrl?: string): Promise<AlarmStatusResponse> {
-  const client = getApiClient();
+export async function getAlarmStatus(client: ApiClient, monitorId: string, apiBaseUrl?: string): Promise<AlarmStatusResponse> {
   const config = { intent: `Fetch alarm status for monitor ${monitorId}`, ...(apiBaseUrl ? { baseURL: apiBaseUrl } : {}) };
   const response = await client.get(`/monitors/alarm/id:${monitorId}/command:status.json`, config);
 
@@ -265,11 +262,11 @@ export async function getAlarmStatus(monitorId: string, apiBaseUrl?: string): Pr
  * @returns Promise resolving to object with status string
  */
 export async function getDaemonStatus(
+  client: ApiClient,
   monitorId: string,
   daemon: 'zmc' | 'zma',
   apiBaseUrl?: string
 ): Promise<DaemonStatusResponse> {
-  const client = getApiClient();
   const config = { intent: `Fetch ${daemon} daemon status for monitor ${monitorId}`, ...(apiBaseUrl ? { baseURL: apiBaseUrl } : {}) };
   const response = await client.get(`/monitors/daemonStatus/id:${monitorId}/daemon:${daemon}.json`, config);
 
@@ -326,6 +323,7 @@ export function getStreamUrl(
  * @param token - Optional auth token
  */
 export async function controlMonitor(
+  client: ApiClient,
   portalUrl: string,
   monitorId: string,
   command: string,
@@ -339,7 +337,6 @@ export async function controlMonitor(
   // In dev mode on web, use proxy server to avoid CORS issues
   const proxiedUrl = wrapWithImageProxy(url);
 
-  const client = getApiClient();
   // Use the unified client for cross-platform HTTP while keeping the full URL override.
   // We skip auth interceptor because we manually added the token to the URL
   await client.get(proxiedUrl, {

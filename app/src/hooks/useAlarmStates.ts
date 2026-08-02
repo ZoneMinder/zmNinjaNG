@@ -13,6 +13,7 @@
 
 import { useQueries } from '@tanstack/react-query';
 import { getAlarmStatus } from '../api/monitors';
+import { getCurrentSession } from '../services/sessions';
 import { queryKeys } from '../lib/query/query-keys';
 import { parseAlarmState, type MonitorAlarmState } from '../lib/monitor/alarm-state';
 import { useCurrentProfile } from './useCurrentProfile';
@@ -54,7 +55,7 @@ export function useAlarmStates(
   return useQueries({
     queries: monitorIds.map((monitorId) => ({
       queryKey: queryKeys.monitorAlarmStatus(profileId, monitorId),
-      queryFn: () => getAlarmStatus(monitorId),
+      queryFn: () => getAlarmStatus(getCurrentSession().client, monitorId),
       enabled: enabled && !!profileId && isAuthenticated,
       refetchInterval: pollIntervalMs,
       // The page is only mounted while visible, so background refetching would

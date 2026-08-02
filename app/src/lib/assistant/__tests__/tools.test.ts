@@ -174,14 +174,14 @@ describe('read-only tools', () => {
       const tool = getToolByName('get_monitor')!;
       const r = await tool.execute({ monitorId: 'Front Door' }, ctx());
       expect(r.isError).toBeFalsy();
-      expect(vi.mocked(getMonitor)).toHaveBeenCalledWith('1');
+      expect(vi.mocked(getMonitor)).toHaveBeenCalledWith(expect.anything(), '1');
     });
 
     it('passes a numeric id straight through without listing monitors first', async () => {
       const tool = getToolByName('get_monitor')!;
       const r = await tool.execute({ monitorId: '1' }, ctx());
       expect(r.isError).toBeFalsy();
-      expect(vi.mocked(getMonitor)).toHaveBeenCalledWith('1');
+      expect(vi.mocked(getMonitor)).toHaveBeenCalledWith(expect.anything(), '1');
       // A bare id needs no lookup: a wrong one fails loudly at the API, which
       // is why this path can stay one request instead of two.
       expect(vi.mocked(getMonitors)).not.toHaveBeenCalled();

@@ -9,6 +9,7 @@ import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { getAlarmStatus, triggerAlarm, cancelAlarm } from '../../api/monitors';
+import { getCurrentSession } from '../../services/sessions';
 import { log, LogLevel } from '../../lib/logger';
 import { useBandwidthSettings } from '../../hooks/useBandwidthSettings';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
@@ -45,7 +46,7 @@ export function useAlarmControl({ monitorId, apiBaseUrl }: UseAlarmControlOption
     refetch: refetchAlarmStatus,
   } = useQuery({
     queryKey: queryKeys.monitorAlarmStatus(currentProfile?.id, monitorId),
-    queryFn: () => getAlarmStatus(monitorId!, apiBaseUrl),
+    queryFn: () => getAlarmStatus(getCurrentSession().client, monitorId!, apiBaseUrl),
     enabled: !!monitorId,
     refetchInterval: bandwidth.alarmStatusInterval,
     refetchIntervalInBackground: true,
@@ -109,9 +110,9 @@ export function useAlarmControl({ monitorId, apiBaseUrl }: UseAlarmControlOption
 
       try {
         if (nextValue) {
-          await triggerAlarm(monitorId, apiBaseUrl);
+          await triggerAlarm(getCurrentSession().client, monitorId, apiBaseUrl);
         } else {
-          await cancelAlarm(monitorId, apiBaseUrl);
+          await cancelAlarm(getCurrentSession().client, monitorId, apiBaseUrl);
         }
         await refetchAlarmStatus();
         setTimeout(() => {

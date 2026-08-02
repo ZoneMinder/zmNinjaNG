@@ -83,14 +83,14 @@ export default function MonitorDetail() {
   // Fetch monitor data
   const { data: monitor, isLoading, error, refetch } = useQuery({
     queryKey: queryKeys.monitor(currentProfile?.id, id),
-    queryFn: () => getMonitor(id!),
+    queryFn: () => getMonitor(getCurrentSession().client, id!),
     enabled: !!id,
   });
 
   // Fetch control capabilities if monitor is controllable
   const { data: controlData } = useQuery({
     queryKey: queryKeys.control(currentProfile?.id, monitor?.Monitor.ControlId),
-    queryFn: () => getControl(monitor!.Monitor.ControlId!),
+    queryFn: () => getControl(getCurrentSession().client, monitor!.Monitor.ControlId!),
     enabled: !!monitor?.Monitor.ControlId && monitor.Monitor.Controllable === '1',
   });
 
@@ -161,7 +161,7 @@ export default function MonitorDetail() {
         if (value !== undefined) params[`Monitor[${key}]`] = value;
       }
       if (Object.keys(params).length > 0) {
-        await updateMonitor(monitor.Monitor.Id, params);
+        await updateMonitor(getCurrentSession().client, monitor.Monitor.Id, params);
       }
       await refetch();
       toast.success(t('monitor_detail.capture_updated'));

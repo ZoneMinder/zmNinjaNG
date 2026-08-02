@@ -18,6 +18,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Command } from 'lucide-react';
 import { getMonitors } from '../api/monitors';
+import { getCurrentSession } from '../services/sessions';
 import { queryKeys } from '../lib/query/query-keys';
 import { useGroups } from '../hooks/useGroups';
 import { useGroupFilter } from '../hooks/useGroupFilter';
@@ -60,7 +61,7 @@ export function CommandPalette() {
 
   const { data: monitorsData } = useQuery({
     queryKey: queryKeys.monitors(currentProfile?.id),
-    queryFn: () => getMonitors(),
+    queryFn: () => getMonitors(getCurrentSession().client),
     enabled: !!currentProfile && isAuthenticated,
   });
 

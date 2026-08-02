@@ -82,7 +82,7 @@ export default function EventDetail() {
   });
   const { data: monitorData } = useQuery({
     queryKey: queryKeys.monitor(currentProfile?.id, event?.Event.MonitorId),
-    queryFn: () => getMonitor(event!.Event.MonitorId),
+    queryFn: () => getMonitor(getCurrentSession().client, event!.Event.MonitorId),
     enabled: !!event?.Event.MonitorId,
   });
   const { token: accessToken, isFresh: isAccessTokenFresh } = useFreshAccessToken();

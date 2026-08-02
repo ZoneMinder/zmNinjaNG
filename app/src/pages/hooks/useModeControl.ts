@@ -8,6 +8,7 @@ import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { changeMonitorFunction } from '../../api/monitors';
+import { getCurrentSession } from '../../services/sessions';
 import { log, LogLevel } from '../../lib/logger';
 
 /**
@@ -64,7 +65,7 @@ export function useModeControl({
 
       setIsModeUpdating(true);
       try {
-        await changeMonitorFunction(monitorId, nextMode);
+        await changeMonitorFunction(getCurrentSession().client, monitorId, nextMode);
         if (onSuccess) {
           await onSuccess();
         }

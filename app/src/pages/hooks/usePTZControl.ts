@@ -9,6 +9,7 @@ import { useCallback } from 'react';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { controlMonitor } from '../../api/monitors';
+import { getCurrentSession } from '../../services/sessions';
 import { log, LogLevel } from '../../lib/logger';
 
 interface UsePTZControlOptions {
@@ -35,7 +36,7 @@ export function usePTZControl({
       if (!portalUrl || !monitorId) return;
 
       try {
-        await controlMonitor(portalUrl, monitorId, command, accessToken || undefined, minStreamingPort);
+        await controlMonitor(getCurrentSession().client, portalUrl, monitorId, command, accessToken || undefined, minStreamingPort);
       } catch (error) {
         log.monitorDetail('PTZ command failed', LogLevel.ERROR, { command, error });
         toast.error(t('monitor_detail.ptz_failed'));

@@ -111,8 +111,9 @@ class EventPollerService {
   }
 
   private async _loadMonitorNames(): Promise<void> {
+    if (!this.profileId) return;
     try {
-      const result = await getMonitors();
+      const result = await getMonitors(getSession(asProfileId(this.profileId)).client);
       this.monitorNames.clear();
       this.monitorData = result.monitors.map((m) => ({
         Monitor: { Id: m.Monitor.Id, ServerId: m.Monitor.ServerId ?? null },
