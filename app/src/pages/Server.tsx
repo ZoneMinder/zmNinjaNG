@@ -61,14 +61,14 @@ export default function Server() {
   // Fetch server information
   const { data: servers, isLoading: serversLoading } = useQuery({
     queryKey: queryKeys.servers(currentProfile?.id),
-    queryFn: getServers,
+    queryFn: () => getServers(getCurrentSession().client),
     enabled: !!currentProfile && isAuthenticated,
   });
 
   // Fetch daemon status
   const { data: isDaemonRunning, isLoading: daemonLoading } = useQuery({
     queryKey: queryKeys.daemonCheck(currentProfile?.id),
-    queryFn: () => getDaemonCheck(),
+    queryFn: () => getDaemonCheck(getCurrentSession().client),
     enabled: !!currentProfile && isAuthenticated,
     refetchInterval: bandwidth.daemonCheckInterval,
   });
@@ -76,14 +76,14 @@ export default function Server() {
   // Fetch load average
   const { data: loadData, isLoading: loadLoading } = useQuery({
     queryKey: queryKeys.serverLoad(currentProfile?.id),
-    queryFn: () => getLoad(),
+    queryFn: () => getLoad(getCurrentSession().client),
     enabled: !!currentProfile && isAuthenticated,
   });
 
   // Fetch disk usage
   const { data: diskData, isLoading: diskLoading } = useQuery({
     queryKey: queryKeys.diskUsage(currentProfile?.id),
-    queryFn: () => getDiskPercent(),
+    queryFn: () => getDiskPercent(getCurrentSession().client),
     enabled: !!currentProfile && isAuthenticated,
   });
 
@@ -104,7 +104,7 @@ export default function Server() {
   // Fetch storages
   const { data: storages } = useQuery({
     queryKey: queryKeys.storages(currentProfile?.id),
-    queryFn: getStorages,
+    queryFn: () => getStorages(getCurrentSession().client),
     enabled: !!currentProfile && isAuthenticated,
   });
 

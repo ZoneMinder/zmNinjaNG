@@ -638,11 +638,12 @@ const getServerHealthTool: ToolDefinition = {
   schema: { type: 'object', properties: {}, additionalProperties: false },
   execute: (_input, ctx) =>
     safeExecute('get_server_health', async () => {
+      const client = getSession(ctx.profileId).client;
       const [load, disk, daemonRunning, version] = await Promise.all([
-        getLoad(),
-        getDiskPercent(),
-        getDaemonCheck(),
-        getVersion(getSession(ctx.profileId).client),
+        getLoad(client),
+        getDiskPercent(client),
+        getDaemonCheck(client),
+        getVersion(client),
       ]);
       const result: {
         load: number | number[];
@@ -660,12 +661,12 @@ const getServerHealthTool: ToolDefinition = {
       // storage.json and servers.json are unsupported/empty on some ZM builds;
       // degrade gracefully instead of failing the whole tool (refs #246).
       try {
-        result.storages = (await getStorages()).map(mapStorage);
+        result.storages = (await getStorages(client)).map(mapStorage);
       } catch {
         // omit storages
       }
       try {
-        result.serverCount = (await getServers()).length;
+        result.serverCount = (await getServers(client)).length;
       } catch {
         // omit serverCount
       }

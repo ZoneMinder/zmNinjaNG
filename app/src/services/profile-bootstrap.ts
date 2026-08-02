@@ -174,7 +174,7 @@ export async function bootstrapMultiPortStreaming(
   try {
     log.profileService('Fetching server configuration for multi-port streaming', LogLevel.INFO);
     const { fetchMinStreamingPort } = await import('../api/server');
-    const minPort = await fetchMinStreamingPort();
+    const minPort = await fetchMinStreamingPort(getSession(profile.id).client);
 
     if (minPort === null) {
       log.profileService('Multi-port streaming not configured on server', LogLevel.DEBUG);
@@ -231,13 +231,13 @@ export async function bootstrapMultiPortStreaming(
 /**
  * Bootstrap multi-server map from /servers.json
  */
-export async function bootstrapServerMap(): Promise<void> {
+export async function bootstrapServerMap(profile: Profile): Promise<void> {
   try {
     const { getServers } = await import('../api/server');
     const { buildServerMap, setServerMap } = await import('../lib/zm/server-resolver');
 
     log.profileService('Fetching server list for multi-server routing', LogLevel.INFO);
-    const servers = await getServers();
+    const servers = await getServers(getSession(profile.id).client);
 
     if (servers.length === 0) {
       log.profileService('No servers returned, single-server mode', LogLevel.DEBUG);
@@ -310,7 +310,7 @@ export async function performBootstrap(
   // SSL trust must be configured before any API calls
   await bootstrapSSLTrust(profile);
   await bootstrapAuth(profile, context);
-  await bootstrapServerMap();
+  await bootstrapServerMap(profile);
   await bootstrapTimezone(profile, context);
   await bootstrapZmsPath(profile, context);
   await bootstrapGo2RTCPath(profile, context);
