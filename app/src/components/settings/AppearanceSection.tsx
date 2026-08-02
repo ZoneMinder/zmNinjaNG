@@ -435,6 +435,7 @@ function ThumbnailFallbackChainEditor({ chain, onChange }: ThumbnailFallbackChai
                 className="h-5 w-5"
                 disabled={index === 0}
                 onClick={() => move(index, -1)}
+                title={t('settings.appearance.thumbnail_chain.move_up')}
                 aria-label={t('settings.appearance.thumbnail_chain.move_up')}
                 data-testid={`settings-thumbnail-chain-${entry.type}-up`}
               >
@@ -447,6 +448,7 @@ function ThumbnailFallbackChainEditor({ chain, onChange }: ThumbnailFallbackChai
                 className="h-5 w-5"
                 disabled={index === safeChain.length - 1}
                 onClick={() => move(index, 1)}
+                title={t('settings.appearance.thumbnail_chain.move_down')}
                 aria-label={t('settings.appearance.thumbnail_chain.move_down')}
                 data-testid={`settings-thumbnail-chain-${entry.type}-down`}
               >

@@ -411,6 +411,7 @@ export default function Events() {
                 variant="outline"
                 size="icon"
                 onClick={() => handleViewModeChange(viewMode === 'list' ? 'montage' : 'list')}
+                title={viewMode === 'list' ? t('events.view_montage') : t('events.view_list')}
                 aria-label={viewMode === 'list' ? t('events.view_montage') : t('events.view_list')}
                 data-testid="events-view-toggle"
               >
@@ -448,6 +449,7 @@ export default function Events() {
                     variant={activeFilterCount > 0 ? 'default' : 'outline'}
                     size="icon"
                     className="relative"
+                    title={t('events.filters')}
                     aria-label={t('events.filters')}
                     data-testid="events-filter-button"
                   >

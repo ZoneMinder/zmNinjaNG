@@ -218,7 +218,7 @@ export default function AppLayout() {
           {/* Menu on the left so the button sits on the side the drawer opens from. */}
           <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" aria-label={t('app.navigation_menu')} data-testid="mobile-menu-button">
+              <Button variant="ghost" size="icon" title={t('app.navigation_menu')} aria-label={t('app.navigation_menu')} data-testid="mobile-menu-button">
                 <Menu className="h-5 w-5" />
               </Button>
             </SheetTrigger>

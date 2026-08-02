@@ -8,7 +8,7 @@
 
 import { useState, useRef, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Button } from '../components/ui/button';
+import { Button, HintButton } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../components/ui/card';
@@ -439,15 +439,17 @@ export default function ProfileForm() {
                 data-testid="setup-password"
               />
               {password && (
-                <button
+                <HintButton
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground transition-colors"
                   tabIndex={-1}
+                  title={showPassword ? t('common.hide_password') : t('common.show_password')}
+                  aria-label={showPassword ? t('common.hide_password') : t('common.show_password')}
                   data-testid="setup-password-toggle"
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
+                </HintButton>
               )}
             </div>
             <p className="text-xs text-muted-foreground">

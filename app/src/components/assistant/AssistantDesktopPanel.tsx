@@ -117,6 +117,7 @@ export function AssistantDesktopPanel() {
             className="h-7 w-7"
             onClick={clear}
             disabled={!canClear}
+            title={t('assistant.clear')}
             aria-label={t('assistant.clear')}
             data-testid="assistant-clear"
           >
@@ -128,6 +129,7 @@ export function AssistantDesktopPanel() {
             size="icon"
             className="h-7 w-7"
             onClick={minimize}
+            title={t('assistant.minimize')}
             aria-label={t('assistant.minimize')}
             data-testid="assistant-minimize"
           >
@@ -139,6 +141,7 @@ export function AssistantDesktopPanel() {
             size="icon"
             className="h-7 w-7"
             onClick={close}
+            title={t('common.close')}
             aria-label={t('common.close')}
             data-testid="assistant-close"
           >

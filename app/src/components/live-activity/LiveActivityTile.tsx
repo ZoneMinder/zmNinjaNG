@@ -18,6 +18,7 @@ import { getMonitorAspectRatio } from '../../lib/monitor/monitor-rotation';
 import { MONITOR_UI } from '../../lib/zmninja-ng-constants';
 import { MontageMonitor } from '../monitors/MontageMonitor';
 import { LiveActivityStateIcon } from './LiveActivityStateIcon';
+import { HintButton } from '../ui/button';
 
 interface LiveActivityTileProps {
   entry: ActiveMonitorEntry;
@@ -126,7 +127,7 @@ export function LiveActivityTile({
       {/* Sits where the alarm-count badge used to, clear of the tile header's
           own buttons. stopPropagation so clearing a tile never doubles as a
           click through to the monitor underneath. */}
-      <button
+      <HintButton
         type="button"
         onClick={(event) => {
           event.stopPropagation();
@@ -138,7 +139,7 @@ export function LiveActivityTile({
         data-testid={`live-activity-dismiss-${entry.monitorId}`}
       >
         <X className="h-3.5 w-3.5" />
-      </button>
+      </HintButton>
 
       {/* Siblings of the tile rather than props of it, so the value that
           changes every second never reaches the memo'd component. */}

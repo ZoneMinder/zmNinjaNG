@@ -44,7 +44,10 @@
     "running": "Läuft",
     "stopped": "Gestoppt",
     "done": "Fertig",
-    "press_back_again_to_exit": "Zum Beenden erneut zurück"
+    "press_back_again_to_exit": "Zum Beenden erneut zurück",
+    "expand": "Aufklappen",
+    "collapse": "Zuklappen",
+    "remove": "Entfernen"
   },
   "app": {
     "name": "zmNinjaNg",
@@ -236,7 +239,8 @@
       "loading": "Tags werden geladen...",
       "moreCount": "+{{count}} mehr"
     },
-    "now": "jetzt"
+    "now": "jetzt",
+    "remove_tag": "{{name}} entfernen"
   },
   "event_detail": {
     "event_id": "Ereignis ID",
@@ -835,7 +839,9 @@
     "select_profile_first": "Wählen Sie zuerst ein Profil",
     "source_websocket": "Echtzeit",
     "source_push": "Push",
-    "source_poll": "Abgefragt"
+    "source_poll": "Abgefragt",
+    "unread_count_one": "{{count}} ungelesene Benachrichtigung",
+    "unread_count_other": "{{count}} ungelesene Benachrichtigungen"
   },
   "notification_settings": {
     "title": "Benachrichtigungseinstellungen",
@@ -1316,7 +1322,8 @@
     "pin_changed": "Kiosk-PIN aktualisiert",
     "pin_cleared": "Kiosk-PIN entfernt",
     "pin_setting_label": "Kiosk-PIN",
-    "pin_setting_desc": "PIN zum Sperren und Entsperren des Kiosk-Modus"
+    "pin_setting_desc": "PIN zum Sperren und Entsperren des Kiosk-Modus",
+    "pin_backspace": "Letzte Ziffer löschen"
   },
   "command_palette": {
     "title": "Springe zu",

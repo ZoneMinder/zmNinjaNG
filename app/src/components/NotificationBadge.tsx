@@ -5,17 +5,20 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Bell } from 'lucide-react';
 import { useProfileStore } from '../stores/profile';
 import { useNotificationStore } from '../stores/notifications';
 import { NOTIFICATION_UI } from '../lib/zmninja-ng-constants';
+import { HintButton } from './ui/button';
 
 // Module-level: persists across component mount/unmount cycles so
 // navigating between pages doesn't re-trigger the animation.
 let lastKnownUnreadCount = 0;
 
 export function NotificationBadge() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const currentProfileId = useProfileStore((state) => state.currentProfileId);
   const unreadCount = useNotificationStore((state) => {
@@ -46,14 +49,15 @@ export function NotificationBadge() {
   if (unreadCount === 0) return null;
 
   return (
-    <button
+    <HintButton
       className={
         isRinging
           ? "relative inline-flex items-center justify-center h-7 w-7 rounded-full bg-destructive/20 transition-colors duration-500"
           : "relative inline-flex items-center justify-center h-7 w-7 rounded-full bg-muted hover:bg-muted/80 transition-colors duration-500"
       }
       onClick={(e) => { e.stopPropagation(); navigate('/notifications/history'); }}
-      aria-label={`${unreadCount} unread notifications`}
+      title={t('notification_history.unread_count', { count: unreadCount })}
+      aria-label={t('notification_history.unread_count', { count: unreadCount })}
       data-testid="notification-badge"
     >
       <Bell
@@ -67,6 +71,6 @@ export function NotificationBadge() {
       <span className="absolute -top-1 -right-1 h-4 min-w-4 px-0.5 flex items-center justify-center text-[9px] font-bold rounded-full bg-destructive text-destructive-foreground">
         {unreadCount > 99 ? '99+' : unreadCount}
       </span>
-    </button>
+    </HintButton>
   );
 }

@@ -44,7 +44,10 @@
     "running": "En ejecución",
     "stopped": "Detenido",
     "done": "Listo",
-    "press_back_again_to_exit": "Pulsa atrás de nuevo para salir"
+    "press_back_again_to_exit": "Pulsa atrás de nuevo para salir",
+    "expand": "Expandir",
+    "collapse": "Contraer",
+    "remove": "Quitar"
   },
   "app": {
     "name": "zmNinjaNg",
@@ -236,7 +239,8 @@
       "loading": "Cargando etiquetas...",
       "moreCount": "+{{count}} más"
     },
-    "now": "ahora"
+    "now": "ahora",
+    "remove_tag": "Quitar {{name}}"
   },
   "event_detail": {
     "event_id": "ID de Evento",
@@ -835,7 +839,9 @@
     "select_profile_first": "Seleccione un perfil primero",
     "source_websocket": "Tiempo real",
     "source_push": "Push",
-    "source_poll": "Consultado"
+    "source_poll": "Consultado",
+    "unread_count_one": "{{count}} notificación sin leer",
+    "unread_count_other": "{{count}} notificaciones sin leer"
   },
   "notification_settings": {
     "title": "Notificaciones",
@@ -1316,7 +1322,8 @@
     "pin_changed": "PIN de kiosco actualizado",
     "pin_cleared": "PIN de kiosco eliminado",
     "pin_setting_label": "PIN de kiosco",
-    "pin_setting_desc": "PIN para bloquear y desbloquear el modo kiosco"
+    "pin_setting_desc": "PIN para bloquear y desbloquear el modo kiosco",
+    "pin_backspace": "Borrar último dígito"
   },
   "command_palette": {
     "title": "Ir a",

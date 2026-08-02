@@ -49,6 +49,14 @@ Controls at the bottom of the sidebar:
 - **Keep screen awake (Insomnia)**: stops the device from sleeping while you watch live feeds. Useful on a wall display or while monitoring.
 - **Kiosk lock**: locks the app into kiosk mode; unlocking requires your PIN or biometrics. See {doc}`kiosk`.
 
+## Finding out what a button does
+
+Much of the app is icon-only buttons: a download arrow on a monitor tile, a magnifier on the timeline, a chevron that collapses a panel. On desktop, resting the mouse on one shows its name.
+
+On a phone or tablet there is nothing to hover, so press and hold the button instead. After about half a second its name appears in a small message at the bottom of the screen, and the button does not act. Let go and nothing happens; tap it normally when you want it to run.
+
+If you start scrolling or swiping instead of holding still, the name does not appear, so the gesture never gets in the way of moving around a list.
+
 ## Supported Features
 
 | Feature | Status |

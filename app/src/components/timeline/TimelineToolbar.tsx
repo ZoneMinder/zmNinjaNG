@@ -104,6 +104,7 @@ export function TimelineToolbar({
               variant="ghost"
               size="icon"
               className="h-6 w-6 text-muted-foreground"
+              title={t('sidebar.help')}
               aria-label={t('sidebar.help')}
               data-testid="timeline-help-button"
             >

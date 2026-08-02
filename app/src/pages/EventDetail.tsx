@@ -385,6 +385,7 @@ export default function EventDetail() {
             variant="ghost"
             size="icon"
             onClick={goBack}
+            title={t('common.go_back')}
             aria-label={t('common.go_back')}
             className="h-8 w-8"
             data-testid="event-detail-back"
@@ -396,6 +397,7 @@ export default function EventDetail() {
             size="icon"
             onClick={goToPrevEvent}
             disabled={isLoadingPrev}
+            title={t('common.previous')}
             aria-label={t('common.previous')}
             className="h-7 w-7"
             data-testid="event-detail-prev"
@@ -423,6 +425,7 @@ export default function EventDetail() {
             size="icon"
             onClick={() => { void goToNextEvent(); }}
             disabled={isLoadingNext}
+            title={t('common.next')}
             aria-label={t('common.next')}
             className="h-7 w-7"
             data-testid="event-detail-next"

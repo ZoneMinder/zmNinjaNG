@@ -10,7 +10,7 @@ import { memo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
-import { Button } from '../ui/button';
+import { Button, HintButton } from '../ui/button';
 import { Activity, Settings, Download, Clock, Video, Eye, Disc, Volume2, VolumeX } from 'lucide-react';
 import { cn, formatEventCount } from '../../lib/utils';
 import { handleKeyClick } from '../../lib/tv/tv-a11y';
@@ -140,7 +140,7 @@ function MonitorCardComponent({
           <div className="flex items-center gap-1.5">
             <div className="text-xs font-semibold truncate flex-1 min-w-0" title={monitor.Name} data-testid="monitor-name">{monitor.Name}</div>
             {isRTC && (
-              <button
+              <HintButton
                 type="button"
                 className="h-4 w-4 shrink-0 text-muted-foreground hover:text-foreground"
                 onClick={(e) => { e.stopPropagation(); setIsMuted((m) => !m); }}
@@ -149,7 +149,7 @@ function MonitorCardComponent({
                 data-testid="monitor-volume-btn"
               >
                 {isMuted ? <VolumeX className="h-3 w-3" /> : <Volume2 className="h-3 w-3" />}
-              </button>
+              </HintButton>
             )}
             <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 shrink-0">
               {monitor.Id}
@@ -289,7 +289,7 @@ function MonitorCardComponent({
                 ID: {monitor.Id}
               </Badge>
               {isRTC && (
-                <button
+                <HintButton
                   type="button"
                   className="h-5 w-5 shrink-0 text-muted-foreground hover:text-foreground"
                   onClick={(e) => { e.stopPropagation(); setIsMuted((m) => !m); }}
@@ -298,7 +298,7 @@ function MonitorCardComponent({
                   data-testid="monitor-volume-btn"
                 >
                   {isMuted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
-                </button>
+                </HintButton>
               )}
             </div>
             <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">

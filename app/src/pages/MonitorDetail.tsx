@@ -237,6 +237,7 @@ export default function MonitorDetail() {
             variant="ghost"
             size="icon"
             onClick={goBack}
+            title={t('common.go_back')}
             aria-label={t('common.go_back')}
             className="h-8 w-8"
             data-testid="monitor-detail-back"
@@ -248,6 +249,7 @@ export default function MonitorDetail() {
             size="icon"
             onClick={onSwipeRight}
             disabled={!hasPrev}
+            title={t('common.previous')}
             aria-label={t('common.previous')}
             className="h-7 w-7"
             data-testid="monitor-detail-prev"
@@ -281,6 +283,7 @@ export default function MonitorDetail() {
             size="icon"
             onClick={onSwipeLeft}
             disabled={!hasNext}
+            title={t('common.next')}
             aria-label={t('common.next')}
             className="h-7 w-7"
             data-testid="monitor-detail-next"
@@ -305,6 +308,7 @@ export default function MonitorDetail() {
           <Button
             variant="ghost"
             size="icon"
+            title={t('monitor_detail.settings')}
             aria-label={t('monitor_detail.settings')}
             className="h-8 w-8 sm:h-9 sm:w-9"
             onClick={() => setShowSettingsDialog(true)}
@@ -452,6 +456,7 @@ export default function MonitorDetail() {
               size="icon"
               className="h-8 w-8"
               onClick={handleToggleFullscreen}
+              title={t('monitor_detail.maximize')}
               aria-label={t('monitor_detail.maximize')}
               data-testid="monitor-detail-maximize"
             >

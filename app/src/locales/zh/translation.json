@@ -44,7 +44,10 @@
     "running": "运行中",
     "stopped": "已停止",
     "done": "完成",
-    "press_back_again_to_exit": "再次返回以退出"
+    "press_back_again_to_exit": "再次返回以退出",
+    "expand": "展开",
+    "collapse": "收起",
+    "remove": "移除"
   },
   "app": {
     "name": "zmNinjaNg",
@@ -236,7 +239,8 @@
       "loading": "正在加载标签...",
       "moreCount": "+{{count}} 更多"
     },
-    "now": "现在"
+    "now": "现在",
+    "remove_tag": "移除 {{name}}"
   },
   "event_detail": {
     "event_id": "事件 ID",
@@ -835,7 +839,9 @@
     "select_profile_first": "请先选择配置",
     "source_websocket": "实时",
     "source_push": "推送",
-    "source_poll": "轮询"
+    "source_poll": "轮询",
+    "unread_count_one": "{{count}} 条未读通知",
+    "unread_count_other": "{{count}} 条未读通知"
   },
   "notification_settings": {
     "title": "通知设置",
@@ -1316,7 +1322,8 @@
     "pin_changed": "展台PIN已更新",
     "pin_cleared": "展台PIN已移除",
     "pin_setting_label": "展台PIN",
-    "pin_setting_desc": "用于锁定和解锁展台模式的PIN"
+    "pin_setting_desc": "用于锁定和解锁展台模式的PIN",
+    "pin_backspace": "删除最后一位"
   },
   "command_palette": {
     "title": "跳转至",

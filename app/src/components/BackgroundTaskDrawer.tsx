@@ -93,6 +93,8 @@ function TaskItem({ task }: TaskItemProps) {
               size="sm"
               onClick={() => cancelTask(task.id)}
               className="h-6 w-6 p-0"
+              title={t('common.cancel')}
+              aria-label={t('common.cancel')}
               data-testid="task-cancel-button"
             >
               <X className="h-3 w-3" />
@@ -104,6 +106,8 @@ function TaskItem({ task }: TaskItemProps) {
               size="sm"
               onClick={() => removeTask(task.id)}
               className="h-6 w-6 p-0"
+              title={t('common.remove')}
+              aria-label={t('common.remove')}
               data-testid="task-remove-button"
             >
               <X className="h-3 w-3" />
@@ -253,6 +257,8 @@ export function BackgroundTaskDrawer() {
             size="sm"
             onClick={() => setDrawerState(active.length > 0 ? 'collapsed' : 'badge')}
             className="h-7 w-7 p-0"
+            title={t('common.collapse')}
+            aria-label={t('common.collapse')}
             data-testid="collapse-drawer-button"
           >
             <ChevronDown className="h-4 w-4" />

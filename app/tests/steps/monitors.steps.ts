@@ -276,3 +276,41 @@ Then('the other badged monitors should keep theirs', async ({ page }) => {
     await expect(card.getByTestId('monitor-new-events-badge')).toHaveCount(1);
   }
 });
+
+// The label the view toggle carried before the long press. The hint should
+// echo it, and it should still be the label afterwards: if the button had
+// acted, the toggle would now advertise the opposite view.
+let heldButtonLabel = '';
+
+When('I long-press the monitors view toggle', async ({ page }) => {
+  const toggle = page.getByTestId('monitors-view-toggle');
+  await expect(toggle).toBeVisible({ timeout: testConfig.timeouts.pageLoad });
+
+  const label = await toggle.getAttribute('title');
+  expect(label, 'the view toggle needs a title for the hint to show').toBeTruthy();
+  heldButtonLabel = label as string;
+
+  const box = await toggle.boundingBox();
+  expect(box, 'the view toggle needs a box to press in the middle of').not.toBeNull();
+  const center = { clientX: box!.x + box!.width / 2, clientY: box!.y + box!.height / 2 };
+
+  // A real finger, not a mouse: the hint deliberately ignores mouse presses
+  // because hover already reveals the title there.
+  await toggle.dispatchEvent('pointerdown', { pointerType: 'touch', pointerId: 1, isPrimary: true, ...center });
+});
+
+Then('I should see a hint toast naming the view toggle', async ({ page }) => {
+  // No fixed wait: the toast only appears once the hold passes the threshold,
+  // so the auto-retrying assertion is what times the press.
+  await expect(page.locator('[data-sonner-toast]')).toHaveText(heldButtonLabel, {
+    timeout: testConfig.timeouts.transition,
+  });
+
+  const toggle = page.getByTestId('monitors-view-toggle');
+  await toggle.dispatchEvent('pointerup', { pointerType: 'touch', pointerId: 1, isPrimary: true });
+  await toggle.dispatchEvent('click');
+});
+
+Then('the monitors view should not have switched', async ({ page }) => {
+  await expect(page.getByTestId('monitors-view-toggle')).toHaveAttribute('title', heldButtonLabel);
+});

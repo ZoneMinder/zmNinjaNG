@@ -6,9 +6,11 @@
  */
 
 import { memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import type { Tag } from '../../api/types';
+import { HintButton } from '../ui/button';
 
 interface TagChipProps {
   /** Tag to display */
@@ -46,6 +48,7 @@ function TagChipComponent({
   className,
   size = 'sm',
 }: TagChipProps) {
+  const { t } = useTranslation();
   const hue = getTagColorHue(tag.Name);
 
   const handleRemove = (e: React.MouseEvent) => {
@@ -70,18 +73,19 @@ function TagChipComponent({
         {tag.Name}
       </span>
       {removable && onRemove && (
-        <button
+        <HintButton
           type="button"
           onClick={handleRemove}
           className={cn(
             'rounded-full hover:bg-black/10 transition-colors flex-shrink-0',
             size === 'sm' ? 'p-0.5' : 'p-0.5'
           )}
-          aria-label={`Remove ${tag.Name}`}
+          title={t('events.remove_tag', { name: tag.Name })}
+          aria-label={t('events.remove_tag', { name: tag.Name })}
           data-testid="tag-chip-remove"
         >
           <X className={cn(size === 'sm' ? 'h-2.5 w-2.5' : 'h-3 w-3')} />
-        </button>
+        </HintButton>
       )}
     </span>
   );
