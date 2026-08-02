@@ -269,6 +269,14 @@ SSLTrust plugin API change (breaking, replaced in one PR — no dual API):
 - TS definitions in `app/src/plugins/ssl-trust/definitions.ts` + the test
   mock in `tests/setup.ts` update together (Native contract).
 
+MAINTAINER DECISION (2026-08-02, PR #338 final review): when any profile
+enables self-signed trust, native trust is enabled globally and hosts
+without a pinned fingerprint are accepted (fail-open TOFU). This widens
+the pre-branch blast radius from one profile to all hosts and is ACCEPTED
+deliberately: it preserves ZoneMinder multi-server setups whose sibling
+stream hosts differ from profile URLs. Electron remains a global
+trust-all boolean. Revisit if per-host scoping becomes necessary.
+
 ### 8. Streams and montage
 
 - Stream URL builders (`lib/monitor/*`, `getEffectiveMinStreamingPort`,
@@ -381,6 +389,12 @@ before every commit (P3), full `npm run gates` + full e2e before each PR.
 3. `monitorSeen` store: verify per-profile keying; stop clearing on
    switch if it is (implementer verifies; fix keying if not).
 4. Locales ×5. User doc page for All mode (P10).
+5. Phase 2 MUST fix `reLoginFor` (`app/src/stores/profile.ts`) before
+   aggregate readers go live: it currently ignores its `profileId`
+   argument and re-logs-in the CURRENT profile; for a non-current profile
+   a 401 recovery wastes a login and falsely reports success while that
+   profile's token stays stale (correctness bug, not a credential leak -
+   the POST always targets the current profile's own server).
 
 ### Phase 3 — Events + Timeline + notifications
 1. Failing tests first: merge/sort across timezones and colliding event
