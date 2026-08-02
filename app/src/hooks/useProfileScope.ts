@@ -6,7 +6,7 @@
  * sentinel). `profiles` is always an array so consumers fan out over
  * `scope.profiles` identically in both modes, with no branches.
  *
- * IMPORTANT: mirrors useCurrentProfile's selector discipline — stable
+ * IMPORTANT: mirrors useCurrentProfile's selector discipline: stable
  * primitives from the profile store, useShallow for arrays/objects, and
  * settings merged inside useMemo. Do NOT call getProfileSettings() inside a
  * selector; it allocates a new object on every call and causes infinite
