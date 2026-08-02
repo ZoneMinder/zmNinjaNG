@@ -18,6 +18,7 @@ import { resolveMinStreamingPort } from '../lib/monitor/multiport';
 import { useCurrentProfile } from './useCurrentProfile';
 import { useBandwidthSettings } from './useBandwidthSettings';
 import { useStreamLifecycle } from './useStreamLifecycle';
+import { useAnalysisFrames } from './useAnalysisFrames';
 import { useFreshAccessToken } from './useFreshAccessToken';
 import { useServerUrls } from './useServerUrls';
 import { useVisibilityResume } from './useVisibilityResume';
@@ -112,6 +113,20 @@ export function useMonitorStream({
     mediaRef: imgRef,
     logFn: log.monitor,
     enabled,
+    minStreamingPort: effectiveMinStreamingPort,
+    apiTimeoutSeconds: settings.apiTimeoutSeconds,
+  });
+
+  // Analysis frames: applied to the live connection by command, and re-applied
+  // from the load handler below whenever a fresh connkey replaces it.
+  const analysisFrames = useAnalysisFrames({
+    monitorId,
+    portalUrl: resolvedPortalUrl,
+    accessToken,
+    connKey,
+    viewMode: effectiveViewMode,
+    enabled,
+    showAnalysis: settings.showAnalysisFrames,
     minStreamingPort: effectiveMinStreamingPort,
     apiTimeoutSeconds: settings.apiTimeoutSeconds,
   });
@@ -211,8 +226,11 @@ export function useMonitorStream({
   };
 
   // Reset the backoff counter (and cancel any pending reconnect) once a frame
-  // loads, so a later independent drop starts a fresh backoff.
+  // loads, so a later independent drop starts a fresh backoff. A frame is also
+  // the first proof that this connection's zms command socket exists, which is
+  // when a remembered analysis setting can be applied to it.
   const reportStreamLoad = () => {
+    analysisFrames.applyOnStreamLoad();
     reconnectAttemptRef.current = 0;
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);

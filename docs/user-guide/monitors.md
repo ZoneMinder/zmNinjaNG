@@ -73,6 +73,14 @@ The **Always use ZMS for events** toggle at the top of the Video tab in the moni
 
 The Layers button in the live view toolbar toggles the zone overlay. When active, each detection zone is drawn as a semi-transparent polygon colored by its type: Active (green), Inclusive (blue), Exclusive (red), Preclusive (amber), Inactive (gray), Privacy (purple). A legend in the bottom-left of the player lists the types present on that monitor. Hovering a zone shows its name and type. Inactive zones appear gray.
 
+#### Analysis Frames
+
+The scan button in the toolbar switches the live feed from the captured image to ZoneMinder's analysis image, which draws the motion overlay the analysis daemon produces: the changed pixels it scored and the zones that fired. It is the quickest way to see whether a monitor's zones and sensitivity are set the way you meant.
+
+The same button sits on Montage, the Monitors page, and Live Activity, and all four share one setting, so turning it on in one view turns it on in the others. The app remembers it per profile and applies it again to each stream it opens, including after a reconnect.
+
+Three things to expect. It works on MJPEG streams only, so a monitor served over Go2RTC keeps showing the normal picture. It needs Streaming Mode set to Live; in snapshot mode the button is disabled, because ZoneMinder serves single images straight from the capture buffer and never draws the overlay on them. And a monitor whose Analysing setting is None, or one watching a still scene, looks no different, since the overlay only exists on frames where something actually moved.
+
 ### PTZ Controls
 
 If the monitor has PTZ (Pan-Tilt-Zoom) configured in ZoneMinder, directional controls appear below the live view. Use these to pan, tilt, and zoom the camera.

@@ -23,6 +23,7 @@ import { EmptyState } from '../components/ui/empty-state';
 import { resolveQueryError } from '../lib/query/query-error';
 import { RefreshButton } from '../components/common/RefreshButton';
 import { MonitorCard } from '../components/monitors/MonitorCard';
+import { AnalysisFramesToggle } from '../components/monitors/AnalysisFramesToggle';
 import { MonitorSettingsDialog } from '../components/monitor-detail/MonitorSettingsDialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { filterEnabledMonitors, filterMonitorsByGroup } from '../lib/monitor/filters';
@@ -213,6 +214,7 @@ export default function Monitors() {
               </SelectItem>
             </SelectContent>
           </Select>
+          <AnalysisFramesToggle className="h-8 w-8 sm:h-9 sm:w-9" />
           <RefreshButton
             className="h-8 w-8 sm:h-9 sm:w-9"
             data-testid="monitors-refresh-button"

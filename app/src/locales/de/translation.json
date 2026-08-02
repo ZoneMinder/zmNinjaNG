@@ -1271,7 +1271,10 @@
     "connection_error": "Verbindungsfehler",
     "connection_failed": "Stream-Verbindung fehlgeschlagen",
     "fallback_to_mjpeg": "Wechsle zu MJPEG",
-    "retry_connection": "Verbindung wiederholen"
+    "retry_connection": "Verbindung wiederholen",
+    "analysis_frames": "Analysebilder",
+    "analysis_frames_hint": "ZoneMinders Bewegungsanalyse einblenden. Nur bei MJPEG-Livestreams.",
+    "analysis_needs_streaming": "Analysebilder erfordern den Streaming-Modus Live"
   },
   "groups": {
     "all_monitors": "Alle",

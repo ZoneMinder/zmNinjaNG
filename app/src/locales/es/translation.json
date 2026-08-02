@@ -1271,7 +1271,10 @@
     "connection_error": "Error de Conexión",
     "connection_failed": "Falló la conexión de transmisión",
     "fallback_to_mjpeg": "Cambiando a MJPEG",
-    "retry_connection": "Reintentar Conexión"
+    "retry_connection": "Reintentar Conexión",
+    "analysis_frames": "Fotogramas de análisis",
+    "analysis_frames_hint": "Muestra la superposición de análisis de movimiento de ZoneMinder. Solo en streams MJPEG en directo.",
+    "analysis_needs_streaming": "Los fotogramas de análisis requieren el modo de streaming en directo"
   },
   "groups": {
     "all_monitors": "Todos",

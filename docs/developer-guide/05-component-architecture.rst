@@ -369,6 +369,55 @@ deps as proof of an unmount.
 :doc:`call-flows` walks this same code in "Montage opens and a live MJPEG stream
 runs".
 
+Analysis frames on a running stream
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``hooks/useAnalysisFrames.ts`` puts ZoneMinder's analysis image (the motion
+overlay) on a live view. ZoneMinder offers two ways in, and the difference
+decides the design. ``analysis=1`` on the ``nph-zms`` URL is read once when the
+process starts, so changing it means tearing the stream down and building a new
+one. ``CMD_ANALYZE_ON`` and ``CMD_ANALYZE_OFF`` (19 and 20 in ``ZMS_COMMANDS``)
+go to the running process over its command socket, and the frames swap in place
+with no gap. A toggle wants the second.
+
+The cost of the second is that the state lives in the ``nph-zms`` process rather
+than in ZoneMinder, and this app replaces that process often: the reconnect
+backoff in ``useMonitorStream``, a manual retry, and a visibility resume each
+mint a new connkey, and every new process starts on normal frames. So the
+setting, which is profile-scoped and remembered
+(``showAnalysisFrames``), is applied from two places:
+
+.. code:: tsx
+
+   // The flip itself, against the connection the user is watching
+   const prevShowRef = useRef(showAnalysis);
+   useEffect(() => {
+     if (prevShowRef.current === showAnalysis) return;
+     prevShowRef.current = showAnalysis;
+     apply();
+   }, [showAnalysis]);
+
+   // And again for each new connection, from useMonitorStream's load handler
+   const reportStreamLoad = () => {
+     analysisFrames.applyOnStreamLoad();
+     /* ... backoff reset ... */
+   };
+
+The re-apply hangs off the load handler rather than off ``connKey`` changing
+because ``zms-<connkey>w.sock`` does not exist until the process is up; the
+first decoded frame is the earliest proof that it is. ``apply`` keeps a ref of
+what it last sent and for which connkey, which is what stops a multipart
+``<img>`` firing ``load`` per frame from turning into one request per frame per
+tile, and what lets a fresh connection with the setting off cost no request at
+all.
+
+Two absences are deliberate. Snapshot mode sends nothing, because
+``MonitorStream::SingleImage`` in ZoneMinder reads the capture buffer directly
+and never looks at the frame type, so no parameter or command can put an overlay
+on a single image; ``AnalysisFramesToggle`` disables the button there rather than
+letting it do nothing quietly. And a go2rtc stream has no command socket, so the
+hook only runs on the MJPEG path that ``useMonitorStream`` owns.
+
 Video playback
 --------------
 

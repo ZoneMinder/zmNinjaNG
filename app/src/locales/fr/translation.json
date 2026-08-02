@@ -1271,7 +1271,10 @@
     "connection_error": "Erreur de Connexion",
     "connection_failed": "Échec de la connexion de diffusion",
     "fallback_to_mjpeg": "Passage à MJPEG",
-    "retry_connection": "Réessayer la Connexion"
+    "retry_connection": "Réessayer la Connexion",
+    "analysis_frames": "Images d'analyse",
+    "analysis_frames_hint": "Affiche la surcouche d'analyse de mouvement de ZoneMinder. Uniquement sur les flux MJPEG en direct.",
+    "analysis_needs_streaming": "Les images d'analyse nécessitent le mode de diffusion en direct"
   },
   "groups": {
     "all_monitors": "Tous",
