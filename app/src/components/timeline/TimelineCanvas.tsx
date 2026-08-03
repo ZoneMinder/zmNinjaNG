@@ -377,6 +377,15 @@ const TimelineCanvasInner = ({
             <span className="text-xs font-medium text-foreground/80 truncate max-w-28">
               {monitor.name}
             </span>
+            {monitor.profileChip && (
+              <span
+                className="text-[9px] px-1 py-0 rounded bg-muted text-muted-foreground truncate max-w-[64px] shrink-0"
+                title={monitor.profileChip}
+                data-testid="timeline-monitor-profile-chip"
+              >
+                {monitor.profileChip}
+              </span>
+            )}
           </div>
         ))}
       </div>

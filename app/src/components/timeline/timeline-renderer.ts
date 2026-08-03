@@ -41,6 +41,9 @@ export interface RenderViewport {
 export interface MonitorRow {
   id: string;
   name: string;
+  /** All mode only: the owning profile's display name, for a chip in the
+   *  monitor label sidebar (HTML overlay, not drawn on the canvas itself). */
+  profileChip?: string;
 }
 
 export interface TickMark {

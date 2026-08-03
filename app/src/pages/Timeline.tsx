@@ -14,12 +14,14 @@ import { PageContainer } from '../components/common/PageContainer';
 import { ErrorBanner } from '../components/ui/query-state';
 import { resolveQueryError } from '../lib/query/query-error';
 import { subDays } from 'date-fns';
-import { formatLocalDateTime } from '../lib/time';
+import { formatLocalDateTime, formatForServerInTz } from '../lib/time';
 import { useTranslation } from 'react-i18next';
 import { EmptyState } from '../components/ui/empty-state';
 import { NotificationBadge } from '../components/NotificationBadge';
 import { useTimelineFilters } from '../hooks/useTimelineFilters';
 import { useTimelineData } from '../hooks/useTimelineData';
+import { useScopedTimelineEvents, type ScopedTimelineEvent } from '../hooks/useScopedTimelineEvents';
+import { useProfileScope } from '../hooks/useProfileScope';
 import { useTvKeyHandler } from '../hooks/useTvKeyHandler';
 import { useEventTagMapping } from '../hooks/useEventTags';
 import { TimelineCanvas, type ViewportAction, type ViewportActionType } from '../components/timeline/TimelineCanvas';
@@ -87,12 +89,15 @@ export default function Timeline() {
     scrubberStateRef.current = state;
   }, []);
 
-  /** Navigate to event, saving scrubber state for return. */
-  const navigateToEvent = useCallback((eventId: string) => {
+  /** Navigate to event, saving scrubber state for return. All mode routes
+   *  through the /all/ deep route so EventDetail resolves its session from
+   *  the owning profile instead of the (absent) current one (refs #337). */
+  const navigateToEvent = useCallback((eventId: string, profileId?: string) => {
     if (scrubberStateRef.current) {
       sessionStorage.setItem(SCRUBBER_KEY, JSON.stringify(scrubberStateRef.current));
     }
-    navigate(`/events/${eventId}`, { state: { from: '/timeline' } });
+    const path = profileId ? `/all/events/${profileId}/${eventId}` : `/events/${eventId}`;
+    navigate(path, { state: { from: '/timeline' } });
   }, [navigate]);
 
   // Event preview popover state
@@ -101,14 +106,43 @@ export default function Timeline() {
     position: { x: number; y: number };
   } | null>(null);
 
-  const { data, isLoading, error, enabledMonitors, allTimelineEvents, eventIds, rawEventMap } = useTimelineData({
+  // Single code path picked between two hooks (not one shared hook): the
+  // single-profile path keeps live-mode notification injection and the
+  // per-monitor cause-filter fan-out, neither of which the All-mode
+  // aggregate implements yet (see useScopedTimelineEvents' doc comment).
+  // Both hooks are always called (React hooks rules); each disables its own
+  // queries via `enabled` so only the active mode's hook actually fetches.
+  const scope = useProfileScope();
+  const isAllMode = scope?.mode === 'all';
+  const totalScopeProfiles = scope?.profiles.length ?? 0;
+
+  const single = useTimelineData({
     startDate,
     endDate,
     liveMode,
     selectedMonitorIds,
     onlyDetectedObjects,
     causeFilter,
+    enabled: !isAllMode,
   });
+  const scoped = useScopedTimelineEvents({
+    startDate,
+    endDate,
+    selectedMonitorIds,
+    onlyDetectedObjects,
+    causeFilter,
+    enabled: isAllMode,
+  });
+
+  const data = single.data;
+  const isLoading = isAllMode ? scoped.isLoading : single.isLoading;
+  const eventIds = isAllMode ? scoped.eventIds : single.eventIds;
+  const allTimelineEvents: TimelineEvent[] = isAllMode ? scoped.events : single.allTimelineEvents;
+  // Every profile in scope failed and none ever produced an event: distinct
+  // from "no events in range" (refs #337, same suppression semantics as the
+  // Monitors/Events all-failed state).
+  const allFailed = isAllMode && scoped.errors.length > 0 && scoped.errors.length === totalScopeProfiles && scoped.events.length === 0;
+  const visibleErrors = isAllMode ? scoped.errors.filter((err) => !scoped.events.some((e) => e.profileId === err.profileId)) : [];
 
   // In live mode, scroll to NOW after data arrives (not before, to avoid blank canvas)
   const prevDataRef = useRef(data);
@@ -119,14 +153,26 @@ export default function Timeline() {
     }
   }, [liveMode, data, fireViewportAction]);
 
-  // Build monitor lookup map
+  // Build monitor lookup map. All mode keys by `${profileId}:${monitorId}`
+  // since the same numeric monitor id can exist on two servers.
   const monitorNameMap = useMemo(() => {
     const map = new Map<string, string>();
-    for (const { Monitor } of enabledMonitors) {
-      map.set(Monitor.Id, Monitor.Name);
+    if (isAllMode) {
+      for (const s of scoped.enabledMonitors) {
+        map.set(`${s.profileId}:${s.item.Monitor.Id}`, s.item.Monitor.Name);
+      }
+    } else {
+      for (const { Monitor } of single.enabledMonitors) {
+        map.set(Monitor.Id, Monitor.Name);
+      }
     }
     return map;
-  }, [enabledMonitors]);
+  }, [isAllMode, scoped.enabledMonitors, single.enabledMonitors]);
+
+  // Flat monitor list for the filter panel - unwrapped in both modes (the
+  // panel doesn't group by server for Timeline; see the hook's doc comment
+  // for the accepted v1 scope on colliding monitor ids across profiles).
+  const enabledMonitors = isAllMode ? scoped.enabledMonitors.map((s) => s.item) : single.enabledMonitors;
 
   // Detection category state, counts, and filtered events
   const {
@@ -138,18 +184,33 @@ export default function Timeline() {
 
   // Build MonitorRow[] for canvas: only monitors that have events in the filtered set
   const monitorRows: MonitorRow[] = useMemo(() => {
+    if (isAllMode) {
+      const activeKeys = new Set(
+        filteredEvents.map((ev) => `${(ev as ScopedTimelineEvent).profileId}:${ev.monitorId}`)
+      );
+      const rows: MonitorRow[] = [];
+      const seen = new Set<string>();
+      for (const s of scoped.enabledMonitors) {
+        const key = `${s.profileId}:${s.item.Monitor.Id}`;
+        if (activeKeys.has(key) && !seen.has(key)) {
+          seen.add(key);
+          rows.push({ id: s.item.Monitor.Id, name: s.item.Monitor.Name, profileChip: s.profileName });
+        }
+      }
+      return rows;
+    }
     const activeIds = new Set(filteredEvents.map((ev) => ev.monitorId));
     const rows: MonitorRow[] = [];
     // Deduplicate and maintain stable order
     const seen = new Set<string>();
-    for (const { Monitor } of enabledMonitors) {
+    for (const { Monitor } of single.enabledMonitors) {
       if (activeIds.has(Monitor.Id) && !seen.has(Monitor.Id)) {
         seen.add(Monitor.Id);
         rows.push({ id: Monitor.Id, name: Monitor.Name });
       }
     }
     return rows;
-  }, [enabledMonitors, filteredEvents]);
+  }, [isAllMode, scoped.enabledMonitors, single.enabledMonitors, filteredEvents]);
 
   // Canvas time range: fit to actual event extent + "now" (with padding), fall back to filter range
   const { startMs, endMs } = useMemo(() => {
@@ -183,45 +244,90 @@ export default function Timeline() {
     };
   }, [filteredEvents, startDate, endDate]);
 
-  // Fetch tags for loaded events
-  const { getTagsForEvent } = useEventTagMapping({ eventIds });
+  // Fetch tags for loaded events. All mode: skipped (v1) - tags aren't
+  // fetched per-profile here yet; the popover just shows none in that mode
+  // (ponytail: extend useEventTagMapping's per-profile fan-out to Timeline
+  // if this becomes visible in practice).
+  const { getTagsForEvent } = useEventTagMapping({ eventIds, enabled: !isAllMode });
 
   const handleEventClick = useCallback((ev: TimelineEvent) => {
-    // Find the raw API event data for the popover
-    const raw = rawEventMap.get(ev.id);
-    if (!raw) return;
-    // Position the popover near the center of the screen
+    // All mode: the clicked event object IS a ScopedTimelineEvent at runtime
+    // (it came straight from `scoped.events`), so its own fields cover the
+    // popover - no raw-event lookup needed there. Single mode still looks up
+    // the raw API event for fields TimelineEvent doesn't carry.
+    if (!isAllMode && !single.rawEventMap.get(ev.id)) return;
     setSelectedEvent({
       event: ev,
       position: { x: window.innerWidth / 2 - 144, y: 200 },
     });
-  }, [rawEventMap]);
+  }, [isAllMode, single.rawEventMap]);
 
   const handleEventHover = useCallback((_event: TimelineEvent | null, _x: number, _y: number) => {
     // Hover is handled by the canvas renderer (highlight effect)
   }, []);
 
+  // Resolves the owning profile for a tapped event id (scrubber taps only
+  // carry the id, not the full event) by looking it up in the currently
+  // loaded scope. ponytail: a colliding id across two profiles both visible
+  // at once resolves to whichever matches first - accepted v1 edge case,
+  // same class as useScopedEvents' shared-filter-params tradeoff.
+  const resolveEventProfileId = useCallback((eventId: string): string | undefined => {
+    if (!isAllMode) return undefined;
+    return scoped.events.find((e) => e.id === eventId)?.profileId;
+  }, [isAllMode, scoped.events]);
+
   const handleOpenEvent = useCallback((eventId: string) => {
     setSelectedEvent(null);
-    navigateToEvent(eventId);
-  }, [navigateToEvent]);
+    navigateToEvent(eventId, resolveEventProfileId(eventId));
+  }, [navigateToEvent, resolveEventProfileId]);
+
+  const handleScrubberEventTap = useCallback((eventId: string) => {
+    navigateToEvent(eventId, resolveEventProfileId(eventId));
+  }, [navigateToEvent, resolveEventProfileId]);
 
   const handleClosePopover = useCallback(() => {
     setSelectedEvent(null);
   }, []);
 
-  if (error) {
+  // Single mode: unchanged full-page error wall on any query error. All
+  // mode: only when EVERY profile failed with zero data (allFailed above) -
+  // a partial failure instead renders normally with the strips below.
+  if (!isAllMode ? single.error : allFailed) {
     return (
       <div className="p-8">
         <h1 className="text-lg font-bold mb-6">{t('timeline.title')}</h1>
-        <ErrorBanner message={resolveQueryError(error, t, { fallbackKey: 'timeline.load_error' })} />
+        <ErrorBanner message={
+          isAllMode
+            ? resolveQueryError(scoped.errors[0]?.error, t, { fallbackKey: 'timeline.load_error' })
+            : resolveQueryError(single.error, t, { fallbackKey: 'timeline.load_error' })
+        } />
       </div>
     );
   }
 
-  // Build popover event data from selected event
+  // Build popover event data from selected event. All mode synthesizes a
+  // wall-clock `startDateTime` string from the true instant via
+  // formatForServerInTz(startMs, owning profile's tz) so the SAME
+  // parseISO+fmtDate/fmtTime round-trip every other event display uses
+  // renders it correctly, with no timezone-aware formatAppDate call needed
+  // here (refs #337).
   const popoverEvent = selectedEvent ? (() => {
-    const raw = rawEventMap.get(selectedEvent.event.id);
+    if (isAllMode) {
+      const scopedEv = selectedEvent.event as ScopedTimelineEvent;
+      const ownerTz = scope?.profiles.find((p) => p.id === scopedEv.profileId)?.timezone ?? 'UTC';
+      return {
+        id: scopedEv.id,
+        monitorId: scopedEv.monitorId,
+        cause: scopedEv.cause,
+        startDateTime: formatForServerInTz(new Date(scopedEv.startMs), ownerTz),
+        duration: String(Math.max(0, (scopedEv.endMs - scopedEv.startMs) / 1000)),
+        alarmFrames: '0',
+        notes: scopedEv.notes,
+        monitorName: monitorNameMap.get(`${scopedEv.profileId}:${scopedEv.monitorId}`) ?? scopedEv.monitorId,
+        tags: [] as string[],
+      };
+    }
+    const raw = single.rawEventMap.get(selectedEvent.event.id);
     if (!raw) return null;
     return {
       id: raw.Event.Id,
@@ -256,6 +362,33 @@ export default function Timeline() {
           </Button>
         </div>
       </div>
+
+      {/* Per-profile errors: same suppression semantics as Monitors/Events -
+          a strip only for a profile that produced zero events. */}
+      {visibleErrors.length > 0 && (
+        <div className="space-y-2">
+          {visibleErrors.map((err) => (
+            <div
+              key={err.profileId}
+              className="flex items-center gap-2"
+              data-testid={`profile-error-strip-${err.profileId}`}
+            >
+              <ErrorBanner
+                className="flex-1"
+                message={`${err.profileName}: ${resolveQueryError(err.error, t, { fallbackKey: 'timeline.load_error' })}`}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => scoped.refetchProfile(err.profileId)}
+                data-testid={`profile-error-strip-retry-${err.profileId}`}
+              >
+                {t('common.retry')}
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Filters */}
       <TimelineFiltersPanel
@@ -312,7 +445,7 @@ export default function Timeline() {
                 viewportAction={viewportAction}
                 onEventClick={handleEventClick}
                 onEventHover={handleEventHover}
-                onScrubberEventTap={navigateToEvent}
+                onScrubberEventTap={handleScrubberEventTap}
                 onScrubberStateChange={handleScrubberStateChange}
                 initialScrubberState={initialScrubberState}
                 brushMode={brushMode}
@@ -334,7 +467,7 @@ export default function Timeline() {
       )}
 
       {/* Event Statistics */}
-      <TimelineStats events={data?.events ?? []} />
+      <TimelineStats events={isAllMode ? scoped.rawEvents : (data?.events ?? [])} />
     </PageContainer>
   );
 }

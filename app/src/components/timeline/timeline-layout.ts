@@ -9,6 +9,8 @@ export interface TimelineEvent {
   notes: string;
   /** Timestamp (ms) when this event was injected in live mode. Used for pulse animation. */
   arrivedAt?: number;
+  /** All mode only: the owning profile's display name, for chip labels. */
+  profileChip?: string;
 }
 
 /** Fixed layout dimensions for the timeline canvas. */

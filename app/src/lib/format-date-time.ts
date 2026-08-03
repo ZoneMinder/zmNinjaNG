@@ -6,6 +6,7 @@
  */
 
 import { format as dateFnsFormat } from 'date-fns';
+import { toZonedTime } from 'date-fns-tz';
 import { log, LogLevel } from './logger';
 
 // The presets are declared here rather than in stores/settings, so this module
@@ -38,10 +39,28 @@ function resolveTimePatternShort(s: FormatSettings): string {
   return (s.timeFormat || '12h') === '12h' ? 'h:mm a' : 'HH:mm';
 }
 
+/**
+ * date-fns' `format` always reads a Date's LOCAL (browser) getters. When a
+ * caller passes `timeZone`, shift `date` first so those local getters read
+ * as that zone's wall clock instead - the standard trick for formatting an
+ * arbitrary IANA zone with date-fns's own (non -tz) `format`.
+ *
+ * Only apply this to a value that is a TRUE instant (e.g. `Date.now()` or
+ * `eventInstant()`'s result). Event rows/detail already display the
+ * server-local wall-clock string as-is (parsed and re-formatted with the
+ * SAME - browser - getters on both ends, so the digits round-trip
+ * unchanged); passing a timezone there would convert those digits a second
+ * time and corrupt them. Omitting `timeZone` is a no-op - existing call
+ * sites are byte-identical (refs #337).
+ */
+function applyTz(date: Date, timeZone: string | undefined): Date {
+  return timeZone ? toZonedTime(date, timeZone) : date;
+}
+
 /** Format a date (no time) according to user settings */
-export function formatAppDate(date: Date, settings: FormatSettings): string {
+export function formatAppDate(date: Date, settings: FormatSettings, timeZone?: string): string {
   try {
-    return dateFnsFormat(date, resolveDatePattern(settings));
+    return dateFnsFormat(applyTz(date, timeZone), resolveDatePattern(settings));
   } catch (error) {
     log.time('Format failed, using fallback', LogLevel.DEBUG, { error });
     return dateFnsFormat(date, 'MMM d');
@@ -61,9 +80,9 @@ export function formatAppWeekday(date: Date): string {
 }
 
 /** Format time only (with seconds) according to user settings */
-export function formatAppTime(date: Date, settings: FormatSettings): string {
+export function formatAppTime(date: Date, settings: FormatSettings, timeZone?: string): string {
   try {
-    return dateFnsFormat(date, resolveTimePattern(settings));
+    return dateFnsFormat(applyTz(date, timeZone), resolveTimePattern(settings));
   } catch (error) {
     log.time('Format failed, using fallback', LogLevel.DEBUG, { error });
     return dateFnsFormat(date, 'HH:mm:ss');
@@ -71,9 +90,9 @@ export function formatAppTime(date: Date, settings: FormatSettings): string {
 }
 
 /** Format time only (without seconds) according to user settings */
-export function formatAppTimeShort(date: Date, settings: FormatSettings): string {
+export function formatAppTimeShort(date: Date, settings: FormatSettings, timeZone?: string): string {
   try {
-    return dateFnsFormat(date, resolveTimePatternShort(settings));
+    return dateFnsFormat(applyTz(date, timeZone), resolveTimePatternShort(settings));
   } catch (error) {
     log.time('Format failed, using fallback', LogLevel.DEBUG, { error });
     return dateFnsFormat(date, 'HH:mm');
@@ -81,11 +100,11 @@ export function formatAppTimeShort(date: Date, settings: FormatSettings): string
 }
 
 /** Format date + time according to user settings */
-export function formatAppDateTime(date: Date, settings: FormatSettings): string {
+export function formatAppDateTime(date: Date, settings: FormatSettings, timeZone?: string): string {
   try {
     const d = resolveDatePattern(settings);
     const t = resolveTimePattern(settings);
-    return dateFnsFormat(date, `${d}, ${t}`);
+    return dateFnsFormat(applyTz(date, timeZone), `${d}, ${t}`);
   } catch (error) {
     log.time('Format failed, using fallback', LogLevel.DEBUG, { error });
     return dateFnsFormat(date, 'MMM d, HH:mm:ss');
@@ -93,11 +112,11 @@ export function formatAppDateTime(date: Date, settings: FormatSettings): string 
 }
 
 /** Format date + time (short, no seconds) according to user settings */
-export function formatAppDateTimeShort(date: Date, settings: FormatSettings): string {
+export function formatAppDateTimeShort(date: Date, settings: FormatSettings, timeZone?: string): string {
   try {
     const d = resolveDatePattern(settings);
     const t = resolveTimePatternShort(settings);
-    return dateFnsFormat(date, `${d}, ${t}`);
+    return dateFnsFormat(applyTz(date, timeZone), `${d}, ${t}`);
   } catch (error) {
     log.time('Format failed, using fallback', LogLevel.DEBUG, { error });
     return dateFnsFormat(date, 'MMM d, HH:mm');
