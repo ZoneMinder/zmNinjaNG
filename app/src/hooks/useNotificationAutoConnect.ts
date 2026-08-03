@@ -58,6 +58,15 @@ export function useNotificationAutoConnect({
   const hasAttemptedAutoConnect = useRef(false);
   const lastProfileId = useRef<string | null>(null);
 
+  // Always-fresh ref for the ES auto-connect effect below. Bootstrap
+  // routinely writes a NEW profile object with the SAME id (e.g. after a
+  // token refresh) - reading currentProfile through this ref lets that
+  // effect depend on currentProfile's PRIMITIVE fields instead of the
+  // object itself, so identity-only churn doesn't re-run it (refs #337
+  // round 2 critical).
+  const currentProfileRef = useRef(currentProfile);
+  currentProfileRef.current = currentProfile;
+
   // Reset auto-connect flag when notifications are disabled
   useEffect(() => {
     if (!settings?.enabled) {
@@ -92,11 +101,12 @@ export function useNotificationAutoConnect({
   // Auto-connect when profile loads (if enabled)
   // In ES mode: connects websocket. In Direct mode on desktop: starts event poller.
   useEffect(() => {
+    const profile = currentProfileRef.current;
     if (
       !settings?.enabled ||
-      !currentProfile ||
-      !currentProfile.username ||
-      !currentProfile.password ||
+      !profile ||
+      !profile.username ||
+      !profile.password ||
       hasAttemptedAutoConnect.current
     ) {
       return;
@@ -110,7 +120,7 @@ export function useNotificationAutoConnect({
         // The poller's start() emits its own "Starting event poller" log,
         // so we don't duplicate it here.
         hasAttemptedAutoConnect.current = true;
-        startEventPoller(currentProfile.id);
+        startEventPoller(profile.id);
       }
       // Native mobile (iOS/Android): push notifications handle everything via FCM
       return;
@@ -127,7 +137,7 @@ export function useNotificationAutoConnect({
 
     hasAttemptedAutoConnect.current = true;
 
-    log.notifications('Auto-connecting to notification server', LogLevel.INFO, { profileId: currentProfile.id, });
+    log.notifications('Auto-connecting to notification server', LogLevel.INFO, { profileId: profile.id, });
 
     // Unmounting (or a dep change re-running this effect) while the delay or
     // getDecryptedPassword is still in flight must not connect an ownerless
@@ -135,31 +145,36 @@ export function useNotificationAutoConnect({
     let cancelled = false;
 
     const attemptConnect = async () => {
+      // Re-read the ref, not the `profile` captured above: bootstrap can
+      // swap in a new (same-id) profile object while this is in flight.
+      const p = currentProfileRef.current;
+      if (!p) return;
+
       try {
-        const password = await getDecryptedPassword(currentProfile.id);
+        const password = await getDecryptedPassword(p.id);
         if (cancelled) return;
 
         // Check state again right before connecting to avoid race conditions
         // This is crucial because getDecryptedPassword is async and state might have changed
-        const currentState = useNotificationStore.getState().connections[currentProfile.id] ?? 'disconnected';
+        const currentState = useNotificationStore.getState().connections[p.id] ?? 'disconnected';
         if (currentState !== 'disconnected') {
            log.notifications('Skipping auto-connect - already connected or connecting', LogLevel.INFO, { state: currentState,
-             profileId: currentProfile.id, });
+             profileId: p.id, });
            return;
         }
 
         if (password) {
-          await connect(currentProfile.id, currentProfile.username!, password, currentProfile.portalUrl);
-          log.notifications('Auto-connected to notification server', LogLevel.INFO, { profileId: currentProfile.id, });
+          await connect(p.id, p.username!, password, p.portalUrl);
+          log.notifications('Auto-connected to notification server', LogLevel.INFO, { profileId: p.id, });
         } else {
           log.notifications('Auto-connect failed - could not decrypt password', LogLevel.ERROR, {
-            profileId: currentProfile.id,
+            profileId: p.id,
           });
         }
       } catch (error) {
         // The service handles reconnection internally via exponential backoff
         log.notifications('Auto-connect failed, service will retry automatically', LogLevel.ERROR, {
-          profileId: currentProfile.id,
+          profileId: p.id,
           error,
         });
       }
@@ -170,8 +185,29 @@ export function useNotificationAutoConnect({
     return () => {
       cancelled = true;
       clearTimeout(timerId);
+      // Bootstrap replacing the profile object (same id, e.g. after a token
+      // refresh) re-runs this effect via the primitive deps below; without
+      // resetting this flag, the guard at the top of the next run sees it
+      // still true and returns without rescheduling, permanently stranding
+      // this profile un-connected for the session. Harmless on a true
+      // unmount - nothing reads it again (refs #337 round 2 critical).
+      hasAttemptedAutoConnect.current = false;
     };
-  }, [settings?.enabled, settings?.notificationMode, settings?.host, isConnected, connectionState, currentProfile, connect, getDecryptedPassword]);
+    // Depend on currentProfile's PRIMITIVE fields, not the object itself -
+    // see the currentProfileRef comment above.
+  }, [
+    settings?.enabled,
+    settings?.notificationMode,
+    settings?.host,
+    isConnected,
+    connectionState,
+    currentProfile?.id,
+    currentProfile?.username,
+    currentProfile?.password,
+    currentProfile?.portalUrl,
+    connect,
+    getDecryptedPassword,
+  ]);
 
   // Stop event poller on cleanup or when mode/profile changes. stopEventPoller
   // is a no-op when this profile never had a poller (never creates a phantom

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useNotificationStore, startEventPoller, resolvePollIntervalMs } from '../notifications';
 import { useProfileStore } from '../profile';
 import { stopAllEventPollers } from '../../services/eventPoller';
+import { resetAllNotificationServices } from '../../services/notifications';
 import { ALL_PROFILES_ID, asProfileId } from '../../api/types';
 import { getBandwidthSettings } from '../../lib/zmninja-ng-constants';
 import type { ZMAlarmEvent, ConnectionState } from '../../types/notifications';
@@ -402,6 +403,35 @@ describe('Notification Store', () => {
       }
     });
 
+    it('disconnects itself if the app switched to a different real profile while connect() was in flight (refs #337 round 2 minor #2)', async () => {
+      const store = useNotificationStore.getState();
+      try {
+        useProfileStore.setState({ currentProfileId: asProfileId(profileA) });
+
+        let resolveConnect: () => void = () => {};
+        mockService.connect.mockImplementationOnce(
+          () => new Promise<void>((resolve) => { resolveConnect = resolve; })
+        );
+
+        const connectPromise = store.connect(profileA, 'admin', 'secretA', 'http://a.local');
+
+        // The user switches to a different real profile while the
+        // handshake is still in flight. The switch-teardown effect (in
+        // useNotificationAutoConnect) already ran by this point and found
+        // profileA not yet connected, so nothing else will ever disconnect
+        // it once the handshake finally completes.
+        useProfileStore.setState({ currentProfileId: asProfileId(profileB) });
+
+        resolveConnect();
+        await connectPromise;
+
+        expect(useNotificationStore.getState().connections[profileA]).toBe('disconnected');
+        expect(useNotificationStore.getState().currentProfileId).not.toBe(profileA);
+      } finally {
+        useProfileStore.setState({ currentProfileId: null });
+      }
+    });
+
     it('_initialize cleans up a previous registration for the same profile before re-subscribing (refs #337 #10)', async () => {
       const store = useNotificationStore.getState();
       await store.connect(profileA, 'admin', 'secretA', 'http://a.local');
@@ -427,12 +457,16 @@ describe('Notification Store', () => {
       mockService.onStateChange.mock.calls[0][0]('connected');
       mockService.onStateChange.mock.calls[1][0]('connected');
       vi.mocked(stopAllEventPollers).mockClear();
+      vi.mocked(resetAllNotificationServices).mockClear();
 
       useNotificationStore.getState().disconnectAll();
 
       expect(useNotificationStore.getState().connections[profileA]).toBe('disconnected');
       expect(useNotificationStore.getState().connections[profileB]).toBe('disconnected');
       expect(stopAllEventPollers).toHaveBeenCalledTimes(1);
+      // Also sweeps the service registry directly - not just the profiles
+      // `connections` happens to know about (refs #337 round 2 minor #3).
+      expect(resetAllNotificationServices).toHaveBeenCalledTimes(1);
     });
   });
 

@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import {
   getNotificationService,
   resetNotificationService,
+  resetAllNotificationServices,
 } from '../services/notifications';
 import { getEventPoller, stopAllEventPollers, type EventPollerDeps } from '../services/eventPoller';
 import {
@@ -24,7 +25,7 @@ import { getSession } from '../services/sessions';
 import { useProfileStore } from './profile';
 import { useAuthStore, getAuthSlice } from './auth';
 import { useSettingsStore } from './settings';
-import { asProfileId } from '../api/types';
+import { asProfileId, ALL_PROFILES_ID } from '../api/types';
 import { setPushServiceStoreGates } from '../services/pushNotifications';
 import { getBandwidthSettings, NOTIFICATIONS_SERVICE, STORAGE_KEYS, type BandwidthMode } from '../lib/zmninja-ng-constants';
 
@@ -294,17 +295,37 @@ export const useNotificationStore = create<NotificationState>()(
         try {
           await service.connect(config, _buildServiceProviders(profileId, portalUrl));
 
+          const appCurrentProfileId = useProfileStore.getState().currentProfileId;
+
+          // Single mode, but the user switched to a DIFFERENT real profile
+          // while this connect() was in flight: the switch-teardown effect
+          // already ran and found this profile not yet connected (it wasn't
+          // - the handshake was still in progress), so nothing will ever
+          // disconnect it. Do it here instead of leaking a fully connected,
+          // anchor-less websocket (refs #337 round 2 minor #2). Excluded:
+          // ALL_PROFILES_ID (All mode, where this profile's connection is
+          // intentional and simply isn't "the" current profile by design)
+          // and null (no app-level current profile at all yet - not "the
+          // user switched away", so nothing to tear down).
+          if (appCurrentProfileId && appCurrentProfileId !== profileId && appCurrentProfileId !== ALL_PROFILES_ID) {
+            log.notifications('Profile switched away while connecting - disconnecting the now-ownerless socket', LogLevel.INFO, {
+              profileId,
+              appCurrentProfileId,
+            });
+            get().disconnect(profileId);
+            return;
+          }
+
           // Anchor push/badge bookkeeping only when this IS the app's real
-          // current profile (single mode: useProfileStore's currentProfileId
-          // equals profileId). In All mode the app's currentProfileId is the
-          // ALL_PROFILES_ID sentinel, which never equals any real profileId,
-          // so no connector's connect() call here ever races to overwrite
-          // the anchor with "whichever profile connected last" - it simply
-          // keeps whatever it was before All mode was entered (refs #337
-          // I4). Push registration isn't a thing in All mode on web anyway
-          // (no FCM there), so that pre-All value is never actually read for
-          // push purposes while aggregating.
-          if (useProfileStore.getState().currentProfileId === profileId) {
+          // current profile (single mode). In All mode the app's
+          // currentProfileId is the ALL_PROFILES_ID sentinel, which never
+          // equals any real profileId, so no connector's connect() call here
+          // ever races to overwrite the anchor with "whichever profile
+          // connected last" - it simply keeps whatever it was before All
+          // mode was entered (refs #337 I4). Push registration isn't a thing
+          // in All mode on web anyway (no FCM there), so that pre-All value
+          // is never actually read for push purposes while aggregating.
+          if (appCurrentProfileId === profileId) {
             set({ currentProfileId: profileId });
           }
 
@@ -337,9 +358,18 @@ export const useNotificationStore = create<NotificationState>()(
       },
 
       disconnectAll: () => {
+        // Per-profile disconnect() first: cleans up this store's own state
+        // (listener unsubscribes, connections map, anchor) for every profile
+        // it knows about.
         Object.keys(get().connections).forEach((profileId) => get().disconnect(profileId));
-        // Direct-mode pollers aren't tracked in `connections`, so sweep them
-        // separately.
+        // Then sweep the service registry directly: a service can exist
+        // there without ever appearing in `connections` (e.g. a lazily
+        // created instance from a checkAlive() call that never went through
+        // connect()/_initialize), and `connections` alone would miss it
+        // (refs #337 round 2 minor #3).
+        resetAllNotificationServices();
+        // Direct-mode pollers aren't tracked in `connections` either, so
+        // sweep them separately.
         stopAllEventPollers();
       },
 

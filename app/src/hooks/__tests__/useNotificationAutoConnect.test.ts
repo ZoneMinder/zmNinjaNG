@@ -343,6 +343,59 @@ describe('useNotificationAutoConnect', () => {
 
       expect(params.connect).not.toHaveBeenCalled();
     });
+
+    // Regression (refs #337 round 2, critical): bootstrap routinely writes a
+    // NEW profile object with the SAME id (e.g. after a token refresh).
+    // Depending on the whole `currentProfile` object re-ran this effect on
+    // that identity churn; combined with the I3 timer-cancel cleanup, the
+    // re-run cancelled the pending timer, then hit the hasAttemptedAutoConnect
+    // guard and returned without rescheduling - ES never connected for the
+    // rest of the session.
+    it('still connects after a mid-window rerender with a new profile object of the same id', async () => {
+      const params = makeParams();
+      const { rerender } = renderHook(
+        (p: Parameters<typeof useNotificationAutoConnect>[0]) => useNotificationAutoConnect(p),
+        { initialProps: params },
+      );
+
+      await act(async () => {
+        vi.advanceTimersByTime(250);
+      });
+
+      // Same id, same credentials, new object identity - simulates a
+      // bootstrap/updateProfile write mid-window.
+      rerender({ ...params, currentProfile: { ...defaultProfile } });
+
+      await act(async () => {
+        vi.advanceTimersByTime(500);
+        await vi.runAllTimersAsync();
+      });
+
+      expect(params.connect).toHaveBeenCalledWith('profile-1', 'admin', 'secret', 'http://zm.local');
+    });
+
+    it('reschedules instead of permanently stalling when a primitive dep changes mid-window', async () => {
+      const params = makeParams();
+      const { rerender } = renderHook(
+        (p: Parameters<typeof useNotificationAutoConnect>[0]) => useNotificationAutoConnect(p),
+        { initialProps: params },
+      );
+
+      await act(async () => {
+        vi.advanceTimersByTime(250);
+      });
+
+      // A genuine primitive change (host) interrupts the window - this MUST
+      // still result in exactly one connect() once things settle, not zero.
+      rerender({ ...params, settings: { ...defaultSettings, host: 'ws://new-host:9000' } });
+
+      await act(async () => {
+        vi.advanceTimersByTime(500);
+        await vi.runAllTimersAsync();
+      });
+
+      expect(params.connect).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('direct mode auto-connect (desktop/web)', () => {
