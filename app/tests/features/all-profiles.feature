@@ -46,3 +46,33 @@ Feature: All Servers mode
     When I click a monitor card
     Then the URL should match the all-mode monitor detail route
     And the profile switcher should still show All Servers
+
+  @web
+  Scenario: All Servers montage shows tiles from every profile
+    When I navigate to the "Montage" page
+    Then I record the single-profile montage tile count
+    When I navigate to the "Profiles" page
+    And I click the All Servers profile card
+    When I navigate to the "Montage" page
+    Then I should see a monitor profile chip on every montage tile
+    And the montage tile count should be double the recorded single-profile count
+
+  @web
+  Scenario: Events montage view renders in All mode with no gate notice
+    When I navigate to the "Profiles" page
+    And I click the All Servers profile card
+    When I navigate to the "Events" page
+    And I switch events view to montage
+    Then I should see the events montage grid
+    And event montage tiles should render with no gate notice
+
+  @web
+  Scenario: Logs page picker switches the per-profile log source
+    When I navigate to the "Profiles" page
+    And I click the All Servers profile card
+    When I navigate to the "Logs" page
+    Then I should see the page profile picker
+    When I switch the Logs page to the ZM server log source
+    And I pick a different profile in the Logs page picker
+    Then the Logs page picker should show the newly picked profile
+    And the logs query should have refired with a different access token

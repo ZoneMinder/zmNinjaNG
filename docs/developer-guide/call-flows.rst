@@ -2738,11 +2738,19 @@ profile whose monitors are already cached.
 
 The Monitors page, the Events and Timeline pages, and the profile switcher
 branch on ``isAllMode``; Flow 22 covers how Events aggregates the same way
-Monitors does here. Dashboard, Montage, and Live Activity still resolve
-``currentProfile`` the ordinary way, which is ``null`` in All mode, so their
-queries stay disabled and those screens render empty rather than silently
-falling back to a single profile - deliberate v1 scope, not a gap that
-slipped through.
+Monitors does here. Montage and Dashboard now resolve the same scope and
+aggregate identically - Montage additionally caps the number of simultaneous
+All-mode streams it opens via ``MONTAGE_GRID.allModeMaxStreams``, so a large
+combined camera count can't try to open a live stream to every camera on
+every server at once. Screens that are inherently single-server instead -
+Logs, Server, Notification settings, the server-scoped part of Settings, and
+the assistant panel - resolve a locally-picked profile via
+``ProfilePicker``/``useProfileById``, defaulting to the first profile in
+scope, rather than aggregating. Live Activity still resolves
+``currentProfile`` the ordinary way, which is ``null`` in All mode, so its
+queries stay disabled and it renders empty - the one screen where that
+remains deliberate scope, pending the notification-store profile-tagging
+rework it depends on (refs #337).
 
 Flow 16 covers the other two ways a profile list changes shape, editing and
 deleting; this flow is the third, and the only one where "the current

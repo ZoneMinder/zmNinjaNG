@@ -200,3 +200,119 @@ Then('the profile switcher should still show All Servers', async ({ page }) => {
     timeout: testConfig.timeouts.element,
   });
 });
+
+// Captured on the single-profile Montage view before switching to All mode,
+// same pattern as singleProfileMonitorCount above.
+let singleProfileMontageTileCount = 0;
+
+Then('I record the single-profile montage tile count', async ({ page }) => {
+  // Excludes the nested montage-monitor-media testid inside each tile, which
+  // also matches this prefix (refs #337 round 1 - caught by this scenario).
+  const tiles = page.locator('[data-testid^="montage-monitor-"]:not([data-testid="montage-monitor-media"])');
+  await expect.poll(async () => tiles.count(), {
+    timeout: testConfig.timeouts.pageLoad,
+  }).toBeGreaterThan(0);
+  singleProfileMontageTileCount = await tiles.count();
+});
+
+Then('I should see a monitor profile chip on every montage tile', async ({ page }) => {
+  // Excludes the nested montage-monitor-media testid inside each tile, which
+  // also matches this prefix (refs #337 round 1 - caught by this scenario).
+  const tiles = page.locator('[data-testid^="montage-monitor-"]:not([data-testid="montage-monitor-media"])');
+  await expect.poll(async () => tiles.count(), {
+    timeout: testConfig.timeouts.pageLoad,
+  }).toBeGreaterThan(0);
+  const tileCount = await tiles.count();
+  const chipCount = await page.getByTestId('montage-profile-chip').count();
+  expect(chipCount).toBe(tileCount);
+});
+
+Then('the montage tile count should be double the recorded single-profile count', async ({ page }) => {
+  expect(singleProfileMontageTileCount).toBeGreaterThan(0);
+  // Excludes the nested montage-monitor-media testid inside each tile, which
+  // also matches this prefix (refs #337 round 1 - caught by this scenario).
+  const tiles = page.locator('[data-testid^="montage-monitor-"]:not([data-testid="montage-monitor-media"])');
+  await expect.poll(async () => tiles.count(), {
+    timeout: testConfig.timeouts.pageLoad,
+  }).toBe(singleProfileMontageTileCount * 2);
+});
+
+// Events montage view, All mode (refs #337 Phase 4 Task 6): the gate that
+// used to block montage view in All mode is gone (refs #337 e74d02b4);
+// this is a regression check that it stays gone AND that tiles actually
+// render (not just an absent-gate false-positive).
+Then('event montage tiles should render with no gate notice', async ({ page }) => {
+  await expect.poll(async () => page.getByTestId('event-montage-tile').count(), {
+    timeout: testConfig.timeouts.pageLoad,
+  }).toBeGreaterThan(0);
+  await expect(page.getByTestId('events-montage-gate')).toHaveCount(0);
+});
+
+Then('I should see the page profile picker', async ({ page }) => {
+  await expect(page.getByTestId('page-profile-picker')).toBeVisible({ timeout: testConfig.timeouts.element });
+});
+
+/**
+ * The ZM API takes its session token as a `token=` query param, not a header
+ * (see app/src/api/client.ts appendQuery) - reading it back out of the
+ * request URL is the one truly per-profile-distinguishable signal available
+ * here: both Background profiles point at the SAME real test server, so the
+ * fetched log CONTENT is identical between them and can't be diffed. Each
+ * profile still logs in independently, so its token differs - proving the
+ * query actually refired for the newly-picked profile rather than reusing a
+ * stale response.
+ */
+function extractToken(url: string): string | null {
+  return new URL(url).searchParams.get('token');
+}
+
+let firstLogsRequestToken: string | null = null;
+let secondLogsRequestToken: string | null = null;
+let pickedLogsProfileText = '';
+
+When('I switch the Logs page to the ZM server log source', async ({ page }) => {
+  const [response] = await Promise.all([
+    page.waitForResponse((resp) => resp.url().includes('/logs.json'), { timeout: testConfig.timeouts.pageLoad }),
+    page.getByTestId('log-source-server').click(),
+  ]);
+  firstLogsRequestToken = extractToken(response.url());
+  await expect(
+    page.getByTestId('logs-list').or(page.getByTestId('logs-empty-state'))
+  ).toBeVisible({ timeout: testConfig.timeouts.pageLoad });
+});
+
+// Picks whichever picker option ISN'T the currently-displayed profile, so
+// this doesn't depend on which of the two Background profiles the page
+// happens to default to.
+When('I pick a different profile in the Logs page picker', async ({ page }) => {
+  const picker = page.getByTestId('page-profile-picker');
+  const currentText = (await picker.innerText()).trim();
+  await picker.click();
+  const options = page.locator('[data-testid^="page-profile-picker-option-"]');
+  await expect.poll(async () => options.count(), {
+    timeout: testConfig.timeouts.element,
+  }).toBeGreaterThan(0);
+  const texts = (await options.allTextContents()).map((text) => text.trim());
+  const target = texts.find((text) => text !== currentText);
+  expect(target).toBeTruthy();
+  pickedLogsProfileText = target as string;
+
+  const [response] = await Promise.all([
+    page.waitForResponse((resp) => resp.url().includes('/logs.json'), { timeout: testConfig.timeouts.pageLoad }),
+    options.filter({ hasText: pickedLogsProfileText }).click(),
+  ]);
+  secondLogsRequestToken = extractToken(response.url());
+});
+
+Then('the Logs page picker should show the newly picked profile', async ({ page }) => {
+  expect(pickedLogsProfileText).toBeTruthy();
+  await expect(page.getByTestId('page-profile-picker')).toHaveText(pickedLogsProfileText, {
+    timeout: testConfig.timeouts.element,
+  });
+});
+
+Then('the logs query should have refired with a different access token', async () => {
+  expect(firstLogsRequestToken).toBeTruthy();
+  expect(secondLogsRequestToken).toBeTruthy();
+  expect(secondLogsRequestToken).not.toBe(firstLogsRequestToken);
+});
