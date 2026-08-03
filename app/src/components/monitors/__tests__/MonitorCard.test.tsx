@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { toast } from 'sonner';
 import { MonitorCard } from '../MonitorCard';
 import { useMonitorSeenStore } from '../../../stores/monitorSeen';
 import { asProfileId } from '../../../api/types';
@@ -76,6 +77,9 @@ vi.mock('../../../stores/auth', () => ({
 describe('MonitorCard', () => {
   beforeEach(() => {
     mockNavigate.mockClear();
+    switchProfileMock.mockReset();
+    switchProfileMock.mockResolvedValue(undefined);
+    vi.mocked(toast.error).mockClear();
     useMonitorSeenStore.setState({ profileWatermarks: {} });
   });
 
@@ -228,5 +232,26 @@ describe('MonitorCard', () => {
 
     expect(switchProfileMock).toHaveBeenCalledWith(OTHER_PROFILE_ID);
     expect(mockNavigate).toHaveBeenCalledWith('/monitors/1', { state: { from: '/monitors' } });
+  });
+
+  it('shows a toast and does not navigate when switching to the owning profile fails', async () => {
+    const user = userEvent.setup();
+    switchProfileMock.mockRejectedValueOnce(new Error('switch failed'));
+
+    render(
+      <MonitorCard
+        monitor={monitor}
+        status={status}
+        onShowSettings={vi.fn()}
+        profileId={OTHER_PROFILE_ID}
+        profileChip="Office"
+      />
+    );
+
+    await user.click(screen.getByTestId('monitor-player'));
+
+    expect(switchProfileMock).toHaveBeenCalledWith(OTHER_PROFILE_ID);
+    expect(toast.error).toHaveBeenCalledWith('profiles.switch_failed');
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 });

@@ -161,10 +161,12 @@ describe('Monitors Page', () => {
     expect(chips.map((c) => c.textContent)).toEqual(['Home', 'Office']);
   });
 
-  it('All mode shows an error strip for a failed profile while the healthy profile still renders', () => {
+  it('All mode shows an error strip for a failed profile with zero monitors while the healthy profile still renders', () => {
     allMode(2);
     useScopedMonitorsMock.mockReturnValue({
       monitors: [
+        // profile-2 has no entry here: its error produced zero monitors, so
+        // its strip should show (unlike the suppressed-strip case below).
         { profileId: 'profile-1', profileName: 'Home', item: { Monitor: { Id: '1', Name: 'Front Door', Deleted: false }, Monitor_Status: { Status: 'Connected' } } },
       ],
       errors: [
@@ -179,6 +181,29 @@ describe('Monitors Page', () => {
     expect(screen.getByTestId('profile-error-strip-profile-2')).toBeInTheDocument();
     expect(screen.getByTestId('monitor-card-1')).toHaveTextContent('Front Door');
     expect(screen.queryByTestId('monitors-all-failed-state')).not.toBeInTheDocument();
+  });
+
+  it('suppresses the error strip for a profile that still has cached monitors despite a background refetch error', () => {
+    allMode(2);
+    useScopedMonitorsMock.mockReturnValue({
+      monitors: [
+        // profile-2 has an error below AND a monitor here: a background
+        // refetch failure (e.g. offline) while cached data still renders,
+        // same as the old single-mode "error and !data" wall it replaces.
+        { profileId: 'profile-1', profileName: 'Home', item: { Monitor: { Id: '1', Name: 'Front Door', Deleted: false }, Monitor_Status: { Status: 'Connected' } } },
+        { profileId: 'profile-2', profileName: 'Office', item: { Monitor: { Id: '2', Name: 'Lobby Cam', Deleted: false }, Monitor_Status: { Status: 'Connected' } } },
+      ],
+      errors: [
+        { profileId: 'profile-2', profileName: 'Office', error: new Error('offline') },
+      ],
+      isLoading: false,
+      refetchProfile: vi.fn(),
+    });
+
+    render(<Monitors />);
+
+    expect(screen.getByTestId('monitor-card-2')).toHaveTextContent('Lobby Cam');
+    expect(screen.queryByTestId('profile-error-strip-profile-2')).not.toBeInTheDocument();
   });
 
   it('All mode shows the all-failed empty state when every profile errors', () => {

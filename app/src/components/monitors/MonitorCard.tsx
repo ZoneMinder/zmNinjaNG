@@ -78,10 +78,18 @@ function MonitorCardComponent({
   // Deep /all/... routes with proper All-mode event scoping are Phase 3; for
   // now, a card owned by a non-current profile switches into that profile
   // before navigating so the destination page's single-profile queries land
-  // on the right server.
-  const goToOwningProfile = async () => {
-    if (profileId != null) {
+  // on the right server. Returns false (and shows the same switch-failed
+  // toast profile-switcher.tsx uses) when the switch itself fails, so the
+  // caller can skip navigating to a profile that never actually loaded.
+  const goToOwningProfile = async (): Promise<boolean> => {
+    if (profileId == null) return true;
+    try {
       await switchProfile(profileId);
+      return true;
+    } catch (error) {
+      log.monitorCard('Failed to switch profile before navigating', LogLevel.ERROR, error);
+      toast.error(t('profiles.switch_failed'));
+      return false;
     }
   };
 
@@ -123,7 +131,7 @@ function MonitorCardComponent({
   };
 
   const openEvents = async () => {
-    await goToOwningProfile();
+    if (!(await goToOwningProfile())) return;
     openMonitorEvents({
       monitorId: monitor.Id,
       newEventCount,
@@ -133,7 +141,7 @@ function MonitorCardComponent({
   };
 
   const goToDetail = async () => {
-    await goToOwningProfile();
+    if (!(await goToOwningProfile())) return;
     navigate(`/monitors/${monitor.Id}`, { state: { from: '/monitors' } });
   };
 

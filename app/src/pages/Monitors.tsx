@@ -110,6 +110,17 @@ export default function Monitors() {
     return filtered.map(({ Monitor, Monitor_Status }) => ({ Monitor, Monitor_Status }));
   }, [isAllMode, scopedMonitors, isFilterActive, filteredMonitorIds]);
 
+  // Raw per-profile monitor counts, independent of the group filter above:
+  // used only to decide whether a profile's error strip shows (a profile
+  // filtered down to zero by the group filter still "has data").
+  const monitorCountByProfile = useMemo(() => {
+    const counts = new Map<ProfileId, number>();
+    for (const s of scopedMonitors) {
+      counts.set(s.profileId, (counts.get(s.profileId) ?? 0) + 1);
+    }
+    return counts;
+  }, [scopedMonitors]);
+
   // useMonitorNewEvents is current-profile-scoped (watermarks keyed by one
   // profile id); All mode gets no new-event badges until Phase 3 extends it
   // across every scoped profile.
@@ -187,6 +198,13 @@ export default function Monitors() {
   // "no cameras configured" so a retry affordance stays visible via the error
   // strips below (refs #337, Task 4 finding).
   const allFailed = profileErrors.length > 0 && profileErrors.length === totalScopeProfiles && renderItems.length === 0;
+
+  // A background refetch error (e.g. offline) while cached monitors are
+  // already rendering falls through to the normal view instead of a strip;
+  // the OfflineBanner in AppLayout covers that case. A strip only appears for
+  // a profile that produced zero monitors, the per-profile analogue of the
+  // old single-mode "error and no data" wall.
+  const visibleErrors = profileErrors.filter((err) => (monitorCountByProfile.get(err.profileId) ?? 0) === 0);
 
   const renderMonitorSection = (items: MonitorGridItem[], attachGridRef: boolean) => (
     settings.monitorsViewMode === 'grid' ? (
@@ -326,11 +344,14 @@ export default function Monitors() {
         </div>
       </div>
 
-      {/* Per-profile errors: one strip per failed profile's query, healthy
-          profiles keep rendering below regardless (refs #337, Task 4 finding). */}
-      {profileErrors.length > 0 && (
+      {/* Per-profile errors: one strip per profile whose query failed AND
+          produced zero monitors. A profile with cached data and a background
+          refetch error (e.g. offline) renders that data with no strip; the
+          OfflineBanner in AppLayout covers that case (refs #337, Task 4
+          finding). */}
+      {visibleErrors.length > 0 && (
         <div className="space-y-2">
-          {profileErrors.map((err) => (
+          {visibleErrors.map((err) => (
             <div
               key={err.profileId}
               className="flex items-center gap-2"
