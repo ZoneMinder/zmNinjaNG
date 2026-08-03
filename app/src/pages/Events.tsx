@@ -257,13 +257,15 @@ export default function Events() {
   // All mode carries `?profileId=` alongside `monitorId` (refs #337): those
   // callers know which server the monitor id belongs to, so focus the
   // server filter down to just that profile instead of leaving the numeric
-  // monitorId ambiguous across every server in scope. Runs once per
-  // incoming profileId value, not on every render.
+  // monitorId ambiguous across every server in scope. Transient: overlays
+  // the persisted filter for this render only rather than writing it via
+  // updateSettings, so one tap can't permanently narrow the user's saved
+  // All-mode filter - navigating away (or clearing the param) reverts to
+  // whatever was persisted before the link was opened (refs #337 I9).
   const deepLinkedProfileId = isAllMode ? searchParams.get('profileId') : null;
-  useEffect(() => {
-    if (!deepLinkedProfileId || !currentProfileId) return;
-    updateSettings(currentProfileId, { eventsServerFilter: [deepLinkedProfileId as ProfileId] });
-  }, [deepLinkedProfileId, currentProfileId, updateSettings]);
+  const effectiveServerFilter = deepLinkedProfileId
+    ? [deepLinkedProfileId as ProfileId]
+    : settings.eventsServerFilter;
 
   // Every profile in scope failed and none ever produced an event: distinct
   // from "no events match the filter" (same suppression semantics as
@@ -280,10 +282,10 @@ export default function Events() {
   // profile's slice, so narrowing the DISPLAYED list here is enough and
   // needs no extra query plumbing.
   const serverFilteredEvents = useMemo(() => {
-    if (!isAllMode || !settings.eventsServerFilter) return scopedEvents;
-    const included = new Set(settings.eventsServerFilter);
+    if (!isAllMode || !effectiveServerFilter) return scopedEvents;
+    const included = new Set(effectiveServerFilter);
     return scopedEvents.filter((e) => included.has(e.profileId));
-  }, [isAllMode, settings.eventsServerFilter, scopedEvents]);
+  }, [isAllMode, effectiveServerFilter, scopedEvents]);
 
   // Pull-to-refresh gesture
   const pullToRefresh = usePullToRefresh({
@@ -370,14 +372,13 @@ export default function Events() {
     },
   });
 
+  // Transient, same as the profileId deep link above: a `?view=montage` tap
+  // switches THIS view only, never the persisted preference (refs #337 I9).
   useEffect(() => {
     const paramView = searchParams.get('view');
     if (paramView !== 'montage') return;
     setViewMode('montage');
-    if (currentProfileId) {
-      updateSettings(currentProfileId, { eventsViewMode: 'montage' });
-    }
-  }, [searchParams, currentProfileId, updateSettings]);
+  }, [searchParams]);
 
   useEffect(() => {
     if (!currentProfileId) return;
@@ -580,7 +581,7 @@ export default function Events() {
             profiles={scope?.profiles ?? []}
             visibleErrors={visibleErrors}
             onRetryProfile={refetchProfile}
-            serverFilter={settings.eventsServerFilter ?? null}
+            serverFilter={effectiveServerFilter ?? null}
             onServerFilterChange={(next) => {
               if (currentProfileId) updateSettings(currentProfileId, { eventsServerFilter: next });
             }}

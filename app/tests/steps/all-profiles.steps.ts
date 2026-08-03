@@ -141,12 +141,18 @@ Then('I should see an event profile chip on every event card', async ({ page }) 
 // count, live event counts can drift between the single-profile capture
 // above and this aggregate read (a new motion event recorded server-side in
 // between). Asserting >= keeps the outcome real (aggregation actually ran,
-// chips present) without flaking on that drift.
+// chips present) without flaking on that drift. The count alone can't catch
+// a broken aggregation that silently returns only one profile's events (that
+// still satisfies >=): also require at least 2 DISTINCT profile-chip texts,
+// so both Background profiles are provably represented (refs #337 I11).
 Then('the event card count should be at least the recorded single-profile count', async ({ page }) => {
   expect(singleProfileEventCount).toBeGreaterThan(0);
   await expect.poll(async () => page.getByTestId('event-card').count(), {
     timeout: testConfig.timeouts.pageLoad,
   }).toBeGreaterThanOrEqual(singleProfileEventCount);
+
+  const chipTexts = await page.getByTestId('event-profile-chip').allTextContents();
+  expect(new Set(chipTexts).size).toBeGreaterThanOrEqual(2);
 });
 
 When('I click a monitor card', async ({ page }) => {

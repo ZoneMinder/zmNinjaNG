@@ -183,10 +183,12 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
+let mockSearchParams = new URLSearchParams();
+const setSearchParamsMock = vi.fn();
 vi.mock('react-router-dom', () => ({
   useNavigate: () => vi.fn(),
   useLocation: () => ({ state: {} }),
-  useSearchParams: () => [new URLSearchParams(), vi.fn()],
+  useSearchParams: () => [mockSearchParams, setSearchParamsMock],
 }));
 
 const profileA = { id: 'profile-1', name: 'Home', portalUrl: 'https://a', apiUrl: 'https://a/api', timezone: 'UTC' };
@@ -243,6 +245,8 @@ describe('Events Page', () => {
     applyFilters.mockClear();
     clearFilters.mockClear();
     clearDateRange.mockClear();
+    setSearchParamsMock.mockClear();
+    mockSearchParams = new URLSearchParams();
     eventFiltersOverrides = {};
     settingsOverrides = {};
   });
@@ -400,6 +404,44 @@ describe('Events Page', () => {
       expect(screen.getByTestId('profile-error-strip-profile-2')).toBeInTheDocument();
       expect(screen.getByTestId('event-card-item')).toBeInTheDocument();
       expect(screen.queryByTestId('events-all-failed-state')).not.toBeInTheDocument();
+    });
+
+    it('a ?profileId= deep link narrows the view without persisting it (refs #337 I9)', () => {
+      allScope();
+      mockSearchParams = new URLSearchParams('profileId=profile-2');
+      scopedEvents({
+        events: [
+          { profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1' } } },
+          { profileId: 'profile-2', profileName: 'Office', item: { Event: { Id: '2', MonitorId: '1' } } },
+        ],
+      });
+
+      render(<Events />);
+
+      const cards = screen.getAllByTestId('event-card-item');
+      expect(cards).toHaveLength(1);
+      expect(cards[0]).toHaveTextContent('2-');
+      // The deep link filters this render only - it must never write the
+      // persisted All-mode server filter.
+      expect(updateProfileSettingsMock).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ eventsServerFilter: expect.anything() })
+      );
+    });
+
+    it('shows every server again once the ?profileId= param is gone, with no filter left persisted (refs #337 I9)', () => {
+      allScope();
+      mockSearchParams = new URLSearchParams();
+      scopedEvents({
+        events: [
+          { profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1' } } },
+          { profileId: 'profile-2', profileName: 'Office', item: { Event: { Id: '2', MonitorId: '1' } } },
+        ],
+      });
+
+      render(<Events />);
+
+      expect(screen.getAllByTestId('event-card-item')).toHaveLength(2);
     });
 
     it('shows the all-failed empty state when every profile errors', () => {
