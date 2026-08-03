@@ -20,8 +20,9 @@ import {
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
 import { Button } from './ui/button';
-import { Check, ChevronDown, Server, Plus, Loader2 } from 'lucide-react';
+import { Check, ChevronDown, Server, Plus, Loader2, Layers } from 'lucide-react';
 import { toast } from 'sonner';
+import { ALL_PROFILES_ID } from '../api/types';
 
 import { useTranslation } from 'react-i18next';
 
@@ -33,6 +34,8 @@ export function ProfileSwitcher() {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const profiles = useProfileStore((state) => state.profiles);
+  const currentProfileId = useProfileStore((state) => state.currentProfileId);
+  const isAllMode = currentProfileId === ALL_PROFILES_ID;
   const currentProfile = useProfileStore(
     useShallow((state) => {
       const { profiles, currentProfileId } = state;
@@ -44,8 +47,10 @@ export function ProfileSwitcher() {
   const switchAbortRef = useRef<AbortController | null>(null);
 
   const handleSwitch = async (profileId: string) => {
+    const isAll = profileId === ALL_PROFILES_ID;
     const profile = profiles.find((p) => p.id === profileId);
-    if (!profile) return;
+    if (!isAll && !profile) return;
+    const name = isAll ? t('profiles.all_servers') : profile!.name;
 
     // Abort any in-flight switch
     if (switchAbortRef.current) switchAbortRef.current.abort();
@@ -54,14 +59,14 @@ export function ProfileSwitcher() {
 
     toast.dismiss();
     setIsLoading(true);
-    const loadingToast = toast.loading(t('profiles.switching_to', { name: profile.name }));
+    const loadingToast = toast.loading(t('profiles.switching_to', { name }));
 
     try {
       await switchProfile(profileId);
       if (abort.signal.aborted) return;
 
       toast.dismiss(loadingToast);
-      toast.success(t('profiles.switched_to', { name: profile.name }));
+      toast.success(t('profiles.switched_to', { name }));
       setIsLoading(false);
       navigate('/monitors');
     } catch (error: unknown) {
@@ -98,7 +103,9 @@ export function ProfileSwitcher() {
             ) : (
               <Server className="h-4 w-4 shrink-0" />
             )}
-            <span className="truncate">{currentProfile?.name || t('profiles.select_profile')}</span>
+            <span className="truncate">
+              {isAllMode ? t('profiles.all_servers') : currentProfile?.name || t('profiles.select_profile')}
+            </span>
           </div>
           {!isLoading && <ChevronDown className="h-4 w-4 opacity-50" />}
         </Button>
@@ -106,6 +113,19 @@ export function ProfileSwitcher() {
       <DropdownMenuContent align="end" className="w-[250px]">
         <DropdownMenuLabel>{t('profiles.switch_profile')}</DropdownMenuLabel>
         <DropdownMenuSeparator />
+        {profiles.length >= 2 && (
+          <DropdownMenuItem
+            onClick={() => handleSwitch(ALL_PROFILES_ID)}
+            className="flex items-center justify-between cursor-pointer"
+            data-testid="profile-switcher-all"
+          >
+            <div className="flex items-center gap-2">
+              <Layers className="h-4 w-4 text-muted-foreground" />
+              <span className="font-medium">{t('profiles.all_servers')}</span>
+            </div>
+            {isAllMode && <Check className="h-4 w-4 text-primary" />}
+          </DropdownMenuItem>
+        )}
         {profiles.map((profile) => (
           <DropdownMenuItem
             key={profile.id}

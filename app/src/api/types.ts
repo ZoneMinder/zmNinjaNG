@@ -647,6 +647,16 @@ export interface MonitorCardProps {
   newestEventAt?: string | null;
   objectFit?: React.CSSProperties['objectFit'] | 'flex';
   compact?: boolean;
+  /**
+   * Profile that owns this monitor. Set only in All mode (see
+   * useScopedMonitors); undefined in single mode means "the current
+   * profile". Threaded down to the streaming hooks so the tile streams from
+   * its own server, and used to switchProfile before any detail/events
+   * navigation off this card.
+   */
+  profileId?: ProfileId | null;
+  /** Owning profile's display name, rendered as a small chip. All mode only. */
+  profileChip?: string;
 }
 
 export interface EventCardProps {

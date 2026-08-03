@@ -11,6 +11,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useProfileStore } from './stores/profile';
 import { useCurrentProfile } from './hooks/useCurrentProfile';
+import { useProfileScope } from './hooks/useProfileScope';
 import { setQueryClient, shouldRetryQuery } from './stores/query-cache';
 import { Toaster } from './components/ui/toast';
 import { ThemeProvider } from './components/theme-provider';
@@ -82,6 +83,11 @@ function AppRoutes() {
   const profiles = useProfileStore((state) => state.profiles);
   const isInitialized = useProfileStore((state) => state.isInitialized);
   const { currentProfile, settings } = useCurrentProfile();
+  // A profile "exists" for routing purposes when the active scope resolves
+  // (single profile, or All mode with at least one profile) - not merely
+  // when currentProfile is non-null, which stays null in All mode even with
+  // profiles present (refs #337, Task 2 finding).
+  const scope = useProfileScope();
   const { logLevel, lastRoute, componentLogLevels } = settings;
 
   // Enable automatic token refresh
@@ -200,7 +206,7 @@ function AppRoutes() {
         <Route
           path="/"
           element={
-            currentProfile ? (
+            scope ? (
               <Navigate to={lastRoute || '/monitors'} replace />
             ) : profiles.length > 0 ? (
               <Navigate to="/profiles" replace />

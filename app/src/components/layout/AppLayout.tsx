@@ -9,6 +9,7 @@
 import { Outlet, useLocation, Navigate } from 'react-router-dom';
 import logoUrl from '../../../assets/logo.png';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
+import { useProfileScope } from '../../hooks/useProfileScope';
 import { useProfileStore } from '../../stores/profile';
 import { useSettingsStore } from '../../stores/settings';
 import { Button } from '../ui/button';
@@ -50,6 +51,10 @@ import { AssistantWidget } from '../assistant/AssistantWidget';
  */
 export default function AppLayout() {
   const { currentProfile, settings } = useCurrentProfile();
+  // Route guard below must treat All mode (currentProfile stays null there)
+  // as having a profile: gate on scope resolving, not on currentProfile
+  // (refs #337, Task 2 finding).
+  const scope = useProfileScope();
   const updateProfileSettings = useSettingsStore((state) => state.updateProfileSettings);
   const location = useLocation();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
@@ -174,7 +179,7 @@ export default function AppLayout() {
   }, [pendingCert, updateProfileSettings]);
 
   // Check for profile after all hooks are called to avoid hooks violation
-  if (!currentProfile) {
+  if (!scope) {
     if (location.pathname === '/profiles') {
       // Allow access to profiles page without a current profile
     } else {

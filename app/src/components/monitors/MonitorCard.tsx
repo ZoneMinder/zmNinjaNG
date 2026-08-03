@@ -18,8 +18,9 @@ import { downloadSnapshotFromElement } from '../../services/download';
 import { toast } from 'sonner';
 import { LiveMonitorPlayer } from './LiveMonitorPlayer';
 import { MonitorHoverPreview } from './MonitorHoverPreview';
-import { useCurrentProfile } from '../../hooks/useCurrentProfile';
-import type { MonitorCardProps } from '../../api/types';
+import { useProfileById } from '../../hooks/useCurrentProfile';
+import { useProfileStore } from '../../stores/profile';
+import type { MonitorCardProps, ProfileId } from '../../api/types';
 import { log, LogLevel } from '../../lib/logger';
 import { useTranslation } from 'react-i18next';
 import { getMonitorAspectRatio } from '../../lib/monitor/monitor-rotation';
@@ -28,8 +29,10 @@ import { useAuthSlice } from '../../stores/auth';
 import { useOpenMonitorEvents } from '../../hooks/useOpenMonitorEvents';
 
 interface MonitorCardComponentProps extends MonitorCardProps {
-  /** Callback to open the settings dialog for this monitor */
-  onShowSettings: (monitor: MonitorCardProps['monitor']) => void;
+  /** Callback to open the settings dialog for this monitor. `profileId` is
+   *  the owning profile in All mode, so the caller can save against the
+   *  right session (undefined in single mode: use the current profile). */
+  onShowSettings: (monitor: MonitorCardProps['monitor'], profileId?: ProfileId | null) => void;
 }
 
 /**
@@ -50,25 +53,43 @@ function MonitorCardComponent({
   onShowSettings,
   objectFit,
   compact,
+  profileId,
+  profileChip,
 }: MonitorCardComponentProps) {
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const { currentProfile, settings } = useCurrentProfile();
-  const zmVersion = useAuthSlice(currentProfile?.id ?? null).version;
+  // profileId is set only in All mode (see useScopedMonitors); resolving via
+  // useProfileById rather than useCurrentProfile means the card's stream,
+  // settings, and go2rtc URL all come from the monitor's OWN server instead
+  // of the globally-selected profile.
+  const { profile: ownerProfile, settings } = useProfileById(profileId);
+  const switchProfile = useProfileStore((state) => state.switchProfile);
+  const zmVersion = useAuthSlice(ownerProfile?.id ?? null).version;
   const openMonitorEvents = useOpenMonitorEvents();
   const resolvedFit = (objectFit === 'flex' ? 'cover' : (objectFit ?? 'cover')) as 'contain' | 'cover' | 'fill' | 'none' | 'scale-down';
   const [protocol, setProtocol] = useState('MJPEG');
   const [isMuted, setIsMuted] = useState(true);
   const runState = getMonitorRunState(monitor, status, zmVersion);
-  const isRTC = monitor.Go2RTCEnabled === true && !!currentProfile?.go2rtcUrl;
+  const isRTC = monitor.Go2RTCEnabled === true && !!ownerProfile?.go2rtcUrl;
   const aspectRatio = getMonitorAspectRatio(monitor.Width, monitor.Height, monitor.Orientation);
   const mediaRef = useRef<HTMLImageElement | HTMLVideoElement | null>(null);
   const showHover = compact ? settings.hoverPreview.monitorsGrid : settings.hoverPreview.monitorsList;
 
+  // Deep /all/... routes with proper All-mode event scoping are Phase 3; for
+  // now, a card owned by a non-current profile switches into that profile
+  // before navigating so the destination page's single-profile queries land
+  // on the right server.
+  const goToOwningProfile = async () => {
+    if (profileId != null) {
+      await switchProfile(profileId);
+    }
+  };
+
   const videoPlayer = (
     <LiveMonitorPlayer
       monitor={monitor}
-      profile={currentProfile}
+      profile={ownerProfile}
+      profileId={profileId}
       className="w-full h-full"
       objectFit={resolvedFit}
       externalMediaRef={mediaRef}
@@ -98,15 +119,23 @@ function MonitorCardComponent({
 
   const handleShowSettings = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onShowSettings(monitor);
+    onShowSettings(monitor, profileId);
   };
 
-  const openEvents = () => openMonitorEvents({
-    monitorId: monitor.Id,
-    newEventCount,
-    newestEventAt,
-    from: '/monitors',
-  });
+  const openEvents = async () => {
+    await goToOwningProfile();
+    openMonitorEvents({
+      monitorId: monitor.Id,
+      newEventCount,
+      newestEventAt,
+      from: '/monitors',
+    });
+  };
+
+  const goToDetail = async () => {
+    await goToOwningProfile();
+    navigate(`/monitors/${monitor.Id}`, { state: { from: '/monitors' } });
+  };
 
   if (compact) {
     return (
@@ -118,7 +147,7 @@ function MonitorCardComponent({
         <div
           className="relative bg-card cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary"
           style={{ aspectRatio: aspectRatio ?? '16 / 9' }}
-          onClick={() => navigate(`/monitors/${monitor.Id}`, { state: { from: '/monitors' } })}
+          onClick={goToDetail}
           onKeyDown={handleKeyClick}
           tabIndex={0}
           role="button"
@@ -139,6 +168,15 @@ function MonitorCardComponent({
         <div className="p-2 space-y-1.5">
           <div className="flex items-center gap-1.5">
             <div className="text-xs font-semibold truncate flex-1 min-w-0" title={monitor.Name} data-testid="monitor-name">{monitor.Name}</div>
+            {profileChip && (
+              <span
+                className="text-[9px] px-1 py-0 h-4 rounded bg-muted text-muted-foreground truncate max-w-[72px] shrink-0"
+                title={profileChip}
+                data-testid="monitor-profile-chip"
+              >
+                {profileChip}
+              </span>
+            )}
             {isRTC && (
               <HintButton
                 type="button"
@@ -255,11 +293,11 @@ function MonitorCardComponent({
         <div
           className="relative bg-muted/30 rounded overflow-hidden cursor-pointer w-[40%] shrink-0 focus:outline-none focus:ring-2 focus:ring-primary"
           style={{ aspectRatio: aspectRatio ?? '16 / 9' }}
-          onClick={() => navigate(`/monitors/${monitor.Id}`, { state: { from: '/monitors' } })}
+          onClick={goToDetail}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
-              navigate(`/monitors/${monitor.Id}`, { state: { from: '/monitors' } });
+              void goToDetail();
             }
           }}
           role="button"
@@ -288,6 +326,15 @@ function MonitorCardComponent({
               <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 shrink-0">
                 ID: {monitor.Id}
               </Badge>
+              {profileChip && (
+                <span
+                  className="text-[10px] px-1.5 py-0 h-5 rounded bg-muted text-muted-foreground truncate max-w-[120px] shrink-0"
+                  title={profileChip}
+                  data-testid="monitor-profile-chip"
+                >
+                  {profileChip}
+                </span>
+              )}
               {isRTC && (
                 <HintButton
                   type="button"

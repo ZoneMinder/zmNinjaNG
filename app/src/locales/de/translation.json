@@ -147,7 +147,8 @@
     "fit_fill": "Füllen",
     "fit_none": "Keine",
     "fit_scale_down": "Verkleinern",
-    "view_events": "Ereignisse"
+    "view_events": "Ereignisse",
+    "group_by_server": "Nach Server gruppieren"
   },
   "events": {
     "title": "Ereignisse",
@@ -983,7 +984,9 @@
     "streaming": "Streaming",
     "streaming_url": "Streaming URL",
     "add": "Hinzufügen",
-    "credentials_incomplete": "Bitte geben Sie Benutzername und Passwort ein oder lassen Sie beide leer."
+    "credentials_incomplete": "Bitte geben Sie Benutzername und Passwort ein oder lassen Sie beide leer.",
+    "all_servers": "Alle Server",
+    "all_servers_subtitle": "Monitore aller Server anzeigen"
   },
   "setup": {
     "welcome": "Willkommen bei zmNinjaNg",

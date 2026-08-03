@@ -33,10 +33,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '../components/ui/alert-dialog';
-import { Server, Edit, Plus, Check, Loader2, Eye, EyeOff, Trash2 } from 'lucide-react';
+import { Server, Edit, Plus, Check, Loader2, Eye, EyeOff, Trash2, Layers } from 'lucide-react';
 import { PageContainer } from '../components/common/PageContainer';
 import { Badge } from '../components/ui/badge';
 import type { Profile } from '../api/types';
+import { ALL_PROFILES_ID } from '../api/types';
 import { useToast } from '../hooks/use-toast';
 import { toast as sonnerToast } from 'sonner';
 import { discoverUrls } from '../services/discovery';
@@ -49,7 +50,7 @@ export default function Profiles() {
   const { t } = useTranslation();
 
   const profiles = useProfileStore((state) => state.profiles);
-  const { currentProfile } = useCurrentProfile();
+  const { currentProfile, isAllMode } = useCurrentProfile();
   const updateProfile = useProfileStore((state) => state.updateProfile);
   const deleteProfile = useProfileStore((state) => state.deleteProfile);
   const deleteAllProfiles = useProfileStore((state) => state.deleteAllProfiles);
@@ -276,8 +277,12 @@ export default function Profiles() {
   const switchAbortRef = useRef<AbortController | null>(null);
 
   const handleSwitchProfile = async (profileId: string) => {
+    const isAll = profileId === ALL_PROFILES_ID;
     const profile = profiles.find((p) => p.id === profileId);
-    if (!profile) return;
+    // The All Servers sentinel has no profile record; every other id must
+    // resolve to one.
+    if (!isAll && !profile) return;
+    const name = isAll ? t('profiles.all_servers') : profile!.name;
 
     // Abort any in-flight switch attempt
     if (switchAbortRef.current) {
@@ -289,7 +294,7 @@ export default function Profiles() {
     // Clear previous state
     sonnerToast.dismiss();
     setSwitchingProfileId(profileId);
-    const loadingToast = sonnerToast.loading(t('profiles.switching_to', { name: profile.name }));
+    const loadingToast = sonnerToast.loading(t('profiles.switching_to', { name }));
 
     try {
       await switchProfile(profileId);
@@ -298,7 +303,7 @@ export default function Profiles() {
       if (abort.signal.aborted) return;
 
       sonnerToast.dismiss(loadingToast);
-      sonnerToast.success(t('profiles.switched_to', { name: profile.name }));
+      sonnerToast.success(t('profiles.switched_to', { name }));
       setSwitchingProfileId(null);
       navigate('/monitors');
     } catch {
@@ -356,6 +361,37 @@ export default function Profiles() {
               </div>
             </CardHeader>
             <CardContent>
+              {profiles.length >= 2 && (
+                <div
+                  className={`flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors cursor-pointer mb-3 ${isAllMode ? 'ring-1 ring-primary' : ''}`}
+                  data-testid="profile-card-all"
+                  onClick={() => handleSwitchProfile(ALL_PROFILES_ID)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleSwitchProfile(ALL_PROFILES_ID);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                >
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    {isAllMode && (
+                      <Check className="h-4 w-4 text-primary shrink-0" data-testid="profile-active-indicator" />
+                    )}
+                    <Layers className="h-5 w-5 text-primary shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate" title={t('profiles.all_servers')}>{t('profiles.all_servers')}</div>
+                      <p className="text-xs text-muted-foreground truncate" title={t('profiles.all_servers_subtitle')}>
+                        {t('profiles.all_servers_subtitle')}
+                      </p>
+                    </div>
+                  </div>
+                  {switchingProfileId === ALL_PROFILES_ID && (
+                    <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                  )}
+                </div>
+              )}
               <div className="space-y-3" data-testid="profile-list">
                 {profiles.map((profile) => (
                   <div

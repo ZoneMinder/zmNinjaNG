@@ -3,7 +3,10 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MonitorCard } from '../MonitorCard';
 import { useMonitorSeenStore } from '../../../stores/monitorSeen';
+import { asProfileId } from '../../../api/types';
 import type { Monitor, MonitorStatus } from '../../../api/types';
+
+const OTHER_PROFILE_ID = asProfileId('other-profile');
 
 vi.mock('../LiveMonitorPlayer', () => ({
   LiveMonitorPlayer: ({ monitor }: { monitor: { Name: string } }) => (
@@ -16,10 +19,21 @@ vi.mock('../MonitorHoverPreview', () => ({
 }));
 
 vi.mock('../../../hooks/useCurrentProfile', () => ({
-  useCurrentProfile: () => ({
-    currentProfile: { id: 'test', portalUrl: 'https://test', cgiUrl: 'https://test/cgi', apiUrl: 'https://test/api' },
+  useProfileById: () => ({
+    profile: { id: 'test', portalUrl: 'https://test', cgiUrl: 'https://test/cgi', apiUrl: 'https://test/api' },
     settings: { viewMode: 'streaming', hoverPreview: { eventsList: true, eventsGrid: false, monitorsList: true, monitorsGrid: false, dashboard: true, timeline: true, notifications: true } },
   }),
+  // useOpenMonitorEvents (imported by MonitorCard) reads the current profile
+  // directly, independent of the profileId prop under test here.
+  useCurrentProfile: () => ({
+    currentProfile: { id: 'test' },
+  }),
+}));
+
+const switchProfileMock = vi.fn(() => Promise.resolve());
+vi.mock('../../../stores/profile', () => ({
+  useProfileStore: (selector: (state: { switchProfile: typeof switchProfileMock }) => unknown) =>
+    selector({ switchProfile: switchProfileMock }),
 }));
 
 const mockNavigate = vi.fn();
@@ -96,7 +110,8 @@ describe('MonitorCard', () => {
     await user.click(screen.getByTestId('monitor-settings-button'));
 
     expect(onShowSettings).toHaveBeenCalledWith(
-      expect.objectContaining({ Id: '1', Name: 'Front Door' })
+      expect.objectContaining({ Id: '1', Name: 'Front Door' }),
+      undefined
     );
   });
 
@@ -174,5 +189,44 @@ describe('MonitorCard', () => {
     await user.click(screen.getByTestId('monitor-events-button'));
 
     expect(mockNavigate).toHaveBeenCalledWith('/events?monitorId=1', { state: { from: '/monitors' } });
+  });
+
+  it('renders the profile chip when profileChip is provided (All mode)', () => {
+    render(
+      <MonitorCard
+        monitor={monitor}
+        status={status}
+        onShowSettings={vi.fn()}
+        profileId={OTHER_PROFILE_ID}
+        profileChip="Office"
+      />
+    );
+
+    expect(screen.getByTestId('monitor-profile-chip')).toHaveTextContent('Office');
+  });
+
+  it('does not render a profile chip in single mode', () => {
+    render(<MonitorCard monitor={monitor} status={status} onShowSettings={vi.fn()} />);
+
+    expect(screen.queryByTestId('monitor-profile-chip')).not.toBeInTheDocument();
+  });
+
+  it('switches to the owning profile before navigating to the detail page (All mode)', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MonitorCard
+        monitor={monitor}
+        status={status}
+        onShowSettings={vi.fn()}
+        profileId={OTHER_PROFILE_ID}
+        profileChip="Office"
+      />
+    );
+
+    await user.click(screen.getByTestId('monitor-player'));
+
+    expect(switchProfileMock).toHaveBeenCalledWith(OTHER_PROFILE_ID);
+    expect(mockNavigate).toHaveBeenCalledWith('/monitors/1', { state: { from: '/monitors' } });
   });
 });

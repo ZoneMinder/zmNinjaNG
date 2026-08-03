@@ -6,18 +6,18 @@
  */
 
 import { useState, useMemo, useCallback, useRef } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { queryKeys } from '../lib/query/query-keys';
 import { useTranslation } from 'react-i18next';
-import { getMonitors, updateMonitor } from '../api/monitors';
-import { getCurrentSession } from '../services/sessions';
+import { updateMonitor } from '../api/monitors';
+import { getSession } from '../services/sessions';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
-import { useBandwidthSettings } from '../hooks/useBandwidthSettings';
+import { useProfileScope } from '../hooks/useProfileScope';
+import { useScopedMonitors } from '../hooks/useScopedMonitors';
 import { useMonitorNewEvents } from '../hooks/useMonitorNewEvents';
 import { useAuthSlice } from '../stores/auth';
+import { useProfileStore } from '../stores/profile';
 import { useSettingsStore } from '../stores/settings';
 import { Button } from '../components/ui/button';
-import { LayoutGrid, List, Video } from 'lucide-react';
+import { LayoutGrid, List, Video, Layers } from 'lucide-react';
 import { PageContainer } from '../components/common/PageContainer';
 import { ErrorBanner } from '../components/ui/query-state';
 import { EmptyState } from '../components/ui/empty-state';
@@ -27,33 +27,46 @@ import { MonitorCard } from '../components/monitors/MonitorCard';
 import { AnalysisFramesToggle } from '../components/monitors/AnalysisFramesToggle';
 import { MonitorSettingsDialog } from '../components/monitor-detail/MonitorSettingsDialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { filterEnabledMonitors, filterMonitorsByGroup } from '../lib/monitor/filters';
+import { filterMonitorsByGroup } from '../lib/monitor/filters';
 import { useGroupFilter } from '../hooks/useGroupFilter';
 import { GroupFilterSelect } from '../components/filters/GroupFilterSelect';
-import type { Monitor } from '../api/types';
+import type { Monitor, MonitorStatus, ProfileId } from '../api/types';
 import { NotificationBadge } from '../components/NotificationBadge';
 import { toast } from 'sonner';
 import { log, LogLevel } from '../lib/logger';
 import { EventMontageGridControls } from '../components/events/EventMontageGridControls';
 import { useEventMontageGrid } from '../hooks/useEventMontageGrid';
+
+/** One monitor tile's worth of render data. profileId/profileChip are set
+ * only in All mode (see useScopedMonitors); undefined in single mode. */
+interface MonitorGridItem {
+  Monitor: Monitor;
+  Monitor_Status: MonitorStatus | undefined;
+  profileId?: ProfileId;
+  profileChip?: string;
+}
 export default function Monitors() {
   const { t } = useTranslation();
   const [selectedMonitor, setSelectedMonitor] = useState<Monitor | null>(null);
+  const [selectedMonitorProfileId, setSelectedMonitorProfileId] = useState<ProfileId | null>(null);
   const [showPropertiesDialog, setShowPropertiesDialog] = useState(false);
 
-  const { currentProfile, settings } = useCurrentProfile();
-  const bandwidth = useBandwidthSettings();
+  const { currentProfile, settings, isAllMode } = useCurrentProfile();
+  // Settings-update target: the real profile id in single mode, or the ALL
+  // bucket sentinel in All mode (currentProfile stays null there).
+  const currentProfileId = useProfileStore((state) => state.currentProfileId);
   const updateSettings = useSettingsStore((state) => state.updateProfileSettings);
-  const authSlice = useAuthSlice(currentProfile?.id ?? null);
-  const isAuthenticated = authSlice.isAuthenticated;
-  const zmVersion = authSlice.version;
+  const scope = useProfileScope();
+  const totalScopeProfiles = scope?.profiles.length ?? 0;
+  // Group filter is current-profile-scoped (settings + groups query both key
+  // off it); All mode skips it until Phase 3 extends it across servers.
   const { isFilterActive, filteredMonitorIds, isFilterReady } = useGroupFilter();
   const gridContainerRef = useRef<HTMLDivElement>(null);
 
   const handleMonitorGridChange = useCallback((cols: number) => {
-    if (!currentProfile) return;
-    updateSettings(currentProfile.id, { monitorGridCols: cols });
-  }, [currentProfile, updateSettings]);
+    if (!currentProfileId) return;
+    updateSettings(currentProfileId, { monitorGridCols: cols });
+  }, [currentProfileId, updateSettings]);
 
   const {
     gridCols: monitorGridCols,
@@ -69,43 +82,61 @@ export default function Monitors() {
     onGridChange: handleMonitorGridChange,
   });
 
-  const { data, isLoading, error, refetch } = useQuery({
-    queryKey: queryKeys.monitors(currentProfile?.id),
-    queryFn: () => getMonitors(getCurrentSession().client, getCurrentSession().profileId),
-    enabled: !!currentProfile && isAuthenticated,
-    refetchInterval: bandwidth.monitorStatusInterval,
-  });
+  // Single code path for both modes: one profile in single mode, N in All
+  // mode, sharing the same queryKeys.monitors(id) cache entry useMonitors
+  // uses. isLoading stays true forever on a total outage (no profile ever
+  // gets data), so the render below branches on errors.length instead of
+  // trusting isLoading alone (refs #337, Task 4 finding).
+  const { monitors: scopedMonitors, errors: profileErrors, isLoading: scopedLoading, refetchProfile } = useScopedMonitors();
 
-  // Memoize filtered monitors (all monitors, regardless of status)
-  const enabledMonitors = useMemo(() => {
-    return data?.monitors ? filterEnabledMonitors(data.monitors) : [];
-  }, [data?.monitors]);
+  const renderItems = useMemo((): MonitorGridItem[] => {
+    if (isAllMode) {
+      return scopedMonitors.map((s) => ({
+        Monitor: s.item.Monitor,
+        Monitor_Status: s.item.Monitor_Status,
+        profileId: s.profileId,
+        profileChip: s.profileName,
+      }));
+    }
+    const unwrapped = scopedMonitors.map((s) => s.item);
+    // Apply group filter if active. An empty id list means the group resolved
+    // to nothing (or groups have not loaded yet), so show none rather than
+    // falling back to every monitor.
+    const filtered = !isFilterActive
+      ? unwrapped
+      : filteredMonitorIds.length === 0
+        ? []
+        : filterMonitorsByGroup(unwrapped, filteredMonitorIds);
+    return filtered.map(({ Monitor, Monitor_Status }) => ({ Monitor, Monitor_Status }));
+  }, [isAllMode, scopedMonitors, isFilterActive, filteredMonitorIds]);
 
-  // Apply group filter if active. An empty id list means the group resolved to
-  // nothing (or groups have not loaded yet), so show none rather than falling
-  // back to every monitor.
-  const allMonitors = useMemo(() => {
-    if (!isFilterActive) return enabledMonitors;
-    if (filteredMonitorIds.length === 0) return [];
-    return filterMonitorsByGroup(enabledMonitors, filteredMonitorIds);
-  }, [enabledMonitors, isFilterActive, filteredMonitorIds]);
-
-  const monitorIds = useMemo(() => allMonitors.map(({ Monitor }) => Monitor.Id), [allMonitors]);
+  // useMonitorNewEvents is current-profile-scoped (watermarks keyed by one
+  // profile id); All mode gets no new-event badges until Phase 3 extends it
+  // across every scoped profile.
+  const monitorIds = useMemo(
+    () => (isAllMode ? [] : renderItems.map(({ Monitor }) => Monitor.Id)),
+    [isAllMode, renderItems]
+  );
   const { counts: newEventCounts, newest: newestEventAt } = useMonitorNewEvents(monitorIds);
 
   // Stable identity: MonitorCard is memo()'d, and this is its only
   // reference-unstable prop. A fresh function per render would re-render every
   // card on every status poll.
-  const handleShowSettings = useCallback((monitor: Monitor) => {
+  const handleShowSettings = useCallback((monitor: Monitor, profileId?: ProfileId | null) => {
     setSelectedMonitor(monitor);
+    setSelectedMonitorProfileId(profileId ?? null);
     setShowPropertiesDialog(true);
   }, []);
 
   // Settings dialog save handler
   const [isSavingSettings, setIsSavingSettings] = useState(false);
+  // The profile that owns the selected monitor: the card's own profileId in
+  // All mode, the current profile in single mode.
+  const settingsProfileId = selectedMonitorProfileId ?? currentProfile?.id ?? null;
+  const settingsZmVersion = useAuthSlice(settingsProfileId).version;
 
   const handleSaveSettings = useCallback(async (changes: Record<string, string | undefined>) => {
-    if (!selectedMonitor) return;
+    if (!selectedMonitor || !settingsProfileId) return;
     setIsSavingSettings(true);
     try {
       const params: Record<string, string> = {};
@@ -113,9 +144,9 @@ export default function Monitors() {
         if (value !== undefined) params[`Monitor[${key}]`] = value;
       }
       if (Object.keys(params).length > 0) {
-        await updateMonitor(getCurrentSession().client, selectedMonitor.Id, params);
+        await updateMonitor(getSession(settingsProfileId).client, selectedMonitor.Id, params);
       }
-      await refetch();
+      refetchProfile(settingsProfileId);
       toast.success(t('monitor_detail.capture_updated'));
     } catch (error) {
       log.monitor('Settings save failed', LogLevel.ERROR, { error });
@@ -123,19 +154,23 @@ export default function Monitors() {
     } finally {
       setIsSavingSettings(false);
     }
-  }, [selectedMonitor, refetch, t]);
+  }, [selectedMonitor, settingsProfileId, refetchProfile, t]);
 
   const handleFeedFitChange = (value: string) => {
-    if (!currentProfile) return;
-    updateSettings(currentProfile.id, {
+    if (!currentProfileId) return;
+    updateSettings(currentProfileId, {
       monitorsFeedFit: value as typeof settings.monitorsFeedFit,
     });
   };
 
-  // Wait for monitors to load and for the group filter to resolve before
-  // rendering tiles. A mounted tile starts its stream, so rendering all
-  // monitors for a frame before the group narrows would open every stream.
-  if (isLoading || !isFilterReady) {
+  // Wait for monitors to load and (single mode only) for the group filter to
+  // resolve before rendering tiles. A mounted tile starts its stream, so
+  // rendering all monitors for a frame before the group narrows would open
+  // every stream. Once any profile has errored, scopedLoading never clears
+  // on its own (see useScopedMonitors), so an errored profile must fall
+  // through to the normal view below instead of spinning forever.
+  const stillWaiting = scopedLoading && profileErrors.length === 0;
+  if (stillWaiting || (!isAllMode && !isFilterReady)) {
     return (
       <div className="p-8 space-y-6">
         <div className="h-8 w-48 bg-muted rounded animate-pulse" />
@@ -148,20 +183,69 @@ export default function Monitors() {
     );
   }
 
-  // A background refetch error (e.g. offline) while cached monitors are
-  // already loaded falls through to the normal view below instead of this
-  // error wall; the OfflineBanner in AppLayout covers that case. Only a cold
-  // start with no cached data (no `data` yet) hits the error wall.
-  if (error && !data) {
-    return (
-      <div className="p-8">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-lg font-bold tracking-tight">{t('monitors.title')}</h1>
-        </div>
-        <ErrorBanner message={resolveQueryError(error, t, { fallbackKey: 'monitors.failed_to_load' })} />
+  // Every profile in scope failed and none ever produced data: distinct from
+  // "no cameras configured" so a retry affordance stays visible via the error
+  // strips below (refs #337, Task 4 finding).
+  const allFailed = profileErrors.length > 0 && profileErrors.length === totalScopeProfiles && renderItems.length === 0;
+
+  const renderMonitorSection = (items: MonitorGridItem[], attachGridRef: boolean) => (
+    settings.monitorsViewMode === 'grid' ? (
+      <div
+        ref={attachGridRef ? gridContainerRef : undefined}
+        className="grid gap-3"
+        style={{ gridTemplateColumns: `repeat(${monitorGridCols}, minmax(0, 1fr))` }}
+        data-testid="monitor-grid"
+      >
+        {items.map(({ Monitor, Monitor_Status, profileId, profileChip }) => (
+          <MonitorCard
+            key={`${profileId ?? ''}-${Monitor.Id}`}
+            monitor={Monitor}
+            status={Monitor_Status}
+            newEventCount={newEventCounts[Monitor.Id]}
+            newestEventAt={newestEventAt[Monitor.Id]}
+            onShowSettings={handleShowSettings}
+            objectFit={settings.monitorsFeedFit}
+            profileId={profileId}
+            profileChip={profileChip}
+            compact
+          />
+        ))}
       </div>
-    );
-  }
+    ) : (
+      <div className="space-y-4" data-testid="monitor-grid">
+        {items.map(({ Monitor, Monitor_Status, profileId, profileChip }) => (
+          <MonitorCard
+            key={`${profileId ?? ''}-${Monitor.Id}`}
+            monitor={Monitor}
+            status={Monitor_Status}
+            newEventCount={newEventCounts[Monitor.Id]}
+            newestEventAt={newestEventAt[Monitor.Id]}
+            onShowSettings={handleShowSettings}
+            objectFit={settings.monitorsFeedFit}
+            profileId={profileId}
+            profileChip={profileChip}
+          />
+        ))}
+      </div>
+    )
+  );
+
+  // Section renderItems by owning server when the toggle is on. All mode
+  // only - single mode never has more than one profile to group by.
+  const groupedSections = isAllMode && settings.monitorsGroupByServer
+    ? Array.from(
+        renderItems.reduce((byProfile, item) => {
+          const key = item.profileId as ProfileId;
+          const existing = byProfile.get(key);
+          if (existing) {
+            existing.items.push(item);
+          } else {
+            byProfile.set(key, { profileName: item.profileChip ?? '', items: [item] });
+          }
+          return byProfile;
+        }, new Map<ProfileId, { profileName: string; items: MonitorGridItem[] }>())
+      )
+    : null;
 
   return (
     <PageContainer className="space-y-4 sm:space-y-6" spacing="none">
@@ -172,19 +256,37 @@ export default function Monitors() {
             <NotificationBadge />
           </div>
           <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-            {t('monitors.count', { count: allMonitors.length })}
+            {t('monitors.count', { count: renderItems.length })}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <GroupFilterSelect />
+          {isAllMode ? (
+            <Button
+              variant={settings.monitorsGroupByServer ? 'default' : 'outline'}
+              size="icon"
+              className="h-8 sm:h-9 w-8 sm:w-9"
+              aria-pressed={settings.monitorsGroupByServer}
+              title={t('monitors.group_by_server')}
+              aria-label={t('monitors.group_by_server')}
+              onClick={() => {
+                if (!currentProfileId) return;
+                updateSettings(currentProfileId, { monitorsGroupByServer: !settings.monitorsGroupByServer });
+              }}
+              data-testid="monitors-group-by-server"
+            >
+              <Layers className="h-4 w-4" />
+            </Button>
+          ) : (
+            <GroupFilterSelect />
+          )}
           <Button
             variant="outline"
             size="icon"
             className="h-8 sm:h-9 w-8 sm:w-9"
             onClick={() => {
-              if (!currentProfile) return;
+              if (!currentProfileId) return;
               const next = settings.monitorsViewMode === 'list' ? 'grid' : 'list';
-              updateSettings(currentProfile.id, { monitorsViewMode: next });
+              updateSettings(currentProfileId, { monitorsViewMode: next });
             }}
             title={settings.monitorsViewMode === 'list' ? t('events.view_montage') : t('events.view_list')}
             aria-label={settings.monitorsViewMode === 'list' ? t('events.view_montage') : t('events.view_list')}
@@ -224,51 +326,60 @@ export default function Monitors() {
         </div>
       </div>
 
+      {/* Per-profile errors: one strip per failed profile's query, healthy
+          profiles keep rendering below regardless (refs #337, Task 4 finding). */}
+      {profileErrors.length > 0 && (
+        <div className="space-y-2">
+          {profileErrors.map((err) => (
+            <div
+              key={err.profileId}
+              className="flex items-center gap-2"
+              data-testid={`profile-error-strip-${err.profileId}`}
+            >
+              <ErrorBanner
+                className="flex-1"
+                message={`${err.profileName}: ${resolveQueryError(err.error, t, { fallbackKey: 'monitors.failed_to_load' })}`}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => refetchProfile(err.profileId)}
+                data-testid={`profile-error-strip-retry-${err.profileId}`}
+              >
+                {t('common.retry')}
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* All Cameras */}
       <div className="space-y-3 sm:space-y-4">
-        {allMonitors.length === 0 ? (
-          <div data-testid="monitors-empty-state">
+        {renderItems.length === 0 ? (
+          <div data-testid={allFailed ? 'monitors-all-failed-state' : 'monitors-empty-state'}>
             <EmptyState
               icon={Video}
               title={t('monitors.no_cameras')}
               className="p-8 text-center border rounded-lg bg-muted/20 text-muted-foreground"
             />
           </div>
-        ) : settings.monitorsViewMode === 'grid' ? (
-            <div
-              ref={gridContainerRef}
-              className="grid gap-3"
-              style={{ gridTemplateColumns: `repeat(${monitorGridCols}, minmax(0, 1fr))` }}
-              data-testid="monitor-grid"
-            >
-              {allMonitors.map(({ Monitor, Monitor_Status }) => (
-                <MonitorCard
-                  key={Monitor.Id}
-                  monitor={Monitor}
-                  status={Monitor_Status}
-                  newEventCount={newEventCounts[Monitor.Id]}
-                  newestEventAt={newestEventAt[Monitor.Id]}
-                  onShowSettings={handleShowSettings}
-                  objectFit={settings.monitorsFeedFit}
-                  compact
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="space-y-4" data-testid="monitor-grid">
-              {allMonitors.map(({ Monitor, Monitor_Status }) => (
-                <MonitorCard
-                  key={Monitor.Id}
-                  monitor={Monitor}
-                  status={Monitor_Status}
-                  newEventCount={newEventCounts[Monitor.Id]}
-                  newestEventAt={newestEventAt[Monitor.Id]}
-                  onShowSettings={handleShowSettings}
-                  objectFit={settings.monitorsFeedFit}
-                />
-              ))}
-            </div>
-          )}
+        ) : groupedSections ? (
+          <div className="space-y-6">
+            {groupedSections.map(([profileId, section]) => (
+              <div key={profileId}>
+                <h2
+                  className="text-sm font-semibold text-muted-foreground mb-2 truncate"
+                  title={section.profileName}
+                >
+                  {section.profileName}
+                </h2>
+                {renderMonitorSection(section.items, false)}
+              </div>
+            ))}
+          </div>
+        ) : (
+          renderMonitorSection(renderItems, true)
+        )}
       </div>
 
       {/* Monitor Settings Dialog */}
@@ -277,7 +388,7 @@ export default function Monitors() {
           open={showPropertiesDialog}
           onOpenChange={setShowPropertiesDialog}
           monitor={selectedMonitor}
-          zmVersion={zmVersion}
+          zmVersion={settingsZmVersion}
           onSave={handleSaveSettings}
           isSaving={isSavingSettings}
         />

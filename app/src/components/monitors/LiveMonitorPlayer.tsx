@@ -15,7 +15,7 @@
 import { useRef, useMemo, useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
-import type { Monitor, Profile } from '../../api/types';
+import type { Monitor, Profile, ProfileId } from '../../api/types';
 import { useSettingsStore } from '../../stores/settings';
 import { useGo2RTCStream } from '../../hooks/useGo2RTCStream';
 import { useMonitorStream } from '../../hooks/useMonitorStream';
@@ -102,6 +102,15 @@ export function derivePlayerViewState(input: {
 export interface LiveMonitorPlayerProps {
   monitor: Monitor;
   profile: Profile | null;
+  /**
+   * Id of the profile that owns this monitor, threaded to useMonitorStream so
+   * the MJPEG stream URL/token resolve against that profile instead of the
+   * globally-selected one. Defaults to the current profile when omitted
+   * (single mode). Callers passing a non-current `profile` (All mode) must
+   * pass its id here too - `profile` alone only affects go2rtc/WebRTC, which
+   * read straight off the prop.
+   */
+  profileId?: ProfileId | null;
   className?: string;
   objectFit?: 'contain' | 'cover' | 'fill' | 'none' | 'scale-down';
   /** Show native video controls on Go2RTC streams (mute, fullscreen) */
@@ -131,6 +140,7 @@ export interface LiveMonitorPlayerProps {
 export function LiveMonitorPlayer({
   monitor,
   profile,
+  profileId,
   className = '',
   objectFit = 'contain',
   showControls = false,
@@ -456,6 +466,7 @@ export function LiveMonitorPlayer({
     },
     enabled: effectiveStreamingMethod === 'mjpeg' || showMjpegPlaceholder,
     viewModeOverride: forceViewMode,
+    profileId,
   });
 
   // Track MJPEG image error state. Clear it whenever a new connection is minted
