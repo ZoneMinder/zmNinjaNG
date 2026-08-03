@@ -3,12 +3,12 @@
   "@typescript-eslint/no-explicit-any": 100,
   "@typescript-eslint/no-this-alias": 1,
   "no-restricted-syntax": 4,
-  "react-hooks/exhaustive-deps": 36,
+  "react-hooks/exhaustive-deps": 35,
   "react-hooks/globals": 1,
-  "react-hooks/preserve-manual-memoization": 11,
+  "react-hooks/preserve-manual-memoization": 10,
   "react-hooks/refs": 22,
   "react-hooks/set-state-in-effect": 13,
-  "react-hooks/static-components": 9,
+  "react-hooks/static-components": 10,
   "react-refresh/only-export-components": 8,
   "unused-eslint-disable-directive": 1
 }

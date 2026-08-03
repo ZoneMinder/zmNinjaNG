@@ -26,6 +26,12 @@ vi.mock('../../stores/settings', () => ({
     }
     return {};
   }),
+  mergeProfileSettings: vi.fn((raw?: Record<string, unknown>) => ({
+    viewMode: 'snapshot',
+    displayMode: 'normal',
+    theme: 'light',
+    ...raw,
+  })),
 }));
 
 const switchProfileMock = vi.fn(() => Promise.resolve());
