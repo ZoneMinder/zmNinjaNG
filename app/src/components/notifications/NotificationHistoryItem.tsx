@@ -8,7 +8,7 @@
  * EventItem (refs #337).
  */
 
-import { useCallback, useMemo } from 'react';
+import { memo, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CheckCheck, ExternalLink, Wifi, Smartphone, RefreshCw } from 'lucide-react';
 import type { NotificationEvent } from '../../stores/notifications';
@@ -46,14 +46,13 @@ function SourceIcon({ source }: { source: string }) {
   return <Wifi className="h-3 w-3" />;
 }
 
-export function NotificationHistoryItem({ event, showProfileChip, onView, onMarkRead }: NotificationHistoryItemProps) {
+function NotificationHistoryItemComponent({ event, showProfileChip, onView, onMarkRead }: NotificationHistoryItemProps) {
   const { t } = useTranslation();
   const { profile, settings } = useProfileById(event.profileId);
   const { token: accessToken, isFresh: isAccessTokenFresh } = useFreshAccessToken(event.profileId);
   const { fmtDateTimeShort } = useDateTimeFormat();
 
   const causeDisplay = event.Cause.split('|')[0].trim();
-  const CauseIcon = getEventCauseIcon(causeDisplay);
   // EventId 0 means the push had no ZM event (issue #242): nothing to open
   // and no image to fetch, so the row is not clickable.
   const canView = event.EventId > 0;
@@ -149,7 +148,10 @@ export function NotificationHistoryItem({ event, showProfileChip, onView, onMark
           )}
         </div>
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
-          <CauseIcon className="h-3 w-3 shrink-0" />
+          {(() => {
+            const CauseIcon = getEventCauseIcon(causeDisplay);
+            return <CauseIcon className="h-3 w-3 shrink-0" />;
+          })()}
           <span className="truncate">{causeDisplay}</span>
           {event.Notes && (
             <>
@@ -192,3 +194,8 @@ export function NotificationHistoryItem({ event, showProfileChip, onView, onMark
     </div>
   );
 }
+
+// memo()-wrapped (same pattern as EventCard/EventMontageTile): this
+// list-item component re-renders once per row on every notification-store
+// update, and skips rows whose own props haven't changed.
+export const NotificationHistoryItem = memo(NotificationHistoryItemComponent);

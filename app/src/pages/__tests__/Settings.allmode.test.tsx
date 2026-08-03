@@ -53,6 +53,15 @@ vi.mock('../../components/NotificationBadge', () => ({
 vi.mock('../../components/settings/HiddenMonitorsSection', () => ({
   HiddenMonitorsSection: () => null,
 }));
+// AssistantSection and AdvancedSection pull in WebGPU/model-download/native-LLM
+// probes and other effects unrelated to this test's two-tier-picker subject,
+// which fire post-assert and produce act() noise. Stub them the same way.
+vi.mock('../../components/settings/AssistantSection', () => ({
+  AssistantSection: () => null,
+}));
+vi.mock('../../components/settings/AdvancedSection', () => ({
+  AdvancedSection: () => null,
+}));
 
 const profileA = { id: asProfileId('profile-a'), name: 'Home' } as import('../../api/types').Profile;
 const profileB = { id: asProfileId('profile-b'), name: 'Work' } as import('../../api/types').Profile;
