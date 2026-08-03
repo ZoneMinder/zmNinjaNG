@@ -304,7 +304,11 @@ export function AskPanel() {
   const currentProfile = isAllMode ? pinnedProfile : singleProfile;
   const settings = isAllMode ? pinnedSettings : singleSettings;
   const profileId = currentProfile?.id;
-  const { token: accessToken, isFresh: accessTokenFresh } = useFreshAccessToken();
+  // defaultPinnedId (undefined in single mode) so the token follows the
+  // pinned profile in All mode, same as every other All-mode call site -
+  // an unparented call here resolves to the no-current-profile sentinel and
+  // never refreshes, 401ing authenticated result-card thumbnails (refs #337).
+  const { token: accessToken, isFresh: accessTokenFresh } = useFreshAccessToken(defaultPinnedId);
 
   const { host } = useAssistantHost();
 

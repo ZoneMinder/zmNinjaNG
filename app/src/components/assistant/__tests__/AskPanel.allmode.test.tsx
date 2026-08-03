@@ -44,8 +44,17 @@ vi.mock('../../../lib/assistant/providers/openai', async (importOriginal) => ({
   ...(await importOriginal<object>()),
   warmOllamaModel: vi.fn(() => new Promise(() => {})),
 }));
+// Profile-sensitive, mirroring EventListView/NotificationHistoryItem's own
+// tests: a fixed `{ token: null }` regardless of the argument is exactly
+// what let AskPanel call this with no profileId at all slip through (it
+// resolved to the same no-profile token single mode gets, refs #337 fix
+// round 1) - a real regression test has to key the return off the argument.
+const useFreshAccessTokenMock = vi.fn((profileId?: string) => ({
+  token: profileId ? `${profileId}-token` : null,
+  isFresh: !!profileId,
+}));
 vi.mock('../../../hooks/useFreshAccessToken', () => ({
-  useFreshAccessToken: () => ({ token: null, isFresh: false }),
+  useFreshAccessToken: (profileId?: string) => useFreshAccessTokenMock(profileId),
 }));
 vi.mock('../useAssistantHost', () => ({
   useAssistantHost: () => ({ host: { navigate: vi.fn(), onActivity: vi.fn() } }),
@@ -99,6 +108,7 @@ const baseSettings = {
 describe('AskPanel - All mode profile pinning (refs #337)', () => {
   beforeEach(() => {
     useAssistantStore.setState({ threads: {}, running: false, activities: [] });
+    useFreshAccessTokenMock.mockClear();
     vi.mocked(useCurrentProfile).mockReturnValue({
       currentProfile: null, settings: baseSettings as never, hasProfile: false, isAllMode: true,
     });
@@ -130,5 +140,20 @@ describe('AskPanel - All mode profile pinning (refs #337)', () => {
 
     expect(screen.getByTestId('assistant-pinned-banner')).toHaveTextContent('Work');
     expect(screen.getByText('hello from B')).toBeInTheDocument();
+  });
+
+  // Regression for fix round 1: AskPanel called useFreshAccessToken() with no
+  // argument, which resolves to the no-current-profile sentinel in All mode
+  // (always null/stale) regardless of which profile is pinned - ToolContext's
+  // accessToken (and any authenticated result-card thumbnail built from it)
+  // silently 401ed no matter which profile was picked (refs #337).
+  it('resolves the fresh access token for the pinned profile, following the picker switch', () => {
+    render(<AskPanel />);
+
+    expect(useFreshAccessTokenMock).toHaveBeenLastCalledWith(profileA.id);
+
+    fireEvent.click(screen.getByTestId(`page-profile-picker-option-${profileB.id}`));
+
+    expect(useFreshAccessTokenMock).toHaveBeenLastCalledWith(profileB.id);
   });
 });

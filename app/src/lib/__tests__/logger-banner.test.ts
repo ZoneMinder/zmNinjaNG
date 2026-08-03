@@ -74,4 +74,15 @@ describe('viewNameForPath', () => {
     expect(viewNameForPath('/all/monitors/profile-1/5')).toBe('Monitor Detail');
     expect(viewNameForPath('/all/events/profile-1/12345')).toBe('Event Detail');
   });
+
+  // Only the two-segment /all/monitors|events/:profileId/:id shape (App.tsx's
+  // actual routes) should match - a bare /all/monitors, a non-deep-route
+  // /all/ path, or one missing a segment must fall through to null like any
+  // other unknown path, not silently match a truncated regex.
+  it('returns null for /all/ paths that are not the exact deep-route shape', () => {
+    expect(viewNameForPath('/all/monitors')).toBeNull();
+    expect(viewNameForPath('/all/monitors/profile-1')).toBeNull();
+    expect(viewNameForPath('/all/dashboard')).toBeNull();
+    expect(viewNameForPath('/all/other-style/profile-1/5')).toBeNull();
+  });
 });
