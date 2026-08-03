@@ -263,9 +263,10 @@ export default function Events() {
   // All-mode filter - navigating away (or clearing the param) reverts to
   // whatever was persisted before the link was opened (refs #337 I9).
   const deepLinkedProfileId = isAllMode ? searchParams.get('profileId') : null;
-  const effectiveServerFilter = deepLinkedProfileId
-    ? [deepLinkedProfileId as ProfileId]
-    : settings.eventsServerFilter;
+  const effectiveServerFilter = useMemo(
+    () => (deepLinkedProfileId ? [deepLinkedProfileId as ProfileId] : settings.eventsServerFilter),
+    [deepLinkedProfileId, settings.eventsServerFilter]
+  );
 
   // Every profile in scope failed and none ever produced an event: distinct
   // from "no events match the filter" (same suppression semantics as
