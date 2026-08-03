@@ -247,6 +247,8 @@
     "remove_tag": "Remove {{name}}",
     "all_failed_title": "Unable to load events",
     "filter_by_server": "Filter by server",
+    "filter_hides_everything": "Every server is hidden by the filter above",
+    "show_all_servers": "Show all servers",
     "failed_to_load": "Failed to load events: {{error}}"
   },
   "event_detail": {

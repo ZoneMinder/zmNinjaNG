@@ -109,6 +109,10 @@ export interface UseScopedEventsReturn {
    *  one profile's totalCount, unchanged from the page's old direct query -
    *  drives "Load More" / "Showing X of Y" the same way it always did. */
   totalCount: number | undefined;
+  /** Per-profile breakdown of the same totals, keyed by profile id. Lets a
+   *  caller recompute "Showing X of Y" against a subset of profiles (e.g.
+   *  Events.tsx's server filter) without an extra fetch (refs #337). */
+  totalCountByProfile: Partial<Record<ProfileId, number>>;
   /** Refetch exactly one profile's query */
   refetchProfile: (id: ProfileId) => void;
   /** Refetch every profile in scope; resolves once all have settled. */
@@ -137,7 +141,7 @@ export function useScopedEvents(options: UseScopedEventsOptions): UseScopedEvent
   // combine's OUTPUT with replaceEqualDeep and reuses old references for
   // unchanged sub-trees; without it every poll tick would produce brand-new
   // array identities even when the underlying data hasn't changed).
-  const { events, errors, isLoading, isFetching, totalCount } = useQueries({
+  const { events, errors, isLoading, isFetching, totalCount, totalCountByProfile } = useQueries({
     queries: profiles.map((p, i) => {
       const ownMonitorId = resolveOwnMonitorIds(monitorId, p.id);
       const eventIds = ownEventIds(p.id);
@@ -194,6 +198,7 @@ export function useScopedEvents(options: UseScopedEventsOptions): UseScopedEvent
       const errors: ProfileError[] = [];
       let anyHasData = false;
       let totalCount: number | undefined;
+      const totalCountByProfile: Partial<Record<ProfileId, number>> = {};
 
       profiles.forEach((p, i) => {
         const q = results[i];
@@ -206,6 +211,7 @@ export function useScopedEvents(options: UseScopedEventsOptions): UseScopedEvent
           const profileTotal = q.data.pagination?.totalCount;
           if (profileTotal !== undefined) {
             totalCount = (totalCount ?? 0) + profileTotal;
+            totalCountByProfile[p.id] = profileTotal;
           }
         }
         if (q.error) {
@@ -231,6 +237,7 @@ export function useScopedEvents(options: UseScopedEventsOptions): UseScopedEvent
         isLoading: !anyHasData,
         isFetching: results.some((r) => r?.isFetching),
         totalCount,
+        totalCountByProfile,
       };
     },
   });
@@ -262,5 +269,5 @@ export function useScopedEvents(options: UseScopedEventsOptions): UseScopedEvent
     );
   }, [queryClient, profiles, filters, limit, monitorId, isGroupFilterActive, ownEventIds, tagIds]);
 
-  return { events, errors, isLoading, isFetching, totalCount, refetchProfile, refetchAll };
+  return { events, errors, isLoading, isFetching, totalCount, totalCountByProfile, refetchProfile, refetchAll };
 }

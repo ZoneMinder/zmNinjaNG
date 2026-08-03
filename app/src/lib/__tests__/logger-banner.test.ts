@@ -66,4 +66,12 @@ describe('viewNameForPath', () => {
     expect(viewNameForPath('/profiles/new')).toBeNull();
     expect(viewNameForPath('/some-unknown-path')).toBeNull();
   });
+
+  // All-mode deep routes (/all/monitors/:profileId/:id, /all/events/:profileId/:id)
+  // must resolve to the same view name as their single-mode counterparts, so the
+  // entry banner still fires when a notification/card opens one (refs #337).
+  it('matches /all/ deep routes to their single-mode view names', () => {
+    expect(viewNameForPath('/all/monitors/profile-1/5')).toBe('Monitor Detail');
+    expect(viewNameForPath('/all/events/profile-1/12345')).toBe('Event Detail');
+  });
 });

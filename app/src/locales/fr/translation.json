@@ -247,6 +247,8 @@
     "remove_tag": "Retirer {{name}}",
     "all_failed_title": "Impossible de charger les événements",
     "filter_by_server": "Filtrer par serveur",
+    "filter_hides_everything": "Le filtre ci-dessus masque tous les serveurs",
+    "show_all_servers": "Afficher tous les serveurs",
     "failed_to_load": "Impossible de charger les événements : {{error}}"
   },
   "event_detail": {

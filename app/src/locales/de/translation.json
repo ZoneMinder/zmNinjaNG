@@ -247,6 +247,8 @@
     "remove_tag": "{{name}} entfernen",
     "all_failed_title": "Ereignisse konnten nicht geladen werden",
     "filter_by_server": "Nach Server filtern",
+    "filter_hides_everything": "Alle Server sind durch den Filter oben ausgeblendet",
+    "show_all_servers": "Alle Server anzeigen",
     "failed_to_load": "Ereignisse konnten nicht geladen werden: {{error}}"
   },
   "event_detail": {

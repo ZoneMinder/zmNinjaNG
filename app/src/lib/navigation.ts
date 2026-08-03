@@ -117,5 +117,11 @@ export function viewNameForPath(pathname: string): string | null {
   if (/^\/events\/[^/]+$/.test(path)) return 'Event Detail';
   if (/^\/profiles\/[^/]+\/edit$/.test(path)) return 'Profile Form';
 
+  // All-mode deep routes: /all/monitors/:profileId/:id and /all/events/:profileId/:id
+  // (see App.tsx's routes) name the same view as their single-mode counterparts,
+  // so opening one from a notification or card still fires the entry banner (refs #337).
+  if (/^\/all\/monitors\/[^/]+\/[^/]+$/.test(path)) return 'Monitor Detail';
+  if (/^\/all\/events\/[^/]+\/[^/]+$/.test(path)) return 'Event Detail';
+
   return null;
 }

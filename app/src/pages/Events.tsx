@@ -237,6 +237,7 @@ export default function Events() {
     isLoading,
     isFetching,
     totalCount,
+    totalCountByProfile,
     refetchProfile,
     refetchAll,
   } = useScopedEvents({
@@ -258,10 +259,25 @@ export default function Events() {
   // All-mode filter - navigating away (or clearing the param) reverts to
   // whatever was persisted before the link was opened (refs #337 I9).
   const deepLinkedProfileId = isAllMode ? searchParams.get('profileId') : null;
-  const effectiveServerFilter = useMemo(
-    () => (deepLinkedProfileId ? [deepLinkedProfileId as ProfileId] : settings.eventsServerFilter),
-    [deepLinkedProfileId, settings.eventsServerFilter]
-  );
+  // Reconciled here rather than in mergeProfileSettings (the Settings contract's
+  // usual coercion spot): that merge is a pure function with no access to the
+  // live profiles list - stores/settings.ts importing stores/profile.ts to get
+  // one would cycle back through profile.ts's own useSettingsStore import.
+  // Without this, a deleted profile's id lingers in the persisted filter
+  // forever; if it was the ONLY id left, "no filter" silently became "hide
+  // every real profile" the moment that profile was deleted (refs #337).
+  const effectiveServerFilter = useMemo(() => {
+    if (deepLinkedProfileId) return [deepLinkedProfileId as ProfileId];
+    if (!settings.eventsServerFilter) return null;
+    const liveIds = new Set((scope?.profiles ?? []).map((p) => p.id));
+    const reconciled = settings.eventsServerFilter.filter((id) => liveIds.has(id));
+    // Every persisted id named a since-deleted profile: fall back to "no
+    // filter" instead of an effective list that hides every real profile.
+    // An already-empty persisted list (user deselected every server) stays
+    // empty - that is the deliberate hide-everything state.
+    if (reconciled.length === 0 && settings.eventsServerFilter.length > 0) return null;
+    return reconciled;
+  }, [deepLinkedProfileId, settings.eventsServerFilter, scope?.profiles]);
 
   // Every profile in scope failed and none ever produced an event: distinct
   // from "no events match the filter" (same suppression semantics as
@@ -282,6 +298,21 @@ export default function Events() {
     const included = new Set(effectiveServerFilter);
     return scopedEvents.filter((e) => included.has(e.profileId));
   }, [isAllMode, effectiveServerFilter, scopedEvents]);
+
+  // "Showing X of Y": Y must match the server filter, not every profile in
+  // scope - totalCount (from useScopedEvents) sums ALL of them regardless,
+  // so a narrowed filter otherwise reported a Y the filtered list could never
+  // reach (refs #337).
+  const filteredTotalCount = useMemo(() => {
+    if (!isAllMode || !effectiveServerFilter) return totalCount;
+    return effectiveServerFilter.reduce((sum, id) => sum + (totalCountByProfile[id] ?? 0), 0);
+  }, [isAllMode, effectiveServerFilter, totalCountByProfile, totalCount]);
+
+  // Deselecting every server (an explicit empty filter, distinct from null's
+  // "every profile") leaves zero events for a reason unrelated to the date/
+  // monitor/tag filters below - the plain "no events" empty state (with its
+  // "clear filters" action) doesn't explain it, so this gets its own hint.
+  const serverFilterHidesEverything = isAllMode && effectiveServerFilter !== null && effectiveServerFilter.length === 0;
 
   // Pull-to-refresh gesture
   const pullToRefresh = usePullToRefresh({
@@ -628,21 +659,37 @@ export default function Events() {
 
         {/* Events List or Montage View */}
         {allEvents.length === 0 ? (
-          <div data-testid={allFailed ? 'events-all-failed-state' : 'events-empty-state'}>
-            <EmptyState
-              icon={Clock}
-              title={t(allFailed ? 'events.all_failed_title' : 'events.no_events')}
-              action={
-                filters.monitorId || filters.startDateTime || filters.endDateTime
-                  ? {
-                      label: t('events.clear_filters'),
-                      onClick: clearFilters,
-                      variant: 'link',
-                    }
-                  : undefined
-              }
-            />
-          </div>
+          serverFilterHidesEverything ? (
+            <div data-testid="events-filter-empty-hint">
+              <EmptyState
+                icon={Clock}
+                title={t('events.filter_hides_everything')}
+                action={{
+                  label: t('events.show_all_servers'),
+                  onClick: () => {
+                    if (currentProfileId) updateSettings(currentProfileId, { eventsServerFilter: null });
+                  },
+                  variant: 'link',
+                }}
+              />
+            </div>
+          ) : (
+            <div data-testid={allFailed ? 'events-all-failed-state' : 'events-empty-state'}>
+              <EmptyState
+                icon={Clock}
+                title={t(allFailed ? 'events.all_failed_title' : 'events.no_events')}
+                action={
+                  filters.monitorId || filters.startDateTime || filters.endDateTime
+                    ? {
+                        label: t('events.clear_filters'),
+                        onClick: clearFilters,
+                        variant: 'link',
+                      }
+                    : undefined
+                }
+              />
+            </div>
+          )
         ) : viewMode === 'montage' ? (
           <EventMontageView
             events={allEvents}
@@ -652,7 +699,7 @@ export default function Events() {
             portalUrl={currentProfile?.portalUrl || ''}
             accessToken={isAccessTokenFresh ? accessToken ?? undefined : undefined}
             batchSize={batchSize}
-            totalCount={totalCount}
+            totalCount={filteredTotalCount}
             isFetching={isFetching}
             onLoadMore={loadNextPage}
             eventTagMap={eventTagMap}
@@ -667,7 +714,7 @@ export default function Events() {
             portalUrl={currentProfile?.portalUrl || ''}
             accessToken={isAccessTokenFresh ? accessToken ?? undefined : undefined}
             batchSize={batchSize}
-            totalCount={totalCount}
+            totalCount={filteredTotalCount}
             isFetching={isFetching}
             onLoadMore={loadNextPage}
             eventTagMap={eventTagMap}

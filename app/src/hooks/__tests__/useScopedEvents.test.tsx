@@ -190,6 +190,23 @@ describe('useScopedEvents', () => {
     expect(result.current.totalCount).toBe(3);
   });
 
+  // Events.tsx's "Showing X of Y" needs Y scoped to the active server filter,
+  // not every profile in scope - a per-profile breakdown is the minimal
+  // addition that lets it recompute that without re-fetching (refs #337).
+  it('exposes each profile\'s own totalCount alongside the summed total', async () => {
+    mockScope([profileA, profileB]);
+    vi.mocked(getEvents).mockImplementation(async (client) => {
+      const isA = (client as unknown as { profile: string }).profile === profileA.id;
+      return isA
+        ? eventsResponse([event('a1', '2026-01-15 09:00:00')])
+        : eventsResponse([event('b1', '2026-01-15 08:00:00'), event('b2', '2026-01-15 07:00:00')]);
+    });
+
+    const { result } = renderHook(() => useScopedEvents(baseOptions), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.totalCount).toBe(3));
+    expect(result.current.totalCountByProfile).toEqual({ [profileA.id]: 1, [profileB.id]: 2 });
+  });
+
   it('converts a shared date-range bound per profile using that profile\'s OWN timezone, not one shared value (refs #337)', async () => {
     mockScope([profileA, profileB]);
     vi.mocked(getEvents).mockResolvedValue(eventsResponse([]));

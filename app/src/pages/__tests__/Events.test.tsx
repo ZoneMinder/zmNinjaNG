@@ -215,6 +215,7 @@ function defaultScopedEvents() {
     isLoading: false,
     isFetching: false,
     totalCount: undefined as number | undefined,
+    totalCountByProfile: {} as Record<string, number>,
     refetchProfile: vi.fn(),
     refetchAll: vi.fn(async () => {}),
   };
@@ -425,6 +426,65 @@ describe('Events Page', () => {
       expect(cards).toHaveLength(1);
       expect(cards[0]).toHaveTextContent('1-');
       expect(screen.getByTestId('events-server-filter-row')).toBeInTheDocument();
+    });
+
+    it('drops a deleted profile\'s id from the persisted server filter instead of silently hiding everything (refs #337)', () => {
+      allScope();
+      settingsOverrides = { eventsServerFilter: ['deleted-profile-id'] };
+      scopedEvents({
+        events: [
+          { profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1' } } },
+          { profileId: 'profile-2', profileName: 'Office', item: { Event: { Id: '2', MonitorId: '1' } } },
+        ],
+      });
+
+      render(<Events />);
+
+      // The persisted filter named only a profile that no longer exists - that
+      // must reconcile to "no filter", not silently hide every real profile.
+      expect(screen.getAllByTestId('event-card-item')).toHaveLength(2);
+    });
+
+    it('keeps a persisted filter\'s live ids while dropping only the deleted one', () => {
+      allScope();
+      settingsOverrides = { eventsServerFilter: ['profile-1', 'deleted-profile-id'] };
+      scopedEvents({
+        events: [
+          { profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1' } } },
+          { profileId: 'profile-2', profileName: 'Office', item: { Event: { Id: '2', MonitorId: '1' } } },
+        ],
+      });
+
+      render(<Events />);
+
+      const cards = screen.getAllByTestId('event-card-item');
+      expect(cards).toHaveLength(1);
+      expect(cards[0]).toHaveTextContent('1-');
+    });
+
+    it('"Showing X of Y" reflects only the server-filtered profiles, not every profile in scope (refs #337)', () => {
+      allScope();
+      settingsOverrides = { eventsServerFilter: ['profile-1'] };
+      scopedEvents({
+        events: [{ profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1' } } }],
+        totalCount: 5,
+        totalCountByProfile: { 'profile-1': 1, 'profile-2': 4 },
+      });
+
+      render(<Events />);
+
+      expect(screen.getByText('events.showing_of_total:{"showing":1,"total":1}')).toBeInTheDocument();
+    });
+
+    it('shows a localized hint instead of the plain empty state when the server filter hides every profile (refs #337)', () => {
+      allScope();
+      settingsOverrides = { eventsServerFilter: [] };
+      scopedEvents({ events: [] });
+
+      render(<Events />);
+
+      expect(screen.getByTestId('events-filter-empty-hint')).toBeInTheDocument();
+      expect(screen.queryByTestId('events-empty-state')).not.toBeInTheDocument();
     });
 
     it('shows an error strip for a failed profile with zero events while the healthy profile still renders', () => {
