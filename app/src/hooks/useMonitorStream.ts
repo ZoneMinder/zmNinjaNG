@@ -123,6 +123,7 @@ export function useMonitorStream({
     enabled,
     minStreamingPort: effectiveMinStreamingPort,
     apiTimeoutSeconds: settings.apiTimeoutSeconds,
+    profileId: currentProfile?.id,
   });
 
   // Analysis frames: applied to the live connection by command, and re-applied

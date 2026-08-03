@@ -242,4 +242,24 @@ describe('LiveMonitorPlayer Go2RTC failure cache scoping', () => {
 
     expect(latestEnabled('cache-b')).toBe(false);
   });
+
+  // refs #337: two independent ZM servers (two profiles) can assign the same
+  // monitor id. A failure recorded for profile A's monitor must not silently
+  // skip Go2RTC for profile B's unrelated monitor sharing that id.
+  it('a Go2RTC failure recorded for one profile does not affect another profile with the same monitorId', () => {
+    const rtcMonitor = { Id: 'cache-c', Name: 'Cam', Go2RTCEnabled: true } as unknown as Monitor;
+    const profileA = { ...go2rtcProfile, id: 'profile-a' } as Profile;
+    const profileB = { ...go2rtcProfile, id: 'profile-b' } as Profile;
+
+    // Profile A's tile fails Go2RTC and records the failure.
+    go2rtc.state = 'error';
+    const a = render(<LiveMonitorPlayer monitor={rtcMonitor} profile={profileA} />);
+    a.unmount();
+
+    // Profile B's tile for the SAME monitor id must still try Go2RTC.
+    go2rtc.state = 'connecting';
+    render(<LiveMonitorPlayer monitor={rtcMonitor} profile={profileB} />);
+
+    expect(latestEnabled('cache-c')).toBe(true);
+  });
 });

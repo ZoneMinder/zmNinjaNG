@@ -134,8 +134,10 @@ describe('useMonitorStream', () => {
 
     renderHook(() => useMonitorStream({ monitorId: '1' }));
 
+    // Keyed by profileId:monitorId (refs #337), even in single mode, so the
+    // key stays unique alongside any other profile sharing monitor id '1'.
     await waitFor(() => {
-      expect(regenerateConnKey).toHaveBeenCalledWith('1');
+      expect(regenerateConnKey).toHaveBeenCalledWith('profile-1:1');
     });
   });
 
@@ -357,7 +359,7 @@ describe('useMonitorStream', () => {
       expect.stringContaining('connkey=101'),
       expect.anything(),
     );
-    expect(useMonitorStore.getState().connKeys['1']).toBeUndefined();
+    expect(useMonitorStore.getState().connKeys['profile-1:1']).toBeUndefined();
   });
 
   it('empties streamUrl and imageSrc while disabled, and mints a fresh connkey on re-enable', async () => {

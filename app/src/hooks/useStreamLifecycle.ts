@@ -17,9 +17,10 @@ import { getZmsControlUrl } from '../lib/zm/url-builder';
 import { ZMS_COMMANDS } from '../lib/zm/zm-constants';
 import { httpGet } from '../lib/http';
 import { API_REQUEST } from '../lib/zmninja-ng-constants';
-import { useMonitorStore } from '../stores/monitors';
+import { useMonitorStore, monitorCacheKey } from '../stores/monitors';
 import { registerActiveStream, unregisterActiveStream } from '../lib/monitor/active-streams';
 import { log, LogLevel } from '../lib/logger';
+import type { ProfileId } from '../api/types';
 
 /** Signature of a component-scoped log helper (e.g. log.monitor, log.dashboard). */
 type ComponentLogger = (message: string, level?: LogLevel, details?: unknown) => void;
@@ -27,6 +28,10 @@ type ComponentLogger = (message: string, level?: LogLevel, details?: unknown) =>
 /** Captured stream context used to send CMD_QUIT outside of render. */
 interface StreamCleanupParams {
   monitorId: string;
+  /** Composite profileId:monitorId key used for the connKeys store lookup
+   *  (refs #337) - distinct from monitorId, which stays the real ZM monitor
+   *  id used to build CMD_QUIT URLs. */
+  cacheKey: string;
   monitorName: string;
   connKey: number;
   portalUrl: string | undefined;
@@ -77,8 +82,8 @@ async function quitStreamForParams(
   // concurrent mount's newer key intact: only the key this teardown quit is
   // cleared, never a newer one.
   const store = useMonitorStore.getState();
-  if (store.connKeys[params.monitorId] === params.connKey) {
-    store.clearConnKey(params.monitorId);
+  if (store.connKeys[params.cacheKey] === params.connKey) {
+    store.clearConnKey(params.cacheKey);
   }
 
   try {
@@ -117,6 +122,13 @@ export interface UseStreamLifecycleOptions {
    * it. Defaults to the built-in default when not supplied.
    */
   apiTimeoutSeconds?: number;
+  /**
+   * Profile that owns this monitorId, used only to scope the connKeys store
+   * lookup key (monitorCacheKey) so two profiles sharing a monitor id (two
+   * independent ZM servers) never collide on one connkey slot (refs #337).
+   * Omitted callers keep the pre-existing monitorId-only key.
+   */
+  profileId?: ProfileId | null;
 }
 
 export interface UseStreamLifecycleReturn {
@@ -159,11 +171,13 @@ export function useStreamLifecycle({
   enabled = true,
   minStreamingPort,
   apiTimeoutSeconds = API_REQUEST.defaultTimeoutSeconds,
+  profileId,
 }: UseStreamLifecycleOptions): UseStreamLifecycleReturn {
   const regenerateConnKey = useMonitorStore((state) => state.regenerateConnKey);
 
   // CMD_QUIT follows the same timeout as the rest of the app's HTTP. 0 disables.
   const cmdQuitTimeoutMs = apiTimeoutSeconds > 0 ? apiTimeoutSeconds * 1000 : undefined;
+  const cacheKey = monitorCacheKey(profileId, monitorId || '');
 
   const [connKey, setConnKey] = useState(0);
 
@@ -176,6 +190,7 @@ export function useStreamLifecycle({
   const buildCleanupParams = useCallback(
     (key: number): StreamCleanupParams => ({
       monitorId: monitorId || '',
+      cacheKey,
       monitorName: monitorName || '',
       connKey: key,
       portalUrl,
@@ -184,7 +199,7 @@ export function useStreamLifecycle({
       minStreamingPort,
       cmdQuitTimeoutMs,
     }),
-    [monitorId, monitorName, portalUrl, accessToken, viewMode, minStreamingPort, cmdQuitTimeoutMs],
+    [monitorId, cacheKey, monitorName, portalUrl, accessToken, viewMode, minStreamingPort, cmdQuitTimeoutMs],
   );
 
   // Store cleanup parameters in a ref so the teardowns, which run outside
@@ -235,7 +250,7 @@ export function useStreamLifecycle({
     log.dedupe('connkey-regen', 3000, (suffix) =>
       logFn(`Regenerating connkey${suffix}`, LogLevel.DEBUG, { monitorId, monitorName }),
     );
-    const newKey = regenerateConnKey(monitorId);
+    const newKey = regenerateConnKey(cacheKey);
     setConnKey(newKey);
     prevConnKeyRef.current = newKey;
     // Bind the key to the identity that minted it, here rather than waiting for
@@ -372,7 +387,7 @@ export function useStreamLifecycle({
       sendCmdQuit(prevConnKeyRef.current);
     }
 
-    const newKey = regenerateConnKey(monitorId);
+    const newKey = regenerateConnKey(cacheKey);
     setConnKey(newKey);
     prevConnKeyRef.current = newKey;
     log.dedupe('connkey-force-regen', 3000, (suffix) =>
@@ -394,8 +409,8 @@ export function useStreamLifecycle({
     );
     if (monitorId) {
       const store = useMonitorStore.getState();
-      if (store.connKeys[monitorId] === key) {
-        store.clearConnKey(monitorId);
+      if (store.connKeys[cacheKey] === key) {
+        store.clearConnKey(cacheKey);
       }
     }
     prevConnKeyRef.current = 0;

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useMonitorStore } from '../monitors';
+import { useMonitorStore, monitorCacheKey } from '../monitors';
+import { asProfileId } from '../../api/types';
 
 describe('Monitor Store', () => {
   beforeEach(() => {
@@ -54,5 +55,31 @@ describe('Monitor Store', () => {
 
     expect(key).toBe(12345);
     expect(useMonitorStore.getState().connKeys['1']).toBe(12345);
+  });
+});
+
+// refs #337: connKeys was keyed by monitorId alone, so two profiles sharing
+// the same monitor id (common with independent ZM servers) collided on one
+// connkey slot. monitorCacheKey composes profileId:monitorId so both coexist.
+describe('monitorCacheKey', () => {
+  it('composes profileId and monitorId', () => {
+    expect(monitorCacheKey(asProfileId('profile-a'), '1')).toBe('profile-a:1');
+  });
+
+  it('falls back to the bare monitorId when no profileId is given', () => {
+    expect(monitorCacheKey(null, '1')).toBe('1');
+    expect(monitorCacheKey(undefined, '1')).toBe('1');
+  });
+
+  it('gives two profiles with the same monitorId distinct connKey entries', () => {
+    const keyA = monitorCacheKey(asProfileId('profile-a'), '1');
+    const keyB = monitorCacheKey(asProfileId('profile-b'), '1');
+
+    useMonitorStore.getState().getConnKey(keyA);
+    vi.spyOn(Math, 'random').mockReturnValue(0.54321);
+    useMonitorStore.getState().getConnKey(keyB);
+
+    expect(useMonitorStore.getState().connKeys[keyA]).toBe(12345);
+    expect(useMonitorStore.getState().connKeys[keyB]).toBe(54321);
   });
 });

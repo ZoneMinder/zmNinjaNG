@@ -106,7 +106,7 @@ function MonitorCardComponent({
     />
   );
   const wrappedVideo = showHover ? (
-    <MonitorHoverPreview monitor={monitor}>{videoPlayer}</MonitorHoverPreview>
+    <MonitorHoverPreview monitor={monitor} profileId={profileId}>{videoPlayer}</MonitorHoverPreview>
   ) : videoPlayer;
 
   /**

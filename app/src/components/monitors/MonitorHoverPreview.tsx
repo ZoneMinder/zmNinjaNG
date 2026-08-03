@@ -10,18 +10,25 @@
 import { useRef, type ReactNode } from 'react';
 import { getStreamUrl } from '../../api/monitors';
 import { resolveMinStreamingPort } from '../../lib/monitor/multiport';
-import { useCurrentProfile } from '../../hooks/useCurrentProfile';
+import { useProfileById } from '../../hooks/useCurrentProfile';
 import { useStreamLifecycle } from '../../hooks/useStreamLifecycle';
 import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
 import { parseMonitorRotation } from '../../lib/monitor/monitor-rotation';
 import { log } from '../../lib/logger';
-import type { Monitor } from '../../api/types';
+import type { Monitor, ProfileId } from '../../api/types';
 import { HoverPreview } from '../ui/hover-preview';
 import { VideoOff } from 'lucide-react';
 
 interface MonitorHoverPreviewProps {
   monitor: Monitor;
   children: ReactNode;
+  /**
+   * Id of the profile that owns this monitor. Defaults to the current
+   * profile when omitted (single mode). Mirrors LiveMonitorPlayer's
+   * profileId prop (refs #337) so an All-mode hover preview streams from the
+   * owning profile's server instead of the globally-selected one.
+   */
+  profileId?: ProfileId | null;
 }
 
 function computeNumericAspectRatio(monitor: Monitor): number {
@@ -38,14 +45,14 @@ function computeNumericAspectRatio(monitor: Monitor): number {
   return w / h;
 }
 
-export function MonitorHoverPreview({ monitor, children }: MonitorHoverPreviewProps) {
+export function MonitorHoverPreview({ monitor, children, profileId }: MonitorHoverPreviewProps) {
   const aspectRatio = computeNumericAspectRatio(monitor);
 
   return (
     <HoverPreview
       aspectRatio={aspectRatio}
       testId="monitor-hover-preview"
-      renderPreview={() => <MonitorLivePreview monitor={monitor} />}
+      renderPreview={() => <MonitorLivePreview monitor={monitor} profileId={profileId} />}
     >
       {children}
     </HoverPreview>
@@ -56,9 +63,9 @@ export function MonitorHoverPreview({ monitor, children }: MonitorHoverPreviewPr
  * Live stream body: only mounted while the preview is open.
  * Mount → new connkey. Unmount → CMD_QUIT via useStreamLifecycle.
  */
-function MonitorLivePreview({ monitor }: { monitor: Monitor }) {
-  const { currentProfile, settings } = useCurrentProfile();
-  const { token: accessToken, isFresh: isAccessTokenFresh } = useFreshAccessToken();
+function MonitorLivePreview({ monitor, profileId }: { monitor: Monitor; profileId?: ProfileId | null }) {
+  const { profile: currentProfile, settings } = useProfileById(profileId);
+  const { token: accessToken, isFresh: isAccessTokenFresh } = useFreshAccessToken(profileId);
   const imgRef = useRef<HTMLImageElement>(null);
   const effectiveMinStreamingPort = resolveMinStreamingPort(
     currentProfile?.minStreamingPort,
@@ -76,6 +83,7 @@ function MonitorLivePreview({ monitor }: { monitor: Monitor }) {
     enabled: true,
     minStreamingPort: effectiveMinStreamingPort,
     apiTimeoutSeconds: settings.apiTimeoutSeconds,
+    profileId: currentProfile?.id,
   });
 
   if (!currentProfile || connKey === 0 || !isAccessTokenFresh) {

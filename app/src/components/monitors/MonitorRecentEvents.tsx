@@ -15,8 +15,7 @@ import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useMonitorSeenStore } from '../../stores/monitorSeen';
 import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
 import { resolveMinStreamingPort } from '../../lib/monitor/multiport';
-import { getPortalUrlForEvent } from '../../lib/zm/server-resolver';
-import { buildThumbnailChain, eventHasAlarmFrame } from '../../lib/event/thumbnail-chain';
+import { buildThumbnailChainForEvent, eventHasAlarmFrame } from '../../lib/event/thumbnail-chain';
 import {
   calculateThumbnailDimensions,
   getMonitorDimensions,
@@ -63,8 +62,7 @@ export function MonitorRecentEvents({ monitor }: MonitorRecentEventsProps) {
       monitor.Orientation ?? ev.Orientation,
       EVENT_GRID_CONSTANTS.LIST_VIEW_TARGET_SIZE
     );
-    const eventPortalUrl = getPortalUrlForEvent(ev.MonitorId, monitorsForResolve, portalUrl);
-    const urls = buildThumbnailChain(eventPortalUrl, ev.Id, thumbnailChain, {
+    const urls = buildThumbnailChainForEvent(ev.MonitorId, monitorsForResolve, portalUrl, ev.Id, thumbnailChain, {
       token: isFresh ? accessToken ?? undefined : undefined,
       width: tw,
       height: th,

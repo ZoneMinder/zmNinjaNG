@@ -17,6 +17,7 @@ import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import type { Monitor, Profile, ProfileId } from '../../api/types';
 import { useSettingsStore } from '../../stores/settings';
+import { monitorCacheKey } from '../../stores/monitors';
 import { useGo2RTCStream } from '../../hooks/useGo2RTCStream';
 import { useMonitorStream } from '../../hooks/useMonitorStream';
 import { useVisibilityResume } from '../../hooks/useVisibilityResume';
@@ -33,21 +34,29 @@ import {
 import { Button } from '../ui/button';
 import { VideoOff } from 'lucide-react';
 
-/** Cache of monitors where Go2RTC failed: skip straight to MJPEG until TTL expires */
+/**
+ * Cache of monitors where Go2RTC failed: skip straight to MJPEG until TTL
+ * expires. Keyed by profileId:monitorId (monitorCacheKey, shared with the
+ * connKeys store) rather than monitorId alone - two profiles on independent
+ * ZM servers can report the same monitor id, and without profile scoping a
+ * Go2RTC failure recorded for one profile's monitor would wrongly skip
+ * Go2RTC for another profile's unrelated monitor of the same id (refs #337).
+ */
 const go2rtcFailureCache = new Map<string, number>();
 
-function isGo2rtcCachedFailure(monitorId: string): boolean {
-  const failedAt = go2rtcFailureCache.get(monitorId);
+function isGo2rtcCachedFailure(profileId: ProfileId | undefined, monitorId: string): boolean {
+  const key = monitorCacheKey(profileId, monitorId);
+  const failedAt = go2rtcFailureCache.get(key);
   if (!failedAt) return false;
   if (Date.now() - failedAt > GO2RTC_RETRY_INTERVAL_MIN * 60 * 1000) {
-    go2rtcFailureCache.delete(monitorId);
+    go2rtcFailureCache.delete(key);
     return false;
   }
   return true;
 }
 
-function markGo2rtcFailed(monitorId: string): void {
-  go2rtcFailureCache.set(monitorId, Date.now());
+function markGo2rtcFailed(profileId: ProfileId | undefined, monitorId: string): void {
+  go2rtcFailureCache.set(monitorCacheKey(profileId, monitorId), Date.now());
 }
 
 /**
@@ -187,7 +196,7 @@ export function LiveMonitorPlayer({
   }, [userStreamingPreference, monitor.Go2RTCEnabled, monitor.Id, monitor.Name, profile?.go2rtcUrl]);
 
   const [go2rtcFailed, setGo2rtcFailed] = useState(() =>
-    bypassGo2rtcFailureCache ? false : isGo2rtcCachedFailure(monitor.Id)
+    bypassGo2rtcFailureCache ? false : isGo2rtcCachedFailure(profile?.id, monitor.Id)
   );
   const [hasVideoFrames, setHasVideoFrames] = useState(false);
 
@@ -195,14 +204,14 @@ export function LiveMonitorPlayer({
   // The local go2rtcFailed state still flips so this instance falls back to
   // MJPEG; only the cross-instance cache write is suppressed.
   const recordGo2rtcFailure = useCallback((id: string) => {
-    if (!bypassGo2rtcFailureCache) markGo2rtcFailed(id);
-  }, [bypassGo2rtcFailureCache]);
+    if (!bypassGo2rtcFailureCache) markGo2rtcFailed(profile?.id, id);
+  }, [bypassGo2rtcFailureCache, profile?.id]);
 
   // When user explicitly enables Go2RTC (streamingMethod changes to webrtc),
   // clear the failure cache so it retries immediately
   const prevStreamingMethodRef = useRef(streamingMethod);
   if (streamingMethod === 'webrtc' && prevStreamingMethodRef.current === 'mjpeg') {
-    go2rtcFailureCache.delete(monitor.Id);
+    go2rtcFailureCache.delete(monitorCacheKey(profile?.id, monitor.Id));
     if (go2rtcFailed) {
       setGo2rtcFailed(false);
       setHasVideoFrames(false);
@@ -423,13 +432,14 @@ export function LiveMonitorPlayer({
     return () => clearInterval(interval);
   }, [effectiveStreamingMethod, hasVideoFrames, go2rtcFailed, monitorId, recordGo2rtcFailure]);
 
-  // Reset failure state when monitor changes (check cache for new monitor)
+  // Reset failure state when monitor (or its owning profile) changes (check
+  // cache for the new monitor/profile pair)
   useEffect(() => {
-    setGo2rtcFailed(bypassGo2rtcFailureCache ? false : isGo2rtcCachedFailure(monitor.Id));
+    setGo2rtcFailed(bypassGo2rtcFailureCache ? false : isGo2rtcCachedFailure(profile?.id, monitor.Id));
     setHasVideoFrames(false);
     freezeRetryCountRef.current = 0;
     lastFreezeAtRef.current = 0;
-  }, [monitor.Id, bypassGo2rtcFailureCache]);
+  }, [monitor.Id, profile?.id, bypassGo2rtcFailureCache]);
 
   // When the page returns from background, the freeze watchdog may have
   // exhausted its retry budget while the browser was suspending the player.
@@ -448,7 +458,7 @@ export function LiveMonitorPlayer({
     freezeRetryCountRef.current = 0;
     lastFreezeAtRef.current = 0;
     if (go2rtcFailed) {
-      go2rtcFailureCache.delete(monitor.Id);
+      go2rtcFailureCache.delete(monitorCacheKey(profile?.id, monitor.Id));
       setGo2rtcFailed(false);
       setHasVideoFrames(false);
     }

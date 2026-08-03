@@ -9,9 +9,8 @@
 import { memo, useState, useCallback, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
-import { getPortalUrlForEvent } from '../../lib/zm/server-resolver';
 import { queryKeys } from '../../lib/query/query-keys';
-import { buildThumbnailChain } from '../../lib/event/thumbnail-chain';
+import { buildThumbnailChainForEvent } from '../../lib/event/thumbnail-chain';
 import { EventThumbnail } from '../events/EventThumbnail';
 import { HoverPreview } from '../ui/hover-preview';
 import { EventZmsHoverPlayer } from '../events/EventThumbnailHoverPreview';
@@ -96,8 +95,7 @@ function ScrubberThumbnail({
 
   const profilePortalUrl = currentProfile?.portalUrl ?? '';
   const monitors = (queryClient.getQueryData<MonitorsResponse>(queryKeys.monitors(currentProfile?.id)))?.monitors ?? [];
-  const portalUrl = getPortalUrlForEvent(event.monitorId, monitors, profilePortalUrl);
-  const thumbnailUrls = buildThumbnailChain(portalUrl, event.id, settings.thumbnailFallbackChain, {
+  const thumbnailUrls = buildThumbnailChainForEvent(event.monitorId, monitors, profilePortalUrl, event.id, settings.thumbnailFallbackChain, {
     token: isAccessTokenFresh ? accessToken ?? undefined : undefined,
     minStreamingPort: resolveMinStreamingPort(currentProfile?.minStreamingPort, settings.forceDisableMultiPort),
     monitorId: event.monitorId,

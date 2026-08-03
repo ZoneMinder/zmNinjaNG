@@ -1,4 +1,6 @@
 import { getEventImageUrl } from '../../api/events';
+import { getPortalUrlForEvent } from '../zm/server-resolver';
+import type { ProfileId } from '../../api/types';
 
 // The chain shape is declared here, next to the code that resolves it, so this
 // module and lib/assistant do not import the settings store (refs #281).
@@ -84,4 +86,26 @@ export function buildThumbnailChain(
   return resolveFallbackFids(chain, options).map((fid) =>
     getEventImageUrl(portalUrl, eventId, fid, options)
   );
+}
+
+/**
+ * Resolves the event's portal URL and builds its thumbnail chain in one
+ * call. Several callers (MonitorRecentEvents, EventMontageView,
+ * TimelineScrubber) repeated the same two-step - getPortalUrlForEvent then
+ * buildThumbnailChain - so it is collapsed here. `profileId` rides through
+ * to getPortalUrlForEvent's server-map lookup, defaulting to the current
+ * profile the same way that function already does (refs #337); passing it
+ * lets an All-mode caller build another profile's event thumbnail without
+ * switching the globally-selected profile.
+ */
+export function buildThumbnailChainForEvent(
+  monitorId: string,
+  monitors: Array<{ Monitor: { Id: string; ServerId: string | null } }>,
+  profilePortalUrl: string,
+  eventId: string,
+  chain: ThumbnailFallbackEntry[] | undefined,
+  options: ThumbnailChainOptions & { profileId?: ProfileId | null } = {}
+): string[] {
+  const portalUrl = getPortalUrlForEvent(monitorId, monitors, profilePortalUrl, options.profileId);
+  return buildThumbnailChain(portalUrl, eventId, chain, options);
 }

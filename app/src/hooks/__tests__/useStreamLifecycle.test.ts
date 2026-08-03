@@ -9,6 +9,7 @@ import { render, renderHook, act, waitFor } from '@testing-library/react';
 import { StrictMode, createElement } from 'react';
 import { useStreamLifecycle } from '../useStreamLifecycle';
 import { quitAllActiveStreams } from '../../lib/monitor/active-streams';
+import { asProfileId } from '../../api/types';
 
 // Mock logger
 vi.mock('../../lib/logger', () => ({
@@ -50,6 +51,8 @@ let mockConnKeys: Record<string, number> = {};
 
 vi.mock('../../stores/monitors', () => ({
   useMonitorStore: vi.fn(),
+  monitorCacheKey: (profileId: string | null | undefined, monitorId: string) =>
+    profileId ? `${profileId}:${monitorId}` : monitorId,
 }));
 
 import { useMonitorStore } from '../../stores/monitors';
@@ -854,6 +857,75 @@ describe('useStreamLifecycle', () => {
         expect(quitCountFor(onlyKey)).toBe(1);
       });
       expect(mockHttpGet).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // refs #337: two profiles pointed at independent ZM servers can report the
+  // same monitor id. Without profileId scoping, both tiles fought over one
+  // connKeys slot; with it, each profile gets its own entry so both stream
+  // key lifecycles coexist.
+  describe('profile-scoped cache key', () => {
+    it('stores the connKey under profileId:monitorId when profileId is given', async () => {
+      const mediaRef = makeMediaRef();
+      const { result } = renderHook(() =>
+        useStreamLifecycle({ ...baseOptions, mediaRef, profileId: asProfileId('profile-b') }),
+      );
+
+      await waitFor(() => {
+        expect(result.current.connKey).not.toBe(0);
+      });
+
+      expect(mockRegenerateConnKey).toHaveBeenCalledWith('profile-b:1');
+      expect(mockConnKeys['profile-b:1']).toBe(result.current.connKey);
+      expect(mockConnKeys['1']).toBeUndefined();
+    });
+
+    it('gives two profiles sharing a monitorId distinct, coexisting connKey entries', async () => {
+      const mediaRefA = makeMediaRef();
+      const mediaRefB = makeMediaRef();
+
+      const a = renderHook(() =>
+        useStreamLifecycle({ ...baseOptions, mediaRef: mediaRefA, profileId: asProfileId('profile-a') }),
+      );
+      const b = renderHook(() =>
+        useStreamLifecycle({ ...baseOptions, mediaRef: mediaRefB, profileId: asProfileId('profile-b') }),
+      );
+
+      await waitFor(() => {
+        expect(a.result.current.connKey).not.toBe(0);
+        expect(b.result.current.connKey).not.toBe(0);
+      });
+
+      // Both entries coexist under distinct keys: profile B's mint did not
+      // evict profile A's, which a shared monitorId-only key would have done.
+      expect(a.result.current.connKey).not.toBe(b.result.current.connKey);
+      expect(mockConnKeys['profile-a:1']).toBe(a.result.current.connKey);
+      expect(mockConnKeys['profile-b:1']).toBe(b.result.current.connKey);
+    });
+
+    it('releaseConnection clears only its own profile-scoped entry', async () => {
+      const mediaRefA = makeMediaRef();
+      const mediaRefB = makeMediaRef();
+
+      const a = renderHook(() =>
+        useStreamLifecycle({ ...baseOptions, mediaRef: mediaRefA, profileId: asProfileId('profile-a') }),
+      );
+      const b = renderHook(() =>
+        useStreamLifecycle({ ...baseOptions, mediaRef: mediaRefB, profileId: asProfileId('profile-b') }),
+      );
+
+      await waitFor(() => {
+        expect(mockConnKeys['profile-a:1']).toBe(a.result.current.connKey);
+        expect(mockConnKeys['profile-b:1']).toBe(b.result.current.connKey);
+      });
+      const bKey = b.result.current.connKey;
+
+      act(() => {
+        a.result.current.releaseConnection();
+      });
+
+      expect(mockConnKeys['profile-a:1']).toBeUndefined();
+      expect(mockConnKeys['profile-b:1']).toBe(bKey);
     });
   });
 
