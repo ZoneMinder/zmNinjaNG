@@ -10,7 +10,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MonitorSettingsDialog } from '../MonitorSettingsDialog';
-import type { Monitor } from '../../../api/types';
+import { asProfileId, type Monitor } from '../../../api/types';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -18,13 +18,18 @@ vi.mock('react-i18next', () => ({
 
 let disableLogRedaction = false;
 let forceZmsMonitorIds: string[] = [];
+// Per-profile overrides for the All-mode tests below, keyed by profile id.
+// Anything not listed here falls back to the shared `disableLogRedaction` /
+// `forceZmsMonitorIds` vars above (which is all the pre-existing,
+// single-profile tests need).
+let profileSettingsById: Record<string, { forceZmsMonitorIds?: string[]; disableLogRedaction?: boolean }> = {};
 
 const settingsState = {
-  getProfileSettings: () => ({
+  getProfileSettings: (id: string) => ({
     streamingMethod: 'auto',
     monitorStreamingOverrides: {},
-    forceZmsMonitorIds,
-    disableLogRedaction,
+    forceZmsMonitorIds: profileSettingsById[id]?.forceZmsMonitorIds ?? forceZmsMonitorIds,
+    disableLogRedaction: profileSettingsById[id]?.disableLogRedaction ?? disableLogRedaction,
   }),
   updateProfileSettings: vi.fn(),
 };
@@ -71,6 +76,7 @@ describe('MonitorSettingsDialog', () => {
     vi.clearAllMocks();
     disableLogRedaction = false;
     forceZmsMonitorIds = [];
+    profileSettingsById = {};
   });
 
   it('keeps Save disabled until a field changes', () => {
@@ -271,5 +277,85 @@ describe('MonitorSettingsDialog credential masking', () => {
     const input = screen.getByTestId('settings-source-input') as HTMLInputElement;
     expect(input.value).toBe('rtsp://admin:S3cret@cam.lan:554/h264');
     expect(screen.getByLabelText('common.show_password')).toBeTruthy();
+  });
+});
+
+/**
+ * All-mode: monitor owned by profile B, opened while profile A is globally
+ * current (refs #337). Both the app-local preferences (MonitorAppPreferences)
+ * and the credential-masking read used to go through useCurrentProfile()
+ * directly, so a monitor from B's `/all/monitors/B/:id` deep route (or B's
+ * card in the All-mode monitor grid) would read A's settings and write
+ * preference changes into A's bucket - a cross-profile settings leak and,
+ * for disableLogRedaction, a camera-credential exposure bug. profileId must
+ * now override the current-profile default at both read and write sites.
+ */
+const profileB = asProfileId('profile-b');
+
+describe('MonitorSettingsDialog owning-profile scoping (refs #337)', () => {
+  const renderDialog = (profileId?: string, onSave = vi.fn().mockResolvedValue(undefined)) => {
+    render(
+      <MonitorSettingsDialog
+        open
+        onOpenChange={vi.fn()}
+        monitor={baseMonitor}
+        zmVersion="1.38.0"
+        onSave={onSave}
+        profileId={profileId ? asProfileId(profileId) : undefined}
+      />
+    );
+    return onSave;
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    disableLogRedaction = false;
+    forceZmsMonitorIds = [];
+    profileSettingsById = {};
+  });
+
+  it('writes a preference change to the owning profile (B), not the globally-current one (A=p1)', () => {
+    profileSettingsById = {
+      'profile-b': { forceZmsMonitorIds: [] },
+    };
+    renderDialog('profile-b');
+
+    fireEvent.click(screen.getByTestId('settings-monitor-force-zms-switch'));
+
+    expect(settingsState.updateProfileSettings).toHaveBeenCalledWith('profile-b', {
+      forceZmsMonitorIds: ['1'],
+    });
+    expect(settingsState.updateProfileSettings).not.toHaveBeenCalledWith('p1', expect.anything());
+  });
+
+  it('reads credential masking from the owning profile (B), independent of the current profile (A=p1)', () => {
+    // A (current, unused here) keeps redaction on; B has turned it off.
+    disableLogRedaction = false;
+    profileSettingsById = { 'profile-b': { disableLogRedaction: true } };
+
+    render(
+      <MonitorSettingsDialog
+        open
+        onOpenChange={vi.fn()}
+        monitor={{ ...baseMonitor, Path: 'rtsp://admin:S3cret@cam.lan:554/h264', Pass: 'S3cret' } as unknown as Monitor}
+        zmVersion="1.38.0"
+        onSave={vi.fn()}
+        profileId={profileB}
+      />
+    );
+
+    const input = screen.getByTestId('settings-source-input') as HTMLInputElement;
+    expect(input.value).toBe('rtsp://admin:S3cret@cam.lan:554/h264');
+    expect(screen.getByLabelText('common.show_password')).toBeTruthy();
+  });
+
+  it('falls back to the current profile when profileId is omitted (single mode, zero change)', () => {
+    renderDialog(undefined);
+
+    fireEvent.click(screen.getByTestId('settings-monitor-force-zms-switch'));
+
+    expect(settingsState.updateProfileSettings).toHaveBeenCalledWith('p1', {
+      forceZmsMonitorIds: ['1'],
+    });
   });
 });

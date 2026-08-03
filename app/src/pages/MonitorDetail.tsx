@@ -567,6 +567,7 @@ export default function MonitorDetail() {
         cycleSeconds={settings.monitorDetailCycleSeconds}
         onCycleSecondsChange={handleCycleSecondsChange}
         orientedResolution={orientedResolution}
+        profileId={ownerProfile.id}
       />
     </div>
   );

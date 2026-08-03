@@ -16,14 +16,21 @@ import { Switch } from '../ui/switch';
 import { SettingsRow } from './SettingsRow';
 import { useSettingsStore } from '../../stores/settings';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
-import type { Monitor } from '../../api/types';
+import type { Monitor, ProfileId } from '../../api/types';
 
-export function MonitorAppPreferences({ monitor }: { monitor: Monitor }) {
+interface MonitorAppPreferencesProps {
+  monitor: Monitor;
+  /** Owning profile for an /all/ deep route or All-mode monitor grid; defaults to the current profile. */
+  profileId?: ProfileId;
+}
+
+export function MonitorAppPreferences({ monitor, profileId }: MonitorAppPreferencesProps) {
   const { t } = useTranslation();
   const { currentProfile } = useCurrentProfile();
+  const effectiveProfileId = profileId ?? currentProfile?.id;
   const getProfileSettings = useSettingsStore((state) => state.getProfileSettings);
   const updateProfileSettings = useSettingsStore((state) => state.updateProfileSettings);
-  const profileSettings = currentProfile ? getProfileSettings(currentProfile.id) : null;
+  const profileSettings = effectiveProfileId ? getProfileSettings(effectiveProfileId) : null;
 
   const globalStreamingMethod = profileSettings?.streamingMethod ?? 'auto';
   const monitorOverride = profileSettings?.monitorStreamingOverrides?.[monitor.Id];
@@ -31,7 +38,7 @@ export function MonitorAppPreferences({ monitor }: { monitor: Monitor }) {
   const monitorSupportsGo2rtc = monitor.Go2RTCEnabled === true;
 
   const handleGo2rtcToggle = (enabled: boolean) => {
-    if (!currentProfile || !profileSettings) return;
+    if (!effectiveProfileId || !profileSettings) return;
 
     if (!enabled && globalStreamingMethod === 'auto' && !monitorOverride) {
       // Turning off Go2RTC for this monitor while global is 'auto':
@@ -46,15 +53,15 @@ export function MonitorAppPreferences({ monitor }: { monitor: Monitor }) {
     } else {
       overrides[monitor.Id] = 'mjpeg';
     }
-    updateProfileSettings(currentProfile.id, { monitorStreamingOverrides: overrides });
+    updateProfileSettings(effectiveProfileId, { monitorStreamingOverrides: overrides });
   };
 
   const forceZms = profileSettings?.forceZmsMonitorIds?.includes(monitor.Id) ?? false;
 
   const handleForceZmsToggle = (enabled: boolean) => {
-    if (!currentProfile || !profileSettings) return;
+    if (!effectiveProfileId || !profileSettings) return;
     const others = (profileSettings.forceZmsMonitorIds ?? []).filter((id) => id !== monitor.Id);
-    updateProfileSettings(currentProfile.id, {
+    updateProfileSettings(effectiveProfileId, {
       forceZmsMonitorIds: enabled ? [...others, monitor.Id] : others,
     });
   };

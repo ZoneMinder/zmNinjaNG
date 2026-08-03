@@ -17,7 +17,7 @@ import { Switch } from '../ui/switch';
 import { Input } from '../ui/input';
 import { PasswordInput } from '../ui/password-input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import type { Monitor } from '../../api/types';
+import type { Monitor, ProfileId } from '../../api/types';
 import type { MonitorFunction } from '../../pages/hooks/useModeControl';
 import { isZmVersionAtLeast } from '../../lib/zm/zm-version';
 import { maskUrlCredentials, restoreUrlCredentials } from '../../lib/security/url-credentials';
@@ -42,6 +42,8 @@ interface MonitorSettingsDialogProps {
   orientedResolution?: string;
   /** Map of monitor ID to name for resolving LinkedMonitors. */
   monitorNames?: Record<string, string>;
+  /** Owning profile for an /all/ deep route or All-mode monitor grid; defaults to the current profile. */
+  profileId?: ProfileId;
 }
 
 export function MonitorSettingsDialog({
@@ -55,13 +57,15 @@ export function MonitorSettingsDialog({
   onCycleSecondsChange,
   orientedResolution,
   monitorNames,
+  profileId,
 }: MonitorSettingsDialogProps) {
   const { t } = useTranslation();
   const editable = !!onSave;
   const is138Plus = isZmVersionAtLeast(zmVersion, '1.38.0');
   const { currentProfile } = useCurrentProfile();
+  const effectiveProfileId = profileId ?? currentProfile?.id;
   const getProfileSettings = useSettingsStore((state) => state.getProfileSettings);
-  const profileSettings = currentProfile ? getProfileSettings(currentProfile.id) : null;
+  const profileSettings = effectiveProfileId ? getProfileSettings(effectiveProfileId) : null;
 
   // A camera's password lives in the source URL as userinfo, and on pre-1.38
   // servers that is the only place it can live. While log redaction is on, the
@@ -346,7 +350,7 @@ export function MonitorSettingsDialog({
           <TabsContent value="video" className="mt-4 space-y-0 overflow-y-auto">
             {/* App-local per-monitor preferences. Applied on toggle, never part
                 of the ZM save payload below. */}
-            <MonitorAppPreferences monitor={monitor} />
+            <MonitorAppPreferences monitor={monitor} profileId={profileId} />
 
             {/* Source Path: stacked layout for long value */}
             <div className="py-2.5 border-b border-border/40 " data-testid="settings-source-row">

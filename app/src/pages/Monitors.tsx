@@ -416,6 +416,7 @@ export default function Monitors() {
           zmVersion={settingsZmVersion}
           onSave={handleSaveSettings}
           isSaving={isSavingSettings}
+          profileId={settingsProfileId ?? undefined}
         />
       )}
     </PageContainer>
