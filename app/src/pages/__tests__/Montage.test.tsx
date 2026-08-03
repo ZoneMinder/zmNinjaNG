@@ -60,15 +60,23 @@ vi.mock('react-grid-layout', () => ({
   WidthProvider: (Component: React.ComponentType<{ children?: React.ReactNode }>) => Component,
 }));
 
-vi.mock('../../components/montage', () => ({
-  GridLayoutControls: () => <div data-testid="grid-layout-controls-stub" />,
-  FullscreenControls: () => <div data-testid="fullscreen-controls-stub" />,
-  MontageKebabMenu: () => <div data-testid="montage-kebab-stub" />,
-  MontageTileErrorBoundary: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
-  MontageScrollPad: () => null,
-  useMontageGrid: () => useMontageGridMock(),
-  useContainerResize: () => ({ containerRef: vi.fn() }),
-}));
+// MontageErrorStrips/MontageGridSections stay the REAL implementations (via
+// importOriginal): they're this task's own new code, so stubbing them would
+// test the stub instead. Their own dependencies (MontageMonitor,
+// react-grid-layout) are mocked separately above/below.
+vi.mock('../../components/montage', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../components/montage')>();
+  return {
+    ...actual,
+    GridLayoutControls: () => <div data-testid="grid-layout-controls-stub" />,
+    FullscreenControls: () => <div data-testid="fullscreen-controls-stub" />,
+    MontageKebabMenu: () => <div data-testid="montage-kebab-stub" />,
+    MontageTileErrorBoundary: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+    MontageScrollPad: () => null,
+    useMontageGrid: () => useMontageGridMock(),
+    useContainerResize: () => ({ containerRef: vi.fn() }),
+  };
+});
 
 vi.mock('../../components/monitors/MontageMonitor', () => ({
   MontageMonitor: ({

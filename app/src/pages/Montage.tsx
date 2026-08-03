@@ -5,7 +5,7 @@
  * Supports drag-and-drop layout, resizing, and fullscreen mode.
  */
 
-import { GRID_LAYOUT, MONTAGE_GRID } from '../lib/zmninja-ng-constants';
+import { MONTAGE_GRID } from '../lib/zmninja-ng-constants';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useProfileScope } from '../hooks/useProfileScope';
 import { useScopedMonitors } from '../hooks/useScopedMonitors';
@@ -18,7 +18,6 @@ import { useNavigate } from 'react-router-dom';
 import { useTvKeyHandler } from '../hooks/useTvKeyHandler';
 import { useTvMode } from '../hooks/useTvMode';
 import { Button } from '../components/ui/button';
-import { MontageMonitor } from '../components/monitors/MontageMonitor';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Video, Maximize, Pencil, ArrowLeftRight, Layers } from 'lucide-react';
 import { RefreshButton } from '../components/common/RefreshButton';
@@ -31,37 +30,28 @@ import { useGroupFilter } from '../hooks/useGroupFilter';
 import { useMontageGroupState } from '../hooks/useMontageGroupState';
 import { GroupFilterSelect } from '../components/filters/GroupFilterSelect';
 import { cn } from '../lib/utils';
-import { handleKeyClick } from '../lib/tv/tv-a11y';
 import { useTranslation } from 'react-i18next';
 import { usePinchZoom } from '../hooks/usePinchZoom';
 import { useInsomnia } from '../hooks/useInsomnia';
 import { NotificationBadge } from '../components/NotificationBadge';
-import GridLayout, { WidthProvider } from 'react-grid-layout';
 import type { Layout } from 'react-grid-layout';
-import type { MonitorData, ProfileId } from '../api/types';
-import 'react-grid-layout/css/styles.css';
-import 'react-resizable/css/styles.css';
+import type { Profile, MonitorData, ProfileId } from '../api/types';
 
 // Extracted hooks and components
 import {
   GridLayoutControls,
   FullscreenControls,
   MontageKebabMenu,
-  MontageTileErrorBoundary,
   MontageScrollPad,
+  MontageErrorStrips,
+  MontageGridSections,
   useMontageGrid,
   useContainerResize,
+  type MontageTileItem,
+  type MontageGroupedSections,
 } from '../components/montage';
 import { useFullscreenMode } from '../hooks/useFullscreenMode';
-import { internalColsForCols, tileIdFor, type MontageTileMonitorData } from '../components/montage/hooks/useMontageGrid';
-
-/** One montage tile's render data. profileId/profileChip are set only in
- *  All mode (see useScopedMonitors), mirroring Monitors.tsx's MonitorGridItem. */
-interface MontageTileItem extends MontageTileMonitorData {
-  profileChip?: string;
-}
-
-const WrappedGridLayout = WidthProvider(GridLayout);
+import { tileIdFor } from '../components/montage/hooks/useMontageGrid';
 
 export default function Montage() {
   const navigate = useNavigate();
@@ -237,20 +227,29 @@ export default function Montage() {
     groupKey,
   });
 
-  // layout is one flat array covering every tile (single WrappedGridLayout in
-  // the ungrouped case); grouped rendering (below) slices it per profile so
-  // each server gets its own independent grid region. x stays within
-  // internalColsForCols(gridCols) regardless of subset size, so a section's
-  // own vertical compaction is all that changes per instance.
-  const layoutByTileId = useMemo(
-    () => new Map(layout.map((item) => [item.i, item])),
-    [layout]
+  // Tile render resolvers passed to MontageGridSections: the owning profile
+  // and event-badge counts differ by mode (All mode reads its own server /
+  // scoped counts, single mode reads currentProfile / the page's own
+  // counts), so the extracted component stays agnostic of that branching.
+  const resolveOwnerProfile = useCallback(
+    (profileId: ProfileId | undefined): Profile | null =>
+      profileId ? profilesById.get(profileId) ?? null : currentProfile,
+    [profilesById, currentProfile]
   );
-  const globalIndexByTileId = useMemo(() => {
-    const map = new Map<string, number>();
-    cappedMonitors.forEach((item, i) => map.set(tileIdFor(item), i));
-    return map;
-  }, [cappedMonitors]);
+  const resolveNewEventCount = useCallback(
+    (item: MontageTileItem): number | undefined =>
+      item.profileId
+        ? scopedNewEventCounts[scopedMonitorEventKey(item.profileId, item.Monitor.Id)]
+        : newEventCounts[item.Monitor.Id],
+    [scopedNewEventCounts, newEventCounts]
+  );
+  const resolveNewestEventAt = useCallback(
+    (item: MontageTileItem): string | null | undefined =>
+      item.profileId
+        ? scopedNewestEventAt[scopedMonitorEventKey(item.profileId, item.Monitor.Id)]
+        : newestEventAt[item.Monitor.Id],
+    [scopedNewestEventAt, newestEventAt]
+  );
 
   // Container resize observation
   const { containerRef } = useContainerResize({
@@ -456,8 +455,11 @@ export default function Montage() {
     : [];
 
   // Section cappedMonitors by owning server when the toggle is on. All mode
-  // only - single mode never has more than one profile to group by.
-  const groupedSections = isAllMode && settings.monitorsGroupByServer
+  // only - single mode never has more than one profile to group by. The
+  // actual grid/tile rendering lives in MontageGridSections (extracted,
+  // refs #337 Phase 4 Task 1 fix round 1); this stays here since it depends
+  // on isAllMode/settings the same way visibleErrors above does.
+  const groupedSections: MontageGroupedSections | null = isAllMode && settings.monitorsGroupByServer
     ? Array.from(
         cappedMonitors.reduce((byProfile, item) => {
           const key = item.profileId as ProfileId;
@@ -471,78 +473,6 @@ export default function Montage() {
         }, new Map<ProfileId, { profileName: string; items: MontageTileItem[] }>())
       )
     : null;
-
-  const sharedGridLayoutProps = {
-    cols: internalColsForCols(gridCols),
-    rowHeight: GRID_LAYOUT.montageRowHeight,
-    margin: [0, 0] as [number, number],
-    containerPadding: [0, 0] as [number, number],
-    compactType: 'vertical' as const,
-    preventCollision: false,
-    isResizable: isEditMode,
-    isDraggable: isEditMode,
-    resizeHandles: ['se', 'sw', 'ne', 'nw'] as Array<'s' | 'w' | 'e' | 'n' | 'sw' | 'nw' | 'se' | 'ne'>,
-    draggableCancel: '.pin-locked,.no-drag',
-    onLayoutChange: handleLayoutChange,
-    onDragStop: handleDragStop,
-    onResizeStop: handleResizeStop,
-  };
-
-  const renderTile = (item: MontageTileItem) => {
-    const { Monitor, Monitor_Status, profileId, profileChip } = item;
-    const tileId = tileIdFor(item);
-    const idx = globalIndexByTileId.get(tileId) ?? -1;
-    // The tile's owning profile: its own server in All mode, the page's
-    // current profile in single mode (unchanged) - see MontageMonitor.
-    const ownerProfile = profileId ? profilesById.get(profileId) ?? null : currentProfile;
-    return (
-      <div
-        key={tileId}
-        className={cn(
-          "relative focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
-          isMonitorPinned(tileId) && "pin-locked",
-          isTvMode && idx === focusedMonitorIndex && "ring-2 ring-primary"
-        )}
-        role="button"
-        aria-label={Monitor.Name}
-        data-testid={`montage-monitor-${tileId}`}
-        tabIndex={isEditMode ? -1 : 0}
-        onClick={() => !isEditMode && navigate(
-          profileId ? `/all/monitors/${profileId}/${Monitor.Id}` : `/monitors/${Monitor.Id}`,
-          { state: { from: '/montage' } }
-        )}
-        onKeyDown={handleKeyClick}
-      >
-        <MontageTileErrorBoundary monitorId={Monitor.Id} monitorName={Monitor.Name}>
-          <MontageMonitor
-            monitor={Monitor}
-            status={Monitor_Status}
-            currentProfile={ownerProfile}
-            accessToken={accessToken}
-            navigate={navigate}
-            profileId={profileId}
-            profileChip={profileChip}
-            isFullscreen={isFullscreen}
-            isEditing={isEditMode}
-            isPinned={isMonitorPinned(tileId)}
-            onPinToggle={() => togglePinMonitor(tileId)}
-            objectFit={settings.montageFeedFit}
-            showOverlay={showMonitorLabels}
-            newEventCount={
-              profileId
-                ? scopedNewEventCounts[scopedMonitorEventKey(profileId, Monitor.Id)]
-                : newEventCounts[Monitor.Id]
-            }
-            newestEventAt={
-              profileId
-                ? scopedNewestEventAt[scopedMonitorEventKey(profileId, Monitor.Id)]
-                : newestEventAt[Monitor.Id]
-            }
-          />
-        </MontageTileErrorBoundary>
-      </div>
-    );
-  };
 
   return (
     <div
@@ -673,30 +603,7 @@ export default function Montage() {
       )}
 
       {/* Per-profile errors: All mode only, see visibleErrors above. */}
-      {!isFullscreen && visibleErrors.length > 0 && (
-        <div className="space-y-2 px-2 pt-2 sm:px-3">
-          {visibleErrors.map((err) => (
-            <div
-              key={err.profileId}
-              className="flex items-center gap-2"
-              data-testid={`profile-error-strip-${err.profileId}`}
-            >
-              <ErrorBanner
-                className="flex-1"
-                message={`${err.profileName}: ${resolveQueryError(err.error, t, { fallbackKey: 'monitors.failed_to_load' })}`}
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => refetchProfile(err.profileId)}
-                data-testid={`profile-error-strip-retry-${err.profileId}`}
-              >
-                {t('common.retry')}
-              </Button>
-            </div>
-          ))}
-        </div>
-      )}
+      {!isFullscreen && <MontageErrorStrips errors={visibleErrors} onRetry={refetchProfile} />}
 
       {/* Grid Content */}
       <div
@@ -716,45 +623,29 @@ export default function Montage() {
             transition: pinchZoom.isPinching ? 'none' : 'transform 0.2s ease-out',
           }}
         >
-          <div
-            className={cn(
-              'w-full',
-              isFullscreen && 'pl-[var(--sai-left,env(safe-area-inset-left))] pr-[var(--sai-right,env(safe-area-inset-right))]'
-            )}
-            data-testid="montage-grid"
-          >
-            {groupedSections ? (
-              <div className="space-y-6">
-                {groupedSections.map(([sectionProfileId, section]) => {
-                  const sectionLayout = section.items
-                    .map((item) => layoutByTileId.get(tileIdFor(item)))
-                    .filter((item): item is Layout => !!item);
-                  return (
-                    <div key={sectionProfileId}>
-                      <h2
-                        className="text-sm font-semibold text-muted-foreground mb-2 truncate px-1"
-                        title={section.profileName}
-                      >
-                        {section.profileName}
-                      </h2>
-                      <WrappedGridLayout layout={sectionLayout} {...sharedGridLayoutProps}>
-                        {section.items.map(renderTile)}
-                      </WrappedGridLayout>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <WrappedGridLayout layout={layout} {...sharedGridLayoutProps}>
-                {cappedMonitors.map(renderTile)}
-              </WrappedGridLayout>
-            )}
-          </div>
-          {overflowCount > 0 && (
-            <p className="text-sm text-muted-foreground mt-3 px-1" data-testid="montage-stream-cap-overflow">
-              {t('montage.stream_cap_overflow', { count: overflowCount })}
-            </p>
-          )}
+          <MontageGridSections
+            cappedMonitors={cappedMonitors}
+            groupedSections={groupedSections}
+            layout={layout}
+            gridCols={gridCols}
+            isEditMode={isEditMode}
+            overflowCount={overflowCount}
+            onLayoutChange={handleLayoutChange}
+            onDragStop={handleDragStop}
+            onResizeStop={handleResizeStop}
+            navigate={navigate}
+            isFullscreen={isFullscreen}
+            isTvMode={isTvMode}
+            focusedMonitorIndex={focusedMonitorIndex}
+            showMonitorLabels={showMonitorLabels}
+            objectFit={settings.montageFeedFit}
+            accessToken={accessToken}
+            isMonitorPinned={isMonitorPinned}
+            onPinToggle={togglePinMonitor}
+            resolveOwnerProfile={resolveOwnerProfile}
+            resolveNewEventCount={resolveNewEventCount}
+            resolveNewestEventAt={resolveNewestEventAt}
+          />
         </div>
       </div>
 
