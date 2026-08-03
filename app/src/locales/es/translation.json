@@ -769,6 +769,8 @@
     "fullscreen": "Pantalla completa",
     "exit_fullscreen": "Salir",
     "no_monitors": "No se encontraron monitores",
+    "stream_cap_overflow_one": "+{{count}} monitor más no mostrado",
+    "stream_cap_overflow_other": "+{{count}} monitores más no mostrados",
     "stream_lost_reconnecting": "Transmisión perdida, reconectando...",
     "snapshot_saved": "Instantánea guardada",
     "snapshot_failed": "Error al guardar instantánea",
@@ -1030,6 +1032,8 @@
   },
   "live_activity": {
     "title": "Actividad en vivo",
+    "all_mode_title": "Seleccione un perfil",
+    "all_mode_description": "Actividad en vivo vigila un servidor a la vez. Salga de Todos los perfiles para usarla.",
     "all_quiet": "Todo tranquilo",
     "watching_count_one": "Observando {{count}} monitor",
     "watching_count_other": "Observando {{count}} monitores",

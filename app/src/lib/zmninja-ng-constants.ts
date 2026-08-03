@@ -997,6 +997,14 @@ export const MONTAGE_GRID = {
 
   // h-8 header bar height with monitor name + buttons (px)
   cardHeaderHeightPx: 32,
+
+  // All-mode only cap on total tiles (== streams) rendered across every
+  // profile's monitors combined. Single mode has no cap (unchanged,
+  // unlimited) - this only guards the aggregate view, where N profiles each
+  // contributing every enabled monitor could otherwise open dozens of
+  // simultaneous MJPEG/WebRTC connections across independent servers at
+  // once (refs #337, Phase 4 Task 1).
+  allModeMaxStreams: 16,
 } as const;
 
 /**

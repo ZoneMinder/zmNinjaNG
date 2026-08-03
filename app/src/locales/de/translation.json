@@ -769,6 +769,8 @@
     "fullscreen": "Vollbild",
     "exit_fullscreen": "Beenden",
     "no_monitors": "Keine Monitore gefunden",
+    "stream_cap_overflow_one": "+{{count}} weiterer Monitor nicht angezeigt",
+    "stream_cap_overflow_other": "+{{count}} weitere Monitore nicht angezeigt",
     "stream_lost_reconnecting": "Stream verloren, verbinde neu...",
     "snapshot_saved": "Schnappschuss gespeichert",
     "snapshot_failed": "Schnappschuss fehlgeschlagen",
@@ -1030,6 +1032,8 @@
   },
   "live_activity": {
     "title": "Live-Aktivität",
+    "all_mode_title": "Ein Profil wählen",
+    "all_mode_description": "Live-Aktivität überwacht jeweils einen Server. Verlassen Sie „Alle Profile“, um sie zu nutzen.",
     "all_quiet": "Alles ruhig",
     "watching_count_one": "{{count}} Monitor beobachtet",
     "watching_count_other": "{{count}} Monitore beobachtet",

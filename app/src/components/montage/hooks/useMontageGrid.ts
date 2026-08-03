@@ -12,10 +12,23 @@ import { useTranslation } from 'react-i18next';
 import { GRID_LAYOUT, MONTAGE_GRID } from '../../../lib/zmninja-ng-constants';
 import { useSettingsStore, DEFAULT_MONTAGE_GROUP_LAYOUT } from '../../../stores/settings';
 import { getMonitorAspectRatio } from '../../../lib/monitor/monitor-rotation';
+import { monitorCacheKey } from '../../../stores/monitors';
 import type { Layout } from 'react-grid-layout';
-import type { Monitor, MonitorData } from '../../../api/types';
+import type { Monitor, MonitorData, ProfileId } from '../../../api/types';
 import type { Profile } from '../../../api/types';
 import type { ProfileSettings } from '../../../stores/settings';
+
+/** A montage tile's monitor data, plus its owning profile in All mode
+ *  (undefined in single mode, where the tile id degrades to the bare
+ *  monitor id via monitorCacheKey - single mode stays byte-identical). */
+export type MontageTileMonitorData = MonitorData & { profileId?: ProfileId };
+
+/** Tile identity used for layout tracking (react-grid-layout `i`) and the
+ *  monitor lookup map. Two profiles on independent servers can share a raw
+ *  monitor id, so All-mode tiles are keyed by profileId:monitorId instead
+ *  (refs #337, Phase 4 Task 1). */
+export const tileIdFor = (item: MontageTileMonitorData): string =>
+  monitorCacheKey(item.profileId, item.Monitor.Id);
 
 /**
  * Sub-units per display column. Re-exported from MONTAGE_GRID. Each default
@@ -103,7 +116,7 @@ const areLayoutsEqual = (a: Layout[], b: Layout[]): boolean => {
 };
 
 interface UseMontageGridOptions {
-  monitors: MonitorData[];
+  monitors: MontageTileMonitorData[];
   currentProfile: Profile | null;
   settings: ProfileSettings;
   isEditMode: boolean;
@@ -169,23 +182,24 @@ export function useMontageGrid({
   useEffect(() => { groupKeyRef.current = groupKey; }, [groupKey]);
 
   const monitorMap = useMemo(() => {
-    return new Map(monitors.map((item) => [item.Monitor.Id, item.Monitor]));
+    return new Map(monitors.map((item) => [tileIdFor(item), item.Monitor]));
   }, [monitors]);
 
   useEffect(() => { monitorMapRef.current = monitorMap; }, [monitorMap]);
 
   const buildDefaultLayout = useCallback(
-    (monitorList: MonitorData[], cols: number, gridWidth: number): Layout[] => {
+    (monitorList: MontageTileMonitorData[], cols: number, gridWidth: number): Layout[] => {
       // Each default tile is exactly one column wide. perRow == cols exactly,
       // so N columns always renders N regardless of whether N divides evenly.
       const w = COL_SUBDIVISION;
       const perRow = Math.max(1, Math.round(cols));
       const internalCols = internalColsForCols(cols);
       const map = monitorMapRef.current;
-      return monitorList.map(({ Monitor }, index) => {
-        const h = calculateHeightUnits(map, Monitor.Id, w, gridWidth, 0, internalCols);
+      return monitorList.map((item, index) => {
+        const id = tileIdFor(item);
+        const h = calculateHeightUnits(map, id, w, gridWidth, 0, internalCols);
         return {
-          i: Monitor.Id,
+          i: id,
           x: (index % perRow) * w,
           y: Math.floor(index / perRow) * h,
           w,
@@ -238,10 +252,10 @@ export function useMontageGrid({
     const legacy = !!stored && isLegacyLayout(stored, displayCols);
 
     if (stored && stored.length > 0 && !legacy) {
-      const existingIds = new Set(monitors.map((item) => item.Monitor.Id));
+      const existingIds = new Set(monitors.map(tileIdFor));
       const filtered = stored.filter((item) => existingIds.has(item.i));
       const presentIds = new Set(filtered.map((item) => item.i));
-      const missing = monitors.filter((item) => !presentIds.has(item.Monitor.Id));
+      const missing = monitors.filter((item) => !presentIds.has(tileIdFor(item)));
       const defaults = buildDefaultLayout(missing, displayCols, currentWidthRef.current);
       nextLayout = [...filtered, ...defaults];
     } else {
@@ -267,10 +281,10 @@ export function useMontageGrid({
 
     setLayout((prev) => {
       const existingIds = new Set(prev.map((item) => item.i));
-      const newMonitors = monitors.filter((m) => !existingIds.has(m.Monitor.Id));
+      const newMonitors = monitors.filter((m) => !existingIds.has(tileIdFor(m)));
       if (newMonitors.length === 0) {
         // No new monitors; just remove items for monitors that no longer exist
-        const currentIds = new Set(monitors.map((m) => m.Monitor.Id));
+        const currentIds = new Set(monitors.map(tileIdFor));
         const filtered = prev.filter((item) => currentIds.has(item.i));
         return filtered.length === prev.length ? prev : filtered;
       }

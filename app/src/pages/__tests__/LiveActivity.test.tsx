@@ -735,4 +735,34 @@ describe('LiveActivity', () => {
     expect(screen.getByTestId('live-activity-empty')).toBeInTheDocument();
   }, 10000);
 
+  // All mode is gated, not aggregated (refs #337, Phase 4 Task 1): this page's
+  // alarm fanout and its notification-store "recent cause" hints both key off
+  // ONE profile id, unlike Montage/Monitors.
+  it('shows a gate notice instead of tiles in All mode', async () => {
+    vi.resetModules();
+    vi.doMock('../../hooks/useCurrentProfile', () => ({
+      useCurrentProfile: () => ({
+        currentProfile: null,
+        isAllMode: true,
+        settings: {
+          liveActivityPollSeconds: 5,
+          liveActivityDwellSeconds: 30,
+          liveActivityMaxTiles: 12,
+          liveActivityIgnoredMonitorIds: [],
+          bandwidthMode: 'normal',
+          monitorGridCols: 2,
+        },
+      }),
+    }));
+
+    const { default: LiveActivityAllMode } = await import('../LiveActivity');
+    const { getMonitors: reimportedGetMonitors } = await import('../../api/monitors');
+    vi.mocked(reimportedGetMonitors).mockResolvedValue(MONITORS as never);
+
+    render(<LiveActivityAllMode />, { wrapper });
+
+    expect(screen.getByTestId('live-activity-all-mode-notice')).toBeInTheDocument();
+    expect(screen.queryByTestId('live-activity-tile')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('live-activity-empty')).not.toBeInTheDocument();
+  });
 });

@@ -52,7 +52,7 @@ import { PageContainer } from '../components/common/PageContainer';
 export default function LiveActivity() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { currentProfile, settings } = useCurrentProfile();
+  const { currentProfile, settings, isAllMode } = useCurrentProfile();
   const authSlice = useAuthSlice(currentProfile?.id ?? null);
   const isAuthenticated = authSlice.isAuthenticated;
   const accessToken = authSlice.accessToken;
@@ -375,6 +375,29 @@ export default function LiveActivity() {
 
     </>
   );
+
+  // All mode is gated rather than aggregated (unlike Montage/Monitors,
+  // refs #337, Phase 4 Task 1): this page's alarm fanout and its "recent
+  // cause" hints both read useNotificationStore.profileEvents keyed by ONE
+  // profile id (see recentCauses above), and useAlarmStates/reduceActiveMonitors
+  // track a single flat monitor-id set with no owning-profile tag at all.
+  // Generalizing either to N profiles - deduping ids that collide across
+  // servers, re-deriving hints per owning profile - is real surface this task
+  // does not touch. Ledgered as a carried gap for a future task; the
+  // maintainer can decide whether it is worth the notification-store rework.
+  if (isAllMode) {
+    return (
+      <PageContainer>
+        <div data-testid="live-activity-all-mode-notice">
+          <EmptyState
+            icon={EyeClosed}
+            title={t('live_activity.all_mode_title')}
+            description={t('live_activity.all_mode_description')}
+          />
+        </div>
+      </PageContainer>
+    );
+  }
 
   // Fullscreen drops the page chrome the way Montage does: the app frame is
   // covered edge to edge and the only control left is the thin translucent

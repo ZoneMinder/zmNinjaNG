@@ -769,6 +769,8 @@
     "fullscreen": "Fullscreen",
     "exit_fullscreen": "Exit Fullscreen",
     "no_monitors": "No monitors found",
+    "stream_cap_overflow_one": "+{{count}} more monitor not shown",
+    "stream_cap_overflow_other": "+{{count}} more monitors not shown",
     "stream_lost_reconnecting": "Stream lost, reconnecting...",
     "snapshot_saved": "Snapshot saved",
     "snapshot_failed": "Snapshot failed",
@@ -1030,6 +1032,8 @@
   },
   "live_activity": {
     "title": "Live Activity",
+    "all_mode_title": "Select one profile",
+    "all_mode_description": "Live Activity watches one server's alarms at a time. Switch out of All Profiles to use it.",
     "all_quiet": "All quiet",
     "watching_count_one": "Watching {{count}} monitor",
     "watching_count_other": "Watching {{count}} monitors",

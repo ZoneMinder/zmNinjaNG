@@ -769,6 +769,8 @@
     "fullscreen": "Plein écran",
     "exit_fullscreen": "Quitter",
     "no_monitors": "Aucun moniteur trouvé",
+    "stream_cap_overflow_one": "+{{count}} moniteur supplémentaire non affiché",
+    "stream_cap_overflow_other": "+{{count}} moniteurs supplémentaires non affichés",
     "stream_lost_reconnecting": "Flux perdu, reconnexion...",
     "snapshot_saved": "Instantané enregistré",
     "snapshot_failed": "Échec de l'instantané",
@@ -1030,6 +1032,8 @@
   },
   "live_activity": {
     "title": "Activité en direct",
+    "all_mode_title": "Choisir un profil",
+    "all_mode_description": "Activité en direct surveille un seul serveur à la fois. Quittez Tous les profils pour l'utiliser.",
     "all_quiet": "Tout est calme",
     "watching_count_one": "{{count}} caméra surveillée",
     "watching_count_other": "{{count}} caméras surveillées",

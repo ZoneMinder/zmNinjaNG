@@ -15,7 +15,7 @@
 import { useState, useRef, memo, useEffect, type ReactNode } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
-import type { Monitor, MonitorStatus, Profile } from '../../api/types';
+import type { Monitor, MonitorStatus, Profile, ProfileId } from '../../api/types';
 import { useAuthSlice } from '../../stores/auth';
 import { getMonitorRunState, monitorDotColor } from '../../lib/monitor/monitor-status';
 import { MONITOR_UI } from '../../lib/zmninja-ng-constants';
@@ -47,9 +47,24 @@ const NO_MONITOR_EVENTS: NotificationEvent[] = [];
 interface MontageMonitorProps {
   monitor: Monitor;
   status: MonitorStatus | undefined;
+  /** The tile's owning profile: the current profile in single mode, the
+   *  monitor's OWN server in All mode (see useScopedMonitors). Drives
+   *  zmVersion, settings, go2rtcUrl and the LiveMonitorPlayer `profile`
+   *  prop, all keyed off its id. */
   currentProfile: Profile | null;
   accessToken: string | null;
   navigate: NavigateFunction;
+  /**
+   * All mode only: the same owning profile's id, threaded separately to
+   * LiveMonitorPlayer's cache-key scoping and to the events watermark so a
+   * monitor id shared by two servers cannot collide (refs #337, Phase 4
+   * Task 1). Undefined in single mode - degrades to the pre-existing
+   * unscoped cache key (monitorCacheKey), unchanged.
+   */
+  profileId?: ProfileId;
+  /** All mode only: the owning profile's display name, shown as a small
+   *  chip next to the monitor name (mirrors MonitorCard's profileChip). */
+  profileChip?: string;
   isFullscreen?: boolean;
   isEditing?: boolean;
   isPinned?: boolean;
@@ -95,6 +110,8 @@ function MontageMonitorComponent({
   currentProfile,
   accessToken: _accessToken,
   navigate,
+  profileId,
+  profileChip,
   isFullscreen = false,
   isEditing = false,
   isPinned = false,
@@ -131,19 +148,19 @@ function MontageMonitorComponent({
   const lastSeenRef = useRef(0);
   const seedKeyRef = useRef<string | null>(null);
 
-  const profileId = currentProfile?.id;
+  const ownerProfileId = currentProfile?.id;
   const monitorId = monitor.Id;
 
   const monitorEvents = useNotificationStore(
     useShallow((state) => {
-      const events = profileId ? state.profileEvents[profileId] : undefined;
+      const events = ownerProfileId ? state.profileEvents[ownerProfileId] : undefined;
       if (!events?.length) return NO_MONITOR_EVENTS;
       return events.filter((e) => String(e.MonitorId) === monitorId);
     })
   );
 
   useEffect(() => {
-    const seedKey = `${profileId ?? ''}:${monitorId}`;
+    const seedKey = `${ownerProfileId ?? ''}:${monitorId}`;
     const isNewKey = seedKeyRef.current !== seedKey;
     seedKeyRef.current = seedKey;
 
@@ -164,7 +181,7 @@ function MontageMonitorComponent({
       setIsAlarming(true);
       alarmTimerRef.current = setTimeout(() => setIsAlarming(false), MONITOR_UI.alarmPulseMs);
     }
-  }, [monitorEvents, profileId, monitorId]);
+  }, [monitorEvents, ownerProfileId, monitorId]);
 
   useEffect(() => {
     return () => {
@@ -230,6 +247,15 @@ function MontageMonitorComponent({
           )} title={titleOverride ?? monitor.Name}>
             {titleOverride ?? monitor.Name}
           </span>
+          {profileChip && (
+            <span
+              className="text-[9px] px-1 py-0 h-4 rounded bg-muted text-muted-foreground truncate max-w-[72px] shrink-0"
+              title={profileChip}
+              data-testid="montage-profile-chip"
+            >
+              {profileChip}
+            </span>
+          )}
         </div>
 
         {/* Action buttons */}
@@ -243,7 +269,7 @@ function MontageMonitorComponent({
             )}
             onClick={(e) => {
               e.stopPropagation();
-              openMonitorEvents({ monitorId: monitor.Id, newEventCount, newestEventAt, from: fromRoute });
+              openMonitorEvents({ monitorId: monitor.Id, newEventCount, newestEventAt, from: fromRoute, profileId });
             }}
             title={t('common.events')}
             aria-label={t('monitors.view_events')}
@@ -340,6 +366,7 @@ function MontageMonitorComponent({
         <LiveMonitorPlayer
           monitor={monitor}
           profile={currentProfile}
+          profileId={profileId}
           externalMediaRef={mediaRef}
           objectFit={resolvedFit}
           muted={isMuted}
