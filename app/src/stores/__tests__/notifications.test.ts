@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useNotificationStore, startEventPoller, resolvePollIntervalMs } from '../notifications';
 import { getBandwidthSettings } from '../../lib/zmninja-ng-constants';
-import type { ZMAlarmEvent } from '../../types/notifications';
+import type { ZMAlarmEvent, ConnectionState } from '../../types/notifications';
 
 const mockService = {
   connect: vi.fn().mockResolvedValue(undefined),
-  onStateChange: vi.fn(() => vi.fn()),
-  onEvent: vi.fn(() => vi.fn()),
+  onStateChange: vi.fn((_cb: (state: ConnectionState) => void) => vi.fn()),
+  onEvent: vi.fn((_cb: (event: ZMAlarmEvent) => void) => vi.fn()),
   setMonitorFilter: vi.fn().mockResolvedValue(undefined),
   updateBadgeCount: vi.fn().mockResolvedValue(undefined),
   registerPushToken: vi.fn().mockResolvedValue(undefined),
@@ -16,6 +16,7 @@ const mockService = {
 vi.mock('../../services/notifications', () => ({
   getNotificationService: vi.fn(() => mockService),
   resetNotificationService: vi.fn(),
+  resetAllNotificationServices: vi.fn(),
 }));
 
 const mockPollerStart = vi.fn().mockResolvedValue(undefined);
@@ -26,6 +27,7 @@ vi.mock('../../services/eventPoller', () => ({
     stop: vi.fn(),
     isRunning: vi.fn(() => false),
   })),
+  stopAllEventPollers: vi.fn(),
 }));
 
 vi.mock('../auth', () => ({
@@ -104,11 +106,10 @@ describe('Notification Store', () => {
     localStorage.clear();
     useNotificationStore.setState({
       profileSettings: {},
-      connectionState: 'disconnected',
-      isConnected: false,
+      connections: {},
       currentProfileId: null,
       profileEvents: {},
-      _cleanupFunctions: [],
+      _cleanupFunctions: {},
     });
     vi.clearAllMocks();
   });
@@ -122,7 +123,7 @@ describe('Notification Store', () => {
 
   it('updates profile settings and disconnects when disabling active profile', () => {
     useNotificationStore.setState({
-      isConnected: true,
+      connections: { [profileId]: 'connected' },
       currentProfileId: profileId,
     });
 
@@ -331,6 +332,51 @@ describe('Notification Store', () => {
     expect(providers.buildEventImageUrl(42, null)).not.toContain('token=');
 
     expect(providers.getKeepaliveIntervalMs()).toBe(60000);
+  });
+
+  describe('multi-profile connection lifecycle (refs #337)', () => {
+    const profileA = 'profile-A';
+    const profileB = 'profile-B';
+
+    beforeEach(() => {
+      useNotificationStore.getState().updateProfileSettings(profileA, { enabled: true, host: 'a.example.com' });
+      useNotificationStore.getState().updateProfileSettings(profileB, { enabled: true, host: 'b.example.com' });
+    });
+
+    it('connects two profiles independently; disconnecting one leaves the other connected', async () => {
+      const store = useNotificationStore.getState();
+      await store.connect(profileA, 'admin', 'secretA', 'http://a.local');
+      await store.connect(profileB, 'admin', 'secretB', 'http://b.local');
+
+      // Simulate each connection's onStateChange callback firing 'connected'.
+      const stateCalls = mockService.onStateChange.mock.calls;
+      expect(stateCalls).toHaveLength(2);
+      stateCalls[0][0]('connected');
+      stateCalls[1][0]('connected');
+
+      expect(useNotificationStore.getState().connections[profileA]).toBe('connected');
+      expect(useNotificationStore.getState().connections[profileB]).toBe('connected');
+
+      useNotificationStore.getState().disconnect(profileA);
+
+      expect(useNotificationStore.getState().connections[profileA]).toBe('disconnected');
+      expect(useNotificationStore.getState().connections[profileB]).toBe('connected');
+    });
+
+    it('binds each connection\'s onEvent callback to its own profile id', async () => {
+      const store = useNotificationStore.getState();
+      await store.connect(profileA, 'admin', 'secretA', 'http://a.local');
+      await store.connect(profileB, 'admin', 'secretB', 'http://b.local');
+
+      const eventCalls = mockService.onEvent.mock.calls;
+      expect(eventCalls).toHaveLength(2);
+
+      // Profile B's own callback fires - must land in profile B's history only.
+      eventCalls[1][0]({ ...baseEvent, EventId: 999 });
+
+      expect(useNotificationStore.getState().getEvents(profileB)).toHaveLength(1);
+      expect(useNotificationStore.getState().getEvents(profileA)).toHaveLength(0);
+    });
   });
 
   it('startEventPoller wires store-derived deps into the poller', async () => {

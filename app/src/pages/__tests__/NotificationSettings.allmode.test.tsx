@@ -59,8 +59,7 @@ vi.mock('../../stores/notifications', () => ({
     setMonitorFilter: () => void;
     connect: () => void;
     disconnect: () => void;
-    connectionState: string;
-    isConnected: boolean;
+    connections: Record<string, string>;
   }) => unknown) =>
     selector({
       getProfileSettings: (profileId: string) => notificationSettingsFixture[profileId] ?? DEFAULT_TEST_SETTINGS,
@@ -69,8 +68,7 @@ vi.mock('../../stores/notifications', () => ({
       setMonitorFilter: vi.fn(),
       connect: vi.fn(),
       disconnect: vi.fn(),
-      connectionState: 'disconnected',
-      isConnected: false,
+      connections: {},
     }),
   startEventPoller: vi.fn(),
 }));

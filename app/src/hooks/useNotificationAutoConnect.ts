@@ -124,7 +124,7 @@ export function useNotificationAutoConnect({
 
         // Check state again right before connecting to avoid race conditions
         // This is crucial because getDecryptedPassword is async and state might have changed
-        const currentState = useNotificationStore.getState().connectionState;
+        const currentState = useNotificationStore.getState().connections[currentProfile.id] ?? 'disconnected';
         if (currentState !== 'disconnected') {
            log.notifications('Skipping auto-connect - already connected or connecting', LogLevel.INFO, { state: currentState,
              profileId: currentProfile.id, });
@@ -154,8 +154,10 @@ export function useNotificationAutoConnect({
 
   // Stop event poller on cleanup or when mode/profile changes
   useEffect(() => {
+    const profileId = currentProfile?.id;
     return () => {
-      const poller = getEventPoller();
+      if (!profileId) return;
+      const poller = getEventPoller(profileId);
       if (poller.isRunning()) {
         poller.stop();
       }
@@ -211,8 +213,10 @@ export function useNotificationAutoConnect({
         return;
       }
 
+      if (!currentProfile) return;
+
       log.notificationHandler('Tab visible, checking WebSocket liveness', LogLevel.DEBUG);
-      const service = getNotificationService();
+      const service = getNotificationService(currentProfile.id);
       const alive = await service.checkAlive(5000);
 
       if (!alive) {
@@ -223,7 +227,7 @@ export function useNotificationAutoConnect({
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [settings?.enabled, settings?.notificationMode, isConnected, reconnect]);
+  }, [settings?.enabled, settings?.notificationMode, isConnected, reconnect, currentProfile]);
 
   // App resume liveness check (mobile): verify WebSocket is alive when app returns to foreground
   useCapacitorListener(
@@ -241,8 +245,10 @@ export function useNotificationAutoConnect({
         return;
       }
 
+      if (!currentProfile) return;
+
       log.notificationHandler('App resumed, checking WebSocket liveness', LogLevel.DEBUG);
-      const service = getNotificationService();
+      const service = getNotificationService(currentProfile.id);
       const alive = await service.checkAlive(5000);
 
       if (!alive) {

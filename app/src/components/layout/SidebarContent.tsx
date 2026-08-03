@@ -75,7 +75,7 @@ export function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentPro
       return profiles.find((p) => p.id === currentProfileId) || null;
     })
   );
-  const connectionState = useNotificationStore((state) => state.connectionState);
+  const connectionState = useNotificationStore((state) => state.connections[currentProfile?.id ?? ''] ?? 'disconnected');
   const getProfileSettings = useNotificationStore((state) => state.getProfileSettings);
   const getSettings = useSettingsStore((state) => state.getProfileSettings);
   const updateProfileSettings = useSettingsStore((state) => state.updateProfileSettings);

@@ -30,6 +30,7 @@ vi.mock('../../lib/logger', () => ({
     profile: vi.fn(),
     profileService: vi.fn(),
     auth: vi.fn(),
+    notifications: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
     info: vi.fn(),

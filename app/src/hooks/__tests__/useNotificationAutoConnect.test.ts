@@ -38,7 +38,7 @@ vi.mock('@capacitor/app', () => ({
 }));
 
 // Mock notification store (getState + poller wiring usage inside hook)
-const mockNotificationStoreState = { connectionState: 'disconnected' };
+const mockNotificationStoreState = { connections: {} as Record<string, string> };
 const mockStartEventPoller = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('../../stores/notifications', () => ({
@@ -124,7 +124,7 @@ describe('useNotificationAutoConnect', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
-    mockNotificationStoreState.connectionState = 'disconnected';
+    mockNotificationStoreState.connections = {};
     mockPlatform.isDesktopOrWeb = true;
     mockPlatform.isNative = false;
     mockAppAddListener.mockResolvedValue({ remove: vi.fn() });
@@ -254,7 +254,7 @@ describe('useNotificationAutoConnect', () => {
       const params = makeParams();
       // Simulate store having changed state by the time decrypt resolves
       params.getDecryptedPassword = vi.fn().mockImplementation(async () => {
-        mockNotificationStoreState.connectionState = 'connecting';
+        mockNotificationStoreState.connections = { 'profile-1': 'connecting' };
         return 'secret';
       });
 

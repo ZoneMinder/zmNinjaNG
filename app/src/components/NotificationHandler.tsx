@@ -54,19 +54,26 @@ export function NotificationHandler() {
     connectionState,
     currentProfileId,
     connect,
-    disconnect,
-    reconnect,
   } = useNotificationStore(
     useShallow((state) => ({
       getProfileSettings: state.getProfileSettings,
-      isConnected: state.isConnected,
-      connectionState: state.connectionState,
+      isConnected: currentProfile ? state.connections[currentProfile.id] === 'connected' : false,
+      connectionState: currentProfile ? (state.connections[currentProfile.id] ?? 'disconnected') : 'disconnected',
       currentProfileId: state.currentProfileId,
       connect: state.connect,
-      disconnect: state.disconnect,
-      reconnect: state.reconnect,
     }))
   );
+
+  // disconnect() tears down whichever profile's connection is currently
+  // anchored (mirrors the pre-#337 singleton's "disconnect whatever's
+  // connected"); reconnect() always targets this component's own profile.
+  const disconnect = useCallback(() => {
+    const prevId = useNotificationStore.getState().currentProfileId;
+    if (prevId) useNotificationStore.getState().disconnect(prevId);
+  }, []);
+  const reconnect = useCallback((force?: boolean) => {
+    if (currentProfile) useNotificationStore.getState().reconnect(currentProfile.id, force);
+  }, [currentProfile]);
 
   // Events for the current profile, subscribed via selector so addEvent
   // re-renders this component. The store's websocket listener only calls

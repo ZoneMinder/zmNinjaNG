@@ -253,12 +253,22 @@ class EventPollerService {
   }
 }
 
-// Singleton
-let eventPoller: EventPollerService | null = null;
+// Per-profile registry: every profile can run its own poller (refs #337).
+const eventPollers = new Map<string, EventPollerService>();
 
-export function getEventPoller(): EventPollerService {
-  if (!eventPoller) {
-    eventPoller = new EventPollerService();
+export function getEventPoller(profileId: string): EventPollerService {
+  let poller = eventPollers.get(profileId);
+  if (!poller) {
+    poller = new EventPollerService();
+    eventPollers.set(profileId, poller);
   }
-  return eventPoller;
+  return poller;
+}
+
+/** Stop every running poller. Used on full logout (refs #337). */
+export function stopAllEventPollers(): void {
+  for (const poller of eventPollers.values()) {
+    poller.stop();
+  }
+  eventPollers.clear();
 }

@@ -22,6 +22,8 @@ import { log, LogLevel } from '../lib/logger';
 import { setLogRedactionGate } from '../lib/log-sanitizer';
 import { setProfileSettingsGate } from '../lib/profile/profile-settings';
 import { getSession, dropSession, dropAllSessions, registerSessionsGate } from '../services/sessions';
+import { resetNotificationService, resetAllNotificationServices } from '../services/notifications';
+import { getEventPoller, stopAllEventPollers } from '../services/eventPoller';
 import { registerServerResolverGate } from '../lib/zm/server-resolver';
 import { STORAGE_KEYS } from '../lib/zmninja-ng-constants';
 import { useAuthStore, getAuthSlice, registerAuthClientResolver } from './auth';
@@ -218,6 +220,12 @@ export const useProfileStore = create<ProfileState>()(
           dropSession(asProfileId(id));
           useAuthStore.getState().logout(asProfileId(id));
 
+          // Tear down its live notification connection and poller too - a
+          // deleted profile must not keep a websocket or poll loop running
+          // in the background (refs #337).
+          resetNotificationService(id);
+          getEventPoller(id).stop();
+
           // Evict its query cache entries. Profile-scoped keys are the sole
           // cross-profile isolation now that switchProfile no longer clears
           // the whole cache (refs #337).
@@ -260,6 +268,11 @@ export const useProfileStore = create<ProfileState>()(
           // and persisted refresh token. Refs #337.
           dropAllSessions();
           useAuthStore.getState().logoutAll();
+
+          // Tear down every profile's live notification connection and
+          // poller (refs #337).
+          resetAllNotificationServices();
+          stopAllEventPollers();
 
           log.profileService('All profiles deleted', LogLevel.INFO);
         },

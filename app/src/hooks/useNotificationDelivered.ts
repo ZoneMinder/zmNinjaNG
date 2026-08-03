@@ -141,7 +141,7 @@ export function useNotificationDelivered({
       log.notificationHandler('Cleared delivered notifications on app resume', LogLevel.DEBUG);
 
       // Sync badge count with server
-      store._updateBadge();
+      store._updateBadge(profileId);
     },
     {
       enabled: Platform.isNative,

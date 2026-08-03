@@ -3,6 +3,7 @@ import {
   ZMNotificationService,
   getNotificationService,
   resetNotificationService,
+  resetAllNotificationServices,
 } from '../notifications';
 
 // Mock WebSocket
@@ -595,18 +596,36 @@ describe('ZMNotificationService', () => {
     });
   });
 
-  describe('Singleton', () => {
-    it('getNotificationService returns same instance', () => {
-      const a = getNotificationService();
-      const b = getNotificationService();
+  describe('Per-profile registry (refs #337)', () => {
+    it('getNotificationService returns same instance for the same profile id', () => {
+      const a = getNotificationService('profile-1');
+      const b = getNotificationService('profile-1');
       expect(a).toBe(b);
     });
 
-    it('resetNotificationService creates new instance', () => {
-      const a = getNotificationService();
-      resetNotificationService();
-      const b = getNotificationService();
+    it('getNotificationService returns a distinct instance per profile id', () => {
+      const a = getNotificationService('profile-1');
+      const b = getNotificationService('profile-2');
       expect(a).not.toBe(b);
+    });
+
+    it('resetNotificationService creates a new instance for that profile only', () => {
+      const a = getNotificationService('profile-1');
+      const other = getNotificationService('profile-2');
+      resetNotificationService('profile-1');
+      const b = getNotificationService('profile-1');
+      expect(a).not.toBe(b);
+      expect(getNotificationService('profile-2')).toBe(other);
+    });
+
+    it('resetAllNotificationServices tears down every profile', () => {
+      const a = getNotificationService('profile-1');
+      const b = getNotificationService('profile-2');
+
+      resetAllNotificationServices();
+
+      expect(getNotificationService('profile-1')).not.toBe(a);
+      expect(getNotificationService('profile-2')).not.toBe(b);
     });
   });
 });

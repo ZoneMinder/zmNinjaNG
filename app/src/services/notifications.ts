@@ -707,19 +707,33 @@ export class ZMNotificationService {
   }
 }
 
-// Singleton instance
-let notificationService: ZMNotificationService | null = null;
+// Per-profile registry: every profile can hold its own live connection
+// (refs #337), so this is a Map instead of a single singleton. The service
+// itself has no zustand imports and no profile-id awareness - the registry
+// key is the only place "which profile" lives.
+const notificationServices = new Map<string, ZMNotificationService>();
 
-export function getNotificationService(): ZMNotificationService {
-  if (!notificationService) {
-    notificationService = new ZMNotificationService();
+export function getNotificationService(profileId: string): ZMNotificationService {
+  let service = notificationServices.get(profileId);
+  if (!service) {
+    service = new ZMNotificationService();
+    notificationServices.set(profileId, service);
   }
-  return notificationService;
+  return service;
 }
 
-export function resetNotificationService(): void {
-  if (notificationService) {
-    notificationService.disconnect();
-    notificationService = null;
+export function resetNotificationService(profileId: string): void {
+  const service = notificationServices.get(profileId);
+  if (service) {
+    service.disconnect();
+    notificationServices.delete(profileId);
   }
+}
+
+/** Tear down every profile's connection. Used on full logout (refs #337). */
+export function resetAllNotificationServices(): void {
+  for (const service of notificationServices.values()) {
+    service.disconnect();
+  }
+  notificationServices.clear();
 }

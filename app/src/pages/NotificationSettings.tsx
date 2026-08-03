@@ -66,9 +66,10 @@ export default function NotificationSettings() {
   const updateProfileSettings = useNotificationStore((s) => s.updateProfileSettings);
   const setMonitorFilter = useNotificationStore((s) => s.setMonitorFilter);
   const connect = useNotificationStore((s) => s.connect);
-  const disconnect = useNotificationStore((s) => s.disconnect);
-  const connectionState = useNotificationStore((s) => s.connectionState);
-  const isConnected = useNotificationStore((s) => s.isConnected);
+  const storeDisconnect = useNotificationStore((s) => s.disconnect);
+  const connectionState = useNotificationStore((s) => s.connections[currentProfile?.id ?? ''] ?? 'disconnected');
+  const isConnected = connectionState === 'connected';
+  const disconnect = () => currentProfile && storeDisconnect(currentProfile.id);
 
   // Subscribe reactively to this profile's settings and unread count so the
   // enable switch and dependent sections update live. getProfileSettings is a
@@ -212,7 +213,7 @@ export default function NotificationSettings() {
       toast.info(t('notification_settings.mode_switched_direct'));
     } else if (currentMode === 'direct' && mode === 'es') {
       // Switching from Direct to ES: stop poller, connect websocket
-      const poller = getEventPoller();
+      const poller = getEventPoller(currentProfile.id);
       if (poller.isRunning()) {
         poller.stop();
       }
@@ -261,7 +262,7 @@ export default function NotificationSettings() {
 
   const handlePollingIntervalRestart = () => {
     if (!currentProfile) return;
-    const poller = getEventPoller();
+    const poller = getEventPoller(currentProfile.id);
     if (poller.isRunning()) {
       startEventPoller(currentProfile.id);
     }
