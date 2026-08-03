@@ -622,6 +622,8 @@ export interface Profile {
   timezone?: string;
   minStreamingPort?: number; // ZM_MIN_STREAMING_PORT from server config
   go2rtcUrl?: string; // ZM_GO2RTC_PATH from server config (full URL)
+  /** Excluded from selection and every All-mode aggregate (refs #337). Absent/undefined means enabled - no migration needed for existing persisted profiles. */
+  disabled?: boolean;
 }
 
 // Stream options types

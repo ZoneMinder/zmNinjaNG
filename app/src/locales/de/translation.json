@@ -1004,7 +1004,11 @@
     "add": "Hinzufügen",
     "credentials_incomplete": "Bitte geben Sie Benutzername und Passwort ein oder lassen Sie beide leer.",
     "all_servers": "Alle Server",
-    "all_servers_subtitle": "Monitore aller Server anzeigen"
+    "all_servers_subtitle": "Monitore aller Server anzeigen",
+    "disable": "Deaktivieren",
+    "enable": "Aktivieren",
+    "disabled": "Deaktiviert",
+    "cannot_disable_active": "Aktives Profil kann nicht deaktiviert werden. Zuerst Profil wechseln."
   },
   "profile_picker": {
     "label": "Profil"

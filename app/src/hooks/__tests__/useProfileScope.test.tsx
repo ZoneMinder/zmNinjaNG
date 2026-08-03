@@ -148,4 +148,43 @@ describe('useProfileScope', () => {
 
     expect(result.current?.mode).toBe('all');
   });
+
+  // refs #337: profile disable toggle
+  it('excludes a disabled profile from the All mode profiles list', () => {
+    const disabledProfile = { ...mockProfile2, disabled: true };
+    mockStores(
+      { profiles: [mockProfile, disabledProfile], currentProfileId: ALL_PROFILES_ID },
+      { profileSettings: {} }
+    );
+
+    const { result } = renderHook(() => useProfileScope());
+
+    expect(result.current?.mode).toBe('all');
+    expect(result.current?.profiles).toEqual([mockProfile]);
+  });
+
+  it('is still All mode with a single enabled profile left after filtering (existing mode semantics)', () => {
+    const disabledProfile = { ...mockProfile2, disabled: true };
+    mockStores(
+      { profiles: [mockProfile, disabledProfile], currentProfileId: ALL_PROFILES_ID },
+      { profileSettings: {} }
+    );
+
+    const { result } = renderHook(() => useProfileScope());
+
+    expect(result.current?.mode).toBe('all');
+    expect(result.current?.profiles).toHaveLength(1);
+  });
+
+  it('treats a disabled persisted current profile as null scope', () => {
+    const disabledProfile = { ...mockProfile, disabled: true };
+    mockStores(
+      { profiles: [disabledProfile, mockProfile2], currentProfileId: 'profile-1' },
+      { profileSettings: {} }
+    );
+
+    const { result } = renderHook(() => useProfileScope());
+
+    expect(result.current).toBeNull();
+  });
 });

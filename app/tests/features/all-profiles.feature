@@ -86,3 +86,30 @@ Feature: All Servers mode
     And I should see a notification overview row for every profile
     When I click a different profile's notification overview row
     Then that row should be marked as the active profile
+
+  @web
+  Scenario: disabling a profile hides the All Servers card until it is re-enabled
+    When I navigate to the "Profiles" page
+    Then I should see the All Servers profile card
+    # Adding "Second" (Background) switched the active profile to it - switch
+    # to All mode first so disabling it below targets a non-active profile.
+    When I click the All Servers profile card
+    When I navigate to the "Profiles" page
+    And I disable the "Second" profile
+    Then I should not see the All Servers profile card
+    When I enable the "Second" profile
+    Then I should see the All Servers profile card
+
+  @web
+  Scenario: All Servers aggregation excludes a disabled profile
+    When I navigate to the "Monitors" page
+    Then I record the single-profile monitor card count
+    When I navigate to the "Profiles" page
+    And I add a profile named "Disabled" pointing at the same server
+    # Adding it switched the active profile to it - switch to All mode first
+    # so disabling it below targets a non-active profile.
+    And I click the All Servers profile card
+    When I navigate to the "Profiles" page
+    And I disable the "Disabled" profile
+    When I navigate to the "Monitors" page
+    Then the monitor card count should be double the recorded single-profile count

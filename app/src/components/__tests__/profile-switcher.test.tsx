@@ -67,12 +67,12 @@ vi.mock('../../stores/profile', () => ({
 }));
 
 let mockProfileState: {
-  profiles: Array<{ id: string; name: string; portalUrl: string }>;
+  profiles: Array<{ id: string; name: string; portalUrl: string; disabled?: boolean }>;
   currentProfileId: string | null;
   switchProfile: typeof switchProfileMock;
 };
 
-function setProfiles(profiles: Array<{ id: string; name: string; portalUrl: string }>) {
+function setProfiles(profiles: Array<{ id: string; name: string; portalUrl: string; disabled?: boolean }>) {
   mockProfileState = {
     profiles,
     currentProfileId: profiles[0]?.id ?? null,
@@ -112,5 +112,16 @@ describe('ProfileSwitcher', () => {
     fireEvent.click(screen.getByTestId('profile-switcher-all'));
 
     expect(switchProfileMock).toHaveBeenCalledWith(ALL_PROFILES_ID);
+  });
+
+  it('hides a disabled profile from the list (refs #337)', () => {
+    setProfiles([profileA, { ...profileB, disabled: true }]);
+
+    render(<ProfileSwitcher />);
+
+    expect(screen.getByTestId('profile-switcher-item-profile-a')).toBeInTheDocument();
+    expect(screen.queryByTestId('profile-switcher-item-profile-b')).not.toBeInTheDocument();
+    // Only one selectable profile remains, so the All Servers item hides too.
+    expect(screen.queryByTestId('profile-switcher-all')).not.toBeInTheDocument();
   });
 });

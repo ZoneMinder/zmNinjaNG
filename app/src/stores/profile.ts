@@ -30,6 +30,23 @@ import { useMonitorSeenStore } from './monitorSeen';
 import { performBootstrap } from '../services/profile-bootstrap';
 import { handleProfileRehydration } from '../services/profile-initialization';
 
+/**
+ * Thrown by profile-store guards that a UI action can trigger directly (as
+ * opposed to plain `Error`s from invariant violations like "profile not
+ * found"). The `code` lets a catch block pick the right localized toast
+ * instead of displaying a raw message, mirroring DiscoveryError's shape
+ * (services/discovery.ts). Refs #337.
+ */
+export class ProfileGuardError extends Error {
+  public code: 'CANNOT_DISABLE_CURRENT';
+
+  constructor(message: string, code: 'CANNOT_DISABLE_CURRENT') {
+    super(message);
+    this.name = 'ProfileGuardError';
+    this.code = code;
+  }
+}
+
 interface ProfileState {
   profiles: Profile[];
   currentProfileId: ProfileId | null;
@@ -48,6 +65,7 @@ interface ProfileState {
   deleteAllProfiles: () => Promise<void>;
   switchProfile: (id: string) => Promise<void>;
   setDefaultProfile: (id: string) => void;
+  setProfileDisabled: (id: string, disabled: boolean) => void;
   cancelBootstrap: () => void;
 
   // Helpers
@@ -281,6 +299,13 @@ export const useProfileStore = create<ProfileState>()(
           if (!profile) {
             throw new Error(`Profile ${id} not found`);
           }
+          if (profile.disabled) {
+            // Defensive only: the UI never offers a disabled profile to
+            // switch to (Profiles page, ProfileSwitcher both hide/disallow
+            // it). Refs #337.
+            log.profileService('Switch rejected: profile is disabled', LogLevel.WARN, { profileId: id });
+            throw new Error(`Profile ${id} is disabled`);
+          }
 
           // Save previous profile for rollback
           const previousProfileId = get().currentProfileId;
@@ -373,6 +398,44 @@ export const useProfileStore = create<ProfileState>()(
               isDefault: p.id === id,
             })),
           }));
+        },
+
+        /**
+         * Disable or re-enable a profile. A disabled profile stays listed on
+         * the Profiles page but is unselectable (switchProfile rejects it)
+         * and excluded from every All-mode aggregate (useProfileScope
+         * filters it out of `profiles`, which every aggregate reader fans
+         * out over). Refs #337.
+         *
+         * The active profile can never be disabled - there would be nothing
+         * left selected. Enabling is always unconditional.
+         *
+         * Mirrors deleteProfile's session teardown minus the deletion
+         * itself: dropSession(id) so the next getSession rebuilds instead of
+         * reusing a stale client, and its polling stops. No explicit
+         * quitAllActiveStreams call is needed (unlike switchProfile's use of
+         * it): deleteProfile doesn't call it either, because unmounting the
+         * profile's monitor tiles (which useProfileScope's filter causes
+         * immediately, in every All-mode surface that renders them) already
+         * tears down their streams via each tile's own cleanup effect.
+         */
+        setProfileDisabled: (id, disabled) => {
+          if (disabled && get().currentProfileId === id) {
+            throw new ProfileGuardError(
+              `Cannot disable the active profile ${id}`,
+              'CANNOT_DISABLE_CURRENT'
+            );
+          }
+
+          set((state) => ({
+            profiles: state.profiles.map((p) => (p.id === id ? { ...p, disabled } : p)),
+          }));
+
+          if (disabled) {
+            dropSession(asProfileId(id));
+          }
+
+          log.profileService('Profile disabled state changed', LogLevel.INFO, { profileId: id, disabled });
         },
 
         /**

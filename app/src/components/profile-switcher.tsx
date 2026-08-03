@@ -33,7 +33,13 @@ import { useTranslation } from 'react-i18next';
 export function ProfileSwitcher() {
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const profiles = useProfileStore((state) => state.profiles);
+  // Disabled profiles are unselectable (switchProfile rejects them) so they
+  // are hidden from the switcher entirely rather than shown muted - this
+  // dropdown has no existing muted/disabled item styling to reuse, and a
+  // profile the user can't act on has no reason to occupy a row here.
+  // useShallow so an unrelated store update doesn't force a re-render off a
+  // freshly-allocated (but element-wise identical) filtered array. Refs #337.
+  const profiles = useProfileStore(useShallow((state) => state.profiles.filter((p) => !p.disabled)));
   const currentProfileId = useProfileStore((state) => state.currentProfileId);
   const isAllMode = currentProfileId === ALL_PROFILES_ID;
   const currentProfile = useProfileStore(

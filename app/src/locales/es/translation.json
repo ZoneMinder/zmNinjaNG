@@ -1004,7 +1004,11 @@
     "add": "Agregar",
     "credentials_incomplete": "Ingrese nombre de usuario y contraseña, o deje ambos en blanco.",
     "all_servers": "Todos los Servidores",
-    "all_servers_subtitle": "Ver monitores de todos los servidores"
+    "all_servers_subtitle": "Ver monitores de todos los servidores",
+    "disable": "Deshabilitar",
+    "enable": "Habilitar",
+    "disabled": "Deshabilitado",
+    "cannot_disable_active": "No se puede deshabilitar el perfil activo. Cambia de perfil primero."
   },
   "profile_picker": {
     "label": "Perfil"

@@ -424,7 +424,66 @@ describe('Profile Store', () => {
     expect(result).toBe(false);
   });
 
+  describe('setProfileDisabled (refs #337)', () => {
+    it('disables a non-current profile, dropping its session', () => {
+      useProfileStore.setState({
+        profiles: [
+          { id: asProfileId('p1'), name: 'Home', apiUrl: 'http://a', portalUrl: 'http://a', cgiUrl: 'http://a/cgi-bin', isDefault: true, createdAt: 1 },
+          { id: asProfileId('p2'), name: 'Away', apiUrl: 'http://b', portalUrl: 'http://b', cgiUrl: 'http://b/cgi-bin', isDefault: false, createdAt: 2 },
+        ],
+        currentProfileId: asProfileId('p1'),
+      });
+      getSession(asProfileId('p2'));
+      expect(hasSession(asProfileId('p2'))).toBe(true);
+
+      useProfileStore.getState().setProfileDisabled('p2', true);
+
+      expect(useProfileStore.getState().profiles.find((p) => p.id === 'p2')?.disabled).toBe(true);
+      expect(hasSession(asProfileId('p2'))).toBe(false);
+      // The other profile is untouched.
+      expect(useProfileStore.getState().profiles.find((p) => p.id === 'p1')?.disabled).toBeFalsy();
+    });
+
+    it('rejects disabling the active profile', () => {
+      useProfileStore.setState({
+        profiles: [
+          { id: asProfileId('p1'), name: 'Home', apiUrl: 'http://a', portalUrl: 'http://a', cgiUrl: 'http://a/cgi-bin', isDefault: true, createdAt: 1 },
+        ],
+        currentProfileId: asProfileId('p1'),
+      });
+
+      expect(() => useProfileStore.getState().setProfileDisabled('p1', true)).toThrow();
+      expect(useProfileStore.getState().profiles.find((p) => p.id === 'p1')?.disabled).toBeFalsy();
+    });
+
+    it('re-enables a profile unconditionally, without rebuilding a session', () => {
+      useProfileStore.setState({
+        profiles: [
+          { id: asProfileId('p1'), name: 'Home', apiUrl: 'http://a', portalUrl: 'http://a', cgiUrl: 'http://a/cgi-bin', isDefault: true, createdAt: 1, disabled: true },
+        ],
+        currentProfileId: null,
+      });
+
+      useProfileStore.getState().setProfileDisabled('p1', false);
+
+      expect(useProfileStore.getState().profiles.find((p) => p.id === 'p1')?.disabled).toBe(false);
+    });
+  });
+
   describe('switchProfile', () => {
+    it('rejects switching to a disabled profile (refs #337)', async () => {
+      useProfileStore.setState({
+        profiles: [
+          { id: asProfileId('p1'), name: 'Home', apiUrl: 'http://a', portalUrl: 'http://a', cgiUrl: 'http://a/cgi-bin', isDefault: true, createdAt: 1 },
+          { id: asProfileId('p2'), name: 'Away', apiUrl: 'http://b', portalUrl: 'http://b', cgiUrl: 'http://b/cgi-bin', isDefault: false, createdAt: 2, disabled: true },
+        ],
+        currentProfileId: asProfileId('p1'),
+      });
+
+      await expect(useProfileStore.getState().switchProfile('p2')).rejects.toThrow();
+      expect(useProfileStore.getState().currentProfileId).toBe('p1');
+    });
+
     it('keeps both profiles\' query cache entries warm across a switch (refs #337)', async () => {
       useProfileStore.setState({
         profiles: [

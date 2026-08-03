@@ -7,7 +7,7 @@
 
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useProfileStore } from '../stores/profile';
+import { useProfileStore, ProfileGuardError } from '../stores/profile';
 import { useSettingsStore } from '../stores/settings';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { Button } from '../components/ui/button';
@@ -33,7 +33,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '../components/ui/alert-dialog';
-import { Server, Edit, Plus, Check, Loader2, Eye, EyeOff, Trash2, Layers } from 'lucide-react';
+import { Server, Edit, Plus, Check, Loader2, Eye, EyeOff, Trash2, Layers, Power, PowerOff } from 'lucide-react';
 import { PageContainer } from '../components/common/PageContainer';
 import { Badge } from '../components/ui/badge';
 import type { Profile } from '../api/types';
@@ -50,11 +50,15 @@ export default function Profiles() {
   const { t } = useTranslation();
 
   const profiles = useProfileStore((state) => state.profiles);
+  // The All Servers card is only meaningful with 2+ SELECTABLE profiles - a
+  // disabled one can never join the aggregate (refs #337).
+  const enabledProfileCount = profiles.filter((p) => !p.disabled).length;
   const { currentProfile, isAllMode } = useCurrentProfile();
   const updateProfile = useProfileStore((state) => state.updateProfile);
   const deleteProfile = useProfileStore((state) => state.deleteProfile);
   const deleteAllProfiles = useProfileStore((state) => state.deleteAllProfiles);
   const switchProfile = useProfileStore((state) => state.switchProfile);
+  const setProfileDisabled = useProfileStore((state) => state.setProfileDisabled);
 
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -274,6 +278,18 @@ export default function Profiles() {
     }
   };
 
+  const handleToggleDisabled = (profile: Profile) => {
+    try {
+      setProfileDisabled(profile.id, !profile.disabled);
+    } catch (error) {
+      sonnerToast.error(
+        error instanceof ProfileGuardError && error.code === 'CANNOT_DISABLE_CURRENT'
+          ? t('profiles.cannot_disable_active')
+          : t('common.error')
+      );
+    }
+  };
+
   const switchAbortRef = useRef<AbortController | null>(null);
 
   const handleSwitchProfile = async (profileId: string) => {
@@ -361,7 +377,7 @@ export default function Profiles() {
               </div>
             </CardHeader>
             <CardContent>
-              {profiles.length >= 2 && (
+              {enabledProfileCount >= 2 && (
                 <div
                   className={`flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors cursor-pointer mb-3 ${isAllMode ? 'ring-1 ring-primary' : ''}`}
                   data-testid="profile-card-all"
@@ -396,7 +412,7 @@ export default function Profiles() {
                 {profiles.map((profile) => (
                   <div
                     key={profile.id}
-                    className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+                    className={`flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors ${profile.disabled ? 'opacity-60' : ''}`}
                     data-testid="profile-card"
                   >
                     <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -408,6 +424,11 @@ export default function Profiles() {
                           <span className="font-medium" data-testid="profile-name">{profile.name}</span>
                           {profile.isDefault && (
                             <Badge variant="secondary" className="text-xs">{t('profiles.default')}</Badge>
+                          )}
+                          {profile.disabled && (
+                            <Badge variant="outline" className="text-xs" data-testid="profile-disabled-badge">
+                              {t('profiles.disabled')}
+                            </Badge>
                           )}
                           {profile.username && profile.password ? (
                             <Badge variant="outline" className="text-xs text-green-600 dark:text-green-400 border-green-600 dark:border-green-400">
@@ -438,7 +459,7 @@ export default function Profiles() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      {profile.id !== currentProfile?.id && (
+                      {!profile.disabled && profile.id !== currentProfile?.id && (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -455,6 +476,16 @@ export default function Profiles() {
                           )}
                         </Button>
                       )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleToggleDisabled(profile)}
+                        title={profile.disabled ? t('profiles.enable') : t('profiles.disable')}
+                        aria-label={profile.disabled ? t('profiles.enable') : t('profiles.disable')}
+                        data-testid={`profile-disable-toggle-${profile.id}`}
+                      >
+                        {profile.disabled ? <Power className="h-4 w-4" /> : <PowerOff className="h-4 w-4" />}
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"

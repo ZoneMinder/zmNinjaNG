@@ -40,10 +40,21 @@ export function useProfileScope(): ProfileScope | null {
 
   const isAllMode = currentProfileId === ALL_PROFILES_ID;
 
-  const currentProfile = useMemo(
-    () => profiles.find((p) => p.id === currentProfileId) ?? null,
-    [profiles, currentProfileId]
-  );
+  // Disabled profiles are excluded from the All-mode aggregate. This is the
+  // single filter every aggregate surface inherits (monitors, events,
+  // badges, notification overview, pickers, token refresh) since they all
+  // fan out over scope.profiles rather than the raw store list. Refs #337.
+  const enabledProfiles = useMemo(() => profiles.filter((p) => !p.disabled), [profiles]);
+
+  const currentProfile = useMemo(() => {
+    const found = profiles.find((p) => p.id === currentProfileId) ?? null;
+    // A disabled profile can never be current in normal operation -
+    // switchProfile's guard rejects switching to one. This only matters if
+    // persisted state is ever edited externally to hold a disabled profile
+    // as current; treat that the same as "no profile selected" so it routes
+    // to the setup redirect like any other unresolvable current id.
+    return found && !found.disabled ? found : null;
+  }, [profiles, currentProfileId]);
 
   // Select the RAW profile settings object - NOT the getProfileSettings
   // function, which creates a new object on every call. useShallow ensures
@@ -61,11 +72,12 @@ export function useProfileScope(): ProfileScope | null {
       // sentinel selected with zero real profiles left (deleteProfile only
       // resets currentProfileId when it equals the deleted id, never for
       // the sentinel). Collapse to null so it means "nothing to show, route
-      // to setup" uniformly in both modes (refs #337).
-      if (profiles.length === 0) return null;
-      return { mode: 'all', profile: null, profiles, settings };
+      // to setup" uniformly in both modes (refs #337). Same collapse
+      // applies when every remaining profile is disabled.
+      if (enabledProfiles.length === 0) return null;
+      return { mode: 'all', profile: null, profiles: enabledProfiles, settings };
     }
     if (!currentProfile) return null;
     return { mode: 'single', profile: currentProfile, profiles: [currentProfile], settings };
-  }, [isAllMode, profiles, currentProfile, settings]);
+  }, [isAllMode, enabledProfiles, currentProfile, settings]);
 }

@@ -38,14 +38,16 @@ let singleProfileMonitorCount = 0;
 // All mode.
 let singleProfileEventCount = 0;
 
-When('I add a second profile named {string} pointing at the same server', async ({ page }, name: string) => {
+/**
+ * Points a newly-created profile at the SAME real test server as the
+ * Background's profile - what makes "All mode aggregates N profiles"
+ * observable without a second real ZM instance.
+ */
+async function addProfilePointingAtSameServer(page: Page, name: string): Promise<void> {
   await page.getByTestId('profiles-add-button').click();
   await expect(page.getByTestId('setup-profile-name')).toBeVisible({ timeout: testConfig.timeouts.element });
   await page.getByTestId('setup-profile-name').fill(name);
 
-  // Point at the SAME real test server as the profile created by the login
-  // step - this is what makes "All mode aggregates N profiles" observable
-  // without a second real ZM instance.
   const { host, username, password } = testConfig.server;
   const portalInput = page.getByTestId('setup-portal-url');
   await portalInput.clear();
@@ -64,6 +66,16 @@ When('I add a second profile named {string} pointing at the same server', async 
   await expect(page.locator('[data-testid="profile-card"]').filter({ hasText: name })).toBeVisible({
     timeout: testConfig.timeouts.pageLoad,
   });
+}
+
+When('I add a second profile named {string} pointing at the same server', async ({ page }, name: string) => {
+  await addProfilePointingAtSameServer(page, name);
+});
+
+// Same helper as the Background's "second profile" step above, under a name
+// that reads naturally when a scenario adds a THIRD profile (refs #337).
+When('I add a profile named {string} pointing at the same server', async ({ page }, name: string) => {
+  await addProfilePointingAtSameServer(page, name);
 });
 
 When('I add a profile named {string} with an unreachable server', async ({ page }, name: string) => {
@@ -105,6 +117,24 @@ Then('I record the single-profile monitor card count', async ({ page }) => {
 
 Then('I should see the All Servers profile card', async ({ page }) => {
   await expect(page.getByTestId('profile-card-all')).toBeVisible({ timeout: testConfig.timeouts.element });
+});
+
+Then('I should not see the All Servers profile card', async ({ page }) => {
+  await expect(page.getByTestId('profile-card-all')).toHaveCount(0, { timeout: testConfig.timeouts.element });
+});
+
+// refs #337: per-profile disable toggle. Same button drives both directions -
+// clicking it again on an already-disabled profile re-enables it.
+When('I disable the {string} profile', async ({ page }, name: string) => {
+  const card = page.locator('[data-testid="profile-card"]').filter({ hasText: name });
+  await card.locator('[data-testid^="profile-disable-toggle-"]').click();
+  await expect(card.getByTestId('profile-disabled-badge')).toBeVisible({ timeout: testConfig.timeouts.element });
+});
+
+When('I enable the {string} profile', async ({ page }, name: string) => {
+  const card = page.locator('[data-testid="profile-card"]').filter({ hasText: name });
+  await card.locator('[data-testid^="profile-disable-toggle-"]').click();
+  await expect(card.getByTestId('profile-disabled-badge')).toHaveCount(0, { timeout: testConfig.timeouts.element });
 });
 
 When('I click the All Servers profile card', async ({ page }) => {

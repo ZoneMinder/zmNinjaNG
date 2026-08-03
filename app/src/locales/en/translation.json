@@ -1004,7 +1004,11 @@
     "add": "Add",
     "credentials_incomplete": "Please enter both username and password, or leave both empty.",
     "all_servers": "All Servers",
-    "all_servers_subtitle": "View monitors from every server"
+    "all_servers_subtitle": "View monitors from every server",
+    "disable": "Disable",
+    "enable": "Enable",
+    "disabled": "Disabled",
+    "cannot_disable_active": "Can't disable the active profile. Switch profiles first."
   },
   "profile_picker": {
     "label": "Profile"
