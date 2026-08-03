@@ -47,6 +47,7 @@ vi.mock('../../api/notifications', () => ({
 }));
 vi.mock('../../services/eventPoller', () => ({
   getEventPoller: () => ({ isRunning: () => false, stop: vi.fn() }),
+  stopEventPoller: vi.fn(),
 }));
 vi.mock('../../components/NotificationBadge', () => ({
   NotificationBadge: () => null,

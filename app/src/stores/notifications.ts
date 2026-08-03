@@ -4,7 +4,7 @@ import {
   getNotificationService,
   resetNotificationService,
 } from '../services/notifications';
-import { getEventPoller, type EventPollerDeps } from '../services/eventPoller';
+import { getEventPoller, stopAllEventPollers, type EventPollerDeps } from '../services/eventPoller';
 import {
   type ZMEventServerConfig,
   type ZMNotificationProviders,
@@ -70,6 +70,10 @@ interface NotificationState {
   // Actions - Connection
   connect: (profileId: string, username: string, password: string, portalUrl: string) => Promise<void>;
   disconnect: (profileId: string) => void;
+  /** Disconnect every profile that currently holds a connection, and stop
+   *  every direct-mode poller (which isn't tracked in `connections`). Used
+   *  on full logout (refs #337 I5). */
+  disconnectAll: () => void;
   /** @param force - reconnect even while the service still reports connected */
   reconnect: (profileId: string, force?: boolean) => Promise<void>;
 
@@ -290,8 +294,19 @@ export const useNotificationStore = create<NotificationState>()(
         try {
           await service.connect(config, _buildServiceProviders(profileId, portalUrl));
 
-          // Anchor push/badge bookkeeping to the most recently connected profile
-          set({ currentProfileId: profileId });
+          // Anchor push/badge bookkeeping only when this IS the app's real
+          // current profile (single mode: useProfileStore's currentProfileId
+          // equals profileId). In All mode the app's currentProfileId is the
+          // ALL_PROFILES_ID sentinel, which never equals any real profileId,
+          // so no connector's connect() call here ever races to overwrite
+          // the anchor with "whichever profile connected last" - it simply
+          // keeps whatever it was before All mode was entered (refs #337
+          // I4). Push registration isn't a thing in All mode on web anyway
+          // (no FCM there), so that pre-All value is never actually read for
+          // push purposes while aggregating.
+          if (useProfileStore.getState().currentProfileId === profileId) {
+            set({ currentProfileId: profileId });
+          }
 
           // Sync monitor filters after connection
           get()._syncMonitorFilters(profileId);
@@ -319,6 +334,13 @@ export const useNotificationStore = create<NotificationState>()(
           connections: { ...state.connections, [profileId]: 'disconnected' },
           currentProfileId: state.currentProfileId === profileId ? null : state.currentProfileId,
         }));
+      },
+
+      disconnectAll: () => {
+        Object.keys(get().connections).forEach((profileId) => get().disconnect(profileId));
+        // Direct-mode pollers aren't tracked in `connections`, so sweep them
+        // separately.
+        stopAllEventPollers();
       },
 
       reconnect: async (profileId: string, force = false) => {
@@ -473,6 +495,13 @@ export const useNotificationStore = create<NotificationState>()(
       // ========== Internal Methods ==========
 
       _initialize: (profileId: string) => {
+        // Drop any stale listeners from a previous _initialize(profileId)
+        // that was never matched by a _cleanup - otherwise the service's
+        // onEvent/onStateChange Sets (services/notifications.ts) accumulate
+        // duplicate callbacks and every event/state change fires twice
+        // (refs #337 #10).
+        get()._cleanup(profileId);
+
         const service = getNotificationService(profileId);
 
         // Listen for connection state changes - scoped to this profile only

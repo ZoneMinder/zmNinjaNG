@@ -272,3 +272,18 @@ export function stopAllEventPollers(): void {
   }
   eventPollers.clear();
 }
+
+/**
+ * Stop and evict this profile's poller. A no-op if it never had one -
+ * unlike `getEventPoller(id).stop()`, this never creates a phantom registry
+ * entry just to immediately stop a poller that was never started, which
+ * would otherwise orphan a never-referenced instance in the map on every
+ * teardown of a profile that only ever used ES mode (refs #337 I5).
+ */
+export function stopEventPoller(profileId: string): void {
+  const poller = eventPollers.get(profileId);
+  if (poller) {
+    poller.stop();
+    eventPollers.delete(profileId);
+  }
+}

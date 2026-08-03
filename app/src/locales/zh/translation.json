@@ -947,7 +947,7 @@
     "switch_profile_desc": "此通知来自\"{{profile}}\"。切换到此配置文件以查看事件？",
     "switch_profile_confirm": "切换",
     "profile_switch_failed": "切换配置文件失败",
-    "all_mode_burst_summary": "{{count}} 个新事件，来自 {{servers}} 台服务器"
+    "all_mode_burst_summary": "{{eventCount}} 个新事件，来自 {{servers}} 台服务器"
   },
   "profiles": {
     "title": "配置",

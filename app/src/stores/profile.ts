@@ -22,8 +22,7 @@ import { log, LogLevel } from '../lib/logger';
 import { setLogRedactionGate } from '../lib/log-sanitizer';
 import { setProfileSettingsGate } from '../lib/profile/profile-settings';
 import { getSession, dropSession, dropAllSessions, registerSessionsGate } from '../services/sessions';
-import { resetNotificationService, resetAllNotificationServices } from '../services/notifications';
-import { getEventPoller, stopAllEventPollers } from '../services/eventPoller';
+import { stopEventPoller } from '../services/eventPoller';
 import { registerServerResolverGate } from '../lib/zm/server-resolver';
 import { STORAGE_KEYS } from '../lib/zmninja-ng-constants';
 import { useAuthStore, getAuthSlice, registerAuthClientResolver } from './auth';
@@ -222,9 +221,15 @@ export const useProfileStore = create<ProfileState>()(
 
           // Tear down its live notification connection and poller too - a
           // deleted profile must not keep a websocket or poll loop running
-          // in the background (refs #337).
-          resetNotificationService(id);
-          getEventPoller(id).stop();
+          // in the background. Routed through the store's disconnect() (not
+          // the service registry directly) so connections[id]/the anchor
+          // stay consistent, not just the underlying socket; dynamic import
+          // avoids a static cycle (stores/notifications.ts imports this
+          // store), same pattern as the query-cache import below (refs #337
+          // I5).
+          const { useNotificationStore } = await import('./notifications');
+          useNotificationStore.getState().disconnect(id);
+          stopEventPoller(id);
 
           // Evict its query cache entries. Profile-scoped keys are the sole
           // cross-profile isolation now that switchProfile no longer clears
@@ -270,9 +275,9 @@ export const useProfileStore = create<ProfileState>()(
           useAuthStore.getState().logoutAll();
 
           // Tear down every profile's live notification connection and
-          // poller (refs #337).
-          resetAllNotificationServices();
-          stopAllEventPollers();
+          // poller, through the store (refs #337 I5).
+          const { useNotificationStore } = await import('./notifications');
+          useNotificationStore.getState().disconnectAll();
 
           log.profileService('All profiles deleted', LogLevel.INFO);
         },

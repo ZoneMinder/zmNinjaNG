@@ -17,7 +17,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useNotificationStore } from '../../stores/notifications';
 import { useProfileStore } from '../../stores/profile';
 import { useNotificationAutoConnect } from '../../hooks/useNotificationAutoConnect';
-import { getEventPoller } from '../../services/eventPoller';
+import { stopEventPoller } from '../../services/eventPoller';
 import type { Profile } from '../../api/types';
 
 export interface ProfileNotificationConnectorProps {
@@ -26,6 +26,12 @@ export interface ProfileNotificationConnectorProps {
 
 export function ProfileNotificationConnector({ profile }: ProfileNotificationConnectorProps) {
   const getDecryptedPassword = useProfileStore((state) => state.getDecryptedPassword);
+
+  // Subscribe to this profile's raw settings too (not just the stable
+  // getProfileSettings action reference): without it, enabling notifications
+  // for this profile while already mounted in All mode never re-rendered,
+  // so the connector never noticed and never connected (refs #337 I2).
+  useNotificationStore((state) => state.profileSettings[profile.id]);
 
   const { getProfileSettings, connectionState, connect } = useNotificationStore(
     useShallow((state) => ({
@@ -41,11 +47,12 @@ export function ProfileNotificationConnector({ profile }: ProfileNotificationCon
     currentProfile: profile,
     settings,
     isConnected,
+    // This connector only ever manages its own profile, so "the previous
+    // profile" is always this same one - the hook's profile-switch effect
+    // only fires for a genuine switch within one instance, which never
+    // happens here, so this value is inert.
+    isPreviousProfileConnected: isConnected,
     connectionState,
-    // This connector only ever manages its own profile, so it is always
-    // "the current one" from the hook's point of view - the hook's
-    // profile-switch effect only fires for a genuine switch within one
-    // instance, which never happens here.
     currentProfileId: profile.id,
     connect,
     disconnect: () => useNotificationStore.getState().disconnect(profile.id),
@@ -61,10 +68,7 @@ export function ProfileNotificationConnector({ profile }: ProfileNotificationCon
   useEffect(() => {
     return () => {
       useNotificationStore.getState().disconnect(profile.id);
-      const poller = getEventPoller(profile.id);
-      if (poller.isRunning()) {
-        poller.stop();
-      }
+      stopEventPoller(profile.id);
     };
   }, [profile.id]);
 

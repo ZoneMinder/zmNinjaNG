@@ -92,7 +92,7 @@ describe('useNotificationAllModeToasts (refs #337)', () => {
       profiles: [{ id: PROFILE_A, name: 'Home' }],
       settings: { allModeMuteToasts: false },
     });
-    useNotificationStore.getState().updateProfileSettings(PROFILE_A, { showToasts: true });
+    useNotificationStore.getState().updateProfileSettings(PROFILE_A, { enabled: true, showToasts: true });
     renderIt();
 
     act(() => {
@@ -110,8 +110,8 @@ describe('useNotificationAllModeToasts (refs #337)', () => {
       profiles: [{ id: PROFILE_A, name: 'Home' }, { id: PROFILE_B, name: 'Work' }],
       settings: { allModeMuteToasts: false },
     });
-    useNotificationStore.getState().updateProfileSettings(PROFILE_A, { showToasts: true });
-    useNotificationStore.getState().updateProfileSettings(PROFILE_B, { showToasts: true });
+    useNotificationStore.getState().updateProfileSettings(PROFILE_A, { enabled: true, showToasts: true });
+    useNotificationStore.getState().updateProfileSettings(PROFILE_B, { enabled: true, showToasts: true });
     renderIt();
 
     act(() => {
@@ -132,8 +132,8 @@ describe('useNotificationAllModeToasts (refs #337)', () => {
       profiles: [{ id: PROFILE_A, name: 'Home' }, { id: PROFILE_B, name: 'Work' }],
       settings: { allModeMuteToasts: false },
     });
-    useNotificationStore.getState().updateProfileSettings(PROFILE_A, { showToasts: true });
-    useNotificationStore.getState().updateProfileSettings(PROFILE_B, { showToasts: true });
+    useNotificationStore.getState().updateProfileSettings(PROFILE_A, { enabled: true, showToasts: true });
+    useNotificationStore.getState().updateProfileSettings(PROFILE_B, { enabled: true, showToasts: true });
     renderIt();
 
     act(() => {
@@ -144,7 +144,7 @@ describe('useNotificationAllModeToasts (refs #337)', () => {
 
     expect(toast).toHaveBeenCalledTimes(1);
     const [content] = vi.mocked(toast).mock.calls[0];
-    expect(content).toBe('notifications.all_mode_burst_summary:{"count":2,"servers":2}');
+    expect(content).toBe('notifications.all_mode_burst_summary:{"eventCount":2,"servers":2}');
   });
 
   it('tapping the summary toast navigates to the aggregated events page', async () => {
@@ -154,8 +154,8 @@ describe('useNotificationAllModeToasts (refs #337)', () => {
       profiles: [{ id: PROFILE_A, name: 'Home' }, { id: PROFILE_B, name: 'Work' }],
       settings: { allModeMuteToasts: false },
     });
-    useNotificationStore.getState().updateProfileSettings(PROFILE_A, { showToasts: true });
-    useNotificationStore.getState().updateProfileSettings(PROFILE_B, { showToasts: true });
+    useNotificationStore.getState().updateProfileSettings(PROFILE_A, { enabled: true, showToasts: true });
+    useNotificationStore.getState().updateProfileSettings(PROFILE_B, { enabled: true, showToasts: true });
     renderIt();
 
     act(() => {
@@ -180,8 +180,8 @@ describe('useNotificationAllModeToasts (refs #337)', () => {
       profiles: [{ id: PROFILE_A, name: 'Home' }, { id: PROFILE_B, name: 'Work' }],
       settings: { allModeMuteToasts: false },
     });
-    useNotificationStore.getState().updateProfileSettings(PROFILE_A, { showToasts: true });
-    useNotificationStore.getState().updateProfileSettings(PROFILE_B, { showToasts: false });
+    useNotificationStore.getState().updateProfileSettings(PROFILE_A, { enabled: true, showToasts: true });
+    useNotificationStore.getState().updateProfileSettings(PROFILE_B, { enabled: true, showToasts: false });
     renderIt();
 
     // B's event first (muted for B) - no toast expected once the window closes.
@@ -207,8 +207,8 @@ describe('useNotificationAllModeToasts (refs #337)', () => {
       profiles: [{ id: PROFILE_A, name: 'Home' }, { id: PROFILE_B, name: 'Work' }],
       settings: { allModeMuteToasts: false },
     });
-    useNotificationStore.getState().updateProfileSettings(PROFILE_A, { showToasts: true, playSound: true });
-    useNotificationStore.getState().updateProfileSettings(PROFILE_B, { showToasts: true, playSound: true });
+    useNotificationStore.getState().updateProfileSettings(PROFILE_A, { enabled: true, showToasts: true, playSound: true });
+    useNotificationStore.getState().updateProfileSettings(PROFILE_B, { enabled: true, showToasts: true, playSound: true });
     renderIt();
 
     act(() => {
@@ -228,7 +228,7 @@ describe('useNotificationAllModeToasts (refs #337)', () => {
       profiles: [{ id: PROFILE_A, name: 'Home' }],
       settings: { allModeMuteToasts: true },
     });
-    useNotificationStore.getState().updateProfileSettings(PROFILE_A, { showToasts: true, playSound: true });
+    useNotificationStore.getState().updateProfileSettings(PROFILE_A, { enabled: true, showToasts: true, playSound: true });
     renderIt();
 
     act(() => {
@@ -238,9 +238,60 @@ describe('useNotificationAllModeToasts (refs #337)', () => {
 
     expect(toast).not.toHaveBeenCalled();
     expect(playNotificationSound).not.toHaveBeenCalled();
-    // Store-side effects (badge/history) are independent of this hook and
-    // already covered by stores/__tests__/notifications.test.ts - addEvent
-    // ran above regardless of the mute toggle.
+    // Store-side effects (badge/history) are independent of this hook -
+    // addEvent ran above regardless of the mute toggle (refs #337 #11).
     expect(useNotificationStore.getState().getEvents(PROFILE_A)).toHaveLength(1);
+    expect(useNotificationStore.getState().getProfileSettings(PROFILE_A).badgeCount).toBe(1);
+  });
+
+  // refs #337 #12
+  it('does not toast for a profile with notifications entirely disabled, even with showToasts true', async () => {
+    mockScope.mockReturnValue({
+      mode: 'all',
+      profile: null,
+      profiles: [{ id: PROFILE_A, name: 'Home' }, { id: PROFILE_B, name: 'Work' }],
+      settings: { allModeMuteToasts: false },
+    });
+    useNotificationStore.getState().updateProfileSettings(PROFILE_A, { enabled: true, showToasts: true });
+    // Disabled overall, even though showToasts itself is on.
+    useNotificationStore.getState().updateProfileSettings(PROFILE_B, { enabled: false, showToasts: true });
+    renderIt();
+
+    act(() => {
+      useNotificationStore.getState().addEvent(PROFILE_B, makeEvent());
+    });
+    await flushBurst();
+    expect(toast).not.toHaveBeenCalled();
+
+    act(() => {
+      useNotificationStore.getState().addEvent(PROFILE_A, makeEvent());
+    });
+    await flushBurst();
+    expect(toast).toHaveBeenCalledTimes(1);
+  });
+
+  // refs #337 #7
+  it('seeds a profile\'s pre-existing event on first observation instead of toasting it at launch', async () => {
+    mockScope.mockReturnValue({
+      mode: 'all',
+      profile: null,
+      profiles: [{ id: PROFILE_A, name: 'Home' }],
+      settings: { allModeMuteToasts: false },
+    });
+    useNotificationStore.getState().updateProfileSettings(PROFILE_A, { enabled: true, showToasts: true });
+    // Simulate a stale/persisted event already present before the hook ever
+    // mounts (e.g. rehydrated from a previous session).
+    useNotificationStore.getState().addEvent(PROFILE_A, makeEvent({ MonitorName: 'Stale' }));
+
+    renderIt();
+    await flushBurst();
+    expect(toast).not.toHaveBeenCalled();
+
+    // A genuinely new event afterward must still toast normally.
+    act(() => {
+      useNotificationStore.getState().addEvent(PROFILE_A, makeEvent({ MonitorName: 'Fresh' }));
+    });
+    await flushBurst();
+    expect(toast).toHaveBeenCalledTimes(1);
   });
 });

@@ -38,7 +38,7 @@ vi.mock('../../lib/logger', () => ({
   },
 }));
 
-import { getEventPoller, stopAllEventPollers } from '../eventPoller';
+import { getEventPoller, stopAllEventPollers, stopEventPoller } from '../eventPoller';
 
 // --- Helpers ---
 
@@ -99,6 +99,29 @@ describe('EventPollerService', () => {
     const a = getEventPoller('profile-1');
     const b = getEventPoller('profile-2');
     expect(a).not.toBe(b);
+  });
+
+  describe('stopEventPoller (refs #337 I5)', () => {
+    it('stops and evicts a running poller', async () => {
+      const poller = getEventPoller('profile-1');
+      await poller.start('profile-1', deps);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(poller.isRunning()).toBe(true);
+
+      stopEventPoller('profile-1');
+
+      expect(poller.isRunning()).toBe(false);
+      // Evicted from the registry: a fresh getEventPoller call returns a
+      // brand new instance instead of the (now-stopped) one above.
+      expect(getEventPoller('profile-1')).not.toBe(poller);
+    });
+
+    it('is a no-op for a profile that was never polled - no phantom registry entry', () => {
+      // A profile that only ever used ES mode has no poller. Calling
+      // getEventPoller(id).stop() here would silently create-then-orphan a
+      // never-started instance; stopEventPoller must not do that.
+      expect(() => stopEventPoller('never-started-profile')).not.toThrow();
+    });
   });
 
   it('two profiles poll independently and stopAllEventPollers stops both', async () => {

@@ -15,7 +15,7 @@ import { useEffect, useRef } from 'react';
 import { Platform } from '../lib/platform';
 import { log, LogLevel } from '../lib/logger';
 import { useNotificationStore, startEventPoller } from '../stores/notifications';
-import { getEventPoller } from '../services/eventPoller';
+import { stopEventPoller } from '../services/eventPoller';
 import { getNotificationService } from '../services/notifications';
 import { useCapacitorListener } from './useCapacitorListener';
 import { NOTIFICATIONS_SERVICE } from '../lib/zmninja-ng-constants';
@@ -29,6 +29,12 @@ interface AutoConnectParams {
     host?: string;
   } | null;
   isConnected: boolean;
+  /** Whether `currentProfileId` (the profile this hook was PREVIOUSLY bound
+   *  to, before the current render) still has a live connection. Distinct
+   *  from `isConnected`, which is scoped to the NEW `currentProfile` after a
+   *  switch and so can never answer "is the profile I'm switching AWAY FROM
+   *  still connected" (refs #337 C1). */
+  isPreviousProfileConnected: boolean;
   connectionState: string;
   currentProfileId: string | null;
   connect: (profileId: string, username: string, password: string, portalUrl: string) => Promise<void>;
@@ -41,6 +47,7 @@ export function useNotificationAutoConnect({
   currentProfile,
   settings,
   isConnected,
+  isPreviousProfileConnected,
   connectionState,
   currentProfileId,
   connect,
@@ -69,14 +76,18 @@ export function useNotificationAutoConnect({
       lastProfileId.current = currentProfile?.id || null;
       hasAttemptedAutoConnect.current = false;
 
-      // Disconnect from previous profile if connected to a different one
-      if (isConnected && currentProfileId !== currentProfile?.id) {
+      // Disconnect from previous profile if it's still connected to a
+      // different one. Must check isPreviousProfileConnected, not
+      // isConnected: the latter is scoped to the NEW currentProfile after a
+      // switch, so it's already wrong by the time this effect runs
+      // (refs #337 C1).
+      if (isPreviousProfileConnected && currentProfileId !== currentProfile?.id) {
         log.notifications('Profile changed - disconnecting from previous profile', LogLevel.INFO, { previousProfile: currentProfileId,
           newProfile: currentProfile?.id, });
         disconnect();
       }
     }
-  }, [currentProfile?.id, isConnected, currentProfileId, disconnect]);
+  }, [currentProfile?.id, isPreviousProfileConnected, currentProfileId, disconnect]);
 
   // Auto-connect when profile loads (if enabled)
   // In ES mode: connects websocket. In Direct mode on desktop: starts event poller.
@@ -118,9 +129,15 @@ export function useNotificationAutoConnect({
 
     log.notifications('Auto-connecting to notification server', LogLevel.INFO, { profileId: currentProfile.id, });
 
+    // Unmounting (or a dep change re-running this effect) while the delay or
+    // getDecryptedPassword is still in flight must not connect an ownerless
+    // socket nobody will ever disconnect (refs #337 I3).
+    let cancelled = false;
+
     const attemptConnect = async () => {
       try {
         const password = await getDecryptedPassword(currentProfile.id);
+        if (cancelled) return;
 
         // Check state again right before connecting to avoid race conditions
         // This is crucial because getDecryptedPassword is async and state might have changed
@@ -149,18 +166,21 @@ export function useNotificationAutoConnect({
     };
 
     // Small delay to ensure store initialization is complete
-    setTimeout(() => attemptConnect(), NOTIFICATIONS_SERVICE.autoConnectInitDelayMs);
+    const timerId = setTimeout(() => attemptConnect(), NOTIFICATIONS_SERVICE.autoConnectInitDelayMs);
+    return () => {
+      cancelled = true;
+      clearTimeout(timerId);
+    };
   }, [settings?.enabled, settings?.notificationMode, settings?.host, isConnected, connectionState, currentProfile, connect, getDecryptedPassword]);
 
-  // Stop event poller on cleanup or when mode/profile changes
+  // Stop event poller on cleanup or when mode/profile changes. stopEventPoller
+  // is a no-op when this profile never had a poller (never creates a phantom
+  // registry entry just to immediately stop it - refs #337 I5).
   useEffect(() => {
     const profileId = currentProfile?.id;
     return () => {
       if (!profileId) return;
-      const poller = getEventPoller(profileId);
-      if (poller.isRunning()) {
-        poller.stop();
-      }
+      stopEventPoller(profileId);
     };
   }, [currentProfile?.id, settings?.notificationMode, settings?.enabled]);
 

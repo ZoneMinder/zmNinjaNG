@@ -9,6 +9,7 @@ import { getServerTimeZone } from '../../api/time';
 import { setSecureValue, removeSecureValue, getSecureValue } from '../../lib/security/secureStorage';
 import { asProfileId, ALL_PROFILES_ID } from '../../api/types';
 import { getSession, hasSession, dropAllSessions } from '../../services/sessions';
+import { useNotificationStore } from '../notifications';
 
 vi.mock('../../api/store-gates', () => ({
   createStoreApiClient: vi.fn(() => ({ mock: true })),
@@ -247,6 +248,24 @@ describe('Profile Store', () => {
     expect(getAuthSlice(asProfileId('p2')).refreshToken).toBe('p2-rt');
   });
 
+  it('tears down the deleted profile\'s notification connection through the store, leaving others alone (refs #337 I5)', async () => {
+    useProfileStore.setState({
+      profiles: [
+        { id: asProfileId('p1'), name: 'Home', apiUrl: 'http://a', portalUrl: 'http://a', cgiUrl: 'http://a/cgi-bin', isDefault: true, createdAt: 1 },
+        { id: asProfileId('p2'), name: 'Away', apiUrl: 'http://b', portalUrl: 'http://b', cgiUrl: 'http://b/cgi-bin', isDefault: false, createdAt: 2 },
+      ],
+      currentProfileId: asProfileId('p1'),
+    });
+    useNotificationStore.setState({
+      connections: { p1: 'connected', p2: 'connected' },
+    });
+
+    await useProfileStore.getState().deleteProfile('p1');
+
+    expect(useNotificationStore.getState().connections.p1).toBe('disconnected');
+    expect(useNotificationStore.getState().connections.p2).toBe('connected');
+  });
+
   it('deleteAllProfiles clears every profile\'s auth slice (refs #337)', async () => {
     useProfileStore.setState({
       profiles: [
@@ -315,6 +334,24 @@ describe('Profile Store', () => {
 
     expect(hasSession(asProfileId('p1'))).toBe(false);
     expect(hasSession(asProfileId('p2'))).toBe(false);
+  });
+
+  it('deleteAllProfiles tears down every profile\'s notification connection through the store (refs #337 I5)', async () => {
+    useProfileStore.setState({
+      profiles: [
+        { id: asProfileId('p1'), name: 'Home', apiUrl: 'http://a', portalUrl: 'http://a', cgiUrl: 'http://a/cgi-bin', isDefault: true, createdAt: 1 },
+        { id: asProfileId('p2'), name: 'Away', apiUrl: 'http://b', portalUrl: 'http://b', cgiUrl: 'http://b/cgi-bin', isDefault: false, createdAt: 2 },
+      ],
+      currentProfileId: asProfileId('p1'),
+    });
+    useNotificationStore.setState({
+      connections: { p1: 'connected', p2: 'connected' },
+    });
+
+    await useProfileStore.getState().deleteAllProfiles();
+
+    expect(useNotificationStore.getState().connections.p1).toBe('disconnected');
+    expect(useNotificationStore.getState().connections.p2).toBe('disconnected');
   });
 
   it('reLoginFor(id) re-authenticates a non-current profile against its own client, leaving the current profile untouched (refs #337)', async () => {

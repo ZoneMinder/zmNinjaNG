@@ -49,14 +49,10 @@ vi.mock('../../stores/notifications', () => ({
 }));
 
 // Mock event poller
-const mockPollerStop = vi.fn();
-const mockPollerIsRunning = vi.fn().mockReturnValue(false);
+const mockStopEventPoller = vi.fn();
 
 vi.mock('../../services/eventPoller', () => ({
-  getEventPoller: vi.fn(() => ({
-    stop: mockPollerStop,
-    isRunning: mockPollerIsRunning,
-  })),
+  stopEventPoller: (profileId: string) => mockStopEventPoller(profileId),
 }));
 
 // Mock notification service
@@ -98,6 +94,7 @@ function makeParams(overrides: Partial<{
   currentProfile: typeof defaultProfile | null;
   settings: Settings | null;
   isConnected: boolean;
+  isPreviousProfileConnected: boolean;
   connectionState: string;
   currentProfileId: string | null;
 }> & Record<string, unknown> = {}) {
@@ -110,6 +107,7 @@ function makeParams(overrides: Partial<{
     currentProfile: defaultProfile,
     settings: defaultSettings,
     isConnected: false,
+    isPreviousProfileConnected: false,
     connectionState: 'disconnected',
     currentProfileId: 'profile-1',
     connect,
@@ -303,6 +301,48 @@ describe('useNotificationAutoConnect', () => {
       // Still only once: hasAttemptedAutoConnect flag prevents repeated calls
       expect(params.connect).toHaveBeenCalledTimes(1);
     });
+
+    // Regression (refs #337 I3): the 500ms delay timer was never cancelled,
+    // so unmounting mid-window (or mid-getDecryptedPassword) could still
+    // connect a socket nobody would ever disconnect.
+    it('cancels the pending auto-connect timer on unmount before it fires', async () => {
+      const params = makeParams();
+      const { unmount } = renderHook(() => useNotificationAutoConnect(params));
+
+      unmount();
+
+      await act(async () => {
+        vi.advanceTimersByTime(500);
+        await vi.runAllTimersAsync();
+      });
+
+      expect(params.connect).not.toHaveBeenCalled();
+    });
+
+    it('does not connect if unmounted while decrypting the password', async () => {
+      const params = makeParams();
+      let resolvePassword: (value: string) => void = () => {};
+      params.getDecryptedPassword = vi.fn().mockImplementation(
+        () => new Promise<string>((resolve) => { resolvePassword = resolve; })
+      );
+
+      const { unmount } = renderHook(() => useNotificationAutoConnect(params));
+
+      await act(async () => {
+        vi.advanceTimersByTime(500);
+        await Promise.resolve();
+      });
+
+      unmount();
+      resolvePassword('secret');
+
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(params.connect).not.toHaveBeenCalled();
+    });
   });
 
   describe('direct mode auto-connect (desktop/web)', () => {
@@ -331,9 +371,9 @@ describe('useNotificationAutoConnect', () => {
   });
 
   describe('profile switching', () => {
-    it('disconnects when profile changes and was connected to different profile', () => {
+    it('disconnects when profile changes and the previous profile was connected', () => {
       const params = makeParams({
-        isConnected: true,
+        isPreviousProfileConnected: true,
         currentProfileId: 'profile-OLD',
         currentProfile: { ...defaultProfile, id: asProfileId('profile-NEW') },
       });
@@ -342,9 +382,25 @@ describe('useNotificationAutoConnect', () => {
       expect(params.disconnect).toHaveBeenCalled();
     });
 
-    it('does not disconnect when connected to the same profile', () => {
+    // Regression (refs #337 C1): `isConnected` alone is scoped to the NEW
+    // currentProfile after a switch and can never see whether the OLD
+    // (anchor) profile is still connected - `isPreviousProfileConnected` is
+    // the value that must gate this, independently of `isConnected`.
+    it('does not disconnect when isConnected is true but the previous profile was not', () => {
       const params = makeParams({
         isConnected: true,
+        isPreviousProfileConnected: false,
+        currentProfileId: 'profile-OLD',
+        currentProfile: { ...defaultProfile, id: asProfileId('profile-NEW') },
+      });
+      renderHook(() => useNotificationAutoConnect(params));
+
+      expect(params.disconnect).not.toHaveBeenCalled();
+    });
+
+    it('does not disconnect when connected to the same profile', () => {
+      const params = makeParams({
+        isPreviousProfileConnected: true,
         currentProfileId: 'profile-1',
         currentProfile: defaultProfile,
       });
@@ -382,8 +438,7 @@ describe('useNotificationAutoConnect', () => {
   });
 
   describe('event poller cleanup', () => {
-    it('stops event poller on unmount when running', () => {
-      mockPollerIsRunning.mockReturnValue(true);
+    it('stops this profile\'s event poller on unmount', () => {
       const params = makeParams({
         settings: { ...defaultSettings, notificationMode: 'direct' },
       });
@@ -392,18 +447,17 @@ describe('useNotificationAutoConnect', () => {
 
       unmount();
 
-      expect(mockPollerStop).toHaveBeenCalled();
+      expect(mockStopEventPoller).toHaveBeenCalledWith('profile-1');
     });
 
-    it('does not stop poller on unmount when not running', () => {
-      mockPollerIsRunning.mockReturnValue(false);
-      const params = makeParams();
+    it('does not call stopEventPoller when currentProfile is null', () => {
+      const params = makeParams({ currentProfile: null });
 
       const { unmount } = renderHook(() => useNotificationAutoConnect(params));
 
       unmount();
 
-      expect(mockPollerStop).not.toHaveBeenCalled();
+      expect(mockStopEventPoller).not.toHaveBeenCalled();
     });
   });
 

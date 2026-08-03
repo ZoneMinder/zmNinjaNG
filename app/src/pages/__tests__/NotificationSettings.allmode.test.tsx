@@ -40,6 +40,7 @@ vi.mock('../../api/notifications', () => ({
 }));
 vi.mock('../../services/eventPoller', () => ({
   getEventPoller: () => ({ isRunning: () => false, stop: vi.fn() }),
+  stopEventPoller: vi.fn(),
 }));
 // Keyed by profileId so All-mode tests can give each profile a distinct
 // config; a test that never populates it falls back to the previous

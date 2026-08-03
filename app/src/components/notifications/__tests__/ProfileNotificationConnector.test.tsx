@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render } from '@testing-library/react';
+import { render, act } from '@testing-library/react';
 import { ProfileNotificationConnector } from '../ProfileNotificationConnector';
 import { useNotificationStore } from '../../../stores/notifications';
 import { asProfileId } from '../../../api/types';
@@ -20,15 +20,9 @@ vi.mock('../../../hooks/useNotificationAutoConnect', () => ({
   useNotificationAutoConnect: (params: unknown) => mockAutoConnect(params),
 }));
 
-const pollerStops = new Map<string, ReturnType<typeof vi.fn>>();
+const mockStopEventPoller = vi.fn();
 vi.mock('../../../services/eventPoller', () => ({
-  getEventPoller: (profileId: string) => {
-    if (!pollerStops.has(profileId)) pollerStops.set(profileId, vi.fn());
-    return {
-      isRunning: () => true,
-      stop: pollerStops.get(profileId),
-    };
-  },
+  stopEventPoller: (profileId: string) => mockStopEventPoller(profileId),
 }));
 
 function makeProfile(id: string, name: string): Profile {
@@ -51,7 +45,7 @@ const profileB = makeProfile('profile-b', 'Work');
 describe('ProfileNotificationConnector (refs #337)', () => {
   beforeEach(() => {
     mockAutoConnect.mockClear();
-    pollerStops.clear();
+    mockStopEventPoller.mockClear();
     useNotificationStore.setState({
       profileSettings: {},
       connections: {},
@@ -66,6 +60,25 @@ describe('ProfileNotificationConnector (refs #337)', () => {
     const params = mockAutoConnect.mock.calls[0][0];
     expect(params.currentProfile).toBe(profileA);
     expect(params.currentProfileId).toBe(profileA.id);
+  });
+
+  // Regression (refs #337 I2): the connector selected only the stable
+  // getProfileSettings action, not the raw profileSettings slice, so
+  // enabling notifications for a profile already mounted in All mode never
+  // re-rendered the connector - it just sat there never connecting.
+  it('re-renders with fresh settings when this profile\'s notification settings change', () => {
+    render(<ProfileNotificationConnector profile={profileA} />);
+
+    expect(mockAutoConnect).toHaveBeenCalledTimes(1);
+    expect(mockAutoConnect.mock.calls[0][0].settings.enabled).toBe(false);
+
+    act(() => {
+      useNotificationStore.getState().updateProfileSettings(profileA.id, { enabled: true });
+    });
+
+    const lastCall = mockAutoConnect.mock.calls[mockAutoConnect.mock.calls.length - 1][0];
+    expect(mockAutoConnect.mock.calls.length).toBeGreaterThan(1);
+    expect(lastCall.settings.enabled).toBe(true);
   });
 
   it('two connectors each see their own profile\'s connection state', () => {
@@ -123,9 +136,8 @@ describe('ProfileNotificationConnector (refs #337)', () => {
 
     expect(disconnectSpy).toHaveBeenCalledWith(profileB.id);
     expect(disconnectSpy).not.toHaveBeenCalledWith(profileA.id);
-    expect(pollerStops.get(profileB.id)).toHaveBeenCalledTimes(1);
-    // profileA's poller was never even looked up: its connector never unmounted.
-    expect(pollerStops.has(profileA.id)).toBe(false);
+    expect(mockStopEventPoller).toHaveBeenCalledWith(profileB.id);
+    expect(mockStopEventPoller).not.toHaveBeenCalledWith(profileA.id);
   });
 
   it('unmounting all connectors disconnects every profile', () => {

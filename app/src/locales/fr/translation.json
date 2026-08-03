@@ -947,7 +947,7 @@
     "switch_profile_desc": "Cette notification provient de \"{{profile}}\". Passer a ce profil pour voir l'evenement ?",
     "switch_profile_confirm": "Changer",
     "profile_switch_failed": "Echec du changement de profil",
-    "all_mode_burst_summary": "{{count}} nouveaux evenements sur {{servers}} serveurs"
+    "all_mode_burst_summary": "{{eventCount}} nouveaux evenements sur {{servers}} serveurs"
   },
   "profiles": {
     "title": "Profils",

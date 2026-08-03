@@ -947,7 +947,7 @@
     "switch_profile_desc": "Esta notificacion es de \"{{profile}}\". Cambiar a este perfil para ver el evento?",
     "switch_profile_confirm": "Cambiar",
     "profile_switch_failed": "Error al cambiar de perfil",
-    "all_mode_burst_summary": "{{count}} eventos nuevos en {{servers}} servidores"
+    "all_mode_burst_summary": "{{eventCount}} eventos nuevos en {{servers}} servidores"
   },
   "profiles": {
     "title": "Perfiles",

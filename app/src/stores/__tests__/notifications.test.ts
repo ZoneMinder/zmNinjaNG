@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useNotificationStore, startEventPoller, resolvePollIntervalMs } from '../notifications';
+import { useProfileStore } from '../profile';
+import { stopAllEventPollers } from '../../services/eventPoller';
+import { ALL_PROFILES_ID, asProfileId } from '../../api/types';
 import { getBandwidthSettings } from '../../lib/zmninja-ng-constants';
 import type { ZMAlarmEvent, ConnectionState } from '../../types/notifications';
 
@@ -376,6 +379,60 @@ describe('Notification Store', () => {
 
       expect(useNotificationStore.getState().getEvents(profileB)).toHaveLength(1);
       expect(useNotificationStore.getState().getEvents(profileA)).toHaveLength(0);
+    });
+
+    it('anchors currentProfileId only when profileId is the app\'s real current profile; All mode leaves it alone (refs #337 I4)', async () => {
+      const store = useNotificationStore.getState();
+      try {
+        // Single mode: the app's real current profile IS profileA.
+        useProfileStore.setState({ currentProfileId: asProfileId(profileA) });
+        await store.connect(profileA, 'admin', 'secretA', 'http://a.local');
+        expect(useNotificationStore.getState().currentProfileId).toBe(profileA);
+
+        // All mode: the app's real current profile is the ALL sentinel, not
+        // profileB - connecting profileB (a connector's own connect() call)
+        // must not overwrite the anchor with "whichever profile connected
+        // last".
+        useNotificationStore.setState({ currentProfileId: null });
+        useProfileStore.setState({ currentProfileId: ALL_PROFILES_ID });
+        await store.connect(profileB, 'admin', 'secretB', 'http://b.local');
+        expect(useNotificationStore.getState().currentProfileId).toBeNull();
+      } finally {
+        useProfileStore.setState({ currentProfileId: null });
+      }
+    });
+
+    it('_initialize cleans up a previous registration for the same profile before re-subscribing (refs #337 #10)', async () => {
+      const store = useNotificationStore.getState();
+      await store.connect(profileA, 'admin', 'secretA', 'http://a.local');
+
+      const firstStateUnsub = mockService.onStateChange.mock.results[0].value;
+      const firstEventUnsub = mockService.onEvent.mock.results[0].value;
+      expect(firstStateUnsub).not.toHaveBeenCalled();
+
+      // A second _initialize for the same profile without an intervening
+      // disconnect (e.g. a retried connect()) must tear down the stale
+      // listeners first, not just overwrite the cleanup array and leak them
+      // (duplicate event/state delivery).
+      useNotificationStore.getState()._initialize(profileA);
+
+      expect(firstStateUnsub).toHaveBeenCalledTimes(1);
+      expect(firstEventUnsub).toHaveBeenCalledTimes(1);
+    });
+
+    it('disconnectAll disconnects every connected profile and sweeps pollers (refs #337 I5)', async () => {
+      const store = useNotificationStore.getState();
+      await store.connect(profileA, 'admin', 'secretA', 'http://a.local');
+      await store.connect(profileB, 'admin', 'secretB', 'http://b.local');
+      mockService.onStateChange.mock.calls[0][0]('connected');
+      mockService.onStateChange.mock.calls[1][0]('connected');
+      vi.mocked(stopAllEventPollers).mockClear();
+
+      useNotificationStore.getState().disconnectAll();
+
+      expect(useNotificationStore.getState().connections[profileA]).toBe('disconnected');
+      expect(useNotificationStore.getState().connections[profileB]).toBe('disconnected');
+      expect(stopAllEventPollers).toHaveBeenCalledTimes(1);
     });
   });
 

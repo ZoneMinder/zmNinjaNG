@@ -50,6 +50,11 @@ export function useNotificationAllModeToasts(): void {
   const getProfileSettings = useNotificationStore((s) => s.getProfileSettings);
 
   const lastSeenAtRef = useRef<Record<string, number>>({});
+  // Profiles this hook has evaluated at least once. Distinct from having a
+  // `lastSeenAtRef` entry: a profile with no events yet still needs to be
+  // marked observed on its first pass, or its first REAL event would itself
+  // read as "first observation" and get seeded away instead of toasted.
+  const observedProfilesRef = useRef<Set<string>>(new Set());
   const burstRef = useRef<BurstEntry[]>([]);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -92,7 +97,11 @@ export function useNotificationAllModeToasts(): void {
       );
     } else {
       const servers = new Set(collected.map((c) => c.profileId)).size;
-      toast(t('notifications.all_mode_burst_summary', { count: collected.length, servers }), {
+      // `eventCount`, not `count`: i18next treats `count` as a reserved
+      // pluralization key (auto-selecting `_one`/`_other` suffixed keys),
+      // which this single non-pluralized key was never meant to opt into
+      // (refs #337 #9).
+      toast(t('notifications.all_mode_burst_summary', { eventCount: collected.length, servers }), {
         duration: 5000,
         action: { label: t('common.view'), onClick: () => navigate('/events') },
       });
@@ -114,6 +123,19 @@ export function useNotificationAllModeToasts(): void {
     const newlyArrived: BurstEntry[] = [];
     for (const profile of scope.profiles) {
       const latest = profileEvents[profile.id]?.[0];
+
+      // The first time this profile is observed (true first mount, or a
+      // profile newly entering All-mode scope), seed lastSeenAtRef to
+      // whatever is already there (or 0) and skip - without this, a profile
+      // whose "latest" event is old/persisted from a previous session would
+      // toast it once at launch, a stale-event summary toast nobody asked
+      // for (refs #337 #7).
+      if (!observedProfilesRef.current.has(profile.id)) {
+        observedProfilesRef.current.add(profile.id);
+        lastSeenAtRef.current[profile.id] = latest?.receivedAt ?? 0;
+        continue;
+      }
+
       if (!latest) continue;
 
       // receivedAt (not EventId) marks "new": EventId can be 0 for more than
@@ -123,7 +145,10 @@ export function useNotificationAllModeToasts(): void {
       lastSeenAtRef.current[profile.id] = latest.receivedAt;
 
       const ownerSettings = getProfileSettings(profile.id);
-      if (!ownerSettings.showToasts) continue;
+      // Symmetric with the connection resource guard (only connect profiles
+      // with notifications enabled): a disabled profile never toasts either,
+      // even if stale events already sit in its history (refs #337 #12).
+      if (!ownerSettings.enabled || !ownerSettings.showToasts) continue;
 
       newlyArrived.push({
         profileId: profile.id,
@@ -142,4 +167,16 @@ export function useNotificationAllModeToasts(): void {
       timerRef.current = setTimeout(flushBurst, NOTIFICATIONS_SERVICE.allModeBurstWindowMs);
     }
   }, [profileEvents, scope, getProfileSettings, flushBurst]);
+
+  // Clear a pending burst timer on unmount - otherwise it fires into a
+  // toast() call after the page/component that would show it is gone
+  // (refs #337 #6).
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, []);
 }

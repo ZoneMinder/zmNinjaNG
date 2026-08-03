@@ -40,7 +40,7 @@ import { useTranslation } from 'react-i18next';
 import { log, LogLevel } from '../lib/logger';
 import { checkNotificationsApiSupport } from '../api/notifications';
 import { getSession } from '../services/sessions';
-import { getEventPoller } from '../services/eventPoller';
+import { getEventPoller, stopEventPoller } from '../services/eventPoller';
 import type { NotificationMode } from '../types/notifications';
 import { NotificationBadge } from '../components/NotificationBadge';
 import { NotificationModeSection } from '../components/notifications/NotificationModeSection';
@@ -222,10 +222,7 @@ export default function NotificationSettings() {
       toast.info(t('notification_settings.mode_switched_direct'));
     } else if (currentMode === 'direct' && mode === 'es') {
       // Switching from Direct to ES: stop poller, connect websocket
-      const poller = getEventPoller(currentProfile.id);
-      if (poller.isRunning()) {
-        poller.stop();
-      }
+      stopEventPoller(currentProfile.id);
 
       updateProfileSettings(currentProfile.id, { notificationMode: 'es' });
 

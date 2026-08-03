@@ -14,6 +14,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNotificationStore } from '../stores/notifications';
 import { useShallow } from 'zustand/react/shallow';
+import { Platform } from '../lib/platform';
 import { resolveMinStreamingPort } from '../lib/monitor/multiport';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useProfileScope } from '../hooks/useProfileScope';
@@ -56,6 +57,7 @@ export function NotificationHandler() {
   const {
     getProfileSettings,
     isConnected,
+    isPreviousProfileConnected,
     connectionState,
     currentProfileId,
     connect,
@@ -63,6 +65,13 @@ export function NotificationHandler() {
     useShallow((state) => ({
       getProfileSettings: state.getProfileSettings,
       isConnected: currentProfile ? state.connections[currentProfile.id] === 'connected' : false,
+      // The anchor profile (state.currentProfileId) is whichever profile
+      // this hook was bound to BEFORE the current render - distinct from
+      // `isConnected` above, which is scoped to the NEW currentProfile
+      // after a switch (refs #337 C1).
+      isPreviousProfileConnected: state.currentProfileId
+        ? state.connections[state.currentProfileId] === 'connected'
+        : false,
       connectionState: currentProfile ? (state.connections[currentProfile.id] ?? 'disconnected') : 'disconnected',
       currentProfileId: state.currentProfileId,
       connect: state.connect,
@@ -141,6 +150,7 @@ export function NotificationHandler() {
     currentProfile,
     settings,
     isConnected,
+    isPreviousProfileConnected,
     connectionState,
     currentProfileId,
     connect,
@@ -279,6 +289,12 @@ export function NotificationHandler() {
   // (refs #337). Single mode is untouched: `scope.mode` is 'single' there,
   // so no connectors mount and this component's own hook calls above
   // (bound to the real current profile) are the only connection.
+  //
+  // Desktop/web only (refs #337 I4): on mobile, FCM already delivers every
+  // profile's events server-side regardless of which one is foregrounded,
+  // so N extra websockets would only cost battery with no gap to close.
+  // Native keeps today's deterministic single-connection + FCM-anchor
+  // semantics unchanged.
   return (
     <>
       <ProfileSwitchDialog
@@ -286,7 +302,7 @@ export function NotificationHandler() {
         onConfirm={handleConfirmSwitch}
         onCancel={handleCancelSwitch}
       />
-      {scope?.mode === 'all' &&
+      {Platform.isDesktopOrWeb && scope?.mode === 'all' &&
         scope.profiles.map((profile) => (
           <ProfileNotificationConnector key={profile.id} profile={profile} />
         ))}
