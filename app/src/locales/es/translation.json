@@ -246,7 +246,8 @@
     "remove_tag": "Quitar {{name}}",
     "all_failed_title": "No se pudieron cargar los eventos",
     "filter_by_server": "Filtrar por servidor",
-    "failed_to_load": "No se pudieron cargar los eventos: {{error}}"
+    "failed_to_load": "No se pudieron cargar los eventos: {{error}}",
+    "montage_unavailable_all_mode": "La vista de montaje no está disponible en el modo Todos los servidores"
   },
   "event_detail": {
     "event_id": "ID de Evento",

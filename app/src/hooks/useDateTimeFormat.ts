@@ -13,40 +13,34 @@ import {
   formatAppDateTimeShort,
 } from '../lib/format-date-time';
 
-/**
- * @param timeZone Optional IANA zone to render true-instant Dates in (e.g. an
- * All-mode owning profile's timezone), instead of the viewer's browser zone.
- * Omit for existing call sites - see the `applyTz` doc comment in
- * lib/format-date-time.ts for when passing this is (and isn't) correct.
- */
-export function useDateTimeFormat(timeZone?: string) {
+export function useDateTimeFormat() {
   const { settings } = useCurrentProfile();
 
   const fmtDate = useCallback(
-    (date: Date) => formatAppDate(date, settings, timeZone),
-    [settings.dateFormat, settings.customDateFormat, timeZone]
+    (date: Date) => formatAppDate(date, settings),
+    [settings.dateFormat, settings.customDateFormat]
   );
 
   const fmtWeekday = useCallback((date: Date) => formatAppWeekday(date), []);
 
   const fmtTime = useCallback(
-    (date: Date) => formatAppTime(date, settings, timeZone),
-    [settings.timeFormat, settings.customTimeFormat, timeZone]
+    (date: Date) => formatAppTime(date, settings),
+    [settings.timeFormat, settings.customTimeFormat]
   );
 
   const fmtTimeShort = useCallback(
-    (date: Date) => formatAppTimeShort(date, settings, timeZone),
-    [settings.timeFormat, settings.customTimeFormat, timeZone]
+    (date: Date) => formatAppTimeShort(date, settings),
+    [settings.timeFormat, settings.customTimeFormat]
   );
 
   const fmtDateTime = useCallback(
-    (date: Date) => formatAppDateTime(date, settings, timeZone),
-    [settings.dateFormat, settings.timeFormat, settings.customDateFormat, settings.customTimeFormat, timeZone]
+    (date: Date) => formatAppDateTime(date, settings),
+    [settings.dateFormat, settings.timeFormat, settings.customDateFormat, settings.customTimeFormat]
   );
 
   const fmtDateTimeShort = useCallback(
-    (date: Date) => formatAppDateTimeShort(date, settings, timeZone),
-    [settings.dateFormat, settings.timeFormat, settings.customDateFormat, settings.customTimeFormat, timeZone]
+    (date: Date) => formatAppDateTimeShort(date, settings),
+    [settings.dateFormat, settings.timeFormat, settings.customDateFormat, settings.customTimeFormat]
   );
 
   const formatSettings = {

@@ -335,6 +335,13 @@ describe('Events Page', () => {
     expect(options?.refetchInterval).toBeUndefined();
   });
 
+  it('single mode leaves the montage toggle enabled with no gate notice (refs #337 fix round 1)', () => {
+    render(<Events />);
+
+    expect(screen.getByTestId('events-view-toggle')).not.toBeDisabled();
+    expect(screen.queryByTestId('events-montage-gate')).not.toBeInTheDocument();
+  });
+
   describe('All mode', () => {
     it('renders both profiles\' events with a profile chip per row', () => {
       allScope();
@@ -351,6 +358,16 @@ describe('Events Page', () => {
       expect(cards).toHaveLength(2);
       const chips = screen.getAllByTestId('event-card-profile-chip');
       expect(chips.map((c) => c.textContent)).toEqual(['Home', 'Office']);
+    });
+
+    it('disables the montage toggle with a localized notice (refs #337 fix round 1)', () => {
+      allScope();
+
+      render(<Events />);
+
+      expect(screen.getByTestId('events-view-toggle')).toBeDisabled();
+      expect(screen.getByTestId('events-montage-gate')).toBeInTheDocument();
+      expect(screen.getByTestId('events-montage-gate')).toHaveAttribute('title', 'events.montage_unavailable_all_mode');
     });
 
     it('the server filter chip row hides a profile\'s slice when toggled off', () => {

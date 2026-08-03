@@ -246,7 +246,8 @@
     "remove_tag": "{{name}} entfernen",
     "all_failed_title": "Ereignisse konnten nicht geladen werden",
     "filter_by_server": "Nach Server filtern",
-    "failed_to_load": "Ereignisse konnten nicht geladen werden: {{error}}"
+    "failed_to_load": "Ereignisse konnten nicht geladen werden: {{error}}",
+    "montage_unavailable_all_mode": "Montageansicht ist im Modus \"Alle Server\" nicht verfügbar"
   },
   "event_detail": {
     "event_id": "Ereignis ID",

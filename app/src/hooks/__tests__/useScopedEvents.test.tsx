@@ -7,6 +7,7 @@ import { useProfileScope, type ProfileScope } from '../useProfileScope';
 import { getEvents } from '../../api/events';
 import { getSession } from '../../services/sessions';
 import { queryKeys } from '../../lib/query/query-keys';
+import { formatForServerInTz } from '../../lib/time';
 import { asProfileId } from '../../api/types';
 import type { EventData, EventsResponse } from '../../api/types';
 
@@ -17,6 +18,13 @@ vi.mock('../../api/events', () => ({
 vi.mock('../../services/sessions', () => ({
   getSession: vi.fn(),
   getCurrentSession: vi.fn(),
+  // stores/profile.ts (pulled in transitively via lib/time.ts's
+  // useProfileStore import) calls registerSessionsGate at module scope;
+  // dropSession/dropAllSessions are its other named imports from this
+  // module. Stubbed so that module-level wiring doesn't throw here.
+  registerSessionsGate: vi.fn(),
+  dropSession: vi.fn(),
+  dropAllSessions: vi.fn(),
 }));
 
 vi.mock('../useProfileScope', () => ({
@@ -207,6 +215,26 @@ describe('useScopedEvents', () => {
     expect(forA).not.toBe(forB);
     const hourOf = (s: string) => Number(s!.slice(11, 13));
     expect((hourOf(forA!) - hourOf(forB!) + 24) % 24).toBe(5);
+  });
+
+  // refs #337 fix round 1: a profile with no configured timezone must
+  // convert date-range filters using the BROWSER zone (formatForServer's
+  // historical fallback for the single-mode query this hook replaced), not
+  // a hardcoded 'UTC' - the latter silently shifted the query window for
+  // such a profile once Events.tsx switched to this hook.
+  it('a profile without a timezone converts date filters using the browser zone, matching formatForServer byte-for-byte', async () => {
+    const profileNoTz = { ...profileA, timezone: undefined as unknown as string };
+    mockScope([profileNoTz], 'single');
+    vi.mocked(getEvents).mockResolvedValue(eventsResponse([]));
+
+    const filters = { startDateTime: '2026-01-15T10:00:00' };
+    renderHook(() => useScopedEvents({ ...baseOptions, filters }), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(vi.mocked(getEvents).mock.calls.length).toBeGreaterThanOrEqual(1));
+
+    const sent = vi.mocked(getEvents).mock.calls[0][2] as { startDateTime?: string };
+    const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    expect(sent.startDateTime).toBe(formatForServerInTz(new Date(filters.startDateTime), browserTz));
   });
 
   it('surfaces one failing profile as a ProfileError while the other profile still renders its data', async () => {

@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { formatForServer, formatForServerInTz, formatLocalDateTime } from '../time';
+import { formatForServer, formatForServerInTz, formatLocalDateTime, resolveProfileTimezone } from '../time';
 import { useProfileStore } from '../../stores/profile';
 
 // Mock the profile store - using primitives pattern (not deprecated currentProfile getter)
@@ -241,5 +241,23 @@ describe('formatForServerInTz', () => {
   it('matches formatForServer when given the current profile\'s own timezone', () => {
     // useProfileStore.getState() is mocked above to profile-1 @ America/New_York.
     expect(formatForServerInTz(instant, 'America/New_York')).toBe(formatForServer(instant));
+  });
+});
+
+describe('resolveProfileTimezone', () => {
+  const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  it('returns the given timezone when present', () => {
+    expect(resolveProfileTimezone('America/New_York')).toBe('America/New_York');
+  });
+
+  // refs #337 fix round 1: a timezone-less profile must fall back to the
+  // BROWSER zone (formatForServer's historical fallback), not 'UTC' - the
+  // All-mode aggregation hooks were silently shifting the query window for
+  // such a profile before this helper unified the fallback.
+  it('falls back to the browser zone, not UTC, when the profile has no timezone', () => {
+    expect(resolveProfileTimezone(undefined)).toBe(browserTz);
+    expect(resolveProfileTimezone(null)).toBe(browserTz);
+    expect(resolveProfileTimezone('')).toBe(browserTz);
   });
 });

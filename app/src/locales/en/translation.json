@@ -246,7 +246,8 @@
     "remove_tag": "Remove {{name}}",
     "all_failed_title": "Unable to load events",
     "filter_by_server": "Filter by server",
-    "failed_to_load": "Failed to load events: {{error}}"
+    "failed_to_load": "Failed to load events: {{error}}",
+    "montage_unavailable_all_mode": "Montage view is unavailable in All Servers mode"
   },
   "event_detail": {
     "event_id": "Event ID",

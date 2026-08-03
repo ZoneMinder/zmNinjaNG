@@ -30,7 +30,7 @@ import { getSession } from '../services/sessions';
 import { useProfileScope } from './useProfileScope';
 import { queryKeys } from '../lib/query/query-keys';
 import { eventInstant } from '../lib/event/event-instant';
-import { formatForServerInTz } from '../lib/time';
+import { formatForServerInTz, resolveProfileTimezone } from '../lib/time';
 import { causeToEventFilter } from '../lib/event/timeline-cause-filter';
 import { filterEnabledMonitors } from '../lib/monitor/filters';
 import { getMonitors } from '../api/monitors';
@@ -106,7 +106,11 @@ export function useScopedTimelineEvents({
     queries: profiles.map((p) => ({
       queryKey: queryKeys.timelineEventsList(p.id, startDate, endDate, monitorFilter, onlyDetectedObjects, causeFilter),
       queryFn: () => {
-        const tz = p.timezone ?? 'UTC';
+        // Browser-zone fallback (not 'UTC') for a timezone-less profile,
+        // matching formatForServer's historical fallback - the eventInstant
+        // sort below deliberately keeps its own 'UTC' fallback (matches
+        // getSession's convention) (refs #337 fix round 1).
+        const tz = resolveProfileTimezone(p.timezone);
         return getEvents(getSession(p.id).client, p.id, {
           startDateTime: formatForServerInTz(new Date(startDate), tz),
           endDateTime: formatForServerInTz(new Date(endDate), tz),

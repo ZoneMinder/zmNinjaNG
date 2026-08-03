@@ -43,6 +43,24 @@ export function formatForServerInTz(date: Date, timeZone: string): string {
 }
 
 /**
+ * Resolve a profile's timezone for date-filter conversion, falling back to
+ * the BROWSER's own zone when the profile has none set - the historical
+ * `formatForServer` fallback. Shared by `formatForServer` and the All-mode
+ * aggregation hooks (useScopedEvents, useScopedTimelineEvents) so a
+ * timezone-less profile converts date-range filters identically in both
+ * single and All mode (refs #337 fix round 1: All mode previously fell back
+ * to 'UTC' here, silently shifting the query window for such a profile).
+ *
+ * Not used for the eventInstant/sort ordering fallback - that one
+ * deliberately matches `getSession`'s own 'UTC' convention instead (a
+ * different, already-correct concern: a stable sort key, not a
+ * user-facing query window).
+ */
+export function resolveProfileTimezone(timezone: string | null | undefined): string {
+    return timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
+/**
  * Format a date for the ZM API using the CURRENT profile's timezone.
  * Single-mode call sites (queries scoped to one active profile).
  *
@@ -53,8 +71,7 @@ export function formatForServer(date: Date): string {
     // Access primitives directly to avoid deprecated currentProfile() getter
     const { profiles, currentProfileId } = useProfileStore.getState();
     const currentProfile = profiles.find(p => p.id === currentProfileId);
-    const timeZone = currentProfile?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-    return formatForServerInTz(date, timeZone);
+    return formatForServerInTz(date, resolveProfileTimezone(currentProfile?.timezone));
 }
 
 /**
