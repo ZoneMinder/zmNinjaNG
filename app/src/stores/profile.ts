@@ -48,7 +48,6 @@ interface ProfileState {
   deleteAllProfiles: () => Promise<void>;
   switchProfile: (id: string) => Promise<void>;
   setDefaultProfile: (id: string) => void;
-  reLogin: () => Promise<boolean>;
   cancelBootstrap: () => void;
 
   // Helpers
@@ -57,15 +56,6 @@ interface ProfileState {
 
 let storeSet: ((partial: Partial<ProfileState>) => void) | null = null;
 let storeGet: (() => ProfileState) | null = null;
-
-// True while switchProfile is running. The logout in step 1 clears the auth
-// state, which makes the useFreshAccessToken self-heal effect fire
-// getFreshAccessToken -> reLogin. At that point currentProfileId is still the
-// outgoing profile, so reLogin would log in with the previous profile's
-// credentials against the incoming server (a 401 that then poisons the
-// single-flight login). The switch runs its own bootstrap login, so suppress
-// reLogin for the duration.
-let switchInProgress = false;
 
 export const useProfileStore = create<ProfileState>()(
   persist(
@@ -280,15 +270,10 @@ export const useProfileStore = create<ProfileState>()(
         switchProfile: async (id) => {
           if (id === ALL_PROFILES_ID) {
             log.profileService('Switching to All mode', LogLevel.INFO);
-            switchInProgress = true;
-            try {
-              const { quitAllActiveStreams } = await import('../lib/monitor/active-streams');
-              await quitAllActiveStreams();
-              set({ currentProfileId: ALL_PROFILES_ID });
-              log.profileService('Switched to All mode', LogLevel.INFO);
-            } finally {
-              switchInProgress = false;
-            }
+            const { quitAllActiveStreams } = await import('../lib/monitor/active-streams');
+            await quitAllActiveStreams();
+            set({ currentProfileId: ALL_PROFILES_ID });
+            log.profileService('Switched to All mode', LogLevel.INFO);
             return;
           }
 
@@ -310,7 +295,6 @@ export const useProfileStore = create<ProfileState>()(
             targetAPI: profile.apiUrl,
           });
 
-          switchInProgress = true;
           try {
             // STEP 0: Quit the previous profile's active streams while its SSL
             // trust and access token are still in effect, before the new
@@ -381,8 +365,6 @@ export const useProfileStore = create<ProfileState>()(
 
             // Re-throw the original error
             throw error;
-          } finally {
-            switchInProgress = false;
           }
         }, setDefaultProfile: (id) => {
           set((state) => ({
@@ -391,36 +373,6 @@ export const useProfileStore = create<ProfileState>()(
               isDefault: p.id === id,
             })),
           }));
-        },
-
-        reLogin: async () => {
-          // During a profile switch the bootstrap performs its own login. A
-          // self-heal reLogin here would race it with stale (outgoing-profile)
-          // credentials, so skip it until the switch completes.
-          if (switchInProgress) {
-            log.profileService('Skipping reLogin during profile switch', LogLevel.DEBUG);
-            return false;
-          }
-          const { currentProfileId, getDecryptedPassword, profiles } = get();
-          if (!currentProfileId) return false;
-
-          const profile = profiles.find((p) => p.id === currentProfileId);
-          if (!profile) return false;
-
-          // No credentials means no auth required (public server) - not a failure
-          if (!profile.username || !profile.password) return true;
-
-          try {
-            const password = await getDecryptedPassword(currentProfileId);
-            if (!password) return false;
-
-            const { useAuthStore } = await import('./auth');
-            await useAuthStore.getState().login(currentProfileId, profile.username, password);
-            return true;
-          } catch (e) {
-            log.profileService('Re-login helper failed', LogLevel.ERROR, { error: e });
-            return false;
-          }
         },
 
         /**
