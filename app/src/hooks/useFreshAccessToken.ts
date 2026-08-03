@@ -23,18 +23,22 @@
 
 import { useEffect } from 'react';
 import { useAuthStore, useAuthSlice } from '../stores/auth';
-import { useCurrentProfile } from './useCurrentProfile';
+import { useProfileById } from './useCurrentProfile';
 import { ZM_INTEGRATION } from '../lib/zmninja-ng-constants';
+import type { ProfileId } from '../api/types';
 
 export interface FreshAccessToken {
   token: string | null;
   isFresh: boolean;
 }
 
-export function useFreshAccessToken(): FreshAccessToken {
-  const { currentProfile } = useCurrentProfile();
-  const profileId = currentProfile?.id ?? null;
-  const { accessToken, accessTokenExpires, requiresAuth } = useAuthSlice(profileId);
+/**
+ * @param profileId - Profile whose token to track; defaults to the current profile.
+ */
+export function useFreshAccessToken(profileId?: ProfileId | null): FreshAccessToken {
+  const { profile } = useProfileById(profileId);
+  const effectiveProfileId = profile?.id ?? null;
+  const { accessToken, accessTokenExpires, requiresAuth } = useAuthSlice(effectiveProfileId);
   const getFreshAccessToken = useAuthStore((state) => state.getFreshAccessToken);
 
   const tokenValid =
@@ -47,10 +51,10 @@ export function useFreshAccessToken(): FreshAccessToken {
   const isFresh = !requiresAuth || tokenValid;
 
   useEffect(() => {
-    if (profileId && requiresAuth && !tokenValid) {
-      void getFreshAccessToken(profileId);
+    if (effectiveProfileId && requiresAuth && !tokenValid) {
+      void getFreshAccessToken(effectiveProfileId);
     }
-  }, [profileId, requiresAuth, tokenValid, getFreshAccessToken]);
+  }, [effectiveProfileId, requiresAuth, tokenValid, getFreshAccessToken]);
 
   return { token: tokenValid ? accessToken : null, isFresh };
 }

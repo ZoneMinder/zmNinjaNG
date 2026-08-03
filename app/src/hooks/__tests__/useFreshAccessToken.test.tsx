@@ -25,6 +25,10 @@ vi.mock('../../api/auth', () => ({
 const profileId = 'p1';
 vi.mock('../useCurrentProfile', () => ({
   useCurrentProfile: () => ({ currentProfile: { id: profileId }, settings: {}, hasProfile: true }),
+  // useFreshAccessToken now resolves its profile via useProfileById; mock it to
+  // mirror useCurrentProfile's default (current) profile so existing assertions
+  // (which never pass an explicit profileId) stay unchanged.
+  useProfileById: (id?: string | null) => ({ profile: { id: id ?? profileId }, settings: {} }),
 }));
 
 import { useFreshAccessToken } from '../useFreshAccessToken';

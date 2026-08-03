@@ -15,7 +15,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { getStreamUrl } from '../api/monitors';
 import { resolveMinStreamingPort } from '../lib/monitor/multiport';
-import { useCurrentProfile } from './useCurrentProfile';
+import { useProfileById } from './useCurrentProfile';
 import { useBandwidthSettings } from './useBandwidthSettings';
 import { useStreamLifecycle } from './useStreamLifecycle';
 import { useAnalysisFrames } from './useAnalysisFrames';
@@ -25,7 +25,7 @@ import { useVisibilityResume } from './useVisibilityResume';
 import { useAuthStore } from '../stores/auth';
 import { log, LogLevel } from '../lib/logger';
 import { ZM_INTEGRATION } from '../lib/zmninja-ng-constants';
-import type { StreamOptions } from '../api/types';
+import type { StreamOptions, ProfileId } from '../api/types';
 
 interface UseMonitorStreamOptions {
   monitorId: string;
@@ -38,6 +38,13 @@ interface UseMonitorStreamOptions {
    * Used by the single-monitor page, which always wants continuous streaming.
    */
   viewModeOverride?: 'streaming' | 'snapshot';
+  /**
+   * Profile that owns this monitor. Defaults to the current profile. An
+   * All-mode tile owned by a non-current profile passes that profile's id so
+   * the stream URL, minStreamingPort and token all resolve against it
+   * instead of the globally-selected profile.
+   */
+  profileId?: ProfileId | null;
 }
 
 interface UseMonitorStreamReturn {
@@ -78,11 +85,12 @@ export function useMonitorStream({
   streamOptions = {},
   enabled = true,
   viewModeOverride,
+  profileId,
 }: UseMonitorStreamOptions): UseMonitorStreamReturn {
-  const { currentProfile, settings } = useCurrentProfile();
+  const { profile: currentProfile, settings } = useProfileById(profileId);
   const bandwidth = useBandwidthSettings();
-  const { token: accessToken, isFresh: isAccessTokenFresh } = useFreshAccessToken();
-  const { recordingUrl, portalPath } = useServerUrls(serverId);
+  const { token: accessToken, isFresh: isAccessTokenFresh } = useFreshAccessToken(profileId);
+  const { recordingUrl, portalPath } = useServerUrls(serverId, profileId);
   // portalUrl for stream lifecycle = portalPath without /index.php
   const resolvedPortalUrl = portalPath ? portalPath.replace(/\/index\.php$/, '') : currentProfile?.portalUrl;
 

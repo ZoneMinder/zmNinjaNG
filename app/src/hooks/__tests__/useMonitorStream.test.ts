@@ -44,6 +44,7 @@ vi.mock('../../api/monitors', () => ({
     if (options.scale) params.set('scale', options.scale.toString());
     if (options.maxfps) params.set('maxfps', options.maxfps.toString());
     if (options.cacheBuster) params.set('rand', options.cacheBuster.toString());
+    if (options.token) params.set('token', options.token);
     return `${cgiUrl}/nph-zms?${params.toString()}`;
   },
 }));
@@ -476,5 +477,124 @@ describe('useMonitorStream', () => {
     expect(result.current.streamUrl).toContain('maxfps=5');
     expect(result.current.streamUrl).not.toContain('mode=single');
     expect(result.current.streamUrl).not.toContain('rand=');
+  });
+});
+
+describe('useMonitorStream: explicit profileId (All mode)', () => {
+  const profileA: Profile = {
+    id: asProfileId('profile-a'),
+    name: 'Profile A',
+    apiUrl: 'https://a.example.com',
+    portalUrl: 'https://a.example.com',
+    cgiUrl: 'https://a.example.com/cgi-bin',
+    minStreamingPort: 30000,
+    isDefault: true,
+    createdAt: Date.now(),
+  };
+
+  const profileB: Profile = {
+    id: asProfileId('profile-b'),
+    name: 'Profile B',
+    apiUrl: 'https://b.example.com',
+    portalUrl: 'https://b.example.com',
+    cgiUrl: 'https://b.example.com/cgi-bin',
+    minStreamingPort: 40000,
+    isDefault: false,
+    createdAt: Date.now(),
+  };
+
+  beforeEach(() => {
+    useProfileStore.setState({
+      profiles: [profileA, profileB],
+      currentProfileId: profileA.id,
+      isInitialized: true,
+      isBootstrapping: false,
+      bootstrapStep: null,
+    });
+
+    useAuthStore.setState({
+      slices: {
+        [profileA.id]: {
+          accessToken: 'token-a',
+          accessTokenExpires: Date.now() + 60 * 60 * 1000,
+          refreshToken: null,
+          refreshTokenExpires: null,
+          version: null,
+          apiVersion: null,
+          isAuthenticated: false,
+          requiresAuth: true,
+        },
+        [profileB.id]: {
+          accessToken: 'token-b',
+          accessTokenExpires: Date.now() + 60 * 60 * 1000,
+          refreshToken: null,
+          refreshTokenExpires: null,
+          version: null,
+          apiVersion: null,
+          isAuthenticated: false,
+          requiresAuth: true,
+        },
+      },
+    });
+
+    useSettingsStore.setState({
+      profileSettings: {
+        'profile-a': {
+          ...DEFAULT_SETTINGS,
+          viewMode: 'streaming',
+          streamMaxFps: 5,
+        },
+        'profile-b': {
+          ...DEFAULT_SETTINGS,
+          viewMode: 'streaming',
+          streamMaxFps: 5,
+        },
+      },
+    });
+
+    useMonitorStore.setState({
+      connKeys: {},
+      regenerateConnKey: vi.fn((monitorId: string) => {
+        const key = Date.now() + parseInt(monitorId);
+        useMonitorStore.setState((state) => ({
+          connKeys: { ...state.connKeys, [monitorId]: key },
+        }));
+        return key;
+      }),
+    });
+
+    vi.clearAllMocks();
+  });
+
+  it('builds the stream URL from the explicit profileId, not the current profile', async () => {
+    const regenerateConnKey = vi.fn(() => 999);
+    useMonitorStore.setState({ regenerateConnKey });
+
+    const { result } = renderHook(() =>
+      useMonitorStream({ monitorId: '1', profileId: profileB.id })
+    );
+
+    await waitFor(() => {
+      expect(result.current.streamUrl).toBeTruthy();
+    });
+
+    expect(result.current.streamUrl).toContain('https://b.example.com/cgi-bin');
+    expect(result.current.streamUrl).toContain('token=token-b');
+    expect(result.current.streamUrl).not.toContain('a.example.com');
+    expect(result.current.streamUrl).not.toContain('token=token-a');
+  });
+
+  it('defaults to the current profile when profileId is omitted', async () => {
+    const regenerateConnKey = vi.fn(() => 999);
+    useMonitorStore.setState({ regenerateConnKey });
+
+    const { result } = renderHook(() => useMonitorStream({ monitorId: '1' }));
+
+    await waitFor(() => {
+      expect(result.current.streamUrl).toBeTruthy();
+    });
+
+    expect(result.current.streamUrl).toContain('https://a.example.com/cgi-bin');
+    expect(result.current.streamUrl).toContain('token=token-a');
   });
 });

@@ -19,7 +19,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useProfileStore } from '../stores/profile';
 import { useSettingsStore, mergeProfileSettings } from '../stores/settings';
 import { ALL_PROFILES_ID } from '../api/types';
-import type { Profile } from '../api/types';
+import type { Profile, ProfileId } from '../api/types';
 import type { ProfileSettings } from '../stores/settings';
 
 export interface UseCurrentProfileReturn {
@@ -88,4 +88,42 @@ export function useCurrentProfile(): UseCurrentProfileReturn {
     hasProfile: currentProfile !== null,
     isAllMode,
   };
+}
+
+export interface UseProfileByIdReturn {
+  /** The requested profile, or null when unknown/unset */
+  profile: Profile | null;
+  /** Settings for that profile */
+  settings: ProfileSettings;
+}
+
+/**
+ * Hook to get a specific profile and its settings by id, defaulting to the
+ * current profile when no id is given. Used by the stream-URL chain
+ * (useServerUrls, useFreshAccessToken, useMonitorStream) so an All-mode
+ * monitor tile owned by a non-current profile can resolve that profile's
+ * URLs and token instead of always reading the globally-selected one.
+ *
+ * @param profileId - Profile to resolve; defaults to the current profile.
+ */
+export function useProfileById(profileId?: ProfileId | null): UseProfileByIdReturn {
+  const currentProfileId = useProfileStore((state) => state.currentProfileId);
+  const effectiveProfileId = profileId ?? currentProfileId;
+
+  const profiles = useProfileStore(useShallow((state) => state.profiles));
+  const profile = useMemo(
+    () => (profiles ?? []).find((p) => p.id === effectiveProfileId) ?? null,
+    [profiles, effectiveProfileId]
+  );
+
+  const rawProfileSettings = useSettingsStore(
+    useShallow((state) => state.profileSettings?.[effectiveProfileId ?? ''])
+  );
+
+  const settings = useMemo(
+    (): ProfileSettings => mergeProfileSettings(rawProfileSettings),
+    [rawProfileSettings]
+  );
+
+  return { profile, settings };
 }
