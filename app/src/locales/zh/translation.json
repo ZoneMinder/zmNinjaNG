@@ -1374,6 +1374,7 @@
     "backend_on_device": "设备端",
     "backend_ollama": "Ollama",
     "placeholder": "询问你的摄像头...",
+    "pinned_to": "已固定到 {{profile}}",
     "send": "发送",
     "abort": "停止",
     "thinking": "思考中...",

@@ -1374,6 +1374,7 @@
     "backend_on_device": "En el dispositivo",
     "backend_ollama": "Ollama",
     "placeholder": "Pregunta sobre tus cámaras...",
+    "pinned_to": "Anclado a {{profile}}",
     "send": "Enviar",
     "abort": "Detener",
     "thinking": "Pensando...",
