@@ -1,10 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQueries } from '@tanstack/react-query';
 import React from 'react';
 import { useScopedEvents } from '../useScopedEvents';
 import { useProfileScope, type ProfileScope } from '../useProfileScope';
-import { useBandwidthSettings } from '../useBandwidthSettings';
 import { getEvents } from '../../api/events';
 import { getSession } from '../../services/sessions';
 import { queryKeys } from '../../lib/query/query-keys';
@@ -24,9 +23,18 @@ vi.mock('../useProfileScope', () => ({
   useProfileScope: vi.fn(),
 }));
 
-vi.mock('../useBandwidthSettings', () => ({
-  useBandwidthSettings: vi.fn(),
-}));
+// Spy on the real useQueries (delegates to actual react-query) so the
+// polling-opt-in tests can inspect exactly what query config the hook
+// builds, without needing fake timers to prove a refetch never fires.
+vi.mock('@tanstack/react-query', async () => {
+  const actual = await vi.importActual<typeof import('@tanstack/react-query')>('@tanstack/react-query');
+  // Plain `(options: unknown) => unknown` shape, not `vi.fn(actual.useQueries)`
+  // directly - useQueries' real signature is an overloaded generic that vi.fn's
+  // own generic inference can't reconcile with itself (tsc error, no runtime
+  // issue). The cast inside just forwards to the real implementation.
+  const useQueriesSpy = vi.fn((options: unknown) => (actual.useQueries as (o: unknown) => unknown)(options));
+  return { ...actual, useQueries: useQueriesSpy };
+});
 
 const profileA = {
   id: asProfileId('profile-a'),
@@ -107,9 +115,6 @@ const baseOptions = {
 describe('useScopedEvents', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(useBandwidthSettings).mockReturnValue({
-      eventsWidgetInterval: 30000,
-    } as never);
     vi.mocked(getSession).mockImplementation((id) => {
       const p = [profileA, profileB].find((pr) => pr.id === id);
       return sessionFor(p ?? profileA);
@@ -246,5 +251,29 @@ describe('useScopedEvents', () => {
       const calledProfileIds = vi.mocked(getEvents).mock.calls.map(([, id]) => id);
       expect(calledProfileIds).toContain(profileB.id);
     });
+  });
+
+  it('does not poll by default - refetchInterval is omitted unless the caller opts in', async () => {
+    mockScope([profileA, profileB]);
+    vi.mocked(getEvents).mockResolvedValue(eventsResponse([event('1', '2026-01-15 09:00:00')]));
+
+    renderHook(() => useScopedEvents(baseOptions), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(vi.mocked(useQueries).mock.calls.length).toBeGreaterThan(0));
+    const { queries } = vi.mocked(useQueries).mock.calls[0][0] as { queries: Array<{ refetchInterval?: number }> };
+    expect(queries).toHaveLength(2);
+    expect(queries.every((q) => q.refetchInterval === undefined)).toBe(true);
+  });
+
+  it('honors an explicit refetchInterval when the caller opts in', async () => {
+    mockScope([profileA, profileB]);
+    vi.mocked(getEvents).mockResolvedValue(eventsResponse([event('1', '2026-01-15 09:00:00')]));
+
+    renderHook(() => useScopedEvents({ ...baseOptions, refetchInterval: 15000 }), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(vi.mocked(useQueries).mock.calls.length).toBeGreaterThan(0));
+    const { queries } = vi.mocked(useQueries).mock.calls[0][0] as { queries: Array<{ refetchInterval?: number }> };
+    expect(queries).toHaveLength(2);
+    expect(queries.every((q) => q.refetchInterval === 15000)).toBe(true);
   });
 });

@@ -18,6 +18,12 @@
  * Merged events are sorted descending by true absolute instant (eventInstant,
  * lib/event/event-instant.ts), not by the server-local StartDateTime string,
  * so events from profiles in different timezones interleave correctly.
+ *
+ * Polling is opt-in: `options.refetchInterval` is undefined unless the
+ * caller passes one. The Events page's own query has no polling today, so
+ * this hook must not invent it - a caller that wants live refresh sources
+ * the interval itself via useBandwidthSettings (Polling contract stays at
+ * the call site) and passes it through.
  */
 
 import { useCallback } from 'react';
@@ -26,7 +32,6 @@ import { getEvents } from '../api/events';
 import type { EventFilters } from '../api/events';
 import { getSession } from '../services/sessions';
 import { useProfileScope } from './useProfileScope';
-import { useBandwidthSettings } from './useBandwidthSettings';
 import { queryKeys } from '../lib/query/query-keys';
 import { eventInstant } from '../lib/event/event-instant';
 import type { Scoped, ProfileError } from '../api/scoped-types';
@@ -44,6 +49,9 @@ export interface UseScopedEventsOptions {
   tagIds?: string[];
   /** Whether the queries are enabled (default: true) */
   enabled?: boolean;
+  /** Refetch interval in ms. Undefined (default) means no polling - the
+   *  caller opts in explicitly, e.g. with a bandwidth-settings field. */
+  refetchInterval?: number;
 }
 
 export interface UseScopedEventsReturn {
@@ -59,10 +67,9 @@ export interface UseScopedEventsReturn {
 
 export function useScopedEvents(options: UseScopedEventsOptions): UseScopedEventsReturn {
   const scope = useProfileScope();
-  const bandwidth = useBandwidthSettings();
   const queryClient = useQueryClient();
   const profiles = scope?.profiles ?? [];
-  const { filters, limit, monitorId, isGroupFilterActive, eventIds, tagIds } = options;
+  const { filters, limit, monitorId, isGroupFilterActive, eventIds, tagIds, enabled, refetchInterval } = options;
 
   // combine is the only useQueries path that gets reference-stable output -
   // see useScopedMonitors.ts for the full rationale (QueriesObserver diffs
@@ -85,12 +92,13 @@ export function useScopedEvents(options: UseScopedEventsOptions): UseScopedEvent
       // useScopedMonitors.ts for why (the API client self-heals via its own
       // proactiveLogin path; a real auth failure still surfaces as this
       // profile's ProfileError). Refs #337.
-      enabled: options.enabled ?? true,
-      // ponytail: plain shared interval for v1, same tradeoff
+      enabled: enabled ?? true,
+      // Opt-in only - see the module doc comment. When the caller does pass
+      // one, ponytail: plain shared interval for v1, same tradeoff
       // useScopedMonitors documents for monitorStatusInterval; upgrade to a
       // per-query offset scheduler together with it (W8/Task 7) if N-profile
       // refetches land as a synchronized burst in the field.
-      refetchInterval: bandwidth.eventsWidgetInterval,
+      refetchInterval,
     })),
     combine: (results) => {
       // Owning profile's timezone for eventInstant - falls back to 'UTC'
