@@ -35,7 +35,6 @@ interface AutoConnectParams {
    *  switch and so can never answer "is the profile I'm switching AWAY FROM
    *  still connected" (refs #337 C1). */
   isPreviousProfileConnected: boolean;
-  connectionState: string;
   currentProfileId: string | null;
   connect: (profileId: string, username: string, password: string, portalUrl: string) => Promise<void>;
   disconnect: () => void;
@@ -48,7 +47,6 @@ export function useNotificationAutoConnect({
   settings,
   isConnected,
   isPreviousProfileConnected,
-  connectionState,
   currentProfileId,
   connect,
   disconnect,
@@ -126,11 +124,15 @@ export function useNotificationAutoConnect({
       return;
     }
 
-    // ES mode: auto-connect websocket (existing behavior)
+    // ES mode: auto-connect websocket (existing behavior). Read the live
+    // connection state from the store here, not an isConnected/
+    // connectionState prop: connection-state changes must not be a reactive
+    // dep on this effect (see the dependency array below) - reading live
+    // instead costs nothing, since attemptConnect below re-checks the same
+    // store immediately before connecting anyway.
     if (
       !settings.host ||
-      isConnected ||
-      connectionState !== 'disconnected'
+      (useNotificationStore.getState().connections[profile.id] ?? 'disconnected') !== 'disconnected'
     ) {
       return;
     }
@@ -194,13 +196,18 @@ export function useNotificationAutoConnect({
       hasAttemptedAutoConnect.current = false;
     };
     // Depend on currentProfile's PRIMITIVE fields, not the object itself -
-    // see the currentProfileRef comment above.
+    // see the currentProfileRef comment above. Connection state is
+    // deliberately NOT a dep (read live above instead): this effect's only
+    // job is the ONE initial auto-connect attempt for a newly loaded/enabled
+    // profile. Letting connection-state churn (e.g. a drop) re-run it
+    // re-armed the timer on every disconnect - on top of duplicating, that
+    // fights the service's own exponential backoff (refs #274), which is
+    // what actually owns reconnection after the first attempt (refs #337
+    // round 3 important).
   }, [
     settings?.enabled,
     settings?.notificationMode,
     settings?.host,
-    isConnected,
-    connectionState,
     currentProfile?.id,
     currentProfile?.username,
     currentProfile?.password,

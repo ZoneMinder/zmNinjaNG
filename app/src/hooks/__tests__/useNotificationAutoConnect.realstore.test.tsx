@@ -134,7 +134,6 @@ function useWrapper(currentProfile: Profile | null) {
   const isPreviousProfileConnected = storeCurrentProfileId
     ? connections[storeCurrentProfileId] === 'connected'
     : false;
-  const connectionState = currentProfile ? (connections[currentProfile.id] ?? 'disconnected') : 'disconnected';
 
   const disconnect = useCallback(() => {
     const prevId = useNotificationStore.getState().currentProfileId;
@@ -152,7 +151,6 @@ function useWrapper(currentProfile: Profile | null) {
       : null,
     isConnected,
     isPreviousProfileConnected,
-    connectionState,
     currentProfileId: storeCurrentProfileId,
     connect,
     disconnect,

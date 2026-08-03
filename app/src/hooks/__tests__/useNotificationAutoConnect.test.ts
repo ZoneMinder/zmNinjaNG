@@ -186,8 +186,13 @@ describe('useNotificationAutoConnect', () => {
       );
     });
 
+    // The ES-connect effect reads live connection state from the store
+    // directly (mockNotificationStoreState.connections), not the
+    // isConnected/connectionState props - those are deliberately not
+    // reactive deps on this effect (refs #337 round 3).
     it('does not connect when already connected', async () => {
-      const params = makeParams({ isConnected: true });
+      mockNotificationStoreState.connections = { 'profile-1': 'connected' };
+      const params = makeParams();
       renderHook(() => useNotificationAutoConnect(params));
 
       await act(async () => {
@@ -199,7 +204,8 @@ describe('useNotificationAutoConnect', () => {
     });
 
     it('does not connect when connectionState is not "disconnected"', async () => {
-      const params = makeParams({ connectionState: 'connecting' });
+      mockNotificationStoreState.connections = { 'profile-1': 'connecting' };
+      const params = makeParams();
       renderHook(() => useNotificationAutoConnect(params));
 
       await act(async () => {
@@ -394,6 +400,40 @@ describe('useNotificationAutoConnect', () => {
         await vi.runAllTimersAsync();
       });
 
+      expect(params.connect).toHaveBeenCalledTimes(1);
+    });
+
+    // Regression (refs #337 round 3, important): isConnected/connectionState
+    // used to be reactive deps on this effect. A drop (connected ->
+    // disconnected) re-ran it, and with the round-2 cleanup reset, that
+    // re-armed a second auto-connect attempt on top of the service's own
+    // exponential backoff (refs #274) - duplicating/fighting it. Recovery
+    // after the first attempt belongs to the service alone.
+    it('does not re-attempt auto-connect when the connection later drops', async () => {
+      const params = makeParams();
+      const { rerender } = renderHook(
+        (p: Parameters<typeof useNotificationAutoConnect>[0]) => useNotificationAutoConnect(p),
+        { initialProps: params },
+      );
+
+      // Let the initial auto-connect attempt complete.
+      await act(async () => {
+        vi.advanceTimersByTime(500);
+        await vi.runAllTimersAsync();
+      });
+      expect(params.connect).toHaveBeenCalledTimes(1);
+
+      // Simulate a drop flowing into the hook's props, exactly as
+      // NotificationHandler would pass it down from the store.
+      rerender({ ...params, isConnected: false, connectionState: 'disconnected' });
+
+      await act(async () => {
+        vi.advanceTimersByTime(500);
+        await vi.runAllTimersAsync();
+      });
+
+      // Still only once: isConnected/connectionState are not deps on this
+      // effect, so the drop can't re-run it and schedule a duplicate attempt.
       expect(params.connect).toHaveBeenCalledTimes(1);
     });
   });

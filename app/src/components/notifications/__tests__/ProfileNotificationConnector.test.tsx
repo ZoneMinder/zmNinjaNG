@@ -95,9 +95,7 @@ describe('ProfileNotificationConnector (refs #337)', () => {
 
     const paramsA = mockAutoConnect.mock.calls[0][0];
     const paramsB = mockAutoConnect.mock.calls[1][0];
-    expect(paramsA.connectionState).toBe('connected');
     expect(paramsA.isConnected).toBe(true);
-    expect(paramsB.connectionState).toBe('connecting');
     expect(paramsB.isConnected).toBe(false);
   });
 

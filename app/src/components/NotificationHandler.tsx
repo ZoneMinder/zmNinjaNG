@@ -58,7 +58,6 @@ export function NotificationHandler() {
     getProfileSettings,
     isConnected,
     isPreviousProfileConnected,
-    connectionState,
     currentProfileId,
     connect,
   } = useNotificationStore(
@@ -72,7 +71,6 @@ export function NotificationHandler() {
       isPreviousProfileConnected: state.currentProfileId
         ? state.connections[state.currentProfileId] === 'connected'
         : false,
-      connectionState: currentProfile ? (state.connections[currentProfile.id] ?? 'disconnected') : 'disconnected',
       currentProfileId: state.currentProfileId,
       connect: state.connect,
     }))
@@ -151,7 +149,6 @@ export function NotificationHandler() {
     settings,
     isConnected,
     isPreviousProfileConnected,
-    connectionState,
     currentProfileId,
     connect,
     disconnect,

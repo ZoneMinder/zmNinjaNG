@@ -194,6 +194,32 @@ describe('ZMNotificationService', () => {
       expect(wsCtor).toHaveBeenCalledTimes(1);
     });
 
+    // refs #337 round 3 belt-and-braces: a manual/hook-triggered connect()
+    // can land while a backoff timer from a previous drop is still armed -
+    // state sits at 'disconnected' between attempts, so the already-
+    // connected/connecting guard in connect() doesn't catch it. Without
+    // clearing the armed timer first, both the manual call and the stale
+    // timer would eventually create their own socket.
+    it('connect() during an armed backoff timer produces only one new socket', async () => {
+      const ws = await connectAndAuth();
+      ws._triggerClose(false, 1006); // schedules a reconnect (~2s backoff)
+      expect(service.getState()).toBe('disconnected');
+
+      const manualConnect = service.connect(testConfig, providers);
+      const newWs = wsCtor.instances[wsCtor.instances.length - 1];
+      newWs._triggerOpen();
+      newWs._triggerMessage({ event: 'auth', status: 'Success', version: '1.0' });
+      await manualConnect;
+
+      expect(wsCtor).toHaveBeenCalledTimes(2);
+
+      // Advance well past the original backoff delay: if the old timer were
+      // still armed, it would fire and create a THIRD socket.
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      expect(wsCtor).toHaveBeenCalledTimes(2);
+    });
+
     it('uses exponential backoff with increasing delays', async () => {
       const ws = await connectAndAuth();
 

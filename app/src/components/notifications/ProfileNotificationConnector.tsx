@@ -52,7 +52,6 @@ export function ProfileNotificationConnector({ profile }: ProfileNotificationCon
     // only fires for a genuine switch within one instance, which never
     // happens here, so this value is inert.
     isPreviousProfileConnected: isConnected,
-    connectionState,
     currentProfileId: profile.id,
     connect,
     disconnect: () => useNotificationStore.getState().disconnect(profile.id),
