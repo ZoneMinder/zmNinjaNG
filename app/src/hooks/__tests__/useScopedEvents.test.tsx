@@ -343,7 +343,7 @@ describe('useScopedEvents', () => {
     expect(queries.every((q) => q.refetchInterval === undefined)).toBe(true);
   });
 
-  it('honors an explicit refetchInterval when the caller opts in', async () => {
+  it('honors an explicit refetchInterval when the caller opts in, staggered per profile (W8)', async () => {
     mockScope([profileA, profileB]);
     vi.mocked(getEvents).mockResolvedValue(eventsResponse([event('1', '2026-01-15 09:00:00')]));
 
@@ -352,6 +352,11 @@ describe('useScopedEvents', () => {
     await waitFor(() => expect(vi.mocked(useQueries).mock.calls.length).toBeGreaterThan(0));
     const { queries } = vi.mocked(useQueries).mock.calls[0][0] as { queries: Array<{ refetchInterval?: number }> };
     expect(queries).toHaveLength(2);
-    expect(queries.every((q) => q.refetchInterval === 15000)).toBe(true);
+    // Index 0 keeps the base period exactly; index 1 gets a distinct,
+    // bounded-larger period (stagger-interval.ts) so both profiles' polls
+    // don't land as a synchronized burst.
+    expect(queries[0].refetchInterval).toBe(15000);
+    expect(queries[1].refetchInterval).toBeGreaterThan(15000);
+    expect(queries[1].refetchInterval).toBeLessThanOrEqual(15000 * 1.5);
   });
 });

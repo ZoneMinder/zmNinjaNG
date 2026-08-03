@@ -17,13 +17,25 @@ let mockStoreState = {
   getFreshAccessToken: mockGetFreshAccessToken as unknown as () => Promise<string | null>,
 };
 
+// Per-profile slices for All-mode tests, keyed by profile id. getAuthSlice
+// reads this directly (non-reactive), same shape as the real auth store.
+let mockAuthSlices: Record<string, { isAuthenticated: boolean; accessTokenExpires: number | null }> = {};
+
 vi.mock('../../stores/auth', () => ({
   useAuthStore: (selector: (state: typeof mockStoreState) => unknown) => selector(mockStoreState),
   useAuthSlice: () => mockStoreState,
+  getAuthSlice: (profileId: string | null) =>
+    (profileId && mockAuthSlices[profileId]) || { isAuthenticated: false, accessTokenExpires: null },
 }));
 
+let mockIsAllMode = false;
 vi.mock('../useCurrentProfile', () => ({
-  useCurrentProfile: () => ({ currentProfile: { id: 'p1' }, settings: {}, hasProfile: true }),
+  useCurrentProfile: () => ({ currentProfile: { id: 'p1' }, settings: {}, hasProfile: true, isAllMode: mockIsAllMode }),
+}));
+
+let mockScopeProfiles: Array<{ id: string }> = [];
+vi.mock('../useProfileScope', () => ({
+  useProfileScope: () => (mockScopeProfiles.length > 0 ? { mode: 'all', profile: null, profiles: mockScopeProfiles, settings: {} } : null),
 }));
 
 vi.mock('../../lib/logger', () => ({
@@ -55,6 +67,9 @@ describe('useTokenRefresh', () => {
       accessTokenExpires: null,
       getFreshAccessToken: mockGetFreshAccessToken as unknown as () => Promise<string | null>,
     };
+    mockIsAllMode = false;
+    mockScopeProfiles = [];
+    mockAuthSlices = {};
   });
 
   afterEach(() => {
@@ -231,5 +246,80 @@ describe('useTokenRefresh', () => {
     renderHook(() => useTokenRefresh());
 
     expect(mockGetFreshAccessToken).not.toHaveBeenCalled();
+  });
+
+  describe('All mode', () => {
+    beforeEach(() => {
+      mockIsAllMode = true;
+      mockScopeProfiles = [{ id: 'profile-a' }, { id: 'profile-b' }];
+    });
+
+    it('refreshes every scope profile whose token is within the leeway window', async () => {
+      mockGetFreshAccessToken.mockResolvedValue(undefined);
+      mockAuthSlices = {
+        'profile-a': { isAuthenticated: true, accessTokenExpires: NOW + 3 * 60 * 1000 }, // within leeway
+        'profile-b': { isAuthenticated: true, accessTokenExpires: NOW - 10 * 1000 }, // expired
+      };
+
+      renderHook(() => useTokenRefresh());
+
+      await vi.waitFor(() => {
+        expect(mockGetFreshAccessToken).toHaveBeenCalledWith('profile-a');
+        expect(mockGetFreshAccessToken).toHaveBeenCalledWith('profile-b');
+      });
+      expect(mockGetFreshAccessToken).toHaveBeenCalledTimes(2);
+    });
+
+    it('skips a scope profile whose token is far from expiry', async () => {
+      mockGetFreshAccessToken.mockResolvedValue(undefined);
+      mockAuthSlices = {
+        'profile-a': { isAuthenticated: true, accessTokenExpires: NOW + 3 * 60 * 1000 }, // within leeway
+        'profile-b': { isAuthenticated: true, accessTokenExpires: NOW + 2 * 60 * 60 * 1000 }, // 2 hours away
+      };
+
+      renderHook(() => useTokenRefresh());
+
+      await vi.waitFor(() => {
+        expect(mockGetFreshAccessToken).toHaveBeenCalledWith('profile-a');
+      });
+      expect(mockGetFreshAccessToken).not.toHaveBeenCalledWith('profile-b');
+      expect(mockGetFreshAccessToken).toHaveBeenCalledTimes(1);
+    });
+
+    it('skips a scope profile that has never authenticated this session', async () => {
+      mockAuthSlices = {
+        'profile-a': { isAuthenticated: false, accessTokenExpires: null },
+        'profile-b': { isAuthenticated: true, accessTokenExpires: NOW + 2 * 60 * 60 * 1000 },
+      };
+
+      renderHook(() => useTokenRefresh());
+
+      expect(mockGetFreshAccessToken).not.toHaveBeenCalled();
+    });
+
+    it('checks every scope profile again on the next interval tick', async () => {
+      mockGetFreshAccessToken.mockResolvedValue(undefined);
+      mockAuthSlices = {
+        'profile-a': { isAuthenticated: true, accessTokenExpires: NOW + 2 * 60 * 60 * 1000 },
+        'profile-b': { isAuthenticated: true, accessTokenExpires: NOW + 2 * 60 * 60 * 1000 },
+      };
+
+      renderHook(() => useTokenRefresh());
+      expect(mockGetFreshAccessToken).not.toHaveBeenCalled();
+
+      // Advance time so both tokens are now within the leeway window.
+      const later = NOW + (2 * 60 * 60 * 1000) - 3 * 60 * 1000;
+      vi.setSystemTime(later);
+      mockAuthSlices['profile-a'].accessTokenExpires = later + 3 * 60 * 1000;
+      mockAuthSlices['profile-b'].accessTokenExpires = later + 3 * 60 * 1000;
+
+      await act(async () => {
+        vi.advanceTimersByTime(ZM_INTEGRATION.tokenCheckInterval);
+      });
+
+      await vi.waitFor(() => {
+        expect(mockGetFreshAccessToken).toHaveBeenCalledTimes(2);
+      });
+    });
   });
 });

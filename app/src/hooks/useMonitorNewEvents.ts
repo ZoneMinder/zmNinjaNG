@@ -18,6 +18,7 @@ import { useMonitorSeenStore } from '../stores/monitorSeen';
 import { useCurrentProfile } from './useCurrentProfile';
 import { useAuthSlice } from '../stores/auth';
 import { useBandwidthSettings } from './useBandwidthSettings';
+import { staggeredRefetchInterval } from '../lib/query/stagger-interval';
 import type { ProfileId } from '../api/types';
 
 interface MonitorNewEvents {
@@ -114,7 +115,7 @@ export function useScopedMonitorNewEvents(items: ScopedMonitorRef[]): ScopedMoni
   const seed = useMonitorSeenStore((s) => s.seed);
 
   const results = useQueries({
-    queries: items.map(({ profileId, monitorId }) => {
+    queries: items.map(({ profileId, monitorId }, i) => {
       const since = profileWatermarks[profileId]?.[monitorId] ?? null;
       return {
         queryKey: queryKeys.monitorEventsSince(profileId, monitorId, since),
@@ -122,9 +123,13 @@ export function useScopedMonitorNewEvents(items: ScopedMonitorRef[]): ScopedMoni
         // No isAuthenticated gate: same rationale as useScopedMonitors - an
         // All-mode profile that has never authenticated this session still
         // gets a query, and the API client's own proactiveLogin self-heals
-        // it on first request (refs #337).
+        // it on first request (refs #337). Its TLS trust-on-first-use rides
+        // the same concurrent fan-out; cert pinning order across profiles
+        // is best-effort, not guaranteed (refs #337, W8).
         enabled: true,
-        refetchInterval: bandwidth.monitorNewEventsInterval,
+        // Desynchronizes the per-(profile, monitor) refetch bursts (W8) -
+        // see stagger-interval.ts for the exact semantics.
+        refetchInterval: staggeredRefetchInterval(i, items.length, bandwidth.monitorNewEventsInterval),
       };
     }),
   });

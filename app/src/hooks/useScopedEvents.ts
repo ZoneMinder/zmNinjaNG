@@ -41,6 +41,7 @@ import type { EventFilters } from '../api/events';
 import { getSession } from '../services/sessions';
 import { useProfileScope } from './useProfileScope';
 import { queryKeys } from '../lib/query/query-keys';
+import { staggeredRefetchInterval } from '../lib/query/stagger-interval';
 import { eventInstant } from '../lib/event/event-instant';
 import { formatForServerInTz, resolveProfileTimezone } from '../lib/time';
 import type { Scoped, ProfileError } from '../api/scoped-types';
@@ -95,7 +96,7 @@ export function useScopedEvents(options: UseScopedEventsOptions): UseScopedEvent
   // unchanged sub-trees; without it every poll tick would produce brand-new
   // array identities even when the underlying data hasn't changed).
   const { events, errors, isLoading, isFetching, totalCount } = useQueries({
-    queries: profiles.map((p) => ({
+    queries: profiles.map((p, i) => ({
       queryKey: queryKeys.eventsList(p.id, filters, limit, monitorId, isGroupFilterActive, eventIds, tagIds),
       queryFn: () => {
         // Browser-zone fallback (not 'UTC') for a timezone-less profile,
@@ -120,18 +121,22 @@ export function useScopedEvents(options: UseScopedEventsOptions): UseScopedEvent
       // has ever bootstrapped/authenticated this session - see
       // useScopedMonitors.ts for why (the API client self-heals via its own
       // proactiveLogin path; a real auth failure still surfaces as this
-      // profile's ProfileError). Refs #337.
+      // profile's ProfileError). Refs #337. Its TLS trust-on-first-use rides
+      // the same concurrent fan-out; cert pinning order across profiles is
+      // best-effort, not guaranteed (refs #337, W8).
       enabled: enabled ?? true,
       // Keeps showing a profile's previous page while fetching the next one
       // (pagination "Load More") instead of flashing empty - matches the
       // Events page's old single-query behavior exactly.
       placeholderData: keepPreviousData,
-      // Opt-in only - see the module doc comment. When the caller does pass
-      // one, ponytail: plain shared interval for v1, same tradeoff
-      // useScopedMonitors documents for monitorStatusInterval; upgrade to a
-      // per-query offset scheduler together with it (W8/Task 7) if N-profile
-      // refetches land as a synchronized burst in the field.
-      refetchInterval,
+      // Opt-in only - see the module doc comment: undefined means no polling,
+      // and must stay undefined rather than accidentally turning into one via
+      // staggering. When a caller does pass a base interval, stagger it the
+      // same way useScopedMonitors does (see stagger-interval.ts) so a future
+      // polling caller doesn't reintroduce the N-profile synchronized burst.
+      refetchInterval: refetchInterval !== undefined
+        ? staggeredRefetchInterval(i, profiles.length, refetchInterval)
+        : undefined,
     })),
     combine: (results) => {
       // Owning profile's timezone for eventInstant - falls back to 'UTC'

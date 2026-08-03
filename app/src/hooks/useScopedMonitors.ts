@@ -21,6 +21,7 @@ import { filterEnabledMonitors } from '../lib/monitor/filters';
 import { useProfileScope } from './useProfileScope';
 import { useBandwidthSettings } from './useBandwidthSettings';
 import { queryKeys } from '../lib/query/query-keys';
+import { staggeredRefetchInterval } from '../lib/query/stagger-interval';
 import type { Scoped, ProfileError } from '../api/scoped-types';
 import type { MonitorData, ProfileId } from '../api/types';
 
@@ -58,7 +59,7 @@ export function useScopedMonitors(options?: UseScopedMonitorsOptions): UseScoped
   // re-render every memoized monitor card once an All-mode view consumes
   // this hook.
   const { monitors, errors, isLoading } = useQueries({
-    queries: profiles.map((p) => ({
+    queries: profiles.map((p, i) => ({
       queryKey: queryKeys.monitors(p.id),
       queryFn: () => getMonitors(getSession(p.id).client, p.id),
       // A profile in scope always gets an enabled query, whether or not it
@@ -67,12 +68,14 @@ export function useScopedMonitors(options?: UseScopedMonitorsOptions): UseScoped
       // path (api/client.ts), so gating on isAuthenticated here just meant
       // an untouched profile's query stayed disabled forever - no data, no
       // error strip, silently missing from All mode. A real auth failure
-      // still surfaces as this profile's ProfileError. Refs #337.
+      // still surfaces as this profile's ProfileError. Refs #337. Every
+      // profile's TLS trust-on-first-use also resolves through this same
+      // concurrent fan-out; which profile's cert gets pinned first is
+      // best-effort, not ordered (refs #337, W8).
       enabled: options?.enabled ?? true,
-      // ponytail: plain shared interval for v1; if N-profile refetches land
-      // as a synchronized burst on the server in the field, upgrade to a
-      // per-query offset scheduler instead of this identical interval.
-      refetchInterval: bandwidth.monitorStatusInterval,
+      // Desynchronizes the N profiles' refetch bursts (W8) - see
+      // stagger-interval.ts for the exact semantics.
+      refetchInterval: staggeredRefetchInterval(i, profiles.length, bandwidth.monitorStatusInterval),
     })),
     combine: (results) => {
       const monitors: Scoped<MonitorData>[] = [];
