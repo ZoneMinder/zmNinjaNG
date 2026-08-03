@@ -13,10 +13,11 @@ import { useShallow } from 'zustand/react/shallow';
 import { useCurrentProfile, useProfileById } from '../hooks/useCurrentProfile';
 import { useProfileScope } from '../hooks/useProfileScope';
 import { useProfileStore } from '../stores/profile';
+import { useSettingsStore } from '../stores/settings';
 import { getMonitors } from '../api/monitors';
 import { useAuthSlice } from '../stores/auth';
 import { ProfilePicker } from '../components/profile-picker';
-import type { ProfileId } from '../api/types';
+import { ALL_PROFILES_ID, type ProfileId } from '../api/types';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Label } from '../components/ui/label';
@@ -70,6 +71,14 @@ export default function NotificationSettings() {
   const connectionState = useNotificationStore((s) => s.connections[currentProfile?.id ?? ''] ?? 'disconnected');
   const isConnected = connectionState === 'connected';
   const disconnect = () => currentProfile && storeDisconnect(currentProfile.id);
+
+  // All-mode mute toggle: an ALL-bucket app setting (not a per-profile
+  // notification setting), so it lives in the settings store and is
+  // read/written against the ALL_PROFILES_ID sentinel (refs #337).
+  // `scope.settings` is already the merged ALL-bucket settings whenever
+  // scope.mode is 'all' (useProfileScope), so no extra selector is needed.
+  const allModeMuteToasts = scope?.settings.allModeMuteToasts ?? false;
+  const updateAllModeSettings = useSettingsStore((s) => s.updateProfileSettings);
 
   // Subscribe reactively to this profile's settings and unread count so the
   // enable switch and dependent sections update live. getProfileSettings is a
@@ -358,6 +367,26 @@ export default function NotificationSettings() {
 
       {isAllMode && (
         <>
+          <Card>
+            <CardContent className="flex items-center justify-between gap-3 p-4">
+              <div className="flex-1 space-y-0.5">
+                <Label htmlFor="all-mode-mute-toggle" className="text-base font-semibold">
+                  {t('notification_settings.all_mode_mute_toggle')}
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  {t('notification_settings.all_mode_mute_toggle_desc')}
+                </p>
+              </div>
+              <Switch
+                id="all-mode-mute-toggle"
+                checked={allModeMuteToasts}
+                onCheckedChange={(checked) =>
+                  updateAllModeSettings(ALL_PROFILES_ID, { allModeMuteToasts: checked })
+                }
+                data-testid="all-mode-mute-toggle"
+              />
+            </CardContent>
+          </Card>
           <NotificationOverview
             profiles={scope?.profiles ?? []}
             activeProfileId={defaultPickedId}

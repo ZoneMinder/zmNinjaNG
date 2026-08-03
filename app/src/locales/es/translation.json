@@ -931,7 +931,9 @@
     "overview_enabled": "Habilitado",
     "overview_disabled": "Deshabilitado",
     "overview_direct_mode_host": "Sondeo directo",
-    "overview_no_host": "Sin host configurado"
+    "overview_no_host": "Sin host configurado",
+    "all_mode_mute_toggle": "Silenciar avisos en modo Todos",
+    "all_mode_mute_toggle_desc": "Suprime los avisos emergentes y el sonido al agregar todos los servidores. El contador y el historial se siguen actualizando."
   },
   "notifications": {
     "status": {
@@ -944,7 +946,8 @@
     "switch_profile_title": "Cambiar perfil?",
     "switch_profile_desc": "Esta notificacion es de \"{{profile}}\". Cambiar a este perfil para ver el evento?",
     "switch_profile_confirm": "Cambiar",
-    "profile_switch_failed": "Error al cambiar de perfil"
+    "profile_switch_failed": "Error al cambiar de perfil",
+    "all_mode_burst_summary": "{{count}} eventos nuevos en {{servers}} servidores"
   },
   "profiles": {
     "title": "Perfiles",

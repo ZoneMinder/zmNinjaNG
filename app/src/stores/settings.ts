@@ -128,6 +128,10 @@ export interface ProfileSettings {
    *  null = every profile in scope (default). Stored under the ALL
    *  settings bucket. */
   eventsServerFilter: ProfileId[] | null;
+  /** All mode only: suppress toast notifications and sound while
+   *  aggregating every server (badge counts and history still update).
+   *  Stored under the ALL settings bucket (refs #337). */
+  allModeMuteToasts: boolean;
   monitorGridCols: number; // Grid columns for Monitors page grid view
   monitorDetailFeedFit: MonitorFeedFit; // Object-fit for monitor detail feed
   eventsThumbnailFit: MonitorFeedFit; // Object-fit for event thumbnails
@@ -324,6 +328,7 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   monitorsViewMode: 'list' as const,
   monitorsGroupByServer: false,
   eventsServerFilter: null,
+  allModeMuteToasts: false,
   monitorGridCols: 2,
   monitorDetailFeedFit: 'contain',
   eventsThumbnailFit: 'contain',

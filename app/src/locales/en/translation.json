@@ -931,7 +931,9 @@
     "overview_enabled": "Enabled",
     "overview_disabled": "Disabled",
     "overview_direct_mode_host": "Direct polling",
-    "overview_no_host": "No host set"
+    "overview_no_host": "No host set",
+    "all_mode_mute_toggle": "Mute All-mode toasts",
+    "all_mode_mute_toggle_desc": "Suppress toast notifications and sound while aggregating every server. Badge counts and history still update."
   },
   "notifications": {
     "status": {
@@ -944,7 +946,8 @@
     "switch_profile_title": "Switch Profile?",
     "switch_profile_desc": "This notification is from \"{{profile}}\". Switch to this profile to view the event?",
     "switch_profile_confirm": "Switch",
-    "profile_switch_failed": "Failed to switch profile"
+    "profile_switch_failed": "Failed to switch profile",
+    "all_mode_burst_summary": "{{count}} new events across {{servers}} servers"
   },
   "profiles": {
     "title": "Profiles",

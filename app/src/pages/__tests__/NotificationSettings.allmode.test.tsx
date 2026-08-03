@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
@@ -9,7 +9,8 @@ import { useCurrentProfile, useProfileById } from '../../hooks/useCurrentProfile
 import { useProfileScope } from '../../hooks/useProfileScope';
 import { getSession } from '../../services/sessions';
 import { getMonitors } from '../../api/monitors';
-import { asProfileId } from '../../api/types';
+import { asProfileId, ALL_PROFILES_ID } from '../../api/types';
+import { useSettingsStore } from '../../stores/settings';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (k: string) => k }),
@@ -204,5 +205,47 @@ describe('NotificationSettings page - All mode profile picker (refs #337)', () =
     expect(screen.getByTestId('notification-per-profile-caption')).toBeInTheDocument();
     expect(screen.queryByTestId('notification-overview')).not.toBeInTheDocument();
     expect(screen.queryByTestId('page-profile-picker')).not.toBeInTheDocument();
+  });
+
+  describe('all-mode mute toggle (refs #337)', () => {
+    afterEach(() => {
+      useSettingsStore.setState({ profileSettings: {} });
+    });
+
+    it('reflects the ALL-bucket setting and is not shown in single mode', async () => {
+      vi.mocked(useProfileScope).mockReturnValue({
+        mode: 'all', profile: null, profiles: [profileA, profileB],
+        settings: { allModeMuteToasts: true } as never,
+      });
+      renderPage();
+
+      const toggle = await screen.findByTestId('all-mode-mute-toggle');
+      expect(toggle).toHaveAttribute('aria-checked', 'true');
+    });
+
+    it('toggling it updates the real settings store under ALL_PROFILES_ID', async () => {
+      vi.mocked(useProfileScope).mockReturnValue({
+        mode: 'all', profile: null, profiles: [profileA, profileB],
+        settings: { allModeMuteToasts: false } as never,
+      });
+      renderPage();
+
+      const toggle = await screen.findByTestId('all-mode-mute-toggle');
+      fireEvent.click(toggle);
+
+      await waitFor(() =>
+        expect(useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID).allModeMuteToasts).toBe(true)
+      );
+    });
+
+    it('does not render in single mode', async () => {
+      vi.mocked(useCurrentProfile).mockReturnValue({
+        currentProfile: profileA, settings: {} as never, hasProfile: true, isAllMode: false,
+      });
+      renderPage();
+
+      await waitFor(() => expect(getSession).toHaveBeenCalledWith(profileA.id));
+      expect(screen.queryByTestId('all-mode-mute-toggle')).not.toBeInTheDocument();
+    });
   });
 });

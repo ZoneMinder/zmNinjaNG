@@ -224,6 +224,11 @@ export const NOTIFICATIONS_SERVICE = {
   // foreground the user is watching a disconnected badge, so retries stay
   // frequent enough to recover on their own (refs #274).
   foregroundMaxReconnectDelayMs: 15000,
+
+  // All mode only: events arriving within this window of each other collapse
+  // into one summary toast instead of one toast per event, so aggregating
+  // several busy servers doesn't flood the screen (refs #337).
+  allModeBurstWindowMs: 3000,
 } as const;
 
 /**

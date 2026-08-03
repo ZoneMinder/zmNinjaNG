@@ -23,6 +23,7 @@ import { toast } from 'sonner';
 import { Bell } from 'lucide-react';
 import { getEventCauseIcon } from '../lib/event/event-icons';
 import { buildThumbnailChain } from '../lib/event/thumbnail-chain';
+import { playNotificationSound } from '../lib/event/notification-sound';
 import { EventThumbnail } from './events/EventThumbnail';
 import { log, LogLevel } from '../lib/logger';
 import { navigationService } from '../lib/navigation';
@@ -36,6 +37,7 @@ import { useNotificationAutoConnect } from '../hooks/useNotificationAutoConnect'
 import { useNotificationPushSetup } from '../hooks/useNotificationPushSetup';
 import { useNotificationDelivered } from '../hooks/useNotificationDelivered';
 import { useNotificationBadgeNudge } from '../hooks/useNotificationBadgeNudge';
+import { useNotificationAllModeToasts } from '../hooks/useNotificationAllModeToasts';
 import { ProfileNotificationConnector } from './notifications/ProfileNotificationConnector';
 
 /**
@@ -159,6 +161,11 @@ export function NotificationHandler() {
   // Refreshes the monitor/montage "new events" badge as soon as a
   // notification arrives, independent of the toast setting below.
   useNotificationBadgeNudge(currentProfile?.id, events);
+
+  // All-mode toast display (own-profile settings, burst coalescing, mute
+  // toggle). No-ops in single mode; the effect below stays the single/
+  // current-profile toast path, unchanged (refs #337).
+  useNotificationAllModeToasts();
 
   // Listen to navigation events from services (e.g., push notifications)
   useEffect(() => {
@@ -335,31 +342,4 @@ function ProfileSwitchDialog({
       </div>
     </div>
   );
-}
-
-/**
- * Plays a notification sound using the Web Audio API.
- * Generates a simple beep tone.
- */
-function playNotificationSound() {
-  try {
-    // Create a simple beep sound using Web Audio API
-    const audioContext = new (window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext!)();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-
-    oscillator.frequency.value = 800; // 800 Hz tone
-    oscillator.type = 'sine';
-
-    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 0.3);
-  } catch (error) {
-    log.notifications('Failed to play notification sound', LogLevel.ERROR, error);
-  }
 }
