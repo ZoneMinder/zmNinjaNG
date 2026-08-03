@@ -577,7 +577,11 @@ export class MobilePushService {
 
     const profileIdForEvent = targetProfileId || currentProfileId;
 
-    if (profileIdForEvent) {
+    // Never write into the aggregate sentinel's own bucket: nothing reads
+    // profileEvents[ALL_PROFILES_ID] (NotificationBadge and NotificationHistory
+    // both key off a real profile id), so an entry there would be a
+    // permanently unread, unclearable stuck badge (refs #337).
+    if (profileIdForEvent && profileIdForEvent !== ALL_PROFILES_ID) {
       const profiles = gates.profile.getProfiles();
       const targetProfile = profiles.find(p => p.id === profileIdForEvent);
       const accessToken = gates.auth.getAccessToken();

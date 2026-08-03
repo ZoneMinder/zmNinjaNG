@@ -650,6 +650,25 @@ describe('notification tap handling', () => {
       expect(mockRequestProfileSwitch).not.toHaveBeenCalled();
       expect(mockNavigateToEvent).not.toHaveBeenCalled();
       expect(mockNavigate).toHaveBeenCalledWith('/events', false, { from: '/monitors', fromNotification: true });
+      // Never write into the aggregate sentinel's event bucket: nothing reads
+      // profileEvents[ALL_PROFILES_ID], so an entry there is a permanently
+      // unread, unclearable stuck badge (refs #337).
+      expect(gates.notifications.addEvent).not.toHaveBeenCalled();
+      expect(gates.notifications.markEventRead).not.toHaveBeenCalled();
+    });
+
+    it('never stores a notification event under the aggregate sentinel (no eid, unmatched profile name)', async () => {
+      gates.profile.getCurrentProfileId = vi.fn().mockReturnValue(ALL_PROFILES_ID);
+      mockResolveProfileForNotification.mockReturnValue({ targetProfileId: ALL_PROFILES_ID, isCrossProfile: false });
+      const { listener } = await initAndGetListener();
+
+      // No eid at all: the worst case, since without an eid the event can
+      // never be marked read either - it would sit unread forever with no
+      // profile page able to clear it.
+      listener({ notification: { title: 'Alarm', body: 'Motion', data: { profile: 'Deleted Server' } } });
+
+      expect(gates.notifications.addEvent).not.toHaveBeenCalled();
+      expect(gates.notifications.markEventRead).not.toHaveBeenCalled();
     });
   });
 });
