@@ -51,6 +51,25 @@ vi.mock('../../hooks/useNotificationAutoConnect', () => ({
   useNotificationAutoConnect: () => {},
 }));
 
+// Real single-current-profile mode by default; overridden per-test for the
+// All-mode fan-out coverage below.
+type ScopeLike = {
+  mode: string;
+  profile: { id: string; name: string } | null;
+  profiles: { id: string; name: string }[];
+  settings: Record<string, never>;
+} | null;
+const mockUseProfileScope = vi.fn<() => ScopeLike>(() => null);
+vi.mock('../../hooks/useProfileScope', () => ({
+  useProfileScope: () => mockUseProfileScope(),
+}));
+
+vi.mock('../../components/notifications/ProfileNotificationConnector', () => ({
+  ProfileNotificationConnector: ({ profile }: { profile: { id: string } }) => (
+    <div data-testid={`connector-${profile.id}`} />
+  ),
+}));
+
 vi.mock('../../hooks/useNotificationPushSetup', () => ({
   useNotificationPushSetup: () => {},
 }));
@@ -140,5 +159,41 @@ describe('NotificationHandler live-event toasts', () => {
     });
 
     expect(toast).not.toHaveBeenCalled();
+  });
+});
+
+describe('NotificationHandler All-mode fan-out (refs #337)', () => {
+  beforeEach(() => {
+    mockUseProfileScope.mockReset();
+  });
+
+  it('mounts one connector per All-mode scope profile', () => {
+    mockUseProfileScope.mockReturnValue({
+      mode: 'all',
+      profile: null,
+      profiles: [
+        { id: 'profile-a', name: 'Home' },
+        { id: 'profile-b', name: 'Work' },
+      ],
+      settings: {},
+    });
+
+    const { getByTestId } = renderHandler();
+
+    expect(getByTestId('connector-profile-a')).toBeInTheDocument();
+    expect(getByTestId('connector-profile-b')).toBeInTheDocument();
+  });
+
+  it('mounts no connectors in single mode', () => {
+    mockUseProfileScope.mockReturnValue({
+      mode: 'single',
+      profile: { id: 'profile-1', name: 'Test Profile' },
+      profiles: [{ id: 'profile-1', name: 'Test Profile' }],
+      settings: {},
+    });
+
+    const { queryByTestId } = renderHandler();
+
+    expect(queryByTestId('connector-profile-1')).not.toBeInTheDocument();
   });
 });

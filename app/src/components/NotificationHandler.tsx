@@ -16,6 +16,7 @@ import { useNotificationStore } from '../stores/notifications';
 import { useShallow } from 'zustand/react/shallow';
 import { resolveMinStreamingPort } from '../lib/monitor/multiport';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
+import { useProfileScope } from '../hooks/useProfileScope';
 import { useProfileStore } from '../stores/profile';
 import { useFreshAccessToken } from '../hooks/useFreshAccessToken';
 import { toast } from 'sonner';
@@ -35,6 +36,7 @@ import { useNotificationAutoConnect } from '../hooks/useNotificationAutoConnect'
 import { useNotificationPushSetup } from '../hooks/useNotificationPushSetup';
 import { useNotificationDelivered } from '../hooks/useNotificationDelivered';
 import { useNotificationBadgeNudge } from '../hooks/useNotificationBadgeNudge';
+import { ProfileNotificationConnector } from './notifications/ProfileNotificationConnector';
 
 /**
  * NotificationHandler component.
@@ -44,6 +46,7 @@ import { useNotificationBadgeNudge } from '../hooks/useNotificationBadgeNudge';
 export function NotificationHandler() {
   const navigate = useNavigate();
   const { currentProfile, settings: profileSettings } = useCurrentProfile();
+  const scope = useProfileScope();
   const getDecryptedPassword = useProfileStore((state) => state.getDecryptedPassword);
   const switchProfile = useProfileStore((state) => state.switchProfile);
   const { t } = useTranslation();
@@ -263,13 +266,24 @@ export function NotificationHandler() {
     }
   }, [events, settings?.showToasts, settings?.playSound, currentProfile?.id, t, navigate, accessToken, isAccessTokenFresh]);
 
-  // Render profile switch confirmation dialog when a cross-profile notification is tapped
+  // Render profile switch confirmation dialog when a cross-profile
+  // notification is tapped, plus one connector per All-mode profile so
+  // every enabled profile gets its own live connection while aggregating
+  // (refs #337). Single mode is untouched: `scope.mode` is 'single' there,
+  // so no connectors mount and this component's own hook calls above
+  // (bound to the real current profile) are the only connection.
   return (
-    <ProfileSwitchDialog
-      pending={pendingSwitch}
-      onConfirm={handleConfirmSwitch}
-      onCancel={handleCancelSwitch}
-    />
+    <>
+      <ProfileSwitchDialog
+        pending={pendingSwitch}
+        onConfirm={handleConfirmSwitch}
+        onCancel={handleCancelSwitch}
+      />
+      {scope?.mode === 'all' &&
+        scope.profiles.map((profile) => (
+          <ProfileNotificationConnector key={profile.id} profile={profile} />
+        ))}
+    </>
   );
 }
 

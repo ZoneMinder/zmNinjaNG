@@ -9,10 +9,43 @@
  */
 
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { useNotificationStore } from '../../stores/notifications';
+import type { ConnectionState } from '../../types/notifications';
 import type { Profile, ProfileId } from '../../api/types';
+
+/** Maps a live ES connection state to the same status copy/variant the
+ *  NotificationSettings page's own connection badge uses, so the overview
+ *  row and the detail page never disagree on wording (refs #337). */
+function connectionStatusKey(state: ConnectionState): string {
+  switch (state) {
+    case 'connected':
+      return 'notification_settings.status_connected';
+    case 'connecting':
+    case 'authenticating':
+      return 'notification_settings.status_connecting';
+    case 'error':
+      return 'notification_settings.status_error';
+    default:
+      return 'notification_settings.status_disconnected';
+  }
+}
+
+function connectionBadgeVariant(state: ConnectionState): 'default' | 'secondary' | 'destructive' | 'outline' {
+  switch (state) {
+    case 'connected':
+      return 'default';
+    case 'connecting':
+    case 'authenticating':
+      return 'secondary';
+    case 'error':
+      return 'destructive';
+    default:
+      return 'outline';
+  }
+}
 
 export interface NotificationOverviewProps {
   profiles: Profile[];
@@ -31,6 +64,8 @@ export function NotificationOverview({ profiles, activeProfileId, onSelect }: No
   // equality is element-by-element reference comparison for arrays.
   useNotificationStore((s) => s.profileSettings);
   const getProfileSettings = useNotificationStore((s) => s.getProfileSettings);
+  // Per-profile live connection state for the ES-mode dot below (refs #337).
+  const connections = useNotificationStore(useShallow((s) => s.connections));
 
   return (
     <Card data-testid="notification-overview">
@@ -46,6 +81,8 @@ export function NotificationOverview({ profiles, activeProfileId, onSelect }: No
           const hostLabel = mode === 'direct'
             ? t('notification_settings.overview_direct_mode_host')
             : (settings.host || t('notification_settings.overview_no_host'));
+          const connectionState = connections[profile.id] ?? 'disconnected';
+          const showConnectionStatus = mode === 'es' && settings.enabled;
 
           return (
             <button
@@ -63,6 +100,14 @@ export function NotificationOverview({ profiles, activeProfileId, onSelect }: No
                 <div className="text-xs text-muted-foreground truncate" title={hostLabel}>{hostLabel}</div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
+                {showConnectionStatus && (
+                  <Badge
+                    variant={connectionBadgeVariant(connectionState)}
+                    data-testid={`notification-overview-connection-${profile.id}`}
+                  >
+                    {t(connectionStatusKey(connectionState))}
+                  </Badge>
+                )}
                 <Badge variant="outline" data-testid="notification-overview-mode">
                   {t(`notification_settings.mode_${mode}`)}
                 </Badge>
