@@ -58,17 +58,22 @@ export default function NotificationHistory() {
     [isAllMode, scope, currentProfile]
   );
 
-  // Subscribe reactively to every scope profile's events, tagged with their
-  // owning profile, merged newest-first by receivedAt (an absolute Date.now()
-  // instant already, so no timezone-aware eventInstant conversion is needed
-  // across profiles).
-  const events = useNotificationStore(
-    useShallow((s): HistoryEvent[] => {
-      if (scopeProfiles.length === 0) return EMPTY_EVENTS;
-      return scopeProfiles
-        .flatMap((p) => s.getEvents(p.id).map((e) => ({ ...e, profileId: p.id, profileName: p.name })))
-        .sort((a, b) => b.receivedAt - a.receivedAt);
-    })
+  // Subscribe to the RAW per-profile event arrays only - not a derived,
+  // freshly-allocated union. A selector that builds a new array/object every
+  // call defeats useShallow's element-wise Object.is compare (every element
+  // differs every time) and useSyncExternalStore loops forever (refs #337).
+  const buckets = useNotificationStore(
+    useShallow((s) => scopeProfiles.map((p) => s.profileEvents[p.id] ?? EMPTY_EVENTS))
+  );
+
+  // Tag/merge/sort OUTSIDE the store subscription, in a plain useMemo keyed
+  // on the stable bucket references.
+  const events = useMemo<HistoryEvent[]>(
+    () =>
+      scopeProfiles
+        .flatMap((p, i) => buckets[i].map((e) => ({ ...e, profileId: p.id, profileName: p.name })))
+        .sort((a, b) => b.receivedAt - a.receivedAt),
+    [buckets, scopeProfiles]
   );
   const unreadCount = useMemo(() => events.filter((e) => !e.read).length, [events]);
 
