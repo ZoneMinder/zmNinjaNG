@@ -126,14 +126,23 @@ export function EventsFilterPopover({
       {serverGroups ? (
         <div className="space-y-3" data-testid="events-monitor-filter-by-server">
           {serverGroups.map((group) => {
-            const groupMonitorIdSet = new Set(group.monitors.map((m) => m.Monitor.Id));
+            // All-mode selections are composite `${profileId}:${monitorId}`
+            // tokens, not bare monitor ids: a bare id is only unique within
+            // one server, so two groups sharing a numeric id would otherwise
+            // read/write the SAME entry in the flat selection and selecting
+            // one server's monitor would silently select the other's too
+            // (refs #337 I6).
+            const prefix = `${group.profileId}:`;
+            const groupSelectedBareIds = selectedMonitorIds
+              .filter((id) => id.startsWith(prefix))
+              .map((id) => id.slice(prefix.length));
             // Each section's "select all" must only replace THIS group's
             // slice of the shared selection, not every other server's picks
             // too (MonitorFilterPopoverContent's handleSelectAll replaces
             // wholesale) - merge back the other groups' ids here.
             const handleGroupChange = (ids: string[]) => {
-              const others = selectedMonitorIds.filter((id) => !groupMonitorIdSet.has(id));
-              onMonitorSelectionChange([...others, ...ids]);
+              const others = selectedMonitorIds.filter((id) => !id.startsWith(prefix));
+              onMonitorSelectionChange([...others, ...ids.map((id) => `${prefix}${id}`)]);
             };
             return (
               <div key={group.profileId}>
@@ -142,7 +151,7 @@ export function EventsFilterPopover({
                 </h5>
                 <MonitorFilterPopoverContent
                   monitors={group.monitors}
-                  selectedMonitorIds={selectedMonitorIds.filter((id) => groupMonitorIdSet.has(id))}
+                  selectedMonitorIds={groupSelectedBareIds}
                   onSelectionChange={handleGroupChange}
                   idPrefix={`events-${group.profileId}`}
                 />

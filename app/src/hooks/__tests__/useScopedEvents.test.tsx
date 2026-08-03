@@ -237,6 +237,44 @@ describe('useScopedEvents', () => {
     expect(sent.startDateTime).toBe(formatForServerInTz(new Date(filters.startDateTime), browserTz));
   });
 
+  it('fans out only each profile\'s own composite monitorId selection (refs #337 I6)', async () => {
+    mockScope([profileA, profileB]);
+    vi.mocked(getEvents).mockResolvedValue(eventsResponse([]));
+
+    renderHook(
+      () => useScopedEvents({ ...baseOptions, monitorId: `${profileA.id}:3` }),
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => expect(vi.mocked(getEvents).mock.calls.length).toBeGreaterThanOrEqual(2));
+
+    const callFor = (p: typeof profileA) =>
+      vi.mocked(getEvents).mock.calls.find(([, id]) => id === p.id)?.[2] as { monitorId?: string };
+
+    // A's selection stays A's - B never gets filtered by a monitor id that
+    // only means something on A's server.
+    expect(callFor(profileA)?.monitorId).toBe('3');
+    expect(callFor(profileB)?.monitorId).toBeUndefined();
+  });
+
+  it('joins multiple composite ids owned by the same profile into one comma list (refs #337 I6)', async () => {
+    mockScope([profileA, profileB]);
+    vi.mocked(getEvents).mockResolvedValue(eventsResponse([]));
+
+    renderHook(
+      () => useScopedEvents({ ...baseOptions, monitorId: `${profileA.id}:3,${profileA.id}:5,${profileB.id}:7` }),
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => expect(vi.mocked(getEvents).mock.calls.length).toBeGreaterThanOrEqual(2));
+
+    const callFor = (p: typeof profileA) =>
+      vi.mocked(getEvents).mock.calls.find(([, id]) => id === p.id)?.[2] as { monitorId?: string };
+
+    expect(callFor(profileA)?.monitorId).toBe('3,5');
+    expect(callFor(profileB)?.monitorId).toBe('7');
+  });
+
   it('surfaces one failing profile as a ProfileError while the other profile still renders its data', async () => {
     mockScope([profileA, profileB]);
     const failure = new Error('B is down');

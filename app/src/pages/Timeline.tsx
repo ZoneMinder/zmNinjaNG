@@ -24,6 +24,8 @@ import { useScopedTimelineEvents, type ScopedTimelineEvent } from '../hooks/useS
 import { useProfileScope } from '../hooks/useProfileScope';
 import { useTvKeyHandler } from '../hooks/useTvKeyHandler';
 import { useEventTagMapping } from '../hooks/useEventTags';
+import { monitorCacheKey } from '../stores/monitors';
+import { asProfileId } from '../api/types';
 import { TimelineCanvas, type ViewportAction, type ViewportActionType } from '../components/timeline/TimelineCanvas';
 import { TimelineFiltersPanel } from '../components/timeline/TimelineFiltersPanel';
 import { TimelineToolbar } from '../components/timeline/TimelineToolbar';
@@ -34,6 +36,13 @@ import { EventPreviewPopover } from '../components/timeline/EventPreviewPopover'
 import type { TimelineEvent } from '../components/timeline/timeline-layout';
 import type { MonitorRow } from '../components/timeline/timeline-renderer';
 import type { ScrubberState } from '../components/timeline/TimelineScrubber';
+
+/** All mode only: canvas-bound event with monitorId overwritten to the
+ *  composite `${profileId}:${monitorId}` key (see canvasEvents below); the
+ *  real monitorId survives here so the popover can recover it. */
+interface CanvasTimelineEvent extends TimelineEvent {
+  realMonitorId?: string;
+}
 
 export default function Timeline() {
   const navigate = useNavigate();
@@ -182,19 +191,23 @@ export default function Timeline() {
     filteredEvents,
   } = useDetectionCategories(allTimelineEvents);
 
-  // Build MonitorRow[] for canvas: only monitors that have events in the filtered set
+  // Build MonitorRow[] for canvas: only monitors that have events in the filtered set.
+  // All mode keys rows by the composite `${profileId}:${monitorId}` - a bare
+  // monitor id is only unique within one ZM server, so two profiles' servers
+  // reporting the same numeric id would otherwise collide onto one row and
+  // silently merge their events (refs #337 I4).
   const monitorRows: MonitorRow[] = useMemo(() => {
     if (isAllMode) {
       const activeKeys = new Set(
-        filteredEvents.map((ev) => `${(ev as ScopedTimelineEvent).profileId}:${ev.monitorId}`)
+        filteredEvents.map((ev) => monitorCacheKey(asProfileId((ev as ScopedTimelineEvent).profileId), ev.monitorId))
       );
       const rows: MonitorRow[] = [];
       const seen = new Set<string>();
       for (const s of scoped.enabledMonitors) {
-        const key = `${s.profileId}:${s.item.Monitor.Id}`;
+        const key = monitorCacheKey(asProfileId(s.profileId), s.item.Monitor.Id);
         if (activeKeys.has(key) && !seen.has(key)) {
           seen.add(key);
-          rows.push({ id: s.item.Monitor.Id, name: s.item.Monitor.Name, profileChip: s.profileName });
+          rows.push({ id: key, name: s.item.Monitor.Name, profileChip: s.profileName });
         }
       }
       return rows;
@@ -211,6 +224,26 @@ export default function Timeline() {
     }
     return rows;
   }, [isAllMode, scoped.enabledMonitors, single.enabledMonitors, filteredEvents]);
+
+  // Events fed to the canvas: All mode overrides monitorId to the same
+  // composite key monitorRows uses above, so the renderer's (profile-unaware)
+  // event->row matching lands events on the correct row instead of merging
+  // colliding ids from two profiles onto whichever row happened to be
+  // indexed last (refs #337 I4). The real monitorId is preserved under
+  // realMonitorId for consumers (the popover) that need it back - kept out
+  // of filteredEvents/scoped.events themselves so nothing else observes the
+  // composite value.
+  const canvasEvents: CanvasTimelineEvent[] = useMemo(() => {
+    if (!isAllMode) return filteredEvents;
+    return filteredEvents.map((ev) => {
+      const scopedEv = ev as ScopedTimelineEvent;
+      return {
+        ...scopedEv,
+        monitorId: monitorCacheKey(asProfileId(scopedEv.profileId), scopedEv.monitorId),
+        realMonitorId: scopedEv.monitorId,
+      };
+    });
+  }, [isAllMode, filteredEvents]);
 
   // Canvas time range: fit to actual event extent + "now" (with padding), fall back to filter range
   const { startMs, endMs } = useMemo(() => {
@@ -268,18 +301,27 @@ export default function Timeline() {
 
   // Resolves the owning profile for a tapped event id (scrubber taps only
   // carry the id, not the full event) by looking it up in the currently
-  // loaded scope. ponytail: a colliding id across two profiles both visible
-  // at once resolves to whichever matches first - accepted v1 edge case,
+  // loaded scope. Only used for scrubber taps, which have nothing but the id
+  // to go on; handleOpenEvent below has the actual clicked event in hand and
+  // uses that instead, so it never hits this collision case. ponytail: a
+  // colliding id across two profiles both visible at once resolves to
+  // whichever matches first - accepted v1 edge case for the scrubber path,
   // same class as useScopedEvents' shared-filter-params tradeoff.
   const resolveEventProfileId = useCallback((eventId: string): string | undefined => {
     if (!isAllMode) return undefined;
     return scoped.events.find((e) => e.id === eventId)?.profileId;
   }, [isAllMode, scoped.events]);
 
+  // The popover's "open" action always targets whichever event is currently
+  // selected, so its profileId comes straight from that (already-correct)
+  // selection instead of a fresh by-id search - a search would pick the
+  // wrong profile whenever two profiles' events collide on the same id
+  // (refs #337 I5).
   const handleOpenEvent = useCallback((eventId: string) => {
+    const profileId = isAllMode ? (selectedEvent?.event as ScopedTimelineEvent | undefined)?.profileId : undefined;
     setSelectedEvent(null);
-    navigateToEvent(eventId, resolveEventProfileId(eventId));
-  }, [navigateToEvent, resolveEventProfileId]);
+    navigateToEvent(eventId, profileId);
+  }, [navigateToEvent, isAllMode, selectedEvent]);
 
   const handleScrubberEventTap = useCallback((eventId: string) => {
     navigateToEvent(eventId, resolveEventProfileId(eventId));
@@ -313,17 +355,18 @@ export default function Timeline() {
   // here (refs #337).
   const popoverEvent = selectedEvent ? (() => {
     if (isAllMode) {
-      const scopedEv = selectedEvent.event as ScopedTimelineEvent;
+      const scopedEv = selectedEvent.event as CanvasTimelineEvent & ScopedTimelineEvent;
+      const realMonitorId = scopedEv.realMonitorId ?? scopedEv.monitorId;
       const ownerTz = scope?.profiles.find((p) => p.id === scopedEv.profileId)?.timezone ?? 'UTC';
       return {
         id: scopedEv.id,
-        monitorId: scopedEv.monitorId,
+        monitorId: realMonitorId,
         cause: scopedEv.cause,
         startDateTime: formatForServerInTz(new Date(scopedEv.startMs), ownerTz),
         duration: String(Math.max(0, (scopedEv.endMs - scopedEv.startMs) / 1000)),
         alarmFrames: '0',
         notes: scopedEv.notes,
-        monitorName: monitorNameMap.get(`${scopedEv.profileId}:${scopedEv.monitorId}`) ?? scopedEv.monitorId,
+        monitorName: monitorNameMap.get(`${scopedEv.profileId}:${realMonitorId}`) ?? realMonitorId,
         tags: [] as string[],
       };
     }
@@ -439,7 +482,7 @@ export default function Timeline() {
               />
               <TimelineCanvas
                 monitors={monitorRows}
-                events={filteredEvents}
+                events={canvasEvents}
                 startMs={startMs}
                 endMs={endMs}
                 viewportAction={viewportAction}
