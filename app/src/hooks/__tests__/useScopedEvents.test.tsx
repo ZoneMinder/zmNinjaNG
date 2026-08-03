@@ -159,6 +159,56 @@ describe('useScopedEvents', () => {
     expect(result.current.events.find((e) => e.profileId === profileB.id)?.profileName).toBe('Work');
   });
 
+  it('sums every profile\'s own totalCount, matching the single query\'s totalCount in single mode (refs #337)', async () => {
+    mockScope([profileA], 'single');
+    vi.mocked(getEvents).mockResolvedValue(eventsResponse([event('1', '2026-01-15 09:00:00'), event('2', '2026-01-15 08:00:00')]));
+
+    const { result } = renderHook(() => useScopedEvents(baseOptions), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.totalCount).toBe(2));
+  });
+
+  it('sums totalCount across profiles in All mode', async () => {
+    mockScope([profileA, profileB]);
+    vi.mocked(getEvents).mockImplementation(async (client) => {
+      const isA = (client as unknown as { profile: string }).profile === profileA.id;
+      return isA
+        ? eventsResponse([event('a1', '2026-01-15 09:00:00')])
+        : eventsResponse([event('b1', '2026-01-15 08:00:00'), event('b2', '2026-01-15 07:00:00')]);
+    });
+
+    const { result } = renderHook(() => useScopedEvents(baseOptions), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.events).toHaveLength(3));
+    expect(result.current.totalCount).toBe(3);
+  });
+
+  it('converts a shared date-range bound per profile using that profile\'s OWN timezone, not one shared value (refs #337)', async () => {
+    mockScope([profileA, profileB]);
+    vi.mocked(getEvents).mockResolvedValue(eventsResponse([]));
+
+    // A raw local datetime-local input string, as useEventFilters produces -
+    // NOT pre-formatted server text (that conversion now happens per profile
+    // inside the hook, not once up front by the caller).
+    const filters = { startDateTime: '2026-01-15T10:00:00' };
+
+    renderHook(() => useScopedEvents({ ...baseOptions, filters }), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(vi.mocked(getEvents).mock.calls.length).toBeGreaterThanOrEqual(2));
+
+    const callFor = (p: typeof profileA) =>
+      vi.mocked(getEvents).mock.calls.find(([, id]) => id === p.id)?.[2] as { startDateTime?: string };
+
+    const forA = callFor(profileA)?.startDateTime;
+    const forB = callFor(profileB)?.startDateTime;
+    expect(forA).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+    expect(forB).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+    // profileA=UTC and profileB=America/New_York (EST=-05:00) render the SAME
+    // instant 5 hours apart on the wall clock - not the same shared string,
+    // which is what the old caller-pre-converts-once behavior produced.
+    expect(forA).not.toBe(forB);
+    const hourOf = (s: string) => Number(s!.slice(11, 13));
+    expect((hourOf(forA!) - hourOf(forB!) + 24) % 24).toBe(5);
+  });
+
   it('surfaces one failing profile as a ProfileError while the other profile still renders its data', async () => {
     mockScope([profileA, profileB]);
     const failure = new Error('B is down');

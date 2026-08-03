@@ -243,7 +243,10 @@
       "moreCount": "+{{count}} more"
     },
     "now": "now",
-    "remove_tag": "Remove {{name}}"
+    "remove_tag": "Remove {{name}}",
+    "all_failed_title": "Unable to load events",
+    "filter_by_server": "Filter by server",
+    "failed_to_load": "Failed to load events: {{error}}"
   },
   "event_detail": {
     "event_id": "Event ID",

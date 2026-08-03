@@ -21,6 +21,10 @@ import { cn } from '../../lib/utils';
 
 interface EventsFilterPopoverProps {
   monitors: MonitorData[];
+  /** All mode only: monitors grouped by owning server. When present, the
+   *  monitor picker renders one section per server instead of the flat
+   *  `monitors` list (refs #337). */
+  serverGroups?: Array<{ profileId: string; profileName: string; monitors: MonitorData[] }>;
   selectedMonitorIds: string[];
   onMonitorSelectionChange: (ids: string[]) => void;
   favoritesOnly: boolean;
@@ -47,6 +51,7 @@ interface EventsFilterPopoverProps {
 
 export function EventsFilterPopover({
   monitors,
+  serverGroups,
   selectedMonitorIds,
   onMonitorSelectionChange,
   favoritesOnly,
@@ -118,12 +123,41 @@ export function EventsFilterPopover({
         </Button>
       </div>
 
-      <MonitorFilterPopoverContent
-        monitors={monitors}
-        selectedMonitorIds={selectedMonitorIds}
-        onSelectionChange={onMonitorSelectionChange}
-        idPrefix="events"
-      />
+      {serverGroups ? (
+        <div className="space-y-3" data-testid="events-monitor-filter-by-server">
+          {serverGroups.map((group) => {
+            const groupMonitorIdSet = new Set(group.monitors.map((m) => m.Monitor.Id));
+            // Each section's "select all" must only replace THIS group's
+            // slice of the shared selection, not every other server's picks
+            // too (MonitorFilterPopoverContent's handleSelectAll replaces
+            // wholesale) - merge back the other groups' ids here.
+            const handleGroupChange = (ids: string[]) => {
+              const others = selectedMonitorIds.filter((id) => !groupMonitorIdSet.has(id));
+              onMonitorSelectionChange([...others, ...ids]);
+            };
+            return (
+              <div key={group.profileId}>
+                <h5 className="text-xs font-medium text-muted-foreground mb-1 truncate" title={group.profileName}>
+                  {group.profileName}
+                </h5>
+                <MonitorFilterPopoverContent
+                  monitors={group.monitors}
+                  selectedMonitorIds={selectedMonitorIds.filter((id) => groupMonitorIdSet.has(id))}
+                  onSelectionChange={handleGroupChange}
+                  idPrefix={`events-${group.profileId}`}
+                />
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <MonitorFilterPopoverContent
+          monitors={monitors}
+          selectedMonitorIds={selectedMonitorIds}
+          onSelectionChange={onMonitorSelectionChange}
+          idPrefix="events"
+        />
+      )}
       <div className="grid gap-2 mt-3">
         {/* Favorites filter */}
         <div className="flex items-center justify-between p-3 rounded-md border bg-card">

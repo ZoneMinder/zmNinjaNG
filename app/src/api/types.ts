@@ -662,6 +662,11 @@ export interface MonitorCardProps {
 export interface EventCardProps {
   event: Event;
   monitorName: string;
+  /** All mode only: the owning profile, so the card routes to its /all/
+   *  deep route instead of switching profiles first (refs #337). */
+  profileId?: ProfileId;
+  /** All mode only: the owning profile's display name, for a chip. */
+  profileChip?: string;
   thumbnailUrls: string[];
   largeThumbnailUrls?: string[];
   objectFit?: React.CSSProperties['objectFit'];

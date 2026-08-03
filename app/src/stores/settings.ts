@@ -8,6 +8,7 @@ import { API_REQUEST, ASSISTANT, DEFAULT_EVENT_PLAYBACK_RATE, LIVE_ACTIVITY, STO
 import type { AssistantBackend } from '../lib/assistant/types';
 import type { DateFormatPreset, TimeFormatPreset } from '../lib/format-date-time';
 import type { ThumbnailFallbackType, ThumbnailFallbackEntry } from '../lib/event/thumbnail-chain';
+import type { ProfileId } from '../api/types';
 
 export type ViewMode = 'snapshot' | 'streaming';
 export type DisplayMode = 'normal' | 'compact';
@@ -123,6 +124,10 @@ export interface ProfileSettings {
   /** All mode only: section the Monitors grid by owning server instead of a
    *  flat list. Stored under the ALL settings bucket. */
   monitorsGroupByServer: boolean;
+  /** All mode only: profiles to include in the aggregated Events list.
+   *  null = every profile in scope (default). Stored under the ALL
+   *  settings bucket. */
+  eventsServerFilter: ProfileId[] | null;
   monitorGridCols: number; // Grid columns for Monitors page grid view
   monitorDetailFeedFit: MonitorFeedFit; // Object-fit for monitor detail feed
   eventsThumbnailFit: MonitorFeedFit; // Object-fit for event thumbnails
@@ -318,6 +323,7 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   monitorsFeedFit: 'contain',
   monitorsViewMode: 'list' as const,
   monitorsGroupByServer: false,
+  eventsServerFilter: null,
   monitorGridCols: 2,
   monitorDetailFeedFit: 'contain',
   eventsThumbnailFit: 'contain',

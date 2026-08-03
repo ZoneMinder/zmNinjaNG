@@ -6,17 +6,20 @@
  */
 
 import { useMemo, useRef, useState, useEffect } from 'react';
-import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '../lib/query/query-keys';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
-import { getEvents } from '../api/events';
 import type { EventFilters } from '../api/events';
+import type { ProfileId } from '../api/types';
 import { getCurrentSession } from '../services/sessions';
-import type { EventData } from '../api/types';
 import { getMonitors } from '../api/monitors';
 import { resolveMinStreamingPort } from '../lib/monitor/multiport';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
+import { useProfileScope } from '../hooks/useProfileScope';
+import { useScopedEvents } from '../hooks/useScopedEvents';
+import { useScopedMonitors } from '../hooks/useScopedMonitors';
+import { useProfileStore } from '../stores/profile';
 import { useAuthSlice } from '../stores/auth';
 import { useFreshAccessToken } from '../hooks/useFreshAccessToken';
 import { useSettingsStore, ALL_GROUPS_KEY, DEFAULT_EVENT_MONTAGE_GROUP_LAYOUT } from '../stores/settings';
@@ -29,8 +32,6 @@ import { useScrollRestoration } from '../hooks/useScrollRestoration';
 import { PullToRefreshIndicator } from '../components/ui/pull-to-refresh-indicator';
 import { Button } from '../components/ui/button';
 import { Filter, ArrowLeft, LayoutGrid, List, Clock, X } from 'lucide-react';
-import { ErrorBanner } from '../components/ui/query-state';
-import { resolveQueryError } from '../lib/query/query-error';
 import { RefreshButton } from '../components/common/RefreshButton';
 import { filterMonitorsByGroup, includedMonitorIdParam } from '../lib/monitor/filters';
 import { useGroupFilter } from '../hooks/useGroupFilter';
@@ -38,7 +39,8 @@ import { GroupFilterSelect } from '../components/filters/GroupFilterSelect';
 import { Popover, PopoverTrigger } from '../components/ui/popover';
 import { EventHeatmap } from '../components/events/EventHeatmap';
 import { EventMontageView } from '../components/events/EventMontageView';
-import { EventListView } from '../components/events/EventListView';
+import { EventListView, type ScopedEventItem } from '../components/events/EventListView';
+import { EventsAllModeBar } from '../components/events/EventsAllModeBar';
 import { EventMontageGridControls } from '../components/events/EventMontageGridControls';
 import { EventsFilterPopover } from '../components/events/EventsFilterPopover';
 import { QuickDateRangeButtons } from '../components/ui/quick-date-range-buttons';
@@ -53,7 +55,13 @@ export default function Events() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { currentProfile, settings } = useCurrentProfile();
+  const { currentProfile, settings, isAllMode } = useCurrentProfile();
+  // Settings-update target: the real profile id in single mode, or the ALL
+  // bucket sentinel in All mode (currentProfile stays null there) - same
+  // pattern Monitors.tsx uses so view-level toggles persist in both modes.
+  const currentProfileId = useProfileStore((state) => state.currentProfileId);
+  const scope = useProfileScope();
+  const totalScopeProfiles = scope?.profiles.length ?? 0;
   const normalizedThumbnailFit = settings.eventsThumbnailFit === 'fill'
     ? 'contain'
     : settings.eventsThumbnailFit;
@@ -122,21 +130,52 @@ export default function Events() {
     return settings.eventsViewMode;
   });
 
-  // Fetch monitors for display in filter UI
+  // Fetch monitors for display in filter UI (single mode; unchanged query).
   const { data: monitorsData } = useQuery({
     queryKey: queryKeys.monitors(currentProfile?.id),
     queryFn: () => getMonitors(getCurrentSession().client, getCurrentSession().profileId),
     enabled: !!currentProfile && isAuthenticated,
   });
 
+  // All mode: monitors across every profile in scope, for the server-grouped
+  // filter picker and for EventListView's per-server thumbnail/name lookups.
+  // Disabled in single mode (enabled ties to isAllMode), so this never
+  // double-fetches what the query above already covers there.
+  const { monitors: scopedMonitorsAll } = useScopedMonitors({ enabled: isAllMode });
+
   // All monitors (for filter popover display)
   const allMonitors = monitorsData?.monitors || [];
 
-  // Monitors filtered by group (for filter popover when group is active)
+  // Monitors filtered by group (for filter popover when group is active).
+  // Group filter is current-profile-scoped and skipped in All mode (see
+  // useGroupFilter/Monitors.tsx - same Phase 3 boundary).
   const displayMonitors = useMemo(() => {
     if (!isGroupFilterActive) return allMonitors;
     return filterMonitorsByGroup(allMonitors, groupMonitorIds);
   }, [allMonitors, isGroupFilterActive, groupMonitorIds]);
+
+  // Monitor list handed to EventListView: single mode passes the flat list
+  // unchanged; All mode tags each monitor with its owning profileId so a
+  // colliding numeric id across two servers resolves correctly per row.
+  const eventListMonitors = useMemo(
+    () => (isAllMode ? scopedMonitorsAll.map((s) => ({ ...s.item, profileId: s.profileId })) : displayMonitors),
+    [isAllMode, scopedMonitorsAll, displayMonitors]
+  );
+
+  // Monitors grouped by owning server, for the All-mode filter popover.
+  const monitorServerGroups = useMemo(() => {
+    if (!isAllMode) return undefined;
+    const byProfile = new Map<string, { profileId: string; profileName: string; monitors: typeof allMonitors }>();
+    for (const s of scopedMonitorsAll) {
+      const existing = byProfile.get(s.profileId);
+      if (existing) {
+        existing.monitors.push(s.item);
+      } else {
+        byProfile.set(s.profileId, { profileId: s.profileId, profileName: s.profileName, monitors: [s.item] });
+      }
+    }
+    return Array.from(byProfile.values());
+  }, [isAllMode, scopedMonitorsAll]);
 
   // Compute effective monitor IDs for API call:
   // 1. If user selected specific monitors in filter → use those
@@ -204,40 +243,73 @@ export default function Events() {
     persistKey: paginationKey,
   });
 
-  // Fetch events with configured limit
-  // Include effectiveMonitorId and group filter state in query key for proper cache invalidation
-  const { data: eventsData, isLoading, isFetching, error, refetch } = useQuery({
-    queryKey: queryKeys.eventsList(currentProfile?.id, filters, eventLimit, effectiveMonitorId, isGroupFilterActive, eventIdFilter, tagIdFilter),
-    queryFn: () =>
-      getEvents(getCurrentSession().client, getCurrentSession().profileId, {
-        ...filters,
-        // Use effective monitor ID (user filter or group filter)
-        monitorId: effectiveMonitorId,
-        // Convert local time inputs to server time for the API
-        startDateTime: filters.startDateTime ? formatForServer(new Date(filters.startDateTime)) : undefined,
-        endDateTime: filters.endDateTime ? formatForServer(new Date(filters.endDateTime)) : undefined,
-        eventIds: eventIdFilter,
-        tagIds: tagIdFilter,
-        limit: eventLimit,
-      }),
-    enabled: !!currentProfile && isAuthenticated,
-    // Keep showing previous data while fetching more (prevents UI flash during pagination)
-    placeholderData: keepPreviousData,
+  // Fetch events with configured limit, aggregated across the active scope
+  // (one profile in single mode, every profile in All mode - see
+  // useScopedEvents). Single mode shares the SAME cache slot the page used
+  // before: same queryKeys.eventsList(...) shape, filters passed RAW (not
+  // pre-formatted - the hook converts dates per profile's own timezone).
+  const {
+    events: scopedEvents,
+    errors: profileErrors,
+    isLoading,
+    isFetching,
+    totalCount,
+    refetchProfile,
+    refetchAll,
+  } = useScopedEvents({
+    filters,
+    limit: eventLimit,
+    monitorId: effectiveMonitorId,
+    isGroupFilterActive,
+    eventIds: eventIdFilter,
+    tagIds: tagIdFilter,
   });
+
+  // A deep link from a monitor card / event detail / recent-events row in
+  // All mode carries `?profileId=` alongside `monitorId` (refs #337): those
+  // callers know which server the monitor id belongs to, so focus the
+  // server filter down to just that profile instead of leaving the numeric
+  // monitorId ambiguous across every server in scope. Runs once per
+  // incoming profileId value, not on every render.
+  const deepLinkedProfileId = isAllMode ? searchParams.get('profileId') : null;
+  useEffect(() => {
+    if (!deepLinkedProfileId || !currentProfileId) return;
+    updateSettings(currentProfileId, { eventsServerFilter: [deepLinkedProfileId as ProfileId] });
+  }, [deepLinkedProfileId, currentProfileId, updateSettings]);
+
+  // Every profile in scope failed and none ever produced an event: distinct
+  // from "no events match the filter" (same suppression semantics as
+  // Monitors.tsx - refs #337, Task 4).
+  const allFailed = profileErrors.length > 0 && profileErrors.length === totalScopeProfiles && scopedEvents.length === 0;
+  // A strip only for a profile that produced zero events; one with cached
+  // data and a background refetch error renders that data with no strip.
+  const visibleErrors = profileErrors.filter(
+    (err) => !scopedEvents.some((e) => e.profileId === err.profileId)
+  );
+
+  // ALL mode's server filter (settings.eventsServerFilter, null = every
+  // profile) is applied client-side: useScopedEvents already fetched every
+  // profile's slice, so narrowing the DISPLAYED list here is enough and
+  // needs no extra query plumbing.
+  const serverFilteredEvents = useMemo(() => {
+    if (!isAllMode || !settings.eventsServerFilter) return scopedEvents;
+    const included = new Set(settings.eventsServerFilter);
+    return scopedEvents.filter((e) => included.has(e.profileId));
+  }, [isAllMode, settings.eventsServerFilter, scopedEvents]);
 
   // Pull-to-refresh gesture
   const pullToRefresh = usePullToRefresh({
     containerRef: parentRef,
-    onRefresh: async () => {
-      await refetch();
-    },
+    onRefresh: refetchAll,
     enabled: true,
   });
 
-  // Get event IDs for tag fetching
+  // Get event IDs for tag fetching. All mode: tag lookups stay
+  // current-profile-scoped (v1 gap, same as Timeline) - events owned by a
+  // non-current profile just show no tags rather than crashing.
   const eventIdsForTagFetch = useMemo(() =>
-    (eventsData?.events || []).map(({ Event }: EventData) => Event.Id),
-    [eventsData?.events]
+    serverFilteredEvents.map((e) => e.item.Event.Id),
+    [serverFilteredEvents]
   );
 
   // Fetch tags for displayed events
@@ -250,12 +322,14 @@ export default function Events() {
   // (eventIds), and tags (tagIds). The one case left for the client is tags
   // while favorites is also on: ZM can't run both server-side, but the favorite
   // set is fetched in full above, so filtering it here by tag stays accurate.
-  const allEvents = useMemo(() => {
-    let filtered = eventsData?.events || [];
+  // Merges each item's Event with its owning profileId/profileChip
+  // (undefined in single mode) for EventListView's per-row All-mode wiring.
+  const allEvents: ScopedEventItem[] = useMemo(() => {
+    let filtered = serverFilteredEvents;
 
     if (favoritesOnly && selectedTagIds.length > 0 && eventTagMap.size > 0) {
       const isAllTagsFilter = selectedTagIds.includes(ALL_TAGS_FILTER_ID);
-      filtered = filtered.filter(({ Event }: EventData) => {
+      filtered = filtered.filter(({ item: { Event } }) => {
         const eventTags = eventTagMap.get(Event.Id) || [];
         if (isAllTagsFilter) {
           // "All" = show events that have at least one tag
@@ -266,8 +340,12 @@ export default function Events() {
       });
     }
 
-    return filtered;
-  }, [eventsData?.events, favoritesOnly, selectedTagIds, eventTagMap]);
+    return filtered.map((e) => ({
+      ...e.item,
+      profileId: isAllMode ? e.profileId : undefined,
+      profileChip: isAllMode ? e.profileName : undefined,
+    }));
+  }, [serverFilteredEvents, favoritesOnly, selectedTagIds, eventTagMap, isAllMode]);
 
   // Date range shown on the heatmap: explicit filters win, otherwise infer
   // the span from the loaded events.
@@ -290,13 +368,16 @@ export default function Events() {
   // opening an event; without this the list snaps back to the top (refs #197).
   const restoreScrollRef = useScrollRestoration(location.key, !isLoading && allEvents.length > 0);
 
-  // Use grid management hook (only active when in montage mode)
+  // Use grid management hook (only active when in montage mode). Settings
+  // writes below target currentProfileId (the ALL bucket sentinel in All
+  // mode, the real profile id in single mode) so view-level toggles persist
+  // in both modes, same as Monitors.tsx.
   const gridControls = useEventMontageGrid({
     initialCols: eventCols,
     containerRef: parentRef,
     onGridChange: (cols) => {
-      if (currentProfile) {
-        updateEventMontageGroupLayout(currentProfile.id, groupKey, { gridCols: cols });
+      if (currentProfileId) {
+        updateEventMontageGroupLayout(currentProfileId, groupKey, { gridCols: cols });
       }
     },
   });
@@ -305,22 +386,22 @@ export default function Events() {
     const paramView = searchParams.get('view');
     if (paramView !== 'montage') return;
     setViewMode('montage');
-    if (currentProfile) {
-      updateSettings(currentProfile.id, { eventsViewMode: 'montage' });
+    if (currentProfileId) {
+      updateSettings(currentProfileId, { eventsViewMode: 'montage' });
     }
-  }, [searchParams, currentProfile, updateSettings]);
+  }, [searchParams, currentProfileId, updateSettings]);
 
   useEffect(() => {
-    if (!currentProfile) return;
+    if (!currentProfileId) return;
     setViewMode(settings.eventsViewMode);
     gridControls.setGridCols(eventCols);
     gridControls.setCustomCols(eventCols.toString());
-  }, [currentProfile?.id, settings.eventsViewMode, groupKey, eventCols]);
+  }, [currentProfileId, settings.eventsViewMode, groupKey, eventCols]);
 
   const handleViewModeChange = (mode: 'list' | 'montage') => {
     setViewMode(mode);
-    if (currentProfile) {
-      updateSettings(currentProfile.id, { eventsViewMode: mode });
+    if (currentProfileId) {
+      updateSettings(currentProfileId, { eventsViewMode: mode });
     }
     const nextParams = new URLSearchParams(searchParams);
     if (mode === 'montage') {
@@ -332,13 +413,18 @@ export default function Events() {
   };
 
   const handleThumbnailFitChange = (value: string) => {
-    if (!currentProfile) return;
-    updateSettings(currentProfile.id, {
+    if (!currentProfileId) return;
+    updateSettings(currentProfileId, {
       eventsThumbnailFit: (value === 'fill' ? 'contain' : value) as typeof settings.eventsThumbnailFit,
     });
   };
 
-  if (isLoading) {
+  // isLoading never clears on a total outage (no profile ever gets data), so
+  // the skeleton only shows while there's still a chance of that - once
+  // every profile has errored, allFailed below takes over (refs #337, Task 4
+  // finding - same as Monitors.tsx).
+  const stillWaiting = isLoading && profileErrors.length === 0;
+  if (stillWaiting) {
     return (
       <div className="flex flex-col h-full p-6 md:p-8 gap-6">
         <div className="flex justify-between flex-shrink-0">
@@ -352,17 +438,6 @@ export default function Events() {
             ))}
           </div>
         </div>
-      </div>
-    );
-  }
-
-  // A background refetch error while cached events are already loaded falls
-  // through to the normal list below instead of this error wall. Only a cold
-  // start with no cached data hits the error wall.
-  if (error && !eventsData) {
-    return (
-      <div className="p-8">
-        <ErrorBanner message={resolveQueryError(error, t)} />
       </div>
     );
   }
@@ -462,6 +537,7 @@ export default function Events() {
                 </PopoverTrigger>
                 <EventsFilterPopover
                   monitors={displayMonitors}
+                  serverGroups={monitorServerGroups}
                   selectedMonitorIds={selectedMonitorIds}
                   onMonitorSelectionChange={setSelectedMonitorIds}
                   favoritesOnly={favoritesOnly}
@@ -497,6 +573,17 @@ export default function Events() {
           {viewMode === 'montage' && gridControls.isScreenTooSmall && (
             <p className="text-xs text-destructive">{t('eventMontage.screen_too_small')}</p>
           )}
+
+          {/* Per-profile error strips + All-mode server filter chips */}
+          <EventsAllModeBar
+            profiles={scope?.profiles ?? []}
+            visibleErrors={visibleErrors}
+            onRetryProfile={refetchProfile}
+            serverFilter={settings.eventsServerFilter ?? null}
+            onServerFilterChange={(next) => {
+              if (currentProfileId) updateSettings(currentProfileId, { eventsServerFilter: next });
+            }}
+          />
 
           {/* Quick Date Range Buttons */}
           <div className="flex items-center gap-3">
@@ -549,10 +636,10 @@ export default function Events() {
 
         {/* Events List or Montage View */}
         {allEvents.length === 0 ? (
-          <div data-testid="events-empty-state">
+          <div data-testid={allFailed ? 'events-all-failed-state' : 'events-empty-state'}>
             <EmptyState
               icon={Clock}
-              title={t('events.no_events')}
+              title={t(allFailed ? 'events.all_failed_title' : 'events.no_events')}
               action={
                 filters.monitorId || filters.startDateTime || filters.endDateTime
                   ? {
@@ -567,13 +654,13 @@ export default function Events() {
         ) : viewMode === 'montage' ? (
           <EventMontageView
             events={allEvents}
-            monitors={displayMonitors}
+            monitors={eventListMonitors}
             gridCols={gridControls.gridCols}
             thumbnailFit={normalizedThumbnailFit}
             portalUrl={currentProfile?.portalUrl || ''}
             accessToken={isAccessTokenFresh ? accessToken ?? undefined : undefined}
             batchSize={batchSize}
-            totalCount={eventsData?.pagination?.totalCount}
+            totalCount={totalCount}
             isFetching={isFetching}
             onLoadMore={loadNextPage}
             eventTagMap={eventTagMap}
@@ -583,12 +670,12 @@ export default function Events() {
         ) : (
           <EventListView
             events={allEvents}
-            monitors={displayMonitors}
+            monitors={eventListMonitors}
             thumbnailFit={normalizedThumbnailFit}
             portalUrl={currentProfile?.portalUrl || ''}
             accessToken={isAccessTokenFresh ? accessToken ?? undefined : undefined}
             batchSize={batchSize}
-            totalCount={eventsData?.pagination?.totalCount}
+            totalCount={totalCount}
             isFetching={isFetching}
             onLoadMore={loadNextPage}
             eventTagMap={eventTagMap}

@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import userEvent from '@testing-library/user-event';
 import Events from '../Events';
+import { ALL_PROFILES_ID } from '../../api/types';
 
 const useQueryMock = vi.fn();
 
@@ -11,11 +12,29 @@ vi.mock('@tanstack/react-query', () => ({
   keepPreviousData: (previousData: unknown) => previousData,
 }));
 
+const useScopedEventsMock = vi.fn();
+const useScopedMonitorsMock = vi.fn();
+const useProfileScopeMock = vi.fn();
+
+vi.mock('../../hooks/useScopedEvents', () => ({
+  useScopedEvents: (options: unknown) => useScopedEventsMock(options),
+}));
+vi.mock('../../hooks/useScopedMonitors', () => ({
+  useScopedMonitors: () => useScopedMonitorsMock(),
+}));
+vi.mock('../../hooks/useProfileScope', () => ({
+  useProfileScope: () => useProfileScopeMock(),
+}));
+
+// Mutable so All-mode tests can flip isAllMode (real useCurrentProfile/
+// useCurrentProfile.isAllMode compares this against ALL_PROFILES_ID) - a
+// SEPARATE signal from the useProfileScope mock below, and Events.tsx reads
+// both, so tests must set both together (see allScope()/singleScope()).
+let mockCurrentProfileId = 'profile-1';
+
 vi.mock('../../stores/profile', () => ({
-  useProfileStore: (selector: (state: { currentProfile: () => { id: string; portalUrl: string; apiUrl: string } }) => unknown) =>
-    selector({
-      currentProfile: () => ({ id: 'profile-1', portalUrl: 'https://portal.test', apiUrl: 'https://api.test' }),
-    }),
+  useProfileStore: (selector: (state: { currentProfileId: string }) => unknown) =>
+    selector({ currentProfileId: mockCurrentProfileId }),
 }));
 
 vi.mock('../../stores/auth', () => ({
@@ -37,8 +56,12 @@ vi.mock('../../stores/auth', () => ({
     accessToken: 'token-1',
     accessTokenExpires: Date.now() + 60 * 60 * 1000,
     isAuthenticated: true,
+    requiresAuth: true,
   }),
 }));
+
+const updateProfileSettingsMock = vi.fn();
+let settingsOverrides: Record<string, unknown> = {};
 
 vi.mock('../../stores/settings', () => {
   const DEFAULT_SETTINGS = {
@@ -49,16 +72,17 @@ vi.mock('../../stores/settings', () => {
     eventsViewMode: 'list',
     eventMontageByGroup: { '__all__': { gridCols: 3 } },
     excludedMonitorIds: [],
+    eventsServerFilter: null,
   };
   return {
     ALL_GROUPS_KEY: '__all__',
     DEFAULT_EVENT_MONTAGE_GROUP_LAYOUT: { gridCols: 3 },
     DEFAULT_SETTINGS,
-    mergeProfileSettings: (raw: Record<string, unknown> | undefined) => ({ ...DEFAULT_SETTINGS, ...raw }),
-    useSettingsStore: (selector: (state: { getProfileSettings: (id: string) => { defaultEventLimit: number; eventsViewMode: 'list'; eventMontageByGroup: Record<string, { gridCols: number }> }; updateProfileSettings: () => void; updateEventMontageGroupLayout: () => void }) => unknown) =>
+    mergeProfileSettings: (raw: Record<string, unknown> | undefined) => ({ ...DEFAULT_SETTINGS, ...raw, ...settingsOverrides }),
+    useSettingsStore: (selector: (state: { getProfileSettings: (id: string) => { defaultEventLimit: number; eventsViewMode: 'list'; eventMontageByGroup: Record<string, { gridCols: number }> }; updateProfileSettings: (...args: unknown[]) => void; updateEventMontageGroupLayout: () => void }) => unknown) =>
       selector({
         getProfileSettings: () => ({ defaultEventLimit: 50, eventsViewMode: 'list', eventMontageByGroup: { '__all__': { gridCols: 3 } }, excludedMonitorIds: [] }),
-        updateProfileSettings: vi.fn(),
+        updateProfileSettings: updateProfileSettingsMock,
         updateEventMontageGroupLayout: vi.fn(),
       }),
   };
@@ -117,9 +141,10 @@ vi.mock('../../hooks/usePullToRefresh', () => ({
 }));
 
 vi.mock('../../components/events/EventCard', () => ({
-  EventCard: ({ event, monitorName }: { event: { Id: string }; monitorName: string }) => (
+  EventCard: ({ event, monitorName, profileChip }: { event: { Id: string }; monitorName: string; profileChip?: string }) => (
     <div data-testid="event-card-item">
       {event.Id}-{monitorName}
+      {profileChip && <span data-testid="event-card-profile-chip">{profileChip}</span>}
     </div>
   ),
 }));
@@ -152,14 +177,9 @@ vi.mock('../../components/ui/popover', () => ({
   ),
 }));
 
-vi.mock('../../api/events', () => ({
-  getEvents: vi.fn(),
-  getEventImageUrl: vi.fn(() => 'https://example.test/thumb.jpg'),
-}));
-
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string) => key,
+    t: (key: string, params?: Record<string, unknown>) => (params ? `${key}:${JSON.stringify(params)}` : key),
   }),
 }));
 
@@ -169,22 +189,41 @@ vi.mock('react-router-dom', () => ({
   useSearchParams: () => [new URLSearchParams(), vi.fn()],
 }));
 
+const profileA = { id: 'profile-1', name: 'Home', portalUrl: 'https://a', apiUrl: 'https://a/api', timezone: 'UTC' };
+const profileB = { id: 'profile-2', name: 'Office', portalUrl: 'https://b', apiUrl: 'https://b/api', timezone: 'America/New_York' };
+
+function singleScope() {
+  mockCurrentProfileId = 'profile-1';
+  useProfileScopeMock.mockReturnValue({ mode: 'single', profile: profileA, profiles: [profileA], settings: {} });
+}
+
+function allScope(profiles: Array<typeof profileA> = [profileA, profileB]) {
+  mockCurrentProfileId = ALL_PROFILES_ID;
+  useProfileScopeMock.mockReturnValue({ mode: 'all', profile: null, profiles, settings: {} });
+}
+
+function scopedEvents(overrides: Partial<ReturnType<typeof defaultScopedEvents>> = {}) {
+  useScopedEventsMock.mockReturnValue({ ...defaultScopedEvents(), ...overrides });
+}
+
+function defaultScopedEvents() {
+  return {
+    events: [] as Array<{ profileId: string; profileName: string; item: { Event: { Id: string; MonitorId: string } } }>,
+    errors: [] as Array<{ profileId: string; profileName: string; error: unknown }>,
+    isLoading: false,
+    isFetching: false,
+    totalCount: undefined as number | undefined,
+    refetchProfile: vi.fn(),
+    refetchAll: vi.fn(async () => {}),
+  };
+}
+
 describe('Events Page', () => {
   beforeEach(() => {
     useQueryMock.mockReset();
-    applyFilters.mockClear();
-    clearFilters.mockClear();
-    clearDateRange.mockClear();
-    eventFiltersOverrides = {};
-  });
-
-  it('shows empty state when no events exist', () => {
-    useQueryMock.mockImplementation(({ queryKey }) => {
+    useQueryMock.mockImplementation(({ queryKey }: { queryKey: (string | object)[] }) => {
       if (queryKey[0] === 'monitors') {
         return { data: { monitors: [] }, isLoading: false, error: null, refetch: vi.fn() };
-      }
-      if (queryKey[0] === 'events') {
-        return { data: { events: [] }, isLoading: false, error: null, refetch: vi.fn() };
       }
       if (queryKey[0] === 'tags') {
         return { data: { tags: [] }, isLoading: false, error: null, refetch: vi.fn() };
@@ -194,38 +233,33 @@ describe('Events Page', () => {
       }
       return { data: null, isLoading: false, error: null, refetch: vi.fn() };
     });
+    useScopedEventsMock.mockReset();
+    useScopedMonitorsMock.mockReset();
+    useScopedMonitorsMock.mockReturnValue({ monitors: [], errors: [], isLoading: false, refetchProfile: vi.fn() });
+    useProfileScopeMock.mockReset();
+    singleScope();
+    scopedEvents();
+    updateProfileSettingsMock.mockClear();
+    applyFilters.mockClear();
+    clearFilters.mockClear();
+    clearDateRange.mockClear();
+    eventFiltersOverrides = {};
+    settingsOverrides = {};
+  });
 
+  it('shows empty state when no events exist', () => {
     render(<Events />);
-
     expect(screen.getByTestId('events-empty-state')).toBeInTheDocument();
   });
 
   it('renders event list when events are available', () => {
-    useQueryMock.mockImplementation(({ queryKey }) => {
+    scopedEvents({
+      events: [{ profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '100', MonitorId: '1' } } }],
+    });
+    useQueryMock.mockImplementation(({ queryKey }: { queryKey: (string | object)[] }) => {
       if (queryKey[0] === 'monitors') {
         return {
-          data: {
-            monitors: [
-              { Monitor: { Id: '1', Name: 'Front Door', Deleted: false } },
-            ],
-          },
-          isLoading: false,
-          error: null,
-          refetch: vi.fn(),
-        };
-      }
-      if (queryKey[0] === 'events') {
-        return {
-          data: {
-            events: [
-              {
-                Event: {
-                  Id: '100',
-                  MonitorId: '1',
-                },
-              },
-            ],
-          },
+          data: { monitors: [{ Monitor: { Id: '1', Name: 'Front Door', Deleted: false } }] },
           isLoading: false,
           error: null,
           refetch: vi.fn(),
@@ -247,22 +281,6 @@ describe('Events Page', () => {
   });
 
   it('applies and clears filters from the filter panel', async () => {
-    useQueryMock.mockImplementation(({ queryKey }) => {
-      if (queryKey[0] === 'monitors') {
-        return { data: { monitors: [] }, isLoading: false, error: null, refetch: vi.fn() };
-      }
-      if (queryKey[0] === 'events') {
-        return { data: { events: [] }, isLoading: false, error: null, refetch: vi.fn() };
-      }
-      if (queryKey[0] === 'tags') {
-        return { data: { tags: [] }, isLoading: false, error: null, refetch: vi.fn() };
-      }
-      if (queryKey[0] === 'eventTags') {
-        return { data: new Map(), isLoading: false, error: null, refetch: vi.fn() };
-      }
-      return { data: null, isLoading: false, error: null, refetch: vi.fn() };
-    });
-
     render(<Events />);
 
     expect(screen.getByTestId('events-filter-panel')).toBeInTheDocument();
@@ -280,12 +298,6 @@ describe('Events Page', () => {
   // hooks/__tests__/useEventFilters.test.ts). The clear-date button must still show
   // up in that case, not only when a quick-range chip set activeQuickRange.
   it('shows the clear-date button for a URL-driven date range with no active quick range', () => {
-    useQueryMock.mockImplementation(({ queryKey }: { queryKey: (string | object)[] }) => {
-      if (queryKey[0] === 'events') {
-        return { data: { events: [] }, isLoading: false, error: null, refetch: vi.fn() };
-      }
-      return { data: null, isLoading: false, error: null, refetch: vi.fn() };
-    });
     eventFiltersOverrides = { startDateInput: '2026-07-10T08:49:38', endDateInput: '', activeQuickRange: null };
 
     render(<Events />);
@@ -294,12 +306,6 @@ describe('Events Page', () => {
   });
 
   it('hides the clear-date button when no date range and no quick range are active', () => {
-    useQueryMock.mockImplementation(({ queryKey }: { queryKey: (string | object)[] }) => {
-      if (queryKey[0] === 'events') {
-        return { data: { events: [] }, isLoading: false, error: null, refetch: vi.fn() };
-      }
-      return { data: null, isLoading: false, error: null, refetch: vi.fn() };
-    });
     eventFiltersOverrides = { startDateInput: '', endDateInput: '', activeQuickRange: null };
 
     render(<Events />);
@@ -308,12 +314,6 @@ describe('Events Page', () => {
   });
 
   it('clicking the clear-date button calls clearDateRange, which preserves monitorId (refs #194)', async () => {
-    useQueryMock.mockImplementation(({ queryKey }: { queryKey: (string | object)[] }) => {
-      if (queryKey[0] === 'events') {
-        return { data: { events: [] }, isLoading: false, error: null, refetch: vi.fn() };
-      }
-      return { data: null, isLoading: false, error: null, refetch: vi.fn() };
-    });
     eventFiltersOverrides = { startDateInput: '2026-07-10T08:49:38', endDateInput: '', activeQuickRange: null };
 
     render(<Events />);
@@ -325,5 +325,80 @@ describe('Events Page', () => {
     // clearDateRange itself (not this button) is what preserves monitorId; that
     // contract is covered directly in useEventFilters.test.ts's
     // "clearDateRange (refs #194)" describe block.
+  });
+
+  it('single mode calls useScopedEvents for its data with no refetchInterval passed (no polling, refs #337)', () => {
+    render(<Events />);
+
+    expect(useScopedEventsMock).toHaveBeenCalled();
+    const options = useScopedEventsMock.mock.calls.at(-1)?.[0] as { refetchInterval?: number } | undefined;
+    expect(options?.refetchInterval).toBeUndefined();
+  });
+
+  describe('All mode', () => {
+    it('renders both profiles\' events with a profile chip per row', () => {
+      allScope();
+      scopedEvents({
+        events: [
+          { profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1' } } },
+          { profileId: 'profile-2', profileName: 'Office', item: { Event: { Id: '2', MonitorId: '1' } } },
+        ],
+      });
+
+      render(<Events />);
+
+      const cards = screen.getAllByTestId('event-card-item');
+      expect(cards).toHaveLength(2);
+      const chips = screen.getAllByTestId('event-card-profile-chip');
+      expect(chips.map((c) => c.textContent)).toEqual(['Home', 'Office']);
+    });
+
+    it('the server filter chip row hides a profile\'s slice when toggled off', () => {
+      allScope();
+      settingsOverrides = { eventsServerFilter: ['profile-1'] };
+      scopedEvents({
+        events: [
+          { profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1' } } },
+          { profileId: 'profile-2', profileName: 'Office', item: { Event: { Id: '2', MonitorId: '1' } } },
+        ],
+      });
+
+      render(<Events />);
+
+      const cards = screen.getAllByTestId('event-card-item');
+      expect(cards).toHaveLength(1);
+      expect(cards[0]).toHaveTextContent('1-');
+      expect(screen.getByTestId('events-server-filter-row')).toBeInTheDocument();
+    });
+
+    it('shows an error strip for a failed profile with zero events while the healthy profile still renders', () => {
+      allScope();
+      scopedEvents({
+        events: [{ profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1' } } }],
+        errors: [{ profileId: 'profile-2', profileName: 'Office', error: new Error('down') }],
+      });
+
+      render(<Events />);
+
+      expect(screen.getByTestId('profile-error-strip-profile-2')).toBeInTheDocument();
+      expect(screen.getByTestId('event-card-item')).toBeInTheDocument();
+      expect(screen.queryByTestId('events-all-failed-state')).not.toBeInTheDocument();
+    });
+
+    it('shows the all-failed empty state when every profile errors', () => {
+      allScope();
+      scopedEvents({
+        events: [],
+        errors: [
+          { profileId: 'profile-1', profileName: 'Home', error: new Error('down') },
+          { profileId: 'profile-2', profileName: 'Office', error: new Error('down') },
+        ],
+      });
+
+      render(<Events />);
+
+      expect(screen.getByTestId('events-all-failed-state')).toBeInTheDocument();
+      expect(screen.getByTestId('events-all-failed-state')).toHaveTextContent('events.all_failed_title');
+    });
   });
 });

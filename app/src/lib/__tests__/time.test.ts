@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { formatForServer, formatLocalDateTime } from '../time';
+import { formatForServer, formatForServerInTz, formatLocalDateTime } from '../time';
 import { useProfileStore } from '../../stores/profile';
 
 // Mock the profile store - using primitives pattern (not deprecated currentProfile getter)
@@ -224,5 +224,22 @@ describe('formatLocalDateTime', () => {
     testCases.forEach(({ date, expected }) => {
       expect(formatLocalDateTime(date)).toBe(expected);
     });
+  });
+});
+
+describe('formatForServerInTz', () => {
+  // A single instant, converted into two different IANA zones, must produce
+  // the two zones' own distinct wall-clock digits - the per-profile
+  // conversion All-mode aggregation fan-outs rely on (refs #337).
+  const instant = new Date('2026-01-15T15:30:00Z');
+
+  it('formats the same instant differently per timezone', () => {
+    expect(formatForServerInTz(instant, 'UTC')).toBe('2026-01-15 15:30:00');
+    expect(formatForServerInTz(instant, 'America/New_York')).toBe('2026-01-15 10:30:00');
+  });
+
+  it('matches formatForServer when given the current profile\'s own timezone', () => {
+    // useProfileStore.getState() is mocked above to profile-1 @ America/New_York.
+    expect(formatForServerInTz(instant, 'America/New_York')).toBe(formatForServer(instant));
   });
 });

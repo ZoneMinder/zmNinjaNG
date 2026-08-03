@@ -243,7 +243,10 @@
       "moreCount": "+{{count}} mehr"
     },
     "now": "jetzt",
-    "remove_tag": "{{name}} entfernen"
+    "remove_tag": "{{name}} entfernen",
+    "all_failed_title": "Ereignisse konnten nicht geladen werden",
+    "filter_by_server": "Nach Server filtern",
+    "failed_to_load": "Ereignisse konnten nicht geladen werden: {{error}}"
   },
   "event_detail": {
     "event_id": "Ereignis ID",
