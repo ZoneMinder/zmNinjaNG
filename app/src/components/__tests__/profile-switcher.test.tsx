@@ -114,6 +114,16 @@ describe('ProfileSwitcher', () => {
     expect(switchProfileMock).toHaveBeenCalledWith(ALL_PROFILES_ID);
   });
 
+  // refs #337 round 2: moved to the end for consistency with the Profiles page.
+  it('places the All Servers item after every profile item', () => {
+    setProfiles([profileA, profileB]);
+
+    render(<ProfileSwitcher />);
+
+    const items = screen.getAllByTestId(/^profile-switcher-(item-.+|all)$/);
+    expect(items.at(-1)).toBe(screen.getByTestId('profile-switcher-all'));
+  });
+
   it('hides a disabled profile from the list (refs #337)', () => {
     setProfiles([profileA, { ...profileB, disabled: true }]);
 

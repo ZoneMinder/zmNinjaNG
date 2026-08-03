@@ -377,37 +377,6 @@ export default function Profiles() {
               </div>
             </CardHeader>
             <CardContent>
-              {enabledProfileCount >= 2 && (
-                <div
-                  className={`flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors cursor-pointer mb-3 ${isAllMode ? 'ring-1 ring-primary' : ''}`}
-                  data-testid="profile-card-all"
-                  onClick={() => handleSwitchProfile(ALL_PROFILES_ID)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      handleSwitchProfile(ALL_PROFILES_ID);
-                    }
-                  }}
-                  role="button"
-                  tabIndex={0}
-                >
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    {isAllMode && (
-                      <Check className="h-4 w-4 text-primary shrink-0" data-testid="profile-active-indicator" />
-                    )}
-                    <Layers className="h-5 w-5 text-primary shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium truncate" title={t('profiles.all_servers')}>{t('profiles.all_servers')}</div>
-                      <p className="text-xs text-muted-foreground truncate" title={t('profiles.all_servers_subtitle')}>
-                        {t('profiles.all_servers_subtitle')}
-                      </p>
-                    </div>
-                  </div>
-                  {switchingProfileId === ALL_PROFILES_ID && (
-                    <Loader2 className="h-4 w-4 animate-spin shrink-0" />
-                  )}
-                </div>
-              )}
               <div className="space-y-3" data-testid="profile-list">
                 {profiles.map((profile) => (
                   <div
@@ -513,6 +482,44 @@ export default function Profiles() {
                   </div>
                 ))}
               </div>
+              {enabledProfileCount >= 2 && (
+                <div
+                  className={`flex items-center justify-between p-4 rounded-lg border border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors cursor-pointer mt-3 ${isAllMode ? 'ring-1 ring-primary' : ''}`}
+                  data-testid="profile-card-all"
+                  onClick={() => handleSwitchProfile(ALL_PROFILES_ID)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleSwitchProfile(ALL_PROFILES_ID);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                >
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    {isAllMode && (
+                      <Check className="h-4 w-4 text-primary shrink-0" data-testid="profile-active-indicator" />
+                    )}
+                    <Layers className="h-5 w-5 text-primary shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate" title={t('profiles.all_servers')}>{t('profiles.all_servers')}</div>
+                      <p className="text-xs text-muted-foreground truncate" title={t('profiles.all_servers_subtitle')}>
+                        {t('profiles.all_servers_subtitle')}
+                      </p>
+                      <p
+                        className="text-xs text-muted-foreground/80 truncate"
+                        title={t('profiles.all_servers_resource_note')}
+                        data-testid="profile-card-all-note"
+                      >
+                        {t('profiles.all_servers_resource_note')}
+                      </p>
+                    </div>
+                  </div>
+                  {switchingProfileId === ALL_PROFILES_ID && (
+                    <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

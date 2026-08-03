@@ -1005,6 +1005,7 @@
     "credentials_incomplete": "Please enter both username and password, or leave both empty.",
     "all_servers": "All Servers",
     "all_servers_subtitle": "View monitors from every server",
+    "all_servers_resource_note": "Aggregating all servers can be resource-heavy",
     "disable": "Disable",
     "enable": "Enable",
     "disabled": "Disabled",

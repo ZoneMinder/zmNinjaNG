@@ -427,6 +427,12 @@ export const useProfileStore = create<ProfileState>()(
             );
           }
 
+          // set() is synchronous and there is no await between it and the
+          // dropSession() below - both land in the same tick, so a reader
+          // can never observe `disabled: true` with the old session still
+          // cached. Keep it that way: an intervening await here would
+          // reopen the same stale-session race class deleteProfile guards
+          // against elsewhere in this file.
           set((state) => ({
             profiles: state.profiles.map((p) => (p.id === id ? { ...p, disabled } : p)),
           }));

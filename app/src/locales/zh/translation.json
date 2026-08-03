@@ -1005,6 +1005,7 @@
     "credentials_incomplete": "请输入用户名和密码，或两者都留空。",
     "all_servers": "所有服务器",
     "all_servers_subtitle": "查看所有服务器的监控",
+    "all_servers_resource_note": "聚合所有服务器可能会消耗较多资源",
     "disable": "禁用",
     "enable": "启用",
     "disabled": "已禁用",

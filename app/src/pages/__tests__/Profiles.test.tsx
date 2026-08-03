@@ -159,6 +159,20 @@ describe('Profiles Page', () => {
     expect(screen.getByTestId('profile-active-indicator')).toBeInTheDocument();
   });
 
+  // refs #337 round 2: the All Servers card moved to the end of the list.
+  it('renders the All Servers card after every profile card, with the resource note', () => {
+    useCurrentProfileMock.mockReturnValue({ currentProfile: HOME, isAllMode: false });
+    useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1'));
+
+    render(<Profiles />);
+
+    const cards = screen.getAllByTestId(/^profile-card(-all)?$/);
+    expect(cards.at(-1)).toBe(screen.getByTestId('profile-card-all'));
+    expect(screen.getByTestId('profile-card-all-note')).toHaveTextContent(
+      'profiles.all_servers_resource_note'
+    );
+  });
+
   it('switches to the All Servers sentinel and navigates to /monitors on click', async () => {
     const user = userEvent.setup();
     useCurrentProfileMock.mockReturnValue({

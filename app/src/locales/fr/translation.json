@@ -1005,6 +1005,7 @@
     "credentials_incomplete": "Veuillez saisir le nom d'utilisateur et le mot de passe, ou laisser les deux vides.",
     "all_servers": "Tous les serveurs",
     "all_servers_subtitle": "Voir les caméras de tous les serveurs",
+    "all_servers_resource_note": "L'agrégation de tous les serveurs peut être coûteuse en ressources",
     "disable": "Désactiver",
     "enable": "Activer",
     "disabled": "Désactivé",

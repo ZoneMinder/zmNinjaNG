@@ -1005,6 +1005,7 @@
     "credentials_incomplete": "Ingrese nombre de usuario y contraseña, o deje ambos en blanco.",
     "all_servers": "Todos los Servidores",
     "all_servers_subtitle": "Ver monitores de todos los servidores",
+    "all_servers_resource_note": "Agregar todos los servidores puede exigir muchos recursos",
     "disable": "Deshabilitar",
     "enable": "Habilitar",
     "disabled": "Deshabilitado",

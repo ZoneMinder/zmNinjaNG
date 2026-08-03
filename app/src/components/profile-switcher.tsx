@@ -119,19 +119,6 @@ export function ProfileSwitcher() {
       <DropdownMenuContent align="end" className="w-[250px]">
         <DropdownMenuLabel>{t('profiles.switch_profile')}</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {profiles.length >= 2 && (
-          <DropdownMenuItem
-            onClick={() => handleSwitch(ALL_PROFILES_ID)}
-            className="flex items-center justify-between cursor-pointer"
-            data-testid="profile-switcher-all"
-          >
-            <div className="flex items-center gap-2">
-              <Layers className="h-4 w-4 text-muted-foreground" />
-              <span className="font-medium">{t('profiles.all_servers')}</span>
-            </div>
-            {isAllMode && <Check className="h-4 w-4 text-primary" />}
-          </DropdownMenuItem>
-        )}
         {profiles.map((profile) => (
           <DropdownMenuItem
             key={profile.id}
@@ -157,6 +144,21 @@ export function ProfileSwitcher() {
             )}
           </DropdownMenuItem>
         ))}
+        {/* Placed after the real profiles for consistency with the Profiles
+            page card order (refs #337 round 2). */}
+        {profiles.length >= 2 && (
+          <DropdownMenuItem
+            onClick={() => handleSwitch(ALL_PROFILES_ID)}
+            className="flex items-center justify-between cursor-pointer"
+            data-testid="profile-switcher-all"
+          >
+            <div className="flex items-center gap-2">
+              <Layers className="h-4 w-4 text-muted-foreground" />
+              <span className="font-medium">{t('profiles.all_servers')}</span>
+            </div>
+            {isAllMode && <Check className="h-4 w-4 text-primary" />}
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleAddProfile} className="cursor-pointer" data-testid="profile-switcher-add-profile">
           <Plus className="h-4 w-4 mr-2" />
