@@ -10,7 +10,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render } from '@testing-library/react';
 import { MonitorRecentEvents } from '../MonitorRecentEvents';
-import type { Event, Monitor } from '../../../api/types';
+import { asProfileId, type Event, type Monitor } from '../../../api/types';
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('react-router-dom', () => ({ useNavigate: () => vi.fn() }));
@@ -34,12 +34,12 @@ vi.mock('../../../stores/monitorSeen', () => ({
   useMonitorSeenStore: (sel: (s: { markSeen: () => void }) => unknown) => sel({ markSeen: vi.fn() }),
 }));
 
-const useMonitorRecentEventsMock = vi.fn();
+const useMonitorRecentEventsMock = vi.fn((..._args: unknown[]) => ({}) as unknown);
 vi.mock('../../../hooks/useMonitorRecentEvents', () => ({
   useMonitorRecentEvents: (...args: unknown[]) => useMonitorRecentEventsMock(...args),
 }));
 
-const buildThumbnailChainForEventMock = vi.fn(() => ['url1']);
+const buildThumbnailChainForEventMock = vi.fn((..._args: unknown[]) => ['url1']);
 vi.mock('../../../lib/event/thumbnail-chain', () => ({
   buildThumbnailChainForEvent: (...args: unknown[]) => buildThumbnailChainForEventMock(...args),
   eventHasAlarmFrame: () => false,
@@ -77,10 +77,10 @@ describe('MonitorRecentEvents thumbnail-chain profile scoping (refs #337 I2)', (
   });
 
   it('builds the thumbnail chain with the deep route profileId, not the current profile', () => {
-    render(<MonitorRecentEvents monitor={monitor} profileId="profile-b" />);
+    render(<MonitorRecentEvents monitor={monitor} profileId={asProfileId('profile-b')} />);
 
     expect(buildThumbnailChainForEventMock).toHaveBeenCalledTimes(1);
-    const options = buildThumbnailChainForEventMock.mock.calls[0][5] as { profileId?: string };
+    const options = buildThumbnailChainForEventMock.mock.calls[0][5] as unknown as { profileId?: string };
     expect(options.profileId).toBe('profile-b');
   });
 });
