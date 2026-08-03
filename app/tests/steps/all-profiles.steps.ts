@@ -173,8 +173,15 @@ Then('the event card count should be at least the recorded single-profile count'
     timeout: testConfig.timeouts.pageLoad,
   }).toBeGreaterThanOrEqual(singleProfileEventCount);
 
-  const chipTexts = await page.getByTestId('event-profile-chip').allTextContents();
-  expect(new Set(chipTexts).size).toBeGreaterThanOrEqual(2);
+  // A one-shot snapshot here can fire before the slower of the two
+  // profiles' event queries has contributed to the DOM: the total card
+  // count settling (above) only means it stopped changing, not that BOTH
+  // profiles are represented yet. Polled with its own generous timeout so
+  // a late-arriving second profile still gets counted (refs #337 round 3).
+  await expect.poll(async () => {
+    const chipTexts = await page.getByTestId('event-profile-chip').allTextContents();
+    return new Set(chipTexts).size;
+  }, { timeout: testConfig.timeouts.pageLoad }).toBeGreaterThanOrEqual(2);
 });
 
 When('I click a monitor card', async ({ page }) => {
