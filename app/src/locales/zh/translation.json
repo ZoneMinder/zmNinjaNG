@@ -795,6 +795,7 @@
     "fit_scale_down": "缩小",
     "edit_layout": "编辑",
     "done_editing": "完成",
+    "edit_disabled_all_mode": "请切换到单一配置以编辑布局",
     "fill_width": "填充",
     "scroll_top": "回到顶部",
     "scroll_up": "向上滚动",

@@ -385,3 +385,42 @@ describe('group-switch re-init', () => {
     }
   });
 });
+
+// All mode (currentProfile null) has nothing to persist a layout change
+// against, so editing must be fully inert - not just un-persisted, but
+// visually unchanged too (refs #337, Phase 4 Task 1 fix round 1). A resize
+// that updated local state anyway would visibly move the tile until some
+// unrelated re-render snapped it back to the stored layout.
+describe('All mode: editing is inert (no real profile to persist against)', () => {
+  const monitors = [makeMonitor('10'), makeMonitor('20')];
+
+  it('leaves the layout unchanged when handleResizeStop fires with no current profile', () => {
+    type HookProps = Parameters<typeof useMontageGrid>[0];
+    const { result } = renderHook(
+      (props: HookProps) => useMontageGrid(props),
+      {
+        initialProps: {
+          monitors,
+          currentProfile: null,
+          settings: useSettingsStore.getState().getProfileSettings(''),
+          isEditMode: true,
+          groupKey: 'A',
+        },
+      }
+    );
+
+    act(() => { result.current.handleWidthChange(800); });
+    const before = result.current.layout;
+    expect(before.length).toBe(2);
+
+    act(() => {
+      result.current.handleResizeStop(
+        before,
+        before[0],
+        { ...before[0], w: before[0].w + 4, h: before[0].h + 4 }
+      );
+    });
+
+    expect(result.current.layout).toBe(before);
+  });
+});

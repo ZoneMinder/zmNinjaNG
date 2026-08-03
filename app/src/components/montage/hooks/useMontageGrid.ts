@@ -374,6 +374,11 @@ export function useMontageGrid({
 
   const handleResizeStop = useCallback(
     (_layout: Layout[], _oldItem: Layout, newItem: Layout) => {
+      // All mode has no real profile to persist against (currentProfile is
+      // null there) - inert like handleDragStop, so a resize doesn't visibly
+      // change the tile then snap back on the next unrelated re-render
+      // (refs #337, Phase 4 Task 1 fix round 1).
+      if (!currentProfileRef.current) return;
       const map = monitorMapRef.current;
       const adjustedHeight = calculateHeightUnits(
         map,

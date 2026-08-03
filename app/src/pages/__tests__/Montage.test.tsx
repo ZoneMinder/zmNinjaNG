@@ -206,6 +206,29 @@ describe('Montage Page', () => {
     expect(screen.getByTestId('montage-monitor-2')).toBeInTheDocument();
     expect(screen.getByText('Front Door')).toBeInTheDocument();
     expect(screen.queryByTestId('montage-profile-chip')).not.toBeInTheDocument();
+    expect(screen.getByTestId('montage-edit-toggle')).not.toBeDisabled();
+  });
+
+  // Layout editing has no real profile to persist against in All mode
+  // (useMontageGrid guards every write on currentProfile), so the control is
+  // disabled with an explanatory tooltip rather than left clickable-but-inert
+  // (refs #337, Phase 4 Task 1 fix round 1).
+  it('disables the edit-layout toggle in All mode with an explanatory tooltip', () => {
+    allMode([{ id: 'profile-1', name: 'Home' }, { id: 'profile-2', name: 'Office' }]);
+    useScopedMonitorsMock.mockReturnValue({
+      monitors: [
+        { profileId: 'profile-1', profileName: 'Home', item: monitor('1', 'Front Door') },
+      ],
+      errors: [],
+      isLoading: false,
+      refetchProfile: vi.fn(),
+    });
+
+    render(<Montage />);
+
+    const toggle = screen.getByTestId('montage-edit-toggle');
+    expect(toggle).toBeDisabled();
+    expect(toggle).toHaveAttribute('title', 'montage.edit_disabled_all_mode');
   });
 
   it('All mode renders both profiles\' tiles with a profile chip each, composite-keyed', () => {

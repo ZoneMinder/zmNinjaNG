@@ -110,6 +110,14 @@ export default function Montage() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
+  // TODO(#337): hiddenMonitorIds is keyed by bare Monitor.Id, not a composite
+  // profileId:monitorId tile id. In practice this stays harmless today - the
+  // toggle that writes it (handleToggleMonitorVisibility below) already
+  // no-ops in All mode (currentProfile is null there) - but if that guard
+  // ever moves to a real ALL-bucket setting, two servers sharing a raw
+  // monitor id would hide/show each other's tile together. Fix by keying
+  // hiddenMonitorIds with monitorCacheKey(profileId, monitorId) if that
+  // guard is lifted.
   const hiddenSet = useMemo(
     () => new Set(bucket.hiddenMonitorIds),
     [bucket.hiddenMonitorIds]
@@ -602,7 +610,15 @@ export default function Montage() {
                 variant={isEditMode ? 'default' : 'outline'}
                 size="sm"
                 className="h-8 sm:h-9"
-                title={isEditMode ? t('montage.done_editing') : t('montage.edit_layout')}
+                // Layout editing has no real profile to persist against in All
+                // mode (useMontageGrid guards every write on currentProfile),
+                // so the control that would open it is disabled with an
+                // explanatory tooltip rather than left clickable-but-inert
+                // (refs #337, Phase 4 Task 1 fix round 1).
+                disabled={isAllMode}
+                title={isAllMode
+                  ? t('montage.edit_disabled_all_mode')
+                  : isEditMode ? t('montage.done_editing') : t('montage.edit_layout')}
                 data-testid="montage-edit-toggle"
               >
                 <Pencil className="h-4 w-4 sm:mr-2" />
