@@ -45,6 +45,7 @@ vi.mock('../../api/monitors', () => ({
     if (options.maxfps) params.set('maxfps', options.maxfps.toString());
     if (options.cacheBuster) params.set('rand', options.cacheBuster.toString());
     if (options.token) params.set('token', options.token);
+    if (options.minStreamingPort) params.set('minStreamingPort', options.minStreamingPort.toString());
     return `${cgiUrl}/nph-zms?${params.toString()}`;
   },
 }));
@@ -580,8 +581,10 @@ describe('useMonitorStream: explicit profileId (All mode)', () => {
 
     expect(result.current.streamUrl).toContain('https://b.example.com/cgi-bin');
     expect(result.current.streamUrl).toContain('token=token-b');
+    expect(result.current.streamUrl).toContain('minStreamingPort=40000');
     expect(result.current.streamUrl).not.toContain('a.example.com');
     expect(result.current.streamUrl).not.toContain('token=token-a');
+    expect(result.current.streamUrl).not.toContain('minStreamingPort=30000');
   });
 
   it('defaults to the current profile when profileId is omitted', async () => {
@@ -596,5 +599,7 @@ describe('useMonitorStream: explicit profileId (All mode)', () => {
 
     expect(result.current.streamUrl).toContain('https://a.example.com/cgi-bin');
     expect(result.current.streamUrl).toContain('token=token-a');
+    expect(result.current.streamUrl).toContain('minStreamingPort=30000');
+    expect(result.current.streamUrl).not.toContain('minStreamingPort=40000');
   });
 });
