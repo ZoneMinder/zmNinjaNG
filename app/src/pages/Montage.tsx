@@ -124,6 +124,16 @@ export default function Montage() {
     return counts;
   }, [scopedMonitors]);
 
+  // The full monitor list, NEVER group-filtered: the kebab menu's hidden-
+  // monitors list must be able to un-hide any monitor regardless of which
+  // group filter is currently active, or a monitor hidden while outside the
+  // active group becomes permanently un-hideable (refs #337 single-mode
+  // regression - `monitors` below is group-filtered).
+  const enabledMonitors = useMemo(
+    (): MonitorData[] => scopedMonitors.map((s) => ({ Monitor: s.item.Monitor, Monitor_Status: s.item.Monitor_Status })),
+    [scopedMonitors]
+  );
+
   const monitors = useMemo((): MontageTileItem[] => {
     if (isAllMode) {
       // Group filter is current-profile-scoped (Monitors.tsx precedent) - All
@@ -186,6 +196,21 @@ export default function Montage() {
 
   // Edit mode state lifted to page level
   const [isEditMode, setIsEditMode] = useState(false);
+
+  // Editing is single-mode-only (the toggle is disabled in All mode below),
+  // but isEditMode itself is not scoped to isAllMode - switching into All
+  // mode with it left on from single mode stranded the grid in edit mode
+  // with no way to turn it off (the toggle stays disabled), so drag/resize
+  // handlers were live but no-op (refs #337). Reset during render rather
+  // than in an Effect (React's documented "adjusting state when a prop
+  // changes" pattern - see LiveActivitySettingsDialog's useClampedNumberField
+  // for the same idiom): an Effect would paint one extra frame with the
+  // stale edit-mode UI before correcting it.
+  const [lastIsAllMode, setLastIsAllMode] = useState(isAllMode);
+  if (isAllMode !== lastIsAllMode) {
+    setLastIsAllMode(isAllMode);
+    if (isAllMode) setIsEditMode(false);
+  }
 
   // Active saved layout name (persisted in settings)
   const activeLayoutName = bucket.activeLayoutName;
@@ -583,7 +608,7 @@ export default function Montage() {
               </Button>
               <RefreshButton size="sm" className="h-8 sm:h-9" data-testid="montage-refresh-button" />
               <MontageKebabMenu
-                monitors={monitors.map((m) => m.Monitor)}
+                monitors={enabledMonitors.map((m) => m.Monitor)}
                 hiddenMonitorIds={bucket.hiddenMonitorIds}
                 onToggleVisibility={handleToggleMonitorVisibility}
               />

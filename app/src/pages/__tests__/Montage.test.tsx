@@ -8,13 +8,14 @@
  * strips. Single-mode assertions guard the byte-identical requirement.
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import Montage from '../Montage';
 
 const useScopedMonitorsMock = vi.fn();
 const useCurrentProfileMock = vi.fn();
 const useProfileScopeMock = vi.fn();
 const useMontageGridMock = vi.fn();
+const useGroupFilterMock = vi.fn();
 
 vi.mock('../../hooks/useScopedMonitors', () => ({
   useScopedMonitors: () => useScopedMonitorsMock(),
@@ -29,7 +30,7 @@ vi.mock('../../hooks/useProfileScope', () => ({
 }));
 
 vi.mock('../../hooks/useGroupFilter', () => ({
-  useGroupFilter: () => ({ isFilterActive: false, filteredMonitorIds: [], isFilterReady: true }),
+  useGroupFilter: () => useGroupFilterMock(),
 }));
 
 vi.mock('../../hooks/useMontageGroupState', () => ({
@@ -70,7 +71,9 @@ vi.mock('../../components/montage', async (importOriginal) => {
     ...actual,
     GridLayoutControls: () => <div data-testid="grid-layout-controls-stub" />,
     FullscreenControls: () => <div data-testid="fullscreen-controls-stub" />,
-    MontageKebabMenu: () => <div data-testid="montage-kebab-stub" />,
+    MontageKebabMenu: ({ monitors }: { monitors: Array<{ Id: string; Name: string }> }) => (
+      <div data-testid="montage-kebab-stub">{monitors.map((m) => m.Name).join(',')}</div>
+    ),
     MontageTileErrorBoundary: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
     MontageScrollPad: () => null,
     useMontageGrid: () => useMontageGridMock(),
@@ -166,6 +169,8 @@ describe('Montage Page', () => {
     useCurrentProfileMock.mockReset();
     useProfileScopeMock.mockReset();
     useMontageGridMock.mockReset();
+    useGroupFilterMock.mockReset();
+    useGroupFilterMock.mockReturnValue({ isFilterActive: false, filteredMonitorIds: [], isFilterReady: true });
     useMontageGridMock.mockReturnValue({
       layout: [],
       gridCols: 2,
@@ -237,6 +242,63 @@ describe('Montage Page', () => {
     const toggle = screen.getByTestId('montage-edit-toggle');
     expect(toggle).toBeDisabled();
     expect(toggle).toHaveAttribute('title', 'montage.edit_disabled_all_mode');
+  });
+
+  // Stale edit mode from single mode left the All-mode grid in a
+  // draggable-but-inert state (the toggle disables so it can never be turned
+  // off): entering All mode must reset it (refs #337, final fix wave).
+  it('resets edit mode when switching into All mode', () => {
+    singleProfile();
+    useScopedMonitorsMock.mockReturnValue({
+      monitors: [{ profileId: 'profile-1', profileName: 'Home', item: monitor('1', 'Front Door') }],
+      errors: [],
+      isLoading: false,
+      refetchProfile: vi.fn(),
+    });
+
+    const { rerender } = render(<Montage />);
+    fireEvent.click(screen.getByTestId('montage-edit-toggle'));
+    expect(screen.getByTestId('montage-edit-toggle')).toHaveTextContent('montage.done_editing');
+
+    allMode([{ id: 'profile-1', name: 'Home' }, { id: 'profile-2', name: 'Office' }]);
+    useScopedMonitorsMock.mockReturnValue({
+      monitors: [{ profileId: 'profile-1', profileName: 'Home', item: monitor('1', 'Front Door') }],
+      errors: [],
+      isLoading: false,
+      refetchProfile: vi.fn(),
+    });
+    rerender(<Montage />);
+
+    const toggle = screen.getByTestId('montage-edit-toggle');
+    expect(toggle).toHaveTextContent('montage.edit_layout');
+    expect(toggle).toBeDisabled();
+  });
+
+  // A hidden monitor must stay un-hideable regardless of the active group
+  // filter: the kebab's own list is a DIFFERENT list than the grid's (the
+  // grid is group-filtered, the kebab must not be), else a monitor hidden
+  // while outside the active group becomes permanently stuck (refs #337,
+  // single-mode regression in the final fix wave).
+  it('kebab lists every monitor even when the grid is narrowed by an active group filter', () => {
+    singleProfile();
+    useScopedMonitorsMock.mockReturnValue({
+      monitors: [
+        { profileId: 'profile-1', profileName: 'Home', item: monitor('1', 'Front Door') },
+        { profileId: 'profile-1', profileName: 'Home', item: monitor('2', 'Back Door') },
+      ],
+      errors: [],
+      isLoading: false,
+      refetchProfile: vi.fn(),
+    });
+    useGroupFilterMock.mockReturnValue({ isFilterActive: true, filteredMonitorIds: ['1'], isFilterReady: true });
+
+    render(<Montage />);
+
+    // Grid: narrowed to the active group (monitor 2 excluded).
+    expect(screen.getByTestId('montage-monitor-1')).toBeInTheDocument();
+    expect(screen.queryByTestId('montage-monitor-2')).not.toBeInTheDocument();
+    // Kebab: still lists both, so the excluded one stays toggleable.
+    expect(screen.getByTestId('montage-kebab-stub')).toHaveTextContent('Front Door,Back Door');
   });
 
   it('All mode renders both profiles\' tiles with a profile chip each, composite-keyed', () => {

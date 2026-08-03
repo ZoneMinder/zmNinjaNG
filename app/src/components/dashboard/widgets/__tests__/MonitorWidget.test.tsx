@@ -22,7 +22,9 @@ vi.mock('../../../../api/monitors', () => ({
   getMonitors: vi.fn(),
 }));
 vi.mock('../../../monitors/LiveMonitorPlayer', () => ({
-  LiveMonitorPlayer: () => <div data-testid="live-player" />,
+  LiveMonitorPlayer: ({ profileId }: { profileId?: string }) => (
+    <div data-testid="live-player" data-profile-id={profileId ?? ''} />
+  ),
 }));
 vi.mock('../../../monitors/MonitorHoverPreview', () => ({
   MonitorHoverPreview: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -92,5 +94,9 @@ describe('MonitorWidget', () => {
     expect((client as unknown as { profile: string }).profile).toBe(profileB.id);
 
     await waitFor(() => expect(screen.getByTestId('widget-profile-chip')).toHaveTextContent('Work'));
+    // LiveMonitorPlayer's own profileId prop (distinct from `profile`) scopes
+    // its go2rtc failure cache / MJPEG token resolution to the OWNING
+    // profile, not whichever profile is globally selected (refs #337).
+    expect(screen.getByTestId('live-player')).toHaveAttribute('data-profile-id', profileB.id);
   });
 });

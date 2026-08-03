@@ -91,6 +91,7 @@ function SingleMonitor({ monitorId, objectFit, profileId }: { monitorId: string;
                     <LiveMonitorPlayer
                         monitor={monitor.Monitor}
                         profile={currentProfile}
+                        profileId={profileId}
                         className="w-full h-full"
                         objectFit={objectFit}
                         onProtocolChange={setProtocol}
@@ -100,6 +101,7 @@ function SingleMonitor({ monitorId, objectFit, profileId }: { monitorId: string;
                 <LiveMonitorPlayer
                     monitor={monitor.Monitor}
                     profile={currentProfile}
+                    profileId={profileId}
                     className="w-full h-full"
                     objectFit={objectFit}
                     onProtocolChange={setProtocol}

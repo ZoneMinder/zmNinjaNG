@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { EventsWidget } from '../EventsWidget';
 import { useProfileScope } from '../../../../hooks/useProfileScope';
@@ -55,11 +55,11 @@ function clientFor(id: string) {
   return { profile: id } as unknown as import('../../../../api/client').ApiClient;
 }
 
-function mockScope(profiles: Array<typeof profileA>) {
-  const mode = profiles.length > 1 ? 'all' : 'single';
+function mockScope(profiles: Array<typeof profileA>, mode?: 'single' | 'all') {
+  const resolvedMode = mode ?? (profiles.length > 1 ? 'all' : 'single');
   vi.mocked(useProfileScope).mockReturnValue({
-    mode,
-    profile: mode === 'single' ? profiles[0] : null,
+    mode: resolvedMode,
+    profile: resolvedMode === 'single' ? profiles[0] : null,
     profiles,
     settings: {},
   } as never);
@@ -85,6 +85,35 @@ describe('EventsWidget', () => {
       client: clientFor(id),
       timezone: 'UTC',
     }));
+  });
+
+  // profiles.length > 1 as the All-mode signal breaks the moment a delete
+  // brings the scope down to one profile while still IN All mode (mode
+  // stays 'all', but the count-based heuristic silently flips to single-mode
+  // behavior): chips disappear and links stop deep-linking through /all
+  // (refs #337, final fix wave).
+  it('a single remaining profile in All mode still chips and deep-links via /all (refs #337)', async () => {
+    mockScope([profileA], 'all');
+    vi.mocked(getEvents).mockResolvedValue({
+      events: [event('1', 'Front Door A', '2026-08-03 10:00:00')],
+    } as never);
+
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter initialEntries={['/dashboard']}>
+          <Routes>
+            <Route path="/dashboard" element={<EventsWidget />} />
+            <Route path="/all/events/:profileId/:eventId" element={<div data-testid="landed-all-route" />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => expect(screen.getByText('Front Door A')).toBeInTheDocument());
+    expect(screen.getByTestId('widget-profile-chip')).toHaveTextContent('Home');
+
+    fireEvent.click(screen.getByText('Front Door A'));
+    expect(screen.getByTestId('landed-all-route')).toBeInTheDocument();
   });
 
   it('All mode: aggregates both profiles\' events with a profile chip per row (refs #337)', async () => {

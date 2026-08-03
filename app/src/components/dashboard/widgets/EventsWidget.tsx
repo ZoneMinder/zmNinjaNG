@@ -64,10 +64,11 @@ export const EventsWidget = memo(function EventsWidget({
     const bandwidth = useBandwidthSettings();
     const scope = useProfileScope();
     const profiles = scope?.profiles ?? [];
-    // profiles.length > 1 only happens in All mode (useProfileScope's single
-    // mode always returns exactly one profile) - a chip-worthy signal with
-    // no separate isAllMode branch needed.
-    const isAllMode = profiles.length > 1;
+    // scope.mode, not profiles.length > 1: a single remaining profile after
+    // deleting down to one WHILE still in All mode must keep chips/deep-links
+    // (profiles.length > 1 collapses to the single-mode branch there, refs
+    // #337).
+    const isAllMode = scope?.mode === 'all';
     const monitorIdFilter = monitorIds?.length ? monitorIds.join(',') : undefined;
     const refetchMs = refreshInterval ?? bandwidth.eventsWidgetInterval;
 
