@@ -597,7 +597,7 @@ export default function Montage() {
               <AnalysisFramesToggle className="h-8 w-8 sm:h-9 sm:w-9" />
               <Button
                 onClick={() => handleToggleFullscreen(true)}
-                variant="default"
+                variant="outline"
                 size="sm"
                 className="h-8 sm:h-9"
                 title={t('montage.fullscreen')}
