@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQueries } from '@tanstack/react-query';
 import React from 'react';
 import { useScopedMonitors } from '../useScopedMonitors';
 import { useProfileScope, type ProfileScope } from '../useProfileScope';
@@ -14,6 +14,15 @@ import type { MonitorData } from '../../api/types';
 vi.mock('../../api/monitors', () => ({
   getMonitors: vi.fn(),
 }));
+
+// Spy on the real useQueries (delegates to actual react-query) so the
+// stagger test can inspect exactly what query config the hook builds,
+// without needing fake timers to prove a refetch never fires.
+vi.mock('@tanstack/react-query', async () => {
+  const actual = await vi.importActual<typeof import('@tanstack/react-query')>('@tanstack/react-query');
+  const useQueriesSpy = vi.fn((options: unknown) => (actual.useQueries as (o: unknown) => unknown)(options));
+  return { ...actual, useQueries: useQueriesSpy };
+});
 
 vi.mock('../../services/sessions', () => ({
   getSession: vi.fn(),
@@ -242,6 +251,23 @@ describe('useScopedMonitors', () => {
       const calledProfileIds = vi.mocked(getMonitors).mock.calls.map(([, id]) => id);
       expect(calledProfileIds).toContain(profileB.id);
     });
+  });
+
+  it('staggers each profile query refetchInterval so N profiles do not poll in a synchronized burst (W8)', async () => {
+    mockScope([profileA, profileB]);
+    vi.mocked(getMonitors).mockResolvedValue({ monitors: [monitor('1', 'Mon')] });
+
+    renderHook(() => useScopedMonitors(), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(vi.mocked(useQueries).mock.calls.length).toBeGreaterThan(0));
+    const { queries } = vi.mocked(useQueries).mock.calls[0][0] as { queries: Array<{ refetchInterval?: number }> };
+    expect(queries).toHaveLength(2);
+    // Index 0 keeps the base interval exactly; index 1 gets a distinct,
+    // bounded-larger period (stagger-interval.ts) instead of the identical
+    // shared interval both profiles used before.
+    expect(queries[0].refetchInterval).toBe(20000);
+    expect(queries[1].refetchInterval).toBeGreaterThan(20000);
+    expect(queries[1].refetchInterval).toBeLessThanOrEqual(20000 * 1.5);
   });
 
   it('refetchProfile still triggers a real network refetch under combine', async () => {
