@@ -160,6 +160,7 @@ function EventCardComponent({ event, monitorName, profileId, profileChip, thumbn
                 alt={event.Name}
                 aspectRatio={aspectRatio}
                 event={event}
+                profileId={ownerProfileId}
               >
                 <EventThumbnail
                   urls={thumbnailUrls}

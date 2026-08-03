@@ -9,24 +9,32 @@
 import { useEffect, useMemo, type ReactNode } from 'react';
 import { HoverPreview } from '../ui/hover-preview';
 import { resolveMinStreamingPort } from '../../lib/monitor/multiport';
-import { useCurrentProfile } from '../../hooks/useCurrentProfile';
+import { useProfileById } from '../../hooks/useCurrentProfile';
 import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
 import { getEventZmsUrl, getZmsControlUrl } from '../../lib/zm/url-builder';
 import { log, LogLevel } from '../../lib/logger';
 import { ZMS_COMMANDS } from '../../lib/zm/zm-constants';
 import { sendDelayedCmdQuit, cancelPendingQuit } from '../../lib/zm/zms-quit';
 import { DEFAULT_HOVER_PREVIEW_PLAYBACK_RATE } from '../../stores/settings';
-import type { Event } from '../../api/types';
+import { asProfileId, type Event } from '../../api/types';
 
 export interface EventZmsHoverDescriptor {
   eventId: string;
   monitorId: string;
   name?: string;
+  /** All mode only: the owning profile, so the ZMS stream is built against
+   *  THAT profile's portal/token instead of the (absent or wrong) current
+   *  profile (refs #337 Task 2). Undefined in single mode. Plain string:
+   *  callers carry this off a timeline/event row, which isn't branded
+   *  ProfileId end-to-end. */
+  profileId?: string;
 }
 
 interface EventThumbnailHoverPreviewProps {
   event: Event;
   aspectRatio: number;
+  /** All mode only: this event's owning profile (refs #337 Task 2). */
+  profileId?: string;
   /** Legacy props (kept for API compatibility, unused in ZMS playback path) */
   urls?: string[];
   cacheKey?: string;
@@ -37,6 +45,7 @@ interface EventThumbnailHoverPreviewProps {
 export function EventThumbnailHoverPreview({
   event,
   aspectRatio,
+  profileId,
   children,
 }: EventThumbnailHoverPreviewProps) {
   return (
@@ -45,7 +54,7 @@ export function EventThumbnailHoverPreview({
       testId="event-thumbnail-hover-preview"
       renderPreview={() => (
         <EventZmsHoverPlayer
-          descriptor={{ eventId: event.Id, monitorId: event.MonitorId, name: event.Name }}
+          descriptor={{ eventId: event.Id, monitorId: event.MonitorId, name: event.Name, profileId }}
         />
       )}
     >
@@ -59,19 +68,20 @@ export function EventThumbnailHoverPreview({
  * Mount: new connkey + event ZMS stream. Unmount: CMD_QUIT.
  */
 export function EventZmsHoverPlayer({ descriptor }: { descriptor: EventZmsHoverDescriptor }) {
-  const { currentProfile, settings } = useCurrentProfile();
-  const { token: accessToken, isFresh: isAccessTokenFresh } = useFreshAccessToken();
+  const ownerProfileId = descriptor.profileId ? asProfileId(descriptor.profileId) : undefined;
+  const { profile: ownerProfile, settings } = useProfileById(ownerProfileId);
+  const { token: accessToken, isFresh: isAccessTokenFresh } = useFreshAccessToken(ownerProfileId);
 
   const connkey = useMemo(
     () => Math.floor(Math.random() * 1_000_000_000).toString(),
     [],
   );
 
-  const portalUrl = currentProfile?.portalUrl ?? '';
+  const portalUrl = ownerProfile?.portalUrl ?? '';
   const tokenOpts = {
     token: accessToken ?? undefined,
-    apiUrl: currentProfile?.apiUrl,
-    minStreamingPort: resolveMinStreamingPort(currentProfile?.minStreamingPort, settings.forceDisableMultiPort),
+    apiUrl: ownerProfile?.apiUrl,
+    minStreamingPort: resolveMinStreamingPort(ownerProfile?.minStreamingPort, settings.forceDisableMultiPort),
     monitorId: descriptor.monitorId,
   };
 

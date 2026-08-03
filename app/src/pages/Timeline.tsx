@@ -37,13 +37,6 @@ import type { TimelineEvent } from '../components/timeline/timeline-layout';
 import type { MonitorRow } from '../components/timeline/timeline-renderer';
 import type { ScrubberState } from '../components/timeline/TimelineScrubber';
 
-/** All mode only: canvas-bound event with monitorId overwritten to the
- *  composite `${profileId}:${monitorId}` key (see canvasEvents below); the
- *  real monitorId survives here so the popover can recover it. */
-interface CanvasTimelineEvent extends TimelineEvent {
-  realMonitorId?: string;
-}
-
 export default function Timeline() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -233,7 +226,7 @@ export default function Timeline() {
   // realMonitorId for consumers (the popover) that need it back - kept out
   // of filteredEvents/scoped.events themselves so nothing else observes the
   // composite value.
-  const canvasEvents: CanvasTimelineEvent[] = useMemo(() => {
+  const canvasEvents: TimelineEvent[] = useMemo(() => {
     if (!isAllMode) return filteredEvents;
     return filteredEvents.map((ev) => {
       const scopedEv = ev as ScopedTimelineEvent;
@@ -299,19 +292,6 @@ export default function Timeline() {
     // Hover is handled by the canvas renderer (highlight effect)
   }, []);
 
-  // Resolves the owning profile for a tapped event id (scrubber taps only
-  // carry the id, not the full event) by looking it up in the currently
-  // loaded scope. Only used for scrubber taps, which have nothing but the id
-  // to go on; handleOpenEvent below has the actual clicked event in hand and
-  // uses that instead, so it never hits this collision case. ponytail: a
-  // colliding id across two profiles both visible at once resolves to
-  // whichever matches first - accepted v1 edge case for the scrubber path,
-  // same class as useScopedEvents' shared-filter-params tradeoff.
-  const resolveEventProfileId = useCallback((eventId: string): string | undefined => {
-    if (!isAllMode) return undefined;
-    return scoped.events.find((e) => e.id === eventId)?.profileId;
-  }, [isAllMode, scoped.events]);
-
   // The popover's "open" action always targets whichever event is currently
   // selected, so its profileId comes straight from that (already-correct)
   // selection instead of a fresh by-id search - a search would pick the
@@ -323,9 +303,12 @@ export default function Timeline() {
     navigateToEvent(eventId, profileId);
   }, [navigateToEvent, isAllMode, selectedEvent]);
 
-  const handleScrubberEventTap = useCallback((eventId: string) => {
-    navigateToEvent(eventId, resolveEventProfileId(eventId));
-  }, [navigateToEvent, resolveEventProfileId]);
+  // profileId comes straight off the tapped event object (ScrubberThumbnail
+  // reads it directly, refs #337 Task 3) - never a reverse by-id lookup,
+  // which breaks whenever two profiles' events collide on the same id.
+  const handleScrubberEventTap = useCallback((eventId: string, profileId?: string) => {
+    navigateToEvent(eventId, profileId);
+  }, [navigateToEvent]);
 
   const handleClosePopover = useCallback(() => {
     setSelectedEvent(null);
@@ -355,7 +338,7 @@ export default function Timeline() {
   // here (refs #337).
   const popoverEvent = selectedEvent ? (() => {
     if (isAllMode) {
-      const scopedEv = selectedEvent.event as CanvasTimelineEvent & ScopedTimelineEvent;
+      const scopedEv = selectedEvent.event as ScopedTimelineEvent;
       const realMonitorId = scopedEv.realMonitorId ?? scopedEv.monitorId;
       const ownerTz = scope?.profiles.find((p) => p.id === scopedEv.profileId)?.timezone ?? 'UTC';
       return {
@@ -368,6 +351,10 @@ export default function Timeline() {
         notes: scopedEv.notes,
         monitorName: monitorNameMap.get(`${scopedEv.profileId}:${realMonitorId}`) ?? realMonitorId,
         tags: [] as string[],
+        // The owning profile, so the popover (and its embedded ZMS hover
+        // preview) resolve THAT profile's portal/token instead of the
+        // (absent or wrong) current profile (refs #337 Task 2).
+        profileId: scopedEv.profileId,
       };
     }
     const raw = single.rawEventMap.get(selectedEvent.event.id);

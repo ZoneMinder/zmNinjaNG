@@ -40,13 +40,14 @@ vi.mock('../../hooks/useEventTags', () => ({
   useEventTagMapping: () => ({ getTagsForEvent: () => [] }),
 }));
 
-type StubEvent = { id: string; monitorId: string };
+type StubEvent = { id: string; monitorId: string; profileId?: string };
 vi.mock('../../components/timeline/TimelineCanvas', () => ({
   TimelineCanvas: (
-    { monitors, events, onEventClick }: {
+    { monitors, events, onEventClick, onScrubberEventTap }: {
       monitors: Array<{ id: string; name: string; profileChip?: string }>;
       events: StubEvent[];
       onEventClick?: (ev: StubEvent) => void;
+      onScrubberEventTap?: (eventId: string, profileId?: string) => void;
     }
   ) => (
     <div data-testid="timeline-canvas-stub">
@@ -66,6 +67,19 @@ vi.mock('../../components/timeline/TimelineCanvas', () => ({
           onClick={() => onEventClick?.(e)}
         >
           {e.monitorId}
+        </button>
+      ))}
+      {/* Stand-in for a scrubber thumbnail tap: carries the event's own
+          profileId straight through, exactly like the real ScrubberThumbnail
+          (refs #337 Task 3) - never a reverse by-id lookup. */}
+      {events.map((e, i) => (
+        <button
+          key={`scrub-${e.id}-${i}`}
+          type="button"
+          data-testid={`scrubber-tap-stub-${e.id}-${i}`}
+          onClick={() => onScrubberEventTap?.(e.id, e.profileId)}
+        >
+          tap
         </button>
       ))}
     </div>
@@ -248,6 +262,37 @@ describe('Timeline Page', () => {
     // Click the SECOND event (profile-2's "dup1"), then open it.
     fireEvent.click(screen.getByTestId('timeline-canvas-event-dup1-1'));
     fireEvent.click(screen.getByTestId('event-preview-popover-open'));
+
+    expect(navigateMock).toHaveBeenCalledWith('/all/events/profile-2/dup1', expect.anything());
+  });
+
+  it('a scrubber tap on a colliding event id opens the tapped event\'s OWN owning profile\'s route (refs #337 Task 3)', () => {
+    useProfileScopeMock.mockReturnValue({
+      mode: 'all',
+      profile: null,
+      profiles: [
+        { id: 'profile-1', name: 'Home', timezone: 'UTC' },
+        { id: 'profile-2', name: 'Office', timezone: 'America/New_York' },
+      ],
+      settings: {},
+    });
+    useScopedTimelineEventsMock.mockReturnValue({
+      ...defaultScoped(),
+      enabledMonitors: [
+        { profileId: 'profile-1', profileName: 'Home', item: { Monitor: { Id: '1', Name: 'Front Door' } } },
+        { profileId: 'profile-2', profileName: 'Office', item: { Monitor: { Id: '2', Name: 'Lobby Cam' } } },
+      ],
+      events: [
+        { id: 'dup1', monitorId: '1', startMs: 5000, endMs: 6000, cause: 'Motion', alarmRatio: 0.2, notes: '', profileId: 'profile-1', profileChip: 'Home' },
+        { id: 'dup1', monitorId: '2', startMs: 4000, endMs: 4500, cause: 'Motion', alarmRatio: 0.9, notes: '', profileId: 'profile-2', profileChip: 'Office' },
+      ],
+    });
+
+    render(<Timeline />);
+
+    // Tap the SECOND event's scrubber stand-in (profile-2's "dup1") directly
+    // - never via handleOpenEvent's popover-selection path.
+    fireEvent.click(screen.getByTestId('scrubber-tap-stub-dup1-1'));
 
     expect(navigateMock).toHaveBeenCalledWith('/all/events/profile-2/dup1', expect.anything());
   });

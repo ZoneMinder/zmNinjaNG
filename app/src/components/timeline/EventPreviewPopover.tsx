@@ -19,10 +19,10 @@ import { getPortalUrlForEvent } from '../../lib/zm/server-resolver';
 import { resolveFallbackFids } from '../../lib/event/thumbnail-chain';
 import { resolveMinStreamingPort } from '../../lib/monitor/multiport';
 import { parseDetectedObjects } from '../../lib/event/event-detection';
-import { useCurrentProfile } from '../../hooks/useCurrentProfile';
+import { useProfileById } from '../../hooks/useCurrentProfile';
 import { useDateTimeFormat } from '../../hooks/useDateTimeFormat';
 import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
-import type { MonitorsResponse } from '../../api/types';
+import { asProfileId, type MonitorsResponse } from '../../api/types';
 import { HoverPreview } from '../ui/hover-preview';
 import { EventZmsHoverPlayer } from '../events/EventThumbnailHoverPreview';
 
@@ -37,6 +37,11 @@ interface EventPreviewPopoverProps {
     notes: string | null;
     monitorName: string;
     tags?: string[];
+    /** All mode only: the owning profile, so the popover resolves THAT
+     *  profile's portal/token instead of the (absent or wrong) current
+     *  profile (refs #337 Task 2). Undefined in single mode. Plain string:
+     *  carried off a timeline row, which isn't branded ProfileId end-to-end. */
+    profileId?: string;
   };
   position: { x: number; y: number };
   onOpenEvent: (eventId: string) => void;
@@ -57,17 +62,22 @@ export const EventPreviewPopover = memo(function EventPreviewPopover({
   onClose,
 }: EventPreviewPopoverProps) {
   const { t } = useTranslation();
-  const { currentProfile, settings } = useCurrentProfile();
+  // All mode: resolve the event's OWNING profile instead of the (absent or
+  // wrong) current profile - same pattern as EventListView's EventItem
+  // (refs #337 Task 2). Single mode: event.profileId is undefined, both
+  // hooks fall back to the current profile, matching prior behavior exactly.
+  const ownerProfileId = event.profileId ? asProfileId(event.profileId) : undefined;
+  const { profile: ownerProfile, settings } = useProfileById(ownerProfileId);
   const { fmtDate, fmtTime } = useDateTimeFormat();
-  const { token: accessToken, isFresh: isAccessTokenFresh } = useFreshAccessToken();
+  const { token: accessToken, isFresh: isAccessTokenFresh } = useFreshAccessToken(ownerProfileId);
   const queryClient = useQueryClient();
 
-  const profilePortalUrl = currentProfile?.portalUrl ?? '';
-  const monitors = (queryClient.getQueryData<MonitorsResponse>(queryKeys.monitors(currentProfile?.id)))?.monitors ?? [];
-  const portalUrl = getPortalUrlForEvent(event.monitorId, monitors, profilePortalUrl);
+  const profilePortalUrl = ownerProfile?.portalUrl ?? '';
+  const monitors = (queryClient.getQueryData<MonitorsResponse>(queryKeys.monitors(ownerProfile?.id)))?.monitors ?? [];
+  const portalUrl = getPortalUrlForEvent(event.monitorId, monitors, profilePortalUrl, ownerProfileId);
   const tokenOpts = {
     token: accessToken ?? undefined,
-    minStreamingPort: resolveMinStreamingPort(currentProfile?.minStreamingPort, settings.forceDisableMultiPort),
+    minStreamingPort: resolveMinStreamingPort(ownerProfile?.minStreamingPort, settings.forceDisableMultiPort),
     monitorId: event.monitorId,
   };
   const fids = resolveFallbackFids(settings.thumbnailFallbackChain);
@@ -165,7 +175,7 @@ export const EventPreviewPopover = memo(function EventPreviewPopover({
                 testId="event-thumbnail-hover-preview"
                 renderPreview={() => (
                   <EventZmsHoverPlayer
-                    descriptor={{ eventId: event.id, monitorId: event.monitorId }}
+                    descriptor={{ eventId: event.id, monitorId: event.monitorId, profileId: event.profileId }}
                   />
                 )}
               >
