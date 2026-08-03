@@ -997,6 +997,9 @@
     "all_servers": "All Servers",
     "all_servers_subtitle": "View monitors from every server"
   },
+  "profile_picker": {
+    "label": "Profile"
+  },
   "setup": {
     "welcome": "Welcome to zmNinjaNg",
     "subtitle": "Initial Configuration",

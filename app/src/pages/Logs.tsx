@@ -1,7 +1,10 @@
 import { useLogStore } from '../stores/logs';
 import { logger, log, LogLevel } from '../lib/logger';
-import { useCurrentProfile } from '../hooks/useCurrentProfile';
+import { useCurrentProfile, useProfileById } from '../hooks/useCurrentProfile';
+import { useProfileScope } from '../hooks/useProfileScope';
 import { useSettingsStore } from '../stores/settings';
+import { ProfilePicker } from '../components/profile-picker';
+import type { ProfileId } from '../api/types';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -31,7 +34,7 @@ import { Checkbox } from '../components/ui/checkbox';
 import { Label } from '../components/ui/label';
 import type { LogEntry } from '../stores/logs';
 import { getZMLogs, getZMLogLevel, getUniqueZMComponents } from '../api/logs';
-import { getCurrentSession } from '../services/sessions';
+import { getSession } from '../services/sessions';
 import { sanitizeLogMessage } from '../lib/log-sanitizer';
 import type { ZMLog } from '../api/types';
 import { NotificationBadge } from '../components/NotificationBadge';
@@ -84,7 +87,16 @@ export default function Logs() {
     const isNative = Platform.isNative;
     const logFile = getLogFile();
     const showShareFile = logFile.capabilities.share;      // Capacitor only
-    const { currentProfile, settings } = useCurrentProfile();
+    const { currentProfile: singleProfile, settings: singleSettings } = useCurrentProfile();
+    const scope = useProfileScope();
+    const isAllMode = scope?.mode === 'all';
+    const [pickedProfileId, setPickedProfileId] = useState<ProfileId | undefined>(undefined);
+    const defaultPickedId = isAllMode ? (pickedProfileId ?? scope.profiles[0]?.id) : undefined;
+    const { profile: allModeProfile, settings: allModeSettings } = useProfileById(defaultPickedId);
+    // Single mode: the page's own current profile/settings, byte-identical to
+    // before. All mode: the picked profile (defaults to the first in scope).
+    const currentProfile = isAllMode ? allModeProfile : singleProfile;
+    const settings = isAllMode ? allModeSettings : singleSettings;
     const { logLevel, componentLogLevels } = settings;
     const updateProfileSettings = useSettingsStore((state) => state.updateProfileSettings);
     const [selectedComponentsZmng, setSelectedComponentsZmng] = useState<string[]>([]);
@@ -100,9 +112,9 @@ export default function Logs() {
 
     // Fetch ZM logs when switching to server view
     useEffect(() => {
-        if (logSource === 'server') {
+        if (logSource === 'server' && currentProfile) {
             setIsLoadingZmLogs(true);
-            getZMLogs(getCurrentSession().client, { limit: 100 })
+            getZMLogs(getSession(currentProfile.id).client, { limit: 100 })
                 .then((response) => {
                     const logs = response.logs.map((logData) => logData.Log);
                     setZmLogs(logs);
@@ -119,9 +131,10 @@ export default function Logs() {
                     setIsLoadingZmLogs(false);
                 });
         }
-        // Refetch only when the source changes; `t` and `toast` would cause refetches on language change.
+        // Refetch only when the source or the owning profile changes; `t` and
+        // `toast` would cause refetches on language change.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [logSource]);
+    }, [logSource, currentProfile?.id]);
 
     const handleLevelChange = (value: string) => {
         const level = parseInt(value, 10) as LogLevel;
@@ -387,6 +400,14 @@ export default function Logs() {
                     </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                    {isAllMode && (
+                        <ProfilePicker
+                            profiles={scope?.profiles ?? []}
+                            value={defaultPickedId}
+                            onChange={setPickedProfileId}
+                            className="w-40 h-8"
+                        />
+                    )}
                     <div className="inline-flex h-8 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground" data-testid="log-source-tabs">
                         <Button
                             variant={logSource === 'zmng' ? 'default' : 'ghost'}

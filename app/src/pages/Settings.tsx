@@ -5,11 +5,15 @@
  * Each section is extracted into its own component under components/settings/.
  */
 
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { NotificationBadge } from '../components/NotificationBadge';
 import { PageContainer } from '../components/common/PageContainer';
+import { ProfilePicker } from '../components/profile-picker';
 import { useSettingsStore } from '../stores/settings';
-import { useCurrentProfile } from '../hooks/useCurrentProfile';
+import { useCurrentProfile, useProfileById } from '../hooks/useCurrentProfile';
+import { useProfileScope } from '../hooks/useProfileScope';
+import { ALL_PROFILES_ID, type ProfileId } from '../api/types';
 import { AppearanceSection } from '../components/settings/AppearanceSection';
 import { LiveStreamingSection } from '../components/settings/LiveStreamingSection';
 import { PlaybackSection } from '../components/settings/PlaybackSection';
@@ -20,16 +24,39 @@ import type { ProfileSettings } from '../stores/settings';
 
 export default function Settings() {
   const { t } = useTranslation();
-  const { currentProfile, settings } = useCurrentProfile();
+  const { currentProfile, settings, isAllMode } = useCurrentProfile();
   const updateSettings = useSettingsStore((state) => state.updateProfileSettings);
 
-  // Generic update helper
+  // View-level (ALL bucket) update helper: AppearanceSection only. Targets
+  // the ALL_PROFILES_ID sentinel bucket in All mode so language/date-format/
+  // etc. stay editable there, and the current profile's bucket otherwise
+  // (unchanged single-mode behavior).
   const update = <K extends keyof ProfileSettings>(
     key: K,
     value: ProfileSettings[K]
   ) => {
-    if (!currentProfile) return;
-    updateSettings(currentProfile.id, { [key]: value });
+    const targetId = isAllMode ? ALL_PROFILES_ID : currentProfile?.id;
+    if (!targetId) return;
+    updateSettings(targetId, { [key]: value });
+  };
+
+  // Server-scoped sections (connection/exclusions/streaming/playback/
+  // assistant/advanced) need a real picked profile in All mode - the ALL
+  // bucket makes no sense for per-server data. Picker defaults to the first
+  // profile in scope (refs #337).
+  const scope = useProfileScope();
+  const [pickedProfileId, setPickedProfileId] = useState<ProfileId | undefined>(undefined);
+  const defaultPickedId = isAllMode ? (pickedProfileId ?? scope?.profiles[0]?.id) : undefined;
+  const { profile: pickedProfile, settings: pickedSettings } = useProfileById(defaultPickedId);
+  const serverScopedProfile = isAllMode ? pickedProfile : currentProfile;
+  const serverScopedSettings = isAllMode ? pickedSettings : settings;
+
+  const updateServerScoped = <K extends keyof ProfileSettings>(
+    key: K,
+    value: ProfileSettings[K]
+  ) => {
+    if (!serverScopedProfile) return;
+    updateSettings(serverScopedProfile.id, { [key]: value });
   };
 
   return (
@@ -46,32 +73,41 @@ export default function Settings() {
       </div>
 
       <AppearanceSection settings={settings} update={update} />
+
+      {isAllMode && (
+        <ProfilePicker
+          profiles={scope?.profiles ?? []}
+          value={defaultPickedId}
+          onChange={setPickedProfileId}
+        />
+      )}
+
       <LiveStreamingSection
-        settings={settings}
-        update={update}
-        currentProfile={currentProfile}
+        settings={serverScopedSettings}
+        update={updateServerScoped}
+        currentProfile={serverScopedProfile}
         updateSettings={updateSettings}
       />
       <PlaybackSection
-        settings={settings}
-        update={update}
-        currentProfile={currentProfile}
+        settings={serverScopedSettings}
+        update={updateServerScoped}
+        currentProfile={serverScopedProfile}
         updateSettings={updateSettings}
       />
       <HiddenMonitorsSection
-        settings={settings}
-        currentProfile={currentProfile}
+        settings={serverScopedSettings}
+        currentProfile={serverScopedProfile}
         updateSettings={updateSettings}
       />
       <AssistantSection
-        settings={settings}
-        update={update}
-        currentProfile={currentProfile}
+        settings={serverScopedSettings}
+        update={updateServerScoped}
+        currentProfile={serverScopedProfile}
         updateSettings={updateSettings}
       />
       <AdvancedSection
-        settings={settings}
-        currentProfile={currentProfile}
+        settings={serverScopedSettings}
+        currentProfile={serverScopedProfile}
         updateSettings={updateSettings}
       />
     </PageContainer>

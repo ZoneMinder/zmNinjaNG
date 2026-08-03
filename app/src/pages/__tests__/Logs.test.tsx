@@ -104,10 +104,15 @@ vi.mock('../../hooks/useCurrentProfile', () => ({
     settings: { logLevel: 1 },
     hasProfile: true,
   }),
+  useProfileById: () => ({ profile: null, settings: { logLevel: 1 } }),
+}));
+
+vi.mock('../../hooks/useProfileScope', () => ({
+  useProfileScope: () => null,
 }));
 
 vi.mock('../../services/sessions', () => ({
-  getCurrentSession: vi.fn(() => ({ client: {} })),
+  getSession: vi.fn(() => ({ client: {} })),
 }));
 
 vi.mock('../../stores/settings', () => ({

@@ -997,6 +997,9 @@
     "all_servers": "所有服务器",
     "all_servers_subtitle": "查看所有服务器的监控"
   },
+  "profile_picker": {
+    "label": "配置"
+  },
   "setup": {
     "welcome": "欢迎使用 zmNinjaNg",
     "subtitle": "初始配置",

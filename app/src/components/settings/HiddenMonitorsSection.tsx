@@ -14,7 +14,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown } from 'lucide-react';
 import { useAuthSlice } from '../../stores/auth';
 import { getMonitors } from '../../api/monitors';
-import { getCurrentSession } from '../../services/sessions';
+import { getSession } from '../../services/sessions';
 import { queryKeys } from '../../lib/query/query-keys';
 import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
@@ -44,7 +44,7 @@ export function HiddenMonitorsSection({
   // filtered ['monitors', ...] cache the rest of the app relies on.
   const { data, isLoading, error } = useQuery({
     queryKey: queryKeys.monitorsAllIncludingExcluded(currentProfile?.id),
-    queryFn: () => getMonitors(getCurrentSession().client, getCurrentSession().profileId, { includeExcluded: true }),
+    queryFn: () => getMonitors(getSession(currentProfile!.id).client, currentProfile!.id, { includeExcluded: true }),
     enabled: !!currentProfile && isAuthenticated,
   });
 

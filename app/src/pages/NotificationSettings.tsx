@@ -10,10 +10,13 @@ import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '../lib/query/query-keys';
 import { useNotificationStore, startEventPoller } from '../stores/notifications';
 import { useShallow } from 'zustand/react/shallow';
-import { useCurrentProfile } from '../hooks/useCurrentProfile';
+import { useCurrentProfile, useProfileById } from '../hooks/useCurrentProfile';
+import { useProfileScope } from '../hooks/useProfileScope';
 import { useProfileStore } from '../stores/profile';
 import { getMonitors } from '../api/monitors';
 import { useAuthSlice } from '../stores/auth';
+import { ProfilePicker } from '../components/profile-picker';
+import type { ProfileId } from '../api/types';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Label } from '../components/ui/label';
@@ -35,7 +38,7 @@ import { Platform } from '../lib/platform';
 import { useTranslation } from 'react-i18next';
 import { log, LogLevel } from '../lib/logger';
 import { checkNotificationsApiSupport } from '../api/notifications';
-import { getCurrentSession } from '../services/sessions';
+import { getSession } from '../services/sessions';
 import { getEventPoller } from '../services/eventPoller';
 import type { NotificationMode } from '../types/notifications';
 import { NotificationBadge } from '../components/NotificationBadge';
@@ -46,7 +49,16 @@ import { MonitorFilterSection } from '../components/notifications/MonitorFilterS
 export default function NotificationSettings() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { currentProfile } = useCurrentProfile();
+  const { currentProfile: singleProfile, isAllMode } = useCurrentProfile();
+  const scope = useProfileScope();
+  const [pickedProfileId, setPickedProfileId] = useState<ProfileId | undefined>(undefined);
+  const defaultPickedId = isAllMode ? (pickedProfileId ?? scope?.profiles[0]?.id) : undefined;
+  const { profile: allModeProfile } = useProfileById(defaultPickedId);
+  // Single mode: the page's own current profile, byte-identical to before.
+  // All mode: the picked profile (defaults to the first in scope). ES
+  // registration is per profile (refs #337), so this page is entirely
+  // server-scoped - one picker gates the whole page, not sub-sections.
+  const currentProfile = isAllMode ? allModeProfile : singleProfile;
   const getDecryptedPassword = useProfileStore((state) => state.getDecryptedPassword);
   const isAuthenticated = useAuthSlice(currentProfile?.id ?? null).isAuthenticated;
 
@@ -71,7 +83,7 @@ export default function NotificationSettings() {
   // Fetch monitors
   const { data: monitorsData } = useQuery({
     queryKey: queryKeys.monitors(currentProfile?.id),
-    queryFn: () => getMonitors(getCurrentSession().client, getCurrentSession().profileId),
+    queryFn: () => getMonitors(getSession(currentProfile!.id).client, currentProfile!.id),
     enabled: !!currentProfile && isAuthenticated,
   });
 
@@ -84,7 +96,7 @@ export default function NotificationSettings() {
   useEffect(() => {
     if (!currentProfile || !isAuthenticated) return;
 
-    checkNotificationsApiSupport(getCurrentSession().client)
+    checkNotificationsApiSupport(getSession(currentProfile.id).client)
       .then((supported) => {
         setDirectModeAvailable(supported);
         log.notificationSettings('ZM Notifications API support check', LogLevel.INFO, { supported });
@@ -336,6 +348,14 @@ export default function NotificationSettings() {
           {t('notification_settings.view_history')}
         </Button>
       </div>
+
+      {isAllMode && (
+        <ProfilePicker
+          profiles={scope?.profiles ?? []}
+          value={defaultPickedId}
+          onChange={setPickedProfileId}
+        />
+      )}
 
       <div className="grid gap-4">
         {/* Enable/Disable */}

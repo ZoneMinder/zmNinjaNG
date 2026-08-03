@@ -997,6 +997,9 @@
     "all_servers": "Tous les serveurs",
     "all_servers_subtitle": "Voir les caméras de tous les serveurs"
   },
+  "profile_picker": {
+    "label": "Profil"
+  },
   "setup": {
     "welcome": "Bienvenue sur zmNinjaNg",
     "subtitle": "Configuration initiale",
