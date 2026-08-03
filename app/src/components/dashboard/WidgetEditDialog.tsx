@@ -25,9 +25,10 @@ import type { ProfileId } from '../../api/types';
 import type { DashboardWidget } from '../../stores/dashboard';
 import type { MonitorFeedFit } from '../../stores/settings';
 import { useDashboardStore } from '../../stores/dashboard';
+import { useProfileScope } from '../../hooks/useProfileScope';
 import { useQuery } from '@tanstack/react-query';
 import { getMonitors } from '../../api/monitors';
-import { getCurrentSession } from '../../services/sessions';
+import { getSession } from '../../services/sessions';
 import { Label } from '../ui/label';
 import { Input } from '../ui/input';
 import { Checkbox } from '../ui/checkbox';
@@ -58,13 +59,22 @@ export function WidgetEditDialog({ open, onOpenChange, widget, profileId }: Widg
     const [onlyDetectedObjects, setOnlyDetectedObjects] = useState(widget.settings.onlyDetectedObjects || false);
     const [selectedTagIds, setSelectedTagIds] = useState<string[]>(widget.settings.tagIds || []);
     const updateWidget = useDashboardStore((state) => state.updateWidget);
+    const scope = useProfileScope();
+    const isAllMode = scope?.mode === 'all';
+    // Which profile's monitors to list/pin this widget to - a monitorId only
+    // means something on one server (refs #337). Single mode: scope's one
+    // profile, same as `profileId` (the dashboard-bucket id) already is.
+    const [pickedProfileId, setPickedProfileId] = useState<ProfileId | undefined>(
+        (widget.settings.profileId as ProfileId | undefined) ?? scope?.profiles[0]?.id
+    );
 
     const { data: monitors } = useQuery({
-        queryKey: queryKeys.monitors(profileId),
-        queryFn: () => getMonitors(getCurrentSession().client, getCurrentSession().profileId),
+        queryKey: queryKeys.monitors(pickedProfileId),
+        queryFn: () => getMonitors(getSession(pickedProfileId!).client, pickedProfileId!),
+        enabled: !!pickedProfileId,
     });
 
-    const { availableTags, tagsSupported } = useEventTags();
+    const { availableTags, tagsSupported } = useEventTags(pickedProfileId);
 
     // Filter out deleted monitors
     const enabledMonitors = useMemo(() => {
@@ -82,6 +92,11 @@ export function WidgetEditDialog({ open, onOpenChange, widget, profileId }: Widg
         setFeedFit((widget.settings.feedFit as MonitorFeedFit) || 'contain');
         setOnlyDetectedObjects(widget.settings.onlyDetectedObjects || false);
         setSelectedTagIds(widget.settings.tagIds || []);
+        setPickedProfileId((widget.settings.profileId as ProfileId | undefined) ?? scope?.profiles[0]?.id);
+        // scope is intentionally omitted: it's a stable reference that only
+        // changes when profiles/settings actually change, and re-deriving
+        // the picked profile on every scope tick would fight the user's pick.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [widget]);
 
     /**
@@ -164,6 +179,7 @@ export function WidgetEditDialog({ open, onOpenChange, widget, profileId }: Widg
         if (widget.type === 'monitor') {
             updatedSettings.monitorIds = selectedMonitors;
             updatedSettings.feedFit = feedFit;
+            if (isAllMode) updatedSettings.profileId = pickedProfileId;
         } else if (widget.type === 'events') {
             updatedSettings.monitorIds = selectedMonitors;
             updatedSettings.onlyDetectedObjects = onlyDetectedObjects;
@@ -200,6 +216,23 @@ export function WidgetEditDialog({ open, onOpenChange, widget, profileId }: Widg
                             data-testid="widget-edit-title-input"
                         />
                     </div>
+
+                    {/* Profile picker (All mode only, monitor/events widgets) */}
+                    {isAllMode && (widget.type === 'monitor' || widget.type === 'events') && (
+                        <div className="space-y-2">
+                            <Label>{t('dashboard.widget_profile')}</Label>
+                            <Select value={pickedProfileId ?? ''} onValueChange={(val) => setPickedProfileId(val as ProfileId)}>
+                                <SelectTrigger data-testid="widget-profile-picker">
+                                    <SelectValue placeholder={t('dashboard.widget_profile')} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {(scope?.profiles ?? []).map((p) => (
+                                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
 
                     {/* Monitor Selection (for monitor and events widgets) */}
                     {(widget.type === 'monitor' || widget.type === 'events') && (

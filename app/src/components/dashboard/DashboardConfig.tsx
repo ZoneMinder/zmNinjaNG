@@ -25,12 +25,13 @@ import { queryKeys } from '../../lib/query/query-keys';
 import type { DashboardWidget, WidgetType } from '../../stores/dashboard';
 import type { MonitorFeedFit } from '../../stores/settings';
 import { useDashboardStore } from '../../stores/dashboard';
-import { useProfileStore } from '../../stores/profile';
-import { asProfileId } from '../../api/types';
-import { useShallow } from 'zustand/react/shallow';
+import { useCurrentProfile } from '../../hooks/useCurrentProfile';
+import { useProfileScope } from '../../hooks/useProfileScope';
+import { ALL_PROFILES_ID, asProfileId } from '../../api/types';
+import type { ProfileId } from '../../api/types';
 import { useQuery } from '@tanstack/react-query';
 import { getMonitors } from '../../api/monitors';
-import { getCurrentSession } from '../../services/sessions';
+import { getSession } from '../../services/sessions';
 import { filterEnabledMonitors } from '../../lib/monitor/filters';
 import { GRID_LAYOUT } from '../../lib/zmninja-ng-constants';
 import { activateOnEnterOrSpace } from '../../lib/utils';
@@ -49,20 +50,25 @@ export function DashboardConfig() {
     const [title, setTitle] = useState('');
     const [feedFit, setFeedFit] = useState<MonitorFeedFit>('contain');
     const addWidget = useDashboardStore((state) => state.addWidget);
-    const currentProfile = useProfileStore(
-        useShallow((state) => {
-            const { profiles, currentProfileId } = state;
-            return profiles.find((p) => p.id === currentProfileId) || null;
-        })
-    );
+    const { currentProfile, isAllMode } = useCurrentProfile();
+    const scope = useProfileScope();
     // Boundary: 'default' is a synthesized placeholder key for the
     // no-profile-selected case (dashboard widget storage keys still need a
-    // key). Not a real profile id, so it must be minted explicitly.
-    const profileId = currentProfile?.id || asProfileId('default');
+    // key). Not a real profile id, so it must be minted explicitly. All mode
+    // gets its own bucket instead of colliding with 'default' (refs #337).
+    const profileId = isAllMode ? ALL_PROFILES_ID : (currentProfile?.id ?? asProfileId('default'));
+
+    // Which profile's monitors to list (monitor/events widgets only need
+    // this to populate the checkbox list): the widget's own settings.profileId
+    // isn't known yet at add-time, so this is just the current pick, default
+    // to the first profile in scope. Single mode: scope.profiles[0] is
+    // exactly the current profile, so this is byte-identical to before.
+    const [pickedProfileId, setPickedProfileId] = useState<ProfileId | undefined>(scope?.profiles[0]?.id);
 
     const { data: monitors } = useQuery({
-        queryKey: queryKeys.monitors(profileId),
-        queryFn: () => getMonitors(getCurrentSession().client, getCurrentSession().profileId),
+        queryKey: queryKeys.monitors(pickedProfileId),
+        queryFn: () => getMonitors(getSession(pickedProfileId!).client, pickedProfileId!),
+        enabled: !!pickedProfileId,
     });
 
     // Filter out deleted monitors
@@ -119,6 +125,9 @@ export function DashboardConfig() {
         if (type === 'monitor') {
             settings.monitorIds = monitors;
             settings.feedFit = fit;
+            // Pins the widget to the profile its monitors were picked from -
+            // a monitorId only means something on one server (refs #337).
+            if (isAllMode) settings.profileId = pickedProfileId;
         } else if (type === 'events') {
             settings.monitorId = monitors[0] || undefined;
             settings.eventCount = 5;
@@ -155,6 +164,7 @@ export function DashboardConfig() {
         setSelectedMonitors([]);
         setTitle('');
         setFeedFit('contain');
+        setPickedProfileId(scope?.profiles[0]?.id);
     };
 
     /**
@@ -248,6 +258,22 @@ export function DashboardConfig() {
                             data-testid="widget-title-input"
                         />
                     </div>
+
+                    {isAllMode && (selectedType === 'monitor' || selectedType === 'events') && (
+                        <div className="space-y-2">
+                            <Label>{t('dashboard.widget_profile')}</Label>
+                            <Select value={pickedProfileId ?? ''} onValueChange={(val) => setPickedProfileId(val as ProfileId)}>
+                                <SelectTrigger data-testid="widget-profile-picker">
+                                    <SelectValue placeholder={t('dashboard.widget_profile')} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {(scope?.profiles ?? []).map((p) => (
+                                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
 
                     {selectedType === 'monitor' && (
                         <div className="space-y-2">

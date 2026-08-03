@@ -86,6 +86,7 @@
     "widget_title_placeholder": "Mi Widget",
     "select_monitor": "Seleccionar Monitor",
     "select_monitors": "Seleccionar Monitores",
+    "widget_profile": "Perfil",
     "all_monitors": "Todos (solo eventos)",
     "monitor_required": "Por favor selecciona al menos un monitor.",
     "monitor_order": "Orden",

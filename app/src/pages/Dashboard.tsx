@@ -15,7 +15,8 @@ import { RefreshButton } from '../components/common/RefreshButton';
 import { DashboardLayout } from '../components/dashboard/DashboardLayout';
 import { DashboardConfig } from '../components/dashboard/DashboardConfig';
 import { useDashboardStore } from '../stores/dashboard';
-import { useProfileStore } from '../stores/profile';
+import { useCurrentProfile } from '../hooks/useCurrentProfile';
+import { ALL_PROFILES_ID, asProfileId } from '../api/types';
 import { useShallow } from 'zustand/react/shallow';
 import { useTranslation } from 'react-i18next';
 import { NotificationBadge } from '../components/NotificationBadge';
@@ -24,13 +25,12 @@ export default function Dashboard() {
     const { t } = useTranslation();
     const isEditing = useDashboardStore((state) => state.isEditing);
     const toggleEditMode = useDashboardStore((state) => state.toggleEditMode);
-    const currentProfile = useProfileStore(
-        useShallow((state) => {
-            const { profiles, currentProfileId } = state;
-            return profiles.find((p) => p.id === currentProfileId) || null;
-        })
-    );
-    const profileId = currentProfile?.id || 'default';
+    const { currentProfile, isAllMode } = useCurrentProfile();
+    // Boundary: 'default' is a synthesized placeholder key for the
+    // no-profile-selected case; All mode gets its own bucket (view-level
+    // prefs owned by the virtual ALL profile, refs #337) rather than
+    // colliding with 'default'.
+    const profileId = isAllMode ? ALL_PROFILES_ID : (currentProfile?.id ?? asProfileId('default'));
     const widgets = useDashboardStore(
         useShallow((state) => state.widgets[profileId] ?? [])
     );

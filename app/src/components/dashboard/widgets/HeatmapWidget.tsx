@@ -9,15 +9,16 @@
  */
 
 import { useState, useMemo, memo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQueries } from '@tanstack/react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { getEvents } from '../../../api/events';
-import { getCurrentSession } from '../../../services/sessions';
-import { useCurrentProfile } from '../../../hooks/useCurrentProfile';
+import { getSession } from '../../../services/sessions';
+import { useProfileScope } from '../../../hooks/useProfileScope';
 import { queryKeys } from '../../../lib/query/query-keys';
 import { useBandwidthSettings } from '../../../hooks/useBandwidthSettings';
-import { useAuthSlice } from '../../../stores/auth';
+import { staggeredRefetchInterval } from '../../../lib/query/stagger-interval';
+import type { EventData } from '../../../api/types';
 import { Card, CardHeader, CardTitle, CardContent } from '../../ui/card';
 import { Button } from '../../ui/button';
 import { Loader2, Activity } from 'lucide-react';
@@ -37,8 +38,8 @@ export const HeatmapWidget = memo(function HeatmapWidget({ title }: HeatmapWidge
   const location = useLocation();
   const bandwidth = useBandwidthSettings();
   const [timeRange, setTimeRange] = useState<TimeRange>('7d');
-  const { currentProfile } = useCurrentProfile();
-  const isAuthenticated = useAuthSlice(currentProfile?.id ?? null).isAuthenticated;
+  const scope = useProfileScope();
+  const profiles = scope?.profiles ?? [];
 
   // Calculate date range based on selection
   const { startDate, endDate } = useMemo(() => {
@@ -70,20 +71,31 @@ export const HeatmapWidget = memo(function HeatmapWidget({ title }: HeatmapWidge
 
   // ... (inside component)
 
-  // Fetch events for the time range
-  const { data: eventsData, isLoading, error } = useQuery({
-    queryKey: queryKeys.eventsHeatmap(currentProfile?.id, timeRange),
-    queryFn: () =>
-      getEvents(getCurrentSession().client, getCurrentSession().profileId, {
-        startDateTime: formatForServer(startDate),
-        endDateTime: formatForServer(endDate),
-        limit: 1000,
-      }),
-    enabled: !!currentProfile && isAuthenticated,
-    refetchInterval: bandwidth.timelineHeatmapInterval,
+  // One query per profile in scope - single mode's array of one shares the
+  // exact key+session the old single query used (byte-identical). All mode
+  // merges raw events across profiles for the density visualization; this
+  // is aggregate density, not per-row datums, so no profile identity needs
+  // to survive the merge (no chip - unlike EventsWidget's list).
+  // Partial-failure tolerant: one profile's error never blanks the heatmap
+  // once another profile has data (mirrors useScopedEvents' anyHasData).
+  const { events, isLoading } = useQueries({
+    queries: profiles.map((p, i) => ({
+      queryKey: queryKeys.eventsHeatmap(p.id, timeRange),
+      queryFn: () =>
+        getEvents(getSession(p.id).client, p.id, {
+          startDateTime: formatForServer(startDate),
+          endDateTime: formatForServer(endDate),
+          limit: 1000,
+        }),
+      refetchInterval: staggeredRefetchInterval(i, profiles.length, bandwidth.timelineHeatmapInterval),
+    })),
+    combine: (results) => {
+      const events: EventData[] = [];
+      let anyData = false;
+      results.forEach((q) => { if (q?.data) { anyData = true; events.push(...q.data.events); } });
+      return { events, isLoading: !anyData };
+    },
   });
-
-  const events = eventsData?.events || [];
 
   const handleTimeRangeClick = (start: string, end: string) => {
     // Navigate to events page with time filter
@@ -149,10 +161,6 @@ export const HeatmapWidget = memo(function HeatmapWidget({ title }: HeatmapWidge
           {isLoading ? (
             <div className="flex items-center justify-center h-full">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-          ) : error ? (
-            <div className="text-center py-12 text-destructive">
-              <p className="text-sm">{t('common.error')}</p>
             </div>
           ) : events.length === 0 ? (
             <EmptyState
