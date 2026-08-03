@@ -19,7 +19,6 @@ import { getCurrentSession } from '../services/sessions';
 import { filterEnabledMonitors } from '../lib/monitor/filters';
 import { useCurrentProfile } from './useCurrentProfile';
 import { useBandwidthSettings } from './useBandwidthSettings';
-import { useAuthSlice } from '../stores/auth';
 import { queryKeys } from '../lib/query/query-keys';
 import type { MonitorData } from '../api/types';
 
@@ -59,12 +58,15 @@ export interface UseMonitorsReturn {
 export function useMonitors(options?: UseMonitorsOptions): UseMonitorsReturn {
   const { currentProfile } = useCurrentProfile();
   const bandwidth = useBandwidthSettings();
-  const isAuthenticated = useAuthSlice(currentProfile?.id ?? null).isAuthenticated;
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: queryKeys.monitors(currentProfile?.id),
     queryFn: () => getMonitors(getCurrentSession().client, getCurrentSession().profileId),
-    enabled: (options?.enabled ?? true) && !!currentProfile?.id && isAuthenticated,
+    // Enabled once there's a profile to fetch for, whether or not it has
+    // authenticated yet: the API client self-heals an unauthenticated
+    // request via its own proactiveLogin path (api/client.ts). Mirrors
+    // useScopedMonitors' semantics (refs #337).
+    enabled: (options?.enabled ?? true) && !!currentProfile?.id,
     refetchInterval: options?.refetchInterval ?? bandwidth.monitorStatusInterval,
   });
 

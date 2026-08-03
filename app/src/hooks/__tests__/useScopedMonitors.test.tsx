@@ -7,7 +7,6 @@ import { useProfileScope, type ProfileScope } from '../useProfileScope';
 import { useBandwidthSettings } from '../useBandwidthSettings';
 import { getMonitors } from '../../api/monitors';
 import { getSession } from '../../services/sessions';
-import { useAuthStore } from '../../stores/auth';
 import { queryKeys } from '../../lib/query/query-keys';
 import { asProfileId } from '../../api/types';
 import type { MonitorData } from '../../api/types';
@@ -27,10 +26,6 @@ vi.mock('../useProfileScope', () => ({
 
 vi.mock('../useBandwidthSettings', () => ({
   useBandwidthSettings: vi.fn(),
-}));
-
-vi.mock('../../stores/auth', () => ({
-  useAuthStore: vi.fn(),
 }));
 
 vi.mock('zustand/react/shallow', () => ({
@@ -70,20 +65,12 @@ function createWrapper() {
   };
 }
 
-const AUTHENTICATED_SLICE = { isAuthenticated: true, requiresAuth: true };
-
 function mockScope(profiles: Array<typeof profileA>, mode: 'single' | 'all' = profiles.length === 1 ? 'single' : 'all') {
   const scope =
     mode === 'single'
       ? { mode: 'single' as const, profile: profiles[0], profiles: [profiles[0]] as [typeof profileA], settings: {} }
       : { mode: 'all' as const, profile: null, profiles, settings: {} };
   vi.mocked(useProfileScope).mockReturnValue(scope as unknown as ProfileScope);
-}
-
-function mockAuthSlices(slices: Record<string, { isAuthenticated: boolean; requiresAuth: boolean }>) {
-  vi.mocked(useAuthStore).mockImplementation((selector: unknown) =>
-    (selector as (s: { slices: typeof slices }) => unknown)({ slices })
-  );
 }
 
 function sessionFor(p: typeof profileA) {
@@ -108,7 +95,6 @@ describe('useScopedMonitors', () => {
 
   it('keeps colliding monitor ids distinct across profiles, tagged with the right profile', async () => {
     mockScope([profileA, profileB]);
-    mockAuthSlices({ [profileA.id]: AUTHENTICATED_SLICE, [profileB.id]: AUTHENTICATED_SLICE });
     vi.mocked(getMonitors).mockImplementation(async (client) => {
       const isA = (client as unknown as { profile: string }).profile === profileA.id;
       return { monitors: [monitor('1', isA ? 'Front Door (A)' : 'Front Door (B)')] };
@@ -133,7 +119,6 @@ describe('useScopedMonitors', () => {
 
   it('surfaces one failing profile as a ProfileError while the other profile still renders its data', async () => {
     mockScope([profileA, profileB]);
-    mockAuthSlices({ [profileA.id]: AUTHENTICATED_SLICE, [profileB.id]: AUTHENTICATED_SLICE });
     const failure = new Error('B is down');
     vi.mocked(getMonitors).mockImplementation(async (client) => {
       const isA = (client as unknown as { profile: string }).profile === profileA.id;
@@ -155,7 +140,6 @@ describe('useScopedMonitors', () => {
 
   it('single-mode profile scope writes to the exact key useMonitors reads, so the cache entry is shared', async () => {
     mockScope([profileA], 'single');
-    mockAuthSlices({ [profileA.id]: AUTHENTICATED_SLICE });
     vi.mocked(getMonitors).mockResolvedValue({ monitors: [monitor('42', 'Driveway')] });
 
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -180,7 +164,6 @@ describe('useScopedMonitors', () => {
 
   it('is not loading once at least one profile has data, even if others are still pending', async () => {
     mockScope([profileA, profileB]);
-    mockAuthSlices({ [profileA.id]: AUTHENTICATED_SLICE, [profileB.id]: AUTHENTICATED_SLICE });
     let resolveB: (v: { monitors: MonitorData[] }) => void = () => {};
     vi.mocked(getMonitors).mockImplementation(async (client) => {
       const isA = (client as unknown as { profile: string }).profile === profileA.id;
@@ -201,7 +184,6 @@ describe('useScopedMonitors', () => {
 
   it('refetchProfile(id) refetches only that profile', async () => {
     mockScope([profileA, profileB]);
-    mockAuthSlices({ [profileA.id]: AUTHENTICATED_SLICE, [profileB.id]: AUTHENTICATED_SLICE });
     vi.mocked(getMonitors).mockResolvedValue({ monitors: [monitor('1', 'Mon')] });
 
     const { result } = renderHook(() => useScopedMonitors(), { wrapper: createWrapper() });
@@ -229,7 +211,6 @@ describe('useScopedMonitors', () => {
     // against the previous combined result via replaceEqualDeep, reusing old
     // references for unchanged data.
     mockScope([profileA], 'single');
-    mockAuthSlices({ [profileA.id]: AUTHENTICATED_SLICE });
     vi.mocked(getMonitors).mockResolvedValue({ monitors: [monitor('1', 'Front Door')] });
 
     const { result, rerender } = renderHook(() => useScopedMonitors(), { wrapper: createWrapper() });
@@ -246,9 +227,25 @@ describe('useScopedMonitors', () => {
     expect(result.current.errors).toBe(errorsRef);
   });
 
+  it('fetches every profile in scope even when neither has ever authenticated this session (refs #337)', async () => {
+    mockScope([profileA, profileB]);
+    // Neither profile has an auth slice at all - the state an All-mode
+    // profile is in until something touches it this session. The old gate
+    // (isAuthenticated) left it disabled forever, so its query never fired
+    // and it silently never appeared. The fix enables it regardless and
+    // lets the API client's own proactiveLogin self-heal on first request.
+    vi.mocked(getMonitors).mockResolvedValue({ monitors: [monitor('1', 'Mon')] });
+
+    renderHook(() => useScopedMonitors(), { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      const calledProfileIds = vi.mocked(getMonitors).mock.calls.map(([, id]) => id);
+      expect(calledProfileIds).toContain(profileB.id);
+    });
+  });
+
   it('refetchProfile still triggers a real network refetch under combine', async () => {
     mockScope([profileA], 'single');
-    mockAuthSlices({ [profileA.id]: AUTHENTICATED_SLICE });
     vi.mocked(getMonitors).mockResolvedValue({ monitors: [monitor('1', 'Front Door')] });
 
     const { result } = renderHook(() => useScopedMonitors(), { wrapper: createWrapper() });

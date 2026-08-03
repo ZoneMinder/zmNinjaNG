@@ -12,7 +12,7 @@
  * 5. Set initialization flags to allow UI to render
  */
 
-import type { Profile, ProfileId } from '../api/types';
+import { ALL_PROFILES_ID, type Profile, type ProfileId } from '../api/types';
 import { getSession } from './sessions';
 import { log, LogLevel } from '../lib/logger';
 import { BOOTSTRAP_TIMEOUTS } from '../lib/zmninja-ng-constants';
@@ -30,7 +30,6 @@ interface ProfileState {
   bootstrapStep: 'start' | 'auth' | 'timezone' | 'zms' | 'finalize' | null;
   getDecryptedPassword: (profileId: string) => Promise<string | undefined>;
   updateProfile: (id: string, updates: Partial<Profile>) => Promise<void>;
-  reLogin: () => Promise<boolean>;
 }
 
 /**
@@ -102,23 +101,19 @@ async function clearStaleState(profileId: ProfileId): Promise<void> {
 }
 
 /**
- * Ensures the given profile's session exists.
+ * Ensures the given profile's session exists. getSession's own construction
+ * path registers this profile's credentials reLogin into the auth store
+ * (services/sessions.ts's gate -> stores/profile.ts's reLoginFor(id)), so
+ * getFreshAccessToken can fall through to it when refresh fails - no
+ * separate registration needed here. Refs #337.
  */
-async function initializeApiClient(
-  profile: Profile,
-  reLogin: () => Promise<boolean>
-): Promise<void> {
+async function initializeApiClient(profile: Profile): Promise<void> {
   const apiClientStart = Date.now();
   log.profileService('Ensuring session', LogLevel.INFO, {
     apiUrl: profile.apiUrl,
   });
 
   getSession(profile.id);
-
-  // Wire the same credentials reLogin into the auth store so
-  // getFreshAccessToken can fall through to it when refresh fails.
-  const { useAuthStore } = await import('../stores/auth');
-  useAuthStore.getState().setReLoginCallback(profile.id, reLogin);
 
   logDuration('Bootstrap step: session ready', apiClientStart, {
     apiUrl: profile.apiUrl,
@@ -198,7 +193,17 @@ export async function handleProfileRehydration(
     return;
   }
 
-  // Case 2: Profile ID exists but profile not found - error case
+  // Case 2: The All Profiles virtual sentinel - no single profile to
+  // bootstrap. Each real profile's own aggregate query (useScopedMonitors)
+  // self-heals its own auth on first fetch, so there is nothing to do here
+  // beyond marking the app initialized. Refs #337.
+  if (state.currentProfileId === ALL_PROFILES_ID) {
+    safeLog('App loading in All Profiles mode; skipping single-profile bootstrap', LogLevel.INFO);
+    setInitializationState(storeSet, false);
+    return;
+  }
+
+  // Case 3: Profile ID exists but profile not found - error case
   const profile = state.profiles.find((p) => p.id === state.currentProfileId);
   if (!profile) {
     safeLog('Current profile ID exists but profile not found', LogLevel.ERROR, {
@@ -225,13 +230,13 @@ export async function handleProfileRehydration(
       : 'never',
   });
 
-  // Case 3: Valid profile - perform initialization and bootstrap
+  // Case 4: Valid profile - perform initialization and bootstrap
   try {
     // Clear stale state from previous session
     await clearStaleState(profile.id);
 
     // Initialize API client
-    await initializeApiClient(profile, storeGet().reLogin);
+    await initializeApiClient(profile);
   } catch (error) {
     log.profileService(
       'Profile bootstrap failed during early initialization',

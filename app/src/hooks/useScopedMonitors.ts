@@ -15,13 +15,11 @@
 
 import { useCallback } from 'react';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
-import { useShallow } from 'zustand/react/shallow';
 import { getMonitors } from '../api/monitors';
 import { getSession } from '../services/sessions';
 import { filterEnabledMonitors } from '../lib/monitor/filters';
 import { useProfileScope } from './useProfileScope';
 import { useBandwidthSettings } from './useBandwidthSettings';
-import { useAuthStore } from '../stores/auth';
 import { queryKeys } from '../lib/query/query-keys';
 import type { Scoped, ProfileError } from '../api/scoped-types';
 import type { MonitorData, ProfileId } from '../api/types';
@@ -48,12 +46,6 @@ export function useScopedMonitors(options?: UseScopedMonitorsOptions): UseScoped
   const queryClient = useQueryClient();
   const profiles = scope?.profiles ?? [];
 
-  // Can't call useAuthSlice in a loop - select the whole slices map once and
-  // derive per-profile enablement below (mirrors useMonitors' semantics: a
-  // profile whose server requires auth and isn't authenticated yet doesn't
-  // fetch).
-  const slices = useAuthStore(useShallow((s) => s.slices));
-
   // combine is the only useQueries path that gets reference-stable output
   // (QueriesObserver diffs the combined result with replaceEqualDeep). The
   // combine callback is a fresh closure every render, but that's fine: the
@@ -66,19 +58,22 @@ export function useScopedMonitors(options?: UseScopedMonitorsOptions): UseScoped
   // re-render every memoized monitor card once an All-mode view consumes
   // this hook.
   const { monitors, errors, isLoading } = useQueries({
-    queries: profiles.map((p) => {
-      const slice = slices[p.id];
-      const authOk = !!slice && (slice.isAuthenticated || !slice.requiresAuth);
-      return {
-        queryKey: queryKeys.monitors(p.id),
-        queryFn: () => getMonitors(getSession(p.id).client, p.id),
-        enabled: (options?.enabled ?? true) && authOk,
-        // ponytail: plain shared interval for v1; if N-profile refetches land
-        // as a synchronized burst on the server in the field, upgrade to a
-        // per-query offset scheduler instead of this identical interval.
-        refetchInterval: bandwidth.monitorStatusInterval,
-      };
-    }),
+    queries: profiles.map((p) => ({
+      queryKey: queryKeys.monitors(p.id),
+      queryFn: () => getMonitors(getSession(p.id).client, p.id),
+      // A profile in scope always gets an enabled query, whether or not it
+      // has ever bootstrapped/authenticated this session: the API client
+      // self-heals an unauthenticated request via its own proactiveLogin
+      // path (api/client.ts), so gating on isAuthenticated here just meant
+      // an untouched profile's query stayed disabled forever - no data, no
+      // error strip, silently missing from All mode. A real auth failure
+      // still surfaces as this profile's ProfileError. Refs #337.
+      enabled: options?.enabled ?? true,
+      // ponytail: plain shared interval for v1; if N-profile refetches land
+      // as a synchronized burst on the server in the field, upgrade to a
+      // per-query offset scheduler instead of this identical interval.
+      refetchInterval: bandwidth.monitorStatusInterval,
+    })),
     combine: (results) => {
       const monitors: Scoped<MonitorData>[] = [];
       const errors: ProfileError[] = [];
