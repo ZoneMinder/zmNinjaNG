@@ -11,6 +11,8 @@ import {
   ALL_PROFILES_ID,
 } from '../sessions';
 import { PROBE_PROFILE_ID } from '../../api/types';
+import { getServerMap } from '../../lib/zm/server-resolver';
+import { getServers } from '../../api/server';
 
 vi.mock('../../api/store-gates', () => ({
   createStoreApiClient: vi.fn((baseURL: string, _reLogin?: () => Promise<boolean>, profileId?: string) => ({
@@ -18,6 +20,16 @@ vi.mock('../../api/store-gates', () => ({
   })),
   resetAuthGates: vi.fn(),
 }));
+
+vi.mock('../../api/server', () => ({
+  getServers: vi.fn(async () => []),
+}));
+
+/** Flush the microtask queue so fire-and-forget server-map populates settle. */
+async function flush(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}
 
 vi.mock('../../lib/logger', () => ({
   log: {
@@ -168,5 +180,35 @@ describe('sessions', () => {
     currentProfileId = PROBE_PROFILE_ID;
 
     expect(tryGetCurrentSession()).toBeNull();
+  });
+
+  describe('server map bootstrap on session creation (refs #337 I3)', () => {
+    it('fires one populate against the new session\'s client', async () => {
+      const session = getSession(aId);
+      await flush();
+
+      expect(getServers).toHaveBeenCalledTimes(1);
+      expect(getServers).toHaveBeenCalledWith(session.client);
+    });
+
+    it('does not re-fire on a second getSession for the same profile', async () => {
+      getSession(aId);
+      await flush();
+      vi.mocked(getServers).mockClear();
+
+      getSession(aId);
+      await flush();
+
+      expect(getServers).not.toHaveBeenCalled();
+    });
+
+    it('leaves the server map empty without throwing when the fetch fails', async () => {
+      vi.mocked(getServers).mockRejectedValueOnce(new Error('network down'));
+
+      expect(() => getSession(aId)).not.toThrow();
+      await flush();
+
+      expect(getServerMap(aId).size).toBe(0);
+    });
   });
 });

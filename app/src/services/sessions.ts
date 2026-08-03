@@ -19,7 +19,8 @@ import { ALL_PROFILES_ID, PROBE_PROFILE_ID, type Profile, type ProfileId } from 
 import type { ApiClient } from '../api/client';
 import { createStoreApiClient, resetAuthGates } from '../api/store-gates';
 import { markSessionActive, markSessionInactive, markAllSessionsInactive } from './session-flags';
-import { clearServerMap, clearAllServerMaps } from '../lib/zm/server-resolver';
+import { clearServerMap, clearAllServerMaps, getServerMap, setServerMap, buildServerMap } from '../lib/zm/server-resolver';
+import { getServers } from '../api/server';
 import { log, LogLevel } from '../lib/logger';
 
 // Re-exported so consumers of the session registry (this module's real
@@ -51,6 +52,33 @@ export function registerSessionsGate(g: SessionsGate): void {
 }
 
 const sessions = new Map<ProfileId, ServerSession>();
+
+/** Profiles with a server-map populate currently in flight, so a burst of
+ *  getSession calls for the same freshly-created session doesn't fire the
+ *  fetch more than once. */
+const serverMapFetchesInFlight = new Set<ProfileId>();
+
+/**
+ * Fire-and-forget population of a profile's multi-server map right after its
+ * session is created. Without this, sessions built for a non-current profile
+ * (All mode) never go through the login-time bootstrapServerMap flow, so
+ * that profile's map stays empty forever and its multi-server
+ * thumbnails/streams silently fall back to (usually wrong) single-server
+ * URLs. Only fires when the map is still empty and no fetch for this
+ * profile is already running; errors are swallowed - the empty-map fallback
+ * already handles that case (refs #337 I3).
+ */
+function bootstrapServerMapFor(session: ServerSession): void {
+  const { profileId, client } = session;
+  if (getServerMap(profileId).size > 0 || serverMapFetchesInFlight.has(profileId)) return;
+  serverMapFetchesInFlight.add(profileId);
+  getServers(client)
+    .then((servers) => setServerMap(buildServerMap(servers), profileId))
+    .catch((error) => {
+      log.profileService('Failed to bootstrap server map for session', LogLevel.WARN, { profileId, error });
+    })
+    .finally(() => serverMapFetchesInFlight.delete(profileId));
+}
 
 /**
  * Get (lazily building and caching) the session for a profile.
@@ -85,6 +113,7 @@ export function getSession(profileId: ProfileId): ServerSession {
   sessions.set(profileId, session);
   markSessionActive(profileId);
   log.profileService('Session created', LogLevel.DEBUG, { profileId });
+  bootstrapServerMapFor(session);
   return session;
 }
 
