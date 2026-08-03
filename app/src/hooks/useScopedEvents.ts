@@ -39,6 +39,7 @@ import { useQueries, useQueryClient, keepPreviousData } from '@tanstack/react-qu
 import { getEvents } from '../api/events';
 import type { EventFilters } from '../api/events';
 import { getSession } from '../services/sessions';
+import { useEventFavoritesStore } from '../stores/eventFavorites';
 import { useProfileScope } from './useProfileScope';
 import { queryKeys } from '../lib/query/query-keys';
 import { staggeredRefetchInterval } from '../lib/query/stagger-interval';
@@ -79,7 +80,13 @@ export interface UseScopedEventsOptions {
    *  resolveOwnMonitorIds). Single mode: bare ids, unchanged. */
   monitorId?: string;
   isGroupFilterActive: boolean;
-  eventIds?: string[];
+  /** Filter to only favorited events. Each profile's OWN favorites (per the
+   *  Stores contract's getFavorites(profileId)) resolve inside the fan-out
+   *  below, never a single profile's list reused for every profile - see
+   *  resolveOwnMonitorIds' doc comment for the parallel bug this avoids
+   *  (refs #337 I7). A profile with none of its own favorited contributes
+   *  no events, matching single mode's existing empty-favorites behavior. */
+  favoritesOnly?: boolean;
   tagIds?: string[];
   /** Whether the queries are enabled (default: true) */
   enabled?: boolean;
@@ -112,7 +119,18 @@ export function useScopedEvents(options: UseScopedEventsOptions): UseScopedEvent
   const scope = useProfileScope();
   const queryClient = useQueryClient();
   const profiles = scope?.profiles ?? [];
-  const { filters, limit, monitorId, isGroupFilterActive, eventIds, tagIds, enabled, refetchInterval } = options;
+  const { filters, limit, monitorId, isGroupFilterActive, favoritesOnly, tagIds, enabled, refetchInterval } = options;
+
+  // Reactive so toggling a favorite refetches the affected profile's query
+  // (Stores contract: select every reactive field read - the whole record,
+  // not a per-profile derived array, so an untouched profile's entry stays
+  // reference-stable across renders).
+  const profileFavorites = useEventFavoritesStore((s) => s.profileFavorites);
+  const ownEventIds = useCallback(
+    (profileId: ProfileId): string[] | undefined =>
+      favoritesOnly ? (profileFavorites[profileId] ?? []) : undefined,
+    [favoritesOnly, profileFavorites]
+  );
 
   // combine is the only useQueries path that gets reference-stable output -
   // see useScopedMonitors.ts for the full rationale (QueriesObserver diffs
@@ -122,6 +140,7 @@ export function useScopedEvents(options: UseScopedEventsOptions): UseScopedEvent
   const { events, errors, isLoading, isFetching, totalCount } = useQueries({
     queries: profiles.map((p, i) => {
       const ownMonitorId = resolveOwnMonitorIds(monitorId, p.id);
+      const eventIds = ownEventIds(p.id);
       return {
         queryKey: queryKeys.eventsList(p.id, filters, limit, ownMonitorId, isGroupFilterActive, eventIds, tagIds),
         queryFn: () => {
@@ -222,11 +241,11 @@ export function useScopedEvents(options: UseScopedEventsOptions): UseScopedEvent
   const refetchProfile = useCallback(
     (id: ProfileId): void => {
       void queryClient.refetchQueries({
-        queryKey: queryKeys.eventsList(id, filters, limit, resolveOwnMonitorIds(monitorId, id), isGroupFilterActive, eventIds, tagIds),
+        queryKey: queryKeys.eventsList(id, filters, limit, resolveOwnMonitorIds(monitorId, id), isGroupFilterActive, ownEventIds(id), tagIds),
         exact: true,
       });
     },
-    [queryClient, filters, limit, monitorId, isGroupFilterActive, eventIds, tagIds]
+    [queryClient, filters, limit, monitorId, isGroupFilterActive, ownEventIds, tagIds]
   );
 
   // Refetches every profile in scope and resolves once they've all settled -
@@ -236,12 +255,12 @@ export function useScopedEvents(options: UseScopedEventsOptions): UseScopedEvent
     await Promise.all(
       profiles.map((p) =>
         queryClient.refetchQueries({
-          queryKey: queryKeys.eventsList(p.id, filters, limit, resolveOwnMonitorIds(monitorId, p.id), isGroupFilterActive, eventIds, tagIds),
+          queryKey: queryKeys.eventsList(p.id, filters, limit, resolveOwnMonitorIds(monitorId, p.id), isGroupFilterActive, ownEventIds(p.id), tagIds),
           exact: true,
         })
       )
     );
-  }, [queryClient, profiles, filters, limit, monitorId, isGroupFilterActive, eventIds, tagIds]);
+  }, [queryClient, profiles, filters, limit, monitorId, isGroupFilterActive, ownEventIds, tagIds]);
 
   return { events, errors, isLoading, isFetching, totalCount, refetchProfile, refetchAll };
 }

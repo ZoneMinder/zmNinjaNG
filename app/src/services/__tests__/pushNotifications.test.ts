@@ -640,8 +640,48 @@ describe('notification tap handling', () => {
       );
     });
 
-    it('falls back to the aggregated events list, without crashing, when the tap does not match a known profile', async () => {
+    // refs #337 I8: a profile-less (or unmatched-name) payload in All mode
+    // used to fall all the way through to the generic /events list, even
+    // though there IS a real profile available to attribute it to - the one
+    // this app instance is actually ES-connected to. gates.notifications.
+    // getCurrentProfileId() defaults to 'profile-1' (makeFakeGates above),
+    // so that's the expected fallback target here.
+    it('falls back to the ES-connected profile\'s /all/ route and history when the tap does not match a known profile (refs #337 I8)', async () => {
       gates.profile.getCurrentProfileId = vi.fn().mockReturnValue(ALL_PROFILES_ID);
+      mockResolveProfileForNotification.mockReturnValue({ targetProfileId: ALL_PROFILES_ID, isCrossProfile: false });
+      const { listener } = await initAndGetListener();
+
+      listener({ notification: { title: 'Alarm', body: 'Motion', data: { eid: '11', mid: '9', profile: 'Deleted Server' } } });
+
+      expect(mockRequestProfileSwitch).not.toHaveBeenCalled();
+      expect(mockNavigate).not.toHaveBeenCalled();
+      expect(mockNavigateToEvent).toHaveBeenCalledWith(
+        '11',
+        { from: '/monitors', fromNotification: true },
+        'profile-1'
+      );
+      // Stored under the real ES-connected profile, never the aggregate
+      // sentinel bucket (nothing reads profileEvents[ALL_PROFILES_ID]).
+      expect(gates.notifications.addEvent).toHaveBeenCalledWith('profile-1', expect.objectContaining({ EventId: 11 }), 'push');
+      expect(gates.notifications.markEventRead).toHaveBeenCalledWith('profile-1', 11);
+    });
+
+    it('stores an id-less, unmatched-profile tap under the ES-connected profile as EventId 0, never the sentinel (refs #337 I8)', async () => {
+      gates.profile.getCurrentProfileId = vi.fn().mockReturnValue(ALL_PROFILES_ID);
+      mockResolveProfileForNotification.mockReturnValue({ targetProfileId: ALL_PROFILES_ID, isCrossProfile: false });
+      const { listener } = await initAndGetListener();
+
+      listener({ notification: { title: 'Alarm', body: 'Motion', data: { profile: 'Deleted Server' } } });
+
+      expect(gates.notifications.addEvent).toHaveBeenCalledWith('profile-1', expect.objectContaining({ EventId: 0 }), 'push');
+      // Id 0 is not a real ZM event - never marked read (issue #242), same
+      // as the single-profile id-less case above.
+      expect(gates.notifications.markEventRead).not.toHaveBeenCalled();
+    });
+
+    it('falls back to the aggregated events list only when there is no ES-connected profile either', async () => {
+      gates.profile.getCurrentProfileId = vi.fn().mockReturnValue(ALL_PROFILES_ID);
+      gates.notifications.getCurrentProfileId = vi.fn().mockReturnValue(null);
       mockResolveProfileForNotification.mockReturnValue({ targetProfileId: ALL_PROFILES_ID, isCrossProfile: false });
       const { listener } = await initAndGetListener();
 
@@ -653,20 +693,6 @@ describe('notification tap handling', () => {
       // Never write into the aggregate sentinel's event bucket: nothing reads
       // profileEvents[ALL_PROFILES_ID], so an entry there is a permanently
       // unread, unclearable stuck badge (refs #337).
-      expect(gates.notifications.addEvent).not.toHaveBeenCalled();
-      expect(gates.notifications.markEventRead).not.toHaveBeenCalled();
-    });
-
-    it('never stores a notification event under the aggregate sentinel (no eid, unmatched profile name)', async () => {
-      gates.profile.getCurrentProfileId = vi.fn().mockReturnValue(ALL_PROFILES_ID);
-      mockResolveProfileForNotification.mockReturnValue({ targetProfileId: ALL_PROFILES_ID, isCrossProfile: false });
-      const { listener } = await initAndGetListener();
-
-      // No eid at all: the worst case, since without an eid the event can
-      // never be marked read either - it would sit unread forever with no
-      // profile page able to clear it.
-      listener({ notification: { title: 'Alarm', body: 'Motion', data: { profile: 'Deleted Server' } } });
-
       expect(gates.notifications.addEvent).not.toHaveBeenCalled();
       expect(gates.notifications.markEventRead).not.toHaveBeenCalled();
     });

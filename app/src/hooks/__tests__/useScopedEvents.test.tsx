@@ -6,6 +6,7 @@ import { useScopedEvents } from '../useScopedEvents';
 import { useProfileScope, type ProfileScope } from '../useProfileScope';
 import { getEvents } from '../../api/events';
 import { getSession } from '../../services/sessions';
+import { useEventFavoritesStore } from '../../stores/eventFavorites';
 import { queryKeys } from '../../lib/query/query-keys';
 import { formatForServerInTz } from '../../lib/time';
 import { asProfileId } from '../../api/types';
@@ -116,7 +117,6 @@ const baseOptions = {
   limit: 100,
   monitorId: undefined,
   isGroupFilterActive: false,
-  eventIds: undefined,
   tagIds: undefined,
 };
 
@@ -127,6 +127,7 @@ describe('useScopedEvents', () => {
       const p = [profileA, profileB].find((pr) => pr.id === id);
       return sessionFor(p ?? profileA);
     });
+    useEventFavoritesStore.setState({ profileFavorites: {} });
   });
 
   it('orders merged events by true cross-timezone instant, not by wall-clock string', async () => {
@@ -275,6 +276,41 @@ describe('useScopedEvents', () => {
     expect(callFor(profileB)?.monitorId).toBe('7');
   });
 
+  it('resolves favoritesOnly per profile - a profile with no favorites contributes nothing (refs #337 I7)', async () => {
+    mockScope([profileA, profileB]);
+    useEventFavoritesStore.getState().addFavorite(profileA.id, '3');
+    vi.mocked(getEvents).mockResolvedValue(eventsResponse([]));
+
+    renderHook(() => useScopedEvents({ ...baseOptions, favoritesOnly: true }), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(vi.mocked(getEvents).mock.calls.length).toBeGreaterThanOrEqual(2));
+
+    const callFor = (p: typeof profileA) =>
+      vi.mocked(getEvents).mock.calls.find(([, id]) => id === p.id)?.[2] as { eventIds?: string[] };
+
+    // A's own favorite reaches its query; B (no favorites of its own) gets
+    // an impossible filter instead of silently reusing A's list or fetching
+    // everything unfiltered.
+    expect(callFor(profileA)?.eventIds).toEqual(['3']);
+    expect(callFor(profileB)?.eventIds).toEqual([]);
+  });
+
+  it('passes no eventIds filter when favoritesOnly is off', async () => {
+    mockScope([profileA, profileB]);
+    useEventFavoritesStore.getState().addFavorite(profileA.id, '3');
+    vi.mocked(getEvents).mockResolvedValue(eventsResponse([]));
+
+    renderHook(() => useScopedEvents(baseOptions), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(vi.mocked(getEvents).mock.calls.length).toBeGreaterThanOrEqual(2));
+
+    const callFor = (p: typeof profileA) =>
+      vi.mocked(getEvents).mock.calls.find(([, id]) => id === p.id)?.[2] as { eventIds?: string[] };
+
+    expect(callFor(profileA)?.eventIds).toBeUndefined();
+    expect(callFor(profileB)?.eventIds).toBeUndefined();
+  });
+
   it('surfaces one failing profile as a ProfileError while the other profile still renders its data', async () => {
     mockScope([profileA, profileB]);
     const failure = new Error('B is down');
@@ -320,7 +356,7 @@ describe('useScopedEvents', () => {
       baseOptions.limit,
       baseOptions.monitorId,
       baseOptions.isGroupFilterActive,
-      baseOptions.eventIds,
+      undefined,
       baseOptions.tagIds
     );
     expect(queryClient.getQueryData(key)).toEqual(eventsResponse([event('42', '2026-01-15 09:00:00')]));

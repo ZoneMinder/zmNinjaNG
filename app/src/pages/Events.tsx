@@ -9,7 +9,6 @@ import { useMemo, useRef, useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '../lib/query/query-keys';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
-import { useShallow } from 'zustand/react/shallow';
 import type { EventFilters } from '../api/events';
 import type { ProfileId } from '../api/types';
 import { getCurrentSession } from '../services/sessions';
@@ -48,7 +47,6 @@ import { useTranslation } from 'react-i18next';
 import { formatForServer, formatLocalDateTime } from '../lib/time';
 import { EmptyState } from '../components/ui/empty-state';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { useEventFavoritesStore } from '../stores/eventFavorites';
 import { NotificationBadge } from '../components/NotificationBadge';
 
 export default function Events() {
@@ -76,14 +74,6 @@ export default function Events() {
   const eventCols =
     settings.eventMontageByGroup[groupKey]?.gridCols ??
     DEFAULT_EVENT_MONTAGE_GROUP_LAYOUT.gridCols;
-
-  // Subscribe to the actual favorites data, not just the getter function
-  // Use shallow comparison to avoid infinite re-renders from new array references
-  const favoriteIds = useEventFavoritesStore(
-    useShallow((state) =>
-      currentProfile ? state.getFavorites(currentProfile.id) : []
-    )
-  );
 
   const parentRef = useRef<HTMLDivElement>(null);
   const { t } = useTranslation();
@@ -208,15 +198,6 @@ export default function Events() {
     monitorId: effectiveMonitorId,
   }), [filters, effectiveMonitorId]);
 
-  // Favorites are stored locally, so push them into the server query as an
-  // explicit ID set. This keeps the favorites filter consistent with pagination:
-  // totalCount and "Load More" reflect the favorites, and favorites beyond the
-  // first fetched page stay reachable (refs #205). undefined = no favorites filter.
-  const eventIdFilter = useMemo(
-    () => (favoritesOnly ? favoriteIds : undefined),
-    [favoritesOnly, favoriteIds]
-  );
-
   // Tags filter server-side too, so tagged events past the first page stay
   // reachable and "Load More" is accurate (refs #205). ZM cannot combine its
   // "Tags.Id:" filter with the favorites "Id IN:" query, so when favorites is
@@ -236,11 +217,14 @@ export default function Events() {
   // count survives the round-trip into an event and back, and resets when a
   // filter changes (refs #197). Opening an event unmounts this page, so a
   // component-local count would collapse back to the first page on return.
+  // favoritesOnly resolves to each profile's OWN favorites now (useScopedEvents,
+  // refs #337 I7), so this key can no longer carry the resolved id list -
+  // a sentinel that flips with the toggle is enough to reset pagination.
   const paginationKey = useMemo(
     () => JSON.stringify(
-      queryKeys.eventsList(currentProfile?.id, filters, 0, effectiveMonitorId, isGroupFilterActive, eventIdFilter, tagIdFilter)
+      queryKeys.eventsList(currentProfile?.id, filters, 0, effectiveMonitorId, isGroupFilterActive, favoritesOnly ? ['__favorites__'] : undefined, tagIdFilter)
     ),
-    [currentProfile?.id, filters, effectiveMonitorId, isGroupFilterActive, eventIdFilter, tagIdFilter]
+    [currentProfile?.id, filters, effectiveMonitorId, isGroupFilterActive, favoritesOnly, tagIdFilter]
   );
   const { eventLimit, batchSize, loadNextPage } = useEventPagination({
     defaultLimit: settings.defaultEventLimit || 100,
@@ -265,7 +249,7 @@ export default function Events() {
     limit: eventLimit,
     monitorId: effectiveMonitorId,
     isGroupFilterActive,
-    eventIds: eventIdFilter,
+    favoritesOnly,
     tagIds: tagIdFilter,
   });
 

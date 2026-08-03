@@ -575,7 +575,21 @@ export class MobilePushService {
       isAllMode ? appProfileId : currentProfileId
     );
 
-    const profileIdForEvent = targetProfileId || currentProfileId;
+    // All mode with no (or an unmatched) profile in the payload resolves
+    // targetProfileId to the ALL_PROFILES_ID sentinel itself
+    // (resolveProfileForNotification's absent-data early return echoes back
+    // whatever currentProfileId it was given, which is appProfileId here).
+    // Falling back straight to the generic /events list in that case drops
+    // the notification's history entry and deep link even though there IS
+    // a real profile available: the ES-connected one this app instance is
+    // actually listening on. Only when that is ALSO absent does the
+    // existing warn+/events fallback below apply (refs #337 I8).
+    const effectiveTargetProfileId =
+      isAllMode && (!targetProfileId || targetProfileId === ALL_PROFILES_ID)
+        ? currentProfileId
+        : targetProfileId;
+
+    const profileIdForEvent = effectiveTargetProfileId || currentProfileId;
 
     // Never write into the aggregate sentinel's own bucket: nothing reads
     // profileEvents[ALL_PROFILES_ID] (NotificationBadge and NotificationHistory
@@ -640,12 +654,13 @@ export class MobilePushService {
         eventId: String(eid),
       });
     } else if (isAllMode) {
-      if (targetProfileId && targetProfileId !== ALL_PROFILES_ID) {
-        // Known profile while in All mode: no switch needed, deep-link
-        // straight into that profile's event via the /all/ route.
-        navigationService.navigateToEvent(String(eid), { from: '/monitors', fromNotification: true }, targetProfileId);
+      if (effectiveTargetProfileId && effectiveTargetProfileId !== ALL_PROFILES_ID) {
+        // Known (or ES-connected-fallback) profile while in All mode: no
+        // switch needed, deep-link straight into that profile's event via
+        // the /all/ route.
+        navigationService.navigateToEvent(String(eid), { from: '/monitors', fromNotification: true }, effectiveTargetProfileId);
         log.push('All-mode notification tap, navigating to owning profile event', LogLevel.INFO, {
-          targetProfileId,
+          targetProfileId: effectiveTargetProfileId,
           eventId: eid,
         });
       } else {
