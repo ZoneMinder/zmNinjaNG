@@ -97,6 +97,27 @@ export function getCurrentSession(): ServerSession {
   return getSession(currentProfileId);
 }
 
+/**
+ * Get the session for the current profile, or null instead of throwing.
+ *
+ * For UI-layer code that can render while All mode is active (currentProfileId
+ * is the ALL_PROFILES_ID sentinel, so there is no single "current" session) -
+ * e.g. a detail page reached without an owning-profile route param. Never
+ * throws: getCurrentSession stays the throwing form for non-UI callers that
+ * can assume a real current profile.
+ */
+export function tryGetCurrentSession(): ServerSession | null {
+  const currentProfileId = gate.getCurrentProfileId();
+  if (!currentProfileId || currentProfileId === ALL_PROFILES_ID || currentProfileId === PROBE_PROFILE_ID) {
+    return null;
+  }
+  try {
+    return getSession(currentProfileId);
+  } catch {
+    return null;
+  }
+}
+
 export function hasSession(profileId: ProfileId): boolean {
   return sessions.has(profileId);
 }

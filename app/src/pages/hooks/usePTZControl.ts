@@ -9,14 +9,17 @@ import { useCallback } from 'react';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { controlMonitor } from '../../api/monitors';
-import { getCurrentSession } from '../../services/sessions';
+import { getSession, getCurrentSession } from '../../services/sessions';
 import { log, LogLevel } from '../../lib/logger';
+import type { ProfileId } from '../../api/types';
 
 interface UsePTZControlOptions {
   portalUrl: string;
   monitorId: string;
   accessToken: string | null;
   minStreamingPort?: number;
+  /** Owning profile for an /all/ deep route; defaults to the current profile. */
+  profileId?: ProfileId;
 }
 
 interface UsePTZControlReturn {
@@ -28,6 +31,7 @@ export function usePTZControl({
   monitorId,
   accessToken,
   minStreamingPort,
+  profileId,
 }: UsePTZControlOptions): UsePTZControlReturn {
   const { t } = useTranslation();
 
@@ -36,13 +40,14 @@ export function usePTZControl({
       if (!portalUrl || !monitorId) return;
 
       try {
-        await controlMonitor(getCurrentSession().client, portalUrl, monitorId, command, accessToken || undefined, minStreamingPort);
+        const client = (profileId ? getSession(profileId) : getCurrentSession()).client;
+        await controlMonitor(client, portalUrl, monitorId, command, accessToken || undefined, minStreamingPort);
       } catch (error) {
         log.monitorDetail('PTZ command failed', LogLevel.ERROR, { command, error });
         toast.error(t('monitor_detail.ptz_failed'));
       }
     },
-    [portalUrl, monitorId, accessToken, minStreamingPort, t]
+    [portalUrl, monitorId, accessToken, minStreamingPort, profileId, t]
   );
 
   return { handlePTZCommand };

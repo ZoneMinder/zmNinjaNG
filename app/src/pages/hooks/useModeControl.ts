@@ -8,8 +8,9 @@ import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { changeMonitorFunction } from '../../api/monitors';
-import { getCurrentSession } from '../../services/sessions';
+import { getSession, getCurrentSession } from '../../services/sessions';
 import { log, LogLevel } from '../../lib/logger';
+import type { ProfileId } from '../../api/types';
 
 /**
  * Tolerant when reading, strict when writing (refs #247).
@@ -36,6 +37,8 @@ interface UseModeControlOptions {
   monitorId: string | undefined;
   currentFunction: MonitorFunction | undefined;
   onSuccess?: () => Promise<unknown>;
+  /** Owning profile for an /all/ deep route; defaults to the current profile. */
+  profileId?: ProfileId;
 }
 
 interface UseModeControlReturn {
@@ -47,6 +50,7 @@ export function useModeControl({
   monitorId,
   currentFunction,
   onSuccess,
+  profileId,
 }: UseModeControlOptions): UseModeControlReturn {
   const { t } = useTranslation();
   const [isModeUpdating, setIsModeUpdating] = useState(false);
@@ -65,7 +69,8 @@ export function useModeControl({
 
       setIsModeUpdating(true);
       try {
-        await changeMonitorFunction(getCurrentSession().client, monitorId, nextMode);
+        const client = (profileId ? getSession(profileId) : getCurrentSession()).client;
+        await changeMonitorFunction(client, monitorId, nextMode);
         if (onSuccess) {
           await onSuccess();
         }
@@ -81,7 +86,7 @@ export function useModeControl({
         setIsModeUpdating(false);
       }
     },
-    [monitorId, currentFunction, onSuccess, t]
+    [monitorId, currentFunction, onSuccess, profileId, t]
   );
 
   return {

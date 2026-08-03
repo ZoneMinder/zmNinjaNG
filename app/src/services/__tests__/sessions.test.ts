@@ -4,11 +4,13 @@ import {
   registerSessionsGate,
   getSession,
   getCurrentSession,
+  tryGetCurrentSession,
   hasSession,
   dropSession,
   dropAllSessions,
   ALL_PROFILES_ID,
 } from '../sessions';
+import { PROBE_PROFILE_ID } from '../../api/types';
 
 vi.mock('../../api/store-gates', () => ({
   createStoreApiClient: vi.fn((baseURL: string, _reLogin?: () => Promise<boolean>, profileId?: string) => ({
@@ -140,5 +142,31 @@ describe('sessions', () => {
     currentProfileId = null;
 
     expect(() => getCurrentSession()).toThrow();
+  });
+
+  it('tryGetCurrentSession returns the session for the current profile', () => {
+    currentProfileId = bId;
+
+    const session = tryGetCurrentSession();
+
+    expect(session?.profileId).toBe(bId);
+  });
+
+  it('tryGetCurrentSession returns null instead of throwing when there is no current profile', () => {
+    currentProfileId = null;
+
+    expect(tryGetCurrentSession()).toBeNull();
+  });
+
+  it('tryGetCurrentSession returns null instead of throwing for the ALL_PROFILES_ID sentinel', () => {
+    currentProfileId = ALL_PROFILES_ID;
+
+    expect(tryGetCurrentSession()).toBeNull();
+  });
+
+  it('tryGetCurrentSession returns null instead of throwing for the probe sentinel', () => {
+    currentProfileId = PROBE_PROFILE_ID;
+
+    expect(tryGetCurrentSession()).toBeNull();
   });
 });

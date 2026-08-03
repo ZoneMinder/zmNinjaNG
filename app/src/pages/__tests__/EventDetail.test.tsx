@@ -7,7 +7,7 @@
  * favorites store and assert the DOM and the toast both follow the new state.
  */
 
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import EventDetail from '../EventDetail';
 import { useEventFavoritesStore } from '../../stores/eventFavorites';
@@ -30,6 +30,7 @@ const h = vi.hoisted(() => ({
   } as Record<string, unknown>,
   goToNextEvent: vi.fn(),
   locationState: {} as Record<string, unknown>,
+  routeParams: { id: '101' } as Record<string, string | undefined>,
   translate: vi.fn((key: string) => key),
   logEventDetail: vi.fn(),
   logOther: vi.fn(),
@@ -50,7 +51,7 @@ vi.mock('sonner', () => ({
 }));
 
 vi.mock('react-router-dom', () => ({
-  useParams: () => ({ id: '101' }),
+  useParams: () => h.routeParams,
   useNavigate: () => vi.fn(),
   useLocation: () => ({ state: h.locationState }),
 }));
@@ -84,11 +85,23 @@ vi.mock('../../api/monitors', () => ({ getMonitor: vi.fn() }));
 
 vi.mock('../../services/download', () => ({ downloadEventVideo: vi.fn() }));
 
+const getSessionMock = vi.fn((id: string) => ({ client: `client-${id}`, profileId: id }));
+const tryGetCurrentSessionMock = vi.fn(() => ({ client: 'client-current', profileId: 'profile-1' }));
+vi.mock('../../services/sessions', () => ({
+  getSession: (id: string) => getSessionMock(id),
+  tryGetCurrentSession: () => tryGetCurrentSessionMock(),
+  // stores/profile.ts (pulled in transitively, real in this test) registers
+  // its gate at module load - the mock needs the export even though this
+  // suite never exercises it.
+  registerSessionsGate: vi.fn(),
+}));
+
 vi.mock('../../hooks/useCurrentProfile', () => ({
-  useCurrentProfile: () => ({
-    currentProfile: { id: 'profile-1', portalUrl: 'https://portal.test', apiUrl: 'https://api.test' },
+  useProfileById: (profileId?: string) => ({
+    profile: profileId === 'unknown-profile'
+      ? null
+      : { id: profileId ?? 'profile-1', portalUrl: 'https://portal.test', apiUrl: 'https://api.test' },
     settings: h.settings,
-    hasProfile: true,
   }),
 }));
 
@@ -392,5 +405,80 @@ describe('EventDetail forced ZMS playback (#313)', () => {
     expect(h.logEventDetail.mock.calls.some(
       ([message]) => typeof message === 'string' && message.includes('always use ZMS'),
     )).toBe(false);
+  });
+});
+
+/**
+ * All-mode deep route (refs #337): `/all/events/:profileId/:eventId` carries
+ * the owning profile as a route param. EventDetail must fetch via THAT
+ * profile's client/keys regardless of which profile (if any) is globally
+ * current, and must render the existing error state - never crash - for an
+ * unknown profileId.
+ */
+describe('EventDetail All-mode deep route (refs #337)', () => {
+  beforeEach(() => {
+    h.settings.forceZmsMonitorIds = [];
+    h.locationState = {};
+    getSessionMock.mockClear();
+    tryGetCurrentSessionMock.mockClear();
+    useQueryMock.mockReset();
+  });
+
+  afterEach(() => {
+    h.routeParams = { id: '101' };
+  });
+
+  it('fetches the event via the route profileId\'s client and query key', () => {
+    h.routeParams = { profileId: 'profile-b', eventId: '101' };
+    const seenKeys: unknown[][] = [];
+    useQueryMock.mockImplementation(({ queryKey, queryFn }: { queryKey: readonly unknown[]; queryFn: () => unknown }) => {
+      seenKeys.push([...queryKey]);
+      if (queryKey[0] === 'event') {
+        // Actually invoke the queryFn so we can assert it resolves the
+        // client via the route's profileId (getSession), not the current
+        // session (tryGetCurrentSession never called).
+        queryFn();
+        return { data: event, isLoading: false, error: null };
+      }
+      if (queryKey[0] === 'monitor') {
+        return { data: monitorData, isLoading: false, error: null };
+      }
+      return { data: null, isLoading: false, error: null };
+    });
+
+    render(<EventDetail />);
+
+    expect(seenKeys).toContainEqual(['event', 'profile-b', '101']);
+    expect(getSessionMock).toHaveBeenCalledWith('profile-b');
+    expect(tryGetCurrentSessionMock).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the current session and single-mode key when the route has no profileId', () => {
+    h.routeParams = { id: '101' };
+    useQueryMock.mockImplementation(({ queryKey, queryFn }: { queryKey: readonly unknown[]; queryFn: () => unknown }) => {
+      if (queryKey[0] === 'event') {
+        queryFn();
+        return { data: event, isLoading: false, error: null };
+      }
+      if (queryKey[0] === 'monitor') {
+        return { data: monitorData, isLoading: false, error: null };
+      }
+      return { data: null, isLoading: false, error: null };
+    });
+
+    render(<EventDetail />);
+
+    expect(tryGetCurrentSessionMock).toHaveBeenCalled();
+    expect(getSessionMock).not.toHaveBeenCalled();
+  });
+
+  it('renders the existing error state instead of crashing for an unknown route profileId', () => {
+    h.routeParams = { profileId: 'unknown-profile', eventId: '101' };
+    useQueryMock.mockImplementation(() => ({ data: null, isLoading: false, error: null }));
+
+    render(<EventDetail />);
+
+    expect(screen.getByText('event_detail.load_error')).toBeTruthy();
+    expect(getSessionMock).not.toHaveBeenCalledWith('unknown-profile');
   });
 });

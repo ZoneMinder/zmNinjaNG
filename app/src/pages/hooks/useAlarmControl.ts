@@ -9,16 +9,19 @@ import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { getAlarmStatus, triggerAlarm, cancelAlarm } from '../../api/monitors';
-import { getCurrentSession } from '../../services/sessions';
+import { getSession, getCurrentSession } from '../../services/sessions';
 import { log, LogLevel } from '../../lib/logger';
 import { useBandwidthSettings } from '../../hooks/useBandwidthSettings';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { queryKeys } from '../../lib/query/query-keys';
 import { parseAlarmState, isArmedState } from '../../lib/monitor/alarm-state';
+import type { ProfileId } from '../../api/types';
 
 interface UseAlarmControlOptions {
   monitorId: string | undefined;
   apiBaseUrl?: string;
+  /** Owning profile for an /all/ deep route; defaults to the current profile. */
+  profileId?: ProfileId;
 }
 
 interface UseAlarmControlReturn {
@@ -32,10 +35,11 @@ interface UseAlarmControlReturn {
   handleAlarmToggle: (nextValue: boolean) => Promise<void>;
 }
 
-export function useAlarmControl({ monitorId, apiBaseUrl }: UseAlarmControlOptions): UseAlarmControlReturn {
+export function useAlarmControl({ monitorId, apiBaseUrl, profileId }: UseAlarmControlOptions): UseAlarmControlReturn {
   const { t } = useTranslation();
   const bandwidth = useBandwidthSettings();
   const { currentProfile } = useCurrentProfile();
+  const effectiveProfileId = profileId ?? currentProfile?.id;
   const [isAlarmUpdating, setIsAlarmUpdating] = useState(false);
   const [alarmToggleValue, setAlarmToggleValue] = useState(false);
   const [alarmPendingValue, setAlarmPendingValue] = useState<boolean | null>(null);
@@ -45,8 +49,8 @@ export function useAlarmControl({ monitorId, apiBaseUrl }: UseAlarmControlOption
     isLoading: isAlarmLoading,
     refetch: refetchAlarmStatus,
   } = useQuery({
-    queryKey: queryKeys.monitorAlarmStatus(currentProfile?.id, monitorId),
-    queryFn: () => getAlarmStatus(getCurrentSession().client, monitorId!, apiBaseUrl),
+    queryKey: queryKeys.monitorAlarmStatus(effectiveProfileId, monitorId),
+    queryFn: () => getAlarmStatus((profileId ? getSession(profileId) : getCurrentSession()).client, monitorId!, apiBaseUrl),
     enabled: !!monitorId,
     refetchInterval: bandwidth.alarmStatusInterval,
     refetchIntervalInBackground: true,
@@ -109,10 +113,11 @@ export function useAlarmControl({ monitorId, apiBaseUrl }: UseAlarmControlOption
       setIsAlarmUpdating(true);
 
       try {
+        const client = (profileId ? getSession(profileId) : getCurrentSession()).client;
         if (nextValue) {
-          await triggerAlarm(getCurrentSession().client, monitorId, apiBaseUrl);
+          await triggerAlarm(client, monitorId, apiBaseUrl);
         } else {
-          await cancelAlarm(getCurrentSession().client, monitorId, apiBaseUrl);
+          await cancelAlarm(client, monitorId, apiBaseUrl);
         }
         await refetchAlarmStatus();
         setTimeout(() => {
@@ -136,7 +141,7 @@ export function useAlarmControl({ monitorId, apiBaseUrl }: UseAlarmControlOption
         setIsAlarmUpdating(false);
       }
     },
-    [monitorId, apiBaseUrl, alarmToggleValue, refetchAlarmStatus, t]
+    [monitorId, apiBaseUrl, profileId, alarmToggleValue, refetchAlarmStatus, t]
   );
 
   return {

@@ -10,8 +10,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { deleteEvent as apiDeleteEvent } from '../api/events';
-import { getCurrentSession } from '../services/sessions';
-import type { EventData, EventsResponse } from '../api/types';
+import { getSession, getCurrentSession } from '../services/sessions';
+import type { EventData, EventsResponse, ProfileId } from '../api/types';
 import { queryKeys } from '../lib/query/query-keys';
 import { useCurrentProfile } from './useCurrentProfile';
 import { log, LogLevel } from '../lib/logger';
@@ -23,20 +23,22 @@ function removeFromEventsCache(old: unknown, deleted: Set<string>): unknown {
   return { ...data, events: data.events.filter((e: EventData) => !deleted.has(e.Event.Id)) };
 }
 
-export function useBulkDeleteEvents(): {
+/** @param profileId - Owning profile for an /all/ deep route; defaults to the current profile. */
+export function useBulkDeleteEvents(profileId?: ProfileId): {
   deleteEvents: (eventIds: string[]) => Promise<void>;
   isDeleting: boolean;
 } {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { currentProfile } = useCurrentProfile();
+  const effectiveProfileId = profileId ?? currentProfile?.id;
   const [isDeleting, setIsDeleting] = useState(false);
 
   const deleteEvents = async (eventIds: string[]) => {
     if (eventIds.length === 0) return;
     setIsDeleting(true);
     try {
-      const client = getCurrentSession().client;
+      const client = (profileId ? getSession(profileId) : getCurrentSession()).client;
       const results = await Promise.allSettled(eventIds.map((id) => apiDeleteEvent(client, id)));
       const failed = results.filter((r) => r.status === 'rejected').length;
 
@@ -54,9 +56,9 @@ export function useBulkDeleteEvents(): {
       );
 
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.events(currentProfile?.id) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.events(effectiveProfileId) }),
         ...eventIds.map((id) =>
-          queryClient.invalidateQueries({ queryKey: queryKeys.event(currentProfile?.id, id) })),
+          queryClient.invalidateQueries({ queryKey: queryKeys.event(effectiveProfileId, id) })),
         queryClient.invalidateQueries({
           predicate: (q) => q.queryKey.includes('monitorRecentEvents'),
         }),

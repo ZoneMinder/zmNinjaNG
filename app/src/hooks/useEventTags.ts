@@ -14,11 +14,11 @@
 import { useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getTags, getEventTags, extractUniqueTags } from '../api/tags';
-import { getCurrentSession } from '../services/sessions';
+import { getSession, getCurrentSession } from '../services/sessions';
 import { useCurrentProfile } from './useCurrentProfile';
 import { useAuthSlice } from '../stores/auth';
 import { queryKeys } from '../lib/query/query-keys';
-import type { Tag } from '../api/types';
+import type { Tag, ProfileId } from '../api/types';
 
 export interface UseEventTagsReturn {
   /** All available tags */
@@ -49,14 +49,15 @@ export interface UseEventTagsReturn {
  * }
  * ```
  */
-export function useEventTags(): UseEventTagsReturn {
+export function useEventTags(profileId?: ProfileId): UseEventTagsReturn {
   const { currentProfile } = useCurrentProfile();
-  const isAuthenticated = useAuthSlice(currentProfile?.id ?? null).isAuthenticated;
+  const effectiveProfileId = profileId ?? currentProfile?.id;
+  const isAuthenticated = useAuthSlice(effectiveProfileId ?? null).isAuthenticated;
 
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: queryKeys.tags(currentProfile?.id),
-    queryFn: () => getTags(getCurrentSession().client),
-    enabled: !!currentProfile?.id && isAuthenticated,
+    queryKey: queryKeys.tags(effectiveProfileId),
+    queryFn: () => getTags((profileId ? getSession(profileId) : getCurrentSession()).client),
+    enabled: !!effectiveProfileId && isAuthenticated,
     // Tags list rarely changes, use longer stale time
     staleTime: 5 * 60 * 1000, // 5 minutes
     // Retry once on failure (for network issues)
@@ -87,6 +88,8 @@ export interface UseEventTagMappingOptions {
   eventIds: string[];
   /** Whether to enable the query */
   enabled?: boolean;
+  /** Owning profile for an /all/ deep route; defaults to the current profile. */
+  profileId?: ProfileId;
 }
 
 export interface UseEventTagMappingReturn {
@@ -118,9 +121,10 @@ export interface UseEventTagMappingReturn {
  * ```
  */
 export function useEventTagMapping(options: UseEventTagMappingOptions): UseEventTagMappingReturn {
-  const { eventIds, enabled = true } = options;
+  const { eventIds, enabled = true, profileId } = options;
   const { currentProfile } = useCurrentProfile();
-  const isAuthenticated = useAuthSlice(currentProfile?.id ?? null).isAuthenticated;
+  const effectiveProfileId = profileId ?? currentProfile?.id;
+  const isAuthenticated = useAuthSlice(effectiveProfileId ?? null).isAuthenticated;
 
   // Sort event IDs for consistent cache key
   const sortedEventIds = useMemo(
@@ -130,9 +134,9 @@ export function useEventTagMapping(options: UseEventTagMappingOptions): UseEvent
 
   const { data, isLoading, error, refetch } = useQuery({
     // Include sorted event IDs in query key for proper caching
-    queryKey: queryKeys.eventTags(currentProfile?.id, sortedEventIds),
-    queryFn: () => getEventTags(getCurrentSession().client, eventIds),
-    enabled: enabled && !!currentProfile?.id && isAuthenticated && eventIds.length > 0,
+    queryKey: queryKeys.eventTags(effectiveProfileId, sortedEventIds),
+    queryFn: () => getEventTags((profileId ? getSession(profileId) : getCurrentSession()).client, eventIds),
+    enabled: enabled && !!effectiveProfileId && isAuthenticated && eventIds.length > 0,
     // Event tags can change when tags are assigned, use moderate stale time
     staleTime: 2 * 60 * 1000, // 2 minutes
     retry: 1,

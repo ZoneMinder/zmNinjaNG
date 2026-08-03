@@ -215,7 +215,7 @@ describe('MonitorCard', () => {
     expect(screen.queryByTestId('monitor-profile-chip')).not.toBeInTheDocument();
   });
 
-  it('switches to the owning profile before navigating to the detail page (All mode)', async () => {
+  it('navigates directly to the /all/ deep route without switching profile (refs #337)', async () => {
     const user = userEvent.setup();
 
     render(
@@ -230,11 +230,45 @@ describe('MonitorCard', () => {
 
     await user.click(screen.getByTestId('monitor-player'));
 
-    expect(switchProfileMock).toHaveBeenCalledWith(OTHER_PROFILE_ID);
+    expect(switchProfileMock).not.toHaveBeenCalled();
+    expect(mockNavigate).toHaveBeenCalledWith(
+      `/all/monitors/${OTHER_PROFILE_ID}/1`,
+      { state: { from: '/monitors' } }
+    );
+  });
+
+  it('navigates to the single-mode detail route in single mode (no profileId)', async () => {
+    const user = userEvent.setup();
+
+    render(<MonitorCard monitor={monitor} status={status} onShowSettings={vi.fn()} />);
+
+    await user.click(screen.getByTestId('monitor-player'));
+
+    expect(switchProfileMock).not.toHaveBeenCalled();
     expect(mockNavigate).toHaveBeenCalledWith('/monitors/1', { state: { from: '/monitors' } });
   });
 
-  it('shows a toast and does not navigate when switching to the owning profile fails', async () => {
+  it('still switches to the owning profile before opening the events list (All mode, pending Task 4)', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MonitorCard
+        monitor={monitor}
+        status={status}
+        newEventCount={undefined}
+        onShowSettings={vi.fn()}
+        profileId={OTHER_PROFILE_ID}
+        profileChip="Office"
+      />
+    );
+
+    await user.click(screen.getByTestId('monitor-events-button'));
+
+    expect(switchProfileMock).toHaveBeenCalledWith(OTHER_PROFILE_ID);
+    expect(mockNavigate).toHaveBeenCalledWith('/events?monitorId=1', { state: { from: '/monitors' } });
+  });
+
+  it('shows a toast and does not navigate when switching for the events list fails', async () => {
     const user = userEvent.setup();
     switchProfileMock.mockRejectedValueOnce(new Error('switch failed'));
 
@@ -248,7 +282,7 @@ describe('MonitorCard', () => {
       />
     );
 
-    await user.click(screen.getByTestId('monitor-player'));
+    await user.click(screen.getByTestId('monitor-events-button'));
 
     expect(switchProfileMock).toHaveBeenCalledWith(OTHER_PROFILE_ID);
     expect(toast.error).toHaveBeenCalledWith('profiles.switch_failed');

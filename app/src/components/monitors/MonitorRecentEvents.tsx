@@ -11,7 +11,7 @@ import { Button } from '../ui/button';
 import { cn } from '../../lib/utils';
 import { CompactEventRow } from '../events/CompactEventRow';
 import { useMonitorRecentEvents } from '../../hooks/useMonitorRecentEvents';
-import { useCurrentProfile } from '../../hooks/useCurrentProfile';
+import { useProfileById } from '../../hooks/useCurrentProfile';
 import { useMonitorSeenStore } from '../../stores/monitorSeen';
 import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
 import { resolveMinStreamingPort } from '../../lib/monitor/multiport';
@@ -21,35 +21,37 @@ import {
   getMonitorDimensions,
   EVENT_GRID_CONSTANTS,
 } from '../../lib/event/event-utils';
-import type { Event, Monitor } from '../../api/types';
+import type { Event, Monitor, ProfileId } from '../../api/types';
 
 interface MonitorRecentEventsProps {
   monitor: Monitor;
+  /** Owning profile for an /all/ deep route; defaults to the current profile. */
+  profileId?: ProfileId;
 }
 
-export function MonitorRecentEvents({ monitor }: MonitorRecentEventsProps) {
+export function MonitorRecentEvents({ monitor, profileId }: MonitorRecentEventsProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { currentProfile, settings } = useCurrentProfile();
-  const { token: accessToken, isFresh } = useFreshAccessToken();
+  const { profile: ownerProfile, settings } = useProfileById(profileId);
+  const { token: accessToken, isFresh } = useFreshAccessToken(profileId);
   const monitorId = monitor.Id;
   const { events, isLoading, isError, isFetching, hidden, count, toggleHidden, refetch } =
-    useMonitorRecentEvents(monitorId);
+    useMonitorRecentEvents(monitorId, profileId);
   const markSeen = useMonitorSeenStore((s) => s.markSeen);
 
   // The list is on screen, so its events have been seen. Collapsed (`hidden`)
   // means the user opened this page for the live stream and never saw them.
   useEffect(() => {
     if (hidden || isLoading || events.length === 0) return;
-    if (!currentProfile) return;
-    markSeen(currentProfile.id, monitorId, events[0].Event.StartDateTime);
-  }, [hidden, isLoading, events, currentProfile, monitorId, markSeen]);
+    if (!ownerProfile) return;
+    markSeen(ownerProfile.id, monitorId, events[0].Event.StartDateTime);
+  }, [hidden, isLoading, events, ownerProfile, monitorId, markSeen]);
 
-  const portalUrl = currentProfile?.portalUrl || '';
+  const portalUrl = ownerProfile?.portalUrl || '';
   const thumbnailChain = settings.thumbnailFallbackChain;
   const thumbnailFit = settings.eventsThumbnailFit === 'fill' ? 'contain' : settings.eventsThumbnailFit;
   const minStreamingPort = resolveMinStreamingPort(
-    currentProfile?.minStreamingPort,
+    ownerProfile?.minStreamingPort,
     settings.forceDisableMultiPort
   );
   const monitorsForResolve = [{ Monitor: monitor }];

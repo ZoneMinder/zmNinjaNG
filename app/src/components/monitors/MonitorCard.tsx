@@ -75,12 +75,14 @@ function MonitorCardComponent({
   const mediaRef = useRef<HTMLImageElement | HTMLVideoElement | null>(null);
   const showHover = compact ? settings.hoverPreview.monitorsGrid : settings.hoverPreview.monitorsList;
 
-  // Deep /all/... routes with proper All-mode event scoping are Phase 3; for
-  // now, a card owned by a non-current profile switches into that profile
-  // before navigating so the destination page's single-profile queries land
-  // on the right server. Returns false (and shows the same switch-failed
-  // toast profile-switcher.tsx uses) when the switch itself fails, so the
-  // caller can skip navigating to a profile that never actually loaded.
+  // The detail page now has a deep /all/... route that carries the owning
+  // profile (refs #337), so goToDetail navigates there directly without
+  // switching. The events LIST view (openEvents, below) still targets the
+  // single-mode /events route - it has no All-mode aggregation yet (Phase 3
+  // Task 4) - so it still needs to switch into the owning profile first.
+  // Returns false (and shows the same switch-failed toast profile-switcher.tsx
+  // uses) when the switch itself fails, so the caller can skip navigating to a
+  // profile that never actually loaded.
   const goToOwningProfile = async (): Promise<boolean> => {
     if (profileId == null) return true;
     try {
@@ -140,9 +142,11 @@ function MonitorCardComponent({
     });
   };
 
-  const goToDetail = async () => {
-    if (!(await goToOwningProfile())) return;
-    navigate(`/monitors/${monitor.Id}`, { state: { from: '/monitors' } });
+  const goToDetail = () => {
+    navigate(
+      profileId != null ? `/all/monitors/${profileId}/${monitor.Id}` : `/monitors/${monitor.Id}`,
+      { state: { from: '/monitors' } }
+    );
   };
 
   if (compact) {
@@ -305,7 +309,7 @@ function MonitorCardComponent({
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
-              void goToDetail();
+              goToDetail();
             }
           }}
           role="button"

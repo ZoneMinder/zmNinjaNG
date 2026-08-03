@@ -9,14 +9,16 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../lib/query/query-keys';
 import { getEvent, getEventVideoUrl, getEventImageUrl, setEventArchived } from '../api/events';
-import { getCurrentSession } from '../services/sessions';
+import { getSession, tryGetCurrentSession } from '../services/sessions';
+import type { ApiClient } from '../api/client';
 import { eventHasAlarmFrame } from '../lib/event/thumbnail-chain';
 import { resolveFallbackFids } from '../lib/event/thumbnail-chain';
 import { resolveBackNavigation } from '../lib/back-navigation';
 import { getMonitor } from '../api/monitors';
 import { resolveMinStreamingPort } from '../lib/monitor/multiport';
-import { useCurrentProfile } from '../hooks/useCurrentProfile';
+import { useProfileById } from '../hooks/useCurrentProfile';
 import { useFreshAccessToken } from '../hooks/useFreshAccessToken';
+import type { ProfileId } from '../api/types';
 import { useEventTagMapping } from '../hooks/useEventTags';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
@@ -49,8 +51,29 @@ import { cn } from '../lib/utils';
 import { formatEventRelative } from '../lib/relative-time';
 import { CONTINUOUS_PLAYBACK_TOAST_DURATION_MS } from '../lib/zmninja-ng-constants';
 
+/**
+ * Resolves the API client for this page's owning profile: the /all/ route's
+ * profileId when present, else the current profile via tryGetCurrentSession
+ * (never throws - this page can render while All mode has no single current
+ * profile). Callers only invoke this once `enabled`/render guards confirm an
+ * owning profile actually exists, so the null branch is defensive, not
+ * expected in practice.
+ */
+function resolveClient(routeProfileId: ProfileId | undefined): ApiClient {
+  const session = routeProfileId ? getSession(routeProfileId) : tryGetCurrentSession();
+  if (!session) {
+    throw new Error('EventDetail: no session available for the owning profile');
+  }
+  return session.client;
+}
+
 export default function EventDetail() {
-  const { id } = useParams<{ id: string }>();
+  const params = useParams<{ id?: string; profileId?: string; eventId?: string }>();
+  // Two route shapes render this page: single-mode `/events/:id` and the
+  // All-mode deep route `/all/events/:profileId/:eventId` (refs #337). Only
+  // one half of each pair is ever defined, depending on which matched.
+  const id = params.id ?? params.eventId;
+  const routeProfileId = params.profileId as ProfileId | undefined;
   const navigate = useNavigate();
   const location = useLocation();
   const { t, i18n } = useTranslation();
@@ -74,26 +97,33 @@ export default function EventDetail() {
   }, [isTvMode]);
 
   const queryClient = useQueryClient();
-  const { currentProfile, settings } = useCurrentProfile();
+  // routeProfileId when present (All-mode deep route), else the current
+  // profile - useProfileById already implements that fallback. ownerProfile
+  // stays null (same as today's !ownerProfile) both when no profile is
+  // selected at all AND when routeProfileId names an unknown profile, so the
+  // existing error state below covers both cases without new branching
+  // (refs #337).
+  const { profile: ownerProfile, settings } = useProfileById(routeProfileId);
+  const dataEnabled = !!id && !!ownerProfile;
   const { data: event, isLoading, error } = useQuery({
-    queryKey: queryKeys.event(currentProfile?.id, id),
-    queryFn: () => getEvent(getCurrentSession().client, id!),
-    enabled: !!id,
+    queryKey: queryKeys.event(ownerProfile?.id, id),
+    queryFn: () => getEvent(resolveClient(routeProfileId), id!),
+    enabled: dataEnabled,
   });
   const { data: monitorData } = useQuery({
-    queryKey: queryKeys.monitor(currentProfile?.id, event?.Event.MonitorId),
-    queryFn: () => getMonitor(getCurrentSession().client, event!.Event.MonitorId),
-    enabled: !!event?.Event.MonitorId,
+    queryKey: queryKeys.monitor(ownerProfile?.id, event?.Event.MonitorId),
+    queryFn: () => getMonitor(resolveClient(routeProfileId), event!.Event.MonitorId),
+    enabled: dataEnabled && !!event?.Event.MonitorId,
   });
-  const { token: accessToken, isFresh: isAccessTokenFresh } = useFreshAccessToken();
+  const { token: accessToken, isFresh: isAccessTokenFresh } = useFreshAccessToken(routeProfileId);
   const effectiveMinStreamingPort = resolveMinStreamingPort(
-    currentProfile?.minStreamingPort,
+    ownerProfile?.minStreamingPort,
     settings.forceDisableMultiPort,
   );
 
   // Resolve portal URL for the monitor's server (multi-server support)
-  const { portalPath } = useServerUrls(monitorData?.Monitor?.ServerId);
-  const resolvedPortalUrl = portalPath ? portalPath.replace(/\/index\.php$/, '') : currentProfile?.portalUrl || '';
+  const { portalPath } = useServerUrls(monitorData?.Monitor?.ServerId, routeProfileId);
+  const resolvedPortalUrl = portalPath ? portalPath.replace(/\/index\.php$/, '') : ownerProfile?.portalUrl || '';
 
   const toggleFavorite = useEventFavoritesStore((state) => state.toggleFavorite);
 
@@ -101,7 +131,7 @@ export default function EventDetail() {
   // identity never changes, so selecting it would compare equal on every store update
   // and the star would never flip.
   const isFav = useEventFavoritesStore((state) =>
-    currentProfile && event ? state.isFavorited(currentProfile.id, event.Event.Id) : false
+    ownerProfile && event ? state.isFavorited(ownerProfile.id, event.Event.Id) : false
   );
 
   const {
@@ -112,6 +142,7 @@ export default function EventDetail() {
   } = useEventNavigation({
     currentEventId: id,
     currentStartDateTime: event?.Event.StartDateTime,
+    profileId: routeProfileId,
   });
 
   // Continuous playback (#250): when on, an event ending auto-advances to the
@@ -120,14 +151,14 @@ export default function EventDetail() {
   const updateSettings = useSettingsStore((state) => state.updateProfileSettings);
   const continuousPlay = settings.eventContinuousPlay;
   const toggleContinuousPlay = useCallback(() => {
-    if (!currentProfile) return;
-    updateSettings(currentProfile.id, { eventContinuousPlay: !continuousPlay });
-  }, [currentProfile, continuousPlay, updateSettings]);
+    if (!ownerProfile) return;
+    updateSettings(ownerProfile.id, { eventContinuousPlay: !continuousPlay });
+  }, [ownerProfile, continuousPlay, updateSettings]);
 
   const handleRateChange = useCallback((rate: number) => {
-    if (!currentProfile) return;
-    updateSettings(currentProfile.id, { eventPlaybackRate: rate });
-  }, [currentProfile, updateSettings]);
+    if (!ownerProfile) return;
+    updateSettings(ownerProfile.id, { eventPlaybackRate: rate });
+  }, [ownerProfile, updateSettings]);
 
   // Guards against a stray second 'ended' (video.js can emit it during teardown)
   // triggering a double advance. Re-armed for each event by the id-change effect.
@@ -166,18 +197,19 @@ export default function EventDetail() {
   const { getTagsForEvent } = useEventTagMapping({
     eventIds: id ? [id] : [],
     enabled: !!id,
+    profileId: routeProfileId,
   });
 
   const eventTags = id ? getTagsForEvent(id) : [];
 
   const handleFavoriteToggle = useCallback(() => {
-    if (currentProfile && event) {
-      toggleFavorite(currentProfile.id, event.Event.Id);
+    if (ownerProfile && event) {
+      toggleFavorite(ownerProfile.id, event.Event.Id);
       toast.success(
         isFav ? t('events.removed_from_favorites') : t('events.added_to_favorites')
       );
     }
-  }, [currentProfile, event, toggleFavorite, isFav, t]);
+  }, [ownerProfile, event, toggleFavorite, isFav, t]);
 
   const isArchived = event?.Event.Archived === '1';
   const [isArchiving, setIsArchiving] = useState(false);
@@ -186,10 +218,10 @@ export default function EventDetail() {
     const next = !isArchived;
     setIsArchiving(true);
     try {
-      await setEventArchived(getCurrentSession().client, event.Event.Id, next);
+      await setEventArchived(resolveClient(routeProfileId), event.Event.Id, next);
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.event(currentProfile?.id, event.Event.Id) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.events(currentProfile?.id) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.event(ownerProfile?.id, event.Event.Id) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.events(ownerProfile?.id) }),
       ]);
       toast.success(next ? t('events.archived_success') : t('events.unarchived_success'));
     } catch (err) {
@@ -198,7 +230,7 @@ export default function EventDetail() {
     } finally {
       setIsArchiving(false);
     }
-  }, [event, isArchived, isArchiving, queryClient, t]);
+  }, [event, isArchived, isArchiving, routeProfileId, ownerProfile?.id, queryClient, t]);
 
   // Generate video markers for alarm frames
   // NOTE: This hook must be called before any conditional returns
@@ -288,22 +320,22 @@ export default function EventDetail() {
   // Without memoization the Mp4EventPlayer's update effect calls player.src() mid-playback
   // every time the parent re-renders for unrelated reasons (toast state, query refetch).
   const videoUrl = useMemo(
-    () => (currentProfile && hasVideo && isAccessTokenFresh && eventIdForUrls
-      ? getEventVideoUrl(resolvedPortalUrl, eventIdForUrls, accessToken || undefined, currentProfile.apiUrl, isHlsEvent, effectiveMinStreamingPort, monitorIdForUrls)
+    () => (ownerProfile && hasVideo && isAccessTokenFresh && eventIdForUrls
+      ? getEventVideoUrl(resolvedPortalUrl, eventIdForUrls, accessToken || undefined, ownerProfile.apiUrl, isHlsEvent, effectiveMinStreamingPort, monitorIdForUrls)
       : ''),
-    [currentProfile, hasVideo, isAccessTokenFresh, resolvedPortalUrl, eventIdForUrls, accessToken, isHlsEvent, effectiveMinStreamingPort, monitorIdForUrls]
+    [ownerProfile, hasVideo, isAccessTokenFresh, resolvedPortalUrl, eventIdForUrls, accessToken, isHlsEvent, effectiveMinStreamingPort, monitorIdForUrls]
   );
 
   const posterUrl = useMemo(
-    () => (currentProfile && isAccessTokenFresh && eventIdForUrls
+    () => (ownerProfile && isAccessTokenFresh && eventIdForUrls
       ? getEventImageUrl(resolvedPortalUrl, eventIdForUrls, posterFid, {
         token: accessToken || undefined,
-        apiUrl: currentProfile.apiUrl,
+        apiUrl: ownerProfile.apiUrl,
         minStreamingPort: effectiveMinStreamingPort,
         monitorId: monitorIdForUrls,
       })
       : undefined),
-    [currentProfile, isAccessTokenFresh, resolvedPortalUrl, eventIdForUrls, posterFid, accessToken, effectiveMinStreamingPort, monitorIdForUrls]
+    [ownerProfile, isAccessTokenFresh, resolvedPortalUrl, eventIdForUrls, posterFid, accessToken, effectiveMinStreamingPort, monitorIdForUrls]
   );
 
   // Per-monitor "always use ZMS" preference. Read from the event rather than
@@ -451,7 +483,7 @@ export default function EventDetail() {
             <Star className={isFav ? "h-4 w-4 fill-current" : "h-4 w-4"} />
             <span className="hidden sm:inline">{isFav ? t('events.favorited') : t('events.favorite')}</span>
           </Button>
-          <Button variant="outline" size="sm" className="gap-2 h-8 sm:h-9" onClick={() => navigate(`/monitors/${event.Event.MonitorId}`)} title={t('event_detail.view_camera')} data-testid="event-detail-view-camera">
+          <Button variant="outline" size="sm" className="gap-2 h-8 sm:h-9" onClick={() => navigate(routeProfileId ? `/all/monitors/${routeProfileId}/${event.Event.MonitorId}` : `/monitors/${event.Event.MonitorId}`)} title={t('event_detail.view_camera')} data-testid="event-detail-view-camera">
             <Video className="h-4 w-4" />
             <span className="hidden sm:inline">{t('event_detail.view_camera')}</span>
           </Button>
@@ -489,7 +521,7 @@ export default function EventDetail() {
               size="sm"
               className="gap-2 h-8 sm:h-9"
               onClick={() => {
-                if (hasVideo && currentProfile) {
+                if (hasVideo && ownerProfile) {
                   downloadEventVideo(
                     resolvedPortalUrl,
                     event.Event.Id,
@@ -525,13 +557,13 @@ export default function EventDetail() {
           {hasVideo ? (
             playThroughZms ? (
               // ZMS playback with controls
-              currentProfile && (
+              ownerProfile && (
                 <ZmsEventPlayer
                   portalUrl={resolvedPortalUrl}
                   eventId={event.Event.Id}
                   token={isAccessTokenFresh ? accessToken ?? undefined : undefined}
                   suspended={frameViewerOpen}
-                  apiUrl={currentProfile.apiUrl}
+                  apiUrl={ownerProfile.apiUrl}
                   totalFrames={parseInt(event.Event.Frames)}
                   alarmFrames={parseInt(event.Event.AlarmFrames)}
                   alarmFrameId={event.Event.AlarmFrameId}
@@ -581,13 +613,13 @@ export default function EventDetail() {
             )
           ) : hasJPEGs ? (
             // ZMS playback for JPEG-only events
-            currentProfile && (
+            ownerProfile && (
               <ZmsEventPlayer
                 portalUrl={resolvedPortalUrl}
                 eventId={event.Event.Id}
                 token={accessToken || undefined}
                 suspended={frameViewerOpen}
-                apiUrl={currentProfile.apiUrl}
+                apiUrl={ownerProfile.apiUrl}
                 totalFrames={parseInt(event.Event.Frames)}
                 alarmFrames={parseInt(event.Event.AlarmFrames)}
                 alarmFrameId={event.Event.AlarmFrameId}
@@ -620,12 +652,12 @@ export default function EventDetail() {
               screen above, rather than pushing the player itself below the
               fold. Gated on a fresh token so the thumbnails are not all
               dropped as failures during a refresh. */}
-          {currentProfile && isAccessTokenFresh && (
+          {ownerProfile && isAccessTokenFresh && (
             <EventFrameCarousel
               portalUrl={resolvedPortalUrl}
               eventId={event.Event.Id}
               token={accessToken || undefined}
-              apiUrl={currentProfile.apiUrl}
+              apiUrl={ownerProfile.apiUrl}
               minStreamingPort={effectiveMinStreamingPort}
               monitorId={event.Event.MonitorId}
               hasAlarmFrame={eventHasAlarmFrame(event.Event)}

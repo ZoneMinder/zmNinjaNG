@@ -254,6 +254,17 @@ function AppRoutes() {
               </RouteErrorBoundary>
             }
           />
+          {/* All-mode deep route: carries the owning profile so the same
+              MonitorDetail page fetches via that profile's client instead of
+              the (absent) current one (refs #337). */}
+          <Route
+            path="/all/monitors/:profileId/:monitorId"
+            element={
+              <RouteErrorBoundary routePath="/all/monitors/:profileId/:monitorId">
+                <MonitorDetail />
+              </RouteErrorBoundary>
+            }
+          />
           <Route
             path="/montage"
             element={
@@ -282,6 +293,17 @@ function AppRoutes() {
             path="/events/:id"
             element={
               <RouteErrorBoundary routePath="/events/:id">
+                <EventDetail />
+              </RouteErrorBoundary>
+            }
+          />
+          {/* All-mode deep route: carries the owning profile so the same
+              EventDetail page fetches via that profile's client instead of
+              the (absent) current one (refs #337). */}
+          <Route
+            path="/all/events/:profileId/:eventId"
+            element={
+              <RouteErrorBoundary routePath="/all/events/:profileId/:eventId">
                 <EventDetail />
               </RouteErrorBoundary>
             }
