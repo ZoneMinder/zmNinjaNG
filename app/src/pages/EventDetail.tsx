@@ -487,7 +487,7 @@ export default function EventDetail() {
             <Video className="h-4 w-4" />
             <span className="hidden sm:inline">{t('event_detail.view_camera')}</span>
           </Button>
-          <Button variant="outline" size="sm" className="gap-2 h-8 sm:h-9" onClick={() => navigate(`/events?monitorId=${event.Event.MonitorId}`)} title={t('event_detail.all_events')} data-testid="event-detail-all-events">
+          <Button variant="outline" size="sm" className="gap-2 h-8 sm:h-9" onClick={() => navigate(routeProfileId ? `/events?monitorId=${event.Event.MonitorId}&profileId=${routeProfileId}` : `/events?monitorId=${event.Event.MonitorId}`)} title={t('event_detail.all_events')} data-testid="event-detail-all-events">
             <Clock className="h-4 w-4" />
             <span className="hidden sm:inline">{t('event_detail.all_events')}</span>
           </Button>

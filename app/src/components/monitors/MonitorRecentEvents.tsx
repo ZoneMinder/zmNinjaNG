@@ -112,7 +112,9 @@ export function MonitorRecentEvents({ monitor, profileId }: MonitorRecentEventsP
             variant="ghost"
             size="sm"
             className="h-7 text-xs"
-            onClick={() => navigate(`/events?monitorId=${monitorId}`)}
+            onClick={() => navigate(
+              profileId ? `/events?monitorId=${monitorId}&profileId=${profileId}` : `/events?monitorId=${monitorId}`
+            )}
             data-testid="monitor-recent-events-all"
           >
             {t('monitor_detail.all_events')}
@@ -149,6 +151,7 @@ export function MonitorRecentEvents({ monitor, profileId }: MonitorRecentEventsP
                     thumbnailUrls={urls}
                     aspectRatio={aspectRatio}
                     objectFit={thumbnailFit}
+                    profileId={profileId}
                   />
                 );
               })}

@@ -12,6 +12,7 @@ import { useNavigate } from 'react-router-dom';
 import { useCurrentProfile } from './useCurrentProfile';
 import { useMonitorSeenStore } from '../stores/monitorSeen';
 import { nextSecondAfter } from '../lib/event/watermark';
+import type { ProfileId } from '../api/types';
 
 export interface OpenMonitorEventsOptions {
   monitorId: string;
@@ -19,6 +20,13 @@ export interface OpenMonitorEventsOptions {
   newestEventAt: string | null | undefined;
   /** Route the caller navigated from, stored as navigation state for the back link. */
   from: string;
+  /** All mode only: the monitor's owning profile. The Events page reads this
+   *  to scope its All-mode server filter to just that profile, so the caller
+   *  navigates directly instead of switching into it first (refs #337). Seen
+   *  watermarking below stays current-profile-scoped until Task 5 extends it
+   *  per-profile - harmless here since All mode's newEventCount is always
+   *  undefined until then (Monitors.tsx gates badges off in All mode). */
+  profileId?: ProfileId;
 }
 
 /**
@@ -32,7 +40,7 @@ export function useOpenMonitorEvents(): (opts: OpenMonitorEventsOptions) => void
   const markSeen = useMonitorSeenStore((s) => s.markSeen);
 
   return useCallback(
-    ({ monitorId, newEventCount, newestEventAt, from }: OpenMonitorEventsOptions) => {
+    ({ monitorId, newEventCount, newestEventAt, from, profileId }: OpenMonitorEventsOptions) => {
       // Read the watermark BEFORE markSeen overwrites it: the date filter must
       // match what the badge counted, not what "seen" becomes after this click.
       const oldWatermark = currentProfile
@@ -50,6 +58,7 @@ export function useOpenMonitorEvents(): (opts: OpenMonitorEventsOptions) => void
       if (newEventCount !== undefined && newEventCount > 0 && oldWatermark !== null) {
         params.set('startDateTime', nextSecondAfter(oldWatermark));
       }
+      if (profileId) params.set('profileId', profileId);
       navigate(`/events?${params.toString()}`, { state: { from } });
     },
     [navigate, currentProfile, markSeen]

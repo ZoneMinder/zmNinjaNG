@@ -19,7 +19,6 @@ import { toast } from 'sonner';
 import { LiveMonitorPlayer } from './LiveMonitorPlayer';
 import { MonitorHoverPreview } from './MonitorHoverPreview';
 import { useProfileById } from '../../hooks/useCurrentProfile';
-import { useProfileStore } from '../../stores/profile';
 import type { MonitorCardProps, ProfileId } from '../../api/types';
 import { log, LogLevel } from '../../lib/logger';
 import { useTranslation } from 'react-i18next';
@@ -63,7 +62,6 @@ function MonitorCardComponent({
   // settings, and go2rtc URL all come from the monitor's OWN server instead
   // of the globally-selected profile.
   const { profile: ownerProfile, settings } = useProfileById(profileId);
-  const switchProfile = useProfileStore((state) => state.switchProfile);
   const zmVersion = useAuthSlice(ownerProfile?.id ?? null).version;
   const openMonitorEvents = useOpenMonitorEvents();
   const resolvedFit = (objectFit === 'flex' ? 'cover' : (objectFit ?? 'cover')) as 'contain' | 'cover' | 'fill' | 'none' | 'scale-down';
@@ -74,26 +72,6 @@ function MonitorCardComponent({
   const aspectRatio = getMonitorAspectRatio(monitor.Width, monitor.Height, monitor.Orientation);
   const mediaRef = useRef<HTMLImageElement | HTMLVideoElement | null>(null);
   const showHover = compact ? settings.hoverPreview.monitorsGrid : settings.hoverPreview.monitorsList;
-
-  // The detail page now has a deep /all/... route that carries the owning
-  // profile (refs #337), so goToDetail navigates there directly without
-  // switching. The events LIST view (openEvents, below) still targets the
-  // single-mode /events route - it has no All-mode aggregation yet (Phase 3
-  // Task 4) - so it still needs to switch into the owning profile first.
-  // Returns false (and shows the same switch-failed toast profile-switcher.tsx
-  // uses) when the switch itself fails, so the caller can skip navigating to a
-  // profile that never actually loaded.
-  const goToOwningProfile = async (): Promise<boolean> => {
-    if (profileId == null) return true;
-    try {
-      await switchProfile(profileId);
-      return true;
-    } catch (error) {
-      log.monitorCard('Failed to switch profile before navigating', LogLevel.ERROR, error);
-      toast.error(t('profiles.switch_failed'));
-      return false;
-    }
-  };
 
   const videoPlayer = (
     <LiveMonitorPlayer
@@ -132,13 +110,16 @@ function MonitorCardComponent({
     onShowSettings(monitor, profileId);
   };
 
-  const openEvents = async () => {
-    if (!(await goToOwningProfile())) return;
+  // The Events page aggregates in All mode (refs #337, Task 4), so this
+  // navigates directly with the owning profileId - no switch-then-navigate
+  // needed (detail view already does the same via goToDetail's deep route).
+  const openEvents = () => {
     openMonitorEvents({
       monitorId: monitor.Id,
       newEventCount,
       newestEventAt,
       from: '/monitors',
+      profileId: profileId ?? undefined,
     });
   };
 

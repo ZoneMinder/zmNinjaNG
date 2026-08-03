@@ -18,16 +18,18 @@ import { cn } from '../../lib/utils';
 import { useReturnFlash } from '../../hooks/useReturnFlash';
 import { useReturnHighlightStore } from '../../stores/returnHighlight';
 import { useDeleteSelectionStore } from '../../stores/deleteSelection';
-import type { Event } from '../../api/types';
+import type { Event, ProfileId } from '../../api/types';
 
 interface CompactEventRowProps {
   event: Event;
   thumbnailUrls: string[];
   aspectRatio: number;
   objectFit?: CSSProperties['objectFit'];
+  /** Owning profile for an /all/ deep route; defaults to the current profile. */
+  profileId?: ProfileId;
 }
 
-export function CompactEventRow({ event, thumbnailUrls, aspectRatio, objectFit = 'cover' }: CompactEventRowProps) {
+export function CompactEventRow({ event, thumbnailUrls, aspectRatio, objectFit = 'cover', profileId }: CompactEventRowProps) {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   const { fmtTime } = useDateTimeFormat();
@@ -46,7 +48,9 @@ export function CompactEventRow({ event, thumbnailUrls, aspectRatio, objectFit =
       : `${durationSecs}s`;
   const open = () => {
     markViewed(event.Id);
-    navigate(`/events/${event.Id}`, { state: { from: `/monitors/${event.MonitorId}` } });
+    // All mode: deep route carries the owning profile (refs #337).
+    const path = profileId ? `/all/events/${profileId}/${event.Id}` : `/events/${event.Id}`;
+    navigate(path, { state: { from: `/monitors/${event.MonitorId}` } });
   };
 
   return (

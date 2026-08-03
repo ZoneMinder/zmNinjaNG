@@ -61,6 +61,21 @@ describe('CompactEventRow', () => {
     expect(navigate).toHaveBeenCalledWith('/events/233228', { state: { from: '/monitors/4' } });
   });
 
+  it('navigates to the /all/ deep route when a profileId is given (refs #337)', () => {
+    render(
+      <MemoryRouter>
+        <CompactEventRow
+          event={base as never}
+          thumbnailUrls={['http://x/1.jpg']}
+          aspectRatio={1.6}
+          profileId={'profile-b' as never}
+        />
+      </MemoryRouter>
+    );
+    fireEvent.click(screen.getByTestId('compact-event-row'));
+    expect(navigate).toHaveBeenCalledWith('/all/events/profile-b/233228', { state: { from: '/monitors/4' } });
+  });
+
   it('shows the return-flash indicator when returning to this event', () => {
     useReturnHighlightStore.getState().markViewed('233228');
     render1();
