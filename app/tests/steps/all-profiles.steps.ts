@@ -1,8 +1,31 @@
 import { createBdd } from 'playwright-bdd';
-import { expect } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import { testConfig } from '../helpers/config';
 
 const { When, Then } = createBdd();
+
+/**
+ * Asserts the event list has stopped changing before a step counts cards.
+ *
+ * The events query can resolve into more than one render pass (a cached
+ * page, then the network response), so a bare "count > 0" check can fire on
+ * a partial render - exactly what made the merged-events scenario flaky:
+ * the single-profile capture and the All-mode read each grabbed a card
+ * count mid-fetch instead of the settled one. Polls the card count until it
+ * reads the SAME non-zero value twice in a row (each read spaced by
+ * expect.poll's own retry interval - no waitForTimeout, per repo rule).
+ */
+async function assertEventListSettled(page: Page): Promise<void> {
+  const eventCards = page.getByTestId('event-card');
+  let lastCount = -1;
+  let stableReads = 0;
+  await expect.poll(async () => {
+    const count = await eventCards.count();
+    stableReads = count > 0 && count === lastCount ? stableReads + 1 : 0;
+    lastCount = count;
+    return stableReads >= 2;
+  }, { timeout: testConfig.timeouts.pageLoad }).toBeTruthy();
+}
 
 // Captured on the single-profile Monitors view before switching to All mode,
 // so the aggregation scenario can assert an outcome (2x) instead of a
@@ -121,9 +144,7 @@ Then('I should see monitor cards from the healthy profiles', async ({ page }) =>
 });
 
 Then('I record the single-profile event card count', async ({ page }) => {
-  await expect.poll(async () => page.getByTestId('event-card').count(), {
-    timeout: testConfig.timeouts.pageLoad,
-  }).toBeGreaterThan(0);
+  await assertEventListSettled(page);
   singleProfileEventCount = await page.getByTestId('event-card').count();
 });
 
@@ -147,6 +168,7 @@ Then('I should see an event profile chip on every event card', async ({ page }) 
 // so both Background profiles are provably represented (refs #337 I11).
 Then('the event card count should be at least the recorded single-profile count', async ({ page }) => {
   expect(singleProfileEventCount).toBeGreaterThan(0);
+  await assertEventListSettled(page);
   await expect.poll(async () => page.getByTestId('event-card').count(), {
     timeout: testConfig.timeouts.pageLoad,
   }).toBeGreaterThanOrEqual(singleProfileEventCount);
