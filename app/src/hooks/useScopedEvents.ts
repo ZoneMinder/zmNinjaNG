@@ -59,7 +59,7 @@ import type { EventData, ProfileId } from '../api/types';
  * one profile in scope then). No tokens left for this profile -> undefined,
  * i.e. no filter, same as never having selected anything for it.
  */
-function resolveOwnMonitorIds(monitorId: string | undefined, profileId: ProfileId): string | undefined {
+export function resolveOwnMonitorIds(monitorId: string | undefined, profileId: ProfileId): string | undefined {
   if (!monitorId) return undefined;
   const owned = monitorId.split(',').flatMap((token) => {
     const sep = token.indexOf(':');

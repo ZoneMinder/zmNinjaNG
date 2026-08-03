@@ -383,10 +383,17 @@ export default function Events() {
 
   useEffect(() => {
     if (!currentProfileId) return;
+    // Skip while a `?view=montage` deep link is active (refs #337 round 2):
+    // this effect and the deep-link effect above both fire on the same
+    // mount, and without this guard this one's setViewMode(settings.
+    // eventsViewMode) runs after the deep link's and wins, silently
+    // reverting a single-mode montage deep link back to the persisted
+    // (usually 'list') preference.
+    if (searchParams.get('view') === 'montage') return;
     setViewMode(settings.eventsViewMode);
     gridControls.setGridCols(eventCols);
     gridControls.setCustomCols(eventCols.toString());
-  }, [currentProfileId, settings.eventsViewMode, groupKey, eventCols]);
+  }, [currentProfileId, settings.eventsViewMode, groupKey, eventCols, searchParams]);
 
   const handleViewModeChange = (mode: 'list' | 'montage') => {
     setViewMode(mode);

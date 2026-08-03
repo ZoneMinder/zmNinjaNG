@@ -24,6 +24,7 @@ import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/utils';
 import { useEventFavoritesStore } from '../../stores/eventFavorites';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
+import { resolveOwnMonitorIds } from '../../hooks/useScopedEvents';
 import { queryKeys } from '../../lib/query/query-keys';
 import { setEventArchived } from '../../api/events';
 import { getSession } from '../../services/sessions';
@@ -76,7 +77,17 @@ function EventCardComponent({ event, monitorName, profileId, profileChip, thumbn
     // resolves its session from it instead of the (absent) current
     // profile (refs #337).
     const path = profileId ? `/all/events/${profileId}/${event.Id}` : `/events/${event.Id}`;
-    navigate(path, { state: { from: '/events', eventFilters } });
+    // The shared eventFilters object's monitorId can carry composite
+    // `${profileId}:${monitorId}` tokens from the All-mode camera filter
+    // (refs #337 I6) - riding that into nav state sends a bogus
+    // `MonitorId:profile-b:3` segment to getAdjacentEvent, silently
+    // breaking prev/next. Strip to this row's own bare ids before
+    // navigating; a bare (single-mode) monitorId passes through unchanged
+    // (round 2).
+    const navEventFilters = eventFilters && ownerProfileId
+      ? { ...eventFilters, monitorId: resolveOwnMonitorIds(eventFilters.monitorId, ownerProfileId) }
+      : eventFilters;
+    navigate(path, { state: { from: '/events', eventFilters: navEventFilters } });
   };
 
   const startTime = new Date(event.StartDateTime.replace(' ', 'T'));

@@ -346,6 +346,37 @@ describe('Events Page', () => {
     expect(screen.queryByTestId('events-montage-gate')).not.toBeInTheDocument();
   });
 
+  // refs #337 round 2: the I9 fix dropped the persisted write for the
+  // ?view=montage deep link but left the settings-sync effect (which also
+  // fires on mount) free to immediately overwrite the deep link's
+  // setViewMode('montage') with the persisted (list) preference - a
+  // same-mount race that silently broke the deep link.
+  it('a ?view=montage deep link renders montage without a persisted write, surviving the settings-sync effect on the same mount (refs #337 round 2)', () => {
+    mockSearchParams = new URLSearchParams('view=montage');
+    scopedEvents({
+      events: [{ profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1' } } }],
+    });
+
+    render(<Events />);
+
+    expect(screen.getByTestId('events-montage-grid')).toBeInTheDocument();
+    expect(updateProfileSettingsMock).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ eventsViewMode: expect.anything() })
+    );
+  });
+
+  it('settings-sync still applies the persisted view when no ?view param is present (refs #337 round 2)', () => {
+    settingsOverrides = { eventsViewMode: 'montage' };
+    scopedEvents({
+      events: [{ profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1' } } }],
+    });
+
+    render(<Events />);
+
+    expect(screen.getByTestId('events-montage-grid')).toBeInTheDocument();
+  });
+
   describe('All mode', () => {
     it('renders both profiles\' events with a profile chip per row', () => {
       allScope();

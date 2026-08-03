@@ -245,6 +245,50 @@ describe('EventCard', () => {
     expect(navigate).toHaveBeenCalledWith('/all/events/profile-b/303', { state: { from: '/events', eventFilters: undefined } });
   });
 
+  // refs #337 round 2: All-mode's camera filter stores composite
+  // `${profileId}:${monitorId}` tokens (I6) in the shared eventFilters
+  // object handed to every row. Riding that straight into nav state sends
+  // a bogus `MonitorId:profile-b:3` segment to getAdjacentEvent - stripped
+  // here to just this row's OWN bare ids before it reaches navigate().
+  it('strips composite monitor tokens down to this row\'s own bare ids in the nav state (refs #337 round 2)', () => {
+    renderWithClient(
+      <EventCard
+        event={makeEvent({ Id: '405' })}
+        monitorName="Front Door"
+        profileId={'profile-b' as never}
+        eventFilters={{ monitorId: 'profile-a:1,profile-b:3' }}
+        thumbnailUrls={['https://example.test/thumb.jpg']}
+        thumbnailWidth={160}
+        thumbnailHeight={120}
+      />
+    );
+
+    fireEvent.click(screen.getByTestId('event-card'));
+
+    expect(navigate).toHaveBeenCalledWith('/all/events/profile-b/405', {
+      state: { from: '/events', eventFilters: { monitorId: '3' } },
+    });
+  });
+
+  it('leaves bare eventFilters.monitorId untouched in single mode (byte-identical, refs #337 round 2)', () => {
+    renderWithClient(
+      <EventCard
+        event={makeEvent({ Id: '406' })}
+        monitorName="Front Door"
+        eventFilters={{ monitorId: '5' }}
+        thumbnailUrls={['https://example.test/thumb.jpg']}
+        thumbnailWidth={160}
+        thumbnailHeight={120}
+      />
+    );
+
+    fireEvent.click(screen.getByTestId('event-card'));
+
+    expect(navigate).toHaveBeenCalledWith('/events/406', {
+      state: { from: '/events', eventFilters: { monitorId: '5' } },
+    });
+  });
+
   it('shows a relative-time chip for a recent event', () => {
     const recent = new Date(Date.now() - 40 * 60_000);
     const pad = (n: number) => String(n).padStart(2, '0');
