@@ -28,6 +28,18 @@ vi.mock('../../../../hooks/useDateTimeFormat', () => ({
 vi.mock('../../../theme-provider', () => ({
   useTheme: () => ({ theme: 'light' }),
 }));
+// TimelineWidget renders a real recharts BarChart; jsdom has no layout
+// engine, so ResponsiveContainer measures a 0x0 container and recharts logs
+// a noisy width/height warning on every render. This is a smoke test for
+// throws, not chart output, so stub the whole module out.
+vi.mock('recharts', () => ({
+  ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  BarChart: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  Bar: () => null,
+  XAxis: () => null,
+  YAxis: () => null,
+  Tooltip: () => null,
+}));
 vi.mock('../../../../hooks/useBandwidthSettings', () => ({
   useBandwidthSettings: vi.fn(),
 }));

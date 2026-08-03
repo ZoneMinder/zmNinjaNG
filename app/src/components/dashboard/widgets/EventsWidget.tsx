@@ -33,7 +33,9 @@ import { ALL_TAGS_FILTER_ID } from '../../../hooks/useEventFilters';
 import { activateOnEnterOrSpace } from '../../../lib/utils';
 import { staggeredRefetchInterval } from '../../../lib/query/stagger-interval';
 import { eventInstant } from '../../../lib/event/event-instant';
-import type { Scoped } from '../../../api/scoped-types';
+import { ErrorBanner } from '../../ui/query-state';
+import { resolveQueryError } from '../../../lib/query/query-error';
+import type { Scoped, ProfileError } from '../../../api/scoped-types';
 import type { EventData } from '../../../api/types';
 
 interface EventsWidgetProps {
@@ -74,7 +76,7 @@ export const EventsWidget = memo(function EventsWidget({
     // cache entry (byte-identical). All mode's monitor id filter, if set,
     // applies identically to every profile - same v1 precedent as
     // useScopedEvents (a bare id only ever means something on one server).
-    const { events, isLoading } = useQueries({
+    const { events, isLoading, errors } = useQueries({
         queries: profiles.map((p, i) => ({
             queryKey: queryKeys.eventsWidget(p.id, monitorIdFilter, limit, onlyDetectedObjects),
             queryFn: () => getEvents(getSession(p.id).client, p.id, {
@@ -88,6 +90,7 @@ export const EventsWidget = memo(function EventsWidget({
         })),
         combine: (results) => {
             const scoped: Scoped<EventData>[] = [];
+            const errors: ProfileError[] = [];
             let anyData = false;
             profiles.forEach((p, i) => {
                 const q = results[i];
@@ -96,12 +99,13 @@ export const EventsWidget = memo(function EventsWidget({
                     anyData = true;
                     for (const item of q.data.events) scoped.push({ profileId: p.id, profileName: p.name, item });
                 }
+                if (q.error) errors.push({ profileId: p.id, profileName: p.name, error: q.error });
             });
             const tzById = new Map(profiles.map((p) => [p.id, p.timezone ?? 'UTC']));
             scoped.sort((a, b) =>
                 eventInstant(b.item, tzById.get(b.profileId) ?? 'UTC') - eventInstant(a.item, tzById.get(a.profileId) ?? 'UTC')
             );
-            return { events: scoped.slice(0, limit), isLoading: !anyData };
+            return { events: scoped.slice(0, limit), isLoading: !anyData, errors };
         },
     });
 
@@ -132,7 +136,7 @@ export const EventsWidget = memo(function EventsWidget({
         });
     }, [events, tagIds, eventTagMap]);
 
-    if (isLoading) {
+    if (isLoading && errors.length === 0) {
         return (
             <div className="p-4 space-y-2">
                 {[...Array(3)].map((_, i) => (
@@ -140,6 +144,10 @@ export const EventsWidget = memo(function EventsWidget({
                 ))}
             </div>
         );
+    }
+
+    if (events.length === 0 && errors.length > 0) {
+        return <ErrorBanner message={resolveQueryError(errors[0].error, t)} className="m-4" />;
     }
 
     if (!filteredEvents.length) {

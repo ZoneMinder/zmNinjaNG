@@ -4,7 +4,10 @@ import { useNavigate } from 'react-router-dom';
 import { getEvents } from '../../../api/events';
 import { getSession } from '../../../services/sessions';
 import { staggeredRefetchInterval } from '../../../lib/query/stagger-interval';
+import { ErrorBanner } from '../../ui/query-state';
+import { resolveQueryError } from '../../../lib/query/query-error';
 import type { EventData } from '../../../api/types';
+import type { ProfileError } from '../../../api/scoped-types';
 import { formatForServer, formatLocalDateTime } from '../../../lib/time';
 import {
     subHours,
@@ -92,8 +95,10 @@ export const TimelineWidget = memo(function TimelineWidget() {
     // this is a chart of counts, not per-row datums, so no profile identity
     // needs to survive the merge (no chip - unlike EventsWidget's list).
     // Partial-failure tolerant: one profile's error never blanks the chart
-    // once another profile has data (mirrors useScopedEvents' anyHasData).
-    const { events: mergedEvents } = useQueries({
+    // once another profile has data (mirrors useScopedEvents' anyHasData) -
+    // but zero data AND at least one error still needs the error branch
+    // below (zero-data suppression, same rule Montage.tsx applies).
+    const { events: mergedEvents, errors } = useQueries({
         queries: profiles.map((p, i) => ({
             queryKey: queryKeys.eventsTimelineWidget(p.id, start.getTime()),
             queryFn: () => getEvents(getSession(p.id).client, p.id, {
@@ -104,8 +109,14 @@ export const TimelineWidget = memo(function TimelineWidget() {
         })),
         combine: (results) => {
             const events: EventData[] = [];
-            results.forEach((q) => { if (q?.data) events.push(...q.data.events); });
-            return { events };
+            const errors: ProfileError[] = [];
+            profiles.forEach((p, i) => {
+                const q = results[i];
+                if (!q) return;
+                if (q.data) events.push(...q.data.events);
+                if (q.error) errors.push({ profileId: p.id, profileName: p.name, error: q.error });
+            });
+            return { events, errors };
         },
     });
 
@@ -380,6 +391,9 @@ export const TimelineWidget = memo(function TimelineWidget() {
                     {t('events.past_month')}
                 </Button>
             </div>
+            {mergedEvents.length === 0 && errors.length > 0 ? (
+                <ErrorBanner message={resolveQueryError(errors[0].error, t)} className="m-2" />
+            ) : (
             <div className="flex-1 min-h-0">
                 <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={data}>
@@ -416,6 +430,7 @@ export const TimelineWidget = memo(function TimelineWidget() {
                 </BarChart>
             </ResponsiveContainer>
             </div>
+            )}
         </div>
     );
 });

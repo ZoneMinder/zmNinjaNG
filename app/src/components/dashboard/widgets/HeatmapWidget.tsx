@@ -19,12 +19,15 @@ import { queryKeys } from '../../../lib/query/query-keys';
 import { useBandwidthSettings } from '../../../hooks/useBandwidthSettings';
 import { staggeredRefetchInterval } from '../../../lib/query/stagger-interval';
 import type { EventData } from '../../../api/types';
+import type { ProfileError } from '../../../api/scoped-types';
 import { Card, CardHeader, CardTitle, CardContent } from '../../ui/card';
 import { Button } from '../../ui/button';
 import { Loader2, Activity } from 'lucide-react';
 import { EventHeatmap } from '../../events/EventHeatmap';
 import { formatForServer } from '../../../lib/time';
 import { EmptyState } from '../../ui/empty-state';
+import { ErrorBanner } from '../../ui/query-state';
+import { resolveQueryError } from '../../../lib/query/query-error';
 
 interface HeatmapWidgetProps {
   title?: string;
@@ -77,8 +80,10 @@ export const HeatmapWidget = memo(function HeatmapWidget({ title }: HeatmapWidge
   // is aggregate density, not per-row datums, so no profile identity needs
   // to survive the merge (no chip - unlike EventsWidget's list).
   // Partial-failure tolerant: one profile's error never blanks the heatmap
-  // once another profile has data (mirrors useScopedEvents' anyHasData).
-  const { events, isLoading } = useQueries({
+  // once another profile has data (mirrors useScopedEvents' anyHasData) -
+  // but zero data AND at least one error still needs the error branch below
+  // (zero-data suppression, same rule Montage.tsx applies for its strip).
+  const { events, isLoading, errors } = useQueries({
     queries: profiles.map((p, i) => ({
       queryKey: queryKeys.eventsHeatmap(p.id, timeRange),
       queryFn: () =>
@@ -91,9 +96,15 @@ export const HeatmapWidget = memo(function HeatmapWidget({ title }: HeatmapWidge
     })),
     combine: (results) => {
       const events: EventData[] = [];
+      const errors: ProfileError[] = [];
       let anyData = false;
-      results.forEach((q) => { if (q?.data) { anyData = true; events.push(...q.data.events); } });
-      return { events, isLoading: !anyData };
+      profiles.forEach((p, i) => {
+        const q = results[i];
+        if (!q) return;
+        if (q.data) { anyData = true; events.push(...q.data.events); }
+        if (q.error) errors.push({ profileId: p.id, profileName: p.name, error: q.error });
+      });
+      return { events, isLoading: !anyData, errors };
     },
   });
 
@@ -158,10 +169,15 @@ export const HeatmapWidget = memo(function HeatmapWidget({ title }: HeatmapWidge
 
         {/* Heatmap or loading state */}
         <div className="flex-1 min-h-0 overflow-auto">
-          {isLoading ? (
+          {isLoading && errors.length === 0 ? (
             <div className="flex items-center justify-center h-full">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
+          ) : events.length === 0 && errors.length > 0 ? (
+            <ErrorBanner
+              message={resolveQueryError(errors[0].error, t)}
+              className="mx-4 mt-4"
+            />
           ) : events.length === 0 ? (
             <EmptyState
               icon={Activity}

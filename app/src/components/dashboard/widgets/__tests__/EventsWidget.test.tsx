@@ -125,4 +125,14 @@ describe('EventsWidget', () => {
 
     expect(() => renderWidget()).not.toThrow();
   });
+
+  it('single profile erroring with zero data shows the error branch, not the empty state (refs #337)', async () => {
+    mockScope([profileA]);
+    vi.mocked(getEvents).mockRejectedValue(new Error('boom'));
+
+    renderWidget();
+
+    await waitFor(() => expect(screen.getByText(/common\.error/)).toBeInTheDocument());
+    expect(screen.queryByText('dashboard.no_recent_events')).toBeNull();
+  });
 });
