@@ -858,6 +858,7 @@
   "notification_settings": {
     "title": "通知设置",
     "subtitle": "配置推送通知",
+    "per_profile_caption": "通知按服务器配置文件设置。",
     "enable_notifications": "启用通知",
     "enable_notifications_desc": "此设备的推送通知",
     "push_enabled": "推送通知已启用",
@@ -924,7 +925,13 @@
     "polling_interval": "轮询间隔",
     "polling_interval_desc": "事件检查频率",
     "only_detected": "仅检测到的事件",
-    "only_detected_desc": "仅含对象检测的事件"
+    "only_detected_desc": "仅含对象检测的事件",
+    "overview_title": "配置文件",
+    "overview_desc": "每个服务器的通知设置",
+    "overview_enabled": "已启用",
+    "overview_disabled": "已禁用",
+    "overview_direct_mode_host": "直接轮询",
+    "overview_no_host": "未设置主机"
   },
   "notifications": {
     "status": {

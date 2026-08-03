@@ -316,3 +316,42 @@ Then('the logs query should have refired with a different access token', async (
   expect(secondLogsRequestToken).toBeTruthy();
   expect(secondLogsRequestToken).not.toBe(firstLogsRequestToken);
 });
+
+Then('I should see a notification overview row for every profile', async ({ page }) => {
+  await expect.poll(async () => page.locator('[data-testid^="notification-overview-row-"]').count(), {
+    timeout: testConfig.timeouts.pageLoad,
+  }).toBeGreaterThanOrEqual(2);
+});
+
+// Both Background profiles point at the same real server, so a host or
+// query-param diff (the Logs picker's proof-of-switch signal) isn't
+// available here - the overview row's own active marker is the strongest
+// assertable outcome. Clicks whichever row ISN'T currently marked active.
+let clickedOverviewRowTestId = '';
+
+When("I click a different profile's notification overview row", async ({ page }) => {
+  const rows = page.locator('[data-testid^="notification-overview-row-"]');
+  await expect.poll(async () => rows.count(), { timeout: testConfig.timeouts.pageLoad }).toBeGreaterThanOrEqual(2);
+
+  const activeTestId = await page
+    .locator('[data-testid^="notification-overview-row-"][aria-current="true"]')
+    .getAttribute('data-testid');
+
+  const count = await rows.count();
+  for (let i = 0; i < count; i++) {
+    const testId = await rows.nth(i).getAttribute('data-testid');
+    if (testId !== activeTestId) {
+      clickedOverviewRowTestId = testId as string;
+      await rows.nth(i).click();
+      break;
+    }
+  }
+  expect(clickedOverviewRowTestId).toBeTruthy();
+});
+
+Then('that row should be marked as the active profile', async ({ page }) => {
+  expect(clickedOverviewRowTestId).toBeTruthy();
+  await expect(page.getByTestId(clickedOverviewRowTestId)).toHaveAttribute('aria-current', 'true', {
+    timeout: testConfig.timeouts.element,
+  });
+});

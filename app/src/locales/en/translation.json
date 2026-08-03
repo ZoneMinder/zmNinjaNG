@@ -858,6 +858,7 @@
   "notification_settings": {
     "title": "Notification Settings",
     "subtitle": "Configure push notifications",
+    "per_profile_caption": "Notifications are configured per server profile.",
     "enable_notifications": "Enable Notifications",
     "enable_notifications_desc": "Push notifications for this device",
     "push_enabled": "Push Notifications Enabled",
@@ -924,7 +925,13 @@
     "polling_interval": "Polling interval",
     "polling_interval_desc": "Event check frequency",
     "only_detected": "Only detected events",
-    "only_detected_desc": "Only events with object detection"
+    "only_detected_desc": "Only events with object detection",
+    "overview_title": "Profiles",
+    "overview_desc": "Notification setup for each server",
+    "overview_enabled": "Enabled",
+    "overview_disabled": "Disabled",
+    "overview_direct_mode_host": "Direct polling",
+    "overview_no_host": "No host set"
   },
   "notifications": {
     "status": {

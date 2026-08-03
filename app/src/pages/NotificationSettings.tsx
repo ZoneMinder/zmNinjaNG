@@ -45,6 +45,7 @@ import { NotificationBadge } from '../components/NotificationBadge';
 import { NotificationModeSection } from '../components/notifications/NotificationModeSection';
 import { ServerConfigSection } from '../components/notifications/ServerConfigSection';
 import { MonitorFilterSection } from '../components/notifications/MonitorFilterSection';
+import { NotificationOverview } from '../components/notifications/NotificationOverview';
 
 export default function NotificationSettings() {
   const { t } = useTranslation();
@@ -338,6 +339,11 @@ export default function NotificationSettings() {
           <p className="text-muted-foreground mt-1">
             {t('notification_settings.subtitle')}
           </p>
+          {!isAllMode && (
+            <p className="text-xs text-muted-foreground mt-0.5" data-testid="notification-per-profile-caption">
+              {t('notification_settings.per_profile_caption')}
+            </p>
+          )}
         </div>
         <Button
           variant="outline"
@@ -350,11 +356,18 @@ export default function NotificationSettings() {
       </div>
 
       {isAllMode && (
-        <ProfilePicker
-          profiles={scope?.profiles ?? []}
-          value={defaultPickedId}
-          onChange={setPickedProfileId}
-        />
+        <>
+          <NotificationOverview
+            profiles={scope?.profiles ?? []}
+            activeProfileId={defaultPickedId}
+            onSelect={setPickedProfileId}
+          />
+          <ProfilePicker
+            profiles={scope?.profiles ?? []}
+            value={defaultPickedId}
+            onChange={setPickedProfileId}
+          />
+        </>
       )}
 
       <div className="grid gap-4">

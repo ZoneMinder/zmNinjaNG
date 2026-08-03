@@ -40,9 +40,20 @@ vi.mock('../../api/notifications', () => ({
 vi.mock('../../services/eventPoller', () => ({
   getEventPoller: () => ({ isRunning: () => false, stop: vi.fn() }),
 }));
+// Keyed by profileId so All-mode tests can give each profile a distinct
+// config; a test that never populates it falls back to the previous
+// hardcoded settings (unaffected).
+const { notificationSettingsFixture, DEFAULT_TEST_SETTINGS } = vi.hoisted(() => {
+  const DEFAULT_TEST_SETTINGS = { enabled: true, notificationMode: 'es' as const, host: 'zm.local' };
+  return {
+    DEFAULT_TEST_SETTINGS,
+    notificationSettingsFixture: {} as Record<string, { enabled: boolean; notificationMode: 'es' | 'direct'; host: string }>,
+  };
+});
+
 vi.mock('../../stores/notifications', () => ({
   useNotificationStore: (selector: (state: {
-    getProfileSettings: () => unknown;
+    getProfileSettings: (profileId: string) => unknown;
     getUnreadCount: () => number;
     updateProfileSettings: () => void;
     setMonitorFilter: () => void;
@@ -52,7 +63,7 @@ vi.mock('../../stores/notifications', () => ({
     isConnected: boolean;
   }) => unknown) =>
     selector({
-      getProfileSettings: () => ({ enabled: true, notificationMode: 'es', host: 'zm.local' }),
+      getProfileSettings: (profileId: string) => notificationSettingsFixture[profileId] ?? DEFAULT_TEST_SETTINGS,
       getUnreadCount: () => 0,
       updateProfileSettings: vi.fn(),
       setMonitorFilter: vi.fn(),
@@ -69,8 +80,12 @@ vi.mock('../../components/NotificationBadge', () => ({
 vi.mock('../../components/notifications/NotificationModeSection', () => ({
   NotificationModeSection: () => null,
 }));
+// Renders the host it received (instead of null) so tests can assert the
+// form actually reflects the currently-selected profile's settings.
 vi.mock('../../components/notifications/ServerConfigSection', () => ({
-  ServerConfigSection: () => null,
+  ServerConfigSection: ({ settings }: { settings: { host: string } }) => (
+    <div data-testid="mock-server-config-host">{settings.host}</div>
+  ),
 }));
 vi.mock('../../components/notifications/MonitorFilterSection', () => ({
   MonitorFilterSection: () => null,
@@ -113,6 +128,7 @@ function renderPage() {
 describe('NotificationSettings page - All mode profile picker (refs #337)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    Object.keys(notificationSettingsFixture).forEach((key) => delete notificationSettingsFixture[key]);
     vi.mocked(getSession).mockImplementation((id) => ({
       profileId: id,
       client: { profile: id } as never,
@@ -140,5 +156,55 @@ describe('NotificationSettings page - All mode profile picker (refs #337)', () =
     fireEvent.click(screen.getByTestId('page-profile-picker-option-profile-b'));
 
     await waitFor(() => expect(getSession).toHaveBeenCalledWith(profileB.id));
+  });
+
+  it('renders a per-profile overview row for each profile with correct enabled/mode/host values', async () => {
+    notificationSettingsFixture['profile-a'] = { enabled: true, notificationMode: 'es', host: 'a.zm.local' };
+    notificationSettingsFixture['profile-b'] = { enabled: false, notificationMode: 'direct', host: '' };
+
+    renderPage();
+
+    const rowA = await screen.findByTestId('notification-overview-row-profile-a');
+    expect(rowA).toHaveTextContent('Home');
+    expect(rowA).toHaveTextContent('a.zm.local');
+    expect(rowA).toHaveTextContent('notification_settings.mode_es');
+    expect(rowA).toHaveTextContent('notification_settings.overview_enabled');
+
+    const rowB = screen.getByTestId('notification-overview-row-profile-b');
+    expect(rowB).toHaveTextContent('Work');
+    expect(rowB).toHaveTextContent('notification_settings.mode_direct');
+    expect(rowB).toHaveTextContent('notification_settings.overview_disabled');
+    // Direct mode ignores whatever `host` holds and shows the mode-specific label instead.
+    expect(rowB).toHaveTextContent('notification_settings.overview_direct_mode_host');
+  });
+
+  it('clicking an overview row selects that profile, switching the form to show its host', async () => {
+    notificationSettingsFixture['profile-a'] = { enabled: true, notificationMode: 'es', host: 'a.zm.local' };
+    notificationSettingsFixture['profile-b'] = { enabled: true, notificationMode: 'es', host: 'b.zm.local' };
+
+    renderPage();
+
+    await waitFor(() => expect(getSession).toHaveBeenCalledWith(profileA.id));
+    expect(screen.getByTestId('mock-server-config-host')).toHaveTextContent('a.zm.local');
+    expect(screen.getByTestId('notification-overview-row-profile-a')).toHaveAttribute('aria-current', 'true');
+
+    fireEvent.click(screen.getByTestId('notification-overview-row-profile-b'));
+
+    await waitFor(() => expect(getSession).toHaveBeenCalledWith(profileB.id));
+    expect(screen.getByTestId('mock-server-config-host')).toHaveTextContent('b.zm.local');
+    expect(screen.getByTestId('notification-overview-row-profile-b')).toHaveAttribute('aria-current', 'true');
+  });
+
+  it('single mode: shows the per-profile caption and no overview list', async () => {
+    vi.mocked(useCurrentProfile).mockReturnValue({
+      currentProfile: profileA, settings: {} as never, hasProfile: true, isAllMode: false,
+    });
+
+    renderPage();
+
+    await waitFor(() => expect(getSession).toHaveBeenCalledWith(profileA.id));
+    expect(screen.getByTestId('notification-per-profile-caption')).toBeInTheDocument();
+    expect(screen.queryByTestId('notification-overview')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('page-profile-picker')).not.toBeInTheDocument();
   });
 });

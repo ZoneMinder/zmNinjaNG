@@ -858,6 +858,7 @@
   "notification_settings": {
     "title": "Benachrichtigungseinstellungen",
     "subtitle": "Push-Benachrichtigungen konfigurieren",
+    "per_profile_caption": "Benachrichtigungen werden pro Server-Profil konfiguriert.",
     "enable_notifications": "Benachrichtigungen aktivieren",
     "enable_notifications_desc": "Push-Benachrichtigungen für dieses Gerät",
     "push_enabled": "Push-Benachrichtigungen aktiviert",
@@ -924,7 +925,13 @@
     "polling_interval": "Abfrageintervall",
     "polling_interval_desc": "Häufigkeit der Ereignisprüfung",
     "only_detected": "Nur erkannte Ereignisse",
-    "only_detected_desc": "Nur Ereignisse mit Objekterkennung"
+    "only_detected_desc": "Nur Ereignisse mit Objekterkennung",
+    "overview_title": "Profile",
+    "overview_desc": "Benachrichtigungseinrichtung für jeden Server",
+    "overview_enabled": "Aktiviert",
+    "overview_disabled": "Deaktiviert",
+    "overview_direct_mode_host": "Direktabfrage",
+    "overview_no_host": "Kein Host festgelegt"
   },
   "notifications": {
     "status": {

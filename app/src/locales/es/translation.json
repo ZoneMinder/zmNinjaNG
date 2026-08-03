@@ -858,6 +858,7 @@
   "notification_settings": {
     "title": "Notificaciones",
     "subtitle": "Configurar notificaciones push",
+    "per_profile_caption": "Las notificaciones se configuran por perfil de servidor.",
     "enable_notifications": "Habilitar Notificaciones",
     "enable_notifications_desc": "Notificaciones push para este dispositivo",
     "push_enabled": "Notificaciones Push Habilitadas",
@@ -924,7 +925,13 @@
     "polling_interval": "Intervalo de sondeo",
     "polling_interval_desc": "Frecuencia de verificación de eventos",
     "only_detected": "Solo eventos detectados",
-    "only_detected_desc": "Solo eventos con detección de objetos"
+    "only_detected_desc": "Solo eventos con detección de objetos",
+    "overview_title": "Perfiles",
+    "overview_desc": "Configuración de notificaciones para cada servidor",
+    "overview_enabled": "Habilitado",
+    "overview_disabled": "Deshabilitado",
+    "overview_direct_mode_host": "Sondeo directo",
+    "overview_no_host": "Sin host configurado"
   },
   "notifications": {
     "status": {

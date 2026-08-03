@@ -76,3 +76,13 @@ Feature: All Servers mode
     And I pick a different profile in the Logs page picker
     Then the Logs page picker should show the newly picked profile
     And the logs query should have refired with a different access token
+
+  @web
+  Scenario: Notifications page overview shows both profiles and switching updates the active row
+    When I navigate to the "Profiles" page
+    And I click the All Servers profile card
+    When I navigate to the "Notifications" page
+    Then I should see the page profile picker
+    And I should see a notification overview row for every profile
+    When I click a different profile's notification overview row
+    Then that row should be marked as the active profile

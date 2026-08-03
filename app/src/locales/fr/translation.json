@@ -858,6 +858,7 @@
   "notification_settings": {
     "title": "Paramètres de notification",
     "subtitle": "Configurer les notifications push",
+    "per_profile_caption": "Les notifications sont configurées par profil de serveur.",
     "enable_notifications": "Activer les notifications",
     "enable_notifications_desc": "Notifications push pour cet appareil",
     "push_enabled": "Notifications push activées",
@@ -924,7 +925,13 @@
     "polling_interval": "Intervalle de sondage",
     "polling_interval_desc": "Fréquence de vérification des événements",
     "only_detected": "Événements détectés uniquement",
-    "only_detected_desc": "Uniquement les événements avec détection d'objets"
+    "only_detected_desc": "Uniquement les événements avec détection d'objets",
+    "overview_title": "Profils",
+    "overview_desc": "Configuration des notifications pour chaque serveur",
+    "overview_enabled": "Activé",
+    "overview_disabled": "Désactivé",
+    "overview_direct_mode_host": "Sondage direct",
+    "overview_no_host": "Aucun hôte défini"
   },
   "notifications": {
     "status": {
