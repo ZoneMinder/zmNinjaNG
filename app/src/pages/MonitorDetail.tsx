@@ -413,6 +413,7 @@ export default function MonitorDetail() {
               key={monitor.Monitor.Id}
               monitor={monitor.Monitor}
               profile={ownerProfile}
+              profileId={routeProfileId ?? undefined}
               externalMediaRef={mediaRef}
               objectFit={isFullscreen ? 'contain' : settings.monitorDetailFeedFit}
               showControls={true}

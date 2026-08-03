@@ -71,6 +71,7 @@ export function MonitorRecentEvents({ monitor, profileId }: MonitorRecentEventsP
       minStreamingPort,
       monitorId: ev.MonitorId,
       hasAlarmFrame: eventHasAlarmFrame(ev),
+      profileId,
     });
     return { urls, aspectRatio: tw / th };
   };

@@ -89,7 +89,13 @@ vi.mock('../../lib/logger', () => ({
 }));
 
 vi.mock('../../components/monitors/PTZControls', () => ({ PTZControls: () => <div data-testid="ptz-controls" /> }));
-vi.mock('../../components/monitors/LiveMonitorPlayer', () => ({ LiveMonitorPlayer: () => <div data-testid="live-player" /> }));
+const liveMonitorPlayerMock = vi.fn();
+vi.mock('../../components/monitors/LiveMonitorPlayer', () => ({
+  LiveMonitorPlayer: (props: Record<string, unknown>) => {
+    liveMonitorPlayerMock(props);
+    return <div data-testid="live-player" />;
+  },
+}));
 vi.mock('../../components/monitors/AnalysisFramesToggle', () => ({ AnalysisFramesToggle: () => <div /> }));
 vi.mock('../../components/monitors/ZoneOverlay', () => ({ ZoneOverlay: () => <div /> }));
 vi.mock('../../components/monitors/ZoneLegend', () => ({ ZoneLegend: () => <div /> }));
@@ -144,6 +150,7 @@ describe('MonitorDetail All-mode deep route (refs #337)', () => {
     getSessionMock.mockClear();
     tryGetCurrentSessionMock.mockClear();
     useQueryMock.mockReset();
+    liveMonitorPlayerMock.mockClear();
   });
 
   afterEach(() => {
@@ -170,6 +177,22 @@ describe('MonitorDetail All-mode deep route (refs #337)', () => {
     expect(seenKeys).toContainEqual(['monitor', 'profile-b', '1']);
     expect(getSessionMock).toHaveBeenCalledWith('profile-b');
     expect(tryGetCurrentSessionMock).not.toHaveBeenCalled();
+  });
+
+  it('passes the route profileId to LiveMonitorPlayer on the All-mode deep route (refs #337 C1)', () => {
+    h.routeParams = { profileId: 'profile-b', monitorId: '1' };
+    useQueryMock.mockImplementation(({ queryKey }: { queryKey: readonly unknown[] }) => {
+      if (queryKey[0] === 'monitor') {
+        return { data: monitor, isLoading: false, error: null, refetch: vi.fn() };
+      }
+      return { data: undefined, isLoading: false, error: null, refetch: vi.fn() };
+    });
+
+    render(<MonitorDetail />);
+
+    expect(liveMonitorPlayerMock).toHaveBeenCalledWith(
+      expect.objectContaining({ profileId: 'profile-b' })
+    );
   });
 
   it('falls back to the current session and single-mode key when the route has no profileId', () => {
