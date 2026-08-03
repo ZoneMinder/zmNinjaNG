@@ -5,7 +5,7 @@
  */
 
 import { parseMonitorRotation } from '../monitor/monitor-rotation';
-import type { Monitor } from '../../api/types';
+import type { Monitor, ProfileId } from '../../api/types';
 
 /**
  * Calculate maximum grid columns based on container width and minimum card width.
@@ -102,6 +102,26 @@ export const getMonitorDimensions = (
     height: parseInt(monitor?.Height || fallbackHeight || String(defaultHeight), 10),
   };
 };
+
+/**
+ * Build an id -> Monitor lookup from a scoped monitors list, shared by
+ * EventListView and EventMontageView (refs #337 Task 2 fix round 1 - was
+ * duplicated verbatim in both files' `useMemo` bodies).
+ *
+ * All mode: also keyed by `${profileId}:${monitorId}` so a colliding numeric
+ * id across two servers doesn't collapse into one entry. Single mode: every
+ * monitor's profileId is undefined, so only the bare id is set, unchanged.
+ */
+export function buildMonitorMap(
+  monitors: Array<{ Monitor: Monitor; profileId?: ProfileId }>
+): Map<string, Monitor> {
+  const map = new Map<string, Monitor>();
+  for (const m of monitors) {
+    map.set(m.Monitor.Id, m.Monitor);
+    if (m.profileId) map.set(`${m.profileId}:${m.Monitor.Id}`, m.Monitor);
+  }
+  return map;
+}
 
 /**
  * Grid layout constants for event montage views.

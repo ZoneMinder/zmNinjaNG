@@ -1,11 +1,12 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { EventMontageView } from '../EventMontageView';
 import { useReturnHighlightStore } from '../../../stores/returnHighlight';
 import { RETURN_FLASH_MS } from '../../../lib/zmninja-ng-constants';
 import { downloadEventVideo } from '../../../services/download';
-import type { EventData } from '../../../api/types';
+import { clearAllServerMaps, setServerMap } from '../../../lib/zm/server-resolver';
+import { asProfileId, type EventData } from '../../../api/types';
 import type { ScopedEventItem } from '../EventListView';
 
 const navigate = vi.fn();
@@ -135,6 +136,12 @@ beforeEach(() => {
   useReturnHighlightStore.setState({ lastViewedEventId: null });
 });
 
+// Server maps are module-global state (server-resolver.ts); clear after
+// every test so a later test never sees a map a previous one registered.
+afterEach(() => {
+  clearAllServerMaps();
+});
+
 describe('EventMontageView relative time (grid view)', () => {
   it('shows a relative-time label for a recent event', () => {
     renderMontage(toZmDate(new Date(Date.now() - 40 * 60_000)));
@@ -240,5 +247,31 @@ describe('EventMontageView all-mode owning-profile wiring (refs #337 Task 2)', (
     const thumb = screen.getByTestId('event-thumbnail');
     const url = decodeURIComponent(thumb.getAttribute('data-url') ?? '');
     expect(url).toContain('https://zm.example.test');
+  });
+
+  // Fix round 1: the tile now subscribes to the server map directly (instead
+  // of the parent's monitorMap useMemo busting on a serverMapVersion dep it
+  // never read) - this proves that subscription still refreshes a mounted
+  // tile's URL when the server map arrives late, not just that the lint
+  // warning went away.
+  it("refreshes an already-mounted tile's thumbnail URL when the server map arrives after first render", () => {
+    renderEvents(
+      [scopedEvent('301', 'profile-b', 'Office')],
+      [{ Monitor: { Id: '1', ServerId: 'srv-1' }, profileId: 'profile-b' }]
+    );
+
+    // Before the server map arrives: falls back to profile-b's own portal.
+    const before = decodeURIComponent(screen.getByTestId('event-thumbnail').getAttribute('data-url') ?? '');
+    expect(before).toContain('https://profile-b.test');
+
+    act(() => {
+      setServerMap(
+        new Map([['srv-1', { recordingUrl: '', portalPath: 'https://srv1.example.test/index.php', apiBaseUrl: '' }]]),
+        asProfileId('profile-b')
+      );
+    });
+
+    const after = decodeURIComponent(screen.getByTestId('event-thumbnail').getAttribute('data-url') ?? '');
+    expect(after).toContain('https://srv1.example.test');
   });
 });

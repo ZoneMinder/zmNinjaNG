@@ -28,7 +28,7 @@ import { useCurrentProfile, useProfileById } from '../../hooks/useCurrentProfile
 import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
 import { resolveMinStreamingPort } from '../../lib/monitor/multiport';
 import { EventThumbnailHoverPreview } from './EventThumbnailHoverPreview';
-import { calculateThumbnailDimensions, getMonitorDimensions } from '../../lib/event/event-utils';
+import { buildMonitorMap, calculateThumbnailDimensions, getMonitorDimensions } from '../../lib/event/event-utils';
 import { ZM_INTEGRATION, RELATIVE_TIME_LIST_WINDOW_DAYS } from '../../lib/zmninja-ng-constants';
 import type { Event, Monitor, ProfileId, Tag } from '../../api/types';
 import type { ThumbnailFallbackEntry } from '../../stores/settings';
@@ -93,6 +93,15 @@ const EventMontageTile = memo(function EventMontageTile({
   const { fmtDateTimeShort } = useDateTimeFormat();
   const markViewed = useReturnHighlightStore((s) => s.markViewed);
   const flash = useReturnFlash(event.Id);
+
+  // Re-render THIS tile when the server map changes (e.g. multi-server
+  // bootstrap populating it after first render). Subscribing here, not in
+  // the parent, means the parent's monitorMap useMemo doesn't need a
+  // serverMapVersion dependency it never actually reads just to bust this
+  // memo()-wrapped tile's props (refs #337 fix round 1) - this tile
+  // re-renders on its own regardless of memo, and getPortalUrlForMonitor
+  // below reads the (now up to date) server map fresh on every call.
+  useSyncExternalStore(subscribeServerMap, getServerMapVersion);
 
   // All mode: resolve this tile's OWN owning-profile client details instead
   // of the page-level defaults (which reflect no/whatever profile is
@@ -296,22 +305,12 @@ export const EventMontageView = ({
   const thumbnailChain = settings.thumbnailFallbackChain;
   const showHover = settings.hoverPreview.eventsGrid;
 
-  // Re-render when the server map changes (e.g. multi-server bootstrap
-  // populating it after this grid's first render) - same reasoning as
-  // EventListView's monitorMap (refs #337 Task 2).
-  const serverMapVersion = useSyncExternalStore(subscribeServerMap, getServerMapVersion);
-
-  // id -> Monitor lookup, same shape/reasoning as EventListView's monitorMap:
-  // keyed by `${profileId}:${monitorId}` too so a colliding numeric id across
-  // two servers doesn't collapse into one entry.
-  const monitorMap = useMemo(() => {
-    const map = new Map<string, Monitor>();
-    for (const m of monitors) {
-      map.set(m.Monitor.Id, m.Monitor);
-      if (m.profileId) map.set(`${m.profileId}:${m.Monitor.Id}`, m.Monitor);
-    }
-    return map;
-  }, [monitors, serverMapVersion]);
+  // id -> Monitor lookup, rebuilt only when the monitors array reference
+  // changes - same shape/reasoning as EventListView's monitorMap.
+  // EventMontageTile below refreshes its own per-server URL when the server
+  // map changes (it subscribes to it directly), so this memo doesn't need
+  // to bust on that too (refs #337 fix round 1).
+  const monitorMap = useMemo(() => buildMonitorMap(monitors), [monitors]);
 
   const isLoadingData = isFetching;
   const hasMore = totalCount !== undefined ? events.length < totalCount : false;

@@ -12,7 +12,7 @@ import { EventCard } from './EventCard';
 import { type EventFilters } from '../../api/events';
 import { getPortalUrlForMonitor, getServerMapVersion, subscribeServerMap } from '../../lib/zm/server-resolver';
 import { buildThumbnailChain, eventHasAlarmFrame } from '../../lib/event/thumbnail-chain';
-import { calculateThumbnailDimensions, EVENT_GRID_CONSTANTS, getMonitorDimensions } from '../../lib/event/event-utils';
+import { buildMonitorMap, calculateThumbnailDimensions, EVENT_GRID_CONSTANTS, getMonitorDimensions } from '../../lib/event/event-utils';
 import { useCurrentProfile, useProfileById } from '../../hooks/useCurrentProfile';
 import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
 import { resolveMinStreamingPort } from '../../lib/monitor/multiport';
@@ -66,6 +66,15 @@ const EventItem = memo(function EventItem({
   thumbnailChain: ThumbnailFallbackEntry[];
 }) {
   const { Event, profileId, profileChip } = event;
+
+  // Re-render THIS row when the server map changes (e.g. multi-server
+  // bootstrap populating it after first render). Subscribing here, not in
+  // the parent, means the parent's monitorMap useMemo doesn't need a
+  // serverMapVersion dependency it never actually reads just to bust this
+  // memo()-wrapped row's props (refs #337 fix round 1) - this row re-renders
+  // on its own regardless of memo, and getPortalUrlForMonitor below reads
+  // the (now up to date) server map fresh on every call.
+  useSyncExternalStore(subscribeServerMap, getServerMapVersion);
 
   // All mode: resolve this row's OWN owning-profile client details instead
   // of the page-level defaults (which reflect no/whatever profile is
@@ -157,28 +166,12 @@ export const EventListView = ({
   const { settings } = useCurrentProfile();
   const thumbnailChain = settings.thumbnailFallbackChain;
 
-  // Re-render when the server map changes (e.g. multi-server bootstrap
-  // populating it after this list's first render). EventItem below is
-  // memo()-wrapped and resolves its portal URL from that module-global map
-  // directly in getPortalUrlForMonitor, so without this the memoized rows
-  // would keep the stale (possibly empty) URL forever once mounted.
-  const serverMapVersion = useSyncExternalStore(subscribeServerMap, getServerMapVersion);
-
-  // id -> Monitor lookup, rebuilt when the monitors array reference changes
-  // or the server map version bumps (see above). Replaces a monitors.find()
-  // per event per render (O(events x monitors)) with an O(1) map.get() per
-  // event, while still forcing memoized EventItem rows to refresh their
-  // per-server URLs once the server map arrives. All mode: keyed by
-  // `${profileId}:${monitorId}` too so a colliding numeric id across two
-  // servers doesn't collapse into one entry (refs #337).
-  const monitorMap = useMemo(() => {
-    const map = new Map<string, Monitor>();
-    for (const m of monitors) {
-      map.set(m.Monitor.Id, m.Monitor);
-      if (m.profileId) map.set(`${m.profileId}:${m.Monitor.Id}`, m.Monitor);
-    }
-    return map;
-  }, [monitors, serverMapVersion]);
+  // id -> Monitor lookup, rebuilt only when the monitors array reference
+  // changes. Replaces a monitors.find() per event per render (O(events x
+  // monitors)) with an O(1) map.get() per event. EventItem below refreshes
+  // its own per-server URL when the server map changes (it subscribes to it
+  // directly), so this memo doesn't need to bust on that too.
+  const monitorMap = useMemo(() => buildMonitorMap(monitors), [monitors]);
 
   const isLoadingData = isFetching;
   const hasMore = totalCount !== undefined ? events.length < totalCount : false;
