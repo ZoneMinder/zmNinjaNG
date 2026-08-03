@@ -22,8 +22,12 @@ vi.mock('../../hooks/useGroupFilter', () => ({
   useGroupFilter: () => ({ isFilterActive: false, filteredMonitorIds: [], isFilterReady: true }),
 }));
 
+const useScopedMonitorNewEventsMock = vi.fn();
+
 vi.mock('../../hooks/useMonitorNewEvents', () => ({
   useMonitorNewEvents: () => ({ counts: {}, newest: {} }),
+  useScopedMonitorNewEvents: () => useScopedMonitorNewEventsMock(),
+  scopedMonitorEventKey: (profileId: string, monitorId: string) => `${profileId}:${monitorId}`,
 }));
 
 vi.mock('../../components/filters/GroupFilterSelect', () => ({
@@ -33,14 +37,23 @@ vi.mock('../../components/filters/GroupFilterSelect', () => ({
 vi.mock('../../components/monitors/MonitorCard', () => ({
   MonitorCard: ({
     monitor,
+    profileId,
     profileChip,
+    newEventCount,
   }: {
     monitor: { Id: string; Name: string };
+    profileId?: string;
     profileChip?: string;
+    newEventCount?: number;
   }) => (
     <div data-testid={`monitor-card-${monitor.Id}`}>
       {monitor.Name}
       {profileChip && <span data-testid="monitor-profile-chip">{profileChip}</span>}
+      {newEventCount !== undefined && (
+        <span data-testid={`monitor-new-events-badge-${profileId ?? 'single'}-${monitor.Id}`}>
+          {newEventCount}
+        </span>
+      )}
     </div>
   ),
 }));
@@ -106,6 +119,8 @@ describe('Monitors Page', () => {
     useScopedMonitorsMock.mockReset();
     useCurrentProfileMock.mockReset();
     useProfileScopeMock.mockReset();
+    useScopedMonitorNewEventsMock.mockReset();
+    useScopedMonitorNewEventsMock.mockReturnValue({ counts: {}, newest: {} });
   });
 
   it('shows empty state when no monitors are available', () => {
@@ -160,6 +175,28 @@ describe('Monitors Page', () => {
     expect(screen.getByTestId('monitor-card-2')).toHaveTextContent('Lobby Cam');
     const chips = screen.getAllByTestId('monitor-profile-chip');
     expect(chips.map((c) => c.textContent)).toEqual(['Home', 'Office']);
+  });
+
+  it('All mode renders a distinct new-event count per owning profile for a colliding monitor id', () => {
+    allMode(2);
+    useScopedMonitorsMock.mockReturnValue({
+      monitors: [
+        { profileId: 'profile-1', profileName: 'Home', item: { Monitor: { Id: '1', Name: 'Front Door', Deleted: false }, Monitor_Status: { Status: 'Connected' } } },
+        { profileId: 'profile-2', profileName: 'Office', item: { Monitor: { Id: '1', Name: 'Front Door (Office)', Deleted: false }, Monitor_Status: { Status: 'Connected' } } },
+      ],
+      errors: [],
+      isLoading: false,
+      refetchProfile: vi.fn(),
+    });
+    useScopedMonitorNewEventsMock.mockReturnValue({
+      counts: { 'profile-1:1': 2, 'profile-2:1': 7 },
+      newest: { 'profile-1:1': 'a', 'profile-2:1': 'b' },
+    });
+
+    render(<Monitors />);
+
+    expect(screen.getByTestId('monitor-new-events-badge-profile-1-1')).toHaveTextContent('2');
+    expect(screen.getByTestId('monitor-new-events-badge-profile-2-1')).toHaveTextContent('7');
   });
 
   it('All mode shows an error strip for a failed profile with zero monitors while the healthy profile still renders', () => {

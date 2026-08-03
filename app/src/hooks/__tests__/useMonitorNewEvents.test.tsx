@@ -2,12 +2,16 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { useMonitorNewEvents } from '../useMonitorNewEvents';
+import { useMonitorNewEvents, useScopedMonitorNewEvents, scopedMonitorEventKey } from '../useMonitorNewEvents';
 import { useMonitorSeenStore } from '../../stores/monitorSeen';
 import { getMonitorEventsSince } from '../../api/events';
+import { asProfileId } from '../../api/types';
 
 vi.mock('../../api/events', () => ({ getMonitorEventsSince: vi.fn() }));
-vi.mock('../../services/sessions', () => ({ getCurrentSession: vi.fn(() => ({ client: {} })) }));
+vi.mock('../../services/sessions', () => ({
+  getCurrentSession: vi.fn(() => ({ client: {} })),
+  getSession: vi.fn((profileId: string) => ({ client: { profileId } })),
+}));
 vi.mock('../useCurrentProfile', () => ({
   useCurrentProfile: () => ({ currentProfile: { id: 'p1' }, settings: {} }),
 }));
@@ -96,5 +100,65 @@ describe('useMonitorNewEvents', () => {
 
     await waitFor(() => expect(result.current.counts['1']).toBe(3));
     expect(result.current.counts['2']).toBe(0);
+  });
+});
+
+describe('useScopedMonitorNewEvents', () => {
+  const profileA = asProfileId('profile-a');
+  const profileB = asProfileId('profile-b');
+
+  beforeEach(() => {
+    useMonitorSeenStore.setState({ profileWatermarks: {} });
+    mockCount.mockReset();
+  });
+
+  it('reports a distinct count per owning profile for the same monitor id', async () => {
+    // Two profiles both have a monitor "1" - a colliding server-side id. Each
+    // count must be fetched under its OWN profile's session and watermark,
+    // not conflated into one entry.
+    useMonitorSeenStore.getState().seed(profileA, '1', '2026-07-01 00:00:00');
+    useMonitorSeenStore.getState().seed(profileB, '1', '2026-07-01 00:00:00');
+    mockCount.mockImplementation(async (client: unknown) =>
+      (client as { profileId: string }).profileId === profileA
+        ? { count: 3, newest: 'a-newest' }
+        : { count: 9, newest: 'b-newest' }
+    );
+
+    const { result } = renderHook(
+      () =>
+        useScopedMonitorNewEvents([
+          { profileId: profileA, monitorId: '1' },
+          { profileId: profileB, monitorId: '1' },
+        ]),
+      { wrapper }
+    );
+
+    await waitFor(() => {
+      expect(result.current.counts[scopedMonitorEventKey(profileA, '1')]).toBe(3);
+      expect(result.current.counts[scopedMonitorEventKey(profileB, '1')]).toBe(9);
+    });
+    expect(result.current.newest[scopedMonitorEventKey(profileA, '1')]).toBe('a-newest');
+    expect(result.current.newest[scopedMonitorEventKey(profileB, '1')]).toBe('b-newest');
+  });
+
+  it('seeds each profile independently and never emits a backlog as new for either', async () => {
+    mockCount.mockImplementation(async (_client: unknown, _monitorId: string, since: string | null) =>
+      since === null ? { count: 40, newest: 'seeded-newest' } : { count: 0, newest: 'seeded-newest' }
+    );
+
+    const observed: (number | undefined)[] = [];
+    renderHook(
+      () => {
+        const result = useScopedMonitorNewEvents([{ profileId: profileA, monitorId: '1' }]);
+        observed.push(result.counts[scopedMonitorEventKey(profileA, '1')]);
+        return result;
+      },
+      { wrapper }
+    );
+
+    await waitFor(() => {
+      expect(useMonitorSeenStore.getState().hasWatermark(profileA, '1')).toBe(true);
+    });
+    expect(observed).not.toContain(40);
   });
 });

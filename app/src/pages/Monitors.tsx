@@ -12,7 +12,7 @@ import { getSession } from '../services/sessions';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useProfileScope } from '../hooks/useProfileScope';
 import { useScopedMonitors } from '../hooks/useScopedMonitors';
-import { useMonitorNewEvents } from '../hooks/useMonitorNewEvents';
+import { useMonitorNewEvents, useScopedMonitorNewEvents, scopedMonitorEventKey } from '../hooks/useMonitorNewEvents';
 import { useAuthSlice } from '../stores/auth';
 import { useProfileStore } from '../stores/profile';
 import { useSettingsStore } from '../stores/settings';
@@ -121,14 +121,26 @@ export default function Monitors() {
     return counts;
   }, [scopedMonitors]);
 
-  // useMonitorNewEvents is current-profile-scoped (watermarks keyed by one
-  // profile id); All mode gets no new-event badges until Phase 3 extends it
-  // across every scoped profile.
+  // useMonitorNewEvents stays current-profile-scoped for single mode, sharing
+  // its watermarks keyed by one profile id. All mode fans the equivalent
+  // query out per owning profile via useScopedMonitorNewEvents (refs #337).
   const monitorIds = useMemo(
     () => (isAllMode ? [] : renderItems.map(({ Monitor }) => Monitor.Id)),
     [isAllMode, renderItems]
   );
   const { counts: newEventCounts, newest: newestEventAt } = useMonitorNewEvents(monitorIds);
+
+  const scopedMonitorRefs = useMemo(
+    () =>
+      isAllMode
+        ? renderItems
+            .filter((item): item is MonitorGridItem & { profileId: ProfileId } => item.profileId !== undefined)
+            .map(({ Monitor, profileId }) => ({ profileId, monitorId: Monitor.Id }))
+        : [],
+    [isAllMode, renderItems]
+  );
+  const { counts: scopedNewEventCounts, newest: scopedNewestEventAt } =
+    useScopedMonitorNewEvents(scopedMonitorRefs);
 
   // Stable identity: MonitorCard is memo()'d, and this is its only
   // reference-unstable prop. A fresh function per render would re-render every
@@ -219,8 +231,16 @@ export default function Monitors() {
             key={`${profileId ?? ''}-${Monitor.Id}`}
             monitor={Monitor}
             status={Monitor_Status}
-            newEventCount={newEventCounts[Monitor.Id]}
-            newestEventAt={newestEventAt[Monitor.Id]}
+            newEventCount={
+              profileId
+                ? scopedNewEventCounts[scopedMonitorEventKey(profileId, Monitor.Id)]
+                : newEventCounts[Monitor.Id]
+            }
+            newestEventAt={
+              profileId
+                ? scopedNewestEventAt[scopedMonitorEventKey(profileId, Monitor.Id)]
+                : newestEventAt[Monitor.Id]
+            }
             onShowSettings={handleShowSettings}
             objectFit={settings.monitorsFeedFit}
             profileId={profileId}
@@ -236,8 +256,16 @@ export default function Monitors() {
             key={`${profileId ?? ''}-${Monitor.Id}`}
             monitor={Monitor}
             status={Monitor_Status}
-            newEventCount={newEventCounts[Monitor.Id]}
-            newestEventAt={newestEventAt[Monitor.Id]}
+            newEventCount={
+              profileId
+                ? scopedNewEventCounts[scopedMonitorEventKey(profileId, Monitor.Id)]
+                : newEventCounts[Monitor.Id]
+            }
+            newestEventAt={
+              profileId
+                ? scopedNewestEventAt[scopedMonitorEventKey(profileId, Monitor.Id)]
+                : newestEventAt[Monitor.Id]
+            }
             onShowSettings={handleShowSettings}
             objectFit={settings.monitorsFeedFit}
             profileId={profileId}

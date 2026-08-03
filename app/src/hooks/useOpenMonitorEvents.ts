@@ -22,10 +22,8 @@ export interface OpenMonitorEventsOptions {
   from: string;
   /** All mode only: the monitor's owning profile. The Events page reads this
    *  to scope its All-mode server filter to just that profile, so the caller
-   *  navigates directly instead of switching into it first (refs #337). Seen
-   *  watermarking below stays current-profile-scoped until Task 5 extends it
-   *  per-profile - harmless here since All mode's newEventCount is always
-   *  undefined until then (Monitors.tsx gates badges off in All mode). */
+   *  navigates directly instead of switching into it first (refs #337). Also
+   *  the profile whose seen watermark this call marks - see below. */
   profileId?: ProfileId;
 }
 
@@ -41,14 +39,20 @@ export function useOpenMonitorEvents(): (opts: OpenMonitorEventsOptions) => void
 
   return useCallback(
     ({ monitorId, newEventCount, newestEventAt, from, profileId }: OpenMonitorEventsOptions) => {
+      // The card's own profile in All mode, the current profile in single
+      // mode. markSeen must write THIS profile's watermark - the globally
+      // selected profile isn't necessarily the one the clicked monitor
+      // belongs to (refs #337, Task 5).
+      const owningProfileId = profileId ?? currentProfile?.id;
+
       // Read the watermark BEFORE markSeen overwrites it: the date filter must
       // match what the badge counted, not what "seen" becomes after this click.
-      const oldWatermark = currentProfile
-        ? useMonitorSeenStore.getState().getWatermark(currentProfile.id, monitorId)
+      const oldWatermark = owningProfileId
+        ? useMonitorSeenStore.getState().getWatermark(owningProfileId, monitorId)
         : null;
 
-      if (currentProfile) {
-        markSeen(currentProfile.id, monitorId, newestEventAt ?? null);
+      if (owningProfileId) {
+        markSeen(owningProfileId, monitorId, newestEventAt ?? null);
       }
 
       const params = new URLSearchParams({ monitorId });

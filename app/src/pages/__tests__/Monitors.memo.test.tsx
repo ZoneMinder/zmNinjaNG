@@ -65,6 +65,8 @@ vi.mock('../../stores/settings', () => ({
 
 vi.mock('../../hooks/useMonitorNewEvents', () => ({
   useMonitorNewEvents: () => ({ counts: mockState.newEventCounts, newest: mockState.newestEventAt }),
+  useScopedMonitorNewEvents: () => ({ counts: {}, newest: {} }),
+  scopedMonitorEventKey: (profileId: string, monitorId: string) => `${profileId}:${monitorId}`,
 }));
 
 // Stand-in for the real memo()'d MonitorCard (MonitorCard.tsx:382). It is
