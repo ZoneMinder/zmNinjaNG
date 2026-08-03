@@ -395,14 +395,18 @@ describe('Events Page', () => {
       expect(chips.map((c) => c.textContent)).toEqual(['Home', 'Office']);
     });
 
-    it('disables the montage toggle with a localized notice (refs #337 fix round 1)', () => {
+    it('leaves the montage toggle enabled with no gate notice, and renders montage (refs #337 Task 2 fix round 3)', () => {
       allScope();
+      mockSearchParams = new URLSearchParams('view=montage');
+      scopedEvents({
+        events: [{ profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1' } } }],
+      });
 
       render(<Events />);
 
-      expect(screen.getByTestId('events-view-toggle')).toBeDisabled();
-      expect(screen.getByTestId('events-montage-gate')).toBeInTheDocument();
-      expect(screen.getByTestId('events-montage-gate')).toHaveAttribute('title', 'events.montage_unavailable_all_mode');
+      expect(screen.getByTestId('events-view-toggle')).not.toBeDisabled();
+      expect(screen.queryByTestId('events-montage-gate')).not.toBeInTheDocument();
+      expect(screen.getByTestId('events-montage-grid')).toBeInTheDocument();
     });
 
     it('the server filter chip row hides a profile\'s slice when toggled off', () => {

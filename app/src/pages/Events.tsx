@@ -119,11 +119,6 @@ export default function Events() {
     }
     return settings.eventsViewMode;
   });
-  // Actual render mode: All mode gates montage off regardless of the stored
-  // preference or a `?view=montage` deep link - see the montage-gate
-  // comment at the toggle button below (refs #337 fix round 1).
-  const effectiveViewMode = isAllMode ? 'list' : viewMode;
-
   // Fetch monitors for display in filter UI (single mode; unchanged query).
   const { data: monitorsData } = useQuery({
     queryKey: queryKeys.monitors(currentProfile?.id),
@@ -480,29 +475,16 @@ export default function Events() {
 
             <div className="flex items-center gap-2">
               <GroupFilterSelect />
-              {/* Montage view in All mode would show every event with the
-                  page-level (absent) current profile's portalUrl/token -
-                  broken tiles for every event. Gated off for v1 rather than
-                  wired: the fix is the same per-tile owning-profile pattern
-                  EventItem already uses in EventListView, just for
-                  EventMontageView's grid tiles too (ledger entry recorded;
-                  see W-list). Single mode is unaffected. Refs #337 fix round 1. */}
-              <span
-                title={isAllMode ? t('events.montage_unavailable_all_mode') : undefined}
-                data-testid={isAllMode ? 'events-montage-gate' : undefined}
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => handleViewModeChange(viewMode === 'list' ? 'montage' : 'list')}
+                title={viewMode === 'list' ? t('events.view_montage') : t('events.view_list')}
+                aria-label={viewMode === 'list' ? t('events.view_montage') : t('events.view_list')}
+                data-testid="events-view-toggle"
               >
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => handleViewModeChange(viewMode === 'list' ? 'montage' : 'list')}
-                  disabled={isAllMode}
-                  title={isAllMode ? t('events.montage_unavailable_all_mode') : (viewMode === 'list' ? t('events.view_montage') : t('events.view_list'))}
-                  aria-label={isAllMode ? t('events.montage_unavailable_all_mode') : (viewMode === 'list' ? t('events.view_montage') : t('events.view_list'))}
-                  data-testid="events-view-toggle"
-                >
-                  {viewMode === 'list' ? <LayoutGrid className="h-4 w-4" /> : <List className="h-4 w-4" />}
-                </Button>
-              </span>
+                {viewMode === 'list' ? <LayoutGrid className="h-4 w-4" /> : <List className="h-4 w-4" />}
+              </Button>
               <div className="flex items-center gap-2">
                 <Select value={normalizedThumbnailFit} onValueChange={handleThumbnailFitChange}>
                   <SelectTrigger className="h-8 sm:h-9 w-[100px]" data-testid="events-thumbnail-fit-select">
@@ -518,7 +500,7 @@ export default function Events() {
                   </SelectContent>
                 </Select>
               </div>
-              {effectiveViewMode === 'montage' && (
+              {viewMode === 'montage' && (
                 <EventMontageGridControls
                   gridCols={gridControls.gridCols}
                   customCols={gridControls.customCols}
@@ -580,7 +562,7 @@ export default function Events() {
               />
             </div>
           </div>
-          {effectiveViewMode === 'montage' && gridControls.isScreenTooSmall && (
+          {viewMode === 'montage' && gridControls.isScreenTooSmall && (
             <p className="text-xs text-destructive">{t('eventMontage.screen_too_small')}</p>
           )}
 
@@ -661,7 +643,7 @@ export default function Events() {
               }
             />
           </div>
-        ) : effectiveViewMode === 'montage' ? (
+        ) : viewMode === 'montage' ? (
           <EventMontageView
             events={allEvents}
             monitors={eventListMonitors}

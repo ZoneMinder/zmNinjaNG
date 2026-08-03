@@ -246,8 +246,7 @@
     "remove_tag": "移除 {{name}}",
     "all_failed_title": "无法加载事件",
     "filter_by_server": "按服务器筛选",
-    "failed_to_load": "加载事件失败：{{error}}",
-    "montage_unavailable_all_mode": "“所有服务器”模式下无法使用蒙太奇视图"
+    "failed_to_load": "加载事件失败：{{error}}"
   },
   "event_detail": {
     "event_id": "事件 ID",
