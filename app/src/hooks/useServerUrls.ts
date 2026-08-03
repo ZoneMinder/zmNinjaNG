@@ -32,8 +32,9 @@ export function useServerUrls(
 
   // Re-render when the server map changes (e.g., after bootstrap populates
   // it). Snapshotting the map itself (not a version counter) keeps it a
-  // real useMemo dependency instead of an unused one.
-  const serverMap = useSyncExternalStore(subscribeServerMap, getServerMap);
+  // real useMemo dependency instead of an unused one. Reads THIS profile's
+  // own map (refs #337) - not whichever profile bootstrapped most recently.
+  const serverMap = useSyncExternalStore(subscribeServerMap, () => getServerMap(profile?.id));
 
   return useMemo(() => {
     if (!profile) {

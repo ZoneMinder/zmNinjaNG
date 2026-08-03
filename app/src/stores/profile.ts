@@ -22,6 +22,7 @@ import { log, LogLevel } from '../lib/logger';
 import { setLogRedactionGate } from '../lib/log-sanitizer';
 import { setProfileSettingsGate } from '../lib/profile/profile-settings';
 import { getSession, dropSession, dropAllSessions, registerSessionsGate } from '../services/sessions';
+import { registerServerResolverGate } from '../lib/zm/server-resolver';
 import { STORAGE_KEYS } from '../lib/zmninja-ng-constants';
 import { useAuthStore, getAuthSlice, registerAuthClientResolver } from './auth';
 import { useSettingsStore } from './settings';
@@ -516,33 +517,57 @@ setProfileSettingsGate({
 // profile `id` fresh from state at call time (not the current profile) so a
 // 401 on a non-current profile's session (aggregate readers) re-authenticates
 // that profile against its own server with its own credentials. Refs #337.
+//
+// It also registers itself as that profile's setReLoginCallback the first
+// time a session is built for it (getSession calls gate.reLoginFor(id)
+// exactly once per profile, when the session isn't cached yet - refs #337).
+// That is the ONLY registration path now: the old one in
+// profile-initialization.ts registered just the rehydrated current profile,
+// with a reLogin that only ever worked for the current profile, so
+// getFreshAccessToken(B) in All mode had nothing to fall through to and
+// couldn't self-heal an expired refresh token. Every profile that gets a
+// session - current or not - now gets its own callback.
 registerSessionsGate({
   getProfile: (id) => useProfileStore.getState().profiles.find((p) => p.id === id),
   getCurrentProfileId: () => useProfileStore.getState().currentProfileId,
-  reLoginFor: (id) => async () => {
-    const profile = useProfileStore.getState().profiles.find((p) => p.id === id);
-    if (!profile) {
-      log.profileService('reLoginFor: profile not found', LogLevel.WARN, { profileId: id });
-      return false;
-    }
+  reLoginFor: (id) => {
+    const doReLogin = async (): Promise<boolean> => {
+      const profile = useProfileStore.getState().profiles.find((p) => p.id === id);
+      if (!profile) {
+        log.profileService('reLoginFor: profile not found', LogLevel.WARN, { profileId: id });
+        return false;
+      }
 
-    // No credentials means no auth required (public server) - not a failure.
-    if (!profile.username || !profile.password) return true;
+      // No credentials means no auth required (public server) - not a failure.
+      if (!profile.username || !profile.password) return true;
 
-    const password = await useProfileStore.getState().getDecryptedPassword(id);
-    if (!password) {
-      log.profileService('reLoginFor: no stored credentials', LogLevel.WARN, { profileId: id });
-      return false;
-    }
+      const password = await useProfileStore.getState().getDecryptedPassword(id);
+      if (!password) {
+        log.profileService('reLoginFor: no stored credentials', LogLevel.WARN, { profileId: id });
+        return false;
+      }
 
-    try {
-      await useAuthStore.getState().login(id, profile.username, password);
-      return true;
-    } catch (e) {
-      log.profileService('reLoginFor failed', LogLevel.ERROR, { profileId: id, error: e });
-      return false;
-    }
+      try {
+        await useAuthStore.getState().login(id, profile.username, password);
+        return true;
+      } catch (e) {
+        log.profileService('reLoginFor failed', LogLevel.ERROR, { profileId: id, error: e });
+        return false;
+      }
+    };
+
+    useAuthStore.getState().setReLoginCallback(id, doReLogin);
+    return doReLogin;
   },
+});
+
+// lib/zm/server-resolver.ts has no store imports for the same reason
+// (getPortalUrlForMonitor/getPortalUrlForEvent are plain functions called
+// from many components that already pass the profile they care about; an
+// omitted profileId falls back to the current profile via this gate).
+// Refs #337.
+registerServerResolverGate({
+  getCurrentProfileId: () => useProfileStore.getState().currentProfileId,
 });
 
 // stores/auth.ts's login/refreshAccessToken resolve their API client through

@@ -19,6 +19,7 @@ import { ALL_PROFILES_ID, PROBE_PROFILE_ID, type Profile, type ProfileId } from 
 import type { ApiClient } from '../api/client';
 import { createStoreApiClient, resetAuthGates } from '../api/store-gates';
 import { markSessionActive, markSessionInactive, markAllSessionsInactive } from './session-flags';
+import { clearServerMap, clearAllServerMaps } from '../lib/zm/server-resolver';
 import { log, LogLevel } from '../lib/logger';
 
 // Re-exported so consumers of the session registry (this module's real
@@ -112,6 +113,7 @@ export function dropSession(profileId: ProfileId): void {
   sessions.delete(profileId);
   markSessionInactive(profileId);
   resetAuthGates(profileId);
+  clearServerMap(profileId);
   log.profileService('Session dropped', LogLevel.DEBUG, { profileId });
 }
 
@@ -119,4 +121,5 @@ export function dropAllSessions(): void {
   sessions.clear();
   markAllSessionsInactive();
   resetAuthGates();
+  clearAllServerMaps();
 }

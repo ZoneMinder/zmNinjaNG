@@ -17,7 +17,7 @@ const { loginSpy, logoutSpy } = vi.hoisted(() => ({
 
 vi.mock('../auth', () => ({
   useAuthStore: {
-    getState: () => ({ logout: logoutSpy, login: loginSpy, setTokens: vi.fn() }),
+    getState: () => ({ logout: logoutSpy, login: loginSpy, setTokens: vi.fn(), setReLoginCallback: vi.fn() }),
     subscribe: vi.fn(() => () => {}),
   },
   getAuthSlice: vi.fn(() => ({ accessToken: null })),

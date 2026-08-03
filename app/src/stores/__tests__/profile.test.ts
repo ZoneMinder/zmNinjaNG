@@ -358,6 +358,54 @@ describe('Profile Store', () => {
     expect(getAuthSlice(asProfileId('a')).isAuthenticated).toBe(false);
   });
 
+  it('getFreshAccessToken(B) self-heals via B\'s own reLogin, not the current profile\'s (refs #337)', async () => {
+    const postFormA = vi.fn();
+    const postFormB = vi.fn().mockResolvedValue({
+      data: {
+        access_token: 'b-at',
+        access_token_expires: 60,
+        refresh_token: 'b-rt',
+        refresh_token_expires: 120,
+        version: '1.36.33',
+        apiversion: '2.0',
+      },
+    });
+    vi.mocked(createStoreApiClient).mockImplementation(
+      (_baseURL, _reLogin, profileId) =>
+        (profileId === asProfileId('b') ? { postForm: postFormB } : { postForm: postFormA }) as never
+    );
+    vi.mocked(getSecureValue).mockImplementation(async (key: string) =>
+      key === 'password_b' ? 'b-secret' : null
+    );
+
+    useProfileStore.setState({
+      profiles: [
+        { id: asProfileId('a'), name: 'A', apiUrl: 'https://a.test', portalUrl: 'https://a.test', cgiUrl: 'https://a.test/cgi-bin', isDefault: true, createdAt: 1, username: 'admin-a', password: 'stored-securely' },
+        { id: asProfileId('b'), name: 'B', apiUrl: 'https://b.test', portalUrl: 'https://b.test', cgiUrl: 'https://b.test/cgi-bin', isDefault: false, createdAt: 2, username: 'admin-b', password: 'stored-securely' },
+      ],
+      // Current profile is A - B has no active session of its own until an
+      // All-mode reader builds one, and getFreshAccessToken(B) must still
+      // self-heal B without touching A's credentials.
+      currentProfileId: asProfileId('a'),
+    });
+
+    // Building B's session is what registers B's reLoginFor into the auth
+    // store's setReLoginCallback map (refs #337) - previously only the
+    // rehydrated CURRENT profile ever got a callback registered, so
+    // getFreshAccessToken(B) had nothing to fall through to.
+    getSession(asProfileId('b'));
+    // B has no refresh token yet (fresh slice), so refreshAccessToken(B)
+    // rejects immediately and getFreshAccessToken falls through to B's
+    // reLogin callback.
+    const token = await useAuthStore.getState().getFreshAccessToken(asProfileId('b'));
+
+    expect(token).toBe('b-at');
+    expect(postFormB).toHaveBeenCalledWith('/host/login.json', expect.any(URLSearchParams));
+    expect(postFormA).not.toHaveBeenCalled();
+    expect(getAuthSlice(asProfileId('b')).isAuthenticated).toBe(true);
+    expect(getAuthSlice(asProfileId('a')).isAuthenticated).toBe(false);
+  });
+
   it('reLoginFor(id) returns false for a profile that no longer exists (refs #337)', async () => {
     useProfileStore.setState({
       profiles: [

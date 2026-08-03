@@ -15,9 +15,16 @@ import {
   getPortalUrlForMonitor,
   getPortalUrlForEvent,
   setServerMap,
+  getServerMap,
   clearServerMap,
+  clearAllServerMaps,
+  registerServerResolverGate,
 } from '../server-resolver';
 import type { Server } from '../../../api/server';
+import { asProfileId } from '../../../api/types';
+
+const profileA = asProfileId('profile-a');
+const profileB = asProfileId('profile-b');
 
 function makeServer(overrides: Partial<Server> & { Id: string; Name: string }): Server {
   return {
@@ -242,20 +249,20 @@ describe('resolveMonitorUrls', () => {
 describe('getPortalUrlForMonitor', () => {
   beforeEach(() => {
     const map = buildServerMap(testServers);
-    setServerMap(map);
+    setServerMap(map, profileA);
   });
 
   afterEach(() => {
-    clearServerMap();
+    clearAllServerMaps();
   });
 
   it('returns server portal URL without /index.php when found', () => {
-    const url = getPortalUrlForMonitor('1', 'https://fallback.example.com');
+    const url = getPortalUrlForMonitor('1', 'https://fallback.example.com', profileA);
     expect(url).toBe('https://pseudo.example.com:443/zm');
   });
 
   it('returns profilePortalUrl when not found', () => {
-    const url = getPortalUrlForMonitor('999', 'https://fallback.example.com');
+    const url = getPortalUrlForMonitor('999', 'https://fallback.example.com', profileA);
     expect(url).toBe('https://fallback.example.com');
   });
 });
@@ -263,11 +270,11 @@ describe('getPortalUrlForMonitor', () => {
 describe('getPortalUrlForEvent', () => {
   beforeEach(() => {
     const map = buildServerMap(testServers);
-    setServerMap(map);
+    setServerMap(map, profileA);
   });
 
   afterEach(() => {
-    clearServerMap();
+    clearAllServerMaps();
   });
 
   const monitors = [
@@ -277,12 +284,60 @@ describe('getPortalUrlForEvent', () => {
   ];
 
   it('returns correct URL when monitor and server found', () => {
-    const url = getPortalUrlForEvent('10', monitors, 'https://fallback.example.com');
+    const url = getPortalUrlForEvent('10', monitors, 'https://fallback.example.com', profileA);
     expect(url).toBe('https://pseudo.example.com:443/zm');
   });
 
   it('returns profilePortalUrl when monitor not found', () => {
-    const url = getPortalUrlForEvent('999', monitors, 'https://fallback.example.com');
+    const url = getPortalUrlForEvent('999', monitors, 'https://fallback.example.com', profileA);
     expect(url).toBe('https://fallback.example.com');
+  });
+});
+
+describe('per-profile server map isolation (refs #337)', () => {
+  afterEach(() => {
+    clearAllServerMaps();
+  });
+
+  it('resolves each profile against its own map, never the other profile\'s host', () => {
+    const mapA = buildServerMap([
+      makeServer({ Id: '1', Name: 'a-server', Hostname: 'a.example.com', Port: 443 }),
+    ]);
+    const mapB = buildServerMap([
+      makeServer({ Id: '1', Name: 'b-server', Hostname: 'b.example.com', Port: 443 }),
+    ]);
+    setServerMap(mapA, profileA);
+    setServerMap(mapB, profileB);
+
+    expect(getServerMap(profileA).get('1')?.apiBaseUrl).toBe('https://a.example.com:443/api');
+    expect(getServerMap(profileB).get('1')?.apiBaseUrl).toBe('https://b.example.com:443/api');
+
+    const urlA = getPortalUrlForMonitor('1', 'https://fallback.example.com', profileA);
+    const urlB = getPortalUrlForMonitor('1', 'https://fallback.example.com', profileB);
+    expect(urlA).toBe('https://a.example.com:443');
+    expect(urlB).toBe('https://b.example.com:443');
+    expect(urlA).not.toBe(urlB);
+  });
+
+  it('clearing one profile\'s map leaves the other profile\'s map intact', () => {
+    setServerMap(buildServerMap(testServers), profileA);
+    setServerMap(buildServerMap(testServers), profileB);
+
+    clearServerMap(profileA);
+
+    expect(getServerMap(profileA).size).toBe(0);
+    expect(getServerMap(profileB).size).toBe(testServers.length);
+  });
+
+  it('falls back to the gate-resolved current profile when profileId is omitted', () => {
+    registerServerResolverGate({ getCurrentProfileId: () => profileB });
+    setServerMap(buildServerMap(testServers), profileB);
+
+    expect(getServerMap().size).toBe(testServers.length);
+
+    // Restore the no-op default so later tests in this file (which pass
+    // profileId explicitly and rely on no ambient current profile) aren't
+    // affected by this gate registration.
+    registerServerResolverGate({ getCurrentProfileId: () => null });
   });
 });
