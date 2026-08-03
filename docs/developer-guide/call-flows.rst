@@ -69,6 +69,8 @@ If you already know the symptom, jump straight to its flow:
     is missing from settings.
 20. A Live Activity poll tick: a tile will not leave, or a monitor never
     appears.
+21. Switching into All Servers mode: monitors from every profile show up
+    tagged with their origin, or one down server blanks the whole list.
 
 Flow 1: Cold start to an authenticated session
 ----------------------------------------------
@@ -2619,6 +2621,131 @@ thrash ``nph-zms`` on the server, not just the display.
    would mint and quit a fresh ``nph-zms`` process on almost every poll.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/LiveActivity.tsx#L246>`__
    · → :doc:`12-shared-services-and-components`
+
+Flow 21: Switching into All Servers mode
+-----------------------------------------
+
+All Servers mode is not a special-cased branch bolted onto the data layer: the
+"all profiles" scope is a sentinel id with no backing ``Profile`` record, and
+every hook that already fanned out over "the current profile" now fans out
+over a list of one or of many the exact same way. The counterintuitive part is
+where that list comes from - the same per-profile React Query key
+``useMonitors`` uses in single mode, so entering All mode never refetches a
+profile whose monitors are already cached.
+
+.. mermaid::
+
+   sequenceDiagram
+       autonumber
+       participant User as User
+       participant Page as Profiles page
+       participant Store as Profile store
+       participant Scope as useProfileScope
+       participant Mon as Monitors page
+       participant Hook as useScopedMonitors
+       participant A as Server A
+       participant B as Server B
+
+       User->>Page: tap the All Servers card
+       Page->>Store: switchProfile(ALL_PROFILES_ID)
+       Store-->>Page: currentProfileId = ALL_PROFILES_ID (no session, no login)
+       Page->>Mon: navigate('/monitors')
+       Mon->>Scope: useProfileScope()
+       Scope-->>Mon: {mode:'all', profile:null, profiles:[A,B]}
+       Mon->>Hook: useScopedMonitors()
+       Hook->>A: getMonitors (queryKeys.monitors(A))
+       Hook->>B: getMonitors (queryKeys.monitors(B))
+       A-->>Hook: monitors
+       B-->>Hook: error
+       Hook-->>Mon: {monitors: Scoped<MonitorData>[], errors: [B]}
+       Mon->>Mon: render A's cards + chip, render a strip for B
+
+#. **The sentinel is not a profile.** ``ALL_PROFILES_ID`` is a fixed string id
+   with no ``Profile`` record behind it. ``currentProfileId`` can point at it
+   the same way it points at any real profile id, which is what lets the rest
+   of the store and every hook treat "all servers" as one more value rather
+   than a mode flag threaded through every consumer.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/types.ts#L596>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **The card needs a real second profile to exist.** ``Profiles`` renders the
+   All Servers card only when ``profiles.length >= 2``; with one profile there
+   is nothing to aggregate and the card is absent, which is the ≥2 rule the
+   user guide documents.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Profiles.tsx#L364>`__
+   · → :doc:`04-pages-and-views`
+
+#. **Switching to All is the cheap branch of switchProfile.** ``Profiles``'s
+   ``handleSwitchProfile`` calls the same ``switchProfile(id)`` action for the
+   All card as for every real card. The store special-cases
+   ``id === ALL_PROFILES_ID`` before it reaches any of the six per-profile
+   bootstrap steps Flow 1 walks: it quits every active stream and sets
+   ``currentProfileId``, nothing else, because a sentinel with no server has
+   no session to build.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/profile.ts#L280>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **One branch point resolves the scope for everyone.** ``useProfileScope``
+   reads ``currentProfileId`` and, when it is the sentinel, returns
+   ``{mode:'all', profile:null, profiles}`` - the full profile list instead of
+   a one-element array. Every consumer below fans out over ``scope.profiles``
+   identically in both modes, so this hook is the only place in the app that
+   branches on the mode at all.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useProfileScope.ts#L66>`__
+   · → :doc:`05-component-architecture`
+
+#. **useCurrentProfile keeps ``currentProfile`` null in All mode.** Its
+   ``isAllMode`` flag is exposed alongside a ``currentProfile`` that stays
+   null, since no single profile is "the" current one while aggregating - the
+   fact the absence noted below traces back to.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useCurrentProfile.ts#L57>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **One ``useQueries`` call, one query per profile, the same cache key.**
+   ``useScopedMonitors`` maps ``scope.profiles`` into a ``getMonitors`` query
+   per profile keyed by ``queryKeys.monitors(p.id)`` - the identical key
+   ``useMonitors`` uses in single mode. A profile already cached from single
+   mode is not refetched just because All mode also asked for it.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useScopedMonitors.ts#L69>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **``combine`` tags every item with its owner and isolates failures.** The
+   ``combine`` option wraps each monitor as ``{profileId, profileName, item}``
+   and, separately, pushes any profile whose query errored into its own
+   ``errors`` array - one unreachable server cannot fail the whole hook or
+   blank the profiles that did answer.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useScopedMonitors.ts#L82>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **The grid keys each card by profile and monitor, not monitor alone.**
+   ``Monitors``'s ``renderItems`` keeps ``profileId``/``profileChip`` on every
+   All-mode item and keys each ``MonitorCard`` ``${profileId}-${Monitor.Id}``,
+   because two servers can and do reuse the same ZoneMinder monitor id. Each
+   card then renders a ``monitor-profile-chip`` naming the server it came
+   from.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Monitors.tsx#L92>`__
+   · → :doc:`05-component-architecture`
+
+#. **A failed profile gets its own strip, and only if it has nothing to
+   show.** ``visibleErrors`` filters down to profiles that produced zero
+   monitors; a profile with cached data and a background refetch error falls
+   through to the normal view instead (the offline banner covers that case).
+   Each remaining entry renders a ``profile-error-strip-<id>`` with a retry
+   button that refetches exactly that profile's query key, not the whole
+   scope.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Monitors.tsx#L207>`__
+   · → :doc:`07-api-and-data-fetching`
+
+Only the Monitors page and the profile switcher itself branch on
+``isAllMode``. Dashboard, Events, Timeline, and Montage all resolve
+``currentProfile`` the ordinary way, which is ``null`` in All mode, so their
+queries stay disabled and the screens render empty rather than silently
+falling back to a single profile. That is v1's deliberate scope, not a gap
+that slipped through: aggregating those screens is future work.
+
+Flow 16 covers the other two ways a profile list changes shape, editing and
+deleting; this flow is the third, and the only one where "the current
+profile" can mean more than one server at a time.
 
 These flows touch most of the moving parts of the app. When you need to change
 something, find the nearest scene, open its ``source`` link to land on the exact

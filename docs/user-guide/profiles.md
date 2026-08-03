@@ -32,6 +32,16 @@ The profile data (including password) is transferred via the QR code. No data is
 
 If you have multiple profiles, tap on a profile card to switch to it. The app will reconnect to the selected server.
 
+## All Servers Mode
+
+Once you have two or more profiles, an **All Servers** card appears above the profile list. Tap it to switch into a combined view that pulls from every profile at once instead of a single server. A single profile drops the app back below two and the card disappears again.
+
+In v1, All Servers mode aggregates monitors only. The Monitors screen shows every camera from every profile, and each card carries a chip naming the server it came from. A toggle at the top of the screen groups the cards by server instead of one flat list. If a server is unreachable while others respond, its cameras are skipped and an error strip with a retry button appears for it; cameras from every reachable server still show.
+
+Preferences are two-tier: All Servers mode has its own settings (grid layout, feed fit, and so on), kept separate from each individual profile's settings. A change made while in All Servers mode does not touch any single profile's settings, and vice versa.
+
+Other screens - Dashboard, Events, Timeline, Montage, and so on - don't support All Servers mode yet and show no data while it's active. Switch back to a single profile, either from the Profiles screen or the profile switcher, to use them.
+
 ## Editing a Profile
 
 Tap the edit icon on a profile card to modify the connection details. You can change the URL, credentials, or display name.
