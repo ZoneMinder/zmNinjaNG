@@ -18,12 +18,11 @@ import { useProfileScope } from '../../../hooks/useProfileScope';
 import { queryKeys } from '../../../lib/query/query-keys';
 import { useBandwidthSettings } from '../../../hooks/useBandwidthSettings';
 import { staggeredRefetchInterval } from '../../../lib/query/stagger-interval';
-import type { EventData } from '../../../api/types';
 import type { ProfileError } from '../../../api/scoped-types';
 import { Card, CardHeader, CardTitle, CardContent } from '../../ui/card';
 import { Button } from '../../ui/button';
 import { Loader2, Activity } from 'lucide-react';
-import { EventHeatmap } from '../../events/EventHeatmap';
+import { EventHeatmap, type TzEvent } from '../../events/EventHeatmap';
 import { formatForServer } from '../../../lib/time';
 import { EmptyState } from '../../ui/empty-state';
 import { ErrorBanner } from '../../ui/query-state';
@@ -95,13 +94,19 @@ export const HeatmapWidget = memo(function HeatmapWidget({ title }: HeatmapWidge
       refetchInterval: staggeredRefetchInterval(i, profiles.length, bandwidth.timelineHeatmapInterval),
     })),
     combine: (results) => {
-      const events: EventData[] = [];
+      // Tag each event with its OWNING profile's timezone so EventHeatmap
+      // buckets by real chronological instant, not a naive local Date parse
+      // of the server wall-clock string (refs #337).
+      const events: TzEvent[] = [];
       const errors: ProfileError[] = [];
       let anyData = false;
       profiles.forEach((p, i) => {
         const q = results[i];
         if (!q) return;
-        if (q.data) { anyData = true; events.push(...q.data.events); }
+        if (q.data) {
+          anyData = true;
+          events.push(...q.data.events.map((item) => ({ item, timezone: p.timezone ?? 'UTC' })));
+        }
         if (q.error) errors.push({ profileId: p.id, profileName: p.name, error: q.error });
       });
       return { events, isLoading: !anyData, errors };

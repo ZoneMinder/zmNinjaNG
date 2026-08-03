@@ -28,6 +28,7 @@ import { Button } from '../../ui/button';
 import { useBandwidthSettings } from '../../../hooks/useBandwidthSettings';
 import { useProfileScope } from '../../../hooks/useProfileScope';
 import { queryKeys } from '../../../lib/query/query-keys';
+import { eventInstant } from '../../../lib/event/event-instant';
 
 type TimeRange = '24h' | '48h' | '1w' | '2w' | '1m';
 
@@ -108,12 +109,17 @@ export const TimelineWidget = memo(function TimelineWidget() {
             refetchInterval: staggeredRefetchInterval(i, profiles.length, bandwidth.timelineHeatmapInterval),
         })),
         combine: (results) => {
-            const events: EventData[] = [];
+            // Tag each event with its OWNING profile's timezone so the hour/day
+            // buckets below use the real chronological instant (eventInstant),
+            // not a naive local Date parse of the server wall-clock string -
+            // required once All mode can merge events from more than one
+            // profile/timezone (refs #337).
+            const events: { item: EventData; timezone: string }[] = [];
             const errors: ProfileError[] = [];
             profiles.forEach((p, i) => {
                 const q = results[i];
                 if (!q) return;
-                if (q.data) events.push(...q.data.events);
+                if (q.data) events.push(...q.data.events.map((item) => ({ item, timezone: p.timezone ?? 'UTC' })));
                 if (q.error) errors.push({ profileId: p.id, profileName: p.name, error: q.error });
             });
             return { events, errors };
@@ -149,7 +155,7 @@ export const TimelineWidget = memo(function TimelineWidget() {
                 const intervalStart = startOfHour(interval);
                 const intervalEnd = endOfHour(interval);
                 const count = mergedEvents.filter(e => {
-                    const eventTime = new Date(e.Event.StartDateTime);
+                    const eventTime = new Date(eventInstant(e.item, e.timezone));
                     return eventTime >= intervalStart && eventTime <= intervalEnd;
                 }).length || 0;
 
@@ -186,7 +192,7 @@ export const TimelineWidget = memo(function TimelineWidget() {
                 const intervalStart = startOfHour(interval);
                 const intervalEnd = endOfHour(interval);
                 const count = mergedEvents.filter(e => {
-                    const eventTime = new Date(e.Event.StartDateTime);
+                    const eventTime = new Date(eventInstant(e.item, e.timezone));
                     return eventTime >= intervalStart && eventTime <= intervalEnd;
                 }).length || 0;
 
@@ -224,7 +230,7 @@ export const TimelineWidget = memo(function TimelineWidget() {
                 const intervalStart = startOfDay(interval);
                 const intervalEnd = endOfDay(interval);
                 const count = mergedEvents.filter(e => {
-                    const eventTime = new Date(e.Event.StartDateTime);
+                    const eventTime = new Date(eventInstant(e.item, e.timezone));
                     return eventTime >= intervalStart && eventTime <= intervalEnd;
                 }).length || 0;
 
@@ -250,7 +256,7 @@ export const TimelineWidget = memo(function TimelineWidget() {
                 const intervalStart = startOfDay(interval);
                 const intervalEnd = endOfDay(interval);
                 const count = mergedEvents.filter(e => {
-                    const eventTime = new Date(e.Event.StartDateTime);
+                    const eventTime = new Date(eventInstant(e.item, e.timezone));
                     return eventTime >= intervalStart && eventTime <= intervalEnd;
                 }).length || 0;
 
@@ -285,7 +291,7 @@ export const TimelineWidget = memo(function TimelineWidget() {
                 const intervalStart = startOfDay(interval);
                 const intervalEnd = endOfDay(interval);
                 const count = mergedEvents.filter(e => {
-                    const eventTime = new Date(e.Event.StartDateTime);
+                    const eventTime = new Date(eventInstant(e.item, e.timezone));
                     return eventTime >= intervalStart && eventTime <= intervalEnd;
                 }).length || 0;
 

@@ -364,6 +364,23 @@ export default function Events() {
     }));
   }, [serverFilteredEvents, favoritesOnly, selectedTagIds, eventTagMap, isAllMode]);
 
+  // allEvents tagged with the OWNING profile's timezone, for EventHeatmap's
+  // real-instant bucketing (eventInstant) instead of a naive local Date
+  // parse - required once All mode can merge events from more than one
+  // profile/timezone (refs #337). Single mode: one profile, one timezone.
+  const tzById = useMemo(
+    () => new Map((scope?.profiles ?? []).map((p) => [p.id, p.timezone ?? 'UTC'])),
+    [scope]
+  );
+  const heatmapEvents = useMemo(
+    () =>
+      allEvents.map((item) => ({
+        item,
+        timezone: item.profileId ? (tzById.get(item.profileId) ?? 'UTC') : (currentProfile?.timezone ?? 'UTC'),
+      })),
+    [allEvents, tzById, currentProfile]
+  );
+
   // Date range shown on the heatmap: explicit filters win, otherwise infer
   // the span from the loaded events.
   const heatmapDateRange = useMemo(() => {
@@ -646,7 +663,7 @@ export default function Events() {
         {/* Event Heatmap */}
         {heatmapDateRange && (
           <EventHeatmap
-            events={allEvents}
+            events={heatmapEvents}
             startDate={heatmapDateRange.startDate}
             endDate={heatmapDateRange.endDate}
             onTimeRangeClick={(startDateTime, endDateTime) => {

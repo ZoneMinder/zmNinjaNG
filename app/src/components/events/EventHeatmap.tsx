@@ -19,9 +19,20 @@ import { Card } from '../ui/card';
 import { startOfHour, startOfDay, differenceInDays, addHours, addDays } from 'date-fns';
 import type { EventData } from '../../api/types';
 import { activateOnEnterOrSpace } from '../../lib/utils';
+import { eventInstant } from '../../lib/event/event-instant';
+
+/** One event tagged with its OWNING profile's IANA timezone, so bucketing
+ * uses the real chronological instant (eventInstant) rather than a naive
+ * local Date parse of the server wall-clock string - required once events
+ * from more than one profile/timezone can be merged into one heatmap
+ * (refs #337). */
+export interface TzEvent {
+  item: EventData;
+  timezone: string;
+}
 
 interface EventHeatmapProps {
-  events: EventData[];
+  events: TzEvent[];
   startDate?: Date;
   endDate?: Date;
   onTimeRangeClick?: (startDateTime: string, endDateTime: string) => void;
@@ -71,9 +82,10 @@ export function EventHeatmap({
       current = useDailyBuckets ? addDays(current, 1) : addHours(current, 1);
     }
 
-    // Count events in each bucket
-    events.forEach((event) => {
-      const eventTime = new Date(event.Event.StartDateTime);
+    // Count events in each bucket, bucketed by real chronological instant
+    // (the owning profile's timezone), not a naive local Date parse.
+    events.forEach(({ item, timezone }) => {
+      const eventTime = new Date(eventInstant(item, timezone));
       const bucketTime = useDailyBuckets ? startOfDay(eventTime) : startOfHour(eventTime);
       const key = bucketTime.toISOString();
       if (bucketMap.has(key)) {

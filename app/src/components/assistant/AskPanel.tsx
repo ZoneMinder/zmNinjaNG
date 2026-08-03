@@ -25,7 +25,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Check, Copy, Loader2, Send, Square } from 'lucide-react';
 import { getVersion } from '../../api/auth';
 import type { ProfileId } from '../../api/types';
-import { getCurrentSession } from '../../services/sessions';
+import { getSession } from '../../services/sessions';
 import { useCurrentProfile, useProfileById } from '../../hooks/useCurrentProfile';
 import { useProfileScope } from '../../hooks/useProfileScope';
 import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
@@ -508,11 +508,19 @@ export function AskPanel() {
         sharedMockProvider.contextWindow = window.__assistantMockContextWindow;
       }
 
+      // getSession(profileId), not getCurrentSession(): under the All-mode
+      // ALL_PROFILES_ID sentinel there is no session for the sentinel
+      // itself, so getCurrentSession() throws (swallowed below, silently
+      // dropping the version from the system prompt every turn). profileId
+      // here is the resolved pinned/current profile, matching every other
+      // read in this block (refs #337).
       let zmVersion = '';
-      try {
-        zmVersion = (await getVersion(getCurrentSession().client)).version;
-      } catch (e) {
-        log.assistant('Failed to fetch ZM version for the assistant system prompt', LogLevel.WARN, { error: e });
+      if (profileId) {
+        try {
+          zmVersion = (await getVersion(getSession(profileId).client)).version;
+        } catch (e) {
+          log.assistant('Failed to fetch ZM version for the assistant system prompt', LogLevel.WARN, { error: e });
+        }
       }
 
       // The install's own label vocabulary, so the model can map "vehicles"
