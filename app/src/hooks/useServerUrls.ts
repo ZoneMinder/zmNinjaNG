@@ -15,7 +15,6 @@ import { useProfileById } from './useCurrentProfile';
 import {
   resolveMonitorUrls,
   getServerMap,
-  getServerMapVersion,
   subscribeServerMap,
   type ResolvedMonitorUrls,
 } from '../lib/zm/server-resolver';
@@ -31,8 +30,10 @@ export function useServerUrls(
 ): ResolvedMonitorUrls {
   const { profile } = useProfileById(profileId);
 
-  // Re-render when the server map changes (e.g., after bootstrap populates it)
-  const mapVersion = useSyncExternalStore(subscribeServerMap, getServerMapVersion);
+  // Re-render when the server map changes (e.g., after bootstrap populates
+  // it). Snapshotting the map itself (not a version counter) keeps it a
+  // real useMemo dependency instead of an unused one.
+  const serverMap = useSyncExternalStore(subscribeServerMap, getServerMap);
 
   return useMemo(() => {
     if (!profile) {
@@ -44,10 +45,10 @@ export function useServerUrls(
       };
     }
 
-    return resolveMonitorUrls(serverId, getServerMap(), {
+    return resolveMonitorUrls(serverId, serverMap, {
       portalUrl: profile.portalUrl,
       cgiUrl: profile.cgiUrl,
       apiUrl: profile.apiUrl,
     });
-  }, [serverId, profile, mapVersion]);
+  }, [serverId, profile, serverMap]);
 }

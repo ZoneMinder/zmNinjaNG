@@ -32,7 +32,11 @@ export type ProfileScope =
  */
 export function useProfileScope(): ProfileScope | null {
   const currentProfileId = useProfileStore((state) => state.currentProfileId);
-  const profiles = useProfileStore(useShallow((state) => state.profiles)) ?? [];
+  // Fallback lives inside the selector so useShallow can dedupe repeated
+  // empty-array snapshots to the same reference; a `?? []` applied outside
+  // the selector allocates a new array every render and defeats the
+  // useMemo below (react-hooks/exhaustive-deps).
+  const profiles = useProfileStore(useShallow((state) => state.profiles ?? []));
 
   const isAllMode = currentProfileId === ALL_PROFILES_ID;
 
