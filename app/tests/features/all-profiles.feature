@@ -27,3 +27,22 @@ Feature: All Servers mode
     Then I should be on the monitors page
     And I should see a profile error strip for "Broken"
     And I should see monitor cards from the healthy profiles
+
+  @web
+  Scenario: All Servers merges events from every profile with per-profile chips
+    When I navigate to the "Events" page
+    Then I record the single-profile event card count
+    When I navigate to the "Profiles" page
+    And I click the All Servers profile card
+    When I navigate to the "Events" page
+    Then I should see an event profile chip on every event card
+    And the event card count should be at least the recorded single-profile count
+
+  @web
+  Scenario: deep-linking into a monitor from All mode does not switch the active profile
+    When I navigate to the "Profiles" page
+    And I click the All Servers profile card
+    Then I should be on the monitors page
+    When I click a monitor card
+    Then the URL should match the all-mode monitor detail route
+    And the profile switcher should still show All Servers

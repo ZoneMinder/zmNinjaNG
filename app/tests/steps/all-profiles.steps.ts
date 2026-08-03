@@ -10,6 +10,10 @@ const { When, Then } = createBdd();
 // (see profiles.steps.ts); each scenario re-runs the Background, so no
 // cross-scenario carryover is relied on here.
 let singleProfileMonitorCount = 0;
+// Same pattern as singleProfileMonitorCount above, for the merged-events
+// scenario. Captured on the single-profile Events view before switching to
+// All mode.
+let singleProfileEventCount = 0;
 
 When('I add a second profile named {string} pointing at the same server', async ({ page }, name: string) => {
   await page.getByTestId('profiles-add-button').click();
@@ -114,4 +118,50 @@ Then('I should see monitor cards from the healthy profiles', async ({ page }) =>
   await expect.poll(async () => page.getByTestId('monitor-card').count(), {
     timeout: testConfig.timeouts.pageLoad,
   }).toBeGreaterThan(0);
+});
+
+Then('I record the single-profile event card count', async ({ page }) => {
+  await expect.poll(async () => page.getByTestId('event-card').count(), {
+    timeout: testConfig.timeouts.pageLoad,
+  }).toBeGreaterThan(0);
+  singleProfileEventCount = await page.getByTestId('event-card').count();
+});
+
+Then('I should see an event profile chip on every event card', async ({ page }) => {
+  await expect.poll(async () => page.getByTestId('event-card').count(), {
+    timeout: testConfig.timeouts.pageLoad,
+  }).toBeGreaterThan(0);
+  const cardCount = await page.getByTestId('event-card').count();
+  const chipCount = await page.getByTestId('event-profile-chip').count();
+  expect(chipCount).toBe(cardCount);
+});
+
+// Both Background profiles point at the same real server, so the merged list
+// is exactly 2x in principle - but unlike the monitors scenario's static
+// count, live event counts can drift between the single-profile capture
+// above and this aggregate read (a new motion event recorded server-side in
+// between). Asserting >= keeps the outcome real (aggregation actually ran,
+// chips present) without flaking on that drift.
+Then('the event card count should be at least the recorded single-profile count', async ({ page }) => {
+  expect(singleProfileEventCount).toBeGreaterThan(0);
+  await expect.poll(async () => page.getByTestId('event-card').count(), {
+    timeout: testConfig.timeouts.pageLoad,
+  }).toBeGreaterThanOrEqual(singleProfileEventCount);
+});
+
+When('I click a monitor card', async ({ page }) => {
+  await expect.poll(async () => page.getByTestId('monitor-player').count(), {
+    timeout: testConfig.timeouts.pageLoad,
+  }).toBeGreaterThan(0);
+  await page.getByTestId('monitor-player').first().click();
+});
+
+Then('the URL should match the all-mode monitor detail route', async ({ page }) => {
+  await expect(page).toHaveURL(/\/all\/monitors\/[^/]+\/[^/]+$/, { timeout: testConfig.timeouts.transition });
+});
+
+Then('the profile switcher should still show All Servers', async ({ page }) => {
+  await expect(page.getByTestId('profile-switcher-trigger')).toHaveText(/All Servers/, {
+    timeout: testConfig.timeouts.element,
+  });
 });

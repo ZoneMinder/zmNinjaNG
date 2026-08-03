@@ -2736,16 +2736,138 @@ profile whose monitors are already cached.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Monitors.tsx#L207>`__
    · → :doc:`07-api-and-data-fetching`
 
-Only the Monitors page and the profile switcher itself branch on
-``isAllMode``. Dashboard, Events, Timeline, and Montage all resolve
+The Monitors page, the Events and Timeline pages, and the profile switcher
+branch on ``isAllMode``; Flow 22 covers how Events aggregates the same way
+Monitors does here. Dashboard, Montage, and Live Activity still resolve
 ``currentProfile`` the ordinary way, which is ``null`` in All mode, so their
-queries stay disabled and the screens render empty rather than silently
-falling back to a single profile. That is v1's deliberate scope, not a gap
-that slipped through: aggregating those screens is future work.
+queries stay disabled and those screens render empty rather than silently
+falling back to a single profile - deliberate v1 scope, not a gap that
+slipped through.
 
 Flow 16 covers the other two ways a profile list changes shape, editing and
 deleting; this flow is the third, and the only one where "the current
 profile" can mean more than one server at a time.
+
+Flow 22: Merged events and direct tap-through in All Servers mode
+-------------------------------------------------------------------
+
+Events aggregation reuses Flow 21's shape - one ``useQueries`` fan-out over
+``scope.profiles``, one ``Scoped<T>`` wrapper, one error strip per empty
+profile - but adds two things Monitors doesn't need: a true cross-server sort
+order, and a way into a specific event or monitor that skips the profile
+switch entirely. The counterintuitive part is that a monitor card, an event
+row, and a push notification all resolve that same owning profile and land on
+the same ``/all/...`` deep route, so the destination page never has to ask
+"whose session am I in" - the URL already says so.
+
+.. mermaid::
+
+   sequenceDiagram
+       autonumber
+       participant User as User
+       participant Card as MonitorCard (All mode)
+       participant Hook as useOpenMonitorEvents
+       participant Push as pushNotifications service
+       participant Nav as navigationService
+       participant Events as Events page
+       participant Scoped as useScopedEvents
+       participant A as Server A
+       participant B as Server B
+
+       User->>Card: tap a card owned by profile B
+       Card->>Hook: openMonitorEvents({monitorId, profileId: B})
+       Hook->>Events: navigate(/events?profileId=B)
+       Events->>Scoped: useScopedEvents({filters})
+       Scoped->>A: getEvents (queryKeys.eventsList(A, ...))
+       Scoped->>B: getEvents (queryKeys.eventsList(B, ...))
+       A-->>Scoped: events
+       B-->>Scoped: events
+       Scoped-->>Events: events sorted by eventInstant, chip per row
+       Events->>Events: eventsServerFilter narrows to B (deep-link param)
+
+       Push->>Push: notification arrives for profile B while in All mode
+       Push->>Nav: navigateToEvent(eventId, state, profileId=B)
+       Nav->>Events: navigate(/all/events/B/eventId), no switchProfile call
+
+#. **The merge sorts by real instant, not server-local time.** ``eventInstant``
+   converts each event's ``StartDateTime`` to an epoch using its OWNING
+   profile's timezone, so a 9pm event on an America/New_York server and a 2am
+   event on a UTC server interleave in true chronological order instead of by
+   the raw string, which Flow 21's monitor cards have no equivalent of - there
+   is nothing to sort there.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/event/event-instant.ts#L22>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **One query per profile, the SAME cache key single mode uses.**
+   ``useScopedEvents`` maps ``scope.profiles`` into a ``getEvents`` query keyed
+   by ``queryKeys.eventsList(p.id, ...)`` - identical to the single-profile
+   Events query, so switching between single and All mode for a profile
+   already visited never refetches it.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useScopedEvents.ts#L87>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **Each row carries its own chip, keyed like Monitors' cards.**
+   ``EventCard`` renders an ``event-profile-chip`` whenever ``profileChip`` is
+   set - only in All mode, wired the same way ``monitor-profile-chip`` is in
+   Flow 21.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/events/EventCard.tsx#L253>`__
+   · → :doc:`05-component-architecture`
+
+#. **A monitor card's "Events" button navigates with the owning profile
+   attached, not the current one.** ``useOpenMonitorEvents`` reads
+   ``profileId`` off the card it was called from (undefined in single mode) and
+   appends it as a ``profileId`` query param on the ``/events`` navigation,
+   rather than assuming the globally-selected profile owns the monitor that
+   was clicked.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useOpenMonitorEvents.ts#L65>`__
+   · → :doc:`05-component-architecture`
+
+#. **The Events page turns that param into a standing filter, once.** An
+   effect reads ``?profileId=`` and writes it into
+   ``settings.eventsServerFilter`` for the All-mode settings bucket, keyed off
+   the deep-linked id so a card click narrows the merged list down to just
+   that server instead of leaving a colliding numeric event id ambiguous
+   across two profiles.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Events.tsx#L278>`__
+   · → :doc:`04-pages-and-views`
+
+#. **A monitor detail click never calls switchProfile at all.**
+   ``MonitorCard``'s ``goToDetail`` navigates straight to
+   ``/all/monitors/:profileId/:monitorId`` when the card carries a
+   ``profileId``, instead of Flow 21's switch-then-navigate; ``MonitorDetail``
+   resolves its session from the route param, so the profile switcher still
+   reads "All Servers" the whole time - the outcome the deep-link e2e scenario
+   asserts.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/MonitorCard.tsx#L126>`__
+   · → :doc:`05-component-architecture`
+
+#. **A push notification resolves to a real profile even while All mode has
+   none current.** ``resolveProfileForNotification`` special-cases
+   ``currentProfileId === ALL_PROFILES_ID``: when the notification's own
+   profile is known, it returns that profile as the target with
+   ``isCrossProfile: false`` - no switch-confirmation dialog, because there is
+   no "wrong" profile to switch away from in All mode.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/profile/notification-profile.ts#L52>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **The tap lands on the same ``/all/`` deep route a card click would.**
+   ``navigateToEvent`` builds ``/all/events/:profileId/:eventId`` whenever a
+   ``profileId`` is passed, so the notification handler and ``MonitorCard``
+   converge on one routing convention rather than each inventing its own way
+   to carry "which server".
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/navigation.ts#L49>`__
+   · → :doc:`12-shared-services-and-components`
+
+Timeline aggregates the same way through its own ``isAllMode`` branch, reusing
+``useScopedEvents``'s sibling query rather than a second hook. The Events
+montage (grid) view is the one piece Task 4 left ungated-but-broken and Task
+4's fix wave then disabled outright: its tiles would resolve thumbnails
+through the page-level (absent) current profile, so ``events-view-toggle`` is
+disabled in All mode and the screen stays in list view - a fix ticket, not a
+missing flow.
+
+Flow 21 covers how a profile enters All mode in the first place; this flow
+picks up once it's there.
 
 These flows touch most of the moving parts of the app. When you need to change
 something, find the nearest scene, open its ``source`` link to land on the exact
