@@ -742,6 +742,7 @@ setPushServiceStoreGates({
   profile: {
     getProfiles: () => useProfileStore.getState().profiles,
     getDecryptedPassword: (profileId) => useProfileStore.getState().getDecryptedPassword(profileId),
+    getCurrentProfileId: () => useProfileStore.getState().currentProfileId,
   },
   auth: {
     getAccessToken: () => getAuthSlice(useProfileStore.getState().currentProfileId).accessToken,

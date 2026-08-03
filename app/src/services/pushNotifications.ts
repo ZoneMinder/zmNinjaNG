@@ -13,7 +13,7 @@ import { log, LogLevel } from '../lib/logger';
 import { navigationService } from '../lib/navigation';
 import type { NotificationSettings, NotificationSource } from '../types/notifications';
 import type { Profile } from '../api/types';
-import { asProfileId } from '../api/types';
+import { asProfileId, ALL_PROFILES_ID } from '../api/types';
 import { registerToken, deleteNotification } from '../api/notifications';
 import { getSession } from './sessions';
 import { getAppVersion } from '../lib/version';
@@ -45,6 +45,10 @@ export interface PushServiceStoreGates {
   profile: {
     getProfiles(): Profile[];
     getDecryptedPassword(profileId: string): Promise<string | undefined>;
+    /** App-level active profile id (may be the All-mode sentinel), distinct
+     *  from notifications.getCurrentProfileId() which tracks the connected
+     *  ES/direct-poll profile only. */
+    getCurrentProfileId(): string | null;
   };
   auth: {
     getAccessToken(): string | null;
@@ -557,11 +561,18 @@ export class MobilePushService {
 
     const gates = getStoreGates();
     const currentProfileId = gates.notifications.getCurrentProfileId();
+    // App-level active profile: the only one that can carry the All-mode
+    // sentinel (the ES-connected profile above never does - there's no
+    // session for it). Outside All mode this is not consulted, so
+    // single-mode taps keep resolving off the ES-connected profile exactly
+    // as before (refs #337).
+    const appProfileId = gates.profile.getCurrentProfileId();
+    const isAllMode = appProfileId === ALL_PROFILES_ID;
 
     // Resolve which profile this notification belongs to
     const { targetProfileId, isCrossProfile } = resolveProfileForNotification(
       data?.profile,
-      currentProfileId
+      isAllMode ? appProfileId : currentProfileId
     );
 
     const profileIdForEvent = targetProfileId || currentProfileId;
@@ -624,6 +635,24 @@ export class MobilePushService {
         targetProfileName: targetProfile?.name || data?.profile || 'Unknown',
         eventId: String(eid),
       });
+    } else if (isAllMode) {
+      if (targetProfileId && targetProfileId !== ALL_PROFILES_ID) {
+        // Known profile while in All mode: no switch needed, deep-link
+        // straight into that profile's event via the /all/ route.
+        navigationService.navigateToEvent(String(eid), { from: '/monitors', fromNotification: true }, targetProfileId);
+        log.push('All-mode notification tap, navigating to owning profile event', LogLevel.INFO, {
+          targetProfileId,
+          eventId: eid,
+        });
+      } else {
+        // Unknown or absent profile while in All mode: no profile to
+        // deep-link into (there's no "current" session to fall back to
+        // either), so open the aggregated events list instead.
+        log.push('All-mode notification tap could not resolve a profile, opening aggregated events list', LogLevel.WARN, {
+          notificationProfile: data?.profile,
+        });
+        navigationService.navigate('/events', false, { from: '/monitors', fromNotification: true });
+      }
     } else {
       // Same profile: navigate directly (with fallback route for back button)
       navigationService.navigateToEvent(String(eid), { from: '/monitors', fromNotification: true });

@@ -21,6 +21,7 @@ vi.mock('../../logger', () => ({
   LogLevel: { INFO: 'INFO', WARN: 'WARN', ERROR: 'ERROR', DEBUG: 'DEBUG' },
 }));
 
+import { ALL_PROFILES_ID } from '../../../api/types';
 import {
   findProfileByName,
   resolveProfileForNotification,
@@ -78,6 +79,26 @@ describe('notification-profile', () => {
       const result = resolveProfileForNotification('Deleted Server', 'profile-1');
       expect(result.targetProfileId).toBe('profile-1');
       expect(result.isCrossProfile).toBe(false);
+    });
+
+    describe('All mode (currentProfileId is the ALL_PROFILES_ID sentinel)', () => {
+      it('resolves a known profile directly with no cross-profile flag (no switch prompt)', () => {
+        const result = resolveProfileForNotification('Office Server', ALL_PROFILES_ID);
+        expect(result.targetProfileId).toBe('profile-2');
+        expect(result.isCrossProfile).toBe(false);
+      });
+
+      it('falls back to the sentinel when the notification profile is unknown', () => {
+        const result = resolveProfileForNotification('Deleted Server', ALL_PROFILES_ID);
+        expect(result.targetProfileId).toBe(ALL_PROFILES_ID);
+        expect(result.isCrossProfile).toBe(false);
+      });
+
+      it('falls back to the sentinel when the notification carries no profile field', () => {
+        const result = resolveProfileForNotification(undefined, ALL_PROFILES_ID);
+        expect(result.targetProfileId).toBe(ALL_PROFILES_ID);
+        expect(result.isCrossProfile).toBe(false);
+      });
     });
   });
 

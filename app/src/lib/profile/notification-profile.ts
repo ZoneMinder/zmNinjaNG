@@ -6,6 +6,7 @@
  */
 
 import type { Profile } from '../../api/types';
+import { ALL_PROFILES_ID } from '../../api/types';
 import { useProfileStore } from '../../stores/profile';
 import { log, LogLevel } from '../logger';
 
@@ -43,6 +44,13 @@ export function resolveProfileForNotification(
       notificationProfile: dataProfile,
     });
     return { targetProfileId: currentProfileId, isCrossProfile: false };
+  }
+
+  // All mode has no single "current" session to compare against - any known
+  // profile navigates straight to its own /all/ deep route, no switch prompt
+  // (refs #337).
+  if (currentProfileId === ALL_PROFILES_ID) {
+    return { targetProfileId: matchedProfile.id, isCrossProfile: false };
   }
 
   const isCrossProfile = matchedProfile.id !== currentProfileId;

@@ -41,10 +41,14 @@ class NavigationService {
   }
 
   /**
-   * Navigate to event detail page
+   * Navigate to event detail page. When profileId is given, routes through
+   * the /all/ deep route so the page resolves its session from that owning
+   * profile instead of the (possibly absent) current one - used for All-mode
+   * notification taps (refs #337).
    */
-  public navigateToEvent(eventId: string | number, state?: NavigationState): void {
-    this.navigate(`/events/${eventId}`, false, state);
+  public navigateToEvent(eventId: string | number, state?: NavigationState, profileId?: string): void {
+    const path = profileId ? `/all/events/${profileId}/${eventId}` : `/events/${eventId}`;
+    this.navigate(path, false, state);
   }
 
   /**

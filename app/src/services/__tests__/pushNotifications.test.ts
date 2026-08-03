@@ -18,7 +18,7 @@ import {
 } from '../pushNotifications';
 import type { NotificationSettings } from '../../stores/notifications';
 import type { Profile } from '../../api/types';
-import { asProfileId } from '../../api/types';
+import { asProfileId, ALL_PROFILES_ID } from '../../api/types';
 
 // @capacitor-firebase/messaging is mocked globally in src/tests/setup.ts
 // (not re-declared per-file here): pushNotifications.ts fires several
@@ -60,8 +60,12 @@ vi.mock('../../lib/logger', () => ({
 }));
 
 const mockNavigateToEvent = vi.fn();
+const mockNavigate = vi.fn();
 vi.mock('../../lib/navigation', () => ({
-  navigationService: { navigateToEvent: (...args: unknown[]) => mockNavigateToEvent(...args) },
+  navigationService: {
+    navigateToEvent: (...args: unknown[]) => mockNavigateToEvent(...args),
+    navigate: (...args: unknown[]) => mockNavigate(...args),
+  },
 }));
 
 const mockRegisterToken = vi.fn();
@@ -139,6 +143,7 @@ function makeFakeGates(overrides: Partial<PushServiceStoreGates> = {}): PushServ
     profile: {
       getProfiles: vi.fn().mockReturnValue([PROFILE]),
       getDecryptedPassword: vi.fn().mockResolvedValue('secret'),
+      getCurrentProfileId: vi.fn().mockReturnValue('profile-1'),
       ...overrides.profile,
     },
     auth: {
@@ -612,6 +617,40 @@ describe('notification tap handling', () => {
 
     expect(gates.notifications.addEvent).toHaveBeenCalledWith('profile-1', expect.objectContaining({ EventId: 0 }), 'push');
     expect(gates.notifications.markEventRead).not.toHaveBeenCalled();
+  });
+
+  describe('All mode (app-level active profile is the ALL_PROFILES_ID sentinel)', () => {
+    it('navigates via the /all/ route with no switch prompt when the tap matches a known profile', async () => {
+      gates.profile.getCurrentProfileId = vi.fn().mockReturnValue(ALL_PROFILES_ID);
+      gates.profile.getProfiles = vi.fn().mockReturnValue([PROFILE, { ...PROFILE, id: 'profile-2', name: 'Work' }]);
+      mockResolveProfileForNotification.mockReturnValue({ targetProfileId: 'profile-2', isCrossProfile: false });
+      const { listener } = await initAndGetListener();
+
+      listener({ notification: { title: 'Alarm', body: 'Motion', data: { eid: '7', mid: '2', profile: 'Work' } } });
+
+      expect(mockResolveProfileForNotification).toHaveBeenCalledWith('Work', ALL_PROFILES_ID);
+      expect(gates.notifications.addEvent).toHaveBeenCalledWith('profile-2', expect.objectContaining({ EventId: 7 }), 'push');
+      expect(gates.notifications.markEventRead).toHaveBeenCalledWith('profile-2', 7);
+      expect(mockRequestProfileSwitch).not.toHaveBeenCalled();
+      expect(mockNavigate).not.toHaveBeenCalled();
+      expect(mockNavigateToEvent).toHaveBeenCalledWith(
+        '7',
+        { from: '/monitors', fromNotification: true },
+        'profile-2'
+      );
+    });
+
+    it('falls back to the aggregated events list, without crashing, when the tap does not match a known profile', async () => {
+      gates.profile.getCurrentProfileId = vi.fn().mockReturnValue(ALL_PROFILES_ID);
+      mockResolveProfileForNotification.mockReturnValue({ targetProfileId: ALL_PROFILES_ID, isCrossProfile: false });
+      const { listener } = await initAndGetListener();
+
+      listener({ notification: { title: 'Alarm', body: 'Motion', data: { eid: '11', mid: '9', profile: 'Deleted Server' } } });
+
+      expect(mockRequestProfileSwitch).not.toHaveBeenCalled();
+      expect(mockNavigateToEvent).not.toHaveBeenCalled();
+      expect(mockNavigate).toHaveBeenCalledWith('/events', false, { from: '/monitors', fromNotification: true });
+    });
   });
 });
 
