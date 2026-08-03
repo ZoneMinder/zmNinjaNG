@@ -37,6 +37,7 @@ import { useGroupFilter } from '../hooks/useGroupFilter';
 import { GroupFilterSelect } from '../components/filters/GroupFilterSelect';
 import { Popover, PopoverTrigger } from '../components/ui/popover';
 import { EventHeatmap } from '../components/events/EventHeatmap';
+import { eventInstant } from '../lib/event/event-instant';
 import { EventMontageView } from '../components/events/EventMontageView';
 import { EventListView, type ScopedEventItem } from '../components/events/EventListView';
 import { EventsAllModeBar } from '../components/events/EventsAllModeBar';
@@ -382,20 +383,24 @@ export default function Events() {
   );
 
   // Date range shown on the heatmap: explicit filters win, otherwise infer
-  // the span from the loaded events.
+  // the span from the loaded events. Derived from heatmapEvents' real
+  // instants (eventInstant), not a naive local Date parse: the buckets
+  // below already use real instants, so a naively-derived window can fall
+  // short of them and silently drop events the buckets would otherwise show
+  // (refs #337 - the other half of the timezone-bucket fix).
   const heatmapDateRange = useMemo(() => {
-    if (allEvents.length === 0) return null;
+    if (heatmapEvents.length === 0) return null;
 
     if (filters.startDateTime && filters.endDateTime) {
       return { startDate: new Date(filters.startDateTime), endDate: new Date(filters.endDateTime) };
     }
 
-    const eventDates = allEvents.map((e) => new Date(e.Event.StartDateTime));
+    const eventDates = heatmapEvents.map(({ item, timezone }) => new Date(eventInstant(item, timezone)));
     return {
       startDate: new Date(Math.min(...eventDates.map((d) => d.getTime()))),
       endDate: new Date(Math.max(...eventDates.map((d) => d.getTime()))),
     };
-  }, [allEvents, filters.startDateTime, filters.endDateTime]);
+  }, [heatmapEvents, filters.startDateTime, filters.endDateTime]);
 
   // Restore the list scroll position when returning from an event detail.
   // /events and /events/:id are sibling routes, so this component unmounts when

@@ -4,6 +4,8 @@ import type { ReactNode } from 'react';
 import userEvent from '@testing-library/user-event';
 import Events from '../Events';
 import { ALL_PROFILES_ID } from '../../api/types';
+import { eventInstant } from '../../lib/event/event-instant';
+import type { EventData } from '../../api/types';
 
 const useQueryMock = vi.fn();
 
@@ -150,7 +152,13 @@ vi.mock('../../components/events/EventCard', () => ({
 }));
 
 vi.mock('../../components/events/EventHeatmap', () => ({
-  EventHeatmap: () => <div data-testid="event-heatmap" />,
+  EventHeatmap: ({ startDate, endDate }: { startDate?: Date; endDate?: Date }) => (
+    <div
+      data-testid="event-heatmap"
+      data-start={startDate?.getTime() ?? ''}
+      data-end={endDate?.getTime() ?? ''}
+    />
+  ),
 }));
 
 vi.mock('../../components/events/EventMontageView', () => ({
@@ -210,7 +218,7 @@ function scopedEvents(overrides: Partial<ReturnType<typeof defaultScopedEvents>>
 
 function defaultScopedEvents() {
   return {
-    events: [] as Array<{ profileId: string; profileName: string; item: { Event: { Id: string; MonitorId: string } } }>,
+    events: [] as Array<{ profileId: string; profileName: string; item: { Event: { Id: string; MonitorId: string; StartDateTime?: string } } }>,
     errors: [] as Array<{ profileId: string; profileName: string; error: unknown }>,
     isLoading: false,
     isFetching: false,
@@ -259,7 +267,7 @@ describe('Events Page', () => {
 
   it('renders event list when events are available', () => {
     scopedEvents({
-      events: [{ profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '100', MonitorId: '1' } } }],
+      events: [{ profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '100', MonitorId: '1', StartDateTime: '2026-08-03 10:00:00' } } }],
     });
     useQueryMock.mockImplementation(({ queryKey }: { queryKey: (string | object)[] }) => {
       if (queryKey[0] === 'monitors') {
@@ -355,7 +363,7 @@ describe('Events Page', () => {
   it('a ?view=montage deep link renders montage without a persisted write, surviving the settings-sync effect on the same mount (refs #337 round 2)', () => {
     mockSearchParams = new URLSearchParams('view=montage');
     scopedEvents({
-      events: [{ profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1' } } }],
+      events: [{ profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1', StartDateTime: '2026-08-03 10:00:00' } } }],
     });
 
     render(<Events />);
@@ -370,7 +378,7 @@ describe('Events Page', () => {
   it('settings-sync still applies the persisted view when no ?view param is present (refs #337 round 2)', () => {
     settingsOverrides = { eventsViewMode: 'montage' };
     scopedEvents({
-      events: [{ profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1' } } }],
+      events: [{ profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1', StartDateTime: '2026-08-03 10:00:00' } } }],
     });
 
     render(<Events />);
@@ -383,8 +391,8 @@ describe('Events Page', () => {
       allScope();
       scopedEvents({
         events: [
-          { profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1' } } },
-          { profileId: 'profile-2', profileName: 'Office', item: { Event: { Id: '2', MonitorId: '1' } } },
+          { profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1', StartDateTime: '2026-08-03 10:00:00' } } },
+          { profileId: 'profile-2', profileName: 'Office', item: { Event: { Id: '2', MonitorId: '1', StartDateTime: '2026-08-03 10:00:00' } } },
         ],
       });
 
@@ -396,11 +404,49 @@ describe('Events Page', () => {
       expect(chips.map((c) => c.textContent)).toEqual(['Home', 'Office']);
     });
 
+    // heatmapDateRange (the OTHER consumer of event timestamps besides the
+    // buckets fixed earlier) must derive its start/end from the same real
+    // instants (eventInstant) the buckets use - a naively-derived window can
+    // fall short of an instant the buckets would otherwise place inside it,
+    // silently dropping that event from the heatmap (refs #337). Goes
+    // through the real heatmapDateRange computation (no explicit
+    // start/endDateTime filter), not explicit start/end props passed
+    // straight to EventHeatmap - that's what the earlier per-widget
+    // timezone tests couldn't catch.
+    it('heatmapDateRange spans both events\' real instants across two profile timezones', () => {
+      allScope();
+      const startDateTime = '2026-06-15 06:00:00';
+      scopedEvents({
+        events: [
+          { profileId: profileA.id, profileName: profileA.name, item: { Event: { Id: '1', MonitorId: '1', StartDateTime: startDateTime } } },
+          { profileId: profileB.id, profileName: profileB.name, item: { Event: { Id: '2', MonitorId: '1', StartDateTime: startDateTime } } },
+        ] as never,
+      });
+
+      render(<Events />);
+
+      const heatmap = screen.getByTestId('event-heatmap');
+      const rangeStart = Number(heatmap.getAttribute('data-start'));
+      const rangeEnd = Number(heatmap.getAttribute('data-end'));
+
+      const instantA = eventInstant({ Event: { StartDateTime: startDateTime } } as EventData, profileA.timezone);
+      const instantB = eventInstant({ Event: { StartDateTime: startDateTime } } as EventData, profileB.timezone);
+      // America/New_York is 4h behind UTC in June: the two real instants
+      // are genuinely 4h apart, not the same millisecond a naive parse of
+      // the identical wall-clock string would have produced.
+      expect(instantB - instantA).toBe(4 * 60 * 60 * 1000);
+
+      expect(rangeStart).toBeLessThanOrEqual(instantA);
+      expect(rangeEnd).toBeGreaterThanOrEqual(instantA);
+      expect(rangeStart).toBeLessThanOrEqual(instantB);
+      expect(rangeEnd).toBeGreaterThanOrEqual(instantB);
+    });
+
     it('leaves the montage toggle enabled with no gate notice, and renders montage (refs #337 Task 2 fix round 3)', () => {
       allScope();
       mockSearchParams = new URLSearchParams('view=montage');
       scopedEvents({
-        events: [{ profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1' } } }],
+        events: [{ profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1', StartDateTime: '2026-08-03 10:00:00' } } }],
       });
 
       render(<Events />);
@@ -415,8 +461,8 @@ describe('Events Page', () => {
       settingsOverrides = { eventsServerFilter: ['profile-1'] };
       scopedEvents({
         events: [
-          { profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1' } } },
-          { profileId: 'profile-2', profileName: 'Office', item: { Event: { Id: '2', MonitorId: '1' } } },
+          { profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1', StartDateTime: '2026-08-03 10:00:00' } } },
+          { profileId: 'profile-2', profileName: 'Office', item: { Event: { Id: '2', MonitorId: '1', StartDateTime: '2026-08-03 10:00:00' } } },
         ],
       });
 
@@ -433,8 +479,8 @@ describe('Events Page', () => {
       settingsOverrides = { eventsServerFilter: ['deleted-profile-id'] };
       scopedEvents({
         events: [
-          { profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1' } } },
-          { profileId: 'profile-2', profileName: 'Office', item: { Event: { Id: '2', MonitorId: '1' } } },
+          { profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1', StartDateTime: '2026-08-03 10:00:00' } } },
+          { profileId: 'profile-2', profileName: 'Office', item: { Event: { Id: '2', MonitorId: '1', StartDateTime: '2026-08-03 10:00:00' } } },
         ],
       });
 
@@ -450,8 +496,8 @@ describe('Events Page', () => {
       settingsOverrides = { eventsServerFilter: ['profile-1', 'deleted-profile-id'] };
       scopedEvents({
         events: [
-          { profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1' } } },
-          { profileId: 'profile-2', profileName: 'Office', item: { Event: { Id: '2', MonitorId: '1' } } },
+          { profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1', StartDateTime: '2026-08-03 10:00:00' } } },
+          { profileId: 'profile-2', profileName: 'Office', item: { Event: { Id: '2', MonitorId: '1', StartDateTime: '2026-08-03 10:00:00' } } },
         ],
       });
 
@@ -466,7 +512,7 @@ describe('Events Page', () => {
       allScope();
       settingsOverrides = { eventsServerFilter: ['profile-1'] };
       scopedEvents({
-        events: [{ profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1' } } }],
+        events: [{ profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1', StartDateTime: '2026-08-03 10:00:00' } } }],
         totalCount: 5,
         totalCountByProfile: { 'profile-1': 1, 'profile-2': 4 },
       });
@@ -490,7 +536,7 @@ describe('Events Page', () => {
     it('shows an error strip for a failed profile with zero events while the healthy profile still renders', () => {
       allScope();
       scopedEvents({
-        events: [{ profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1' } } }],
+        events: [{ profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1', StartDateTime: '2026-08-03 10:00:00' } } }],
         errors: [{ profileId: 'profile-2', profileName: 'Office', error: new Error('down') }],
       });
 
@@ -506,8 +552,8 @@ describe('Events Page', () => {
       mockSearchParams = new URLSearchParams('profileId=profile-2');
       scopedEvents({
         events: [
-          { profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1' } } },
-          { profileId: 'profile-2', profileName: 'Office', item: { Event: { Id: '2', MonitorId: '1' } } },
+          { profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1', StartDateTime: '2026-08-03 10:00:00' } } },
+          { profileId: 'profile-2', profileName: 'Office', item: { Event: { Id: '2', MonitorId: '1', StartDateTime: '2026-08-03 10:00:00' } } },
         ],
       });
 
@@ -529,8 +575,8 @@ describe('Events Page', () => {
       mockSearchParams = new URLSearchParams();
       scopedEvents({
         events: [
-          { profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1' } } },
-          { profileId: 'profile-2', profileName: 'Office', item: { Event: { Id: '2', MonitorId: '1' } } },
+          { profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1', StartDateTime: '2026-08-03 10:00:00' } } },
+          { profileId: 'profile-2', profileName: 'Office', item: { Event: { Id: '2', MonitorId: '1', StartDateTime: '2026-08-03 10:00:00' } } },
         ],
       });
 
