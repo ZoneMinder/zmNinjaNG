@@ -109,6 +109,7 @@
     "new_events_count_one": "{{count}} new event",
     "new_events_count_other": "{{count}} new events",
     "no_cameras": "No monitors found.",
+    "all_failed_title": "Unable to load monitors",
     "failed_to_load": "Failed to load monitors: {{error}}",
     "properties_title": "{{name}}",
     "properties_description": "Monitor ID: {{id}}",

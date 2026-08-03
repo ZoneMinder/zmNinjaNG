@@ -109,6 +109,7 @@
     "new_events_count_one": "{{count}} 个新事件",
     "new_events_count_other": "{{count}} 个新事件",
     "no_cameras": "未找到监视器。",
+    "all_failed_title": "无法加载监视器",
     "failed_to_load": "加载监视器失败: {{error}}",
     "properties_title": "{{name}}",
     "properties_description": "监控 ID: {{id}}",

@@ -120,6 +120,7 @@ describe('Monitors Page', () => {
     render(<Monitors />);
 
     expect(screen.getByTestId('monitors-empty-state')).toBeInTheDocument();
+    expect(screen.getByTestId('monitors-empty-state')).toHaveTextContent('monitors.no_cameras');
   });
 
   it('renders monitor cards when data is available', () => {
@@ -222,7 +223,43 @@ describe('Monitors Page', () => {
     render(<Monitors />);
 
     expect(screen.getByTestId('monitors-all-failed-state')).toBeInTheDocument();
+    expect(screen.getByTestId('monitors-all-failed-state')).toHaveTextContent('monitors.all_failed_title');
     expect(screen.getByTestId('profile-error-strip-profile-1')).toBeInTheDocument();
     expect(screen.getByTestId('profile-error-strip-profile-2')).toBeInTheDocument();
+  });
+
+  it('single mode drops the profile-name prefix from the error strip message', () => {
+    singleProfile();
+    useScopedMonitorsMock.mockReturnValue({
+      monitors: [],
+      errors: [
+        { profileId: 'profile-1', profileName: 'Home', error: new Error('network down') },
+      ],
+      isLoading: false,
+      refetchProfile: vi.fn(),
+    });
+
+    render(<Monitors />);
+
+    const strip = screen.getByTestId('profile-error-strip-profile-1');
+    expect(strip).not.toHaveTextContent('Home:');
+  });
+
+  it('All mode keeps the profile-name prefix so a multi-server error strip is attributable', () => {
+    allMode(2);
+    useScopedMonitorsMock.mockReturnValue({
+      monitors: [
+        { profileId: 'profile-1', profileName: 'Home', item: { Monitor: { Id: '1', Name: 'Front Door', Deleted: false }, Monitor_Status: { Status: 'Connected' } } },
+      ],
+      errors: [
+        { profileId: 'profile-2', profileName: 'Office', error: new Error('network down') },
+      ],
+      isLoading: false,
+      refetchProfile: vi.fn(),
+    });
+
+    render(<Monitors />);
+
+    expect(screen.getByTestId('profile-error-strip-profile-2')).toHaveTextContent('Office:');
   });
 });

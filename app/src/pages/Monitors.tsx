@@ -359,7 +359,11 @@ export default function Monitors() {
             >
               <ErrorBanner
                 className="flex-1"
-                message={`${err.profileName}: ${resolveQueryError(err.error, t, { fallbackKey: 'monitors.failed_to_load' })}`}
+                message={
+                  totalScopeProfiles === 1
+                    ? resolveQueryError(err.error, t, { fallbackKey: 'monitors.failed_to_load' })
+                    : `${err.profileName}: ${resolveQueryError(err.error, t, { fallbackKey: 'monitors.failed_to_load' })}`
+                }
               />
               <Button
                 variant="outline"
@@ -380,7 +384,7 @@ export default function Monitors() {
           <div data-testid={allFailed ? 'monitors-all-failed-state' : 'monitors-empty-state'}>
             <EmptyState
               icon={Video}
-              title={t('monitors.no_cameras')}
+              title={t(allFailed ? 'monitors.all_failed_title' : 'monitors.no_cameras')}
               className="p-8 text-center border rounded-lg bg-muted/20 text-muted-foreground"
             />
           </div>
