@@ -64,7 +64,7 @@ A single **All-mode notifications** setting, separate from any one profile's set
 - **Muted**: every server stays connected and the badge and history keep updating, but toasts and sound are suppressed.
 - **Off**: no server connects while aggregating, so nothing updates until you switch this back on.
 
-In Live or Muted mode, events arriving close together from different servers coalesce into one summary toast instead of flooding the screen with one per event, and toast/sound display still honors each server's own settings underneath the aggregate mode. On mobile, push notifications are unaffected: FCM already delivers every profile's events regardless of which one is active, so All Servers mode opens no extra connections there.
+In Live or Muted mode, events arriving close together from different servers coalesce into one summary toast instead of flooding the screen with one per event, within the **Notification grouping** window under **All Servers performance** in {doc}`settings`, and toast/sound display still honors each server's own settings underneath the aggregate mode. On mobile, push notifications are unaffected: FCM already delivers every profile's events regardless of which one is active, so All Servers mode opens no extra connections there.
 
 ## Notification History
 

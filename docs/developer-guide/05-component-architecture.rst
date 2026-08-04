@@ -1093,6 +1093,48 @@ accept input once visible. ``EventHeatmap``'s tooltip carries the same pair.
 Invisible is not the same as non-interactive, and only a real iOS device shows
 the difference.
 
+Tuning the All Servers aggregate
+-------------------------------
+
+AllServersPerformanceSection
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**Location**: ``src/components/settings/AllServersPerformanceSection.tsx``
+
+Every guardrail that bounds All-mode fan-out is a row here: the montage stream
+cap, the Live Activity watch cap and poll floor, the notification grouping
+window, and the three connection knobs. Settings.tsx renders it only while
+``isAllMode``, above the profile picker, next to
+``AllServersStreamingSection``, because these bound the aggregate rather than
+the server picked below.
+
+Each row's value lives in the ``ALL_PROFILES_ID`` settings bucket and its
+default is the constant its consumer used to hardcode, so
+``DEFAULT_SETTINGS.allModeMaxStreams`` is ``MONTAGE_GRID.allModeMaxStreams``
+and resetting a row writes that constant back. The editable range comes from
+``ALL_MODE_PERFORMANCE`` in ``src/lib/zmninja-ng-constants.ts``, and
+``mergeProfileSettings`` clamps to it on every read: persisted settings are a
+trust boundary (AGENTS.md I1), so a consumer never has to range-check what it
+reads.
+
+Number rows bind through ``useClampedNumberField``
+(``src/hooks/useClampedNumberField.ts``), shared with
+``LiveActivitySettingsDialog``. It keeps a local text draft and commits on blur
+or Enter rather than per keystroke. Committing per keystroke cannot work here:
+the commit clamps, the clamped value flows back into the input, and the next
+keystroke appends to the clamped string instead of what was typed. The hook's
+own comment works the failure through digit by digit.
+
+The reset button renders only while a row differs from its default, so an
+untouched section shows none at all. Because the hook resyncs its draft from
+the store whenever the field is unfocused, a reset writing the default is
+picked up by the input without any extra wiring.
+
+**Test ids**: ``all-mode-max-streams-input``/``-reset``,
+``all-mode-max-watched-input``/``-reset``, ``all-mode-poll-floor-input``/``-reset``,
+``all-mode-burst-window-input``/``-reset``, ``all-mode-stream-tuning-select``,
+``all-mode-pause-hidden-switch``, ``all-mode-idle-minutes-input``/``-reset``.
+
 Hiding monitors
 ---------------
 

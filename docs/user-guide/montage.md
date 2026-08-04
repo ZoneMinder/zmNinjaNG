@@ -18,6 +18,12 @@ In All Servers mode each entry in **Show monitors** names the server it comes
 from, since two servers can have cameras with the same name. Hiding one
 server's camera leaves the other server's camera of that name on screen.
 
+In All Servers mode the grid opens a limited number of tiles at once, since
+each tile is a live connection and combining servers multiplies them. Past that
+limit the remaining cameras collapse into an overflow notice above the grid
+rather than opening more connections. Raise or lower the limit under **All
+Servers performance** in {doc}`settings`.
+
 Every toolbar control works the same way in All Servers mode, including edit
 mode, column presets and saved layouts. The arrangement is kept separately
 from each profile's own, so rearranging the combined grid leaves each

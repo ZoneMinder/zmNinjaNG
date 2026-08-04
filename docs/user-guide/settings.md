@@ -196,6 +196,32 @@ Manage the PIN used to lock and unlock kiosk mode. See {doc}`kiosk` for full det
 | **Change PIN** | Requires verifying your current PIN or biometrics before setting a new one. |
 | **Clear PIN** | Removes the PIN. Requires verifying the current PIN or biometrics first. |
 
+## All Servers performance
+
+This section only appears while you are in All Servers mode, above the server
+picker, because every row in it governs the combined view rather than one
+server. Each row shows the value it ships with, and grows a reset button once
+you change it.
+
+Aggregating several servers multiplies work that one server does once: every
+tile is a separate live connection, and every watched camera is a separate
+request on every poll. The values that suit you depend on how many servers you
+combine and what your network and servers will take, which is why they are
+here rather than fixed.
+
+| Setting | Default | What it does |
+|---|---|---|
+| **Maximum live streams** | 16 | Tiles the montage opens across every server at once. The rest collapse into an overflow notice at the top of the grid. |
+| **Monitors watched for alarms** | 24 | Cameras {doc}`live-activity` polls across every server, drawn evenly from each so one busy server can't crowd the rest out. |
+| **Fastest alarm polling** | 10 seconds | A floor under the Live Activity check interval while aggregating. A slower interval set on that page still applies; this only stops the combined poll running faster than this. |
+| **Notification grouping** | 3 seconds | Events arriving from different servers within this window collapse into one summary notification instead of one each. |
+| **Stream tuning** | Off | Lowers the frame rate and scale of combined tiles to save bandwidth. |
+| **Pause hidden streams** | Off | Stops combined streams while the app is in the background or the window is hidden. |
+| **Idle timeout** | 0 (never) | Stands combined streams down after this many minutes without interaction. |
+
+None of these touch any profile's own settings, and none apply in single mode:
+a single server has nothing to fan out across.
+
 ## Multi-Server
 
 zmNinjaNg detects multi-server ZoneMinder setups via the `/servers.json` API endpoint. Single-server setups are unaffected.
