@@ -67,6 +67,16 @@ Feature: All Servers mode
     And event montage tiles should render with no gate notice
 
   @web
+  Scenario: Live Activity renders in All mode with no gate notice and an aggregated watch count
+    When I navigate to the "Live Activity" page
+    Then I record the single-profile Live Activity watched count
+    When I navigate to the "Profiles" page
+    And I click the All Servers profile card
+    When I navigate to the "Live Activity" page
+    Then Live Activity should render with no gate notice
+    And the Live Activity watched count should be double the recorded single-profile count
+
+  @web
   Scenario: Logs page picker switches the per-profile log source
     When I navigate to the "Profiles" page
     And I click the All Servers profile card

@@ -1058,8 +1058,6 @@
   },
   "live_activity": {
     "title": "Live-Aktivität",
-    "all_mode_title": "Ein Profil wählen",
-    "all_mode_description": "Live-Aktivität überwacht jeweils einen Server. Verlassen Sie „Alle Profile“, um sie zu nutzen.",
     "all_quiet": "Alles ruhig",
     "watching_count_one": "{{count}} Monitor beobachtet",
     "watching_count_other": "{{count}} Monitore beobachtet",
@@ -1068,6 +1066,8 @@
     "state_cooling": "Abklingend",
     "overflow_one": "+{{count}} weiterer aktiv",
     "overflow_other": "+{{count}} weitere aktiv",
+    "watch_cap_overflow_one": "+{{count}} weiterer Monitor nicht beobachtet",
+    "watch_cap_overflow_other": "+{{count}} weitere Monitore nicht beobachtet",
     "fullscreen": "Vollbild",
     "dismiss": "{{name}} von dieser Seite entfernen",
     "elapsed_title": "Zeit seit Beginn dieses Alarms",

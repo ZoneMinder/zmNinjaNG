@@ -1058,8 +1058,6 @@
   },
   "live_activity": {
     "title": "实时动态",
-    "all_mode_title": "请选择一个配置",
-    "all_mode_description": "实时动态一次只能监看一台服务器。请退出“所有配置”后再使用。",
     "all_quiet": "一切正常",
     "watching_count_one": "正在监看 {{count}} 个监控",
     "watching_count_other": "正在监看 {{count}} 个监控",
@@ -1068,6 +1066,8 @@
     "state_cooling": "冷却中",
     "overflow_one": "+{{count}} 个活动中",
     "overflow_other": "+{{count}} 个活动中",
+    "watch_cap_overflow_one": "还有 {{count}} 个监控未被监看",
+    "watch_cap_overflow_other": "还有 {{count}} 个监控未被监看",
     "fullscreen": "全屏",
     "dismiss": "从此页面移除 {{name}}",
     "elapsed_title": "自本次报警开始以来的时间",

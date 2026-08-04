@@ -1058,8 +1058,6 @@
   },
   "live_activity": {
     "title": "Live Activity",
-    "all_mode_title": "Select one profile",
-    "all_mode_description": "Live Activity watches one server's alarms at a time. Switch out of All Profiles to use it.",
     "all_quiet": "All quiet",
     "watching_count_one": "Watching {{count}} monitor",
     "watching_count_other": "Watching {{count}} monitors",
@@ -1068,6 +1066,8 @@
     "state_cooling": "Clearing",
     "overflow_one": "+{{count}} more active",
     "overflow_other": "+{{count}} more active",
+    "watch_cap_overflow_one": "+{{count}} more monitor not watched",
+    "watch_cap_overflow_other": "+{{count}} more monitors not watched",
     "fullscreen": "Fullscreen",
     "dismiss": "Clear {{name}} from this page",
     "elapsed_title": "Time since this alarm started",

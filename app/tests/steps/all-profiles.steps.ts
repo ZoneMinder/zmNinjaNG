@@ -278,6 +278,48 @@ Then('event montage tiles should render with no gate notice', async ({ page }) =
   await expect(page.getByTestId('events-montage-gate')).toHaveCount(0);
 });
 
+// Captured on the single-profile Live Activity view before switching to All
+// mode, same pattern as singleProfileMonitorCount above. Alarm states can't
+// be forced against the live test server (no e2e hook fires a real motion
+// event), so this scenario can only assert page structure and the watched
+// COUNT, not that any tile actually renders - the watched count is only
+// visible in the all-quiet empty state's "Watching N monitors" copy, so the
+// scenario depends on the server being quiet, same as live-activity.feature's
+// own all-quiet scenario.
+let singleProfileLiveActivityWatchedCount = 0;
+
+async function readLiveActivityWatchedCount(page: Page): Promise<number> {
+  const empty = page.getByTestId('live-activity-empty');
+  await expect(empty).toBeVisible({ timeout: testConfig.timeouts.pageLoad });
+  const text = await empty.innerText();
+  const match = text.match(/Watching (\d+) monitors?/i);
+  expect(match, `expected a "Watching N monitor(s)" count in: ${text}`).not.toBeNull();
+  return Number(match![1]);
+}
+
+Then('I record the single-profile Live Activity watched count', async ({ page }) => {
+  singleProfileLiveActivityWatchedCount = await readLiveActivityWatchedCount(page);
+  expect(singleProfileLiveActivityWatchedCount).toBeGreaterThan(0);
+});
+
+// The gate that used to block All mode is gone (refs #337, #341, e74d02b4
+// precedent): this is a regression check that it stays gone AND that the
+// page renders something real (tiles or the quiet state), not just an
+// absent-gate false-positive.
+Then('Live Activity should render with no gate notice', async ({ page }) => {
+  await expect(page.getByTestId('live-activity-all-mode-notice')).toHaveCount(0);
+  await expect(
+    page.getByTestId('live-activity-empty').or(page.getByTestId('live-activity-tile'))
+  ).toBeVisible({ timeout: testConfig.timeouts.pageLoad });
+});
+
+Then('the Live Activity watched count should be double the recorded single-profile count', async ({ page }) => {
+  expect(singleProfileLiveActivityWatchedCount).toBeGreaterThan(0);
+  await expect.poll(async () => readLiveActivityWatchedCount(page), {
+    timeout: testConfig.timeouts.pageLoad,
+  }).toBe(singleProfileLiveActivityWatchedCount * 2);
+});
+
 Then('I should see the page profile picker', async ({ page }) => {
   await expect(page.getByTestId('page-profile-picker')).toBeVisible({ timeout: testConfig.timeouts.element });
 });

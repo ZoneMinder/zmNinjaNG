@@ -1058,8 +1058,6 @@
   },
   "live_activity": {
     "title": "Activité en direct",
-    "all_mode_title": "Choisir un profil",
-    "all_mode_description": "Activité en direct surveille un seul serveur à la fois. Quittez Tous les profils pour l'utiliser.",
     "all_quiet": "Tout est calme",
     "watching_count_one": "{{count}} caméra surveillée",
     "watching_count_other": "{{count}} caméras surveillées",
@@ -1068,6 +1066,8 @@
     "state_cooling": "Apaisement",
     "overflow_one": "+{{count}} autre active",
     "overflow_other": "+{{count}} autres actives",
+    "watch_cap_overflow_one": "+{{count}} moniteur supplémentaire non surveillé",
+    "watch_cap_overflow_other": "+{{count}} moniteurs supplémentaires non surveillés",
     "fullscreen": "Plein écran",
     "dismiss": "Retirer {{name}} de cette page",
     "elapsed_title": "Temps écoulé depuis le début de cette alarme",

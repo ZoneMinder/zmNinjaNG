@@ -1058,8 +1058,6 @@
   },
   "live_activity": {
     "title": "Actividad en vivo",
-    "all_mode_title": "Seleccione un perfil",
-    "all_mode_description": "Actividad en vivo vigila un servidor a la vez. Salga de Todos los perfiles para usarla.",
     "all_quiet": "Todo tranquilo",
     "watching_count_one": "Observando {{count}} monitor",
     "watching_count_other": "Observando {{count}} monitores",
@@ -1068,6 +1066,8 @@
     "state_cooling": "Enfriando",
     "overflow_one": "+{{count}} más activo",
     "overflow_other": "+{{count}} más activos",
+    "watch_cap_overflow_one": "+{{count}} monitor más no vigilado",
+    "watch_cap_overflow_other": "+{{count}} monitores más no vigilados",
     "fullscreen": "Pantalla completa",
     "dismiss": "Quitar {{name}} de esta página",
     "elapsed_title": "Tiempo desde que empezó esta alarma",
