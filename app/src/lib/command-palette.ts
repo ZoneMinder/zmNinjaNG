@@ -7,7 +7,10 @@
 
 export type CommandItem =
   | { kind: 'page'; id: string; label: string; route: string; hintKey?: string }
-  | { kind: 'monitor'; id: string; label: string; monitorId: string }
+  /** All mode carries the owning profile: monitor ids collide across servers,
+   *  so `profileId` both disambiguates the row and selects the /all/ route
+   *  the palette navigates to, and `profileName` labels it (refs #337). */
+  | { kind: 'monitor'; id: string; label: string; monitorId: string; profileId?: string; profileName?: string }
   | { kind: 'group'; id: string; label: string; groupId: string };
 
 // Fixed render order between kinds: pages, then groups, then monitors.
