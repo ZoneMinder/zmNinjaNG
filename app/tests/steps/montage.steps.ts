@@ -107,8 +107,12 @@ When('I open the montage kebab menu', async ({ page }) => {
 
 When('I open the montage show-monitors submenu', async ({ page }) => {
   await page.getByTestId('montage-kebab-visibility').hover();
-  // Wait for the submenu content to render
-  await page.waitForTimeout(150);
+  // Radix opens the submenu on a hover delay, so the next step's click races
+  // it. Wait for a real entry rather than a fixed pause: the chips carry the
+  // same prefix, and they are not what the following steps click.
+  await expect(
+    page.locator('[data-testid^="montage-visibility-"]:not([data-testid^="montage-visibility-chip-"])').first()
+  ).toBeVisible({ timeout: testConfig.timeouts.element });
 });
 
 When('I uncheck the visibility for the captured monitor', async ({ page }) => {
@@ -133,7 +137,15 @@ When('I check the visibility for the captured monitor', async ({ page }) => {
 
 When('I reload the current page', async ({ page }) => {
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(300);
+  // domcontentloaded fires with an empty #root - the SPA has not mounted yet,
+  // and a step that reads localStorage or clicks straight after would run
+  // against a blank page. Wait for React to have painted something instead of
+  // guessing how long that takes.
+  await expect
+    .poll(() => page.evaluate(() => document.getElementById('root')?.childElementCount ?? 0), {
+      timeout: testConfig.timeouts.pageLoad,
+    })
+    .toBeGreaterThan(0);
 });
 
 Then('the captured monitor tile should not be present in the montage grid', async ({ page }) => {

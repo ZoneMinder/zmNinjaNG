@@ -253,12 +253,15 @@ vi.mock('../../stores/auth', () => ({
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string, params?: Record<string, unknown>) => {
-      if (params?.count !== undefined) return `${key}-${params.count}`;
-      // Interpolated values are appended so a dropped one is visible in the
-      // assertion rather than silently rendering the bare key.
-      if (params?.label !== undefined) return `${key}-${params.label}`;
-      return key;
+    // Interpolated values are appended so a dropped one is visible in the
+    // assertion rather than silently rendering the bare key. Composed rather
+    // than first-match: a key carrying both a count and a label used to
+    // assert only the count, so the label could go missing unnoticed.
+    // A string second argument is a default value, not params.
+    t: (key: string, params?: unknown) => {
+      if (typeof params !== 'object' || params === null) return key;
+      const values = Object.values(params).filter((v) => v !== undefined);
+      return values.length > 0 ? `${key}-${values.join('-')}` : key;
     },
   }),
 }));
