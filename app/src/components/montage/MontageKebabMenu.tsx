@@ -60,7 +60,12 @@ export function MontageKebabMenu({
             <DropdownMenuSubTrigger data-testid="montage-kebab-visibility">
               {t('montage.menu_show_monitors')}
             </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="max-h-[min(60vh,24rem)] overflow-y-auto">
+            {/* Bounded width, or the submenu grows to the longest monitor
+                name and the entry's `truncate` never engages - a name long
+                enough would push the panel past the 320px floor the project
+                sizes labels against. The title attribute carries the full
+                name for anything the ellipsis eats. */}
+            <DropdownMenuSubContent className="max-w-[15rem] max-h-[min(60vh,24rem)] overflow-y-auto">
               {items.map((item) => (
                 <DropdownMenuCheckboxItem
                   key={item.id}

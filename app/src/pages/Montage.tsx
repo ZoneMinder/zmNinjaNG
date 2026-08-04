@@ -713,7 +713,11 @@ export default function Montage() {
             transition: pinchZoom.isPinching ? 'none' : 'transform 0.2s ease-out',
           }}
         >
-          {cappedMonitors.length === 0 && (
+          {/* Not in fullscreen: the notice tells the user to reach for the
+              kebab's show-monitors list, and fullscreen's own thin toolbar
+              carries no kebab. Pointing at a control that is not on screen is
+              worse than an empty grid the user put there deliberately. */}
+          {cappedMonitors.length === 0 && !isFullscreen && (
             <div data-testid="montage-all-hidden">
               <EmptyState
                 icon={Video}

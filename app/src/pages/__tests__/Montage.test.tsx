@@ -705,6 +705,28 @@ describe('Montage Page', () => {
     expect(screen.getByTestId('montage-monitor-1')).toHaveTextContent('Front Door');
   });
 
+  // The notice names the kebab's "Show monitors" list, and fullscreen renders
+  // its own thin toolbar with no kebab on it - so in fullscreen the notice
+  // pointed the user at a control that is not on screen (refs #337).
+  it('drops the all-hidden notice in fullscreen, where the menu it names does not exist', () => {
+    allMode([{ id: 'profile-1', name: 'Home' }], { montageIsFullscreen: true });
+    hiddenMonitorIds = ['profile-1:1'];
+    useScopedMonitorsMock.mockReturnValue({
+      monitors: [{ profileId: 'profile-1', profileName: 'Home', item: monitor('1', 'Front Door') }],
+      errors: [],
+      isLoading: false,
+      refetchProfile: vi.fn(),
+    });
+
+    render(<Montage />);
+
+    expect(screen.queryByTestId('montage-all-hidden')).not.toBeInTheDocument();
+    // Fullscreen really is on, so the assertion above is about the notice and
+    // not about a page that failed to render.
+    expect(screen.getByTestId('fullscreen-controls-stub')).toBeInTheDocument();
+    expect(screen.queryByTestId('montage-kebab-stub')).not.toBeInTheDocument();
+  });
+
   // A profile that genuinely has no monitors keeps the old empty state, with
   // no toolbar and nothing to un-hide.
   it('keeps the plain empty state when the server has no monitors at all', () => {
