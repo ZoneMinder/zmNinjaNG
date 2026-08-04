@@ -607,6 +607,51 @@ export const ALL_PROFILES_ID: ProfileId = asProfileId('__all_profiles__');
  */
 export const PROBE_PROFILE_ID: ProfileId = asProfileId('__probe__');
 
+/**
+ * Prefix every virtual-profile id carries. A virtual profile is a named group
+ * of real profiles that aggregates exactly like All Servers, scoped to its
+ * members; its id names no server either.
+ *
+ * The shape is deliberate. Service modules (services/pushNotifications.ts,
+ * stores/notifications.ts) have to answer "is this id an aggregate?" without
+ * reading the profile store, so the answer has to be derivable from the string
+ * alone - a plain UUID would force a store lookup, or a new gate, into four
+ * service modules. Refs #337.
+ */
+export const VIRTUAL_PROFILE_ID_PREFIX = '__virtual_';
+
+/**
+ * Mint an id for a new virtual profile. The only place a virtual id is
+ * created; every stored `VirtualProfile.id` traces back to this call.
+ */
+export function mintVirtualProfileId(): ProfileId {
+  return asProfileId(`${VIRTUAL_PROFILE_ID_PREFIX}${crypto.randomUUID()}`);
+}
+
+/** Whether `id` names a virtual profile (a stored group of real profiles). */
+export function isVirtualProfileId(id: string | null | undefined): boolean {
+  return typeof id === 'string' && id.startsWith(VIRTUAL_PROFILE_ID_PREFIX);
+}
+
+/**
+ * Whether `id` names any aggregate: the built-in All Servers sentinel or a
+ * virtual profile. Guards that must reject "no single server behind this id"
+ * ask this, not `=== ALL_PROFILES_ID`.
+ */
+export function isAggregateProfileId(id: string | null | undefined): boolean {
+  return id === ALL_PROFILES_ID || isVirtualProfileId(id);
+}
+
+/**
+ * A named group of real profiles. Membership is flat: `memberProfileIds` holds
+ * real profile ids only, never another virtual id.
+ */
+export interface VirtualProfile {
+  id: ProfileId;
+  name: string;
+  memberProfileIds: ProfileId[];
+}
+
 export interface Profile {
   id: ProfileId;
   name: string;

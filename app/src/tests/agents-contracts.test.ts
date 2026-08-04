@@ -247,10 +247,16 @@ describe('Sessions contract', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('the ALL_PROFILES_ID and PROBE_PROFILE_ID sentinels live only beside the brand', () => {
+  it('the profile-id sentinels and the virtual prefix live only beside the brand', () => {
+    // The virtual prefix joins the two sentinels here: it is the shape
+    // isVirtualProfileId/isAggregateProfileId test for, so a second copy of
+    // the literal is a second definition of what "aggregate" means. Callers
+    // import the helpers instead. Refs #337.
     const offenders = srcFiles().filter(
       (f) =>
-        (read(f).includes("'__all_profiles__'") || read(f).includes("'__probe__'")) &&
+        (read(f).includes("'__all_profiles__'") ||
+          read(f).includes("'__probe__'") ||
+          read(f).includes("'__virtual_'")) &&
         !f.endsWith('api/types.ts'),
     );
     expect(offenders).toEqual([]);
