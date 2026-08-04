@@ -23,7 +23,7 @@ increments by 2026-08-03 late evening. Wall-clock spans two calendar days
 including a maintainer sleep window, one host reboot, one network loss, and
 one relocation to a different LAN. Unit suite grew from ~3273 to ~3600
 tests; the lint ratchet ended BELOW where it started (exhaustive-deps
-37 to 35 among others) despite the volume.
+38 at the branch point down to 34 at close) despite the volume.
 
 ## How it was executed
 
@@ -147,10 +147,11 @@ have been to "fix" tests that were never broken by us.
    a genuinely new defect, and each new defect was created by the previous
    fix. That is not review churn — that is what concurrency changes cost.
 4. Review depth was uneven with model tier. Sonnet task reviews were good
-   at contracts and mechanics; the Opus whole-branch reviews found the
-   integration and concurrency defects sonnet passes missed (the socket
-   leak, the reschedule deadlock, the tz-naive buckets, the resident-cap
-   dwell bypass). Where I economized on the reviewer tier for
+   at contracts and mechanics; the Opus reviews found the integration and
+   concurrency defects sonnet passes missed (the socket leak, the
+   reschedule deadlock, the tz-naive buckets; the resident-cap dwell
+   bypass likewise came from an Opus TASK review, so the tier mattered
+   more than the scope). Where I economized on the reviewer tier for
    concurrency-heavy diffs, defects survived one extra round before the
    Opus pass caught them. The cost model should have keyed reviewer tier
    to diff RISK, not diff size, earlier than it did.
