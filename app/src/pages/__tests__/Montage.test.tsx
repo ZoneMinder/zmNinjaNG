@@ -157,6 +157,9 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string, params?: Record<string, unknown>) => {
       if (params?.count !== undefined) return `${key}-${params.count}`;
+      // Interpolated values are appended so a dropped one is visible in the
+      // assertion rather than silently rendering the bare key.
+      if (params?.label !== undefined) return `${key}-${params.label}`;
       return key;
     },
   }),
@@ -454,7 +457,7 @@ describe('Montage Page', () => {
     // No tiles, but the list that can bring them back is still on screen, and
     // the page says why the grid is empty.
     expect(screen.queryByTestId('montage-monitor-profile-1:1')).not.toBeInTheDocument();
-    expect(screen.getByTestId('montage-all-hidden')).toHaveTextContent('montage.all_hidden');
+    expect(screen.getByTestId('montage-all-hidden')).toHaveTextContent('montage.all_hidden-montage.menu_show_monitors');
     const entries = within(screen.getByTestId('montage-kebab-stub')).getAllByRole('button');
     expect(entries.map((el) => el.textContent)).toEqual([
       'Front Door (Home)',
@@ -489,7 +492,7 @@ describe('Montage Page', () => {
     const { rerender } = render(<Montage />);
 
     expect(screen.queryByTestId('montage-monitor-1')).not.toBeInTheDocument();
-    expect(screen.getByTestId('montage-all-hidden')).toHaveTextContent('montage.all_hidden');
+    expect(screen.getByTestId('montage-all-hidden')).toHaveTextContent('montage.all_hidden-montage.menu_show_monitors');
 
     fireEvent.click(screen.getByTestId('montage-kebab-item-1'));
     expect(updateMontageGroupLayoutMock).toHaveBeenCalledWith('profile-1', 'ALL', {

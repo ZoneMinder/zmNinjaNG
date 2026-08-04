@@ -681,7 +681,10 @@ export default function Montage() {
         >
           {cappedMonitors.length === 0 && (
             <div data-testid="montage-all-hidden">
-              <EmptyState icon={Video} title={t('montage.all_hidden')} />
+              <EmptyState
+                icon={Video}
+                title={t('montage.all_hidden', { label: t('montage.menu_show_monitors') })}
+              />
             </div>
           )}
           <MontageGridSections
