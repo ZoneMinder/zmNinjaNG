@@ -16,6 +16,7 @@ import { useState, useEffect, useRef } from 'react';
 import { getStreamUrl } from '../api/monitors';
 import { resolveMinStreamingPort } from '../lib/monitor/multiport';
 import { useProfileById } from './useCurrentProfile';
+import { useViewPrefs } from './useViewPrefs';
 import { useBandwidthSettings } from './useBandwidthSettings';
 import { useStreamLifecycle } from './useStreamLifecycle';
 import { useAnalysisFrames } from './useAnalysisFrames';
@@ -88,13 +89,17 @@ export function useMonitorStream({
   profileId,
 }: UseMonitorStreamOptions): UseMonitorStreamReturn {
   const { profile: currentProfile, settings } = useProfileById(profileId);
+  // Streaming Mode and analysis frames are view preferences, so the ALL
+  // bucket governs them while aggregating even though every other setting
+  // here still comes from the server that owns this monitor (refs #337).
+  const viewPrefs = useViewPrefs(profileId);
   const bandwidth = useBandwidthSettings();
   const { token: accessToken, isFresh: isAccessTokenFresh } = useFreshAccessToken(profileId);
   const { recordingUrl, portalPath } = useServerUrls(serverId, profileId);
   // portalUrl for stream lifecycle = portalPath without /index.php
   const resolvedPortalUrl = portalPath ? portalPath.replace(/\/index\.php$/, '') : currentProfile?.portalUrl;
 
-  const effectiveViewMode = viewModeOverride ?? settings.viewMode;
+  const effectiveViewMode = viewModeOverride ?? viewPrefs.viewMode;
   // Multi-port only applies in streaming mode, and only when not force-disabled.
   const effectiveMinStreamingPort =
     effectiveViewMode === 'streaming'
@@ -135,7 +140,7 @@ export function useMonitorStream({
     connKey,
     viewMode: effectiveViewMode,
     enabled,
-    showAnalysis: settings.showAnalysisFrames,
+    showAnalysis: viewPrefs.showAnalysisFrames,
     minStreamingPort: effectiveMinStreamingPort,
     apiTimeoutSeconds: settings.apiTimeoutSeconds,
   });

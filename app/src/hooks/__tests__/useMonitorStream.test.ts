@@ -13,7 +13,7 @@ import { useAuthStore } from '../../stores/auth';
 import { useSettingsStore, DEFAULT_SETTINGS } from '../../stores/settings';
 import { httpGet } from '../../lib/http';
 import type { Profile } from '../../api/types';
-import { asProfileId } from '../../api/types';
+import { asProfileId, ALL_PROFILES_ID } from '../../api/types';
 
 // Mock dependencies
 vi.mock('../../lib/http', () => ({
@@ -63,6 +63,8 @@ vi.mock('../../lib/zm/url-builder', () => ({
 vi.mock('../../lib/zm/zm-constants', () => ({
   ZMS_COMMANDS: {
     cmdQuit: 'quit',
+    cmdAnalyzeOn: 'analyzeOn',
+    cmdAnalyzeOff: 'analyzeOff',
   },
 }));
 
@@ -603,5 +605,120 @@ describe('useMonitorStream: explicit profileId (All mode)', () => {
     expect(result.current.streamUrl).toContain('token=token-a');
     expect(result.current.streamUrl).toContain('minStreamingPort=30000');
     expect(result.current.streamUrl).not.toContain('minStreamingPort=40000');
+  });
+});
+
+// Two-tier view preferences (refs #337): a tile streams under its owning
+// server's viewMode and analysis setting in single mode, but under the ALL
+// bucket's while aggregating, so one toolbar toggle governs every tile no
+// matter which server it came from.
+describe('useMonitorStream: view preferences resolve two-tier', () => {
+  const profileB: Profile = {
+    id: asProfileId('profile-b'),
+    name: 'Profile B',
+    apiUrl: 'https://b.example.com',
+    portalUrl: 'https://b.example.com',
+    cgiUrl: 'https://b.example.com/cgi-bin',
+    isDefault: false,
+    createdAt: Date.now(),
+  };
+
+  beforeEach(() => {
+    useProfileStore.setState({
+      profiles: [profileB],
+      currentProfileId: profileB.id,
+      isInitialized: true,
+      isBootstrapping: false,
+      bootstrapStep: null,
+    });
+
+    useAuthStore.setState({
+      slices: {
+        [profileB.id]: {
+          accessToken: 'token-b',
+          accessTokenExpires: Date.now() + 60 * 60 * 1000,
+          refreshToken: null,
+          refreshTokenExpires: null,
+          version: null,
+          apiVersion: null,
+          isAuthenticated: false,
+          requiresAuth: true,
+        },
+      },
+    });
+
+    // The owning server sits on streaming with analysis off; the ALL bucket
+    // is the opposite on both counts.
+    useSettingsStore.setState({
+      profileSettings: {
+        'profile-b': {
+          ...DEFAULT_SETTINGS,
+          viewMode: 'streaming',
+          showAnalysisFrames: false,
+        },
+        [ALL_PROFILES_ID]: {
+          ...DEFAULT_SETTINGS,
+          viewMode: 'snapshot',
+          showAnalysisFrames: true,
+        },
+      },
+    });
+
+    useMonitorStore.setState({
+      connKeys: {},
+      regenerateConnKey: vi.fn(() => 4242),
+    });
+
+    vi.clearAllMocks();
+  });
+
+  const renderTile = () =>
+    renderHook(() => useMonitorStream({ monitorId: '1', profileId: profileB.id }));
+
+  it('streams under the owning profile in single mode', async () => {
+    const { result } = renderTile();
+
+    await waitFor(() => expect(result.current.streamUrl).toBeTruthy());
+    expect(result.current.streamUrl).toContain('mode=jpeg');
+  });
+
+  it('sends no analysis command in single mode when the owner has it off', async () => {
+    const { result } = renderTile();
+    await waitFor(() => expect(result.current.streamUrl).toBeTruthy());
+
+    act(() => { result.current.reportStreamLoad(); });
+
+    expect(mockHttpGet).not.toHaveBeenCalledWith(
+      expect.stringContaining('command=analyzeOn'),
+      expect.anything(),
+    );
+  });
+
+  it("uses the ALL bucket's snapshot viewMode in All mode", async () => {
+    useProfileStore.setState({ currentProfileId: ALL_PROFILES_ID });
+
+    const { result } = renderTile();
+
+    await waitFor(() => expect(result.current.streamUrl).toBeTruthy());
+    expect(result.current.streamUrl).toContain('mode=single');
+  });
+
+  it("applies the ALL bucket's analysis setting to an owned tile in All mode", async () => {
+    useProfileStore.setState({ currentProfileId: ALL_PROFILES_ID });
+    // Analysis commands only reach a live streaming process, so keep the ALL
+    // bucket on streaming for this one.
+    useSettingsStore.getState().updateProfileSettings(ALL_PROFILES_ID, {
+      viewMode: 'streaming',
+    });
+
+    const { result } = renderTile();
+    await waitFor(() => expect(result.current.streamUrl).toBeTruthy());
+
+    act(() => { result.current.reportStreamLoad(); });
+
+    expect(mockHttpGet).toHaveBeenCalledWith(
+      expect.stringContaining('command=analyzeOn'),
+      expect.anything(),
+    );
   });
 });

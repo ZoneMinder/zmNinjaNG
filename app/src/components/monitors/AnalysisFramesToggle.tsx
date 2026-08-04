@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next';
 import { ScanEye } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
+import { useProfileStore } from '../../stores/profile';
 import { useSettingsStore } from '../../stores/settings';
 
 interface AnalysisFramesToggleProps {
@@ -30,7 +31,10 @@ interface AnalysisFramesToggleProps {
 
 export function AnalysisFramesToggle({ className, alwaysStreaming = false }: AnalysisFramesToggleProps) {
   const { t } = useTranslation();
-  const { currentProfile, settings } = useCurrentProfile();
+  const { settings } = useCurrentProfile();
+  // Write target: the real profile in single mode, the ALL bucket sentinel in
+  // All mode, matching the bucket `settings` above already reads (refs #337).
+  const currentProfileId = useProfileStore((state) => state.currentProfileId);
   const updateSettings = useSettingsStore((state) => state.updateProfileSettings);
 
   const unavailable = !alwaysStreaming && settings.viewMode === 'snapshot';
@@ -43,13 +47,13 @@ export function AnalysisFramesToggle({ className, alwaysStreaming = false }: Ana
       variant={isOn ? 'default' : 'outline'}
       size="icon"
       className={className}
-      disabled={unavailable || !currentProfile}
+      disabled={unavailable || !currentProfileId}
       aria-pressed={isOn}
       aria-label={label}
       title={title}
       onClick={() => {
-        if (!currentProfile) return;
-        updateSettings(currentProfile.id, { showAnalysisFrames: !isOn });
+        if (!currentProfileId) return;
+        updateSettings(currentProfileId, { showAnalysisFrames: !isOn });
       }}
       data-testid="analysis-frames-toggle"
     >
