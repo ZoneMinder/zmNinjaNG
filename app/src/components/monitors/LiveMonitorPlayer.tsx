@@ -20,6 +20,7 @@ import { useSettingsStore } from '../../stores/settings';
 import { monitorCacheKey } from '../../stores/monitors';
 import { useGo2RTCStream } from '../../hooks/useGo2RTCStream';
 import { useMonitorStream } from '../../hooks/useMonitorStream';
+import { tunedStreamOptions } from '../../lib/monitor/stream-tuning';
 import { useVisibilityResume } from '../../hooks/useVisibilityResume';
 import { log, LogLevel } from '../../lib/logger';
 import {
@@ -144,6 +145,14 @@ export interface LiveMonitorPlayerProps {
    * Defaults to false (montage tiles share the cache).
    */
   bypassGo2rtcFailureCache?: boolean;
+  /**
+   * Ask ZM for a cheaper MJPEG stream than the owning profile normally wants
+   * (All-mode "reduced" stream tuning, refs #337). The caller decides: the
+   * montage page sets it while aggregating, the monitor detail view and Live
+   * Activity never do. Off by default, and a no-op on the go2rtc/WebRTC path,
+   * which those parameters do not reach - see stream-tuning.ts.
+   */
+  reduceStream?: boolean;
 }
 
 export function LiveMonitorPlayer({
@@ -159,6 +168,7 @@ export function LiveMonitorPlayer({
   onProtocolChange,
   forceViewMode,
   bypassGo2rtcFailureCache = false,
+  reduceStream = false,
 }: LiveMonitorPlayerProps) {
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -470,10 +480,10 @@ export function LiveMonitorPlayer({
   const mjpegStream = useMonitorStream({
     monitorId: monitor.Id,
     serverId: monitor.ServerId,
-    streamOptions: {
-      maxfps: rawSettings?.streamMaxFps,
-      scale: rawSettings?.streamScale,
-    },
+    streamOptions: tunedStreamOptions(
+      { maxfps: rawSettings?.streamMaxFps, scale: rawSettings?.streamScale },
+      reduceStream,
+    ),
     enabled: effectiveStreamingMethod === 'mjpeg' || showMjpegPlaceholder,
     viewModeOverride: forceViewMode,
     profileId,

@@ -12,6 +12,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { LiveMonitorPlayer } from '../LiveMonitorPlayer';
+import { MONTAGE_GRID } from '../../../lib/zmninja-ng-constants';
 import type { Monitor, Profile } from '../../../api/types';
 
 let mockMjpegReturn: {
@@ -23,13 +24,20 @@ let mockMjpegReturn: {
   reportStreamLoad: () => void;
 };
 
+// Every set of stream options the player has asked for, so a test can assert
+// what this tile requests from ZM.
+const streamOptionsLog: Array<{ maxfps?: number; scale?: number }> = [];
+
 // A fresh object per call, the way the real hook does it: useMonitorStream
 // returns a bare object literal, so its result is a new reference on every
 // render. Returning the same object here hid a bug where a hook dependency on
 // that result re-ran an effect every render. imgRef is deliberately shared
 // across the copies, because the real hook's useRef object is stable.
 vi.mock('../../../hooks/useMonitorStream', () => ({
-  useMonitorStream: () => ({ ...mockMjpegReturn }),
+  useMonitorStream: (opts: { streamOptions?: { maxfps?: number; scale?: number } }) => {
+    streamOptionsLog.push(opts.streamOptions ?? {});
+    return { ...mockMjpegReturn };
+  },
 }));
 
 const go2rtc = vi.hoisted(() => ({
@@ -64,8 +72,12 @@ vi.mock('../../../lib/logger', () => ({
   LogLevel: { DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3 },
 }));
 
+// The owning profile's own stream preferences. Only the keys these tests vary
+// are set; every other read is optional-chained in the player.
+let mockSettings: { streamMaxFps?: number; streamScale?: number } | undefined;
+
 vi.mock('../../../stores/settings', () => ({
-  useSettingsStore: () => undefined,
+  useSettingsStore: () => mockSettings,
 }));
 
 const monitor = { Id: '1', Name: 'Front Door', Go2RTCEnabled: false } as unknown as Monitor;
@@ -261,5 +273,48 @@ describe('LiveMonitorPlayer Go2RTC failure cache scoping', () => {
     render(<LiveMonitorPlayer monitor={rtcMonitor} profile={profileB} />);
 
     expect(latestEnabled('cache-c')).toBe(true);
+  });
+});
+
+// refs #337: All Servers mode can ask every tile for a cheaper stream
+// (Settings > All Servers performance > stream tuning). The player is the
+// place that turns that into what ZM is actually asked for.
+describe('LiveMonitorPlayer reduced stream tuning', () => {
+  beforeEach(() => {
+    mockMjpegReturn = {
+      streamUrl: 'https://t/stream?connkey=1',
+      imageSrc: 'https://t/stream?connkey=1',
+      imgRef: { current: null },
+      regenerateConnection: vi.fn(),
+      reportStreamError: vi.fn(),
+      reportStreamLoad: vi.fn(),
+    };
+    mockSettings = { streamMaxFps: 10, streamScale: 50 };
+    streamOptionsLog.length = 0;
+  });
+
+  const latestOptions = () => streamOptionsLog[streamOptionsLog.length - 1];
+
+  it('asks for the owning profile\'s own frame rate and scale by default', () => {
+    render(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+
+    expect(latestOptions()).toEqual({ maxfps: 10, scale: 50 });
+  });
+
+  it('asks for less when the tile is told to reduce', () => {
+    render(<LiveMonitorPlayer monitor={monitor} profile={profile} reduceStream />);
+
+    expect(latestOptions()).toEqual({
+      maxfps: MONTAGE_GRID.reducedMaxFps,
+      scale: MONTAGE_GRID.reducedScale,
+    });
+  });
+
+  it('keeps a profile already streaming below the ceiling where it is', () => {
+    mockSettings = { streamMaxFps: 2, streamScale: 10 };
+
+    render(<LiveMonitorPlayer monitor={monitor} profile={profile} reduceStream />);
+
+    expect(latestOptions()).toEqual({ maxfps: 2, scale: 10 });
   });
 });

@@ -1012,6 +1012,16 @@ export const MONTAGE_GRID = {
   // once (refs #337, Phase 4 Task 1). The DEFAULT for the editable
   // `allModeMaxStreams` setting, which is what the page reads.
   allModeMaxStreams: 16,
+
+  // What a montage tile asks ZM for while All-mode stream tuning is set to
+  // "reduced" (`allModeStreamTuning`). Both are ceilings, never floors: a
+  // server the user has already throttled below them keeps its own values, so
+  // reducing never turns into raising. Frames per second, and scale as the
+  // percentage ZMS crops the image to - a quarter-size tile is a sixteenth of
+  // the pixels the server has to encode and the client has to decode, which is
+  // where the saving on a wall of cameras actually comes from.
+  reducedMaxFps: 5,
+  reducedScale: 25,
 } as const;
 
 /**

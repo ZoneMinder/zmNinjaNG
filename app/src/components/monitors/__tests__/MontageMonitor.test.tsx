@@ -71,7 +71,13 @@ vi.mock('../../../lib/monitor/monitor-rotation', () => ({
 }));
 
 vi.mock('../LiveMonitorPlayer', () => ({
-  LiveMonitorPlayer: () => <div data-testid="video-player">Mock LiveMonitorPlayer</div>,
+  // The reduce flag is reflected back so a test can assert the tile forwards
+  // what the page decided about stream tuning.
+  LiveMonitorPlayer: ({ reduceStream }: { reduceStream?: boolean }) => (
+    <div data-testid="video-player" data-reduce-stream={String(reduceStream ?? false)}>
+      Mock LiveMonitorPlayer
+    </div>
+  ),
 }));
 
 vi.mock('../../../hooks/useServerUrls', () => ({
@@ -173,6 +179,35 @@ describe('MontageMonitor', () => {
     await waitFor(() => {
       expect(screen.getByText('Front Door')).toBeInTheDocument();
     });
+  });
+
+  it('streams at full quality unless the page asks for reduced tuning', () => {
+    render(
+      <MontageMonitor
+        monitor={mockMonitor}
+        status={mockStatus}
+        currentProfile={mockProfile}
+        accessToken="test-token"
+        navigate={mockNavigate}
+      />
+    );
+
+    expect(screen.getByTestId('video-player')).toHaveAttribute('data-reduce-stream', 'false');
+  });
+
+  it('passes the reduced-tuning decision down to the player', () => {
+    render(
+      <MontageMonitor
+        monitor={mockMonitor}
+        status={mockStatus}
+        currentProfile={mockProfile}
+        accessToken="test-token"
+        navigate={mockNavigate}
+        reduceStream
+      />
+    );
+
+    expect(screen.getByTestId('video-player')).toHaveAttribute('data-reduce-stream', 'true');
   });
 
   it('sizes the video area from the ratio it is given, header on top', () => {

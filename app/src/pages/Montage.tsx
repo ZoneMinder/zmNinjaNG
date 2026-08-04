@@ -209,6 +209,11 @@ export default function Montage() {
     [overflowCount, visibleMonitors, maxStreams]
   );
 
+  // Reduced stream tuning (refs #337): another ALL-bucket knob, so it is read
+  // inside the isAllMode branch for the same reason the cap is - a single
+  // profile carries the same key and must never be throttled by it.
+  const reduceStream = isAllMode && settings.allModeStreamTuning === 'reduced';
+
   // useMonitorNewEvents stays current-profile-scoped for single mode; All mode
   // fans the equivalent query out per owning profile (Monitors.tsx precedent).
   const monitorIds = useMemo(
@@ -692,6 +697,7 @@ export default function Montage() {
             resolveOwnerProfile={resolveOwnerProfile}
             resolveNewEventCount={resolveNewEventCount}
             resolveNewestEventAt={resolveNewestEventAt}
+            reduceStream={reduceStream}
           />
         </div>
       </div>

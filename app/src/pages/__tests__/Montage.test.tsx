@@ -137,13 +137,18 @@ vi.mock('../../components/monitors/MontageMonitor', () => ({
   MontageMonitor: ({
     monitor,
     profileChip,
+    reduceStream,
   }: {
     monitor: { Id: string; Name: string };
     profileChip?: string;
+    reduceStream?: boolean;
   }) => (
     <div>
       {monitor.Name}
       {profileChip && <span data-testid="montage-profile-chip">{profileChip}</span>}
+      {/* Attribute rather than text: every tile renders this and the text
+          would land in the name assertions above. */}
+      <span data-testid="montage-tile-tuning" data-reduce-stream={String(reduceStream ?? false)} />
     </div>
   ),
 }));
@@ -788,6 +793,56 @@ describe('Montage Page', () => {
     expect(screen.getByTestId('montage-stream-cap-overflow')).toHaveTextContent(
       'montage.stream_cap_overflow-18'
     );
+  });
+
+  it('tells its tiles to reduce when All mode asks for reduced stream tuning', () => {
+    allMode([{ id: 'profile-1', name: 'Home' }], { allModeStreamTuning: 'reduced' });
+    useScopedMonitorsMock.mockReturnValue({
+      monitors: [{ profileId: 'profile-1', profileName: 'Home', item: monitor('1', 'Front Door') }],
+      errors: [],
+      isLoading: false,
+      refetchProfile: vi.fn(),
+    });
+
+    render(<Montage />);
+
+    expect(screen.getByTestId('montage-tile-tuning')).toHaveAttribute('data-reduce-stream', 'true');
+  });
+
+  it('leaves tiles at full quality when All-mode tuning is off', () => {
+    allMode([{ id: 'profile-1', name: 'Home' }], { allModeStreamTuning: 'off' });
+    useScopedMonitorsMock.mockReturnValue({
+      monitors: [{ profileId: 'profile-1', profileName: 'Home', item: monitor('1', 'Front Door') }],
+      errors: [],
+      isLoading: false,
+      refetchProfile: vi.fn(),
+    });
+
+    render(<Montage />);
+
+    expect(screen.getByTestId('montage-tile-tuning')).toHaveAttribute('data-reduce-stream', 'false');
+  });
+
+  it('never reduces in single mode, whatever the ALL bucket says', () => {
+    // The knob lives in the ALL bucket, but a single profile's own settings
+    // carry the same key. Reading it outside All mode would throttle a server
+    // the user never asked to throttle.
+    singleProfile();
+    useCurrentProfileMock.mockReturnValue({
+      currentProfile: { id: 'profile-1', name: 'Home' },
+      settings: { ...SETTINGS, allModeStreamTuning: 'reduced' },
+      isAllMode: false,
+    });
+    useScopedMonitorsMock.mockReturnValue({
+      monitors: [{ profileId: 'profile-1', profileName: 'Home', item: monitor('1', 'Front Door') }],
+      errors: [],
+      isLoading: false,
+      refetchProfile: vi.fn(),
+    });
+
+    render(<Montage />);
+
+    expect(screen.getByTestId('montage-tile-tuning')).toHaveAttribute('data-reduce-stream', 'false');
   });
 
   it('splits the stream budget across servers instead of letting the first one eat it', () => {

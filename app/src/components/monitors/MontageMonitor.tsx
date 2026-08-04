@@ -102,6 +102,13 @@ interface MontageMonitorProps {
    * before any other page reused them (refs #313).
    */
   fromRoute?: string;
+  /**
+   * Ask ZM for a cheaper stream for this tile (All-mode "reduced" stream
+   * tuning, refs #337). Decided by the page - Montage sets it while
+   * aggregating, Live Activity does not - and forwarded untouched to the
+   * player, which is where it turns into stream parameters.
+   */
+  reduceStream?: boolean;
 }
 
 function MontageMonitorComponent({
@@ -124,6 +131,7 @@ function MontageMonitorComponent({
   titleIcon,
   mediaAspectRatio,
   fromRoute = '/montage',
+  reduceStream = false,
 }: MontageMonitorProps) {
   const { t } = useTranslation();
   const zmVersion = useAuthSlice(currentProfile?.id ?? null).version;
@@ -372,6 +380,7 @@ function MontageMonitorComponent({
           muted={isMuted}
           className="w-full h-full"
           onProtocolChange={setProtocol}
+          reduceStream={reduceStream}
         />
         {settings.montageShowToolbar && settings.showProtocolLabel && (
           <span className="absolute bottom-1.5 right-1.5 z-30 text-[10px] px-1.5 py-0.5 rounded bg-black/50 text-white/90 font-medium pointer-events-none">
