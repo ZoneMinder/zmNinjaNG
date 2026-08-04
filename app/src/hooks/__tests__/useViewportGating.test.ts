@@ -112,6 +112,18 @@ describe('useViewportGating', () => {
     expect(result.current.isTileGated('p2:1')).toBe(true);
   });
 
+  it('gates before the scroll container it will observe against exists', () => {
+    // The root arrives from a ref, so it is null on the first render. Waiting
+    // for it would render every tile ungated once, and a tile rendered ungated
+    // has already minted a connkey for the next render to quit.
+    const { result } = renderHook(() =>
+      useViewportGating({ enabled: true, root: null, rootMargin: ROOT_MARGIN, lingerMs: LINGER_MS })
+    );
+
+    expect(result.current.isTileGated('p1:1')).toBe(true);
+    expect(MockIntersectionObserver.instances).toHaveLength(0);
+  });
+
   it('gates nothing while switched off, and observes nothing either', () => {
     const { result } = setup(false);
     attach(result, 'p1:1');

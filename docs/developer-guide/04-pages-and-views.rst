@@ -512,7 +512,11 @@ view reports itself.
 Two asymmetries are deliberate. A tile nobody has measured yet counts as
 gated, because assuming the opposite mints a connkey for every off-screen
 tile on mount and quits it a frame later, which is the expensive half of a
-teardown for no streaming at all. And entering view connects at once while
+teardown for no streaming at all. That includes the first render, before the
+root exists: the root arrives from a ref, so waiting for it would render
+every tile ungated once and pay exactly that cost on every cold start, which
+is why gating is switched on by the setting alone and only the observer's
+construction waits for the element. And entering view connects at once while
 leaving it disconnects only after ``MONTAGE_GRID.viewportGatingLingerMs``, so
 scrolling down a tall montage does not quit and remint a key for every tile
 it passes. The gated tile takes the same ``paused`` prop the hidden pause

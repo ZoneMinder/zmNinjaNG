@@ -155,6 +155,12 @@ vi.mock('../../components/montage', async (importOriginal) => {
   };
 });
 
+// Every `paused` a tile has been rendered with, in order. The DOM only ever
+// shows the latest one, and "was this tile ever rendered streaming" is a
+// question about the renders in between: a tile that mounts unpaused has
+// already minted a connkey by the time a later render pauses it.
+const pausedRenders: boolean[] = [];
+
 vi.mock('../../components/monitors/MontageMonitor', () => ({
   MontageMonitor: ({
     monitor,
@@ -168,20 +174,23 @@ vi.mock('../../components/monitors/MontageMonitor', () => ({
     reduceStream?: boolean;
     paused?: boolean;
     forceViewMode?: string;
-  }) => (
-    <div>
-      {monitor.Name}
-      {profileChip && <span data-testid="montage-profile-chip">{profileChip}</span>}
-      {/* Attribute rather than text: every tile renders this and the text
-          would land in the name assertions above. */}
-      <span
-        data-testid="montage-tile-tuning"
-        data-reduce-stream={String(reduceStream ?? false)}
-        data-paused={String(paused ?? false)}
-        data-force-view-mode={forceViewMode ?? 'none'}
-      />
-    </div>
-  ),
+  }) => {
+    pausedRenders.push(paused ?? false);
+    return (
+      <div>
+        {monitor.Name}
+        {profileChip && <span data-testid="montage-profile-chip">{profileChip}</span>}
+        {/* Attribute rather than text: every tile renders this and the text
+            would land in the name assertions above. */}
+        <span
+          data-testid="montage-tile-tuning"
+          data-reduce-stream={String(reduceStream ?? false)}
+          data-paused={String(paused ?? false)}
+          data-force-view-mode={forceViewMode ?? 'none'}
+        />
+      </div>
+    );
+  },
 }));
 
 // Its own tests cover the toggle (including how it resolves the page's
@@ -303,6 +312,7 @@ const monitor = (id: string, name: string, sequence?: string) => ({
 describe('Montage Page', () => {
   beforeEach(() => {
     hiddenMonitorIds = [];
+    pausedRenders.length = 0;
     updateMontageGroupLayoutMock.mockClear();
     updateProfileSettingsMock.mockClear();
     useScopedMonitorsMock.mockReset();
@@ -1011,6 +1021,26 @@ describe('Montage Page', () => {
       report(true);
 
       expect(paused()).toBe('false');
+    });
+
+    it('never renders a tile streaming before the observer has placed it', () => {
+      // The DOM assertion above only sees the settled state, and the cost this
+      // feature exists to avoid is paid in the renders before that: a tile
+      // rendered unpaused even once has already minted a connkey, which the
+      // next render's gate then quits. Every render's `paused` is recorded, so
+      // a single unpaused one fails here.
+      allMode([{ id: 'profile-1', name: 'Home' }], { allModeViewportGating: true });
+      oneMonitor();
+
+      render(<Montage />);
+
+      expect(pausedRenders.length).toBeGreaterThan(0);
+      expect(pausedRenders).not.toContain(false);
+
+      // And the recorder does see the other answer, so the assertion above is
+      // not passing because nothing was ever recorded.
+      report(true);
+      expect(pausedRenders).toContain(false);
     });
 
     it('stops a tile that scrolled out, but only after the linger', () => {

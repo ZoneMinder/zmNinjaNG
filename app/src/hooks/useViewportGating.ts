@@ -93,7 +93,16 @@ export function useViewportGating({
     [cancelLeave]
   );
 
-  const active = enabled && !!root && typeof IntersectionObserver !== 'undefined';
+  // Deliberately NOT gated on `root`. The root arrives from a ref, so it is
+  // null for the first render, and a tile that renders ungated even once has
+  // already minted a connkey - which the next render, once the root lands,
+  // immediately quits. That mint-and-quit on every cold start is most of what
+  // this feature exists to avoid. Gating from the first render costs nothing
+  // in return: the scroll container is rendered unconditionally alongside the
+  // tiles, so the root lands in that same first commit and the observer is
+  // built before anything could have streamed. The effect below still guards
+  // on it, since an observer needs a real element to root on.
+  const active = enabled && typeof IntersectionObserver !== 'undefined';
 
   useEffect(() => {
     if (!active || !root) return;
