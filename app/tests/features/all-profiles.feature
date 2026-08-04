@@ -145,6 +145,25 @@ Feature: All Servers mode
     And event montage tiles should render with no gate notice
 
   @web
+  Scenario: Events filters persist in All mode across a reload
+    When I navigate to the "Profiles" page
+    And I click the All Servers profile card
+    When I navigate to the "Events" page
+    And I open the events filter panel
+    And I enable favorites only filter
+    And I close the events filter panel
+    When I reload the current page
+    And I open the events filter panel
+    Then the favorites-only filter should be "on"
+    # Turning it back off both proves the cleared state persists and leaves the
+    # All Servers settings bucket as the rest of the suite expects it.
+    When I disable favorites only filter
+    And I close the events filter panel
+    And I reload the current page
+    And I open the events filter panel
+    Then the favorites-only filter should be "off"
+
+  @web
   Scenario: Live Activity renders in All mode with no gate notice and an aggregated watch count
     When I navigate to the "Live Activity" page
     Then I record the single-profile Live Activity watched count

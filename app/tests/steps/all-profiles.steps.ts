@@ -584,3 +584,15 @@ Then('the All Servers streaming mode should be {string}', async ({ page }, label
     timeout: testConfig.timeouts.element,
   });
 });
+
+// Events filter persistence in All mode (refs #337). The filter hooks write
+// the ALL settings bucket, which is only observable as the control coming
+// back set after a reload - in All mode there is no current profile whose
+// bucket could have held it instead.
+Then('the favorites-only filter should be {string}', async ({ page }, state: string) => {
+  await expect(page.getByTestId('events-favorites-toggle')).toHaveAttribute(
+    'aria-checked',
+    state === 'on' ? 'true' : 'false',
+    { timeout: testConfig.timeouts.element },
+  );
+});
