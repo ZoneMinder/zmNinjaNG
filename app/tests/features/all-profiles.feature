@@ -294,3 +294,27 @@ Feature: All Servers mode
     And I disable the "Disabled" profile
     When I navigate to the "Monitors" page
     Then the monitor card count should be double the recorded single-profile count
+
+  # Whether a tile can be scrolled far enough out to be gated depends on how
+  # many monitors the server has and how tall the window is, so this asserts
+  # the half that does not: with off-screen pausing on, a tile in view still
+  # streams. Every way the observer can fail to report - a ref the grid never
+  # calls, a callback identity that churns - leaves the tile gated and this
+  # scenario red, and both of those shipped once. Which tile goes quiet when
+  # is covered in Montage.test.tsx, where positions are reported rather than
+  # produced by a real layout.
+  @web
+  Scenario: All Servers montage keeps streaming the tiles in view with off-screen pausing on
+    When I navigate to the "Profiles" page
+    And I click the All Servers profile card
+    When I navigate to the "Settings" page
+    And I turn All Servers off-screen tile pausing "on"
+    When I navigate to the "Montage" page
+    Then I should see at least 2 monitor in montage grid
+    And the first montage tile should be streaming
+    # Leaves the shared ALL bucket as the rest of the suite expects it, the
+    # same way the stream-cap scenario resets its knob.
+    When I navigate to the "Settings" page
+    And I turn All Servers off-screen tile pausing "off"
+    Then All Servers off-screen tile pausing should be "off"
+

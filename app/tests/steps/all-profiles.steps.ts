@@ -728,3 +728,30 @@ Then('the monitor detail page should show the recorded monitor', async ({ page }
     timeout: testConfig.timeouts.pageLoad,
   });
 });
+
+// Viewport gating (refs #337). A gated tile holds no connection, so it has no
+// <img>: asserting one is present asserts the observer reported the tile in
+// view and the page acted on it.
+When('I turn All Servers off-screen tile pausing {string}', async ({ page }, state: string) => {
+  const toggle = page.getByTestId('all-mode-viewport-gating-switch');
+  await expect(toggle).toBeVisible({ timeout: testConfig.timeouts.element });
+  const wanted = state === 'on' ? 'checked' : 'unchecked';
+  if ((await toggle.getAttribute('data-state')) !== wanted) await toggle.click();
+  await expect(toggle).toHaveAttribute('data-state', wanted, {
+    timeout: testConfig.timeouts.element,
+  });
+});
+
+Then('All Servers off-screen tile pausing should be {string}', async ({ page }, state: string) => {
+  await expect(page.getByTestId('all-mode-viewport-gating-switch')).toHaveAttribute(
+    'data-state',
+    state === 'on' ? 'checked' : 'unchecked',
+    { timeout: testConfig.timeouts.element }
+  );
+});
+
+Then('the first montage tile should be streaming', async ({ page }) => {
+  await expect(
+    page.locator(MONTAGE_TILES).first().locator('[data-testid="video-player-mjpeg"]')
+  ).toHaveCount(1, { timeout: testConfig.timeouts.pageLoad });
+});
