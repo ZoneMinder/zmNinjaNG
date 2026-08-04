@@ -14,7 +14,7 @@ import { useProfileStore } from '../../stores/profile';
 import { useSettingsStore } from '../../stores/settings';
 import { Button } from '../ui/button';
 import { log, LogLevel } from '../../lib/logger';
-import { viewNameForPath } from '../../lib/navigation';
+import { viewNameForPath, resolveLastRouteSaveTarget } from '../../lib/navigation';
 import { useInsomnia } from '../../hooks/useInsomnia';
 import {
   Menu,
@@ -87,9 +87,11 @@ export default function AppLayout() {
     });
   }, [profileId, settings.tvMode, updateProfileSettings]);
 
-  // Track route changes and save to settings
+  // Track route changes and save to settings. Gated on `scope` (resolves in
+  // both single and All mode), not `currentProfile?.id` (null in All mode):
+  // the banner log used to never fire there either.
   useEffect(() => {
-    if (!currentProfile?.id) return;
+    if (!scope) return;
 
     // Bold banner so view transitions are easy to spot in the console
     const viewName = viewNameForPath(location.pathname);
@@ -97,16 +99,23 @@ export default function AppLayout() {
       log.banner(`Entering ${viewName} View`);
     }
 
-    // Exclude setup/profile routes and notification-opened pages from being saved as lastRoute
-    const excludedRoutes = ['/profiles/new', '/setup', '/profiles'];
+    // resolveLastRouteSaveTarget excludes setup/profile routes and
+    // notification-opened pages, and saves to the ALL bucket in All mode
+    // rather than being silently dropped (refs #337) - see its own doc
+    // comment.
     const fromNotification = (location.state as Record<string, unknown>)?.fromNotification === true;
-    const shouldSave = !excludedRoutes.includes(location.pathname) && !fromNotification;
+    const saveTarget = resolveLastRouteSaveTarget(
+      location.pathname,
+      fromNotification,
+      scope.mode === 'all',
+      currentProfile?.id
+    );
 
-    if (shouldSave) {
-      updateProfileSettings(currentProfile.id, { lastRoute: location.pathname });
-      log.app('Storing route', LogLevel.DEBUG, { route: location.pathname });
+    if (saveTarget) {
+      updateProfileSettings(saveTarget, { lastRoute: location.pathname });
+      log.app('Storing route', LogLevel.DEBUG, { route: location.pathname, bucket: saveTarget });
     }
-  }, [location.pathname, currentProfile?.id, updateProfileSettings]);
+  }, [location.pathname, location.state, scope, currentProfile?.id, updateProfileSettings]);
 
   // Apply global insomnia setting
   useInsomnia({ enabled: settings.insomnia });

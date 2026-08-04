@@ -6,6 +6,7 @@
  */
 
 import { log, LogLevel } from './logger';
+import { ALL_PROFILES_ID, type ProfileId } from '../api/types';
 
 export interface NavigationState {
   from?: string;
@@ -124,4 +125,28 @@ export function viewNameForPath(pathname: string): string | null {
   if (/^\/all\/events\/[^/]+\/[^/]+$/.test(path)) return 'Event Detail';
 
   return null;
+}
+
+/**
+ * Which settings bucket (if any) AppLayout's route-memory effect should save
+ * `pathname` into, so the app reopens on the last page visited.
+ *
+ * All mode saves to the shared ALL bucket rather than being silently
+ * dropped: `currentProfile` is null there (useCurrentProfile resolves it to
+ * null for the ALL_PROFILES_ID sentinel), so a guard keyed off
+ * `currentProfile?.id` never fired and no page was ever remembered while
+ * aggregating (refs #337). Returns null - meaning "don't save" - for the
+ * setup/profile routes, a notification-opened page, or when there is
+ * genuinely no profile selected yet.
+ */
+export function resolveLastRouteSaveTarget(
+  pathname: string,
+  fromNotification: boolean,
+  isAllMode: boolean,
+  currentProfileId: ProfileId | undefined
+): ProfileId | null {
+  const excludedRoutes = ['/profiles/new', '/setup', '/profiles'];
+  if (excludedRoutes.includes(pathname) || fromNotification) return null;
+  if (isAllMode) return ALL_PROFILES_ID;
+  return currentProfileId ?? null;
 }
