@@ -62,7 +62,7 @@ Gate: `app/src/tests/agents-contracts.test.ts`; review; subscription changes nee
 ### Aggregation (All Servers mode)
 Owns: surfaces fanning out over multiple profiles.
 Path: scope from `useProfileScope` only (filters disabled profiles; single mode is a one-element array); fan out via `useQueries` with `combine` (`useScopedMonitors` is the template); aggregate-keyed state uses `monitorCacheKey` composites, raw ZM ids collide across servers; stagger via `staggeredRefetchInterval`.
-Never: bare monitor/event ids as aggregate keys; `getCurrentSession` where the ALL sentinel can be current; data prefs read from the ALL bucket.
+Never: bare monitor/event ids as aggregate keys; `getCurrentSession` where the ALL sentinel can be current; server-scoped prefs read from the ALL bucket.
 Gate: review; mechanizing the Never checks is a tracked follow-up.
 
 ### Notifications
