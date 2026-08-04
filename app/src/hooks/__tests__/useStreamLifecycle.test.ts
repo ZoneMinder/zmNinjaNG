@@ -32,10 +32,28 @@ vi.mock('../../lib/http', () => ({
   httpGet: (...args: unknown[]) => mockHttpGet(...args),
 }));
 
-// Mock url-builder
+// Mock url-builder. The port math mirrors applyMultiPort in the real builder
+// (monitor N's ZMS traffic lives on minStreamingPort + N), because that is
+// what decides whether a CMD_QUIT reaches the process it is meant to kill: on
+// a multi-port install the portal's default port answers, reports success, and
+// leaves the stream running. A mock that dropped the options argument would
+// let that failure through while still counting the request.
 vi.mock('../../lib/zm/url-builder', () => ({
-  getZmsControlUrl: (portalUrl: string, command: string, connkey: string) =>
-    `${portalUrl}/control?command=${command}&connkey=${connkey}`,
+  getZmsControlUrl: (
+    portalUrl: string,
+    command: string,
+    connkey: string,
+    options: { minStreamingPort?: number; monitorId?: string } = {},
+  ) => {
+    const url = new URL(`${portalUrl}/control`);
+    url.searchParams.set('command', command);
+    url.searchParams.set('connkey', connkey);
+    const monitorIdNum = parseInt(options.monitorId ?? '', 10);
+    if (options.minStreamingPort && !isNaN(monitorIdNum)) {
+      url.port = String(options.minStreamingPort + monitorIdNum);
+    }
+    return url.toString();
+  },
 }));
 
 // Mock ZMS constants
@@ -895,6 +913,47 @@ describe('useStreamLifecycle', () => {
       expect(mockHttpGet).toHaveBeenCalledTimes(1);
     });
 
+    it('quits a multi-port stream on the port it was opened on', async () => {
+      // useMonitorStream computes minStreamingPort from the view mode, so a
+      // flip to snapshot drops it to undefined in the same commit as the flip.
+      // The key being quit was opened on the streaming port, and a CMD_QUIT to
+      // the portal's default port is answered by a server that knows nothing
+      // about it: the request succeeds, the log says the stream was closed,
+      // and the nph-zms process keeps running.
+      const mediaRef = makeMediaRef();
+      const { result, rerender } = renderHook(
+        ({ viewMode }: { viewMode: 'streaming' | 'snapshot' }) =>
+          useStreamLifecycle({
+            ...baseOptions,
+            mediaRef,
+            viewMode,
+            minStreamingPort: viewMode === 'streaming' ? 30000 : undefined,
+          }),
+        { initialProps: { viewMode: 'streaming' as 'streaming' | 'snapshot' } },
+      );
+
+      await waitFor(() => {
+        expect(result.current.connKey).not.toBe(0);
+      });
+      const streamingKey = result.current.connKey;
+      mockHttpGet.mockClear();
+
+      rerender({ viewMode: 'snapshot' });
+
+      // Monitor 1 on a base of 30000 streams from port 30001.
+      await waitFor(() => {
+        expect(mockHttpGet).toHaveBeenCalledWith(
+          expect.stringContaining(`:30001/`),
+          expect.objectContaining({ timeoutMs: 12000 }),
+        );
+      });
+      expect(mockHttpGet).toHaveBeenCalledWith(
+        expect.stringContaining(`connkey=${streamingKey}`),
+        expect.objectContaining({ timeoutMs: 12000 }),
+      );
+      expect(mockHttpGet).toHaveBeenCalledTimes(1);
+    });
+
     it('mints a fresh key for snapshot mode rather than reusing the quit one', async () => {
       const mediaRef = makeMediaRef();
       const { result, rerender } = renderHook(
@@ -1027,8 +1086,30 @@ describe('useStreamLifecycle', () => {
 
       await act(async () => {});
       expect(mockHttpGet).not.toHaveBeenCalled();
-      expect(result.current.connKey).toBe(firstKey);
       expect(quitCountFor(firstKey)).toBe(0);
+    });
+
+    it('mints nothing when a flip lands with a monitor change', async () => {
+      // Separate from the quit assertion above so both halves of the stand-down
+      // are pinned: a mint here would hand the tile a key for monitor 2 while
+      // monitor 1's stream is still open and unowned.
+      const mediaRef = makeMediaRef();
+      const { result, rerender } = renderHook(
+        ({ monitorId, viewMode }: { monitorId: string; viewMode: 'streaming' | 'snapshot' }) =>
+          useStreamLifecycle({ ...baseOptions, mediaRef, monitorId, viewMode }),
+        { initialProps: { monitorId: '1', viewMode: 'streaming' as 'streaming' | 'snapshot' } },
+      );
+
+      await waitFor(() => {
+        expect(result.current.connKey).not.toBe(0);
+      });
+      const firstKey = result.current.connKey;
+
+      rerender({ monitorId: '2', viewMode: 'snapshot' });
+      await act(async () => {});
+
+      expect(mockRegenerateConnKey).toHaveBeenCalledTimes(1);
+      expect(result.current.connKey).toBe(firstKey);
     });
 
     it('sends nothing when a disabled hook changes view mode', async () => {

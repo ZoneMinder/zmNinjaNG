@@ -1191,9 +1191,15 @@ tile dropped to snapshots left a running ``nph-zms`` process behind until ZM's
 own idle timeout. The Streaming Mode setting reaches that transition, and so
 does the All-mode idle downgrade. Both directions of the flip then mint a
 fresh key, because a snapshot URL carries a connkey too and reusing a quit one
-risks colliding with the state it left on the server. A flip that arrives in
-the same commit as a monitor change or an ``enabled`` change belongs to the
-regeneration or disable teardown instead, and this path stands down.
+risks colliding with the state it left on the server. A flip arriving in the same commit as an ``enabled`` change belongs to the
+disable teardown, and one arriving with a monitor change has no correct move
+available: the key it holds was opened against the previous monitor's URL and
+port, while every prop now describes the new one. It stands down in both
+cases. The monitor-change path is a pre-existing gap rather than a delegation
+(the regeneration effect returns early on a live hook, so it does not mint for
+the new monitor either), and it is unreachable from the app today because
+every call site that swaps monitors remounts the player instead, keyed by
+monitor id (refs #201).
 
 ``useMonitorStream`` builds the retry behavior on top: ``reportStreamError``
 (wired to ``<img onError>``) schedules an exponential-backoff reconnect

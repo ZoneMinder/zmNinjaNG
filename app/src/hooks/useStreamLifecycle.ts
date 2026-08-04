@@ -214,6 +214,15 @@ export function useStreamLifecycle({
 
     // If we already have a connKey for this monitor, don't regenerate
     // (only regenerate when first enabled or monitor changes)
+    //
+    // Despite that second line, a monitorId change on a live hook returns here
+    // rather than minting for the new monitor, and the old monitor's key is
+    // left for the unmount path to quit against whatever the props say by
+    // then. Nothing in the app reaches it: every call site that swaps monitors
+    // remounts the player instead, keyed by monitor id, which was itself the
+    // fix for the feed lagging a monitor behind (see MonitorDetail's `key=`
+    // comment, refs #201). Left alone deliberately - changing it would move a
+    // teardown that the keyed remount already handles.
     if (connKey !== 0 && !isInitialMountRef.current) return;
 
     // Send CMD_QUIT for previous connKey before generating new one (skip on initial mount)
@@ -312,27 +321,47 @@ export function useStreamLifecycle({
   // Both directions then mint a fresh key. The new mode needs one (a snapshot
   // URL carries a connkey too), and reusing the quit key risks colliding with
   // whatever server-side state it left behind.
-  const prevStreamIdentityRef = useRef({ viewMode, monitorId, enabled });
+  const prevStreamIdentityRef = useRef({ viewMode, monitorId, enabled, minStreamingPort });
   useEffect(() => {
     const prev = prevStreamIdentityRef.current;
-    prevStreamIdentityRef.current = { viewMode, monitorId, enabled };
+    prevStreamIdentityRef.current = { viewMode, monitorId, enabled, minStreamingPort };
     if (prev.viewMode === viewMode) return;
     // Only a mode flip on an otherwise unchanged stream is this effect's to
-    // handle. When the monitor or the enabled flag moved in the same commit,
-    // the key held here belongs to a stream another teardown owns (or to a
-    // monitor whose URL and port are no longer what the props say), and acting
-    // on it would quit the wrong stream or start a second one.
+    // handle. When the enabled flag moved in the same commit, the disable
+    // teardown or the regeneration effect already owns that key. When the
+    // monitor moved, the key held here was opened against the previous
+    // monitor's URL and port while every prop now describes the new one, so
+    // there is nothing here that could quit it correctly; standing down at
+    // least avoids quitting the wrong monitor's stream. That leaves the old
+    // key to the unmount path, which is a pre-existing gap in the monitor-
+    // change path (the regeneration effect below returns early on a live hook
+    // and never mints for the new monitor either). It is unreachable from the
+    // app today because every call site that swaps monitors remounts instead,
+    // via a keyed element - see MonitorDetail's `key=` comment and refs #201.
+    //
+    // minStreamingPort is deliberately NOT part of this comparison: it is
+    // derived from the view mode, so it changes BECAUSE of the flip.
     if (prev.monitorId !== monitorId || prev.enabled !== enabled) return;
     // A disabled hook owns no stream: the disable teardown already quit its key
     // and re-enabling mints a fresh one, so there is nothing to do here.
     if (!enabled || !monitorId) return;
 
     if (prev.viewMode === 'streaming') {
-      // viewMode is forced back to what the key was minted under: the params
-      // effect above runs earlier in this same commit and has already rebuilt
-      // the ref with the NEW mode, which would make the quit a no-op.
+      // Both values are forced back to what the key was opened under. The
+      // params effect above runs earlier in this same commit and has already
+      // rebuilt the ref for the NEW mode, where viewMode is 'snapshot' (which
+      // would make the quit a silent no-op) and minStreamingPort is undefined,
+      // because the caller only computes a port for streaming. A CMD_QUIT sent
+      // to the portal's default port on a multi-port install is answered by a
+      // server that knows nothing about this connkey: the request succeeds,
+      // the log says the stream closed, and the nph-zms process on the real
+      // port keeps running.
       void quitStreamForParams(
-        { ...cleanupParamsRef.current, viewMode: 'streaming' },
+        {
+          ...cleanupParamsRef.current,
+          viewMode: 'streaming',
+          minStreamingPort: prev.minStreamingPort,
+        },
         logFn,
         'view-mode',
       );
@@ -342,8 +371,11 @@ export function useStreamLifecycle({
     setConnKey(newKey);
     prevConnKeyRef.current = newKey;
     cleanupParamsRef.current = buildCleanupParams(newKey);
+    // minStreamingPort is a dependency so the identity ref keeps the port the
+    // current stream was opened on, even when it changes without a flip (the
+    // force-disable-multi-port setting does that).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewMode, monitorId, enabled]);
+  }, [viewMode, monitorId, enabled, minStreamingPort]);
 
   // Capture the live media element on every render. The unmount cleanup runs as
   // a passive effect, by which point React has already nulled mediaRef, so we
