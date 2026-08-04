@@ -3,7 +3,8 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { CompactEventRow } from '../CompactEventRow';
 import { useReturnHighlightStore } from '../../../stores/returnHighlight';
-import { useDeleteSelectionStore } from '../../../stores/deleteSelection';
+import { useDeleteSelectionStore, eventSelectionKey } from '../../../stores/deleteSelection';
+import { asProfileId } from '../../../api/types';
 
 const navigate = vi.fn();
 vi.mock('react-router-dom', async (orig) => ({
@@ -96,6 +97,24 @@ describe('CompactEventRow', () => {
     const cls = screen.getByTestId('compact-event-row').className;
     expect(cls).toContain('bg-destructive/10');
     expect(cls).toContain('opacity-60');
+    useDeleteSelectionStore.getState().clear();
+  });
+
+  it('is not marked when the same raw event id is queued on another profile', () => {
+    useDeleteSelectionStore.getState().clear();
+    useDeleteSelectionStore.getState().toggle(eventSelectionKey(asProfileId('p2'), '233228'));
+    render(
+      <MemoryRouter>
+        <CompactEventRow
+          event={base as never}
+          thumbnailUrls={['http://x/1.jpg']}
+          aspectRatio={1.6}
+          profileId={asProfileId('p1')}
+        />
+      </MemoryRouter>
+    );
+    const cls = screen.getByTestId('compact-event-row').className;
+    expect(cls).not.toContain('bg-destructive/10');
     useDeleteSelectionStore.getState().clear();
   });
 });

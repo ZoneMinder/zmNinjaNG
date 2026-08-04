@@ -35,7 +35,7 @@ import { RELATIVE_TIME_LIST_WINDOW_DAYS } from '../../lib/zmninja-ng-constants';
 import { ReturnFlashArrow } from './ReturnFlashArrow';
 import { useReturnFlash } from '../../hooks/useReturnFlash';
 import { useReturnHighlightStore } from '../../stores/returnHighlight';
-import { useDeleteSelectionStore } from '../../stores/deleteSelection';
+import { useDeleteSelectionStore, eventSelectionKey } from '../../stores/deleteSelection';
 import { HintButton } from '../ui/button';
 
 /**
@@ -70,7 +70,8 @@ function EventCardComponent({ event, monitorName, profileId, profileChip, thumbn
 
   const markViewed = useReturnHighlightStore((s) => s.markViewed);
   const flash = useReturnFlash(event.Id);
-  const selectedForDelete = useDeleteSelectionStore((s) => s.selectedIds.includes(event.Id));
+  const selectedForDelete = useDeleteSelectionStore((s) =>
+    s.selectedKeys.includes(eventSelectionKey(ownerProfileId, event.Id)));
   const openEvent = () => {
     markViewed(event.Id);
     // All mode: deep route carries the owning profile so EventDetail
@@ -242,7 +243,7 @@ function EventCardComponent({ event, monitorName, profileId, profileChip, thumbn
                     )}
                   />
                 </HintButton>
-                <EventDeleteButton eventId={event.Id} />
+                <EventDeleteButton eventId={event.Id} profileId={ownerProfileId} />
                 {(() => {
                   const CauseIcon = getEventCauseIcon(event.Cause);
                   return (

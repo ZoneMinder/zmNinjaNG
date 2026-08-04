@@ -1,9 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { DeleteBatchBar } from '../DeleteBatchBar';
-import { useDeleteSelectionStore } from '../../../stores/deleteSelection';
+import { useDeleteSelectionStore, eventSelectionKey } from '../../../stores/deleteSelection';
+import { asProfileId } from '../../../api/types';
 
-const deleteEvents = vi.fn().mockResolvedValue(undefined);
+const P1 = asProfileId('p1');
+const P2 = asProfileId('p2');
+
+const deleteEvents = vi.fn().mockResolvedValue([]);
 vi.mock('../../../hooks/useBulkDeleteEvents', () => ({
   useBulkDeleteEvents: () => ({ deleteEvents, isDeleting: false }),
 }));
@@ -14,6 +18,7 @@ vi.mock('react-i18next', () => ({
 beforeEach(() => {
   useDeleteSelectionStore.getState().clear();
   deleteEvents.mockClear();
+  deleteEvents.mockResolvedValue([]);
 });
 
 describe('DeleteBatchBar', () => {
@@ -29,13 +34,27 @@ describe('DeleteBatchBar', () => {
     expect(screen.getByTestId('delete-batch-bar')).toBeTruthy();
     expect(screen.getByText(/delete_selected:2/)).toBeTruthy();
     fireEvent.click(screen.getByTestId('delete-batch-cancel'));
-    expect(useDeleteSelectionStore.getState().selectedIds).toEqual([]);
+    expect(useDeleteSelectionStore.getState().selectedKeys).toEqual([]);
   });
 
-  it('deletes the selected ids on confirm', () => {
+  it('deletes the selected keys on confirm', () => {
     useDeleteSelectionStore.getState().toggle('7');
     render(<DeleteBatchBar />);
     fireEvent.click(screen.getByTestId('delete-batch-confirm'));
     expect(deleteEvents).toHaveBeenCalledWith(['7']);
+  });
+
+  it('keeps the events that failed to delete selected', async () => {
+    const kept = eventSelectionKey(P2, '2');
+    useDeleteSelectionStore.getState().toggle(eventSelectionKey(P1, '1'));
+    useDeleteSelectionStore.getState().toggle(kept);
+    deleteEvents.mockResolvedValue([eventSelectionKey(P1, '1')]);
+
+    render(<DeleteBatchBar />);
+    fireEvent.click(screen.getByTestId('delete-batch-confirm'));
+
+    await waitFor(() =>
+      expect(useDeleteSelectionStore.getState().selectedKeys).toEqual([kept]));
+    expect(screen.getByText(/delete_selected:1/)).toBeTruthy();
   });
 });

@@ -4,16 +4,42 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
 import { useBulkDeleteEvents } from '../useBulkDeleteEvents';
 import { deleteEvent } from '../../api/events';
+import { getSession } from '../../services/sessions';
+import { eventSelectionKey } from '../../stores/deleteSelection';
+import { asProfileId } from '../../api/types';
 import { toast } from 'sonner';
+
+const P1 = asProfileId('p1');
+const P2 = asProfileId('p2');
 
 vi.mock('../../api/events', () => ({ deleteEvent: vi.fn() }));
 vi.mock('../../services/sessions', () => ({
-  getCurrentSession: vi.fn(() => ({ client: {} })),
+  // Mirrors the real registry: a real profile id yields its own client, the
+  // ALL sentinel throws (services/sessions.ts getSession).
+  getSession: vi.fn((id: string) => {
+    if (id === 'ALL') throw new Error('getSession: ALL_PROFILES_ID has no session');
+    return { client: { profileId: id } };
+  }),
+  // All mode makes the ALL sentinel the current profile, so the real
+  // getCurrentSession throws there - the crash this suite guards against.
+  getCurrentSession: vi.fn(() => {
+    if (!mockCurrentProfile) throw new Error('getSession: ALL_PROFILES_ID has no session');
+    return { client: { profileId: 'p1' } };
+  }),
   registerSessionsGate: vi.fn(),
 }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (k: string, o?: { count?: number }) => `${k}:${o?.count ?? ''}` }) }));
 vi.mock('../../lib/logger', () => ({ log: { eventCard: vi.fn() }, LogLevel: { ERROR: 'ERROR' } }));
+
+// All mode leaves currentProfile null (useCurrentProfile: the ALL sentinel
+// matches no real profile); single mode resolves a real one.
+let mockCurrentProfile: { id: string } | null = { id: 'p1' };
+vi.mock('../useCurrentProfile', () => ({
+  useCurrentProfile: () => ({ currentProfile: mockCurrentProfile, settings: {}, hasProfile: !!mockCurrentProfile, isAllMode: !mockCurrentProfile }),
+}));
+
+const asMock = (fn: unknown) => fn as unknown as ReturnType<typeof vi.fn>;
 
 let qc: QueryClient;
 const wrapper = ({ children }: { children: React.ReactNode }) => (
@@ -23,11 +49,12 @@ const wrapper = ({ children }: { children: React.ReactNode }) => (
 beforeEach(() => {
   qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   vi.clearAllMocks();
+  mockCurrentProfile = { id: 'p1' };
 });
 
-describe('useBulkDeleteEvents', () => {
+describe('useBulkDeleteEvents - single mode', () => {
   it('deletes all ids, invalidates, and toasts success with the count', async () => {
-    (deleteEvent as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+    asMock(deleteEvent).mockResolvedValue(undefined);
     const spy = vi.spyOn(qc, 'invalidateQueries');
     const { result } = renderHook(() => useBulkDeleteEvents(), { wrapper });
 
@@ -43,7 +70,7 @@ describe('useBulkDeleteEvents', () => {
   });
 
   it('toasts failure when any delete rejects, without aborting the rest', async () => {
-    (deleteEvent as unknown as ReturnType<typeof vi.fn>)
+    asMock(deleteEvent)
       .mockResolvedValueOnce(undefined)
       .mockRejectedValueOnce(new Error('nope'));
     const { result } = renderHook(() => useBulkDeleteEvents(), { wrapper });
@@ -59,14 +86,85 @@ describe('useBulkDeleteEvents', () => {
   });
 
   it('removes the deleted events from a cached events list immediately', async () => {
-    (deleteEvent as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
-    qc.setQueryData(['events', 'x'], {
+    asMock(deleteEvent).mockResolvedValue(undefined);
+    qc.setQueryData(['events', P1], {
       events: [{ Event: { Id: '1' } }, { Event: { Id: '2' } }],
       pagination: {},
     });
     const { result } = renderHook(() => useBulkDeleteEvents(), { wrapper });
     await act(async () => { await result.current.deleteEvents(['1']); });
-    const cached = qc.getQueryData(['events', 'x']) as { events: { Event: { Id: string } }[] };
+    const cached = qc.getQueryData(['events', P1]) as { events: { Event: { Id: string } }[] };
     expect(cached.events.map((e) => e.Event.Id)).toEqual(['2']);
+  });
+});
+
+describe('useBulkDeleteEvents - All mode', () => {
+  beforeEach(() => { mockCurrentProfile = null; });
+
+  it('routes each event to its OWN profile session instead of the ALL sentinel', async () => {
+    asMock(deleteEvent).mockResolvedValue(undefined);
+    const { result } = renderHook(() => useBulkDeleteEvents(), { wrapper });
+
+    let deleted: string[] = [];
+    await act(async () => {
+      deleted = await result.current.deleteEvents([
+        eventSelectionKey(P1, '1234'),
+        eventSelectionKey(P2, '77'),
+      ]);
+    });
+
+    expect(asMock(getSession).mock.calls.map((c) => c[0]).sort()).toEqual(['p1', 'p2']);
+    expect(deleteEvent).toHaveBeenCalledWith({ profileId: 'p1' }, '1234');
+    expect(deleteEvent).toHaveBeenCalledWith({ profileId: 'p2' }, '77');
+    expect(deleted.sort()).toEqual([eventSelectionKey(P1, '1234'), eventSelectionKey(P2, '77')].sort());
+    expect(toast.success).toHaveBeenCalledWith('events.delete_selected_success:2');
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it('strips a deleted event only from the OWNING profile cached list', async () => {
+    asMock(deleteEvent).mockResolvedValue(undefined);
+    // Same raw ZM id 1234 exists on both servers - deleting profile 1's must
+    // not evict profile 2's identically numbered event.
+    qc.setQueryData(['events', P1], { events: [{ Event: { Id: '1234' } }], pagination: {} });
+    qc.setQueryData(['events', P2], { events: [{ Event: { Id: '1234' } }], pagination: {} });
+
+    const { result } = renderHook(() => useBulkDeleteEvents(), { wrapper });
+    await act(async () => { await result.current.deleteEvents([eventSelectionKey(P1, '1234')]); });
+
+    expect((qc.getQueryData(['events', P1]) as { events: unknown[] }).events).toEqual([]);
+    expect((qc.getQueryData(['events', P2]) as { events: { Event: { Id: string } }[] }).events
+      .map((e) => e.Event.Id)).toEqual(['1234']);
+  });
+
+  it('keeps the failed profile selected and reports the failure on partial success', async () => {
+    asMock(deleteEvent).mockImplementation((client: { profileId: string }) =>
+      client.profileId === 'p2' ? Promise.reject(new Error('boom')) : Promise.resolve(undefined));
+    const { result } = renderHook(() => useBulkDeleteEvents(), { wrapper });
+
+    let deleted: string[] = [];
+    await act(async () => {
+      deleted = await result.current.deleteEvents([
+        eventSelectionKey(P1, '1'),
+        eventSelectionKey(P2, '2'),
+      ]);
+    });
+
+    expect(deleted).toEqual([eventSelectionKey(P1, '1')]);
+    expect(toast.error).toHaveBeenCalledWith('events.delete_failed:');
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it('reports a failure instead of rejecting when a profile has no session', async () => {
+    asMock(deleteEvent).mockResolvedValue(undefined);
+    const { result } = renderHook(() => useBulkDeleteEvents(), { wrapper });
+
+    let deleted: string[] = [];
+    await act(async () => {
+      deleted = await result.current.deleteEvents([eventSelectionKey(asProfileId('ALL'), '9')]);
+    });
+
+    expect(deleted).toEqual([]);
+    expect(deleteEvent).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith('events.delete_failed:');
   });
 });

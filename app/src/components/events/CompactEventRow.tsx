@@ -17,7 +17,8 @@ import { RELATIVE_TIME_LIST_WINDOW_DAYS } from '../../lib/zmninja-ng-constants';
 import { cn } from '../../lib/utils';
 import { useReturnFlash } from '../../hooks/useReturnFlash';
 import { useReturnHighlightStore } from '../../stores/returnHighlight';
-import { useDeleteSelectionStore } from '../../stores/deleteSelection';
+import { useDeleteSelectionStore, eventSelectionKey } from '../../stores/deleteSelection';
+import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import type { Event, ProfileId } from '../../api/types';
 
 interface CompactEventRowProps {
@@ -35,7 +36,13 @@ export function CompactEventRow({ event, thumbnailUrls, aspectRatio, objectFit =
   const { fmtTime } = useDateTimeFormat();
   const markViewed = useReturnHighlightStore((s) => s.markViewed);
   const flash = useReturnFlash(event.Id);
-  const selectedForDelete = useDeleteSelectionStore((s) => s.selectedIds.includes(event.Id));
+  // Owning profile for this row's delete selection: the row's own profileId in
+  // All mode, the current one otherwise - same resolution EventCard uses, so
+  // one event selected from either surface is one selection key (refs #337).
+  const { currentProfile } = useCurrentProfile();
+  const ownerProfileId = profileId ?? currentProfile?.id;
+  const selectedForDelete = useDeleteSelectionStore((s) =>
+    s.selectedKeys.includes(eventSelectionKey(ownerProfileId, event.Id)));
   const startTime = new Date(event.StartDateTime.replace(' ', 'T'));
   const detected = parseDetectedObjects(event.Notes);
   const DetIcon = detected.length ? getObjectClassIconFromList(detected.join(',')) : null;
@@ -107,7 +114,7 @@ export function CompactEventRow({ event, thumbnailUrls, aspectRatio, objectFit =
       >
         {durationLabel}
       </span>
-      <EventDeleteButton eventId={event.Id} size="sm" className="flex-shrink-0" />
+      <EventDeleteButton eventId={event.Id} profileId={ownerProfileId} size="sm" className="flex-shrink-0" />
     </div>
   );
 }
