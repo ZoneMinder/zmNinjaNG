@@ -2868,6 +2868,36 @@ the same ``/all/...`` deep route, so the destination page never has to ask
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/navigation.ts#L49>`__
    · → :doc:`12-shared-services-and-components`
 
+#. **Tags fan out per profile and are keyed by owner, not by event id.**
+   ``useScopedEventTagMapping`` asks each profile only for the event ids that
+   profile owns and merges the answers under ``scopedEventKey`` -
+   ``${profileId}:${eventId}`` in All mode, the bare id in single mode, which
+   is exactly what a row carries. A single map keyed by bare event id would
+   hand one server's tags to the other server's row, the event-side twin of
+   the ``monitorCacheKey`` collision.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useScopedEventTags.ts#L134>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **The tag FILTER aggregates by name, because tag ids are per-server.**
+   ``useScopedTags`` offers one entry per distinct tag name with the name
+   standing in for ``Id``, and ``resolveOwnTagIds`` maps a selection back into
+   each profile's real ids before its query runs - the same composite-token
+   shape the All-mode monitor filter persists in the ALL settings bucket. A
+   profile that has no tag by that name resolves to an empty list, which
+   ``getEvents`` treats as "matches nothing" rather than falling through to an
+   unfiltered query.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useScopedEventTags.ts#L52>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **The command palette and the keyboard shortcuts fan out the same way.**
+   Both read ``useScopedMonitors`` (with ``poll: false``, since they mount for
+   the whole session and share the monitors query key with the Monitors page),
+   label each row with its owning profile, and navigate to
+   ``/all/monitors/:profileId/:id``. Group entries are absent in All mode:
+   groups are per-server and nothing aggregates them.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/CommandPalette.tsx#L70>`__
+   · → :doc:`05-component-architecture`
+
 Timeline aggregates the same way through its own ``isAllMode`` branch, reusing
 ``useScopedEvents``'s sibling query rather than a second hook. The Events
 montage (grid) view is the one piece Task 4 left ungated-but-broken and Task
