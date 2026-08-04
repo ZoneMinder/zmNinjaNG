@@ -34,6 +34,7 @@ import { activateOnEnterOrSpace } from '../../../lib/utils';
 import { staggeredRefetchInterval } from '../../../lib/query/stagger-interval';
 import { eventInstant } from '../../../lib/event/event-instant';
 import { ErrorBanner } from '../../ui/query-state';
+import { ProfileChip } from '../../ui/profile-chip';
 import { resolveQueryError } from '../../../lib/query/query-error';
 import type { Scoped, ProfileError } from '../../../api/scoped-types';
 import type { EventData } from '../../../api/types';
@@ -206,13 +207,10 @@ export const EventsWidget = memo(function EventsWidget({
                                 {(isAllMode || tags.length > 0) && (
                                     <div className="flex items-center gap-1 flex-wrap mt-1">
                                         {isAllMode && (
-                                            <span
-                                                className="text-[9px] px-1 py-0 h-4 rounded bg-muted text-muted-foreground truncate max-w-[72px] shrink-0"
-                                                title={scopedEvent.profileName}
-                                                data-testid="widget-profile-chip"
-                                            >
-                                                {scopedEvent.profileName}
-                                            </span>
+                                            <ProfileChip
+                                                name={scopedEvent.profileName}
+                                                testId="widget-profile-chip"
+                                            />
                                         )}
                                         {tags.length > 0 && <TagChipList tags={tags} maxVisible={3} size="sm" />}
                                     </div>

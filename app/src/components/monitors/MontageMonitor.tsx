@@ -23,6 +23,7 @@ import { useSettingsStore } from '../../stores/settings';
 import { Card } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
+import { ProfileChip } from '../ui/profile-chip';
 import { LiveMonitorPlayer } from './LiveMonitorPlayer';
 import { Clock, ChartGantt, Download, Volume2, VolumeX, Pin, MoreVertical } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -269,13 +270,7 @@ function MontageMonitorComponent({
             {titleOverride ?? monitor.Name}
           </span>
           {profileChip && (
-            <span
-              className="text-[9px] px-1 py-0 h-4 rounded bg-muted text-muted-foreground truncate max-w-[72px] shrink-0"
-              title={profileChip}
-              data-testid="montage-profile-chip"
-            >
-              {profileChip}
-            </span>
+            <ProfileChip name={profileChip} testId="montage-profile-chip" />
           )}
         </div>
 

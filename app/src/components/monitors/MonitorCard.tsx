@@ -10,6 +10,7 @@ import { memo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
+import { ProfileChip } from '../ui/profile-chip';
 import { Button, HintButton } from '../ui/button';
 import { Activity, Settings, Download, Clock, Video, Eye, Disc, Volume2, VolumeX } from 'lucide-react';
 import { cn, formatEventCount } from '../../lib/utils';
@@ -162,13 +163,7 @@ function MonitorCardComponent({
           <div className="flex items-center gap-1.5">
             <div className="text-xs font-semibold truncate flex-1 min-w-0" title={monitor.Name} data-testid="monitor-name">{monitor.Name}</div>
             {profileChip && (
-              <span
-                className="text-[9px] px-1 py-0 h-4 rounded bg-muted text-muted-foreground truncate max-w-[72px] shrink-0"
-                title={profileChip}
-                data-testid="monitor-profile-chip"
-              >
-                {profileChip}
-              </span>
+              <ProfileChip name={profileChip} testId="monitor-profile-chip" />
             )}
             {isRTC && (
               <HintButton

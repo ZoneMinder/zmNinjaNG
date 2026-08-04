@@ -2,6 +2,7 @@ import { MoreVertical } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useMemo } from 'react';
 import { Button } from '../ui/button';
+import { ProfileChip } from '../ui/profile-chip';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -74,15 +75,11 @@ export function MontageKebabMenu({
                     {item.name}
                   </span>
                   {item.profileChip && (
-                    // Same chip as the tile header's owning-server label
-                    // (MontageMonitor), so the two read as one thing.
-                    <span
-                      className="ml-1.5 text-[9px] px-1 py-0 h-4 rounded bg-muted text-muted-foreground truncate max-w-[72px] shrink-0"
-                      title={item.profileChip}
-                      data-testid={`montage-visibility-chip-${item.id}`}
-                    >
-                      {item.profileChip}
-                    </span>
+                    <ProfileChip
+                      name={item.profileChip}
+                      testId={`montage-visibility-chip-${item.id}`}
+                      className="ml-1.5"
+                    />
                   )}
                 </DropdownMenuCheckboxItem>
               ))}
