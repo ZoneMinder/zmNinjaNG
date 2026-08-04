@@ -57,7 +57,7 @@ type ScopeLike = {
   mode: string;
   profile: { id: string; name: string } | null;
   profiles: { id: string; name: string }[];
-  settings: Record<string, never>;
+  settings: { allModeNotifications?: 'live' | 'muted' | 'off' };
 } | null;
 const mockUseProfileScope = vi.fn<() => ScopeLike>(() => null);
 vi.mock('../../hooks/useProfileScope', () => ({
@@ -195,5 +195,39 @@ describe('NotificationHandler All-mode fan-out (refs #337)', () => {
     const { queryByTestId } = renderHandler();
 
     expect(queryByTestId('connector-profile-1')).not.toBeInTheDocument();
+  });
+
+  // refs #337: the live/muted/off upgrade. 'off' must not mount any
+  // connector at all - zero websockets/pollers, nothing accumulates from
+  // live paths (distinct from 'muted', which still connects and only
+  // suppresses toast/sound display at the useNotificationAllModeToasts seam).
+  it('mounts no connectors when allModeNotifications is off', () => {
+    mockUseProfileScope.mockReturnValue({
+      mode: 'all',
+      profile: null,
+      profiles: [
+        { id: 'profile-a', name: 'Home' },
+        { id: 'profile-b', name: 'Work' },
+      ],
+      settings: { allModeNotifications: 'off' },
+    });
+
+    const { queryByTestId } = renderHandler();
+
+    expect(queryByTestId('connector-profile-a')).not.toBeInTheDocument();
+    expect(queryByTestId('connector-profile-b')).not.toBeInTheDocument();
+  });
+
+  it('still mounts connectors when allModeNotifications is muted', () => {
+    mockUseProfileScope.mockReturnValue({
+      mode: 'all',
+      profile: null,
+      profiles: [{ id: 'profile-a', name: 'Home' }],
+      settings: { allModeNotifications: 'muted' },
+    });
+
+    const { getByTestId } = renderHandler();
+
+    expect(getByTestId('connector-profile-a')).toBeInTheDocument();
   });
 });

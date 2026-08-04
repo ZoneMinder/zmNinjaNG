@@ -91,10 +91,10 @@ vi.mock('../../components/notifications/MonitorFilterSection', () => ({
   MonitorFilterSection: () => null,
 }));
 
-const SelectContext = createContext<{ onValueChange?: (value: string) => void }>({});
+const SelectContext = createContext<{ onValueChange?: (value: string) => void; value?: string }>({});
 vi.mock('../../components/ui/select', () => ({
-  Select: ({ children, onValueChange }: { children: ReactNode; onValueChange?: (value: string) => void }) => (
-    <SelectContext.Provider value={{ onValueChange }}>{children}</SelectContext.Provider>
+  Select: ({ children, onValueChange, value }: { children: ReactNode; onValueChange?: (value: string) => void; value?: string }) => (
+    <SelectContext.Provider value={{ onValueChange, value }}>{children}</SelectContext.Provider>
   ),
   SelectTrigger: ({ children, ...props }: { children: ReactNode }) => (
     <button type="button" {...props}>{children}</button>
@@ -104,7 +104,12 @@ vi.mock('../../components/ui/select', () => ({
   SelectItem: ({ children, value, ...props }: { children: ReactNode; value: string }) => {
     const ctx = useContext(SelectContext);
     return (
-      <button type="button" {...props} onClick={() => ctx.onValueChange?.(value)}>
+      <button
+        type="button"
+        data-selected={ctx.value === value}
+        {...props}
+        onClick={() => ctx.onValueChange?.(value)}
+      >
         {children}
       </button>
     );
@@ -208,7 +213,7 @@ describe('NotificationSettings page - All mode profile picker (refs #337)', () =
     expect(screen.queryByTestId('page-profile-picker')).not.toBeInTheDocument();
   });
 
-  describe('all-mode mute toggle (refs #337)', () => {
+  describe('all-mode notifications live/muted/off select (refs #337)', () => {
     afterEach(() => {
       useSettingsStore.setState({ profileSettings: {} });
     });
@@ -216,26 +221,28 @@ describe('NotificationSettings page - All mode profile picker (refs #337)', () =
     it('reflects the ALL-bucket setting and is not shown in single mode', async () => {
       vi.mocked(useProfileScope).mockReturnValue({
         mode: 'all', profile: null, profiles: [profileA, profileB],
-        settings: { allModeMuteToasts: true } as never,
+        settings: { allModeNotifications: 'muted' } as never,
       });
       renderPage();
 
-      const toggle = await screen.findByTestId('all-mode-mute-toggle');
-      expect(toggle).toHaveAttribute('aria-checked', 'true');
+      const mutedOption = await screen.findByTestId('all-mode-notifications-option-muted');
+      expect(mutedOption).toHaveAttribute('data-selected', 'true');
+      expect(screen.getByTestId('all-mode-notifications-option-live')).toHaveAttribute('data-selected', 'false');
+      expect(screen.getByTestId('all-mode-notifications-option-off')).toHaveAttribute('data-selected', 'false');
     });
 
-    it('toggling it updates the real settings store under ALL_PROFILES_ID', async () => {
+    it('selecting Off updates the real settings store under ALL_PROFILES_ID', async () => {
       vi.mocked(useProfileScope).mockReturnValue({
         mode: 'all', profile: null, profiles: [profileA, profileB],
-        settings: { allModeMuteToasts: false } as never,
+        settings: { allModeNotifications: 'live' } as never,
       });
       renderPage();
 
-      const toggle = await screen.findByTestId('all-mode-mute-toggle');
-      fireEvent.click(toggle);
+      const offOption = await screen.findByTestId('all-mode-notifications-option-off');
+      fireEvent.click(offOption);
 
       await waitFor(() =>
-        expect(useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID).allModeMuteToasts).toBe(true)
+        expect(useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID).allModeNotifications).toBe('off')
       );
     });
 
@@ -246,7 +253,7 @@ describe('NotificationSettings page - All mode profile picker (refs #337)', () =
       renderPage();
 
       await waitFor(() => expect(getSession).toHaveBeenCalledWith(profileA.id));
-      expect(screen.queryByTestId('all-mode-mute-toggle')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('all-mode-notifications-select')).not.toBeInTheDocument();
     });
   });
 });

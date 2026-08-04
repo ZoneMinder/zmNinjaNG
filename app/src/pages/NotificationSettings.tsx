@@ -13,7 +13,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useCurrentProfile, useProfileById } from '../hooks/useCurrentProfile';
 import { useProfileScope } from '../hooks/useProfileScope';
 import { useProfileStore } from '../stores/profile';
-import { useSettingsStore } from '../stores/settings';
+import { useSettingsStore, type AllModeNotifications } from '../stores/settings';
 import { getMonitors } from '../api/monitors';
 import { useAuthSlice } from '../stores/auth';
 import { ProfilePicker } from '../components/profile-picker';
@@ -22,6 +22,7 @@ import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Label } from '../components/ui/label';
 import { Switch } from '../components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Badge } from '../components/ui/badge';
 import {
   Bell,
@@ -72,12 +73,12 @@ export default function NotificationSettings() {
   const isConnected = connectionState === 'connected';
   const disconnect = () => currentProfile && storeDisconnect(currentProfile.id);
 
-  // All-mode mute toggle: an ALL-bucket app setting (not a per-profile
-  // notification setting), so it lives in the settings store and is
-  // read/written against the ALL_PROFILES_ID sentinel (refs #337).
+  // All-mode notifications (live/muted/off): an ALL-bucket app setting (not
+  // a per-profile notification setting), so it lives in the settings store
+  // and is read/written against the ALL_PROFILES_ID sentinel (refs #337).
   // `scope.settings` is already the merged ALL-bucket settings whenever
   // scope.mode is 'all' (useProfileScope), so no extra selector is needed.
-  const allModeMuteToasts = scope?.settings.allModeMuteToasts ?? false;
+  const allModeNotifications = scope?.settings.allModeNotifications ?? 'live';
   const updateAllModeSettings = useSettingsStore((s) => s.updateProfileSettings);
 
   // Subscribe reactively to this profile's settings and unread count so the
@@ -367,21 +368,38 @@ export default function NotificationSettings() {
           <Card>
             <CardContent className="flex items-center justify-between gap-3 p-4">
               <div className="flex-1 space-y-0.5">
-                <Label htmlFor="all-mode-mute-toggle" className="text-base font-semibold">
-                  {t('notification_settings.all_mode_mute_toggle')}
+                <Label htmlFor="all-mode-notifications-select" className="text-base font-semibold">
+                  {t('notification_settings.all_mode_notifications_label')}
                 </Label>
                 <p className="text-sm text-muted-foreground">
-                  {t('notification_settings.all_mode_mute_toggle_desc')}
+                  {t(`notification_settings.all_mode_notifications_${allModeNotifications}_desc`)}
                 </p>
               </div>
-              <Switch
-                id="all-mode-mute-toggle"
-                checked={allModeMuteToasts}
-                onCheckedChange={(checked) =>
-                  updateAllModeSettings(ALL_PROFILES_ID, { allModeMuteToasts: checked })
+              <Select
+                value={allModeNotifications}
+                onValueChange={(value) =>
+                  updateAllModeSettings(ALL_PROFILES_ID, { allModeNotifications: value as AllModeNotifications })
                 }
-                data-testid="all-mode-mute-toggle"
-              />
+              >
+                <SelectTrigger
+                  id="all-mode-notifications-select"
+                  className="w-32"
+                  data-testid="all-mode-notifications-select"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="live" data-testid="all-mode-notifications-option-live">
+                    {t('notification_settings.all_mode_notifications_live')}
+                  </SelectItem>
+                  <SelectItem value="muted" data-testid="all-mode-notifications-option-muted">
+                    {t('notification_settings.all_mode_notifications_muted')}
+                  </SelectItem>
+                  <SelectItem value="off" data-testid="all-mode-notifications-option-off">
+                    {t('notification_settings.all_mode_notifications_off')}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </CardContent>
           </Card>
           <NotificationOverview

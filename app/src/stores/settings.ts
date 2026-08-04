@@ -19,6 +19,9 @@ export type EventsViewMode = 'list' | 'montage';
 export type ThemePreference = 'amber' | 'cream' | 'dark' | 'light' | 'slate' | 'system';
 export type StreamingMethod = 'auto' | 'mjpeg';
 export type WebRTCProtocol = 'webrtc' | 'mse' | 'hls';
+/** All mode only: whether every scope profile's live connection is on. */
+export type AllModeNotifications = 'live' | 'muted' | 'off';
+export const ALL_MODE_NOTIFICATIONS_VALUES: readonly AllModeNotifications[] = ['live', 'muted', 'off'] as const;
 // Declared by the modules that consume them, so those modules do not import
 // this store (refs #281). Re-exported for the existing callers.
 export type { DateFormatPreset, TimeFormatPreset };
@@ -128,10 +131,12 @@ export interface ProfileSettings {
    *  null = every profile in scope (default). Stored under the ALL
    *  settings bucket. */
   eventsServerFilter: ProfileId[] | null;
-  /** All mode only: suppress toast notifications and sound while
-   *  aggregating every server (badge counts and history still update).
-   *  Stored under the ALL settings bucket (refs #337). */
-  allModeMuteToasts: boolean;
+  /** All mode only: 'live' runs every scope profile's connection and shows
+   *  toasts/sound; 'muted' keeps every connection running but suppresses
+   *  toasts/sound (badge counts and history still update); 'off' tears down
+   *  every All-mode connection so nothing live runs. Stored under the ALL
+   *  settings bucket (refs #337). */
+  allModeNotifications: AllModeNotifications;
   monitorGridCols: number; // Grid columns for Monitors page grid view
   monitorDetailFeedFit: MonitorFeedFit; // Object-fit for monitor detail feed
   eventsThumbnailFit: MonitorFeedFit; // Object-fit for event thumbnails
@@ -328,7 +333,7 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   monitorsViewMode: 'list' as const,
   monitorsGroupByServer: false,
   eventsServerFilter: null,
-  allModeMuteToasts: false,
+  allModeNotifications: 'live',
   monitorGridCols: 2,
   monitorDetailFeedFit: 'contain',
   eventsThumbnailFit: 'contain',
@@ -435,6 +440,13 @@ export function mergeProfileSettings(raw: Partial<ProfileSettings> | undefined):
   const merged = { ...DEFAULT_SETTINGS, ...raw };
   if (Platform.isNative && merged.assistantBackend === 'on-device') {
     merged.assistantBackend = 'ollama';
+  }
+  // allModeMuteToasts (boolean) -> allModeNotifications migration (refs #337).
+  const legacyRaw = raw as (Partial<ProfileSettings> & { allModeMuteToasts?: boolean }) | undefined;
+  if (legacyRaw && 'allModeMuteToasts' in legacyRaw && !('allModeNotifications' in legacyRaw)) {
+    merged.allModeNotifications = legacyRaw.allModeMuteToasts ? 'muted' : 'live';
+  } else if (!ALL_MODE_NOTIFICATIONS_VALUES.includes(merged.allModeNotifications)) {
+    merged.allModeNotifications = 'live';
   }
   return merged;
 }

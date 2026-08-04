@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSettingsStore, ALL_GROUPS_KEY, migrateSettings, SETTINGS_VERSION } from '../settings';
 import type { ProfileSettings } from '../settings';
 import { ASSISTANT } from '../../lib/zmninja-ng-constants';
+import { ALL_PROFILES_ID } from '../../api/types';
 
 let isNative = false;
 vi.mock('../../lib/platform', () => ({ Platform: { get isNative() { return isNative; } } }));
@@ -367,5 +368,48 @@ describe('assistant backend migration for mobile', () => {
     useSettingsStore.getState().updateProfileSettings('profile-apple', { assistantBackend: 'apple' });
     const s = useSettingsStore.getState().getProfileSettings('profile-apple');
     expect(s.assistantBackend).toBe('apple');
+  });
+});
+
+// refs #337: allModeMuteToasts (boolean) was replaced by allModeNotifications
+// ('live' | 'muted' | 'off'). The migration lives in mergeProfileSettings,
+// same as the assistantBackend coercion above (Settings contract: every
+// coercion lives there, not in reactive readers).
+describe('all-mode notifications setting migration (refs #337)', () => {
+  it('migrates legacy allModeMuteToasts:true to muted', () => {
+    useSettingsStore.setState({
+      profileSettings: { [ALL_PROFILES_ID]: { allModeMuteToasts: true } } as never,
+    });
+    const s = useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID);
+    expect(s.allModeNotifications).toBe('muted');
+  });
+
+  it('migrates legacy allModeMuteToasts:false to live', () => {
+    useSettingsStore.setState({
+      profileSettings: { [ALL_PROFILES_ID]: { allModeMuteToasts: false } } as never,
+    });
+    const s = useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID);
+    expect(s.allModeNotifications).toBe('live');
+  });
+
+  it('defaults to live when the field was never stored', () => {
+    const s = useSettingsStore.getState().getProfileSettings('brand-new-all-bucket');
+    expect(s.allModeNotifications).toBe('live');
+  });
+
+  it('coerces an invalid stored value to live', () => {
+    useSettingsStore.setState({
+      profileSettings: { [ALL_PROFILES_ID]: { allModeNotifications: 'bogus' } } as never,
+    });
+    const s = useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID);
+    expect(s.allModeNotifications).toBe('live');
+  });
+
+  it('preserves a validly stored off value', () => {
+    useSettingsStore.setState({
+      profileSettings: { [ALL_PROFILES_ID]: { allModeNotifications: 'off' } } as never,
+    });
+    const s = useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID);
+    expect(s.allModeNotifications).toBe('off');
   });
 });

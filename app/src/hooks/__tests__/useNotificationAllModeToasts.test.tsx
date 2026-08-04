@@ -39,7 +39,7 @@ type ScopeLike = {
   mode: 'all' | 'single';
   profile: null;
   profiles: { id: string; name: string }[];
-  settings: { allModeMuteToasts: boolean };
+  settings: { allModeNotifications: 'live' | 'muted' | 'off' };
 } | null;
 
 const mockScope = vi.fn<() => ScopeLike>(() => null);
@@ -90,7 +90,7 @@ describe('useNotificationAllModeToasts (refs #337)', () => {
       mode: 'single',
       profile: null,
       profiles: [{ id: PROFILE_A, name: 'Home' }],
-      settings: { allModeMuteToasts: false },
+      settings: { allModeNotifications: 'live' },
     });
     useNotificationStore.getState().updateProfileSettings(PROFILE_A, { enabled: true, showToasts: true });
     renderIt();
@@ -108,7 +108,7 @@ describe('useNotificationAllModeToasts (refs #337)', () => {
       mode: 'all',
       profile: null,
       profiles: [{ id: PROFILE_A, name: 'Home' }, { id: PROFILE_B, name: 'Work' }],
-      settings: { allModeMuteToasts: false },
+      settings: { allModeNotifications: 'live' },
     });
     useNotificationStore.getState().updateProfileSettings(PROFILE_A, { enabled: true, showToasts: true });
     useNotificationStore.getState().updateProfileSettings(PROFILE_B, { enabled: true, showToasts: true });
@@ -130,7 +130,7 @@ describe('useNotificationAllModeToasts (refs #337)', () => {
       mode: 'all',
       profile: null,
       profiles: [{ id: PROFILE_A, name: 'Home' }, { id: PROFILE_B, name: 'Work' }],
-      settings: { allModeMuteToasts: false },
+      settings: { allModeNotifications: 'live' },
     });
     useNotificationStore.getState().updateProfileSettings(PROFILE_A, { enabled: true, showToasts: true });
     useNotificationStore.getState().updateProfileSettings(PROFILE_B, { enabled: true, showToasts: true });
@@ -152,7 +152,7 @@ describe('useNotificationAllModeToasts (refs #337)', () => {
       mode: 'all',
       profile: null,
       profiles: [{ id: PROFILE_A, name: 'Home' }, { id: PROFILE_B, name: 'Work' }],
-      settings: { allModeMuteToasts: false },
+      settings: { allModeNotifications: 'live' },
     });
     useNotificationStore.getState().updateProfileSettings(PROFILE_A, { enabled: true, showToasts: true });
     useNotificationStore.getState().updateProfileSettings(PROFILE_B, { enabled: true, showToasts: true });
@@ -178,7 +178,7 @@ describe('useNotificationAllModeToasts (refs #337)', () => {
       mode: 'all',
       profile: null,
       profiles: [{ id: PROFILE_A, name: 'Home' }, { id: PROFILE_B, name: 'Work' }],
-      settings: { allModeMuteToasts: false },
+      settings: { allModeNotifications: 'live' },
     });
     useNotificationStore.getState().updateProfileSettings(PROFILE_A, { enabled: true, showToasts: true });
     useNotificationStore.getState().updateProfileSettings(PROFILE_B, { enabled: true, showToasts: false });
@@ -205,7 +205,7 @@ describe('useNotificationAllModeToasts (refs #337)', () => {
       mode: 'all',
       profile: null,
       profiles: [{ id: PROFILE_A, name: 'Home' }, { id: PROFILE_B, name: 'Work' }],
-      settings: { allModeMuteToasts: false },
+      settings: { allModeNotifications: 'live' },
     });
     useNotificationStore.getState().updateProfileSettings(PROFILE_A, { enabled: true, showToasts: true, playSound: true });
     useNotificationStore.getState().updateProfileSettings(PROFILE_B, { enabled: true, showToasts: true, playSound: true });
@@ -226,7 +226,7 @@ describe('useNotificationAllModeToasts (refs #337)', () => {
       mode: 'all',
       profile: null,
       profiles: [{ id: PROFILE_A, name: 'Home' }],
-      settings: { allModeMuteToasts: true },
+      settings: { allModeNotifications: 'muted' },
     });
     useNotificationStore.getState().updateProfileSettings(PROFILE_A, { enabled: true, showToasts: true, playSound: true });
     renderIt();
@@ -250,7 +250,7 @@ describe('useNotificationAllModeToasts (refs #337)', () => {
       mode: 'all',
       profile: null,
       profiles: [{ id: PROFILE_A, name: 'Home' }, { id: PROFILE_B, name: 'Work' }],
-      settings: { allModeMuteToasts: false },
+      settings: { allModeNotifications: 'live' },
     });
     useNotificationStore.getState().updateProfileSettings(PROFILE_A, { enabled: true, showToasts: true });
     // Disabled overall, even though showToasts itself is on.
@@ -276,7 +276,7 @@ describe('useNotificationAllModeToasts (refs #337)', () => {
       mode: 'all',
       profile: null,
       profiles: [{ id: PROFILE_A, name: 'Home' }],
-      settings: { allModeMuteToasts: false },
+      settings: { allModeNotifications: 'live' },
     });
     useNotificationStore.getState().updateProfileSettings(PROFILE_A, { enabled: true, showToasts: true });
     // Simulate a stale/persisted event already present before the hook ever

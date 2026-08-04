@@ -12,9 +12,11 @@
  * in the window still shows the normal per-event toast. At most one
  * notification sound plays per window.
  *
- * The all-mode mute toggle (settings store, ALL_PROFILES_ID bucket)
- * suppresses toasts and sound entirely; badge counts and history are
- * unaffected (addEvent, in stores/notifications.ts, always runs regardless).
+ * The all-mode notifications setting (settings store, ALL_PROFILES_ID bucket)
+ * 'muted' value suppresses toasts and sound entirely; badge counts and
+ * history are unaffected (addEvent, in stores/notifications.ts, always runs
+ * regardless). 'off' means no connector ever mounts, so this hook simply
+ * never sees a new event for that profile.
  *
  * Single mode is untouched: this hook no-ops unless scope.mode is 'all'.
  */
@@ -160,7 +162,7 @@ export function useNotificationAllModeToasts(): void {
 
     // lastSeenAtRef is updated above regardless of mute, so nothing already
     // seen replays into a toast once the user unmutes.
-    if (newlyArrived.length === 0 || scope.settings.allModeMuteToasts) return;
+    if (newlyArrived.length === 0 || scope.settings.allModeNotifications === 'muted') return;
 
     burstRef.current.push(...newlyArrived);
     if (!timerRef.current) {

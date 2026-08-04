@@ -292,6 +292,11 @@ export function NotificationHandler() {
   // so N extra websockets would only cost battery with no gap to close.
   // Native keeps today's deterministic single-connection + FCM-anchor
   // semantics unchanged.
+  //
+  // allModeNotifications === 'off' (refs #337): no connector mounts at all,
+  // so zero All-mode websockets/pollers exist and nothing accumulates from
+  // live paths. 'muted' still mounts every connector - only toast/sound
+  // display is suppressed, at the useNotificationAllModeToasts seam.
   return (
     <>
       <ProfileSwitchDialog
@@ -299,7 +304,7 @@ export function NotificationHandler() {
         onConfirm={handleConfirmSwitch}
         onCancel={handleCancelSwitch}
       />
-      {Platform.isDesktopOrWeb && scope?.mode === 'all' &&
+      {Platform.isDesktopOrWeb && scope?.mode === 'all' && scope.settings.allModeNotifications !== 'off' &&
         scope.profiles.map((profile) => (
           <ProfileNotificationConnector key={profile.id} profile={profile} />
         ))}

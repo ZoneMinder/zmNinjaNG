@@ -932,8 +932,13 @@
     "overview_disabled": "已禁用",
     "overview_direct_mode_host": "直接轮询",
     "overview_no_host": "未设置主机",
-    "all_mode_mute_toggle": "静音全部模式提示",
-    "all_mode_mute_toggle_desc": "聚合查看所有服务器时禁止提示通知和声音。角标计数和历史记录仍会更新。"
+    "all_mode_notifications_label": "全部模式通知",
+    "all_mode_notifications_live": "实时",
+    "all_mode_notifications_live_desc": "每个服务器实时连接；事件到达时播放提示和声音。",
+    "all_mode_notifications_muted": "静音",
+    "all_mode_notifications_muted_desc": "每个服务器保持连接，但禁止提示和声音。角标计数和历史记录仍会更新。",
+    "all_mode_notifications_off": "关闭",
+    "all_mode_notifications_off_desc": "聚合查看时不连接任何服务器。重新开启前不会有任何更新。"
   },
   "notifications": {
     "status": {

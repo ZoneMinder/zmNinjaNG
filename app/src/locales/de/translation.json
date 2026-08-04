@@ -932,8 +932,13 @@
     "overview_disabled": "Deaktiviert",
     "overview_direct_mode_host": "Direktabfrage",
     "overview_no_host": "Kein Host festgelegt",
-    "all_mode_mute_toggle": "Alle-Server-Meldungen stummschalten",
-    "all_mode_mute_toggle_desc": "Unterdrückt Toast-Meldungen und Ton bei aggregierter Ansicht aller Server. Zähler und Verlauf werden weiterhin aktualisiert."
+    "all_mode_notifications_label": "Alle-Server-Benachrichtigungen",
+    "all_mode_notifications_live": "Live",
+    "all_mode_notifications_live_desc": "Jeder Server verbindet sich live; Toast-Meldungen und Ton werden bei Ereignissen abgespielt.",
+    "all_mode_notifications_muted": "Stumm",
+    "all_mode_notifications_muted_desc": "Jeder Server bleibt verbunden, aber Toast-Meldungen und Ton werden unterdrückt. Zähler und Verlauf werden weiterhin aktualisiert.",
+    "all_mode_notifications_off": "Aus",
+    "all_mode_notifications_off_desc": "Bei aggregierter Ansicht verbindet sich kein Server. Nichts wird aktualisiert, bis dies wieder aktiviert wird."
   },
   "notifications": {
     "status": {

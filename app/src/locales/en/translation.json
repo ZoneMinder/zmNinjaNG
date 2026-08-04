@@ -932,8 +932,13 @@
     "overview_disabled": "Disabled",
     "overview_direct_mode_host": "Direct polling",
     "overview_no_host": "No host set",
-    "all_mode_mute_toggle": "Mute All-mode toasts",
-    "all_mode_mute_toggle_desc": "Suppress toast notifications and sound while aggregating every server. Badge counts and history still update."
+    "all_mode_notifications_label": "All-mode notifications",
+    "all_mode_notifications_live": "Live",
+    "all_mode_notifications_live_desc": "Every server connects live; toasts and sound play as events arrive.",
+    "all_mode_notifications_muted": "Muted",
+    "all_mode_notifications_muted_desc": "Every server stays connected, but toasts and sound are suppressed. Badge counts and history still update.",
+    "all_mode_notifications_off": "Off",
+    "all_mode_notifications_off_desc": "No server connects while aggregating. Nothing updates until you switch this back on."
   },
   "notifications": {
     "status": {
