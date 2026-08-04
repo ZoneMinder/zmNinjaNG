@@ -15,7 +15,6 @@ import { getMonitorAspectRatio } from '../../../lib/monitor/monitor-rotation';
 import { monitorCacheKey } from '../../../stores/monitors';
 import type { Layout } from 'react-grid-layout';
 import type { Monitor, MonitorData, ProfileId } from '../../../api/types';
-import type { Profile } from '../../../api/types';
 import type { ProfileSettings } from '../../../stores/settings';
 
 /** A montage tile's monitor data, plus its owning profile in All mode
@@ -117,7 +116,10 @@ const areLayoutsEqual = (a: Layout[], b: Layout[]): boolean => {
 
 interface UseMontageGridOptions {
   monitors: MontageTileMonitorData[];
-  currentProfile: Profile | null;
+  /** Profile id every layout write targets: the real profile in single mode,
+   *  the ALL sentinel in All mode, where the ALL bucket owns the layout the
+   *  way it owns every other view preference (refs #337). */
+  profileId: ProfileId | null;
   settings: ProfileSettings;
   isEditMode: boolean;
   groupKey: string;
@@ -140,7 +142,7 @@ interface UseMontageGridReturn {
 
 export function useMontageGrid({
   monitors,
-  currentProfile,
+  profileId,
   settings,
   isEditMode,
   groupKey,
@@ -171,11 +173,11 @@ export function useMontageGrid({
   // Refs for stable access in callbacks without causing re-renders
   const monitorMapRef = useRef<Map<string, Monitor>>(new Map());
   const isEditModeRef = useRef(isEditMode);
-  const currentProfileRef = useRef(currentProfile);
+  const profileIdRef = useRef(profileId);
   const settingsRef = useRef(settings);
 
   useEffect(() => { isEditModeRef.current = isEditMode; }, [isEditMode]);
-  useEffect(() => { currentProfileRef.current = currentProfile; }, [currentProfile]);
+  useEffect(() => { profileIdRef.current = profileId; }, [profileId]);
   useEffect(() => { settingsRef.current = settings; }, [settings]);
 
   const groupKeyRef = useRef(groupKey);
@@ -229,7 +231,7 @@ export function useMontageGrid({
   // Update displayCols when profile changes (external change only)
   useEffect(() => {
     setDisplayCols(bucketGridCols);
-  }, [currentProfile?.id, groupKey, bucketGridCols]);
+  }, [profileId, groupKey, bucketGridCols]);
 
   // Build initial layout once when we have monitors + width.
   // Also re-runs when displayCols changes (user picked a new column count).
@@ -264,8 +266,8 @@ export function useMontageGrid({
 
     const normalized = recalcHeights(nextLayout, currentWidthRef.current, displayCols);
     setLayout((prev) => (areLayoutsEqual(prev, normalized) ? prev : normalized));
-    if (legacy && currentProfileRef.current) {
-      updateMontageGroupLayout(currentProfileRef.current.id, groupKeyRef.current, {
+    if (legacy && profileIdRef.current) {
+      updateMontageGroupLayout(profileIdRef.current, groupKeyRef.current, {
         workingLayout: normalized,
       });
     }
@@ -295,7 +297,8 @@ export function useMontageGrid({
 
   const handleApplyGridLayout = useCallback(
     (cols: number) => {
-      if (!currentProfileRef.current) return;
+      const profileId = profileIdRef.current;
+      if (!profileId) return;
 
       const nextLayout = buildDefaultLayout(monitors, cols, currentWidthRef.current);
 
@@ -303,7 +306,6 @@ export function useMontageGrid({
       setDisplayCols(cols);
       setLayout(nextLayout);
 
-      const profileId = currentProfileRef.current.id;
       updateMontageGroupLayout(profileId, groupKeyRef.current, {
         gridCols: cols,
         workingLayout: nextLayout,
@@ -316,14 +318,14 @@ export function useMontageGrid({
 
   const handleLoadSavedLayout = useCallback(
     (savedLayout: Layout[], cols: number) => {
-      if (!currentProfileRef.current) return;
+      const profileId = profileIdRef.current;
+      if (!profileId) return;
 
       skipRestoreRef.current = true;
       const normalized = recalcHeights(savedLayout, currentWidthRef.current, cols);
       setDisplayCols(cols);
       setLayout(normalized);
 
-      const profileId = currentProfileRef.current.id;
       updateMontageGroupLayout(profileId, groupKeyRef.current, {
         gridCols: cols,
         workingLayout: normalized,
@@ -363,9 +365,10 @@ export function useMontageGrid({
   // Save layout only when user finishes a drag
   const handleDragStop = useCallback(
     (nextLayout: Layout[]) => {
-      if (!isEditModeRef.current || !currentProfileRef.current) return;
+      const profileId = profileIdRef.current;
+      if (!isEditModeRef.current || !profileId) return;
       setLayout(nextLayout);
-      updateMontageGroupLayout(currentProfileRef.current.id, groupKeyRef.current, {
+      updateMontageGroupLayout(profileId, groupKeyRef.current, {
         workingLayout: nextLayout,
       });
     },
@@ -374,11 +377,10 @@ export function useMontageGrid({
 
   const handleResizeStop = useCallback(
     (_layout: Layout[], _oldItem: Layout, newItem: Layout) => {
-      // All mode has no real profile to persist against (currentProfile is
-      // null there) - inert like handleDragStop, so a resize doesn't visibly
-      // change the tile then snap back on the next unrelated re-render
-      // (refs #337, Phase 4 Task 1 fix round 1).
-      if (!currentProfileRef.current) return;
+      // With no write target at all (no profile selected) a resize would
+      // visibly move the tile and then snap back on the next unrelated
+      // re-render, so stay inert rather than half-applying it.
+      if (!profileIdRef.current) return;
       const map = monitorMapRef.current;
       const adjustedHeight = calculateHeightUnits(
         map,
@@ -393,8 +395,8 @@ export function useMontageGrid({
         const nextLayout = prev.map((item) =>
           item.i === newItem.i ? { ...item, h: adjustedHeight, w: newItem.w } : item
         );
-        if (isEditModeRef.current && currentProfileRef.current) {
-          updateMontageGroupLayout(currentProfileRef.current.id, groupKeyRef.current, {
+        if (isEditModeRef.current && profileIdRef.current) {
+          updateMontageGroupLayout(profileIdRef.current, groupKeyRef.current, {
             workingLayout: nextLayout,
           });
         }
@@ -406,7 +408,7 @@ export function useMontageGrid({
 
   // Proportionally scale the entire layout so it fills the full grid width
   const handleFillWidth = useCallback(() => {
-    const profileId = currentProfileRef.current?.id;
+    const profileId = profileIdRef.current;
     if (!profileId) return;
 
     const cols = displayColsRef.current;

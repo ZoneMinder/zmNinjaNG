@@ -10,6 +10,7 @@
 import { useCallback } from 'react';
 import { useCurrentProfile } from './useCurrentProfile';
 import { useGroupFilter } from './useGroupFilter';
+import { useProfileStore } from '../stores/profile';
 import {
   useSettingsStore,
   ALL_GROUPS_KEY,
@@ -27,8 +28,13 @@ export interface UseMontageGroupStateReturn {
 }
 
 export function useMontageGroupState(): UseMontageGroupStateReturn {
-  const { currentProfile, settings } = useCurrentProfile();
+  const { settings } = useCurrentProfile();
   const { selectedGroupId } = useGroupFilter();
+  // Write target: the real profile id in single mode, the ALL sentinel in All
+  // mode (currentProfile is null there). Montage layout is a view preference,
+  // so the ALL bucket owns it - the same bucket `settings` above already
+  // reads from, keeping read and write on one key (refs #337).
+  const currentProfileId = useProfileStore((state) => state.currentProfileId);
   const updateMontageGroupLayout = useSettingsStore(
     (state) => state.updateMontageGroupLayout
   );
@@ -38,10 +44,10 @@ export function useMontageGroupState(): UseMontageGroupStateReturn {
 
   const update = useCallback(
     (patch: Partial<MontageGroupLayout>) => {
-      if (!currentProfile) return;
-      updateMontageGroupLayout(currentProfile.id, groupKey, patch);
+      if (!currentProfileId) return;
+      updateMontageGroupLayout(currentProfileId, groupKey, patch);
     },
-    [currentProfile, groupKey, updateMontageGroupLayout]
+    [currentProfileId, groupKey, updateMontageGroupLayout]
   );
 
   return { groupKey, bucket, update };

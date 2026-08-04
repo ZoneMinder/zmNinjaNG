@@ -38,6 +38,10 @@ vi.mock('../../hooks/useGroupFilter', () => ({
 // then renders; reset in beforeEach.
 let hiddenMonitorIds: string[] = [];
 
+// update() forwards to the settings-store mock exactly as the real hook does
+// (against currentProfileId, which is the ALL sentinel in All mode), so page
+// tests can assert the bucket a write lands in. The hook's own targeting is
+// covered by useMontageGroupState.test.ts.
 vi.mock('../../hooks/useMontageGroupState', () => ({
   useMontageGroupState: () => ({
     groupKey: 'ALL',
@@ -48,7 +52,7 @@ vi.mock('../../hooks/useMontageGroupState', () => ({
       gridCols: 2,
       hiddenMonitorIds,
     },
-    update: vi.fn(),
+    update: (patch: unknown) => updateMontageGroupLayoutMock(currentProfileId, 'ALL', patch),
   }),
 }));
 
@@ -74,7 +78,30 @@ vi.mock('../../components/montage', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../components/montage')>();
   return {
     ...actual,
-    GridLayoutControls: () => <div data-testid="grid-layout-controls-stub" />,
+    // Buttons for each callback so a test can fire one and assert what the
+    // page persists; the control's own rendering is covered by
+    // GridLayoutControls.test.tsx.
+    GridLayoutControls: ({
+      onApplyGridLayout,
+      onSaveLayout,
+      onLoadLayout,
+      onDeleteLayout,
+    }: {
+      onApplyGridLayout: (cols: number) => void;
+      onSaveLayout: (name: string) => void;
+      onLoadLayout: (saved: { name: string; layout: unknown[]; displayCols: number }) => void;
+      onDeleteLayout: (index: number) => void;
+    }) => (
+      <div data-testid="grid-layout-controls-stub">
+        <button data-testid="grid-apply-stub" onClick={() => onApplyGridLayout(3)} />
+        <button data-testid="grid-save-stub" onClick={() => onSaveLayout('Wall')} />
+        <button
+          data-testid="grid-load-stub"
+          onClick={() => onLoadLayout({ name: 'Wall', layout: [], displayCols: 3 })}
+        />
+        <button data-testid="grid-delete-stub" onClick={() => onDeleteLayout(0)} />
+      </div>
+    ),
     FullscreenControls: () => <div data-testid="fullscreen-controls-stub" />,
     // Rendered as buttons so a test can toggle an entry and assert what the
     // page does with the id it hands back; the real list rendering (chips,
@@ -124,6 +151,20 @@ vi.mock('../../components/filters/GroupFilterSelect', () => ({
   GroupFilterSelect: () => <div data-testid="group-filter-select-stub" />,
 }));
 
+// Radix Select needs pointer geometry jsdom does not provide; the stub keeps
+// the value and exposes one button that picks the other fit mode.
+vi.mock('../../components/ui/select', () => ({
+  Select: ({ value, onValueChange }: { value: string; onValueChange: (v: string) => void }) => (
+    <button data-testid="montage-fit-select" onClick={() => onValueChange('contain')}>
+      {value}
+    </button>
+  ),
+  SelectContent: () => null,
+  SelectItem: () => null,
+  SelectTrigger: () => null,
+  SelectValue: () => null,
+}));
+
 // The page's settings-write target: the real profile id in single mode, the
 // ALL sentinel in All mode (where currentProfile is null). Set by
 // singleProfile()/allMode() below.
@@ -135,6 +176,7 @@ vi.mock('../../stores/profile', () => ({
 }));
 
 const updateMontageGroupLayoutMock = vi.fn();
+const updateProfileSettingsMock = vi.fn();
 
 vi.mock('../../stores/settings', () => ({
   useSettingsStore: (
@@ -144,7 +186,7 @@ vi.mock('../../stores/settings', () => ({
     }) => unknown
   ) =>
     selector({
-      updateProfileSettings: vi.fn(),
+      updateProfileSettings: updateProfileSettingsMock,
       updateMontageGroupLayout: updateMontageGroupLayoutMock,
     }),
 }));
@@ -207,6 +249,7 @@ describe('Montage Page', () => {
   beforeEach(() => {
     hiddenMonitorIds = [];
     updateMontageGroupLayoutMock.mockClear();
+    updateProfileSettingsMock.mockClear();
     useScopedMonitorsMock.mockReset();
     useCurrentProfileMock.mockReset();
     useProfileScopeMock.mockReset();
@@ -263,11 +306,10 @@ describe('Montage Page', () => {
     expect(screen.getByTestId('montage-edit-toggle')).not.toBeDisabled();
   });
 
-  // Layout editing has no real profile to persist against in All mode
-  // (useMontageGrid guards every write on currentProfile), so the control is
-  // disabled with an explanatory tooltip rather than left clickable-but-inert
-  // (refs #337, Phase 4 Task 1 fix round 1).
-  it('disables the edit-layout toggle in All mode with an explanatory tooltip', () => {
+  // Layout is a view preference, so All mode edits it against the ALL bucket
+  // like every other view-level control - the toggle is live, not disabled
+  // with an explanatory tooltip (refs #337).
+  it('enables the edit-layout toggle in All mode', () => {
     allMode([{ id: 'profile-1', name: 'Home' }, { id: 'profile-2', name: 'Office' }]);
     useScopedMonitorsMock.mockReturnValue({
       monitors: [
@@ -281,14 +323,17 @@ describe('Montage Page', () => {
     render(<Montage />);
 
     const toggle = screen.getByTestId('montage-edit-toggle');
-    expect(toggle).toBeDisabled();
-    expect(toggle).toHaveAttribute('title', 'montage.edit_disabled_all_mode');
+    expect(toggle).not.toBeDisabled();
+    expect(toggle).toHaveAttribute('title', 'montage.edit_layout');
+
+    fireEvent.click(toggle);
+    expect(screen.getByTestId('montage-edit-toggle')).toHaveTextContent('montage.done_editing');
   });
 
-  // Stale edit mode from single mode left the All-mode grid in a
-  // draggable-but-inert state (the toggle disables so it can never be turned
-  // off): entering All mode must reset it (refs #337, final fix wave).
-  it('resets edit mode when switching into All mode', () => {
+  // Edit mode used to be force-reset on the way into All mode because the
+  // toggle was disabled there; now that it is live, the mode must survive
+  // the switch (refs #337).
+  it('keeps edit mode on when switching into All mode', () => {
     singleProfile();
     useScopedMonitorsMock.mockReturnValue({
       monitors: [{ profileId: 'profile-1', profileName: 'Home', item: monitor('1', 'Front Door') }],
@@ -311,8 +356,67 @@ describe('Montage Page', () => {
     rerender(<Montage />);
 
     const toggle = screen.getByTestId('montage-edit-toggle');
-    expect(toggle).toHaveTextContent('montage.edit_layout');
-    expect(toggle).toBeDisabled();
+    expect(toggle).not.toBeDisabled();
+    expect(toggle).toHaveTextContent('montage.done_editing');
+  });
+
+  // Every view-level montage control writes to the ALL bucket in All mode
+  // rather than dropping the change on the floor (refs #337).
+  describe('All-mode view-level writes target the ALL bucket', () => {
+    const renderAllMode = () => {
+      allMode([{ id: 'profile-1', name: 'Home' }, { id: 'profile-2', name: 'Office' }]);
+      useScopedMonitorsMock.mockReturnValue({
+        monitors: [
+          { profileId: 'profile-1', profileName: 'Home', item: monitor('1', 'Front Door') },
+        ],
+        errors: [],
+        isLoading: false,
+        refetchProfile: vi.fn(),
+      });
+      render(<Montage />);
+    };
+
+    it('persists the feed-fit choice', () => {
+      renderAllMode();
+      fireEvent.click(screen.getByTestId('montage-fit-select'));
+      expect(updateProfileSettingsMock).toHaveBeenCalledWith(ALL_PROFILES_ID, {
+        montageFeedFit: 'contain',
+      });
+    });
+
+    it('clears the active saved-layout name when a column count is applied', () => {
+      renderAllMode();
+      fireEvent.click(screen.getByTestId('grid-apply-stub'));
+      expect(updateMontageGroupLayoutMock).toHaveBeenCalledWith(ALL_PROFILES_ID, 'ALL', {
+        activeLayoutName: null,
+      });
+    });
+
+    it('persists a saved layout', () => {
+      renderAllMode();
+      fireEvent.click(screen.getByTestId('grid-save-stub'));
+      expect(updateMontageGroupLayoutMock).toHaveBeenCalledWith(
+        ALL_PROFILES_ID,
+        'ALL',
+        expect.objectContaining({ activeLayoutName: 'Wall' })
+      );
+    });
+
+    it('persists the loaded layout name', () => {
+      renderAllMode();
+      fireEvent.click(screen.getByTestId('grid-load-stub'));
+      expect(updateMontageGroupLayoutMock).toHaveBeenCalledWith(ALL_PROFILES_ID, 'ALL', {
+        activeLayoutName: 'Wall',
+      });
+    });
+
+    it('persists a saved-layout deletion', () => {
+      renderAllMode();
+      fireEvent.click(screen.getByTestId('grid-delete-stub'));
+      expect(updateMontageGroupLayoutMock).toHaveBeenCalledWith(ALL_PROFILES_ID, 'ALL', {
+        savedLayouts: [],
+      });
+    });
   });
 
   // A hidden monitor must stay un-hideable regardless of the active group

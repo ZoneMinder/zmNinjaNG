@@ -85,9 +85,10 @@ export default function Montage() {
   } = useScopedMonitors();
 
   const updateSettings = useSettingsStore((state) => state.updateProfileSettings);
-  const updateMontageGroupLayout = useSettingsStore((state) => state.updateMontageGroupLayout);
   const { isFilterActive, filteredMonitorIds, isFilterReady } = useGroupFilter();
-  const { groupKey, bucket } = useMontageGroupState();
+  // update() writes the active group's montage bucket against currentProfileId,
+  // so every montage-layout write below goes through one path in both modes.
+  const { groupKey, bucket, update: updateGroupLayout } = useMontageGroupState();
 
   // Keep screen awake when Insomnia is enabled
   useInsomnia({ enabled: settings.insomnia });
@@ -216,21 +217,6 @@ export default function Montage() {
   // Edit mode state lifted to page level
   const [isEditMode, setIsEditMode] = useState(false);
 
-  // Editing is single-mode-only (the toggle is disabled in All mode below),
-  // but isEditMode itself is not scoped to isAllMode - switching into All
-  // mode with it left on from single mode stranded the grid in edit mode
-  // with no way to turn it off (the toggle stays disabled), so drag/resize
-  // handlers were live but no-op (refs #337). Reset during render rather
-  // than in an Effect (React's documented "adjusting state when a prop
-  // changes" pattern - see LiveActivitySettingsDialog's useClampedNumberField
-  // for the same idiom): an Effect would paint one extra frame with the
-  // stale edit-mode UI before correcting it.
-  const [lastIsAllMode, setLastIsAllMode] = useState(isAllMode);
-  if (isAllMode !== lastIsAllMode) {
-    setLastIsAllMode(isAllMode);
-    if (isAllMode) setIsEditMode(false);
-  }
-
   // Active saved layout name (persisted in settings)
   const activeLayoutName = bucket.activeLayoutName;
 
@@ -267,7 +253,7 @@ export default function Montage() {
     isMonitorPinned,
   } = useMontageGrid({
     monitors: cappedMonitors,
-    currentProfile,
+    profileId: currentProfileId,
     settings,
     isEditMode,
     groupKey,
@@ -387,23 +373,20 @@ export default function Montage() {
 
   const handleApplyGridLayoutWithClear = (cols: number) => {
     handleApplyGridLayout(cols);
-    if (currentProfile) {
-      updateMontageGroupLayout(currentProfile.id, groupKey, { activeLayoutName: null });
-    }
+    updateGroupLayout({ activeLayoutName: null });
   };
 
   const handleFeedFitChange = (value: string) => {
-    if (!currentProfile) return;
-    updateSettings(currentProfile.id, {
+    if (!currentProfileId) return;
+    updateSettings(currentProfileId, {
       montageFeedFit: value as typeof settings.montageFeedFit,
     });
   };
 
   // Saved layout handlers
   const handleSaveLayout = (name: string) => {
-    if (!currentProfile) return;
     const entry = { name, layout: [...layout], displayCols: gridCols };
-    updateMontageGroupLayout(currentProfile.id, groupKey, {
+    updateGroupLayout({
       savedLayouts: [...bucket.savedLayouts, entry],
       activeLayoutName: name,
     });
@@ -411,34 +394,27 @@ export default function Montage() {
 
   const handleLoadLayout = (saved: { name: string; layout: Layout[]; displayCols: number }) => {
     handleLoadSavedLayout(saved.layout, saved.displayCols);
-    if (currentProfile) {
-      updateMontageGroupLayout(currentProfile.id, groupKey, { activeLayoutName: saved.name });
-    }
+    updateGroupLayout({ activeLayoutName: saved.name });
   };
 
   const handleDeleteLayout = (index: number) => {
-    if (!currentProfile) return;
     const saved = [...bucket.savedLayouts];
     saved.splice(index, 1);
-    updateMontageGroupLayout(currentProfile.id, groupKey, { savedLayouts: saved });
+    updateGroupLayout({ savedLayouts: saved });
   };
 
-  // Unlike layout editing, hiding a tile needs no per-server persistence: the
-  // ids are composite in All mode, so the whole list lives in the ALL bucket
-  // under currentProfileId (the sentinel), the same ALL-bucket write the
-  // group-by-server toggle above does. Single mode keeps writing bare ids
-  // against the real profile (refs #337).
+  // Hiding a tile needs no per-server persistence: the ids are composite in
+  // All mode, so the whole list lives in the ALL bucket, and bare ids keep
+  // going to the real profile in single mode (refs #337).
   const handleToggleMonitorVisibility = useCallback(
     (id: string) => {
-      const targetProfileId = isAllMode ? currentProfileId : currentProfile?.id;
-      if (!targetProfileId) return;
       const current = bucket.hiddenMonitorIds;
       const next = current.includes(id)
         ? current.filter((x) => x !== id)
         : [...current, id];
-      updateMontageGroupLayout(targetProfileId, groupKey, { hiddenMonitorIds: next });
+      updateGroupLayout({ hiddenMonitorIds: next });
     },
-    [isAllMode, currentProfileId, currentProfile, bucket.hiddenMonitorIds, groupKey, updateMontageGroupLayout]
+    [bucket.hiddenMonitorIds, updateGroupLayout]
   );
 
   const handleEditModeToggle = () => {
@@ -596,15 +572,7 @@ export default function Montage() {
                 variant={isEditMode ? 'default' : 'outline'}
                 size="sm"
                 className="h-8 sm:h-9"
-                // Layout editing has no real profile to persist against in All
-                // mode (useMontageGrid guards every write on currentProfile),
-                // so the control that would open it is disabled with an
-                // explanatory tooltip rather than left clickable-but-inert
-                // (refs #337, Phase 4 Task 1 fix round 1).
-                disabled={isAllMode}
-                title={isAllMode
-                  ? t('montage.edit_disabled_all_mode')
-                  : isEditMode ? t('montage.done_editing') : t('montage.edit_layout')}
+                title={isEditMode ? t('montage.done_editing') : t('montage.edit_layout')}
                 data-testid="montage-edit-toggle"
               >
                 <Pencil className="h-4 w-4 sm:mr-2" />
