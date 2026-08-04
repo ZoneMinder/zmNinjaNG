@@ -1060,6 +1060,55 @@ describe('useStreamLifecycle', () => {
       const liveKey = result.current.connKey;
       expect(quitCountFor(liveKey)).toBe(0);
       expect(mockConnKeys['1']).toBe(liveKey);
+      // One mint on mount, one on the re-enable - and none from this effect.
+      // Without the `prev.enabled !== enabled` half of its stand-down guard it
+      // would mint a third key in this same commit, orphaning the one the
+      // regeneration effect just handed the tile.
+      expect(mockRegenerateConnKey).toHaveBeenCalledTimes(2);
+    });
+
+    it('quits on the port the stream moved to, not the one it started on', async () => {
+      // minStreamingPort can change without a view-mode flip: turning off
+      // multi-port repoints a live stream at the portal's own port. The
+      // identity ref has to follow it, or the eventual flip sends CMD_QUIT to
+      // the port the stream was opened on months of settings ago and a server
+      // that knows nothing about the key answers happily.
+      const mediaRef = makeMediaRef();
+      const { result, rerender } = renderHook(
+        ({ viewMode, minStreamingPort }: { viewMode: 'streaming' | 'snapshot'; minStreamingPort?: number }) =>
+          useStreamLifecycle({ ...baseOptions, mediaRef, viewMode, minStreamingPort }),
+        {
+          initialProps: {
+            viewMode: 'streaming' as 'streaming' | 'snapshot',
+            minStreamingPort: 30000 as number | undefined,
+          },
+        },
+      );
+
+      await waitFor(() => {
+        expect(result.current.connKey).not.toBe(0);
+      });
+      const streamingKey = result.current.connKey;
+
+      // Port-only change: same mode, same monitor, still enabled.
+      rerender({ viewMode: 'streaming', minStreamingPort: 40000 });
+      await act(async () => {});
+      mockHttpGet.mockClear();
+
+      rerender({ viewMode: 'snapshot', minStreamingPort: undefined });
+
+      // Monitor 1 on a base of 40000 streams from port 40001.
+      await waitFor(() => {
+        expect(quitCountFor(streamingKey)).toBe(1);
+      });
+      expect(mockHttpGet).toHaveBeenCalledWith(
+        expect.stringContaining(':40001/'),
+        expect.objectContaining({ timeoutMs: 12000 }),
+      );
+      expect(mockHttpGet).not.toHaveBeenCalledWith(
+        expect.stringContaining(':30001/'),
+        expect.anything(),
+      );
     });
 
     it('stays out of the way when a flip lands with a monitor change', async () => {
