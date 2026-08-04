@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useCurrentProfile } from './useCurrentProfile';
+import { useProfileStore } from '../stores/profile';
 import { useSettingsStore } from '../stores/settings';
 
 export interface UseTimelineFiltersReturn {
@@ -36,7 +37,15 @@ function saveFilterField(profileId: string, field: string, value: unknown) {
 }
 
 export function useTimelineFilters(): UseTimelineFiltersReturn {
-  const { currentProfile, settings } = useCurrentProfile();
+  const { settings } = useCurrentProfile();
+  // Persist against currentProfileId, which is the ALL sentinel in All mode
+  // and a real profile id in single mode - the same bucket `settings` reads
+  // back. Keyed off the current profile instead, every All-mode selection was
+  // discarded on unmount, since All mode has no current profile (refs #337).
+  // monitorIds stay bare ids in both modes, matching what the Timeline filter
+  // panel selects from: its All-mode monitor list is flat and unwrapped, the
+  // accepted v1 scope on ids colliding across servers (useScopedTimelineEvents).
+  const currentProfileId = useProfileStore((state) => state.currentProfileId);
 
   const [selectedMonitorIds, _setMonitorIds] = useState<string[]>([]);
   const [startDateInput, _setStartDate] = useState('');
@@ -46,7 +55,7 @@ export function useTimelineFilters(): UseTimelineFiltersReturn {
   const [activeQuickRange, _setActiveQuickRange] = useState<number | null>(null);
 
   const profileIdRef = useRef<string | null>(null);
-  profileIdRef.current = currentProfile?.id ?? null;
+  profileIdRef.current = currentProfileId;
 
   const setSelectedMonitorIds = useCallback((ids: string[]) => {
     _setMonitorIds(ids);
@@ -81,7 +90,7 @@ export function useTimelineFilters(): UseTimelineFiltersReturn {
   // Restore from persisted settings on mount / profile change
   const prevSettingsRef = useRef<string>('');
   useEffect(() => {
-    if (!currentProfile) return;
+    if (!currentProfileId) return;
     const saved = settings.timelinePageFilters;
     const settingsKey = JSON.stringify(saved);
     if (settingsKey === prevSettingsRef.current) return;
@@ -93,7 +102,7 @@ export function useTimelineFilters(): UseTimelineFiltersReturn {
     _setOnlyDetected(saved.onlyDetectedObjects);
     _setCauseFilter(saved.causeFilter ?? '');
     _setActiveQuickRange(saved.activeQuickRange ?? null);
-  }, [currentProfile?.id, settings.timelinePageFilters]);
+  }, [currentProfileId, settings.timelinePageFilters]);
 
   const clearFilters = useCallback(() => {
     setSelectedMonitorIds([]);

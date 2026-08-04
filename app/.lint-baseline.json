@@ -3,7 +3,7 @@
   "@typescript-eslint/no-explicit-any": 100,
   "@typescript-eslint/no-this-alias": 1,
   "no-restricted-syntax": 4,
-  "react-hooks/exhaustive-deps": 34,
+  "react-hooks/exhaustive-deps": 32,
   "react-hooks/globals": 1,
   "react-hooks/preserve-manual-memoization": 10,
   "react-hooks/refs": 22,

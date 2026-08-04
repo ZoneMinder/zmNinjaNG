@@ -9,6 +9,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams, useLocation } from 'react-router-dom';
 import { useCurrentProfile } from './useCurrentProfile';
+import { useProfileStore } from '../stores/profile';
 import { useSettingsStore, type ProfileSettings } from '../stores/settings';
 import type { EventFilters } from '../api/events';
 import { log, LogLevel } from '../lib/logger';
@@ -163,7 +164,16 @@ function resolveInitialFilters(
 export function useEventFilters(): UseEventFiltersReturn {
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
-  const { currentProfile, settings } = useCurrentProfile();
+  const { settings } = useCurrentProfile();
+  // Filters persist against currentProfileId, not the current profile: All
+  // mode has no current profile, only the ALL sentinel, and that sentinel is
+  // the bucket `settings` already resolves to. Keying the writes off
+  // currentProfile instead left every All-mode selection unpersisted and the
+  // restore below dead (refs #337). All-mode monitor selections are composite
+  // `${profileId}:${monitorId}` tokens, so what round-trips through the ALL
+  // bucket is the same token EventsFilterPopover produces and
+  // resolveOwnMonitorIds resolves; single mode stores bare ids as before.
+  const currentProfileId = useProfileStore((state) => state.currentProfileId);
 
   // Local filter state. The `_set*` setters below are raw React setters: they
   // update state only and do NOT persist to the settings store. Reserve them
@@ -187,7 +197,7 @@ export function useEventFilters(): UseEventFiltersReturn {
   // Wrapped setters that also save to settings store immediately.
   // No effects needed: saves happen synchronously on user action.
   const profileIdRef = useRef<string | null>(null);
-  profileIdRef.current = currentProfile?.id ?? null;
+  profileIdRef.current = currentProfileId;
 
   const setSelectedMonitorIds = useCallback((ids: string[]) => {
     _setMonitorIds(ids);
@@ -233,7 +243,7 @@ export function useEventFilters(): UseEventFiltersReturn {
   // Does NOT trigger auto-save because it uses the raw _set* functions.
   const prevSettingsRef = useRef<string>('');
   useEffect(() => {
-    if (!currentProfile) return;
+    if (!currentProfileId) return;
 
     // Deep-link URL params take priority
     if (hasUrlFilters(searchParams)) {
@@ -253,7 +263,7 @@ export function useEventFilters(): UseEventFiltersReturn {
     _setArchivedOnly(saved.archivedOnly ?? false);
     _setOnlyDetected(saved.onlyDetectedObjects);
     _setActiveQuickRange(saved.activeQuickRange ?? null);
-  }, [currentProfile?.id, settings.eventsPageFilters, searchParams]);
+  }, [currentProfileId, settings.eventsPageFilters, searchParams]);
 
   // ----- Handle deep-link URL params -----
   const isFirstRender = useRef(true);

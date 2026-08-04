@@ -7,7 +7,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useEventFilters, ALL_TAGS_FILTER_ID } from '../useEventFilters';
-import { asProfileId } from '../../api/types';
+import { resolveOwnMonitorIds } from '../useScopedEvents';
+import { asProfileId, ALL_PROFILES_ID } from '../../api/types';
 
 // Mock react-router-dom
 const mockSearchParams = new URLSearchParams();
@@ -48,6 +49,14 @@ vi.mock('../../stores/settings', () => ({
   },
 }));
 
+// Mock the profile store: the hook persists against currentProfileId, which is
+// the ALL sentinel in All mode and a real id in single mode.
+let mockCurrentProfileId: string | null = 'profile-1';
+vi.mock('../../stores/profile', () => ({
+  useProfileStore: (selector: (state: { currentProfileId: string | null }) => unknown) =>
+    selector({ currentProfileId: mockCurrentProfileId }),
+}));
+
 import { useCurrentProfile } from '../useCurrentProfile';
 import { useSettingsStore } from '../../stores/settings';
 
@@ -67,6 +76,7 @@ const mockProfileSettings = {
 
 function setupMocks(overrides?: Partial<typeof mockProfileSettings>) {
   const settings = { ...mockProfileSettings, ...overrides };
+  mockCurrentProfileId = 'profile-1';
 
   vi.mocked(useCurrentProfile).mockReturnValue({
     currentProfile: mockCurrentProfile,
@@ -653,6 +663,7 @@ describe('useEventFilters', () => {
 
   describe('no profile', () => {
     it('does not crash when currentProfile is null', () => {
+      mockCurrentProfileId = null;
       vi.mocked(useCurrentProfile).mockReturnValue({
         currentProfile: null,
         settings: mockProfileSettings as never,
@@ -671,5 +682,100 @@ describe('useEventFilters', () => {
       // Settings store should NOT be called because there is no profile ID
       expect(mockUpdateProfileSettings).not.toHaveBeenCalled();
     });
+  });
+});
+
+// All Servers mode has no current profile, only the ALL sentinel. Filters have
+// to persist against that sentinel's bucket, or every selection dies on
+// navigation away from the page (refs #337).
+describe('useEventFilters in All Servers mode', () => {
+  // A settings store that actually stores, so a filter written by one mount is
+  // what the next mount reads back. Asserting the write call alone would not
+  // show the restore path reading the same bucket.
+  let buckets: Record<string, typeof mockProfileSettings>;
+
+  function setupAllMode(saved?: Partial<typeof defaultEventsPageFilters>) {
+    mockCurrentProfileId = ALL_PROFILES_ID;
+    buckets = {
+      [ALL_PROFILES_ID]: {
+        defaultEventLimit: 100,
+        eventsPageFilters: { ...defaultEventsPageFilters, ...saved },
+      },
+      'profile-1': { defaultEventLimit: 100, eventsPageFilters: { ...defaultEventsPageFilters } },
+    };
+
+    // currentProfile is null in All mode; settings resolve to the ALL bucket,
+    // exactly as useCurrentProfile does through the sentinel profile id.
+    vi.mocked(useCurrentProfile).mockImplementation(() => ({
+      currentProfile: null,
+      settings: buckets[mockCurrentProfileId ?? ''] as never,
+      hasProfile: false,
+      isAllMode: mockCurrentProfileId === ALL_PROFILES_ID,
+    }));
+
+    mockGetProfileSettings.mockImplementation((id: string) => buckets[id]);
+    mockUpdateProfileSettings.mockImplementation((id: string, updates: Partial<typeof mockProfileSettings>) => {
+      buckets[id] = { ...buckets[id], ...updates };
+    });
+    vi.mocked(useSettingsStore.getState).mockReturnValue({
+      getProfileSettings: mockGetProfileSettings,
+      updateProfileSettings: mockUpdateProfileSettings,
+    } as never);
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    Array.from(mockSearchParams.keys()).forEach((key) => mockSearchParams.delete(key));
+    setupAllMode();
+  });
+
+  it('writes a filter to the ALL bucket and restores it on the next mount', () => {
+    const first = renderHook(() => useEventFilters());
+    act(() => {
+      first.result.current.setFavoritesOnly(true);
+      first.result.current.setActiveQuickRange(6);
+    });
+    first.unmount();
+
+    expect(mockUpdateProfileSettings).toHaveBeenCalledWith(ALL_PROFILES_ID, expect.anything());
+    expect(buckets[ALL_PROFILES_ID].eventsPageFilters).toMatchObject({ favoritesOnly: true, activeQuickRange: 6 });
+
+    const second = renderHook(() => useEventFilters());
+    expect(second.result.current.favoritesOnly).toBe(true);
+    expect(second.result.current.activeQuickRange).toBe(6);
+  });
+
+  // All-mode monitor selections are composite `${profileId}:${monitorId}`
+  // tokens (EventsFilterPopover). The persisted form has to keep the token
+  // whole: a bare id restored into All mode would apply profile-a's monitor 3
+  // to profile-b's query too, since resolveOwnMonitorIds passes a ':'-less
+  // token through to every profile in scope.
+  it('round-trips a composite monitor token that no other profile matches', () => {
+    const first = renderHook(() => useEventFilters());
+    act(() => {
+      first.result.current.setSelectedMonitorIds(['profile-a:3']);
+    });
+    first.unmount();
+
+    const second = renderHook(() => useEventFilters());
+    const restored = second.result.current.filters.monitorId;
+
+    expect(resolveOwnMonitorIds(restored, asProfileId('profile-a'))).toBe('3');
+    expect(resolveOwnMonitorIds(restored, asProfileId('profile-b'))).toBeUndefined();
+    expect(second.result.current.selectedMonitorIds).toEqual(['profile-a:3']);
+  });
+
+  it('keeps the ALL bucket filter out of a single profile bucket', () => {
+    const inAllMode = renderHook(() => useEventFilters());
+    act(() => {
+      inAllMode.result.current.setSelectedMonitorIds(['profile-a:3']);
+    });
+    inAllMode.unmount();
+
+    mockCurrentProfileId = 'profile-1';
+    const inSingleMode = renderHook(() => useEventFilters());
+
+    expect(buckets['profile-1'].eventsPageFilters.monitorIds).toEqual([]);
+    expect(inSingleMode.result.current.selectedMonitorIds).toEqual([]);
   });
 });
