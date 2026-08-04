@@ -229,6 +229,28 @@ Feature: All Servers mode
     Then I should see the All Servers profile card
 
   @web
+  Scenario: the command palette lists a monitor from every server and opens the owning one
+    When I navigate to the "Profiles" page
+    And I click the All Servers profile card
+    Then I should be on the monitors page
+    When I record the first monitor name
+    And I press the slash key
+    Then I should see the command palette
+    When I type the recorded monitor name into the command palette
+    Then the palette should list that monitor once per server, each labelled with its server
+    When I press Enter in the command palette
+    Then the URL should match the all-mode monitor detail route
+    And the monitor detail page should show the recorded monitor
+
+  @web
+  Scenario: navigation shortcuts still work in All Servers mode
+    When I navigate to the "Profiles" page
+    And I click the All Servers profile card
+    Then I should be on the monitors page
+    When I press the "e" navigation key
+    Then I should be on the "events" section
+
+  @web
   Scenario: All Servers aggregation excludes a disabled profile
     When I navigate to the "Monitors" page
     Then I record the single-profile monitor card count

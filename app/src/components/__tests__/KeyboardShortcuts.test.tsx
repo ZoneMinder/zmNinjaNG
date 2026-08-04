@@ -134,6 +134,17 @@ describe('KeyboardShortcuts in All mode (refs #337)', () => {
     expect(navigateMock).toHaveBeenCalledWith('/all/monitors/p2/7', { state: { from: '/dashboard' } });
   });
 
+  // Escape is a plain back-navigation with nothing open, and All mode is no
+  // exception now that the handler runs there - the e2e steps that press it
+  // must not do so speculatively (refs #337).
+  it('navigates back on Escape with no overlay open', () => {
+    render(<KeyboardShortcuts />);
+    act(() => {
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    expect(navigateMock).toHaveBeenCalledWith(-1);
+  });
+
   it('keeps the bare monitor route in single mode', () => {
     useProfileScopeMock.mockReturnValue(singleScope);
     scopedMonitorsMock.mockReturnValue({

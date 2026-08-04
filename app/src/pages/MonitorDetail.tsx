@@ -302,7 +302,7 @@ export default function MonitorDetail() {
                   monitorDotColor(getMonitorRunState(monitor.Monitor, monitor.Monitor_Status, zmVersion))
                 )}
               />
-              <h1 className="text-sm sm:text-base font-semibold">{monitor.Monitor.Name}</h1>
+              <h1 className="text-sm sm:text-base font-semibold" data-testid="monitor-detail-name">{monitor.Monitor.Name}</h1>
             </div>
             <div className="flex items-center gap-2 text-[10px] sm:text-xs text-muted-foreground ml-3">
               {is138Plus ? (

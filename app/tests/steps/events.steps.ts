@@ -231,8 +231,11 @@ When('I open the events filter panel', async ({ page }) => {
   const filterButton = page.getByTestId('events-filter-button');
   const panel = page.getByTestId('events-filter-panel');
 
-  // Wait for button to be ready
-  await filterButton.waitFor({ state: 'visible', timeout: testConfig.timeouts.element });
+  // The whole Events header, this button included, sits behind the page's
+  // loading skeleton until the first profile's events query resolves, so this
+  // is a full data load rather than a plain element wait - and All mode adds
+  // one events query per profile on top (refs #337).
+  await filterButton.waitFor({ state: 'visible', timeout: testConfig.timeouts.pageLoad });
 
   // Click to open if not already open
   if (!(await panel.isVisible().catch(() => false))) {
@@ -272,8 +275,16 @@ When('I apply event filters', async ({ page }) => {
 // step that then clicks a card is clicking through it and never lands, so the
 // popover must be dismissed first (refs #237).
 When('I close the events filter panel', async ({ page }) => {
-  await page.keyboard.press('Escape');
-  await expect(page.getByTestId('events-filter-panel')).toBeHidden({
+  const panel = page.getByTestId('events-filter-panel');
+  // Escape is also the global back shortcut, so it only gets pressed when
+  // there is a panel for it to close. Applying a filter can dismiss the
+  // popover on its own, and a speculative Escape then navigates the app off
+  // the Events page entirely - which is what All mode surfaced, since the
+  // shortcuts run there now too (refs #337).
+  if (await panel.isVisible().catch(() => false)) {
+    await page.keyboard.press('Escape');
+  }
+  await expect(panel).toBeHidden({
     timeout: testConfig.timeouts.transition,
   });
 });

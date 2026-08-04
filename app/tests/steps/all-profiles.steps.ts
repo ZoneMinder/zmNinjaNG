@@ -596,3 +596,47 @@ Then('the favorites-only filter should be {string}', async ({ page }, state: str
     { timeout: testConfig.timeouts.element },
   );
 });
+
+// Command palette in All mode (refs #337, audit C12). The e2e's second
+// profile points at the SAME server, so both profiles carry identical monitor
+// names and identical monitor ids - exactly the collision the palette has to
+// keep apart.
+let recordedMonitorName = '';
+
+When('I record the first monitor name', async ({ page }) => {
+  const names = page.getByTestId('monitor-name');
+  await expect.poll(async () => names.count(), {
+    timeout: testConfig.timeouts.pageLoad,
+  }).toBeGreaterThan(0);
+  recordedMonitorName = (await names.first().textContent())?.trim() ?? '';
+  expect(recordedMonitorName).not.toBe('');
+});
+
+When('I type the recorded monitor name into the command palette', async ({ page }) => {
+  await page.getByTestId('command-palette-input').fill(recordedMonitorName);
+});
+
+Then('the palette should list that monitor once per server, each labelled with its server', async ({ page }) => {
+  const rows = page.locator('[data-testid^="command-item-monitor-"]');
+  await expect.poll(async () => rows.count(), {
+    timeout: testConfig.timeouts.pageLoad,
+  }).toBeGreaterThanOrEqual(2);
+
+  // Every row names the monitor, and one of them is labelled "Second" - the
+  // profile added in the Background. The palette used to list no monitors at
+  // all in All mode, and a bare monitor id would have collapsed the two
+  // servers' identical ids into a single row.
+  const texts = await rows.allTextContents();
+  for (const text of texts) {
+    expect(text).toContain(recordedMonitorName);
+  }
+  expect(texts.some((t) => t.includes('Second'))).toBe(true);
+  const testIds = await rows.evaluateAll((els) => els.map((el) => el.getAttribute('data-testid') ?? ''));
+  expect(new Set(testIds).size).toBe(testIds.length);
+});
+
+Then('the monitor detail page should show the recorded monitor', async ({ page }) => {
+  await expect(page.getByTestId('monitor-detail-name')).toHaveText(recordedMonitorName, {
+    timeout: testConfig.timeouts.pageLoad,
+  });
+});
