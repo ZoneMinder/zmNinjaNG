@@ -220,10 +220,25 @@ export function LiveMonitorPlayer({
   const [hasVideoFrames, setHasVideoFrames] = useState(false);
 
   // A paused tile holds no connection, so it has no frames whatever the last
-  // ones were. Derived rather than stored: the freeze watchdog must not keep
-  // running (and eventually "recover" a stream nobody asked for) against a
-  // connection the pause already closed.
+  // ones were. Derived rather than stored: the go2rtc hook stops in its own
+  // effect, so its last "connected, frames flowing" answer outlives the render
+  // that paused the tile, and the freeze watchdog must not keep running (and
+  // eventually "recover" a stream nobody asked for) against a connection the
+  // pause already closed.
   const hasLiveVideoFrames = hasVideoFrames && !paused;
+
+  // Going into a pause also drops the stored frame state, so the resume starts
+  // from cold: placeholder, then the pre-frame timeout that allows a full
+  // GO2RTC_VIDEO_TIMEOUT_S for the first frame. Carrying "has frames" across
+  // the pause would instead arm the freeze watchdog against a connection that
+  // has not finished negotiating, and its GO2RTC_FREEZE_THRESHOLD_S clock
+  // would run out before any frame could arrive. Derived during render, in
+  // the same style as the streamingMethod reset above.
+  const prevPausedRef = useRef(paused);
+  if (paused && !prevPausedRef.current && hasVideoFrames) {
+    setHasVideoFrames(false);
+  }
+  prevPausedRef.current = paused;
 
   // Record a Go2RTC failure in the shared cache, unless this player opts out.
   // The local go2rtcFailed state still flips so this instance falls back to
