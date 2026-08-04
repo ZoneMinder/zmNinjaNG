@@ -28,6 +28,7 @@ import { filterMonitorsByGroup } from '../lib/monitor/filters';
 import { allocateStreamBudget } from '../lib/monitor/stream-budget';
 import { useHiddenPause } from '../hooks/useHiddenPause';
 import { useIdleAfter } from '../hooks/useIdleAfter';
+import { useViewportGating } from '../hooks/useViewportGating';
 import { MONTAGE_GRID } from '../lib/zmninja-ng-constants';
 import { useGroupFilter } from '../hooks/useGroupFilter';
 import { useMontageGroupState } from '../hooks/useMontageGroupState';
@@ -335,14 +336,36 @@ export default function Montage() {
   // The same element also scrolls, and the scroll pad needs to reach it.
   // Composed in a stable callback so the resize observer is not torn down and
   // re-attached on every render.
+  //
+  // Also kept in state, not only in the ref: the viewport gating below roots
+  // its observer on this element and has to build one the moment it exists,
+  // which a ref alone cannot announce.
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const [scrollContainer, setScrollContainerEl] = useState<HTMLDivElement | null>(null);
   const setScrollContainer = useCallback(
     (element: HTMLDivElement | null) => {
       scrollContainerRef.current = element;
+      setScrollContainerEl(element);
       containerRef(element);
     },
     [containerRef]
   );
+
+  // Viewport gating (refs #337): All mode only. A tile scrolled out of the
+  // container (plus a container's worth of margin) holds no connection at
+  // all, and comes back as it returns.
+  //
+  // This runs AFTER the stream budget above, and the ordering is the point:
+  // the budget decides which tiles exist, gating decides which of those hold
+  // a connection. A tile the budget dropped never reaches here, and a tile
+  // gated here still counts against the budget - so scrolling cannot promote
+  // an overflow monitor into the grid.
+  const { isTileGated, registerTile } = useViewportGating({
+    enabled: isAllMode && settings.allModeViewportGating,
+    root: scrollContainer,
+    rootMargin: MONTAGE_GRID.viewportGatingRootMargin,
+    lingerMs: MONTAGE_GRID.viewportGatingLingerMs,
+  });
 
   // TV mode D-pad grid navigation
   const { isTvMode } = useTvMode();
@@ -722,6 +745,8 @@ export default function Montage() {
             resolveNewestEventAt={resolveNewestEventAt}
             reduceStream={reduceStream}
             paused={paused}
+            isTileGated={isTileGated}
+            registerTile={registerTile}
             forceViewMode={isIdle ? 'snapshot' : undefined}
           />
         </div>

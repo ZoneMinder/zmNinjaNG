@@ -111,6 +111,13 @@ interface MontageGridSectionsProps {
   /** All-mode pause-while-hidden: every tile stops streaming (refs #337).
    *  Always false in single mode. */
   paused: boolean;
+  /** All-mode viewport gating: this tile is out of view and must hold no
+   *  connection (refs #337). Composes with `paused` - either reason stops the
+   *  tile. Always false in single mode. */
+  isTileGated: (tileId: string) => boolean;
+  /** Hands the tile's element to the page's one IntersectionObserver, which
+   *  is what answers `isTileGated`. A no-op ref while gating is off. */
+  registerTile: (tileId: string) => (el: HTMLElement | null) => void;
   /** All-mode idle downgrade: 'snapshot' once the user has left the page
    *  alone long enough (refs #337). Undefined leaves each tile on its own
    *  Streaming Mode. */
@@ -143,6 +150,8 @@ export function MontageGridSections({
   resolveNewestEventAt,
   reduceStream,
   paused,
+  isTileGated,
+  registerTile,
   forceViewMode,
 }: MontageGridSectionsProps) {
   const { t } = useTranslation();
@@ -179,6 +188,10 @@ export function MontageGridSections({
     return (
       <div
         key={tileId}
+        // The observed element is this wrapper rather than the card inside it:
+        // it is the one react-grid-layout positions, so its box is the tile's
+        // real position on screen.
+        ref={registerTile(tileId)}
         className={cn(
           "relative focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
           isMonitorPinned(tileId) && "pin-locked",
@@ -212,7 +225,10 @@ export function MontageGridSections({
             newEventCount={resolveNewEventCount(item)}
             newestEventAt={resolveNewestEventAt(item)}
             reduceStream={reduceStream}
-            paused={paused}
+            // Out of view stops the tile for the same reason a hidden page
+            // does, so the two share one prop rather than the player learning
+            // a second way to be off.
+            paused={paused || isTileGated(tileId)}
             forceViewMode={forceViewMode}
           />
         </MontageTileErrorBoundary>

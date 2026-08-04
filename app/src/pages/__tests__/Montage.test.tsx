@@ -13,6 +13,10 @@ import Montage from '../Montage';
 import { ALL_PROFILES_ID } from '../../api/types';
 import { DEFAULT_SETTINGS } from '../../stores/settings';
 import { MONTAGE_GRID } from '../../lib/zmninja-ng-constants';
+import {
+  installMockIntersectionObserver,
+  latestIntersectionObserver,
+} from '../../tests/mock-intersection-observer';
 
 const useScopedMonitorsMock = vi.fn();
 const useCurrentProfileMock = vi.fn();
@@ -933,6 +937,201 @@ describe('Montage Page', () => {
       act(() => { vi.advanceTimersByTime(IDLE_MS * 4); });
 
       expect(viewMode()).toBe('none');
+    });
+  });
+
+  describe('viewport gating', () => {
+    const TILE = 'montage-monitor-profile-1:1';
+
+    const oneMonitor = () => {
+      useScopedMonitorsMock.mockReturnValue({
+        monitors: [{ profileId: 'profile-1', profileName: 'Home', item: monitor('1', 'Front Door') }],
+        errors: [],
+        isLoading: false,
+        refetchProfile: vi.fn(),
+      });
+    };
+
+    const paused = () =>
+      screen.getByTestId('montage-tile-tuning').getAttribute('data-paused');
+
+    /** Report the tile's position the way the browser's observer would. */
+    const report = (isIntersecting: boolean) => {
+      const target = screen.getByTestId(TILE);
+      act(() => { latestIntersectionObserver().fire([{ target, isIntersecting }]); });
+    };
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      installMockIntersectionObserver();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    });
+
+    it('holds an unmeasured tile closed and opens it once it is reported in view', () => {
+      allMode([{ id: 'profile-1', name: 'Home' }], { allModeViewportGating: true });
+      oneMonitor();
+
+      render(<Montage />);
+      expect(paused()).toBe('true');
+
+      report(true);
+
+      expect(paused()).toBe('false');
+    });
+
+    it('stops a tile that scrolled out, but only after the linger', () => {
+      allMode([{ id: 'profile-1', name: 'Home' }], { allModeViewportGating: true });
+      oneMonitor();
+
+      render(<Montage />);
+      report(true);
+      report(false);
+      expect(paused()).toBe('false');
+
+      act(() => { vi.advanceTimersByTime(MONTAGE_GRID.viewportGatingLingerMs - 1); });
+      expect(paused()).toBe('false');
+
+      act(() => { vi.advanceTimersByTime(1); });
+      expect(paused()).toBe('true');
+
+      report(true);
+      expect(paused()).toBe('false');
+    });
+
+    it('leaves every tile streaming while the setting is off', () => {
+      allMode([{ id: 'profile-1', name: 'Home' }], { allModeViewportGating: false });
+      oneMonitor();
+
+      render(<Montage />);
+
+      expect(paused()).toBe('false');
+      act(() => { vi.advanceTimersByTime(MONTAGE_GRID.viewportGatingLingerMs * 2); });
+      expect(paused()).toBe('false');
+    });
+
+    it('never gates in single mode, whatever the ALL bucket says', () => {
+      singleProfile();
+      useCurrentProfileMock.mockReturnValue({
+        currentProfile: { id: 'profile-1', name: 'Home' },
+        settings: { ...SETTINGS, allModeViewportGating: true },
+        isAllMode: false,
+      });
+      oneMonitor();
+
+      render(<Montage />);
+
+      expect(paused()).toBe('false');
+      act(() => { vi.advanceTimersByTime(MONTAGE_GRID.viewportGatingLingerMs * 2); });
+      expect(paused()).toBe('false');
+    });
+
+    it('gates each tile on its own position rather than the grid as a whole', () => {
+      allMode([{ id: 'profile-1', name: 'Home' }], { allModeViewportGating: true });
+      useScopedMonitorsMock.mockReturnValue({
+        monitors: [
+          { profileId: 'profile-1', profileName: 'Home', item: monitor('1', 'Front Door') },
+          { profileId: 'profile-1', profileName: 'Home', item: monitor('2', 'Back Yard') },
+        ],
+        errors: [],
+        isLoading: false,
+        refetchProfile: vi.fn(),
+      });
+
+      render(<Montage />);
+      act(() => {
+        latestIntersectionObserver().fire([
+          { target: screen.getByTestId('montage-monitor-profile-1:1'), isIntersecting: true },
+          { target: screen.getByTestId('montage-monitor-profile-1:2'), isIntersecting: false },
+        ]);
+      });
+      act(() => { vi.advanceTimersByTime(MONTAGE_GRID.viewportGatingLingerMs); });
+
+      const [first, second] = screen.getAllByTestId('montage-tile-tuning');
+      expect(first).toHaveAttribute('data-paused', 'false');
+      expect(second).toHaveAttribute('data-paused', 'true');
+    });
+
+    it('keeps a hidden page paused even where the tile is in view', () => {
+      // Two guardrails, one answer: either reason to stop is enough, so the
+      // tile stays closed until BOTH say it may stream.
+      allMode([{ id: 'profile-1', name: 'Home' }], {
+        allModeViewportGating: true,
+        allModePauseHidden: true,
+      });
+      oneMonitor();
+
+      render(<Montage />);
+      report(true);
+      expect(paused()).toBe('false');
+
+      act(() => {
+        Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      act(() => { vi.advanceTimersByTime(MONTAGE_GRID.pauseHiddenGraceMs); });
+      expect(paused()).toBe('true');
+
+      act(() => {
+        Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      expect(paused()).toBe('false');
+    });
+
+    it('stops an off-screen tile outright rather than downgrading it to snapshots', () => {
+      // The idle downgrade asks for snapshots; gating asks for no connection
+      // at all. A tile both apply to holds no connection: pausing wins,
+      // because a snapshot poll is still traffic for a tile nobody can see.
+      allMode([{ id: 'profile-1', name: 'Home' }], {
+        allModeViewportGating: true,
+        allModeIdleMinutes: 5,
+      });
+      oneMonitor();
+
+      render(<Montage />);
+      report(true);
+      act(() => { vi.advanceTimersByTime(5 * 60_000); });
+      expect(paused()).toBe('false');
+      expect(screen.getByTestId('montage-tile-tuning')).toHaveAttribute(
+        'data-force-view-mode',
+        'snapshot'
+      );
+
+      report(false);
+      act(() => { vi.advanceTimersByTime(MONTAGE_GRID.viewportGatingLingerMs); });
+
+      expect(paused()).toBe('true');
+    });
+
+    it('releases a gated tile when the setting is turned off', () => {
+      allMode([{ id: 'profile-1', name: 'Home' }], { allModeViewportGating: true });
+      oneMonitor();
+
+      const { rerender } = render(<Montage />);
+      expect(paused()).toBe('true');
+
+      allMode([{ id: 'profile-1', name: 'Home' }], { allModeViewportGating: false });
+      rerender(<Montage />);
+
+      expect(paused()).toBe('false');
+    });
+
+    it('leaves no linger timer behind when the montage unmounts', () => {
+      allMode([{ id: 'profile-1', name: 'Home' }], { allModeViewportGating: true });
+      oneMonitor();
+
+      const { unmount } = render(<Montage />);
+      report(true);
+      report(false);
+      expect(vi.getTimerCount()).toBe(1);
+
+      unmount();
+
+      expect(vi.getTimerCount()).toBe(0);
     });
   });
 

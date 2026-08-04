@@ -1035,6 +1035,20 @@ export const MONTAGE_GRID = {
   // the montage fires hundreds of events a second and every one of them would
   // otherwise rebuild the idle timer (ms).
   idleActivityThrottleMs: 1_000,
+
+  // How far beyond the montage's scroll container a tile still counts as
+  // worth a connection while viewport gating is on (`allModeViewportGating`),
+  // as an IntersectionObserver rootMargin. One container height either way:
+  // the row about to be scrolled to is already streaming when it arrives, so
+  // gating costs no visible connect delay in ordinary scrolling.
+  viewportGatingRootMargin: '100%',
+
+  // How long a tile keeps its connection after leaving that margin. Scrolling
+  // from the top of a tall montage to the bottom passes every tile in
+  // between, and without this each one would quit and remint a connkey on the
+  // way past - more server work than the streaming it saves. Coming back into
+  // view is not debounced; only leaving is (ms).
+  viewportGatingLingerMs: 1_500,
 } as const;
 
 /**
