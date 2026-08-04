@@ -475,7 +475,11 @@ listener for pointer, key and touch activity, throttled by
 hundreds of events a second and each one would otherwise rebuild the timer.
 Going idle passes ``forceViewMode='snapshot'`` down to the player, which is
 the same override the single-monitor page uses, so tiles land on the existing
-periodic-snapshot path rather than a new render branch. It is independent of
+periodic-snapshot path rather than a new render branch. Leaving streaming is a
+teardown, so each tile's live connkey is quit as it goes; that closure lives in
+``useStreamLifecycle`` rather than here, because the Streaming Mode setting
+reaches the same transition (see
+:doc:`12-shared-services-and-components`). It is independent of
 insomnia on purpose: a montage left up on a display insomnia is keeping awake
 is the case it exists for.
 

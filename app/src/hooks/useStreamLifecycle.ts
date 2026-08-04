@@ -8,6 +8,8 @@
  * - CMD_QUIT on unmount (streaming mode only)
  * - CMD_QUIT when `enabled` goes false, so a disabled hook never leaves a live
  *   nph-zms process behind, and re-enabling mints a fresh key
+ * - CMD_QUIT when `viewMode` leaves 'streaming', for the same reason: every
+ *   other quit path is gated on streaming and would skip the key by then
  * - Image/media element abort on unmount to release browser connections
  * - cleanupParamsRef pattern to capture latest values for the unmount effect
  */
@@ -50,7 +52,7 @@ interface StreamCleanupParams {
 async function quitStreamForParams(
   params: StreamCleanupParams,
   logFn: ComponentLogger,
-  reason: 'unmount' | 'profile-switch' | 'disable',
+  reason: 'unmount' | 'profile-switch' | 'disable' | 'view-mode',
 ): Promise<void> {
   if (
     params.viewMode !== 'streaming' ||
@@ -298,6 +300,50 @@ export function useStreamLifecycle({
     prevConnKeyRef.current = 0;
     setConnKey(0);
   }, [enabled, logFn]);
+
+  // View-mode teardown. A streaming connkey is a running nph-zms process on the
+  // server; a snapshot request is not. Flipping a live hook from streaming to
+  // snapshot therefore ends that process's usefulness while nothing else would
+  // ever close it: the unmount and disable teardowns both skip snapshot mode by
+  // the time they run, so the key was orphaned until ZM's own idle timeout. The
+  // Streaming Mode setting reaches this, and so does the All-mode idle
+  // downgrade (refs #337), which flips every tile at once.
+  //
+  // Both directions then mint a fresh key. The new mode needs one (a snapshot
+  // URL carries a connkey too), and reusing the quit key risks colliding with
+  // whatever server-side state it left behind.
+  const prevStreamIdentityRef = useRef({ viewMode, monitorId, enabled });
+  useEffect(() => {
+    const prev = prevStreamIdentityRef.current;
+    prevStreamIdentityRef.current = { viewMode, monitorId, enabled };
+    if (prev.viewMode === viewMode) return;
+    // Only a mode flip on an otherwise unchanged stream is this effect's to
+    // handle. When the monitor or the enabled flag moved in the same commit,
+    // the key held here belongs to a stream another teardown owns (or to a
+    // monitor whose URL and port are no longer what the props say), and acting
+    // on it would quit the wrong stream or start a second one.
+    if (prev.monitorId !== monitorId || prev.enabled !== enabled) return;
+    // A disabled hook owns no stream: the disable teardown already quit its key
+    // and re-enabling mints a fresh one, so there is nothing to do here.
+    if (!enabled || !monitorId) return;
+
+    if (prev.viewMode === 'streaming') {
+      // viewMode is forced back to what the key was minted under: the params
+      // effect above runs earlier in this same commit and has already rebuilt
+      // the ref with the NEW mode, which would make the quit a no-op.
+      void quitStreamForParams(
+        { ...cleanupParamsRef.current, viewMode: 'streaming' },
+        logFn,
+        'view-mode',
+      );
+    }
+
+    const newKey = regenerateConnKey(cacheKey);
+    setConnKey(newKey);
+    prevConnKeyRef.current = newKey;
+    cleanupParamsRef.current = buildCleanupParams(newKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode, monitorId, enabled]);
 
   // Capture the live media element on every render. The unmount cleanup runs as
   // a passive effect, by which point React has already nulled mediaRef, so we

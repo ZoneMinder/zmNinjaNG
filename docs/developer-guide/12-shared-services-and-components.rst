@@ -1182,6 +1182,19 @@ only its optional ``killPrevious`` quit is streaming-gated, because the private
 ``mediaRef`` points at the ``<img>`` or ``<video>`` whose ``src`` is cleared on
 unmount, which is what actually releases the browser's connection.
 
+Three transitions end a key's life without an unmount, and each one quits it:
+``enabled`` going false, a profile switch (below), and ``viewMode`` leaving
+``'streaming'``. The last is easy to miss, because by the time any other
+teardown runs the hook already reads ``'snapshot'`` and every quit path is
+gated on ``'streaming'``, so the key it holds would never be closed at all: a
+tile dropped to snapshots left a running ``nph-zms`` process behind until ZM's
+own idle timeout. The Streaming Mode setting reaches that transition, and so
+does the All-mode idle downgrade. Both directions of the flip then mint a
+fresh key, because a snapshot URL carries a connkey too and reusing a quit one
+risks colliding with the state it left on the server. A flip that arrives in
+the same commit as a monitor change or an ``enabled`` change belongs to the
+regeneration or disable teardown instead, and this path stands down.
+
 ``useMonitorStream`` builds the retry behavior on top: ``reportStreamError``
 (wired to ``<img onError>``) schedules an exponential-backoff reconnect
 (``mjpegReconnectBaseDelayMs`` 1000 ms, doubling to ``mjpegReconnectMaxDelayMs``

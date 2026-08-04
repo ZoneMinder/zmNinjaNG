@@ -95,7 +95,7 @@ const baseOptions = {
   monitorName: 'Cam 1',
   portalUrl: 'http://zm.local',
   accessToken: 'tok-abc',
-  viewMode: 'streaming' as const,
+  viewMode: 'streaming' as 'streaming' | 'snapshot',
   logFn: mockLogFn,
   apiTimeoutSeconds: 12,
 };
@@ -857,6 +857,194 @@ describe('useStreamLifecycle', () => {
         expect(quitCountFor(onlyKey)).toBe(1);
       });
       expect(mockHttpGet).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // A streaming key is a running nph-zms process; a snapshot request is not.
+  // Switching a live hook from streaming to snapshot therefore has to close
+  // the stream, exactly as disabling it does. Reached from the Streaming Mode
+  // setting, the All-mode idle downgrade (refs #337), and any other viewMode
+  // flip on a mounted tile.
+  describe('view-mode teardown', () => {
+    function quitCountFor(key: number): number {
+      const pattern = new RegExp(`connkey=${key}(?![0-9])`);
+      return mockHttpGet.mock.calls.filter(
+        (call) => typeof call[0] === 'string' && pattern.test(call[0] as string),
+      ).length;
+    }
+
+    it('quits the streaming key when the hook flips to snapshot', async () => {
+      const mediaRef = makeMediaRef();
+      const { result, rerender } = renderHook(
+        ({ viewMode }: { viewMode: 'streaming' | 'snapshot' }) =>
+          useStreamLifecycle({ ...baseOptions, mediaRef, viewMode }),
+        { initialProps: { viewMode: 'streaming' as 'streaming' | 'snapshot' } },
+      );
+
+      await waitFor(() => {
+        expect(result.current.connKey).not.toBe(0);
+      });
+      const streamingKey = result.current.connKey;
+      mockHttpGet.mockClear();
+
+      rerender({ viewMode: 'snapshot' });
+
+      await waitFor(() => {
+        expect(quitCountFor(streamingKey)).toBe(1);
+      });
+      expect(mockHttpGet).toHaveBeenCalledTimes(1);
+    });
+
+    it('mints a fresh key for snapshot mode rather than reusing the quit one', async () => {
+      const mediaRef = makeMediaRef();
+      const { result, rerender } = renderHook(
+        ({ viewMode }: { viewMode: 'streaming' | 'snapshot' }) =>
+          useStreamLifecycle({ ...baseOptions, mediaRef, viewMode }),
+        { initialProps: { viewMode: 'streaming' as 'streaming' | 'snapshot' } },
+      );
+
+      await waitFor(() => {
+        expect(result.current.connKey).not.toBe(0);
+      });
+      const streamingKey = result.current.connKey;
+
+      rerender({ viewMode: 'snapshot' });
+
+      // A quit key can collide with server-side state, and the snapshot view
+      // still needs a key to fetch with, so the hook must hand back a new one.
+      await waitFor(() => {
+        expect(result.current.connKey).not.toBe(streamingKey);
+      });
+      expect(result.current.connKey).not.toBe(0);
+      expect(mockConnKeys['1']).toBe(result.current.connKey);
+    });
+
+    it('mints another fresh key on the way back to streaming', async () => {
+      const mediaRef = makeMediaRef();
+      const { result, rerender } = renderHook(
+        ({ viewMode }: { viewMode: 'streaming' | 'snapshot' }) =>
+          useStreamLifecycle({ ...baseOptions, mediaRef, viewMode }),
+        { initialProps: { viewMode: 'streaming' as 'streaming' | 'snapshot' } },
+      );
+
+      await waitFor(() => {
+        expect(result.current.connKey).not.toBe(0);
+      });
+      const streamingKey = result.current.connKey;
+
+      rerender({ viewMode: 'snapshot' });
+      await waitFor(() => {
+        expect(result.current.connKey).not.toBe(streamingKey);
+      });
+      const snapshotKey = result.current.connKey;
+
+      rerender({ viewMode: 'streaming' });
+
+      await waitFor(() => {
+        expect(result.current.connKey).not.toBe(snapshotKey);
+      });
+      // Nothing to quit on the way back: a snapshot key holds no nph-zms
+      // process, so the only request in the whole cycle is the first quit.
+      expect(quitCountFor(snapshotKey)).toBe(0);
+      expect(quitCountFor(streamingKey)).toBe(1);
+    });
+
+    it('does not quit the streaming key twice when the flip is followed by an unmount', async () => {
+      const mediaRef = makeMediaRef();
+      const { result, rerender, unmount } = renderHook(
+        ({ viewMode }: { viewMode: 'streaming' | 'snapshot' }) =>
+          useStreamLifecycle({ ...baseOptions, mediaRef, viewMode }),
+        { initialProps: { viewMode: 'streaming' as 'streaming' | 'snapshot' } },
+      );
+
+      await waitFor(() => {
+        expect(result.current.connKey).not.toBe(0);
+      });
+      const streamingKey = result.current.connKey;
+
+      rerender({ viewMode: 'snapshot' });
+      await waitFor(() => {
+        expect(quitCountFor(streamingKey)).toBe(1);
+      });
+
+      unmount();
+
+      expect(quitCountFor(streamingKey)).toBe(1);
+    });
+
+    it('leaves the freshly minted key alone when a re-enable and a flip land together', async () => {
+      // The montage resume case: a paused tile comes back at the same moment
+      // the idle downgrade clears. The regeneration effect owns the new key in
+      // that commit, and quitting it here would kill the stream on arrival.
+      const mediaRef = makeMediaRef();
+      const { result, rerender } = renderHook(
+        ({ enabled, viewMode }: { enabled: boolean; viewMode: 'streaming' | 'snapshot' }) =>
+          useStreamLifecycle({ ...baseOptions, mediaRef, enabled, viewMode }),
+        { initialProps: { enabled: true, viewMode: 'streaming' as 'streaming' | 'snapshot' } },
+      );
+
+      await waitFor(() => {
+        expect(result.current.connKey).not.toBe(0);
+      });
+
+      rerender({ enabled: false, viewMode: 'streaming' });
+      await waitFor(() => {
+        expect(result.current.connKey).toBe(0);
+      });
+      mockHttpGet.mockClear();
+
+      rerender({ enabled: true, viewMode: 'snapshot' });
+
+      await waitFor(() => {
+        expect(result.current.connKey).not.toBe(0);
+      });
+      const liveKey = result.current.connKey;
+      expect(quitCountFor(liveKey)).toBe(0);
+      expect(mockConnKeys['1']).toBe(liveKey);
+    });
+
+    it('stays out of the way when a flip lands with a monitor change', async () => {
+      const mediaRef = makeMediaRef();
+      const { result, rerender } = renderHook(
+        ({ monitorId, viewMode }: { monitorId: string; viewMode: 'streaming' | 'snapshot' }) =>
+          useStreamLifecycle({ ...baseOptions, mediaRef, monitorId, viewMode }),
+        { initialProps: { monitorId: '1', viewMode: 'streaming' as 'streaming' | 'snapshot' } },
+      );
+
+      await waitFor(() => {
+        expect(result.current.connKey).not.toBe(0);
+      });
+      const firstKey = result.current.connKey;
+      mockHttpGet.mockClear();
+
+      // A tile repointed at another monitor in the same commit as a mode flip.
+      // By now every value this effect could quit from describes monitor 2,
+      // while the key it holds was opened against monitor 1's URL and port, so
+      // a quit would close a stream on the wrong port and a mint would strand
+      // monitor 1's key with no owner. Monitor changes are the regeneration
+      // effect's business; this one stands down.
+      rerender({ monitorId: '2', viewMode: 'snapshot' });
+
+      await act(async () => {});
+      expect(mockHttpGet).not.toHaveBeenCalled();
+      expect(result.current.connKey).toBe(firstKey);
+      expect(quitCountFor(firstKey)).toBe(0);
+    });
+
+    it('sends nothing when a disabled hook changes view mode', async () => {
+      const mediaRef = makeMediaRef();
+      const { rerender } = renderHook(
+        ({ viewMode }: { viewMode: 'streaming' | 'snapshot' }) =>
+          useStreamLifecycle({ ...baseOptions, mediaRef, enabled: false, viewMode }),
+        { initialProps: { viewMode: 'streaming' as 'streaming' | 'snapshot' } },
+      );
+
+      rerender({ viewMode: 'snapshot' });
+
+      // A disabled hook owns no stream, so there is nothing to quit and no
+      // key to mint.
+      expect(mockHttpGet).not.toHaveBeenCalled();
+      expect(mockRegenerateConnKey).not.toHaveBeenCalled();
     });
   });
 
