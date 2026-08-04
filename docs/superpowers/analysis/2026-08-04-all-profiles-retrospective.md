@@ -256,3 +256,48 @@ alongside it)
 5. Keep task reviewers alive until their scoped re-review completes.
 6. #341 closed by the Live Activity work; #342 (e2e infra) remains the
    standing debt with an expiry.
+
+## Addendum: the closing session (written after the final review)
+
+The last hours added evidence in both columns and are worth recording
+separately because they happened AFTER the retrospective's first draft
+and partially tested its own claims.
+
+- The Live Activity increment (the last spec gap) went through three
+  review rounds. The task-level Opus review caught a cap-re-slice dwell
+  bypass (the refs #313 churn class through a fourth eviction channel)
+  and, in round 2, a wrong-profile settings write reachable in PLAIN
+  single mode from a mount-time state snapshot - the tenth
+  single-mode-regression catch of the effort, on its very last feature.
+  The prescribed fix (a derived value with no state write-back) was
+  verified loop-free from the emitting component's side, not just the
+  consumer's. The pattern held to the end: implementers ship plausible
+  code; discriminating reviews plus proven-red regression tests find
+  what plausibility hides.
+- The shared-worktree index race bit BOTH directions in one night: an
+  implementer's commit swept my staged doc files (caught, soft-reset,
+  recovered), and later MY one-line trim commit swept the docs agent's
+  four staged files (content correct, commit message now mislabeled -
+  left unamended because force-pushing a shared branch mid-work is the
+  worse failure). Lesson recorded in the workflow playbook: one worktree,
+  one committer at a time, stage-by-explicit-path is necessary but NOT
+  sufficient - git commit takes the whole index.
+- The instruction-file word-budget gate fired on my own contract
+  additions, twice, and forced ~40 words of compression before the new
+  contracts could land. The file now sits at its budget exactly. The
+  M-rules were applied to the orchestrator by the orchestrator's own
+  gates - which is precisely the property that makes them trustworthy.
+- The review of my closeout docs commit found a real M1 violation I had
+  just written (a Gate line claiming mechanization the gate does not
+  perform) plus two factual errors in this retrospective's first draft
+  (ratchet figures; a review-tier misattribution that inflated my own
+  argument). All corrected in 32f7c03/069cada. A retrospective that had
+  to be fact-checked by the process it evaluates, and failed twice, is
+  itself a data point for that process.
+
+Final tallies at close: 27 commits on the foundation branch + 50 on the
+feature branch (77 total), 297 files, +22,025/-3,555 lines, unit suite
+at 3,614 tests, lint ratchet 38 at branch point to 34 at close, both
+PRs (#338, #339) pushed and mergeable, working tree clean. Every spec
+UX line delivered including Live Activity; #342 (e2e infra) is the one
+standing debt.
