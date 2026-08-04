@@ -265,3 +265,33 @@ export function capActiveMonitors(
     overflowCount: entries.length - maxTiles,
   };
 }
+
+/**
+ * All mode only: caps the total watched set across every profile's own
+ * group, distributing the cap round-robin instead of taking the first N in
+ * profile order. A profile-order truncation (Montage's stream cap) would let
+ * one server with many monitors starve every profile listed after it; here
+ * each profile's own monitor list is a `groups` entry, so position 0 from
+ * every profile is taken before position 1 from any, and so on, until the
+ * cap is reached. Deterministic for a given input order (refs #337, #341).
+ */
+export function capWatchedRoundRobin<T>(
+  groups: T[][],
+  maxTotal: number
+): { watched: T[]; overflowCount: number } {
+  const total = groups.reduce((sum, group) => sum + group.length, 0);
+  if (total <= maxTotal) {
+    return { watched: groups.flat(), overflowCount: 0 };
+  }
+
+  const watched: T[] = [];
+  const maxGroupLength = Math.max(0, ...groups.map((group) => group.length));
+  for (let pos = 0; pos < maxGroupLength && watched.length < maxTotal; pos++) {
+    for (const group of groups) {
+      if (watched.length >= maxTotal) break;
+      if (pos < group.length) watched.push(group[pos]);
+    }
+  }
+
+  return { watched, overflowCount: total - watched.length };
+}

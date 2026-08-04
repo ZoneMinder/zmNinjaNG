@@ -1228,4 +1228,20 @@ export const LIVE_ACTIVITY = {
   // purpose: it exists so activity does not vanish without trace, not to
   // become a second, unbounded list competing with the grid for the page. A
   // few minutes covers "what did I just miss" and nothing longer.
+  //
+  // All mode only (refs #337, #341): the page aggregates every scope
+  // profile's alarm fanout instead of gating All mode out entirely.
+  // Single mode is unaffected by both guardrails below.
+  //
+  // Cap on total (profile, monitor) pairs watched across every profile
+  // combined, applied round-robin so one busy server cannot crowd out the
+  // rest (see capWatchedRoundRobin, lib/monitor/live-activity.ts). The alarm
+  // endpoint is per-monitor, so this bounds query fan-out the same way
+  // MONTAGE_GRID.allModeMaxStreams bounds stream fan-out.
+  allModeMaxWatched: 24,
+  // Floor under the configured alarm poll interval. Live hints
+  // (applyLiveAlarmHints) carry the fast path when a profile's connection is
+  // Live; polling only confirms, so All mode does not need single mode's
+  // tighter floor while fanning its poll out across every scope profile.
+  allModePollFloorSeconds: 10,
 } as const;
