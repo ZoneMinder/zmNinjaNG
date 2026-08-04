@@ -641,6 +641,26 @@ Then('the montage grid should show exactly {int} tile', async ({ page }, count: 
   }).toBe(count);
 });
 
+// The budget is shared out per server, so a cap smaller than one server's
+// monitor list must still leave every server on screen. Asserting the profile
+// chips rather than the tile ids: the chip is what a user reads to tell whose
+// camera a tile is. Both e2e profiles point at the same server, so this
+// discriminates whenever that server has more than one monitor; the split
+// arithmetic itself is covered in Montage.test.tsx and stream-budget.test.ts.
+Then('the montage tiles should come from more than one server', async ({ page }) => {
+  await expect
+    .poll(
+      async () => {
+        const chips = await page
+          .locator(`${MONTAGE_TILES} [data-testid="montage-profile-chip"]`)
+          .allTextContents();
+        return new Set(chips.map((chip) => chip.trim())).size;
+      },
+      { timeout: testConfig.timeouts.pageLoad }
+    )
+    .toBeGreaterThan(1);
+});
+
 Then('the montage stream cap overflow notice should be visible', async ({ page }) => {
   await expect(page.getByTestId('montage-stream-cap-overflow')).toBeVisible({
     timeout: testConfig.timeouts.element,

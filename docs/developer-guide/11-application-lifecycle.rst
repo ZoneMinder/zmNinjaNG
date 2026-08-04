@@ -264,6 +264,13 @@ Nothing explicitly pauses the MJPEG streams. The OS suspends the webview, the
 socket goes quiet, and the stream is simply dead when the app comes back.
 Recovery happens on resume, not on the way out.
 
+The montage in All Servers mode is the one exception, and only when
+``allModePauseHidden`` is on: ``useHiddenPause`` fires
+``MONTAGE_GRID.pauseHiddenGraceMs`` after the page goes hidden and disables
+each tile's stream hooks, which CMD_QUITs the connkey instead of leaving the
+server's ``nph-zms`` process running until it notices the socket is gone. See
+:doc:`04-pages-and-views` for the rest of the All-mode guardrails.
+
 ``App.tsx`` flushes the log buffer on ``pause``, so entries are not lost if the
 OS kills the process while it is backgrounded.
 

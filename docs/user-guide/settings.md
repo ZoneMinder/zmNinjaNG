@@ -211,13 +211,13 @@ here rather than fixed.
 
 | Setting | Default | What it does |
 |---|---|---|
-| **Maximum live streams** | 16 | Tiles the montage opens across every server at once. The rest collapse into an overflow notice at the top of the grid. |
+| **Maximum live streams** | 16 | Tiles the montage opens across every server at once. The slots are shared out evenly, so a server with many cameras cannot take the whole budget and leave another with none. The rest collapse into an overflow notice at the top of the grid. |
 | **Monitors watched for alarms** | 24 | Cameras {doc}`live-activity` polls across every server, drawn evenly from each so one busy server can't crowd the rest out. |
 | **Fastest alarm polling** | 10 seconds | A floor under the Live Activity check interval while aggregating. A slower interval set on that page still applies; this only stops the combined poll running faster than this. |
 | **Notification grouping** | 3 seconds | Events arriving from different servers within this window collapse into one summary notification instead of one each. |
-| **Stream tuning** | Off | Lowers the frame rate and scale of combined tiles to save bandwidth. |
-| **Pause hidden streams** | Off | Stops combined streams while the app is in the background or the window is hidden. |
-| **Idle timeout** | 0 (never) | Stands combined streams down after this many minutes without interaction. |
+| **Stream tuning** | Off | On *Reduced*, montage tiles ask their server for 5 frames a second at quarter scale instead of what that server normally sends. A server you have already set lower than that keeps its own values, so this only ever asks for less. Go2RTC tiles are unaffected. |
+| **Pause hidden streams** | Off | Stops montage streams once the app has been in the background, or the window minimized, for 30 seconds. They come back when you do. A window merely covered by another window still counts as visible. |
+| **Idle timeout** | 0 (never) | Drops montage tiles to periodic snapshots after this many minutes with no touch, click or keypress. Any interaction puts them back on live streams. This runs whether or not *Keep screen awake* is on, which is the case it exists for. |
 
 None of these touch any profile's own settings, and none apply in single mode:
 a single server has nothing to fan out across.

@@ -140,6 +140,20 @@ Feature: All Servers mode
     And the montage stream cap overflow notice should be gone
 
   @web
+  Scenario: the All Servers stream budget is shared between the servers
+    When I navigate to the "Profiles" page
+    And I click the All Servers profile card
+    When I navigate to the "Settings" page
+    And I set the All Servers maximum live streams to "2"
+    Then the All Servers maximum live streams should be "2"
+    When I navigate to the "Montage" page
+    Then the montage grid should show exactly 2 tile
+    And the montage tiles should come from more than one server
+    When I navigate to the "Settings" page
+    And I reset the All Servers maximum live streams
+    Then the All Servers maximum live streams should be back to the shipped default
+
+  @web
   Scenario: analysis frames toggle is usable from All Servers mode
     When I navigate to the "Profiles" page
     And I click the All Servers profile card

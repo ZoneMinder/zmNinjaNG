@@ -19,7 +19,9 @@ from, since two servers can have cameras with the same name. Hiding one
 server's camera leaves the other server's camera of that name on screen.
 
 In All Servers mode the grid opens a limited number of tiles at once, since
-each tile is a live connection and combining servers multiplies them. Past that
+each tile is a live connection and combining servers multiplies them. The
+slots are shared out evenly between the servers in view, so every server is
+represented rather than the first one filling the grid on its own. Past that
 limit the remaining cameras collapse into an overflow notice above the grid
 rather than opening more connections. Raise or lower the limit under **All
 Servers performance** in {doc}`settings`.
@@ -81,6 +83,27 @@ For a per-platform breakdown of where the ~6-stream limit applies, see {ref}`Con
 :::{tip}
 If you have many cameras, use **Low bandwidth mode** in Settings to reduce data usage. You can also filter to show only the cameras you need, or use saved layouts to switch between different subsets.
 :::
+
+### All Servers mode
+
+Combining servers multiplies all of the above, so **All Servers performance**
+in {doc}`settings` carries three switches that only apply to the combined
+montage. None of them change any server's own settings, and none apply when
+you are on a single server.
+
+- **Stream tuning** set to *Reduced* asks every tile for 5 frames a second at
+  quarter scale. A server already set below that keeps its own values.
+- **Pause hidden streams** stops the tiles 30 seconds after the app goes to
+  the background or the window is minimized, and closes the connections on
+  each server rather than leaving them running. Coming back rebuilds them.
+- **Idle timeout** drops the tiles to periodic snapshots after the minutes you
+  set with no touch, click or keypress. Any interaction puts them back. It
+  works while **Keep screen awake** is on, which is the case it is for: a
+  montage left up on a display nobody is watching.
+
+Go2RTC tiles keep streaming through all three of the frame rate, scale and
+idle settings, the same way they ignore *Streaming Mode*. Only the pause
+setting stops them.
 
 ## Screen Size Warning
 

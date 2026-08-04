@@ -423,6 +423,62 @@ An eye-toggle button shows and hides the toolbar (group filter, grid
 controls, fit selector, refresh, edit, fullscreen). Stored per profile in
 ``settings.montageShowToolbar``. i18n key: ``montage.toggle_toolbar``.
 
+Keeping All Servers mode affordable
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+One montage across four servers is four servers' worth of encoding and one
+client's worth of decoding, so the page carries four guardrails that only
+apply while aggregating (refs #337). All four read the ALL settings bucket,
+which ``useCurrentProfile`` already resolves to while the sentinel profile is
+current, and all four are computed inside an ``isAllMode`` branch: a single
+profile carries the same keys and must never be throttled by them.
+
+Each tile is rendered by ``MontageMonitor``, which forwards the decisions to
+``LiveMonitorPlayer``. The page decides, the tile carries, the player acts.
+Live Activity renders the same ``MontageMonitor`` and passes none of them, so
+it is unaffected.
+
+**The stream budget.** ``settings.allModeMaxStreams`` caps how many tiles
+open at once. ``allocateStreamBudget`` (``src/lib/monitor/stream-budget.ts``)
+decides whose tiles those are. The scoped monitor list arrives clustered by
+profile, so slicing the first N gave the whole budget to whichever server
+sorted first and left later servers with nothing on screen. The slots are
+dealt round-robin in profile order instead, and a server with fewer monitors
+than its even share drops out of later passes so its unused slots go to
+servers that can fill them. The total is unchanged, which is why the overflow
+count above the grid still describes exactly the tiles that were dropped.
+
+**Reduced stream tuning.** ``settings.allModeStreamTuning`` set to
+``'reduced'`` runs each tile's stream options through ``tunedStreamOptions``
+(``src/lib/monitor/stream-tuning.ts``), which holds ``maxfps`` and ``scale``
+down to ``MONTAGE_GRID.reducedMaxFps`` and ``MONTAGE_GRID.reducedScale``.
+They are ceilings and never floors, so a profile the user has already
+throttled below them keeps its own values. Both are ZMS query parameters, so
+this reaches the MJPEG path only; a go2rtc tile is served from an existing
+RTSP stream that neither parameter touches.
+
+**Pause while hidden.** ``settings.allModePauseHidden`` turns on
+``useHiddenPause`` (``src/hooks/useHiddenPause.ts``), one page-level watch on
+``visibilitychange``. After ``MONTAGE_GRID.pauseHiddenGraceMs`` out of sight
+it reports paused, and the player disables both stream hooks: the MJPEG
+lifecycle CMD_QUITs its connkey on the way down rather than orphaning an
+``nph-zms`` process, and ``useGo2RTCStream`` closes its own connection. The
+grace period is the debounce, because a teardown and reconnect of every tile
+costs more than the half minute of streaming it saves. Window blur is
+deliberately not a pause signal, unlike in ``useVisibilityResume``: on
+Electron a fully visible window on a second display fires it.
+
+**Idle downgrade.** ``settings.allModeIdleMinutes`` turns on
+``useIdleAfter`` (``src/hooks/useIdleAfter.ts``), one passive document
+listener for pointer, key and touch activity, throttled by
+``MONTAGE_GRID.idleActivityThrottleMs`` because a dragged pointer fires
+hundreds of events a second and each one would otherwise rebuild the timer.
+Going idle passes ``forceViewMode='snapshot'`` down to the player, which is
+the same override the single-monitor page uses, so tiles land on the existing
+periodic-snapshot path rather than a new render branch. It is independent of
+insomnia on purpose: a montage left up on a display insomnia is keeping awake
+is the case it exists for.
+
 Monitors
 --------
 
