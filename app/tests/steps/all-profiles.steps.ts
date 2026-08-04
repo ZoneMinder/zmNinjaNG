@@ -462,6 +462,12 @@ When('I hide the first montage show-monitors entry', async ({ page }) => {
 
   // The other server's tile for the same raw monitor id: same ":<monitorId>"
   // suffix, different profile prefix.
+  //
+  // This looks in the GRID, so it only finds a twin the stream cap actually
+  // rendered. The scenario runs at the shipped cap with two small fixture
+  // servers, so every tile is on screen; if that ever stops being true the
+  // toBeVisible below fails loudly rather than the scenario passing while
+  // asserting nothing.
   const rawMonitorId = hiddenEntryTileId.split(':').pop();
   const sibling = page
     .locator(

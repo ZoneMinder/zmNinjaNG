@@ -349,6 +349,16 @@ export function useEventFilters(): UseEventFiltersReturn {
     } else {
       newParams.delete('archived');
     }
+    // In All mode these tokens are tag NAMES, not ids: tag ids are per-server
+    // and collide, so the aggregate selection is keyed by name and
+    // resolveOwnTagIds maps it back per profile (useScopedEventTags). The name
+    // therefore lands in ?tagIds= too, and a URL copied from All mode into
+    // single mode asks ZoneMinder for Tags.Id:<name>, which matches nothing.
+    //
+    // Left as is deliberately: the filter still reads correctly in the mode it
+    // was made in, the failure is an empty list rather than wrong events, and
+    // the fix is a mode marker in the URL plus a resolver on the way back in -
+    // new plumbing for a cross-mode link nobody shares (refs #337).
     if (selectedTagIds.length > 0) {
       newParams.set('tagIds', selectedTagIds.join(','));
     } else {

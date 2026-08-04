@@ -2912,11 +2912,11 @@ the same ``/all/...`` deep route, so the destination page never has to ask
 
 Timeline aggregates the same way through its own ``isAllMode`` branch, reusing
 ``useScopedEvents``'s sibling query rather than a second hook. The Events
-montage (grid) view is the one piece Task 4 left ungated-but-broken and Task
-4's fix wave then disabled outright: its tiles would resolve thumbnails
-through the page-level (absent) current profile, so ``events-view-toggle`` is
-disabled in All mode and the screen stays in list view - a fix ticket, not a
-missing flow.
+montage (grid) view was the one piece Task 4 left ungated-but-broken, since
+its tiles resolved thumbnails through the page-level (absent) current
+profile. It now works in All mode: each tile resolves against its event's
+OWN profile, so ``events-view-toggle`` stays enabled and the grid renders
+with no gate notice.
 
 Flow 21 covers how a profile enters All mode in the first place; this flow
 picks up once it's there.

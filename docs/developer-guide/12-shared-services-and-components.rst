@@ -1191,8 +1191,9 @@ tile dropped to snapshots left a running ``nph-zms`` process behind until ZM's
 own idle timeout. The Streaming Mode setting reaches that transition, and so
 does the All-mode idle downgrade. Both directions of the flip then mint a
 fresh key, because a snapshot URL carries a connkey too and reusing a quit one
-risks colliding with the state it left on the server. A flip arriving in the same commit as an ``enabled`` change belongs to the
-disable teardown, and one arriving with a monitor change has no correct move
+risks colliding with the state it left on the server. A flip arriving in the
+same commit as an ``enabled`` change belongs to the disable teardown, and one
+arriving with a monitor change has no correct move
 available: the key it holds was opened against the previous monitor's URL and
 port, while every prop now describes the new one. It stands down in both
 cases. The monitor-change path is a pre-existing gap rather than a delegation

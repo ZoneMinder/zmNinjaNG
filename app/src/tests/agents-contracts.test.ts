@@ -335,10 +335,11 @@ describe('Localization contract', () => {
         const missing = [...expected].filter((p) => !actual.has(p));
         const extra = [...actual].filter((p) => !expected.has(p));
         if (missing.length || extra.length) {
-          mismatches.push(
-            `${locale}: ${key} — missing {{${missing.join('}}, {{')}}}`.replace('{{}}', 'none') +
-              (extra.length ? `, unexpected {{${extra.join('}}, {{')}}}` : '')
-          );
+          const parts = [
+            missing.length ? `missing ${missing.map((p) => `{{${p}}}`).join(', ')}` : '',
+            extra.length ? `unexpected ${extra.map((p) => `{{${p}}}`).join(', ')}` : '',
+          ].filter(Boolean);
+          mismatches.push(`${locale}: ${key} - ${parts.join(', ')}`);
         }
       }
     }

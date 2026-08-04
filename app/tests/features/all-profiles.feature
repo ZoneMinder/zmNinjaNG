@@ -132,6 +132,9 @@ Feature: All Servers mode
     When I navigate to the "Montage" page
     Then the montage grid should show exactly 1 tile
     And the montage stream cap overflow notice should be visible
+    # Not cleanup: the browser context is this scenario's own, so the cap it
+    # wrote dies with it. The reset button is what these steps cover - that it
+    # restores the shipped default and that the montage follows it back up.
     When I navigate to the "Settings" page
     And I reset the All Servers maximum live streams
     Then the All Servers maximum live streams should be back to the shipped default
@@ -149,6 +152,7 @@ Feature: All Servers mode
     When I navigate to the "Montage" page
     Then the montage grid should show exactly 2 tile
     And the montage tiles should come from more than one server
+    # Reset-button coverage again, not cleanup - see the scenario above.
     When I navigate to the "Settings" page
     And I reset the All Servers maximum live streams
     Then the All Servers maximum live streams should be back to the shipped default
@@ -186,8 +190,9 @@ Feature: All Servers mode
     When I reload the current page
     And I open the events filter panel
     Then the favorites-only filter should be "on"
-    # Turning it back off both proves the cleared state persists and leaves the
-    # All Servers settings bucket as the rest of the suite expects it.
+    # Not cleanup: every scenario runs in its own browser context, so nothing
+    # written to the ALL bucket here outlives it. This is the cleared state
+    # persisting, which is the other half of the filter's round-trip.
     When I disable favorites only filter
     And I close the events filter panel
     And I reload the current page

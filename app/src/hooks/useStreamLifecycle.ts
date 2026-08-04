@@ -334,7 +334,7 @@ export function useStreamLifecycle({
     // there is nothing here that could quit it correctly; standing down at
     // least avoids quitting the wrong monitor's stream. That leaves the old
     // key to the unmount path, which is a pre-existing gap in the monitor-
-    // change path (the regeneration effect below returns early on a live hook
+    // change path (the regeneration effect above returns early on a live hook
     // and never mints for the new monitor either). It is unreachable from the
     // app today because every call site that swaps monitors remounts instead,
     // via a keyed element - see MonitorDetail's `key=` comment and refs #201.
