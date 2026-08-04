@@ -36,8 +36,15 @@ vi.mock('../../hooks/useTimelineFilters', () => ({
 }));
 
 vi.mock('../../hooks/useTvKeyHandler', () => ({ useTvKeyHandler: () => {} }));
+const scopedTagsByKey = vi.fn(() => new Map<string, Array<{ Id: string; Name: string }>>());
 vi.mock('../../hooks/useScopedEventTags', () => ({
-  useScopedEventTagMapping: () => ({ eventTagMap: new Map(), getTagsForEvent: () => [] }),
+  useScopedEventTagMapping: () => ({
+    eventTagMap: scopedTagsByKey(),
+    // Keyed the way the real hook keys it, so the page has to hand over the
+    // OWNING profile for the lookup to hit.
+    getTagsForEvent: (profileId: string | undefined, eventId: string) =>
+      scopedTagsByKey().get(profileId ? `${profileId}:${eventId}` : eventId) ?? [],
+  }),
 }));
 
 type StubEvent = { id: string; monitorId: string; profileId?: string };
@@ -100,9 +107,13 @@ vi.mock('../../components/timeline/DetectionFilterTabs', () => ({
 }));
 vi.mock('../../components/timeline/EventPreviewPopover', () => ({
   EventPreviewPopover: (
-    { event, onOpenEvent }: { event: { id: string; monitorId: string }; onOpenEvent: (eventId: string) => void }
+    { event, onOpenEvent }: { event: { id: string; monitorId: string; tags?: string[] }; onOpenEvent: (eventId: string) => void }
   ) => (
-    <div data-testid="event-preview-popover-stub" data-monitor-id={event.monitorId}>
+    <div
+      data-testid="event-preview-popover-stub"
+      data-monitor-id={event.monitorId}
+      data-tags={(event.tags ?? []).join(',')}
+    >
       <button type="button" data-testid="event-preview-popover-open" onClick={() => onOpenEvent(event.id)}>
         open
       </button>
@@ -145,6 +156,8 @@ function defaultScoped() {
 
 describe('Timeline Page', () => {
   beforeEach(() => {
+    scopedTagsByKey.mockReset();
+    scopedTagsByKey.mockReturnValue(new Map());
     useTimelineDataMock.mockReset();
     useScopedTimelineEventsMock.mockReset();
     useProfileScopeMock.mockReset();
@@ -264,6 +277,44 @@ describe('Timeline Page', () => {
     fireEvent.click(screen.getByTestId('event-preview-popover-open'));
 
     expect(navigateMock).toHaveBeenCalledWith('/all/events/profile-2/dup1', expect.anything());
+  });
+
+  it('All mode shows the tags of the profile that owns the clicked event (refs #337 D4)', () => {
+    useProfileScopeMock.mockReturnValue({
+      mode: 'all',
+      profile: null,
+      profiles: [
+        { id: 'profile-1', name: 'Home', timezone: 'UTC' },
+        { id: 'profile-2', name: 'Office', timezone: 'America/New_York' },
+      ],
+      settings: {},
+    });
+    // Both servers have an event "dup1" and both have tagged it - differently.
+    scopedTagsByKey.mockReturnValue(
+      new Map([
+        ['profile-1:dup1', [{ Id: '4', Name: 'person' }]],
+        ['profile-2:dup1', [{ Id: '9', Name: 'vehicle' }]],
+      ])
+    );
+    useScopedTimelineEventsMock.mockReturnValue({
+      ...defaultScoped(),
+      enabledMonitors: [
+        { profileId: 'profile-1', profileName: 'Home', item: { Monitor: { Id: '1', Name: 'Front Door' } } },
+        { profileId: 'profile-2', profileName: 'Office', item: { Monitor: { Id: '2', Name: 'Lobby Cam' } } },
+      ],
+      events: [
+        { id: 'dup1', monitorId: '1', startMs: 5000, endMs: 6000, cause: 'Motion', alarmRatio: 0.2, notes: '', profileId: 'profile-1', profileChip: 'Home' },
+        { id: 'dup1', monitorId: '2', startMs: 4000, endMs: 4500, cause: 'Motion', alarmRatio: 0.9, notes: '', profileId: 'profile-2', profileChip: 'Office' },
+      ],
+    });
+
+    render(<Timeline />);
+
+    // Click the SECOND event (profile-2's "dup1"): it must show ITS server's
+    // tag, not the other server's, and not the empty list All mode used to
+    // hard-code here.
+    fireEvent.click(screen.getByTestId('timeline-canvas-event-dup1-1'));
+    expect(screen.getByTestId('event-preview-popover-stub')).toHaveAttribute('data-tags', 'vehicle');
   });
 
   it('a scrubber tap on a colliding event id opens the tapped event\'s OWN owning profile\'s route (refs #337 Task 3)', () => {

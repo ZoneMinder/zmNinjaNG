@@ -56,11 +56,11 @@ vi.mock('../../hooks/useProfileScope', () => ({
 
 // Two servers, same monitor id 3: the jump must resolve to the FIRST one in
 // profile-then-server order, exactly what the Monitors page lists.
-const scopedMonitorsMock = vi.fn(() => ({
+const scopedMonitorsMock = vi.fn((_options?: unknown) => ({
   monitors: [] as Array<{ profileId: string; profileName: string; item: { Monitor: { Id: string; Name: string } } }>,
 }));
 vi.mock('../../hooks/useScopedMonitors', () => ({
-  useScopedMonitors: () => scopedMonitorsMock(),
+  useScopedMonitors: (options: unknown) => scopedMonitorsMock(options),
 }));
 
 describe('KeyboardShortcuts "?" key', () => {
@@ -106,6 +106,15 @@ describe('KeyboardShortcuts in All mode (refs #337)', () => {
     useProfileScopeMock.mockReturnValue(allScope);
     scopedMonitorsMock.mockReturnValue(twoServers);
     useAssistantPanelStore.setState({ state: 'closed', size: { width: 400, height: 560 } });
+  });
+
+  // These two components mount for the whole session and share the monitors
+  // query key with the Monitors page. React Query polls a shared query on the
+  // shortest interval ANY observer asks for, so without the opt-out this turns
+  // a page-scoped refresh into a permanent one, times the profiles in scope.
+  it('asks the scoped hook not to poll', () => {
+    render(<KeyboardShortcuts />);
+    expect(scopedMonitorsMock).toHaveBeenCalledWith({ poll: false });
   });
 
   it('navigates on a page shortcut while the ALL sentinel is selected', () => {

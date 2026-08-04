@@ -166,4 +166,28 @@ describe('useGroups', () => {
     expect(getGroups).not.toHaveBeenCalled();
     expect(result.current.groups).toEqual([]);
   });
+
+  // The mechanism behind the command palette omitting group entries in All
+  // Servers mode (refs #337, audit C13). Groups are per-server and nothing
+  // aggregates them, so this hook stays silent while the ALL sentinel is
+  // current: no request (its queryFn resolves getCurrentSession(), which has
+  // no session for the sentinel) and an empty list, which is what leaves the
+  // palette with no group rows to render rather than dead ones. The
+  // sentinel-to-null mapping itself is useCurrentProfile's documented
+  // behavior, covered in its own suite.
+  it('stays silent in All Servers mode, which is why the palette lists no groups', async () => {
+    vi.mocked(useCurrentProfile).mockReturnValue({
+      currentProfile: null,
+      settings: {} as never,
+      hasProfile: false,
+      isAllMode: true,
+    });
+
+    const { result } = renderHook(() => useGroups(), { wrapper: createWrapper() });
+
+    expect(getGroups).not.toHaveBeenCalled();
+    expect(result.current.groups).toEqual([]);
+    expect(result.current.hasGroups).toBe(false);
+    expect(result.current.getGroupMonitorIds('1')).toEqual([]);
+  });
 });

@@ -21,9 +21,9 @@ const allMonitors = [
   { profileId: 'p1', profileName: 'Home', item: { Monitor: { Id: '1', Name: 'Front Door' } } },
   { profileId: 'p2', profileName: 'Cabin', item: { Monitor: { Id: '1', Name: 'Front Gate' } } },
 ];
-const scopedMonitorsMock = vi.fn(() => ({ monitors: singleMonitors }));
+const scopedMonitorsMock = vi.fn((_options?: unknown) => ({ monitors: singleMonitors }));
 vi.mock('../../hooks/useScopedMonitors', () => ({
-  useScopedMonitors: () => scopedMonitorsMock(),
+  useScopedMonitors: (options: unknown) => scopedMonitorsMock(options),
 }));
 
 const singleScope = {
@@ -130,6 +130,15 @@ describe('CommandPalette', () => {
     fireEvent.keyDown(input, { key: 'ArrowDown' });
     expect(input).toHaveAttribute('aria-activedescendant', 'command-option-1');
     expect(screen.getByTestId('command-item-monitor-1')).toHaveAttribute('aria-selected', 'true');
+  });
+
+  // These two components mount for the whole session and share the monitors
+  // query key with the Monitors page. React Query polls a shared query on the
+  // shortest interval ANY observer asks for, so without the opt-out this turns
+  // a page-scoped refresh into a permanent one, times the profiles in scope.
+  it('asks the scoped hook not to poll', () => {
+    render(<CommandPalette />);
+    expect(scopedMonitorsMock).toHaveBeenCalledWith({ poll: false });
   });
 
   it('does not show the Ask item when the assistant is disabled', () => {
