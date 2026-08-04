@@ -57,8 +57,8 @@ export default function AppLayout() {
   const scope = useProfileScope();
   // Write target for this file's view-level preferences (sidebar width, the
   // montage toolbar, insomnia, TV mode): the real profile id in single mode,
-  // the ALL sentinel in All mode - the same bucket `settings` above reads
-  // (refs #337).
+  // the active aggregate's id while aggregating - the same bucket `settings`
+  // above reads (refs #337).
   const currentProfileId = useProfileStore((state) => state.currentProfileId);
   const updateProfileSettings = useSettingsStore((state) => state.updateProfileSettings);
   const location = useLocation();
@@ -104,14 +104,14 @@ export default function AppLayout() {
     }
 
     // resolveLastRouteSaveTarget excludes setup/profile routes and
-    // notification-opened pages, and saves to the ALL bucket in All mode
-    // rather than being silently dropped (refs #337) - see its own doc
-    // comment.
+    // notification-opened pages, and saves to the active aggregate's own
+    // bucket while aggregating rather than being silently dropped (refs #337)
+    // - see its own doc comment.
     const fromNotification = (location.state as Record<string, unknown>)?.fromNotification === true;
     const saveTarget = resolveLastRouteSaveTarget(
       location.pathname,
       fromNotification,
-      scope.mode === 'all',
+      scope.mode === 'all' ? scope.aggregateId : null,
       currentProfile?.id
     );
 

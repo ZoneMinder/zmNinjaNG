@@ -9,7 +9,7 @@ import { useCurrentProfile, useProfileById } from '../../hooks/useCurrentProfile
 import { useProfileScope } from '../../hooks/useProfileScope';
 import { getSession } from '../../services/sessions';
 import { getMonitors } from '../../api/monitors';
-import { asProfileId, ALL_PROFILES_ID } from '../../api/types';
+import { asProfileId, ALL_PROFILES_ID, mintVirtualProfileId } from '../../api/types';
 import { useSettingsStore } from '../../stores/settings';
 
 vi.mock('react-i18next', () => ({
@@ -244,6 +244,27 @@ describe('NotificationSettings page - All mode profile picker (refs #337)', () =
       await waitFor(() =>
         expect(useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID).allModeNotifications).toBe('off')
       );
+    });
+
+    // Each aggregate owns its own bucket: muting a group must not mute All
+    // Servers (refs #337).
+    it("selecting Off updates the active group's bucket, leaving the ALL sentinel's alone", async () => {
+      const group = mintVirtualProfileId();
+      vi.mocked(useProfileScope).mockReturnValue({
+        mode: 'all', aggregateId: group, aggregateName: 'Backyard', profile: null,
+        profiles: [profileA, profileB],
+        settings: { allModeNotifications: 'live' } as never,
+      });
+      renderPage();
+
+      fireEvent.click(await screen.findByTestId('all-mode-notifications-option-off'));
+
+      await waitFor(() =>
+        expect(useSettingsStore.getState().getProfileSettings(group).allModeNotifications).toBe('off')
+      );
+      expect(
+        useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID).allModeNotifications
+      ).toBe('live');
     });
 
     it('does not render in single mode', async () => {

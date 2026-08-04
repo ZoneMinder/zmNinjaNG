@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 import Settings from '../Settings';
 import { useCurrentProfile, useProfileById } from '../../hooks/useCurrentProfile';
 import { useProfileScope } from '../../hooks/useProfileScope';
-import { asProfileId, ALL_PROFILES_ID } from '../../api/types';
+import { asProfileId, ALL_PROFILES_ID, mintVirtualProfileId } from '../../api/types';
 import { DEFAULT_SETTINGS } from '../../stores/settings';
 
 const updateProfileSettings = vi.fn();
@@ -208,6 +208,53 @@ describe('Settings page - All mode two-tier picker (refs #337)', () => {
       render(<Settings />);
 
       expect(screen.queryByTestId('all-mode-max-streams-input')).not.toBeInTheDocument();
+    });
+  });
+
+  // A group is an aggregate in its own right, with its own settings bucket:
+  // every write these sections make lands under the group's id, never the ALL
+  // sentinel's (refs #337).
+  describe('a named group', () => {
+    const GROUP = mintVirtualProfileId();
+
+    beforeEach(() => {
+      vi.mocked(useProfileScope).mockReturnValue({
+        mode: 'all', aggregateId: GROUP, aggregateName: 'Backyard', profile: null,
+        profiles: [profileA, profileB], settings: baseSettings as never,
+      });
+    });
+
+    it('writes a view-level setting to the group bucket', async () => {
+      render(<Settings />);
+
+      await screen.findByTestId('settings-tv-mode');
+      fireEvent.click(screen.getByTestId('settings-tv-mode'));
+
+      expect(updateProfileSettings).toHaveBeenCalledWith(GROUP, { tvMode: true });
+    });
+
+    it('writes the imposed Streaming Mode to the group bucket', () => {
+      render(<Settings />);
+
+      fireEvent.click(screen.getByTestId('all-mode-streaming-option-streaming'));
+
+      expect(updateProfileSettings).toHaveBeenCalledWith(GROUP, {
+        allModeViewMode: 'streaming',
+      });
+    });
+
+    it('writes a performance knob to the group bucket', () => {
+      vi.mocked(useCurrentProfile).mockImplementation(() => ({
+        currentProfile: null, isAllMode: true, hasProfile: false,
+        settings: { ...baseSettings, allModeViewMode, allModeMaxStreams: 2 } as never,
+      }));
+      render(<Settings />);
+
+      fireEvent.click(screen.getByTestId('all-mode-max-streams-reset'));
+
+      expect(updateProfileSettings).toHaveBeenCalledWith(GROUP, {
+        allModeMaxStreams: DEFAULT_SETTINGS.allModeMaxStreams,
+      });
     });
   });
 });

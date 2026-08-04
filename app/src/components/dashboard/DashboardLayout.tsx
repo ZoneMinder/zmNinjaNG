@@ -13,7 +13,7 @@
 import { useDashboardStore } from '../../stores/dashboard';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useProfileScope } from '../../hooks/useProfileScope';
-import { ALL_PROFILES_ID, asProfileId } from '../../api/types';
+import { asProfileId } from '../../api/types';
 import type { ProfileId } from '../../api/types';
 import { useShallow } from 'zustand/react/shallow';
 import { GRID_LAYOUT } from '../../lib/zmninja-ng-constants';
@@ -34,17 +34,20 @@ const WrappedGridLayout = WidthProvider(GridLayout);
 export function DashboardLayout() {
     const { t } = useTranslation();
     const { currentProfile, isAllMode } = useCurrentProfile();
-    // Boundary: 'default' is a synthesized placeholder key for the
-    // no-profile-selected case (dashboard widget storage keys still need a
-    // key). Not a real profile id, so it must be minted explicitly. All mode
-    // gets its own bucket instead of colliding with 'default' (refs #337).
-    const profileId = isAllMode ? ALL_PROFILES_ID : (currentProfile?.id ?? asProfileId('default'));
     // Owning-profile resolution for the monitor widget (the one intrinsically
     // single-server widget type - a monitorId only means something on one
     // server): widget.settings.profileId if the edit dialog set one,
     // otherwise the first profile in scope. Undefined outside All mode so
     // MonitorWidget keeps its exact single-mode prop shape.
     const scope = useProfileScope();
+    // Boundary: 'default' is a synthesized placeholder key for the
+    // no-profile-selected case (dashboard widget storage keys still need a
+    // key). Not a real profile id, so it must be minted explicitly. Each
+    // aggregate gets its own bucket instead of colliding with 'default' or
+    // with another aggregate (refs #337).
+    const profileId = scope?.mode === 'all'
+        ? scope.aggregateId
+        : (currentProfile?.id ?? asProfileId('default'));
 
     const widgets = useDashboardStore(
         useShallow((state) => state.widgets[profileId] ?? [])

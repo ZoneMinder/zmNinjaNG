@@ -16,7 +16,8 @@ import { DashboardLayout } from '../components/dashboard/DashboardLayout';
 import { DashboardConfig } from '../components/dashboard/DashboardConfig';
 import { useDashboardStore } from '../stores/dashboard';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
-import { ALL_PROFILES_ID, asProfileId } from '../api/types';
+import { useProfileScope } from '../hooks/useProfileScope';
+import { asProfileId } from '../api/types';
 import { useShallow } from 'zustand/react/shallow';
 import { useTranslation } from 'react-i18next';
 import { NotificationBadge } from '../components/NotificationBadge';
@@ -25,12 +26,15 @@ export default function Dashboard() {
     const { t } = useTranslation();
     const isEditing = useDashboardStore((state) => state.isEditing);
     const toggleEditMode = useDashboardStore((state) => state.toggleEditMode);
-    const { currentProfile, isAllMode } = useCurrentProfile();
+    const { currentProfile } = useCurrentProfile();
+    const scope = useProfileScope();
     // Boundary: 'default' is a synthesized placeholder key for the
-    // no-profile-selected case; All mode gets its own bucket (view-level
-    // prefs owned by the virtual ALL profile, refs #337) rather than
-    // colliding with 'default'.
-    const profileId = isAllMode ? ALL_PROFILES_ID : (currentProfile?.id ?? asProfileId('default'));
+    // no-profile-selected case; each aggregate gets its own bucket (All
+    // Servers under its sentinel, a group under its own id, refs #337)
+    // rather than colliding with 'default' or with each other.
+    const profileId = scope?.mode === 'all'
+        ? scope.aggregateId
+        : (currentProfile?.id ?? asProfileId('default'));
     const widgets = useDashboardStore(
         useShallow((state) => state.widgets[profileId] ?? [])
     );

@@ -13,7 +13,7 @@ import { ProfilePicker } from '../components/profile-picker';
 import { useSettingsStore } from '../stores/settings';
 import { useCurrentProfile, useProfileById } from '../hooks/useCurrentProfile';
 import { useProfileScope } from '../hooks/useProfileScope';
-import { ALL_PROFILES_ID, type ProfileId } from '../api/types';
+import { type ProfileId } from '../api/types';
 import { AppearanceSection } from '../components/settings/AppearanceSection';
 import { AllServersStreamingSection } from '../components/settings/AllServersStreamingSection';
 import { AllServersPerformanceSection } from '../components/settings/AllServersPerformanceSection';
@@ -29,24 +29,26 @@ export default function Settings() {
   const { currentProfile, settings, isAllMode } = useCurrentProfile();
   const updateSettings = useSettingsStore((state) => state.updateProfileSettings);
 
-  // View-level (ALL bucket) update helper: AppearanceSection only. Targets
-  // the ALL_PROFILES_ID sentinel bucket in All mode so language/date-format/
-  // etc. stay editable there, and the current profile's bucket otherwise
-  // (unchanged single-mode behavior).
+  // Server-scoped sections (connection/exclusions/streaming/playback/
+  // assistant/advanced) need a real picked profile while aggregating - an
+  // aggregate bucket makes no sense for per-server data. Picker defaults to
+  // the first profile in scope (refs #337).
+  const scope = useProfileScope();
+
+  // View-level update helper: AppearanceSection and the aggregate sections.
+  // Targets the active aggregate's own bucket while aggregating so
+  // language/date-format/etc. stay editable there, and the current profile's
+  // bucket otherwise (unchanged single-mode behavior). Every aggregate keeps
+  // its own bucket, so a group's knobs never write All Servers'.
   const update = <K extends keyof ProfileSettings>(
     key: K,
     value: ProfileSettings[K]
   ) => {
-    const targetId = isAllMode ? ALL_PROFILES_ID : currentProfile?.id;
+    const targetId = scope?.mode === 'all' ? scope.aggregateId : currentProfile?.id;
     if (!targetId) return;
     updateSettings(targetId, { [key]: value });
   };
 
-  // Server-scoped sections (connection/exclusions/streaming/playback/
-  // assistant/advanced) need a real picked profile in All mode - the ALL
-  // bucket makes no sense for per-server data. Picker defaults to the first
-  // profile in scope (refs #337).
-  const scope = useProfileScope();
   const [pickedProfileId, setPickedProfileId] = useState<ProfileId | undefined>(undefined);
   const defaultPickedId = isAllMode ? (pickedProfileId ?? scope?.profiles[0]?.id) : undefined;
   const { profile: pickedProfile, settings: pickedSettings } = useProfileById(defaultPickedId);

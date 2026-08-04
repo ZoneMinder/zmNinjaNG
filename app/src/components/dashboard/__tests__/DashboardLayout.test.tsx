@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, act, waitFor } from '@testing-library/react';
 import { DashboardLayout } from '../DashboardLayout';
+import { ALL_PROFILES_ID, mintVirtualProfileId } from '../../../api/types';
 
 // Track calls to updateLayouts to verify it's not called during sync
 const updateLayouts = vi.fn();
@@ -21,6 +22,11 @@ const mockWidgets = [
   },
 ];
 
+// Which bucket the widgets live in, and which one the component asks for.
+// Mutable so a test can put the app in a group and check the key it reads.
+let widgetBuckets: Record<string, typeof mockWidgets> = {};
+let profileState: Record<string, unknown> = {};
+
 vi.mock('../../../stores/dashboard', () => ({
   useDashboardStore: (selector: (state: {
     widgets: Record<string, typeof mockWidgets>;
@@ -28,21 +34,14 @@ vi.mock('../../../stores/dashboard', () => ({
     updateLayouts: typeof updateLayouts;
   }) => unknown) =>
     selector({
-      widgets: { 'profile-1': mockWidgets },
+      widgets: widgetBuckets,
       isEditing: true,
       updateLayouts,
     }),
 }));
 
 vi.mock('../../../stores/profile', () => ({
-  useProfileStore: (selector: (state: {
-    profiles: { id: string; name: string }[];
-    currentProfileId: string;
-  }) => unknown) =>
-    selector({
-      profiles: [{ id: 'profile-1', name: 'Test' }],
-      currentProfileId: 'profile-1',
-    }),
+  useProfileStore: (selector: (state: Record<string, unknown>) => unknown) => selector(profileState),
 }));
 
 vi.mock('zustand/react/shallow', () => ({
@@ -94,6 +93,12 @@ vi.mock('../DashboardWidget', () => ({
 describe('DashboardLayout', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    widgetBuckets = { 'profile-1': mockWidgets };
+    profileState = {
+      profiles: [{ id: 'profile-1', name: 'Test' }],
+      currentProfileId: 'profile-1',
+      virtualProfiles: [],
+    };
     capturedOnLayoutChange = null;
     // Mock requestAnimationFrame
     vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
@@ -107,6 +112,22 @@ describe('DashboardLayout', () => {
 
     expect(screen.getByTestId('dashboard-widget-widget-1')).toBeInTheDocument();
     expect(screen.getByTestId('dashboard-widget-widget-2')).toBeInTheDocument();
+  });
+
+  // Each aggregate keeps its own dashboard: a group's widgets live under the
+  // group's id, not the All Servers sentinel's (refs #337).
+  it("renders the active group's own widgets", () => {
+    const group = mintVirtualProfileId();
+    widgetBuckets = { [group]: mockWidgets, [ALL_PROFILES_ID]: [] };
+    profileState = {
+      profiles: [{ id: 'profile-1', name: 'Test' }],
+      currentProfileId: group,
+      virtualProfiles: [{ id: group, name: 'Backyard', memberProfileIds: ['profile-1'] }],
+    };
+
+    render(<DashboardLayout />);
+
+    expect(screen.getByTestId('dashboard-widget-widget-1')).toBeInTheDocument();
   });
 
   it('renders empty state when no widgets exist', () => {

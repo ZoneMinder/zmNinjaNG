@@ -14,7 +14,7 @@ import AppLayout from '../AppLayout';
 import { useProfileStore } from '../../../stores/profile';
 import { useSettingsStore } from '../../../stores/settings';
 import { useKioskStore } from '../../../stores/kioskStore';
-import { ALL_PROFILES_ID, asProfileId } from '../../../api/types';
+import { ALL_PROFILES_ID, asProfileId, mintVirtualProfileId } from '../../../api/types';
 import type { Profile } from '../../../api/types';
 
 vi.mock('../../../../assets/logo.png', () => ({ default: 'logo.png' }));
@@ -30,8 +30,11 @@ vi.mock('../../../hooks/useReconcileDeletedMonitors', () => ({
   useReconcileDeletedMonitors: vi.fn(),
 }));
 vi.mock('../../../hooks/useTvMode', () => ({ useTvMode: () => ({ isTvMode: false }) }));
+// Which aggregate is active. Mutable so a test can swap All Servers for a
+// named group, whose bucket is a different key in the same settings map.
+let scopeMock: Record<string, unknown> = {};
 vi.mock('../../../hooks/useProfileScope', () => ({
-  useProfileScope: () => ({ mode: 'all', profiles: [] }),
+  useProfileScope: () => scopeMock,
 }));
 
 vi.mock('../SidebarContent', () => ({ SidebarContent: () => <div /> }));
@@ -81,10 +84,12 @@ describe('AppLayout in All Servers mode', () => {
   beforeEach(() => {
     checkIsTVMock.mockReset();
     checkIsTVMock.mockResolvedValue(false);
+    scopeMock = { mode: 'all', profiles: [], aggregateId: ALL_PROFILES_ID, aggregateName: null };
     useSettingsStore.setState({ profileSettings: {} });
     useProfileStore.setState({
       profiles: [profile('profile-1', 'Home'), profile('profile-2', 'Office')],
       currentProfileId: ALL_PROFILES_ID,
+      virtualProfiles: [],
     });
     useKioskStore.setState({ isLocked: false, previousInsomniaState: false });
   });
@@ -118,6 +123,29 @@ describe('AppLayout in All Servers mode', () => {
     fireEvent.click(screen.getByTestId('kiosk-unlock-stub'));
 
     expect(allBucket().insomnia).toBe(false);
+  });
+
+  it('remembers the last route in the ALL bucket', () => {
+    renderLayout('/montage');
+
+    expect(allBucket().lastRoute).toBe('/montage');
+  });
+
+  // Each aggregate remembers its own page: reopening a group must not send
+  // the user back to wherever All Servers was left.
+  it("remembers the last route in the active group's bucket, not the ALL sentinel's", () => {
+    const group = mintVirtualProfileId();
+    useSettingsStore.getState().updateProfileSettings(ALL_PROFILES_ID, { lastRoute: '/events' });
+    scopeMock = { mode: 'all', profiles: [], aggregateId: group, aggregateName: 'Backyard' };
+    useProfileStore.setState({
+      currentProfileId: group,
+      virtualProfiles: [{ id: group, name: 'Backyard', memberProfileIds: [asProfileId('profile-1')] }],
+    });
+
+    renderLayout('/montage');
+
+    expect(useSettingsStore.getState().getProfileSettings(group).lastRoute).toBe('/montage');
+    expect(allBucket().lastRoute).toBe('/events');
   });
 
   it('persists TV auto-detection into the ALL bucket', async () => {

@@ -27,7 +27,7 @@ import type { MonitorFeedFit } from '../../stores/settings';
 import { useDashboardStore } from '../../stores/dashboard';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useProfileScope } from '../../hooks/useProfileScope';
-import { ALL_PROFILES_ID, asProfileId } from '../../api/types';
+import { asProfileId } from '../../api/types';
 import type { ProfileId } from '../../api/types';
 import { useQuery } from '@tanstack/react-query';
 import { getMonitors } from '../../api/monitors';
@@ -54,9 +54,12 @@ export function DashboardConfig() {
     const scope = useProfileScope();
     // Boundary: 'default' is a synthesized placeholder key for the
     // no-profile-selected case (dashboard widget storage keys still need a
-    // key). Not a real profile id, so it must be minted explicitly. All mode
-    // gets its own bucket instead of colliding with 'default' (refs #337).
-    const profileId = isAllMode ? ALL_PROFILES_ID : (currentProfile?.id ?? asProfileId('default'));
+    // key). Not a real profile id, so it must be minted explicitly. Each
+    // aggregate gets its own bucket instead of colliding with 'default' or
+    // with another aggregate (refs #337).
+    const profileId = scope?.mode === 'all'
+        ? scope.aggregateId
+        : (currentProfile?.id ?? asProfileId('default'));
 
     // Which profile's monitors to list (monitor/events widgets only need
     // this to populate the checkbox list): the widget's own settings.profileId

@@ -17,7 +17,7 @@ import { useSettingsStore, type AllModeNotifications } from '../stores/settings'
 import { getMonitors } from '../api/monitors';
 import { useAuthSlice } from '../stores/auth';
 import { ProfilePicker } from '../components/profile-picker';
-import { ALL_PROFILES_ID, type ProfileId } from '../api/types';
+import { type ProfileId } from '../api/types';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Label } from '../components/ui/label';
@@ -73,12 +73,15 @@ export default function NotificationSettings() {
   const isConnected = connectionState === 'connected';
   const disconnect = () => currentProfile && storeDisconnect(currentProfile.id);
 
-  // All-mode notifications (live/muted/off): an ALL-bucket app setting (not
-  // a per-profile notification setting), so it lives in the settings store
-  // and is read/written against the ALL_PROFILES_ID sentinel (refs #337).
-  // `scope.settings` is already the merged ALL-bucket settings whenever
-  // scope.mode is 'all' (useProfileScope), so no extra selector is needed.
+  // All-mode notifications (live/muted/off): an aggregate-bucket app setting
+  // (not a per-profile notification setting), so it lives in the settings
+  // store under the active aggregate's own id - the ALL sentinel, or a group's
+  // id when a group is current (refs #337). `scope.settings` is already that
+  // aggregate's merged bucket whenever scope.mode is 'all' (useProfileScope),
+  // so no extra selector is needed, and `aggregateId` names the same bucket
+  // to write back to.
   const allModeNotifications = scope?.settings.allModeNotifications ?? 'live';
+  const aggregateId = scope?.mode === 'all' ? scope.aggregateId : null;
   const updateAllModeSettings = useSettingsStore((s) => s.updateProfileSettings);
 
   // Subscribe reactively to this profile's settings and unread count so the
@@ -378,7 +381,8 @@ export default function NotificationSettings() {
               <Select
                 value={allModeNotifications}
                 onValueChange={(value) =>
-                  updateAllModeSettings(ALL_PROFILES_ID, { allModeNotifications: value as AllModeNotifications })
+                  aggregateId &&
+                  updateAllModeSettings(aggregateId, { allModeNotifications: value as AllModeNotifications })
                 }
               >
                 <SelectTrigger
