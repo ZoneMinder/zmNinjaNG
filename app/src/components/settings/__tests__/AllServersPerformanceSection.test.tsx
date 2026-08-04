@@ -40,7 +40,7 @@ const update = vi.fn();
 
 function renderSection(overrides: Partial<ProfileSettings> = {}) {
   const settings = { ...DEFAULT_SETTINGS, ...overrides };
-  return render(<AllServersPerformanceSection settings={settings} update={update} />);
+  return render(<AllServersPerformanceSection settings={settings} update={update} name="All Servers" />);
 }
 
 /** Types into a committed-on-blur number field the way a user does. */

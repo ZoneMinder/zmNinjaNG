@@ -34,6 +34,10 @@ export default function Settings() {
   // aggregate bucket makes no sense for per-server data. Picker defaults to
   // the first profile in scope (refs #337).
   const scope = useProfileScope();
+  // What the aggregate sections call themselves. A group answers with its own
+  // name; All Servers has none stored, so it uses the localized label.
+  const aggregateName =
+    (scope?.mode === 'all' ? scope.aggregateName : null) ?? t('profiles.all_servers');
 
   // View-level update helper: AppearanceSection and the aggregate sections.
   // Targets the active aggregate's own bucket while aggregating so
@@ -80,15 +84,17 @@ export default function Settings() {
 
       {isAllMode && (
         <>
-          {/* Governs every tile from every server; above the picker so it does
-              not read as another row belonging to the picked profile. */}
+          {/* Governs every tile from every server in the aggregate; above the
+              picker so it does not read as another row belonging to the picked
+              profile. */}
           <AllServersStreamingSection
             value={settings.allModeViewMode}
             onChange={(value) => update('allModeViewMode', value)}
+            name={aggregateName}
           />
           {/* Same reasoning, same placement: every knob in here bounds the
               aggregate as a whole, so it belongs above the picker too. */}
-          <AllServersPerformanceSection settings={settings} update={update} />
+          <AllServersPerformanceSection settings={settings} update={update} name={aggregateName} />
           <ProfilePicker
             profiles={scope?.profiles ?? []}
             value={defaultPickedId}

@@ -21,13 +21,19 @@ import type { AllModeViewMode } from '../../stores/settings';
 export interface AllServersStreamingSectionProps {
   value: AllModeViewMode;
   onChange: (value: AllModeViewMode) => void;
+  /** The aggregate this row governs: a group's name, or the localized All
+   *  Servers label. It names what "every tile" means here, since a group's
+   *  tiles are only its members'. */
+  name: string;
 }
 
 export function AllServersStreamingSection({
   value,
   onChange,
+  name,
 }: AllServersStreamingSectionProps) {
   const { t } = useTranslation();
+  const label = t('settings.all_mode_streaming_label', { name });
 
   const descKey =
     value === 'streaming'
@@ -40,13 +46,13 @@ export function AllServersStreamingSection({
     <SettingsCard>
       <SettingsRow>
         <RowLabel
-          label={t('settings.all_mode_streaming_label')}
+          label={label}
           desc={t(descKey)}
         />
         <Select value={value} onValueChange={(next) => onChange(next as AllModeViewMode)}>
           <SelectTrigger
             className="w-36 flex-shrink-0"
-            aria-label={t('settings.all_mode_streaming_label')}
+            aria-label={label}
             data-testid="all-mode-streaming-select"
           >
             <SelectValue />

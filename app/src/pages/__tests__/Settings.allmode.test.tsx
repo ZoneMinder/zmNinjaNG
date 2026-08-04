@@ -30,8 +30,14 @@ vi.mock('../../stores/settings', async (importOriginal) => ({
     selector: (state: { updateProfileSettings: typeof updateProfileSettings }) => unknown
   ) => selector({ updateProfileSettings }),
 }));
+// Interpolation values are appended so a test can assert which aggregate a
+// section named, not just which key it used.
 vi.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en', changeLanguage: vi.fn() } }),
+  useTranslation: () => ({
+    t: (key: string, params?: Record<string, unknown>) =>
+      params ? `${key}:${JSON.stringify(params)}` : key,
+    i18n: { language: 'en', changeLanguage: vi.fn() },
+  }),
 }));
 
 const SelectContext = createContext<{ onValueChange?: (value: string) => void }>({});
@@ -163,6 +169,14 @@ describe('Settings page - All mode two-tier picker (refs #337)', () => {
       ).toBeInTheDocument();
     });
 
+    it('names All Servers in its label', () => {
+      render(<Settings />);
+
+      expect(
+        screen.getByText('settings.all_mode_streaming_label:{"name":"profiles.all_servers"}')
+      ).toBeInTheDocument();
+    });
+
     it('is absent in single mode, where Streaming Mode is per-profile', () => {
       vi.mocked(useCurrentProfile).mockReturnValue({
         currentProfile: profileA, isAllMode: false, hasProfile: true,
@@ -241,6 +255,19 @@ describe('Settings page - All mode two-tier picker (refs #337)', () => {
       expect(updateProfileSettings).toHaveBeenCalledWith(GROUP, {
         allModeViewMode: 'streaming',
       });
+    });
+
+    // Both aggregate sections are titled after the aggregate they govern, so
+    // "every tile" reads as the group's tiles rather than every server's.
+    it('names the group in both aggregate section headers', () => {
+      render(<Settings />);
+
+      expect(
+        screen.getByText('settings.all_mode_streaming_label:{"name":"Backyard"}')
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText('settings.all_mode_perf.title:{"name":"Backyard"}')
+      ).toBeInTheDocument();
     });
 
     it('writes a performance knob to the group bucket', () => {

@@ -34,9 +34,13 @@ import { DEFAULT_SETTINGS } from '../../stores/settings';
 import type { AllModeStreamTuning, ProfileSettings } from '../../stores/settings';
 
 export interface AllServersPerformanceSectionProps {
-  /** The ALL bucket: this section only renders while aggregating. */
+  /** The active aggregate's bucket: this section only renders while
+   *  aggregating, and each aggregate keeps its own guardrails. */
   settings: ProfileSettings;
   update: <K extends keyof ProfileSettings>(key: K, value: ProfileSettings[K]) => void;
+  /** The aggregate these guardrails bound: a group's name, or the localized
+   *  All Servers label. */
+  name: string;
 }
 
 /** The reset control, present only while the row differs from its default.
@@ -137,13 +141,14 @@ function NumberRow({
 export function AllServersPerformanceSection({
   settings,
   update,
+  name,
 }: AllServersPerformanceSectionProps) {
   const { t } = useTranslation();
 
   return (
     <CollapsibleSection
       id="all-servers-performance"
-      label={t('settings.all_mode_perf.title')}
+      label={t('settings.all_mode_perf.title', { name })}
     >
       <SettingsCard>
         <NumberRow
