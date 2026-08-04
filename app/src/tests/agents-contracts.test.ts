@@ -280,3 +280,69 @@ describe('developer docs reference valid rule IDs', () => {
     }
   });
 });
+
+/**
+ * Localization contract, mechanical half: a translated string may say anything
+ * it likes, but it has to interpolate the same values `en` does.
+ *
+ * A dropped or renamed `{{param}}` is invisible to the existing key gate,
+ * which only checks that keys exist. The string still renders - it just
+ * renders without the monitor name, the count, or the server it was about, in
+ * one language only, which nobody reviewing an English diff would notice.
+ */
+describe('Localization contract', () => {
+  const localesDir = path.join(appSrc, 'locales');
+
+  /** Every leaf string, keyed by its dotted path. */
+  function flatten(node: unknown, prefix = '', acc = new Map<string, string>()): Map<string, string> {
+    if (typeof node === 'string') {
+      acc.set(prefix, node);
+    } else if (node && typeof node === 'object') {
+      for (const [key, value] of Object.entries(node)) {
+        flatten(value, prefix ? `${prefix}.${key}` : key, acc);
+      }
+    }
+    return acc;
+  }
+
+  /** Names only: `{{count}}` and `{{count, number}}` are the same parameter. */
+  function placeholders(text: string): Set<string> {
+    return new Set([...text.matchAll(/\{\{\s*([^}\s,]+)/g)].map((m) => m[1]));
+  }
+
+  function load(locale: string): Map<string, string> {
+    return flatten(JSON.parse(read(path.join(localesDir, locale, 'translation.json'))));
+  }
+
+  it('every locale interpolates the same values as en, key for key', () => {
+    const en = load('en');
+    expect(en.size).toBeGreaterThan(500);
+
+    const others = fs
+      .readdirSync(localesDir, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && e.name !== 'en' && e.name !== '__tests__')
+      .map((e) => e.name);
+    expect(others.length).toBeGreaterThanOrEqual(4);
+
+    const mismatches: string[] = [];
+    for (const locale of others) {
+      for (const [key, text] of load(locale)) {
+        const enText = en.get(key);
+        // Keys en does not have are the key gate's business, not this one.
+        if (enText === undefined) continue;
+        const expected = placeholders(enText);
+        const actual = placeholders(text);
+        const missing = [...expected].filter((p) => !actual.has(p));
+        const extra = [...actual].filter((p) => !expected.has(p));
+        if (missing.length || extra.length) {
+          mismatches.push(
+            `${locale}: ${key} — missing {{${missing.join('}}, {{')}}}`.replace('{{}}', 'none') +
+              (extra.length ? `, unexpected {{${extra.join('}}, {{')}}}` : '')
+          );
+        }
+      }
+    }
+
+    expect(mismatches, `Placeholder drift against en:\n${mismatches.join('\n')}`).toEqual([]);
+  });
+});
