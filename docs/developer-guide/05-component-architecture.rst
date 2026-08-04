@@ -805,54 +805,91 @@ from the bottom with the count and a Delete button. A selection store, the
 row-level toggle, the floating bar, and the delete hook implement that.
 
 ``useDeleteSelectionStore`` (``src/stores/deleteSelection.ts``) holds
-``selectedIds: string[]`` with ``toggle(eventId)`` and ``clear()``. It is
-session-only, not persisted, and survives navigation on purpose: opening an
-event from the queued list does not clear the selection. It clears on Cancel or
-after a successful bulk delete.
+``selectedKeys: string[]`` with ``toggle(key)``, ``remove(keys)`` and
+``clear()``. It is session-only, not persisted, and survives navigation on
+purpose: opening an event from the queued list does not clear the selection. It
+clears on Cancel, or drops the events a delete actually removed.
+
+The entries are *not* raw ZoneMinder event ids. An event id is only unique
+within one server, so in All Servers mode ticking event 1234 on profile A also
+ticked event 1234 on profile B and would have deleted both. The store keys on
+``eventSelectionKey(profileId, eventId)``, which is ``` `${profileId}:${eventId}` ```
+(refs #337) and mirrors ``monitorCacheKey`` in ``stores/monitors.ts``. With no
+profile in hand it falls back to the bare event id, which is exactly the key
+single mode used before. ``parseEventSelectionKey`` splits it back apart on the
+first ``':'``, the same convention ``resolveOwnMonitorIds`` uses for the
+composite monitor-filter tokens.
 
 ``EventDeleteButton`` (``src/components/events/EventDeleteButton.tsx``) is a
-trash icon toggle, not a dialog trigger. It reads whether its ``eventId`` is in
-``selectedIds`` and calls ``toggle`` on click, stopping propagation so it never
-fires the parent row's click-to-navigate handler. Selected state fills the icon
+trash icon toggle, not a dialog trigger. It builds its selection key from
+``eventId`` plus ``profileId``, reads whether that key is in ``selectedKeys``,
+and calls ``toggle`` on click, stopping propagation so it never fires the parent
+row's click-to-navigate handler. Selected state fills the icon
 (``fill-destructive text-destructive``) and sets ``aria-pressed``. Used by both
-``CompactEventRow`` and ``EventCard``.
+``CompactEventRow`` and ``EventCard``; each resolves the owning profile the same
+way (``profileId ?? currentProfile?.id``), so one event ticked from either
+surface is one selection entry rather than two.
 
-**Props**: ``eventId``, ``size`` (``'sm' | 'md'``, default ``'md'``),
-``className``. **Test id**: ``event-delete-button``.
+**Props**: ``eventId``, ``profileId`` (owning profile, optional),
+``size`` (``'sm' | 'md'``, default ``'md'``), ``className``.
+**Test id**: ``event-delete-button``.
 
 ``DeleteBatchBar`` (``src/components/events/DeleteBatchBar.tsx``) is rendered
 once, in ``AppLayout``, so it floats above every page rather than being
-duplicated inside each list. It reads ``selectedIds`` and renders nothing when
+duplicated inside each list. It reads ``selectedKeys`` and renders nothing when
 the array is empty. Otherwise it shows a pill with the queued count
 (``events.delete_selected``, pluralized), a Cancel button calling ``clear()``,
-and a Delete button that calls ``useBulkDeleteEvents`` then ``clear()``. Delete
+and a Delete button that passes the keys to ``useBulkDeleteEvents`` and feeds
+what came back to ``remove()``. Deleting only what the hook confirms leaves the
+events that failed queued for a retry instead of silently dropping them. Delete
 is disabled while ``isDeleting``. **Test ids**: ``delete-batch-bar``,
 ``delete-batch-cancel``, ``delete-batch-confirm``.
 
 ``useBulkDeleteEvents`` (``src/hooks/useBulkDeleteEvents.ts``) exposes
-``deleteEvents(eventIds: string[]): Promise<void>`` and ``isDeleting``. It calls
-the API layer's ``deleteEvent`` (imported as ``apiDeleteEvent`` to avoid a name
-clash) for every id through ``Promise.allSettled``, so one failed deletion does
-not stop the rest. It then edits the cache twice, for two different reasons:
+``deleteEvents(selectionKeys: string[]): Promise<string[]>`` (the keys it
+actually deleted) and ``isDeleting``. It first groups the keys by owning
+profile, because a delete has to go to the server the event lives on:
+
+.. code:: tsx
+
+   const byProfile = new Map<ProfileId, OwnedEvent[]>();
+   for (const key of selectionKeys) {
+     const { profileId: owner, eventId } = parseEventSelectionKey(key);
+     const target = owner ?? effectiveProfileId;   // bare key: the current profile
+     ...
+   }
+
+That grouping is the fix for a crash, not a refactor. The hook used to resolve
+one client up front with ``getCurrentSession()``. In All mode the current
+profile is the ``ALL_PROFILES_ID`` sentinel, which has no session, so
+``getSession`` threw. The call sat inside a ``try``/``finally`` with no
+``catch``, so confirming a bulk delete produced an unhandled rejection: no
+toast, nothing deleted, the selection still there. Each profile's
+``getSession`` call is now wrapped, and a profile that cannot produce a client
+counts its events as failed rather than taking the whole batch down. The
+Sessions contract (``AGENTS.project.md``) states the rule directly: never
+``getCurrentSession`` where the sentinel can be current.
+
+Per profile it calls the API layer's ``deleteEvent`` (imported as
+``apiDeleteEvent`` to avoid a name clash) for every id through
+``Promise.allSettled``, so one failed deletion does not stop the rest, then
+edits that profile's cache twice, for two different reasons:
 
 .. code:: tsx
 
    // Remove the successfully deleted events from cached lists right away so
    // the UI reflects the deletion immediately, then invalidate to reconcile.
    queryClient.setQueriesData(
-     {
-       predicate: (q) =>
-         q.queryKey[0] === 'events' || q.queryKey.includes('monitorRecentEvents'),
-     },
+     { predicate: (q) => isEventListQueryFor(q.queryKey, owner) },
      (old) => removeFromEventsCache(old, deletedIds)
    );
 
    await Promise.all([
-     queryClient.invalidateQueries({ queryKey: queryKeys.events(currentProfile?.id) }),
-     ...eventIds.map((id) =>
-       queryClient.invalidateQueries({ queryKey: queryKeys.event(currentProfile?.id, id) })),
+     queryClient.invalidateQueries({ queryKey: queryKeys.events(owner) }),
+     ...deleted.map((e) =>
+       queryClient.invalidateQueries({ queryKey: queryKeys.event(owner, e.eventId) })),
      queryClient.invalidateQueries({
-       predicate: (q) => q.queryKey.includes('monitorRecentEvents'),
+       predicate: (q) => q.queryKey[0] === 'monitorRecentEvents' && q.queryKey[1] === owner,
      }),
    ]);
 
@@ -864,14 +901,20 @@ actually did. Doing only the second would leave deleted rows on screen for a
 round trip; doing only the first would let a failed server-side delete disappear
 from the UI and stay gone.
 
-The keys come from the ``queryKeys`` factory in ``lib/query/query-keys.ts``, never
-written inline. The last invalidation uses a predicate rather than a key because
-it has to reach every monitor's recent-events query, not just this event's
-monitor.
+Both predicates check the profile id, not just the domain name. Every events
+key puts the profile id at index 1, so matching on it keeps deleting profile A's
+event 1234 from evicting profile B's identically numbered event out of the
+cache, which is the same collision the composite selection key fixes one layer
+up. The keys themselves come from the ``queryKeys`` factory in
+``lib/query/query-keys.ts``, never written inline. The last invalidation uses a
+predicate rather than a key because it has to reach every monitor's
+recent-events query for that profile, not just this event's monitor.
 
 If any deletion failed, the hook logs via ``log.eventCard`` and toasts
 ``events.delete_failed``; otherwise it toasts ``events.delete_selected_success``,
-pluralized on the count.
+pluralized on the count. It never rejects. Deleting is destructive, and a
+rejected promise reaching the bar's ``onClick`` is a failure the user never
+sees, which is what the old All-mode crash looked like.
 
 MonitorRecentEvents
 ~~~~~~~~~~~~~~~~~~~
