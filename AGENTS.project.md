@@ -56,18 +56,18 @@ Gate: `app/src/tests/agents-contracts.test.ts`; review.
 ### Stores
 Owns: client state via Zustand.
 Path: subscriptions select every reactive field they read, with `useShallow` for multi-field selects (`app/src/stores/`); selectors return raw slices or primitives, deriving shapes in `useMemo` outside the subscription.
-Never: mutating objects returned by `getState`; whole-store subscriptions; minting objects inside a selector (spread, map, getter calls) - `useShallow` never stabilizes them and the render loops.
+Never: mutating objects returned by `getState`; whole-store subscriptions; minting objects inside a selector - `useShallow` never stabilizes them and the render loops.
 Gate: `app/src/tests/agents-contracts.test.ts`; review; subscription changes need a real-store regression test (testing playbook).
 
 ### Aggregation (All Servers mode)
-Owns: every surface fanning out over multiple profiles.
-Path: scope from `useProfileScope` only (filters disabled profiles; single mode is a one-element array); fan out via `useQueries` with `combine` (`useScopedMonitors` is the template); aggregate-keyed state uses `monitorCacheKey` composites since raw ZM ids collide across servers; stagger via `staggeredRefetchInterval`.
+Owns: surfaces fanning out over multiple profiles.
+Path: scope from `useProfileScope` only (filters disabled profiles; single mode is a one-element array); fan out via `useQueries` with `combine` (`useScopedMonitors` is the template); aggregate-keyed state uses `monitorCacheKey` composites, raw ZM ids collide across servers; stagger via `staggeredRefetchInterval`.
 Never: bare monitor/event ids as aggregate keys; `getCurrentSession` where the ALL sentinel can be current; data prefs read from the ALL bucket.
-Gate: review; mechanized checks for the Never clauses are a tracked follow-up (all-profiles retrospective).
+Gate: review; mechanizing the Never checks is a tracked follow-up.
 
 ### Notifications
-Owns: live notification connections and event attribution.
-Path: per-profile registries (`app/src/services/notifications.ts`, `app/src/services/eventPoller.ts`); connect/disconnect by profileId through the store (`app/src/stores/notifications.ts`), whose wiring closure-binds each connection's profileId into `addEvent`; display honors the owning profile's settings and the `allModeNotifications` mode.
+Owns: live notification connections and attribution.
+Path: per-profile registries (`app/src/services/notifications.ts`, `app/src/services/eventPoller.ts`); connect/disconnect by profileId through the store (`app/src/stores/notifications.ts`), which closure-binds each connection's profileId into `addEvent`; display honors the owning profile's settings and `allModeNotifications`.
 Never: shared "current connection" state on event paths; events stored under the ALL sentinel; reconnects outside the service's own backoff.
 Gate: `app/src/stores/__tests__/notifications.test.ts`; review.
 
