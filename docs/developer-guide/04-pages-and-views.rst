@@ -427,11 +427,22 @@ Keeping All Servers mode affordable
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 One montage across four servers is four servers' worth of encoding and one
-client's worth of decoding, so the page carries four guardrails that only
-apply while aggregating (refs #337). All four read the ALL settings bucket,
+client's worth of decoding, so the page carries five guardrails that only
+apply while aggregating (refs #337). All five read the ALL settings bucket,
 which ``useCurrentProfile`` already resolves to while the sentinel profile is
-current, and all four are computed inside an ``isAllMode`` branch: a single
+current, and all five are computed inside an ``isAllMode`` branch: a single
 profile carries the same keys and must never be throttled by them.
+
+They compose in a fixed order, and the order is the part worth remembering.
+The stream budget runs first and decides which tiles exist at all. Everything
+after it decides what those tiles do: viewport gating and the hidden pause
+both stop a tile outright, the idle downgrade drops it to snapshots, and
+reduced tuning only changes what a still-streaming tile asks for. Stopping
+wins over downgrading, because ``paused`` disables the stream hooks before
+``forceViewMode`` can reach them, so a tile that is both idle and out of view
+holds no connection rather than polling snapshots nobody can see. A gated
+tile still occupies its budget slot: scrolling changes which tiles stream,
+never which monitors are on the page.
 
 Each tile is rendered by ``MontageMonitor``, which forwards the decisions to
 ``LiveMonitorPlayer``. The page decides, the tile carries, the player acts.
@@ -469,6 +480,33 @@ grace period is the debounce, because a teardown and reconnect of every tile
 costs more than the half minute of streaming it saves. Window blur is
 deliberately not a pause signal, unlike in ``useVisibilityResume``: on
 Electron a fully visible window on a second display fires it.
+
+**Viewport gating.** ``settings.allModeViewportGating`` turns on
+``useViewportGating`` (``src/hooks/useViewportGating.ts``), one
+IntersectionObserver for the whole grid rather than one per tile. Tiles hand
+their wrapper element to ``registerTile``, whose ref callback is memoized per
+tile id: a fresh identity each render would make React detach and re-observe
+every tile on every grid re-render. That map is also how an entry finds the
+composite tile id it belongs to, since raw monitor ids collide across servers.
+
+The observer is rooted on the montage's scroll container, not the viewport.
+``rootMargin`` only expands the root, while an intermediate scroller clips
+without it, so a viewport-rooted observer would collapse
+``MONTAGE_GRID.viewportGatingRootMargin`` to nothing and tiles would connect
+only as they appeared. There is no scroll listener and nothing re-observes on
+layout change: react-grid-layout positions tiles with transforms, and the
+observer measures the element's real box, so a tile dragged or resized into
+view reports itself.
+
+Two asymmetries are deliberate. A tile nobody has measured yet counts as
+gated, because assuming the opposite mints a connkey for every off-screen
+tile on mount and quits it a frame later, which is the expensive half of a
+teardown for no streaming at all. And entering view connects at once while
+leaving it disconnects only after ``MONTAGE_GRID.viewportGatingLingerMs``, so
+scrolling down a tall montage does not quit and remint a key for every tile
+it passes. The gated tile takes the same ``paused`` prop the hidden pause
+uses, so the teardown path, the fresh key on return and the waiting
+placeholder are all the ones that already existed.
 
 **Idle downgrade.** ``settings.allModeIdleMinutes`` turns on
 ``useIdleAfter`` (``src/hooks/useIdleAfter.ts``), one passive document

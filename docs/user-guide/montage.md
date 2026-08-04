@@ -87,7 +87,7 @@ If you have many cameras, use **Low bandwidth mode** in Settings to reduce data 
 ### All Servers mode
 
 Combining servers multiplies all of the above, so **All Servers performance**
-in {doc}`settings` carries three switches that only apply to the combined
+in {doc}`settings` carries four switches that only apply to the combined
 montage. None of them change any server's own settings, and none apply when
 you are on a single server.
 
@@ -96,15 +96,26 @@ you are on a single server.
 - **Pause hidden streams** stops the tiles 30 seconds after the app goes to
   the background or the window is minimized, and closes the connections on
   each server rather than leaving them running. Coming back rebuilds them.
+- **Pause off-screen tiles** does the same for one tile at a time: a camera
+  scrolled a screen's worth past the edge of the grid closes its connection,
+  and opens it again as you scroll back. A tile you scroll past keeps its
+  connection for a second or two, so moving through a long grid does not
+  reconnect everything you pass. This changes which cameras are streaming,
+  never which are on the page: the stream limit still decides that, and
+  scrolling does not bring an overflow camera in.
 - **Idle timeout** drops the tiles to periodic snapshots after the minutes you
   set with no touch, click or keypress. Any interaction puts them back, and so
   does returning to the app from another tab or window. It works while **Keep
   screen awake** is on, which is the case it is for: a montage left up on a
   display nobody is watching.
 
-Go2RTC tiles keep streaming through all three of the frame rate, scale and
-idle settings, the same way they ignore *Streaming Mode*. Only the pause
-setting stops them.
+Go2RTC tiles keep streaming through the frame rate, scale and idle settings,
+the same way they ignore *Streaming Mode*. Only the two pause settings stop
+them.
+
+Where a tile is stopped for any of these reasons, it shows the same waiting
+placeholder it does before a stream arrives, and picks up live again from
+whatever the camera is showing when it comes back.
 
 ## Screen Size Warning
 

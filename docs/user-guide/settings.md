@@ -217,6 +217,7 @@ here rather than fixed.
 | **Notification grouping** | 3 seconds | Events arriving from different servers within this window collapse into one summary notification instead of one each. |
 | **Stream tuning** | Off | On *Reduced*, montage tiles ask their server for 5 frames a second at quarter scale instead of what that server normally sends. A server you have already set lower than that keeps its own values, so this only ever asks for less. Go2RTC tiles are unaffected. |
 | **Pause hidden streams** | Off | Stops montage streams once the app has been in the background, or the window minimized, for 30 seconds, including when it opens that way. They come back when you do. A window merely covered by another window still counts as visible. |
+| **Pause off-screen tiles** | Off | Stops a montage tile once it has been scrolled a screen's worth past the edge of the grid, and starts it again as it comes back. The limit above still decides which cameras are on the page, so scrolling never brings an overflow camera in. |
 | **Idle timeout** | 0 (never) | Drops montage tiles to periodic snapshots after this many minutes with no touch, click or keypress. Any interaction puts them back on live streams, as does returning to the app. This runs whether or not *Keep screen awake* is on, which is the case it exists for. |
 
 None of these touch any profile's own settings, and none apply in single mode:
