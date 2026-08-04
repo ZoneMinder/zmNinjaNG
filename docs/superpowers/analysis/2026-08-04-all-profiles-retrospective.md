@@ -29,7 +29,9 @@ process either catches those or it does not.
 
 The framework under evaluation is checked into this repository:
 [`AGENTS.md`](../../../AGENTS.md) (portable process and code rules with
-stable IDs such as P2 or C7), [`AGENTS.project.md`](../../../AGENTS.project.md)
+stable IDs such as [P2](../../../AGENTS.md#process) or
+[C7](../../../AGENTS.md#code); rule IDs throughout this report link to
+their section), [`AGENTS.project.md`](../../../AGENTS.project.md)
 (architecture contracts with named enforcement gates), the playbooks under
 [`agents/`](../../../agents/) (per-domain working notes agents must read
 before touching an area), and a subagent process: an orchestrating agent
@@ -57,9 +59,9 @@ session would probably have missed, with incidents to show for it.
 |---|---|---|
 | Independent review loop (separate reviewer per task, re-review per fix round) | A second context re-derives correctness instead of the author grading their own work | Helped; largest single effect: 10 user-visible defects caught before merge (3.1) |
 | Mechanical gates (contract tests, lint ratchet, instruction word budget) | Invariants enforced by failing tests, not by memory or goodwill | Helped; blocked real drift 4+ times, including against the orchestrator (3.2, 3.7) |
-| Architecture contracts in AGENTS.project.md | Written invariants quoted in every brief and review | Helped; mostly by prevention, visible as absence of whole defect classes (3.3) |
-| Test-first with proven-red regression tests (P2) | A fix's test must be shown failing on pre-fix code | Helped where verifiable; caught 2 tests that could not fail (3.4) |
-| Raw-output rule (P6) | Verification reads raw command output, never summaries | Helped; decisive twice (3.5) |
+| Architecture contracts in [AGENTS.project.md](../../../AGENTS.project.md) | Written invariants quoted in every brief and review | Helped; mostly by prevention, visible as absence of whole defect classes (3.3) |
+| Test-first with proven-red regression tests ([P2](../../../AGENTS.md#process)) | A fix's test must be shown failing on pre-fix code | Helped where verifiable; caught 2 tests that could not fail (3.4) |
+| Raw-output rule ([P6](../../../AGENTS.md#process)) | Verification reads raw command output, never summaries | Helped; decisive twice (3.5) |
 | Ledger and committed phase plans | Progress state survives crashes and restarts | Helped; 3 environment failures recovered cheaply (3.6) |
 | Playbooks and domain knowledge | Per-domain facts agents read before working | Mixed; pre-existing playbooks helped, closeout additions unproven (3.8) |
 | Brief-driven dispatch | Orchestrator writes the task, implementer builds exactly that | Mixed; propagates orchestrator mistakes with full test coverage (4.1) |
@@ -302,7 +304,7 @@ capture:
   Without that review, this report would contain two wrong numbers and a
   claim that overstated my own case.
 
-### 3.2 The lint ratchet (rule C7)
+### 3.2 The lint ratchet (rule [C7](../../../AGENTS.md#code))
 
 C7 says the lint baseline may shrink or hold but never grow, and that a
 hand-raise needs a written reason. It was tested twice. The two incidents
@@ -344,7 +346,7 @@ landed in all five languages in the same commit, gate-enforced.
 
 Three contracts had specific, checkable effects:
 
-- **Settings.** The rule that every coercion lives in
+- **[Settings.](../../../AGENTS.project.md#settings)** The rule that every coercion lives in
   `mergeProfileSettings` meant the ALL-bucket design needed zero new
   storage code, and the
   live/muted/off migration
@@ -352,7 +354,7 @@ Three contracts had specific, checkable effects:
   had exactly one correct place to put its legacy-boolean conversion.
   Reviewers checked bucket writes on both sides (target written, other
   bucket untouched) because the contract told them which side was which.
-- **Sessions.** Written mid-project (phase 1,
+- **[Sessions.](../../../AGENTS.project.md#sessions)** Written mid-project (phase 1,
   [`93bb7de`](https://github.com/ZoneMinder/zmNinjaNg/commit/93bb7deb))
   with real grep-gates: ApiClient construction confined to four sanctioned
   files, the deleted singleton stays deleted, the reserved marker ids
@@ -361,7 +363,7 @@ Three contracts had specific, checkable effects:
   and caught one real drift attempt: an implementer's test files used raw
   `'__all_profiles__'` string literals, and the gate blocked the commit
   until they imported the constant.
-- **Auth tokens.** The single-flight dedup contract shaped the phase 1
+- **[Auth tokens.](../../../AGENTS.project.md#auth-tokens)** The single-flight dedup contract shaped the phase 1
   refactor (per-profile gates had to preserve it, and the tests that
   encode it were named as the gate in the brief), and it is why the
   reviewer of the multi-connection work could state precisely which
@@ -375,7 +377,7 @@ event filters, ignore lists, grid layouts, mute settings, screen memory.
 Nobody ever had to ask "where does this setting live," which was the
 maintainer's original "no confusion later" requirement.
 
-### 3.4 Test-first with proven-red regression tests (rule P2)
+### 3.4 Test-first with proven-red regression tests (rule [P2](../../../AGENTS.md#process))
 
 The plain test-first habit is hard to audit from the outside, so I will
 only claim what I saw evidence for: the *proven-red* discipline, where a
@@ -396,7 +398,7 @@ caught two tests that would otherwise have been decorative.
   bug class, and caught the next instance during the overview feature
   ([`9f25d2e`](https://github.com/ZoneMinder/zmNinjaNg/commit/9f25d2e5)).
 
-### 3.5 Raw-output distrust (rule P6 and the rtk memory)
+### 3.5 Raw-output distrust (rule [P6](../../../AGENTS.md#process) and the rtk memory)
 
 Twice decisive. A compressed test summary reported "0 failed" while a
 suite-level import error was hiding underneath it; the implementer of
@@ -429,7 +431,7 @@ is what made these recoveries cheap. After the reboot, the resumed session
 knew exactly which tasks were complete, which fix round was open, and what
 had been ruled on, without re-reading the whole history.
 
-### 3.7 The instruction word-budget gate (rule M-series)
+### 3.7 The instruction word-budget gate (the [M-series rules](../../../AGENTS.md#meta-governs-this-file))
 
 A minor incident, recorded because it constrained the orchestrator.
 The `agents-contracts` test caps the combined instruction files at 2,000
@@ -455,7 +457,7 @@ helped in narrow, checkable ways:
   no line numbers) against the playbook's own rules, and the doc gates
   (heading voice, citation format, no em-dashes) failed builds when
   violated rather than relying on taste.
-- [`agents/project/native.md`](../../../agents/project/native.md) mostly pointed to the Native contract, which
+- [`agents/project/native.md`](../../../agents/project/native.md) mostly pointed to the [Native contract](../../../AGENTS.project.md#native), which
   carried the TLS trust-on-first-use invariant that drove the phase 0
   review finding.
 
@@ -466,7 +468,8 @@ degradation pattern) were written into
 [`agents/project/domain-context.md`](../../../agents/project/domain-context.md)
 at closeout. They did not help this project, because they were learned
 here; they can only help future work. I want to be clear about that
-distinction: writing them down is following rule M5, but I have no
+distinction: writing them down is following rule
+[M5](../../../AGENTS.md#meta-governs-this-file), but I have no
 evidence yet that the M5 pipeline pays off, only that this run *consumed*
 several facts recorded by earlier runs (the RTK output warning and the
 device e2e manual-only rule both came from memory/playbooks and both
@@ -479,7 +482,9 @@ timeline row merge, the popover profile resolution, the filter
 cross-selection, the connection keys, the go2rtc cache, the hint
 matching). The spec named the risk in prose; nothing enforced it. After
 the third incident the `monitorCacheKey` helper became the standard, and
-the closeout added an Aggregation contract, but a gate that could check it
+the closeout added an
+[Aggregation contract](../../../AGENTS.project.md#aggregation-all-servers-mode),
+but a gate that could check it
 mechanically does not exist yet and is the top tracked follow-up. Had the
 composite-id rule existed before phase 2, most of the six incidents would
 not have happened; this is the clearest case in the project where a
@@ -514,7 +519,9 @@ extracted from the plan file, but dispatch prompts often add rulings and
 scope on top. Reviewers only see the brief. In phase 3 this produced a
 formal "undisclosed scope creep" finding against work my own dispatch had
 explicitly ordered, wasting a round on a misunderstanding. Rule now
-recorded in the workflow playbook: the brief file is the reviewer's
+recorded in the
+[workflow playbook](../../../agents/generic/claude-workflows.md): the
+brief file is the reviewer's
 contract, so anything added at dispatch time must be folded into it.
 
 **The one-fix-wave rule under-budgets concurrency work.** The
@@ -551,8 +558,9 @@ implementer's commit swept my staged doc files (caught and recovered), and
 later my own one-line commit swept the docs agent's staged files, which is
 why the user-doc updates sit under the mislabeled commit
 [`310335e`](https://github.com/ZoneMinder/zmNinjaNg/commit/310335e)
-instead of their own message. Content is intact and verified, but the P5
-one-commit-one-change rule was broken by accident twice in one night. The
+instead of their own message. Content is intact and verified, but the
+[P5](../../../AGENTS.md#process) one-commit-one-change rule was broken by
+accident twice in one night. The
 conclusion: staging by explicit path is not sufficient; either one
 committer at a time, or worktree isolation for agents that commit. This
 was operator error combined with git's whole-index commit behavior, not a
@@ -591,7 +599,8 @@ noisier than it should be.
   handoff note are framework properties. The ledger compensates for
   them; it does not prevent them.
 - **Output-summarizing wrappers** (the rtk tee) hid a suite failure once.
-  The project already distrusts them by rule (P6), which is how the
+  The project already distrusts them by rule
+  ([P6](../../../AGENTS.md#process)), which is how the
   failure was caught, but the rule exists specifically to defend against
   this piece of tooling.
 - **A resumable-agent limitation**: stopped agents cannot be re-messaged
@@ -630,8 +639,9 @@ failure would be letting the tolerated-failure list quietly grow instead.
 
 **The render-loop selector class recurred five times despite being
 caught every time.** The workflow detected each instance but did not
-prevent recurrence until the closeout wrote the pattern into the Stores
-contract and the testing playbook. Detection worked; prevention did not
+prevent recurrence until the closeout wrote the pattern into the
+[Stores contract](../../../AGENTS.project.md#stores) and the
+[testing playbook](../../../agents/project/testing.md). Detection worked; prevention did not
 exist until the end, and whether the new contract text prevents the next
 instance is untested.
 
@@ -643,14 +653,16 @@ instance is untested.
   I could verify) changed outcomes. Implementers reported failing-first
   consistently, but I cannot distinguish a genuinely test-driven task from
   a well-reported one from where I sit.
-- Whether the issue-linkage rule (P1) prevented anything. Every commit
+- Whether the issue-linkage rule
+  ([P1](../../../AGENTS.md#process)) prevented anything. Every commit
   references [#337](https://github.com/ZoneMinder/zmNinjaNg/issues/337)
   and the PR trail is clean, which has archival value, but
   I saw no incident where the linkage itself caught or prevented a
   mistake. When the maintainer said to stop filing new issues mid-flow,
   folding increments into the umbrella issue worked fine.
 - Several rules simply never came under pressure: the one-file-folder
-  rule (C5), the merge-without-approval rule (P8), the typo-exemption in
+  rule ([C5](../../../AGENTS.md#code)), the merge-without-approval rule
+  ([P8](../../../AGENTS.md#process)), the typo-exemption in
   P1. No violations, no tests of their value either. Absence of incidents
   is consistent with "working silently" and with "irrelevant this run";
   the available evidence cannot distinguish the two.
@@ -692,10 +704,14 @@ the benefit with less process.
 ## 7. Follow-ups this report feeds
 
 1. A mechanical gate for composite ids in aggregate paths, the
-   six-incident class (tracked; the Aggregation contract currently says
+   six-incident class (tracked; the
+   [Aggregation contract](../../../AGENTS.project.md#aggregation-all-servers-mode)
+   currently says
    "review" honestly instead of overclaiming).
 2. The render-loop selector rule and real-store test requirement are now
-   in the Stores contract and testing playbook; their effectiveness is
+   in the [Stores contract](../../../AGENTS.project.md#stores) and
+   [testing playbook](../../../agents/project/testing.md); their
+   effectiveness is
    unproven until the next feature.
 3. e2e infrastructure
    ([#342](https://github.com/ZoneMinder/zmNinjaNg/issues/342)):
