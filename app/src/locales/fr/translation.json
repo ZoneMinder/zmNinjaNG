@@ -230,6 +230,8 @@
     "delete_toggle_aria": "Sélectionner l'événement à supprimer",
     "delete_selected_success_one": "{{count}} événement supprimé",
     "delete_selected_success_other": "{{count}} événements supprimés",
+    "delete_partial_one": "{{count}} événement supprimé, {{failed}} en échec",
+    "delete_partial_other": "{{count}} événements supprimés, {{failed}} en échec",
     "delete_selected_one": "Supprimer {{count}} événement",
     "delete_selected_other": "Supprimer {{count}} événements",
     "filter": {

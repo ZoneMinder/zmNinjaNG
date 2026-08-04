@@ -124,7 +124,16 @@ export function useBulkDeleteEvents(profileId?: ProfileId): {
 
       if (failed > 0) {
         log.eventCard('Bulk delete had failures', LogLevel.ERROR, { failed, total: selectionKeys.length });
-        toast.error(t('events.delete_failed'));
+        // A partial delete says how many survived. "Delete failed" on its own
+        // reads as "nothing was deleted", which sends the user back to
+        // re-delete events the server has already dropped - and those retries
+        // 404 forever. `count` is the deleted total so i18next pluralizes on
+        // it; `failed` is a plain interpolation.
+        toast.error(
+          deletedKeys.length > 0
+            ? t('events.delete_partial', { count: deletedKeys.length, failed })
+            : t('events.delete_failed')
+        );
       } else {
         toast.success(t('events.delete_selected_success', { count: deletedKeys.length }));
       }

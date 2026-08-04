@@ -230,6 +230,8 @@
     "delete_toggle_aria": "Select event for deletion",
     "delete_selected_success_one": "Deleted {{count}} event",
     "delete_selected_success_other": "Deleted {{count}} events",
+    "delete_partial_one": "Deleted {{count}} event, {{failed}} failed",
+    "delete_partial_other": "Deleted {{count}} events, {{failed}} failed",
     "delete_selected_one": "Delete {{count}} event",
     "delete_selected_other": "Delete {{count}} events",
     "filter": {

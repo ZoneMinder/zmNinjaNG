@@ -230,6 +230,8 @@
     "delete_toggle_aria": "Ereignis zum Löschen auswählen",
     "delete_selected_success_one": "{{count}} Ereignis gelöscht",
     "delete_selected_success_other": "{{count}} Ereignisse gelöscht",
+    "delete_partial_one": "{{count}} Ereignis gelöscht, {{failed}} fehlgeschlagen",
+    "delete_partial_other": "{{count}} Ereignisse gelöscht, {{failed}} fehlgeschlagen",
     "delete_selected_one": "{{count}} Ereignis löschen",
     "delete_selected_other": "{{count}} Ereignisse löschen",
     "filter": {

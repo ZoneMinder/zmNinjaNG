@@ -230,6 +230,8 @@
     "delete_toggle_aria": "选择要删除的事件",
     "delete_selected_success_one": "已删除 {{count}} 个事件",
     "delete_selected_success_other": "已删除 {{count}} 个事件",
+    "delete_partial_one": "已删除 {{count}} 个事件，{{failed}} 个失败",
+    "delete_partial_other": "已删除 {{count}} 个事件，{{failed}} 个失败",
     "delete_selected_one": "删除 {{count}} 个事件",
     "delete_selected_other": "删除 {{count}} 个事件",
     "filter": {

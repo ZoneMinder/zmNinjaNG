@@ -29,7 +29,13 @@ vi.mock('../../services/sessions', () => ({
   registerSessionsGate: vi.fn(),
 }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
-vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (k: string, o?: { count?: number }) => `${k}:${o?.count ?? ''}` }) }));
+// Every interpolated value is appended, so a toast that drops one is visible
+// in the assertion instead of reading as the bare key.
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (k: string, o?: Record<string, unknown>) => `${k}:${o ? Object.values(o).join(':') : ''}`,
+  }),
+}));
 vi.mock('../../lib/logger', () => ({ log: { eventCard: vi.fn() }, LogLevel: { ERROR: 'ERROR' } }));
 
 // All mode leaves currentProfile null (useCurrentProfile: the ALL sentinel
@@ -76,7 +82,10 @@ describe('useBulkDeleteEvents - single mode', () => {
     const { result } = renderHook(() => useBulkDeleteEvents(), { wrapper });
     await act(async () => { await result.current.deleteEvents(['1', '2']); });
     expect(deleteEvent).toHaveBeenCalledTimes(2); // both attempted
-    expect(toast.error).toHaveBeenCalledWith('events.delete_failed:');
+    // One landed, one did not, and the toast has to say so: "Delete failed"
+    // alone reads as "nothing was deleted", which would send the user back to
+    // re-delete an event the server no longer has.
+    expect(toast.error).toHaveBeenCalledWith('events.delete_partial:1:1');
   });
 
   it('does nothing for an empty list', async () => {
@@ -163,7 +172,7 @@ describe('useBulkDeleteEvents - All mode', () => {
     });
 
     expect(deleted).toEqual([eventSelectionKey(P1, '1')]);
-    expect(toast.error).toHaveBeenCalledWith('events.delete_failed:');
+    expect(toast.error).toHaveBeenCalledWith('events.delete_partial:1:1');
     expect(toast.success).not.toHaveBeenCalled();
   });
 
@@ -211,6 +220,7 @@ describe('useBulkDeleteEvents - All mode', () => {
 
     expect(deleted).toEqual([]);
     expect(deleteEvent).not.toHaveBeenCalled();
+    // Nothing survived, so there is no count worth reporting.
     expect(toast.error).toHaveBeenCalledWith('events.delete_failed:');
   });
 });
