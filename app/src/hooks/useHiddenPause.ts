@@ -59,6 +59,15 @@ export function useHiddenPause(enabled: boolean, graceMs: number): boolean {
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
+    // A page can already be hidden when this starts watching: opened in a
+    // background tab, or restored into one. No visibilitychange is coming to
+    // say so, and without this the tiles would stream on unwatched forever.
+    // The grace period still runs, from here rather than from whenever the
+    // page actually went out of sight, so nothing pauses on the spot.
+    if (document.visibilityState === 'hidden') {
+      timer = setTimeout(() => setPaused(true), graceMs);
+    }
+
     return () => {
       disarm();
       document.removeEventListener('visibilitychange', handleVisibilityChange);

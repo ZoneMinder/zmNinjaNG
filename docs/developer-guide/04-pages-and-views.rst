@@ -459,8 +459,10 @@ RTSP stream that neither parameter touches.
 
 **Pause while hidden.** ``settings.allModePauseHidden`` turns on
 ``useHiddenPause`` (``src/hooks/useHiddenPause.ts``), one page-level watch on
-``visibilitychange``. After ``MONTAGE_GRID.pauseHiddenGraceMs`` out of sight
-it reports paused, and the player disables both stream hooks: the MJPEG
+``visibilitychange``, seeded from the page's current state so a montage
+opened in a background tab pauses too. After
+``MONTAGE_GRID.pauseHiddenGraceMs`` out of sight it reports paused, and the
+player disables both stream hooks: the MJPEG
 lifecycle CMD_QUITs its connkey on the way down rather than orphaning an
 ``nph-zms`` process, and ``useGo2RTCStream`` closes its own connection. The
 grace period is the debounce, because a teardown and reconnect of every tile
@@ -470,7 +472,8 @@ Electron a fully visible window on a second display fires it.
 
 **Idle downgrade.** ``settings.allModeIdleMinutes`` turns on
 ``useIdleAfter`` (``src/hooks/useIdleAfter.ts``), one passive document
-listener for pointer, key and touch activity, throttled by
+listener for pointer, key and touch activity (plus a return to the page,
+which counts as looking at it, while leaving does not), throttled by
 ``MONTAGE_GRID.idleActivityThrottleMs`` because a dragged pointer fires
 hundreds of events a second and each one would otherwise rebuild the timer.
 Going idle passes ``forceViewMode='snapshot'`` down to the player, which is

@@ -15,6 +15,11 @@ const THROTTLE_MS = 1_000;
 
 const activity = () => document.dispatchEvent(new Event('pointermove'));
 
+function setVisibility(state: 'visible' | 'hidden') {
+  Object.defineProperty(document, 'visibilityState', { value: state, configurable: true });
+  document.dispatchEvent(new Event('visibilitychange'));
+}
+
 describe('useIdleAfter', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
@@ -65,6 +70,31 @@ describe('useIdleAfter', () => {
     });
     act(() => { vi.advanceTimersByTime(IDLE_MS); });
 
+    expect(result.current).toBe(true);
+  });
+
+  it('wakes when the user comes back to the tab', () => {
+    // Returning to a montage counts as looking at it, even before the mouse
+    // moves; otherwise the tiles stay on snapshots until something is clicked.
+    const { result } = renderHook(() => useIdleAfter(MINUTES, THROTTLE_MS));
+
+    act(() => { vi.advanceTimersByTime(IDLE_MS); });
+    expect(result.current).toBe(true);
+
+    act(() => { setVisibility('visible'); });
+
+    expect(result.current).toBe(false);
+  });
+
+  it('does not count leaving the tab as activity', () => {
+    const { result } = renderHook(() => useIdleAfter(MINUTES, THROTTLE_MS));
+
+    act(() => { vi.advanceTimersByTime(IDLE_MS - 1000); });
+    act(() => { setVisibility('hidden'); });
+    act(() => { vi.advanceTimersByTime(1000); });
+
+    // Walking away is the opposite of activity: the quiet period runs out on
+    // the schedule it was already on.
     expect(result.current).toBe(true);
   });
 

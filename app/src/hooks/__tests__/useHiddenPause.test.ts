@@ -23,12 +23,12 @@ function setVisibility(state: 'visible' | 'hidden') {
 describe('useHiddenPause', () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    setVisibility('visible');
+    act(() => setVisibility('visible'));
   });
 
   afterEach(() => {
     vi.useRealTimers();
-    setVisibility('visible');
+    act(() => setVisibility('visible'));
   });
 
   it('keeps streaming while the page is visible', () => {
@@ -98,6 +98,22 @@ describe('useHiddenPause', () => {
 
     rerender({ on: false });
     expect(result.current).toBe(false);
+  });
+
+  it('pauses on schedule when it mounts on an already-hidden page', () => {
+    // Nothing tells the hook it was hidden before it existed, so a montage
+    // opened in a background tab (or restored into one) would stream forever.
+    // The grace period still runs from mount rather than pausing on the spot.
+    act(() => setVisibility('hidden'));
+
+    const { result } = renderHook(() => useHiddenPause(true, GRACE_MS));
+    expect(result.current).toBe(false);
+
+    act(() => { vi.advanceTimersByTime(GRACE_MS - 1); });
+    expect(result.current).toBe(false);
+
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(result.current).toBe(true);
   });
 
   it('leaves no timer armed after unmount', () => {

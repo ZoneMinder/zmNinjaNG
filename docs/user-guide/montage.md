@@ -97,9 +97,10 @@ you are on a single server.
   the background or the window is minimized, and closes the connections on
   each server rather than leaving them running. Coming back rebuilds them.
 - **Idle timeout** drops the tiles to periodic snapshots after the minutes you
-  set with no touch, click or keypress. Any interaction puts them back. It
-  works while **Keep screen awake** is on, which is the case it is for: a
-  montage left up on a display nobody is watching.
+  set with no touch, click or keypress. Any interaction puts them back, and so
+  does returning to the app from another tab or window. It works while **Keep
+  screen awake** is on, which is the case it is for: a montage left up on a
+  display nobody is watching.
 
 Go2RTC tiles keep streaming through all three of the frame rate, scale and
 idle settings, the same way they ignore *Streaming Mode*. Only the pause

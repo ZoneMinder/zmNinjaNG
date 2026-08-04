@@ -56,16 +56,25 @@ export function useIdleAfter(minutes: number, throttleMs: number): boolean {
       restart();
     };
 
+    // Coming back to the page counts as looking at it, before any pointer has
+    // moved. Leaving does not: walking away is the opposite of activity, so a
+    // hidden page keeps counting down on the schedule it was already on.
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') handleActivity();
+    };
+
     restart();
     for (const type of ACTIVITY_EVENTS) {
       document.addEventListener(type, handleActivity, { passive: true });
     }
+    document.addEventListener('visibilitychange', handleVisibilityChange, { passive: true });
 
     return () => {
       if (timer) clearTimeout(timer);
       for (const type of ACTIVITY_EVENTS) {
         document.removeEventListener(type, handleActivity);
       }
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       // Unmounting, or turning the setting off, must not leave the caller
       // stuck on the downgraded view with nothing left to wake it.
       setIdle(false);
