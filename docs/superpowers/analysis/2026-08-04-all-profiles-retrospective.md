@@ -1,303 +1,593 @@
-# All Profiles: an honest retrospective of the agent workflow
+# All Profiles: a retrospective on the agent workflow
 
-Written 2026-08-04 by the orchestrating agent at the maintainer's request:
-"document fairly and honestly whether the agent workflow we created actually
-helped or not." This is that document. Numbers come from git; judgments are
-mine and I have tried to argue against myself where the evidence allows.
+Written 2026-08-04 by the orchestrating agent, at the maintainer's request, to
+answer one question honestly: did the agent workflow this repository built
+(AGENTS.md rules, AGENTS.project.md contracts, the playbooks, and the
+subagent-driven review process) actually help, or did it get in the way?
 
-## What was built
+A note on method before anything else. This report is compiled from two
+sources: the git history of the two feature branches, and the orchestrator's
+own session record of every dispatch, review, and fix round. Where I cite a
+commit, the link is real and checked. Where I make a judgment, I say it is a
+judgment. Where I have no evidence one way or the other, I say that too,
+because a fair report about whether a process works has to admit which parts
+of it were never really tested.
 
-The All Profiles feature: a virtual "All Servers" profile aggregating every
-configured ZoneMinder server across the whole app. Prerequisites forced two
-deep refactors first: the API-client singleton became a per-profile session
-layer, and native TLS trust became a host-keyed fingerprint map. Delivered
-over two stacked PRs (#338 foundation, #339 feature), five planned phases
-plus a stream of post-close increments from the maintainer's live acceptance
-testing (disable toggle, notification overview, multi-connection live
-notifications with a live/muted/off control, All-mode Live Activity, and
-assorted UX fixes).
+All commit links are to `github.com/ZoneMinder/zmNinjaNg`.
 
-Scale: 77 commits, roughly 285 files and +21k/-3.5k lines across both
-branches, first code commit 2026-08-02 14:15, feature-complete plus
-increments by 2026-08-03 late evening. Wall-clock spans two calendar days
-including a maintainer sleep window, one host reboot, one network loss, and
-one relocation to a different LAN. Unit suite grew from ~3273 to ~3600
-tests; the lint ratchet ended BELOW where it started (exhaustive-deps
-38 at the branch point down to 34 at close) despite the volume.
+---
 
-## How it was executed
+## 1. What was built
 
-- Design: brainstorming skill (interactive, ~10 clarifying decisions),
-  spec written and committed before any code. Approach chosen explicitly by
-  the maintainer: big-bang session migration over an incremental facade.
-- Per phase: a written plan with per-task briefs, then subagent-driven
-  development — one fresh implementer per task, an independent reviewer per
-  task, scoped re-reviews per fix round, a whole-branch Opus review per
-  phase, and one consolidated fix wave after each of those.
-- Post-close increments used a lighter loop (single implementer + single
-  reviewer per increment) but kept the same review bar.
-- Roughly 40 subagents dispatched across the effort. Every task-level
-  review ran; no code merged unreviewed except two one-line cosmetic edits
-  by the orchestrator (a button variant, a card color), each covered by
-  existing tests.
+The All Profiles feature: a virtual "All Servers" profile that shows every
+configured ZoneMinder server together in one UI. Monitors, Events, Timeline,
+Montage, Dashboard, Live Activity, and notifications all aggregate. Actions
+route automatically to the server that owns the monitor or event. Two deep
+refactors had to land first, because the app was built around exactly one
+server at a time:
 
-## Did the workflow help? Verdict first
+- The global API-client singleton became a per-profile session layer
+  (one client, auth-token slice, and timezone per profile).
+- Native TLS trust went from one stored certificate fingerprint to a
+  host-keyed fingerprint map, so several self-signed servers can be trusted
+  at once (iOS, Android, and the web layer all changed).
 
-Yes, decisively — but not uniformly, and not cheaply. The honest summary:
-the review loop was the single highest-value mechanism and paid for itself
-many times over; the contracts/gates caught real classes of error
-repeatedly; the ledger made three environment failures a non-event. The
-costs were real too: reviewer-report delivery was unreliable and cost a
-nudge round on most dispatches, my own briefs introduced defects that
-implementers faithfully built, and the "one fix wave" rule was violated
-twice because reality (a new Critical inside a fix wave) beat the rule.
+The work shipped as two stacked PRs:
 
-## What the workflow caught (the case FOR)
+- **#338** (`feat/all-profiles-sessions`): TLS multi-fingerprint plus the
+  session-layer migration. 27 commits.
+- **#339** (`feat/all-profiles-ui`): the visible feature, phases 2 through 4,
+  plus about a dozen post-completion increments that came from the
+  maintainer's live acceptance testing. 50 commits.
 
-The independent-review loop found, before merge, every one of these — none
-were caught by the implementing agent's own tests first:
+Final numbers: 77 commits, 297 files changed, +22,025 / -3,555 lines. The
+unit suite grew from about 3,273 tests to 3,614. The lint ratchet baseline
+ended lower than it started (react-hooks/exhaustive-deps went from 38 at the
+branch point to 34 at close). First code commit
+[`af8c8a2`](https://github.com/ZoneMinder/zmNinjaNg/commit/af8c8a20) landed
+2026-08-02 at 14:15; the last feature commit
+[`1c8fd61`](https://github.com/ZoneMinder/zmNinjaNg/commit/1c8fd614) landed
+2026-08-03 at 22:13. In between there was a maintainer sleep window, a host
+reboot, a network outage, and a move to a different LAN.
 
-1. Pre-save TLS trust regression (Phase 0, plan-mandated defect — MY brief
-   was wrong; the reviewer caught the consequence, the maintainer ruled the
-   candidate-override fix).
-2. Proactive token refresh silently dead for two whole tasks (Phase 1 C1 —
-   the enable guard referenced wiring that would not exist until Task 8).
-3. Cross-profile server-map/token bleed for multi-server ZM (Phase 2 I1)
-   and the missing per-profile reLogin callbacks (I2).
-4. All mode silently omitting every unbootstrapped profile — no data, no
-   error strip (Phase 2 C1, the exact failure the partial-failure design
-   existed to prevent).
-5. Blank MJPEG player on the deep route that was the headline of Phase 3
-   (one missing prop; the e2e asserted only the URL).
-6. Composite-token leak into event prev/next; the montage deep link
-   clobbered by a settings-sync effect (both introduced BY a fix wave and
-   caught by the scoped re-review of that wave).
-7. A notification-history render loop that crashes on the first
-   notification in ANY mode (post-close Critical; unit tests could not see
-   it because the store mock bypassed useSyncExternalStore — the reviewer
-   reproduced against the real store).
-8. A single-mode profile-switch socket leak, an auto-connect deadlock, and
-   a backoff-defeat regression, each introduced by the previous round's fix
-   in the multi-connection work — three consecutive scoped re-reviews each
-   caught the new defect the prior fix created.
-9. Live Activity's watch-cap re-slice evicting an on-screen alarming tile
-   outside the dwell window (the refs #313 churn class through a new door).
+### Timeline
 
-Recurring classes the gates caught mechanically:
-- C7 lint ratchet: two attempted baseline raises, both justified with
-  "existing code does it" — the exact rationalization the rule names. One
-  was avoidable and fixed (and ended BELOW baseline); one survived an
-  empirical three-variant attempt and stands as a documented hand-raise.
-  The rule worked both ways: it forced the fight, and its escape hatch
-  covered the genuine case.
-- The render-loop selector class (fresh objects inside zustand selectors)
-  bit FIVE times across the branch. After the second, reviews checked for
-  it by name; after the third, real-store regression tests became the
-  demanded standard. The workflow turned a recurring bug into a checklist
-  item — but note honestly: the workflow also failed to prevent
-  recurrence, it only caught each instance.
-- Localization ×5, kebab testids, ErrorBanner-only error UI, constants
-  placement: near-zero violations reached review because the briefs quoted
-  the contracts. The one translation near-miss (a sed that broke 15
-  pluralized strings across 5 locales) was caught by the implementer
-  reading raw test output — a practice the project rules mandate (P6/rtk
-  distrust) and which paid off exactly as designed.
+| Stage | Landed | Anchor commits |
+|---|---|---|
+| Spec + phase 0/1 plan | Aug 2, morning | [`36317b8`](https://github.com/ZoneMinder/zmNinjaNg/commit/36317b8), [`e21e609`](https://github.com/ZoneMinder/zmNinjaNg/commit/e21e609) |
+| Phase 0: TLS host-map (JS, iOS, Android) | Aug 2, ~14:15-15:00 | [`af8c8a2`](https://github.com/ZoneMinder/zmNinjaNg/commit/af8c8a20), [`18bb83d`](https://github.com/ZoneMinder/zmNinjaNg/commit/18bb83d7), [`3848380`](https://github.com/ZoneMinder/zmNinjaNg/commit/3848380e) |
+| Phase 1: session layer, singleton deleted | Aug 2, afternoon-evening | [`f1ab768`](https://github.com/ZoneMinder/zmNinjaNg/commit/f1ab7685), [`a38b2ac`](https://github.com/ZoneMinder/zmNinjaNg/commit/a38b2aca), [`73b9959`](https://github.com/ZoneMinder/zmNinjaNg/commit/73b99594), [`93bb7de`](https://github.com/ZoneMinder/zmNinjaNg/commit/93bb7deb) |
+| Phase 2: All mode + aggregated Monitors | Aug 2 night - Aug 3 early | [`6bc4b50`](https://github.com/ZoneMinder/zmNinjaNg/commit/6bc4b50e), [`4cc8ae6`](https://github.com/ZoneMinder/zmNinjaNg/commit/4cc8ae68), [`a1b1657`](https://github.com/ZoneMinder/zmNinjaNg/commit/a1b16579), [`da38666`](https://github.com/ZoneMinder/zmNinjaNg/commit/da38666a) |
+| Phase 3: Events/Timeline, deep routes, notification taps | Aug 3, morning-midday | [`7009839`](https://github.com/ZoneMinder/zmNinjaNg/commit/70098391), [`11ff9ce`](https://github.com/ZoneMinder/zmNinjaNg/commit/11ff9ce4), [`a3abfe4`](https://github.com/ZoneMinder/zmNinjaNg/commit/a3abfe48), [`5a8cf65`](https://github.com/ZoneMinder/zmNinjaNg/commit/5a8cf654) |
+| Phase 4: Montage, Dashboard, pickers, assistant | Aug 3, midday-afternoon | [`bc25cec`](https://github.com/ZoneMinder/zmNinjaNg/commit/bc25cec1), [`89b3c4e`](https://github.com/ZoneMinder/zmNinjaNg/commit/89b3c4ef), [`edbe1c3`](https://github.com/ZoneMinder/zmNinjaNg/commit/edbe1c3e), [`85ffc08`](https://github.com/ZoneMinder/zmNinjaNg/commit/85ffc086) |
+| Acceptance-testing increments | Aug 3, evening-night | [`db96140`](https://github.com/ZoneMinder/zmNinjaNg/commit/db961404), [`3d7f4cc`](https://github.com/ZoneMinder/zmNinjaNg/commit/3d7f4ccc), [`74c65f0`](https://github.com/ZoneMinder/zmNinjaNg/commit/74c65f00), [`542c814`](https://github.com/ZoneMinder/zmNinjaNg/commit/542c814d) |
+| Closeout: docs, contracts, this report | Aug 3 night - Aug 4 | [`c83bebe`](https://github.com/ZoneMinder/zmNinjaNg/commit/c83bebea), [`069cada`](https://github.com/ZoneMinder/zmNinjaNg/commit/069cada) |
 
-Environment resilience: a host reboot killed one implementer mid-task
-(~20 uncommitted files), a network loss killed another, and a LAN move
-stranded e2e for hours. The ledger + git recovered all three with zero
-lost work and zero re-done tasks. The deferred-e2e playbook (commit
-locally, hold push, poll for the LAN, run acceptance later) worked
-unmodified. This is the strongest evidence for the ledger discipline: the
-recovery cost was minutes, not sessions.
+---
 
-Bisect-verified honesty: when the full e2e suite showed 5 failures in the
-area the fix waves had just touched, the workflow's answer was a
-pre-branch-baseline bisect, which proved all 5 pre-existing (shared live
-demo server degradation). Without that discipline the natural move would
-have been to "fix" tests that were never broken by us.
+## 2. How the work was organized
 
-## What the workflow cost or got wrong (the case AGAINST)
+The design phase used the brainstorming skill interactively: about ten
+clarifying decisions (scope, UX model, preference handling, write behavior,
+architecture approach), each answered by the maintainer, then a spec
+committed before any code. The maintainer explicitly chose a big-bang
+migration of the API layer over an incremental facade, and that decision is
+recorded in the spec as final.
 
-1. MY plan briefs shipped defects that implementers faithfully built.
-   The Phase 0 brief mandated the trust-union call pattern that broke
-   pre-save onboarding; it also used a wrong settings field name. The
-   Phase 1 plan's ALL_PROFILES_ID placement was unbuildable (a real import
-   cycle). Task-brief extraction (scripts/task-brief) also lost dispatch
-   context: in Phase 3 Task 7 the reviewer flagged "undisclosed scope
-   creep" for work MY dispatch had explicitly ordered — the brief file did
-   not contain the dispatch prompt, and the reviewer only saw the brief.
-   Lesson recorded: the brief must be the single source of requirements;
-   anything added in the dispatch prose is invisible to reviewers.
-2. Subagent report delivery was unreliable. Roughly a third of reviewer
-   completions arrived as idle notifications with no report; each needed a
-   "resend via SendMessage" nudge, and subagents' sends to "main" errored
-   in some sessions ("you are the main conversation"), requiring a by-name
-   fallback. Pure overhead, maybe 10-15 exchanges across the effort.
-   Memory now instructs every dispatch to demand SendMessage delivery with
-   the by-name fallback, which stabilized it late.
-3. The one-fix-wave rule lost to reality twice. Both whole-branch fix
-   waves introduced at least one new Critical/Important, and parking a
-   fresh Critical (a montage deep-link regression for single-profile
-   users; later a socket-per-drop backoff defeat) was worse than a
-   documented extra round. I broke the rule deliberately both times, with
-   ledger entries. The rule's intent (no endless churn) is right; its
-   letter assumes fix waves do not create Criticals, which large waves do.
-   The multi-connection increment needed FOUR rounds; each was justified by
-   a genuinely new defect, and each new defect was created by the previous
-   fix. That is not review churn — that is what concurrency changes cost.
-4. Review depth was uneven with model tier. Sonnet task reviews were good
-   at contracts and mechanics; the Opus reviews found the integration and
-   concurrency defects sonnet passes missed (the socket leak, the
-   reschedule deadlock, the tz-naive buckets; the resident-cap dwell
-   bypass likewise came from an Opus TASK review, so the tier mattered
-   more than the scope). Where I economized on the reviewer tier for
-   concurrency-heavy diffs, defects survived one extra round before the
-   Opus pass caught them. The cost model should have keyed reviewer tier
-   to diff RISK, not diff size, earlier than it did.
-5. e2e was the weakest leg. One shared live ZM server, fullyParallel
-   workers, content drift: 14 flaky-then-pass on a bad run, 5 permanently
-   failing scenarios (bisect-proven pre-existing) that now ride as a
-   documented tolerated set (#342). Two of my own new scenarios were
-   initially timing-fragile and needed settle/poll rewrites after their
-   first live run. The unit/component suites carried the real verification
-   weight; e2e mostly proved wiring and caught two test bugs of its own
-   making. Live websockets and alarm states were declared un-e2e-able and
-   covered by unit tests only — true, but it means the most concurrent
-   code has the least end-to-end evidence.
-6. Orchestration overhead was nonzero: ~40 dispatch prompts, each
-   hand-written with context, plus ledger bookkeeping, package scripts,
-   and stale idle-notification noise from stopped agents (dozens of
-   messages). I judge the overhead at perhaps 15-20% of total effort.
-   Against the defect list above it was clearly bought well, but a solo
-   agent WITHOUT reviews would have shipped several of those Criticals.
-7. Two rules I applied inconsistently: I deleted the SDD workspace after
-   each phase per the skill, then twice needed its diffs again and had to
-   recreate packages; and I stopped agents promptly per memory, which
-   twice killed a reviewer I wanted for the scoped re-review (context
-   lost, fresh spawn needed). Prompt-kill and keep-for-re-review are in
-   tension; keeping the reviewer alive until its re-review is the better
-   default and is what I converged on.
+Each phase then followed the same loop:
 
-## Rules and contracts: which earned their keep
+1. A written plan with per-task briefs, committed to the repo.
+2. One fresh subagent per task to implement, working test-first.
+3. A different subagent to review that task against the brief and the
+   project contracts.
+4. If the review found problems, the same implementer fixed them, and a
+   scoped re-review verified only those fixes.
+5. After all tasks, a whole-branch review on the most capable model,
+   followed by one consolidated fix wave and a re-review of that wave.
 
-- P2 failing-test-first: the discriminating-test discipline (prove red,
-  then green) caught two would-be-vacuous regression tests — one that
-  passed on both old and new code (reference-stability), one that would
-  have masked the notification render loop. The demand "prove your test
-  fails against the pre-fix code" became the single most-repeated
-  instruction and repeatedly earned it.
-- The Settings/Sessions/Polling/Query-UI/Localization contracts: quoted in
-  every brief; violations near zero at review. The Sessions contract's
-  grep-gates (sanctioned ApiClient constructors, sentinel locality) held
-  through 77 commits without drift.
-- P6 raw-output distrust: caught the rtk-summarized "0 failed" that hid a
-  suite-level collection error, and the sed locale breakage. Twice
-  decisive.
-- The zero-behavior-change acceptance (full e2e green with no e2e edits)
-  for the Phase 1 big-bang: it worked — the riskiest refactor of the
-  effort produced no observed single-profile regression, ever. The
-  maintainer's big-bang choice was vindicated by this gate existing.
-- Two-tier preferences (data prefs per profile, view prefs in the ALL
-  bucket): zero ambiguity across ~15 later feature decisions; every new
-  setting had an obvious home. The single best DESIGN decision of the
-  spec against "confusion later".
-- The composite-id rule (profileId:monitorId) was discovered, not
-  designed: monitor/event id collisions across servers caused SIX distinct
-  findings before the helper became standard. The spec named the risk but
-  no gate enforced it; a lint/contract for "no bare monitor/event id keys
-  in aggregate paths" would have prevented four of the six. That is the
-  clearest miss in the original design.
+Progress lived in a ledger file per phase so that a crash or restart could
+not lose the thread. Roughly forty subagents ran over the two days. Nothing
+merged without review except two one-line cosmetic edits made directly by
+the orchestrator (a button variant in
+[`6cac031`](https://github.com/ZoneMinder/zmNinjaNg/commit/6cac031a) and a
+card color in
+[`b090a6c`](https://github.com/ZoneMinder/zmNinjaNg/commit/b090a6c1)), both
+covered by existing tests.
 
-## Time accounting (approximate, from commit timestamps and session flow)
+---
 
-- Design + spec + plans: ~3h (interactive).
-- Phase 0+1 (TLS + session layer): ~6h including reviews and fix rounds.
-- Phase 2 (All mode + monitors): ~5h.
-- Phase 3 (events/timeline/routes/notifications): ~8h including a reboot
-  recovery, a LAN outage, and the deferred-e2e window.
-- Phase 4 (montage/dashboard/pickers/assistant): ~6h.
-- Post-close increments (disable, overview, multi-connection notifications
-  live/muted/off, Live Activity, UX fixes): ~8h, review-heavy — the
-  multi-connection work alone took four review rounds.
-- Overhead attributable to workflow mechanics (nudges, ledger, packaging,
-  stale pings): perhaps 3-4h spread across everything.
+## 3. Where the rules and contracts helped
 
-## Bottom line
+For each mechanism I describe what it is, the specific incidents where it
+mattered, and what I believe would have happened without it. Every incident
+cites the commit that fixed it.
 
-The workflow's core loop — fresh implementer, independent reviewer,
-prove-it-fails tests, scoped re-review, phase-level deep review — caught
-at least nine defects that would have shipped as user-visible breakage,
-including three single-mode regressions in an effort whose first promise
-was "zero single-mode change". No solo pass would plausibly have caught
-the socket-leak/deadlock/backoff triple or the render-loop family. The
-contracts turned project style into mechanical checks that held under ~21k
-new lines. The ledger made real-world interruptions cheap.
+### 3.1 The independent review loop
 
-The same workflow generated real friction: defective briefs propagate
-fast precisely because implementers follow them faithfully; report
-delivery needed babysitting; fix waves on complex subsystems create new
-defects at a rate the one-wave rule does not anticipate; and e2e is the
-one gate whose evidence is weakest exactly where the code is most
-concurrent. None of these outweigh the catch list. On this feature, at
-this scale, the workflow was worth its cost — roughly a fifth of the
-effort spent on process, in exchange for a defect class list that reads
-like a production postmortem that never happened.
+This mechanism caught more defects than everything else combined. The
+recurring pattern: an implementer produces plausible,
+green-tested code; an independent reviewer, reading the diff against the
+brief and the contracts, finds a defect the implementer's own tests could
+not see. Ten of those defects would have been user-visible breakage.
+The list, in order:
 
-## Follow-ups this retrospective feeds (see workflow-file changes landed
-alongside it)
+1. **Pre-save TLS trust regression** (phase 0). My own brief told the
+   implementer to compute the trust union from saved profiles only. The
+   reviewer noticed that the profile-creation flow tests the connection
+   *before* the profile is saved, so the very first self-signed profile
+   could never onboard. The maintainer ruled the fix: a candidate override
+   for the in-flight profile,
+   [`67b30f2`](https://github.com/ZoneMinder/zmNinjaNg/commit/67b30f29).
+   Worth noting: the implementer had flagged the risk in its own report,
+   but it was the review that turned the flag into a blocking finding.
+2. **Proactive token refresh silently dead** (phase 1). The new session
+   guard depended on wiring that would not exist until two tasks later, so
+   token refresh would never fire and live streams would go blank after
+   about 90 minutes. Found by the task review of the auth-store refactor;
+   fixed in [`94bc5a8`](https://github.com/ZoneMinder/zmNinjaNg/commit/94bc5a8b)
+   along with four other findings from the same review (orphaned tokens
+   from unsaved profiles, tokens surviving profile deletion, a single-flight
+   race on failed refresh, and a sentinel id being used as a scratch bucket).
+3. **Cross-profile host/token bleed** (phase 2 whole-branch review). The
+   server map for multi-server ZoneMinder installs was a single global,
+   populated by whichever profile bootstrapped last, so profile B's access
+   token could be attached to a request aimed at profile A's host. Made
+   per-profile in
+   [`ac55a05`](https://github.com/ZoneMinder/zmNinjaNg/commit/ac55a056).
+4. **All mode silently omitting profiles** (phase 2 whole-branch review,
+   the one Critical of that phase). Any profile not bootstrapped in the
+   current app session had its queries disabled forever: no data and,
+   worse, no error strip, so the aggregate count was just quietly wrong.
+   After an app restart in All mode, the page showed a skeleton forever.
+   Fixed in [`22a7285`](https://github.com/ZoneMinder/zmNinjaNg/commit/22a7285c).
+   This was the exact failure mode the partial-failure design existed to
+   prevent, and no unit test could see it because the test mocks bypassed
+   the real enablement path.
+5. **Blank live player on the deep route** (phase 3 whole-branch review,
+   Critical). `/all/monitors/:profileId/:monitorId` was the headline
+   destination of the phase, and its MJPEG player rendered blank because
+   one `profileId` prop was missing. The e2e test asserted only the URL,
+   so it passed. One line, fixed in
+   [`d0422f8`](https://github.com/ZoneMinder/zmNinjaNg/commit/d0422f86).
+6. **Two defects introduced by a fix wave itself** (phase 3). The
+   composite-key fix leaked composite tokens into the event prev/next
+   navigation (breaking it in All mode), and removing a persisted write
+   broke the `?view=montage` deep link for ordinary single-profile users.
+   Both were caught by the scoped re-review of the wave that created them,
+   and fixed in
+   [`2de8a7d`](https://github.com/ZoneMinder/zmNinjaNg/commit/2de8a7d1).
+7. **A render loop that crashed the notification history page** the moment
+   one notification existed, in both modes (post-completion, Critical).
+   The selector built new objects on every call, which zustand's shallow
+   comparison can never stabilize. The page's own test could not fail on
+   this because it mocked the store as a plain function, skipping
+   `useSyncExternalStore` entirely. The reviewer reproduced the crash
+   against the real store; fixed in
+   [`36587c5`](https://github.com/ZoneMinder/zmNinjaNg/commit/36587c5b),
+   with a real-store regression test.
+8. **Three consecutive defects in the multi-connection notification work**,
+   each created by the previous round's fix: a socket leak on ordinary
+   profile switches
+   ([`9112a69`](https://github.com/ZoneMinder/zmNinjaNg/commit/9112a694)),
+   then an auto-connect deadlock after routine bootstrap writes
+   ([`e98c77d`](https://github.com/ZoneMinder/zmNinjaNg/commit/e98c77d6)),
+   then a per-drop reconnect that defeated the exponential backoff and
+   doubled sockets
+   ([`7008691`](https://github.com/ZoneMinder/zmNinjaNg/commit/70086912)).
+   Each was found only because every fix round got its own scoped
+   re-review. Each fix was tested and green, and each was wrong; without
+   per-round re-reviews all three defects would have shipped.
+9. **The Live Activity watch-cap evicting an on-screen alarming tile**
+   with no dwell window (the tile-churn class issue #313 exists to
+   prevent, reachable through a new code path). Found by a task-level
+   review; fixed with a resident-exemption in
+   [`c468a66`](https://github.com/ZoneMinder/zmNinjaNg/commit/c468a66b).
+10. **A wrong-profile settings write in plain single mode** on the very
+    last increment: the Live Activity settings dialog captured the profile
+    id once at mount, and the page never unmounts, so after any profile
+    switch the ignore list silently edited the previous profile's
+    preferences. Fixed in
+    [`1c8fd61`](https://github.com/ZoneMinder/zmNinjaNg/commit/1c8fd614).
 
-1. Composite-id gate for aggregate paths (the six-findings class).
-2. Render-loop selector rule + real-store test requirement as a contract,
-   not tribal knowledge.
-3. Brief-is-the-contract: dispatch prose must be folded into the brief
-   file before dispatch, or reviewers judge against the wrong document.
-4. Reviewer tier keyed to risk (concurrency/token/native) not size.
-5. Keep task reviewers alive until their scoped re-review completes.
-6. #341 closed by the Live Activity work; #342 (e2e infra) remains the
-   standing debt with an expiry.
+Two more observations about the review loop that the list above does not
+capture:
 
-## Addendum: the closing session (written after the final review)
+- Reviewers frequently verified claims instead of trusting reports. The
+  phase 2 reviewer read TanStack Query's installed source to prove the
+  render-instability finding. The multi-connection reviewer read the
+  installed zustand shallow-compare implementation. The phase 3 T7 reviewer
+  bisected the branch to prove five e2e failures pre-dated our work. This
+  is behavior the reviewer prompt asks for ("verify, don't trust"), and it
+  repeatedly changed outcomes.
+- The loop also applied to the orchestrator's own commits. The final
+  review of my closeout commit found
+  a rule violation I had just written (a contract Gate line claiming
+  enforcement the gate does not perform) and two factual errors in the
+  first draft of this very report (wrong ratchet figures, and a
+  review-tier misattribution that flattered my own argument). Corrected in
+  [`32f7c03`](https://github.com/ZoneMinder/zmNinjaNg/commit/32f7c03) and
+  [`069cada`](https://github.com/ZoneMinder/zmNinjaNg/commit/069cada).
+  Without that review, this report would contain two wrong numbers and a
+  claim that overstated my own case.
 
-The last hours added evidence in both columns and are worth recording
-separately because they happened AFTER the retrospective's first draft
-and partially tested its own claims.
+### 3.2 The lint ratchet (rule C7)
 
-- The Live Activity increment (the last spec gap) went through three
-  review rounds. The task-level Opus review caught a cap-re-slice dwell
-  bypass (the refs #313 churn class through a fourth eviction channel)
-  and, in round 2, a wrong-profile settings write reachable in PLAIN
-  single mode from a mount-time state snapshot - the tenth
-  single-mode-regression catch of the effort, on its very last feature.
-  The prescribed fix (a derived value with no state write-back) was
-  verified loop-free from the emitting component's side, not just the
-  consumer's. The pattern held to the end: implementers ship plausible
-  code; discriminating reviews plus proven-red regression tests find
-  what plausibility hides.
-- The shared-worktree index race bit BOTH directions in one night: an
-  implementer's commit swept my staged doc files (caught, soft-reset,
-  recovered), and later MY one-line trim commit swept the docs agent's
-  four staged files (content correct, commit message now mislabeled -
-  left unamended because force-pushing a shared branch mid-work is the
-  worse failure). Lesson recorded in the workflow playbook: one worktree,
-  one committer at a time, stage-by-explicit-path is necessary but NOT
-  sufficient - git commit takes the whole index.
-- The instruction-file word-budget gate fired on my own contract
-  additions, twice, and forced ~40 words of compression before the new
-  contracts could land. The file now sits at its budget exactly. The
-  M-rules were applied to the orchestrator by the orchestrator's own
-  gates - which is precisely the property that makes them trustworthy.
-- The review of my closeout docs commit found a real M1 violation I had
-  just written (a Gate line claiming mechanization the gate does not
-  perform) plus two factual errors in this retrospective's first draft
-  (ratchet figures; a review-tier misattribution that inflated my own
-  argument). All corrected in 32f7c03/069cada. A retrospective that had
-  to be fact-checked by the process it evaluates, and failed twice, is
-  itself a data point for that process.
+C7 says the lint baseline may shrink or hold but never grow, and that a
+hand-raise needs a written reason. It was tested twice. The two incidents
+ended differently, and the difference tracks the evidence in each case,
+which is what the escape hatch is for.
 
-Final tallies at close: 27 commits on the foundation branch + 50 on the
-feature branch (77 total), 297 files, +22,025/-3,555 lines, unit suite
-at 3,614 tests, lint ratchet 38 at branch point to 34 at close, both
-PRs (#338, #339) pushed and mergeable, working tree clean. Every spec
-UX line delivered including Live Activity; #342 (e2e infra) is the one
-standing debt.
+- In phase 4, an implementer raised the `react-hooks/static-components`
+  baseline from 9 to 10 with the justification "five existing call sites
+  use this pattern." The reviewer rejected that reasoning by name (it is
+  the precise rationalization the rule exists to block) and proposed a
+  rewrite. The implementer then tried the rewrite and reported honestly
+  that it did not clear the diagnostic; the reviewer re-verified that
+  negative result empirically, retracted, and the +1 stood as a documented
+  hand-raise in
+  [`6d409ff`](https://github.com/ZoneMinder/zmNinjaNg/commit/6d409ffe).
+- Earlier in the same phase, a different +1 (exhaustive-deps, from a fake
+  dependency used to bust memoization) was challenged the same way, and
+  this time the clean alternative existed: subscribing at the tile level
+  instead of faking a dependency at the parent. The fix in
+  [`ac1310f`](https://github.com/ZoneMinder/zmNinjaNg/commit/ac1310f7)
+  removed the new violation *and* the pre-existing copy of the same hack,
+  ending below the original baseline.
+
+The ratchet also went down for legitimate reasons twice more
+([`e4986c9`](https://github.com/ZoneMinder/zmNinjaNg/commit/e4986c9f),
+[`0583bf3`](https://github.com/ZoneMinder/zmNinjaNg/commit/0583bf3c)). Net
+effect across 22,000 added lines: the debt number fell. My judgment is
+that without the rule it would have grown, because both blocked increments
+came with plausible-sounding justifications.
+
+### 3.3 The architecture contracts in AGENTS.project.md
+
+The contracts were quoted in every task brief, and the pattern of failures
+shows they worked mostly by *prevention*, which is hard to prove but shows
+up as absence: across roughly forty implementer runs there were no direct
+`fetch`/`axios` calls, no inline query keys, no console logging, no
+hardcoded user-facing strings that reached a reviewer. Every locale change
+landed in all five languages in the same commit, gate-enforced.
+
+Three contracts had specific, checkable effects:
+
+- **Settings.** The rule that every coercion lives in
+  `mergeProfileSettings` meant the ALL-bucket design needed zero new
+  storage code, and the
+  live/muted/off migration
+  ([`74c65f0`](https://github.com/ZoneMinder/zmNinjaNg/commit/74c65f00))
+  had exactly one correct place to put its legacy-boolean conversion.
+  Reviewers checked bucket writes on both sides (target written, other
+  bucket untouched) because the contract told them which side was which.
+- **Sessions.** Written mid-project (phase 1,
+  [`93bb7de`](https://github.com/ZoneMinder/zmNinjaNg/commit/93bb7deb))
+  with real grep-gates: ApiClient construction confined to four sanctioned
+  files, the deleted singleton stays deleted, the sentinel ids live only
+  beside their brand. Those gates then ran green through 50 more commits
+  and caught one real drift attempt: an implementer's test files used raw
+  `'__all_profiles__'` string literals, and the gate blocked the commit
+  until they imported the constant.
+- **Auth tokens.** The single-flight dedup contract shaped the phase 1
+  refactor (per-profile gates had to preserve it, and the tests that
+  encode it were named as the gate in the brief), and it is why the
+  reviewer of the multi-connection work could state precisely which
+  regression mattered when a hook started racing the service's backoff.
+
+The two-tier preference rule from the spec (data preferences come from
+each profile's own bucket, view preferences from the ALL bucket) was
+applied without ambiguity to something like fifteen later decisions:
+excluded monitors,
+event filters, ignore lists, grid layouts, mute settings, screen memory.
+Nobody ever had to ask "where does this setting live," which was the
+maintainer's original "no confusion later" requirement.
+
+### 3.4 Test-first with proven-red regression tests (rule P2)
+
+The plain test-first habit is hard to audit from the outside, so I will
+only claim what I saw evidence for: the *proven-red* discipline, where a
+fix's regression test must be shown to fail against the pre-fix code,
+caught two tests that would otherwise have been decorative.
+
+- The reference-stability test for the aggregation hook initially used a
+  same-data refetch, which passed against both the broken and fixed
+  implementations because React Query's own render suppression masked the
+  difference. The implementer discovered this by running it against the
+  stashed old code, and replaced it with a rerender-based test that
+  genuinely discriminates
+  ([`a1b1657`](https://github.com/ZoneMinder/zmNinjaNg/commit/a1b16579)).
+- The notification render-loop fix demanded a test against the real store,
+  because the existing mock structurally could not fail. The implementer
+  proved the new test red first, and that test style
+  (`*.realstore.test.tsx`) then became the required pattern for the whole
+  bug class, and caught the next instance during the overview feature
+  ([`9f25d2e`](https://github.com/ZoneMinder/zmNinjaNg/commit/9f25d2e5)).
+
+### 3.5 Raw-output distrust (rule P6 and the rtk memory)
+
+Twice decisive. A compressed test summary reported "0 failed" while a
+suite-level import error was hiding underneath it; the implementer of
+phase 4 task 6 caught it only by reading the raw JSON reporter output.
+And the locale sed accident (a bulk regex that broke 15 pluralized strings
+across all five languages) was caught the same way, by reading the actual
+failure text of two seemingly unrelated tests rather than trusting the
+green/red count. Both times the project's standing instruction to distrust
+summarizing wrappers was the difference.
+
+### 3.6 The ledger and recovery from real-world failures
+
+Three environment failures hit during the work:
+
+- A host reboot killed an implementer mid-task with about twenty modified
+  files uncommitted. A fresh agent was dispatched with instructions to
+  audit the orphaned work rather than trust it; it found the work largely
+  complete, fixed a latent test bug the original had left, and landed it
+  ([`7009839`](https://github.com/ZoneMinder/zmNinjaNg/commit/70098391)).
+- A network drop killed another agent the same way; same recovery pattern,
+  same result ([`a3abfe4`](https://github.com/ZoneMinder/zmNinjaNg/commit/a3abfe48)).
+- The machine moved to a LAN that could not reach the test ZoneMinder
+  server, stranding e2e acceptance. The response: commit locally, hold the
+  push, write the exact resume commands into the report, and poll for the
+  network in the background. When the maintainer restored the LAN,
+  acceptance ran and the queue drained with nothing lost.
+
+The ledger file (per-phase progress notes with commit ranges and rulings)
+is what made these recoveries cheap. After the reboot, the resumed session
+knew exactly which tasks were complete, which fix round was open, and what
+had been ruled on, without re-reading the whole history.
+
+### 3.7 The instruction word-budget gate (rule M-series)
+
+A minor incident, recorded because it constrained the orchestrator.
+The `agents-contracts` test caps the combined instruction files at 2,000
+words. My closeout added three contracts and blew the budget twice; the
+gate forced roughly forty words of compression before the additions could
+land ([`069cada`](https://github.com/ZoneMinder/zmNinjaNg/commit/069cada)).
+The instruction files ended at exactly 2,000 words. The rule exists so
+the always-loaded context cannot silently grow, and here it constrained
+the person adding rules, not just implementers.
+
+### 3.8 Domain-specific knowledge: what helped and what did not
+
+This splits into two parts. The playbooks that existed *before* this work
+helped in narrow, checkable ways:
+
+- `agents/project/testing.md` is why the e2e strategy was realistic from
+  the start: it documents that automated e2e is Chromium-only against one
+  real server, which shaped the "two profiles on the same server plus one
+  unreachable profile" test design instead of an unworkable mock-server
+  plan.
+- `agents/project/documentation.md` produced measurably consistent docs:
+  reviewers verified call-flow structure (step counts, symbol citations,
+  no line numbers) against the playbook's own rules, and the doc gates
+  (heading voice, citation format, no em-dashes) failed builds when
+  violated rather than relying on taste.
+- `agents/project/native.md` mostly pointed to the Native contract, which
+  carried the TLS TOFU invariant that drove the phase 0 review finding.
+
+The domain facts *added during* this work (the alarm endpoint being
+single-monitor only, cross-server id collisions, ES payload profile
+fields, the i18next `{{count}}` reservation, the live-server e2e
+degradation pattern) were written into `agents/project/domain-context.md`
+at closeout. They did not help this project, because they were learned
+here; they can only help future work. I want to be clear about that
+distinction: writing them down is following rule M5, but I have no
+evidence yet that the M5 pipeline pays off, only that this run *consumed*
+several facts recorded by earlier runs (the RTK output warning and the
+device e2e manual-only rule both came from memory/playbooks and both
+mattered).
+
+One domain rule was discovered too late to be cheap: composite ids.
+Monitor and event ids collide across servers as a matter of course, and
+six separate defects came from bare-id keys in aggregate code (the
+timeline row merge, the popover profile resolution, the filter
+cross-selection, the connection keys, the go2rtc cache, the hint
+matching). The spec named the risk in prose; nothing enforced it. After
+the third incident the `monitorCacheKey` helper became the standard, and
+the closeout added an Aggregation contract, but a gate that could check it
+mechanically does not exist yet and is the top tracked follow-up. Had the
+composite-id rule existed before phase 2, most of the six incidents would
+not have happened; this is the clearest case in the project where a
+missing rule had a measurable cost.
+
+---
+
+## 4. Where the process cost time, split by cause
+
+The maintainer asked me to separate failures of the rules from failures of
+the surrounding framework. On review, most of the friction came from the
+framework and from my own plan-writing, not from the rules.
+
+### 4.1 Failures of the process design (the rules' side)
+
+**My briefs contained defects, and the process amplified them.** The
+implementer/reviewer split means implementers faithfully build what the
+brief says, so a wrong brief produces wrong code with full test coverage. The phase 0 brief mandated the exact
+call pattern that broke self-signed onboarding; it also named a settings
+field that did not exist (`trustSelfSignedCerts` for the real
+`allowSelfSignedCerts`). The phase 1 plan placed a constant in a file
+where importing its type closes a real dependency cycle; the implementer
+had to prove the cycle empirically before deviating. All were caught, but
+each cost a round, and the root cause was upstream of every rule: the
+orchestrator's unverified assumptions, written confidently into briefs.
+The fix is not a new rule so much as humility in plan-writing, but one
+mechanical lesson was recorded: verify field names and import graphs
+against the tree before they go into a brief.
+
+**The brief-extraction script drops dispatch context.** Task briefs are
+extracted from the plan file, but dispatch prompts often add rulings and
+scope on top. Reviewers only see the brief. In phase 3 this produced a
+formal "undisclosed scope creep" finding against work my own dispatch had
+explicitly ordered, wasting a round on a misunderstanding. Rule now
+recorded in the workflow playbook: the brief file is the reviewer's
+contract, so anything added at dispatch time must be folded into it.
+
+**The one-fix-wave rule under-budgets concurrency work.** The
+subagent-development skill says a whole-branch review gets one fix
+dispatch and one re-review, then residuals are parked. Both whole-branch
+fix waves introduced at least one new Critical or Important defect of
+their own, and the multi-connection increment needed four rounds, each
+justified by a defect the previous round created. I broke the rule's
+letter twice, deliberately and with ledger entries, because parking a
+fresh single-mode regression would have been worse than the extra round.
+The rule's intent (prevent endless churn) is right; its budget assumes
+fixes do not create Criticals, and on lifecycle/concurrency code they
+reliably do. The playbook now says to budget re-reviews per wave on such
+subsystems.
+
+**Two rules were in unplanned tension.** The standing memory says to stop
+idle subagents promptly; the re-review pattern wants the original
+reviewer, with its context, to verify the fix. Twice I killed a reviewer I
+then needed and paid for a cold respawn. Converged practice, now written
+down: a task's reviewer lives until its scoped re-review completes.
+
+**Reviewer model tier was chosen by size, and should have been chosen by
+risk.** The evidence: the four subtlest defects of the project (socket
+leak, reschedule deadlock, backoff defeat, resident-cap dwell bypass) were
+all found by the top-tier model, and one of them came from a top-tier
+*task* review, so it was the tier and not the wider scope that mattered.
+Where I economized on concurrency-heavy diffs, defects survived exactly
+one round longer, until the stronger pass. Nothing in the rules said how
+to pick the tier; that judgment call is now a playbook line.
+
+**One process gap had no rule at all: concurrent access to one worktree.**
+`git commit` commits the whole index, not the files you just staged. An
+implementer's commit swept my staged doc files (caught and recovered), and
+later my own one-line commit swept the docs agent's staged files, which is
+why the user-doc updates sit under the mislabeled commit
+[`310335e`](https://github.com/ZoneMinder/zmNinjaNg/commit/310335e)
+instead of their own message. Content is intact and verified, but the P5
+one-commit-one-change rule was broken by accident twice in one night. The
+conclusion: staging by explicit path is not sufficient; either one
+committer at a time, or worktree isolation for agents that commit. This
+was operator error combined with git's whole-index commit behavior, not a
+defect in any written rule, but no written rule prevented it either.
+
+### 4.2 Failures of the framework (not the rules)
+
+These cost real time and none of them are addressable by editing
+AGENTS.md. I list them separately because a reading of the session log
+that does not make this distinction would attribute all of it to the
+process.
+
+- **Subagent report delivery is unreliable.** Roughly a third of
+  completions arrived as a bare idle notification with no report attached;
+  each needed a "resend via SendMessage" nudge. Worse, agents' sends to
+  the "main" address sometimes errored with "you are the main
+  conversation," so the working pattern became "send to main, fall back to
+  the orchestrator's name," discovered by trial. Later dispatches baked
+  the instruction in and the problem mostly stopped, but I count perhaps
+  ten to fifteen wasted exchanges before that stabilized.
+- **Stale idle pings from stopped agents.** Stopped agents kept emitting
+  idle notifications that arrive as messages and have to be read and
+  dismissed. Dozens of them across the run. No rule change addresses this;
+  it is framework noise and belongs on a framework issue list.
+- **Two agent deaths from environment failures** (host reboot, network
+  drop) left half-done worktrees. The recovery worked (section 3.6), but
+  the deaths themselves and the fact that an interrupted agent leaves no
+  handoff note are framework properties. The ledger compensates for
+  them; it does not prevent them.
+- **Output-summarizing wrappers** (the rtk tee) hid a suite failure once.
+  The project already distrusts them by rule (P6), which is how the
+  failure was caught, but the rule exists specifically to defend against
+  this piece of tooling.
+- **A resumable-agent limitation**: stopped agents cannot be re-messaged
+  ("no agent named X is reachable"), so continuing a task after a stop
+  means a fresh spawn and re-established context. This shaped the
+  keep-reviewers-alive practice above.
+
+### 4.3 Weak spots that are neither rules nor framework
+
+**End-to-end testing was the least reliable form of verification, and
+the cause is infrastructure.** All e2e runs share one live ZoneMinder demo server with
+parallel workers. Over repeated same-day runs it degrades: one full run
+showed 14 flaky-passes and 5 hard failures. The five failures were proven
+pre-existing by checking out the pre-branch baseline and running the same
+scenarios there; that check took most of an afternoon and prevented us
+from "fixing" tests our code never broke. The remaining facts are less
+comfortable: the five failures now stand as a documented tolerated set
+(issue #342), the
+most concurrent code in the project (websockets, alarm polling) is
+covered by unit tests only, and two of my own new scenarios needed
+timing rewrites after their first live run
+([`f6c21e8`](https://github.com/ZoneMinder/zmNinjaNg/commit/f6c21e89),
+[`84372f8`](https://github.com/ZoneMinder/zmNinjaNg/commit/84372f89)).
+Unit and component tests carried the real verification weight all
+weekend.
+
+**The render-loop selector class recurred five times despite being
+caught every time.** The workflow detected each instance but did not
+prevent recurrence until the closeout wrote the pattern into the Stores
+contract and the testing playbook. Detection worked; prevention did not
+exist until the end, and whether the new contract text prevents the next
+instance is untested.
+
+---
+
+## 5. Things I cannot fairly judge
+
+- Whether plain test-first (as opposed to the proven-red discipline, which
+  I could verify) changed outcomes. Implementers reported failing-first
+  consistently, but I cannot distinguish a genuinely test-driven task from
+  a well-reported one from where I sit.
+- Whether the issue-linkage rule (P1) prevented anything. Every commit
+  references #337 and the PR trail is clean, which has archival value, but
+  I saw no incident where the linkage itself caught or prevented a
+  mistake. When the maintainer said to stop filing new issues mid-flow,
+  folding increments into the umbrella issue worked fine.
+- Several rules simply never came under pressure: the one-file-folder
+  rule (C5), the merge-without-approval rule (P8), the typo-exemption in
+  P1. No violations, no tests of their value either. Absence of incidents
+  is consistent with "working silently" and with "irrelevant this run";
+  the available evidence cannot distinguish the two.
+- The overhead estimate. My best judgment is that workflow mechanics
+  (dispatch writing, ledger upkeep, review packaging, nudges) consumed
+  fifteen to twenty percent of total effort, but nobody was timing
+  individual activities, so treat that as an estimate by the person who
+  did the work, not a measurement.
+
+---
+
+## 6. Conclusion
+
+The facts that support the workflow: ten user-visible defects, including
+several regressions in the single-profile mode the project promised not
+to touch, were caught before merge by reviews the workflow mandated. At
+least four of them (the socket-leak triple and the unbootstrapped-profile
+omission) would have been hard to reproduce from field reports if they
+had shipped. The contracts kept style and architecture consistent across
+22,000 lines written by roughly forty separate agent contexts. The ledger
+made recovery from a reboot, a network drop, and a LAN outage cheap. The
+gates applied to the orchestrator's own commits twice, not only to
+implementers'.
+
+The costs: briefs with defects that implementers faithfully built, a
+fix-wave budget that concurrency work overran three rounds deep, one
+worktree shared by too many committers, and a messaging layer that
+required repeated manual workarounds. The first three have recorded fixes
+in the workflow files now; the last is a framework problem outside the
+reach of rule changes.
+
+My assessment: for this feature, at this scale, with this much
+refactoring underneath it, the workflow helped, and the benefit clearly
+exceeded the overhead. The caveat is that most of the value came from two
+mechanisms, the independent review loop and the mechanical gates. A
+future project that keeps those two plus the ledger would keep most of
+the benefit with less process.
+
+## 7. Follow-ups this report feeds
+
+1. A mechanical gate for composite ids in aggregate paths, the
+   six-incident class (tracked; the Aggregation contract currently says
+   "review" honestly instead of overclaiming).
+2. The render-loop selector rule and real-store test requirement are now
+   in the Stores contract and testing playbook; their effectiveness is
+   unproven until the next feature.
+3. e2e infrastructure (issue #342): shared-server flakiness needs a real
+   answer (worker cap, dedicated server, or mocks) with an expiry, so the
+   tolerated-failure list does not become permanent.
+4. Live Activity aggregation closed the #341 gap during this run; nothing
+   from the original spec remains undelivered.
+5. Framework issues worth reporting upstream rather than working around:
+   report delivery reliability, stale idle pings from stopped agents, and
+   the inability to resume a stopped agent.
