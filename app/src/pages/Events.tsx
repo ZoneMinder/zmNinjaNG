@@ -208,7 +208,12 @@ export default function Events() {
   const tagIdFilter = useMemo(() => {
     if (favoritesOnly || selectedTagIds.length === 0) return undefined;
     if (selectedTagIds.includes(ALL_TAGS_FILTER_ID)) {
-      return availableTags.map((tag) => tag.Id);
+      const expanded = availableTags.map((tag) => tag.Id);
+      // No tags loaded yet, the request failed, or the server has no tag
+      // support: an empty expansion is a filter that matches nothing, which
+      // would empty the list with no banner to explain it. "All tags" with
+      // nothing to expand means no tag filter at all.
+      return expanded.length > 0 ? expanded : undefined;
     }
     return selectedTagIds;
   }, [favoritesOnly, selectedTagIds, availableTags]);

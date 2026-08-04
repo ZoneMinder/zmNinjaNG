@@ -23,8 +23,14 @@ const useProfileScopeMock = vi.fn();
 // is keyed the way the real hook keys it, so the page's own lookup is still
 // under test.
 const eventTagMapMock = vi.fn(() => new Map<string, Array<{ Id: string; Name: string }>>());
+const availableTagsMock = vi.fn(() => [] as Array<{ Id: string; Name: string }>);
 vi.mock('../../hooks/useScopedEventTags', () => ({
-  useScopedTags: () => ({ availableTags: [], tagsSupported: true, isLoadingTags: false, resolveOwnTagIds: (t: string[]) => t }),
+  useScopedTags: () => ({
+    availableTags: availableTagsMock(),
+    tagsSupported: true,
+    isLoadingTags: false,
+    resolveOwnTagIds: (t: string[]) => t,
+  }),
   useScopedEventTagMapping: () => ({ eventTagMap: eventTagMapMock(), getTagsForEvent: () => [] }),
 }));
 vi.mock('../../hooks/useScopedEvents', () => ({
@@ -111,10 +117,12 @@ const clearDateRange = vi.fn();
 // hooks/__tests__/useEventFilters.test.ts, which covers that hydration against the
 // real hook). Controlling the three fields directly here exercises the same
 // downstream state without re-parsing a URL through this file's other mocks.
+let favoritesOnlyOverride = false;
 let eventFiltersOverrides: {
   startDateInput?: string;
   endDateInput?: string;
   activeQuickRange?: number | null;
+  selectedTagIds?: string[];
 } = {};
 
 vi.mock('../../hooks/useEventFilters', () => ({
@@ -125,7 +133,7 @@ vi.mock('../../hooks/useEventFilters', () => ({
     selectedTagIds: [],
     startDateInput: '',
     endDateInput: '',
-    favoritesOnly: false,
+    favoritesOnly: favoritesOnlyOverride,
     activeQuickRange: null,
     setSelectedMonitorIds: vi.fn(),
     setSelectedTagIds: vi.fn(),
@@ -256,6 +264,8 @@ describe('Events Page', () => {
     });
     eventTagMapMock.mockReset();
     eventTagMapMock.mockReturnValue(new Map());
+    availableTagsMock.mockReset();
+    availableTagsMock.mockReturnValue([]);
     useScopedEventsMock.mockReset();
     useScopedMonitorsMock.mockReset();
     useScopedMonitorsMock.mockReturnValue({ monitors: [], errors: [], isLoading: false, refetchProfile: vi.fn() });
@@ -269,6 +279,7 @@ describe('Events Page', () => {
     setSearchParamsMock.mockClear();
     mockSearchParams = new URLSearchParams();
     eventFiltersOverrides = {};
+    favoritesOnlyOverride = false;
     settingsOverrides = {};
   });
 
@@ -360,6 +371,31 @@ describe('Events Page', () => {
     expect(options?.refetchInterval).toBeUndefined();
   });
 
+  // "All tags" expands to every available tag id. When that list is empty -
+  // cold load, a failed /tags request, a server without tag support - the
+  // expansion produces [], which is a truthy filter meaning "matches nothing",
+  // so the list would go silently empty with no banner explaining why. Single
+  // mode too, not just All mode.
+  it('sends no tag filter when "All tags" is selected but no tags have loaded', () => {
+    eventFiltersOverrides = { selectedTagIds: ['__all_tags__'] };
+    availableTagsMock.mockReturnValue([]);
+
+    render(<Events />);
+
+    const options = useScopedEventsMock.mock.calls.at(-1)?.[0] as { tagIdsByProfile?: unknown };
+    expect(options?.tagIdsByProfile).toBeUndefined();
+  });
+
+  it('expands "All tags" to every loaded tag id when there are some', () => {
+    eventFiltersOverrides = { selectedTagIds: ['__all_tags__'] };
+    availableTagsMock.mockReturnValue([{ Id: '1', Name: 'person' }, { Id: '2', Name: 'cat' }]);
+
+    render(<Events />);
+
+    const options = useScopedEventsMock.mock.calls.at(-1)?.[0] as { tagIdsByProfile?: Record<string, string[]> };
+    expect(options?.tagIdsByProfile).toEqual({ 'profile-1': ['1', '2'] });
+  });
+
   it('single mode leaves the montage toggle enabled with no gate notice (refs #337 fix round 1)', () => {
     render(<Events />);
 
@@ -442,6 +478,34 @@ describe('Events Page', () => {
       expect(cards[0]).not.toHaveTextContent('vehicle');
       expect(cards[1]).toHaveTextContent('vehicle');
       expect(cards[1]).not.toHaveTextContent('person');
+    });
+
+    // ZoneMinder cannot combine its Tags.Id: filter with the favorites Id IN:
+    // query, so that one combination falls to a client-side pass. In All mode
+    // the selection is tag NAMES (ids differ per server), and matching them
+    // against tag.Id there drops every row.
+    it('matches the favorites+tags client pass by tag name in All mode (refs #337 D4)', () => {
+      allScope();
+      eventFiltersOverrides = { selectedTagIds: ['person'] };
+      favoritesOnlyOverride = true;
+      eventTagMapMock.mockReturnValue(
+        new Map([
+          ['profile-1:1', [{ Id: '4', Name: 'person' }]],
+          ['profile-2:2', [{ Id: '9', Name: 'vehicle' }]],
+        ])
+      );
+      scopedEvents({
+        events: [
+          { profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1', StartDateTime: '2026-08-03 10:00:00' } } },
+          { profileId: 'profile-2', profileName: 'Office', item: { Event: { Id: '2', MonitorId: '1', StartDateTime: '2026-08-03 09:00:00' } } },
+        ],
+      });
+
+      render(<Events />);
+
+      const cards = screen.getAllByTestId('event-card-item');
+      expect(cards).toHaveLength(1);
+      expect(cards[0]).toHaveTextContent('person');
     });
 
     // heatmapDateRange (the OTHER consumer of event timestamps besides the
