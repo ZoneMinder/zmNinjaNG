@@ -484,7 +484,7 @@ export default function Profiles() {
               </div>
               {enabledProfileCount >= 2 && (
                 <div
-                  className={`flex items-center justify-between p-4 rounded-lg border border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors cursor-pointer mt-3 ${isAllMode ? 'ring-1 ring-primary' : ''}`}
+                  className={`flex items-center justify-between p-4 rounded-lg border border-blue-500/40 bg-blue-500/10 hover:bg-blue-500/15 transition-colors cursor-pointer mt-3 ${isAllMode ? 'ring-1 ring-blue-500' : ''}`}
                   data-testid="profile-card-all"
                   onClick={() => handleSwitchProfile(ALL_PROFILES_ID)}
                   onKeyDown={(e) => {
@@ -500,7 +500,7 @@ export default function Profiles() {
                     {isAllMode && (
                       <Check className="h-4 w-4 text-primary shrink-0" data-testid="profile-active-indicator" />
                     )}
-                    <Layers className="h-5 w-5 text-primary shrink-0" />
+                    <Layers className="h-5 w-5 text-blue-500 shrink-0" />
                     <div className="flex-1 min-w-0">
                       <div className="font-medium truncate" title={t('profiles.all_servers')}>{t('profiles.all_servers')}</div>
                       <p className="text-xs text-muted-foreground truncate" title={t('profiles.all_servers_subtitle')}>
