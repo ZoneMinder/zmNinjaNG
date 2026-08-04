@@ -117,8 +117,13 @@ export function LiveActivityTile({
       //
       // gridRowEnd is placement, not a visual effect, so it is safe next to
       // the view-transition name the note above is about.
+      //
+      // entry.monitorId is monitorCacheKey(profileId, monitorId) in All mode
+      // (`profileId:monitorId`), and a CSS custom-ident cannot contain a
+      // colon - the browser drops the whole declaration, silently losing the
+      // transition rather than erroring, so the colon is swapped for a dash.
       style={{
-        viewTransitionName: `live-activity-tile-${entry.monitorId}`,
+        viewTransitionName: `live-activity-tile-${entry.monitorId.replace(/:/g, '-')}`,
         gridRowEnd: rowSpan ? `span ${rowSpan}` : undefined,
       }}
       data-testid="live-activity-tile"

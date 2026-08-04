@@ -266,6 +266,13 @@ export function capActiveMonitors(
   };
 }
 
+/** Items already on screen and mid-alarm never lose their slot to a
+ *  re-slice; see capWatchedRoundRobin's `resident` parameter. */
+export interface CapResidentOptions<T> {
+  keyOf: (item: T) => string;
+  keys: ReadonlySet<string>;
+}
+
 /**
  * All mode only: caps the total watched set across every profile's own
  * group, distributing the cap round-robin instead of taking the first N in
@@ -274,24 +281,49 @@ export function capActiveMonitors(
  * each profile's own monitor list is a `groups` entry, so position 0 from
  * every profile is taken before position 1 from any, and so on, until the
  * cap is reached. Deterministic for a given input order (refs #337, #341).
+ *
+ * `resident` exempts currently-watched, currently-alarming items from the
+ * slice entirely: the watched set is recomputed whenever the underlying
+ * monitor list or an ignore list changes, and without this a monitor mid-
+ * alarm and on screen could lose its position in that recompute and vanish
+ * with no dwell window at all - the #313 failure mode (CMD_QUIT + remount
+ * thrash for a tile the user is looking at), reached through the cap
+ * instead of the poll. Resident items are pulled out first and always kept;
+ * the round-robin then spends the remaining budget on everyone else, so the
+ * cap still holds for anything that isn't currently alarming.
  */
 export function capWatchedRoundRobin<T>(
   groups: T[][],
-  maxTotal: number
+  maxTotal: number,
+  resident?: CapResidentOptions<T>
 ): { watched: T[]; overflowCount: number } {
   const total = groups.reduce((sum, group) => sum + group.length, 0);
   if (total <= maxTotal) {
     return { watched: groups.flat(), overflowCount: 0 };
   }
 
-  const watched: T[] = [];
-  const maxGroupLength = Math.max(0, ...groups.map((group) => group.length));
-  for (let pos = 0; pos < maxGroupLength && watched.length < maxTotal; pos++) {
-    for (const group of groups) {
-      if (watched.length >= maxTotal) break;
-      if (pos < group.length) watched.push(group[pos]);
+  const residentItems: T[] = [];
+  const remainderGroups =
+    resident && resident.keys.size > 0
+      ? groups.map((group) =>
+          group.filter((item) => {
+            if (!resident.keys.has(resident.keyOf(item))) return true;
+            residentItems.push(item);
+            return false;
+          })
+        )
+      : groups;
+
+  const budget = Math.max(0, maxTotal - residentItems.length);
+  const nonResident: T[] = [];
+  const maxGroupLength = Math.max(0, ...remainderGroups.map((group) => group.length));
+  for (let pos = 0; pos < maxGroupLength && nonResident.length < budget; pos++) {
+    for (const group of remainderGroups) {
+      if (nonResident.length >= budget) break;
+      if (pos < group.length) nonResident.push(group[pos]);
     }
   }
 
+  const watched = [...residentItems, ...nonResident];
   return { watched, overflowCount: total - watched.length };
 }

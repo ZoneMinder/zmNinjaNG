@@ -177,7 +177,13 @@ export function useScopedAlarmStates(
       if (enabled) {
         results.forEach((result, i) => {
           if (result.isLoading) isLoading = true;
-          const key = monitorCacheKey(pairs[i].profileId, pairs[i].monitorId);
+          // Defensive: `results` and `pairs` are built from the same
+          // `queries` map in this same render pass, so they are the same
+          // length in practice, but a mismatch degrades to "skip this
+          // result" rather than throwing on `pairs[i].profileId`.
+          const pair = pairs[i];
+          if (!pair) return;
+          const key = monitorCacheKey(pair.profileId, pair.monitorId);
           states[key] = parseAlarmState(result.data);
           if (result.error && !error) error = result.error as Error;
         });

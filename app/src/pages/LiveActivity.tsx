@@ -111,21 +111,24 @@ export default function LiveActivity() {
 
   const dwellMs = settings.liveActivityDwellSeconds * 1000;
 
-  // ---- All mode: scoped monitors, per-profile ignore lists, capped fanout,
-  // and live-hint causes, all assembled in one hook (see its own doc
-  // comment for why this stays a separate fetch path from useAlarmStates
-  // above rather than one unified call).
-  const allMode = useLiveActivityAllMode(isAllMode, dwellMs, pollIntervalMs);
-
   // ---- Damped display list: fed by whichever mode is active ----
   // Held in state rather than derived during render because it depends on
-  // the previous list and on the current time.
+  // the previous list and on the current time. Declared before
+  // useLiveActivityAllMode below: that hook reads `active` to exempt
+  // currently-resident monitors from its watched-set cap.
   const [active, setActive] = useState<ActiveMonitorEntry[]>([]);
   // Mirrors `active` so the updater below can read the previous list without
   // listing it as an effect dependency. `active` in the cooling effect's deps
   // would rearm the interval on every list change, and since an alarming
   // monitor's entry restamps Date.now() on each pass, that never settles.
   const activeRef = useRef<ActiveMonitorEntry[]>(active);
+
+  // ---- All mode: scoped monitors, per-profile ignore lists, capped fanout,
+  // and live-hint causes, all assembled in one hook (see its own doc
+  // comment for why this stays a separate fetch path from useAlarmStates
+  // above rather than one unified call).
+  const allMode = useLiveActivityAllMode(isAllMode, dwellMs, pollIntervalMs, active);
+
   // Clock for the per-tile elapsed labels. A plain number rather than a Date
   // so an unchanged tick cannot produce a new reference, and advanced by the
   // cooling interval below rather than by a second timer of its own.

@@ -21,7 +21,7 @@ import { useScopedAlarmStates, type ScopedAlarmRef } from './useAlarmStates';
 import { useSettingsStore, mergeProfileSettings } from '../stores/settings';
 import { monitorCacheKey } from '../stores/monitors';
 import { useNotificationStore } from '../stores/notifications';
-import { capWatchedRoundRobin } from '../lib/monitor/live-activity';
+import { capWatchedRoundRobin, type ActiveMonitorEntry } from '../lib/monitor/live-activity';
 import { LIVE_ACTIVITY } from '../lib/zmninja-ng-constants';
 import type { MonitorAlarmState } from '../lib/monitor/alarm-state';
 import type { Monitor, MonitorStatus, Profile, ProfileId } from '../api/types';
@@ -58,7 +58,13 @@ interface UseLiveActivityAllModeReturn {
 export function useLiveActivityAllMode(
   isAllMode: boolean,
   dwellMs: number,
-  configuredPollIntervalMs: number
+  configuredPollIntervalMs: number,
+  /** The page's damping-engine display list: every monitorId currently
+   *  resident (on screen, mid-alarm-or-cooling) is exempt from the
+   *  watched-set cap below. A reactive value (not a ref) so it is a normal,
+   *  React-Compiler-safe useMemo dependency; react-hooks/refs forbids
+   *  reading `ref.current` during render, which a memo callback counts as. */
+  active: ActiveMonitorEntry[]
 ): UseLiveActivityAllModeReturn {
   const scope = useProfileScope();
   const {
@@ -86,11 +92,9 @@ export function useLiveActivityAllMode(
     return map;
   }, [isAllMode, scopedMonitors]);
 
-  // Raw record select (not a per-profile selector), same discipline as
-  // useNotificationAllModeToasts' profileSettings subscription: every
-  // profile's OWN liveActivityIgnoredMonitorIds is a per-server data
-  // preference, never the shared ALL-bucket settings the page's poll/dwell/
-  // tiles controls use.
+  // Raw record select (not a per-profile selector): every profile's OWN
+  // liveActivityIgnoredMonitorIds is a per-server data preference, never the
+  // shared ALL-bucket settings the page's poll/dwell/tiles controls use.
   const profileSettingsMap = useSettingsStore((s) => s.profileSettings);
 
   // Grouped by owning profile (not a flat list) so the round-robin cap below
@@ -111,9 +115,26 @@ export function useLiveActivityAllMode(
   // GUARDRAIL: total watched cap, round-robin across profiles - the alarm
   // endpoint is per-monitor, so without this an All mode with many
   // profiles/monitors could fan out dozens of concurrent polls.
+  //
+  // Exempts currently-resident (mid-alarm, on screen) keys from the slice: a
+  // re-slice triggered by `watchedGroups` changing (a monitor list refetch,
+  // an ignore list edit) would otherwise silently drop a tile the dwell
+  // window hasn't released yet - the #313 failure mode reached through the
+  // cap instead of the poll. `active` in the dependency array is
+  // technically wider than strictly necessary (a monitor can only become
+  // resident by first being polled, i.e. by already being in
+  // `watchedGroups`, so residency changing alone never NEEDS a fresh
+  // recompute), but it is the React-Compiler-safe way to read it - reading
+  // `activeRef.current` inside this memo instead is exactly what
+  // react-hooks/refs forbids (accessing a ref's value during render).
+  const activeKeys = useMemo(() => new Set(active.map((entry) => entry.monitorId)), [active]);
   const { watched: watchedPairs, overflowCount: watchOverflowCount } = useMemo(
-    () => capWatchedRoundRobin(watchedGroups, LIVE_ACTIVITY.allModeMaxWatched),
-    [watchedGroups]
+    () =>
+      capWatchedRoundRobin(watchedGroups, LIVE_ACTIVITY.allModeMaxWatched, {
+        keyOf: (pair) => monitorCacheKey(pair.profileId, pair.monitorId),
+        keys: activeKeys,
+      }),
+    [watchedGroups, activeKeys]
   );
 
   // GUARDRAIL: poll floor. Live hints (below) carry the fast path when a
@@ -129,10 +150,16 @@ export function useLiveActivityAllMode(
 
   // Live-hint accelerant, generalized across every scope profile and keyed
   // by monitorCacheKey so an event for profile B's monitor "3" can never
-  // promote profile A's own monitor "3". Mirrors useNotificationAllModeToasts'
-  // raw-slice discipline: reads the store's actual per-profile event arrays
-  // rather than a derived value, so useShallow can dedupe repeated empty
-  // snapshots to one reference.
+  // promote profile A's own monitor "3". Mirrors LiveActivity.tsx's own
+  // single-mode recentCauses selector below (same store, same shape), just
+  // scanning every scope profile's event bucket instead of one profile id.
+  //
+  // ponytail: this selector rebuilds the Map on every evaluation, so
+  // useShallow still re-runs the scan on unrelated notification-store
+  // writes (it just avoids a re-render when the resulting Map is contents-
+  // equal). Same cost, same fix if it matters, as the single-mode selector
+  // this mirrors: memoize each profile's event list with a reference-stable
+  // selector and build the Map in a separate useMemo keyed off that.
   const scopeProfileIds = useMemo(() => (scope?.profiles ?? []).map((p) => p.id), [scope?.profiles]);
   const recentCauses = useNotificationStore(
     useShallow((state) => {

@@ -909,6 +909,75 @@ describe('LiveActivity', () => {
       expect(polledProfiles).toEqual(new Set(['p1', 'p2', 'p3']));
     });
 
+    it('keeps a resident (currently alarming) tile watched across a cap re-slice', async () => {
+      // Regression for the round-robin cap evicting an on-screen tile with
+      // no dwell window: a monitor-list change re-slices the watched set,
+      // and without the residency exemption a monitor still alarming right
+      // now can lose its slot and vanish - the #313 failure mode reached
+      // through the cap instead of the poll.
+      vi.resetModules();
+      mockAllMode();
+
+      // p1 alone fills the cap exactly (24 = 24): nothing dropped yet, and
+      // monitor "23" (the last one drawn) is the one that alarms.
+      let monitors = Array.from({ length: 24 }, (_, i) => scopedMonitor('p1', 'One', String(i), `p1-${i}`));
+      vi.doMock('../../hooks/useScopedMonitors', () => ({
+        useScopedMonitors: () => ({ monitors, errors: [], isLoading: false, refetchProfile: vi.fn() }),
+      }));
+
+      const { default: LiveActivityAllMode } = await import('../LiveActivity');
+      const { getAlarmStatus: reimportedGetAlarmStatus } = await import('../../api/monitors');
+      vi.mocked(reimportedGetAlarmStatus).mockImplementation(async (_client: unknown, id: string) =>
+        (id === '23' ? { status: 2 } : { status: 0 }) as never
+      );
+
+      render(<LiveActivityAllMode />, { wrapper });
+
+      await waitFor(() => {
+        expect(screen.getByText('p1-23')).toBeInTheDocument();
+      });
+
+      // p2 joins with 4 more monitors: total 28 > the 24 cap, so a re-slice
+      // is now due. A plain (unexempted) round-robin over this new grouping
+      // drops p1's monitors "19"-"22" to make room for p2 - "23" falls
+      // outside that too, UNLESS it is exempted for being resident.
+      monitors = [
+        ...monitors,
+        ...Array.from({ length: 4 }, (_, i) => scopedMonitor('p2', 'Two', String(i), `p2-${i}`)),
+      ];
+
+      // No explicit rerender(): the page's own cooling-tick effect
+      // (LiveActivity.tsx) re-renders once a second while a tile is
+      // resident, which is what picks up the mutated useScopedMonitors()
+      // return value above. Waits for a p2 poll to prove the re-slice
+      // actually happened (p2 was entirely absent from round one, and a
+      // pre-existing query's own 10s refetch interval wouldn't otherwise
+      // produce a fresh call inside this test's short window).
+      await waitFor(
+        () => {
+          const p2Polled = vi
+            .mocked(reimportedGetAlarmStatus)
+            .mock.calls.some((c) => (c[0] as unknown as { profileId: string }).profileId === 'p2');
+          expect(p2Polled).toBe(true);
+        },
+        { timeout: 5000 }
+      );
+
+      // The resident, still-alarming tile must never have left the screen.
+      expect(screen.getByText('p1-23')).toBeInTheDocument();
+
+      // The cap is still a real ceiling, not blown open by the exemption:
+      // 28 requested, 24 watched (1 resident + 23 round-robin), 4 dropped.
+      // A raw poll-count diff can't prove this within the test's short
+      // window (a query already fetched once in round one produces no new
+      // call regardless of whether it stayed watched, until its own 10s
+      // refetch interval elapses), so the overflow notice - which reads
+      // straight off watchOverflowCount - is the reliable signal instead.
+      await waitFor(() => {
+        expect(screen.getByTestId('live-activity-watch-cap-notice')).toHaveTextContent('4');
+      });
+    }, 10000);
+
     it("promotes only the owning profile's tile on a live hint, not another profile's same-id monitor", async () => {
       vi.resetModules();
       vi.doMock('../../hooks/useCurrentProfile', () => ({
