@@ -75,6 +75,17 @@ describe('AllServersPerformanceSection (refs #337)', () => {
     expect(update).toHaveBeenCalledWith('allModeMaxStreams', ALL_MODE_PERFORMANCE.minStreams);
   });
 
+  it('rounds a fractional entry to what the store will actually hold', () => {
+    // mergeProfileSettings rounds on read, so a raw 2.5 written here comes
+    // back as 3 for every consumer while the field, whose storedValue never
+    // changed, keeps showing 2.5. Rounding at commit keeps the two the same
+    // number.
+    renderSection();
+    const input = typeAndBlur('all-mode-max-streams-input', '2.5');
+    expect(update).toHaveBeenCalledWith('allModeMaxStreams', 3);
+    expect(input).toHaveValue(3);
+  });
+
   it('edits the burst window in seconds, not milliseconds', () => {
     renderSection();
     expect(screen.getByTestId('all-mode-burst-window-input')).toHaveValue(

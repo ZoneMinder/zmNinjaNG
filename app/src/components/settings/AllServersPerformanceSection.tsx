@@ -15,9 +15,10 @@
  * hardcode.
  *
  * Number rows commit on blur or Enter rather than per keystroke
- * (useClampedNumberField explains why at length). The reset button only
- * appears once a row differs from its default, so a section left alone shows
- * no reset buttons at all.
+ * (useClampedNumberField explains why at length). Each number row and the
+ * tuning select grows a reset button once it differs from its default, so a
+ * section left alone shows no reset buttons at all. The pause-hidden switch
+ * has none: a two-state control is already its own way back.
  */
 
 import { useTranslation } from 'react-i18next';

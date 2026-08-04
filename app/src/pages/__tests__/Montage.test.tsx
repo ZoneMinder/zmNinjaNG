@@ -11,7 +11,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import Montage from '../Montage';
 import { ALL_PROFILES_ID } from '../../api/types';
-import { MONTAGE_GRID } from '../../lib/zmninja-ng-constants';
+import { DEFAULT_SETTINGS } from '../../stores/settings';
 
 const useScopedMonitorsMock = vi.fn();
 const useCurrentProfileMock = vi.fn();
@@ -186,7 +186,10 @@ vi.mock('../../stores/profile', () => ({
 const updateMontageGroupLayoutMock = vi.fn();
 const updateProfileSettingsMock = vi.fn();
 
-vi.mock('../../stores/settings', () => ({
+// Everything except the store itself stays REAL: SETTINGS below is built on
+// DEFAULT_SETTINGS, and a stubbed-out module would make that spread empty.
+vi.mock('../../stores/settings', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../stores/settings')>()),
   useSettingsStore: (
     selector: (state: {
       updateProfileSettings: (...args: unknown[]) => void;
@@ -219,9 +222,13 @@ vi.mock('react-router-dom', () => ({
   useNavigate: () => vi.fn(),
 }));
 
+// Spread over the real defaults rather than hand-listed: the page reads
+// ALL-bucket settings that grow over time, and a subset silently hands the
+// page `undefined` for any it does not list (which is how the Live Activity
+// fixture emptied its own grid). Overrides below are what these tests vary.
 const SETTINGS = {
+  ...DEFAULT_SETTINGS,
   insomnia: false,
-  allModeMaxStreams: MONTAGE_GRID.allModeMaxStreams as number,
   montageShowToolbar: true,
   montageFeedFit: 'cover' as const,
   montageIsFullscreen: false,
@@ -742,7 +749,7 @@ describe('Montage Page', () => {
 
     const { container } = render(<Montage />);
 
-    // 20 monitors total, cap is 16 (MONTAGE_GRID.allModeMaxStreams).
+    // 20 monitors total, cap is the default allModeMaxStreams (16).
     const tiles = container.querySelectorAll('[data-testid^="montage-monitor-"]');
     expect(tiles.length).toBe(16);
     expect(screen.getByTestId('montage-stream-cap-overflow')).toHaveTextContent(

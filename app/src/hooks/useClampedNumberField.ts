@@ -50,9 +50,18 @@
 
 import { useState, type KeyboardEvent } from 'react';
 
+/**
+ * Rounds as well as clamps, because every field bound to this hook counts
+ * whole things: tiles, streams, seconds, minutes. Rounding matters beyond
+ * taste, since the settings store rounds these values when it reads them
+ * back. Committing a raw 2.5 would leave the store holding 2.5, every
+ * consumer seeing 3, and this field showing 2.5 forever: `storedValue` never
+ * changes, so the resync below has nothing to correct. Rounding here makes
+ * the committed value the same number the store will hand back.
+ */
 function clamp(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return min;
-  return Math.min(max, Math.max(min, value));
+  return Math.min(max, Math.max(min, Math.round(value)));
 }
 
 export function useClampedNumberField(
