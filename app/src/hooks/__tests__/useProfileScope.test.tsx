@@ -187,4 +187,151 @@ describe('useProfileScope', () => {
 
     expect(result.current).toBeNull();
   });
+
+  // refs #337: virtual profiles - a named group aggregates like All Servers
+  // over its own members.
+  describe('virtual profiles', () => {
+    const VIRTUAL_ID = '__virtual_g1';
+    const group = (memberProfileIds: string[]) => ({
+      id: VIRTUAL_ID,
+      name: 'Upstairs',
+      memberProfileIds,
+    });
+
+    it('aggregates over the group members only', () => {
+      mockStores(
+        {
+          profiles: [mockProfile, mockProfile2],
+          virtualProfiles: [group(['profile-2'])],
+          currentProfileId: VIRTUAL_ID,
+        },
+        { profileSettings: {} }
+      );
+
+      const { result } = renderHook(() => useProfileScope());
+
+      expect(result.current?.mode).toBe('all');
+      expect(result.current?.profiles).toEqual([mockProfile2]);
+      expect(result.current?.profile).toBeNull();
+    });
+
+    it('names the aggregate so consumers can label it', () => {
+      mockStores(
+        {
+          profiles: [mockProfile, mockProfile2],
+          virtualProfiles: [group(['profile-1', 'profile-2'])],
+          currentProfileId: VIRTUAL_ID,
+        },
+        { profileSettings: {} }
+      );
+
+      const { result } = renderHook(() => useProfileScope());
+
+      expect(result.current?.mode === 'all' && result.current.aggregateId).toBe(VIRTUAL_ID);
+      expect(result.current?.mode === 'all' && result.current.aggregateName).toBe('Upstairs');
+    });
+
+    it('leaves All Servers unnamed, so consumers use the localized label', () => {
+      mockStores(
+        { profiles: [mockProfile], currentProfileId: ALL_PROFILES_ID },
+        { profileSettings: {} }
+      );
+
+      const { result } = renderHook(() => useProfileScope());
+
+      expect(result.current?.mode === 'all' && result.current.aggregateId).toBe(ALL_PROFILES_ID);
+      expect(result.current?.mode === 'all' && result.current.aggregateName).toBeNull();
+    });
+
+    it('reads the group\'s own settings bucket, not the All bucket', () => {
+      mockStores(
+        {
+          profiles: [mockProfile, mockProfile2],
+          virtualProfiles: [group(['profile-1'])],
+          currentProfileId: VIRTUAL_ID,
+        },
+        {
+          profileSettings: {
+            [VIRTUAL_ID]: { streamMaxFps: 11 },
+            [ALL_PROFILES_ID]: { streamMaxFps: 42 },
+          },
+        }
+      );
+
+      const { result } = renderHook(() => useProfileScope());
+
+      expect(result.current?.settings.streamMaxFps).toBe(11);
+    });
+
+    it('filters a disabled member out of the group', () => {
+      mockStores(
+        {
+          profiles: [mockProfile, { ...mockProfile2, disabled: true }],
+          virtualProfiles: [group(['profile-1', 'profile-2'])],
+          currentProfileId: VIRTUAL_ID,
+        },
+        { profileSettings: {} }
+      );
+
+      const { result } = renderHook(() => useProfileScope());
+
+      expect(result.current?.profiles).toEqual([mockProfile]);
+    });
+
+    it('filters a member id no profile answers to (hand-edited storage)', () => {
+      mockStores(
+        {
+          profiles: [mockProfile],
+          virtualProfiles: [group(['profile-1', 'ghost'])],
+          currentProfileId: VIRTUAL_ID,
+        },
+        { profileSettings: {} }
+      );
+
+      const { result } = renderHook(() => useProfileScope());
+
+      expect(result.current?.profiles).toEqual([mockProfile]);
+    });
+
+    it('collapses to null when every member is gone or disabled', () => {
+      mockStores(
+        {
+          profiles: [mockProfile, { ...mockProfile2, disabled: true }],
+          virtualProfiles: [group(['profile-2'])],
+          currentProfileId: VIRTUAL_ID,
+        },
+        { profileSettings: {} }
+      );
+
+      const { result } = renderHook(() => useProfileScope());
+
+      expect(result.current).toBeNull();
+    });
+
+    it('collapses to null for a virtual id with no group behind it', () => {
+      mockStores(
+        { profiles: [mockProfile], virtualProfiles: [], currentProfileId: VIRTUAL_ID },
+        { profileSettings: {} }
+      );
+
+      const { result } = renderHook(() => useProfileScope());
+
+      expect(result.current).toBeNull();
+    });
+
+    it('keeps member order stable with the profile list, not the member list', () => {
+      mockStores(
+        {
+          profiles: [mockProfile, mockProfile2],
+          virtualProfiles: [group(['profile-2', 'profile-1'])],
+          currentProfileId: VIRTUAL_ID,
+        },
+        { profileSettings: {} }
+      );
+
+      const { result } = renderHook(() => useProfileScope());
+
+      expect(result.current?.profiles).toEqual([mockProfile, mockProfile2]);
+    });
+  });
 });

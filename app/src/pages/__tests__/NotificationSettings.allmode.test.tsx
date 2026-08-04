@@ -147,7 +147,7 @@ describe('NotificationSettings page - All mode profile picker (refs #337)', () =
       settings: {} as never,
     }));
     vi.mocked(useProfileScope).mockReturnValue({
-      mode: 'all', profile: null, profiles: [profileA, profileB], settings: {} as never,
+      mode: 'all', aggregateId: ALL_PROFILES_ID, aggregateName: null, profile: null, profiles: [profileA, profileB], settings: {} as never,
     });
   });
 
@@ -220,7 +220,7 @@ describe('NotificationSettings page - All mode profile picker (refs #337)', () =
 
     it('reflects the ALL-bucket setting and is not shown in single mode', async () => {
       vi.mocked(useProfileScope).mockReturnValue({
-        mode: 'all', profile: null, profiles: [profileA, profileB],
+        mode: 'all', aggregateId: ALL_PROFILES_ID, aggregateName: null, profile: null, profiles: [profileA, profileB],
         settings: { allModeNotifications: 'muted' } as never,
       });
       renderPage();
@@ -233,7 +233,7 @@ describe('NotificationSettings page - All mode profile picker (refs #337)', () =
 
     it('selecting Off updates the real settings store under ALL_PROFILES_ID', async () => {
       vi.mocked(useProfileScope).mockReturnValue({
-        mode: 'all', profile: null, profiles: [profileA, profileB],
+        mode: 'all', aggregateId: ALL_PROFILES_ID, aggregateName: null, profile: null, profiles: [profileA, profileB],
         settings: { allModeNotifications: 'live' } as never,
       });
       renderPage();

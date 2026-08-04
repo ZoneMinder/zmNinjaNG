@@ -16,7 +16,7 @@ import NotificationSettings from '../NotificationSettings';
 import { useCurrentProfile, useProfileById } from '../../hooks/useCurrentProfile';
 import { useProfileScope } from '../../hooks/useProfileScope';
 import { useNotificationStore } from '../../stores/notifications';
-import { asProfileId } from '../../api/types';
+import { asProfileId, ALL_PROFILES_ID } from '../../api/types';
 import type { Profile } from '../../api/types';
 
 vi.mock('react-i18next', () => ({
@@ -88,7 +88,7 @@ describe('NotificationSettings page - real store render loop regression (refs #3
       settings: {} as never,
     }));
     vi.mocked(useProfileScope).mockReturnValue({
-      mode: 'all', profile: null, profiles: [profileA, profileB], settings: {} as never,
+      mode: 'all', aggregateId: ALL_PROFILES_ID, aggregateName: null, profile: null, profiles: [profileA, profileB], settings: {} as never,
     });
     useNotificationStore.getState().updateProfileSettings(profileA.id, {
       enabled: true, notificationMode: 'es', host: 'a.zm.local',

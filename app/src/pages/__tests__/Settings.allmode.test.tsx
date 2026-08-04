@@ -94,7 +94,7 @@ describe('Settings page - All mode two-tier picker (refs #337)', () => {
       settings: baseSettings as never,
     }));
     vi.mocked(useProfileScope).mockReturnValue({
-      mode: 'all', profile: null, profiles: [profileA, profileB], settings: baseSettings as never,
+      mode: 'all', aggregateId: ALL_PROFILES_ID, aggregateName: null, profile: null, profiles: [profileA, profileB], settings: baseSettings as never,
     });
   });
 

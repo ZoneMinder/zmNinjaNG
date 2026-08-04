@@ -53,7 +53,7 @@ describe('NotificationBadge (refs #337)', () => {
       ALL_PROFILES_ID
     );
     vi.mocked(useProfileScope).mockReturnValue({
-      mode: 'all',
+      mode: 'all', aggregateId: ALL_PROFILES_ID, aggregateName: null,
       profile: null,
       profiles: [{ id: profileA, name: 'A' }, { id: profileB, name: 'B' }] as never,
       settings: {} as never,

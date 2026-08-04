@@ -23,7 +23,7 @@ import { useProfileScope } from '../../../hooks/useProfileScope';
 import { getSession } from '../../../services/sessions';
 import { getVersion } from '../../../api/auth';
 import { STORAGE_KEYS } from '../../../lib/zmninja-ng-constants';
-import { asProfileId } from '../../../api/types';
+import { asProfileId, ALL_PROFILES_ID } from '../../../api/types';
 import type { Profile } from '../../../api/types';
 import type { AssistantTurn } from '../../../lib/assistant/types';
 
@@ -127,7 +127,7 @@ describe('AskPanel - All mode version probe uses the pinned session (refs #337)'
       settings: baseSettings as never,
     }));
     vi.mocked(useProfileScope).mockReturnValue({
-      mode: 'all', profile: null, profiles: [profileA, profileB], settings: baseSettings as never,
+      mode: 'all', aggregateId: ALL_PROFILES_ID, aggregateName: null, profile: null, profiles: [profileA, profileB], settings: baseSettings as never,
     });
     vi.mocked(getSession).mockImplementation((id) => ({
       profileId: id, client: clientFor(id) as never, timezone: 'UTC',

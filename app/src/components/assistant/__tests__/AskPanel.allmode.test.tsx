@@ -17,7 +17,7 @@ import { AskPanel } from '../AskPanel';
 import { useAssistantStore } from '../../../stores/assistant';
 import { useCurrentProfile, useProfileById } from '../../../hooks/useCurrentProfile';
 import { useProfileScope } from '../../../hooks/useProfileScope';
-import { asProfileId } from '../../../api/types';
+import { asProfileId, ALL_PROFILES_ID } from '../../../api/types';
 import type { Profile } from '../../../api/types';
 
 vi.mock('react-i18next', () => ({
@@ -117,7 +117,7 @@ describe('AskPanel - All mode profile pinning (refs #337)', () => {
       settings: baseSettings as never,
     }));
     vi.mocked(useProfileScope).mockReturnValue({
-      mode: 'all', profile: null, profiles: [profileA, profileB], settings: baseSettings as never,
+      mode: 'all', aggregateId: ALL_PROFILES_ID, aggregateName: null, profile: null, profiles: [profileA, profileB], settings: baseSettings as never,
     });
   });
 

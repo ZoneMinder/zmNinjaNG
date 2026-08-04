@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import NotificationHistory from '../NotificationHistory';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useProfileScope } from '../../hooks/useProfileScope';
-import { asProfileId } from '../../api/types';
+import { asProfileId, ALL_PROFILES_ID } from '../../api/types';
 import type { Profile } from '../../api/types';
 import type { HistoryEvent } from '../../components/notifications/NotificationHistoryItem';
 
@@ -101,7 +101,7 @@ describe('NotificationHistory page (refs #337)', () => {
         currentProfile: null, settings: {} as never, hasProfile: false, isAllMode: true,
       });
       vi.mocked(useProfileScope).mockReturnValue({
-        mode: 'all', profile: null, profiles: [profileA, profileB], settings: {} as never,
+        mode: 'all', aggregateId: ALL_PROFILES_ID, aggregateName: null, profile: null, profiles: [profileA, profileB], settings: {} as never,
       });
       storeState = {
         profileEvents: {

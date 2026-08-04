@@ -8,7 +8,7 @@ import { useCurrentProfile, useProfileById } from '../../hooks/useCurrentProfile
 import { useProfileScope } from '../../hooks/useProfileScope';
 import { getSession } from '../../services/sessions';
 import { getServers } from '../../api/server';
-import { asProfileId } from '../../api/types';
+import { asProfileId, ALL_PROFILES_ID } from '../../api/types';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (k: string) => k }),
@@ -114,7 +114,7 @@ describe('Server page - profile picker (refs #337)', () => {
       profile: id ? [profileA, profileB].find((p) => p.id === id) ?? null : null,
       settings: {} as never,
     }));
-    vi.mocked(useProfileScope).mockReturnValue({ mode: 'all', profile: null, profiles: [profileA, profileB], settings: {} as never });
+    vi.mocked(useProfileScope).mockReturnValue({ mode: 'all', aggregateId: ALL_PROFILES_ID, aggregateName: null, profile: null, profiles: [profileA, profileB], settings: {} as never });
 
     renderServer();
 

@@ -7,7 +7,7 @@ import { useCurrentProfile, useProfileById } from '../../hooks/useCurrentProfile
 import { useProfileScope } from '../../hooks/useProfileScope';
 import { getSession } from '../../services/sessions';
 import { getZMLogs } from '../../api/logs';
-import { asProfileId } from '../../api/types';
+import { asProfileId, ALL_PROFILES_ID } from '../../api/types';
 
 vi.mock('../../stores/logs', () => ({
   useLogStore: (selector: (state: { logs: unknown[]; clearLogs: () => void }) => unknown) =>
@@ -111,7 +111,7 @@ describe('Logs page - All mode profile picker (refs #337)', () => {
       settings: { logLevel: 1 } as never,
     }));
     vi.mocked(useProfileScope).mockReturnValue({
-      mode: 'all', profile: null, profiles: [profileA, profileB], settings: {} as never,
+      mode: 'all', aggregateId: ALL_PROFILES_ID, aggregateName: null, profile: null, profiles: [profileA, profileB], settings: {} as never,
     });
   });
 
