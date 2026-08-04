@@ -18,7 +18,6 @@ import { cn } from '../../lib/utils';
 import { useReturnFlash } from '../../hooks/useReturnFlash';
 import { useReturnHighlightStore } from '../../stores/returnHighlight';
 import { useDeleteSelectionStore, eventSelectionKey } from '../../stores/deleteSelection';
-import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import type { Event, ProfileId } from '../../api/types';
 
 interface CompactEventRowProps {
@@ -28,19 +27,25 @@ interface CompactEventRowProps {
   objectFit?: CSSProperties['objectFit'];
   /** Owning profile for an /all/ deep route; defaults to the current profile. */
   profileId?: ProfileId;
+  /**
+   * Owning profile for this row's delete-selection key - the row's own
+   * profileId in All mode, the current one otherwise, so one event selected
+   * from either surface is one selection key (refs #337).
+   *
+   * Passed down rather than re-derived here: the parent already resolves the
+   * owning profile, and a list of rows each subscribing to the profile store
+   * to recompute the id its parent is holding costs three subscriptions per
+   * row for nothing.
+   */
+  ownerProfileId?: ProfileId;
 }
 
-export function CompactEventRow({ event, thumbnailUrls, aspectRatio, objectFit = 'cover', profileId }: CompactEventRowProps) {
+export function CompactEventRow({ event, thumbnailUrls, aspectRatio, objectFit = 'cover', profileId, ownerProfileId }: CompactEventRowProps) {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   const { fmtTime } = useDateTimeFormat();
   const markViewed = useReturnHighlightStore((s) => s.markViewed);
   const flash = useReturnFlash(event.Id);
-  // Owning profile for this row's delete selection: the row's own profileId in
-  // All mode, the current one otherwise - same resolution EventCard uses, so
-  // one event selected from either surface is one selection key (refs #337).
-  const { currentProfile } = useCurrentProfile();
-  const ownerProfileId = profileId ?? currentProfile?.id;
   const selectedForDelete = useDeleteSelectionStore((s) =>
     s.selectedKeys.includes(eventSelectionKey(ownerProfileId, event.Id)));
   const startTime = new Date(event.StartDateTime.replace(' ', 'T'));

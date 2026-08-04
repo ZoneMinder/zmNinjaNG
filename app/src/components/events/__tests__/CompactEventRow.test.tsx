@@ -5,6 +5,7 @@ import { CompactEventRow } from '../CompactEventRow';
 import { useReturnHighlightStore } from '../../../stores/returnHighlight';
 import { useDeleteSelectionStore, eventSelectionKey } from '../../../stores/deleteSelection';
 import { asProfileId } from '../../../api/types';
+import { useProfileStore } from '../../../stores/profile';
 
 const navigate = vi.fn();
 vi.mock('react-router-dom', async (orig) => ({
@@ -110,11 +111,39 @@ describe('CompactEventRow', () => {
           thumbnailUrls={['http://x/1.jpg']}
           aspectRatio={1.6}
           profileId={asProfileId('p1')}
+          ownerProfileId={asProfileId('p1')}
         />
       </MemoryRouter>
     );
     const cls = screen.getByTestId('compact-event-row').className;
     expect(cls).not.toContain('bg-destructive/10');
+    useDeleteSelectionStore.getState().clear();
+  });
+
+  // Against the REAL profile store, because the row used to read it: it
+  // subscribed to useCurrentProfile purely to rebuild an id its parent was
+  // already holding. The owner now arrives as a prop, and the globally
+  // current profile has no say in which key this row watches.
+  it('keys the selection off the owner prop, not whichever profile is current', () => {
+    useProfileStore.setState({
+      currentProfileId: asProfileId('p-current'),
+      profiles: [{ id: asProfileId('p-current'), name: 'Current' }],
+    } as never);
+    useDeleteSelectionStore.getState().clear();
+    useDeleteSelectionStore.getState().toggle(eventSelectionKey(asProfileId('p1'), '233228'));
+
+    render(
+      <MemoryRouter>
+        <CompactEventRow
+          event={base as never}
+          thumbnailUrls={['http://x/1.jpg']}
+          aspectRatio={1.6}
+          ownerProfileId={asProfileId('p1')}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByTestId('compact-event-row').className).toContain('bg-destructive/10');
     useDeleteSelectionStore.getState().clear();
   });
 });

@@ -153,6 +153,7 @@ export function MonitorRecentEvents({ monitor, profileId }: MonitorRecentEventsP
                     aspectRatio={aspectRatio}
                     objectFit={thumbnailFit}
                     profileId={profileId}
+                    ownerProfileId={profileId ?? ownerProfile?.id}
                   />
                 );
               })}

@@ -45,7 +45,13 @@ vi.mock('../../../lib/event/thumbnail-chain', () => ({
   eventHasAlarmFrame: () => false,
 }));
 
-vi.mock('../../events/CompactEventRow', () => ({ CompactEventRow: () => <div data-testid="event-row" /> }));
+// Surfaces ownerProfileId so the parent's job - resolving the owning profile
+// once for every row - is assertable.
+vi.mock('../../events/CompactEventRow', () => ({
+  CompactEventRow: ({ ownerProfileId }: { ownerProfileId?: string }) => (
+    <div data-testid="event-row" data-owner-profile-id={ownerProfileId ?? ''} />
+  ),
+}));
 
 const monitor: Monitor = {
   Id: '5',
@@ -82,5 +88,21 @@ describe('MonitorRecentEvents thumbnail-chain profile scoping (refs #337 I2)', (
     expect(buildThumbnailChainForEventMock).toHaveBeenCalledTimes(1);
     const options = buildThumbnailChainForEventMock.mock.calls[0][5] as unknown as { profileId?: string };
     expect(options.profileId).toBe('profile-b');
+  });
+
+  // Each row's delete-selection key needs the owning profile. Resolving it
+  // here, once, is why the rows no longer subscribe to the profile store.
+  it('hands every row the owning profile id', () => {
+    const { getByTestId } = render(
+      <MonitorRecentEvents monitor={monitor} profileId={asProfileId('profile-b')} />
+    );
+
+    expect(getByTestId('event-row').getAttribute('data-owner-profile-id')).toBe('profile-b');
+  });
+
+  it('falls back to the current profile when the route names none', () => {
+    const { getByTestId } = render(<MonitorRecentEvents monitor={monitor} />);
+
+    expect(getByTestId('event-row').getAttribute('data-owner-profile-id')).toBe('current-profile');
   });
 });
