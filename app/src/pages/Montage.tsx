@@ -51,9 +51,9 @@ import {
   MontageGridSections,
   useMontageGrid,
   useContainerResize,
+  useMontageVisibilityItems,
   type MontageTileItem,
   type MontageGroupedSections,
-  type MontageVisibilityItem,
 } from '../components/montage';
 import { useFullscreenMode } from '../hooks/useFullscreenMode';
 import { tileIdFor } from '../components/montage/hooks/useMontageGrid';
@@ -127,34 +127,9 @@ export default function Montage() {
     return counts;
   }, [scopedMonitors]);
 
-  // The kebab's show-monitors list, built from the full monitor list and NEVER
-  // group-filtered: it must be able to un-hide any monitor regardless of which
-  // group filter is currently active, or a monitor hidden while outside the
-  // active group becomes permanently un-hideable (refs #337 single-mode
-  // regression - `monitors` below is group-filtered). Entries carry their
-  // owning server's name in All mode, where two servers can show the same
-  // monitor name, and cluster by server in the order useScopedMonitors
-  // returns them - the same order the grid's per-server sections use.
-  const visibilityItems = useMemo((): MontageVisibilityItem[] => {
-    const profileRank = new Map<ProfileId, number>();
-    for (const s of scopedMonitors) {
-      if (!profileRank.has(s.profileId)) profileRank.set(s.profileId, profileRank.size);
-    }
-    const rank = (s: (typeof scopedMonitors)[number]) => profileRank.get(s.profileId) ?? 0;
-    const sequence = (s: (typeof scopedMonitors)[number]) => Number(s.item.Monitor.Sequence ?? 0);
-    return [...scopedMonitors]
-      .sort(
-        (a, b) =>
-          rank(a) - rank(b) ||
-          sequence(a) - sequence(b) ||
-          (a.item.Monitor.Name ?? '').localeCompare(b.item.Monitor.Name ?? '')
-      )
-      .map((s) => ({
-        id: isAllMode ? tileIdFor({ ...s.item, profileId: s.profileId }) : s.item.Monitor.Id,
-        name: s.item.Monitor.Name ?? '',
-        profileChip: isAllMode ? s.profileName : undefined,
-      }));
-  }, [scopedMonitors, isAllMode]);
+  // The kebab's show-monitors list. Built from the FULL monitor list, never
+  // the group-filtered `monitors` below - see the hook for why.
+  const visibilityItems = useMontageVisibilityItems(scopedMonitors, isAllMode);
 
   const monitors = useMemo((): MontageTileItem[] => {
     if (isAllMode) {
