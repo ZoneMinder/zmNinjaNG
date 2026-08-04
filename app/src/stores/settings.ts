@@ -346,6 +346,9 @@ interface SettingsState {
   // Update settings for a specific profile
   updateProfileSettings: (profileId: string, updates: Partial<ProfileSettings>) => void;
 
+  // Drop a profile's whole settings bucket (the profile itself is gone)
+  removeProfileSettings: (profileId: string) => void;
+
   // Merge a patch into a group's montage bucket
   updateMontageGroupLayout: (
     profileId: string,
@@ -676,6 +679,23 @@ export const useSettingsStore = create<SettingsState>()(
             },
           },
         }));
+      },
+
+      /**
+       * Delete a profile's bucket outright, for when the profile it belongs to
+       * no longer exists (deleting a virtual profile, refs #337). Not a reset:
+       * writing defaults back would leave an orphaned bucket behind, which is
+       * exactly what this avoids. No coercion runs here - removal has no value
+       * to coerce, and getProfileSettings on a missing key already merges the
+       * defaults for any later reader.
+       */
+      removeProfileSettings: (profileId) => {
+        set((state) => {
+          if (!(profileId in state.profileSettings)) return state;
+          const profileSettings = { ...state.profileSettings };
+          delete profileSettings[profileId];
+          return { profileSettings };
+        });
       },
 
       updateMontageGroupLayout: (profileId, groupKey, patch) => {

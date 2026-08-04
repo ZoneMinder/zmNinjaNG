@@ -14,10 +14,11 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Profile, ProfileId } from '../api/types';
-import { asProfileId, ALL_PROFILES_ID } from '../api/types';
+import type { Profile, ProfileId, VirtualProfile } from '../api/types';
+import { asProfileId, isAggregateProfileId, isVirtualProfileId, mintVirtualProfileId } from '../api/types';
 import { getServerTimeZone } from '../api/time';
 import { ProfileService } from '../services/profile';
+import { isProfileNameAvailable } from '../lib/profile/profile-validation';
 import { log, LogLevel } from '../lib/logger';
 import { setLogRedactionGate } from '../lib/log-sanitizer';
 import { setProfileSettingsGate } from '../lib/profile/profile-settings';
@@ -27,6 +28,7 @@ import { registerServerResolverGate } from '../lib/zm/server-resolver';
 import { STORAGE_KEYS } from '../lib/zmninja-ng-constants';
 import { useAuthStore, getAuthSlice, registerAuthClientResolver } from './auth';
 import { useSettingsStore } from './settings';
+import { useDashboardStore } from './dashboard';
 import { useMonitorSeenStore } from './monitorSeen';
 import { useDeleteSelectionStore } from './deleteSelection';
 import { performBootstrap } from '../services/profile-bootstrap';
@@ -51,6 +53,11 @@ export class ProfileGuardError extends Error {
 
 interface ProfileState {
   profiles: Profile[];
+  /** Named groups of real profiles, each aggregating like All Servers over
+   *  its own members. Purely additive to the persisted blob, so a store
+   *  written before #337 rehydrates without it - every read defends with
+   *  `?? []`. */
+  virtualProfiles: VirtualProfile[];
   currentProfileId: ProfileId | null;
   isInitialized: boolean;
   isBootstrapping: boolean;
@@ -65,6 +72,12 @@ interface ProfileState {
   updateProfile: (id: string, updates: Partial<Profile>) => Promise<void>;
   deleteProfile: (id: string) => Promise<void>;
   deleteAllProfiles: () => Promise<void>;
+  addVirtualProfile: (name: string, memberProfileIds: ProfileId[]) => ProfileId;
+  updateVirtualProfile: (
+    id: string,
+    patch: Partial<Pick<VirtualProfile, 'name' | 'memberProfileIds'>>
+  ) => void;
+  deleteVirtualProfile: (id: string) => void;
   switchProfile: (id: string) => Promise<void>;
   setDefaultProfile: (id: string) => void;
   setProfileDisabled: (id: string, disabled: boolean) => void;
@@ -77,6 +90,16 @@ interface ProfileState {
 let storeSet: ((partial: Partial<ProfileState>) => void) | null = null;
 let storeGet: (() => ProfileState) | null = null;
 
+/**
+ * Every name already spoken for, real and virtual, as one list for
+ * isProfileNameAvailable. Uniqueness spans both namespaces because the
+ * switcher and notification attribution (findProfileByName) present names
+ * from both without saying which kind they are. Refs #337.
+ */
+function namedProfiles(state: ProfileState): { id: string; name: string }[] {
+  return [...state.profiles, ...(state.virtualProfiles ?? [])];
+}
+
 export const useProfileStore = create<ProfileState>()(
   persist(
     (set, get) => {
@@ -84,21 +107,18 @@ export const useProfileStore = create<ProfileState>()(
       storeGet = get;
       return {
         profiles: [],
+        virtualProfiles: [],
         currentProfileId: null,
         isInitialized: false,
         isBootstrapping: false,
         bootstrapStep: null,
 
         /**
-         * Check if a profile with the given name already exists.
-         * Case-insensitive.
+         * Check if a profile with the given name already exists, in either
+         * namespace. Case-insensitive.
          */
-        profileExists: (name, excludeId) => {
-          const { profiles } = get();
-          return profiles.some(
-            (p) => p.name.toLowerCase() === name.toLowerCase() && p.id !== excludeId
-          );
-        },
+        profileExists: (name, excludeId) =>
+          !isProfileNameAvailable(name, namedProfiles(get()), excludeId),
 
         /**
          * Add a new profile.
@@ -107,8 +127,8 @@ export const useProfileStore = create<ProfileState>()(
          * If it's the first profile, it becomes the default and current profile.
          */
         addProfile: async (profileData, id) => {
-          // Check for duplicate names
-          if (!ProfileService.validateNameAvailability(profileData.name, get().profiles)) {
+          // Check for duplicate names, across both namespaces (refs #337)
+          if (!isProfileNameAvailable(profileData.name, namedProfiles(get()))) {
             throw new Error(`Profile "${profileData.name}" already exists`);
           }
 
@@ -170,7 +190,7 @@ export const useProfileStore = create<ProfileState>()(
           log.profileService(`updateProfile called for profile ID: ${id}`, LogLevel.INFO, updates);
 
           // Check for duplicate names if name is being updated
-          if (updates.name && !ProfileService.validateNameAvailability(updates.name, get().profiles, id)) {
+          if (updates.name && !isProfileNameAvailable(updates.name, namedProfiles(get()), id)) {
             throw new Error(`Profile "${updates.name}" already exists`);
           }
 
@@ -258,7 +278,17 @@ export const useProfileStore = create<ProfileState>()(
                   : null
                 : state.currentProfileId;
 
-            return { profiles, currentProfileId };
+            // Prune the deleted id out of every group that named it. A group
+            // can be left with no members; useProfileScope collapses that to
+            // null the same way All mode collapses with nothing enabled, so
+            // there is nothing to delete here (refs #337).
+            const virtualProfiles = (state.virtualProfiles ?? []).map((v) =>
+              v.memberProfileIds.includes(asProfileId(id))
+                ? { ...v, memberProfileIds: v.memberProfileIds.filter((m) => m !== id) }
+                : v
+            );
+
+            return { profiles, currentProfileId, virtualProfiles };
           });
         },
 
@@ -280,8 +310,9 @@ export const useProfileStore = create<ProfileState>()(
           // No profile left to own a queued delete (see deleteProfile).
           useDeleteSelectionStore.getState().clear();
 
-          // Clear all profiles and reset state
-          set({ profiles: [], currentProfileId: null });
+          // Clear all profiles and reset state. Every group is a grouping OF
+          // these profiles, so none of them can outlive the last one.
+          set({ profiles: [], virtualProfiles: [], currentProfileId: null });
 
           // Drop every cached session and clear every profile's auth slice
           // and persisted refresh token. Refs #337.
@@ -294,6 +325,95 @@ export const useProfileStore = create<ProfileState>()(
           useNotificationStore.getState().disconnectAll();
 
           log.profileService('All profiles deleted', LogLevel.INFO);
+        },
+
+        /**
+         * Create a named group of real profiles.
+         *
+         * Membership is flat and non-empty: a group with no members would
+         * aggregate nothing, and the id namespace exists so that scope
+         * resolution always has something to fan out over. The UI rejects an
+         * empty selection before it gets here; this is the backstop.
+         *
+         * Refs #337.
+         */
+        addVirtualProfile: (name, memberProfileIds) => {
+          if (memberProfileIds.length === 0) {
+            throw new Error('A virtual profile needs at least one member profile');
+          }
+          if (!isProfileNameAvailable(name, namedProfiles(get()))) {
+            throw new Error(`Profile "${name}" already exists`);
+          }
+
+          const virtualProfile: VirtualProfile = {
+            id: mintVirtualProfileId(),
+            name,
+            memberProfileIds,
+          };
+
+          set((state) => ({
+            virtualProfiles: [...(state.virtualProfiles ?? []), virtualProfile],
+          }));
+
+          log.profileService('Virtual profile created', LogLevel.INFO, {
+            profileId: virtualProfile.id,
+            memberCount: memberProfileIds.length,
+          });
+
+          return virtualProfile.id;
+        },
+
+        /**
+         * Rename a group or replace its member list. Same two validations as
+         * creation - the group being edited is excluded from the name check so
+         * it can keep its own name. Refs #337.
+         */
+        updateVirtualProfile: (id, patch) => {
+          const existing = (get().virtualProfiles ?? []).find((v) => v.id === id);
+          if (!existing) {
+            throw new Error(`Virtual profile ${id} not found`);
+          }
+          if (patch.memberProfileIds && patch.memberProfileIds.length === 0) {
+            throw new Error('A virtual profile needs at least one member profile');
+          }
+          if (patch.name && !isProfileNameAvailable(patch.name, namedProfiles(get()), id)) {
+            throw new Error(`Profile "${patch.name}" already exists`);
+          }
+
+          set((state) => ({
+            virtualProfiles: (state.virtualProfiles ?? []).map((v) =>
+              v.id === id ? { ...v, ...patch } : v
+            ),
+          }));
+        },
+
+        /**
+         * Delete a group. Only the grouping goes: its members are untouched
+         * real profiles that other groups (and single mode) still use.
+         *
+         * Its own per-id buckets go with it, or they accumulate as orphans no
+         * UI can ever reach again - the settings bucket and the dashboard
+         * widget bucket are both keyed by this id. There is no session, auth
+         * slice, password or notification connection to tear down: an
+         * aggregate id never had any (services/sessions.ts rejects it).
+         *
+         * Refs #337.
+         */
+        deleteVirtualProfile: (id) => {
+          set((state) => ({
+            virtualProfiles: (state.virtualProfiles ?? []).filter((v) => v.id !== id),
+            // Nothing else resets the current id for an aggregate today (the
+            // ALL sentinel can't be deleted), so a deleted group would stay
+            // selected with no entity behind it. null means "route to setup".
+            currentProfileId: state.currentProfileId === id ? null : state.currentProfileId,
+          }));
+
+          useSettingsStore.getState().removeProfileSettings(id);
+          useDashboardStore.getState().clearProfile(id);
+          // Stale queue from the outgoing scope (see deleteProfile).
+          useDeleteSelectionStore.getState().clear();
+
+          log.profileService('Virtual profile deleted', LogLevel.INFO, { profileId: id });
         },
 
         /**
@@ -311,21 +431,34 @@ export const useProfileStore = create<ProfileState>()(
          * isolation primitive, which keeps other profiles' data warm for
          * All mode. Includes rollback logic if switching fails.
          *
-         * ALL_PROFILES_ID is a virtual aggregate, not a real server: it
-         * skips the lookup below along with session/bootstrap/lastUsed.
-         * Leaving ALL mode for a real profile has no single outgoing
-         * profile to target, so it quits every stream via the same no-arg
-         * call (refs #337).
+         * An aggregate id - the All Servers sentinel or a virtual profile -
+         * names no real server: it skips the lookup below along with
+         * session/bootstrap/lastUsed. Leaving an aggregate for a real
+         * profile has no single outgoing profile to target, so it quits
+         * every stream via the same no-arg call (refs #337).
          */
         switchProfile: async (id) => {
-          if (id === ALL_PROFILES_ID) {
-            log.profileService('Switching to All mode', LogLevel.INFO);
+          if (isAggregateProfileId(id)) {
+            // A virtual id has an entity behind it, so it can be stale
+            // (deleted in another tab, hand-edited storage). Reject it the
+            // same way an unknown real profile id is rejected, rather than
+            // selecting a group that resolves to nothing. The ALL sentinel
+            // is built in and always resolvable.
+            const aggregateId = asProfileId(id);
+            if (
+              isVirtualProfileId(aggregateId) &&
+              !(get().virtualProfiles ?? []).some((v) => v.id === aggregateId)
+            ) {
+              throw new Error(`Profile ${id} not found`);
+            }
+
+            log.profileService('Switching to aggregate mode', LogLevel.INFO, { profileId: id });
             const { quitAllActiveStreams } = await import('../lib/monitor/active-streams');
             await quitAllActiveStreams();
             // Stale queue from the outgoing profile (see deleteProfile).
             useDeleteSelectionStore.getState().clear();
-            set({ currentProfileId: ALL_PROFILES_ID });
-            log.profileService('Switched to All mode', LogLevel.INFO);
+            set({ currentProfileId: aggregateId });
+            log.profileService('Switched to aggregate mode', LogLevel.INFO, { profileId: id });
             return;
           }
 

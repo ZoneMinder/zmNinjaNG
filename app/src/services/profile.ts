@@ -1,7 +1,5 @@
-import type { Profile } from '../api/types';
 import { setSecureValue, getSecureValue, removeSecureValue } from '../lib/security/secureStorage';
 import { log, LogLevel } from '../lib/logger';
-import { isProfileNameAvailable } from '../lib/profile/profile-validation';
 
 export const ProfileService = {
     /**
@@ -41,12 +39,4 @@ export const ProfileService = {
             log.profileService('Failed to remove password from secure storage', LogLevel.WARN, error);
         }
     },
-
-    /**
-     * Check if a profile name already exists
-     * @deprecated Use isProfileNameAvailable from lib/profile/profile-validation instead
-     */
-    validateNameAvailability(name: string, profiles: Profile[], excludeId?: string): boolean {
-        return isProfileNameAvailable(name, profiles, excludeId);
-    }
 };

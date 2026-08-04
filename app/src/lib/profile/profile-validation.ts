@@ -4,19 +4,28 @@
  * Pure validation functions for profile data.
  */
 
-import type { Profile } from '../../api/types';
+/** The shared shape of anything holding a profile name: a real profile or a
+ *  virtual one. Names are unique across both namespaces, so both lists go
+ *  through the same check (refs #337). */
+interface NamedProfile {
+  id: string;
+  name: string;
+}
 
 /**
  * Check if a profile name is available (not already taken by another profile).
  *
  * @param name - The profile name to check
- * @param profiles - List of existing profiles
+ * @param taken - Every profile already holding a name. Real and virtual
+ *   profiles are concatenated here: the switcher and notification attribution
+ *   (`findProfileByName`) present names from both namespaces, so a virtual
+ *   group may not reuse a server's name and vice versa.
  * @param excludeId - Optional profile ID to exclude from check (for updates)
  * @returns true if name is available, false if taken
  *
  * @example
  * ```ts
- * const isAvailable = isProfileNameAvailable('My Server', profiles);
+ * const isAvailable = isProfileNameAvailable('My Server', [...profiles, ...virtualProfiles]);
  * if (!isAvailable) {
  *   throw new Error('Profile name already exists');
  * }
@@ -24,11 +33,11 @@ import type { Profile } from '../../api/types';
  */
 export function isProfileNameAvailable(
   name: string,
-  profiles: Profile[],
+  taken: NamedProfile[],
   excludeId?: string
 ): boolean {
   const normalizedName = name.toLowerCase();
-  return !profiles.some(
+  return !taken.some(
     (p) => p.name.toLowerCase() === normalizedName && p.id !== excludeId
   );
 }
