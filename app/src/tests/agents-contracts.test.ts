@@ -251,12 +251,17 @@ describe('Sessions contract', () => {
     // The virtual prefix joins the two sentinels here: it is the shape
     // isVirtualProfileId/isAggregateProfileId test for, so a second copy of
     // the literal is a second definition of what "aggregate" means. Callers
-    // import the helpers instead. Refs #337.
+    // import the helpers instead, and mint ids with mintVirtualProfileId().
+    //
+    // The prefix match is open-ended, unlike the two sentinels: those are
+    // whole ids, but this is a prefix, so '__virtual_legacy' hand-written
+    // anywhere is the same second definition and has to be caught too.
+    // Refs #337.
     const offenders = srcFiles().filter(
       (f) =>
         (read(f).includes("'__all_profiles__'") ||
           read(f).includes("'__probe__'") ||
-          read(f).includes("'__virtual_'")) &&
+          /['"`]__virtual_/.test(read(f))) &&
         !f.endsWith('api/types.ts'),
     );
     expect(offenders).toEqual([]);

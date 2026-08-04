@@ -100,6 +100,51 @@ function namedProfiles(state: ProfileState): { id: string; name: string }[] {
   return [...state.profiles, ...(state.virtualProfiles ?? [])];
 }
 
+/**
+ * Validate a virtual profile write. Shared by creation and editing so the two
+ * cannot drift; `excludeId` lets a group keep its own name.
+ *
+ * These are backstops, not the user-facing validation - the dialog checks the
+ * same things and reports them in place - but they are what actually holds the
+ * invariants, since a store action is reachable from anywhere. Refs #337.
+ */
+function validateVirtualProfileWrite(
+  state: ProfileState,
+  patch: { name?: string; memberProfileIds?: ProfileId[] },
+  excludeId?: string
+): void {
+  if (patch.name !== undefined) {
+    // A whitespace-only name is unique, so the availability check below would
+    // pass it and leave an unlabelled entry in the switcher. Only the emptiness
+    // test trims; the comparison stays untrimmed, matching how real profile
+    // names have always been compared.
+    if (patch.name.trim().length === 0) {
+      throw new Error('A virtual profile name cannot be empty');
+    }
+    if (!isProfileNameAvailable(patch.name, namedProfiles(state), excludeId)) {
+      throw new Error(`Profile "${patch.name}" already exists`);
+    }
+  }
+
+  if (patch.memberProfileIds !== undefined) {
+    if (patch.memberProfileIds.length === 0) {
+      throw new Error('A virtual profile needs at least one member profile');
+    }
+    for (const memberId of patch.memberProfileIds) {
+      // Membership is flat: a group of groups always flattens to a member
+      // list, so nothing is lost by refusing it, and allowing it would put a
+      // cycle one edit away. Rejected with its own message because "unknown
+      // profile" would be a misleading thing to tell the user.
+      if (isVirtualProfileId(memberId)) {
+        throw new Error(`A virtual profile cannot contain another virtual profile (${memberId})`);
+      }
+      if (!state.profiles.some((p) => p.id === memberId)) {
+        throw new Error(`Unknown member profile ${memberId}`);
+      }
+    }
+  }
+}
+
 export const useProfileStore = create<ProfileState>()(
   persist(
     (set, get) => {
@@ -328,22 +373,13 @@ export const useProfileStore = create<ProfileState>()(
         },
 
         /**
-         * Create a named group of real profiles.
+         * Create a named group of real profiles. Refs #337.
          *
-         * Membership is flat and non-empty: a group with no members would
-         * aggregate nothing, and the id namespace exists so that scope
-         * resolution always has something to fan out over. The UI rejects an
-         * empty selection before it gets here; this is the backstop.
-         *
-         * Refs #337.
+         * See validateVirtualProfileWrite for what a valid group is; the
+         * checks are shared with editing.
          */
         addVirtualProfile: (name, memberProfileIds) => {
-          if (memberProfileIds.length === 0) {
-            throw new Error('A virtual profile needs at least one member profile');
-          }
-          if (!isProfileNameAvailable(name, namedProfiles(get()))) {
-            throw new Error(`Profile "${name}" already exists`);
-          }
+          validateVirtualProfileWrite(get(), { name, memberProfileIds });
 
           const virtualProfile: VirtualProfile = {
             id: mintVirtualProfileId(),
@@ -364,21 +400,15 @@ export const useProfileStore = create<ProfileState>()(
         },
 
         /**
-         * Rename a group or replace its member list. Same two validations as
+         * Rename a group or replace its member list. Same validations as
          * creation - the group being edited is excluded from the name check so
          * it can keep its own name. Refs #337.
          */
         updateVirtualProfile: (id, patch) => {
-          const existing = (get().virtualProfiles ?? []).find((v) => v.id === id);
-          if (!existing) {
+          if (!(get().virtualProfiles ?? []).some((v) => v.id === id)) {
             throw new Error(`Virtual profile ${id} not found`);
           }
-          if (patch.memberProfileIds && patch.memberProfileIds.length === 0) {
-            throw new Error('A virtual profile needs at least one member profile');
-          }
-          if (patch.name && !isProfileNameAvailable(patch.name, namedProfiles(get()), id)) {
-            throw new Error(`Profile "${patch.name}" already exists`);
-          }
+          validateVirtualProfileWrite(get(), patch, id);
 
           set((state) => ({
             virtualProfiles: (state.virtualProfiles ?? []).map((v) =>
@@ -400,6 +430,14 @@ export const useProfileStore = create<ProfileState>()(
          * Refs #337.
          */
         deleteVirtualProfile: (id) => {
+          // Rejected rather than a silent no-op, matching
+          // updateVirtualProfile: a no-op would make a double-delete look like
+          // it worked, and would clear the delete queue for a group that never
+          // existed.
+          if (!(get().virtualProfiles ?? []).some((v) => v.id === id)) {
+            throw new Error(`Virtual profile ${id} not found`);
+          }
+
           set((state) => ({
             virtualProfiles: (state.virtualProfiles ?? []).filter((v) => v.id !== id),
             // Nothing else resets the current id for an aggregate today (the

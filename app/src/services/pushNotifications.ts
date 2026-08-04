@@ -595,6 +595,11 @@ export class MobilePushService {
     // profileEvents[aggregateId] (NotificationBadge and NotificationHistory
     // both key off a real profile id), so an entry there would be a
     // permanently unread, unclearable stuck badge (refs #337).
+    //
+    // Defense in depth, not the load-bearing guard: the fallback just above
+    // has already swapped any aggregate id out for the ES-connected profile,
+    // so this condition is unreachable with an aggregate id today. It stays
+    // so a future change to that fallback cannot quietly start writing here.
     if (profileIdForEvent && !isAggregateProfileId(profileIdForEvent)) {
       const profiles = gates.profile.getProfiles();
       const targetProfile = profiles.find(p => p.id === profileIdForEvent);
@@ -657,7 +662,10 @@ export class MobilePushService {
       if (effectiveTargetProfileId && !isAggregateProfileId(effectiveTargetProfileId)) {
         // Known (or ES-connected-fallback) profile while aggregating: no
         // switch needed, deep-link straight into that profile's event via
-        // the /all/ route.
+        // the /all/ route. The aggregate half of this condition is the same
+        // unreachable defense as the storage guard above - the fallback has
+        // already swapped an aggregate id out; what still decides the branch
+        // is whether there was any ES-connected profile to fall back to.
         navigationService.navigateToEvent(String(eid), { from: '/monitors', fromNotification: true }, effectiveTargetProfileId);
         log.push('All-mode notification tap, navigating to owning profile event', LogLevel.INFO, {
           targetProfileId: effectiveTargetProfileId,

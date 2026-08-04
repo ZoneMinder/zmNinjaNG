@@ -16,7 +16,7 @@ import { useDashboardStore } from '../dashboard';
 import { useMonitorSeenStore } from '../monitorSeen';
 import { setQueryClient } from '../query-cache';
 import { createStoreApiClient } from '../../api/store-gates';
-import { asProfileId, isVirtualProfileId, ALL_PROFILES_ID } from '../../api/types';
+import { asProfileId, isVirtualProfileId, mintVirtualProfileId, ALL_PROFILES_ID } from '../../api/types';
 import { dropAllSessions, hasSession } from '../../services/sessions';
 import { useDeleteSelectionStore, eventSelectionKey } from '../deleteSelection';
 
@@ -115,6 +115,34 @@ describe('virtual profiles in the profile store', () => {
       ).toThrow('already exists');
       expect(useProfileStore.getState().virtualProfiles).toHaveLength(1);
     });
+
+    it('rejects a blank name', () => {
+      // A whitespace-only name is unique, so the availability check passes it
+      // through and the switcher ends up with an unlabelled entry.
+      expect(() => useProfileStore.getState().addVirtualProfile('   ', [asProfileId('p1')])).toThrow(
+        'cannot be empty'
+      );
+      expect(useProfileStore.getState().virtualProfiles).toEqual([]);
+    });
+
+    it('rejects a member id no profile answers to', () => {
+      expect(() =>
+        useProfileStore.getState().addVirtualProfile('Ghosts', [asProfileId('p1'), asProfileId('nope')])
+      ).toThrow('Unknown member profile');
+      expect(useProfileStore.getState().virtualProfiles).toEqual([]);
+    });
+
+    it('rejects nesting a virtual profile inside another', () => {
+      // Membership is flat by design (spec decision: any nested combination
+      // flattens to a member list, so nothing is lost). Enforced at the write,
+      // not left to read-time filtering.
+      const inner = useProfileStore.getState().addVirtualProfile('Inner', [asProfileId('p1')]);
+
+      expect(() => useProfileStore.getState().addVirtualProfile('Outer', [inner])).toThrow(
+        'cannot contain another virtual profile'
+      );
+      expect(useProfileStore.getState().virtualProfiles).toHaveLength(1);
+    });
   });
 
   it('rejects a real profile taking a name a virtual profile already holds', async () => {
@@ -180,8 +208,36 @@ describe('virtual profiles in the profile store', () => {
 
     it('rejects an unknown group', () => {
       expect(() =>
-        useProfileStore.getState().updateVirtualProfile('__virtual_nope', { name: 'X' })
+        useProfileStore.getState().updateVirtualProfile(mintVirtualProfileId(), { name: 'X' })
       ).toThrow('not found');
+    });
+
+    it('rejects a blank name', () => {
+      const id = useProfileStore.getState().addVirtualProfile('Upstairs', [asProfileId('p1')]);
+
+      expect(() => useProfileStore.getState().updateVirtualProfile(id, { name: '   ' })).toThrow(
+        'cannot be empty'
+      );
+      expect(useProfileStore.getState().virtualProfiles[0].name).toBe('Upstairs');
+    });
+
+    it('rejects a member id no profile answers to', () => {
+      const id = useProfileStore.getState().addVirtualProfile('Upstairs', [asProfileId('p1')]);
+
+      expect(() =>
+        useProfileStore.getState().updateVirtualProfile(id, { memberProfileIds: [asProfileId('nope')] })
+      ).toThrow('Unknown member profile');
+      expect(useProfileStore.getState().virtualProfiles[0].memberProfileIds).toEqual(['p1']);
+    });
+
+    it('rejects nesting a virtual profile inside another', () => {
+      const inner = useProfileStore.getState().addVirtualProfile('Inner', [asProfileId('p1')]);
+      const outer = useProfileStore.getState().addVirtualProfile('Outer', [asProfileId('p2')]);
+
+      expect(() =>
+        useProfileStore.getState().updateVirtualProfile(outer, { memberProfileIds: [inner] })
+      ).toThrow('cannot contain another virtual profile');
+      expect(useProfileStore.getState().virtualProfiles[1].memberProfileIds).toEqual(['p2']);
     });
   });
 
@@ -239,6 +295,19 @@ describe('virtual profiles in the profile store', () => {
 
       expect(useDeleteSelectionStore.getState().selectedKeys).toEqual([]);
     });
+
+    it('rejects an unknown group, like its sibling does', () => {
+      // A silent no-op here would let a double-delete look like it worked,
+      // and would clear the delete queue for a group that never existed.
+      const id = useProfileStore.getState().addVirtualProfile('Upstairs', [asProfileId('p1')]);
+      useDeleteSelectionStore.getState().toggle(eventSelectionKey(asProfileId('p1'), '5'));
+
+      expect(() => useProfileStore.getState().deleteVirtualProfile(mintVirtualProfileId())).toThrow(
+        'not found'
+      );
+      expect(useProfileStore.getState().virtualProfiles.map((v) => v.id)).toEqual([id]);
+      expect(useDeleteSelectionStore.getState().selectedKeys).toHaveLength(1);
+    });
   });
 
   describe('membership hygiene', () => {
@@ -292,7 +361,7 @@ describe('virtual profiles in the profile store', () => {
     });
 
     it('rejects an unknown virtual id, leaving the selection alone', async () => {
-      await expect(useProfileStore.getState().switchProfile('__virtual_ghost')).rejects.toThrow(
+      await expect(useProfileStore.getState().switchProfile(mintVirtualProfileId())).rejects.toThrow(
         'not found'
       );
       expect(useProfileStore.getState().currentProfileId).toBe('p1');

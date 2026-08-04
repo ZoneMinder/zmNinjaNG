@@ -3,7 +3,7 @@ import { renderHook } from '@testing-library/react';
 import { useProfileScope } from '../useProfileScope';
 import { useProfileStore } from '../../stores/profile';
 import { useSettingsStore } from '../../stores/settings';
-import { ALL_PROFILES_ID } from '../../api/types';
+import { ALL_PROFILES_ID, mintVirtualProfileId } from '../../api/types';
 
 // Mock the stores
 vi.mock('../../stores/profile', () => ({
@@ -191,7 +191,7 @@ describe('useProfileScope', () => {
   // refs #337: virtual profiles - a named group aggregates like All Servers
   // over its own members.
   describe('virtual profiles', () => {
-    const VIRTUAL_ID = '__virtual_g1';
+    const VIRTUAL_ID = mintVirtualProfileId();
     const group = (memberProfileIds: string[]) => ({
       id: VIRTUAL_ID,
       name: 'Upstairs',
