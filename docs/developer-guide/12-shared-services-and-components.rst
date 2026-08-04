@@ -1280,6 +1280,13 @@ with no Apply button in the persistence path.
 - The restore effect reads settings on mount and on profile change using the
   raw ``_set*`` functions, bypassing the save wrappers so restore does not
   immediately re-save what it just read.
+- Persistence keys off ``currentProfileId``, so in All Servers mode filters
+  live in the ALL bucket, following the same two-tier rule as
+  ``useViewPrefs`` above.
+- In All mode the persisted ``monitorIds`` are composite
+  ``profileId:monitorId`` tokens, the same form ``EventsFilterPopover``
+  builds and ``resolveOwnMonitorIds`` splits, since raw ZoneMinder ids
+  collide across servers. Single mode stores bare ids, unchanged.
 - ``ALL_TAGS_FILTER_ID`` (``'__all_tags__'``) means "any tag" and is mutually
   exclusive with individual tag selections.
 - ``onlyDetectedObjects`` adds ``notesRegexp: 'detected:'`` to the API filter,

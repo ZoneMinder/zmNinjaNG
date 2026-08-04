@@ -243,6 +243,10 @@ export function useEventFilters(): UseEventFiltersReturn {
   // Does NOT trigger auto-save because it uses the raw _set* functions.
   const prevSettingsRef = useRef<string>('');
   useEffect(() => {
+    // Symmetry with the write path, not a covered branch: initial state
+    // already hydrates synchronously from the same bucket, and the profile
+    // switcher remounts this page, so this guard is near-unreachable. Kept
+    // so both paths key off the same id (refs #337 review).
     if (!currentProfileId) return;
 
     // Deep-link URL params take priority
