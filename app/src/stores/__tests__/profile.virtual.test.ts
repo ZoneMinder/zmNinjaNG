@@ -170,6 +170,8 @@ describe('virtual profiles in the profile store', () => {
   describe('updateVirtualProfile', () => {
     it('renames a group and replaces its members', () => {
       const id = useProfileStore.getState().addVirtualProfile('Upstairs', [asProfileId('p1')]);
+      useProfileStore.setState({ currentProfileId: id });
+      useDeleteSelectionStore.getState().toggle(eventSelectionKey(asProfileId('p1'), '5'));
 
       useProfileStore
         .getState()
@@ -178,6 +180,20 @@ describe('virtual profiles in the profile store', () => {
       expect(useProfileStore.getState().virtualProfiles).toEqual([
         { id, name: 'Downstairs', memberProfileIds: ['p2'] },
       ]);
+      // p1 just left the current scope with a delete queued against it -
+      // DeleteBatchBar never unmounts, so confirming would delete events on a
+      // server the user is no longer looking at (see deleteProfile).
+      expect(useDeleteSelectionStore.getState().selectedKeys).toEqual([]);
+    });
+
+    it('keeps the queue when a group that is not current is edited', () => {
+      const id = useProfileStore.getState().addVirtualProfile('Upstairs', [asProfileId('p1')]);
+      const key = eventSelectionKey(asProfileId('p1'), '5');
+      useDeleteSelectionStore.getState().toggle(key);
+
+      useProfileStore.getState().updateVirtualProfile(id, { memberProfileIds: [asProfileId('p2')] });
+
+      expect(useDeleteSelectionStore.getState().selectedKeys).toEqual([key]);
     });
 
     it('lets a group keep its own name', () => {

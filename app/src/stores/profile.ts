@@ -415,6 +415,14 @@ export const useProfileStore = create<ProfileState>()(
               v.id === id ? { ...v, ...patch } : v
             ),
           }));
+
+          // Dropping a member shrinks the aggregate under a destructive queue
+          // (see deleteProfile). Guarded like setProfileDisabled rather than
+          // cleared outright as the other four siblings do: editing a group
+          // that isn't current, or renaming one, moves nothing in view.
+          if (patch.memberProfileIds && get().currentProfileId === id) {
+            useDeleteSelectionStore.getState().clear();
+          }
         },
 
         /**
