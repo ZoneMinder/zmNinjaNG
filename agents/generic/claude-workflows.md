@@ -104,3 +104,27 @@ named fleet.
 - Doc references that drift silently from renumbered rules; the
   `agents-contracts` gate now catches the repo cases, but dispatches into
   agents should cite rule IDs, not copied text, for the same reason.
+
+## Multi-agent lessons from the all-profiles run (2026-08-03, refs #337)
+
+- The task brief is the reviewer's contract. Anything added only in the
+  dispatch prose is invisible to the reviewer, who judges against the
+  brief file - fold every dispatch-time addition into the brief (or hand
+  the reviewer the dispatch text) or expect false scope-creep findings.
+- Key reviewer capability to diff RISK, not size. Concurrency, token
+  handling, and native-adjacent diffs earn the top-tier reviewer on the
+  first pass; economizing there let defects survive one extra round every
+  time it was tried.
+- Keep a task's reviewer alive until its scoped re-review completes.
+  Prompt-killing after the first report loses the context the re-review
+  needs and forces a cold respawn.
+- Fix waves on concurrency-heavy subsystems CREATE defects (three
+  consecutive waves each introduced one). Budget scoped re-reviews per
+  wave; a fresh Critical inside a wave is fixed, never parked, and the
+  extra round is recorded as a deliberate deviation.
+- Demand a regression test be proven red against the pre-fix code.
+  Two would-be-vacuous tests (passing on both old and new code) were
+  caught only by this demand.
+- Subagent final plain text often never reaches the controller. Every
+  dispatch states: report via SendMessage to "main", fall back to the
+  controller's name if that errors. Budget one nudge round anyway.

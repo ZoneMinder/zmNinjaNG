@@ -37,3 +37,13 @@ npm run test:e2e:ios-tablet
 
 Never run two web e2e suites in one checkout. They share generated files and result paths.
 
+
+## Regression tests for store-subscription bugs
+
+Selector bugs (fresh objects minted inside a zustand selector) crash via
+useSyncExternalStore loops in production but are invisible to tests that
+mock the store as `(selector) => selector(state)`. Regression tests for
+this class render against the REAL store (seed via `getState()`, assert
+no "Maximum update depth exceeded"); `NotificationHistory.realstore.test.tsx`
+is the template. Prove any such test red against the pre-fix code before
+trusting it.
