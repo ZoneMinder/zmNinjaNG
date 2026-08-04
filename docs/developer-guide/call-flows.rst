@@ -787,10 +787,12 @@ alive, and turns each live alarm into an event in the store and a toast on scree
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useNotificationAutoConnect.ts#L120>`__
    · → :doc:`11-application-lifecycle`
 
-#. **Store builds the config and listeners.** ``connect`` disconnects any other
-   profile, builds the server config, registers state/event listeners, and awaits
-   the service connect.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts#L254>`__
+#. **Store builds the config and listeners.** ``connect`` gets its own service
+   instance per profile id, builds the server config, registers state/event
+   listeners, and awaits the service connect - it no longer disconnects any
+   other profile, since All Servers mode needs more than one profile connected
+   at once (refs #337; see Flow 23).
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts#L261>`__
    · → :doc:`03-state-management-zustand`
 
 #. **Inject store-derived providers.** ``_buildServiceProviders`` hands the
@@ -2876,6 +2878,111 @@ missing flow.
 
 Flow 21 covers how a profile enters All mode in the first place; this flow
 picks up once it's there.
+
+Flow 23: Live notifications across every server in All Servers mode
+---------------------------------------------------------------------
+
+Flow 7 covers one profile's websocket. All Servers mode does not multiplex
+that single connection - it mounts one independent connector per enabled
+profile, each running Flow 7's own connect/reconnect/backoff machinery
+unchanged, so one server's flaky network never stalls another's toasts. The
+counterintuitive part is that no aggregation code decides which profile an
+event belongs to: each connector closes over its own profile id at mount, so
+the same numeric monitor or event id from two different servers can never
+land in the wrong bucket.
+
+.. mermaid::
+
+   sequenceDiagram
+       autonumber
+       participant Handler as NotificationHandler
+       participant ConnA as Connector (profile A)
+       participant ConnB as Connector (profile B)
+       participant Store as Notification store
+       participant Toasts as All-mode toasts hook
+
+       Handler->>ConnA: mount, bound to profile A
+       Handler->>ConnB: mount, bound to profile B
+       ConnA->>Store: connect(profileA)
+       ConnB->>Store: connect(profileB)
+       Store-->>ConnA: alarm event, closure-bound to A
+       Store-->>ConnB: alarm event, closure-bound to B
+       Store->>Toasts: profileEvents changed
+       Toasts-->>Handler: coalesced toast, A's own settings
+
+#. **The handler fans out one connector per scope profile.** ``NotificationHandler``
+   renders a ``ProfileNotificationConnector`` for every profile in
+   ``scope.profiles`` when ``scope.mode`` is ``'all'`` and
+   ``allModeNotifications`` is not ``'off'``, gated to desktop/web only -
+   mobile keeps Flow 3's single anchor-profile connection since FCM already
+   delivers every profile's events server-side regardless of which one is
+   foregrounded.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/NotificationHandler.tsx#L307>`__
+   · → :doc:`16-platform-surfaces`
+
+#. **Mount is the fan-out, unmount is the teardown.** ``ProfileNotificationConnector``
+   reuses ``useNotificationAutoConnect`` unmodified, permanently bound to its
+   own profile; React mounting or unmounting it as profiles enter or leave
+   scope (switch, disable, delete, or ``allModeNotifications`` flipping off)
+   is the only fan-out and teardown mechanism, with an explicit cleanup that
+   disconnects the socket and stops the poller on unmount.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/notifications/ProfileNotificationConnector.tsx#L27>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **Each profile gets its own service instance.** The store's ``connect``
+   resolves a service through ``getNotificationService(profileId)`` and no
+   longer disconnects any other profile before connecting - Flow 7's old
+   single-connection assumption doesn't hold once two connectors can be
+   connecting at once.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts#L261>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **Listeners bind their profile id at registration, not at read time.**
+   ``_initialize`` wires each connector's own event/state callbacks, so an
+   alarm from server B's websocket can only ever reach the handler closed
+   over profile B's id.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts#L527>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **The write carries no ambiguity either.** ``addEvent(profileId, event)``
+   stores the alarm under ``profileEvents[profileId]``; two servers reporting
+   monitor id ``3`` write to two different buckets, never one overwriting the
+   other.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts#L398>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **Toast display is a separate seam from the store write.**
+   ``useNotificationAllModeToasts`` watches every scope profile's events and
+   reads each one's own ``showToasts``/``playSound`` out of that profile's
+   settings - there is no "current profile" to fall back on while
+   aggregating.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useNotificationAllModeToasts.tsx#L43>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **Events landing close together coalesce.** ``flushBurst`` collapses every
+   event collected within the burst window into one summary toast naming the
+   event and server counts, and plays at most one sound per window, so
+   several busy servers can't flood the screen with individual toasts.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useNotificationAllModeToasts.tsx#L63>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **``allModeNotifications`` is the kill switch upstream of all of it.**
+   ``'off'`` means the handler never mounts a single connector, so no All-mode
+   sockets or pollers exist at all; ``'muted'`` still mounts every connector
+   (badge and history keep updating) but the toasts hook's own check
+   suppresses toast and sound display.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/settings.ts#L23>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **Notification Settings reads the same state the connectors write.**
+   ``NotificationOverview`` renders each profile's live connection status and
+   stored settings straight from the store's ``connections`` map and
+   ``profileSettings``, with no separate aggregation hook of its own.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/notifications/NotificationOverview.tsx#L56>`__
+   · → :doc:`05-component-architecture`
+
+Flow 21 covers the scope these connectors fan out over; Flow 7 is the
+single-profile mechanics each one repeats N times over.
 
 These flows touch most of the moving parts of the app. When you need to change
 something, find the nearest scene, open its ``source`` link to land on the exact

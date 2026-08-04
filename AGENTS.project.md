@@ -63,7 +63,7 @@ Gate: `app/src/tests/agents-contracts.test.ts`; review; subscription changes nee
 Owns: every surface fanning out over multiple profiles.
 Path: scope from `useProfileScope` only (filters disabled profiles; single mode is a one-element array); fan out via `useQueries` with `combine` (`useScopedMonitors` is the template); aggregate-keyed state uses `monitorCacheKey` composites since raw ZM ids collide across servers; stagger via `staggeredRefetchInterval`.
 Never: bare monitor/event ids as aggregate keys; `getCurrentSession` where the ALL sentinel can be current; data prefs read from the ALL bucket.
-Gate: review (mechanized checks for these Never clauses are tracked in the all-profiles retrospective; the sentinel-locality gate in `app/src/tests/agents-contracts.test.ts` covers only the sentinel constants).
+Gate: review; mechanized checks for the Never clauses are a tracked follow-up (all-profiles retrospective).
 
 ### Notifications
 Owns: live notification connections and event attribution.
