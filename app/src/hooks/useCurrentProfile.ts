@@ -18,7 +18,7 @@ import { useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useProfileStore } from '../stores/profile';
 import { useSettingsStore, mergeProfileSettings } from '../stores/settings';
-import { ALL_PROFILES_ID } from '../api/types';
+import { isAggregateProfileId } from '../api/types';
 import type { Profile, ProfileId } from '../api/types';
 import type { ProfileSettings } from '../stores/settings';
 
@@ -29,7 +29,7 @@ export interface UseCurrentProfileReturn {
   settings: ProfileSettings;
   /** Helper to check if profile exists */
   hasProfile: boolean;
-  /** True when the virtual "all profiles" sentinel is the active selection */
+  /** True while aggregating: All Servers or a group is the active selection */
   isAllMode: boolean;
 }
 
@@ -51,10 +51,12 @@ export function useCurrentProfile(): UseCurrentProfileReturn {
   // Select currentProfileId as a stable primitive
   const currentProfileId = useProfileStore((state) => state.currentProfileId);
 
-  // True when the ALL_PROFILES_ID sentinel is selected. currentProfile stays
-  // null and hasProfile stays false in this case (no real profile matches
-  // the sentinel), keeping single-mode-only surfaces unchanged.
-  const isAllMode = currentProfileId === ALL_PROFILES_ID;
+  // True whenever an aggregate is selected: the All Servers sentinel or a
+  // group. Consumers ask "am I aggregating", never which aggregate - the
+  // scope answers that (useProfileScope's aggregateId). currentProfile stays
+  // null and hasProfile stays false either way (no real profile matches an
+  // aggregate id), keeping single-mode-only surfaces unchanged. Refs #337.
+  const isAllMode = isAggregateProfileId(currentProfileId);
   
   // Use useShallow for the profiles array to prevent re-renders when
   // unrelated parts of the profile store change

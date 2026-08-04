@@ -3,7 +3,7 @@ import { renderHook } from '@testing-library/react';
 import { useCurrentProfile } from '../useCurrentProfile';
 import { useProfileStore } from '../../stores/profile';
 import { useSettingsStore, DEFAULT_SETTINGS } from '../../stores/settings';
-import { ALL_PROFILES_ID } from '../../api/types';
+import { ALL_PROFILES_ID, mintVirtualProfileId } from '../../api/types';
 
 // Mock the stores
 vi.mock('../../stores/profile', () => ({
@@ -286,6 +286,32 @@ describe('useCurrentProfile', () => {
       const state = {
         profiles: [mockProfile],
         currentProfileId: ALL_PROFILES_ID,
+      };
+      return selector(state as never);
+    });
+
+    vi.mocked(useSettingsStore).mockImplementation((selector) => {
+      const state = {
+        profileSettings: {},
+      };
+      return selector(state as never);
+    });
+
+    const { result } = renderHook(() => useCurrentProfile());
+
+    expect(result.current.isAllMode).toBe(true);
+    expect(result.current.currentProfile).toBeNull();
+    expect(result.current.hasProfile).toBe(false);
+  });
+
+  // A group aggregates the same way, so every surface that branches on this
+  // flag treats it the same way; the flag says "aggregating", not "which
+  // aggregate" (refs #337).
+  it('isAllMode is true for a group id, with currentProfile and hasProfile unaffected', () => {
+    vi.mocked(useProfileStore).mockImplementation((selector) => {
+      const state = {
+        profiles: [mockProfile],
+        currentProfileId: mintVirtualProfileId(),
       };
       return selector(state as never);
     });
