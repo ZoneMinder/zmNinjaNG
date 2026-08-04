@@ -770,6 +770,7 @@
     "custom": "Custom",
     "fullscreen": "Fullscreen",
     "exit_fullscreen": "Exit Fullscreen",
+    "all_hidden": "All monitors are hidden. Use Show monitors to bring one back.",
     "no_monitors": "No monitors found",
     "stream_cap_overflow_one": "+{{count}} more monitor not shown",
     "stream_cap_overflow_other": "+{{count}} more monitors not shown",

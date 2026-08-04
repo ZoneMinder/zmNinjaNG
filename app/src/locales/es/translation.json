@@ -770,6 +770,7 @@
     "custom": "Personalizado",
     "fullscreen": "Pantalla completa",
     "exit_fullscreen": "Salir",
+    "all_hidden": "Todos los monitores están ocultos. Usa Mostrar monitores para recuperarlos.",
     "no_monitors": "No se encontraron monitores",
     "stream_cap_overflow_one": "+{{count}} monitor más no mostrado",
     "stream_cap_overflow_other": "+{{count}} monitores más no mostrados",

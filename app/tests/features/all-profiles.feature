@@ -79,6 +79,23 @@ Feature: All Servers mode
     Then that entry's tile should be back in the montage grid
 
   @web
+  Scenario: All Servers montage recovers after every monitor is hidden
+    When I navigate to the "Profiles" page
+    And I click the All Servers profile card
+    When I navigate to the "Montage" page
+    Then I should see at least 1 monitor in montage grid
+    When I open the montage kebab menu
+    And I open the montage show-monitors submenu
+    And I hide every montage show-monitors entry
+    Then the montage grid should show no tiles
+    When I reload the current page
+    Then the montage grid should show no tiles
+    When I open the montage kebab menu
+    And I open the montage show-monitors submenu
+    And I show the first hidden montage show-monitors entry
+    Then I should see at least 1 monitor in montage grid
+
+  @web
   Scenario: Events montage view renders in All mode with no gate notice
     When I navigate to the "Profiles" page
     And I click the All Servers profile card

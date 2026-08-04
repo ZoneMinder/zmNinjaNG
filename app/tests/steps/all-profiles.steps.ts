@@ -505,3 +505,41 @@ Then("that entry's tile should be back in the montage grid", async ({ page }) =>
     timeout: testConfig.timeouts.element,
   });
 });
+
+// Hiding every monitor used to strand the user: the page fell through to an
+// empty state with no toolbar, so the list that would bring the tiles back
+// was gone (refs #337).
+When('I hide every montage show-monitors entry', async ({ page }) => {
+  const entries = page.locator(VISIBILITY_ENTRY);
+  const count = await entries.count();
+  expect(count).toBeGreaterThan(0);
+  // The menu stays open across selections (each entry preventDefaults its
+  // select), so every entry can be unchecked in one pass.
+  for (let i = 0; i < count; i++) {
+    const entry = entries.nth(i);
+    if ((await entry.getAttribute('data-state')) === 'checked') await entry.click();
+  }
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+});
+
+When('I show the first hidden montage show-monitors entry', async ({ page }) => {
+  const entry = page.locator(`${VISIBILITY_ENTRY}[data-state="unchecked"]`).first();
+  await expect(entry).toBeVisible({ timeout: testConfig.timeouts.element });
+  await entry.click();
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+});
+
+Then('the montage grid should show no tiles', async ({ page }) => {
+  const tiles = page.locator(
+    '[data-testid^="montage-monitor-"]:not([data-testid="montage-monitor-media"])'
+  );
+  await expect.poll(async () => tiles.count(), {
+    timeout: testConfig.timeouts.pageLoad,
+  }).toBe(0);
+  // The toolbar has to survive, or the kebab that un-hides them is gone.
+  await expect(page.getByTestId('montage-kebab-menu')).toBeVisible({
+    timeout: testConfig.timeouts.element,
+  });
+});

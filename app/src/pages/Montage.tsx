@@ -483,8 +483,12 @@ export default function Montage() {
     );
   }
 
-  // Empty state
-  if (cappedMonitors.length === 0) {
+  // Empty state, keyed off the PRE-hide list. Keying it off the visible tiles
+  // made hiding every monitor a one-way door: this branch renders no toolbar,
+  // so the kebab that would un-hide them was gone and nothing else in the app
+  // edits that list. With monitors present but all hidden the page renders
+  // normally and says so under the toolbar instead (refs #337).
+  if (monitors.length === 0) {
     return (
       <div className="p-8">
         <div className="flex items-center justify-between mb-6">
@@ -675,6 +679,11 @@ export default function Montage() {
             transition: pinchZoom.isPinching ? 'none' : 'transform 0.2s ease-out',
           }}
         >
+          {cappedMonitors.length === 0 && (
+            <div data-testid="montage-all-hidden">
+              <EmptyState icon={Video} title={t('montage.all_hidden')} />
+            </div>
+          )}
           <MontageGridSections
             cappedMonitors={cappedMonitors}
             groupedSections={groupedSections}

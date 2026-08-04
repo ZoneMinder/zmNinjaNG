@@ -770,6 +770,7 @@
     "custom": "自定义",
     "fullscreen": "全屏",
     "exit_fullscreen": "退出全屏",
+    "all_hidden": "所有监控均已隐藏。使用\"显示监控\"重新显示。",
     "no_monitors": "未找到监控",
     "stream_cap_overflow_one": "还有 {{count}} 个监控未显示",
     "stream_cap_overflow_other": "还有 {{count}} 个监控未显示",

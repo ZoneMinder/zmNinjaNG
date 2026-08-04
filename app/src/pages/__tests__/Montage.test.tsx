@@ -432,6 +432,92 @@ describe('Montage Page', () => {
     });
   });
 
+  // Hiding every monitor used to be a one-way door: the page fell through to
+  // the empty state, which renders without the toolbar, so the kebab that
+  // would un-hide them was gone - in All mode and in single mode alike
+  // (refs #337). The empty state now keys off the pre-hide list.
+  it('All mode keeps the kebab reachable when every monitor is hidden, and un-hiding restores the tile', () => {
+    allMode([{ id: 'profile-1', name: 'Home' }, { id: 'profile-2', name: 'Office' }]);
+    hiddenMonitorIds = ['profile-1:1', 'profile-2:1'];
+    useScopedMonitorsMock.mockReturnValue({
+      monitors: [
+        { profileId: 'profile-1', profileName: 'Home', item: monitor('1', 'Front Door') },
+        { profileId: 'profile-2', profileName: 'Office', item: monitor('1', 'Lobby Cam') },
+      ],
+      errors: [],
+      isLoading: false,
+      refetchProfile: vi.fn(),
+    });
+
+    const { rerender } = render(<Montage />);
+
+    // No tiles, but the list that can bring them back is still on screen, and
+    // the page says why the grid is empty.
+    expect(screen.queryByTestId('montage-monitor-profile-1:1')).not.toBeInTheDocument();
+    expect(screen.getByTestId('montage-all-hidden')).toHaveTextContent('montage.all_hidden');
+    const entries = within(screen.getByTestId('montage-kebab-stub')).getAllByRole('button');
+    expect(entries.map((el) => el.textContent)).toEqual([
+      'Front Door (Home)',
+      'Lobby Cam (Office)',
+    ]);
+
+    fireEvent.click(screen.getByTestId('montage-kebab-item-profile-1:1'));
+    expect(updateMontageGroupLayoutMock).toHaveBeenCalledWith(ALL_PROFILES_ID, 'ALL', {
+      hiddenMonitorIds: ['profile-2:1'],
+    });
+
+    // What the store write then renders: the tile is back.
+    hiddenMonitorIds = ['profile-2:1'];
+    rerender(<Montage />);
+    expect(screen.getByTestId('montage-monitor-profile-1:1')).toHaveTextContent('Front Door');
+    expect(screen.queryByTestId('montage-all-hidden')).not.toBeInTheDocument();
+  });
+
+  it('single mode keeps the kebab reachable when every monitor is hidden, and un-hiding restores the tile', () => {
+    singleProfile();
+    hiddenMonitorIds = ['1', '2'];
+    useScopedMonitorsMock.mockReturnValue({
+      monitors: [
+        { profileId: 'profile-1', profileName: 'Home', item: monitor('1', 'Front Door') },
+        { profileId: 'profile-1', profileName: 'Home', item: monitor('2', 'Back Door') },
+      ],
+      errors: [],
+      isLoading: false,
+      refetchProfile: vi.fn(),
+    });
+
+    const { rerender } = render(<Montage />);
+
+    expect(screen.queryByTestId('montage-monitor-1')).not.toBeInTheDocument();
+    expect(screen.getByTestId('montage-all-hidden')).toHaveTextContent('montage.all_hidden');
+
+    fireEvent.click(screen.getByTestId('montage-kebab-item-1'));
+    expect(updateMontageGroupLayoutMock).toHaveBeenCalledWith('profile-1', 'ALL', {
+      hiddenMonitorIds: ['2'],
+    });
+
+    hiddenMonitorIds = ['2'];
+    rerender(<Montage />);
+    expect(screen.getByTestId('montage-monitor-1')).toHaveTextContent('Front Door');
+  });
+
+  // A profile that genuinely has no monitors keeps the old empty state, with
+  // no toolbar and nothing to un-hide.
+  it('keeps the plain empty state when the server has no monitors at all', () => {
+    singleProfile();
+    useScopedMonitorsMock.mockReturnValue({
+      monitors: [],
+      errors: [],
+      isLoading: false,
+      refetchProfile: vi.fn(),
+    });
+
+    render(<Montage />);
+
+    expect(screen.getByText('montage.no_monitors')).toBeInTheDocument();
+    expect(screen.queryByTestId('montage-kebab-stub')).not.toBeInTheDocument();
+  });
+
   // Single mode keeps bare ids so hidden lists stored before this change keep
   // working - no migration of stored data.
   it('single mode keeps bare monitor ids, for the stored list and for new writes', () => {

@@ -770,6 +770,7 @@
     "custom": "Personnalisé",
     "fullscreen": "Plein écran",
     "exit_fullscreen": "Quitter",
+    "all_hidden": "Tous les moniteurs sont masqués. Utilisez Afficher les moniteurs pour en rétablir un.",
     "no_monitors": "Aucun moniteur trouvé",
     "stream_cap_overflow_one": "+{{count}} moniteur supplémentaire non affiché",
     "stream_cap_overflow_other": "+{{count}} moniteurs supplémentaires non affichés",
