@@ -38,6 +38,22 @@ npm run test:e2e:ios-tablet
 Never run two web e2e suites in one checkout. They share generated files and result paths.
 
 
+## Traps that have burned agents (each cost a fix round)
+
+- Run `npx vitest` only from `app/`. From the repo root, npx resolves a
+  cached install without the project's jsdom config and dozens of tests
+  fail with `document is not defined`. Shell working directories drift
+  after `git` commands; re-check before diagnosing "regressions".
+- Test fixtures for settings objects must spread `DEFAULT_SETTINGS`
+  (with `importOriginal` when the store module is mocked, or the spread
+  is silently empty). A hand-listed fixture breaks on the next settings
+  key addition — and the break can be silent (a cap that reads
+  `undefined` disables itself).
+- Per-commit scoped gates must include suites that CONSUME a changed
+  settings shape, not just files importing the changed module. Two
+  fixtures broke this way in one wave while the directly-scoped suites
+  stayed green.
+
 ## Regression tests for store-subscription bugs
 
 Selector bugs (fresh objects minted inside a zustand selector) crash via
