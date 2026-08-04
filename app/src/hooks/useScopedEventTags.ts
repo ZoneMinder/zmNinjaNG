@@ -61,7 +61,7 @@ export function useScopedTags(): UseScopedTagsReturn {
   const profiles = scope?.profiles ?? [];
   const isAllMode = scope?.mode === 'all';
 
-  const { tagsByProfile, availableTags, tagsSupported, isLoadingTags } = useQueries({
+  const { tagEntries, availableTags, tagsSupported, isLoadingTags } = useQueries({
     queries: profiles.map((p) => ({
       queryKey: queryKeys.tags(p.id),
       queryFn: () => getTags(getSession(p.id).client),
@@ -70,8 +70,13 @@ export function useScopedTags(): UseScopedTagsReturn {
       staleTime: 5 * 60 * 1000,
       retry: 1,
     })),
+    // Returns plain arrays, never a Map: QueriesObserver deep-diffs this
+    // output with replaceEqualDeep, which only reuses references for plain
+    // arrays and objects. A Map comes back brand new on every render, and
+    // combine re-runs every render, so anything memoized on it would recompute
+    // forever. The Maps are built once in useMemo below instead.
     combine: (results) => {
-      const tagsByProfile = new Map<ProfileId, Tag[]>();
+      const tagEntries: Array<[ProfileId, Tag[]]> = [];
       // Insertion order is profile order, so the offered list is stable and
       // the first server to define a name owns the row's position.
       const byName = new Map<string, Tag>();
@@ -82,22 +87,24 @@ export function useScopedTags(): UseScopedTagsReturn {
         if (!data) return;
         tagsSupported = true;
         const tags = extractUniqueTags(data);
-        tagsByProfile.set(p.id, tags);
+        tagEntries.push([p.id, tags]);
         for (const tag of tags) {
           if (!byName.has(tag.Name)) byName.set(tag.Name, { ...tag, Id: tag.Name });
         }
       });
 
       return {
-        tagsByProfile,
+        tagEntries,
         availableTags: isAllMode
           ? Array.from(byName.values())
-          : (tagsByProfile.get(profiles[0]?.id as ProfileId) ?? []),
+          : (tagEntries.find(([id]) => id === profiles[0]?.id)?.[1] ?? []),
         tagsSupported,
         isLoadingTags: results.some((r) => r?.isLoading),
       };
     },
   });
+
+  const tagsByProfile = useMemo(() => new Map(tagEntries), [tagEntries]);
 
   const resolveOwnTagIds = useCallback(
     (tokens: string[], profileId: ProfileId): string[] => {
@@ -151,9 +158,13 @@ export function useScopedEventTagMapping(
     return new Map(Array.from(grouped, ([id, ids]) => [id, Array.from(ids).sort()]));
   }, [events]);
 
-  // combine keeps the merged map reference-stable across renders - see
-  // useScopedMonitors.ts for the full rationale.
-  const eventTagMap = useQueries({
+  // combine returns entry ARRAYS, not a Map, for the reason spelled out in
+  // useScopedTags above: replaceEqualDeep stabilizes plain arrays/objects
+  // only. The Map is assembled once in useMemo below, so its identity changes
+  // only when the underlying tags actually do - Events.tsx keys its row-object
+  // memo on it, and a churning identity remints every row and defeats
+  // memo(EventItem) for every card.
+  const tagEntries = useQueries({
     queries: profiles.map((p) => {
       const eventIds = idsByProfile.get(p.id) ?? [];
       return {
@@ -172,19 +183,21 @@ export function useScopedEventTagMapping(
       };
     }),
     combine: (results) => {
-      const merged = new Map<string, Tag[]>();
+      const merged: Array<[string, Tag[]]> = [];
       profiles.forEach((p, i) => {
         // null means "this server does not support tags"; an error means it
         // failed. Either way the other profiles' tags still render.
         const data = results[i]?.data;
         if (!data) return;
         for (const [eventId, tags] of data) {
-          merged.set(scopedEventKey(isAllMode ? p.id : undefined, eventId), tags);
+          merged.push([scopedEventKey(isAllMode ? p.id : undefined, eventId), tags]);
         }
       });
       return merged;
     },
   });
+
+  const eventTagMap = useMemo(() => new Map(tagEntries), [tagEntries]);
 
   const getTagsForEvent = useCallback(
     (profileId: ProfileId | undefined, eventId: string): Tag[] =>

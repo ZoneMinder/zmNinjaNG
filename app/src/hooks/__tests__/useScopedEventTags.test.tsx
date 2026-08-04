@@ -170,6 +170,29 @@ describe('useScopedEventTagMapping', () => {
     expect(result.current.getTagsForEvent(profileA.id, '100')).toEqual([]);
   });
 
+  // combine's output is what QueriesObserver deep-diffs, and it only reuses
+  // references for plain arrays/objects - a Map comes back brand new every
+  // render. Events.tsx keys its allEvents useMemo on this map, so a churning
+  // identity remints every row object and defeats memo(EventItem) for every
+  // card on every render.
+  it('keeps eventTagMap identity across a rerender with unchanged data', async () => {
+    mockScope([profileA, profileB]);
+    vi.mocked(getEventTags).mockResolvedValue(new Map([['100', [tag('1', 'person')]]]));
+    const events = [{ profileId: profileA.id, eventId: '100' }];
+
+    const { result, rerender } = renderHook(() => useScopedEventTagMapping({ events }), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.eventTagMap.size).toBe(1));
+
+    const firstMap = result.current.eventTagMap;
+    const firstLookup = result.current.getTagsForEvent;
+    rerender();
+
+    expect(result.current.eventTagMap).toBe(firstMap);
+    expect(result.current.getTagsForEvent).toBe(firstLookup);
+  });
+
   it('enabled:false fetches nothing', async () => {
     mockScope([profileA, profileB]);
     vi.mocked(getEventTags).mockResolvedValue(new Map());
@@ -252,6 +275,22 @@ describe('useScopedTags', () => {
     await waitFor(() => expect(result.current.availableTags.length).toBe(2));
     expect(result.current.availableTags.map((t) => t.Id)).toEqual(['1', '2']);
     expect(result.current.resolveOwnTagIds(['1'], profileA.id)).toEqual(['1']);
+  });
+
+  it('keeps availableTags and the resolver stable across a rerender', async () => {
+    mockScope([profileA, profileB]);
+
+    const { result, rerender } = renderHook(() => useScopedTags(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.availableTags.length).toBe(3));
+
+    const firstTags = result.current.availableTags;
+    const firstResolver = result.current.resolveOwnTagIds;
+    rerender();
+
+    expect(result.current.availableTags).toBe(firstTags);
+    // Events.tsx builds tagIdsByProfile in a useMemo keyed on this - a new
+    // identity every render remints the filter and rekeys every events query.
+    expect(result.current.resolveOwnTagIds).toBe(firstResolver);
   });
 
   it('reports tags unsupported when no profile answers the endpoint', async () => {
