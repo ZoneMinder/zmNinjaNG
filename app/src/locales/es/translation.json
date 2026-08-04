@@ -490,6 +490,8 @@
       "stream_tuning_reduced": "Reducido",
       "pause_hidden_label": "Pausar transmisiones ocultas",
       "pause_hidden_desc": "Detener las transmisiones agregadas mientras la aplicación está en segundo plano o la ventana está oculta.",
+      "viewport_gating_label": "Pausar mosaicos fuera de vista",
+      "viewport_gating_desc": "Detener los mosaicos del montaje que quedan fuera de la vista y reanudarlos cuando vuelven.",
       "idle_minutes_label": "Tiempo de inactividad",
       "idle_minutes_desc": "Detener las transmisiones agregadas tras este tiempo sin interacción. 0 las mantiene activas.",
       "unit_seconds": "segundos",

@@ -490,6 +490,8 @@
       "stream_tuning_reduced": "Reduziert",
       "pause_hidden_label": "Verdeckte Streams pausieren",
       "pause_hidden_desc": "Gesammelte Streams anhalten, während die App im Hintergrund oder das Fenster verdeckt ist.",
+      "viewport_gating_label": "Kacheln außer Sicht pausieren",
+      "viewport_gating_desc": "Montage-Kacheln anhalten, die aus dem Sichtbereich gescrollt sind, und wieder starten, sobald sie zurückkommen.",
       "idle_minutes_label": "Leerlauf-Zeitlimit",
       "idle_minutes_desc": "Gesammelte Streams nach dieser Zeit ohne Interaktion beenden. 0 lässt sie laufen.",
       "unit_seconds": "Sekunden",

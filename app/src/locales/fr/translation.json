@@ -490,6 +490,8 @@
       "stream_tuning_reduced": "Réduit",
       "pause_hidden_label": "Suspendre les flux masqués",
       "pause_hidden_desc": "Arrêter les flux agrégés lorsque l'application est en arrière-plan ou la fenêtre masquée.",
+      "viewport_gating_label": "Suspendre les tuiles hors écran",
+      "viewport_gating_desc": "Arrêter les tuiles du montage sorties de la vue et les relancer à leur retour.",
       "idle_minutes_label": "Délai d'inactivité",
       "idle_minutes_desc": "Arrêter les flux agrégés après ce délai sans interaction. 0 les laisse tourner.",
       "unit_seconds": "secondes",

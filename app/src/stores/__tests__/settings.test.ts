@@ -453,6 +453,11 @@ describe('all-mode performance settings (refs #337)', () => {
     expect(s.allModeIdleMinutes).toBe(0);
   });
 
+  it('ships viewport gating off, like every other connection guardrail', () => {
+    const s = useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID);
+    expect(s.allModeViewportGating).toBe(false);
+  });
+
   it('keeps in-range stored values untouched', () => {
     const s = allBucket({
       allModeMaxStreams: 4,
@@ -462,6 +467,7 @@ describe('all-mode performance settings (refs #337)', () => {
       allModeStreamTuning: 'reduced',
       allModePauseHidden: true,
       allModeIdleMinutes: 15,
+      allModeViewportGating: true,
     });
     expect(s.allModeMaxStreams).toBe(4);
     expect(s.allModeMaxWatched).toBe(6);
@@ -470,6 +476,7 @@ describe('all-mode performance settings (refs #337)', () => {
     expect(s.allModeStreamTuning).toBe('reduced');
     expect(s.allModePauseHidden).toBe(true);
     expect(s.allModeIdleMinutes).toBe(15);
+    expect(s.allModeViewportGating).toBe(true);
   });
 
   it('clamps values stored below the floor up to the minimum', () => {
@@ -523,9 +530,14 @@ describe('all-mode performance settings (refs #337)', () => {
     expect(s.allModeMaxWatched).toBe(3);
   });
 
-  it('coerces an unknown stream-tuning value and a non-boolean pause flag', () => {
-    const s = allBucket({ allModeStreamTuning: 'bogus', allModePauseHidden: 'yes' });
+  it('coerces an unknown stream-tuning value and the non-boolean flags', () => {
+    const s = allBucket({
+      allModeStreamTuning: 'bogus',
+      allModePauseHidden: 'yes',
+      allModeViewportGating: 1,
+    });
     expect(s.allModeStreamTuning).toBe('off');
     expect(s.allModePauseHidden).toBe(false);
+    expect(s.allModeViewportGating).toBe(false);
   });
 });

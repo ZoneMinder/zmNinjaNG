@@ -192,6 +192,11 @@ export interface ProfileSettings {
   /** All mode only: minutes of no interaction before aggregated streams stand
    *  down. 0 means never. Stored under the ALL settings bucket (refs #337). */
   allModeIdleMinutes: number;
+  /** All mode only: whether montage tiles scrolled out of view stop streaming
+   *  until they come back. Applies to the tiles the stream budget already
+   *  allowed, never to which tiles exist. Stored under the ALL settings
+   *  bucket (refs #337). */
+  allModeViewportGating: boolean;
   monitorGridCols: number; // Grid columns for Monitors page grid view
   monitorDetailFeedFit: MonitorFeedFit; // Object-fit for monitor detail feed
   eventsThumbnailFit: MonitorFeedFit; // Object-fit for event thumbnails
@@ -402,6 +407,7 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   allModeStreamTuning: 'off',
   allModePauseHidden: false,
   allModeIdleMinutes: 0,
+  allModeViewportGating: false,
   monitorGridCols: 2,
   monitorDetailFeedFit: 'contain',
   eventsThumbnailFit: 'contain',
@@ -573,6 +579,9 @@ function coerceAllModePerformance(merged: ProfileSettings): void {
   }
   if (typeof merged.allModePauseHidden !== 'boolean') {
     merged.allModePauseHidden = DEFAULT_SETTINGS.allModePauseHidden;
+  }
+  if (typeof merged.allModeViewportGating !== 'boolean') {
+    merged.allModeViewportGating = DEFAULT_SETTINGS.allModeViewportGating;
   }
 }
 

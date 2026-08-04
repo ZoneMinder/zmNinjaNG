@@ -490,6 +490,8 @@
       "stream_tuning_reduced": "降低",
       "pause_hidden_label": "暂停隐藏的视频流",
       "pause_hidden_desc": "当应用在后台或窗口被遮挡时停止聚合视频流。",
+      "viewport_gating_label": "暂停屏幕外的画面",
+      "viewport_gating_desc": "停止已滚出视野的拼接画面，重新滚回时再启动。",
       "idle_minutes_label": "空闲超时",
       "idle_minutes_desc": "无操作达到此时长后停止聚合视频流。0 表示一直保持。",
       "unit_seconds": "秒",

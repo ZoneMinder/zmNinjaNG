@@ -129,6 +129,12 @@ describe('AllServersPerformanceSection (refs #337)', () => {
     expect(update).toHaveBeenCalledWith('allModePauseHidden', true);
   });
 
+  it('toggles viewport gating', () => {
+    renderSection();
+    fireEvent.click(screen.getByTestId('all-mode-viewport-gating-switch'));
+    expect(update).toHaveBeenCalledWith('allModeViewportGating', true);
+  });
+
   it('treats 0 idle minutes as a real value rather than a floor to clamp away', () => {
     renderSection({ allModeIdleMinutes: 30 });
     typeAndBlur('all-mode-idle-minutes-input', '0');

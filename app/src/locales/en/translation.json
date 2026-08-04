@@ -490,6 +490,8 @@
       "stream_tuning_reduced": "Reduced",
       "pause_hidden_label": "Pause hidden streams",
       "pause_hidden_desc": "Stop aggregated streams while the app is in the background or the window is hidden.",
+      "viewport_gating_label": "Pause off-screen tiles",
+      "viewport_gating_desc": "Stop montage tiles scrolled out of view, and start them again as they come back.",
       "idle_minutes_label": "Idle timeout",
       "idle_minutes_desc": "Stand aggregated streams down after this long without interaction. 0 keeps them running.",
       "unit_seconds": "seconds",

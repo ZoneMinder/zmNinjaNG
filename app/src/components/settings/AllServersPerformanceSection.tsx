@@ -17,8 +17,8 @@
  * Number rows commit on blur or Enter rather than per keystroke
  * (useClampedNumberField explains why at length). Each number row and the
  * tuning select grows a reset button once it differs from its default, so a
- * section left alone shows no reset buttons at all. The pause-hidden switch
- * has none: a two-state control is already its own way back.
+ * section left alone shows no reset buttons at all. The switches have none: a
+ * two-state control is already its own way back.
  */
 
 import { useTranslation } from 'react-i18next';
@@ -237,6 +237,19 @@ export function AllServersPerformanceSection({
             onCheckedChange={(checked) => update('allModePauseHidden', checked)}
             aria-label={t('settings.all_mode_perf.pause_hidden_label')}
             data-testid="all-mode-pause-hidden-switch"
+          />
+        </SettingsRow>
+
+        <SettingsRow>
+          <RowLabel
+            label={t('settings.all_mode_perf.viewport_gating_label')}
+            desc={t('settings.all_mode_perf.viewport_gating_desc')}
+          />
+          <Switch
+            checked={settings.allModeViewportGating}
+            onCheckedChange={(checked) => update('allModeViewportGating', checked)}
+            aria-label={t('settings.all_mode_perf.viewport_gating_label')}
+            data-testid="all-mode-viewport-gating-switch"
           />
         </SettingsRow>
 
