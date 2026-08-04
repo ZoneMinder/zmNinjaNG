@@ -6,6 +6,7 @@ import Settings from '../Settings';
 import { useCurrentProfile, useProfileById } from '../../hooks/useCurrentProfile';
 import { useProfileScope } from '../../hooks/useProfileScope';
 import { asProfileId, ALL_PROFILES_ID } from '../../api/types';
+import { DEFAULT_SETTINGS } from '../../stores/settings';
 
 const updateProfileSettings = vi.fn();
 
@@ -19,10 +20,12 @@ vi.mock('../../hooks/useProfileScope', () => ({
 // What the ALL bucket holds for the All Servers Streaming Mode. 'per-server'
 // is its default: each server keeps its own Streaming Mode.
 let allModeViewMode = 'per-server';
-vi.mock('../../stores/settings', () => ({
-  DEFAULT_SETTINGS: { viewMode: 'snapshot', tvMode: false },
-  HOVER_PREVIEW_PLAYBACK_RATES: [50, 100, 150, 200, 400],
-  DEFAULT_HOVER_PREVIEW_PLAYBACK_RATE: 200,
+// Everything except the store itself stays REAL: the All Servers performance
+// section reads DEFAULT_SETTINGS to decide what "back to default" means, and a
+// hand-written stub of that would assert against the stub rather than against
+// what the app ships.
+vi.mock('../../stores/settings', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../stores/settings')>()),
   useSettingsStore: (
     selector: (state: { updateProfileSettings: typeof updateProfileSettings }) => unknown
   ) => selector({ updateProfileSettings }),
@@ -70,6 +73,7 @@ vi.mock('../../components/settings/AdvancedSection', () => ({
 const profileA = { id: asProfileId('profile-a'), name: 'Home' } as import('../../api/types').Profile;
 const profileB = { id: asProfileId('profile-b'), name: 'Work' } as import('../../api/types').Profile;
 const baseSettings = {
+  ...DEFAULT_SETTINGS,
   viewMode: 'snapshot', tvMode: false, dateFormat: 'MMM d, yyyy', timeFormat: '12h',
   customDateFormat: '', customTimeFormat: '', thumbnailFallbackChain: [], hoverPreview: {},
   hoverPreviewPlaybackRate: 200,
@@ -171,6 +175,39 @@ describe('Settings page - All mode two-tier picker (refs #337)', () => {
       render(<Settings />);
 
       expect(screen.queryByTestId('all-mode-streaming-select')).not.toBeInTheDocument();
+    });
+  });
+
+  // The All Servers performance section: the one place the aggregate's
+  // guardrails are editable, so what matters here is that its writes land in
+  // the ALL bucket and that it stays out of single mode entirely (refs #337).
+  describe('All Servers performance', () => {
+    it('writes a reset knob back to the ALL bucket', () => {
+      vi.mocked(useCurrentProfile).mockImplementation(() => ({
+        currentProfile: null, isAllMode: true, hasProfile: false,
+        settings: { ...baseSettings, allModeViewMode, allModeMaxStreams: 2 } as never,
+      }));
+      render(<Settings />);
+
+      fireEvent.click(screen.getByTestId('all-mode-max-streams-reset'));
+
+      expect(updateProfileSettings).toHaveBeenCalledWith(ALL_PROFILES_ID, {
+        allModeMaxStreams: DEFAULT_SETTINGS.allModeMaxStreams,
+      });
+    });
+
+    it('is absent in single mode, where none of these guardrails apply', () => {
+      vi.mocked(useCurrentProfile).mockReturnValue({
+        currentProfile: profileA, isAllMode: false, hasProfile: true,
+        settings: baseSettings as never,
+      });
+      vi.mocked(useProfileScope).mockReturnValue({
+        mode: 'single', profile: profileA, profiles: [profileA], settings: baseSettings as never,
+      });
+
+      render(<Settings />);
+
+      expect(screen.queryByTestId('all-mode-max-streams-input')).not.toBeInTheDocument();
     });
   });
 });

@@ -16,6 +16,7 @@ import { useProfileScope } from '../hooks/useProfileScope';
 import { ALL_PROFILES_ID, type ProfileId } from '../api/types';
 import { AppearanceSection } from '../components/settings/AppearanceSection';
 import { AllServersStreamingSection } from '../components/settings/AllServersStreamingSection';
+import { AllServersPerformanceSection } from '../components/settings/AllServersPerformanceSection';
 import { LiveStreamingSection } from '../components/settings/LiveStreamingSection';
 import { PlaybackSection } from '../components/settings/PlaybackSection';
 import { AssistantSection } from '../components/settings/AssistantSection';
@@ -83,6 +84,9 @@ export default function Settings() {
             value={settings.allModeViewMode}
             onChange={(value) => update('allModeViewMode', value)}
           />
+          {/* Same reasoning, same placement: every knob in here bounds the
+              aggregate as a whole, so it belongs above the picker too. */}
+          <AllServersPerformanceSection settings={settings} update={update} />
           <ProfilePicker
             profiles={scope?.profiles ?? []}
             value={defaultPickedId}

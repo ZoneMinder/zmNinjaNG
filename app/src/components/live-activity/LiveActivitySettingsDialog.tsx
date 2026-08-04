@@ -169,6 +169,14 @@ export function LiveActivitySettingsDialog({
             </div>
             <p className="text-xs text-muted-foreground">{t('live_activity.poll_interval_desc')}</p>
             <p className="text-xs text-muted-foreground">{t('live_activity.poll_bandwidth_note')}</p>
+            {/* All mode only: the value typed above is floored while
+                aggregating, and the floor is edited somewhere else entirely.
+                Without this note the field silently reads as ignored. */}
+            {scopeProfiles && scopeProfiles.length > 0 && (
+              <p className="text-xs text-muted-foreground" data-testid="live-activity-all-mode-floor-note">
+                {t('live_activity.all_mode_floor_note')}
+              </p>
+            )}
           </div>
 
           <Separator />
