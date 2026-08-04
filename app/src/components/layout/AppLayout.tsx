@@ -55,6 +55,11 @@ export default function AppLayout() {
   // as having a profile: gate on scope resolving, not on currentProfile
   // (refs #337, Task 2 finding).
   const scope = useProfileScope();
+  // Write target for this file's view-level preferences (sidebar width, the
+  // montage toolbar, insomnia, TV mode): the real profile id in single mode,
+  // the ALL sentinel in All mode - the same bucket `settings` above reads
+  // (refs #337).
+  const currentProfileId = useProfileStore((state) => state.currentProfileId);
   const updateProfileSettings = useSettingsStore((state) => state.updateProfileSettings);
   const location = useLocation();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
@@ -73,19 +78,18 @@ export default function AppLayout() {
     }
   }, [isTvMode]);
 
-  const profileId = currentProfile?.id;
   const tvAutoDetectedRef = useRef(false);
 
   useEffect(() => {
-    if (!profileId || tvAutoDetectedRef.current) return;
+    if (!currentProfileId || tvAutoDetectedRef.current) return;
     tvAutoDetectedRef.current = true;
 
     checkIsTV().then((isTV) => {
       if (isTV && !settings.tvMode) {
-        updateProfileSettings(profileId, { tvMode: true });
+        updateProfileSettings(currentProfileId, { tvMode: true });
       }
     });
-  }, [profileId, settings.tvMode, updateProfileSettings]);
+  }, [currentProfileId, settings.tvMode, updateProfileSettings]);
 
   // Track route changes and save to settings. Gated on `scope` (resolves in
   // both single and All mode), not `currentProfile?.id` (null in All mode):
@@ -136,11 +140,13 @@ export default function AppLayout() {
     }
   }, [isLocked]);
 
+  // Symmetric with useKioskLock, which already stores the lock against
+  // currentProfileId: an unlock that skipped All mode left insomnia on.
   const handleKioskUnlock = useCallback(() => {
-    if (currentProfile) {
-      updateProfileSettings(currentProfile.id, { insomnia: previousInsomniaState });
+    if (currentProfileId) {
+      updateProfileSettings(currentProfileId, { insomnia: previousInsomniaState });
     }
-  }, [currentProfile, previousInsomniaState, updateProfileSettings]);
+  }, [currentProfileId, previousInsomniaState, updateProfileSettings]);
 
 
   const expandedWidth = 180;
@@ -150,8 +156,8 @@ export default function AppLayout() {
   const toggleSidebar = () => {
     const next = !isCollapsed;
     setIsCollapsed(next);
-    if (currentProfile) {
-      updateProfileSettings(currentProfile.id, { sidebarWidth: next ? collapsedWidth : expandedWidth });
+    if (currentProfileId) {
+      updateProfileSettings(currentProfileId, { sidebarWidth: next ? collapsedWidth : expandedWidth });
     }
   };
 
@@ -262,8 +268,8 @@ export default function AppLayout() {
               variant="ghost"
               size="icon"
               onClick={() => {
-                if (currentProfile) {
-                  updateProfileSettings(currentProfile.id, {
+                if (currentProfileId) {
+                  updateProfileSettings(currentProfileId, {
                     montageShowToolbar: !settings.montageShowToolbar,
                   });
                 }
