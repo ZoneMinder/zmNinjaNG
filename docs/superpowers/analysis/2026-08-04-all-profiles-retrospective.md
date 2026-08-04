@@ -2,9 +2,12 @@
 
 Written 2026-08-04 by the orchestrating agent, at the maintainer's
 request. It evaluates the agent framework this repository uses, against a
-baseline of standard Claude Code (one agent, one session, no
-repository-specific rules), using the All Profiles feature as the test
-case.
+baseline of out-of-the-box Claude Code, using the All Profiles feature as
+the test case. Out-of-the-box Claude Code can and does spawn subagents on
+its own; what it lacks is everything this repository adds on top: written
+rules and contracts, mandated independent review, mechanical gates, and a
+recorded process. The comparison is discipline versus discretion, not
+many agents versus one.
 
 Context for readers outside this project. zmNinjaNg is a mobile and desktop
 client for [ZoneMinder](https://zoneminder.com/), an open-source video
@@ -37,9 +40,11 @@ their section), [`AGENTS.project.md`](../../../AGENTS.project.md)
 before touching an area), and a subagent process: an orchestrating agent
 writes per-task briefs, separate implementer agents build them test-first,
 separate reviewer agents check each diff, and mechanical test gates block
-commits that break declared invariants. The comparison baseline throughout
-this report is standard Claude Code: one agent in one session, no
-repository-specific rules, self-review only.
+commits that break declared invariants. None of that exists in baseline
+Claude Code: there, whether a diff gets an independent review, whether a
+fix gets a regression test, and whether an invariant survives a refactor
+all depend on the model's judgment in the moment, with nothing written
+down to hold it and nothing mechanical to stop a bad commit.
 
 A note on method. This report is compiled from two sources: the git history
 of the two feature branches, and the orchestrator's own session record of
@@ -52,8 +57,8 @@ All commit links are to `github.com/ZoneMinder/zmNinjaNg`.
 ## Verdict by pillar
 
 Details and evidence follow in sections 3 and 4; this table is the summary.
-"Helped" means it produced outcomes a standard single-agent Claude Code
-session would probably have missed, with incidents to show for it.
+"Helped" means it produced outcomes out-of-the-box Claude Code would
+probably have missed, with incidents to show for it.
 
 | Pillar | What it adds over standard Claude | Verdict |
 |---|---|---|
