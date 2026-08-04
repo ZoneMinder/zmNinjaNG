@@ -2889,6 +2889,17 @@ the same ``/all/...`` deep route, so the destination page never has to ask
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useScopedEventTags.ts#L52>`__
    · → :doc:`07-api-and-data-fetching`
 
+#. **A profile that owns none of the selected monitors contributes nothing.**
+   ``resolveOwnMonitorIds`` can only answer "no monitor filter" for a profile
+   none of the composite tokens name, and ZoneMinder reads that as "every
+   monitor" - so filtering to one server's camera used to put the OTHER
+   server's whole event list on screen. ``ownFilterIds`` pairs that case with
+   the impossible ``eventIds: []`` filter instead, the same shape
+   ``favoritesOnly`` uses for a profile with no favorites of its own, and the
+   shape the tag filter above uses for a server without the selected tag.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useScopedEvents.ts#L161>`__
+   · → :doc:`07-api-and-data-fetching`
+
 #. **The command palette and the keyboard shortcuts fan out the same way.**
    Both read ``useScopedMonitors`` (with ``poll: false``, since they mount for
    the whole session and share the monitors query key with the Monitors page),

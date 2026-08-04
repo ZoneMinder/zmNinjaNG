@@ -56,8 +56,12 @@ import type { EventData, ProfileId } from '../api/types';
  * shared string to every profile's query would filter profile B by a
  * monitor id that only means something on profile A. A token with no ':' is
  * a plain single-mode id and passes through unchanged (there is only ever
- * one profile in scope then). No tokens left for this profile -> undefined,
- * i.e. no filter, same as never having selected anything for it.
+ * one profile in scope then).
+ *
+ * No tokens left for this profile -> undefined, which means "no monitor
+ * filter" to ZoneMinder. That alone would answer with every event on that
+ * server, so the caller pairs it with the impossible `eventIds: []` filter -
+ * see `ownFilterIds` below.
  */
 export function resolveOwnMonitorIds(monitorId: string | undefined, profileId: ProfileId): string | undefined {
   if (!monitorId) return undefined;
@@ -139,10 +143,31 @@ export function useScopedEvents(options: UseScopedEventsOptions): UseScopedEvent
   // not a per-profile derived array, so an untouched profile's entry stays
   // reference-stable across renders).
   const profileFavorites = useEventFavoritesStore((s) => s.profileFavorites);
-  const ownEventIds = useCallback(
-    (profileId: ProfileId): string[] | undefined =>
-      favoritesOnly ? (profileFavorites[profileId] ?? []) : undefined,
-    [favoritesOnly, profileFavorites]
+
+  /**
+   * One profile's share of the id-shaped filters.
+   *
+   * `monitorId` and `eventIds` interact: a profile that owns NONE of the
+   * selected composite monitor tokens must contribute zero events, but
+   * resolveOwnMonitorIds can only say "no monitor filter" there, which
+   * ZoneMinder reads as "every monitor". The impossible `eventIds: []` filter
+   * is what actually makes it match nothing - getEvents short-circuits an
+   * empty id set to an empty response, the same shape favoritesOnly relies on
+   * for a profile with no favorites of its own (refs #337).
+   *
+   * Shared by the fan-out and both refetch paths so the query key they
+   * compute is byte-identical to the one that ran.
+   */
+  const ownFilterIds = useCallback(
+    (profileId: ProfileId): { monitorId: string | undefined; eventIds: string[] | undefined } => {
+      const ownMonitorId = resolveOwnMonitorIds(monitorId, profileId);
+      if (monitorId && ownMonitorId === undefined) return { monitorId: undefined, eventIds: [] };
+      return {
+        monitorId: ownMonitorId,
+        eventIds: favoritesOnly ? (profileFavorites[profileId] ?? []) : undefined,
+      };
+    },
+    [monitorId, favoritesOnly, profileFavorites]
   );
 
   // combine is the only useQueries path that gets reference-stable output -
@@ -152,8 +177,7 @@ export function useScopedEvents(options: UseScopedEventsOptions): UseScopedEvent
   // array identities even when the underlying data hasn't changed).
   const { events, errors, isLoading, isFetching, totalCount, totalCountByProfile } = useQueries({
     queries: profiles.map((p, i) => {
-      const ownMonitorId = resolveOwnMonitorIds(monitorId, p.id);
-      const eventIds = ownEventIds(p.id);
+      const { monitorId: ownMonitorId, eventIds } = ownFilterIds(p.id);
       const tagIds = tagIdsByProfile?.[p.id];
       return {
         queryKey: queryKeys.eventsList(p.id, filters, limit, ownMonitorId, isGroupFilterActive, eventIds, tagIds),
@@ -258,11 +282,11 @@ export function useScopedEvents(options: UseScopedEventsOptions): UseScopedEvent
   const refetchProfile = useCallback(
     (id: ProfileId): void => {
       void queryClient.refetchQueries({
-        queryKey: queryKeys.eventsList(id, filters, limit, resolveOwnMonitorIds(monitorId, id), isGroupFilterActive, ownEventIds(id), tagIdsByProfile?.[id]),
+        queryKey: queryKeys.eventsList(id, filters, limit, ownFilterIds(id).monitorId, isGroupFilterActive, ownFilterIds(id).eventIds, tagIdsByProfile?.[id]),
         exact: true,
       });
     },
-    [queryClient, filters, limit, monitorId, isGroupFilterActive, ownEventIds, tagIdsByProfile]
+    [queryClient, filters, limit, isGroupFilterActive, ownFilterIds, tagIdsByProfile]
   );
 
   // Refetches every profile in scope and resolves once they've all settled -
@@ -272,12 +296,12 @@ export function useScopedEvents(options: UseScopedEventsOptions): UseScopedEvent
     await Promise.all(
       profiles.map((p) =>
         queryClient.refetchQueries({
-          queryKey: queryKeys.eventsList(p.id, filters, limit, resolveOwnMonitorIds(monitorId, p.id), isGroupFilterActive, ownEventIds(p.id), tagIdsByProfile?.[p.id]),
+          queryKey: queryKeys.eventsList(p.id, filters, limit, ownFilterIds(p.id).monitorId, isGroupFilterActive, ownFilterIds(p.id).eventIds, tagIdsByProfile?.[p.id]),
           exact: true,
         })
       )
     );
-  }, [queryClient, profiles, filters, limit, monitorId, isGroupFilterActive, ownEventIds, tagIdsByProfile]);
+  }, [queryClient, profiles, filters, limit, isGroupFilterActive, ownFilterIds, tagIdsByProfile]);
 
   return { events, errors, isLoading, isFetching, totalCount, totalCountByProfile, refetchProfile, refetchAll };
 }

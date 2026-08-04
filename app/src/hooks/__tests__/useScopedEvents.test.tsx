@@ -267,12 +267,41 @@ describe('useScopedEvents', () => {
     await waitFor(() => expect(vi.mocked(getEvents).mock.calls.length).toBeGreaterThanOrEqual(2));
 
     const callFor = (p: typeof profileA) =>
-      vi.mocked(getEvents).mock.calls.find(([, id]) => id === p.id)?.[2] as { monitorId?: string };
+      vi.mocked(getEvents).mock.calls.find(([, id]) => id === p.id)?.[2] as { monitorId?: string; eventIds?: string[] };
 
     // A's selection stays A's - B never gets filtered by a monitor id that
     // only means something on A's server.
     expect(callFor(profileA)?.monitorId).toBe('3');
     expect(callFor(profileB)?.monitorId).toBeUndefined();
+    // ...and B owns none of the selected monitors, so it gets the impossible
+    // filter rather than an unfiltered query. This assertion used to read
+    // `eventIds` undefined, which encoded the defect: "no monitor of yours was
+    // picked" was answered with every event on B's server.
+    expect(callFor(profileB)?.eventIds).toEqual([]);
+  });
+
+  it('a profile owning none of the selected monitors contributes NO events (refs #337)', async () => {
+    mockScope([profileA, profileB]);
+    // Mirrors the getEvents contract an empty id set has (covered directly in
+    // api/__tests__/events.test.ts): it short-circuits to an empty response
+    // without a request, rather than falling through unfiltered.
+    vi.mocked(getEvents).mockImplementation(async (client, _profileId, opts) => {
+      if (opts?.eventIds?.length === 0) return eventsResponse([]);
+      const isA = (client as unknown as { profile: string }).profile === profileA.id;
+      return eventsResponse([event(isA ? 'a1' : 'b1', '2026-01-15 09:00:00')]);
+    });
+
+    const { result } = renderHook(
+      () => useScopedEvents({ ...baseOptions, monitorId: `${profileA.id}:3` }),
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    // Filtering to one server's camera must not put the OTHER server's whole
+    // event list on screen.
+    expect(result.current.events.map((e) => e.item.Event.Id)).toEqual(['a1']);
+    expect(result.current.events.every((e) => e.profileId === profileA.id)).toBe(true);
   });
 
   it('joins multiple composite ids owned by the same profile into one comma list (refs #337 I6)', async () => {
