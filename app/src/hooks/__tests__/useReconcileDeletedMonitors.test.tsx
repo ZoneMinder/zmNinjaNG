@@ -6,7 +6,9 @@ import { useReconcileDeletedMonitors } from '../useReconcileDeletedMonitors';
 import { useSettingsStore, DEFAULT_MONTAGE_GROUP_LAYOUT } from '../../stores/settings';
 import { useDashboardStore } from '../../stores/dashboard';
 import { getMonitors } from '../../api/monitors';
-import { ALL_PROFILES_ID } from '../../api/types';
+import { ALL_PROFILES_ID, mintVirtualProfileId } from '../../api/types';
+
+const VIRTUAL_ID = mintVirtualProfileId();
 
 vi.mock('../../api/monitors', () => ({ getMonitors: vi.fn() }));
 vi.mock('../../services/sessions', () => ({ getCurrentSession: vi.fn(() => ({ client: {}, profileId: 'p1' })) }));
@@ -122,6 +124,43 @@ describe('useReconcileDeletedMonitors', () => {
     // that happens to share the raw id, and p1's list says nothing about it.
     await waitFor(() => expect(storedState().allHidden).toEqual(['p1:1', 'p2:99']));
     expect(storedState().allLayoutIds).toEqual(['p1:1', 'p2:99']);
+  });
+
+  it("drops this profile's deleted tiles from a virtual profile's bucket too (refs #337)", async () => {
+    // A group's bucket holds the same composite profileId:monitorId tile ids
+    // the All bucket does, under its own key. Pruning only the All bucket
+    // leaves a group showing a monitor ZoneMinder no longer has, with no way
+    // to clear it.
+    useSettingsStore.setState({
+      profileSettings: {
+        ...useSettingsStore.getState().profileSettings,
+        [VIRTUAL_ID]: {
+          montageByGroup: {
+            all: {
+              ...DEFAULT_MONTAGE_GROUP_LAYOUT,
+              hiddenMonitorIds: ['p1:1', 'p1:99', 'p2:99'],
+              workingLayout: [
+                { i: 'p1:1', x: 0, y: 0, w: 4, h: 4 },
+                { i: 'p1:99', x: 4, y: 0, w: 4, h: 4 },
+                { i: 'p2:99', x: 8, y: 0, w: 4, h: 4 },
+              ],
+            },
+          },
+        },
+      } as never,
+    });
+    mockGetMonitors.mockResolvedValue(monitorList(['1']));
+
+    renderHook(() => useReconcileDeletedMonitors(), { wrapper });
+
+    await waitFor(() =>
+      expect(
+        useSettingsStore.getState().getProfileSettings(VIRTUAL_ID).montageByGroup?.all
+          ?.hiddenMonitorIds
+      ).toEqual(['p1:1', 'p2:99'])
+    );
+    // The All bucket is still pruned as well - this is an addition, not a move.
+    expect(storedState().allHidden).toEqual(['p1:1', 'p2:99']);
   });
 
   it('changes nothing when the fetch fails: an error is not proof of deletion', async () => {

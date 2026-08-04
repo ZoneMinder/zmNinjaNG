@@ -13,7 +13,7 @@ import { log, LogLevel } from '../lib/logger';
 import { navigationService } from '../lib/navigation';
 import type { NotificationSettings, NotificationSource } from '../types/notifications';
 import type { Profile } from '../api/types';
-import { asProfileId, ALL_PROFILES_ID } from '../api/types';
+import { asProfileId, isAggregateProfileId } from '../api/types';
 import { registerToken, deleteNotification } from '../api/notifications';
 import { getSession } from './sessions';
 import { getAppVersion } from '../lib/version';
@@ -561,13 +561,13 @@ export class MobilePushService {
 
     const gates = getStoreGates();
     const currentProfileId = gates.notifications.getCurrentProfileId();
-    // App-level active profile: the only one that can carry the All-mode
-    // sentinel (the ES-connected profile above never does - there's no
-    // session for it). Outside All mode this is not consulted, so
-    // single-mode taps keep resolving off the ES-connected profile exactly
-    // as before (refs #337).
+    // App-level active profile: the only one that can carry an aggregate id -
+    // the All Servers sentinel or a virtual profile (the ES-connected profile
+    // above never does - there's no session for either). Outside an aggregate
+    // this is not consulted, so single-mode taps keep resolving off the
+    // ES-connected profile exactly as before (refs #337).
     const appProfileId = gates.profile.getCurrentProfileId();
-    const isAllMode = appProfileId === ALL_PROFILES_ID;
+    const isAllMode = isAggregateProfileId(appProfileId);
 
     // Resolve which profile this notification belongs to
     const { targetProfileId, isCrossProfile } = resolveProfileForNotification(
@@ -575,8 +575,8 @@ export class MobilePushService {
       isAllMode ? appProfileId : currentProfileId
     );
 
-    // All mode with no (or an unmatched) profile in the payload resolves
-    // targetProfileId to the ALL_PROFILES_ID sentinel itself
+    // An aggregate with no (or an unmatched) profile in the payload resolves
+    // targetProfileId to the aggregate id itself
     // (resolveProfileForNotification's absent-data early return echoes back
     // whatever currentProfileId it was given, which is appProfileId here).
     // Falling back straight to the generic /events list in that case drops
@@ -585,17 +585,17 @@ export class MobilePushService {
     // actually listening on. Only when that is ALSO absent does the
     // existing warn+/events fallback below apply (refs #337 I8).
     const effectiveTargetProfileId =
-      isAllMode && (!targetProfileId || targetProfileId === ALL_PROFILES_ID)
+      isAllMode && (!targetProfileId || isAggregateProfileId(targetProfileId))
         ? currentProfileId
         : targetProfileId;
 
     const profileIdForEvent = effectiveTargetProfileId || currentProfileId;
 
-    // Never write into the aggregate sentinel's own bucket: nothing reads
-    // profileEvents[ALL_PROFILES_ID] (NotificationBadge and NotificationHistory
+    // Never write into an aggregate's own bucket: nothing reads
+    // profileEvents[aggregateId] (NotificationBadge and NotificationHistory
     // both key off a real profile id), so an entry there would be a
     // permanently unread, unclearable stuck badge (refs #337).
-    if (profileIdForEvent && profileIdForEvent !== ALL_PROFILES_ID) {
+    if (profileIdForEvent && !isAggregateProfileId(profileIdForEvent)) {
       const profiles = gates.profile.getProfiles();
       const targetProfile = profiles.find(p => p.id === profileIdForEvent);
       const accessToken = gates.auth.getAccessToken();
@@ -654,8 +654,8 @@ export class MobilePushService {
         eventId: String(eid),
       });
     } else if (isAllMode) {
-      if (effectiveTargetProfileId && effectiveTargetProfileId !== ALL_PROFILES_ID) {
-        // Known (or ES-connected-fallback) profile while in All mode: no
+      if (effectiveTargetProfileId && !isAggregateProfileId(effectiveTargetProfileId)) {
+        // Known (or ES-connected-fallback) profile while aggregating: no
         // switch needed, deep-link straight into that profile's event via
         // the /all/ route.
         navigationService.navigateToEvent(String(eid), { from: '/monitors', fromNotification: true }, effectiveTargetProfileId);

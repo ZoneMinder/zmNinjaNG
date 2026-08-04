@@ -10,7 +10,7 @@ import {
   dropAllSessions,
   ALL_PROFILES_ID,
 } from '../sessions';
-import { PROBE_PROFILE_ID } from '../../api/types';
+import { PROBE_PROFILE_ID, mintVirtualProfileId } from '../../api/types';
 import { getServerMap } from '../../lib/zm/server-resolver';
 import { getServers } from '../../api/server';
 
@@ -115,6 +115,10 @@ describe('sessions', () => {
     expect(() => getSession(asProfileId('nope'))).toThrow();
   });
 
+  it('throws for a virtual profile id, which names no server either (refs #337)', () => {
+    expect(() => getSession(mintVirtualProfileId())).toThrow(/no session/);
+  });
+
   it('dropSession evicts so the next get rebuilds', () => {
     const s1 = getSession(aId);
     dropSession(aId);
@@ -172,6 +176,12 @@ describe('sessions', () => {
 
   it('tryGetCurrentSession returns null instead of throwing for the ALL_PROFILES_ID sentinel', () => {
     currentProfileId = ALL_PROFILES_ID;
+
+    expect(tryGetCurrentSession()).toBeNull();
+  });
+
+  it('tryGetCurrentSession returns null instead of throwing for a virtual profile (refs #337)', () => {
+    currentProfileId = mintVirtualProfileId();
 
     expect(tryGetCurrentSession()).toBeNull();
   });

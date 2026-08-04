@@ -32,7 +32,7 @@ import {
   pruneProfileSettingsMonitorIds,
   pruneWidgetMonitorIds,
 } from '../lib/monitor/prune-deleted-monitors';
-import { ALL_PROFILES_ID } from '../api/types';
+import { isAggregateProfileId } from '../api/types';
 
 export function useReconcileDeletedMonitors(): void {
   const { currentProfile } = useCurrentProfile();
@@ -66,21 +66,30 @@ export function useReconcileDeletedMonitors(): void {
       });
     }
 
-    // The All Servers bucket stores composite profileId:monitorId tile ids, so
-    // this profile's deleted monitors linger there under a key the loop above
-    // never looks at. Only ids prefixed with THIS profile are judged: the
-    // fetch above is one server's monitor list, and every other server's ids
-    // are unknowable from it (refs #337).
-    const allPatch = pruneAllBucketMonitorIds(
-      settingsState.getProfileSettings(ALL_PROFILES_ID),
-      profileId,
-      known
+    // Every aggregate bucket - All Servers and each virtual profile - stores
+    // composite profileId:monitorId tile ids, so this profile's deleted
+    // monitors linger there under keys the loop above never looks at. The
+    // buckets that exist ARE the set to prune, so they come from the settings
+    // map itself rather than from a second read of the profile store. Only
+    // ids prefixed with THIS profile are judged: the fetch above is one
+    // server's monitor list, and every other server's ids are unknowable from
+    // it (refs #337).
+    const aggregateBucketIds = Object.keys(settingsState.profileSettings).filter(
+      isAggregateProfileId
     );
-    if (allPatch) {
-      settingsState.updateProfileSettings(ALL_PROFILES_ID, allPatch);
-      log.monitor('Dropped deleted monitors from the All Servers montage bucket', LogLevel.INFO, {
+    for (const bucketId of aggregateBucketIds) {
+      const allPatch = pruneAllBucketMonitorIds(
+        settingsState.getProfileSettings(bucketId),
         profileId,
-      });
+        known
+      );
+      if (allPatch) {
+        settingsState.updateProfileSettings(bucketId, allPatch);
+        log.monitor('Dropped deleted monitors from an aggregate montage bucket', LogLevel.INFO, {
+          profileId,
+          bucketId,
+        });
+      }
     }
 
     const dashboardState = useDashboardStore.getState();

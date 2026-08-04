@@ -15,7 +15,7 @@
  * setProfileSettingsGate registration. Refs #337.
  */
 
-import { ALL_PROFILES_ID, PROBE_PROFILE_ID, type Profile, type ProfileId } from '../api/types';
+import { ALL_PROFILES_ID, PROBE_PROFILE_ID, isAggregateProfileId, type Profile, type ProfileId } from '../api/types';
 import type { ApiClient } from '../api/client';
 import { createStoreApiClient, resetAuthGates } from '../api/store-gates';
 import { markSessionActive, markSessionInactive, markAllSessionsInactive } from './session-flags';
@@ -83,15 +83,16 @@ function bootstrapServerMapFor(session: ServerSession): void {
 /**
  * Get (lazily building and caching) the session for a profile.
  *
- * ALL_PROFILES_ID is the virtual aggregate profile and PROBE_PROFILE_ID is
- * the anonymous pre-profile discovery id - neither is ever a real server, so
- * neither has a session (probe flows build their own client directly via
+ * An aggregate id (the ALL_PROFILES_ID sentinel or a virtual profile) names a
+ * set of servers rather than one, and PROBE_PROFILE_ID is the anonymous
+ * pre-profile discovery id - none is ever a real server, so none has a
+ * session (probe flows build their own client directly via
  * createStoreApiClient instead). An id with no matching profile is also
  * rejected rather than silently building a broken client.
  */
 export function getSession(profileId: ProfileId): ServerSession {
-  if (profileId === ALL_PROFILES_ID) {
-    throw new Error('getSession: ALL_PROFILES_ID has no session');
+  if (isAggregateProfileId(profileId)) {
+    throw new Error(`getSession: aggregate profile ${profileId} has no session`);
   }
   if (profileId === PROBE_PROFILE_ID) {
     throw new Error('getSession: PROBE_PROFILE_ID has no session');
@@ -129,15 +130,15 @@ export function getCurrentSession(): ServerSession {
 /**
  * Get the session for the current profile, or null instead of throwing.
  *
- * For UI-layer code that can render while All mode is active (currentProfileId
- * is the ALL_PROFILES_ID sentinel, so there is no single "current" session) -
- * e.g. a detail page reached without an owning-profile route param. Never
- * throws: getCurrentSession stays the throwing form for non-UI callers that
- * can assume a real current profile.
+ * For UI-layer code that can render while an aggregate is active (the current
+ * id is the ALL_PROFILES_ID sentinel or a virtual profile, so there is no
+ * single "current" session) - e.g. a detail page reached without an
+ * owning-profile route param. Never throws: getCurrentSession stays the
+ * throwing form for non-UI callers that can assume a real current profile.
  */
 export function tryGetCurrentSession(): ServerSession | null {
   const currentProfileId = gate.getCurrentProfileId();
-  if (!currentProfileId || currentProfileId === ALL_PROFILES_ID || currentProfileId === PROBE_PROFILE_ID) {
+  if (!currentProfileId || isAggregateProfileId(currentProfileId) || currentProfileId === PROBE_PROFILE_ID) {
     return null;
   }
   try {

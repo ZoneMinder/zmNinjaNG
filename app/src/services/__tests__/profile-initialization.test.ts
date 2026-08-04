@@ -7,7 +7,7 @@
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { handleProfileRehydration } from '../profile-initialization';
-import { ALL_PROFILES_ID, asProfileId } from '../../api/types';
+import { ALL_PROFILES_ID, asProfileId, mintVirtualProfileId } from '../../api/types';
 
 const logSpy = vi.fn();
 
@@ -50,6 +50,34 @@ describe('handleProfileRehydration', () => {
     expect(storeGet).not.toHaveBeenCalled();
     const errorCalls = logSpy.mock.calls.filter(([, level]) => level === 3);
     expect(errorCalls).toEqual([]);
+  });
+
+  it('treats a virtual profile the same way, with no ERROR (refs #337)', async () => {
+    // A virtual id matches no profile either, so without the guard it lands
+    // in the "profile not found" ERROR branch, which also skips bootstrap for
+    // every real profile with no indication why.
+    const storeSet = vi.fn();
+    const storeGet = vi.fn();
+
+    await handleProfileRehydration(
+      {
+        profiles: [],
+        currentProfileId: mintVirtualProfileId(),
+        isInitialized: false,
+        isBootstrapping: false,
+        bootstrapStep: null,
+        getDecryptedPassword: vi.fn(),
+        updateProfile: vi.fn(),
+      },
+      storeSet,
+      storeGet
+    );
+
+    expect(storeSet).toHaveBeenCalledWith(
+      expect.objectContaining({ isInitialized: true, isBootstrapping: false })
+    );
+    expect(storeGet).not.toHaveBeenCalled();
+    expect(logSpy.mock.calls.filter(([, level]) => level === 3)).toEqual([]);
   });
 
   it('still logs ERROR for a real unknown-profile id (regression guard)', async () => {

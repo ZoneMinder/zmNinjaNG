@@ -3,7 +3,7 @@ import { useNotificationStore, startEventPoller, resolvePollIntervalMs } from '.
 import { useProfileStore } from '../profile';
 import { stopAllEventPollers } from '../../services/eventPoller';
 import { resetAllNotificationServices } from '../../services/notifications';
-import { ALL_PROFILES_ID, asProfileId } from '../../api/types';
+import { ALL_PROFILES_ID, asProfileId, mintVirtualProfileId } from '../../api/types';
 import { getBandwidthSettings } from '../../lib/zmninja-ng-constants';
 import type { ZMAlarmEvent, ConnectionState } from '../../types/notifications';
 
@@ -427,6 +427,35 @@ describe('Notification Store', () => {
 
         expect(useNotificationStore.getState().connections[profileA]).toBe('disconnected');
         expect(useNotificationStore.getState().currentProfileId).not.toBe(profileA);
+      } finally {
+        useProfileStore.setState({ currentProfileId: null });
+      }
+    });
+
+    it('keeps a member\'s connection alive when a virtual profile becomes current mid-connect (refs #337)', async () => {
+      const store = useNotificationStore.getState();
+      try {
+        useProfileStore.setState({ currentProfileId: asProfileId(profileA) });
+
+        let resolveConnect: () => void = () => {};
+        mockService.connect.mockImplementationOnce(
+          () => new Promise<void>((resolve) => { resolveConnect = resolve; })
+        );
+
+        const connectPromise = store.connect(profileA, 'admin', 'secretA', 'http://a.local');
+        mockService.onStateChange.mock.calls[0][0]('connected');
+
+        // Selecting a group that CONTAINS profileA is not "the user switched
+        // to a different real profile": a member's connection under an
+        // aggregate is intentional, exactly as under All Servers. Reading the
+        // group id as a real profile tears the socket down the moment the
+        // handshake completes, and the member's notifications never arrive.
+        useProfileStore.setState({ currentProfileId: mintVirtualProfileId() });
+
+        resolveConnect();
+        await connectPromise;
+
+        expect(useNotificationStore.getState().connections[profileA]).toBe('connected');
       } finally {
         useProfileStore.setState({ currentProfileId: null });
       }

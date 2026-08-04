@@ -18,7 +18,7 @@ import {
 } from '../pushNotifications';
 import type { NotificationSettings } from '../../stores/notifications';
 import type { Profile } from '../../api/types';
-import { asProfileId, ALL_PROFILES_ID } from '../../api/types';
+import { asProfileId, ALL_PROFILES_ID, mintVirtualProfileId } from '../../api/types';
 
 // @capacitor-firebase/messaging is mocked globally in src/tests/setup.ts
 // (not re-declared per-file here): pushNotifications.ts fires several
@@ -695,6 +695,60 @@ describe('notification tap handling', () => {
       // unread, unclearable stuck badge (refs #337).
       expect(gates.notifications.addEvent).not.toHaveBeenCalled();
       expect(gates.notifications.markEventRead).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('a virtual profile is the app-level active profile (refs #337)', () => {
+    const VIRTUAL_ID = mintVirtualProfileId();
+
+    it('resolves the tap against the group id, not the ES-connected profile', async () => {
+      gates.profile.getCurrentProfileId = vi.fn().mockReturnValue(VIRTUAL_ID);
+      gates.profile.getProfiles = vi.fn().mockReturnValue([PROFILE, { ...PROFILE, id: 'profile-2', name: 'Work' }]);
+      mockResolveProfileForNotification.mockReturnValue({ targetProfileId: 'profile-2', isCrossProfile: false });
+      const { listener } = await initAndGetListener();
+
+      listener({ notification: { title: 'Alarm', body: 'Motion', data: { eid: '7', mid: '2', profile: 'Work' } } });
+
+      expect(mockResolveProfileForNotification).toHaveBeenCalledWith('Work', VIRTUAL_ID);
+      expect(gates.notifications.addEvent).toHaveBeenCalledWith('profile-2', expect.objectContaining({ EventId: 7 }), 'push');
+      expect(mockRequestProfileSwitch).not.toHaveBeenCalled();
+      expect(mockNavigateToEvent).toHaveBeenCalledWith(
+        '7',
+        { from: '/monitors', fromNotification: true },
+        'profile-2'
+      );
+    });
+
+    it('stores an unmatched tap in the ES-connected profile\'s bucket, never the group\'s', async () => {
+      // The group id names no server, so nothing ever reads
+      // profileEvents[groupId] - an entry there would be a permanently
+      // unread, unclearable stuck badge, exactly as under the ALL sentinel.
+      gates.profile.getCurrentProfileId = vi.fn().mockReturnValue(VIRTUAL_ID);
+      mockResolveProfileForNotification.mockReturnValue({ targetProfileId: VIRTUAL_ID, isCrossProfile: false });
+      const { listener } = await initAndGetListener();
+
+      listener({ notification: { title: 'Alarm', body: 'Motion', data: { eid: '11', mid: '9', profile: 'Deleted Server' } } });
+
+      expect(gates.notifications.addEvent).toHaveBeenCalledWith('profile-1', expect.objectContaining({ EventId: 11 }), 'push');
+      expect(gates.notifications.addEvent).not.toHaveBeenCalledWith(VIRTUAL_ID, expect.anything(), expect.anything());
+      expect(mockNavigateToEvent).toHaveBeenCalledWith(
+        '11',
+        { from: '/monitors', fromNotification: true },
+        'profile-1'
+      );
+    });
+
+    it('writes nothing at all when there is no ES-connected profile to attribute the tap to', async () => {
+      gates.profile.getCurrentProfileId = vi.fn().mockReturnValue(VIRTUAL_ID);
+      gates.notifications.getCurrentProfileId = vi.fn().mockReturnValue(null);
+      mockResolveProfileForNotification.mockReturnValue({ targetProfileId: VIRTUAL_ID, isCrossProfile: false });
+      const { listener } = await initAndGetListener();
+
+      listener({ notification: { title: 'Alarm', body: 'Motion', data: { eid: '11', mid: '9', profile: 'Deleted Server' } } });
+
+      expect(gates.notifications.addEvent).not.toHaveBeenCalled();
+      expect(mockNavigateToEvent).not.toHaveBeenCalled();
+      expect(mockNavigate).toHaveBeenCalledWith('/events', false, { from: '/monitors', fromNotification: true });
     });
   });
 });

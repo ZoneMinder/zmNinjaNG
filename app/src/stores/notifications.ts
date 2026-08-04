@@ -25,7 +25,7 @@ import { getSession } from '../services/sessions';
 import { useProfileStore } from './profile';
 import { useAuthStore, getAuthSlice } from './auth';
 import { useSettingsStore } from './settings';
-import { asProfileId, ALL_PROFILES_ID } from '../api/types';
+import { asProfileId, isAggregateProfileId } from '../api/types';
 import { setPushServiceStoreGates } from '../services/pushNotifications';
 import { getBandwidthSettings, NOTIFICATIONS_SERVICE, STORAGE_KEYS, type BandwidthMode } from '../lib/zmninja-ng-constants';
 
@@ -303,11 +303,12 @@ export const useNotificationStore = create<NotificationState>()(
           // - the handshake was still in progress), so nothing will ever
           // disconnect it. Do it here instead of leaking a fully connected,
           // anchor-less websocket (refs #337 round 2 minor #2). Excluded:
-          // ALL_PROFILES_ID (All mode, where this profile's connection is
-          // intentional and simply isn't "the" current profile by design)
-          // and null (no app-level current profile at all yet - not "the
-          // user switched away", so nothing to tear down).
-          if (appCurrentProfileId && appCurrentProfileId !== profileId && appCurrentProfileId !== ALL_PROFILES_ID) {
+          // any aggregate id (All Servers or a virtual profile, where this
+          // profile's connection is intentional and simply isn't "the"
+          // current profile by design) and null (no app-level current profile
+          // at all yet - not "the user switched away", so nothing to tear
+          // down).
+          if (appCurrentProfileId && appCurrentProfileId !== profileId && !isAggregateProfileId(appCurrentProfileId)) {
             log.notifications('Profile switched away while connecting - disconnecting the now-ownerless socket', LogLevel.INFO, {
               profileId,
               appCurrentProfileId,
@@ -317,8 +318,8 @@ export const useNotificationStore = create<NotificationState>()(
           }
 
           // Anchor push/badge bookkeeping only when this IS the app's real
-          // current profile (single mode). In All mode the app's
-          // currentProfileId is the ALL_PROFILES_ID sentinel, which never
+          // current profile (single mode). Under an aggregate the app's
+          // currentProfileId is a sentinel or group id, which never
           // equals any real profileId, so no connector's connect() call here
           // ever races to overwrite the anchor with "whichever profile
           // connected last" - it simply keeps whatever it was before All

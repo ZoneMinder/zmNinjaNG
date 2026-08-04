@@ -12,7 +12,7 @@
  * 5. Set initialization flags to allow UI to render
  */
 
-import { ALL_PROFILES_ID, type Profile, type ProfileId } from '../api/types';
+import { isAggregateProfileId, type Profile, type ProfileId } from '../api/types';
 import { getSession } from './sessions';
 import { log, LogLevel } from '../lib/logger';
 import { BOOTSTRAP_TIMEOUTS } from '../lib/zmninja-ng-constants';
@@ -193,12 +193,13 @@ export async function handleProfileRehydration(
     return;
   }
 
-  // Case 2: The All Profiles virtual sentinel - no single profile to
-  // bootstrap. Each real profile's own aggregate query (useScopedMonitors)
-  // self-heals its own auth on first fetch, so there is nothing to do here
-  // beyond marking the app initialized. Refs #337.
-  if (state.currentProfileId === ALL_PROFILES_ID) {
-    safeLog('App loading in All Profiles mode; skipping single-profile bootstrap', LogLevel.INFO);
+  // Case 2: An aggregate id - the All Profiles sentinel or a virtual profile.
+  // No single profile to bootstrap. Each real profile's own aggregate query
+  // (useScopedMonitors) self-heals its own auth on first fetch, so there is
+  // nothing to do here beyond marking the app initialized. Without this the
+  // id falls into Case 3's "profile not found" ERROR branch. Refs #337.
+  if (isAggregateProfileId(state.currentProfileId)) {
+    safeLog('App loading in aggregate mode; skipping single-profile bootstrap', LogLevel.INFO);
     setInitializationState(storeSet, false);
     return;
   }
