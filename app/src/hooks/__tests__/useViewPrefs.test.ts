@@ -13,7 +13,7 @@ import { renderHook } from '@testing-library/react';
 import { useViewPrefs, usePageViewMode } from '../useViewPrefs';
 import { useProfileStore } from '../../stores/profile';
 import { useSettingsStore, DEFAULT_SETTINGS } from '../../stores/settings';
-import { ALL_PROFILES_ID, asProfileId } from '../../api/types';
+import { ALL_PROFILES_ID, asProfileId, mintVirtualProfileId } from '../../api/types';
 import type { Profile } from '../../api/types';
 
 const profile = (id: string): Profile => ({
@@ -26,12 +26,19 @@ const profile = (id: string): Profile => ({
   createdAt: 0,
 });
 
+/** A group over profile-2 only, so a test can tell "the group's bucket" from
+ *  "the ALL bucket" by which one governs profile-2's tile. */
+const GROUP = mintVirtualProfileId();
+
 /** The ALL bucket starts at its defaults, which means 'per-server'. Tests
  *  that need an imposed mode set one. */
 const seed = (viewMode: 'streaming' | 'snapshot') => {
   useProfileStore.setState({
     profiles: [profile('profile-1'), profile('profile-2')],
     currentProfileId: asProfileId('profile-1'),
+    virtualProfiles: [
+      { id: GROUP, name: 'Backyard', memberProfileIds: [asProfileId('profile-2')] },
+    ],
   });
   useSettingsStore.setState({
     profileSettings: {
@@ -97,6 +104,38 @@ describe('useViewPrefs', () => {
     expect(result.current.viewMode).toBe('streaming');
   });
 
+  // A group is an aggregate in its own right: the bucket that governs its
+  // tiles is its own, never All Servers'. Both buckets are written here with
+  // opposite modes, so only the right one can produce this result.
+  it("lets the active group's own bucket win over the ALL bucket", () => {
+    seed('snapshot');
+    useProfileStore.setState({ currentProfileId: GROUP });
+    useSettingsStore.getState().updateProfileSettings(ALL_PROFILES_ID, {
+      allModeViewMode: 'snapshot',
+    });
+    useSettingsStore.getState().updateProfileSettings(GROUP, {
+      allModeViewMode: 'streaming',
+    });
+
+    const { result } = renderHook(() => useViewPrefs(asProfileId('profile-2')));
+
+    expect(result.current.viewMode).toBe('streaming');
+  });
+
+  it("reads analysis frames from the active group's bucket", () => {
+    useProfileStore.setState({ currentProfileId: GROUP });
+    useSettingsStore.getState().updateProfileSettings(ALL_PROFILES_ID, {
+      showAnalysisFrames: false,
+    });
+    useSettingsStore.getState().updateProfileSettings(GROUP, {
+      showAnalysisFrames: true,
+    });
+
+    const { result } = renderHook(() => useViewPrefs(asProfileId('profile-2')));
+
+    expect(result.current.showAnalysisFrames).toBe(true);
+  });
+
   // Analysis frames stay a plain two-state preference: off is a coherent
   // default, so there is nothing to distinguish "unset" from.
   it('lets the ALL bucket own analysis frames in All mode', () => {
@@ -139,6 +178,21 @@ describe('usePageViewMode', () => {
     const { result } = renderHook(() => usePageViewMode());
 
     expect(result.current).toBe('snapshot');
+  });
+
+  it('reports the mode the active group imposes, not the ALL bucket\'s', () => {
+    seed('snapshot');
+    useProfileStore.setState({ currentProfileId: GROUP });
+    useSettingsStore.getState().updateProfileSettings(ALL_PROFILES_ID, {
+      allModeViewMode: 'snapshot',
+    });
+    useSettingsStore.getState().updateProfileSettings(GROUP, {
+      allModeViewMode: 'streaming',
+    });
+
+    const { result } = renderHook(() => usePageViewMode());
+
+    expect(result.current).toBe('streaming');
   });
 
   it('reports the imposed All-Servers mode when one is set', () => {

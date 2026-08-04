@@ -3,10 +3,11 @@
  *
  * Resolves the view-level preferences a rendered stream must honor.
  *
- * Preferences are two-tier (refs #337): All Servers mode keeps its own
- * settings bucket, separate from every individual profile's. Page-level
- * controls get that for free - they read `useCurrentProfile().settings`,
- * which already resolves to the ALL bucket through the sentinel profile id.
+ * Preferences are two-tier (refs #337): every aggregate - All Servers or a
+ * named group - keeps its own settings bucket, separate from every individual
+ * profile's and from every other aggregate's. Page-level controls get that for
+ * free: they read `useCurrentProfile().settings`, which already resolves to
+ * the active aggregate's bucket through the current profile id.
  * The stream path does not: a montage tile owned by profile B resolves its
  * URLs, ports and token against profile B, so reading its view preferences
  * from the same place would leave the All Servers settings governing nothing.
@@ -16,10 +17,10 @@
  * mode they are the same profile and behavior is unchanged.
  *
  * Streaming Mode is a TRI-state while aggregating, because two states cannot
- * say "leave each server alone". It lives in its own ALL-bucket setting,
+ * say "leave each server alone". It lives in its own aggregate-bucket setting,
  * `allModeViewMode`, whose 'per-server' default sends each tile back to its
- * owning profile - so entering All mode never changes how anything streams
- * until the user asks. Reusing `viewMode` in the ALL bucket and treating
+ * owning profile - so entering an aggregate never changes how anything streams
+ * until the user asks. Reusing `viewMode` in the aggregate bucket and treating
  * "unset" as per-server does not work: the first write of any key to a bucket
  * materializes the whole defaults shape, so unset is not a state that bucket
  * can stay in. Analysis frames stay two-state: off is a coherent default.
@@ -33,7 +34,7 @@ import { useProfileById } from './useCurrentProfile';
 import { useProfileScope } from './useProfileScope';
 import { useProfileStore } from '../stores/profile';
 
-import { ALL_PROFILES_ID } from '../api/types';
+import { isAggregateProfileId } from '../api/types';
 import type { ProfileId } from '../api/types';
 import { useSettingsStore } from '../stores/settings';
 import type { ProfileSettings, ViewMode } from '../stores/settings';
@@ -48,10 +49,15 @@ export type ViewPrefs = Pick<ProfileSettings, 'viewMode' | 'showAnalysisFrames'>
  */
 export function useViewPrefs(owningProfileId?: ProfileId | null): ViewPrefs {
   const currentProfileId = useProfileStore((state) => state.currentProfileId);
-  const isAllMode = currentProfileId === ALL_PROFILES_ID;
+  const isAllMode = isAggregateProfileId(currentProfileId);
 
   const { settings: owningSettings } = useProfileById(owningProfileId);
-  const { settings: allSettings } = useProfileById(ALL_PROFILES_ID);
+  // The active aggregate's own bucket. Defaulting to the current profile id is
+  // the whole resolution: every aggregate's bucket lives under its own id, so
+  // this is the ALL bucket under the sentinel and the group's bucket under a
+  // group. Read unconditionally to keep the hook order fixed; unused in
+  // single mode, where the owning profile answers everything.
+  const aggregateSettings = useProfileById().settings;
 
   if (!isAllMode) {
     return {
@@ -60,10 +66,10 @@ export function useViewPrefs(owningProfileId?: ProfileId | null): ViewPrefs {
     };
   }
 
-  const imposed = allSettings.allModeViewMode;
+  const imposed = aggregateSettings.allModeViewMode;
   return {
     viewMode: imposed === 'per-server' ? owningSettings.viewMode : imposed,
-    showAnalysisFrames: allSettings.showAnalysisFrames,
+    showAnalysisFrames: aggregateSettings.showAnalysisFrames,
   };
 }
 
@@ -78,11 +84,12 @@ export function useViewPrefs(owningProfileId?: ProfileId | null): ViewPrefs {
  */
 export function usePageViewMode(): ViewMode {
   const currentProfileId = useProfileStore((state) => state.currentProfileId);
-  const isAllMode = currentProfileId === ALL_PROFILES_ID;
+  const isAllMode = isAggregateProfileId(currentProfileId);
 
   const scope = useProfileScope();
+  // The current profile's bucket in single mode, the active aggregate's own
+  // bucket while aggregating - the same id keys both.
   const { settings } = useProfileById();
-  const { settings: allSettings } = useProfileById(ALL_PROFILES_ID);
   // Returns a boolean, so no fresh object reaches the subscription.
   const anyServerStreams = useSettingsStore((state) =>
     (scope?.profiles ?? []).some(
@@ -91,7 +98,7 @@ export function usePageViewMode(): ViewMode {
   );
 
   if (!isAllMode) return settings.viewMode;
-  const imposed = allSettings.allModeViewMode;
+  const imposed = settings.allModeViewMode;
   if (imposed !== 'per-server') return imposed;
   return anyServerStreams ? 'streaming' : 'snapshot';
 }
