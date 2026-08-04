@@ -27,6 +27,7 @@ import { EmptyState } from '../components/ui/empty-state';
 import { filterMonitorsByGroup } from '../lib/monitor/filters';
 import { allocateStreamBudget } from '../lib/monitor/stream-budget';
 import { useHiddenPause } from '../hooks/useHiddenPause';
+import { useIdleAfter } from '../hooks/useIdleAfter';
 import { MONTAGE_GRID } from '../lib/zmninja-ng-constants';
 import { useGroupFilter } from '../hooks/useGroupFilter';
 import { useMontageGroupState } from '../hooks/useMontageGroupState';
@@ -222,6 +223,18 @@ export default function Montage() {
   const paused = useHiddenPause(
     isAllMode && settings.allModePauseHidden,
     MONTAGE_GRID.pauseHiddenGraceMs
+  );
+
+  // Idle downgrade (refs #337): after allModeIdleMinutes with no pointer, key
+  // or touch activity, tiles fall back to periodic snapshots on the existing
+  // Streaming Mode path - the same one the user's own setting drives - and any
+  // activity puts them back. One page-level listener covers every tile.
+  //
+  // Independent of insomnia by design: a montage left running on a display
+  // insomnia is keeping awake is exactly what this is for.
+  const isIdle = useIdleAfter(
+    isAllMode ? settings.allModeIdleMinutes : 0,
+    MONTAGE_GRID.idleActivityThrottleMs
   );
 
   // useMonitorNewEvents stays current-profile-scoped for single mode; All mode
@@ -709,6 +722,7 @@ export default function Montage() {
             resolveNewestEventAt={resolveNewestEventAt}
             reduceStream={reduceStream}
             paused={paused}
+            forceViewMode={isIdle ? 'snapshot' : undefined}
           />
         </div>
       </div>

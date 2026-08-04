@@ -73,11 +73,20 @@ vi.mock('../../../lib/monitor/monitor-rotation', () => ({
 vi.mock('../LiveMonitorPlayer', () => ({
   // The reduce flag is reflected back so a test can assert the tile forwards
   // what the page decided about stream tuning.
-  LiveMonitorPlayer: ({ reduceStream, paused }: { reduceStream?: boolean; paused?: boolean }) => (
+  LiveMonitorPlayer: ({
+    reduceStream,
+    paused,
+    forceViewMode,
+  }: {
+    reduceStream?: boolean;
+    paused?: boolean;
+    forceViewMode?: string;
+  }) => (
     <div
       data-testid="video-player"
       data-reduce-stream={String(reduceStream ?? false)}
       data-paused={String(paused ?? false)}
+      data-force-view-mode={forceViewMode ?? 'none'}
     >
       Mock LiveMonitorPlayer
     </div>
@@ -212,6 +221,24 @@ describe('MontageMonitor', () => {
     );
 
     expect(screen.getByTestId('video-player')).toHaveAttribute('data-reduce-stream', 'true');
+  });
+
+  it('downgrades the player to snapshots when the page says the user is idle', () => {
+    render(
+      <MontageMonitor
+        monitor={mockMonitor}
+        status={mockStatus}
+        currentProfile={mockProfile}
+        accessToken="test-token"
+        navigate={mockNavigate}
+        forceViewMode="snapshot"
+      />
+    );
+
+    expect(screen.getByTestId('video-player')).toHaveAttribute(
+      'data-force-view-mode',
+      'snapshot'
+    );
   });
 
   it('stops the player when the page pauses its tiles', () => {

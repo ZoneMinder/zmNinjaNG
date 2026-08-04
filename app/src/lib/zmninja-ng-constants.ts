@@ -1029,6 +1029,12 @@ export const MONTAGE_GRID = {
   // reconnect of every tile across every server costs more than the half
   // minute of streaming it saves (ms).
   pauseHiddenGraceMs: 30_000,
+
+  // Shortest gap between two activity events that both count towards the
+  // All-mode idle downgrade (`allModeIdleMinutes`). A pointer dragged across
+  // the montage fires hundreds of events a second and every one of them would
+  // otherwise rebuild the idle timer (ms).
+  idleActivityThrottleMs: 1_000,
 } as const;
 
 /**

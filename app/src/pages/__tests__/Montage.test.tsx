@@ -140,11 +140,13 @@ vi.mock('../../components/monitors/MontageMonitor', () => ({
     profileChip,
     reduceStream,
     paused,
+    forceViewMode,
   }: {
     monitor: { Id: string; Name: string };
     profileChip?: string;
     reduceStream?: boolean;
     paused?: boolean;
+    forceViewMode?: string;
   }) => (
     <div>
       {monitor.Name}
@@ -155,6 +157,7 @@ vi.mock('../../components/monitors/MontageMonitor', () => ({
         data-testid="montage-tile-tuning"
         data-reduce-stream={String(reduceStream ?? false)}
         data-paused={String(paused ?? false)}
+        data-force-view-mode={forceViewMode ?? 'none'}
       />
     </div>
   ),
@@ -871,6 +874,65 @@ describe('Montage Page', () => {
       act(() => { vi.advanceTimersByTime(MONTAGE_GRID.pauseHiddenGraceMs * 2); });
 
       expect(screen.getByTestId('montage-tile-tuning')).toHaveAttribute('data-paused', 'false');
+    });
+  });
+
+  describe('idle downgrade', () => {
+    const IDLE_MINUTES = 5;
+    const IDLE_MS = IDLE_MINUTES * 60_000;
+
+    const oneMonitor = () => {
+      useScopedMonitorsMock.mockReturnValue({
+        monitors: [{ profileId: 'profile-1', profileName: 'Home', item: monitor('1', 'Front Door') }],
+        errors: [],
+        isLoading: false,
+        refetchProfile: vi.fn(),
+      });
+    };
+
+    const viewMode = () =>
+      screen.getByTestId('montage-tile-tuning').getAttribute('data-force-view-mode');
+
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    it('drops All-mode tiles to snapshots after the idle period, and streams again on a touch', () => {
+      allMode([{ id: 'profile-1', name: 'Home' }], { allModeIdleMinutes: IDLE_MINUTES });
+      oneMonitor();
+
+      render(<Montage />);
+      expect(viewMode()).toBe('none');
+
+      act(() => { vi.advanceTimersByTime(IDLE_MS); });
+      expect(viewMode()).toBe('snapshot');
+
+      act(() => { document.dispatchEvent(new Event('pointerdown')); });
+      expect(viewMode()).toBe('none');
+    });
+
+    it('keeps streaming when the idle downgrade is switched off', () => {
+      allMode([{ id: 'profile-1', name: 'Home' }], { allModeIdleMinutes: 0 });
+      oneMonitor();
+
+      render(<Montage />);
+      act(() => { vi.advanceTimersByTime(IDLE_MS * 4); });
+
+      expect(viewMode()).toBe('none');
+    });
+
+    it('never downgrades in single mode, whatever the ALL bucket says', () => {
+      singleProfile();
+      useCurrentProfileMock.mockReturnValue({
+        currentProfile: { id: 'profile-1', name: 'Home' },
+        settings: { ...SETTINGS, allModeIdleMinutes: IDLE_MINUTES },
+        isAllMode: false,
+      });
+      oneMonitor();
+
+      render(<Montage />);
+      act(() => { vi.advanceTimersByTime(IDLE_MS * 4); });
+
+      expect(viewMode()).toBe('none');
     });
   });
 

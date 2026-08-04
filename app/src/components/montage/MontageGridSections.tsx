@@ -111,6 +111,10 @@ interface MontageGridSectionsProps {
   /** All-mode pause-while-hidden: every tile stops streaming (refs #337).
    *  Always false in single mode. */
   paused: boolean;
+  /** All-mode idle downgrade: 'snapshot' once the user has left the page
+   *  alone long enough (refs #337). Undefined leaves each tile on its own
+   *  Streaming Mode. */
+  forceViewMode?: 'streaming' | 'snapshot';
 }
 
 /** Grouped-by-server sections when the toggle is on (All mode only), or one
@@ -139,6 +143,7 @@ export function MontageGridSections({
   resolveNewestEventAt,
   reduceStream,
   paused,
+  forceViewMode,
 }: MontageGridSectionsProps) {
   const { t } = useTranslation();
 
@@ -208,6 +213,7 @@ export function MontageGridSections({
             newestEventAt={resolveNewestEventAt(item)}
             reduceStream={reduceStream}
             paused={paused}
+            forceViewMode={forceViewMode}
           />
         </MontageTileErrorBoundary>
       </div>

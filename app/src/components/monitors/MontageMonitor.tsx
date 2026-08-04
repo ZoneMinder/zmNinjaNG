@@ -114,6 +114,12 @@ interface MontageMonitorProps {
    * by the page and forwarded to the player, which drops the connection.
    */
   paused?: boolean;
+  /**
+   * Force this tile's MJPEG view mode regardless of the Streaming Mode
+   * setting, forwarded to the player. Montage passes 'snapshot' once the
+   * All-mode idle downgrade fires (refs #337).
+   */
+  forceViewMode?: 'streaming' | 'snapshot';
 }
 
 function MontageMonitorComponent({
@@ -138,6 +144,7 @@ function MontageMonitorComponent({
   fromRoute = '/montage',
   reduceStream = false,
   paused = false,
+  forceViewMode,
 }: MontageMonitorProps) {
   const { t } = useTranslation();
   const zmVersion = useAuthSlice(currentProfile?.id ?? null).version;
@@ -388,6 +395,7 @@ function MontageMonitorComponent({
           onProtocolChange={setProtocol}
           reduceStream={reduceStream}
           paused={paused}
+          forceViewMode={forceViewMode}
         />
         {settings.montageShowToolbar && settings.showProtocolLabel && (
           <span className="absolute bottom-1.5 right-1.5 z-30 text-[10px] px-1.5 py-0.5 rounded bg-black/50 text-white/90 font-medium pointer-events-none">
