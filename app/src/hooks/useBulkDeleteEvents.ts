@@ -99,19 +99,26 @@ export function useBulkDeleteEvents(profileId?: ProfileId): {
           deletedKeys.push(...deleted.map((e) => e.key));
           if (deleted.length === 0) return;
 
-          const deletedIds = new Set(deleted.map((e) => e.eventId));
-          queryClient.setQueriesData(
-            { predicate: (q) => isEventListQueryFor(q.queryKey, owner) },
-            (old) => removeFromEventsCache(old, deletedIds)
-          );
-          await Promise.all([
-            queryClient.invalidateQueries({ queryKey: queryKeys.events(owner) }),
-            ...deleted.map((e) =>
-              queryClient.invalidateQueries({ queryKey: queryKeys.event(owner, e.eventId) })),
-            queryClient.invalidateQueries({
-              predicate: (q) => q.queryKey[0] === 'monitorRecentEvents' && q.queryKey[1] === owner,
-            }),
-          ]);
+          // The server has already dropped these events. A cache failure must
+          // not unsay that: reporting them as not deleted would leave them
+          // queued and every retry would 404 forever. Log and move on.
+          try {
+            const deletedIds = new Set(deleted.map((e) => e.eventId));
+            queryClient.setQueriesData(
+              { predicate: (q) => isEventListQueryFor(q.queryKey, owner) },
+              (old) => removeFromEventsCache(old, deletedIds)
+            );
+            await Promise.all([
+              queryClient.invalidateQueries({ queryKey: queryKeys.events(owner) }),
+              ...deleted.map((e) =>
+                queryClient.invalidateQueries({ queryKey: queryKeys.event(owner, e.eventId) })),
+              queryClient.invalidateQueries({
+                predicate: (q) => q.queryKey[0] === 'monitorRecentEvents' && q.queryKey[1] === owner,
+              }),
+            ]);
+          } catch (err) {
+            log.eventCard('Bulk delete: cache update failed after a successful delete', LogLevel.ERROR, { profileId: owner, error: err });
+          }
         })
       );
 

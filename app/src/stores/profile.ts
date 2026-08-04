@@ -28,6 +28,7 @@ import { STORAGE_KEYS } from '../lib/zmninja-ng-constants';
 import { useAuthStore, getAuthSlice, registerAuthClientResolver } from './auth';
 import { useSettingsStore } from './settings';
 import { useMonitorSeenStore } from './monitorSeen';
+import { useDeleteSelectionStore } from './deleteSelection';
 import { performBootstrap } from '../services/profile-bootstrap';
 import { handleProfileRehydration } from '../services/profile-initialization';
 
@@ -213,6 +214,17 @@ export const useProfileStore = create<ProfileState>()(
           // Drop this profile's per-monitor seen-watermarks (refs #239)
           useMonitorSeenStore.getState().clearProfile(id);
 
+          // Drop any queued bulk-delete selection. DeleteBatchBar lives in
+          // AppLayout and never unmounts, so a queue outlives the profile it
+          // was built on: the bar keeps its count with nothing marked under it,
+          // and confirming would delete events on a server the user is no
+          // longer looking at. Clearing rather than filtering out this
+          // profile's keys is deliberate - the profile list just changed under
+          // a destructive queue, and dropping it is the safe direction (the
+          // user re-ticks in seconds). switchProfile and setProfileDisabled
+          // do the same for the same reason. Refs #337.
+          useDeleteSelectionStore.getState().clear();
+
           // Drop its cached session and clear its auth slice/persisted
           // refresh token - otherwise all three survive the profile's own
           // deletion. Refs #337.
@@ -308,6 +320,8 @@ export const useProfileStore = create<ProfileState>()(
             log.profileService('Switching to All mode', LogLevel.INFO);
             const { quitAllActiveStreams } = await import('../lib/monitor/active-streams');
             await quitAllActiveStreams();
+            // Stale queue from the outgoing profile (see deleteProfile).
+            useDeleteSelectionStore.getState().clear();
             set({ currentProfileId: ALL_PROFILES_ID });
             log.profileService('Switched to All mode', LogLevel.INFO);
             return;
@@ -346,6 +360,8 @@ export const useProfileStore = create<ProfileState>()(
             log.profileService('Step 0: Quitting previous profile streams', LogLevel.INFO);
             const { quitAllActiveStreams } = await import('../lib/monitor/active-streams');
             await quitAllActiveStreams();
+            // Stale queue from the outgoing profile (see deleteProfile).
+            useDeleteSelectionStore.getState().clear();
 
             // STEP 1: Update current profile ID
             // Use profile.id (already a ProfileId) rather than the raw `id`
@@ -457,6 +473,9 @@ export const useProfileStore = create<ProfileState>()(
 
           if (disabled) {
             dropSession(asProfileId(id));
+            // A disabled profile leaves every All-mode aggregate, so its rows
+            // (and any queued deletes) vanish from view (see deleteProfile).
+            useDeleteSelectionStore.getState().clear();
           }
 
           log.profileService('Profile disabled state changed', LogLevel.INFO, { profileId: id, disabled });

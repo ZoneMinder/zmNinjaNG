@@ -810,6 +810,16 @@ row-level toggle, the floating bar, and the delete hook implement that.
 purpose: opening an event from the queued list does not clear the selection. It
 clears on Cancel, or drops the events a delete actually removed.
 
+Surviving *navigation* is the point; surviving a profile change is not.
+``switchProfile``, ``deleteProfile`` and ``setProfileDisabled``
+(``stores/profile.ts``) all clear the selection, because ``DeleteBatchBar``
+lives in ``AppLayout`` and never unmounts. Without that, ticking an event on
+one server and then switching servers left the bar showing its count with
+nothing marked under it, and confirming would have deleted events on a server
+the user was no longer looking at. Those actions clear the whole queue rather
+than filtering out one profile's keys: the profile list just changed under a
+destructive queue, and dropping it is the safe direction.
+
 The entries are *not* raw ZoneMinder event ids. An event id is only unique
 within one server, so in All Servers mode ticking event 1234 on profile A also
 ticked event 1234 on profile B and would have deleted both. The store keys on
@@ -915,6 +925,12 @@ If any deletion failed, the hook logs via ``log.eventCard`` and toasts
 pluralized on the count. It never rejects. Deleting is destructive, and a
 rejected promise reaching the bar's ``onClick`` is a failure the user never
 sees, which is what the old All-mode crash looked like.
+
+The cache work sits in its own ``try``/``catch`` for a related reason. By the
+time it runs the server has already dropped the events, so a cache error must
+not unsay that. Letting it fall through to the outer ``catch`` would report
+nothing deleted, the bar would keep the dead events queued, and every retry
+would ``404`` forever. It logs and moves on instead.
 
 MonitorRecentEvents
 ~~~~~~~~~~~~~~~~~~~

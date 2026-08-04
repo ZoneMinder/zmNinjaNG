@@ -85,6 +85,19 @@ describe('useBulkDeleteEvents - single mode', () => {
     expect(deleteEvent).not.toHaveBeenCalled();
   });
 
+  it('honours the key\'s own profile over the current one', async () => {
+    // A key that names its owner wins even when a real current profile is
+    // available to fall back on - otherwise a deep /all/ route open in single
+    // mode would delete against the wrong server.
+    asMock(deleteEvent).mockResolvedValue(undefined);
+    const { result } = renderHook(() => useBulkDeleteEvents(), { wrapper });
+
+    await act(async () => { await result.current.deleteEvents([eventSelectionKey(P2, '9')]); });
+
+    expect(asMock(getSession).mock.calls.map((c) => c[0])).toEqual(['p2']);
+    expect(deleteEvent).toHaveBeenCalledWith({ profileId: 'p2' }, '9');
+  });
+
   it('removes the deleted events from a cached events list immediately', async () => {
     asMock(deleteEvent).mockResolvedValue(undefined);
     qc.setQueryData(['events', P1], {
@@ -152,6 +165,39 @@ describe('useBulkDeleteEvents - All mode', () => {
     expect(deleted).toEqual([eventSelectionKey(P1, '1')]);
     expect(toast.error).toHaveBeenCalledWith('events.delete_failed:');
     expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it('invalidates only the owning profile\'s monitorRecentEvents queries', async () => {
+    asMock(deleteEvent).mockResolvedValue(undefined);
+    const spy = vi.spyOn(qc, 'invalidateQueries');
+    qc.setQueryData(['monitorRecentEvents', P1, '4', 10], { events: [] });
+    qc.setQueryData(['monitorRecentEvents', P2, '4', 10], { events: [] });
+
+    const { result } = renderHook(() => useBulkDeleteEvents(), { wrapper });
+    await act(async () => { await result.current.deleteEvents([eventSelectionKey(P1, '1234')]); });
+
+    const predicates = spy.mock.calls
+      .map((c) => (c[0] as { predicate?: (q: { queryKey: readonly unknown[] }) => boolean }).predicate)
+      .filter((p): p is (q: { queryKey: readonly unknown[] }) => boolean => typeof p === 'function');
+    expect(predicates.length).toBeGreaterThan(0);
+    expect(predicates.some((p) => p({ queryKey: ['monitorRecentEvents', P1, '4', 10] }))).toBe(true);
+    expect(predicates.every((p) => !p({ queryKey: ['monitorRecentEvents', P2, '4', 10] }))).toBe(true);
+  });
+
+  it('still reports the delete when the cache update afterwards throws', async () => {
+    // The server already removed the events. A cache failure must not unsay
+    // that: reporting none deleted leaves them queued and every retry 404s.
+    asMock(deleteEvent).mockResolvedValue(undefined);
+    vi.spyOn(qc, 'invalidateQueries').mockImplementation(() => { throw new Error('cache exploded'); });
+
+    const { result } = renderHook(() => useBulkDeleteEvents(), { wrapper });
+    let deleted: string[] = [];
+    await act(async () => {
+      deleted = await result.current.deleteEvents([eventSelectionKey(P1, '1234')]);
+    });
+
+    expect(deleted).toEqual([eventSelectionKey(P1, '1234')]);
+    expect(toast.success).toHaveBeenCalledWith('events.delete_selected_success:1');
   });
 
   it('reports a failure instead of rejecting when a profile has no session', async () => {

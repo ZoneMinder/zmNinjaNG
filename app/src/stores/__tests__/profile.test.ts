@@ -10,6 +10,7 @@ import { setSecureValue, removeSecureValue, getSecureValue } from '../../lib/sec
 import { asProfileId, ALL_PROFILES_ID } from '../../api/types';
 import { getSession, hasSession, dropAllSessions } from '../../services/sessions';
 import { useNotificationStore } from '../notifications';
+import { useDeleteSelectionStore, eventSelectionKey } from '../deleteSelection';
 
 vi.mock('../../api/store-gates', () => ({
   createStoreApiClient: vi.fn(() => ({ mock: true })),
@@ -552,6 +553,65 @@ describe('Profile Store', () => {
       expect(useProfileStore.getState().currentProfileId).toBe(ALL_PROFILES_ID);
       expect(hasSession(ALL_PROFILES_ID)).toBe(false);
       expect(createStoreApiClient).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * The delete-selection bar lives in AppLayout and never unmounts, so a queue
+   * left over from another profile stays on screen with nothing marked under
+   * it - and confirming would delete events on a server the user is no longer
+   * looking at (refs #337).
+   */
+  describe('stale delete selection', () => {
+    const twoProfiles = () =>
+      useProfileStore.setState({
+        profiles: [
+          { id: asProfileId('p1'), name: 'Home', apiUrl: 'http://a', portalUrl: 'http://a', cgiUrl: 'http://a/cgi-bin', isDefault: true, createdAt: 1 },
+          { id: asProfileId('p2'), name: 'Away', apiUrl: 'http://b', portalUrl: 'http://b', cgiUrl: 'http://b/cgi-bin', isDefault: false, createdAt: 2 },
+        ],
+        currentProfileId: asProfileId('p1'),
+      });
+
+    beforeEach(() => {
+      useDeleteSelectionStore.getState().clear();
+      useDeleteSelectionStore.getState().toggle(eventSelectionKey(asProfileId('p1'), '5'));
+    });
+
+    it('switching to another profile drops the queue', async () => {
+      twoProfiles();
+      await useProfileStore.getState().switchProfile('p2');
+      expect(useDeleteSelectionStore.getState().selectedKeys).toEqual([]);
+    });
+
+    it('switching to All mode drops the queue', async () => {
+      twoProfiles();
+      await useProfileStore.getState().switchProfile(ALL_PROFILES_ID);
+      expect(useDeleteSelectionStore.getState().selectedKeys).toEqual([]);
+    });
+
+    it('deleting a profile drops the queue', async () => {
+      twoProfiles();
+      await useProfileStore.getState().deleteProfile('p1');
+      expect(useDeleteSelectionStore.getState().selectedKeys).toEqual([]);
+    });
+
+    it('disabling a profile drops the queue', () => {
+      twoProfiles();
+      useProfileStore.getState().setProfileDisabled('p2', true);
+      expect(useDeleteSelectionStore.getState().selectedKeys).toEqual([]);
+    });
+
+    it('keeps the queue when the switch is rejected', async () => {
+      useProfileStore.setState({
+        profiles: [
+          { id: asProfileId('p1'), name: 'Home', apiUrl: 'http://a', portalUrl: 'http://a', cgiUrl: 'http://a/cgi-bin', isDefault: true, createdAt: 1 },
+          { id: asProfileId('p2'), name: 'Away', apiUrl: 'http://b', portalUrl: 'http://b', cgiUrl: 'http://b/cgi-bin', isDefault: false, createdAt: 2, disabled: true },
+        ],
+        currentProfileId: asProfileId('p1'),
+      });
+
+      await expect(useProfileStore.getState().switchProfile('p2')).rejects.toThrow();
+      expect(useDeleteSelectionStore.getState().selectedKeys).toEqual([eventSelectionKey(asProfileId('p1'), '5')]);
     });
   });
 });
