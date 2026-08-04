@@ -191,7 +191,15 @@ export async function getEvents(client: ApiClient, profileId: ProfileId, filters
 
   // Tags filter server-side via one "Tags.Id:" query per selected tag (ZM
   // rejects "Tags.Id IN:"), merged so it composes with pagination (refs #205).
-  if (filters.tagIds && filters.tagIds.length > 0) {
+  // An empty list means the caller HAS a tag filter that this server matches
+  // nothing for - All mode resolves a selected tag name into each server's own
+  // ids, and a server without that tag resolves to none (refs #337). Falling
+  // through would answer an unfiltered query, i.e. every event on the one
+  // server that lacks the tag. Same contract as eventIds above.
+  if (filters.tagIds != null) {
+    if (filters.tagIds.length === 0) {
+      return buildEventsResponse([], filters.limit || API_PAGINATION.eventsPerPage, 0);
+    }
     const variants = filters.tagIds.map(tagId => `Tags.Id:${tagId}`);
     return fetchEventsByVariants(client, profileId, filterSegments, variants, filters);
   }

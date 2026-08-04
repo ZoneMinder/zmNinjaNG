@@ -23,7 +23,7 @@ import { useTimelineData } from '../hooks/useTimelineData';
 import { useScopedTimelineEvents, type ScopedTimelineEvent } from '../hooks/useScopedTimelineEvents';
 import { useProfileScope } from '../hooks/useProfileScope';
 import { useTvKeyHandler } from '../hooks/useTvKeyHandler';
-import { useEventTagMapping } from '../hooks/useEventTags';
+import { useScopedEventTagMapping, type ScopedEventRef } from '../hooks/useScopedEventTags';
 import { monitorCacheKey } from '../stores/monitors';
 import { asProfileId } from '../api/types';
 import { TimelineCanvas, type ViewportAction, type ViewportActionType } from '../components/timeline/TimelineCanvas';
@@ -270,11 +270,15 @@ export default function Timeline() {
     };
   }, [filteredEvents, startDate, endDate]);
 
-  // Fetch tags for loaded events. All mode: skipped (v1) - tags aren't
-  // fetched per-profile here yet; the popover just shows none in that mode
-  // (ponytail: extend useEventTagMapping's per-profile fan-out to Timeline
-  // if this becomes visible in practice).
-  const { getTagsForEvent } = useEventTagMapping({ eventIds, enabled: !isAllMode });
+  // Tags for the loaded events, fanned out per owning profile so All mode
+  // shows them too (refs #337, audit D4). Event ids collide across servers, so
+  // every lookup goes through the owning profile - never a bare id.
+  const tagRefs = useMemo<ScopedEventRef[]>(() => {
+    if (isAllMode) return scoped.events.map((e) => ({ profileId: e.profileId, eventId: e.id }));
+    const ownProfileId = scope?.profiles[0]?.id;
+    return ownProfileId ? eventIds.map((id) => ({ profileId: ownProfileId, eventId: id })) : [];
+  }, [isAllMode, scoped.events, eventIds, scope]);
+  const { getTagsForEvent } = useScopedEventTagMapping({ events: tagRefs });
 
   const handleEventClick = useCallback((ev: TimelineEvent) => {
     // All mode: the clicked event object IS a ScopedTimelineEvent at runtime
@@ -350,7 +354,7 @@ export default function Timeline() {
         alarmFrames: '0',
         notes: scopedEv.notes,
         monitorName: monitorNameMap.get(`${scopedEv.profileId}:${realMonitorId}`) ?? realMonitorId,
-        tags: [] as string[],
+        tags: getTagsForEvent(scopedEv.profileId, scopedEv.id).map((tag) => tag.Name),
         // The owning profile, so the popover (and its embedded ZMS hover
         // preview) resolve THAT profile's portal/token instead of the
         // (absent or wrong) current profile (refs #337 Task 2).
@@ -368,7 +372,8 @@ export default function Timeline() {
       alarmFrames: raw.Event.AlarmFrames,
       notes: raw.Event.Notes,
       monitorName: monitorNameMap.get(raw.Event.MonitorId) ?? raw.Event.Name,
-      tags: getTagsForEvent(raw.Event.Id).map((tag) => tag.Name),
+      // Single-mode rows carry no profileId, and the map is keyed to match.
+      tags: getTagsForEvent(undefined, raw.Event.Id).map((tag) => tag.Name),
     };
   })() : null;
 

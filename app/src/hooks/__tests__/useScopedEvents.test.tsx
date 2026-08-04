@@ -117,7 +117,7 @@ const baseOptions = {
   limit: 100,
   monitorId: undefined,
   isGroupFilterActive: false,
-  tagIds: undefined,
+  tagIdsByProfile: undefined,
 };
 
 describe('useScopedEvents', () => {
@@ -328,6 +328,62 @@ describe('useScopedEvents', () => {
     expect(callFor(profileB)?.eventIds).toBeUndefined();
   });
 
+  it('sends each profile its OWN tag ids for the same selected tag (refs #337 D4)', async () => {
+    mockScope([profileA, profileB]);
+    vi.mocked(getEvents).mockResolvedValue(eventsResponse([]));
+
+    // "person" is tag 1 on A and tag 7 on B. Sending one shared id to both
+    // would filter B by whatever tag happens to carry that number there.
+    renderHook(
+      () => useScopedEvents({ ...baseOptions, tagIdsByProfile: { [profileA.id]: ['1'], [profileB.id]: ['7'] } }),
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => expect(vi.mocked(getEvents).mock.calls.length).toBeGreaterThanOrEqual(2));
+
+    const callFor = (p: typeof profileA) =>
+      vi.mocked(getEvents).mock.calls.find(([, id]) => id === p.id)?.[2] as { tagIds?: string[] };
+
+    expect(callFor(profileA)?.tagIds).toEqual(['1']);
+    expect(callFor(profileB)?.tagIds).toEqual(['7']);
+  });
+
+  it('gives a profile that has none of the selected tags an impossible filter, not an unfiltered query', async () => {
+    mockScope([profileA, profileB]);
+    vi.mocked(getEvents).mockResolvedValue(eventsResponse([]));
+
+    renderHook(
+      () => useScopedEvents({ ...baseOptions, tagIdsByProfile: { [profileA.id]: ['2'], [profileB.id]: [] } }),
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => expect(vi.mocked(getEvents).mock.calls.length).toBeGreaterThanOrEqual(2));
+
+    const callFor = (p: typeof profileA) =>
+      vi.mocked(getEvents).mock.calls.find(([, id]) => id === p.id)?.[2] as { tagIds?: string[] };
+
+    // Same shape favoritesOnly uses: an empty list means "matches nothing
+    // here", never "no filter" - otherwise filtering by a tag only one server
+    // defines would show every event from the other one.
+    expect(callFor(profileA)?.tagIds).toEqual(['2']);
+    expect(callFor(profileB)?.tagIds).toEqual([]);
+  });
+
+  it('passes no tag filter when the caller supplies none', async () => {
+    mockScope([profileA, profileB]);
+    vi.mocked(getEvents).mockResolvedValue(eventsResponse([]));
+
+    renderHook(() => useScopedEvents(baseOptions), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(vi.mocked(getEvents).mock.calls.length).toBeGreaterThanOrEqual(2));
+
+    const callFor = (p: typeof profileA) =>
+      vi.mocked(getEvents).mock.calls.find(([, id]) => id === p.id)?.[2] as { tagIds?: string[] };
+
+    expect(callFor(profileA)?.tagIds).toBeUndefined();
+    expect(callFor(profileB)?.tagIds).toBeUndefined();
+  });
+
   it('surfaces one failing profile as a ProfileError while the other profile still renders its data', async () => {
     mockScope([profileA, profileB]);
     const failure = new Error('B is down');
@@ -374,7 +430,7 @@ describe('useScopedEvents', () => {
       baseOptions.monitorId,
       baseOptions.isGroupFilterActive,
       undefined,
-      baseOptions.tagIds
+      baseOptions.tagIdsByProfile
     );
     expect(queryClient.getQueryData(key)).toEqual(eventsResponse([event('42', '2026-01-15 09:00:00')]));
   });

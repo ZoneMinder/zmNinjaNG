@@ -50,7 +50,7 @@ export interface UseScopedTimelineEventsOptions {
 }
 
 export interface ScopedTimelineEvent extends TimelineEvent {
-  profileId: string;
+  profileId: ProfileId;
   profileChip: string;
 }
 

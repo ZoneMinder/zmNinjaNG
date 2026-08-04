@@ -18,6 +18,15 @@ const useScopedEventsMock = vi.fn();
 const useScopedMonitorsMock = vi.fn();
 const useProfileScopeMock = vi.fn();
 
+// The fan-out itself is covered in useScopedEventTags' own suite; stubbed
+// here so this page suite keeps its narrow react-query mock. The returned map
+// is keyed the way the real hook keys it, so the page's own lookup is still
+// under test.
+const eventTagMapMock = vi.fn(() => new Map<string, Array<{ Id: string; Name: string }>>());
+vi.mock('../../hooks/useScopedEventTags', () => ({
+  useScopedTags: () => ({ availableTags: [], tagsSupported: true, isLoadingTags: false, resolveOwnTagIds: (t: string[]) => t }),
+  useScopedEventTagMapping: () => ({ eventTagMap: eventTagMapMock(), getTagsForEvent: () => [] }),
+}));
 vi.mock('../../hooks/useScopedEvents', () => ({
   useScopedEvents: (options: unknown) => useScopedEventsMock(options),
 }));
@@ -143,10 +152,11 @@ vi.mock('../../hooks/usePullToRefresh', () => ({
 }));
 
 vi.mock('../../components/events/EventCard', () => ({
-  EventCard: ({ event, monitorName, profileChip }: { event: { Id: string }; monitorName: string; profileChip?: string }) => (
+  EventCard: ({ event, monitorName, profileChip, tags }: { event: { Id: string }; monitorName: string; profileChip?: string; tags?: Array<{ Name: string }> }) => (
     <div data-testid="event-card-item">
       {event.Id}-{monitorName}
       {profileChip && <span data-testid="event-card-profile-chip">{profileChip}</span>}
+      {tags?.map((t) => <span key={t.Name} data-testid="event-card-tag">{t.Name}</span>)}
     </div>
   ),
 }));
@@ -244,6 +254,8 @@ describe('Events Page', () => {
       }
       return { data: null, isLoading: false, error: null, refetch: vi.fn() };
     });
+    eventTagMapMock.mockReset();
+    eventTagMapMock.mockReturnValue(new Map());
     useScopedEventsMock.mockReset();
     useScopedMonitorsMock.mockReset();
     useScopedMonitorsMock.mockReturnValue({ monitors: [], errors: [], isLoading: false, refetchProfile: vi.fn() });
@@ -402,6 +414,34 @@ describe('Events Page', () => {
       expect(cards).toHaveLength(2);
       const chips = screen.getAllByTestId('event-card-profile-chip');
       expect(chips.map((c) => c.textContent)).toEqual(['Home', 'Office']);
+    });
+
+    it('tags a colliding event id from the server that owns it (refs #337 D4)', () => {
+      allScope();
+      // Both servers have an event 1. Before the fan-out, tags in All mode
+      // were fetched from the current profile only (there is none) and looked
+      // up by bare event id, so one server's tags could land on the other
+      // server's row.
+      eventTagMapMock.mockReturnValue(
+        new Map([
+          ['profile-1:1', [{ Id: '4', Name: 'person' }]],
+          ['profile-2:1', [{ Id: '9', Name: 'vehicle' }]],
+        ])
+      );
+      scopedEvents({
+        events: [
+          { profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1', StartDateTime: '2026-08-03 10:00:00' } } },
+          { profileId: 'profile-2', profileName: 'Office', item: { Event: { Id: '1', MonitorId: '1', StartDateTime: '2026-08-03 09:00:00' } } },
+        ],
+      });
+
+      render(<Events />);
+
+      const cards = screen.getAllByTestId('event-card-item');
+      expect(cards[0]).toHaveTextContent('person');
+      expect(cards[0]).not.toHaveTextContent('vehicle');
+      expect(cards[1]).toHaveTextContent('vehicle');
+      expect(cards[1]).not.toHaveTextContent('person');
     });
 
     // heatmapDateRange (the OTHER consumer of event timestamps besides the

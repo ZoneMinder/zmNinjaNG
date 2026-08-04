@@ -18,6 +18,7 @@ import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
 import { resolveMinStreamingPort } from '../../lib/monitor/multiport';
 import type { EventData, Monitor, ProfileId, Tag } from '../../api/types';
 import type { ThumbnailFallbackEntry } from '../../stores/settings';
+import { scopedEventKey } from '../../lib/event/scoped-event-key';
 
 /** An event tagged with its owning profile - set only in All mode
  *  (see useScopedEvents); undefined in single mode. */
@@ -36,6 +37,8 @@ interface EventListViewProps {
   totalCount?: number;
   isFetching?: boolean;
   onLoadMore: () => void;
+  /** Tags keyed by scopedEventKey: `${profileId}:${eventId}` for All-mode
+   *  rows (event ids collide across servers), bare event id in single mode. */
   eventTagMap?: Map<string, Tag[]>;
   eventFilters?: EventFilters;
   minStreamingPort?: number;
@@ -141,7 +144,7 @@ const EventItem = memo(function EventItem({
         objectFit={thumbnailFit}
         thumbnailWidth={thumbnailWidth}
         thumbnailHeight={thumbnailHeight}
-        tags={eventTagMap?.get(Event.Id)}
+        tags={eventTagMap?.get(scopedEventKey(profileId, Event.Id))}
         eventFilters={eventFilters}
       />
     </div>
@@ -215,7 +218,7 @@ export const EventListView = ({
       {header}
       {events.map((event) => (
         <EventItem
-          key={event.profileId ? `${event.profileId}:${event.Event.Id}` : event.Event.Id}
+          key={scopedEventKey(event.profileId, event.Event.Id)}
           event={event}
           monitorMap={monitorMap}
           thumbnailFit={thumbnailFit}

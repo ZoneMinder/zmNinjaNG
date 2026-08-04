@@ -87,7 +87,16 @@ export interface UseScopedEventsOptions {
    *  (refs #337 I7). A profile with none of its own favorited contributes
    *  no events, matching single mode's existing empty-favorites behavior. */
   favoritesOnly?: boolean;
-  tagIds?: string[];
+  /** Tag filter, already resolved to each profile's OWN tag ids; absent means
+   *  no tag filter at all. Tags are per-server entities whose ids differ
+   *  server to server, so All mode resolves the user's selection by NAME into
+   *  every profile's own ids before it reaches that profile's query (see
+   *  useScopedTags). A profile mapped to an EMPTY array has none of the
+   *  selected tags and therefore matches nothing - the same
+   *  impossible-filter shape favoritesOnly uses, and the reason getEvents
+   *  treats an empty tagIds as "no results" rather than "no filter" (refs
+   *  #337 D4). */
+  tagIdsByProfile?: Partial<Record<ProfileId, string[]>>;
   /** Whether the queries are enabled (default: true) */
   enabled?: boolean;
   /** Refetch interval in ms. Undefined (default) means no polling - the
@@ -123,7 +132,7 @@ export function useScopedEvents(options: UseScopedEventsOptions): UseScopedEvent
   const scope = useProfileScope();
   const queryClient = useQueryClient();
   const profiles = scope?.profiles ?? [];
-  const { filters, limit, monitorId, isGroupFilterActive, favoritesOnly, tagIds, enabled, refetchInterval } = options;
+  const { filters, limit, monitorId, isGroupFilterActive, favoritesOnly, tagIdsByProfile, enabled, refetchInterval } = options;
 
   // Reactive so toggling a favorite refetches the affected profile's query
   // (Stores contract: select every reactive field read - the whole record,
@@ -145,6 +154,7 @@ export function useScopedEvents(options: UseScopedEventsOptions): UseScopedEvent
     queries: profiles.map((p, i) => {
       const ownMonitorId = resolveOwnMonitorIds(monitorId, p.id);
       const eventIds = ownEventIds(p.id);
+      const tagIds = tagIdsByProfile?.[p.id];
       return {
         queryKey: queryKeys.eventsList(p.id, filters, limit, ownMonitorId, isGroupFilterActive, eventIds, tagIds),
         queryFn: () => {
@@ -248,11 +258,11 @@ export function useScopedEvents(options: UseScopedEventsOptions): UseScopedEvent
   const refetchProfile = useCallback(
     (id: ProfileId): void => {
       void queryClient.refetchQueries({
-        queryKey: queryKeys.eventsList(id, filters, limit, resolveOwnMonitorIds(monitorId, id), isGroupFilterActive, ownEventIds(id), tagIds),
+        queryKey: queryKeys.eventsList(id, filters, limit, resolveOwnMonitorIds(monitorId, id), isGroupFilterActive, ownEventIds(id), tagIdsByProfile?.[id]),
         exact: true,
       });
     },
-    [queryClient, filters, limit, monitorId, isGroupFilterActive, ownEventIds, tagIds]
+    [queryClient, filters, limit, monitorId, isGroupFilterActive, ownEventIds, tagIdsByProfile]
   );
 
   // Refetches every profile in scope and resolves once they've all settled -
@@ -262,12 +272,12 @@ export function useScopedEvents(options: UseScopedEventsOptions): UseScopedEvent
     await Promise.all(
       profiles.map((p) =>
         queryClient.refetchQueries({
-          queryKey: queryKeys.eventsList(p.id, filters, limit, resolveOwnMonitorIds(monitorId, p.id), isGroupFilterActive, ownEventIds(p.id), tagIds),
+          queryKey: queryKeys.eventsList(p.id, filters, limit, resolveOwnMonitorIds(monitorId, p.id), isGroupFilterActive, ownEventIds(p.id), tagIdsByProfile?.[p.id]),
           exact: true,
         })
       )
     );
-  }, [queryClient, profiles, filters, limit, monitorId, isGroupFilterActive, ownEventIds, tagIds]);
+  }, [queryClient, profiles, filters, limit, monitorId, isGroupFilterActive, ownEventIds, tagIdsByProfile]);
 
   return { events, errors, isLoading, isFetching, totalCount, totalCountByProfile, refetchProfile, refetchAll };
 }

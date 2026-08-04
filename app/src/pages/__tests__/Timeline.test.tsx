@@ -36,8 +36,8 @@ vi.mock('../../hooks/useTimelineFilters', () => ({
 }));
 
 vi.mock('../../hooks/useTvKeyHandler', () => ({ useTvKeyHandler: () => {} }));
-vi.mock('../../hooks/useEventTags', () => ({
-  useEventTagMapping: () => ({ getTagsForEvent: () => [] }),
+vi.mock('../../hooks/useScopedEventTags', () => ({
+  useScopedEventTagMapping: () => ({ eventTagMap: new Map(), getTagsForEvent: () => [] }),
 }));
 
 type StubEvent = { id: string; monitorId: string; profileId?: string };

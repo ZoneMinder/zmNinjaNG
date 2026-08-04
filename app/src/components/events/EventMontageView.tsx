@@ -39,6 +39,7 @@ import { useReturnFlash } from '../../hooks/useReturnFlash';
 import { useReturnHighlightStore } from '../../stores/returnHighlight';
 import { cn } from '../../lib/utils';
 import type { ScopedEventItem } from './EventListView';
+import { scopedEventKey } from '../../lib/event/scoped-event-key';
 
 // Haptic feedback helper
 const triggerHaptic = async () => {
@@ -280,6 +281,8 @@ interface EventMontageViewProps {
   totalCount?: number;
   isFetching?: boolean;
   onLoadMore: () => void;
+  /** Tags keyed by scopedEventKey: `${profileId}:${eventId}` for All-mode
+   *  rows (event ids collide across servers), bare event id in single mode. */
   eventTagMap?: Map<string, Tag[]>;
   eventFilters?: EventFilters;
   minStreamingPort?: number;
@@ -329,7 +332,7 @@ export const EventMontageView = ({
       <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}>
         {events.map((eventData) => (
           <EventMontageTile
-            key={eventData.profileId ? `${eventData.profileId}:${eventData.Event.Id}` : eventData.Event.Id}
+            key={scopedEventKey(eventData.profileId, eventData.Event.Id)}
             event={eventData.Event}
             profileId={eventData.profileId}
             profileChip={eventData.profileChip}
@@ -339,7 +342,7 @@ export const EventMontageView = ({
             showHover={showHover}
             portalUrl={portalUrl}
             accessToken={accessToken}
-            tags={eventTagMap?.get(eventData.Event.Id)}
+            tags={eventTagMap?.get(scopedEventKey(eventData.profileId, eventData.Event.Id))}
             eventFilters={eventFilters}
             minStreamingPort={minStreamingPort}
           />

@@ -26,7 +26,8 @@ import { useEventFilters, ALL_TAGS_FILTER_ID } from '../hooks/useEventFilters';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import { useEventPagination } from '../hooks/useEventPagination';
 import { useEventMontageGrid } from '../hooks/useEventMontageGrid';
-import { useEventTags, useEventTagMapping } from '../hooks/useEventTags';
+import { useScopedTags, useScopedEventTagMapping, type ScopedEventRef } from '../hooks/useScopedEventTags';
+import { scopedEventKey } from '../lib/event/scoped-event-key';
 import { useScrollRestoration } from '../hooks/useScrollRestoration';
 import { PullToRefreshIndicator } from '../components/ui/pull-to-refresh-indicator';
 import { Button } from '../components/ui/button';
@@ -106,12 +107,16 @@ export default function Events() {
     activeFilterCount,
   } = useEventFilters();
 
-  // Fetch available tags and check if tags are supported
+  // Available tags across the scope. In All mode the offered entries are one
+  // per distinct tag NAME, with the name standing in for the id, because tag
+  // ids are per-server and collide; resolveOwnTagIds maps a selection back to
+  // each server's own ids (refs #337, audit D4).
   const {
     availableTags,
     tagsSupported,
     isLoadingTags,
-  } = useEventTags();
+    resolveOwnTagIds,
+  } = useScopedTags();
 
   const [viewMode, setViewMode] = useState<'list' | 'montage'>(() => {
     const paramView = searchParams.get('view');
@@ -199,7 +204,7 @@ export default function Events() {
   // "Tags.Id:" filter with the favorites "Id IN:" query, so when favorites is
   // also on we leave tags to the client-side pass below (the favorite set is
   // fetched in full there, so that pass stays accurate). "All tags" expands to
-  // every available tag id, i.e. events carrying any tag.
+  // every available tag token, i.e. events carrying any tag.
   const tagIdFilter = useMemo(() => {
     if (favoritesOnly || selectedTagIds.length === 0) return undefined;
     if (selectedTagIds.includes(ALL_TAGS_FILTER_ID)) {
@@ -207,6 +212,20 @@ export default function Events() {
     }
     return selectedTagIds;
   }, [favoritesOnly, selectedTagIds, availableTags]);
+
+  // The selection resolved to every profile's OWN tag ids. In single mode the
+  // tokens already ARE that profile's ids, so this is a one-entry passthrough;
+  // in All mode the tokens are tag names and a profile lacking the tag maps to
+  // an empty list, which means "matches nothing here" rather than "no filter"
+  // (see useScopedEvents.tagIdsByProfile).
+  const tagIdsByProfile = useMemo(() => {
+    if (!tagIdFilter) return undefined;
+    const resolved: Partial<Record<ProfileId, string[]>> = {};
+    for (const p of scope?.profiles ?? []) {
+      resolved[p.id] = resolveOwnTagIds(tagIdFilter, p.id);
+    }
+    return resolved;
+  }, [tagIdFilter, scope?.profiles, resolveOwnTagIds]);
 
   // Manual "Load More" pagination. persistKey identifies the current result set
   // (everything the query key encodes except the limit itself) so the expanded
@@ -247,7 +266,7 @@ export default function Events() {
     monitorId: effectiveMonitorId,
     isGroupFilterActive,
     favoritesOnly,
-    tagIds: tagIdFilter,
+    tagIdsByProfile,
   });
 
   // A deep link from a monitor card / event detail / recent-events row in
@@ -322,18 +341,18 @@ export default function Events() {
     enabled: true,
   });
 
-  // Get event IDs for tag fetching. All mode: tag lookups stay
-  // current-profile-scoped (v1 gap, same as Timeline) - events owned by a
-  // non-current profile just show no tags rather than crashing.
-  const eventIdsForTagFetch = useMemo(() =>
-    serverFilteredEvents.map((e) => e.item.Event.Id),
+  // Displayed events with their owning profile, so each server is asked only
+  // for its own event ids and the merged map stays collision-free.
+  const tagRefs = useMemo<ScopedEventRef[]>(() =>
+    serverFilteredEvents.map((e) => ({ profileId: e.profileId, eventId: e.item.Event.Id })),
     [serverFilteredEvents]
   );
 
-  // Fetch tags for displayed events
-  const { eventTagMap } = useEventTagMapping({
-    eventIds: eventIdsForTagFetch,
-    enabled: tagsSupported && eventIdsForTagFetch.length > 0,
+  // Fetch tags for displayed events. Keyed to match what a ROW carries:
+  // composite in All mode, bare event id in single mode (scopedEventKey).
+  const { eventTagMap } = useScopedEventTagMapping({
+    events: tagRefs,
+    enabled: tagsSupported && tagRefs.length > 0,
   });
 
   // Memoize filtered events. The server applied monitor/group, date, favorites
@@ -347,14 +366,16 @@ export default function Events() {
 
     if (favoritesOnly && selectedTagIds.length > 0 && eventTagMap.size > 0) {
       const isAllTagsFilter = selectedTagIds.includes(ALL_TAGS_FILTER_ID);
-      filtered = filtered.filter(({ item: { Event } }) => {
-        const eventTags = eventTagMap.get(Event.Id) || [];
+      filtered = filtered.filter(({ profileId, item: { Event } }) => {
+        // The map is keyed the way rows are: composite in All mode only.
+        const eventTags = eventTagMap.get(scopedEventKey(isAllMode ? profileId : undefined, Event.Id)) || [];
         if (isAllTagsFilter) {
           // "All" = show events that have at least one tag
           return eventTags.length > 0;
         }
-        // Otherwise event must have at least one of the selected tags
-        return eventTags.some(tag => selectedTagIds.includes(tag.Id));
+        // Otherwise event must have at least one of the selected tags. All
+        // mode selects by tag NAME, since ids differ per server.
+        return eventTags.some(tag => selectedTagIds.includes(isAllMode ? tag.Name : tag.Id));
       });
     }
 
