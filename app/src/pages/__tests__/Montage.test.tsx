@@ -8,6 +8,7 @@
  * strips. Single-mode assertions guard the byte-identical requirement.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { Children, cloneElement, isValidElement } from 'react';
 import { render, screen, fireEvent, within, act } from '@testing-library/react';
 import Montage from '../Montage';
 import { ALL_PROFILES_ID } from '../../api/types';
@@ -71,10 +72,26 @@ vi.mock('../../hooks/useMonitorNewEvents', () => ({
 // react-grid-layout measures its container width via ResizeObserver/DOM rects,
 // none of which resolve meaningfully in jsdom; the mock renders children
 // directly so tile presence/count is what these tests actually assert.
-vi.mock('react-grid-layout', () => ({
-  default: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
-  WidthProvider: (Component: React.ComponentType<{ children?: React.ReactNode }>) => Component,
-}));
+//
+// It does clone each child with a ref of its own, because the real GridItem
+// does (`cloneElement(child, { ref: this.elementRef, ... })`) and that ref
+// REPLACES any the caller put on the same element. A mock that rendered
+// children untouched would let a ref on the tile root work in tests and
+// silently do nothing in the browser, which is exactly how viewport gating
+// first shipped broken (refs #337).
+vi.mock('react-grid-layout', () => {
+  const ownedRef = () => {};
+  return {
+    default: ({ children }: { children?: React.ReactNode }) => (
+      <div>
+        {Children.map(children, (child) =>
+          isValidElement(child) ? cloneElement(child, { ref: ownedRef } as never) : child
+        )}
+      </div>
+    ),
+    WidthProvider: (Component: React.ComponentType<{ children?: React.ReactNode }>) => Component,
+  };
+});
 
 // MontageErrorStrips/MontageGridSections stay the REAL implementations (via
 // importOriginal): they're this task's own new code, so stubbing them would
@@ -955,9 +972,22 @@ describe('Montage Page', () => {
     const paused = () =>
       screen.getByTestId('montage-tile-tuning').getAttribute('data-paused');
 
+    /**
+     * The element the page actually handed the observer for this tile, found
+     * through the observer rather than by walking the tile's DOM: which node
+     * carries the ref is the page's business, but it has to be one inside the
+     * tile, and there has to be one at all.
+     */
+    const observedIn = (testId: string): Element => {
+      const tile = screen.getByTestId(testId);
+      const target = [...latestIntersectionObserver().targets].find((el) => tile.contains(el));
+      if (!target) throw new Error(`no observed element inside ${testId}`);
+      return target;
+    };
+
     /** Report the tile's position the way the browser's observer would. */
     const report = (isIntersecting: boolean) => {
-      const target = screen.getByTestId(TILE);
+      const target = observedIn(TILE);
       act(() => { latestIntersectionObserver().fire([{ target, isIntersecting }]); });
     };
 
@@ -1044,8 +1074,8 @@ describe('Montage Page', () => {
       render(<Montage />);
       act(() => {
         latestIntersectionObserver().fire([
-          { target: screen.getByTestId('montage-monitor-profile-1:1'), isIntersecting: true },
-          { target: screen.getByTestId('montage-monitor-profile-1:2'), isIntersecting: false },
+          { target: observedIn('montage-monitor-profile-1:1'), isIntersecting: true },
+          { target: observedIn('montage-monitor-profile-1:2'), isIntersecting: false },
         ]);
       });
       act(() => { vi.advanceTimersByTime(MONTAGE_GRID.viewportGatingLingerMs); });

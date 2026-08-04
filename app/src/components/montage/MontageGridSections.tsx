@@ -188,10 +188,6 @@ export function MontageGridSections({
     return (
       <div
         key={tileId}
-        // The observed element is this wrapper rather than the card inside it:
-        // it is the one react-grid-layout positions, so its box is the tile's
-        // real position on screen.
-        ref={registerTile(tileId)}
         className={cn(
           "relative focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
           isMonitorPinned(tileId) && "pin-locked",
@@ -207,31 +203,40 @@ export function MontageGridSections({
         )}
         onKeyDown={handleKeyClick}
       >
-        <MontageTileErrorBoundary monitorId={Monitor.Id} monitorName={Monitor.Name}>
-          <MontageMonitor
-            monitor={Monitor}
-            status={Monitor_Status}
-            currentProfile={ownerProfile}
-            accessToken={accessToken}
-            navigate={navigate}
-            profileId={profileId}
-            profileChip={profileChip}
-            isFullscreen={isFullscreen}
-            isEditing={isEditMode}
-            isPinned={isMonitorPinned(tileId)}
-            onPinToggle={() => onPinToggle(tileId)}
-            objectFit={objectFit}
-            showOverlay={showMonitorLabels}
-            newEventCount={resolveNewEventCount(item)}
-            newestEventAt={resolveNewestEventAt(item)}
-            reduceStream={reduceStream}
-            // Out of view stops the tile for the same reason a hidden page
-            // does, so the two share one prop rather than the player learning
-            // a second way to be off.
-            paused={paused || isTileGated(tileId)}
-            forceViewMode={forceViewMode}
-          />
-        </MontageTileErrorBoundary>
+        {/* The element viewport gating observes. It has to be INSIDE the grid
+            item rather than being the item itself: react-grid-layout clones
+            every child with a ref of its own, which replaces any ref put on
+            that element, so a ref one level up is never called. This div
+            fills the item, so its box is the tile's real position, and the
+            item is the thing react-grid-layout moves - a drag or resize
+            changes this box with it. */}
+        <div ref={registerTile(tileId)} className="w-full h-full">
+          <MontageTileErrorBoundary monitorId={Monitor.Id} monitorName={Monitor.Name}>
+            <MontageMonitor
+              monitor={Monitor}
+              status={Monitor_Status}
+              currentProfile={ownerProfile}
+              accessToken={accessToken}
+              navigate={navigate}
+              profileId={profileId}
+              profileChip={profileChip}
+              isFullscreen={isFullscreen}
+              isEditing={isEditMode}
+              isPinned={isMonitorPinned(tileId)}
+              onPinToggle={() => onPinToggle(tileId)}
+              objectFit={objectFit}
+              showOverlay={showMonitorLabels}
+              newEventCount={resolveNewEventCount(item)}
+              newestEventAt={resolveNewestEventAt(item)}
+              reduceStream={reduceStream}
+              // Out of view stops the tile for the same reason a hidden page
+              // does, so the two share one prop rather than the player
+              // learning a second way to be off.
+              paused={paused || isTileGated(tileId)}
+              forceViewMode={forceViewMode}
+            />
+          </MontageTileErrorBoundary>
+        </div>
       </div>
     );
   };

@@ -158,7 +158,15 @@ export function useViewportGating({
           // The tile is gone (unmounted, or moved between grid sections). Drop
           // what we knew about it: a stale "in view" would let it come back
           // streaming from a position nobody has measured.
-          refCallbacks.current.delete(tileId);
+          //
+          // The callback itself STAYS cached. Dropping it here would hand the
+          // next render a different function for the same tile, React would
+          // detach the old one, this branch would run again, and the tile
+          // would be observed, dropped and re-observed on every render.
+          // React's own StrictMode attach/detach/attach on mount is enough to
+          // start that, and it left every tile gated with nothing streaming.
+          // The map holds one closure per tile id this page has rendered,
+          // which is bounded by the montage itself.
           dropTile(tileId);
           return;
         }

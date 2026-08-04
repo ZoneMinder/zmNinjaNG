@@ -165,6 +165,24 @@ describe('useViewportGating', () => {
     expect(result.current.registerTile('p1:1')).toBe(first);
   });
 
+  it('keeps the same ref callback after a detach, so nothing churns', () => {
+    // React detaches and re-attaches a ref on mount under StrictMode, and any
+    // time the callback's identity changes. Handing out a NEW callback after a
+    // detach makes that self-sustaining: the next render's ref differs, React
+    // detaches again, and the tile is observed, dropped and re-observed
+    // forever - which in the browser meant every tile sat gated and no montage
+    // tile ever streamed (refs #337).
+    const { result, rerender } = setup();
+    const first = result.current.registerTile('p1:1');
+    const el = document.createElement('div');
+
+    act(() => { first(el); });
+    act(() => { first(null); });
+    rerender({ on: true });
+
+    expect(result.current.registerTile('p1:1')).toBe(first);
+  });
+
   it('stops tracking a tile that unmounts, and forgets it was in view', () => {
     const { result } = setup();
     const el = attach(result, 'p1:1');
