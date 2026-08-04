@@ -116,7 +116,9 @@ interface MontageGridSectionsProps {
    *  tile. Always false in single mode. */
   isTileGated: (tileId: string) => boolean;
   /** Hands the tile's element to the page's one IntersectionObserver, which
-   *  is what answers `isTileGated`. A no-op ref while gating is off. */
+   *  is what answers `isTileGated`. Records the element whether gating is on
+   *  or off - only the observing waits for the setting, so turning it on
+   *  mid-session finds every tile already registered. */
   registerTile: (tileId: string) => (el: HTMLElement | null) => void;
   /** All-mode idle downgrade: 'snapshot' once the user has left the page
    *  alone long enough (refs #337). Undefined leaves each tile on its own

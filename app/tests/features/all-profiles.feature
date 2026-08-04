@@ -312,8 +312,9 @@ Feature: All Servers mode
     When I navigate to the "Montage" page
     Then I should see at least 2 monitor in montage grid
     And the first montage tile should be streaming
-    # Leaves the shared ALL bucket as the rest of the suite expects it, the
-    # same way the stream-cap scenario resets its knob.
+    # Not cleanup: every scenario runs in its own browser context and logs in
+    # from the setup page, so nothing written to the ALL bucket here outlives
+    # it. This is the switch's other direction, which nothing else covers.
     When I navigate to the "Settings" page
     And I turn All Servers off-screen tile pausing "off"
     Then All Servers off-screen tile pausing should be "off"
