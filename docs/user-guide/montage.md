@@ -12,6 +12,11 @@ The toolbar appears above the grid. You can hide or show it using the eye icon i
 - **Refresh**: manually reload all feeds
 - **Edit Layout**: enter edit mode to drag and resize cells
 - **Fullscreen**: expand the grid to fill the entire screen
+- **More (⋮) → Show monitors**: uncheck a camera to drop its tile from the grid, check it again to bring it back. Nothing changes on the server, and the choice survives a reload
+
+In All Servers mode each entry in **Show monitors** names the server it comes
+from, since two servers can have cameras with the same name. Hiding one
+server's camera leaves the other server's camera of that name on screen.
 
 ## Edit Mode
 
